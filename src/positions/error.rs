@@ -47,8 +47,8 @@ pub enum Error {
     // --- validation ---
     #[error("invalid price {price} for token {mint}")]
     InvalidPrice { mint: String, price: f64 },
-    #[error("invalid trade size {amount_sol} SOL: {reason}")]
-    InvalidTradeSize { amount_sol: f64, reason: String },
+    #[error("invalid trade size {amount_sol} SOL: {reason}", amount_sol = .amount_native)]
+    InvalidTradeSize { amount_native: f64, reason: String },
     #[error("invalid exit percentage {percent}: {reason}")]
     InvalidExitPercentage { percent: f64, reason: String },
     #[error("calculated exit amount for token {mint} is zero")]

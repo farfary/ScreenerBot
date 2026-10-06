@@ -85,7 +85,7 @@ pub async fn trader_stats(period_days: u32) -> TraderStats {
     // how far back the realized window reaches.
     let open_positions = positions::get_open_positions().await;
     let open_positions_count = open_positions.len();
-    let locked_sol: f64 = open_positions.iter().map(|p| p.total_size_sol).sum();
+    let locked_sol: f64 = open_positions.iter().map(|p| p.total_size_native).sum();
     let max_open_positions = with_config(|cfg| cfg.trader.max_open_positions);
 
     let window_start = chrono::Utc::now() - chrono::Duration::days(i64::from(period_days));

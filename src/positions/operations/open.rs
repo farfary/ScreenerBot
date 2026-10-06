@@ -28,11 +28,11 @@ use serde_json::json;
 
 /// Open a new position using trade size from configuration (auto-trader path)
 pub async fn open_position_direct(token_mint: &str) -> Result<EntrySubmission> {
-    let trade_size_sol = with_config(|cfg| cfg.trader.trade_size_sol);
+    let trade_size_native = with_config(|cfg| cfg.trader.trade_size_sol);
     // Auto-trader entry: slippage always follows config.
     open_position_impl(
         token_mint,
-        trade_size_sol,
+        trade_size_native,
         PositionOrigin::Auto { strategy_id: None },
         PositionManagement::AutoTrader,
         None,
@@ -44,24 +44,31 @@ pub async fn open_position_direct(token_mint: &str) -> Result<EntrySubmission> {
 ///
 pub async fn open_position_with_size(
     token_mint: &str,
-    trade_size_sol: f64,
+    trade_size_native: f64,
     origin: PositionOrigin,
     management: PositionManagement,
     slippage_pct: Option<f64>,
 ) -> Result<EntrySubmission> {
-    if !trade_size_sol.is_finite() || trade_size_sol <= 0.0 {
+    if !trade_size_native.is_finite() || trade_size_native <= 0.0 {
         return Err(Error::InvalidTradeSize {
-            amount_sol: trade_size_sol,
+            amount_native: trade_size_native,
             reason: "must be a positive, finite amount".to_owned(),
         });
     }
-    open_position_impl(token_mint, trade_size_sol, origin, management, slippage_pct).await
+    open_position_impl(
+        token_mint,
+        trade_size_native,
+        origin,
+        management,
+        slippage_pct,
+    )
+    .await
 }
 
 /// Internal helper to open a new position with an explicit SOL size
 async fn open_position_impl(
     token_mint: &str,
-    trade_size_sol: f64,
+    trade_size_native: f64,
     origin: PositionOrigin,
     management: PositionManagement,
     slippage_pct: Option<f64>,
@@ -126,7 +133,7 @@ async fn open_position_impl(
             "open_blocked",
             None,
             None,
-            trade_size_sol,
+            trade_size_native,
             RawAmount::ZERO,
             None,
             None,
@@ -175,7 +182,7 @@ async fn open_position_impl(
                     "open_blocked_db",
                     db_pos.entry_transaction_signature.as_deref(),
                     db_pos.exit_transaction_signature.as_deref(),
-                    trade_size_sol,
+                    trade_size_native,
                     RawAmount::ZERO,
                     None,
                     None,
@@ -252,7 +259,7 @@ async fn open_position_impl(
         chain: crate::chains::active_chain(),
         input_mint: adapter().native_asset_address().to_string(),
         output_mint: api_token.mint.clone(),
-        input_amount: adapter().native_to_raw(trade_size_sol).into(),
+        input_amount: adapter().native_to_raw(trade_size_native).into(),
         wallet_address: wallet_address.clone(),
         slippage_pct: slippage_quote_default,
         swap_mode: SwapMode::ExactIn,
@@ -276,8 +283,8 @@ async fn open_position_impl(
         .await
         {
             Ok(result) => {
-                let effective_price = effective_entry_price_sol(
-                    trade_size_sol,
+                let effective_price = effective_entry_price_native(
+                    trade_size_native,
                     result.output_amount,
                     api_token.decimals,
                 )
@@ -297,8 +304,8 @@ async fn open_position_impl(
                             "Entry swap {signature} was submitted but confirmation timed out; creating the pending position and handing it to verification"
                         ),
                     );
-                    let effective_price = effective_entry_price_sol(
-                        trade_size_sol,
+                    let effective_price = effective_entry_price_native(
+                        trade_size_native,
                         expected_output_amount,
                         api_token.decimals,
                     )
@@ -325,8 +332,8 @@ async fn open_position_impl(
         exit_price: None,
         exit_time: None,
         position_type: "buy".to_owned(),
-        entry_size_sol: trade_size_sol,
-        total_size_sol: trade_size_sol,
+        entry_size_native: trade_size_native,
+        total_size_native: trade_size_native,
         price_highest: entry_price,
         price_lowest: entry_price,
         entry_transaction_signature: Some(transaction_signature.clone()),
@@ -334,14 +341,14 @@ async fn open_position_impl(
         token_amount: None,
         effective_entry_price: None,
         effective_exit_price: None,
-        sol_received: None,
+        native_received: None,
         profit_target_min: Some(5.0),
         profit_target_max: Some(20.0),
         liquidity_tier: Some("UNKNOWN".to_owned()),
         transaction_entry_verified: false,
         transaction_exit_verified: false,
-        entry_fee_lamports: None,
-        exit_fee_lamports: None,
+        entry_fee_raw: None,
+        exit_fee_raw: None,
         current_price: Some(entry_price),
         current_price_updated: Some(Utc::now()),
         current_price_source: None,
@@ -414,7 +421,7 @@ async fn open_position_impl(
         "opened",
         Some(&transaction_signature),
         None,
-        trade_size_sol,
+        trade_size_native,
         output_amount,
         None,
         None,
@@ -478,41 +485,42 @@ async fn open_position_impl(
     Ok(EntrySubmission {
         transaction_signature,
         confirmation_pending,
-        entry_price_sol: effective_entry_price,
+        entry_price_native: effective_entry_price,
     })
 }
 
-fn effective_entry_price_sol(
-    input_sol: f64,
+fn effective_entry_price_native(
+    input_native: f64,
     output_amount: RawAmount,
     decimals: Option<u8>,
 ) -> Option<f64> {
     let token_amount = output_amount.to_whole_units(decimals?);
-    let price = input_sol / token_amount;
-    (input_sol.is_finite() && input_sol > 0.0 && price.is_finite() && price > 0.0).then_some(price)
+    let price = input_native / token_amount;
+    (input_native.is_finite() && input_native > 0.0 && price.is_finite() && price > 0.0)
+        .then_some(price)
 }
 
 #[cfg(test)]
 mod submission_price_tests {
-    use super::effective_entry_price_sol;
+    use super::effective_entry_price_native;
     use crate::chains::RawAmount;
 
     #[test]
     fn entry_submission_price_uses_the_quoted_token_amount() {
         assert_eq!(
-            effective_entry_price_sol(0.2, RawAmount::from(50_000_000u64), Some(6)),
+            effective_entry_price_native(0.2, RawAmount::from(50_000_000u64), Some(6)),
             Some(0.004)
         );
         assert_eq!(
-            effective_entry_price_sol(0.2, RawAmount::ZERO, Some(6)),
+            effective_entry_price_native(0.2, RawAmount::ZERO, Some(6)),
             None
         );
         assert_eq!(
-            effective_entry_price_sol(0.2, RawAmount::from(50_000_000u64), None),
+            effective_entry_price_native(0.2, RawAmount::from(50_000_000u64), None),
             None
         );
         assert_eq!(
-            effective_entry_price_sol(1.0, RawAmount::new(1u128 << 70), Some(0)),
+            effective_entry_price_native(1.0, RawAmount::new(1u128 << 70), Some(0)),
             Some(1.0 / (1u128 << 70) as f64)
         );
     }

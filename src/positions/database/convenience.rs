@@ -370,11 +370,11 @@ pub async fn save_exit_record(
     timestamp: DateTime<Utc>,
     amount: crate::chains::RawAmount,
     price: f64,
-    sol_received: f64,
+    native_received: f64,
     transaction_signature: &str,
     is_partial: bool,
     percentage: f64,
-    fees_lamports: Option<u64>,
+    fees_raw: Option<u64>,
 ) -> Result<()> {
     let db_guard = GLOBAL_POSITIONS_DB.lock().await;
     let db = db_guard.as_ref().ok_or(Error::NotInitialised)?;
@@ -393,8 +393,8 @@ pub async fn save_exit_record(
     // otherwise insert the SAME exit twice and double it everywhere the records are summed
     // — the History tab, the chart's exit markers, the "% exited" fallback.
     conn.execute(
-    "INSERT INTO position_exits (position_id, wallet_address, timestamp, amount, price, sol_received,
-     transaction_signature, is_partial, percentage, fees_lamports)
+    "INSERT INTO position_exits (position_id, wallet_address, timestamp, amount, price, native_received,
+     transaction_signature, is_partial, percentage, fees_raw)
      SELECT ?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10
      WHERE NOT EXISTS (
        SELECT 1 FROM position_exits WHERE position_id = ?1 AND transaction_signature = ?7
@@ -405,11 +405,11 @@ pub async fn save_exit_record(
       timestamp.to_rfc3339(),
       amount,
       price,
-      sol_received,
+      native_received,
       transaction_signature,
       is_partial,
       percentage,
-      fees_lamports.map(|f| f as i64),
+      fees_raw.map(|f| f as i64),
     ],
   )
   .map_err(|e| DatabaseError::Query { operation: "save exit record".to_owned(), message: e.to_string() })?;
@@ -429,7 +429,7 @@ pub async fn save_exit_record(
 /// Has this exact swap already been recorded as an exit for this position?
 ///
 /// The idempotency token for applying an exit transition. `PartialExitVerified` ACCUMULATES
-/// (`sol_received +=`, `total_exited_amount +=`, `partial_exit_count += 1`), so applying it
+/// (`native_received +=`, `total_exited_amount +=`, `partial_exit_count += 1`), so applying it
 /// twice for the same signature would double the proceeds and the tokens sold. The queue
 /// dedupes by signature only while an item is IN it — once polled it is gone, so a
 /// re-enqueue (startup rehydrate, a manual re-verification) can hand the same swap back.
@@ -469,8 +469,8 @@ pub async fn get_exit_history(position_id: i64) -> Result<Vec<ExitRecord>> {
 
     let mut stmt = conn
         .prepare(
-            "SELECT id, position_id, timestamp, amount, price, sol_received, 
-       transaction_signature, is_partial, percentage, fees_lamports 
+            "SELECT id, position_id, timestamp, amount, price, native_received, 
+       transaction_signature, is_partial, percentage, fees_raw 
        FROM position_exits WHERE position_id = ?1 AND wallet_address = ?2 ORDER BY timestamp ASC",
         )
         .map_err(|e| DatabaseError::Query {
@@ -494,11 +494,11 @@ pub async fn get_exit_history(position_id: i64) -> Result<Vec<ExitRecord>> {
                     .with_timezone(&Utc),
                 amount: row.get("amount")?,
                 price: row.get(4)?,
-                sol_received: row.get(5)?,
+                native_received: row.get(5)?,
                 transaction_signature: row.get(6)?,
                 is_partial: row.get(7)?,
                 percentage: row.get(8)?,
-                fees_lamports: row.get::<_, Option<i64>>(9)?.map(|f| f as u64),
+                fees_raw: row.get::<_, Option<i64>>(9)?.map(|f| f as u64),
             })
         })
         .map_err(|e| DatabaseError::Query {
@@ -520,10 +520,10 @@ pub async fn save_entry_record(
     timestamp: DateTime<Utc>,
     amount: crate::chains::RawAmount,
     price: f64,
-    sol_spent: f64,
+    native_spent: f64,
     transaction_signature: &str,
     is_dca: bool,
-    fees_lamports: Option<u64>,
+    fees_raw: Option<u64>,
 ) -> Result<()> {
     let db_guard = GLOBAL_POSITIONS_DB.lock().await;
     let db = db_guard.as_ref().ok_or(Error::NotInitialised)?;
@@ -540,8 +540,8 @@ pub async fn save_entry_record(
     // Idempotent per (position, signature) — see save_exit_record. A DCA add re-verified
     // after a restart must not be recorded (and averaged in) twice.
     conn.execute(
-    "INSERT INTO position_entries (position_id, wallet_address, timestamp, amount, price, sol_spent,
-     transaction_signature, is_dca, fees_lamports)
+    "INSERT INTO position_entries (position_id, wallet_address, timestamp, amount, price, native_spent,
+     transaction_signature, is_dca, fees_raw)
      SELECT ?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9
      WHERE NOT EXISTS (
        SELECT 1 FROM position_entries WHERE position_id = ?1 AND transaction_signature = ?7
@@ -552,10 +552,10 @@ pub async fn save_entry_record(
       timestamp.to_rfc3339(),
       amount,
       price,
-      sol_spent,
+      native_spent,
       transaction_signature,
       is_dca,
-      fees_lamports.map(|f| f as i64),
+      fees_raw.map(|f| f as i64),
     ],
   )
   .map_err(|e| DatabaseError::Query { operation: "save entry record".to_owned(), message: e.to_string() })?;
@@ -587,8 +587,8 @@ pub async fn get_entry_history(position_id: i64) -> Result<Vec<EntryRecord>> {
 
     let mut stmt = conn
         .prepare(
-            "SELECT id, position_id, timestamp, amount, price, sol_spent, 
-       transaction_signature, is_dca, fees_lamports 
+            "SELECT id, position_id, timestamp, amount, price, native_spent, 
+       transaction_signature, is_dca, fees_raw 
        FROM position_entries WHERE position_id = ?1 AND wallet_address = ?2 ORDER BY timestamp ASC",
         )
         .map_err(|e| DatabaseError::Query {
@@ -612,10 +612,10 @@ pub async fn get_entry_history(position_id: i64) -> Result<Vec<EntryRecord>> {
                     .with_timezone(&Utc),
                 amount: row.get("amount")?,
                 price: row.get(4)?,
-                sol_spent: row.get(5)?,
+                native_spent: row.get(5)?,
                 transaction_signature: row.get(6)?,
                 is_dca: row.get(7)?,
-                fees_lamports: row.get::<_, Option<i64>>(8)?.map(|f| f as u64),
+                fees_raw: row.get::<_, Option<i64>>(8)?.map(|f| f as u64),
             })
         })
         .map_err(|e| DatabaseError::Query {
@@ -652,10 +652,10 @@ pub async fn get_trader_swap_legs() -> Result<Vec<(i64, String, bool, f64)>> {
 
     let mut stmt = conn
         .prepare(
-            "SELECT position_id, transaction_signature, 0 AS is_exit, sol_spent AS sol
+            "SELECT position_id, transaction_signature, 0 AS is_exit, native_spent AS sol
                FROM position_entries WHERE wallet_address = ?1
              UNION ALL
-             SELECT position_id, transaction_signature, 1 AS is_exit, sol_received AS sol
+             SELECT position_id, transaction_signature, 1 AS is_exit, native_received AS sol
                FROM position_exits WHERE wallet_address = ?1",
         )
         .map_err(|e| DatabaseError::Query {

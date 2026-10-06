@@ -210,7 +210,7 @@ pub async fn initialize_from_history() {
 
     match crate::positions::get_period_trading_stats(period_start, None).await {
         Ok(stats) => {
-            let loss = stats.loss_sol; // Already absolute value
+            let loss = stats.loss_native; // Already absolute value
             let limit = config::get_loss_limit_sol();
 
             if let Ok(mut state) = LOSS_LIMIT_STATE.write() {

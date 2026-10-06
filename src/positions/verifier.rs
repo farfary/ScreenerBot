@@ -542,8 +542,8 @@ pub async fn verify_transaction(item: &VerificationItem) -> VerificationOutcome 
                     }
                 };
 
-                let sol_spent = swap_info.effective_sol_spent.abs();
-                if sol_spent <= 0.0 || !sol_spent.is_finite() {
+                let native_spent = swap_info.effective_sol_spent.abs();
+                if native_spent <= 0.0 || !native_spent.is_finite() {
                     return VerificationOutcome::RetryTransient(
                         "Invalid SOL spent reported for DCA".to_owned(),
                     );
@@ -556,7 +556,7 @@ pub async fn verify_transaction(item: &VerificationItem) -> VerificationOutcome 
                     );
                 }
 
-                let effective_price = sol_spent / token_amount_float;
+                let effective_price = native_spent / token_amount_float;
                 let dca_time = if let Some(block_time) = transaction.block_time {
                     chrono::DateTime::<Utc>::from_timestamp(block_time, 0)
                         .unwrap_or_else(|| Utc::now())
@@ -567,9 +567,9 @@ pub async fn verify_transaction(item: &VerificationItem) -> VerificationOutcome 
                 return VerificationOutcome::Transition(PositionTransition::DcaVerified {
                     position_id,
                     tokens_bought: RawAmount::from(token_amount_units),
-                    sol_spent,
+                    native_spent,
                     effective_price,
-                    fee_lamports: adapter().native_to_raw(swap_info.fee_sol),
+                    fee_raw: adapter().native_to_raw(swap_info.fee_sol),
                     dca_time,
                     dca_signature: item.signature.clone(),
                 });
@@ -626,8 +626,8 @@ pub async fn verify_transaction(item: &VerificationItem) -> VerificationOutcome 
                 position_id,
                 effective_entry_price: effective_price,
                 token_amount_units: RawAmount::from(token_amount_units),
-                fee_lamports: adapter().native_to_raw(swap_info.fee_sol),
-                sol_size: swap_info.sol_amount,
+                fee_raw: adapter().native_to_raw(swap_info.fee_sol),
+                native_size: swap_info.sol_amount,
             })
         }
         VerificationKind::Exit => {
@@ -715,9 +715,9 @@ pub async fn verify_transaction(item: &VerificationItem) -> VerificationOutcome 
                                 PositionTransition::PartialExitVerified {
                                     position_id,
                                     exit_amount: RawAmount::from(exit_amount),
-                                    sol_received: swap_info.effective_sol_received.abs(),
+                                    native_received: swap_info.effective_sol_received.abs(),
                                     effective_exit_price: swap_info.calculated_price_sol,
-                                    fee_lamports: adapter().native_to_raw(swap_info.fee_sol),
+                                    fee_raw: adapter().native_to_raw(swap_info.fee_sol),
                                     exit_time,
                                     exit_signature: item.signature.clone(),
                                     exit_percentage: match (
@@ -788,9 +788,9 @@ pub async fn verify_transaction(item: &VerificationItem) -> VerificationOutcome 
                                 PositionTransition::ExitResidualClearForRetry {
                                     position_id,
                                     exit_amount: RawAmount::from(exit_amount),
-                                    sol_received: swap_info.effective_sol_received.abs(),
+                                    native_received: swap_info.effective_sol_received.abs(),
                                     effective_exit_price: swap_info.calculated_price_sol,
-                                    fee_lamports: adapter().native_to_raw(swap_info.fee_sol),
+                                    fee_raw: adapter().native_to_raw(swap_info.fee_sol),
                                     exit_time,
                                     exit_signature: item.signature.clone(),
                                     exit_percentage: sold_pct,
@@ -820,8 +820,8 @@ pub async fn verify_transaction(item: &VerificationItem) -> VerificationOutcome 
             VerificationOutcome::Transition(PositionTransition::ExitVerified {
                 position_id,
                 effective_exit_price: swap_info.calculated_price_sol,
-                sol_received: swap_info.effective_sol_received.abs(),
-                fee_lamports: adapter().native_to_raw(swap_info.fee_sol),
+                native_received: swap_info.effective_sol_received.abs(),
+                fee_raw: adapter().native_to_raw(swap_info.fee_sol),
                 exit_time,
             })
         }

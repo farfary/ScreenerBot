@@ -472,9 +472,9 @@ impl PositionsDatabase {
                     Ok(PeriodTradingStats {
                         buys: total_buys,
                         sells: total_sells,
-                        profit_sol: profit,
-                        loss_sol: loss,
-                        net_pnl_sol: total_pnl,
+                        profit_native: profit,
+                        loss_native: loss,
+                        net_pnl_native: total_pnl,
                         drawdown_percent: max_dd,
                         win_rate,
                         closed_positions: trade_count,
@@ -509,9 +509,9 @@ impl PositionsDatabase {
                     Ok(PeriodTradingStats {
                         buys: total_buys,
                         sells: total_sells,
-                        profit_sol: profit,
-                        loss_sol: loss,
-                        net_pnl_sol: total_pnl,
+                        profit_native: profit,
+                        loss_native: loss,
+                        net_pnl_native: total_pnl,
                         drawdown_percent: max_dd,
                         win_rate,
                         closed_positions: trade_count,
@@ -581,9 +581,9 @@ impl PositionsDatabase {
                         date: row.get(0)?,
                         trades: row.get(1)?,
                         wins: row.get::<_, Option<i64>>(2)?.unwrap_or_default(),
-                        profit_sol: row.get(3)?,
-                        loss_sol: row.get(4)?,
-                        net_pnl_sol: row.get(5)?,
+                        profit_native: row.get(3)?,
+                        loss_native: row.get(4)?,
+                        net_pnl_native: row.get(5)?,
                     })
                 },
             )

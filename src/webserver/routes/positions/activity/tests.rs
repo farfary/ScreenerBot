@@ -24,8 +24,8 @@ fn closed_externally_round() -> Position {
         "exit_price": 0.00235,
         "exit_time": "2026-09-18T12:00:00Z",
         "position_type": "buy",
-        "entry_size_sol": 0.01304544,
-        "total_size_sol": 0.01304544,
+        "entry_size_native": 0.01304544,
+        "total_size_native": 0.01304544,
         "price_highest": 0.00602,
         "price_lowest": 0.00235,
         "entry_transaction_signature": "entry-signature",
@@ -33,14 +33,14 @@ fn closed_externally_round() -> Position {
         "token_amount": "2167137",
         "effective_entry_price": 0.00602,
         "effective_exit_price": 0.00235,
-        "sol_received": 0.005090624,
+        "native_received": 0.005090624,
         "profit_target_min": null,
         "profit_target_max": null,
         "liquidity_tier": null,
         "transaction_entry_verified": true,
         "transaction_exit_verified": true,
-        "entry_fee_lamports": null,
-        "exit_fee_lamports": null,
+        "entry_fee_raw": null,
+        "exit_fee_raw": null,
         "current_price": null,
         "current_price_updated": null,
         "phantom_remove": false,
@@ -89,7 +89,7 @@ fn closed_externally_round_reports_the_stored_proceeds_and_pnl() {
         timestamp: position.entry_time.timestamp(),
         amount: RawAmount::from(2_167_137u64),
         price: 0.00602,
-        sol_spent: 0.01304544,
+        native_spent: 0.01304544,
         transaction_signature: ENTRY_SIG.to_owned(),
         is_dca: false,
         fees_sol: None,
@@ -117,10 +117,10 @@ fn closed_externally_round_reports_the_stored_proceeds_and_pnl() {
     let settled = HashMap::from([(205, StoredClose::of(&position).expect("closed row"))]);
     settle_closed_rounds(&mut summaries, &settled, &mut totals);
 
-    let stored_received = position.sol_received.unwrap();
+    let stored_received = position.native_received.unwrap();
     let stored_pnl = position.pnl.unwrap();
     assert_eq!(summaries[0].swaps, 2);
-    assert_eq!(summaries[0].sol_invested, position.total_size_sol);
+    assert_eq!(summaries[0].sol_invested, position.total_size_native);
     assert_eq!(summaries[0].sol_returned, stored_received);
     assert_eq!(summaries[0].realized_pnl, stored_pnl);
     assert_eq!(totals.sol_returned, stored_received);
@@ -133,7 +133,7 @@ fn untrustworthy_pnl_is_not_taken_from_the_row() {
     position.basis_complete = false;
 
     let close = StoredClose::of(&position).expect("closed row");
-    assert_eq!(close.sol_received, position.sol_received);
+    assert_eq!(close.sol_received, position.native_received);
     assert_eq!(close.pnl, None);
 }
 

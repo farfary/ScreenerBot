@@ -58,16 +58,16 @@ pub async fn process_position_loss_detection(position: &Position) -> Result<()> 
     }
 
     // Calculate final P&L for loss detection
-    let (net_pnl_sol, net_pnl_percent) = calculate_position_pnl(position, None).await;
+    let (net_pnl_native, net_pnl_percent) = calculate_position_pnl(position, None).await;
 
     // Process loss detection
-    if net_pnl_sol < 0.0 {
-        let loss_sol = net_pnl_sol.abs();
+    if net_pnl_native < 0.0 {
+        let loss_native = net_pnl_native.abs();
         logger::warning(
             LogTag::Positions,
             &format!(
                 "Loss detected for {} ({}): -{:.3} SOL ({:.1}%)",
-                position.symbol, &position.mint, loss_sol, net_pnl_percent
+                position.symbol, &position.mint, loss_native, net_pnl_percent
             ),
         );
 
@@ -97,7 +97,7 @@ pub async fn process_position_loss_detection(position: &Position) -> Result<()> 
                             LogTag::Positions,
                             &format!(
                                 "Auto-blacklisted {} due to significant loss: -{:.3} SOL ({:.1}%)",
-                                position.symbol, loss_sol, net_pnl_percent
+                                position.symbol, loss_native, net_pnl_percent
                             ),
                         );
                     }
@@ -126,16 +126,16 @@ pub async fn process_position_loss_detection(position: &Position) -> Result<()> 
                 LogTag::Positions,
                 &format!(
                     "Minor loss for {} not blacklisted: -{:.3} SOL ({:.1}%)",
-                    position.symbol, loss_sol, net_pnl_percent
+                    position.symbol, loss_native, net_pnl_percent
                 ),
             );
         }
-    } else if net_pnl_sol > 0.0 {
+    } else if net_pnl_native > 0.0 {
         logger::info(
             LogTag::Positions,
             &format!(
                 "Profit recorded for {} ({}): +{:.3} SOL ({:.1}%)",
-                position.symbol, &position.mint, net_pnl_sol, net_pnl_percent
+                position.symbol, &position.mint, net_pnl_native, net_pnl_percent
             ),
         );
     }

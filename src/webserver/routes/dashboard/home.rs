@@ -102,9 +102,9 @@ pub async fn get_home_dashboard(State(state): State<Arc<AppState>>) -> Json<Home
                 Ok(stats) => TradingPeriodStats {
                     buys: stats.buys,
                     sells: stats.sells,
-                    profit_sol: stats.profit_sol,
-                    loss_sol: stats.loss_sol,
-                    net_pnl_sol: stats.net_pnl_sol,
+                    profit_sol: stats.profit_native,
+                    loss_sol: stats.loss_native,
+                    net_pnl_sol: stats.net_pnl_native,
                     drawdown_percent: stats.drawdown_percent,
                     win_rate: stats.win_rate,
                 },
@@ -177,7 +177,7 @@ pub async fn get_home_dashboard(State(state): State<Arc<AppState>>) -> Json<Home
     let total_invested_sol: f64 = open_positions
         .iter()
         .filter(|p| p.has_trustworthy_pnl())
-        .map(|p| p.total_size_sol)
+        .map(|p| p.total_size_native)
         .sum();
 
     // Calculate position P&L with performers
@@ -260,7 +260,7 @@ pub async fn get_home_dashboard(State(state): State<Arc<AppState>>) -> Json<Home
                 // the first price tick lands.
                 Some(p.unrealized_pnl.unwrap_or_else(|| {
                     if entry > 0.0 {
-                        (current - entry) * p.total_size_sol / entry
+                        (current - entry) * p.total_size_native / entry
                     } else {
                         0.0
                     }

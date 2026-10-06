@@ -104,8 +104,8 @@ fn map_position_to_response_with_logo(
         exit_time: exit_time_ts,
         position_type: p.position_type.clone(),
         status: PositionStatus::of(p),
-        entry_size_sol: p.entry_size_sol,
-        total_size_sol: p.total_size_sol,
+        entry_size_native: p.entry_size_native,
+        total_size_native: p.total_size_native,
         price_highest: p.price_highest,
         price_lowest: p.price_lowest,
         entry_transaction_signature: p.entry_transaction_signature.clone(),
@@ -113,14 +113,14 @@ fn map_position_to_response_with_logo(
         token_amount: p.token_amount,
         effective_entry_price: p.effective_entry_price,
         effective_exit_price: p.effective_exit_price,
-        sol_received: p.sol_received,
+        native_received: p.native_received,
         profit_target_min: p.profit_target_min,
         profit_target_max: p.profit_target_max,
         liquidity_tier: p.liquidity_tier.clone(),
         transaction_entry_verified: p.transaction_entry_verified,
         transaction_exit_verified: p.transaction_exit_verified,
-        entry_fee_lamports: p.entry_fee_lamports,
-        exit_fee_lamports: p.exit_fee_lamports,
+        entry_fee_raw: p.entry_fee_raw,
+        exit_fee_raw: p.exit_fee_raw,
         current_price: p.current_price,
         current_price_updated: current_price_updated_ts,
         current_price_source: p.current_price_source,
@@ -190,7 +190,7 @@ pub async fn get_positions_stats() -> Json<PositionsStatsResponse> {
     let total_invested_sol: f64 = open_positions
         .iter()
         .filter(|p| p.has_trustworthy_pnl())
-        .map(|p| p.total_size_sol)
+        .map(|p| p.total_size_native)
         .sum();
 
     // Realized P&L is the stored, fee-aware `pnl` — the one the position itself booked

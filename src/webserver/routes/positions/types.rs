@@ -53,8 +53,10 @@ pub struct PositionResponse {
     pub exit_time: Option<i64>,
     pub position_type: String,
     pub status: PositionStatus,
-    pub entry_size_sol: f64,
-    pub total_size_sol: f64,
+    #[serde(rename = "entry_size_sol")]
+    pub entry_size_native: f64,
+    #[serde(rename = "total_size_sol")]
+    pub total_size_native: f64,
     pub price_highest: f64,
     pub price_lowest: f64,
     pub entry_transaction_signature: Option<String>,
@@ -63,14 +65,17 @@ pub struct PositionResponse {
     pub token_amount: Option<RawAmount>,
     pub effective_entry_price: Option<f64>,
     pub effective_exit_price: Option<f64>,
-    pub sol_received: Option<f64>,
+    #[serde(rename = "sol_received")]
+    pub native_received: Option<f64>,
     pub profit_target_min: Option<f64>,
     pub profit_target_max: Option<f64>,
     pub liquidity_tier: Option<String>,
     pub transaction_entry_verified: bool,
     pub transaction_exit_verified: bool,
-    pub entry_fee_lamports: Option<u64>,
-    pub exit_fee_lamports: Option<u64>,
+    #[serde(rename = "entry_fee_lamports")]
+    pub entry_fee_raw: Option<u64>,
+    #[serde(rename = "exit_fee_lamports")]
+    pub exit_fee_raw: Option<u64>,
     pub current_price: Option<f64>,
     pub current_price_updated: Option<i64>,
     /// Price system that produced `current_price`: "pool" or "api"; absent when unknown.
@@ -124,7 +129,8 @@ pub struct EntryRecordResponse {
     #[serde(serialize_with = "raw_amount_number")]
     pub amount: RawAmount,
     pub price: f64,
-    pub sol_spent: f64,
+    #[serde(rename = "sol_spent")]
+    pub native_spent: f64,
     pub transaction_signature: String,
     pub is_dca: bool,
     pub fees_sol: Option<f64>,
@@ -137,7 +143,8 @@ pub struct ExitRecordResponse {
     #[serde(serialize_with = "raw_amount_number")]
     pub amount: RawAmount,
     pub price: f64,
-    pub sol_received: f64,
+    #[serde(rename = "sol_received")]
+    pub native_received: f64,
     pub transaction_signature: String,
     pub is_partial: bool,
     pub percentage: f64,

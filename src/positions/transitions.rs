@@ -12,14 +12,14 @@ pub enum PositionTransition {
         position_id: i64,
         effective_entry_price: f64,
         token_amount_units: RawAmount,
-        fee_lamports: u64,
-        sol_size: f64,
+        fee_raw: u64,
+        native_size: f64,
     },
     ExitVerified {
         position_id: i64,
         effective_exit_price: f64,
-        sol_received: f64,
-        fee_lamports: u64,
+        native_received: f64,
+        fee_raw: u64,
         exit_time: DateTime<Utc>,
     },
     ExitFailedClearForRetry {
@@ -49,9 +49,9 @@ pub enum PositionTransition {
     PartialExitVerified {
         position_id: i64,
         exit_amount: RawAmount,    // Actual tokens sold
-        sol_received: f64,         // Actual SOL received
+        native_received: f64,      // Actual SOL received
         effective_exit_price: f64, // Actual price
-        fee_lamports: u64,         // Transaction fee
+        fee_raw: u64,              // Transaction fee
         exit_time: DateTime<Utc>,
         exit_signature: String,
         exit_percentage: f64,
@@ -71,9 +71,9 @@ pub enum PositionTransition {
     ExitResidualClearForRetry {
         position_id: i64,
         exit_amount: RawAmount,
-        sol_received: f64,
+        native_received: f64,
         effective_exit_price: f64,
-        fee_lamports: u64,
+        fee_raw: u64,
         exit_time: DateTime<Utc>,
         exit_signature: String,
         exit_percentage: f64,
@@ -82,15 +82,15 @@ pub enum PositionTransition {
     DcaSubmitted {
         position_id: i64,
         dca_signature: String,
-        dca_amount_sol: f64, // Additional SOL invested
-        market_price: f64,   // Price at DCA
+        dca_amount_native: f64, // Additional SOL invested
+        market_price: f64,      // Price at DCA
     },
     DcaVerified {
         position_id: i64,
         tokens_bought: RawAmount, // Additional tokens
-        sol_spent: f64,           // Actual SOL spent
+        native_spent: f64,        // Actual SOL spent
         effective_price: f64,     // Actual price
-        fee_lamports: u64,        // Transaction fee
+        fee_raw: u64,             // Transaction fee
         dca_time: DateTime<Utc>,
         dca_signature: String,
     },

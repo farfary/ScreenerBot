@@ -150,8 +150,8 @@ pub async fn analyze_exit(position: &Position, token: &Token) -> Option<ExitAnal
         opening_snapshot: Some(json!({
             "entry_price": position.entry_price,
             "average_entry_price": position.average_entry_price,
-            "entry_size_sol": position.entry_size_sol,
-            "total_size_sol": position.total_size_sol,
+            "entry_size_sol": position.entry_size_native,
+            "total_size_sol": position.total_size_native,
             "entry_time": position.entry_time,
             "current_price": position.current_price,
             "unrealized_pnl": position.unrealized_pnl,

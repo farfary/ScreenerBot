@@ -46,7 +46,7 @@ pub(super) async fn send_position_details(
                 current_price,
                 pos.unrealized_pnl.unwrap_or_default(),
                 pos.unrealized_pnl_percent.unwrap_or_default(),
-                pos.total_size_sol,
+                pos.total_size_native,
                 current_value,
                 tokens,
                 duration,

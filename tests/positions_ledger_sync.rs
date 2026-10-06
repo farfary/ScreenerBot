@@ -49,13 +49,13 @@ fn round(mint: &str, round_key: &str) -> LedgerRound {
         total_disposed_raw: 1_000_000,
         entry_count: 1,
         exit_count: 1,
-        invested_sol: 2.0,
-        remaining_basis_sol: 0.0,
-        realized_proceeds_sol: 3.0,
-        realized_cost_sol: 2.0,
-        average_entry_price_sol: Some(2.0),
-        average_exit_price_sol: Some(3.0),
-        realized_pnl_sol: Some(1.0),
+        invested_native: 2.0,
+        remaining_basis_native: 0.0,
+        realized_proceeds_native: 3.0,
+        realized_cost_native: 2.0,
+        average_entry_price_native: Some(2.0),
+        average_exit_price_native: Some(3.0),
+        realized_pnl_native: Some(1.0),
         basis_complete: true,
         history_complete: true,
         entry_signature: Some("open-sig".to_owned()),
@@ -72,11 +72,11 @@ fn open_round(mint: &str, round_key: &str) -> LedgerRound {
         balance_raw: 1_000_000,
         total_disposed_raw: 0,
         exit_count: 0,
-        remaining_basis_sol: 2.0,
-        realized_proceeds_sol: 0.0,
-        realized_cost_sol: 0.0,
-        average_exit_price_sol: None,
-        realized_pnl_sol: None,
+        remaining_basis_native: 2.0,
+        realized_proceeds_native: 0.0,
+        realized_cost_native: 0.0,
+        average_exit_price_native: None,
+        realized_pnl_native: None,
         exit_signature: None,
         ..round(mint, round_key)
     }
@@ -92,7 +92,7 @@ fn event(block_time: i64) -> LedgerEvent {
         amount: 1.0,
         balance_after: 1.0,
         quote: None,
-        price_sol: None,
+        price_native: None,
         venue: None,
     }
 }
@@ -136,8 +136,8 @@ fn bot_position(round: &LedgerRound) -> Position {
     position.entry_transaction_signature = round.entry_signature.clone();
     position.transaction_entry_verified = true;
     // What the trader booked at entry: fee-exact, and the ledger must never rewrite it.
-    position.total_size_sol = 2.0;
-    position.entry_size_sol = 2.0;
+    position.total_size_native = 2.0;
+    position.entry_size_native = 2.0;
     // Open on our books: no exit was ever executed or recorded by us.
     position.exit_time = None;
     position.exit_price = None;
@@ -146,7 +146,7 @@ fn bot_position(round: &LedgerRound) -> Position {
     position.exit_transaction_signature = None;
     position.transaction_exit_verified = false;
     position.closed_reason = None;
-    position.sol_received = None;
+    position.native_received = None;
     position.pnl = None;
     position.pnl_percent = None;
     position.remaining_token_amount = position.token_amount;
@@ -340,10 +340,10 @@ fn a_round_without_a_cost_basis_carries_no_pnl_and_no_invested_figure() {
     // An airdropped token: real proceeds when sold, but no cost we ever paid.
     let mut source = round(MINT, "open-sig:MINT");
     source.basis_complete = false;
-    source.invested_sol = 0.0;
-    source.realized_cost_sol = 0.0;
-    source.realized_pnl_sol = None;
-    source.average_entry_price_sol = None;
+    source.invested_native = 0.0;
+    source.realized_cost_native = 0.0;
+    source.realized_pnl_native = None;
+    source.average_entry_price_native = None;
 
     let plan = plan_position_writes(
         &[source],
@@ -361,8 +361,8 @@ fn a_round_without_a_cost_basis_carries_no_pnl_and_no_invested_figure() {
     assert!(!position.has_trustworthy_pnl());
     // The proceeds themselves ARE observed, so they stay — it is only the basis and
     // anything derived from it that we refuse to state.
-    assert_eq!(position.sol_received, Some(3.0));
-    assert_eq!(position.total_size_sol, 0.0);
+    assert_eq!(position.native_received, Some(3.0));
+    assert_eq!(position.total_size_native, 0.0);
 }
 
 #[test]
@@ -410,8 +410,8 @@ fn a_complete_round_reports_pnl_against_the_cost_actually_released() {
 #[test]
 fn a_zero_cost_round_reports_no_percentage_rather_than_infinity() {
     let mut source = round(MINT, "open-sig:MINT");
-    source.realized_cost_sol = 0.0;
-    source.realized_pnl_sol = Some(3.0);
+    source.realized_cost_native = 0.0;
+    source.realized_pnl_native = Some(3.0);
 
     let plan = plan_position_writes(
         &[source],
@@ -518,7 +518,10 @@ fn a_round_the_bot_executed_is_adopted_instead_of_duplicated() {
     assert_eq!(adopted.round_key.as_deref(), Some("open-sig:MINT"));
     assert_eq!(adopted.origin, bot_row.origin, "origin is the trader's");
     assert_eq!(adopted.management, PositionManagement::AutoTrader);
-    assert_eq!(adopted.total_size_sol, 2.0, "the booked basis is untouched");
+    assert_eq!(
+        adopted.total_size_native, 2.0,
+        "the booked basis is untouched"
+    );
     assert!(adopted.exit_time.is_none(), "still held, still open");
 }
 
@@ -578,7 +581,7 @@ fn a_bot_position_sold_somewhere_else_is_closed_from_wallet_history() {
         reconciled.closed_reason.as_deref(),
         Some("closed_externally")
     );
-    assert_eq!(reconciled.sol_received, Some(3.0));
+    assert_eq!(reconciled.native_received, Some(3.0));
     // Proceeds from the chain, basis from what the trader booked: 3 SOL out, 2 SOL in.
     assert_eq!(reconciled.pnl, Some(1.0));
     assert_eq!(reconciled.pnl_percent, Some(50.0));
@@ -601,8 +604,8 @@ fn a_close_we_could_not_time_is_dated_by_the_last_time_we_saw_the_holding() {
     let mut vanished = round(MINT, "open-sig:MINT");
     vanished.closed_at = None;
     vanished.exit_signature = None;
-    vanished.average_exit_price_sol = None;
-    vanished.realized_proceeds_sol = 0.0;
+    vanished.average_exit_price_native = None;
+    vanished.realized_proceeds_native = 0.0;
     vanished.basis_complete = false;
     vanished.history_complete = false;
     vanished.events = vec![event(1_600_000_500)];
@@ -625,7 +628,7 @@ fn a_close_we_could_not_time_is_dated_by_the_last_time_we_saw_the_holding() {
     assert_ne!(reconciled.exit_time, Some(now()));
     assert_eq!(reconciled.exit_transaction_signature, None);
     assert_eq!(
-        reconciled.sol_received, None,
+        reconciled.native_received, None,
         "no proceeds may be invented for a disposal we never saw"
     );
     assert_eq!(reconciled.pnl, None);
@@ -662,7 +665,7 @@ fn grown_round() -> LedgerRound {
     grown.balance_raw = 5_000_000;
     grown.total_acquired_raw = 5_000_000;
     grown.entry_count = 3;
-    grown.invested_sol = 8.0;
+    grown.invested_native = 8.0;
     grown.events = vec![
         acquisition("open-sig", LedgerEventKind::Entry, 1.0, 2.0),
         acquisition("outside-1", LedgerEventKind::Add, 2.0, 3.0),
@@ -684,7 +687,7 @@ fn acquisition(signature: &str, kind: LedgerEventKind, amount: f64, sol: f64) ->
             asset: QuoteAsset::Sol,
             amount: sol,
         }),
-        price_sol: Some(sol / amount),
+        price_native: Some(sol / amount),
         venue: Some("jupiter".to_owned()),
     }
 }
@@ -704,7 +707,7 @@ fn a_buy_made_elsewhere_grows_the_bot_s_own_position() {
             entry_signatures: HashSet::from(["open-sig".to_owned()]),
             // Fee-exact, and slightly above the chain's 2.0 leg because the trader
             // booked what it actually paid.
-            booked_invested_sol: 2.01,
+            booked_invested_native: 2.01,
         },
     )]);
 
@@ -725,9 +728,9 @@ fn a_buy_made_elsewhere_grows_the_bot_s_own_position() {
     // The trader's own leg keeps its fee-exact number; the two outside buys come from
     // the chain. Never the round's 8.0, which would discard the fee.
     assert!(
-        (grown.total_size_sol - 8.01).abs() < 1e-9,
+        (grown.total_size_native - 8.01).abs() < 1e-9,
         "{:?}",
-        grown.total_size_sol
+        grown.total_size_native
     );
     assert!(grown.exit_time.is_none());
 }
@@ -744,7 +747,7 @@ fn absorbing_an_outside_buy_is_idempotent() {
         7i64,
         TraderLegs {
             entry_signatures: HashSet::from(["open-sig".to_owned()]),
-            booked_invested_sol: 2.0,
+            booked_invested_native: 2.0,
         },
     )]);
 
@@ -795,7 +798,7 @@ fn an_unpriced_outside_buy_takes_the_holding_but_not_a_basis() {
     assert!(!reconciled.basis_complete);
     assert!(!reconciled.has_trustworthy_pnl());
     assert!(
-        (reconciled.total_size_sol - 2.0).abs() < 1e-9,
+        (reconciled.total_size_native - 2.0).abs() < 1e-9,
         "the trader's basis is left alone, never mixed with an unpriceable leg"
     );
 }
@@ -822,7 +825,7 @@ fn a_holding_that_grew_on_broken_history_is_not_claimed() {
 
     assert_eq!(plan.updates.len(), 1, "only the round key is stamped");
     assert_eq!(plan.updates[0].remaining_token_amount, Some(raw(1_000_000)));
-    assert!((plan.updates[0].total_size_sol - 2.0).abs() < 1e-9);
+    assert!((plan.updates[0].total_size_native - 2.0).abs() < 1e-9);
 }
 
 #[test]
@@ -834,7 +837,7 @@ fn a_position_that_booked_its_own_exit_is_never_rewritten() {
     bot_row.exit_transaction_signature = Some("our-own-close".to_owned());
     bot_row.transaction_exit_verified = true;
     bot_row.remaining_token_amount = Some(raw(0));
-    bot_row.sol_received = Some(2.9);
+    bot_row.native_received = Some(2.9);
     bot_row.pnl = Some(0.85);
 
     let plan = plan_position_writes(
@@ -1162,7 +1165,7 @@ fn a_bot_buy_then_a_sale_made_elsewhere_closes_exactly_one_position() {
     // The trader's row for that buy: open, verified, nothing exited.
     let mut bot_row = bot_position(&open_round(TRADED_MINT, "bot-buy:MINT"));
     bot_row.entry_transaction_signature = Some("bot-buy".to_owned());
-    bot_row.total_size_sol = 1.0;
+    bot_row.total_size_native = 1.0;
     bot_row.remaining_token_amount = Some(raw(2_000_000));
 
     let plan = plan_position_writes(
@@ -1190,6 +1193,6 @@ fn a_bot_buy_then_a_sale_made_elsewhere_closes_exactly_one_position() {
         Some("elsewhere-sell")
     );
     assert_eq!(closed.closed_reason.as_deref(), Some("closed_externally"));
-    assert_eq!(closed.sol_received, Some(1.5));
+    assert_eq!(closed.native_received, Some(1.5));
     assert_eq!(closed.pnl, Some(0.5));
 }

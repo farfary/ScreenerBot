@@ -25,7 +25,7 @@ use chrono::Utc;
 /// CRITICAL: This does NOT consume a new semaphore permit - same position
 pub async fn add_to_position(
     token_mint: &str,
-    dca_amount_sol: f64,
+    dca_amount_native: f64,
     slippage_pct: Option<f64>,
     origin: TradeOrigin,
 ) -> Result<String> {
@@ -90,7 +90,7 @@ pub async fn add_to_position(
         &format!(
             "DCA entry initiated: {} | {} SOL | DCA #{} ",
             position.symbol,
-            dca_amount_sol,
+            dca_amount_native,
             position.dca_count + 1
         ),
     );
@@ -102,7 +102,7 @@ pub async fn add_to_position(
         "dca_initiated",
         position.entry_transaction_signature.as_deref(),
         None,
-        dca_amount_sol,
+        dca_amount_native,
         RawAmount::ZERO,
         None,
         None,
@@ -129,7 +129,7 @@ pub async fn add_to_position(
         chain: crate::chains::active_chain(),
         input_mint: adapter().native_asset_address().to_string(),
         output_mint: token_mint.to_string(),
-        input_amount: adapter().native_to_raw(dca_amount_sol).into(),
+        input_amount: adapter().native_to_raw(dca_amount_native).into(),
         wallet_address: wallet_address.clone(),
         slippage_pct: slippage,
         swap_mode: SwapMode::ExactIn,
@@ -153,7 +153,7 @@ pub async fn add_to_position(
     };
     logger::info(
         LogTag::Positions,
-        &format!("DCA quote: {dca_amount_sol} SOL → {quoted_tokens} tokens"),
+        &format!("DCA quote: {dca_amount_native} SOL → {quoted_tokens} tokens"),
     );
 
     // Execute swap. A swap that REACHED THE CHAIN is never discarded as a trade
@@ -204,7 +204,7 @@ pub async fn add_to_position(
         position_id,
         expiry_height,
         created_at: Utc::now(),
-        size_sol: dca_amount_sol,
+        size_sol: dca_amount_native,
     };
 
     register_pending_dca_swap(pending_dca.clone())
@@ -232,7 +232,7 @@ pub async fn add_to_position(
     let transition = crate::positions::transitions::PositionTransition::DcaSubmitted {
         position_id,
         dca_signature: transaction_signature.clone(),
-        dca_amount_sol,
+        dca_amount_native,
         market_price: price_info.price_sol,
     };
 
@@ -273,7 +273,7 @@ pub async fn add_to_position(
         &format!(
             "DCA entry submitted: {} | {} SOL | TX: {} | DCA #{}",
             api_token.symbol,
-            dca_amount_sol,
+            dca_amount_native,
             transaction_signature,
             position.dca_count + 1
         ),

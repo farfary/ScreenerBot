@@ -154,14 +154,14 @@ pub fn reconcile_with_wallet(rounds: &mut Vec<LedgerRound>, holdings: &[WalletHo
         round.balance_raw = actual;
         round.history_complete = false;
         round.basis_complete = false;
-        round.realized_pnl_sol = None;
-        round.average_entry_price_sol = None;
+        round.realized_pnl_native = None;
+        round.average_entry_price_native = None;
 
         if actual == 0 {
             // Gone from the wallet with no disposal in our history. It is closed, but
             // we do not know when or into what, so no timestamp and no proceeds.
             round.is_open = false;
-            round.remaining_basis_sol = 0.0;
+            round.remaining_basis_native = 0.0;
         }
     }
 
@@ -198,13 +198,13 @@ pub fn reconcile_with_wallet(rounds: &mut Vec<LedgerRound>, holdings: &[WalletHo
             total_disposed_raw: 0,
             entry_count: 0,
             exit_count: 0,
-            invested_sol: 0.0,
-            remaining_basis_sol: 0.0,
-            realized_proceeds_sol: 0.0,
-            realized_cost_sol: 0.0,
-            average_entry_price_sol: None,
-            average_exit_price_sol: None,
-            realized_pnl_sol: None,
+            invested_native: 0.0,
+            remaining_basis_native: 0.0,
+            realized_proceeds_native: 0.0,
+            realized_cost_native: 0.0,
+            average_entry_price_native: None,
+            average_exit_price_native: None,
+            realized_pnl_native: None,
             basis_complete: false,
             history_complete: false,
             entry_signature: None,
@@ -387,14 +387,14 @@ impl Round {
             .then(|| quote_for(group, &delta.mint, true))
             .flatten();
 
-        let mut price_sol = None;
+        let mut price_native = None;
         match quote {
             Some(leg) => {
                 if self.accept_quote(leg) && amount > DUST {
                     self.invested += leg.amount;
                     self.remaining_basis += leg.amount;
                     self.priced_acquired += amount;
-                    price_sol = Some(leg.amount / amount);
+                    price_native = Some(leg.amount / amount);
                 }
             }
             None => {
@@ -414,7 +414,7 @@ impl Round {
             amount,
             balance_after: RawAmount::new(after.unsigned_abs()).to_whole_units(self.decimals),
             quote,
-            price_sol,
+            price_native,
             venue: delta.venue.clone(),
         });
     }
@@ -495,7 +495,7 @@ impl Round {
             .then(|| quote_for(group, &delta.mint, false))
             .flatten();
 
-        let mut price_sol = None;
+        let mut price_native = None;
         if traded {
             match quote {
                 Some(leg)
@@ -506,7 +506,7 @@ impl Round {
                     self.realized_cost += allocated_basis;
                     self.priced_disposed += amount;
                     if amount > DUST {
-                        price_sol = Some(leg.amount / amount);
+                        price_native = Some(leg.amount / amount);
                     }
                 }
                 _ => self.proceeds_complete = false,
@@ -521,7 +521,7 @@ impl Round {
             amount,
             balance_after: RawAmount::new(after.unsigned_abs()).to_whole_units(self.decimals),
             quote,
-            price_sol,
+            price_native,
             venue: delta.venue.clone(),
         });
 
@@ -537,11 +537,11 @@ impl Round {
             && self.quote_asset == Some(QuoteAsset::Sol)
             && self.entry_count > 0;
 
-        let average_entry_price_sol = (basis_complete && self.priced_acquired > DUST)
+        let average_entry_price_native = (basis_complete && self.priced_acquired > DUST)
             .then(|| self.invested / self.priced_acquired);
-        let average_exit_price_sol = (self.proceeds_complete && self.priced_disposed > DUST)
+        let average_exit_price_native = (self.proceeds_complete && self.priced_disposed > DUST)
             .then(|| self.realized_proceeds / self.priced_disposed);
-        let realized_pnl_sol = (basis_complete && self.proceeds_complete && self.exit_count > 0)
+        let realized_pnl_native = (basis_complete && self.proceeds_complete && self.exit_count > 0)
             .then(|| self.realized_proceeds - self.realized_cost);
 
         if !basis_complete {
@@ -561,13 +561,13 @@ impl Round {
             total_disposed_raw: self.total_disposed.max(0).unsigned_abs(),
             entry_count: self.entry_count,
             exit_count: self.exit_count,
-            invested_sol: self.invested,
-            remaining_basis_sol: self.remaining_basis,
-            realized_proceeds_sol: self.realized_proceeds,
-            realized_cost_sol: self.realized_cost,
-            average_entry_price_sol,
-            average_exit_price_sol,
-            realized_pnl_sol,
+            invested_native: self.invested,
+            remaining_basis_native: self.remaining_basis,
+            realized_proceeds_native: self.realized_proceeds,
+            realized_cost_native: self.realized_cost,
+            average_entry_price_native,
+            average_exit_price_native,
+            realized_pnl_native,
             basis_complete,
             history_complete: self.history_complete,
             entry_signature: self.entry_signature,

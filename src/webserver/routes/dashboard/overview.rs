@@ -50,7 +50,7 @@ pub async fn get_dashboard_overview(State(state): State<Arc<AppState>>) -> Json<
     let total_invested_sol: f64 = open_positions
         .iter()
         .filter(|p| p.has_trustworthy_pnl())
-        .map(|p| p.total_size_sol)
+        .map(|p| p.total_size_native)
         .sum();
 
     // Use SQL aggregation for closed positions stats (optimized)
@@ -62,16 +62,16 @@ pub async fn get_dashboard_overview(State(state): State<Arc<AppState>>) -> Json<
         .unwrap_or_else(|_| positions::PeriodTradingStats {
             buys: 0,
             sells: 0,
-            profit_sol: 0.0,
-            loss_sol: 0.0,
-            net_pnl_sol: 0.0,
+            profit_native: 0.0,
+            loss_native: 0.0,
+            net_pnl_native: 0.0,
             drawdown_percent: 0.0,
             win_rate: 0.0,
             closed_positions: 0,
             wins: 0,
         });
 
-    let total_pnl = all_time_stats.net_pnl_sol;
+    let total_pnl = all_time_stats.net_pnl_native;
     let win_rate = all_time_stats.win_rate;
     let closed_positions_count = positions::get_db_closed_positions_count_since(epoch_start)
         .await

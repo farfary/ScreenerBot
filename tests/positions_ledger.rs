@@ -132,7 +132,7 @@ fn a_traded_acquisition_from_zero_opens_an_open_round() {
     assert_eq!(round.round_key, format!("sig1:{MINT_A}"));
     assert_eq!(round.entry_count, 1);
     assert_eq!(round.events[0].kind, LedgerEventKind::Entry);
-    assert!(close(round.invested_sol, 2.0));
+    assert!(close(round.invested_native, 2.0));
     assert!(round.basis_complete);
     assert!(round.history_complete);
 }
@@ -157,7 +157,7 @@ fn a_second_buy_is_an_add_within_the_same_round() {
     let round = &rounds[0];
     assert_eq!(round.entry_count, 2);
     assert_eq!(round.events[1].kind, LedgerEventKind::Add);
-    assert!(close(round.invested_sol, 5.0));
+    assert!(close(round.invested_native, 5.0));
 }
 
 #[test]
@@ -181,7 +181,7 @@ fn a_partial_sell_keeps_the_round_open_and_is_recorded_separately() {
     assert_eq!(round.exit_count, 1);
     assert_eq!(round.events[1].kind, LedgerEventKind::PartialExit);
     assert_eq!(round.balance_raw, 750_000_000);
-    assert!(close(round.realized_proceeds_sol, 1.0));
+    assert!(close(round.realized_proceeds_native, 1.0));
 }
 
 #[test]
@@ -205,7 +205,10 @@ fn selling_the_whole_balance_closes_the_round() {
     assert_eq!(round.closed_at, Some(1_100));
     assert_eq!(round.events[1].kind, LedgerEventKind::Exit);
     assert_eq!(round.exit_signature.as_deref(), Some("sig2"));
-    assert_eq!(round.realized_pnl_sol.map(|v| (v * 1e6).round()), Some(1e6));
+    assert_eq!(
+        round.realized_pnl_native.map(|v| (v * 1e6).round()),
+        Some(1e6)
+    );
 }
 
 #[test]
@@ -229,10 +232,10 @@ fn buying_again_after_a_close_starts_a_new_round_with_its_own_basis() {
     let reopened = rounds.iter().find(|r| r.is_open).expect("second round");
     assert_eq!(reopened.round_key, format!("sig3:{MINT_A}"));
     assert!(
-        close(reopened.invested_sol, 4.0),
+        close(reopened.invested_native, 4.0),
         "the new round must not inherit the old cost basis"
     );
-    assert_eq!(reopened.realized_proceeds_sol, 0.0);
+    assert_eq!(reopened.realized_proceeds_native, 0.0);
 }
 
 // ==================== token -> token ====================
@@ -300,8 +303,8 @@ fn a_token_to_token_swap_yields_no_sol_basis_or_proceeds() {
         !b.basis_complete,
         "no SOL leg means no basis — it must never be invented"
     );
-    assert_eq!(b.realized_pnl_sol, None);
-    assert_eq!(b.invested_sol, 0.0);
+    assert_eq!(b.realized_pnl_native, None);
+    assert_eq!(b.invested_native, 0.0);
 }
 
 // ==================== what the reducer refuses to claim ====================
@@ -327,7 +330,7 @@ fn an_airdrop_never_receives_a_cost_basis() {
         !round.basis_complete,
         "a zero basis on free tokens reads as infinite gain"
     );
-    assert_eq!(round.realized_pnl_sol, None);
+    assert_eq!(round.realized_pnl_native, None);
 }
 
 #[test]
@@ -357,8 +360,8 @@ fn a_usd_quoted_buy_is_recorded_but_never_converted_into_a_sol_basis() {
         !round.basis_complete,
         "USD is never back-converted to SOL at today's rate"
     );
-    assert_eq!(round.invested_sol, 0.0);
-    assert_eq!(round.average_entry_price_sol, None);
+    assert_eq!(round.invested_native, 0.0);
+    assert_eq!(round.average_entry_price_native, None);
 }
 
 #[test]
@@ -415,7 +418,7 @@ fn one_sol_leg_is_not_split_across_two_positions_bought_together() {
             !round.basis_complete,
             "attributing the whole 6 SOL to each would overstate both bases"
         );
-        assert_eq!(round.invested_sol, 0.0);
+        assert_eq!(round.invested_native, 0.0);
     }
 }
 
@@ -443,7 +446,7 @@ fn a_round_already_open_before_our_history_is_marked_genesis() {
     assert_eq!(round.round_key, format!("genesis:{MINT_A}"));
     assert!(!round.basis_complete);
     assert!(!round.history_complete);
-    assert_eq!(round.realized_pnl_sol, None);
+    assert_eq!(round.realized_pnl_native, None);
     assert_eq!(round.balance_raw, 600_000_000);
 }
 
@@ -467,7 +470,7 @@ fn a_gap_in_observed_history_clears_the_completeness_flags() {
 
     assert!(!round.history_complete);
     assert!(!round.basis_complete);
-    assert_eq!(round.realized_pnl_sol, None);
+    assert_eq!(round.realized_pnl_native, None);
 }
 
 // ==================== basis arithmetic ====================
@@ -501,9 +504,12 @@ fn cost_basis_is_released_pro_rata_across_successive_partial_exits() {
     let rounds = reduce_rounds(&deltas);
     let round = &rounds[0];
 
-    assert!(close(round.realized_cost_sol, 0.5), "0.25 + 0.25 of basis");
-    assert!(close(round.remaining_basis_sol, 0.5));
-    assert!(close(round.realized_proceeds_sol, 1.0));
+    assert!(
+        close(round.realized_cost_native, 0.5),
+        "0.25 + 0.25 of basis"
+    );
+    assert!(close(round.remaining_basis_native, 0.5));
+    assert!(close(round.realized_proceeds_native, 1.0));
 }
 
 #[test]
@@ -524,9 +530,9 @@ fn average_entry_price_is_weighted_across_every_priced_acquisition() {
     let round = &rounds[0];
 
     // 10 SOL for 4_000 tokens.
-    assert!(close(round.average_entry_price_sol.unwrap(), 0.0025));
-    assert!(close(round.events[0].price_sol.unwrap(), 0.001));
-    assert!(close(round.events[1].price_sol.unwrap(), 0.003));
+    assert!(close(round.average_entry_price_native.unwrap(), 0.0025));
+    assert!(close(round.events[0].price_native.unwrap(), 0.001));
+    assert!(close(round.events[1].price_native.unwrap(), 0.003));
 }
 
 #[test]
@@ -549,7 +555,7 @@ fn realized_pnl_is_withheld_when_a_disposal_had_no_observable_proceeds() {
     assert_eq!(round.events[1].kind, LedgerEventKind::Send);
     assert_eq!(round.exit_count, 0);
     assert_eq!(
-        round.realized_pnl_sol, None,
+        round.realized_pnl_native, None,
         "sending tokens out is not proceeds"
     );
     assert!(!round.is_open);
@@ -574,7 +580,7 @@ fn a_wsol_leg_is_priced_as_sol() {
     let round = &rounds[0];
 
     assert_eq!(round.events[0].quote.unwrap().asset, QuoteAsset::Sol);
-    assert!(close(round.invested_sol, 2.0));
+    assert!(close(round.invested_native, 2.0));
     assert!(round.basis_complete);
 }
 
@@ -598,7 +604,7 @@ fn native_sol_wins_over_a_wsol_leg_in_the_same_transaction() {
     let rounds = reduce_rounds(&deltas);
 
     assert!(
-        close(rounds[0].invested_sol, 2.0),
+        close(rounds[0].invested_native, 2.0),
         "the leg is counted once"
     );
 }
@@ -673,7 +679,7 @@ fn reconciliation_defers_to_the_wallet_and_marks_the_round_incomplete() {
     assert_eq!(round.balance_raw, 400_000_000, "on-chain truth wins");
     assert!(!round.history_complete);
     assert!(!round.basis_complete);
-    assert_eq!(round.realized_pnl_sol, None);
+    assert_eq!(round.realized_pnl_native, None);
 }
 
 #[test]

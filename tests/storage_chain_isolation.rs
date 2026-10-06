@@ -198,7 +198,7 @@ mod positions_store {
         let path = screenerbot::paths::get_positions_db_path();
         let conn = Connection::open(&path).expect("open positions db directly");
         conn.execute(
-            "INSERT INTO positions (chain_id, wallet_address, mint, symbol, name, entry_price, entry_time, position_type, entry_size_sol, total_size_sol, price_highest, price_lowest)
+            "INSERT INTO positions (chain_id, wallet_address, mint, symbol, name, entry_price, entry_time, position_type, entry_size_native, total_size_native, price_highest, price_lowest)
              VALUES ('ethereum', ?1, ?2, 'FAKE', 'Fake', 0.002, '2026-01-01T00:00:00Z', 'buy', 2.0, 2.0, 0.002, 0.002)",
             rusqlite::params![wallet_address, common::TEST_MINT],
         )
@@ -213,7 +213,7 @@ mod positions_store {
             1,
             "the ethereum row for the same wallet+mint must not appear in the Solana-scoped list"
         );
-        assert_eq!(open[0].total_size_sol, 1.0);
+        assert_eq!(open[0].total_size_native, 1.0);
 
         let solana_rows: i64 = conn
             .query_row(

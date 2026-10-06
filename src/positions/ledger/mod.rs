@@ -123,7 +123,7 @@ pub struct LedgerEvent {
     /// Consideration observed in the same transaction, when there was one.
     pub quote: Option<QuoteLeg>,
     /// Price per whole token in SOL. `None` whenever the quote was not SOL.
-    pub price_sol: Option<f64>,
+    pub price_native: Option<f64>,
     pub venue: Option<String>,
 }
 
@@ -149,17 +149,17 @@ pub struct LedgerRound {
     pub exit_count: u32,
     /// SOL paid in across every priced acquisition. Meaningful only when
     /// `basis_complete`.
-    pub invested_sol: f64,
+    pub invested_native: f64,
     /// Cost basis still attached to the remaining balance.
-    pub remaining_basis_sol: f64,
+    pub remaining_basis_native: f64,
     /// SOL received across every priced disposal.
-    pub realized_proceeds_sol: f64,
+    pub realized_proceeds_native: f64,
     /// Basis consumed by those disposals.
-    pub realized_cost_sol: f64,
-    pub average_entry_price_sol: Option<f64>,
-    pub average_exit_price_sol: Option<f64>,
+    pub realized_cost_native: f64,
+    pub average_entry_price_native: Option<f64>,
+    pub average_exit_price_native: Option<f64>,
     /// `Some` only when both the basis and the proceeds are fully established.
-    pub realized_pnl_sol: Option<f64>,
+    pub realized_pnl_native: Option<f64>,
     /// False when the cost basis could not be established from what we observed.
     pub basis_complete: bool,
     /// False when the observed deltas do not reconcile with the balances we saw.

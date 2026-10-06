@@ -102,7 +102,7 @@ pub async fn handle_positions_command() -> String {
         ));
         response.push('\n');
 
-        total_invested += pos.total_size_sol;
+        total_invested += pos.total_size_native;
         total_pnl += pnl_sol;
     }
 
@@ -161,7 +161,7 @@ pub async fn handle_stats_command() -> String {
     let mut total_pnl = 0.0;
 
     for pos in &positions {
-        total_invested += pos.total_size_sol;
+        total_invested += pos.total_size_native;
         total_pnl += pos.unrealized_pnl.unwrap_or_default();
     }
 

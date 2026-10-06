@@ -60,16 +60,16 @@ pub async fn apply_transition(transition: PositionTransition) -> Result<ApplyEff
             position_id,
             effective_entry_price,
             token_amount_units,
-            fee_lamports,
-            sol_size,
+            fee_raw,
+            native_size,
         } => {
             let updated = update_position_state_by_id(position_id, |pos| {
                 pos.transaction_entry_verified = true;
                 pos.effective_entry_price = Some(effective_entry_price);
-                pos.total_size_sol = sol_size;
+                pos.total_size_native = native_size;
                 pos.token_amount = Some(token_amount_units);
-                pos.entry_fee_lamports = Some(fee_lamports);
-                pos.entry_size_sol = sol_size;
+                pos.entry_fee_raw = Some(fee_raw);
+                pos.entry_size_native = native_size;
                 pos.remaining_token_amount = Some(token_amount_units);
                 pos.average_entry_price = effective_entry_price;
             })
@@ -88,7 +88,7 @@ pub async fn apply_transition(transition: PositionTransition) -> Result<ApplyEff
                                 "entry_verified",
                                 position.entry_transaction_signature.as_deref(),
                                 None,
-                                sol_size,
+                                native_size,
                                 token_amount_units,
                                 None,
                                 None,
@@ -102,10 +102,10 @@ pub async fn apply_transition(transition: PositionTransition) -> Result<ApplyEff
                                     position.entry_time,
                                     token_amount_units,
                                     effective_entry_price,
-                                    sol_size,
+                                    native_size,
                                     entry_sig,
                                     false,
-                                    Some(fee_lamports),
+                                    Some(fee_raw),
                                 )
                                 .await
                                 {
@@ -126,7 +126,7 @@ pub async fn apply_transition(transition: PositionTransition) -> Result<ApplyEff
                                 queue_notification(Notification::position_opened(
                                     position.symbol.clone(),
                                     position.mint.clone(),
-                                    sol_size,
+                                    native_size,
                                     effective_entry_price,
                                 ));
                             }
@@ -149,11 +149,11 @@ pub async fn apply_transition(transition: PositionTransition) -> Result<ApplyEff
         PositionTransition::ExitVerified {
             position_id,
             effective_exit_price,
-            sol_received,
-            fee_lamports,
+            native_received,
+            fee_raw,
             exit_time,
         } => {
-            // IDEMPOTENCE: this transition ACCUMULATES (`sol_received +=`,
+            // IDEMPOTENCE: this transition ACCUMULATES (`native_received +=`,
             // `total_exited_amount +=`), so applying it twice for the same close would double
             // the proceeds and corrupt P&L. The queue dedupes by signature only while an item
             // is IN it — once polled it is gone, so a re-enqueue can hand the same exit back.
@@ -179,14 +179,15 @@ pub async fn apply_transition(transition: PositionTransition) -> Result<ApplyEff
                 }
                 pos.transaction_exit_verified = true;
                 pos.effective_exit_price = Some(effective_exit_price);
-                // ACCUMULATE: `sol_received` is the position's total proceeds, and partial
+                // ACCUMULATE: `native_received` is the position's total proceeds, and partial
                 // exits have already added theirs. Overwriting it here (as this did) threw
                 // away every SOL taken off the table earlier, so a position that took 50%
                 // profit and then closed reported only the final close's proceeds — closed
                 // P&L, which is computed straight off this field, understated the profit by
                 // the whole partial exit.
-                pos.sol_received = Some(pos.sol_received.unwrap_or_default() + sol_received);
-                pos.exit_fee_lamports = Some(fee_lamports);
+                pos.native_received =
+                    Some(pos.native_received.unwrap_or_default() + native_received);
+                pos.exit_fee_raw = Some(fee_raw);
                 pos.exit_time = Some(exit_time);
 
                 // CRITICAL FIX: Update closed_reason to remove pending verification suffix
@@ -209,12 +210,12 @@ pub async fn apply_transition(transition: PositionTransition) -> Result<ApplyEff
             if updated && requires_db_update {
                 if let Some(position) = get_position_by_id(position_id).await {
                     // Calculate final P&L for closed position BEFORE any database operations
-                    let (pnl_sol, pnl_pct) =
+                    let (pnl_native, pnl_pct) =
                         crate::positions::calculate_position_pnl(&position, None).await;
 
                     // Atomically update position with PnL in a single operation
                     let pnl_updated = update_position_state_by_id(position_id, |pos| {
-                        pos.pnl = Some(pnl_sol);
+                        pos.pnl = Some(pnl_native);
                         pos.pnl_percent = Some(pnl_pct);
                         // Clear unrealized PnL (position is now closed)
                         pos.unrealized_pnl = None;
@@ -251,8 +252,10 @@ pub async fn apply_transition(transition: PositionTransition) -> Result<ApplyEff
                         // A wallet-derived round is excluded: it is the user's own
                         // pre-existing holding, not risk the bot took, and a loss on it
                         // must not pause the trader.
-                        if pnl_sol < 0.0 && !position.is_wallet_derived() {
-                            crate::trader::safety::loss_limit::record_realized_loss(pnl_sol.abs());
+                        if pnl_native < 0.0 && !position.is_wallet_derived() {
+                            crate::trader::safety::loss_limit::record_realized_loss(
+                                pnl_native.abs(),
+                            );
                         }
 
                         match update_position(&position).await {
@@ -274,11 +277,11 @@ pub async fn apply_transition(transition: PositionTransition) -> Result<ApplyEff
                                         exit_time,
                                         closed_amount,
                                         effective_exit_price,
-                                        sol_received,
+                                        native_received,
                                         exit_signature,
                                         false,
                                         100.0,
-                                        Some(fee_lamports),
+                                        Some(fee_raw),
                                     )
                                     .await
                                     {
@@ -297,8 +300,9 @@ pub async fn apply_transition(transition: PositionTransition) -> Result<ApplyEff
                                 release_position_slot(position_id).await;
 
                                 // Record an exit verified event with basic P&L if computable
-                                let pnl_sol =
-                                    position.sol_received.map(|s| s - position.total_size_sol);
+                                let pnl_native = position
+                                    .native_received
+                                    .map(|s| s - position.total_size_native);
                                 let pnl_pct = position.effective_entry_price.and_then(|ep| {
                                     position.effective_exit_price.map(|xp| {
                                         if ep > 0.0 {
@@ -314,9 +318,9 @@ pub async fn apply_transition(transition: PositionTransition) -> Result<ApplyEff
                                     "exit_verified",
                                     position.entry_transaction_signature.as_deref(),
                                     position.exit_transaction_signature.as_deref(),
-                                    position.total_size_sol,
+                                    position.total_size_native,
                                     position.token_amount.unwrap_or_default(),
-                                    pnl_sol,
+                                    pnl_native,
                                     pnl_pct,
                                 )
                                 .await;
@@ -351,13 +355,13 @@ pub async fn apply_transition(transition: PositionTransition) -> Result<ApplyEff
                                 }) {
                                     let exit_reason = position.closed_reason.clone();
                                     // Use position.pnl and position.pnl_percent which were set in the state update above
-                                    let final_pnl_sol = position.pnl.unwrap_or_default();
+                                    let final_pnl_native = position.pnl.unwrap_or_default();
                                     let final_pnl_pct = position.pnl_percent.unwrap_or_default();
                                     let entry_price = position.average_entry_price;
                                     let exit_price =
                                         position.effective_exit_price.unwrap_or_default();
-                                    let invested = position.total_size_sol;
-                                    let received = position.sol_received.unwrap_or_default();
+                                    let invested = position.total_size_native;
+                                    let received = position.native_received.unwrap_or_default();
                                     let duration_secs = position
                                         .exit_time
                                         .map(|exit| {
@@ -367,7 +371,7 @@ pub async fn apply_transition(transition: PositionTransition) -> Result<ApplyEff
                                     queue_notification(Notification::position_closed(
                                         position.symbol.clone(),
                                         position.mint.clone(),
-                                        final_pnl_sol,
+                                        final_pnl_native,
                                         final_pnl_pct,
                                         exit_reason,
                                         entry_price,
@@ -468,10 +472,10 @@ pub async fn apply_transition(transition: PositionTransition) -> Result<ApplyEff
                 pos.exit_time = Some(exit_time);
                 pos.closed_reason = Some("synthetic_exit_permanent_failure".to_owned());
 
-                realized_pnl = pos.sol_received.unwrap_or_default() - pos.total_size_sol;
+                realized_pnl = pos.native_received.unwrap_or_default() - pos.total_size_native;
                 pos.pnl = Some(realized_pnl);
-                pos.pnl_percent = Some(if pos.total_size_sol > 0.0 {
-                    (realized_pnl / pos.total_size_sol) * 100.0
+                pos.pnl_percent = Some(if pos.total_size_native > 0.0 {
+                    (realized_pnl / pos.total_size_native) * 100.0
                 } else {
                     0.0
                 });
@@ -500,7 +504,7 @@ pub async fn apply_transition(transition: PositionTransition) -> Result<ApplyEff
                         "exit_synthetic",
                         position.entry_transaction_signature.as_deref(),
                         position.exit_transaction_signature.as_deref(),
-                        position.total_size_sol,
+                        position.total_size_native,
                         position.remaining_token_amount.unwrap_or_default(),
                         None,
                         None,
@@ -612,14 +616,14 @@ pub async fn apply_transition(transition: PositionTransition) -> Result<ApplyEff
         } => {
             // Record partial exit submitted event
             if let Some(position) = get_position_by_id(position_id).await {
-                let sol_estimate = (exit_amount.raw() as f64 / 10_f64.powi(9)) * market_price;
+                let native_estimate = (exit_amount.raw() as f64 / 10_f64.powi(9)) * market_price;
                 crate::events::record_position_event(
                     &position_id.to_string(),
                     &position.mint,
                     "partial_exit_submitted",
                     position.entry_transaction_signature.as_deref(),
                     Some(&exit_signature),
-                    sol_estimate,
+                    native_estimate,
                     exit_amount,
                     None,
                     Some(exit_percentage),
@@ -639,15 +643,15 @@ pub async fn apply_transition(transition: PositionTransition) -> Result<ApplyEff
         PositionTransition::PartialExitVerified {
             position_id,
             exit_amount,
-            sol_received,
+            native_received,
             effective_exit_price,
-            fee_lamports,
+            fee_raw,
             exit_time,
             exit_signature,
             exit_percentage,
         } => {
             // IDEMPOTENCE: everything below ACCUMULATES (remaining -=, total_exited +=,
-            // sol_received +=, partial_exit_count += 1). Applying the same partial twice
+            // native_received +=, partial_exit_count += 1). Applying the same partial twice
             // would sell the same tokens twice on paper. The exit record is the token: one
             // swap = one record (its insert is INSERT ... WHERE NOT EXISTS on the signature).
             if super::db::exit_record_exists(position_id, &exit_signature).await {
@@ -692,7 +696,8 @@ pub async fn apply_transition(transition: PositionTransition) -> Result<ApplyEff
                 pos.partial_exit_count += 1;
 
                 // Update SOL received (cumulative)
-                pos.sol_received = Some(pos.sol_received.unwrap_or_default() + sol_received);
+                pos.native_received =
+                    Some(pos.native_received.unwrap_or_default() + native_received);
 
                 // CRITICAL: Do NOT set exit_time or exit_signature - position still open!
             })
@@ -704,7 +709,7 @@ pub async fn apply_transition(transition: PositionTransition) -> Result<ApplyEff
                     // Calculate unrealized PnL immediately after partial exit
                     // Don't wait for price updater (eliminates up to 1 second delay)
                     if let Some(current_price) = position.current_price {
-                        let (pnl_sol, pnl_pct) = crate::positions::calculate_position_pnl(
+                        let (pnl_native, pnl_pct) = crate::positions::calculate_position_pnl(
                             &position,
                             Some(current_price),
                         )
@@ -712,7 +717,7 @@ pub async fn apply_transition(transition: PositionTransition) -> Result<ApplyEff
 
                         // Update unrealized PnL in memory
                         update_position_state_by_id(position_id, |pos| {
-                            pos.unrealized_pnl = Some(pnl_sol);
+                            pos.unrealized_pnl = Some(pnl_native);
                             pos.unrealized_pnl_percent = Some(pnl_pct);
                         })
                         .await;
@@ -738,11 +743,11 @@ pub async fn apply_transition(transition: PositionTransition) -> Result<ApplyEff
                                 exit_time,
                                 exit_amount,
                                 effective_exit_price,
-                                sol_received,
+                                native_received,
                                 &exit_signature,
                                 true,
                                 exit_percentage,
-                                Some(fee_lamports),
+                                Some(fee_raw),
                             )
                             .await
                             {
@@ -782,7 +787,7 @@ pub async fn apply_transition(transition: PositionTransition) -> Result<ApplyEff
                                 None => 0.0,
                             };
                             let partial_pnl = if sold_tokens > 0.0 {
-                                Some(sol_received - (sold_tokens * position.average_entry_price))
+                                Some(native_received - (sold_tokens * position.average_entry_price))
                             } else {
                                 None
                             };
@@ -805,7 +810,7 @@ pub async fn apply_transition(transition: PositionTransition) -> Result<ApplyEff
                                 "partial_exit_verified",
                                 position.entry_transaction_signature.as_deref(),
                                 None,
-                                sol_received,
+                                native_received,
                                 exit_amount,
                                 partial_pnl,
                                 None,
@@ -870,9 +875,9 @@ pub async fn apply_transition(transition: PositionTransition) -> Result<ApplyEff
         PositionTransition::ExitResidualClearForRetry {
             position_id,
             exit_amount,
-            sol_received,
+            native_received,
             effective_exit_price,
-            fee_lamports,
+            fee_raw,
             exit_time,
             exit_signature,
             exit_percentage,
@@ -889,16 +894,16 @@ pub async fn apply_transition(transition: PositionTransition) -> Result<ApplyEff
                 LogTag::Positions,
                 &format!(
                     "Exit for position {} filled only partially ({} tokens, {:.6} SOL) - recording the fill and retrying the residual",
-                    position_id, exit_amount, sol_received
+                    position_id, exit_amount, native_received
                 ),
             );
 
             Box::pin(apply_transition(PositionTransition::PartialExitVerified {
                 position_id,
                 exit_amount,
-                sol_received,
+                native_received,
                 effective_exit_price,
-                fee_lamports,
+                fee_raw,
                 exit_time,
                 exit_signature,
                 exit_percentage,
@@ -925,7 +930,7 @@ pub async fn apply_transition(transition: PositionTransition) -> Result<ApplyEff
                     "partial_exit_failed",
                     position.entry_transaction_signature.as_deref(),
                     position.exit_transaction_signature.as_deref(),
-                    position.total_size_sol,
+                    position.total_size_native,
                     position.remaining_token_amount.unwrap_or_default(),
                     None,
                     None,
@@ -964,19 +969,19 @@ pub async fn apply_transition(transition: PositionTransition) -> Result<ApplyEff
         PositionTransition::DcaSubmitted {
             position_id,
             dca_signature,
-            dca_amount_sol,
+            dca_amount_native,
             market_price,
         } => {
             // Record DCA submitted event
             if let Some(position) = get_position_by_id(position_id).await {
-                let token_estimate = (dca_amount_sol / market_price) * 10_f64.powi(9);
+                let token_estimate = (dca_amount_native / market_price) * 10_f64.powi(9);
                 crate::events::record_position_event(
                     &position_id.to_string(),
                     &position.mint,
                     "dca_submitted",
                     position.entry_transaction_signature.as_deref(),
                     Some(&dca_signature),
-                    dca_amount_sol,
+                    dca_amount_native,
                     token_estimate as u64,
                     None,
                     None,
@@ -988,7 +993,7 @@ pub async fn apply_transition(transition: PositionTransition) -> Result<ApplyEff
                 LogTag::Positions,
                 &format!(
                     "DCA submitted for position {}: {} SOL at price {:.11}",
-                    position_id, dca_amount_sol, market_price
+                    position_id, dca_amount_native, market_price
                 ),
             );
             // No state update needed for submission - just logging
@@ -997,9 +1002,9 @@ pub async fn apply_transition(transition: PositionTransition) -> Result<ApplyEff
         PositionTransition::DcaVerified {
             position_id,
             tokens_bought,
-            sol_spent,
+            native_spent,
             effective_price,
-            fee_lamports,
+            fee_raw,
             dca_time,
             dca_signature,
         } => {
@@ -1021,14 +1026,14 @@ pub async fn apply_transition(transition: PositionTransition) -> Result<ApplyEff
           };
 
           // Update total SOL invested
-          pos.total_size_sol += sol_spent;
+          pos.total_size_native += native_spent;
 
           // Recalculate average entry price (weighted average) with actual decimals
           // CRITICAL: Validate all inputs to prevent division by zero or invalid calculations
-          if remaining_tokens > RawAmount::ZERO && pos.total_size_sol > 0.0 && pos.total_size_sol.is_finite() {
+          if remaining_tokens > RawAmount::ZERO && pos.total_size_native > 0.0 && pos.total_size_native.is_finite() {
             let total_tokens_normalized = remaining_tokens.to_whole_units(decimals);
             if total_tokens_normalized > 0.0 && total_tokens_normalized.is_finite() {
-              pos.average_entry_price = pos.total_size_sol / total_tokens_normalized;
+              pos.average_entry_price = pos.total_size_native / total_tokens_normalized;
             } else {
               logger::error(
                 LogTag::Positions,
@@ -1043,8 +1048,8 @@ pub async fn apply_transition(transition: PositionTransition) -> Result<ApplyEff
             logger::error(
               LogTag::Positions,
               &format!(
- "DCA: Invalid position state for average price calculation - position_id={}, remaining_tokens={}, total_size_sol={}",
-                position_id, remaining_tokens, pos.total_size_sol
+ "DCA: Invalid position state for average price calculation - position_id={}, remaining_tokens={}, total_size_native={}",
+                position_id, remaining_tokens, pos.total_size_native
               ),
             );
           }
@@ -1070,10 +1075,10 @@ pub async fn apply_transition(transition: PositionTransition) -> Result<ApplyEff
                                 dca_time,
                                 tokens_bought,
                                 effective_price,
-                                sol_spent,
+                                native_spent,
                                 &dca_signature,
                                 true,
-                                Some(fee_lamports),
+                                Some(fee_raw),
                             )
                             .await
                             {
@@ -1102,7 +1107,7 @@ pub async fn apply_transition(transition: PositionTransition) -> Result<ApplyEff
                                 "dca_verified",
                                 position.entry_transaction_signature.as_deref(),
                                 None,
-                                sol_spent,
+                                native_spent,
                                 tokens_bought,
                                 None,
                                 None,
@@ -1125,8 +1130,8 @@ pub async fn apply_transition(transition: PositionTransition) -> Result<ApplyEff
                                 queue_notification(Notification::dca_executed(
                                     position.symbol.clone(),
                                     position.mint.clone(),
-                                    sol_spent,
-                                    position.total_size_sol,
+                                    native_spent,
+                                    position.total_size_native,
                                     position.dca_count,
                                 ));
                             }
@@ -1158,7 +1163,7 @@ pub async fn apply_transition(transition: PositionTransition) -> Result<ApplyEff
                     "dca_failed",
                     position.entry_transaction_signature.as_deref(),
                     Some(&dca_signature),
-                    position.total_size_sol,
+                    position.total_size_native,
                     position.remaining_token_amount.unwrap_or_default(),
                     None,
                     None,

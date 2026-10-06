@@ -28,12 +28,12 @@ pub(super) const POSITIONS_SCHEMA_VERSION: u32 = 5;
 /// Every position SELECT must interpolate this constant.
 pub(super) const POSITION_SELECT_COLUMNS: &str = r#"
   id, mint, symbol, name, entry_price, entry_time, exit_price, exit_time,
-  position_type, entry_size_sol, total_size_sol, price_highest, price_lowest,
+  position_type, entry_size_native, total_size_native, price_highest, price_lowest,
   entry_transaction_signature, exit_transaction_signature, token_amount,
-  effective_entry_price, effective_exit_price, sol_received,
+  effective_entry_price, effective_exit_price, native_received,
   profit_target_min, profit_target_max, liquidity_tier,
   transaction_entry_verified, transaction_exit_verified,
-  entry_fee_lamports, exit_fee_lamports, current_price, current_price_updated,
+  entry_fee_raw, exit_fee_raw, current_price, current_price_updated,
   phantom_confirmations, phantom_first_seen, synthetic_exit, closed_reason,
   pnl, pnl_percent, unrealized_pnl, unrealized_pnl_percent,
   remaining_token_amount, total_exited_amount, average_exit_price, partial_exit_count,
@@ -55,8 +55,8 @@ CREATE TABLE IF NOT EXISTS positions (
   exit_price REAL,
   exit_time TEXT,
  position_type TEXT NOT NULL, -- 'buy'or 'sell'
-  entry_size_sol REAL NOT NULL, -- Initial SOL spent on first entry
-  total_size_sol REAL NOT NULL, -- Cumulative SOL invested (includes DCA)
+  entry_size_native REAL NOT NULL, -- Initial SOL spent on first entry
+  total_size_native REAL NOT NULL, -- Cumulative SOL invested (includes DCA)
   price_highest REAL NOT NULL,
   price_lowest REAL NOT NULL,
   -- Real swap tracking
@@ -65,7 +65,7 @@ CREATE TABLE IF NOT EXISTS positions (
   token_amount TEXT, -- Initial amount of tokens bought (first entry)
   effective_entry_price REAL, -- Initial entry price (deprecated, use average_entry_price)
   effective_exit_price REAL, -- Final exit price (deprecated, use average_exit_price)
-  sol_received REAL, -- Total SOL received after all exits
+  native_received REAL, -- Total SOL received after all exits
   -- Smart profit targeting
   profit_target_min REAL, -- Minimum profit target percentage
   profit_target_max REAL, -- Maximum profit target percentage
@@ -74,8 +74,8 @@ CREATE TABLE IF NOT EXISTS positions (
   transaction_entry_verified BOOLEAN NOT NULL DEFAULT false,
   transaction_exit_verified BOOLEAN NOT NULL DEFAULT false,
   -- Actual transaction fees (in lamports)
-  entry_fee_lamports INTEGER, -- Actual entry transaction fee
-  exit_fee_lamports INTEGER, -- Actual exit transaction fee
+  entry_fee_raw INTEGER, -- Actual entry transaction fee
+  exit_fee_raw INTEGER, -- Actual exit transaction fee
   -- Current price tracking
   current_price REAL, -- Current market price
   current_price_updated TEXT, -- When current_price was last updated
@@ -135,11 +135,11 @@ CREATE TABLE IF NOT EXISTS position_exits (
   timestamp TEXT NOT NULL,
   amount TEXT NOT NULL, -- Tokens sold
   price REAL NOT NULL, -- Exit price per token
-  sol_received REAL NOT NULL, -- SOL received
+  native_received REAL NOT NULL, -- SOL received
   transaction_signature TEXT NOT NULL,
   is_partial BOOLEAN NOT NULL, -- true if partial, false if full exit
   percentage REAL NOT NULL, -- % of position sold
-  fees_lamports INTEGER, -- Transaction fee
+  fees_raw INTEGER, -- Transaction fee
   FOREIGN KEY (position_id) REFERENCES positions(id) ON DELETE CASCADE
 );
 "#;
@@ -152,10 +152,10 @@ CREATE TABLE IF NOT EXISTS position_entries (
   timestamp TEXT NOT NULL,
   amount TEXT NOT NULL, -- Tokens bought
   price REAL NOT NULL, -- Entry price per token
-  sol_spent REAL NOT NULL, -- SOL spent
+  native_spent REAL NOT NULL, -- SOL spent
   transaction_signature TEXT NOT NULL,
   is_dca BOOLEAN NOT NULL, -- true if DCA, false if initial entry
-  fees_lamports INTEGER, -- Transaction fee
+  fees_raw INTEGER, -- Transaction fee
   FOREIGN KEY (position_id) REFERENCES positions(id) ON DELETE CASCADE
 );
 "#;
@@ -428,9 +428,9 @@ pub struct PositionTracking {
 pub struct PeriodTradingStats {
     pub buys: i64,
     pub sells: i64,
-    pub profit_sol: f64,
-    pub loss_sol: f64,
-    pub net_pnl_sol: f64,
+    pub profit_native: f64,
+    pub loss_native: f64,
+    pub net_pnl_native: f64,
     pub drawdown_percent: f64,
     pub win_rate: f64,
     /// Closed positions in the period (the win-rate denominator).
@@ -444,9 +444,9 @@ pub struct PeriodTradingStats {
 pub struct DailyTradingStats {
     /// Calendar day in YYYY-MM-DD (UTC).
     pub date: String,
-    pub net_pnl_sol: f64,
-    pub profit_sol: f64,
-    pub loss_sol: f64,
+    pub net_pnl_native: f64,
+    pub profit_native: f64,
+    pub loss_native: f64,
     pub trades: i64,
     pub wins: i64,
 }

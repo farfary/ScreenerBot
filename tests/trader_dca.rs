@@ -179,12 +179,12 @@ fn a_position_that_never_dcad_has_no_cooldown_to_serve() {
 
 #[test]
 fn the_dca_amount_is_a_share_of_the_first_entry() {
-    // 50% of a 1 SOL entry. Note the base is `entry_size_sol` (the FIRST buy), not the
-    // cumulative `total_size_sol` — so a third DCA is the same size as the first and
+    // 50% of a 1 SOL entry. Note the base is `entry_size_native` (the FIRST buy), not the
+    // cumulative `total_size_native` — so a third DCA is the same size as the first and
     // exposure grows linearly rather than compounding.
     let mut position = position_at(0.5);
-    position.entry_size_sol = 1.0;
-    position.total_size_sol = 4.0; // already averaged in several times
+    position.entry_size_native = 1.0;
+    position.total_size_native = 4.0; // already averaged in several times
     position.dca_count = 2;
 
     let evaluation = evaluate(&position, permissive_config());
@@ -196,7 +196,7 @@ fn a_dust_sized_dca_is_refused() {
     // A swap below the minimum trade size cannot execute, so evaluating it as a
     // trigger would produce a decision that only ever fails at the executor.
     let mut position = position_at(0.5);
-    position.entry_size_sol = MIN_TRADE_SIZE_SOL; // 50% of this is half the minimum
+    position.entry_size_native = MIN_TRADE_SIZE_SOL; // 50% of this is half the minimum
     let evaluation = evaluate(&position, permissive_config());
     assert!(!evaluation.should_trigger);
     assert!(
@@ -212,7 +212,7 @@ fn a_dust_sized_dca_is_refused() {
 #[test]
 fn a_dca_exactly_at_the_minimum_trade_size_is_allowed() {
     let mut position = position_at(0.5);
-    position.entry_size_sol = MIN_TRADE_SIZE_SOL * 2.0; // 50% lands exactly on the floor
+    position.entry_size_native = MIN_TRADE_SIZE_SOL * 2.0; // 50% lands exactly on the floor
     assert!(evaluate(&position, permissive_config()).should_trigger);
 }
 

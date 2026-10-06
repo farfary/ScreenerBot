@@ -227,7 +227,7 @@ pub struct PendingDcaSwap {
 pub struct EntrySubmission {
     pub transaction_signature: String,
     pub confirmation_pending: bool,
-    pub entry_price_sol: f64,
+    pub entry_price_native: f64,
 }
 
 // ==================== POSITION STRUCTURES ====================
@@ -242,9 +242,9 @@ pub struct Position {
     pub entry_time: DateTime<Utc>,
     pub exit_price: Option<f64>,
     pub exit_time: Option<DateTime<Utc>>,
-    pub position_type: String, // "buy" or "sell"
-    pub entry_size_sol: f64,   // Initial SOL spent on first entry
-    pub total_size_sol: f64,   // Cumulative SOL invested (includes DCA)
+    pub position_type: String,  // "buy" or "sell"
+    pub entry_size_native: f64, // Initial SOL spent on first entry
+    pub total_size_native: f64, // Cumulative SOL invested (includes DCA)
     pub price_highest: f64,
     pub price_lowest: f64,
     // Transaction signatures
@@ -253,7 +253,7 @@ pub struct Position {
     pub token_amount: Option<RawAmount>, // Initial amount of tokens bought (first entry)
     pub effective_entry_price: Option<f64>, // Initial entry price (deprecated, use average_entry_price)
     pub effective_exit_price: Option<f64>,  // Final exit price (deprecated, use average_exit_price)
-    pub sol_received: Option<f64>,          // Total SOL received after all exits
+    pub native_received: Option<f64>,       // Total SOL received after all exits
     // Profit targets
     pub profit_target_min: Option<f64>, // Minimum profit target percentage
     pub profit_target_max: Option<f64>, // Maximum profit target percentage
@@ -262,8 +262,8 @@ pub struct Position {
     pub transaction_entry_verified: bool, // Whether entry transaction is fully verified
     pub transaction_exit_verified: bool,  // Whether exit transaction is fully verified
     // Fee tracking
-    pub entry_fee_lamports: Option<u64>, // Actual entry transaction fee
-    pub exit_fee_lamports: Option<u64>,  // Actual exit transaction fee
+    pub entry_fee_raw: Option<u64>, // Actual entry transaction fee
+    pub exit_fee_raw: Option<u64>,  // Actual exit transaction fee
     // Price tracking
     pub current_price: Option<f64>, // Current market price (updated by monitoring system)
     pub current_price_updated: Option<DateTime<Utc>>, // When current_price was last updated
@@ -376,13 +376,13 @@ pub struct ExitRecord {
     pub id: Option<i64>,  // Database ID
     pub position_id: i64, // Parent position ID
     pub timestamp: DateTime<Utc>,
-    pub amount: RawAmount, // Tokens sold
-    pub price: f64,        // Exit price per token
-    pub sol_received: f64, // SOL received
+    pub amount: RawAmount,    // Tokens sold
+    pub price: f64,           // Exit price per token
+    pub native_received: f64, // SOL received
     pub transaction_signature: String,
-    pub is_partial: bool,           // true if partial, false if full exit
-    pub percentage: f64,            // % of position sold at this exit
-    pub fees_lamports: Option<u64>, // Transaction fee
+    pub is_partial: bool,      // true if partial, false if full exit
+    pub percentage: f64,       // % of position sold at this exit
+    pub fees_raw: Option<u64>, // Transaction fee
 }
 
 /// Record of a single entry (initial or DCA)
@@ -393,10 +393,10 @@ pub struct EntryRecord {
     pub timestamp: DateTime<Utc>,
     pub amount: RawAmount, // Tokens bought
     pub price: f64,        // Entry price per token
-    pub sol_spent: f64,    // SOL spent
+    pub native_spent: f64, // SOL spent
     pub transaction_signature: String,
-    pub is_dca: bool,               // true if DCA, false if initial entry
-    pub fees_lamports: Option<u64>, // Transaction fee
+    pub is_dca: bool,          // true if DCA, false if initial entry
+    pub fees_raw: Option<u64>, // Transaction fee
 }
 
 #[cfg(test)]

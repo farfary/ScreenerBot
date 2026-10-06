@@ -250,7 +250,7 @@ impl StrategyEvaluator {
         let position_data = PositionData {
             entry_price: position.average_entry_price,
             entry_time: position.entry_time,
-            current_size_sol: position.total_size_sol,
+            current_size_sol: position.total_size_native,
             unrealized_profit_pct,
             position_age_hours: (Utc::now() - position.entry_time).num_seconds() as f64 / 3600.0,
         };

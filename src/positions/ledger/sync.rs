@@ -73,7 +73,7 @@ pub struct TraderLegs {
     /// Signatures of acquisitions the trader booked.
     pub entry_signatures: HashSet<String>,
     /// SOL those acquisitions cost, fee-exact as the trader recorded it.
-    pub booked_invested_sol: f64,
+    pub booked_invested_native: f64,
 }
 
 impl TraderLegs {
@@ -88,7 +88,7 @@ impl TraderLegs {
             }
             let legs = map.entry(position_id).or_default();
             if legs.entry_signatures.insert(signature) {
-                legs.booked_invested_sol += sol;
+                legs.booked_invested_native += sol;
             }
         }
         map
@@ -301,15 +301,15 @@ fn build_position(
     // Only a complete basis may be presented as money. Without one, invested SOL is
     // zero (the reducer already zeroes it) and there is no P&L to show at all.
     let realized_pnl = if round.basis_complete && round.history_complete {
-        round.realized_pnl_sol
+        round.realized_pnl_native
     } else {
         None
     };
     let realized_pnl_percent = realized_pnl.and_then(|pnl| {
-        (round.realized_cost_sol > super::DUST).then(|| pnl / round.realized_cost_sol * 100.0)
+        (round.realized_cost_native > super::DUST).then(|| pnl / round.realized_cost_native * 100.0)
     });
 
-    let entry_price = round.average_entry_price_sol.unwrap_or(0.0);
+    let entry_price = round.average_entry_price_native.unwrap_or(0.0);
 
     Position {
         id: existing.and_then(|p| p.id),
@@ -326,11 +326,11 @@ fn build_position(
             .unwrap_or_else(|| short_mint(&round.mint)),
         entry_price,
         entry_time,
-        exit_price: round.average_exit_price_sol,
+        exit_price: round.average_exit_price_native,
         exit_time,
         position_type: "buy".to_owned(),
-        entry_size_sol: round.invested_sol,
-        total_size_sol: round.invested_sol,
+        entry_size_native: round.invested_native,
+        total_size_native: round.invested_native,
         // Price extremes belong to the price updater; seed them from the entry price so
         // a brand-new row is not stuck at zero.
         price_highest: existing.map(|p| p.price_highest).unwrap_or(entry_price),
@@ -338,9 +338,9 @@ fn build_position(
         entry_transaction_signature: round.entry_signature.clone(),
         exit_transaction_signature: round.exit_signature.clone(),
         token_amount: Some(RawAmount::new(round.total_acquired_raw)),
-        effective_entry_price: round.average_entry_price_sol,
-        effective_exit_price: round.average_exit_price_sol,
-        sol_received: (round.exit_count > 0).then_some(round.realized_proceeds_sol),
+        effective_entry_price: round.average_entry_price_native,
+        effective_exit_price: round.average_exit_price_native,
+        native_received: (round.exit_count > 0).then_some(round.realized_proceeds_native),
         profit_target_min: None,
         profit_target_max: None,
         liquidity_tier: existing.and_then(|p| p.liquidity_tier.clone()),
@@ -349,8 +349,8 @@ fn build_position(
         // round MUST be marked verified or it would never appear in the Closed tab.
         transaction_entry_verified: true,
         transaction_exit_verified: !round.is_open,
-        entry_fee_lamports: None,
-        exit_fee_lamports: None,
+        entry_fee_raw: None,
+        exit_fee_raw: None,
         current_price: existing.and_then(|p| p.current_price),
         current_price_updated: existing.and_then(|p| p.current_price_updated),
         current_price_source: existing.and_then(|p| p.current_price_source),
@@ -365,7 +365,7 @@ fn build_position(
         unrealized_pnl_percent: existing.and_then(|p| p.unrealized_pnl_percent),
         remaining_token_amount: Some(RawAmount::new(round.balance_raw)),
         total_exited_amount: RawAmount::new(round.total_disposed_raw),
-        average_exit_price: round.average_exit_price_sol,
+        average_exit_price: round.average_exit_price_native,
         // The FIRST traded acquisition is the entry; the rest are adds. Likewise the
         // disposal that closed the round is the exit and the rest are partials.
         partial_exit_count: round
@@ -505,18 +505,18 @@ fn reconcile_owned_position(
         return position;
     }
 
-    if let Some(exit_price) = round.average_exit_price_sol {
+    if let Some(exit_price) = round.average_exit_price_native {
         position.exit_price = Some(exit_price);
         position.effective_exit_price = Some(exit_price);
         position.average_exit_price = Some(exit_price);
-        position.sol_received = Some(round.realized_proceeds_sol);
-        // The basis is the position's own cumulative `total_size_sol` (entry + every
+        position.native_received = Some(round.realized_proceeds_native);
+        // The basis is the position's own cumulative `total_size_native` (entry + every
         // DCA), which is fee-exact because the trader booked it; the proceeds are the
         // chain's. Mixing the two is the only complete number available here.
-        if position.total_size_sol > DUST {
-            let pnl = round.realized_proceeds_sol - position.total_size_sol;
+        if position.total_size_native > DUST {
+            let pnl = round.realized_proceeds_native - position.total_size_native;
             position.pnl = Some(pnl);
-            position.pnl_percent = Some(pnl / position.total_size_sol * 100.0);
+            position.pnl_percent = Some(pnl / position.total_size_native * 100.0);
         }
     }
 
@@ -552,19 +552,19 @@ fn adopt_external_growth(
     // Legs the trader booked itself; without any records the row's own total is the
     // best fee-exact number we have and its entry signature is the only leg we can
     // attribute.
-    let (booked_signatures, booked_sol) = match legs.filter(|l| !l.entry_signatures.is_empty()) {
-        Some(legs) => (legs.entry_signatures.clone(), legs.booked_invested_sol),
+    let (booked_signatures, booked_native) = match legs.filter(|l| !l.entry_signatures.is_empty()) {
+        Some(legs) => (legs.entry_signatures.clone(), legs.booked_invested_native),
         None => (
             existing
                 .entry_transaction_signature
                 .iter()
                 .cloned()
                 .collect(),
-            existing.total_size_sol,
+            existing.total_size_native,
         ),
     };
 
-    let external_sol: f64 = round
+    let external_native: f64 = round
         .events
         .iter()
         .filter(|event| {
@@ -576,11 +576,11 @@ fn adopt_external_growth(
         .map(|quote| quote.amount)
         .sum();
 
-    position.total_size_sol = booked_sol + external_sol;
+    position.total_size_native = booked_native + external_native;
 
     let acquired = RawAmount::new(round.total_acquired_raw).to_whole_units(round.decimals);
     if acquired > DUST {
-        position.average_entry_price = position.total_size_sol / acquired;
+        position.average_entry_price = position.total_size_native / acquired;
     }
 }
 
@@ -594,7 +594,7 @@ fn differs_owned(existing: &Position, fresh: &Position) -> bool {
         || existing.total_exited_amount != fresh.total_exited_amount
         || existing.dca_count != fresh.dca_count
         || existing.basis_complete != fresh.basis_complete
-        || !same_money(existing.total_size_sol, fresh.total_size_sol)
+        || !same_money(existing.total_size_native, fresh.total_size_native)
         || !same_money(existing.average_entry_price, fresh.average_entry_price)
         || existing.exit_time != fresh.exit_time
         || existing.exit_transaction_signature != fresh.exit_transaction_signature
@@ -602,7 +602,7 @@ fn differs_owned(existing: &Position, fresh: &Position) -> bool {
         || existing.closed_reason != fresh.closed_reason
         || existing.unrealized_pnl != fresh.unrealized_pnl
         || !same_opt_money(existing.exit_price, fresh.exit_price)
-        || !same_opt_money(existing.sol_received, fresh.sol_received)
+        || !same_opt_money(existing.native_received, fresh.native_received)
         || !same_opt_money(existing.pnl, fresh.pnl)
 }
 
@@ -626,10 +626,10 @@ fn differs(existing: &Position, fresh: &Position) -> bool {
         || existing.exit_transaction_signature != fresh.exit_transaction_signature
         || existing.symbol != fresh.symbol
         || existing.name != fresh.name
-        || !same_money(existing.total_size_sol, fresh.total_size_sol)
+        || !same_money(existing.total_size_native, fresh.total_size_native)
         || !same_money(existing.entry_price, fresh.entry_price)
         || !same_opt_money(existing.exit_price, fresh.exit_price)
-        || !same_opt_money(existing.sol_received, fresh.sol_received)
+        || !same_opt_money(existing.native_received, fresh.native_received)
         || !same_opt_money(existing.pnl, fresh.pnl)
 }
 
@@ -871,7 +871,7 @@ async fn apply_plan(plan: SyncPlan) {
                 "closed_externally",
                 position.entry_transaction_signature.as_deref(),
                 position.exit_transaction_signature.as_deref(),
-                position.total_size_sol,
+                position.total_size_native,
                 position.token_amount.unwrap_or_default(),
                 position.pnl,
                 position.pnl_percent,

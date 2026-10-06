@@ -101,7 +101,7 @@ impl DcaEvaluation {
         // Calculate metrics
         let pnl_pct = ((current_price - entry_price) / entry_price) * 100.0;
         let required_drop_pct = config.threshold_pct.abs();
-        let dca_amount_sol = position.entry_size_sol * (config.size_percentage / 100.0);
+        let dca_amount_sol = position.entry_size_native * (config.size_percentage / 100.0);
 
         let minutes_since_last = position
             .last_dca_time

@@ -2,6 +2,7 @@
 // SPDX-License-Identifier: BUSL-1.1
 
 //! SQLite persistence layer for position management with connection pooling.
+mod column_names;
 mod convenience;
 mod global;
 mod operations;

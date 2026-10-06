@@ -103,7 +103,7 @@ pub async fn execute_buy_managed(
             let mut result = TradeResult::success(
                 decision.clone(),
                 transaction_signature,
-                submission.entry_price_sol,
+                submission.entry_price_native,
                 trade_size_sol,
                 None, // Position ID will be set by verification
             );

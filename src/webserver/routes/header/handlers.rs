@@ -77,7 +77,7 @@ pub(super) async fn get_header_metrics() -> Json<HeaderMetricsResponse> {
 
     let today_pnl_sol = today_stats
         .as_ref()
-        .map(|stats| stats.net_pnl_sol)
+        .map(|stats| stats.net_pnl_native)
         .unwrap_or_default();
     let start_balance_sol = start_balance.ok().flatten();
     let today_pnl_percent = start_balance_sol

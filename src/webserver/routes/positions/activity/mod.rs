@@ -347,7 +347,7 @@ impl StoredClose {
             return None;
         }
         Some(Self {
-            sol_received: position.sol_received,
+            sol_received: position.native_received,
             pnl: position.pnl.filter(|_| position.has_trustworthy_pnl()),
         })
     }
@@ -401,10 +401,10 @@ async fn load_records(position: &Position) -> (Vec<EntryRecordResponse>, Vec<Exi
             timestamp: record.timestamp.timestamp(),
             amount: record.amount,
             price: record.price,
-            sol_spent: record.sol_spent,
+            native_spent: record.native_spent,
             transaction_signature: record.transaction_signature,
             is_dca: record.is_dca,
-            fees_sol: record.fees_lamports.map(|l| adapter().raw_to_native(l)),
+            fees_sol: record.fees_raw.map(|l| adapter().raw_to_native(l)),
         })
         .collect();
 
@@ -417,11 +417,11 @@ async fn load_records(position: &Position) -> (Vec<EntryRecordResponse>, Vec<Exi
             timestamp: record.timestamp.timestamp(),
             amount: record.amount,
             price: record.price,
-            sol_received: record.sol_received,
+            native_received: record.native_received,
             transaction_signature: record.transaction_signature,
             is_partial: record.is_partial,
             percentage: record.percentage,
-            fees_sol: record.fees_lamports.map(|l| adapter().raw_to_native(l)),
+            fees_sol: record.fees_raw.map(|l| adapter().raw_to_native(l)),
         })
         .collect();
 

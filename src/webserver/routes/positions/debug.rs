@@ -40,7 +40,8 @@ pub struct PositionSummary {
     pub id: Option<i64>,
     pub entry_price: f64,
     pub entry_time: i64,
-    pub entry_size_sol: f64,
+    #[serde(rename = "entry_size_sol")]
+    pub entry_size_native: f64,
     pub current_price: Option<f64>,
     pub unrealized_pnl: Option<f64>,
     pub unrealized_pnl_percent: Option<f64>,
@@ -137,9 +138,11 @@ pub struct TransactionDetails {
 
 #[derive(Debug, Serialize)]
 pub struct FeeDetails {
-    pub entry_fee_lamports: Option<u64>,
+    #[serde(rename = "entry_fee_lamports")]
+    pub entry_fee_raw: Option<u64>,
     pub entry_fee_sol: Option<f64>,
-    pub exit_fee_lamports: Option<u64>,
+    #[serde(rename = "exit_fee_lamports")]
+    pub exit_fee_raw: Option<u64>,
     pub exit_fee_sol: Option<f64>,
     pub total_fees_sol: f64,
 }
@@ -193,13 +196,13 @@ pub async fn get_position_debug_info(Path(mint): Path<String>) -> Json<PositionD
 
     let open_position_summary = open_position_record.as_ref().map(|p| {
         let unrealized_pnl = p.current_price.map(|current| {
-            let current_value = current * p.entry_size_sol;
-            current_value - p.entry_size_sol
+            let current_value = current * p.entry_size_native;
+            current_value - p.entry_size_native
         });
 
         let unrealized_pnl_percent = unrealized_pnl.map(|pnl| {
-            if p.entry_size_sol > 0.0 {
-                (pnl / p.entry_size_sol) * 100.0
+            if p.entry_size_native > 0.0 {
+                (pnl / p.entry_size_native) * 100.0
             } else {
                 0.0
             }
@@ -209,7 +212,7 @@ pub async fn get_position_debug_info(Path(mint): Path<String>) -> Json<PositionD
             id: p.id,
             entry_price: p.entry_price,
             entry_time: p.entry_time.timestamp(),
-            entry_size_sol: p.entry_size_sol,
+            entry_size_native: p.entry_size_native,
             current_price: p.current_price,
             unrealized_pnl,
             unrealized_pnl_percent,
@@ -232,13 +235,16 @@ pub async fn get_position_debug_info(Path(mint): Path<String>) -> Json<PositionD
         // whenever it merely recovered its FIRST buy.
         let total_pnl: f64 = matching_closed
             .iter()
-            .filter_map(|p| p.sol_received.map(|received| received - p.total_size_sol))
+            .filter_map(|p| {
+                p.native_received
+                    .map(|received| received - p.total_size_native)
+            })
             .sum();
         let wins = matching_closed
             .iter()
             .filter(|p| {
-                p.sol_received
-                    .map(|r| r > p.total_size_sol)
+                p.native_received
+                    .map(|r| r > p.total_size_native)
                     .unwrap_or_default()
             })
             .count();
@@ -367,14 +373,14 @@ pub async fn get_position_debug_info(Path(mint): Path<String>) -> Json<PositionD
         };
 
         // Fee details
-        let entry_fee_sol = pos.entry_fee_lamports.map(|l| adapter().raw_to_native(l));
-        let exit_fee_sol = pos.exit_fee_lamports.map(|l| adapter().raw_to_native(l));
+        let entry_fee_sol = pos.entry_fee_raw.map(|l| adapter().raw_to_native(l));
+        let exit_fee_sol = pos.exit_fee_raw.map(|l| adapter().raw_to_native(l));
         let total_fees_sol = entry_fee_sol.unwrap_or_default() + exit_fee_sol.unwrap_or_default();
 
         let fee_details = FeeDetails {
-            entry_fee_lamports: pos.entry_fee_lamports,
+            entry_fee_raw: pos.entry_fee_raw,
             entry_fee_sol,
-            exit_fee_lamports: pos.exit_fee_lamports,
+            exit_fee_raw: pos.exit_fee_raw,
             exit_fee_sol,
             total_fees_sol,
         };

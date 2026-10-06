@@ -8,6 +8,7 @@ use rusqlite::{params, params_from_iter, types::Value, Connection, OptionalExten
 use crate::chains::RawAmount;
 use crate::positions::{Error, Result};
 
+use super::column_names::rename_unit_neutral_columns;
 use super::types::{
     PENDING_PARTIAL_EXIT_METADATA_KEY, POSITIONS_INDEXES, SCHEMA_POSITIONS,
     SCHEMA_POSITION_ENTRIES, SCHEMA_POSITION_EXITS,
@@ -409,19 +410,6 @@ fn migrate_pending_partial_exit_amounts(conn: &Connection) -> Result<()> {
 }
 
 fn migrate_amount_columns(conn: &Connection) -> Result<()> {
-    let inspected = TABLES
-        .iter()
-        .map(|(table, ddl, amounts)| validate_table(conn, table, ddl, amounts))
-        .collect::<Result<Vec<_>>>()?;
-    if inspected.iter().all(|(_, _, legacy)| !legacy) {
-        return Ok(());
-    }
-    if inspected.iter().any(|(_, _, legacy)| !legacy) {
-        return Err(Error::SchemaMigration {
-            detail: "mixed legacy and canonical position amount tables".into(),
-        });
-    }
-    validate_objects(conn)?;
     let foreign_keys: i64 = conn
         .query_row("PRAGMA foreign_keys", [], |row| row.get(0))
         .map_err(|e| Error::SchemaMigration {
@@ -437,6 +425,25 @@ fn migrate_amount_columns(conn: &Connection) -> Result<()> {
             .map_err(|e| Error::SchemaMigration {
                 detail: e.to_string(),
             })?;
+        // Unit column names are canonicalized first, in this transaction, so the
+        // validation below sees canonical names and a refused rebuild leaves the
+        // stored schema exactly as it was.
+        rename_unit_neutral_columns(&tx)?;
+        let inspected = TABLES
+            .iter()
+            .map(|(table, ddl, amounts)| validate_table(&tx, table, ddl, amounts))
+            .collect::<Result<Vec<_>>>()?;
+        if inspected.iter().all(|(_, _, legacy)| !legacy) {
+            return tx.commit().map_err(|e| Error::SchemaMigration {
+                detail: format!("commit position column names: {e}"),
+            });
+        }
+        if inspected.iter().any(|(_, _, legacy)| !legacy) {
+            return Err(Error::SchemaMigration {
+                detail: "mixed legacy and canonical position amount tables".into(),
+            });
+        }
+        validate_objects(&tx)?;
         for ((table, _, amounts), (ddl, names, _)) in TABLES.iter().zip(inspected.iter()) {
             rebuild(&tx, table, ddl, names, amounts)?;
         }

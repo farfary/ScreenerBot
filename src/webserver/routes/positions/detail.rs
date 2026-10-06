@@ -254,10 +254,10 @@ async fn load_entry_exit_history(
                 timestamp: r.timestamp.timestamp(),
                 amount: r.amount,
                 price: r.price,
-                sol_spent: r.sol_spent,
+                native_spent: r.native_spent,
                 transaction_signature: r.transaction_signature,
                 is_dca: r.is_dca,
-                fees_sol: r.fees_lamports.map(|l| adapter().raw_to_native(l)),
+                fees_sol: r.fees_raw.map(|l| adapter().raw_to_native(l)),
             })
             .collect(),
         Err(err) => {
@@ -278,11 +278,11 @@ async fn load_entry_exit_history(
                 timestamp: r.timestamp.timestamp(),
                 amount: r.amount,
                 price: r.price,
-                sol_received: r.sol_received,
+                native_received: r.native_received,
                 transaction_signature: r.transaction_signature,
                 is_partial: r.is_partial,
                 percentage: r.percentage,
-                fees_sol: r.fees_lamports.map(|l| adapter().raw_to_native(l)),
+                fees_sol: r.fees_raw.map(|l| adapter().raw_to_native(l)),
             })
             .collect(),
         Err(err) => {

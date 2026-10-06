@@ -90,7 +90,7 @@ impl Tool for GetPositionsTool {
                 entry_price_sol: pos.average_entry_price,
                 current_price_sol: pos.current_price,
                 token_amount: holding.token_amount,
-                cost_sol: pos.total_size_sol,
+                cost_sol: pos.total_size_native,
                 current_value_sol: holding.current_value_sol,
                 unrealized_pnl_sol: pnl.as_ref().map(|p| p.0),
                 unrealized_pnl_percent: pnl.as_ref().map(|p| p.1),
@@ -174,8 +174,7 @@ impl Tool for GetPositionTool {
         let pnl = positions::calculate_position_pnl_safe(&position, position.current_price).await;
         let holding = position_holding(&position).await;
         let total_fees = adapter().raw_to_native(
-            position.entry_fee_lamports.unwrap_or_default()
-                + position.exit_fee_lamports.unwrap_or_default(),
+            position.entry_fee_raw.unwrap_or_default() + position.exit_fee_raw.unwrap_or_default(),
         );
 
         let details = PositionDetails {
@@ -185,7 +184,7 @@ impl Tool for GetPositionTool {
             entry_price_sol: position.average_entry_price,
             current_price_sol: position.current_price,
             token_amount: holding.token_amount,
-            cost_sol: position.total_size_sol,
+            cost_sol: position.total_size_native,
             current_value_sol: holding.current_value_sol,
             unrealized_pnl_sol: pnl.as_ref().map(|p| p.0),
             unrealized_pnl_percent: pnl.as_ref().map(|p| p.1),
@@ -344,9 +343,9 @@ impl Tool for GetPnLTool {
 
         let pnl_stats = PnLStats {
             period: period.clone(),
-            total_realized_pnl_sol: stats.net_pnl_sol,
+            total_realized_pnl_sol: stats.net_pnl_native,
             total_unrealized_pnl_sol: total_unrealized,
-            total_pnl_sol: stats.net_pnl_sol + total_unrealized,
+            total_pnl_sol: stats.net_pnl_native + total_unrealized,
             total_wins: stats.wins as usize,
             total_losses: (stats.closed_positions - stats.wins) as usize,
             win_rate_percent: (stats.closed_positions > 0).then_some(stats.win_rate),

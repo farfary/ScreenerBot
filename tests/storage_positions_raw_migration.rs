@@ -13,6 +13,14 @@ fn open(dir: &Path) -> Connection {
     Connection::open(dir.join("data/positions.db")).unwrap()
 }
 
+fn has_column(conn: &Connection, table: &str, name: &str) -> bool {
+    conn.prepare(&format!("PRAGMA table_info({table})"))
+        .unwrap()
+        .query_map([], |row| row.get::<_, String>(1))
+        .unwrap()
+        .any(|column| column.unwrap() == name)
+}
+
 fn boot(dir: &Path, succeeds: bool) {
     let status = Command::new(std::env::current_exe().unwrap())
         .arg("--exact")
@@ -52,7 +60,7 @@ fn released_position_amounts_survive_initialization() {
     let conn = open(dir.path());
     for (i, amount) in CASES.iter().enumerate() {
         let id = 21 + i as i64;
-        conn.execute("INSERT INTO positions (id, chain_id, wallet_address, mint, symbol, name, entry_price, entry_time, position_type, entry_size_sol, total_size_sol, price_highest, price_lowest, token_amount, remaining_token_amount, total_exited_amount, origin_kind, management, round_key, basis_complete, history_complete, holding_state, pnl, archived, created_at, updated_at) VALUES (?1, 'solana', 'wallet', ?2, 'S', 'Name', 1.25, '2025-01-01', 'buy', 2.5, 3.5, 4.5, 0.5, ?3, ?3, ?3, 'copy', 'copy_task', ?4, 0, 1, 'frozen', 6.5, 1, '2025-01-01', '2025-01-02')", params![id, format!("mint-{i}"), *amount as i64, format!("round-{i}")]).unwrap();
+        conn.execute("INSERT INTO positions (id, chain_id, wallet_address, mint, symbol, name, entry_price, entry_time, position_type, entry_size_sol, total_size_sol, price_highest, price_lowest, sol_received, entry_fee_lamports, exit_fee_lamports, token_amount, remaining_token_amount, total_exited_amount, origin_kind, management, round_key, basis_complete, history_complete, holding_state, pnl, archived, created_at, updated_at) VALUES (?1, 'solana', 'wallet', ?2, 'S', 'Name', 1.25, '2025-01-01', 'buy', 2.5, 3.5, 4.5, 0.5, 7.5, 11, 13, ?3, ?3, ?3, 'copy', 'copy_task', ?4, 0, 1, 'frozen', 6.5, 1, '2025-01-01', '2025-01-02')", params![id, format!("mint-{i}"), *amount as i64, format!("round-{i}")]).unwrap();
         conn.execute("INSERT INTO position_entries (id, position_id, wallet_address, timestamp, amount, price, sol_spent, transaction_signature, is_dca, fees_lamports) VALUES (?1, ?2, 'wallet', '2025-01-01', ?3, 1.25, 2.5, ?4, 1, 99)", params![31 + i as i64, id, *amount as i64, format!("entry-{i}")]).unwrap();
         conn.execute("INSERT INTO position_exits (id, position_id, wallet_address, timestamp, amount, price, sol_received, transaction_signature, is_partial, percentage, fees_lamports) VALUES (?1, ?2, 'wallet', '2025-01-02', ?3, 1.5, 3.25, ?4, 1, 25.0, 88)", params![41 + i as i64, id, *amount as i64, format!("exit-{i}")]).unwrap();
     }
@@ -89,6 +97,59 @@ fn released_position_amounts_survive_initialization() {
     boot(dir.path(), true);
     boot(dir.path(), true);
     let conn = open(dir.path());
+    for (table, old, new) in [
+        ("positions", "entry_size_sol", "entry_size_native"),
+        ("positions", "total_size_sol", "total_size_native"),
+        ("positions", "sol_received", "native_received"),
+        ("positions", "entry_fee_lamports", "entry_fee_raw"),
+        ("positions", "exit_fee_lamports", "exit_fee_raw"),
+        ("position_exits", "sol_received", "native_received"),
+        ("position_exits", "fees_lamports", "fees_raw"),
+        ("position_entries", "sol_spent", "native_spent"),
+        ("position_entries", "fees_lamports", "fees_raw"),
+    ] {
+        assert!(has_column(&conn, table, new), "missing {table}.{new}");
+        assert!(
+            !has_column(&conn, table, old),
+            "legacy column remains: {table}.{old}"
+        );
+    }
+    assert_eq!(
+        conn.query_row(
+            "SELECT entry_size_native, total_size_native, native_received, entry_fee_raw, exit_fee_raw FROM positions WHERE id = 21",
+            [],
+            |row| Ok((row.get::<_, f64>(0)?, row.get::<_, f64>(1)?, row.get::<_, f64>(2)?, row.get::<_, i64>(3)?, row.get::<_, i64>(4)?))
+        )
+        .unwrap(),
+        (2.5, 3.5, 7.5, 11, 13)
+    );
+    assert_eq!(
+        conn.query_row(
+            "SELECT native_spent, fees_raw FROM position_entries WHERE id = 31",
+            [],
+            |row| Ok((row.get::<_, f64>(0)?, row.get::<_, i64>(1)?))
+        )
+        .unwrap(),
+        (2.5, 99)
+    );
+    assert_eq!(
+        conn.query_row(
+            "SELECT native_received, fees_raw FROM position_exits WHERE id = 41",
+            [],
+            |row| Ok((row.get::<_, f64>(0)?, row.get::<_, i64>(1)?))
+        )
+        .unwrap(),
+        (3.25, 88)
+    );
+    assert_eq!(
+        conn.query_row(
+            "SELECT price_sol FROM token_snapshots WHERE id = 63",
+            [],
+            |row| row.get::<_, f64>(0)
+        )
+        .unwrap(),
+        1.5
+    );
     for (i, amount) in CASES.iter().enumerate() {
         for (table, id, column) in [
             ("positions", 21 + i as i64, "token_amount"),

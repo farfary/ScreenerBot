@@ -879,8 +879,8 @@ mod verdict_tests {
             verification_verdict(&T::ExitVerified {
                 position_id: 1,
                 effective_exit_price: 0.0,
-                sol_received: 0.0,
-                fee_lamports: 0,
+                native_received: 0.0,
+                fee_raw: 0,
                 exit_time: chrono::Utc::now(),
             }),
             Some(Ok(()))

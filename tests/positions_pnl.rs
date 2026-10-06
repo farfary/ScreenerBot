@@ -93,11 +93,11 @@ async fn partial_exit_proceeds_count_towards_an_open_position() {
     // The regression: valuing only the REMAINING tokens against the FULL entry cost.
     // Here half the position was sold at 2x, taking 1 SOL off the table, so the
     // position is already break-even in cash and 100% up in total. Omitting
-    // `sol_received` reported roughly a 50% LOSS — and the exit monitor acts on that.
+    // `native_received` reported roughly a 50% LOSS — and the exit monitor acts on that.
     let mut position = open_position();
     position.remaining_token_amount = Some(units(50.0));
     position.total_exited_amount = units(50.0);
-    position.sol_received = Some(1.0);
+    position.native_received = Some(1.0);
     position.partial_exit_count = 1;
 
     let (pnl, pct) = calculate_position_pnl(&position, Some(0.02)).await;
@@ -107,12 +107,12 @@ async fn partial_exit_proceeds_count_towards_an_open_position() {
 
 #[tokio::test]
 async fn the_cost_basis_of_a_dcad_position_includes_every_add() {
-    // `total_size_sol` is the cumulative cost; `entry_size_sol` is only the first buy.
+    // `total_size_native` is the cumulative cost; `entry_size_native` is only the first buy.
     // Using the latter made an averaged-down position look profitable the moment it
     // recovered its FIRST buy, while the position as a whole was still deep underwater.
     let mut position = open_position();
-    position.entry_size_sol = 1.0; // first buy
-    position.total_size_sol = 2.0; // plus one DCA of 1 SOL
+    position.entry_size_native = 1.0; // first buy
+    position.total_size_native = 2.0; // plus one DCA of 1 SOL
     position.remaining_token_amount = Some(units(200.0));
     position.token_amount = Some(units(100.0)); // never grows on a DCA
     position.average_entry_price = 0.01;
@@ -131,7 +131,7 @@ async fn holdings_come_from_the_remaining_amount_not_the_entry_amount() {
     let mut position = open_position();
     position.token_amount = Some(units(100.0));
     position.remaining_token_amount = Some(units(10.0)); // 90 sold elsewhere
-    position.sol_received = Some(0.0);
+    position.native_received = Some(0.0);
 
     let (pnl, _) = calculate_position_pnl(&position, Some(0.01)).await;
     assert_close(pnl, -0.9, "only the remaining 10 tokens may be valued");
@@ -143,7 +143,7 @@ async fn fees_are_charged_once_for_the_buy_and_once_for_the_estimated_sell() {
     // entry fee. Charging more (e.g. adding the profit buffer) inflates losses on
     // small trades, which is what the emergency exit measures.
     let mut position = open_position();
-    position.entry_fee_lamports = Some(5_000_000); // 0.005 SOL
+    position.entry_fee_raw = Some(5_000_000); // 0.005 SOL
 
     let (pnl, _) = calculate_position_pnl(&position, Some(0.01)).await;
     assert_close(pnl, -0.01, "buy fee plus an equal estimated sell fee");
@@ -175,7 +175,7 @@ async fn a_failed_close_is_still_an_open_position() {
     position.exit_price = Some(0.005); // stamped, then the close failed
     position.exit_time = None; // never actually closed
     position.exit_transaction_signature = None; // cleared for retry
-    position.sol_received = None;
+    position.native_received = None;
 
     let (pnl, pct) = calculate_position_pnl(&position, Some(0.02)).await;
     assert_close(pnl, 1.0, "the still-held tokens must be valued");
@@ -202,7 +202,7 @@ async fn a_close_in_flight_after_partial_exits_counts_the_realized_proceeds() {
     position.transaction_exit_verified = false;
     position.remaining_token_amount = Some(units(50.0));
     position.total_exited_amount = units(50.0);
-    position.sol_received = Some(1.0);
+    position.native_received = Some(1.0);
 
     let (pnl, _) = calculate_position_pnl(&position, Some(0.02)).await;
     assert_close(pnl, 1.0, "realized proceeds are part of the estimate");
@@ -213,8 +213,8 @@ async fn a_close_in_flight_uses_the_cumulative_cost_basis() {
     let mut position = open_position();
     position.exit_transaction_signature = Some("pending-exit".to_owned());
     position.transaction_exit_verified = false;
-    position.entry_size_sol = 1.0;
-    position.total_size_sol = 2.0;
+    position.entry_size_native = 1.0;
+    position.total_size_native = 2.0;
     position.remaining_token_amount = Some(units(200.0));
 
     let (pnl, _) = calculate_position_pnl(&position, Some(0.01)).await;
@@ -226,14 +226,14 @@ async fn a_close_in_flight_uses_the_cumulative_cost_basis() {
 /// A closed position: entered for `invested` SOL, exited for `received` SOL.
 fn closed_position(invested: f64, received: f64) -> Position {
     let mut position = open_position();
-    position.entry_size_sol = invested;
-    position.total_size_sol = invested;
+    position.entry_size_native = invested;
+    position.total_size_native = invested;
     position.exit_price = Some(0.02);
     position.effective_exit_price = Some(0.02);
     position.exit_time = Some(chrono::Utc::now());
     position.exit_transaction_signature = Some("exit-sig".to_owned());
     position.transaction_exit_verified = true;
-    position.sol_received = Some(received);
+    position.native_received = Some(received);
     position.remaining_token_amount = Some(raw(0));
     position.total_exited_amount = units(100.0);
     position
@@ -259,21 +259,21 @@ async fn a_closed_position_needs_no_current_price() {
 
 #[tokio::test]
 async fn closed_proceeds_accumulate_across_every_exit() {
-    // `sol_received` is the position's TOTAL proceeds. Overwriting it with just the
+    // `native_received` is the position's TOTAL proceeds. Overwriting it with just the
     // final close discarded every partial exit's profit: a position that took 80% off
     // the table before the token died was recorded as a total loss.
     let mut position = closed_position(1.0, 0.0);
-    position.sol_received = Some(0.8 + 0.05); // partial exits plus a dying final close
+    position.native_received = Some(0.8 + 0.05); // partial exits plus a dying final close
     let (pnl, _) = calculate_position_pnl(&position, None).await;
     assert_close(pnl, -0.15, "earlier proceeds stay on the books");
 }
 
 #[tokio::test]
 async fn a_closed_dcad_position_must_earn_back_every_add() {
-    // Cost basis is `total_size_sol`, not the first buy.
+    // Cost basis is `total_size_native`, not the first buy.
     let mut position = closed_position(1.0, 1.5);
-    position.entry_size_sol = 1.0;
-    position.total_size_sol = 2.0;
+    position.entry_size_native = 1.0;
+    position.total_size_native = 2.0;
 
     let (pnl, pct) = calculate_position_pnl(&position, None).await;
     assert_close(pnl, -0.5, "recovering only the first buy is still a loss");
@@ -283,8 +283,8 @@ async fn a_closed_dcad_position_must_earn_back_every_add() {
 #[tokio::test]
 async fn a_closed_position_charges_both_real_fees() {
     let mut position = closed_position(1.0, 2.0);
-    position.entry_fee_lamports = Some(5_000_000); // 0.005
-    position.exit_fee_lamports = Some(7_000_000); // 0.007
+    position.entry_fee_raw = Some(5_000_000); // 0.005
+    position.exit_fee_raw = Some(7_000_000); // 0.007
 
     let (pnl, _) = calculate_position_pnl(&position, None).await;
     assert_close(pnl, 1.0 - 0.012, "both actual fees are deducted");
@@ -294,8 +294,8 @@ async fn a_closed_position_charges_both_real_fees() {
 async fn a_closed_position_with_no_cost_basis_does_not_divide_by_zero() {
     // Guards against an infinite percentage reaching the dashboard and the stats.
     let mut position = closed_position(0.0, 0.5);
-    position.entry_size_sol = 0.0;
-    position.total_size_sol = 0.0;
+    position.entry_size_native = 0.0;
+    position.total_size_native = 0.0;
 
     let (pnl, pct) = calculate_position_pnl(&position, None).await;
     assert_close(pnl, 0.5, "pnl");
@@ -369,14 +369,14 @@ async fn total_fees_sum_both_legs_and_treat_missing_fees_as_zero() {
     let mut position = open_position();
     assert_close(calculate_position_total_fees(&position), 0.0, "no fees yet");
 
-    position.entry_fee_lamports = Some(5_000_000);
+    position.entry_fee_raw = Some(5_000_000);
     assert_close(
         calculate_position_total_fees(&position),
         0.005,
         "entry fee only",
     );
 
-    position.exit_fee_lamports = Some(7_000_000);
+    position.exit_fee_raw = Some(7_000_000);
     assert_close(calculate_position_total_fees(&position), 0.012, "both legs");
 }
 
@@ -390,7 +390,7 @@ async fn the_split_reports_realized_and_unrealized_separately() {
     position.remaining_token_amount = Some(units(50.0));
     position.total_exited_amount = units(50.0);
     position.average_exit_price = Some(0.02);
-    position.sol_received = Some(1.0);
+    position.native_received = Some(1.0);
     position.partial_exit_count = 1;
 
     let (realized, unrealized, total, total_pct) = calculate_split_pnl(&position, Some(0.02)).await;
@@ -409,13 +409,13 @@ async fn the_split_prices_a_dcad_position_against_the_tokens_it_actually_acquire
     // wrong. Here: 2 SOL bought 200 tokens; 100 were sold for 2 SOL and 100 are still
     // held at 0.02 — each leg carries exactly half the 2 SOL basis.
     let mut position = open_position();
-    position.entry_size_sol = 1.0;
-    position.total_size_sol = 2.0;
+    position.entry_size_native = 1.0;
+    position.total_size_native = 2.0;
     position.token_amount = Some(units(100.0)); // entry buy only
     position.remaining_token_amount = Some(units(100.0));
     position.total_exited_amount = units(100.0);
     position.average_exit_price = Some(0.02);
-    position.sol_received = Some(2.0);
+    position.native_received = Some(2.0);
     position.partial_exit_count = 1;
     position.dca_count = 1;
 
@@ -473,7 +473,7 @@ async fn large_raw_amounts_keep_their_pnl_bits() {
     base.token_amount = Some(raw(12_345_678_901_234_567_891));
     base.remaining_token_amount = Some(raw(9_007_199_254_740_993));
     base.total_exited_amount = raw(3_333_333_333_333_333_337);
-    base.sol_received = Some(0.5);
+    base.native_received = Some(0.5);
     base.average_exit_price = Some(0.015);
 
     let (open_pnl, open_pct) = calculate_position_pnl(&base, Some(0.0123)).await;
@@ -490,7 +490,7 @@ async fn large_raw_amounts_keep_their_pnl_bits() {
     closed.exit_time = Some(chrono::Utc::now());
     closed.exit_transaction_signature = Some("exit-sig".to_owned());
     closed.transaction_exit_verified = true;
-    closed.sol_received = None;
+    closed.native_received = None;
     let (closed_pnl, closed_pct) = calculate_position_pnl(&closed, None).await;
 
     let bits = [

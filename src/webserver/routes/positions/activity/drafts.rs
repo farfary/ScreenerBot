@@ -114,7 +114,7 @@ pub(super) fn position_drafts(
         draft.record_id = entry.id;
         draft.token_amount = Some(to_ui(entry.amount));
         draft.price = Some(entry.price);
-        draft.sol_amount = Some(entry.sol_spent);
+        draft.sol_amount = Some(entry.native_spent);
         draft.record_fee_sol = entry.fees_sol;
         push(draft, &mut drafts);
     }
@@ -136,7 +136,7 @@ pub(super) fn position_drafts(
         draft.record_id = exit.id;
         draft.token_amount = Some(to_ui(exit.amount));
         draft.price = Some(exit.price);
-        draft.sol_amount = Some(exit.sol_received);
+        draft.sol_amount = Some(exit.native_received);
         draft.exit_percentage = Some(exit.percentage);
         draft.record_fee_sol = exit.fees_sol;
         push(draft, &mut drafts);
