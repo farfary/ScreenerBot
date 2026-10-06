@@ -97,6 +97,10 @@ impl ChainAdapter for SolanaAdapter {
     fn analytics_token_url(&self, address: &str) -> String {
         format!("https://birdeye.so/token/{address}?chain=solana")
     }
+
+    fn has_rugcheck_reports(&self) -> bool {
+        true
+    }
 }
 
 #[cfg(test)]

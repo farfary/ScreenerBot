@@ -941,8 +941,6 @@ const PROCESS_CHAIN_SEAM_CALLER_FILES: &[&str] = &[
     "apis/native_price.rs",
     "connectivity/monitors/dexscreener.rs",
     "events/recorders/lifecycle.rs",
-    "filtering/sources/meta.rs",
-    "filtering/sources/onchain.rs",
     "ohlcvs/cache.rs",
     "ohlcvs/fetcher.rs",
     "ohlcvs/manager.rs",

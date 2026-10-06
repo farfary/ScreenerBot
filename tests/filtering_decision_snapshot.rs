@@ -115,7 +115,7 @@ fn aged(line: &Line) -> Token {
 
 /// Outcome of one evaluation: the string `"pass"` or `{"reason", "source"}`.
 async fn outcome(token: &Token, config: &FilteringConfig) -> serde_json::Value {
-    match evaluate_token(token, config).await {
+    match evaluate_token(&common::solana_filter_profile(), token, config).await {
         Ok(()) => serde_json::Value::String(PASS.to_owned()),
         Err(reason) => serde_json::json!({
             "reason": reason.label(),

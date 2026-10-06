@@ -73,6 +73,10 @@ pub trait ChainAdapter: Send + Sync + 'static {
     fn dex_chart_url(&self, address: &str) -> String;
     /// Token page at the market-analytics front-end.
     fn analytics_token_url(&self, address: &str) -> String;
+
+    // --- data coverage ---
+    /// Whether Rugcheck publishes token security reports for this chain.
+    fn has_rugcheck_reports(&self) -> bool;
 }
 
 /// The adapter for `chain` — the facts of the subject's chain.

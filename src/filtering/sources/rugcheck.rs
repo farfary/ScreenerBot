@@ -3,9 +3,61 @@
 
 //! Rugcheck filter source — validates token safety scores and risk indicators.
 
+use crate::chains::{adapter_for, ChainId};
 use crate::config::schemas::RugCheckFilters;
+use crate::config::FilteringConfig;
 use crate::filtering::sources::FilterRejectionReason;
+use crate::filtering::stage::{FilterStage, StageEval};
 use crate::tokens::types::{SecurityRisk, Token};
+
+/// The Rugcheck stage, applicable only on a chain Rugcheck publishes reports for. It owns
+/// the data-presence check, so a missing report can only reject where Rugcheck applies.
+pub struct RugcheckStage;
+
+impl FilterStage for RugcheckStage {
+    fn name(&self) -> &'static str {
+        "rugcheck"
+    }
+
+    fn supports(&self, chain: ChainId) -> bool {
+        adapter_for(chain).has_rugcheck_reports()
+    }
+
+    fn evaluate<'a>(
+        &'a self,
+        _chain: ChainId,
+        token: &'a Token,
+        config: &'a FilteringConfig,
+    ) -> StageEval<'a> {
+        StageEval::Ready(evaluate_stage(token, config).into())
+    }
+}
+
+fn evaluate_stage(token: &Token, config: &FilteringConfig) -> Result<(), FilterRejectionReason> {
+    if config.rugcheck.enabled {
+        let has_rug_data = token.security_score.is_some()
+            || token.token_type.is_some()
+            || token.mint_authority.is_some()
+            || token.freeze_authority.is_some()
+            || token.graph_insiders_detected.is_some()
+            || token.lp_provider_count.is_some()
+            || token.total_holders.is_some()
+            || !token.security_risks.is_empty()
+            || !token.top_holders.is_empty()
+            || token.creator_balance_pct.is_some()
+            || token.transfer_fee_pct.is_some()
+            || token.transfer_fee_max_amount.is_some()
+            || token.transfer_fee_authority.is_some();
+
+        if !has_rug_data {
+            return Err(FilterRejectionReason::RugcheckDataMissing);
+        }
+
+        evaluate(token, &config.rugcheck)?;
+    }
+
+    Ok(())
+}
 
 /// Evaluate a token against rugcheck filter criteria.
 pub fn evaluate(token: &Token, config: &RugCheckFilters) -> Result<(), FilterRejectionReason> {

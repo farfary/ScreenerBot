@@ -144,7 +144,7 @@ async fn evaluate_all(tokens: &[Token], config: &FilteringConfig) -> Outcome {
 
     let started = Instant::now();
     for token in tokens {
-        match evaluate_token(token, config).await {
+        match evaluate_token(&common::solana_filter_profile(), token, config).await {
             Ok(()) => outcome.passed += 1,
             Err(reason) => {
                 outcome.rejected += 1;
@@ -180,7 +180,7 @@ async fn realdata_batch_load_carries_the_fields_the_rules_read() {
     // That is how `rug_transfer_fee_missing` and then `rug_lp_providers_missing` each came
     // to reject 46% of the corpus: not because the tokens lacked the data, but because the
     // query never asked for it.
-    let Some(_dir) = common::real_db_env() else {
+    let Some(_dir) = common::real_db_env_offline_filtering() else {
         return;
     };
     let _db = common::init_real_token_db();
@@ -243,7 +243,7 @@ async fn realdata_default_config_passes_real_tokens() {
     // gated on the token's single `data_source`, so every token failed whichever gate did
     // not match. On top of that the Rugcheck stage rejected the whole corpus on its own,
     // 46% of it for not proving the absence of a transfer fee.
-    let Some(_dir) = common::real_db_env() else {
+    let Some(_dir) = common::real_db_env_offline_filtering() else {
         return;
     };
     let _db = common::init_real_token_db();
@@ -334,7 +334,7 @@ async fn realdata_rugcheck_stage_is_selective_not_absolute() {
     //
     // `rug_data_missing` remains, and remains correct: the engine will not judge a token's
     // safety from a report it does not have. It is a coverage limit, not a rule defect.
-    let Some(_dir) = common::real_db_env() else {
+    let Some(_dir) = common::real_db_env_offline_filtering() else {
         return;
     };
     let _db = common::init_real_token_db();
@@ -377,7 +377,7 @@ async fn realdata_market_rules_alone_yield_a_plausible_pass_rate() {
     // The positive counterpart: with the source conflict AND the Rugcheck stage out of
     // the way, the market and on-chain rules behave like a filter rather than a wall.
     // This is the assertion that would catch a market rule silently going absolute.
-    let Some(_dir) = common::real_db_env() else {
+    let Some(_dir) = common::real_db_env_offline_filtering() else {
         return;
     };
     let _db = common::init_real_token_db();
@@ -423,7 +423,7 @@ async fn realdata_the_meta_stage_never_pays_for_a_decimals_lookup() {
     // never resolved still goes to the resolver, and should: that is a one-time, self-
     // healing cost (the resolver persists what it finds), not a per-refresh tax. Averaging
     // the two groups together hides the fix behind the warm-up of the other group.
-    let Some(_dir) = common::real_db_env() else {
+    let Some(_dir) = common::real_db_env_offline_filtering() else {
         return;
     };
     let _db = common::init_real_token_db();
@@ -487,7 +487,7 @@ async fn realdata_the_meta_stage_never_pays_for_a_decimals_lookup() {
 #[tokio::test]
 #[ignore = "reads the owner's real database (cloned); run with ./test.sh live"]
 async fn realdata_disabling_every_filter_passes_every_token() {
-    let Some(_dir) = common::real_db_env() else {
+    let Some(_dir) = common::real_db_env_offline_filtering() else {
         return;
     };
     let _db = common::init_real_token_db();
@@ -529,7 +529,7 @@ async fn realdata_disabling_every_filter_passes_every_token() {
 async fn realdata_each_source_is_measured_in_isolation() {
     // Enabling one source at a time shows which rule is responsible for which share of
     // the corpus — the number a user needs in order to loosen the right setting.
-    let Some(_dir) = common::real_db_env() else {
+    let Some(_dir) = common::real_db_env_offline_filtering() else {
         return;
     };
     let _db = common::init_real_token_db();
@@ -567,7 +567,7 @@ async fn realdata_each_source_is_measured_in_isolation() {
 #[tokio::test]
 #[ignore = "reads the owner's real database (cloned); run with ./test.sh live"]
 async fn realdata_evaluation_fits_the_refresh_interval() {
-    let Some(_dir) = common::real_db_env() else {
+    let Some(_dir) = common::real_db_env_offline_filtering() else {
         return;
     };
     let _db = common::init_real_token_db();
@@ -615,7 +615,7 @@ async fn realdata_decimals_preload_survives_its_own_cache() {
     // 100k cache), which evicted three quarters of what it had just loaded, including most
     // pool-backed mints. Loading no more than the cache can hold is what makes the preload
     // mean anything.
-    let Some(_dir) = common::real_db_env() else {
+    let Some(_dir) = common::real_db_env_offline_filtering() else {
         return;
     };
     let db = common::init_real_token_db();
@@ -678,7 +678,7 @@ async fn realdata_snapshot_refresh_and_query_views() {
     // End to end on real data: build a snapshot through the store, then page every view
     // the dashboard offers. Exercises engine + store + store_helpers together, including
     // the batched database writes (which land in the clone).
-    let Some(_dir) = common::real_db_env() else {
+    let Some(_dir) = common::real_db_env_offline_filtering() else {
         return;
     };
     let _db = common::init_real_token_db();
@@ -770,7 +770,7 @@ async fn realdata_snapshot_refresh_and_query_views() {
 #[tokio::test]
 #[ignore = "reads the owner's real database (cloned); run with ./test.sh live"]
 async fn realdata_pagination_never_repeats_or_skips_a_token() {
-    let Some(_dir) = common::real_db_env() else {
+    let Some(_dir) = common::real_db_env_offline_filtering() else {
         return;
     };
     let _db = common::init_real_token_db();
@@ -817,7 +817,7 @@ async fn realdata_pagination_never_repeats_or_skips_a_token() {
 async fn realdata_query_latency_is_interactive() {
     // The tokens page polls this. A query that takes longer than the poll interval means
     // the table can never settle.
-    let Some(_dir) = common::real_db_env() else {
+    let Some(_dir) = common::real_db_env_offline_filtering() else {
         return;
     };
     let _db = common::init_real_token_db();

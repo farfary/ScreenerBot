@@ -11,7 +11,10 @@
 
 mod common;
 
-use common::{config_guard, filter_token, filters_all_disabled, filters_default_dex_only, holder};
+use common::{
+    config_guard, filter_token, filters_all_disabled, filters_default_dex_only, holder,
+    solana_filter_profile,
+};
 use screenerbot::config::FilteringConfig;
 use screenerbot::filtering::evaluate_token;
 use screenerbot::filtering::sources::{FilterRejectionReason, FilterSource};
@@ -47,7 +50,9 @@ async fn pipeline_default_config_accepts_a_healthy_token_from_either_source() {
         let mut token = seeded_token();
         token.data_source = source;
         assert!(
-            evaluate_token(&token, &config).await.is_ok(),
+            evaluate_token(&solana_filter_profile(), &token, &config)
+                .await
+                .is_ok(),
             "a healthy {source:?} token must pass the shipped defaults"
         );
     }
@@ -65,7 +70,7 @@ async fn pipeline_still_applies_the_source_that_matches_the_token() {
     let mut dex = seeded_token();
     dex.data_source = DataSource::DexScreener;
     assert_eq!(
-        rejection(evaluate_token(&dex, &config).await),
+        rejection(evaluate_token(&solana_filter_profile(), &dex, &config).await),
         FilterRejectionReason::DexScreenerInsufficientLiquidity,
         "a DexScreener token is judged by the DexScreener rules"
     );
@@ -73,7 +78,7 @@ async fn pipeline_still_applies_the_source_that_matches_the_token() {
     let mut gecko = seeded_token();
     gecko.data_source = DataSource::GeckoTerminal;
     assert_eq!(
-        rejection(evaluate_token(&gecko, &config).await),
+        rejection(evaluate_token(&solana_filter_profile(), &gecko, &config).await),
         FilterRejectionReason::GeckoTerminalLiquidityTooLow,
         "and a GeckoTerminal token by the GeckoTerminal rules"
     );
@@ -122,7 +127,7 @@ async fn pipeline_market_gate_matrix() {
         let mut token = seeded_token();
         token.data_source = source;
 
-        let verdict = evaluate_token(&token, &config).await;
+        let verdict = evaluate_token(&solana_filter_profile(), &token, &config).await;
         match expected {
             None => assert!(
                 verdict.is_ok(),
@@ -143,9 +148,13 @@ async fn pipeline_passes_a_healthy_token_with_a_single_market_source() {
     let token = seeded_token();
 
     assert!(
-        evaluate_token(&token, &filters_default_dex_only())
-            .await
-            .is_ok(),
+        evaluate_token(
+            &solana_filter_profile(),
+            &token,
+            &filters_default_dex_only()
+        )
+        .await
+        .is_ok(),
         "default rules with only DexScreener enabled must accept the baseline token"
     );
 }
@@ -176,7 +185,9 @@ async fn pipeline_with_no_filters_enabled_accepts_a_hostile_token() {
     token.first_discovered_at = chrono::Utc::now();
 
     assert!(
-        evaluate_token(&token, &config).await.is_ok(),
+        evaluate_token(&solana_filter_profile(), &token, &config)
+            .await
+            .is_ok(),
         "with every switch off the pipeline must be a pass-through — no hidden mandatory rule"
     );
 }
@@ -202,7 +213,7 @@ async fn pipeline_uses_the_decimals_the_token_already_carries() {
     token.decimals = Some(6);
 
     let started = std::time::Instant::now();
-    let verdict = evaluate_token(&token, &config).await;
+    let verdict = evaluate_token(&solana_filter_profile(), &token, &config).await;
     let elapsed = started.elapsed();
 
     assert!(verdict.is_ok(), "got {verdict:?}");
@@ -235,7 +246,7 @@ async fn pipeline_rejects_decimals_it_cannot_trust() {
         token.decimals = junk;
 
         assert_eq!(
-            rejection(evaluate_token(&token, &config).await),
+            rejection(evaluate_token(&solana_filter_profile(), &token, &config).await),
             FilterRejectionReason::NoDecimalsInDatabase,
             "decimals {junk:?} must not count as resolved"
         );
@@ -245,7 +256,9 @@ async fn pipeline_rejects_decimals_it_cannot_trust() {
     for good in 1..=18u8 {
         let mut token = seeded_token();
         token.decimals = Some(good);
-        assert!(evaluate_token(&token, &config).await.is_ok());
+        assert!(evaluate_token(&solana_filter_profile(), &token, &config)
+            .await
+            .is_ok());
     }
 }
 
@@ -264,7 +277,7 @@ async fn pipeline_reports_the_first_failing_stage_meta_before_onchain() {
     token.liquidity_usd = Some(0.0); // and no liquidity
 
     assert_eq!(
-        rejection(evaluate_token(&token, &config).await),
+        rejection(evaluate_token(&solana_filter_profile(), &token, &config).await),
         FilterRejectionReason::TokenTooNew,
         "meta runs first, so age must win over the cheaper on-chain and market rules"
     );
@@ -280,7 +293,7 @@ async fn pipeline_runs_onchain_before_any_market_source() {
     token.liquidity_usd = Some(0.0);
 
     assert_eq!(
-        rejection(evaluate_token(&token, &config).await),
+        rejection(evaluate_token(&solana_filter_profile(), &token, &config).await),
         FilterRejectionReason::OnChainNumericSymbol,
         "the zero-cost scam check must pre-empt market filtering"
     );
@@ -296,7 +309,7 @@ async fn pipeline_runs_market_sources_before_rugcheck() {
     token.is_rugged = true; // Rugcheck would too
 
     assert_eq!(
-        rejection(evaluate_token(&token, &config).await),
+        rejection(evaluate_token(&solana_filter_profile(), &token, &config).await),
         FilterRejectionReason::DexScreenerZeroLiquidity,
         "the cheaper market check must not be preceded by the security one"
     );
@@ -327,7 +340,7 @@ async fn pipeline_rejection_sources_match_the_stage_that_produced_them() {
     ];
 
     for (token, expected_source) in cases {
-        let reason = rejection(evaluate_token(token, &config).await);
+        let reason = rejection(evaluate_token(&solana_filter_profile(), token, &config).await);
         assert_eq!(
             reason.source(),
             expected_source,
@@ -353,13 +366,15 @@ async fn pipeline_age_boundary_is_inclusive() {
     // assertion about the RULE rather than about clock resolution.
     token.first_discovered_at = chrono::Utc::now() - chrono::Duration::seconds(60 * 60 + 1);
     assert!(
-        evaluate_token(&token, &config).await.is_ok(),
+        evaluate_token(&solana_filter_profile(), &token, &config)
+            .await
+            .is_ok(),
         "exactly the minimum age is old enough (`<` rejects)"
     );
 
     token.first_discovered_at = chrono::Utc::now() - chrono::Duration::minutes(59);
     assert_eq!(
-        rejection(evaluate_token(&token, &config).await),
+        rejection(evaluate_token(&solana_filter_profile(), &token, &config).await),
         FilterRejectionReason::TokenTooNew
     );
 }
@@ -380,7 +395,7 @@ async fn pipeline_age_measures_discovery_not_creation() {
     token.first_discovered_at = chrono::Utc::now() - chrono::Duration::minutes(1);
 
     assert_eq!(
-        rejection(evaluate_token(&token, &config).await),
+        rejection(evaluate_token(&solana_filter_profile(), &token, &config).await),
         FilterRejectionReason::TokenTooNew,
         "a year-old token counts as new because WE only just found it"
     );
@@ -399,7 +414,7 @@ async fn pipeline_age_check_tolerates_a_future_discovery_timestamp() {
     token.first_discovered_at = chrono::Utc::now() + chrono::Duration::days(7);
 
     assert_eq!(
-        rejection(evaluate_token(&token, &config).await),
+        rejection(evaluate_token(&solana_filter_profile(), &token, &config).await),
         FilterRejectionReason::TokenTooNew,
         "a future timestamp must read as age 0, not as an ancient token"
     );
@@ -418,7 +433,7 @@ async fn pipeline_dexscreener_gate_rejects_tokens_sourced_elsewhere() {
     let mut token = seeded_token();
     token.data_source = DataSource::Unknown;
     assert_eq!(
-        rejection(evaluate_token(&token, &config).await),
+        rejection(evaluate_token(&solana_filter_profile(), &token, &config).await),
         FilterRejectionReason::DexScreenerDataMissing
     );
 
@@ -426,7 +441,7 @@ async fn pipeline_dexscreener_gate_rejects_tokens_sourced_elsewhere() {
     // provider — the gate is about provenance, not about whether the data exists.
     token.data_source = DataSource::GeckoTerminal;
     assert_eq!(
-        rejection(evaluate_token(&token, &config).await),
+        rejection(evaluate_token(&solana_filter_profile(), &token, &config).await),
         FilterRejectionReason::DexScreenerDataMissing
     );
 }
@@ -439,11 +454,13 @@ async fn pipeline_geckoterminal_gate_mirrors_the_dexscreener_one() {
 
     let mut token = seeded_token();
     token.data_source = DataSource::GeckoTerminal;
-    assert!(evaluate_token(&token, &config).await.is_ok());
+    assert!(evaluate_token(&solana_filter_profile(), &token, &config)
+        .await
+        .is_ok());
 
     token.data_source = DataSource::DexScreener;
     assert_eq!(
-        rejection(evaluate_token(&token, &config).await),
+        rejection(evaluate_token(&solana_filter_profile(), &token, &config).await),
         FilterRejectionReason::GeckoTerminalDataMissing
     );
 }
@@ -469,7 +486,7 @@ async fn pipeline_rugcheck_gate_needs_at_least_one_security_field() {
     bare.transfer_fee_authority = None;
 
     assert_eq!(
-        rejection(evaluate_token(&bare, &config).await),
+        rejection(evaluate_token(&solana_filter_profile(), &bare, &config).await),
         FilterRejectionReason::RugcheckDataMissing
     );
 
@@ -478,7 +495,7 @@ async fn pipeline_rugcheck_gate_needs_at_least_one_security_field() {
     let mut only_type = bare.clone();
     only_type.token_type = Some("spl".to_owned());
     assert_ne!(
-        rejection(evaluate_token(&only_type, &config).await),
+        rejection(evaluate_token(&solana_filter_profile(), &only_type, &config).await),
         FilterRejectionReason::RugcheckDataMissing,
         "a bare token_type is enough to look like a fetched Rugcheck report"
     );
@@ -487,7 +504,11 @@ async fn pipeline_rugcheck_gate_needs_at_least_one_security_field() {
     only_holders.total_holders = Some(500);
     only_holders.transfer_fee_pct = Some(0.0);
     only_holders.lp_provider_count = Some(8);
-    assert!(evaluate_token(&only_holders, &config).await.is_ok());
+    assert!(
+        evaluate_token(&solana_filter_profile(), &only_holders, &config)
+            .await
+            .is_ok()
+    );
 }
 
 #[tokio::test]
@@ -507,7 +528,9 @@ async fn pipeline_disabling_rugcheck_also_disables_its_data_requirement() {
     token.creator_balance_pct = None;
     token.transfer_fee_max_amount = None;
 
-    assert!(evaluate_token(&token, &config).await.is_ok());
+    assert!(evaluate_token(&solana_filter_profile(), &token, &config)
+        .await
+        .is_ok());
 }
 
 // ============================================================================
@@ -519,9 +542,13 @@ async fn pipeline_llm_analysis_stage_is_inert_when_disabled() {
     let _cfg = config_guard(); // resets the global config, where llm.enabled defaults to false
     let token = seeded_token();
 
-    assert!(evaluate_token(&token, &filters_default_dex_only())
-        .await
-        .is_ok());
+    assert!(evaluate_token(
+        &solana_filter_profile(),
+        &token,
+        &filters_default_dex_only()
+    )
+    .await
+    .is_ok());
 }
 
 #[tokio::test]
@@ -536,9 +563,13 @@ async fn pipeline_llm_analysis_stage_fails_open_when_the_engine_is_missing() {
     });
 
     let token = seeded_token();
-    assert!(evaluate_token(&token, &filters_default_dex_only())
-        .await
-        .is_ok());
+    assert!(evaluate_token(
+        &solana_filter_profile(),
+        &token,
+        &filters_default_dex_only()
+    )
+    .await
+    .is_ok());
 }
 
 // ============================================================================
@@ -610,7 +641,7 @@ async fn pipeline_survives_structurally_corrupt_tokens() {
 
     for (label, token) in cases {
         // The assertion is that this returns at all, and produces a labelled decision.
-        match evaluate_token(&token, &config).await {
+        match evaluate_token(&solana_filter_profile(), &token, &config).await {
             Ok(()) => {}
             Err(reason) => assert!(
                 !reason.label().is_empty(),
@@ -634,7 +665,9 @@ async fn pipeline_saturates_instead_of_overflowing_transaction_counts() {
     token.txns_h1_sells = Some(i64::MAX);
 
     assert!(
-        evaluate_token(&token, &config).await.is_ok(),
+        evaluate_token(&solana_filter_profile(), &token, &config)
+            .await
+            .is_ok(),
         "i64::MAX + i64::MAX must saturate, not wrap negative and read as no activity"
     );
 }
@@ -646,10 +679,10 @@ async fn pipeline_is_deterministic_for_the_same_token() {
     let mut token = seeded_token();
     token.liquidity_usd = Some(0.0);
 
-    let first = rejection(evaluate_token(&token, &config).await);
+    let first = rejection(evaluate_token(&solana_filter_profile(), &token, &config).await);
     for _ in 0..25 {
         assert_eq!(
-            rejection(evaluate_token(&token, &config).await),
+            rejection(evaluate_token(&solana_filter_profile(), &token, &config).await),
             first,
             "the same token and config must always yield the same decision"
         );

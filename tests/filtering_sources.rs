@@ -15,12 +15,12 @@
 
 mod common;
 
-use common::{filter_token, holder, security_risk};
+use common::{filter_token, holder, onchain_rules, security_risk};
 use screenerbot::config::schemas::{
     DexScreenerFilters, GeckoTerminalFilters, OnChainFilters, RugCheckFilters,
 };
 use screenerbot::filtering::sources::{
-    dexscreener, geckoterminal, onchain, rugcheck, FilterRejectionReason, FilterSource,
+    dexscreener, geckoterminal, rugcheck, FilterRejectionReason, FilterSource,
 };
 use screenerbot::tokens::types::{DataSource, Token};
 
@@ -60,7 +60,7 @@ fn onchain_disabled_passes_an_obvious_scam() {
     token.freeze_authority = Some("Freeze1111111111111111111111111111111111111".to_owned());
     token.is_mutable = Some(false);
 
-    assert!(onchain::evaluate(&token, &config).is_ok());
+    assert!(onchain_rules(&token, &config).is_ok());
 }
 
 #[test]
@@ -70,7 +70,7 @@ fn onchain_rejects_numeric_only_symbol() {
     token.symbol = "0000".to_owned();
 
     assert_eq!(
-        rejection(onchain::evaluate(&token, &config)),
+        rejection(onchain_rules(&token, &config)),
         FilterRejectionReason::OnChainNumericSymbol
     );
 }
@@ -82,14 +82,14 @@ fn onchain_numeric_check_trims_and_needs_all_digits() {
 
     token.symbol = "  123  ".to_owned();
     assert_eq!(
-        rejection(onchain::evaluate(&token, &config)),
+        rejection(onchain_rules(&token, &config)),
         FilterRejectionReason::OnChainNumericSymbol,
         "surrounding whitespace must not hide a numeric symbol"
     );
 
     // One non-digit is enough to make it a normal symbol.
     token.symbol = "123X".to_owned();
-    assert!(onchain::evaluate(&token, &config).is_ok());
+    assert!(onchain_rules(&token, &config).is_ok());
 }
 
 #[test]
@@ -106,7 +106,7 @@ fn onchain_rejects_empty_and_null_padded_symbols() {
     ] {
         token.symbol = symbol.to_owned();
         assert_eq!(
-            rejection(onchain::evaluate(&token, &config)),
+            rejection(onchain_rules(&token, &config)),
             FilterRejectionReason::OnChainEmptySymbol,
             "symbol {symbol:?} must be treated as empty"
         );
@@ -114,7 +114,7 @@ fn onchain_rejects_empty_and_null_padded_symbols() {
 
     // A real symbol wearing the same padding is still a real symbol.
     token.symbol = " \0BONK\0 ".to_owned();
-    assert!(onchain::evaluate(&token, &config).is_ok());
+    assert!(onchain_rules(&token, &config).is_ok());
 }
 
 #[test]
@@ -131,14 +131,14 @@ fn onchain_sees_through_padding_on_every_symbol_rule() {
     // `\u{0}` rather than `\0` so the digits that follow cannot read as an octal escape.
     token.symbol = " \u{0}123\0 ".to_owned();
     assert_eq!(
-        rejection(onchain::evaluate(&token, &config)),
+        rejection(onchain_rules(&token, &config)),
         FilterRejectionReason::OnChainNumericSymbol,
         "padding must not hide a numeric symbol"
     );
 
     token.symbol = "\0$\0".to_owned();
     assert_eq!(
-        rejection(onchain::evaluate(&token, &config)),
+        rejection(onchain_rules(&token, &config)),
         FilterRejectionReason::OnChainSuspiciousSymbol,
         "padding must not hide a single-character symbol"
     );
@@ -156,13 +156,13 @@ fn onchain_single_char_rule_only_rejects_non_alphabetic() {
 
     token.symbol = "$".to_owned();
     assert_eq!(
-        rejection(onchain::evaluate(&token, &config)),
+        rejection(onchain_rules(&token, &config)),
         FilterRejectionReason::OnChainSuspiciousSymbol
     );
 
     token.symbol = "A".to_owned();
     assert!(
-        onchain::evaluate(&token, &config).is_ok(),
+        onchain_rules(&token, &config).is_ok(),
         "single ASCII letters are deliberately kept despite the filter's name"
     );
 }
@@ -175,16 +175,16 @@ fn onchain_rejects_immutable_metadata_with_freeze_authority() {
     token.freeze_authority = Some("Freeze1111111111111111111111111111111111111".to_owned());
 
     assert_eq!(
-        rejection(onchain::evaluate(&token, &config)),
+        rejection(onchain_rules(&token, &config)),
         FilterRejectionReason::OnChainImmutableWithFreeze
     );
 
     // Either signal alone is not the pattern.
     token.freeze_authority = None;
-    assert!(onchain::evaluate(&token, &config).is_ok());
+    assert!(onchain_rules(&token, &config).is_ok());
     token.is_mutable = Some(true);
     token.freeze_authority = Some("Freeze1111111111111111111111111111111111111".to_owned());
-    assert!(onchain::evaluate(&token, &config).is_ok());
+    assert!(onchain_rules(&token, &config).is_ok());
 }
 
 #[test]
@@ -205,7 +205,7 @@ fn onchain_combined_risk_accumulates_weak_signals() {
     token.is_mutable = Some(false);
 
     assert_eq!(
-        rejection(onchain::evaluate(&token, &config)),
+        rejection(onchain_rules(&token, &config)),
         FilterRejectionReason::OnChainHighRiskScore
     );
 }
@@ -223,7 +223,7 @@ fn onchain_combined_risk_rejects_exactly_at_the_threshold() {
     token.name = "Something Else".to_owned();
 
     assert_eq!(
-        rejection(onchain::evaluate(&token, &config)),
+        rejection(onchain_rules(&token, &config)),
         FilterRejectionReason::OnChainHighRiskScore
     );
 }
@@ -250,7 +250,7 @@ fn onchain_immutable_bonus_amplifies_any_signal_regardless_of_order() {
     token.freeze_authority = None;
 
     assert_eq!(
-        rejection(onchain::evaluate(&token, &config)),
+        rejection(onchain_rules(&token, &config)),
         FilterRejectionReason::OnChainHighRiskScore,
         "15 + the 10 amplifier is 25, over the threshold of 20"
     );
@@ -262,7 +262,7 @@ fn onchain_immutable_bonus_amplifies_any_signal_regardless_of_order() {
     innocent.is_mutable = Some(false);
     innocent.freeze_authority = None;
     assert!(
-        onchain::evaluate(&innocent, &config).is_ok(),
+        onchain_rules(&innocent, &config).is_ok(),
         "the amplifier must have something to amplify"
     );
 }

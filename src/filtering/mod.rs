@@ -6,6 +6,7 @@ pub mod background;
 mod engine;
 mod error;
 pub mod sources;
+mod stage;
 mod store;
 mod store_helpers;
 #[cfg(test)]
@@ -13,9 +14,12 @@ mod store_helpers_tests;
 pub mod types;
 
 use crate::chains::{ChainId, ChainScope};
+use crate::config::FilteringConfig;
+use crate::tokens::types::Token;
+use sources::FilterRejectionReason;
 
-pub use engine::apply_all_filters as evaluate_token;
 pub use error::{Error, Result};
+pub use stage::{FilterProfile, FilterStage, StageEval, StageOutcome};
 pub use types::{
     BlacklistReasonInfo, FilteringQuery, FilteringQueryResult, FilteringSnapshot,
     FilteringStatsSnapshot, FilteringView, PassedToken, RejectedToken, SnapshotState,
@@ -23,6 +27,20 @@ pub use types::{
 };
 
 pub use store::{store, FilteringStore};
+
+/// Run `profile`'s filter pipeline for ONE token, in the order the snapshot uses, and
+/// return the FIRST rejection reason.
+///
+/// Pure with respect to the token: it reads config, the decimals cache and position
+/// cooldowns. Exposed so a single decision can be reproduced and explained outside a full
+/// snapshot run (see `tests/filtering_*`).
+pub async fn evaluate_token(
+    profile: &FilterProfile,
+    token: &Token,
+    config: &FilteringConfig,
+) -> std::result::Result<(), FilterRejectionReason> {
+    profile.evaluate(token, config).await
+}
 
 /// Obtain one chain's filtered token mint list for trading and pool services
 pub async fn get_filtered_token_mints(chain: ChainId) -> Result<Vec<String>> {

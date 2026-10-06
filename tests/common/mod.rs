@@ -265,6 +265,65 @@ pub fn seed_decimals(mint: &str, decimals: u8) {
     screenerbot::tokens::cache_decimals(screenerbot::chains::ChainId::Solana, mint, decimals);
 }
 
+/// Install the runtime of every enabled chain, once per process, after the config exists.
+/// Installing only stores the chain's function pointers; nothing touches the network.
+pub fn install_chain_runtimes() {
+    static INSTALL: std::sync::Once = std::sync::Once::new();
+    INSTALL.call_once(|| {
+        ensure_config();
+        screenerbot::chains::install_enabled_runtimes();
+    });
+}
+
+/// Solana's filter profile, as the snapshot evaluates tokens through it.
+pub fn solana_filter_profile() -> std::sync::Arc<screenerbot::filtering::FilterProfile> {
+    static PROFILE: OnceLock<std::sync::Arc<screenerbot::filtering::FilterProfile>> =
+        OnceLock::new();
+    PROFILE
+        .get_or_init(|| {
+            install_chain_runtimes();
+            screenerbot::chains::runtime_for(screenerbot::chains::ChainId::Solana)
+                .expect("the Solana runtime is installed")
+                .filter_profile()
+        })
+        .clone()
+}
+
+/// The on-chain source's rules alone: the profile's `symbols` stage, then its `onchain`
+/// stage, both synchronous.
+pub fn onchain_rules(
+    token: &Token,
+    config: &screenerbot::config::schemas::OnChainFilters,
+) -> Result<(), screenerbot::filtering::sources::FilterRejectionReason> {
+    let config = screenerbot::config::FilteringConfig {
+        onchain: config.clone(),
+        ..Default::default()
+    };
+    onchain_rules_with(token, &config)
+}
+
+/// [`onchain_rules`] with a whole filtering config built once by the caller.
+pub fn onchain_rules_with(
+    token: &Token,
+    config: &screenerbot::config::FilteringConfig,
+) -> Result<(), screenerbot::filtering::sources::FilterRejectionReason> {
+    use screenerbot::filtering::{StageEval, StageOutcome};
+
+    let profile = solana_filter_profile();
+    for name in ["symbols", "onchain"] {
+        let (stage, _) = profile
+            .stages()
+            .find(|(stage, _)| stage.name() == name)
+            .expect("the profile has the stage");
+        match stage.evaluate(profile.chain(), token, config) {
+            StageEval::Ready(StageOutcome::Reject(reason)) => return Err(reason),
+            StageEval::Ready(StageOutcome::Pass | StageOutcome::NotApplicable) => {}
+            StageEval::Pending(_) => panic!("the {name} stage is synchronous"),
+        }
+    }
+    Ok(())
+}
+
 /// A minimal OPEN buy position: entry at `entry_price`, `size_sol` invested, no DCA,
 /// no partial exits, nothing verified beyond the entry.
 pub fn test_position(entry_price: f64, size_sol: f64) -> Position {
@@ -661,7 +720,86 @@ pub fn real_db_env() -> Option<TempDir> {
     // SAFETY: single-threaded test setup, before any path/config access.
     std::env::set_var("SCREENERBOT_DATA_DIR", dir.path());
     ensure_config();
+    install_chain_runtimes();
     Some(dir)
+}
+
+/// [`real_db_env`] for tests that evaluate tokens through the filter pipeline: the clone is
+/// pruned of tokens that would reach the decimals network fallback, so the run stays offline.
+/// Tests that only measure storage or startup keep the full clone.
+pub fn real_db_env_offline_filtering() -> Option<TempDir> {
+    let dir = real_db_env()?;
+    prune_unresolved_decimals(&dir.path().join("data").join("tokens.db"));
+    Some(dir)
+}
+
+/// Drop every token that would reach the decimals network fallback from the CLONED
+/// `tokens.db`: anything that is neither a native asset nor carries valid stored decimals,
+/// the same rule the decision-snapshot recorder applies. Rows keyed by those mints are
+/// removed from every table that has a `mint` column. The tier stays offline, and the
+/// owner's database is never touched because this only ever runs on the temp clone.
+fn prune_unresolved_decimals(tokens_db: &Path) {
+    let conn = rusqlite::Connection::open(tokens_db).expect("open cloned tokens.db");
+    let adapter = screenerbot::chains::adapter();
+    let doomed: Vec<String> = {
+        let mut stmt = conn
+            .prepare("SELECT mint, decimals FROM tokens")
+            .expect("prepare token scan");
+        let rows = stmt
+            .query_map([], |row| {
+                Ok((row.get::<_, String>(0)?, row.get::<_, Option<i64>>(1)?))
+            })
+            .expect("scan tokens");
+        rows.map(|row| row.expect("read token row"))
+            .filter(|(mint, decimals)| {
+                let valid = decimals
+                    .and_then(|d| u8::try_from(d).ok())
+                    .is_some_and(screenerbot::tokens::decimals_are_valid);
+                !valid && !adapter.is_native_asset(mint)
+            })
+            .map(|(mint, _)| mint)
+            .collect()
+    };
+
+    let tables: Vec<String> = {
+        let mut stmt = conn
+            .prepare(
+                "SELECT m.name FROM sqlite_master m WHERE m.type = 'table' \
+                 AND EXISTS (SELECT 1 FROM pragma_table_info(m.name) WHERE name = 'mint')",
+            )
+            .expect("prepare table scan");
+        let rows = stmt
+            .query_map([], |row| row.get::<_, String>(0))
+            .expect("scan tables");
+        rows.map(|row| row.expect("read table name")).collect()
+    };
+
+    conn.execute_batch(
+        "PRAGMA foreign_keys = OFF; \
+         CREATE TEMP TABLE doomed_mints (mint TEXT PRIMARY KEY) WITHOUT ROWID;",
+    )
+    .expect("prepare prune");
+    conn.execute_batch("BEGIN").expect("begin prune");
+    {
+        let mut insert = conn
+            .prepare("INSERT OR IGNORE INTO doomed_mints (mint) VALUES (?1)")
+            .expect("prepare doomed insert");
+        for mint in &doomed {
+            insert.execute([mint]).expect("record doomed mint");
+        }
+    }
+    for table in &tables {
+        conn.execute(
+            &format!("DELETE FROM \"{table}\" WHERE mint IN (SELECT mint FROM doomed_mints)"),
+            [],
+        )
+        .unwrap_or_else(|e| panic!("prune {table}: {e}"));
+    }
+    conn.execute_batch("COMMIT").expect("commit prune");
+    eprintln!(
+        "real-db: pruned {} tokens without usable decimals from the clone",
+        doomed.len()
+    );
 }
 
 /// Copy one database plus its WAL sidecars (a running bot keeps recent writes there;

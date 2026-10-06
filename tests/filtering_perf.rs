@@ -20,11 +20,14 @@
 
 mod common;
 
-use common::{config_guard, filter_token, filters_default_dex_only, holder, per_item_micros};
+use common::{
+    config_guard, filter_token, filters_default_dex_only, holder, onchain_rules_with,
+    per_item_micros, solana_filter_profile,
+};
 use screenerbot::config::schemas::{DexScreenerFilters, OnChainFilters, RugCheckFilters};
 use screenerbot::config::FilteringConfig;
 use screenerbot::filtering::evaluate_token;
-use screenerbot::filtering::sources::{dexscreener, onchain, rugcheck};
+use screenerbot::filtering::sources::{dexscreener, rugcheck};
 use screenerbot::tokens::types::Token;
 use std::time::{Duration, Instant};
 
@@ -51,9 +54,10 @@ fn corpus(size: usize) -> Vec<Token> {
 }
 
 async fn time_pipeline(tokens: &[Token], config: &FilteringConfig) -> Duration {
+    let profile = solana_filter_profile();
     let started = Instant::now();
     for token in tokens {
-        let _ = evaluate_token(token, config).await;
+        let _ = evaluate_token(&profile, token, config).await;
     }
     started.elapsed()
 }
@@ -161,10 +165,11 @@ async fn perf_pipeline_latency_tail_is_bounded() {
 
     let _ = time_pipeline(&tokens[..500], &config).await;
 
+    let profile = solana_filter_profile();
     let mut samples: Vec<Duration> = Vec::with_capacity(tokens.len());
     for token in &tokens {
         let started = Instant::now();
-        let _ = evaluate_token(token, &config).await;
+        let _ = evaluate_token(&profile, token, &config).await;
         samples.push(started.elapsed());
     }
     samples.sort_unstable();
@@ -193,10 +198,13 @@ async fn perf_cost_per_source_is_reported() {
     let _cfg = config_guard();
     let tokens = corpus(CORPUS);
 
-    let onchain_config = OnChainFilters::default();
+    let onchain_config = FilteringConfig {
+        onchain: OnChainFilters::default(),
+        ..Default::default()
+    };
     let started = Instant::now();
     for token in &tokens {
-        let _ = onchain::evaluate(token, &onchain_config);
+        let _ = onchain_rules_with(token, &onchain_config);
     }
     report("source/onchain", started.elapsed(), tokens.len());
 

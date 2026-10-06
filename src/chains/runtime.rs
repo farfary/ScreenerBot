@@ -5,7 +5,7 @@
 //! behaviour.
 //!
 //! The two injected factories (swap routers, the wallet-watch
-//! runtime) and the token-account read behind it. Later units add
+//! runtime), the token-account read and the filter profile behind it. Later units add
 //! methods as their domains thread the chain through (discovery, pool
 //! pricing, OHLCV, wallets, trading) — a method without a caller is
 //! forbidden until then. Neutral code resolves an instance through
@@ -37,4 +37,6 @@ pub trait ChainRuntime: Send + Sync + 'static {
     fn wallet_watch_runtime(&self) -> Arc<dyn WalletWatchRuntime>;
     /// Read a token's account from the chain: its decimals and authorities.
     async fn read_token_account(&self, address: &str) -> crate::chains::Result<TokenAccountFacts>;
+    /// The filter stages this chain's tokens are evaluated through, in canonical order.
+    fn filter_profile(&self) -> Arc<crate::filtering::FilterProfile>;
 }

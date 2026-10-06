@@ -8,10 +8,11 @@ pub(super) mod bounds;
 pub mod dexscreener;
 pub mod geckoterminal;
 pub mod llm_analysis;
+pub mod market;
 pub mod meta;
-pub mod onchain;
 pub mod rejection;
 pub mod rugcheck;
+pub mod symbols;
 
 pub use rejection::{rejection_text, FilterRejectionReason};
 

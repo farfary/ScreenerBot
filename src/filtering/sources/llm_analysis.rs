@@ -7,40 +7,77 @@
 //! Disabled by default. Provider clients are configured under `[llm]`; this
 //! analysis stage is configured under `[llm_analysis]`.
 
-use crate::config::with_config;
+use std::sync::Arc;
+
+use crate::chains::ChainId;
+use crate::config::{with_config, FilteringConfig};
+use crate::filtering::stage::{FilterStage, StageEval, StageOutcome};
+use crate::llm_analysis::engine::AnalysisEngine;
 use crate::llm_analysis::types::{EvaluationContext, Priority};
 use crate::tokens::types::Token;
 
 use super::FilterRejectionReason;
 
+/// The model-scored stage. Runs LAST so model calls are spent only on tokens that pass
+/// the standard filters; reads its switches from the global config.
+pub struct LlmAnalysisStage;
+
+impl FilterStage for LlmAnalysisStage {
+    fn name(&self) -> &'static str {
+        "llm_analysis"
+    }
+
+    fn supports(&self, _chain: ChainId) -> bool {
+        true
+    }
+
+    fn evaluate<'a>(
+        &'a self,
+        _chain: ChainId,
+        token: &'a Token,
+        _config: &'a FilteringConfig,
+    ) -> StageEval<'a> {
+        // Check whether LLM features and filtering analysis are enabled.
+        let (llm_enabled, filtering_enabled, min_confidence, fallback_pass) = with_config(|cfg| {
+            (
+                cfg.llm.enabled,
+                cfg.llm_analysis.filtering_enabled,
+                cfg.llm_analysis.min_confidence,
+                cfg.llm_analysis.fallback_pass,
+            )
+        });
+
+        if !llm_enabled || !filtering_enabled {
+            return StageEval::Ready(StageOutcome::Pass);
+        }
+
+        // Get the global model-analysis engine.
+        let analysis_engine = match crate::llm_analysis::try_get_analysis_engine() {
+            Some(engine) => engine,
+            None => {
+                // Model-backed features are enabled but the analysis engine is not ready.
+                return StageEval::Ready(StageOutcome::Pass);
+            }
+        };
+
+        StageEval::Pending(Box::pin(async move {
+            evaluate(token, analysis_engine, min_confidence, fallback_pass)
+                .await
+                .into()
+        }))
+    }
+}
+
 /// Check token using LLM analysis
 ///
 /// Returns `Err(FilterRejectionReason::LlmAnalysisRejected)` when analysis rejects the token.
-/// Returns `Ok(())` when analysis passes or the feature is disabled.
-pub async fn evaluate(token: &Token) -> Result<(), FilterRejectionReason> {
-    // Check whether LLM features and filtering analysis are enabled.
-    let (llm_enabled, filtering_enabled, min_confidence, fallback_pass) = with_config(|cfg| {
-        (
-            cfg.llm.enabled,
-            cfg.llm_analysis.filtering_enabled,
-            cfg.llm_analysis.min_confidence,
-            cfg.llm_analysis.fallback_pass,
-        )
-    });
-
-    if !llm_enabled || !filtering_enabled {
-        return Ok(());
-    }
-
-    // Get the global model-analysis engine.
-    let analysis_engine = match crate::llm_analysis::try_get_analysis_engine() {
-        Some(engine) => engine,
-        None => {
-            // Model-backed features are enabled but the analysis engine is not ready.
-            return Ok(());
-        }
-    };
-
+/// Returns `Ok(())` when analysis passes.
+async fn evaluate(
+    token: &Token,
+    analysis_engine: Arc<AnalysisEngine>,
+    min_confidence: u8,
+    fallback_pass: bool,
+) -> Result<(), FilterRejectionReason> {
     // Build evaluation context with token data
     let context = EvaluationContext {
         mint: token.mint.clone(),

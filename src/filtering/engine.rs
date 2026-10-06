@@ -10,19 +10,19 @@ use std::time::Instant as StdInstant;
 use chrono::Utc;
 use serde_json::json;
 
-use crate::chains::ChainId;
+use crate::chains::{runtime_for, ChainId};
 use crate::config::FilteringConfig;
 use crate::events::{record_filtering_event, Severity};
 use crate::logger::{self, LogTag};
 use crate::positions;
-use crate::tokens::types::{DataSource, Token};
+use crate::tokens::types::Token;
 use crate::tokens::{
     batch_clear_rejection_status_async, batch_update_priority_async,
     batch_update_rejection_status_async, batch_upsert_rejection_stats_async,
     get_all_tokens_for_filtering_async, list_blacklisted_tokens_async,
 };
 
-use super::sources::{self, FilterRejectionReason};
+use super::sources::FilterRejectionReason;
 use super::types::{
     BlacklistReasonInfo, FilteringSnapshot, PassedToken, RejectedToken, TokenEntry,
     MAX_DECISION_HISTORY,
@@ -38,6 +38,11 @@ pub async fn compute_snapshot(
     previous: Option<&FilteringSnapshot>,
 ) -> Result<FilteringSnapshot> {
     let start = StdInstant::now();
+
+    // The chain's stage sequence, resolved once per refresh.
+    let profile = runtime_for(chain)
+        .ok_or(Error::RuntimeUnavailable { chain })?
+        .filter_profile();
 
     // INFO: Record snapshot computation start
     record_filtering_event(
@@ -310,7 +315,7 @@ pub async fn compute_snapshot(
             },
         );
 
-        match apply_all_filters(token, &config).await {
+        match profile.evaluate(token, &config).await {
             Ok(()) => {
                 filtered_mints.push(token.mint.clone());
                 stats.passed += 1;
@@ -559,84 +564,6 @@ pub async fn compute_snapshot(
     crate::tokens::store_filtered_results(chain, filtered_lists);
 
     Ok(snapshot)
-}
-
-/// Run the full filter pipeline for ONE token, in the order the snapshot uses:
-/// meta -> on-chain -> DexScreener -> GeckoTerminal -> Rugcheck -> LLM analysis.
-///
-/// Pure with respect to the token: it reads config, the decimals cache and position
-/// cooldowns, and returns the FIRST rejection reason. Exposed so a single decision can be
-/// reproduced and explained outside a full snapshot run (see `tests/filtering_*`).
-pub async fn apply_all_filters(
-    token: &Token,
-    config: &FilteringConfig,
-) -> std::result::Result<(), FilterRejectionReason> {
-    sources::meta::evaluate(token, config).await?;
-
-    // On-chain scam detection — fast, zero-cost, catches obvious scams
-    // before we waste API calls on external sources
-    sources::onchain::evaluate(token, &config.onchain)?;
-
-    // DexScreener and GeckoTerminal are two PROVIDERS OF THE SAME market data, and the
-    // batch load resolves exactly one of them per token (`data_source`). So each enabled
-    // source is applied only to the tokens it actually covers, and a token is rejected for
-    // missing market data only when NONE of the enabled sources covers it.
-    //
-    // Demanding both — which is what running the two checks independently amounted to —
-    // is unsatisfiable: with both enabled (the shipped default) every token failed
-    // whichever gate did not match its single `data_source`, so the pipeline passed
-    // literally nothing. Measured against the production database: 100% rejected.
-    let mut market_data_seen = false;
-
-    if config.dexscreener.enabled && token.data_source == DataSource::DexScreener {
-        sources::dexscreener::evaluate(token, &config.dexscreener)?;
-        market_data_seen = true;
-    }
-
-    if config.geckoterminal.enabled && token.data_source == DataSource::GeckoTerminal {
-        sources::geckoterminal::evaluate(token, &config.geckoterminal)?;
-        market_data_seen = true;
-    }
-
-    if !market_data_seen {
-        // Attribute the rejection to an enabled source the token is genuinely missing.
-        // With only one source enabled this is precise ("you asked for DexScreener rules
-        // and this token has GeckoTerminal data"); with both enabled the token has no
-        // market data at all and DexScreener is the primary source.
-        if config.dexscreener.enabled {
-            return Err(FilterRejectionReason::DexScreenerDataMissing);
-        }
-        if config.geckoterminal.enabled {
-            return Err(FilterRejectionReason::GeckoTerminalDataMissing);
-        }
-    }
-
-    if config.rugcheck.enabled {
-        let has_rug_data = token.security_score.is_some()
-            || token.token_type.is_some()
-            || token.mint_authority.is_some()
-            || token.freeze_authority.is_some()
-            || token.graph_insiders_detected.is_some()
-            || token.lp_provider_count.is_some()
-            || token.total_holders.is_some()
-            || !token.security_risks.is_empty()
-            || !token.top_holders.is_empty()
-            || token.creator_balance_pct.is_some()
-            || token.transfer_fee_pct.is_some()
-            || token.transfer_fee_max_amount.is_some()
-            || token.transfer_fee_authority.is_some();
-
-        if !has_rug_data {
-            return Err(FilterRejectionReason::RugcheckDataMissing);
-        }
-
-        sources::rugcheck::evaluate(token, &config.rugcheck)?;
-    }
-
-    // LLM analysis runs LAST so model calls are spent only on tokens that pass standard filters.
-    sources::llm_analysis::evaluate(token).await?;
-
-    Ok(())
 }
 
 #[derive(Default)]

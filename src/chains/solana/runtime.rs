@@ -54,6 +54,10 @@ impl ChainRuntime for SolanaRuntime {
             }),
         }
     }
+
+    fn filter_profile(&self) -> Arc<crate::filtering::FilterProfile> {
+        crate::chains::solana::filtering::profile()
+    }
 }
 
 /// A runtime instance for the chain registry (called once per boot by

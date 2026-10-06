@@ -1,73 +1,84 @@
 // Copyright (c) 2024-2026 ScreenerBot (screenerbot.io)
 // SPDX-License-Identifier: BUSL-1.1
 
-//! On-chain filter source — validates token accounts, authorities, and program ownership.
+//! Solana's filter profile and its on-chain stage — authority reputation, immutable
+//! metadata with a freeze authority, and the combined risk score.
 
+use std::sync::{Arc, OnceLock};
+
+use crate::chains::ChainId;
 use crate::config::schemas::OnChainFilters;
+use crate::config::FilteringConfig;
+use crate::filtering::sources::symbols::{
+    is_empty_or_whitespace, is_numeric_only_symbol, meaningful_symbol,
+};
 use crate::filtering::sources::FilterRejectionReason;
+use crate::filtering::{FilterProfile, FilterStage, StageEval};
 use crate::tokens::types::Token;
 
-/// On-chain core filtering — detects scam tokens using data already available
-/// in the Token struct (metadata, authorities, supply) without any external API calls.
+/// Solana's filter profile, assembled once per process.
+pub(crate) fn profile() -> Arc<FilterProfile> {
+    static PROFILE: OnceLock<Arc<FilterProfile>> = OnceLock::new();
+    PROFILE
+        .get_or_init(|| {
+            Arc::new(FilterProfile::assemble(
+                ChainId::Solana,
+                Arc::new(SolanaOnChainStage),
+            ))
+        })
+        .clone()
+}
+
+/// On-chain scam detection from data already in the Token struct (metadata,
+/// authorities) without any external API calls.
 ///
-/// Pipeline position: AFTER meta, BEFORE dexscreener/geckoterminal/rugcheck.
-/// This is a fast, zero-RPC-cost filter that catches obvious scams early,
+/// Pipeline position: AFTER meta and the symbol rules, BEFORE the market sources and
+/// Rugcheck. This is a fast, zero-RPC-cost filter that catches obvious scams early,
 /// preventing wasted API calls to external sources.
-pub fn evaluate(token: &Token, config: &OnChainFilters) -> Result<(), FilterRejectionReason> {
+pub struct SolanaOnChainStage;
+
+impl FilterStage for SolanaOnChainStage {
+    fn name(&self) -> &'static str {
+        "onchain"
+    }
+
+    fn supports(&self, chain: ChainId) -> bool {
+        chain == ChainId::Solana
+    }
+
+    fn evaluate<'a>(
+        &'a self,
+        chain: ChainId,
+        token: &'a Token,
+        config: &'a FilteringConfig,
+    ) -> StageEval<'a> {
+        StageEval::Ready(evaluate(chain, token, &config.onchain).into())
+    }
+}
+
+fn evaluate(
+    chain: ChainId,
+    token: &Token,
+    config: &OnChainFilters,
+) -> Result<(), FilterRejectionReason> {
     if !config.enabled {
         return Ok(());
-    }
-
-    // H1: Numeric-only symbol detection
-    if config.reject_numeric_symbols {
-        if is_numeric_only_symbol(&token.symbol) {
-            return Err(FilterRejectionReason::OnChainNumericSymbol);
-        }
-    }
-
-    // H2: Empty or whitespace-only symbol
-    if config.reject_empty_symbols {
-        if is_empty_or_whitespace(&token.symbol) {
-            return Err(FilterRejectionReason::OnChainEmptySymbol);
-        }
-    }
-
-    // H3: Suspicious single-char symbols (often spam)
-    if config.reject_single_char_symbols {
-        let trimmed = meaningful_symbol(&token.symbol);
-        if trimmed.chars().count() == 1
-            && !trimmed
-                .chars()
-                .next()
-                .is_some_and(|c| c.is_ascii_alphabetic())
-        {
-            return Err(FilterRejectionReason::OnChainSuspiciousSymbol);
-        }
     }
 
     // H4: Known scam authority detection (auto-discovered, no hardcoding)
     if config.reject_known_scam_authorities {
         if let Some(ref freeze_auth) = token.freeze_authority {
-            if crate::tokens::authority_cache::is_blocked_authority(
-                crate::chains::active_chain(),
-                freeze_auth,
-            ) {
+            if crate::tokens::authority_cache::is_blocked_authority(chain, freeze_auth) {
                 return Err(FilterRejectionReason::OnChainKnownScamAuthority);
             }
         }
         if let Some(ref update_auth) = token.update_authority {
-            if crate::tokens::authority_cache::is_blocked_authority(
-                crate::chains::active_chain(),
-                update_auth,
-            ) {
+            if crate::tokens::authority_cache::is_blocked_authority(chain, update_auth) {
                 return Err(FilterRejectionReason::OnChainKnownScamAuthority);
             }
         }
         if let Some(ref mint_auth) = token.mint_authority {
-            if crate::tokens::authority_cache::is_blocked_authority(
-                crate::chains::active_chain(),
-                mint_auth,
-            ) {
+            if crate::tokens::authority_cache::is_blocked_authority(chain, mint_auth) {
                 return Err(FilterRejectionReason::OnChainKnownScamAuthority);
             }
         }
@@ -91,28 +102,6 @@ pub fn evaluate(token: &Token, config: &OnChainFilters) -> Result<(), FilterReje
     }
 
     Ok(())
-}
-
-/// A symbol with the padding a scam mint uses removed: ASCII whitespace plus the control
-/// characters (NUL above all) that fixed-width on-chain metadata fields are packed with.
-///
-/// `str::trim` only strips Unicode whitespace, and NUL is not whitespace, so trimming alone
-/// left `"\0"` looking like a real symbol. Trimming NUL from the ends first is not enough
-/// either — `" \0 "` survived both passes, because the spaces protected the NUL from
-/// `trim_matches` and the NUL kept the string non-empty for `trim`.
-fn meaningful_symbol(symbol: &str) -> &str {
-    symbol.trim_matches(|c: char| c.is_whitespace() || c.is_control())
-}
-
-/// Check if symbol contains only ASCII digits (e.g. "00", "123", "0000")
-fn is_numeric_only_symbol(symbol: &str) -> bool {
-    let trimmed = meaningful_symbol(symbol);
-    !trimmed.is_empty() && trimmed.chars().all(|c| c.is_ascii_digit())
-}
-
-/// Check if symbol is empty or whitespace/null-padded
-fn is_empty_or_whitespace(symbol: &str) -> bool {
-    meaningful_symbol(symbol).is_empty()
 }
 
 /// Compute a combined risk score from multiple weak signals.
