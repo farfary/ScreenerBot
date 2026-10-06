@@ -11,8 +11,10 @@
 //! `crate::chains::solana` vendor façade, or a shared module re-exporting a
 //! chain-specific type as its own public API.
 //!
-//! Pure source-text scans: no network, no DB, no compilation.
+//! Pure source-text scans: no network, no DB, no compilation. The venue-coverage guard also
+//! reads the recorded case tree under `tests/fixtures/pools/` and names `ProgramKind`.
 
+use screenerbot::chains::solana::pools::types::ProgramKind;
 use std::fs;
 use std::path::{Path, PathBuf};
 
@@ -384,6 +386,337 @@ fn shared_pools_service_never_imports_solana_runtime() {
         !code_lines(&contents).contains("chains::solana"),
         "src/{path} must not import crate::chains::solana — it orchestrates lifecycle \
          generically and reaches the concrete runtime through its pricing driver"
+    );
+}
+
+/// Directories whose `.rs` files may not read account bytes at a literal offset.
+const ACCOUNT_OFFSET_SCANNED_DIRS: &[&str] = &[
+    "chains/solana/pools/decoders",
+    "chains/solana/swaps/direct/venues",
+];
+
+/// Single files scanned beside [`ACCOUNT_OFFSET_SCANNED_DIRS`].
+const ACCOUNT_OFFSET_SCANNED_FILES: &[&str] = &[
+    "chains/solana/pools/analyzer_extractors.rs",
+    "chains/solana/pools/reserve_accounts.rs",
+];
+
+/// Files that still read pool account bytes at a literal offset, with the exact number of reads.
+/// Each entry leaves when its reads move into the venue's `layouts/<venue>.rs`; the list only
+/// shrinks and ends empty. A file over its count, an unlisted file with any count, and a file
+/// under its count all fail, so the list shrinks in the same change that removes a read.
+const ACCOUNT_OFFSET_READS: &[(&str, usize)] = &[
+    ("chains/solana/pools/decoders/fluxbeam_amm.rs", 1),
+    ("chains/solana/pools/decoders/meteora_damm.rs", 2),
+    ("chains/solana/pools/decoders/meteora_dbc.rs", 1),
+    ("chains/solana/pools/decoders/meteora_dlmm.rs", 2),
+    ("chains/solana/pools/decoders/moonit_amm.rs", 1),
+    ("chains/solana/pools/decoders/orca_whirlpool.rs", 1),
+    ("chains/solana/pools/decoders/pumpfun_amm.rs", 4),
+    ("chains/solana/pools/decoders/pumpfun_legacy.rs", 6),
+    ("chains/solana/pools/decoders/raydium_clmm.rs", 1),
+    ("chains/solana/pools/decoders/raydium_cpmm.rs", 31),
+    ("chains/solana/pools/decoders/raydium_legacy_amm.rs", 1),
+    ("chains/solana/swaps/direct/venues/clmm_ticks.rs", 1),
+    ("chains/solana/swaps/direct/venues/meteora_dlmm.rs", 1),
+    ("chains/solana/swaps/direct/venues/pumpfun_amm.rs", 2),
+    ("chains/solana/swaps/direct/venues/pumpfun_legacy.rs", 1),
+];
+
+/// Reads of account bytes at a literal offset in the production text of `source`: a typed
+/// `*_at(data, <number>` read, a `read_*_at_offset(` call, or a `[<number>..` slice.
+fn account_offset_reads(source: &str) -> usize {
+    let pattern = regex::Regex::new(
+        r"\b(?:pubkey|u8|u16|u32|u64|u128|i32|i64|i128)_at\(\s*[^,]+,\s*\d+|read_\w+_at_offset\(|\[\s*\d+\s*\.\.",
+    )
+    .expect("the offset pattern is valid");
+    pattern
+        .find_iter(&strip_comment_text(&production_text(source)))
+        .count()
+}
+
+#[test]
+fn account_offset_matcher_counts_literal_offsets_only() {
+    let source = "\
+fn read(data: &[u8]) {
+    let a = u64_at(data, 8);
+    let b = pubkey_at(
+        data,
+        32,
+    );
+    let c = read_u32_at_offset(data, 4);
+    let d = &data[8..40];
+    let e = &data[ 0 ..4];
+    // let hidden = u64_at(data, 12);
+    let named = u64_at(data, MINT_OFFSET);
+    let ranged = &data[start..end];
+}
+#[cfg(test)]
+mod tests {
+    fn fixture(data: &[u8]) -> u64 {
+        u64_at(data, 16)
+    }
+}
+";
+    assert_eq!(account_offset_reads(source), 5);
+}
+
+/// Pool account offsets, discriminators and sizes are owned by `pools/layouts/<venue>.rs`.
+/// Decoders, direct-swap venues and the analyzer call the layout and never re-derive an
+/// offset, so a layout fixed in one place is fixed for pricing, swapping and discovery.
+#[test]
+fn pool_account_offsets_are_read_only_by_the_layouts() {
+    let mut counts: Vec<(String, usize)> = Vec::new();
+    for (relative, contents) in walk_src() {
+        let scanned = ACCOUNT_OFFSET_SCANNED_FILES
+            .iter()
+            .any(|file| relative == Path::new(file))
+            || ACCOUNT_OFFSET_SCANNED_DIRS
+                .iter()
+                .any(|dir| relative.parent() == Some(Path::new(dir)));
+        if !scanned {
+            continue;
+        }
+        let count = account_offset_reads(&contents);
+        if count > 0 {
+            counts.push((relative.to_string_lossy().into_owned(), count));
+        }
+    }
+    let allowed = |path: &str| {
+        ACCOUNT_OFFSET_READS
+            .iter()
+            .find(|(file, _)| *file == path)
+            .map(|(_, count)| *count)
+    };
+    let mut problems = Vec::new();
+    for (path, count) in &counts {
+        match allowed(path) {
+            None => problems.push(format!(
+                "src/{path}: {count} literal-offset reads, not on the allowlist"
+            )),
+            Some(listed) if listed != *count => problems.push(format!(
+                "src/{path}: {count} literal-offset reads, the allowlist says {listed}"
+            )),
+            Some(_) => {}
+        }
+    }
+    for (file, listed) in ACCOUNT_OFFSET_READS {
+        if !counts.iter().any(|(path, _)| path == file) {
+            problems.push(format!(
+                "src/{file}: allowlisted for {listed} reads but has none, or is not scanned"
+            ));
+        }
+    }
+    assert!(
+        problems.is_empty(),
+        "account bytes are read at a literal offset only inside pools/layouts/<venue>.rs; move \
+         the read into the layout, and lower or remove the allowlist entry in the same change:\n{}",
+        problems.join("\n")
+    );
+}
+
+/// The slug of a program kind that has a decoder, which is every kind except `Unknown`. The
+/// match is exhaustive so a new kind fails to compile here until it is classified.
+fn priced_slug(kind: ProgramKind) -> Option<&'static str> {
+    match kind {
+        ProgramKind::RaydiumCpmm
+        | ProgramKind::RaydiumLegacyAmm
+        | ProgramKind::RaydiumClmm
+        | ProgramKind::OrcaWhirlpool
+        | ProgramKind::MeteoraDamm
+        | ProgramKind::MeteoraDlmm
+        | ProgramKind::MeteoraDbc
+        | ProgramKind::PumpFunAmm
+        | ProgramKind::PumpFunLegacy
+        | ProgramKind::Moonit
+        | ProgramKind::FluxbeamAmm => Some(kind.protocol_slug()),
+        ProgramKind::Unknown => None,
+    }
+}
+
+const ALL_PROGRAM_KINDS: [ProgramKind; 12] = [
+    ProgramKind::RaydiumCpmm,
+    ProgramKind::RaydiumLegacyAmm,
+    ProgramKind::RaydiumClmm,
+    ProgramKind::OrcaWhirlpool,
+    ProgramKind::MeteoraDamm,
+    ProgramKind::MeteoraDlmm,
+    ProgramKind::MeteoraDbc,
+    ProgramKind::PumpFunAmm,
+    ProgramKind::PumpFunLegacy,
+    ProgramKind::Moonit,
+    ProgramKind::FluxbeamAmm,
+    ProgramKind::Unknown,
+];
+
+/// The cells of the venue coverage matrix a venue has not filled yet, as `(slug, cells)`. A
+/// missing cell that is not listed fails, and a listed cell that is now filled fails, so the list
+/// only shrinks and ends empty. Cells: `spec` and `spec-source` (the vendored layout spec and its
+/// provenance), `case` (a recorded case), `program-truth` and `observations` (a case carrying the
+/// program's own simulated output, or independent market data), `test-module`
+/// (`tests/solana_pools/<slug>.rs`).
+const MISSING_VENUE_CELLS: &[(&str, &[&str])] = &[
+    ("fluxbeam_amm", ALL_BUT_CASE),
+    ("meteora_damm_v2", ALL_BUT_CASE),
+    ("meteora_dbc", ALL_BUT_CASE),
+    ("meteora_dlmm", ALL_BUT_CASE),
+    ("moonit_amm", ALL_BUT_CASE),
+    ("orca_whirlpool", ALL_BUT_CASE),
+    ("pumpfun_amm", ALL_BUT_CASE),
+    ("pumpfun_legacy", ALL_BUT_CASE),
+    ("raydium_clmm", ALL_BUT_CASE),
+    ("raydium_cpmm", ALL_BUT_CASE),
+    ("raydium_legacy_amm", ALL_BUT_CASE),
+];
+
+/// Every cell except `case`: no venue has a spec, program truth, market observations or a test
+/// module of its own yet.
+const ALL_BUT_CASE: &[&str] = &[
+    "spec",
+    "spec-source",
+    "program-truth",
+    "observations",
+    "test-module",
+];
+
+/// The cells of `slug` that are empty, given the case tree `fixtures` and the suite directory
+/// `suite` (`tests/solana_pools`).
+fn missing_venue_cells(fixtures: &Path, suite: &Path, slug: &str) -> Vec<&'static str> {
+    let venue = fixtures.join(slug);
+    let mut cases = Vec::new();
+    if let Ok(entries) = fs::read_dir(&venue) {
+        for entry in entries {
+            let path = entry.expect("venue directory entry").path();
+            let stem = path.file_stem().and_then(|stem| stem.to_str());
+            if path.extension().is_some_and(|ext| ext == "json")
+                && stem != Some("spec")
+                && stem != Some("spec-source")
+            {
+                let text = fs::read_to_string(&path).expect("read case");
+                let case: serde_json::Value = serde_json::from_str(&text)
+                    .unwrap_or_else(|e| panic!("parse case {}: {e}", path.display()));
+                cases.push(case);
+            }
+        }
+    }
+    let carries = |key: &str| {
+        cases.iter().any(|case| {
+            case.get(key)
+                .and_then(|value| value.as_array())
+                .is_some_and(|entries| !entries.is_empty())
+        })
+    };
+    let mut missing = Vec::new();
+    if !venue.join("spec.json").is_file() {
+        missing.push("spec");
+    }
+    if !venue.join("spec-source.json").is_file() {
+        missing.push("spec-source");
+    }
+    if cases.is_empty() {
+        missing.push("case");
+    }
+    if !carries("program_truth") {
+        missing.push("program-truth");
+    }
+    if !carries("observations") {
+        missing.push("observations");
+    }
+    if !suite.join(format!("{slug}.rs")).is_file() {
+        missing.push("test-module");
+    }
+    missing
+}
+
+#[test]
+fn venue_cell_detection_reads_the_case_tree() {
+    let root = tempfile::tempdir().expect("temp dir");
+    let fixtures = root.path().join("fixtures");
+    let suite = root.path().join("suite");
+    fs::create_dir_all(fixtures.join("venue_a")).expect("venue directory");
+    fs::create_dir_all(&suite).expect("suite directory");
+    fs::write(fixtures.join("venue_a/spec.json"), "{}").expect("spec");
+    fs::write(
+        fixtures.join("venue_a/case.json"),
+        r#"{"program_truth": [], "observations": [{"source": "jupiter"}]}"#,
+    )
+    .expect("case");
+    fs::write(suite.join("venue_a.rs"), "").expect("test module");
+    assert_eq!(
+        missing_venue_cells(&fixtures, &suite, "venue_a"),
+        ["spec-source", "program-truth"]
+    );
+    assert_eq!(
+        missing_venue_cells(&fixtures, &suite, "venue_b"),
+        [
+            "spec",
+            "spec-source",
+            "case",
+            "program-truth",
+            "observations",
+            "test-module"
+        ]
+    );
+}
+
+/// Every venue that prices pools has a vendored spec, recorded cases that carry program truth
+/// and market observations, and a test module. Venues fill their cells over time; the missing
+/// ones are listed in [`MISSING_VENUE_CELLS`], which only shrinks.
+#[test]
+fn every_priced_program_kind_has_a_spec_cases_and_tests() {
+    let root = Path::new(env!("CARGO_MANIFEST_DIR")).join("tests");
+    let fixtures = root.join("fixtures/pools/solana");
+    let suite = root.join("solana_pools");
+    let mut problems = Vec::new();
+    let mut priced: Vec<&str> = Vec::new();
+    for kind in ALL_PROGRAM_KINDS {
+        let Some(slug) = priced_slug(kind) else {
+            continue;
+        };
+        priced.push(slug);
+        let listed: &[&str] = MISSING_VENUE_CELLS
+            .iter()
+            .find(|(listed_slug, _)| *listed_slug == slug)
+            .map_or(&[], |(_, cells)| cells);
+        let missing = missing_venue_cells(&fixtures, &suite, slug);
+        for cell in &missing {
+            if !listed.contains(cell) {
+                problems.push(format!(
+                    "{slug}: {cell} is missing and not on the allowlist"
+                ));
+            }
+        }
+        for cell in listed {
+            if !missing.contains(cell) {
+                problems.push(format!(
+                    "{slug}: {cell} is filled, remove it from MISSING_VENUE_CELLS"
+                ));
+            }
+        }
+    }
+    for (slug, _) in MISSING_VENUE_CELLS {
+        if !priced.contains(slug) {
+            problems.push(format!("{slug}: allowlisted but not a priced program kind"));
+        }
+    }
+    for entry in fs::read_dir(&fixtures).expect("read the solana case tree") {
+        let path = entry.expect("case tree entry").path();
+        if path.is_dir() {
+            let name = path
+                .file_name()
+                .and_then(|name| name.to_str())
+                .expect("venue directory name is UTF-8");
+            if !priced.contains(&name) {
+                problems.push(format!(
+                    "{name}: a case directory of no priced program kind"
+                ));
+            }
+        }
+    }
+    assert!(
+        problems.is_empty(),
+        "venue coverage differs from the allowlist:\n{}",
+        problems.join("\n")
     );
 }
 
