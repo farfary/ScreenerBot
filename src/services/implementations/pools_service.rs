@@ -1,7 +1,8 @@
 // Copyright (c) 2024-2026 ScreenerBot (screenerbot.io)
 // SPDX-License-Identifier: BUSL-1.1
 
-//! Pools parent service — initializes pool components and runs the pools maintenance task.
+//! Pools service — initializes the pool components of every enabled chain and runs the pools
+//! maintenance task. The pricing stages run in the pool pricing service.
 
 use crate::i18n::{ids, UiText};
 use crate::logger::{self, LogTag};
@@ -59,8 +60,7 @@ impl Service for PoolsService {
         logger::info(LogTag::PoolService, "Starting pool maintenance task...");
 
         // Periodic cache and database upkeep for every chain runs in one task.
-        // The pricing loops (discovery, fetcher, calculator, analyzer) are
-        // started by their own services.
+        // The pricing stage loops are started by the pool pricing service.
         let handle = crate::pools::start_maintenance_task(shutdown, monitor);
 
         logger::info(
