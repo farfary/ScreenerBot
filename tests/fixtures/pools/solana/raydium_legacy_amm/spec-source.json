@@ -1,0 +1,14 @@
+{
+  "schema": 1,
+  "slug": "raydium_legacy_amm",
+  "program_id": "675kPX9MHTjS2zt1qfr1NYHuzeLXfQM9H24wFSUt1Mp8",
+  "source_kind": "transcribed",
+  "url": "https://raw.githubusercontent.com/raydium-io/raydium-amm/d26944bfb76fb5fa8f91e5d440c2050ed358ef81/program/src/state.rs",
+  "repository": "https://github.com/raydium-io/raydium-amm",
+  "commit": "d26944bfb76fb5fa8f91e5d440c2050ed358ef81",
+  "path": "program/src/state.rs (structs AmmInfo at line 603, Fees at line 430, StateData at line 540); program/src/error.rs (AmmError::ExceededSlippage, declaration index 30)",
+  "licence": "Apache-2.0 (program/Cargo.toml and LICENSE)",
+  "retrieved": "2026-10-06",
+  "extraction": "hand-transcribed into Anchor 0.30 IDL JSON form; all three structs are repr(C, packed), so fields are contiguous and AmmInfo is 752 bytes",
+  "sha256": "f40df9d1767c534455000015b8c511a8a9e3c9a07ad6db219b22cacb09bb50b1"
+}

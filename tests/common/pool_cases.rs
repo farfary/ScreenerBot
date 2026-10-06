@@ -62,6 +62,10 @@ fn base64_bytes<'de, D: Deserializer<'de>>(deserializer: D) -> Result<Vec<u8>, D
         .map_err(serde::de::Error::custom)
 }
 
+/// File stems in a venue directory that are not recorded cases: the vendored layout spec and its
+/// provenance record.
+const VENUE_METADATA_STEMS: [&str; 2] = ["spec", "spec-source"];
+
 /// The directory holding every recorded case and fixture of the pool suites.
 pub fn fixtures_dir() -> PathBuf {
     PathBuf::from(env!("CARGO_MANIFEST_DIR"))
@@ -89,6 +93,11 @@ pub fn load_venue_cases<A: DeserializeOwned>(
         .unwrap_or_else(|e| panic!("read {}: {e}", dir.display()))
         .map(|entry| entry.expect("read case directory entry").path())
         .filter(|path| path.extension().is_some_and(|ext| ext == "json"))
+        .filter(|path| {
+            !VENUE_METADATA_STEMS
+                .iter()
+                .any(|stem| path.file_stem().is_some_and(|name| name == *stem))
+        })
         .collect();
     paths.sort_by(|a, b| a.file_stem().cmp(&b.file_stem()));
     paths

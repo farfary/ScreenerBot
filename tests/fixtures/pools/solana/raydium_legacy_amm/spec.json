@@ -1,0 +1,298 @@
+{
+  "address": "675kPX9MHTjS2zt1qfr1NYHuzeLXfQM9H24wFSUt1Mp8",
+  "metadata": {
+    "name": "raydium_amm",
+    "version": "transcribed",
+    "spec": "0.1.0",
+    "description": "Transcribed from the AmmInfo, Fees and StateData structs of the Raydium AMM v4 program, which is not an Anchor program: accounts carry no discriminator and are packed little-endian structs."
+  },
+  "instructions": [],
+  "accounts": [
+    {
+      "name": "AmmInfo",
+      "discriminator": []
+    }
+  ],
+  "errors": [
+    {
+      "code": 30,
+      "name": "ExceededSlippage",
+      "msg": "Exceeded desired slippage limit."
+    }
+  ],
+  "types": [
+    {
+      "name": "AmmInfo",
+      "serialization": "bytemuckunsafe",
+      "repr": {
+        "kind": "c",
+        "packed": true
+      },
+      "type": {
+        "kind": "struct",
+        "fields": [
+          {
+            "name": "status",
+            "type": "u64"
+          },
+          {
+            "name": "nonce",
+            "type": "u64"
+          },
+          {
+            "name": "order_num",
+            "type": "u64"
+          },
+          {
+            "name": "depth",
+            "type": "u64"
+          },
+          {
+            "name": "coin_decimals",
+            "type": "u64"
+          },
+          {
+            "name": "pc_decimals",
+            "type": "u64"
+          },
+          {
+            "name": "state",
+            "type": "u64"
+          },
+          {
+            "name": "reset_flag",
+            "type": "u64"
+          },
+          {
+            "name": "min_size",
+            "type": "u64"
+          },
+          {
+            "name": "vol_max_cut_ratio",
+            "type": "u64"
+          },
+          {
+            "name": "amount_wave",
+            "type": "u64"
+          },
+          {
+            "name": "coin_lot_size",
+            "type": "u64"
+          },
+          {
+            "name": "pc_lot_size",
+            "type": "u64"
+          },
+          {
+            "name": "min_price_multiplier",
+            "type": "u64"
+          },
+          {
+            "name": "max_price_multiplier",
+            "type": "u64"
+          },
+          {
+            "name": "sys_decimal_value",
+            "type": "u64"
+          },
+          {
+            "name": "fees",
+            "type": {
+              "defined": {
+                "name": "Fees"
+              }
+            }
+          },
+          {
+            "name": "state_data",
+            "type": {
+              "defined": {
+                "name": "StateData"
+              }
+            }
+          },
+          {
+            "name": "coin_vault",
+            "type": "pubkey"
+          },
+          {
+            "name": "pc_vault",
+            "type": "pubkey"
+          },
+          {
+            "name": "coin_vault_mint",
+            "type": "pubkey"
+          },
+          {
+            "name": "pc_vault_mint",
+            "type": "pubkey"
+          },
+          {
+            "name": "lp_mint",
+            "type": "pubkey"
+          },
+          {
+            "name": "open_orders",
+            "type": "pubkey"
+          },
+          {
+            "name": "market",
+            "type": "pubkey"
+          },
+          {
+            "name": "market_program",
+            "type": "pubkey"
+          },
+          {
+            "name": "target_orders",
+            "type": "pubkey"
+          },
+          {
+            "name": "padding1",
+            "type": {
+              "array": [
+                "u64",
+                8
+              ]
+            }
+          },
+          {
+            "name": "amm_owner",
+            "type": "pubkey"
+          },
+          {
+            "name": "lp_amount",
+            "type": "u64"
+          },
+          {
+            "name": "client_order_id",
+            "type": "u64"
+          },
+          {
+            "name": "recent_epoch",
+            "type": "u64"
+          },
+          {
+            "name": "padding2",
+            "type": "u64"
+          }
+        ]
+      }
+    },
+    {
+      "name": "Fees",
+      "serialization": "bytemuckunsafe",
+      "repr": {
+        "kind": "c",
+        "packed": true
+      },
+      "type": {
+        "kind": "struct",
+        "fields": [
+          {
+            "name": "min_separate_numerator",
+            "type": "u64"
+          },
+          {
+            "name": "min_separate_denominator",
+            "type": "u64"
+          },
+          {
+            "name": "trade_fee_numerator",
+            "type": "u64"
+          },
+          {
+            "name": "trade_fee_denominator",
+            "type": "u64"
+          },
+          {
+            "name": "pnl_numerator",
+            "type": "u64"
+          },
+          {
+            "name": "pnl_denominator",
+            "type": "u64"
+          },
+          {
+            "name": "swap_fee_numerator",
+            "type": "u64"
+          },
+          {
+            "name": "swap_fee_denominator",
+            "type": "u64"
+          }
+        ]
+      }
+    },
+    {
+      "name": "StateData",
+      "serialization": "bytemuckunsafe",
+      "repr": {
+        "kind": "c",
+        "packed": true
+      },
+      "type": {
+        "kind": "struct",
+        "fields": [
+          {
+            "name": "need_take_pnl_coin",
+            "type": "u64"
+          },
+          {
+            "name": "need_take_pnl_pc",
+            "type": "u64"
+          },
+          {
+            "name": "total_pnl_pc",
+            "type": "u64"
+          },
+          {
+            "name": "total_pnl_coin",
+            "type": "u64"
+          },
+          {
+            "name": "pool_open_time",
+            "type": "u64"
+          },
+          {
+            "name": "padding",
+            "type": {
+              "array": [
+                "u64",
+                2
+              ]
+            }
+          },
+          {
+            "name": "orderbook_to_init_time",
+            "type": "u64"
+          },
+          {
+            "name": "swap_coin_in_amount",
+            "type": "u128"
+          },
+          {
+            "name": "swap_pc_out_amount",
+            "type": "u128"
+          },
+          {
+            "name": "swap_acc_pc_fee",
+            "type": "u64"
+          },
+          {
+            "name": "swap_pc_in_amount",
+            "type": "u128"
+          },
+          {
+            "name": "swap_coin_out_amount",
+            "type": "u128"
+          },
+          {
+            "name": "swap_acc_coin_fee",
+            "type": "u64"
+          }
+        ]
+      }
+    }
+  ]
+}

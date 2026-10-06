@@ -1,0 +1,165 @@
+{
+  "address": "FLUXubRmkEi2q6K3Y9kBPg9248ggaZVsoSFhtJHSrm1X",
+  "metadata": {
+    "name": "fluxbeam_token_swap",
+    "version": "transcribed",
+    "spec": "0.1.0",
+    "description": "Transcribed from the SPL token-swap SwapV1 state, which FluxBeam deploys as a fork. Not an Anchor program: accounts carry no discriminator, and SwapVersion prefixes the packed SwapV1 with a one-byte version."
+  },
+  "instructions": [],
+  "accounts": [
+    {
+      "name": "SwapV1",
+      "discriminator": []
+    }
+  ],
+  "errors": [
+    {
+      "code": 16,
+      "name": "ExceededSlippage",
+      "msg": "Swap instruction exceeds desired slippage limit"
+    }
+  ],
+  "types": [
+    {
+      "name": "SwapV1",
+      "serialization": "bytemuckunsafe",
+      "repr": {
+        "kind": "c",
+        "packed": true
+      },
+      "type": {
+        "kind": "struct",
+        "fields": [
+          {
+            "name": "version",
+            "type": "u8"
+          },
+          {
+            "name": "is_initialized",
+            "type": "bool"
+          },
+          {
+            "name": "bump_seed",
+            "type": "u8"
+          },
+          {
+            "name": "token_program_id",
+            "type": "pubkey"
+          },
+          {
+            "name": "token_a",
+            "type": "pubkey"
+          },
+          {
+            "name": "token_b",
+            "type": "pubkey"
+          },
+          {
+            "name": "pool_mint",
+            "type": "pubkey"
+          },
+          {
+            "name": "token_a_mint",
+            "type": "pubkey"
+          },
+          {
+            "name": "token_b_mint",
+            "type": "pubkey"
+          },
+          {
+            "name": "pool_fee_account",
+            "type": "pubkey"
+          },
+          {
+            "name": "fees",
+            "type": {
+              "defined": {
+                "name": "Fees"
+              }
+            }
+          },
+          {
+            "name": "swap_curve",
+            "type": {
+              "defined": {
+                "name": "SwapCurve"
+              }
+            }
+          }
+        ]
+      }
+    },
+    {
+      "name": "Fees",
+      "serialization": "bytemuckunsafe",
+      "repr": {
+        "kind": "c",
+        "packed": true
+      },
+      "type": {
+        "kind": "struct",
+        "fields": [
+          {
+            "name": "trade_fee_numerator",
+            "type": "u64"
+          },
+          {
+            "name": "trade_fee_denominator",
+            "type": "u64"
+          },
+          {
+            "name": "owner_trade_fee_numerator",
+            "type": "u64"
+          },
+          {
+            "name": "owner_trade_fee_denominator",
+            "type": "u64"
+          },
+          {
+            "name": "owner_withdraw_fee_numerator",
+            "type": "u64"
+          },
+          {
+            "name": "owner_withdraw_fee_denominator",
+            "type": "u64"
+          },
+          {
+            "name": "host_fee_numerator",
+            "type": "u64"
+          },
+          {
+            "name": "host_fee_denominator",
+            "type": "u64"
+          }
+        ]
+      }
+    },
+    {
+      "name": "SwapCurve",
+      "serialization": "bytemuckunsafe",
+      "repr": {
+        "kind": "c",
+        "packed": true
+      },
+      "type": {
+        "kind": "struct",
+        "fields": [
+          {
+            "name": "curve_type",
+            "type": "u8"
+          },
+          {
+            "name": "calculator",
+            "type": {
+              "array": [
+                "u8",
+                32
+              ]
+            }
+          }
+        ]
+      }
+    }
+  ]
+}

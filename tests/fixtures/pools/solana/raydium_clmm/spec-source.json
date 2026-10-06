@@ -1,0 +1,13 @@
+{
+  "schema": 1,
+  "slug": "raydium_clmm",
+  "program_id": "CAMMCzo5YL8w4VFF8KVHrK22GGUsp5VTaW7grrKgrWqK",
+  "source_kind": "github-file",
+  "url": "https://raw.githubusercontent.com/raydium-io/raydium-idl/e7e0c96fe77bcf6a020b84a44c47a722aac8e359/raydium_clmm/raydium_clmm.json",
+  "repository": "https://github.com/raydium-io/raydium-idl",
+  "commit": "e7e0c96fe77bcf6a020b84a44c47a722aac8e359",
+  "path": "raydium_clmm/raydium_clmm.json",
+  "licence": "none stated in the repository; the program source raydium-io/raydium-clmm is Apache-2.0",
+  "retrieved": "2026-10-06",
+  "sha256": "040a8c4866317fa028be8a81db54325ce6d9b92aeb10582d89992855bbbce5c1"
+}

@@ -1,0 +1,14 @@
+{
+  "schema": 1,
+  "slug": "meteora_dbc",
+  "program_id": "dbcij3LWUppWqq96dh6gJWwBifmcGfLSB5D4DuSMaqN",
+  "source_kind": "npm-package",
+  "url": "https://registry.npmjs.org/@meteora-ag/dynamic-bonding-curve-sdk/-/dynamic-bonding-curve-sdk-1.5.13.tgz",
+  "package": "@meteora-ag/dynamic-bonding-curve-sdk@1.5.13",
+  "tarball_sha256": "31cb6464d7c3c7a8632e3b88571e71b3141f81952ca11b342cb4206524b958b9",
+  "path": "package/dist/index.js lines 5195-12173 (module src/idl/dynamic-bonding-curve/idl.json)",
+  "licence": "MIT (package.json)",
+  "retrieved": "2026-10-06",
+  "extraction": "the IDL object literal embedded in the bundle, evaluated and serialised with JSON.stringify(idl, null, 2) plus a trailing newline; the package ships no standalone IDL file",
+  "sha256": "cfd1bd8c16bc47889b3561a66189e79b1ce534ad6540138abb40d82517d7fea6"
+}

@@ -1,0 +1,15 @@
+{
+  "schema": 1,
+  "slug": "fluxbeam_amm",
+  "program_id": "FLUXubRmkEi2q6K3Y9kBPg9248ggaZVsoSFhtJHSrm1X",
+  "source_kind": "transcribed",
+  "url": "https://raw.githubusercontent.com/solana-labs/solana-program-library/264ca72de06b0c2b45c0b15d298000fe3f82db2e/token-swap/program/src/state.rs",
+  "repository": "https://github.com/solana-labs/solana-program-library",
+  "commit": "264ca72de06b0c2b45c0b15d298000fe3f82db2e",
+  "path": "token-swap/program/src/state.rs (SwapV1::pack_into_slice, field widths 1,1,32,32,32,32,32,32,32,64,33; SwapVersion tag byte), token-swap/program/src/curve/fees.rs (Fees, 64 bytes), token-swap/program/src/curve/base.rs (SwapCurve, 33 bytes), token-swap/program/src/error.rs (SwapError::ExceededSlippage, declaration index 16)",
+  "licence": "Apache-2.0 (repository LICENSE)",
+  "retrieved": "2026-10-06",
+  "extraction": "hand-transcribed into Anchor 0.30 IDL JSON form from the SPL token-swap packed layout that the FluxBeam program forks; SwapV1 is 323 bytes after the version byte, 324 bytes in total",
+  "notes": "FluxBeam publishes no layout of its own that this repository could pin; the deployed program is accepted as the token-swap layout only as far as the recorded pool account agrees (owner, 324 bytes, version byte 1).",
+  "sha256": "f60abb8fe627297bda997bf1042d58d714a36f900df879de0fcb69ed99606933"
+}

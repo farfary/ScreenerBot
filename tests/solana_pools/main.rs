@@ -11,6 +11,9 @@
 //!
 //! * `accounts` — every `direct-swap` case holds exactly the accounts the swap engine's
 //!   production load path reads.
+//! * `spec` — the vendored venue specs (`<slug>/spec.json`, `<slug>/spec-source.json`), the walker
+//!   that lays them out, and the checks that each spec matches its recorded digest and the
+//!   recorded accounts' sizes.
 //! * `snapshot` — bit-exact decoded prices against `prices-snapshot.json`, and the account-set
 //!   and refusal checks that run on the same cases.
 //!
@@ -22,3 +25,4 @@ mod accounts;
 #[path = "../common/mod.rs"]
 mod common;
 mod snapshot;
+mod spec;

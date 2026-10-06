@@ -1,0 +1,13 @@
+{
+  "schema": 1,
+  "slug": "raydium_cpmm",
+  "program_id": "CPMMoo8L3F4NbTegBCKVNunggL7H1ZpdTHKxQB5qKP1C",
+  "source_kind": "github-file",
+  "url": "https://raw.githubusercontent.com/raydium-io/raydium-idl/e7e0c96fe77bcf6a020b84a44c47a722aac8e359/raydium_cpmm/raydium_cp_swap.json",
+  "repository": "https://github.com/raydium-io/raydium-idl",
+  "commit": "e7e0c96fe77bcf6a020b84a44c47a722aac8e359",
+  "path": "raydium_cpmm/raydium_cp_swap.json",
+  "licence": "none stated in the repository; the program source raydium-io/raydium-cp-swap is Apache-2.0",
+  "retrieved": "2026-10-06",
+  "sha256": "1202f6dc8e1c3216598f2ad5c620b9aa8c64ac584563fafed68125c27fb6df81"
+}

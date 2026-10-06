@@ -556,28 +556,22 @@ const ALL_PROGRAM_KINDS: [ProgramKind; 12] = [
 /// program's own simulated output, or independent market data), `test-module`
 /// (`tests/solana_pools/<slug>.rs`).
 const MISSING_VENUE_CELLS: &[(&str, &[&str])] = &[
-    ("fluxbeam_amm", ALL_BUT_CASE),
-    ("meteora_damm_v2", ALL_BUT_CASE),
-    ("meteora_dbc", ALL_BUT_CASE),
-    ("meteora_dlmm", ALL_BUT_CASE),
-    ("moonit_amm", ALL_BUT_CASE),
-    ("orca_whirlpool", ALL_BUT_CASE),
-    ("pumpfun_amm", ALL_BUT_CASE),
-    ("pumpfun_legacy", ALL_BUT_CASE),
-    ("raydium_clmm", ALL_BUT_CASE),
-    ("raydium_cpmm", ALL_BUT_CASE),
-    ("raydium_legacy_amm", ALL_BUT_CASE),
+    ("fluxbeam_amm", TRUTH_AND_TESTS_PENDING),
+    ("meteora_damm_v2", TRUTH_AND_TESTS_PENDING),
+    ("meteora_dbc", TRUTH_AND_TESTS_PENDING),
+    ("meteora_dlmm", TRUTH_AND_TESTS_PENDING),
+    ("moonit_amm", TRUTH_AND_TESTS_PENDING),
+    ("orca_whirlpool", TRUTH_AND_TESTS_PENDING),
+    ("pumpfun_amm", TRUTH_AND_TESTS_PENDING),
+    ("pumpfun_legacy", TRUTH_AND_TESTS_PENDING),
+    ("raydium_clmm", TRUTH_AND_TESTS_PENDING),
+    ("raydium_cpmm", TRUTH_AND_TESTS_PENDING),
+    ("raydium_legacy_amm", TRUTH_AND_TESTS_PENDING),
 ];
 
-/// Every cell except `case`: no venue has a spec, program truth, market observations or a test
-/// module of its own yet.
-const ALL_BUT_CASE: &[&str] = &[
-    "spec",
-    "spec-source",
-    "program-truth",
-    "observations",
-    "test-module",
-];
+/// The cells that follow the spec: no venue has program truth, market
+/// observations or a test module of its own yet.
+const TRUTH_AND_TESTS_PENDING: &[&str] = &["program-truth", "observations", "test-module"];
 
 /// The cells of `slug` that are empty, given the case tree `fixtures` and the suite directory
 /// `suite` (`tests/solana_pools`).

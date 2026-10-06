@@ -1,0 +1,14 @@
+{
+  "schema": 1,
+  "slug": "meteora_damm_v2",
+  "program_id": "cpamdpZCGKUy5JxQXB4dcpGPiikHawvSWAd6mEn1sGG",
+  "source_kind": "npm-package",
+  "url": "https://registry.npmjs.org/@meteora-ag/cp-amm-sdk/-/cp-amm-sdk-1.5.1.tgz",
+  "package": "@meteora-ag/cp-amm-sdk@1.5.1",
+  "tarball_sha256": "f1762590d9883a7e569c56653eafb9dbe2bcd641f988826396d6b045da5abeb6",
+  "path": "package/dist/index.mjs lines 52-7319 (module src/idl/cp_amm.json)",
+  "licence": "MIT (package.json)",
+  "retrieved": "2026-10-06",
+  "extraction": "the IDL object literal embedded in the bundle, evaluated and serialised with JSON.stringify(idl, null, 2) plus a trailing newline; the package ships no standalone IDL file",
+  "sha256": "52ad32666ee3665c417e8e617fcf7de7ac8d2435dfa6316c57bfc7343185e0ef"
+}

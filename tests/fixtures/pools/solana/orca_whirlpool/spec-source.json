@@ -1,0 +1,14 @@
+{
+  "schema": 1,
+  "slug": "orca_whirlpool",
+  "program_id": "whirLbMiicVdio4qvUfM5KAg6Ct8VwpYzGff3uctyCc",
+  "source_kind": "npm-package",
+  "url": "https://registry.npmjs.org/@orca-so/whirlpools-sdk/-/whirlpools-sdk-0.22.0.tgz",
+  "package": "@orca-so/whirlpools-sdk@0.22.0",
+  "tarball_sha256": "1fa2ec11166983bce0d23464a3ab948f6a98ad3b7461cd774c257f456b7564fd",
+  "path": "package/dist/artifacts/whirlpool.json",
+  "licence": "package.json: SEE LICENSE IN LICENSE (Orca licence; the tarball ships no LICENSE file)",
+  "retrieved": "2026-10-06",
+  "extraction": "byte-identical to the file inside the package tarball",
+  "sha256": "f3e95ddf321d24b71ce56f5ba842055899f32a1feee3be9f0d3ccf2bd6a55bb8"
+}

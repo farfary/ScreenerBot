@@ -1,0 +1,13 @@
+{
+  "schema": 1,
+  "slug": "meteora_dlmm",
+  "program_id": "LBUZKhRxPF3XUpBCjp4YzTKgLccjZhTSDM9YuVaPwxo",
+  "source_kind": "github-file",
+  "url": "https://raw.githubusercontent.com/MeteoraAg/dlmm-sdk/576919e3e4368e542c402f000b4264724f7f23ec/idls/dlmm.json",
+  "repository": "https://github.com/MeteoraAg/dlmm-sdk",
+  "commit": "576919e3e4368e542c402f000b4264724f7f23ec",
+  "path": "idls/dlmm.json",
+  "licence": "ISC (ts-client/package.json); no licence file at the repository root",
+  "retrieved": "2026-10-06",
+  "sha256": "045c0f4af044be046b6a14b350077e4242e8ac026b64a855803dab30fcdd8b35"
+}

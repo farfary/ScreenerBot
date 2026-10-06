@@ -1,0 +1,13 @@
+{
+  "schema": 1,
+  "slug": "pumpfun_amm",
+  "program_id": "pAMMBay6oceH9fJKBRHGP5D4bD4sWpmSwMn52FMfXEA",
+  "source_kind": "github-file",
+  "url": "https://raw.githubusercontent.com/pump-fun/pump-public-docs/cb188ce08b5069196eef1f3e4a0c43b70099793b/idl/pump_amm.json",
+  "repository": "https://github.com/pump-fun/pump-public-docs",
+  "commit": "cb188ce08b5069196eef1f3e4a0c43b70099793b",
+  "path": "idl/pump_amm.json",
+  "licence": "none stated in the repository",
+  "retrieved": "2026-10-06",
+  "sha256": "2091433899b07d003d98118ae6cd3c628960fd393b40710b6e15bce6d0e7f2d1"
+}

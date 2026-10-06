@@ -1,0 +1,14 @@
+{
+  "schema": 1,
+  "slug": "moonit_amm",
+  "program_id": "MoonCVVNZFSYkqNXP6bxHLPL6QQJiMagDL3qcqUQTrG",
+  "source_kind": "npm-package",
+  "url": "https://registry.npmjs.org/@moonit/sdk/-/sdk-1.5.0.tgz",
+  "package": "@moonit/sdk@1.5.0",
+  "tarball_sha256": "b25d7ac4dcb9dcfb0f780e7606390d5f1d9d07f787725a30a61396313ea6b1f0",
+  "path": "package/dist/solana/program/tokenLaunchpadIdlV4.js (export IDL_V4)",
+  "licence": "MIT (package.json)",
+  "retrieved": "2026-10-06",
+  "extraction": "the IDL_V4 export, required with node and serialised with JSON.stringify(IDL_V4, null, 2) plus a trailing newline; the package ships no standalone IDL file",
+  "sha256": "56bbc031be12bc0a542f300f441d7deec8cf0bed7d37a5c2d144957e08bc44d5"
+}
