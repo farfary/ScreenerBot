@@ -63,6 +63,13 @@ pub enum Error {
         mint: String,
         detail: String,
     },
+    /// Checked token-amount arithmetic on a position overflowed; the stored amounts cannot
+    /// represent the result, so nothing was changed.
+    #[error("token amount arithmetic overflowed while {operation} for token {mint}")]
+    AmountOverflow {
+        mint: String,
+        operation: &'static str,
+    },
     /// No router would quote the trade. Distinct from [`Error::SwapFailed`]
     /// because nothing was built, signed or submitted — the trade stopped one
     /// step earlier, and the manual-trade timeline reports that step from this
@@ -114,6 +121,7 @@ impl ErrorClass for Error {
             Error::RowDecode { .. }
             | Error::SchemaMigration { .. }
             | Error::TransitionFailed { .. }
+            | Error::AmountOverflow { .. }
             | Error::QuoteFailed { .. }
             | Error::SwapFailed { .. } => false,
             Error::Maintenance { .. } => false,
@@ -148,7 +156,9 @@ impl ErrorClass for Error {
             | Error::InvalidExitPercentage { .. }
             | Error::ZeroExitAmount { .. }
             | Error::DcaDisabled => Severity::Warning,
-            Error::TransitionFailed { .. } | Error::SwapFailed { .. } => Severity::Critical,
+            Error::TransitionFailed { .. }
+            | Error::AmountOverflow { .. }
+            | Error::SwapFailed { .. } => Severity::Critical,
             // Nothing was submitted, so no money moved and no state is at risk.
             Error::QuoteFailed { .. } => Severity::Warning,
             Error::WalletHistorySync { .. } => Severity::Error,
@@ -177,6 +187,7 @@ impl ErrorClass for Error {
             | Error::SchemaMigration { .. }
             | Error::Maintenance { .. }
             | Error::TransitionFailed { .. }
+            | Error::AmountOverflow { .. }
             | Error::SwapFailed { .. }
             | Error::WalletHistorySync { .. }
             | Error::WalletUnavailable { .. } => 500,

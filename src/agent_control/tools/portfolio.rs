@@ -23,13 +23,10 @@ struct Holding {
 }
 
 async fn position_holding(position: &Position) -> Holding {
-    let raw_amount = position
-        .remaining_token_amount
-        .or(position.token_amount)
-        .unwrap_or_default();
+    let raw_amount = position.held_amount().unwrap_or_default();
     let token_amount = crate::tokens::get_decimals(crate::chains::active_chain(), &position.mint)
         .await
-        .map(|decimals| raw_amount as f64 / 10_f64.powi(i32::from(decimals)));
+        .map(|decimals| raw_amount.to_whole_units(decimals));
     let current_value_sol = token_amount
         .zip(position.current_price)
         .map(|(amount, price)| amount * price);

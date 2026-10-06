@@ -35,9 +35,7 @@ pub(super) async fn send_position_details(
     match position {
         Some(pos) => {
             let duration = (chrono::Utc::now() - pos.entry_time).num_seconds().max(0) as u64;
-            let tokens = pos
-                .remaining_token_amount
-                .unwrap_or(pos.token_amount.unwrap_or_default()) as f64;
+            let tokens = pos.held_amount().unwrap_or_default().raw() as f64;
             let current_price = pos.current_price.unwrap_or(pos.average_entry_price);
             let current_value = tokens * current_price;
 
@@ -128,9 +126,7 @@ pub(super) async fn send_confirm_sell(
 
     match position {
         Some(pos) => {
-            let tokens = pos
-                .remaining_token_amount
-                .unwrap_or(pos.token_amount.unwrap_or_default()) as f64;
+            let tokens = pos.held_amount().unwrap_or_default().raw() as f64;
             let msg = confirm_screen(
                 UiText::new(ids::TELEGRAM_POSITION_CONFIRM_SELL)
                     .arg("symbol", text_arg(pos.symbol.as_str()))
@@ -192,9 +188,7 @@ pub(super) async fn send_confirm_close(bot: &Bot, chat_id: ChatId, mint_short: &
 
     match position {
         Some(pos) => {
-            let tokens = pos
-                .remaining_token_amount
-                .unwrap_or(pos.token_amount.unwrap_or_default()) as f64;
+            let tokens = pos.held_amount().unwrap_or_default().raw() as f64;
             let est_receive = tokens * pos.current_price.unwrap_or(pos.average_entry_price);
             let msg = messages::msg_confirm_close(
                 &pos.symbol,

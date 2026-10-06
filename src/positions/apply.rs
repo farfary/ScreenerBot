@@ -168,12 +168,15 @@ pub async fn apply_transition(transition: PositionTransition) -> Result<ApplyEff
                 }
             }
 
-            // Tokens sold by THIS close = whatever was still held. Captured before the
-            // update zeroes it, so the exit record below can be written.
-            let mut closed_amount: u64 = 0;
+            // A full close sells whatever is left: the remaining amount moves into the exited
+            // total, and the amount moved is what THIS close sold, for the exit record below.
+            let mut booking: Result<RawAmount> = Ok(RawAmount::ZERO);
 
             let updated = update_position_state_by_id(position_id, |pos| {
-                closed_amount = pos.remaining_token_amount.unwrap_or_default();
+                booking = pos.book_remaining_as_exited();
+                if booking.is_err() {
+                    return;
+                }
                 pos.transaction_exit_verified = true;
                 pos.effective_exit_price = Some(effective_exit_price);
                 // ACCUMULATE: `sol_received` is the position's total proceeds, and partial
@@ -185,14 +188,6 @@ pub async fn apply_transition(transition: PositionTransition) -> Result<ApplyEff
                 pos.sol_received = Some(pos.sol_received.unwrap_or_default() + sol_received);
                 pos.exit_fee_lamports = Some(fee_lamports);
                 pos.exit_time = Some(exit_time);
-
-                // A full close sells whatever is left, so nothing remains held. Roll it into
-                // the exited total: the Holdings / "% exited" cards read these two fields and
-                // otherwise kept showing a closed position's sold tokens as still held.
-                if let Some(remaining) = pos.remaining_token_amount {
-                    pos.total_exited_amount += remaining;
-                    pos.remaining_token_amount = Some(0);
-                }
 
                 // CRITICAL FIX: Update closed_reason to remove pending verification suffix
                 // This ensures database state matches verification status
@@ -209,6 +204,7 @@ pub async fn apply_transition(transition: PositionTransition) -> Result<ApplyEff
                 // Note: exit_price is already set by close_position_direct to market price
             })
             .await;
+            let closed_amount = booking?;
 
             if updated && requires_db_update {
                 if let Some(position) = get_position_by_id(position_id).await {
@@ -276,7 +272,7 @@ pub async fn apply_transition(transition: PositionTransition) -> Result<ApplyEff
                                     if let Err(err) = save_exit_record(
                                         position_id,
                                         exit_time,
-                                        RawAmount::from(closed_amount),
+                                        closed_amount,
                                         effective_exit_price,
                                         sol_received,
                                         exit_signature,
@@ -459,8 +455,14 @@ pub async fn apply_transition(transition: PositionTransition) -> Result<ApplyEff
             // way never counted as a loss anywhere. Realized proceeds from earlier partial
             // exits still stand; only the remainder is written off.
             let mut realized_pnl = 0.0;
+            // Nothing is held any more: the remainder moves into the exited total.
+            let mut booking: Result<RawAmount> = Ok(RawAmount::ZERO);
 
             let updated = update_position_state_by_id(position_id, |pos| {
+                booking = pos.book_remaining_as_exited();
+                if booking.is_err() {
+                    return;
+                }
                 pos.synthetic_exit = true;
                 pos.transaction_exit_verified = true;
                 pos.exit_time = Some(exit_time);
@@ -475,14 +477,15 @@ pub async fn apply_transition(transition: PositionTransition) -> Result<ApplyEff
                 });
                 pos.unrealized_pnl = None;
                 pos.unrealized_pnl_percent = None;
-
-                // Nothing is held any more — roll the remainder into the exited total.
-                if let Some(remaining) = pos.remaining_token_amount {
-                    pos.total_exited_amount += remaining;
-                    pos.remaining_token_amount = Some(0);
-                }
             })
             .await;
+            if let Err(error) = &booking {
+                logger::error(
+                    LogTag::Positions,
+                    &format!("Synthetic exit for position {position_id} not applied: {error}"),
+                );
+            }
+            booking?;
 
             if updated && realized_pnl < 0.0 {
                 crate::trader::safety::loss_limit::record_realized_loss(realized_pnl.abs());
@@ -643,6 +646,8 @@ pub async fn apply_transition(transition: PositionTransition) -> Result<ApplyEff
             exit_signature,
             exit_percentage,
         } => {
+            let exit_amount = RawAmount::from(exit_amount);
+
             // IDEMPOTENCE: everything below ACCUMULATES (remaining -=, total_exited +=,
             // sol_received +=, partial_exit_count += 1). Applying the same partial twice
             // would sell the same tokens twice on paper. The exit record is the token: one
@@ -663,21 +668,21 @@ pub async fn apply_transition(transition: PositionTransition) -> Result<ApplyEff
                 return Ok(effects);
             }
 
+            let mut booking: Result<RawAmount> = Ok(RawAmount::ZERO);
             let updated = update_position_state_by_id(position_id, |pos| {
-                // Update remaining token amount
-                if let Some(remaining) = pos.remaining_token_amount {
-                    pos.remaining_token_amount = Some(remaining.saturating_sub(exit_amount));
-                }
+                // Lower the remaining amount and add to the exited total
+                booking = pos.book_exit(exit_amount);
+                let Ok(total_exited) = booking.as_ref().copied() else {
+                    return;
+                };
 
-                // Update total exited amount
-                pos.total_exited_amount += exit_amount;
-
-                // Calculate new average exit price (weighted average)
-                let total_exited = pos.total_exited_amount;
-                if total_exited > 0 {
+                // Calculate new average exit price (weighted average). The exited total
+                // includes this exit, so the subtraction cannot underflow.
+                if total_exited > RawAmount::ZERO {
                     if let Some(prev_avg) = pos.average_exit_price {
-                        let prev_weight = (total_exited - exit_amount) as f64 / total_exited as f64;
-                        let new_weight = exit_amount as f64 / total_exited as f64;
+                        let prev_weight = (total_exited.raw() - exit_amount.raw()) as f64
+                            / total_exited.raw() as f64;
+                        let new_weight = exit_amount.raw() as f64 / total_exited.raw() as f64;
                         pos.average_exit_price =
                             Some((prev_avg * prev_weight) + (effective_exit_price * new_weight));
                     } else {
@@ -694,6 +699,7 @@ pub async fn apply_transition(transition: PositionTransition) -> Result<ApplyEff
                 // CRITICAL: Do NOT set exit_time or exit_signature - position still open!
             })
             .await;
+            booking?;
 
             if updated && requires_db_update {
                 if let Some(mut position) = get_position_by_id(position_id).await {
@@ -732,7 +738,7 @@ pub async fn apply_transition(transition: PositionTransition) -> Result<ApplyEff
                             if let Err(err) = save_exit_record(
                                 position_id,
                                 exit_time,
-                                RawAmount::from(exit_amount),
+                                exit_amount,
                                 effective_exit_price,
                                 sol_received,
                                 &exit_signature,
@@ -774,7 +780,7 @@ pub async fn apply_transition(transition: PositionTransition) -> Result<ApplyEff
                             )
                             .await
                             {
-                                Some(decimals) => exit_amount as f64 / 10_f64.powi(decimals as i32),
+                                Some(decimals) => exit_amount.to_whole_units(decimals),
                                 None => 0.0,
                             };
                             let partial_pnl = if sold_tokens > 0.0 {
@@ -998,6 +1004,8 @@ pub async fn apply_transition(transition: PositionTransition) -> Result<ApplyEff
             dca_time,
             dca_signature,
         } => {
+            let tokens_bought = RawAmount::from(tokens_bought);
+
             // Get mint for decimals lookup
             let mint = find_mint_by_position_id(position_id).await?;
 
@@ -1006,24 +1014,22 @@ pub async fn apply_transition(transition: PositionTransition) -> Result<ApplyEff
                 .await
                 .unwrap_or(9); // Default to 9 if not found
 
+            let mut booking: Result<RawAmount> = Ok(RawAmount::ZERO);
             let updated =
         update_position_state_by_id(position_id, |pos| {
           // Update remaining token amount (add new tokens)
-          if let Some(remaining) = pos.remaining_token_amount {
-            pos.remaining_token_amount = Some(remaining + tokens_bought);
-          } else {
-            pos.remaining_token_amount = Some(tokens_bought);
-          }
+          booking = pos.book_acquisition(tokens_bought);
+          let Ok(remaining_tokens) = booking.as_ref().copied() else {
+            return;
+          };
 
           // Update total SOL invested
           pos.total_size_sol += sol_spent;
 
           // Recalculate average entry price (weighted average) with actual decimals
           // CRITICAL: Validate all inputs to prevent division by zero or invalid calculations
-          let remaining_tokens = pos.remaining_token_amount.unwrap_or_default();
-          if remaining_tokens > 0 && pos.total_size_sol > 0.0 && pos.total_size_sol.is_finite() {
-            let total_tokens_normalized = remaining_tokens as f64
-              / 10_f64.powi(decimals as i32);
+          if remaining_tokens > RawAmount::ZERO && pos.total_size_sol > 0.0 && pos.total_size_sol.is_finite() {
+            let total_tokens_normalized = remaining_tokens.to_whole_units(decimals);
             if total_tokens_normalized > 0.0 && total_tokens_normalized.is_finite() {
               pos.average_entry_price = pos.total_size_sol / total_tokens_normalized;
             } else {
@@ -1053,6 +1059,7 @@ pub async fn apply_transition(transition: PositionTransition) -> Result<ApplyEff
           pos.last_dca_time = Some(dca_time);
         })
         .await;
+            booking?;
 
             if updated && requires_db_update {
                 if let Some(position) = get_position_by_id(position_id).await {
@@ -1064,7 +1071,7 @@ pub async fn apply_transition(transition: PositionTransition) -> Result<ApplyEff
                             if let Err(err) = save_entry_record(
                                 position_id,
                                 dca_time,
-                                RawAmount::from(tokens_bought),
+                                tokens_bought,
                                 effective_price,
                                 sol_spent,
                                 &dca_signature,

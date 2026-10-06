@@ -94,6 +94,7 @@ pub(super) async fn force_close_position(
     };
 
     // 5. Update in-memory state
+    let mut booking_error: Option<positions::Error> = None;
     let updated_in_memory = positions::state::update_position_state_by_id(position_id, |pos| {
         pos.exit_time = Some(now);
         pos.exit_price = Some(exit_price);
@@ -103,8 +104,10 @@ pub(super) async fn force_close_position(
         // Keep the SOL realized by partial exits — the force close recovers nothing for
         // the REMAINING tokens, it does not undo the exits already taken.
         pos.sol_received = Some(realized_sol);
-        pos.total_exited_amount += pos.remaining_token_amount.unwrap_or_default();
-        pos.remaining_token_amount = Some(0);
+        if let Err(error) = pos.book_remaining_as_exited() {
+            booking_error = Some(error);
+        }
+        pos.remaining_token_amount = Some(Default::default());
         pos.synthetic_exit = true;
         pos.pnl = Some(pnl);
         pos.pnl_percent = Some(pnl_percent);
@@ -112,6 +115,12 @@ pub(super) async fn force_close_position(
         pos.unrealized_pnl_percent = None;
     })
     .await;
+    if let Some(error) = booking_error {
+        logger::error(
+            LogTag::Positions,
+            &format!("Force-close: exited amount for position {position_id} not updated: {error}"),
+        );
+    }
 
     // 6. Build updated position for database persistence
     let mut db_position = position.clone();
@@ -121,8 +130,13 @@ pub(super) async fn force_close_position(
     db_position.transaction_exit_verified = true;
     db_position.closed_reason = Some(closed_reason.clone());
     db_position.sol_received = Some(realized_sol);
-    db_position.total_exited_amount += db_position.remaining_token_amount.unwrap_or_default();
-    db_position.remaining_token_amount = Some(0);
+    if let Err(error) = db_position.book_remaining_as_exited() {
+        logger::error(
+            LogTag::Positions,
+            &format!("Force-close: exited amount for position {position_id} not updated: {error}"),
+        );
+    }
+    db_position.remaining_token_amount = Some(Default::default());
     db_position.synthetic_exit = true;
     db_position.pnl = Some(pnl);
     db_position.pnl_percent = Some(pnl_percent);

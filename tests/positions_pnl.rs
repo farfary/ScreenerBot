@@ -449,3 +449,62 @@ async fn the_split_is_neutral_when_the_entry_price_is_unusable() {
         (0.0, 0.0, 0.0, 0.0)
     );
 }
+
+// ==================== BIT STABILITY ====================
+
+/// Bit patterns of the P&L figures below, captured from the current arithmetic. A change
+/// to how raw amounts reach the float math must leave every bit as it is.
+const GOLDEN: [u64; 10] = [
+    4682349710092441569,
+    4712209498791126696,
+    13826002309425050170,
+    4682349744266989346,
+    4682349710092441569,
+    4712209498791126696,
+    4682349710092441569,
+    4712209498791126696,
+    4732561053941802072,
+    4762273897776799845,
+];
+
+#[tokio::test]
+async fn large_raw_amounts_keep_their_pnl_bits() {
+    let mut base = open_position();
+    base.token_amount = Some(raw(12_345_678_901_234_567_891));
+    base.remaining_token_amount = Some(raw(9_007_199_254_740_993));
+    base.total_exited_amount = raw(3_333_333_333_333_333_337);
+    base.sol_received = Some(0.5);
+    base.average_exit_price = Some(0.015);
+
+    let (open_pnl, open_pct) = calculate_position_pnl(&base, Some(0.0123)).await;
+    let (realized, unrealized, total, total_pct) = calculate_split_pnl(&base, Some(0.0123)).await;
+
+    let mut closing = base.clone();
+    closing.exit_transaction_signature = Some("exit-sig".to_owned());
+    closing.transaction_exit_verified = false;
+    let (closing_pnl, closing_pct) = calculate_position_pnl(&closing, Some(0.0123)).await;
+
+    let mut closed = base.clone();
+    closed.exit_price = Some(0.02);
+    closed.effective_exit_price = Some(0.02);
+    closed.exit_time = Some(chrono::Utc::now());
+    closed.exit_transaction_signature = Some("exit-sig".to_owned());
+    closed.transaction_exit_verified = true;
+    closed.sol_received = None;
+    let (closed_pnl, closed_pct) = calculate_position_pnl(&closed, None).await;
+
+    let bits = [
+        open_pnl,
+        open_pct,
+        realized,
+        unrealized,
+        total,
+        total_pct,
+        closing_pnl,
+        closing_pct,
+        closed_pnl,
+        closed_pct,
+    ]
+    .map(f64::to_bits);
+    assert_eq!(bits, GOLDEN);
+}
