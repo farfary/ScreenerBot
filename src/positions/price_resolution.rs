@@ -48,8 +48,13 @@ pub async fn get_price_with_api_fallback(token_mint: &str) -> Option<(PriceResul
         }
     }
 
-    // Priority 2: Try API price from token database (DexScreener/GeckoTerminal)
-    match crate::tokens::get_full_token_async(token_mint).await {
+    // Priority 2: Try API price from token database (DexScreener/GeckoTerminal).
+    // A mint no enabled chain accepts is a token the database cannot hold.
+    let stored = match crate::chains::chain_for_address(token_mint) {
+        Ok(chain) => crate::tokens::get_full_token_async(chain, token_mint).await,
+        Err(_) => Ok(None),
+    };
+    match stored {
         Ok(Some(token)) => {
             // Check if API price is fresh enough (within max age)
             let now = chrono::Utc::now();
@@ -184,8 +189,14 @@ async fn force_fetch_fresh_price(token_mint: &str) -> Option<crate::tokens::Toke
     FORCE_FETCH_COOLDOWN.insert(token_mint.to_string(), ());
 
     // Request immediate market data update from tokens system
-    match crate::tokens::request_immediate_update(token_mint).await {
-        Ok(result) => {
+    let update = match crate::chains::chain_for_address(token_mint) {
+        Ok(chain) => crate::tokens::request_immediate_update(chain, token_mint)
+            .await
+            .map(|result| (chain, result)),
+        Err(error) => Err(crate::tokens::Error::from(error)),
+    };
+    match update {
+        Ok((chain, result)) => {
             if result.is_success() {
                 logger::debug(
                     LogTag::Positions,
@@ -196,7 +207,7 @@ async fn force_fetch_fresh_price(token_mint: &str) -> Option<crate::tokens::Toke
                 );
 
                 // Re-fetch token data after update
-                match crate::tokens::get_full_token_async(token_mint).await {
+                match crate::tokens::get_full_token_async(chain, token_mint).await {
                     Ok(Some(token)) => {
                         // Verify the price is valid
                         if token.price_sol > 0.0 && token.price_sol.is_finite() {

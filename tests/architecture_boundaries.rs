@@ -748,8 +748,6 @@ const NEUTRAL_FILES_NAMING_CHAINS_SOLANA: &[&str] = &[
     "services/implementations/referral_service.rs",
     "swaps/operations.rs",
     "telegram/commands/status.rs",
-    "tokens/decimals.rs",
-    "tokens/error.rs",
     "tools/ata_cleanup/operations.rs",
     "tools/ata_cleanup/types.rs",
     "tools/multi_wallet/buy.rs",
@@ -943,7 +941,6 @@ const PROCESS_CHAIN_SEAM_CALLER_FILES: &[&str] = &[
     "apis/native_price.rs",
     "connectivity/monitors/dexscreener.rs",
     "events/recorders/lifecycle.rs",
-    "filtering/engine.rs",
     "filtering/sources/meta.rs",
     "filtering/sources/onchain.rs",
     "ohlcvs/cache.rs",
@@ -966,14 +963,8 @@ const PROCESS_CHAIN_SEAM_CALLER_FILES: &[&str] = &[
     "swaps/operations.rs",
     "swaps/registry.rs",
     "telegram/wallet_alerts.rs",
-    "tokens/decimals.rs",
     "tokens/discovery.rs",
     "tokens/discovery_sources.rs",
-    "tokens/market/dexscreener.rs",
-    "tokens/market/geckoterminal.rs",
-    "tokens/mod.rs",
-    "tokens/search.rs",
-    "tokens/service.rs",
     "tools/ata_cleanup/operations.rs",
     "tools/multi_wallet/buy.rs",
     "tools/multi_wallet/consolidate.rs",
@@ -1042,6 +1033,42 @@ fn is_bare_adapter_call(line: &str) -> bool {
     false
 }
 
+/// True when `line` names the process adapter `chains::adapter` itself — a
+/// call (`chains::adapter()`) or an import (`use crate::chains::adapter;`).
+/// A longer identifier (`chains::adapter_for`) or a path into the adapter
+/// module (`chains::adapter::ChainAdapter`) names something else.
+fn names_process_adapter(line: &str) -> bool {
+    const NEEDLE: &str = "chains::adapter";
+    let mut search_from = 0;
+    while let Some(found) = line[search_from..].find(NEEDLE) {
+        let end = search_from + found + NEEDLE.len();
+        let rest = &line[end..];
+        let continues_identifier = rest
+            .chars()
+            .next()
+            .is_some_and(|next| next.is_alphanumeric() || next == '_');
+        if !continues_identifier && !rest.starts_with("::") {
+            return true;
+        }
+        search_from = end;
+    }
+    false
+}
+
+#[test]
+fn names_process_adapter_matches_only_the_process_adapter() {
+    let cases = [
+        ("crate::chains::adapter()", true),
+        ("use crate::chains::adapter;", true),
+        ("crate::chains::adapter_for(c)", false),
+        ("use crate::chains::adapter_for;", false),
+        ("crate::chains::adapter::ChainAdapter", false),
+    ];
+    for (line, expected) in cases {
+        assert_eq!(names_process_adapter(line), expected, "{line}");
+    }
+}
+
 /// True when `line` calls `active_chain()` bare or path-qualified
 /// (`chains::active_chain(`) — the same identifier/dot boundary as
 /// [`is_bare_adapter_call`]. A method call on some other receiver
@@ -1084,7 +1111,7 @@ fn process_chain_seam_shrinks() {
                 continue;
             }
             let calls_seam = is_active_chain_call(line)
-                || line.contains("chains::adapter")
+                || names_process_adapter(line)
                 || is_bare_adapter_call(line);
             if calls_seam {
                 hits.push(path.clone());
@@ -1107,6 +1134,150 @@ fn process_chain_seam_shrinks() {
          seam):\n{}",
         new_violations.join("\n"),
         stale.join("\n")
+    );
+}
+
+/// Files outside `src/chains/` whose production code derives a chain from an
+/// address (`chain_for_address(`) or from the only enabled chain
+/// (`.sole_chain(`), because their inputs carry no chain yet. Each entry leaves
+/// when its input carries the chain: routes keyed by chain, positions with a
+/// chain column, typed tool input. The list freezes the exact current set and
+/// only shrinks; tokens and filtering never resolve a chain themselves, they
+/// take it from the caller.
+const IMPLICIT_CHAIN_RESOLUTION_FILES: &[&str] = &[
+    "llm_analysis/background_worker.rs",
+    "positions/helpers.rs",
+    "positions/ledger/sync.rs",
+    "positions/loss_detection.rs",
+    "positions/price_resolution.rs",
+    "telegram/commands/callback_positions.rs",
+    "telegram/commands/callback_tokens.rs",
+    "trader/actions/manual.rs",
+    "trader/copy/notify.rs",
+    "trader/entry.rs",
+    "trader/evaluators/entry.rs",
+    "trader/evaluators/exit.rs",
+    "trader/manual/api.rs",
+    "trader/manual/force.rs",
+    "trader/monitors/exit.rs",
+    "wallets/balance_monitor/dashboard/token_metadata.rs",
+    "webserver/routes/featured/cards.rs",
+    "webserver/routes/featured/handlers.rs",
+    "webserver/routes/filtering/analytics.rs",
+    "webserver/routes/filtering/stats.rs",
+    "webserver/routes/filtering/tokens.rs",
+    "webserver/routes/positions/list.rs",
+    "webserver/routes/tokens/blacklist.rs",
+    "webserver/routes/tokens/favorites.rs",
+    "webserver/routes/tokens/identity.rs",
+    "webserver/routes/tokens/list.rs",
+    "webserver/routes/wallet/handlers.rs",
+];
+
+/// True when `line` names `chain_for_address` or `sole_chain` as a whole
+/// identifier in any call form — a direct call, a path-qualified or UFCS call
+/// (`ChainScope::sole_chain(&scope)`) or a point-free use
+/// (`.map(chain_for_address)`). A longer identifier containing either name,
+/// and the `fn` definitions themselves, are not a resolution.
+fn resolves_chain_implicitly(line: &str) -> bool {
+    let is_identifier_char = |c: char| c.is_alphanumeric() || c == '_';
+    ["chain_for_address", "sole_chain"].iter().any(|needle| {
+        let mut search_from = 0;
+        while let Some(found) = line[search_from..].find(needle) {
+            let at = search_from + found;
+            let end = at + needle.len();
+            search_from = end;
+            let before = &line[..at];
+            let starts_word = !before.chars().next_back().is_some_and(is_identifier_char);
+            let ends_word = !line[end..].chars().next().is_some_and(is_identifier_char);
+            let is_definition = before.trim_end().ends_with("fn")
+                && !before
+                    .trim_end()
+                    .trim_end_matches("fn")
+                    .chars()
+                    .next_back()
+                    .is_some_and(is_identifier_char);
+            if starts_word && ends_word && !is_definition {
+                return true;
+            }
+        }
+        false
+    })
+}
+
+#[test]
+fn resolves_chain_implicitly_matches_every_call_form() {
+    let cases = [
+        ("crate::chains::chain_for_address(&mint)?", true),
+        ("let chain = chain_for_address(mint);", true),
+        (".map(chain_for_address)", true),
+        (".and_then(crate::chains::chain_for_address)", true),
+        ("ChainScope::All.sole_chain()?", true),
+        ("ChainScope::sole_chain(&scope)", true),
+        ("scopes.iter().map(ChainScope::sole_chain)", true),
+        (
+            "pub fn chain_for_address(address: &str) -> Result<ChainId> {",
+            false,
+        ),
+        ("pub fn sole_chain(self) -> Result<ChainId> {", false),
+        ("resolve_chain_for_address_cached(mint)", false),
+        ("let sole_chain_count = 1;", false),
+    ];
+    for (line, expected) in cases {
+        assert_eq!(resolves_chain_implicitly(line), expected, "{line}");
+    }
+}
+
+#[test]
+fn implicit_chain_resolution_shrinks() {
+    let mut hits: Vec<String> = Vec::new();
+    let mut new_violations = Vec::new();
+    for (relative, contents) in walk_src() {
+        if is_chain_module(&relative) {
+            continue;
+        }
+        let path = relative.to_string_lossy().into_owned();
+        let production = strip_comment_text(&production_text(&contents));
+        for (idx, line) in production.lines().enumerate() {
+            if line.trim_start().starts_with("//") {
+                continue;
+            }
+            if resolves_chain_implicitly(line) {
+                hits.push(path.clone());
+                if !IMPLICIT_CHAIN_RESOLUTION_FILES.contains(&path.as_str()) {
+                    new_violations.push(format!("src/{path}:{}: {}", idx + 1, line.trim()));
+                }
+            }
+        }
+    }
+    let stale: Vec<&str> = IMPLICIT_CHAIN_RESOLUTION_FILES
+        .iter()
+        .copied()
+        .filter(|entry| !hits.iter().any(|hit| hit.as_str() == *entry))
+        .collect();
+    assert!(
+        new_violations.is_empty() && stale.is_empty(),
+        "a chain must come from the caller's data, not be guessed from an address or the \
+         only enabled chain — take the chain from the input (new files resolving a chain \
+         implicitly):\n{}\nremove it from the allowlist (entries that no longer resolve \
+         a chain):\n{}",
+        new_violations.join("\n"),
+        stale.join("\n")
+    );
+}
+
+#[test]
+fn tokens_and_filtering_never_resolve_a_chain_implicitly() {
+    let inside: Vec<&str> = IMPLICIT_CHAIN_RESOLUTION_FILES
+        .iter()
+        .copied()
+        .filter(|entry| entry.starts_with("tokens/") || entry.starts_with("filtering/"))
+        .collect();
+    assert!(
+        inside.is_empty(),
+        "tokens and filtering take the chain from their caller; these entries resolve it \
+         inside the domain:\n{}",
+        inside.join("\n")
     );
 }
 
@@ -1134,8 +1305,15 @@ const BARE_STRING_KEYED_STATICS: &[&str] = &[
 ];
 
 /// Top-level trading domains in scope for [`no_bare_string_keyed_statics`].
-const BARE_STRING_KEYED_STATIC_DIRS: &[&str] =
-    &["pools", "positions", "transactions", "trader", "swaps"];
+const BARE_STRING_KEYED_STATIC_DIRS: &[&str] = &[
+    "pools",
+    "positions",
+    "transactions",
+    "trader",
+    "swaps",
+    "tokens",
+    "filtering",
+];
 
 /// The name of the static declared on `line`, if the line starts a `static`
 /// item declaration (any visibility).
@@ -1152,16 +1330,52 @@ fn static_declaration_name(line: &str) -> Option<&str> {
     (name_end > 0).then_some(&rest[..name_end])
 }
 
+/// True when the declared type of a `static NAME: TYPE` header has `PerChain`
+/// as its outermost type.
+fn is_per_chain_declaration(declared_type: &str) -> bool {
+    declared_type
+        .split_once(':')
+        .map(|(_, ty)| ty.trim_start())
+        .is_some_and(|ty| ty.starts_with("PerChain<") || ty.starts_with("crate::chains::PerChain<"))
+}
+
+#[test]
+fn per_chain_declarations_are_recognized_by_their_outermost_type() {
+    let cases = [
+        (
+            "static CACHE: PerChain<moka::sync::Cache<String, u8>> ",
+            true,
+        ),
+        (
+            "static CACHE: crate::chains::PerChain<Cache<String, u8>> ",
+            true,
+        ),
+        (
+            "static CACHE: LazyLock<PerChain<Cache<String, u8>>> ",
+            false,
+        ),
+        ("static CACHE: LazyLock<HashMap<String, u8>> ", false),
+    ];
+    for (header, expected) in cases {
+        assert_eq!(is_per_chain_declaration(header), expected, "{header}");
+    }
+}
+
 /// A trading-domain static must not key its map by a bare `String`. The
 /// declaration header (everything from `static NAME` up to the `=`) is
 /// scanned for the `<String,` map-key pattern; the allowlist ratchets the
 /// current set in both directions.
 ///
-/// Convention for a conforming chain-scoped static: key the map by the
-/// tuple `(ChainId, String)`, which does not match the pattern, so it needs
-/// no entry. A nested per-chain map
-/// (`LazyLock<HashMap<ChainId, HashMap<String, T>>>`) DOES match and would
-/// false-fail; such a static must follow the tuple-key convention instead.
+/// A conforming chain-scoped static takes one of two shapes, neither of
+/// which needs an entry:
+/// - the map is keyed by the tuple `(ChainId, String)`, which does not match
+///   the pattern;
+/// - the declared type's outermost type is `PerChain<..>`, one slot per chain,
+///   so the `String` key inside a slot is already scoped to that slot's chain.
+///
+/// A nested per-chain map (`LazyLock<HashMap<ChainId, HashMap<String, T>>>`)
+/// DOES match and would false-fail; such a static must take one of the two
+/// shapes instead.
 ///
 /// Known latent gaps: [`static_declaration_name`] does not recognize
 /// `pub(in path)` visibility (none exist today), and String-keyed SETS
@@ -1200,7 +1414,7 @@ fn no_bare_string_keyed_statics() {
                 continue;
             }
             let declared_type = header.split('=').next().unwrap_or("");
-            if !declared_type.contains("<String,") {
+            if !declared_type.contains("<String,") || is_per_chain_declaration(declared_type) {
                 continue;
             }
             let key = format!("{path}::{name}");

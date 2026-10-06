@@ -5,12 +5,12 @@
 //! token-program detection and mint/freeze authority extraction.
 //!
 //! Pure adapter over a single mint account fetch. Cache/DB/server-fallback
-//! policy for decimals lives in `crate::tokens::decimals`, which calls
-//! [`fetch_mint_account`] as its on-chain source of truth.
+//! policy for decimals lives in `crate::tokens::decimals`, which reads the
+//! chain runtime's `read_token_account`; on Solana that is
+//! [`fetch_mint_account`], its on-chain source of truth.
 
 use std::str::FromStr;
 
-use crate::chains::solana::constants::TOKEN_2022_PROGRAM_ID;
 use crate::chains::solana::rpc::{get_rpc_client, RpcClientMethods};
 use crate::chains::solana::solana_program::program_option::COption;
 use crate::chains::solana::solana_program::program_pack::Pack;
@@ -115,30 +115,6 @@ fn coption_to_string(value: COption<Pubkey>) -> Option<String> {
         COption::Some(pk) => Some(pk.to_string()),
         COption::None => None,
     }
-}
-
-/// Is this mint owned by the Token-2022 program? A single account fetch, no
-/// decoding — callers that already need the full mint should prefer
-/// [`fetch_mint_account`] instead of fetching the account twice.
-pub async fn is_token_2022_mint(mint: &str) -> Result<bool> {
-    let mint_pubkey = Pubkey::from_str(mint).map_err(|_| Error::InvalidAddress {
-        kind: "mint",
-        value: mint.to_owned(),
-    })?;
-    let rpc_client = get_rpc_client();
-
-    let account = rpc_client
-        .get_account(&mint_pubkey)
-        .await
-        .map_err(|e| Error::Rpc {
-            operation: "get_account",
-            detail: e.to_string(),
-        })?
-        .ok_or_else(|| Error::AccountNotFound {
-            address: mint.to_owned(),
-        })?;
-
-    Ok(account.owner.to_string() == TOKEN_2022_PROGRAM_ID)
 }
 
 #[cfg(test)]

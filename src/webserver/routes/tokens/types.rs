@@ -746,7 +746,7 @@ const EXTERNAL_FETCH_TIMEOUT: std::time::Duration = std::time::Duration::from_se
 
 pub(super) async fn fetch_and_add_token_from_external(mint: &str) -> Option<crate::tokens::Token> {
     use crate::apis::get_api_manager;
-    use crate::tokens::database::get_global_database;
+    use crate::tokens::database::database;
 
     // `/tokens/:mint` catches every unrouted segment (`/tokens/passed`, a typo),
     // so a value that is not an address must never reach the external providers
@@ -761,7 +761,7 @@ pub(super) async fn fetch_and_add_token_from_external(mint: &str) -> Option<crat
     );
 
     let apis = get_api_manager();
-    let db = get_global_database()?;
+    let db = database(crate::chains::active_chain())?;
 
     // Try DexScreener first - most reliable for Solana tokens.
     //
@@ -826,7 +826,11 @@ pub(super) async fn fetch_and_add_token_from_external(mint: &str) -> Option<crat
                             );
 
                             // Now fetch the token from database
-                            if let Ok(Some(token)) = crate::tokens::get_full_token_async(mint).await
+                            if let Ok(Some(token)) = crate::tokens::get_full_token_async(
+                                crate::chains::active_chain(),
+                                mint,
+                            )
+                            .await
                             {
                                 return Some(token);
                             }
@@ -907,7 +911,11 @@ pub(super) async fn fetch_and_add_token_from_external(mint: &str) -> Option<crat
                             );
 
                             // Now fetch the token from database
-                            if let Ok(Some(token)) = crate::tokens::get_full_token_async(mint).await
+                            if let Ok(Some(token)) = crate::tokens::get_full_token_async(
+                                crate::chains::active_chain(),
+                                mint,
+                            )
+                            .await
                             {
                                 return Some(token);
                             }

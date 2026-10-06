@@ -21,7 +21,11 @@ async fn fetch_token_metadata_batch(
 
     stream::iter(mints.iter().cloned())
         .map(|mint| async move {
-            match crate::tokens::get_full_token_async(&mint).await {
+            let stored = match crate::chains::chain_for_address(&mint) {
+                Ok(chain) => crate::tokens::get_full_token_async(chain, &mint).await,
+                Err(_) => Ok(None),
+            };
+            match stored {
                 Ok(Some(token)) => Some((mint, token)),
                 Ok(None) => None,
                 Err(err) => {

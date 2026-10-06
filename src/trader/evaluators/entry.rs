@@ -53,7 +53,19 @@ pub async fn evaluate_entry_for_token(
     // 6. LLM entry analysis - check the model-scored entry decision when enabled.
     if llm_analysis::should_analyze_entry() {
         // Get token data for LLM analysis
-        match crate::tokens::get_full_token_async(token_mint).await {
+        // An unresolved chain refuses the entry: the model gate cannot be
+        // skipped on a lookup failure.
+        let chain = match crate::chains::chain_for_address(token_mint) {
+            Ok(chain) => chain,
+            Err(e) => {
+                crate::logger::warning(
+                    crate::logger::LogTag::Trader,
+                    &format!("LLM entry analysis refused entry for {token_mint}: {e}"),
+                );
+                return Ok(None);
+            }
+        };
+        match crate::tokens::get_full_token_async(chain, token_mint).await {
             Ok(Some(token)) => {
                 match llm_analysis::analyze_entry(&token).await {
                     Some(result) => {

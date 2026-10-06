@@ -95,7 +95,7 @@ pub async fn fetch_geckoterminal_data_batch(
     let tokens_response = api_manager
         .geckoterminal
         .fetch_tokens_multi(
-            crate::chains::adapter().market_data_network(),
+            crate::chains::adapter_for(db.chain()).market_data_network(),
             &addresses_str,
             None,
             None,

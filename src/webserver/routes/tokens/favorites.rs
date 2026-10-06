@@ -28,8 +28,15 @@ pub async fn get_favorites() -> Result<Json<FavoritesListResponse>, ApiError> {
         return Ok(Json(FavoritesListResponse { favorites, total }));
     }
 
-    match crate::tokens::get_favorites_async().await {
-        Ok(favorites) => {
+    // Favorites are stored per chain; a route without a chain reads the only one.
+    let listed = match crate::chains::ChainScope::All.sole_chain() {
+        Ok(chain) => crate::tokens::get_favorites_async(chain)
+            .await
+            .map(|favorites| (chain, favorites)),
+        Err(e) => Err(e.into()),
+    };
+    match listed {
+        Ok((chain, favorites)) => {
             let total = favorites.len();
             // Enrich each favorite with the FULL assembled token (market data,
             // price, txns, etc.) so the favorites subtab renders the exact same
@@ -43,7 +50,8 @@ pub async fn get_favorites() -> Result<Json<FavoritesListResponse>, ApiError> {
                     crate::positions::state::is_open_position(&favorite.mint).await;
                 let blacklisted = crate::trader::safety::is_blacklisted(&favorite.mint).await;
 
-                let mut row = match crate::tokens::get_full_token_async(&favorite.mint).await {
+                let mut row = match crate::tokens::get_full_token_async(chain, &favorite.mint).await
+                {
                     Ok(Some(token)) => {
                         serde_json::to_value(&token).unwrap_or_else(|_| serde_json::json!({}))
                     }
@@ -103,7 +111,21 @@ pub async fn add_favorite(
         &format!("Adding favorite: mint={}", request.mint),
     );
 
-    match crate::tokens::add_favorite_async(request.clone()).await {
+    let chain = match crate::chains::chain_for_address(&request.mint) {
+        Ok(chain) => chain,
+        Err(e) => {
+            logger::warning(
+                LogTag::Webserver,
+                &format!("Failed to add favorite mint={}: {}", request.mint, e),
+            );
+            return Err(ApiError::new(
+                ApiErrorCode::InvalidInput,
+                ids::ERRORS_TOKENS_FAVORITE_ADD_FAILED,
+            )
+            .details(e.to_string()));
+        }
+    };
+    match crate::tokens::add_favorite_async(chain, request.clone()).await {
         Ok(favorite) => {
             logger::info(
                 LogTag::Webserver,
@@ -140,7 +162,21 @@ pub async fn remove_favorite(Path(mint): Path<String>) -> Result<Json<FavoriteRe
         &format!("Removing favorite: mint={mint}"),
     );
 
-    match crate::tokens::remove_favorite_async(mint.clone()).await {
+    let chain = match crate::chains::chain_for_address(&mint) {
+        Ok(chain) => chain,
+        Err(e) => {
+            logger::warning(
+                LogTag::Webserver,
+                &format!("Failed to remove favorite mint={mint}: {e}"),
+            );
+            return Err(ApiError::new(
+                ApiErrorCode::InvalidInput,
+                ids::ERRORS_TOKENS_FAVORITE_REMOVE_FAILED,
+            )
+            .details(e.to_string()));
+        }
+    };
+    match crate::tokens::remove_favorite_async(chain, mint.clone()).await {
         Ok(removed) => {
             if removed {
                 logger::info(LogTag::Webserver, &format!("Removed favorite: mint={mint}"));
@@ -185,7 +221,21 @@ pub async fn update_favorite(
         &format!("Updating favorite: mint={mint}"),
     );
 
-    match crate::tokens::update_favorite_async(mint.clone(), request).await {
+    let chain = match crate::chains::chain_for_address(&mint) {
+        Ok(chain) => chain,
+        Err(e) => {
+            logger::warning(
+                LogTag::Webserver,
+                &format!("Failed to update favorite mint={mint}: {e}"),
+            );
+            return Err(ApiError::new(
+                ApiErrorCode::InvalidInput,
+                ids::ERRORS_TOKENS_FAVORITE_UPDATE_FAILED,
+            )
+            .details(e.to_string()));
+        }
+    };
+    match crate::tokens::update_favorite_async(chain, mint.clone(), request).await {
         Ok(Some(favorite)) => {
             logger::info(LogTag::Webserver, &format!("Updated favorite: mint={mint}"));
             Ok(Json(FavoriteResponse {
@@ -214,5 +264,50 @@ pub async fn update_favorite(
             )
             .details(e.to_string()))
         }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use axum::{http::StatusCode, response::IntoResponse};
+
+    const NOT_AN_ADDRESS: &str = "not-a-mint-address";
+
+    fn status_of(result: Result<Json<FavoriteResponse>, ApiError>) -> StatusCode {
+        match result {
+            Ok(_) => StatusCode::OK,
+            Err(error) => error.into_response().status(),
+        }
+    }
+
+    /// A mint that no enabled chain accepts is client input, so every
+    /// address-carrying favorites route answers 400 before it reaches the
+    /// token database.
+    #[tokio::test]
+    async fn a_mint_that_is_not_an_address_is_rejected_as_input() {
+        let add = add_favorite(Json(AddFavoriteRequest {
+            mint: NOT_AN_ADDRESS.to_owned(),
+            name: None,
+            symbol: None,
+            logo_url: None,
+            notes: None,
+        }))
+        .await;
+        assert_eq!(status_of(add), StatusCode::BAD_REQUEST);
+
+        let remove = remove_favorite(Path(NOT_AN_ADDRESS.to_owned())).await;
+        assert_eq!(status_of(remove), StatusCode::BAD_REQUEST);
+
+        let update = update_favorite(
+            Path(NOT_AN_ADDRESS.to_owned()),
+            Json(UpdateFavoriteRequest {
+                name: None,
+                symbol: None,
+                notes: Some("note".to_owned()),
+            }),
+        )
+        .await;
+        assert_eq!(status_of(update), StatusCode::BAD_REQUEST);
     }
 }

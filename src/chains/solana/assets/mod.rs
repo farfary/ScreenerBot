@@ -24,5 +24,5 @@ pub use ata::{
 };
 pub use burn::burn_configured_wallet_token;
 pub use metaplex::{fetch_nft_metadata, fetch_nft_metadata_batch, NftMetadata, NftMetadataError};
-pub use mint::{fetch_mint_account, is_token_2022_mint, MintAccountData};
+pub use mint::{fetch_mint_account, MintAccountData};
 pub use transfer::{close_ata as transfer_close_ata, transfer_sol, transfer_token};

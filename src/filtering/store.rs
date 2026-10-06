@@ -10,9 +10,9 @@ use std::time::Duration;
 
 use chrono::{Duration as ChronoDuration, Utc};
 use serde_json::json;
-use std::sync::LazyLock;
 use tokio::sync::{Mutex, RwLock};
 
+use crate::chains::{ChainId, ChainScope, PerChain};
 use crate::events::{record_filtering_event, Severity};
 use crate::logger::{self, LogTag};
 use crate::tokens::types::Token;
@@ -28,13 +28,23 @@ use super::types::{
 };
 use super::{Error, Result};
 
-static GLOBAL_STORE: LazyLock<Arc<FilteringStore>> =
-    LazyLock::new(|| Arc::new(FilteringStore::new()));
+static STORES: PerChain<Arc<FilteringStore>> = PerChain::new(new_store);
+
+fn new_store(chain: ChainId) -> Arc<FilteringStore> {
+    Arc::new(FilteringStore::new(chain))
+}
+
+/// The filtering store of one chain.
+pub fn store(chain: ChainId) -> Arc<FilteringStore> {
+    STORES.get(chain).clone()
+}
 
 const TOKENS_TAB_MAX_PAGE_SIZE: usize = 200;
 const TOKENS_TAB_RECENT_TOKEN_HOURS: i64 = 24;
 
 pub struct FilteringStore {
+    /// The chain whose tokens this store filters.
+    chain: ChainId,
     snapshot: RwLock<Option<Arc<FilteringSnapshot>>>,
     /// Prevents multiple concurrent refresh operations
     refresh_in_progress: AtomicBool,
@@ -43,8 +53,9 @@ pub struct FilteringStore {
 }
 
 impl FilteringStore {
-    fn new() -> Self {
+    fn new(chain: ChainId) -> Self {
         Self {
+            chain,
             snapshot: RwLock::new(None),
             refresh_in_progress: AtomicBool::new(false),
             refresh_lock: Mutex::new(()),
@@ -58,7 +69,7 @@ impl FilteringStore {
     /// That wait is the right trade for a surface that is nothing but filtering results —
     /// the tokens tab has nothing to show without it. It is the wrong trade for a caller
     /// that only wants counts; use [`Self::snapshot_if_ready`] there.
-    async fn ensure_snapshot(&self) -> Result<Arc<FilteringSnapshot>> {
+    async fn ensure_snapshot(self: &Arc<Self>) -> Result<Arc<FilteringSnapshot>> {
         let stale_snapshot = self.snapshot.read().await.clone();
 
         // If we have any snapshot (even stale), return it immediately
@@ -90,7 +101,7 @@ impl FilteringStore {
     /// freshly-launched app sitting in its loading state for the entire timeout, every
     /// launch. A count that is briefly absent is worth far less than a dashboard that
     /// paints; the background build fills it in on the next poll.
-    async fn snapshot_if_ready(&self) -> Option<Arc<FilteringSnapshot>> {
+    async fn snapshot_if_ready(self: &Arc<Self>) -> Option<Arc<FilteringSnapshot>> {
         let existing = self.snapshot.read().await.clone();
 
         match existing {
@@ -110,12 +121,12 @@ impl FilteringStore {
     }
 
     /// Start a refresh off to the side, unless one is already running.
-    fn spawn_background_refresh(&self) {
+    fn spawn_background_refresh(self: &Arc<Self>) {
         if self.refresh_in_progress.load(AtomicOrdering::Relaxed) {
             return;
         }
 
-        let store = global_store();
+        let store = Arc::clone(self);
         tokio::spawn(async move {
             let _ = store.try_refresh_background().await;
         });
@@ -165,7 +176,8 @@ impl FilteringStore {
             guard.clone()
         };
 
-        let snapshot = Arc::new(compute_snapshot(config, previous_snapshot.as_deref()).await?);
+        let snapshot =
+            Arc::new(compute_snapshot(self.chain, config, previous_snapshot.as_deref()).await?);
         let mut guard = self.snapshot.write().await;
         *guard = Some(snapshot.clone());
 
@@ -194,22 +206,25 @@ impl FilteringStore {
         self.try_refresh().await.map(|_| ())
     }
 
-    pub async fn get_filtered_mints(&self) -> Result<Vec<String>> {
+    pub async fn get_filtered_mints(self: &Arc<Self>) -> Result<Vec<String>> {
         let snapshot = self.ensure_snapshot().await?;
         Ok(snapshot.filtered_mints.clone())
     }
 
-    pub async fn get_passed_tokens(&self) -> Result<Vec<PassedToken>> {
+    pub async fn get_passed_tokens(self: &Arc<Self>) -> Result<Vec<PassedToken>> {
         let snapshot = self.ensure_snapshot().await?;
         Ok(snapshot.passed_tokens.clone())
     }
 
-    pub async fn get_rejected_tokens(&self) -> Result<Vec<RejectedToken>> {
+    pub async fn get_rejected_tokens(self: &Arc<Self>) -> Result<Vec<RejectedToken>> {
         let snapshot = self.ensure_snapshot().await?;
         Ok(snapshot.rejected_tokens.clone())
     }
 
-    pub async fn execute_query(&self, mut query: FilteringQuery) -> Result<FilteringQueryResult> {
+    pub async fn execute_query(
+        self: &Arc<Self>,
+        mut query: FilteringQuery,
+    ) -> Result<FilteringQueryResult> {
         let max_page_size = TOKENS_TAB_MAX_PAGE_SIZE;
         let recent_hours = TOKENS_TAB_RECENT_TOKEN_HOURS;
 
@@ -323,7 +338,7 @@ impl FilteringStore {
 
             // Collect unique reasons from database (not limited snapshot) for filter dropdown
             // Use get_rejection_stats_async() which queries all rejection reasons from update_tracking table
-            match crate::tokens::get_rejection_stats_async().await {
+            match crate::tokens::get_rejection_stats_async(self.chain).await {
                 Ok(stats) => {
                     let mut unique_reasons: HashSet<String> = HashSet::new();
                     for (reason, _source, _count) in stats {
@@ -383,11 +398,14 @@ impl FilteringStore {
     }
 
     /// Execute query for "All" view by querying database directly (bypasses snapshot)
-    async fn execute_all_view_query(&self, query: FilteringQuery) -> Result<FilteringQueryResult> {
+    async fn execute_all_view_query(
+        self: &Arc<Self>,
+        query: FilteringQuery,
+    ) -> Result<FilteringQueryResult> {
         use crate::tokens::{count_tokens_async, get_all_tokens_optional_market_async};
 
         // Fast count query (no data loading)
-        let total_count = count_tokens_async()
+        let total_count = count_tokens_async(ChainScope::One(self.chain))
             .await
             .map_err(|e| Error::TokenSetLoad {
                 kind: "all",
@@ -441,13 +459,18 @@ impl FilteringStore {
         };
 
         // Only load the tokens for THIS page with proper sorting
-        let items =
-            get_all_tokens_optional_market_async(query.page_size, offset, sort_by, sort_direction)
-                .await
-                .map_err(|e| Error::TokenSetLoad {
-                    kind: "all",
-                    source: e,
-                })?;
+        let items = get_all_tokens_optional_market_async(
+            self.chain,
+            query.page_size,
+            offset,
+            sort_by,
+            sort_direction,
+        )
+        .await
+        .map_err(|e| Error::TokenSetLoad {
+            kind: "all",
+            source: e,
+        })?;
 
         // Derived flags (pool price, open positions, ohlcv) come from the snapshot, but the
         // ROWS above came straight from the database — so this view has everything it needs
@@ -524,19 +547,18 @@ impl FilteringStore {
 
     /// Execute query for "No Market Data" view using DB (no Dex/Gecko rows)
     async fn execute_no_market_view_query(
-        &self,
+        self: &Arc<Self>,
         query: FilteringQuery,
     ) -> Result<FilteringQueryResult> {
         use crate::tokens::{count_tokens_no_market_async, get_tokens_no_market_async};
 
         // Count
-        let total_count =
-            count_tokens_no_market_async()
-                .await
-                .map_err(|e| Error::TokenSetLoad {
-                    kind: "no-market",
-                    source: e,
-                })?;
+        let total_count = count_tokens_no_market_async(self.chain)
+            .await
+            .map_err(|e| Error::TokenSetLoad {
+                kind: "no-market",
+                source: e,
+            })?;
 
         let total_pages = if total_count == 0 {
             0
@@ -569,12 +591,18 @@ impl FilteringStore {
             SortDirection::Desc => Some("desc".to_owned()),
         };
 
-        let items = get_tokens_no_market_async(query.page_size, offset, sort_by, sort_direction)
-            .await
-            .map_err(|e| Error::TokenSetLoad {
-                kind: "no-market",
-                source: e,
-            })?;
+        let items = get_tokens_no_market_async(
+            self.chain,
+            query.page_size,
+            offset,
+            sort_by,
+            sort_direction,
+        )
+        .await
+        .map_err(|e| Error::TokenSetLoad {
+            kind: "no-market",
+            source: e,
+        })?;
 
         // Snapshot for timestamp and derived counts — read only if one already exists, for
         // the same reason as the All view: the rows are database-backed and the snapshot
@@ -638,14 +666,15 @@ impl FilteringStore {
             blacklist_reasons,
         })
     }
-    pub async fn get_stats(&self) -> Result<FilteringStatsSnapshot> {
+
+    pub async fn get_stats(self: &Arc<Self>) -> Result<FilteringStatsSnapshot> {
         let snapshot = self.ensure_snapshot().await?;
-        Ok(build_stats(snapshot.as_ref()).await)
+        Ok(build_stats(self.chain, snapshot.as_ref()).await)
     }
 
-    pub async fn stats_if_ready(&self) -> Option<FilteringStatsSnapshot> {
+    pub async fn stats_if_ready(self: &Arc<Self>) -> Option<FilteringStatsSnapshot> {
         let snapshot = self.snapshot_if_ready().await?;
-        Some(build_stats(snapshot.as_ref()).await)
+        Some(build_stats(self.chain, snapshot.as_ref()).await)
     }
 
     pub async fn snapshot_age(&self) -> Option<Duration> {
@@ -656,44 +685,4 @@ impl FilteringStore {
             .ok();
         age
     }
-}
-
-/// Get the global filtering store singleton.
-pub fn global_store() -> Arc<FilteringStore> {
-    GLOBAL_STORE.clone()
-}
-
-/// Refresh the filtering snapshot with current token data.
-pub async fn refresh_snapshot() -> Result<()> {
-    global_store().refresh().await
-}
-
-/// Get the list of mint addresses that passed all filters.
-pub async fn get_filtered_mints() -> Result<Vec<String>> {
-    global_store().get_filtered_mints().await
-}
-
-/// Get detailed info for tokens that passed all filters.
-pub async fn get_passed_tokens() -> Result<Vec<PassedToken>> {
-    global_store().get_passed_tokens().await
-}
-
-/// Get detailed info for tokens that were rejected by filters.
-pub async fn get_rejected_tokens() -> Result<Vec<RejectedToken>> {
-    global_store().get_rejected_tokens().await
-}
-
-/// Execute a filtering query with custom parameters.
-pub async fn execute_query(query: FilteringQuery) -> Result<FilteringQueryResult> {
-    global_store().execute_query(query).await
-}
-
-/// Get aggregated filtering statistics.
-pub async fn get_stats() -> Result<FilteringStatsSnapshot> {
-    global_store().get_stats().await
-}
-
-/// Aggregated filtering statistics, but only if a snapshot already exists.
-pub async fn stats_if_ready() -> Option<FilteringStatsSnapshot> {
-    global_store().stats_if_ready().await
 }

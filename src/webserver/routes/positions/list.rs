@@ -3,9 +3,12 @@
 
 //! Positions list route — serves paginated position listings with sort and filter.
 
+use std::collections::HashMap;
+
 use axum::{extract::Query, Json};
 
 use super::types::*;
+use crate::chains::ChainId;
 use crate::positions;
 use crate::tokens;
 
@@ -61,13 +64,30 @@ pub async fn load_positions_with_filters(
     }
 
     // Batch fetch all logo URLs and decimals in single queries (performance optimization)
-    let mints: Vec<String> = filtered_positions.iter().map(|p| p.mint.clone()).collect();
-    let logo_map = tokens::database::get_token_images_batch_async(mints.clone())
-        .await
-        .unwrap_or_default();
-    let decimals_map = tokens::database::get_token_decimals_batch_async(mints)
-        .await
-        .unwrap_or_default();
+    // One batch per chain; a mint no enabled chain accepts has no stored logo or decimals.
+    let mut mints_by_chain: HashMap<ChainId, Vec<String>> = HashMap::new();
+    for position in &filtered_positions {
+        if let Ok(chain) = crate::chains::chain_for_address(&position.mint) {
+            mints_by_chain
+                .entry(chain)
+                .or_default()
+                .push(position.mint.clone());
+        }
+    }
+    let mut logo_map = HashMap::new();
+    let mut decimals_map = HashMap::new();
+    for (chain, mints) in mints_by_chain {
+        logo_map.extend(
+            tokens::database::get_token_images_batch_async(chain, mints.clone())
+                .await
+                .unwrap_or_default(),
+        );
+        decimals_map.extend(
+            tokens::database::get_token_decimals_batch_async(chain, mints)
+                .await
+                .unwrap_or_default(),
+        );
+    }
 
     // Map positions to responses using pre-fetched logos and decimals
     filtered_positions
@@ -156,14 +176,18 @@ pub async fn map_position_to_response_async(p: &positions::Position) -> Position
     // assembly returns None once a token loses market data (e.g. a delisted/rugged
     // token), which would drop decimals and make the UI render raw amounts (3.08B
     // instead of 3,075). The decimals column survives that.
-    let logo_url = match tokens::database::get_full_token_async(&p.mint).await {
+    let Ok(chain) = crate::chains::chain_for_address(&p.mint) else {
+        return map_position_to_response_with_logo(p, None, None);
+    };
+    let logo_url = match tokens::database::get_full_token_async(chain, &p.mint).await {
         Ok(Some(token)) => token.image_url.clone(),
         _ => None,
     };
-    let token_decimals = tokens::database::get_token_decimals_batch_async(vec![p.mint.clone()])
-        .await
-        .ok()
-        .and_then(|m| m.get(&p.mint).copied());
+    let token_decimals =
+        tokens::database::get_token_decimals_batch_async(chain, vec![p.mint.clone()])
+            .await
+            .ok()
+            .and_then(|m| m.get(&p.mint).copied());
 
     map_position_to_response_with_logo(p, logo_url, token_decimals)
 }

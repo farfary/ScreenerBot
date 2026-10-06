@@ -14,6 +14,7 @@ use std::time::Duration;
 
 use async_trait::async_trait;
 
+use crate::chains::enabled_chains;
 use crate::filtering;
 use crate::i18n::{ids, UiArg, UiText};
 use crate::services::{Service, ServiceHealth, ServiceMetrics};
@@ -71,23 +72,31 @@ impl Service for FilteringService {
         shutdown: Arc<tokio::sync::Notify>,
         monitor: tokio_metrics::TaskMonitor,
     ) -> crate::Result<Vec<tokio::task::JoinHandle<()>>> {
-        let operations = Arc::clone(&self.operations);
-        let errors = Arc::clone(&self.errors);
+        let mut handles = Vec::with_capacity(enabled_chains().len() * 2);
+        for &chain in enabled_chains() {
+            let operations = Arc::clone(&self.operations);
+            let errors = Arc::clone(&self.errors);
 
-        // Main filtering refresh task
-        let shutdown_refresh = Arc::clone(&shutdown);
-        let handle = tokio::spawn(monitor.instrument(async move {
-            crate::filtering::background::run_refresh_loop(shutdown_refresh, operations, errors)
+            // Main filtering refresh task
+            let shutdown_refresh = Arc::clone(&shutdown);
+            handles.push(tokio::spawn(monitor.instrument(async move {
+                crate::filtering::background::run_refresh_loop(
+                    chain,
+                    shutdown_refresh,
+                    operations,
+                    errors,
+                )
                 .await;
-        }));
+            })));
 
-        // Rejection history and stats cleanup task
-        let shutdown_cleanup = Arc::clone(&shutdown);
-        let cleanup_handle = tokio::spawn(async move {
-            crate::filtering::background::run_cleanup_loop(shutdown_cleanup).await;
-        });
+            // Rejection history and stats cleanup task
+            let shutdown_cleanup = Arc::clone(&shutdown);
+            handles.push(tokio::spawn(async move {
+                crate::filtering::background::run_cleanup_loop(chain, shutdown_cleanup).await;
+            }));
+        }
 
-        Ok(vec![handle, cleanup_handle])
+        Ok(handles)
     }
 
     async fn stop(&mut self) -> crate::Result<()> {
@@ -97,15 +106,27 @@ impl Service for FilteringService {
     async fn health(&self) -> ServiceHealth {
         let max_age =
             Duration::from_secs(crate::filtering::background::snapshot_stale_limit_secs());
-        let store = filtering::global_store();
 
-        match store.snapshot_age().await {
-            Some(age) if age <= max_age => ServiceHealth::Healthy,
-            Some(age) => ServiceHealth::Degraded(
+        // The worst chain decides: any chain without a snapshot is still starting, and
+        // the oldest snapshot is the one held against the stale limit.
+        if enabled_chains().is_empty() {
+            return ServiceHealth::Starting;
+        }
+        let mut oldest = Duration::ZERO;
+        for &chain in enabled_chains() {
+            match filtering::store(chain).snapshot_age().await {
+                Some(age) => oldest = oldest.max(age),
+                None => return ServiceHealth::Starting,
+            }
+        }
+
+        if oldest <= max_age {
+            ServiceHealth::Healthy
+        } else {
+            ServiceHealth::Degraded(
                 UiText::new(ids::SERVICES_HEALTH_FILTERING_SNAPSHOT_STALE)
-                    .arg("seconds", UiArg::Text(age.as_secs().to_string())),
-            ),
-            None => ServiceHealth::Starting,
+                    .arg("seconds", UiArg::Text(oldest.as_secs().to_string())),
+            )
         }
     }
 

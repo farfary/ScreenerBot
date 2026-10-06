@@ -13,7 +13,7 @@ use crate::global::{
 use crate::positions;
 use crate::rpc::get_global_rpc_stats;
 use crate::tokens::cleanup::get_blacklist_summary;
-use crate::tokens::database::get_global_database;
+use crate::tokens::database::database;
 use crate::wallet::get_wallet_worth;
 use crate::webserver::promo;
 use crate::webserver::snapshot::get_cached_system_metrics;
@@ -174,7 +174,7 @@ pub async fn get_dashboard_overview(State(state): State<Arc<AppState>>) -> Json<
     };
 
     // Get blacklist info
-    let blacklist_info = if let Some(db) = get_global_database() {
+    let blacklist_info = if let Some(db) = database(crate::chains::active_chain()) {
         match get_blacklist_summary(&db) {
             Ok(summary) => {
                 let mut by_reason = HashMap::new();

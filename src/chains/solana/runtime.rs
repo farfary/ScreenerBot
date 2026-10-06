@@ -12,7 +12,7 @@
 
 use std::sync::Arc;
 
-use crate::chains::runtime::ChainRuntime;
+use crate::chains::runtime::{ChainRuntime, TokenAccountFacts};
 use crate::chains::ChainId;
 use crate::swaps::router::SwapRouter;
 use crate::wallets::watch::runtime::WalletWatchRuntime;
@@ -20,6 +20,7 @@ use crate::wallets::watch::runtime::WalletWatchRuntime;
 /// The Solana implementation of the process chain runtime.
 pub struct SolanaRuntime;
 
+#[async_trait::async_trait]
 impl ChainRuntime for SolanaRuntime {
     fn id(&self) -> ChainId {
         ChainId::Solana
@@ -31,6 +32,27 @@ impl ChainRuntime for SolanaRuntime {
 
     fn wallet_watch_runtime(&self) -> Arc<dyn WalletWatchRuntime> {
         crate::chains::solana::wallets::runtime::build_runtime()
+    }
+
+    async fn read_token_account(&self, address: &str) -> crate::chains::Result<TokenAccountFacts> {
+        match crate::chains::solana::assets::mint::fetch_mint_account(address).await {
+            Ok(mint) => Ok(TokenAccountFacts {
+                decimals: mint.decimals,
+                mint_authority: mint.mint_authority,
+                freeze_authority: mint.freeze_authority,
+            }),
+            Err(crate::chains::solana::Error::AccountNotFound { .. }) => {
+                Err(crate::chains::Error::AccountNotFound {
+                    chain: ChainId::Solana,
+                    address: address.to_owned(),
+                })
+            }
+            Err(error) => Err(crate::chains::Error::AccountRead {
+                chain: ChainId::Solana,
+                address: address.to_owned(),
+                detail: error.to_string(),
+            }),
+        }
     }
 }
 

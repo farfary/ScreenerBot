@@ -18,6 +18,20 @@ pub enum ChainId {
 }
 
 impl ChainId {
+    /// Every chain this build supports, in dense-index order.
+    pub const ALL: &'static [ChainId] = &[ChainId::Solana];
+    /// How many chains this build supports.
+    pub const COUNT: usize = Self::ALL.len();
+
+    /// The dense index of this chain inside [`Self::ALL`]; per-chain storage
+    /// arrays are indexed by it. The exhaustive match makes a new variant a
+    /// compile error until its slot is assigned.
+    pub const fn index(self) -> usize {
+        match self {
+            Self::Solana => 0,
+        }
+    }
+
     /// Returns the stable lowercase storage and wire representation.
     pub const fn as_str(self) -> &'static str {
         match self {
@@ -222,6 +236,14 @@ mod tests {
             "SOLANA".parse::<ChainId>(),
             Err(ChainError::UnsupportedChain { .. })
         ));
+    }
+
+    #[test]
+    fn every_chain_sits_at_its_own_dense_index() {
+        assert_eq!(ChainId::ALL.len(), ChainId::COUNT);
+        for (i, chain) in ChainId::ALL.iter().enumerate() {
+            assert_eq!(chain.index(), i);
+        }
     }
 
     #[test]

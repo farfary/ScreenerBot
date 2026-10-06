@@ -23,7 +23,7 @@ use teloxide::types::{ChatId, ParseMode};
 
 /// Send token explorer main menu
 pub async fn send_tokens_menu(bot: &Bot, chat_id: ChatId) -> Result<()> {
-    let stats = match crate::filtering::fetch_stats().await {
+    let stats = match crate::filtering::fetch_stats(crate::chains::ChainScope::All).await {
         Ok(s) => s,
         Err(e) => {
             let msg = row(
@@ -86,7 +86,11 @@ pub(super) async fn send_tokens_page(
         ..Default::default()
     };
 
-    let result = match crate::filtering::query_tokens(query).await {
+    let listed = match crate::chains::ChainScope::All.sole_chain() {
+        Ok(chain) => crate::filtering::query_tokens(chain, query).await,
+        Err(error) => Err(error.into()),
+    };
+    let result = match listed {
         Ok(r) => r,
         Err(e) => {
             let msg = row(
@@ -181,7 +185,7 @@ pub(super) async fn send_tokens_page(
 
 /// Send filter statistics
 pub(super) async fn send_filter_stats(bot: &Bot, chat_id: ChatId) -> Result<()> {
-    let stats = match crate::filtering::fetch_stats().await {
+    let stats = match crate::filtering::fetch_stats(crate::chains::ChainScope::All).await {
         Ok(s) => s,
         Err(e) => {
             let msg = row(
@@ -378,7 +382,8 @@ async fn find_token_by_prefix(prefix: &str) -> Option<crate::tokens::types::Toke
         ..Default::default()
     };
 
-    match crate::filtering::query_tokens(query).await {
+    let chain = crate::chains::ChainScope::All.sole_chain().ok()?;
+    match crate::filtering::query_tokens(chain, query).await {
         Ok(result) => result.items.into_iter().next(),
         _ => None,
     }
@@ -472,7 +477,10 @@ pub(super) async fn execute_token_blacklist(
     // Add to blacklist using token database
     let mint_clone = token.mint.clone();
     let blacklist_result = tokio::task::spawn_blocking(move || {
-        if let Some(db) = crate::tokens::get_global_database() {
+        if let Some(db) = crate::chains::chain_for_address(&mint_clone)
+            .ok()
+            .and_then(crate::tokens::database::database)
+        {
             crate::tokens::cleanup::blacklist_token(
                 &mint_clone,
                 "Blacklisted via Telegram",

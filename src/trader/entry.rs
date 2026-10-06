@@ -90,11 +90,14 @@ pub async fn submit_entry_with_context(
     .await;
 
     // Create action for dashboard visibility
-    let symbol = crate::tokens::get_full_token_async(&decision.mint)
-        .await
-        .ok()
-        .flatten()
-        .map(|t| t.symbol);
+    let symbol = match crate::chains::chain_for_address(&decision.mint) {
+        Ok(chain) => crate::tokens::get_full_token_async(chain, &decision.mint)
+            .await
+            .ok()
+            .flatten(),
+        Err(_) => None,
+    }
+    .map(|t| t.symbol);
 
     let action = actions::AutoOpenAction::new(
         &decision.mint,

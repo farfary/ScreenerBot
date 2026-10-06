@@ -237,7 +237,8 @@ pub async fn fetch_dexscreener_data_batch(
             continue;
         }
 
-        let is_native_pair = crate::chains::adapter().is_native_asset(&pool.quote_token_address);
+        let is_native_pair =
+            crate::chains::adapter_for(db.chain()).is_native_asset(&pool.quote_token_address);
         let data = convert_pool_to_data(&pool, is_native_pair);
 
         // Store market data in database

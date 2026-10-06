@@ -82,16 +82,19 @@ impl Tool for AnalyzeTokenTool {
         }
 
         // Get token data from database
-        let token = match tokens::get_full_token_async(&params.mint_address).await {
-            Ok(Some(t)) => t,
-            Ok(None) => {
-                return ToolResult::error(format!(
-                    "Token {} not found in database. Try fetching market data first.",
-                    params.mint_address
-                ));
-            }
-            Err(e) => return ToolResult::error(format!("Database error: {e}")),
-        };
+        let token =
+            match tokens::get_full_token_async(crate::chains::active_chain(), &params.mint_address)
+                .await
+            {
+                Ok(Some(t)) => t,
+                Ok(None) => {
+                    return ToolResult::error(format!(
+                        "Token {} not found in database. Try fetching market data first.",
+                        params.mint_address
+                    ));
+                }
+                Err(e) => return ToolResult::error(format!("Database error: {e}")),
+            };
 
         // Build analysis response
         let analysis = TokenAnalysis {
@@ -200,22 +203,30 @@ impl Tool for GetMarketDataTool {
         };
 
         // Request immediate update to get fresh market data
-        let _update_result = match tokens::request_immediate_update(&params.mint_address).await {
+        let _update_result = match tokens::request_immediate_update(
+            crate::chains::active_chain(),
+            &params.mint_address,
+        )
+        .await
+        {
             Ok(r) => r,
             Err(e) => return ToolResult::error(format!("Failed to fetch market data: {e}")),
         };
 
         // Get the updated token data
-        let token = match tokens::get_full_token_async(&params.mint_address).await {
-            Ok(Some(t)) => t,
-            Ok(None) => {
-                return ToolResult::error(format!(
-                    "Token {} not found after update",
-                    params.mint_address
-                ));
-            }
-            Err(e) => return ToolResult::error(format!("Database error: {e}")),
-        };
+        let token =
+            match tokens::get_full_token_async(crate::chains::active_chain(), &params.mint_address)
+                .await
+            {
+                Ok(Some(t)) => t,
+                Ok(None) => {
+                    return ToolResult::error(format!(
+                        "Token {} not found after update",
+                        params.mint_address
+                    ));
+                }
+                Err(e) => return ToolResult::error(format!("Database error: {e}")),
+            };
 
         let market_data = MarketData {
             mint: token.mint.clone(),
@@ -301,19 +312,23 @@ impl Tool for CheckSecurityTool {
         // Refresh first; a provider failure still falls back to the stored row,
         // but a value that is not an address has nothing to fall back to.
         if let Err(e @ tokens::Error::InvalidMint { .. }) =
-            tokens::request_immediate_update(&params.mint_address).await
+            tokens::request_immediate_update(crate::chains::active_chain(), &params.mint_address)
+                .await
         {
             return ToolResult::error(e.to_string());
         }
 
         // Get token security data
-        let token = match tokens::get_full_token_async(&params.mint_address).await {
-            Ok(Some(t)) => t,
-            Ok(None) => {
-                return ToolResult::error(format!("Token {} not found", params.mint_address));
-            }
-            Err(e) => return ToolResult::error(format!("Database error: {e}")),
-        };
+        let token =
+            match tokens::get_full_token_async(crate::chains::active_chain(), &params.mint_address)
+                .await
+            {
+                Ok(Some(t)) => t,
+                Ok(None) => {
+                    return ToolResult::error(format!("Token {} not found", params.mint_address));
+                }
+                Err(e) => return ToolResult::error(format!("Database error: {e}")),
+            };
 
         let security_data = SecurityData {
             mint: token.mint.clone(),

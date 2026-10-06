@@ -14,56 +14,6 @@ use super::TokenDatabase;
 use crate::database::WriteTransaction;
 
 impl TokenDatabase {
-    /// Update or insert a rejection record for a token
-    pub fn update_rejection_status(
-        &self,
-        mint: &str,
-        reason: &str,
-        source: &str,
-        rejected_at: i64,
-    ) -> TokenResult<()> {
-        let conn = self.conn()?;
-
-        conn.execute(
-            "UPDATE update_tracking SET 
-                last_rejection_reason = ?1, 
-                last_rejection_source = ?2, 
-                last_rejection_at = ?3 
-             WHERE chain_id = ?4 AND mint = ?5",
-            params![reason, source, rejected_at, self.chain_id(), mint],
-        )
-        .map_err(|e| {
-            Error::Database(DatabaseError::Query {
-                operation: "Failed to update rejection status".to_owned(),
-                message: e.to_string(),
-            })
-        })?;
-
-        Ok(())
-    }
-
-    /// Clear rejection status for a token that passed filtering
-    pub fn clear_rejection_status(&self, mint: &str) -> TokenResult<()> {
-        let conn = self.conn()?;
-
-        conn.execute(
-            "UPDATE update_tracking SET 
-                last_rejection_reason = NULL, 
-                last_rejection_source = NULL, 
-                last_rejection_at = NULL 
-             WHERE chain_id = ?1 AND mint = ?2",
-            params![self.chain_id(), mint],
-        )
-        .map_err(|e| {
-            Error::Database(DatabaseError::Query {
-                operation: "Failed to clear rejection status".to_owned(),
-                message: e.to_string(),
-            })
-        })?;
-
-        Ok(())
-    }
-
     /// Batch clear rejection status for multiple tokens (PERF optimization)
     /// Uses a single transaction instead of spawning individual tasks
 
@@ -496,91 +446,7 @@ impl TokenDatabase {
 
     /// Insert rejection event into history table (for time-range analytics)
 
-    pub fn insert_rejection_history(
-        &self,
-        mint: &str,
-        reason: &str,
-        source: &str,
-        rejected_at: i64,
-    ) -> TokenResult<()> {
-        let conn = self.conn()?;
-
-        conn.execute(
-            "INSERT INTO rejection_history (chain_id, mint, reason, source, rejected_at) VALUES (?1, ?2, ?3, ?4, ?5)",
-            params![self.chain_id(), mint, reason, source, rejected_at],
-        )
-        .map_err(|e| Error::Database(DatabaseError::Query { operation: "Failed to insert rejection history".to_owned(), message: e.to_string() }))?;
-
-        Ok(())
-    }
-
     /// Get rejection statistics for a specific time range
-
-    pub fn get_rejection_stats_for_range(
-        &self,
-        start_time: Option<i64>,
-        end_time: Option<i64>,
-    ) -> TokenResult<Vec<(String, String, i64)>> {
-        let conn = self.conn()?;
-
-        // If no time range specified, fall back to current rejection stats (update_tracking table)
-        if start_time.is_none() && end_time.is_none() {
-            return self.get_rejection_stats();
-        }
-
-        // Query rejection_history table for time-range stats
-        let mut query =
-            "SELECT reason, source, COUNT(*) as count FROM rejection_history WHERE chain_id = :chain_id".to_owned();
-
-        if start_time.is_some() {
-            query.push_str(" AND rejected_at >= :start_time");
-        }
-        if end_time.is_some() {
-            query.push_str(" AND rejected_at <= :end_time");
-        }
-
-        query.push_str(" GROUP BY reason, source ORDER BY count DESC");
-
-        let mut stmt = conn.prepare(&query).map_err(|e| {
-            Error::Database(DatabaseError::Query {
-                operation: "Failed to prepare".to_owned(),
-                message: e.to_string(),
-            })
-        })?;
-
-        let chain_id = self.chain_id();
-        let mut params: Vec<(&str, &dyn rusqlite::ToSql)> = vec![(":chain_id", &chain_id)];
-        if let Some(ref start) = start_time {
-            params.push((":start_time", start));
-        }
-        if let Some(ref end) = end_time {
-            params.push((":end_time", end));
-        }
-
-        let rows = stmt
-            .query_map(params.as_slice(), |row| {
-                Ok((
-                    row.get::<_, String>(0)?,
-                    row.get::<_, String>(1).unwrap_or_default(),
-                    row.get::<_, i64>(2)?,
-                ))
-            })
-            .map_err(|e| {
-                Error::Database(DatabaseError::Query {
-                    operation: "Query failed".to_owned(),
-                    message: e.to_string(),
-                })
-            })?;
-
-        let mut results = Vec::new();
-        for row in rows {
-            if let Ok(entry) = row {
-                results.push(entry);
-            }
-        }
-
-        Ok(results)
-    }
 
     /// Cleanup old rejection history entries (keep last N hours)
     /// This is critical for database size management - rejection history grows ~5GB/day
@@ -607,30 +473,6 @@ impl TokenDatabase {
 
     /// Upsert rejection stat into aggregated hourly bucket table
     /// This replaces per-event logging with O(1) aggregation
-
-    pub fn upsert_rejection_stat(
-        &self,
-        reason: &str,
-        source: &str,
-        timestamp: i64,
-    ) -> TokenResult<()> {
-        let conn = self.conn()?;
-
-        // Round timestamp to hour bucket
-        let bucket_hour = (timestamp / 3600) * 3600;
-
-        conn.execute(
-            "INSERT INTO rejection_stats (chain_id, bucket_hour, reason, source, rejection_count, unique_tokens, first_seen, last_seen)
-             VALUES (?1, ?2, ?3, ?4, 1, 1, ?5, ?5)
-             ON CONFLICT(chain_id, bucket_hour, reason, source) DO UPDATE SET
-                 rejection_count = rejection_count + 1,
-                 last_seen = ?5",
-            params![self.chain_id(), bucket_hour, reason, source, timestamp],
-        )
-        .map_err(|e| Error::Database(DatabaseError::Query { operation: "Upsert rejection stat failed".to_owned(), message: e.to_string() }))?;
-
-        Ok(())
-    }
 
     /// Get rejection statistics from aggregated table for a time range
 

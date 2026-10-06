@@ -3,7 +3,7 @@
 
 //! Token store — central in-memory store for all discovered tokens with thread-safe access.
 
-use crate::chains::ChainId;
+use crate::chains::{ChainId, PerChain};
 use crate::tokens::database;
 use crate::tokens::types::{DexScreenerData, GeckoTerminalData, RugcheckData, Token, TokenResult};
 use std::collections::HashMap;
@@ -109,43 +109,54 @@ impl TokenStore {
 static TOKEN_STORE: LazyLock<TokenStore> =
     LazyLock::new(|| TokenStore::new(Duration::from_secs(TOKEN_SNAPSHOT_TTL_SECS)));
 
-type CacheKey = (ChainId, String);
+static DEXSCREENER_CACHE: PerChain<moka::sync::Cache<String, DexScreenerData>> =
+    PerChain::new(new_dexscreener_cache);
 
-fn cache_key(chain: ChainId, mint: &str) -> CacheKey {
-    (chain, mint.to_owned())
+fn new_dexscreener_cache(_chain: ChainId) -> moka::sync::Cache<String, DexScreenerData> {
+    moka::sync::Cache::builder()
+        .max_capacity(MARKET_CACHE_CAPACITY)
+        .time_to_live(Duration::from_secs(DEXSCREENER_TTL_SECS))
+        .build()
 }
 
-static DEXSCREENER_CACHE: LazyLock<moka::sync::Cache<CacheKey, DexScreenerData>> =
-    LazyLock::new(|| {
-        moka::sync::Cache::builder()
-            .max_capacity(MARKET_CACHE_CAPACITY)
-            .time_to_live(Duration::from_secs(DEXSCREENER_TTL_SECS))
-            .build()
-    });
+static GECKOTERMINAL_CACHE: PerChain<moka::sync::Cache<String, GeckoTerminalData>> =
+    PerChain::new(new_geckoterminal_cache);
 
-static GECKOTERMINAL_CACHE: LazyLock<moka::sync::Cache<CacheKey, GeckoTerminalData>> =
-    LazyLock::new(|| {
-        moka::sync::Cache::builder()
-            .max_capacity(MARKET_CACHE_CAPACITY)
-            .time_to_live(Duration::from_secs(GECKOTERMINAL_TTL_SECS))
-            .build()
-    });
+fn new_geckoterminal_cache(_chain: ChainId) -> moka::sync::Cache<String, GeckoTerminalData> {
+    moka::sync::Cache::builder()
+        .max_capacity(MARKET_CACHE_CAPACITY)
+        .time_to_live(Duration::from_secs(GECKOTERMINAL_TTL_SECS))
+        .build()
+}
 
-static RUGCHECK_CACHE: LazyLock<moka::sync::Cache<CacheKey, RugcheckData>> = LazyLock::new(|| {
+static RUGCHECK_CACHE: PerChain<moka::sync::Cache<String, RugcheckData>> =
+    PerChain::new(new_rugcheck_cache);
+
+fn new_rugcheck_cache(_chain: ChainId) -> moka::sync::Cache<String, RugcheckData> {
     moka::sync::Cache::builder()
         .max_capacity(SECURITY_CACHE_CAPACITY)
         .time_to_live(Duration::from_secs(RUGCHECK_TTL_SECS))
         .build()
-});
+}
+
+/// Entries across every chain's slot of a per-chain cache.
+fn entry_count<V>(caches: &PerChain<moka::sync::Cache<String, V>>) -> u64
+where
+    V: Clone + Send + Sync + 'static,
+{
+    caches.built().map(|(_, cache)| cache.entry_count()).sum()
+}
 
 /// Retrieve cached DexScreener data for a token mint
 pub fn get_cached_dexscreener(chain: ChainId, mint: &str) -> Option<DexScreenerData> {
-    DEXSCREENER_CACHE.get(&cache_key(chain, mint))
+    DEXSCREENER_CACHE.get(chain).get(mint)
 }
 
 /// Cache DexScreener data for a token mint
 pub fn store_dexscreener(chain: ChainId, mint: &str, data: &DexScreenerData) {
-    DEXSCREENER_CACHE.insert(cache_key(chain, mint), data.clone());
+    DEXSCREENER_CACHE
+        .get(chain)
+        .insert(mint.to_owned(), data.clone());
 }
 
 /// Get DexScreener cache usage metrics
@@ -155,23 +166,25 @@ pub fn dexscreener_cache_metrics() -> CacheMetrics {
         misses: 0,
         evictions: 0,
         expirations: 0,
-        inserts: DEXSCREENER_CACHE.entry_count(),
+        inserts: entry_count(&DEXSCREENER_CACHE),
     }
 }
 
 /// Number of entries in the DexScreener cache
 pub fn dexscreener_cache_size() -> usize {
-    DEXSCREENER_CACHE.entry_count() as usize
+    entry_count(&DEXSCREENER_CACHE) as usize
 }
 
 /// Retrieve cached GeckoTerminal data for a token mint
 pub fn get_cached_geckoterminal(chain: ChainId, mint: &str) -> Option<GeckoTerminalData> {
-    GECKOTERMINAL_CACHE.get(&cache_key(chain, mint))
+    GECKOTERMINAL_CACHE.get(chain).get(mint)
 }
 
 /// Cache GeckoTerminal data for a token mint
 pub fn store_geckoterminal(chain: ChainId, mint: &str, data: &GeckoTerminalData) {
-    GECKOTERMINAL_CACHE.insert(cache_key(chain, mint), data.clone());
+    GECKOTERMINAL_CACHE
+        .get(chain)
+        .insert(mint.to_owned(), data.clone());
 }
 
 /// Get GeckoTerminal cache usage metrics
@@ -181,23 +194,25 @@ pub fn geckoterminal_cache_metrics() -> CacheMetrics {
         misses: 0,
         evictions: 0,
         expirations: 0,
-        inserts: GECKOTERMINAL_CACHE.entry_count(),
+        inserts: entry_count(&GECKOTERMINAL_CACHE),
     }
 }
 
 /// Number of entries in the GeckoTerminal cache
 pub fn geckoterminal_cache_size() -> usize {
-    GECKOTERMINAL_CACHE.entry_count() as usize
+    entry_count(&GECKOTERMINAL_CACHE) as usize
 }
 
 /// Retrieve cached Rugcheck data for a token mint
 pub fn get_cached_rugcheck(chain: ChainId, mint: &str) -> Option<RugcheckData> {
-    RUGCHECK_CACHE.get(&cache_key(chain, mint))
+    RUGCHECK_CACHE.get(chain).get(mint)
 }
 
 /// Cache Rugcheck data for a token mint
 pub fn store_rugcheck(chain: ChainId, mint: &str, data: &RugcheckData) {
-    RUGCHECK_CACHE.insert(cache_key(chain, mint), data.clone());
+    RUGCHECK_CACHE
+        .get(chain)
+        .insert(mint.to_owned(), data.clone());
 }
 
 /// Get Rugcheck cache usage metrics
@@ -207,13 +222,13 @@ pub fn rugcheck_cache_metrics() -> CacheMetrics {
         misses: 0,
         evictions: 0,
         expirations: 0,
-        inserts: RUGCHECK_CACHE.entry_count(),
+        inserts: entry_count(&RUGCHECK_CACHE),
     }
 }
 
 /// Number of entries in the Rugcheck cache
 pub fn rugcheck_cache_size() -> usize {
-    RUGCHECK_CACHE.entry_count() as usize
+    entry_count(&RUGCHECK_CACHE) as usize
 }
 
 /// Retrieve a cached assembled token snapshot
@@ -233,7 +248,7 @@ pub fn invalidate_token_snapshot(chain: ChainId, mint: &str) {
 
 /// Rebuild and cache a token snapshot from database
 pub async fn refresh_token_snapshot(chain: ChainId, mint: &str) -> TokenResult<Option<Token>> {
-    let token = database::get_full_token_async(mint).await?;
+    let token = database::get_full_token_async(chain, mint).await?;
     match token.clone() {
         Some(snapshot) => store_token_snapshot(chain, snapshot),
         None => invalidate_token_snapshot(chain, mint),
@@ -249,13 +264,19 @@ pub async fn get_full_token_async(chain: ChainId, mint: &str) -> TokenResult<Opt
     refresh_token_snapshot(chain, mint).await
 }
 
-/// Invalidate all DexScreener and GeckoTerminal cache entries
+/// Invalidate all DexScreener and GeckoTerminal cache entries, on every chain
 pub fn clear_all_market_caches() {
-    DEXSCREENER_CACHE.invalidate_all();
-    GECKOTERMINAL_CACHE.invalidate_all();
+    for (_, cache) in DEXSCREENER_CACHE.built() {
+        cache.invalidate_all();
+    }
+    for (_, cache) in GECKOTERMINAL_CACHE.built() {
+        cache.invalidate_all();
+    }
 }
 
-/// Invalidate all Rugcheck cache entries
+/// Invalidate all Rugcheck cache entries, on every chain
 pub fn clear_security_cache() {
-    RUGCHECK_CACHE.invalidate_all();
+    for (_, cache) in RUGCHECK_CACHE.built() {
+        cache.invalidate_all();
+    }
 }

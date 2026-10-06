@@ -747,11 +747,14 @@ impl ManualAddAction {
 /// This ensures errors that occur BEFORE the main trading logic are still tracked in the UI.
 pub async fn create_failed_buy_action(mint: &str, error: &str) {
     // Try to get symbol
-    let symbol = crate::tokens::get_full_token_async(mint)
-        .await
-        .ok()
-        .flatten()
-        .map(|t| t.symbol);
+    let symbol = match crate::chains::chain_for_address(mint) {
+        Ok(chain) => crate::tokens::get_full_token_async(chain, mint)
+            .await
+            .ok()
+            .flatten(),
+        Err(_) => None,
+    }
+    .map(|t| t.symbol);
 
     if let Ok(action) = ManualBuyAction::new(mint, symbol.as_deref(), 0.0).await {
         action.start_validation().await;
@@ -761,11 +764,14 @@ pub async fn create_failed_buy_action(mint: &str, error: &str) {
 
 /// Create an immediate-failure action for preflight sell errors
 pub async fn create_failed_sell_action(mint: &str, error: &str) {
-    let symbol = crate::tokens::get_full_token_async(mint)
-        .await
-        .ok()
-        .flatten()
-        .map(|t| t.symbol);
+    let symbol = match crate::chains::chain_for_address(mint) {
+        Ok(chain) => crate::tokens::get_full_token_async(chain, mint)
+            .await
+            .ok()
+            .flatten(),
+        Err(_) => None,
+    }
+    .map(|t| t.symbol);
 
     if let Ok(action) = ManualSellAction::new(mint, symbol.as_deref(), 100.0, None).await {
         action.start_validation().await;
@@ -775,11 +781,14 @@ pub async fn create_failed_sell_action(mint: &str, error: &str) {
 
 /// Create an immediate-failure action for preflight add (DCA) errors
 pub async fn create_failed_add_action(mint: &str, error: &str) {
-    let symbol = crate::tokens::get_full_token_async(mint)
-        .await
-        .ok()
-        .flatten()
-        .map(|t| t.symbol);
+    let symbol = match crate::chains::chain_for_address(mint) {
+        Ok(chain) => crate::tokens::get_full_token_async(chain, mint)
+            .await
+            .ok()
+            .flatten(),
+        Err(_) => None,
+    }
+    .map(|t| t.symbol);
 
     if let Ok(action) = ManualAddAction::new(mint, symbol.as_deref(), 0.0, None).await {
         action.start_validation().await;

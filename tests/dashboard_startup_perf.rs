@@ -38,6 +38,11 @@ mod common;
 
 use std::time::{Duration, Instant};
 
+use screenerbot::chains::{ChainId, ChainScope};
+
+/// The cloned real database is the Solana token database.
+const CHAIN: ChainId = ChainId::Solana;
+
 /// Ceiling for the candidate batch load. The query returns single-digit thousands of rows
 /// on the owner's database; anything approaching a second means it went back to scanning
 /// the whole `tokens` table instead of entering through a market-data index. Measured at
@@ -73,17 +78,17 @@ async fn candidate_load_is_index_driven() {
 
     // Warm pass first: the first touch of a freshly cloned file pays page-cache faults
     // that have nothing to do with the query plan.
-    let _ = screenerbot::tokens::get_all_tokens_for_filtering_async()
+    let _ = screenerbot::tokens::get_all_tokens_for_filtering_async(CHAIN)
         .await
         .expect("warm candidate load");
 
     let started = Instant::now();
-    let tokens = screenerbot::tokens::get_all_tokens_for_filtering_async()
+    let tokens = screenerbot::tokens::get_all_tokens_for_filtering_async(CHAIN)
         .await
         .expect("candidate load");
     let elapsed = started.elapsed();
 
-    let total = screenerbot::tokens::count_tokens_async()
+    let total = screenerbot::tokens::count_tokens_async(ChainScope::One(CHAIN))
         .await
         .expect("count tokens");
 
@@ -114,12 +119,12 @@ async fn first_snapshot_fits_refresh_interval() {
     let Some(_env) = setup() else { return };
 
     let started = Instant::now();
-    screenerbot::filtering::refresh()
+    screenerbot::filtering::refresh(ChainScope::One(CHAIN))
         .await
         .expect("build first snapshot");
     let elapsed = started.elapsed();
 
-    let stats = screenerbot::filtering::try_fetch_stats()
+    let stats = screenerbot::filtering::try_fetch_stats(ChainScope::One(CHAIN))
         .await
         .expect("stats present after an explicit refresh");
 
@@ -143,7 +148,7 @@ async fn header_stats_do_not_block_on_first_snapshot() {
     // Deliberately do NOT build a snapshot first. This is the state a freshly launched
     // app is in, and the state in which the header used to hang for its full 30s timeout.
     let started = Instant::now();
-    let stats = screenerbot::filtering::try_fetch_stats().await;
+    let stats = screenerbot::filtering::try_fetch_stats(ChainScope::One(CHAIN)).await;
     let elapsed = started.elapsed();
 
     eprintln!(
@@ -166,13 +171,14 @@ async fn token_count_is_cheap_under_snapshot_load() {
 
     // Kick off a real snapshot build and, while it is running, ask for the count the home
     // dashboard's token panel needs. On launch these two genuinely do overlap.
-    let build = tokio::spawn(async { screenerbot::filtering::refresh().await });
+    let build =
+        tokio::spawn(async { screenerbot::filtering::refresh(ChainScope::One(CHAIN)).await });
 
     // Give the build long enough to be inside its batch load, holding the connection.
     tokio::time::sleep(Duration::from_millis(150)).await;
 
     let started = Instant::now();
-    let count = screenerbot::tokens::count_tokens_async()
+    let count = screenerbot::tokens::count_tokens_async(ChainScope::One(CHAIN))
         .await
         .expect("count tokens under load");
     let elapsed = started.elapsed();

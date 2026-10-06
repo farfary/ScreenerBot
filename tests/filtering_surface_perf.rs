@@ -39,6 +39,11 @@ mod common;
 
 use std::time::{Duration, Instant};
 
+use screenerbot::chains::{ChainId, ChainScope};
+
+/// The cloned real database is the Solana token database.
+const CHAIN: ChainId = ChainId::Solana;
+
 /// The Status tab's rejection breakdown, re-read every 5 seconds while the tab is open.
 /// Covered by `idx_tracking_rejection_reason` it groups ~26 reasons out of an index; without
 /// it, it scans all 453k `update_tracking` rows (measured 366 ms against 42 ms warm).
@@ -70,7 +75,7 @@ fn setup() -> Option<tempfile::TempDir> {
 /// The rejection reason holding the most tokens — the one Explore opens on, and the worst
 /// case for a query that has to sort within a reason.
 async fn largest_rejection_reason() -> Option<(String, i64)> {
-    let stats = screenerbot::tokens::get_rejection_stats_async()
+    let stats = screenerbot::tokens::get_rejection_stats_async(CHAIN)
         .await
         .expect("rejection stats");
 
@@ -89,12 +94,12 @@ async fn status_tab_rejection_stats_are_index_driven() {
 
     // Warm pass: the first touch of a freshly cloned file pays page-cache faults that have
     // nothing to do with the query plan.
-    let _ = screenerbot::tokens::get_rejection_stats_async()
+    let _ = screenerbot::tokens::get_rejection_stats_async(CHAIN)
         .await
         .expect("warm rejection stats");
 
     let started = Instant::now();
-    let stats = screenerbot::tokens::get_rejection_stats_async()
+    let stats = screenerbot::tokens::get_rejection_stats_async(CHAIN)
         .await
         .expect("rejection stats");
     let elapsed = started.elapsed();
@@ -119,17 +124,19 @@ async fn analytics_tab_reads_are_index_driven() {
     let Some(_env) = setup() else { return };
 
     // Warm pass over both reads the analytics endpoint makes.
-    let _ = screenerbot::tokens::get_rejection_stats_with_time_filter_async(None, None).await;
-    let _ = screenerbot::tokens::get_recent_rejections_async(20).await;
+    let _ =
+        screenerbot::tokens::get_rejection_stats_with_time_filter_async(CHAIN, None, None).await;
+    let _ = screenerbot::tokens::get_recent_rejections_async(CHAIN, 20).await;
 
     let started = Instant::now();
-    let breakdown = screenerbot::tokens::get_rejection_stats_with_time_filter_async(None, None)
-        .await
-        .expect("rejection breakdown");
+    let breakdown =
+        screenerbot::tokens::get_rejection_stats_with_time_filter_async(CHAIN, None, None)
+            .await
+            .expect("rejection breakdown");
     let breakdown_elapsed = started.elapsed();
 
     let started = Instant::now();
-    let recent = screenerbot::tokens::get_recent_rejections_async(20)
+    let recent = screenerbot::tokens::get_recent_rejections_async(CHAIN, 20)
         .await
         .expect("recent rejections");
     let recent_elapsed = started.elapsed();
@@ -172,6 +179,7 @@ async fn explore_tab_pages_are_index_driven() {
 
     // Warm pass, so the measurement is of the plan rather than the filesystem.
     let _ = screenerbot::tokens::get_rejected_tokens_async(
+        CHAIN,
         Some(reason.clone()),
         None,
         None,
@@ -182,6 +190,7 @@ async fn explore_tab_pages_are_index_driven() {
 
     let started = Instant::now();
     let first = screenerbot::tokens::get_rejected_tokens_async(
+        CHAIN,
         Some(reason.clone()),
         None,
         None,
@@ -194,6 +203,7 @@ async fn explore_tab_pages_are_index_driven() {
 
     let started = Instant::now();
     let deep = screenerbot::tokens::get_rejected_tokens_async(
+        CHAIN,
         Some(reason.clone()),
         None,
         None,
@@ -241,15 +251,22 @@ async fn opening_the_filtering_tab_never_waits_for_a_snapshot() {
     // in which the tab used to sit blank for tens of seconds.
     let started = Instant::now();
     let (stats, rejection_stats, analytics_breakdown, recent, explore_page) = tokio::join!(
-        screenerbot::filtering::try_fetch_stats(),
-        screenerbot::tokens::get_rejection_stats_async(),
-        screenerbot::tokens::get_rejection_stats_with_time_filter_async(None, None),
-        screenerbot::tokens::get_recent_rejections_async(20),
+        screenerbot::filtering::try_fetch_stats(ChainScope::One(CHAIN)),
+        screenerbot::tokens::get_rejection_stats_async(CHAIN),
+        screenerbot::tokens::get_rejection_stats_with_time_filter_async(CHAIN, None, None),
+        screenerbot::tokens::get_recent_rejections_async(CHAIN, 20),
         async {
             match reason.clone() {
                 Some(reason) => {
-                    screenerbot::tokens::get_rejected_tokens_async(Some(reason), None, None, 50, 0)
-                        .await
+                    screenerbot::tokens::get_rejected_tokens_async(
+                        CHAIN,
+                        Some(reason),
+                        None,
+                        None,
+                        50,
+                        0,
+                    )
+                    .await
                 }
                 None => Ok(Vec::new()),
             }

@@ -263,11 +263,14 @@ async fn publish(task: Option<String>, announcement: Announcement) {
         }
     }
     let token_symbol = match &mint {
-        Some(mint) => crate::tokens::get_token_info_batch_async(vec![mint.clone()])
-            .await
-            .ok()
-            .and_then(|mut info| info.remove(mint))
-            .and_then(|(symbol, _, _)| symbol),
+        Some(mint) => match crate::chains::chain_for_address(mint) {
+            Ok(chain) => crate::tokens::get_token_info_batch_async(chain, vec![mint.clone()])
+                .await
+                .ok(),
+            Err(_) => None,
+        }
+        .and_then(|mut info| info.remove(mint))
+        .and_then(|(symbol, _, _)| symbol),
         None => None,
     };
     crate::telegram::notifier::queue_notification(Notification::new(

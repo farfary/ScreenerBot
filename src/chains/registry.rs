@@ -11,7 +11,7 @@ use std::collections::HashMap;
 use std::sync::{Arc, OnceLock};
 
 use crate::chains::runtime::ChainRuntime;
-use crate::chains::{solana, ChainId, ChainMetadata};
+use crate::chains::{adapter_for, solana, ChainId, ChainMetadata, Error, Result};
 
 /// A fixed registry of supported blockchain metadata.
 #[derive(Debug, Clone)]
@@ -74,6 +74,26 @@ pub fn enabled_chains() -> &'static [ChainId] {
         .as_slice()
 }
 
+/// The single enabled chain whose adapter accepts `address`.
+///
+/// No accepting chain is [`Error::UnrecognizedAddress`]; more than one is
+/// [`Error::AmbiguousChain`] — the caller's input does not say which chain it
+/// means, so none is chosen.
+pub fn chain_for_address(address: &str) -> Result<ChainId> {
+    let candidates: Vec<ChainId> = enabled_chains()
+        .iter()
+        .copied()
+        .filter(|&chain| adapter_for(chain).validate_address(address).is_ok())
+        .collect();
+    match candidates.as_slice() {
+        [] => Err(Error::UnrecognizedAddress {
+            value: address.to_owned(),
+        }),
+        [only] => Ok(*only),
+        _ => Err(Error::AmbiguousChain { candidates }),
+    }
+}
+
 /// Install the runtime of every enabled chain, once per boot, from the
 /// composition root (`crate::run::services`). A disabled chain gets no
 /// runtime, no process seams and no services.
@@ -101,7 +121,8 @@ static RUNTIMES: OnceLock<HashMap<ChainId, Arc<dyn ChainRuntime>>> = OnceLock::n
 
 #[cfg(test)]
 mod tests {
-    use super::{enabled_chains, install_enabled_runtimes, runtime_for};
+    use super::{chain_for_address, enabled_chains, install_enabled_runtimes, runtime_for};
+    use crate::chains::Error;
     use crate::chains::{solana, solana::constants::SOL_MINT, ChainId, ChainRegistry};
 
     #[test]
@@ -122,6 +143,15 @@ mod tests {
         // Test binaries never load config; the default ChainsConfig enables
         // every supported chain.
         assert_eq!(enabled_chains(), [ChainId::Solana]);
+    }
+
+    #[test]
+    fn an_address_resolves_to_the_single_chain_that_accepts_it() {
+        assert_eq!(chain_for_address(SOL_MINT).unwrap(), ChainId::Solana);
+        assert!(matches!(
+            chain_for_address("not an address"),
+            Err(Error::UnrecognizedAddress { .. })
+        ));
     }
 
     #[test]

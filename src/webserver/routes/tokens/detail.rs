@@ -15,7 +15,7 @@ use crate::{
     logger::{self, LogTag},
     native_price::get_native_price,
     pools, positions,
-    tokens::database::get_global_database,
+    tokens::database::database,
 };
 
 /// GET /api/tokens/:mint
@@ -29,15 +29,16 @@ pub async fn get_token_detail(Path(mint): Path<String>) -> Json<TokenDetailRespo
 
     // Fetch token from database (with market data)
     let lookup_start = std::time::Instant::now();
-    let snapshot = match crate::tokens::get_full_token_async(&mint).await {
-        Ok(Some(snap)) => Some(snap),
-        // Not in our DB yet — fetch from external APIs (DexScreener/Jupiter) and
-        // add it, so opening a token we have not tracked (e.g. from the featured
-        // or search) shows real data instead of an empty NOT_FOUND stub. Mirrors
-        // get_token_analysis.
-        Ok(None) => fetch_and_add_token_from_external(&mint).await,
-        Err(_) => None,
-    };
+    let snapshot =
+        match crate::tokens::get_full_token_async(crate::chains::active_chain(), &mint).await {
+            Ok(Some(snap)) => Some(snap),
+            // Not in our DB yet — fetch from external APIs (DexScreener/Jupiter) and
+            // add it, so opening a token we have not tracked (e.g. from the featured
+            // or search) shows real data instead of an empty NOT_FOUND stub. Mirrors
+            // get_token_analysis.
+            Ok(None) => fetch_and_add_token_from_external(&mint).await,
+            Err(_) => None,
+        };
     logger::debug(
         LogTag::Webserver,
         &format!(
@@ -256,7 +257,7 @@ pub async fn get_token_detail(Path(mint): Path<String>) -> Json<TokenDetailRespo
         if fallback_pool.is_none() {
             let mint_clone = mint.clone();
             if let Ok(Some(ds)) = tokio::task::spawn_blocking(move || {
-                get_global_database()
+                database(crate::chains::active_chain())
                     .and_then(|db| db.get_dexscreener_data(&mint_clone).ok().flatten())
             })
             .await
@@ -274,7 +275,7 @@ pub async fn get_token_detail(Path(mint): Path<String>) -> Json<TokenDetailRespo
             // token/WSOL only when the snapshot has no record of the pool.
             let (mint_lookup, pool_lookup) = (mint.clone(), pool_id.clone());
             let matched = tokio::task::spawn_blocking(move || {
-                get_global_database()
+                database(crate::chains::active_chain())
                     .and_then(|db| db.get_token_pools(&mint_lookup).ok().flatten())
                     .and_then(|snap| {
                         snap.pools
@@ -392,7 +393,7 @@ pub async fn get_token_detail(Path(mint): Path<String>) -> Json<TokenDetailRespo
     );
 
     let has_pool_price = price_sol.is_some();
-    let blacklisted = if let Some(db) = get_global_database() {
+    let blacklisted = if let Some(db) = database(crate::chains::active_chain()) {
         let mint_clone = mint.clone();
         let db_clone = db.clone();
         match tokio::task::spawn_blocking(move || db_clone.is_blacklisted(&mint_clone)).await {
@@ -617,7 +618,7 @@ pub async fn get_token_detail(Path(mint): Path<String>) -> Json<TokenDetailRespo
     // Same order as every other surface (`tokens::media`): the metadata logo the
     // data service reported, then the profile icon (read directly here so a
     // signed-out install still shows it), then the provider's picture.
-    let logo_url = crate::tokens::media::override_logo(&mint)
+    let logo_url = crate::tokens::media::override_logo(crate::chains::active_chain(), &mint)
         .or_else(|| {
             published_profile
                 .as_ref()
@@ -689,21 +690,21 @@ pub async fn get_token_detail(Path(mint): Path<String>) -> Json<TokenDetailRespo
     // Per-source presence for the dialog "no data" row: check each market/security
     // table independently (a token may have DexScreener but not GeckoTerminal, or
     // vice versa) in one blocking hop.
-    let (has_dexscreener, has_geckoterminal, has_rugcheck) = if let Some(db) = get_global_database()
-    {
-        let mint_owned = mint.clone();
-        tokio::task::spawn_blocking(move || {
-            (
-                matches!(db.get_dexscreener_data(&mint_owned), Ok(Some(_))),
-                matches!(db.get_geckoterminal_data(&mint_owned), Ok(Some(_))),
-                matches!(db.get_rugcheck_data(&mint_owned), Ok(Some(_))),
-            )
-        })
-        .await
-        .unwrap_or((false, false, false))
-    } else {
-        (false, false, false)
-    };
+    let (has_dexscreener, has_geckoterminal, has_rugcheck) =
+        if let Some(db) = database(crate::chains::active_chain()) {
+            let mint_owned = mint.clone();
+            tokio::task::spawn_blocking(move || {
+                (
+                    matches!(db.get_dexscreener_data(&mint_owned), Ok(Some(_))),
+                    matches!(db.get_geckoterminal_data(&mint_owned), Ok(Some(_))),
+                    matches!(db.get_rugcheck_data(&mint_owned), Ok(Some(_))),
+                )
+            })
+            .await
+            .unwrap_or((false, false, false))
+        } else {
+            (false, false, false)
+        };
     let source_status =
         build_source_status(has_dexscreener, has_geckoterminal, has_rugcheck, has_ohlcv).await;
 
@@ -809,49 +810,50 @@ pub async fn get_token_analysis(
     );
 
     // Fetch token from database, or try external APIs if not found
-    let token = match crate::tokens::get_full_token_async(&mint).await {
-        Ok(Some(t)) => t,
-        Ok(None) => {
-            // Token not in database - try to fetch from external APIs
-            logger::debug(
-                LogTag::Webserver,
-                &format!("Token not in DB, trying external APIs: mint={mint}"),
-            );
+    let token =
+        match crate::tokens::get_full_token_async(crate::chains::active_chain(), &mint).await {
+            Ok(Some(t)) => t,
+            Ok(None) => {
+                // Token not in database - try to fetch from external APIs
+                logger::debug(
+                    LogTag::Webserver,
+                    &format!("Token not in DB, trying external APIs: mint={mint}"),
+                );
 
-            match fetch_and_add_token_from_external(&mint).await {
-                Some(t) => {
-                    logger::info(
-                        LogTag::Webserver,
-                        &format!(
+                match fetch_and_add_token_from_external(&mint).await {
+                    Some(t) => {
+                        logger::info(
+                            LogTag::Webserver,
+                            &format!(
                             "Token fetched from external API and added to DB: mint={} symbol={}",
                             mint, t.symbol
                         ),
-                    );
-                    t
-                }
-                None => {
-                    logger::debug(
-                        LogTag::Webserver,
-                        &format!("Token not found in DB or external APIs: mint={mint}"),
-                    );
-                    return Err(ApiError::new(
-                        ApiErrorCode::NotFound,
-                        ids::ERRORS_TOKENS_DETAIL_NOT_FOUND,
-                    ));
+                        );
+                        t
+                    }
+                    None => {
+                        logger::debug(
+                            LogTag::Webserver,
+                            &format!("Token not found in DB or external APIs: mint={mint}"),
+                        );
+                        return Err(ApiError::new(
+                            ApiErrorCode::NotFound,
+                            ids::ERRORS_TOKENS_DETAIL_NOT_FOUND,
+                        ));
+                    }
                 }
             }
-        }
-        Err(e) => {
-            logger::warning(
-                LogTag::Webserver,
-                &format!("Failed to fetch token: mint={mint} error={e}"),
-            );
-            return Err(
-                ApiError::new(ApiErrorCode::Internal, ids::ERRORS_TOKENS_FETCH_FAILED)
-                    .details(e.to_string()),
-            );
-        }
-    };
+            Err(e) => {
+                logger::warning(
+                    LogTag::Webserver,
+                    &format!("Failed to fetch token: mint={mint} error={e}"),
+                );
+                return Err(
+                    ApiError::new(ApiErrorCode::Internal, ids::ERRORS_TOKENS_FETCH_FAILED)
+                        .details(e.to_string()),
+                );
+            }
+        };
 
     // Get pool data for liquidity analysis
     let pool_descriptors = crate::chains::solana::pools::service::get_token_pools(&mint);
@@ -1039,7 +1041,7 @@ pub async fn refresh_token_data(
         &format!("Force refresh requested for mint={mint}"),
     );
 
-    match crate::tokens::request_immediate_update(&mint).await {
+    match crate::tokens::request_immediate_update(crate::chains::active_chain(), &mint).await {
         Ok(result) => {
             if result.is_success() {
                 logger::info(

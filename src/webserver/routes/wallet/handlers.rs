@@ -13,6 +13,8 @@ use axum::{
 };
 use std::collections::HashMap;
 
+use crate::chains::ChainId;
+
 use super::types::*;
 use crate::logger::{self, LogTag};
 use crate::wallet::{
@@ -222,11 +224,23 @@ async fn enrich_token_holdings(
 
     let mints: Vec<String> = token_balances.iter().map(|tb| tb.mint.clone()).collect();
 
+    // Each held mint is read from its own chain's token database; a mint no enabled
+    // chain accepts has no stored metadata, logo or price.
+    let mut mints_by_chain: HashMap<ChainId, Vec<String>> = HashMap::new();
+    for mint in &mints {
+        if let Ok(chain) = crate::chains::chain_for_address(mint) {
+            mints_by_chain.entry(chain).or_default().push(mint.clone());
+        }
+    }
+
     // Identify never-seen mints (no metadata row at all) and bootstrap them once.
     // A mint already in the DB — even one whose market fetch previously failed and
     // only has a stamped decimals row — is treated as cached and skipped.
-    if let Some(db) = crate::tokens::database::get_global_database() {
-        let unknown: Vec<String> = mints
+    for (&chain, chain_mints) in &mints_by_chain {
+        let Some(db) = crate::tokens::database::database(chain) else {
+            continue;
+        };
+        let unknown: Vec<String> = chain_mints
             .iter()
             .filter(|m| !matches!(db.get_token(m), Ok(Some(_))))
             .cloned()
@@ -239,7 +253,7 @@ async fn enrich_token_holdings(
             );
             let fetches = unknown
                 .iter()
-                .map(|mint| crate::tokens::ensure_token_available(mint));
+                .map(|mint| crate::tokens::ensure_token_available(chain, mint));
             // Failures are non-fatal (no market data yet) — the row is still stamped.
             let _ = futures::future::join_all(fetches).await;
         }
@@ -247,28 +261,36 @@ async fn enrich_token_holdings(
 
     // Batch-read metadata (symbol/name) and logos from the token DB cache.
     let mut metadata_map: HashMap<String, (Option<String>, Option<String>)> = HashMap::new();
-    if let Some(db) = crate::tokens::database::get_global_database() {
-        for mint in &mints {
-            if let Ok(Some(meta)) = db.get_token(mint) {
-                metadata_map.insert(mint.clone(), (meta.symbol.clone(), meta.name.clone()));
+    let mut logo_map: HashMap<String, String> = HashMap::new();
+    for (&chain, chain_mints) in &mints_by_chain {
+        if let Some(db) = crate::tokens::database::database(chain) {
+            for mint in chain_mints {
+                if let Ok(Some(meta)) = db.get_token(mint) {
+                    metadata_map.insert(mint.clone(), (meta.symbol.clone(), meta.name.clone()));
+                }
             }
         }
+        logo_map.extend(
+            crate::tokens::database::get_token_images_batch_async(chain, chain_mints.clone())
+                .await
+                .unwrap_or_default(),
+        );
     }
-    let logo_map = crate::tokens::database::get_token_images_batch_async(mints.clone())
-        .await
-        .unwrap_or_default();
 
     // Latest price in SOL per mint, sourced from the assembled token's market data
     // (None for mints without market data — they simply show no value).
-    let price_fetches = mints.iter().map(|mint| async move {
-        let price = crate::tokens::database::get_full_token_async(mint)
-            .await
-            .ok()
-            .flatten()
-            .map(|t| t.price_sol)
-            .filter(|p| *p > 0.0);
-        (mint.clone(), price)
-    });
+    let price_fetches = mints_by_chain
+        .iter()
+        .flat_map(|(&chain, chain_mints)| chain_mints.iter().map(move |mint| (chain, mint)))
+        .map(|(chain, mint)| async move {
+            let price = crate::tokens::database::get_full_token_async(chain, mint)
+                .await
+                .ok()
+                .flatten()
+                .map(|t| t.price_sol)
+                .filter(|p| *p > 0.0);
+            (mint.clone(), price)
+        });
     let price_map: HashMap<String, Option<f64>> = futures::future::join_all(price_fetches)
         .await
         .into_iter()

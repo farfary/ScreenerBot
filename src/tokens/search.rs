@@ -13,8 +13,9 @@ use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
 
 use crate::apis::get_api_manager;
+use crate::chains::{adapter_for, ChainId};
 use crate::logger::{self, LogTag};
-use crate::tokens::database::get_global_database;
+use crate::tokens::database::database;
 
 // =============================================================================
 // SEARCH TYPES
@@ -51,8 +52,8 @@ pub struct SearchResults {
 /// This ensures tokens discovered via search are available for future lookups
 /// and can be used by the token analyzer.
 /// Returns true if token was successfully persisted, false otherwise.
-async fn persist_token_to_database(result: &TokenSearchResult) -> bool {
-    let db = match get_global_database() {
+async fn persist_token_to_database(chain: ChainId, result: &TokenSearchResult) -> bool {
+    let db = match database(chain) {
         Some(db) => db,
         None => return false,
     };
@@ -130,6 +131,7 @@ async fn persist_token_to_database(result: &TokenSearchResult) -> bool {
 /// - Otherwise, use DexScreener's search endpoint
 /// - Deduplicate results by mint address, preferring DexScreener data
 pub async fn search_tokens(
+    chain: ChainId,
     query: &str,
     limit: Option<usize>,
 ) -> crate::tokens::Result<SearchResults> {
@@ -153,7 +155,7 @@ pub async fn search_tokens(
     let mut results_map: HashMap<String, TokenSearchResult> = HashMap::new();
 
     // If it looks like a mint address, do direct lookups
-    if crate::chains::adapter().looks_like_address(query) {
+    if adapter_for(chain).looks_like_address(query) {
         logger::debug(
             LogTag::Api,
             &format!(
@@ -234,7 +236,7 @@ pub async fn search_tokens(
 
                     // Filter to only Solana tokens and deduplicate by mint
                     for pool in pools {
-                        if pool.chain_id != crate::chains::adapter().market_data_network() {
+                        if pool.chain_id != adapter_for(chain).market_data_network() {
                             continue;
                         }
                         if results_map.len() >= max_results {
@@ -277,7 +279,7 @@ pub async fn search_tokens(
     // This ensures tokens discovered via search can be used by analyzer and other features
     let mut persisted_count = 0;
     for result in &results {
-        if persist_token_to_database(result).await {
+        if persist_token_to_database(chain, result).await {
             persisted_count += 1;
         }
     }
@@ -301,9 +303,11 @@ pub async fn search_tokens(
 
 #[cfg(test)]
 mod tests {
+    use super::*;
+
     #[test]
     fn test_is_mint_address() {
-        let adapter = crate::chains::adapter();
+        let adapter = adapter_for(ChainId::Solana);
 
         // Valid Solana addresses
         assert!(adapter.looks_like_address("So11111111111111111111111111111111111111112"));

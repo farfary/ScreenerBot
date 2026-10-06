@@ -92,7 +92,7 @@ pub async fn get_home_dashboard(State(state): State<Arc<AppState>>) -> Json<Home
         // to 30 seconds for the first snapshot to be built, so a freshly-launched app sat
         // in its loading state for that entire timeout on every launch. Counts that are
         // briefly absent cost nothing; a dashboard that will not paint costs everything.
-        crate::filtering::try_fetch_stats(),
+        crate::filtering::try_fetch_stats(crate::chains::ChainScope::All),
     );
 
     // Convert from database PeriodTradingStats to dashboard TradingPeriodStats
@@ -367,7 +367,7 @@ pub async fn get_home_dashboard(State(state): State<Arc<AppState>>) -> Json<Home
     // whole tokio worker for the duration — measured at 8.9s against the owner's database.
     // With few workers, a couple of concurrent dashboard polls doing this starved the
     // runtime, which is why unrelated panels (wallet, positions) stalled together.
-    let total_in_database = crate::tokens::count_tokens_async()
+    let total_in_database = crate::tokens::count_tokens_async(crate::chains::ChainScope::All)
         .await
         .unwrap_or_default();
 

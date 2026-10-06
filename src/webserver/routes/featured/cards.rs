@@ -60,7 +60,8 @@ struct DbStats {
 
 /// Read a token's stats from our database. `None` when we do not track it.
 async fn enrich_from_db(mint: String) -> Option<DbStats> {
-    let token = tokens::get_full_token_async(&mint).await.ok()??;
+    let chain = crate::chains::chain_for_address(&mint).ok()?;
+    let token = tokens::get_full_token_async(chain, &mint).await.ok()??;
 
     Some(DbStats {
         name: Some(token.name),

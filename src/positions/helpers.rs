@@ -82,7 +82,10 @@ async fn fetch_and_create_token_snapshot(
     snapshot_type: &str,
 ) -> Result<TokenSnapshot> {
     // Read token from the unified tokens store
-    let token = crate::tokens::get_full_token_async(mint)
+    let chain = crate::chains::chain_for_address(mint).map_err(|_| Error::TokenNotFound {
+        mint: mint.to_owned(),
+    })?;
+    let token = crate::tokens::get_full_token_async(chain, mint)
         .await
         .map_err(|_| Error::TokenNotFound {
             mint: mint.to_owned(),

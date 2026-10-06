@@ -110,7 +110,7 @@ pub async fn add_to_position(
     .await;
 
     // Get API token for swap
-    let api_token = crate::tokens::get_full_token_async(token_mint)
+    let api_token = crate::tokens::get_full_token_async(crate::chains::active_chain(), token_mint)
         .await
         .map_err(|_| Error::TokenNotFound {
             mint: token_mint.to_owned(),

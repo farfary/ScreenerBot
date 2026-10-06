@@ -43,6 +43,8 @@ pub mod store;
 pub mod types;
 pub mod updates;
 
+use crate::chains::ChainId;
+
 // Re-export main types for convenience
 pub use database::{
     // Batch async functions (PERF optimization - reduces 260k tasks to 4)
@@ -53,31 +55,23 @@ pub use database::{
     cleanup_rejection_history_async,
     cleanup_rejection_stats_async,
     // Async wrappers for external code
-    clear_rejection_status_async,
     count_tokens_async,
     count_tokens_no_market_async,
     get_all_tokens_for_filtering_async,
     get_all_tokens_optional_market_async,
     get_full_token_async,
-    get_full_token_for_source_async,
-    get_global_database,
     get_recent_rejections_async,
     get_rejected_tokens_async,
     get_rejection_stats_aggregated_async,
     get_rejection_stats_async,
-    get_rejection_stats_for_range_async,
     get_rejection_stats_with_time_filter_async,
     get_token_async,
     get_token_info_batch_async,
     get_tokens_no_market_async,
-    init_global_database,
-    insert_rejection_history_async,
-    is_market_data_stale_async,
+    // Per-chain database handles
+    install_database,
     list_blacklisted_tokens_async,
-    list_tokens_async,
-    update_rejection_status_async,
-    update_token_priority_async,
-    upsert_rejection_stat_async,
+    uninstall_databases,
     TokenBlacklistRecord,
     TokenDatabase,
 };
@@ -158,6 +152,7 @@ pub use favorites::{
 /// - Rugcheck (security data)
 ///
 /// # Arguments
+/// * `chain` - The chain the token lives on
 /// * `mint` - Token address to update
 ///
 /// # Returns
@@ -165,25 +160,28 @@ pub use favorites::{
 ///
 /// # Example
 /// ```no_run
-/// match request_immediate_update("TokenMintAddress").await {
+/// # async fn example(chain: screenerbot::chains::ChainId) {
+/// match screenerbot::tokens::request_immediate_update(chain, "TokenMintAddress").await {
 ///     Ok(result) if result.is_success() => println!("Updated successfully"),
 ///     Ok(result) => println!("Update failed: {:?}", result.failures),
 ///     Err(e) => println!("Error: {e}"),
 /// }
+/// # }
 /// ```
-pub async fn request_immediate_update(mint: &str) -> TokenResult<UpdateResult> {
+pub async fn request_immediate_update(chain: ChainId, mint: &str) -> TokenResult<UpdateResult> {
     // Every caller (dashboard refresh, agent tools, position pricing) funnels
     // through here, so a value that is not an address is refused before any
     // external provider sees it.
-    if crate::chains::adapter().validate_address(mint).is_err() {
+    if crate::chains::adapter_for(chain)
+        .validate_address(mint)
+        .is_err()
+    {
         return Err(Error::InvalidMint {
             value: mint.to_owned(),
         });
     }
 
-    let db = get_global_database().ok_or_else(|| Error::NotInitialized {
-        resource: "Token database not initialized".to_owned(),
-    })?;
+    let db = database::require_database(chain)?;
 
     let coordinator = service::get_rate_coordinator().ok_or_else(|| Error::NotInitialized {
         resource: "Rate limit coordinator not available".to_owned(),
@@ -202,13 +200,10 @@ pub async fn request_immediate_update(mint: &str) -> TokenResult<UpdateResult> {
 ///
 /// Returns the assembled [`Token`] or an error if the token still has no market data
 /// (in which case it cannot be priced or swapped anyway).
-pub async fn ensure_token_available(mint: &str) -> TokenResult<Token> {
+pub async fn ensure_token_available(chain: ChainId, mint: &str) -> TokenResult<Token> {
     // Fast path: token already known (discovered, has market data) — covers
     // not-pool-tracked and filter-failed tokens shown in the dashboard.
-    let db = get_global_database().ok_or_else(|| Error::NotInitialized {
-        resource: "Token database not initialized".to_owned(),
-    })?;
-    let chain = db.chain();
+    let db = database::require_database(chain)?;
     if let Some(token) = store::get_full_token_async(chain, mint).await? {
         return Ok(token);
     }
@@ -219,15 +214,13 @@ pub async fn ensure_token_available(mint: &str) -> TokenResult<Token> {
     );
 
     // Stamp a metadata row so the token is persisted, fetching decimals from chain.
-    if let Some(db) = get_global_database() {
-        let decimals = decimals::get_token_decimals_from_chain(db.chain(), mint)
-            .await
-            .ok();
-        let _ = db.upsert_token(mint, None, None, decimals);
-    }
+    let decimals = decimals::get_token_decimals_from_chain(chain, mint)
+        .await
+        .ok();
+    let _ = db.upsert_token(mint, None, None, decimals);
 
     // Best-effort: pull market/security data from APIs (failure is non-fatal).
-    if let Err(e) = request_immediate_update(mint).await {
+    if let Err(e) = request_immediate_update(chain, mint).await {
         crate::logger::warning(
             crate::logger::LogTag::Tokens,
             &format!("On-demand market fetch for {mint} failed: {e}"),

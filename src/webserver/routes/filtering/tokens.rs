@@ -11,6 +11,7 @@ use axum::{
 use chrono::{DateTime, Utc};
 
 use crate::{
+    chains::ChainScope,
     filtering::sources::rejection_text,
     i18n::{ids, source_locale, LanguageIdentifier},
     logger::{self, LogTag},
@@ -29,15 +30,29 @@ pub async fn get_rejected_tokens_handler(Query(params): Query<RejectedTokensQuer
     let limit = params.limit.unwrap_or(50).min(100); // Max 100 per page
     let offset = params.offset.unwrap_or_default();
 
-    match get_rejected_tokens_async(params.reason, params.source, params.search, limit, offset)
+    // The rejection tables are per chain; a route without a chain reads the only one.
+    let rejected = match ChainScope::All.sole_chain() {
+        Ok(chain) => get_rejected_tokens_async(
+            chain,
+            params.reason,
+            params.source,
+            params.search,
+            limit,
+            offset,
+        )
         .await
-    {
-        Ok(tokens) => {
+        .map(|tokens| (chain, tokens)),
+        Err(err) => Err(err.into()),
+    };
+    match rejected {
+        Ok((chain, tokens)) => {
             // Collect mints for batch token info lookup
             let mints: Vec<String> = tokens.iter().map(|(mint, _, _, _)| mint.clone()).collect();
 
             // Fetch token info (symbol, name, image) in a single batch query
-            let token_info = get_token_info_batch_async(mints).await.unwrap_or_default();
+            let token_info = get_token_info_batch_async(chain, mints)
+                .await
+                .unwrap_or_default();
 
             let entries: Vec<RejectedTokenEntry> = tokens
                 .into_iter()
@@ -84,9 +99,21 @@ pub async fn export_rejected_tokens(Query(params): Query<RejectedTokensQuery>) -
     let limit = 100000;
     let offset = 0;
 
-    match get_rejected_tokens_async(params.reason, params.source, params.search, limit, offset)
-        .await
-    {
+    let rejected = match ChainScope::All.sole_chain() {
+        Ok(chain) => {
+            get_rejected_tokens_async(
+                chain,
+                params.reason,
+                params.source,
+                params.search,
+                limit,
+                offset,
+            )
+            .await
+        }
+        Err(err) => Err(err.into()),
+    };
+    match rejected {
         Ok(tokens) => {
             let mut wtr = csv::Writer::from_writer(vec![]);
             // Write header

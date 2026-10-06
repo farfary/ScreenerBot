@@ -988,7 +988,7 @@ pub async fn get_best_quote_for_opening(
 /// `manual` entries as the owner's own choices, so an automatic retirement
 /// filed under `manual` would misreport who excluded the token.
 fn retire_token(mint: &str, symbol: &str, reason: &str, cause: &QuoteError) {
-    let Some(db) = crate::tokens::database::get_global_database() else {
+    let Some(db) = crate::tokens::database::database(crate::chains::active_chain()) else {
         return;
     };
     match crate::tokens::cleanup::blacklist_token(mint, reason, "auto_swap_route", &db) {

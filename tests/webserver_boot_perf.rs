@@ -15,6 +15,7 @@
 use std::sync::Arc;
 use std::time::{Duration, Instant};
 
+use screenerbot::chains::ChainScope;
 use screenerbot::filtering;
 use screenerbot::i18n::{self, LanguageIdentifier};
 use screenerbot::webserver::routes;
@@ -45,7 +46,7 @@ const FIRST_PAINT_BUDGET: Duration = Duration::from_millis(500);
 #[tokio::test]
 async fn filtering_counts_never_block_the_first_paint() {
     let started = Instant::now();
-    let stats = filtering::try_fetch_stats().await;
+    let stats = filtering::try_fetch_stats(ChainScope::All).await;
     let elapsed = started.elapsed();
 
     assert!(
@@ -66,7 +67,7 @@ async fn filtering_counts_never_block_the_first_paint() {
     // Asking again must stay just as cheap — a refresh is now in flight, and the second
     // caller must not queue behind it either.
     let started = Instant::now();
-    let _ = filtering::try_fetch_stats().await;
+    let _ = filtering::try_fetch_stats(ChainScope::All).await;
     let elapsed = started.elapsed();
 
     assert!(

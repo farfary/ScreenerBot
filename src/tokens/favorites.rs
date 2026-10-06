@@ -8,7 +8,8 @@ use crate::errors::{DatabaseError, InternalError};
 use rusqlite::{params, Connection, OptionalExtension};
 use serde::{Deserialize, Serialize};
 
-use crate::tokens::database::get_global_database;
+use crate::chains::ChainId;
+use crate::tokens::database::{database, require_database};
 use crate::tokens::types::TokenResult;
 use crate::tokens::Error;
 
@@ -303,10 +304,11 @@ pub fn get_favorites_count(conn: &Connection, chain_id: &str) -> TokenResult<usi
 // =============================================================================
 
 /// Add a favorite (async wrapper)
-pub async fn add_favorite_async(request: AddFavoriteRequest) -> TokenResult<FavoriteToken> {
-    let db = get_global_database().ok_or_else(|| Error::NotInitialized {
-        resource: "Token database not initialized".to_owned(),
-    })?;
+pub async fn add_favorite_async(
+    chain: ChainId,
+    request: AddFavoriteRequest,
+) -> TokenResult<FavoriteToken> {
+    let db = require_database(chain)?;
 
     tokio::task::spawn_blocking(move || {
         let conn = db.conn()?;
@@ -317,10 +319,8 @@ pub async fn add_favorite_async(request: AddFavoriteRequest) -> TokenResult<Favo
 }
 
 /// Remove a favorite (async wrapper)
-pub async fn remove_favorite_async(mint: String) -> TokenResult<bool> {
-    let db = get_global_database().ok_or_else(|| Error::NotInitialized {
-        resource: "Token database not initialized".to_owned(),
-    })?;
+pub async fn remove_favorite_async(chain: ChainId, mint: String) -> TokenResult<bool> {
+    let db = require_database(chain)?;
 
     tokio::task::spawn_blocking(move || {
         let conn = db.conn()?;
@@ -331,10 +331,8 @@ pub async fn remove_favorite_async(mint: String) -> TokenResult<bool> {
 }
 
 /// Get all favorites (async wrapper)
-pub async fn get_favorites_async() -> TokenResult<Vec<FavoriteToken>> {
-    let db = get_global_database().ok_or_else(|| Error::NotInitialized {
-        resource: "Token database not initialized".to_owned(),
-    })?;
+pub async fn get_favorites_async(chain: ChainId) -> TokenResult<Vec<FavoriteToken>> {
+    let db = require_database(chain)?;
 
     tokio::task::spawn_blocking(move || {
         let conn = db.conn()?;
@@ -345,10 +343,11 @@ pub async fn get_favorites_async() -> TokenResult<Vec<FavoriteToken>> {
 }
 
 /// Get a single favorite (async wrapper)
-pub async fn get_favorite_async(mint: String) -> TokenResult<Option<FavoriteToken>> {
-    let db = get_global_database().ok_or_else(|| Error::NotInitialized {
-        resource: "Token database not initialized".to_owned(),
-    })?;
+pub async fn get_favorite_async(
+    chain: ChainId,
+    mint: String,
+) -> TokenResult<Option<FavoriteToken>> {
+    let db = require_database(chain)?;
 
     tokio::task::spawn_blocking(move || {
         let conn = db.conn()?;
@@ -360,12 +359,11 @@ pub async fn get_favorite_async(mint: String) -> TokenResult<Option<FavoriteToke
 
 /// Update a favorite (async wrapper)
 pub async fn update_favorite_async(
+    chain: ChainId,
     mint: String,
     request: UpdateFavoriteRequest,
 ) -> TokenResult<Option<FavoriteToken>> {
-    let db = get_global_database().ok_or_else(|| Error::NotInitialized {
-        resource: "Token database not initialized".to_owned(),
-    })?;
+    let db = require_database(chain)?;
 
     tokio::task::spawn_blocking(move || {
         let conn = db.conn()?;
@@ -376,8 +374,8 @@ pub async fn update_favorite_async(
 }
 
 /// Check if a token is in favorites (async wrapper)
-pub async fn is_favorite_async(mint: String) -> bool {
-    let Some(db) = get_global_database() else {
+pub async fn is_favorite_async(chain: ChainId, mint: String) -> bool {
+    let Some(db) = database(chain) else {
         return false;
     };
 
@@ -390,10 +388,8 @@ pub async fn is_favorite_async(mint: String) -> bool {
 }
 
 /// Get count of favorites (async wrapper)
-pub async fn get_favorites_count_async() -> TokenResult<usize> {
-    let db = get_global_database().ok_or_else(|| Error::NotInitialized {
-        resource: "Token database not initialized".to_owned(),
-    })?;
+pub async fn get_favorites_count_async(chain: ChainId) -> TokenResult<usize> {
+    let db = require_database(chain)?;
 
     tokio::task::spawn_blocking(move || {
         let conn = db.conn()?;

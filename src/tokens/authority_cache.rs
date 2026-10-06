@@ -14,35 +14,40 @@
 // This module does NOT fetch from chain itself — it relies on decimals.rs
 // calling `cache_mint_authorities()` when it unpacks SPL Mint data.
 
-use std::sync::LazyLock;
+use std::collections::HashSet;
+use std::sync::Arc;
 
-use crate::chains::ChainId;
+use arc_swap::ArcSwap;
+
+use crate::chains::{ChainId, PerChain};
 use crate::logger::{self, LogTag};
 
-type CacheKey = (ChainId, String);
-
-fn cache_key(chain: ChainId, address: &str) -> CacheKey {
-    (chain, address.to_owned())
-}
-
-/// Authority data extracted from SPL Mint account (zero extra RPC cost)
+/// Authority data extracted from a token's account (zero extra RPC cost)
 #[derive(Clone, Debug)]
 pub struct MintAuthorities {
     pub mint_authority: Option<String>,
     pub freeze_authority: Option<String>,
-    pub supply: u64,
 }
 
-// In-memory cache — mint address → authorities
-// Bounded to 100K entries (same as decimals cache)
-static AUTHORITIES_CACHE: LazyLock<moka::sync::Cache<CacheKey, MintAuthorities>> =
-    LazyLock::new(|| moka::sync::Cache::builder().max_capacity(100_000).build());
+// In-memory cache per chain — mint address → authorities
+// Bounded to 100K entries per chain (same as the decimals cache)
+static AUTHORITIES_CACHE: PerChain<moka::sync::Cache<String, MintAuthorities>> =
+    PerChain::new(new_authorities_cache);
 
-// Blocked authorities set — addresses confirmed as scam factories
+fn new_authorities_cache(_chain: ChainId) -> moka::sync::Cache<String, MintAuthorities> {
+    moka::sync::Cache::builder().max_capacity(100_000).build()
+}
+
+// Blocked authorities set per chain — addresses confirmed as scam factories
 // Loaded from DB on startup, refreshed periodically by background task
-// Uses ArcSwap for atomic replacement (no race condition during refresh)
-static BLOCKED_AUTHORITIES: LazyLock<arc_swap::ArcSwap<dashmap::DashSet<CacheKey>>> =
-    LazyLock::new(|| arc_swap::ArcSwap::from_pointee(dashmap::DashSet::new()));
+// Uses ArcSwap for atomic replacement (no race condition during refresh); a
+// refresh replaces only its own chain's set
+static BLOCKED_AUTHORITIES: PerChain<ArcSwap<HashSet<String>>> =
+    PerChain::new(new_blocked_authorities);
+
+fn new_blocked_authorities(_chain: ChainId) -> ArcSwap<HashSet<String>> {
+    ArcSwap::from_pointee(HashSet::new())
+}
 
 // ============================================================================
 // PUBLIC API — FILTERING (hot path, sync)
@@ -50,14 +55,12 @@ static BLOCKED_AUTHORITIES: LazyLock<arc_swap::ArcSwap<dashmap::DashSet<CacheKey
 
 /// Check if an authority address is in the blocked set. O(1), no DB/RPC calls.
 pub fn is_blocked_authority(chain: ChainId, address: &str) -> bool {
-    BLOCKED_AUTHORITIES
-        .load()
-        .contains(&cache_key(chain, address))
+    BLOCKED_AUTHORITIES.get(chain).load().contains(address)
 }
 
 /// Get cached authorities for a mint (sync, instant)
 pub fn get_cached(chain: ChainId, mint: &str) -> Option<MintAuthorities> {
-    AUTHORITIES_CACHE.get(&cache_key(chain, mint))
+    AUTHORITIES_CACHE.get(chain).get(mint)
 }
 
 // ============================================================================
@@ -67,7 +70,9 @@ pub fn get_cached(chain: ChainId, mint: &str) -> Option<MintAuthorities> {
 /// Cache authorities extracted from SPL Mint during decimals fetch.
 /// This is called as a side effect — zero extra RPC cost.
 pub fn cache_mint_authorities(chain: ChainId, mint: &str, authorities: MintAuthorities) {
-    AUTHORITIES_CACHE.insert(cache_key(chain, mint), authorities);
+    AUTHORITIES_CACHE
+        .get(chain)
+        .insert(mint.to_owned(), authorities);
 }
 
 // ============================================================================
@@ -84,26 +89,26 @@ pub struct AuthorityReputation {
     pub is_blocked: bool,
 }
 
-/// Refresh the in-memory blocked set from the database.
+/// Refresh `chain`'s in-memory blocked set from the database.
 /// Called on startup and periodically by the background discovery task.
-/// Uses atomic swap — no race condition during refresh.
+/// Uses atomic swap — no race condition during refresh — and replaces only
+/// this chain's set.
 pub fn refresh_blocked_from_db(chain: ChainId, blocked_addresses: Vec<String>) {
-    let new_set = dashmap::DashSet::new();
-    for addr in &blocked_addresses {
-        new_set.insert(cache_key(chain, addr));
-    }
-    BLOCKED_AUTHORITIES.store(std::sync::Arc::new(new_set));
+    let count = blocked_addresses.len();
+    let new_set: HashSet<String> = blocked_addresses.into_iter().collect();
+    BLOCKED_AUTHORITIES.get(chain).store(Arc::new(new_set));
     logger::info(
         LogTag::Filtering,
-        &format!(
-            "Authority reputation refreshed: {} blocked authorities loaded",
-            blocked_addresses.len()
-        ),
+        &format!("Authority reputation refreshed: {count} blocked authorities loaded"),
     );
 }
 
-/// Clear all caches (for testing/reset)
+/// Clear all caches on every chain (for testing/reset)
 pub fn clear_cache() {
-    AUTHORITIES_CACHE.invalidate_all();
-    BLOCKED_AUTHORITIES.store(std::sync::Arc::new(dashmap::DashSet::new()));
+    for (_, cache) in AUTHORITIES_CACHE.built() {
+        cache.invalidate_all();
+    }
+    for (_, blocked) in BLOCKED_AUTHORITIES.built() {
+        blocked.store(Arc::new(HashSet::new()));
+    }
 }

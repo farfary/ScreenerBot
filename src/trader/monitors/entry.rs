@@ -86,7 +86,7 @@ pub async fn monitor_entries(
 
         // Get tokens that passed filtering — only these should be evaluated for entry
         let passed_mints: std::collections::HashSet<String> =
-            match crate::filtering::get_passed_tokens().await {
+            match crate::filtering::get_passed_tokens(crate::chains::ChainScope::All).await {
                 Ok(tokens) => tokens.into_iter().map(|t| t.mint).collect(),
                 Err(e) => {
                     logger::warning(

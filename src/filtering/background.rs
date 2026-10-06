@@ -14,6 +14,7 @@ use std::time::Duration;
 
 use tokio::sync::Notify;
 
+use crate::chains::ChainId;
 use crate::filtering;
 use crate::logger::{self, LogTag};
 use crate::telegram::pagination::PAGINATION_MANAGER;
@@ -50,6 +51,7 @@ pub fn snapshot_stale_limit_secs() -> u64 {
 /// 3. Detects newly passed tokens by comparing snapshots
 /// 4. Sends Telegram notifications for new tokens
 pub async fn run_refresh_loop(
+    chain: ChainId,
     shutdown: Arc<Notify>,
     operations: Arc<AtomicU64>,
     errors: Arc<AtomicU64>,
@@ -59,8 +61,9 @@ pub async fn run_refresh_loop(
     // race it against shutdown so a stop mid-refresh returns at once (and stays parked
     // on notified() so the one-shot shutdown broadcast is never missed) instead of
     // hanging until the ServiceManager's per-task shutdown timeout.
+    let store = filtering::store(chain);
     logger::info(LogTag::Filtering, "Starting initial filtering refresh...");
-    match run_or_shutdown(&shutdown, filtering::refresh()).await {
+    match run_or_shutdown(&shutdown, store.refresh()).await {
         None => return,
         Some(Ok(_)) => {
             operations.fetch_add(1, Ordering::Relaxed);
@@ -83,10 +86,10 @@ pub async fn run_refresh_loop(
         }
 
         // Capture state before refresh
-        let prev_passed = filtering::get_passed_tokens().await.unwrap_or_default();
+        let prev_passed = store.get_passed_tokens().await.unwrap_or_default();
         let prev_mints: HashSet<String> = prev_passed.iter().map(|t| t.mint.clone()).collect();
 
-        let refresh_result = match run_or_shutdown(&shutdown, filtering::refresh()).await {
+        let refresh_result = match run_or_shutdown(&shutdown, store.refresh()).await {
             None => break,
             Some(result) => result,
         };
@@ -95,7 +98,7 @@ pub async fn run_refresh_loop(
                 operations.fetch_add(1, Ordering::Relaxed);
 
                 // Check for new tokens
-                if let Ok(current_passed) = filtering::get_passed_tokens().await {
+                if let Ok(current_passed) = store.get_passed_tokens().await {
                     let new_tokens: Vec<_> = current_passed
                         .into_iter()
                         .filter(|t| !prev_mints.contains(&t.mint))
@@ -134,7 +137,7 @@ pub async fn run_refresh_loop(
 /// 2. Then continues with periodic cleanup every `REJECTION_HISTORY_CLEANUP_INTERVAL_SECS`
 /// 3. Removes rejection_history entries older than `REJECTION_HISTORY_HOURS_TO_KEEP`
 /// 4. Removes rejection_stats buckets older than `REJECTION_HISTORY_HOURS_TO_KEEP`
-pub async fn run_cleanup_loop(shutdown: Arc<Notify>) {
+pub async fn run_cleanup_loop(chain: ChainId, shutdown: Arc<Notify>) {
     // Do initial cleanup immediately on start
     logger::info(
         LogTag::Filtering,
@@ -142,7 +145,7 @@ pub async fn run_cleanup_loop(shutdown: Arc<Notify>) {
     );
 
     // Cleanup old rejection_history entries
-    match cleanup_rejection_history_async(REJECTION_HISTORY_HOURS_TO_KEEP).await {
+    match cleanup_rejection_history_async(chain, REJECTION_HISTORY_HOURS_TO_KEEP).await {
         Ok(deleted) => {
             if deleted > 0 {
                 logger::info(
@@ -163,7 +166,7 @@ pub async fn run_cleanup_loop(shutdown: Arc<Notify>) {
     }
 
     // Cleanup old rejection_stats entries (aggregated hourly buckets)
-    match cleanup_rejection_stats_async(REJECTION_HISTORY_HOURS_TO_KEEP).await {
+    match cleanup_rejection_stats_async(chain, REJECTION_HISTORY_HOURS_TO_KEEP).await {
         Ok(deleted) => {
             if deleted > 0 {
                 logger::info(
@@ -191,7 +194,7 @@ pub async fn run_cleanup_loop(shutdown: Arc<Notify>) {
         }
 
         // Cleanup rejection_history
-        match cleanup_rejection_history_async(REJECTION_HISTORY_HOURS_TO_KEEP).await {
+        match cleanup_rejection_history_async(chain, REJECTION_HISTORY_HOURS_TO_KEEP).await {
             Ok(deleted) => {
                 if deleted > 0 {
                     logger::debug(
@@ -212,7 +215,7 @@ pub async fn run_cleanup_loop(shutdown: Arc<Notify>) {
         }
 
         // Cleanup rejection_stats (aggregated hourly buckets)
-        match cleanup_rejection_stats_async(REJECTION_HISTORY_HOURS_TO_KEEP).await {
+        match cleanup_rejection_stats_async(chain, REJECTION_HISTORY_HOURS_TO_KEEP).await {
             Ok(deleted) => {
                 if deleted > 0 {
                     logger::debug(

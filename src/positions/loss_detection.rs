@@ -10,7 +10,7 @@ use super::{
 use crate::config::with_config;
 use crate::logger::{self, LogTag};
 use crate::tokens::cleanup;
-use crate::tokens::database::get_global_database;
+use crate::tokens::database::database;
 
 use super::error::{Error, Result};
 
@@ -75,7 +75,17 @@ pub async fn process_position_loss_detection(position: &Position) -> Result<()> 
         let threshold = with_config(|cfg| cfg.positions.loss_blacklist_threshold_pct);
         if net_pnl_percent <= threshold {
             // Add to database-backed blacklist
-            if let Some(db) = get_global_database() {
+            let chain = match crate::chains::chain_for_address(&position.mint) {
+                Ok(chain) => chain,
+                Err(e) => {
+                    logger::warning(
+                        LogTag::Positions,
+                        &format!("Failed to blacklist {}: {}", position.symbol, e),
+                    );
+                    return Err(e.into());
+                }
+            };
+            if let Some(db) = database(chain) {
                 let reason = match &position.origin {
                     PositionOrigin::Copy {
                         task_id,

@@ -12,7 +12,7 @@ use crate::llm_analysis::types::{EvaluationContext, Priority};
 use crate::logger::{self, LogTag};
 use crate::positions::state::POSITIONS;
 use crate::tokens::cleanup::blacklist_token;
-use crate::tokens::database::get_global_database;
+use crate::tokens::database::require_database;
 use std::sync::Arc;
 use std::time::Duration;
 use tokio::sync::Notify;
@@ -92,34 +92,40 @@ pub async fn background_check_loop(engine: Arc<AnalysisEngine>, shutdown: Arc<No
                             );
 
                             // Get database and blacklist the token
-                            if let Some(db) = get_global_database() {
-                                let blacklist_reason = format!(
-                                    "LLM analysis auto-blacklist: {} ({}% confidence)",
-                                    result
-                                        .decision
-                                        .reasoning
-                                        .chars()
-                                        .take(100)
-                                        .collect::<String>(),
-                                    result.decision.confidence
-                                );
+                            let db = crate::chains::chain_for_address(&mint)
+                                .map_err(crate::tokens::Error::from)
+                                .and_then(require_database);
+                            match db {
+                                Ok(db) => {
+                                    let blacklist_reason = format!(
+                                        "LLM analysis auto-blacklist: {} ({}% confidence)",
+                                        result
+                                            .decision
+                                            .reasoning
+                                            .chars()
+                                            .take(100)
+                                            .collect::<String>(),
+                                        result.decision.confidence
+                                    );
 
-                                if let Err(e) = blacklist_token(
-                                    &mint,
-                                    &blacklist_reason,
-                                    "auto_llm_analysis",
-                                    &db,
-                                ) {
+                                    if let Err(e) = blacklist_token(
+                                        &mint,
+                                        &blacklist_reason,
+                                        "auto_llm_analysis",
+                                        &db,
+                                    ) {
+                                        logger::error(
+                                            LogTag::Filtering,
+                                            &format!("Failed to blacklist token {mint}: {e}"),
+                                        );
+                                    }
+                                }
+                                Err(e) => {
                                     logger::error(
                                         LogTag::Filtering,
-                                        &format!("Failed to blacklist token {mint}: {e}"),
+                                        &format!("Cannot blacklist token {mint}: {e}"),
                                     );
                                 }
-                            } else {
-                                logger::error(
-                                    LogTag::Filtering,
-                                    "Cannot blacklist token: database not available",
-                                );
                             }
                         }
                     }

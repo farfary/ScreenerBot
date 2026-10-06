@@ -5,10 +5,10 @@
 //! behaviour.
 //!
 //! The two injected factories (swap routers, the wallet-watch
-//! runtime) behind it. Later units add methods as their domains thread the
-//! chain through (discovery, pool pricing, OHLCV,
-//! wallets, trading) — a method without a caller is forbidden until
-//! then. Neutral code resolves an instance through
+//! runtime) and the token-account read behind it. Later units add
+//! methods as their domains thread the chain through (discovery, pool
+//! pricing, OHLCV, wallets, trading) — a method without a caller is
+//! forbidden until then. Neutral code resolves an instance through
 //! [`crate::chains::runtime_for`] and never names a concrete chain module.
 
 use std::sync::Arc;
@@ -17,7 +17,17 @@ use crate::chains::ChainId;
 use crate::swaps::router::SwapRouter;
 use crate::wallets::watch::runtime::WalletWatchRuntime;
 
+/// Decimals and authorities of a token's on-chain account, in the chain's own
+/// address spelling.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct TokenAccountFacts {
+    pub decimals: u8,
+    pub mint_authority: Option<String>,
+    pub freeze_authority: Option<String>,
+}
+
 /// Chain behaviour installed once at boot for every enabled chain.
+#[async_trait::async_trait]
 pub trait ChainRuntime: Send + Sync + 'static {
     /// The chain this runtime serves.
     fn id(&self) -> ChainId;
@@ -25,4 +35,6 @@ pub trait ChainRuntime: Send + Sync + 'static {
     fn swap_routers(&self) -> Vec<Arc<dyn SwapRouter>>;
     /// The wallet-watch execution runtime for this chain.
     fn wallet_watch_runtime(&self) -> Arc<dyn WalletWatchRuntime>;
+    /// Read a token's account from the chain: its decimals and authorities.
+    async fn read_token_account(&self, address: &str) -> crate::chains::Result<TokenAccountFacts>;
 }

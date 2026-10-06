@@ -677,7 +677,7 @@ fn copy_db(source: &Path, target: &Path, name: &str) -> u64 {
     total
 }
 
-/// Open the cloned tokens database and register it as the process-global one, then
+/// Open the cloned tokens database and install it as the Solana token database, then
 /// preload the decimals cache exactly as `tokens::service` does at startup.
 ///
 /// The preload is not an optimisation here, it is what keeps the tier offline: any lookup
@@ -685,7 +685,7 @@ fn copy_db(source: &Path, target: &Path, name: &str) -> u64 {
 /// it the same way the service does also means the tests measure the cache the running bot
 /// actually has, including its capacity limit.
 pub fn init_real_token_db() -> std::sync::Arc<screenerbot::tokens::TokenDatabase> {
-    use screenerbot::tokens::{cache_decimals, init_global_database, TokenDatabase};
+    use screenerbot::tokens::{cache_decimals, install_database, TokenDatabase};
 
     let path = screenerbot::chains::get_tokens_db_path();
     let db = std::sync::Arc::new(
@@ -695,7 +695,7 @@ pub fn init_real_token_db() -> std::sync::Arc<screenerbot::tokens::TokenDatabase
         )
         .expect("open cloned tokens.db"),
     );
-    init_global_database(db.clone()).expect("register global token database");
+    install_database(db.clone());
 
     let started = std::time::Instant::now();
     let decimals = db

@@ -847,8 +847,13 @@ impl TokenDatabase {
                 name: name.unwrap_or_else(|| "Unknown Token".to_owned()),
                 decimals,
                 description: None,
-                image_url: crate::tokens::media::resolve_logo(&mint, resolved_image_url),
+                image_url: crate::tokens::media::resolve_logo(
+                    self.chain(),
+                    &mint,
+                    resolved_image_url,
+                ),
                 header_image_url: crate::tokens::media::resolve_banner(
+                    self.chain(),
                     &mint,
                     resolved_header_image_url,
                 ),

@@ -335,11 +335,14 @@ pub async fn monitor_positions(
             Ok(dca_decisions) => {
                 for decision in dca_decisions {
                     // Get symbol for action
-                    let symbol = crate::tokens::get_full_token_async(&decision.mint)
-                        .await
-                        .ok()
-                        .flatten()
-                        .map(|t| t.symbol);
+                    let symbol = match crate::chains::chain_for_address(&decision.mint) {
+                        Ok(chain) => crate::tokens::get_full_token_async(chain, &decision.mint)
+                            .await
+                            .ok()
+                            .flatten(),
+                        Err(_) => None,
+                    }
+                    .map(|t| t.symbol);
 
                     // Create DCA action for dashboard visibility
                     let action = actions::AutoDcaAction::new(

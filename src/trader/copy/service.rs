@@ -3,7 +3,7 @@
 
 //! Runtime paper/live consumer of the shared wallet-observation broadcast.
 
-use std::collections::HashMap;
+use std::collections::{HashMap, HashSet};
 use std::sync::Arc;
 
 use chrono::Utc;
@@ -182,23 +182,31 @@ async fn process_activity(
         return process_sell_activity(database, activity, &tasks, mint, &target_holdings_before)
             .await;
     }
-    // The filter check is fetched once for the tasks that require it; a task
-    // that does not require it sees a pass.
+    // The filter check is fetched once per chain of the tasks that require it;
+    // a task that does not require it sees a pass.
     let any_requires_filter = tasks
         .iter()
         .any(|task| task.requires_filter_pass(require_filter_pass));
-    let filter_passed = if any_requires_filter {
-        crate::filtering::get_filtered_token_mints()
+    let mut filter_passed_chains = HashSet::new();
+    let mut filter_checked_chains = HashSet::new();
+    for task in &tasks {
+        if !task.requires_filter_pass(require_filter_pass)
+            || !filter_checked_chains.insert(task.chain)
+        {
+            continue;
+        }
+        let passed = crate::filtering::get_filtered_token_mints(task.chain)
             .await
             .map_err(|e| crate::trader::Error::Dependency {
                 dependency: "filtering",
                 detail: e.to_string(),
             })?
             .iter()
-            .any(|passed| passed == mint)
-    } else {
-        true
-    };
+            .any(|passed| passed == mint);
+        if passed {
+            filter_passed_chains.insert(task.chain);
+        }
+    }
     let mut spend = HashMap::new();
     let mut risk = HashMap::new();
     let own_addresses = crate::wallets::list_wallets(true)
@@ -222,7 +230,8 @@ async fn process_activity(
                     .iter()
                     .any(|address| address == &task.target_address),
                 mint_blacklisted: crate::trader::safety::is_blacklisted(mint).await,
-                filter_passed: filter_passed || !task.requires_filter_pass(require_filter_pass),
+                filter_passed: filter_passed_chains.contains(&task.chain)
+                    || !task.requires_filter_pass(require_filter_pass),
                 ..RiskContext::default()
             },
         );

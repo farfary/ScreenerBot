@@ -30,38 +30,46 @@ mod security;
 mod tracking;
 
 use crate::errors::DatabaseError;
+use arc_swap::ArcSwapOption;
 use r2d2::{Pool, PooledConnection};
 use r2d2_sqlite::SqliteConnectionManager;
-use std::sync::{Arc, Mutex};
+use std::sync::Arc;
 
-use crate::chains::ChainId;
+use crate::chains::{ChainId, PerChain};
 use crate::tokens::types::TokenResult;
 use crate::tokens::Error;
 
-// Global database instance for easy access
-static GLOBAL_DB: Mutex<Option<Arc<TokenDatabase>>> = Mutex::new(None);
+// One installed database handle per chain. A slot is written once per boot,
+// after its chain's file opens and before that chain's loops start; reads are
+// lock-free.
+static DATABASES: PerChain<ArcSwapOption<TokenDatabase>> = PerChain::new(empty_database_slot);
 
-/// Initialize global database (called by service)
-pub fn init_global_database(db: Arc<TokenDatabase>) -> crate::tokens::Result<()> {
-    let mut guard =
-        GLOBAL_DB
-            .lock()
-            .map_err(|e| crate::errors::InternalError::InvariantViolation {
-                message: format!("the global token database lock is poisoned: {e}"),
-            })?;
-    *guard = Some(db);
-    Ok(())
+fn empty_database_slot(_chain: ChainId) -> ArcSwapOption<TokenDatabase> {
+    ArcSwapOption::empty()
 }
 
-/// Get global database instance
-pub fn get_global_database() -> Option<Arc<TokenDatabase>> {
-    GLOBAL_DB.lock().ok()?.clone()
+/// Install an opened database into its own chain's slot (`db.chain()`).
+pub fn install_database(db: Arc<TokenDatabase>) {
+    DATABASES.get(db.chain()).store(Some(db));
 }
 
-/// Clear global database (called on service restart)
-pub fn clear_global_database() {
-    if let Ok(mut guard) = GLOBAL_DB.lock() {
-        *guard = None;
+/// The installed database for `chain`; `None` before the tokens service has
+/// opened it, and for a chain that is not enabled.
+pub fn database(chain: ChainId) -> Option<Arc<TokenDatabase>> {
+    DATABASES.get(chain).load_full()
+}
+
+/// The installed database for `chain`, or `NotInitialized` naming the chain.
+pub(crate) fn require_database(chain: ChainId) -> TokenResult<Arc<TokenDatabase>> {
+    database(chain).ok_or_else(|| Error::NotInitialized {
+        resource: format!("token database ({chain})"),
+    })
+}
+
+/// Remove every installed database handle (service stop, tests).
+pub fn uninstall_databases() {
+    for (_, slot) in DATABASES.built() {
+        slot.store(None);
     }
 }
 

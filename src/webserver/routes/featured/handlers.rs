@@ -40,10 +40,13 @@ async fn ensure_boosted_tokens_tracked(cards: &[FeaturedCard]) {
     }
 
     let _ = tokio::task::spawn_blocking(move || {
-        let Some(db) = tokens::get_global_database() else {
-            return;
-        };
         for (mint, symbol, name) in &tracked {
+            let Some(db) = crate::chains::chain_for_address(mint)
+                .ok()
+                .and_then(tokens::database::database)
+            else {
+                continue;
+            };
             // upsert_token creates the tracking entry when the token is unknown.
             let _ = db.upsert_token(mint, symbol.as_deref(), name.as_deref(), None);
         }

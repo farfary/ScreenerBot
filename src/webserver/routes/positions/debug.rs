@@ -261,7 +261,7 @@ pub async fn get_position_debug_info(Path(mint): Path<String>) -> Json<PositionD
     });
 
     // 2. Get token info from database (with market data)
-    let snapshot = crate::tokens::get_full_token_async(&mint)
+    let snapshot = crate::tokens::get_full_token_async(crate::chains::active_chain(), &mint)
         .await
         .ok()
         .flatten();

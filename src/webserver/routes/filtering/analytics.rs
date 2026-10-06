@@ -11,6 +11,7 @@ use chrono::{DateTime, Utc};
 use std::collections::HashMap;
 
 use crate::{
+    chains::ChainScope,
     filtering::{self, sources::rejection_text, SnapshotState},
     i18n::ids,
     logger::{self, LogTag},
@@ -37,20 +38,29 @@ pub async fn get_analytics(Query(query): Query<AnalyticsQuery>) -> Response {
     // Fetch stats and rejection data. Non-blocking: the analytics panel must not hold the
     // request for up to 30 seconds waiting on the first snapshot build (the rejection
     // breakdowns below come from the database and are useful on their own meanwhile).
-    let stats_result = filtering::try_fetch_stats().await;
+    let stats_result = filtering::try_fetch_stats(ChainScope::All).await;
 
     // Choose correct data source based on whether we want "Current State" or "Historical Data"
-    let rejection_result = if query.start_time.is_some() || query.end_time.is_some() {
-        // Time range specified -> Use history table (rejection_stats)
-        // This gives us the cumulative volume of rejections over time
-        get_rejection_stats_aggregated_async(query.start_time, query.end_time).await
-    } else {
-        // No time range -> Use current state snapshot (update_tracking)
-        // This gives us the current snapshot of rejected tokens (one per token)
-        get_rejection_stats_with_time_filter_async(None, None).await
+    // The rejection tables are per chain; a route without a chain reads the only one.
+    let chain = ChainScope::All.sole_chain();
+    let rejection_result = match chain {
+        Err(ref error) => Err(error.clone().into()),
+        Ok(chain) if query.start_time.is_some() || query.end_time.is_some() => {
+            // Time range specified -> Use history table (rejection_stats)
+            // This gives us the cumulative volume of rejections over time
+            get_rejection_stats_aggregated_async(chain, query.start_time, query.end_time).await
+        }
+        Ok(chain) => {
+            // No time range -> Use current state snapshot (update_tracking)
+            // This gives us the current snapshot of rejected tokens (one per token)
+            get_rejection_stats_with_time_filter_async(chain, None, None).await
+        }
     };
 
-    let recent_result = get_recent_rejections_async(20).await;
+    let recent_result = match chain {
+        Ok(chain) => get_recent_rejections_async(chain, 20).await,
+        Err(error) => Err(error.into()),
+    };
 
     match (stats_result, rejection_result, recent_result) {
         (stats, Ok(raw_stats), Ok(recent_raw)) => {

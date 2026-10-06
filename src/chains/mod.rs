@@ -13,8 +13,10 @@ mod amount;
 mod config;
 mod error;
 mod execution;
+mod per_chain;
 mod registry;
 mod runtime;
+mod scope;
 pub mod solana;
 mod types;
 
@@ -22,8 +24,12 @@ pub use adapter::{adapter, adapter_for, ChainAdapter};
 pub use amount::{AmountParseError, RawAmount};
 pub use error::{Error, Result};
 pub use execution::ExecutionFailure;
-pub use registry::{enabled_chains, install_enabled_runtimes, runtime_for, ChainRegistry};
-pub use runtime::ChainRuntime;
+pub use per_chain::PerChain;
+pub use registry::{
+    chain_for_address, enabled_chains, install_enabled_runtimes, runtime_for, ChainRegistry,
+};
+pub use runtime::{ChainRuntime, TokenAccountFacts};
+pub use scope::ChainScope;
 pub use types::{AccountId, AssetId, ChainId, ChainMetadata, NativeAsset, PoolId, TransactionId};
 
 pub(crate) use config::PRE_CHAINS_LAYOUT_CHAIN;

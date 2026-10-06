@@ -267,7 +267,7 @@ pub async fn apply_transition(transition: PositionTransition) -> Result<ApplyEff
 
             // Reset token priority to Standard after the close, so a stale OpenPosition
             // priority does not outlive the position.
-            if let Some(db) = crate::tokens::database::get_global_database() {
+            if let Some(db) = crate::tokens::database::database(crate::chains::active_chain()) {
                 let _ = db.update_priority(
                     &candidate.mint,
                     crate::tokens::priorities::Priority::Standard.to_value(),
@@ -426,7 +426,7 @@ pub async fn apply_transition(transition: PositionTransition) -> Result<ApplyEff
             );
 
             // Reset token priority after synthetic exit
-            if let Some(db) = crate::tokens::database::get_global_database() {
+            if let Some(db) = crate::tokens::database::database(crate::chains::active_chain()) {
                 let _ = db.update_priority(
                     &candidate.mint,
                     crate::tokens::priorities::Priority::Standard.to_value(),
@@ -475,7 +475,9 @@ pub async fn apply_transition(transition: PositionTransition) -> Result<ApplyEff
                     );
 
                     // Reset token priority after orphan removal
-                    if let Some(db) = crate::tokens::database::get_global_database() {
+                    if let Some(db) =
+                        crate::tokens::database::database(crate::chains::active_chain())
+                    {
                         let _ = db.update_priority(
                             &mint,
                             crate::tokens::priorities::Priority::Standard.to_value(),

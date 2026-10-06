@@ -543,31 +543,6 @@ impl TokenDatabase {
     // MARKET DATA FRESHNESS & ERRORS
     // ========================================================================
 
-    /// Check if a token's market data is older than the given threshold
-    pub fn is_market_data_stale(&self, mint: &str, threshold_seconds: i64) -> TokenResult<bool> {
-        let conn = self.conn()?;
-
-        let mut stmt = conn
-            .prepare("SELECT market_data_last_updated_at FROM update_tracking WHERE chain_id = ?1 AND mint = ?2")
-            .map_err(|e| Error::Database(DatabaseError::Query { operation: "Failed to prepare".to_owned(), message: e.to_string() }))?;
-
-        let result: Result<i64, rusqlite::Error> =
-            stmt.query_row(params![self.chain_id(), mint], |row| row.get(0));
-
-        match result {
-            Ok(last_update) => {
-                let now = chrono::Utc::now().timestamp();
-                let age = now - last_update;
-                Ok(age > threshold_seconds)
-            }
-            Err(rusqlite::Error::QueryReturnedNoRows) => Ok(true), // No update tracking = stale
-            Err(e) => Err(Error::Database(DatabaseError::Query {
-                operation: "Query failed".to_owned(),
-                message: e.to_string(),
-            })),
-        }
-    }
-
     /// Fetch token mints that have no market data records
     pub fn get_tokens_without_market_data(&self, limit: usize) -> TokenResult<Vec<String>> {
         let conn = self.conn()?;
@@ -608,22 +583,6 @@ impl TokenDatabase {
                 message: e.to_string(),
             })
         })
-    }
-
-    /// Count tokens with permanent market data failure (not listed on any exchange)
-    /// These tokens are excluded from market data update attempts
-    pub fn count_permanent_market_failures(&self) -> TokenResult<u64> {
-        let conn = self.conn()?;
-
-        let count: i64 = conn
-            .query_row(
-                "SELECT COUNT(*) FROM update_tracking WHERE chain_id = ?1 AND market_error_type = 'permanent'",
-                params![self.chain_id()],
-                |row| row.get(0),
-            )
-            .map_err(|e| Error::Database(DatabaseError::Query { operation: "Failed to count".to_owned(), message: e.to_string() }))?;
-
-        Ok(count as u64)
     }
 
     /// Record a market data fetch error for tracking and retry logic

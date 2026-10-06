@@ -422,7 +422,10 @@ pub(super) async fn execute_blacklist(bot: &Bot, chat_id: ChatId, mint_short: &s
             // Add to blacklist
             let mint_clone = pos.mint.clone();
             let blacklist_result = tokio::task::spawn_blocking(move || {
-                if let Some(db) = crate::tokens::get_global_database() {
+                if let Some(db) = crate::chains::chain_for_address(&mint_clone)
+                    .ok()
+                    .and_then(crate::tokens::database::database)
+                {
                     crate::tokens::cleanup::blacklist_token(
                         &mint_clone,
                         "Blacklisted via Telegram",

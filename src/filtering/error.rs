@@ -14,6 +14,10 @@ pub enum Error {
     #[error(transparent)]
     Internal(#[from] InternalError),
 
+    /// The chain a filtering call named could not be served.
+    #[error(transparent)]
+    Chain(#[from] crate::chains::Error),
+
     /// Loading or counting a token set from storage failed. The token store's
     /// own typed error is kept as the source rather than flattened into text,
     /// so callers keep its classification and `kind` still says which set.
@@ -32,6 +36,7 @@ impl ErrorClass for Error {
     fn is_retryable(&self) -> bool {
         match self {
             Error::Internal(e) => e.is_retryable(),
+            Error::Chain(e) => e.is_retryable(),
             Error::TokenSetLoad { source, .. } => source.is_retryable(),
         }
     }
@@ -39,6 +44,7 @@ impl ErrorClass for Error {
     fn retry_after(&self) -> Option<Duration> {
         match self {
             Error::Internal(e) => e.retry_after(),
+            Error::Chain(e) => e.retry_after(),
             Error::TokenSetLoad { source, .. } => source.retry_after(),
         }
     }
@@ -46,6 +52,7 @@ impl ErrorClass for Error {
     fn severity(&self) -> Severity {
         match self {
             Error::Internal(e) => e.severity(),
+            Error::Chain(e) => e.severity(),
             Error::TokenSetLoad { source, .. } => source.severity(),
         }
     }
@@ -53,6 +60,7 @@ impl ErrorClass for Error {
     fn http_status(&self) -> u16 {
         match self {
             Error::Internal(e) => e.http_status(),
+            Error::Chain(e) => e.http_status(),
             Error::TokenSetLoad { source, .. } => source.http_status(),
         }
     }

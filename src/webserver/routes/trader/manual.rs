@@ -187,7 +187,7 @@ pub async fn quote_preview_handler(Query(req): Query<QuotePreviewRequest>) -> Re
     };
 
     // Get token info for decimals (needed for sell)
-    let token_decimals = match get_token_async(&req.mint).await {
+    let token_decimals = match get_token_async(crate::chains::active_chain(), &req.mint).await {
         Ok(Some(token)) => token.decimals.unwrap_or(9) as u32,
         Ok(None) => 9, // Default to 9 decimals if token not found
         Err(_) => 9,

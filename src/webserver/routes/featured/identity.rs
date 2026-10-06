@@ -93,7 +93,12 @@ pub(super) async fn fill_identity(cards: &mut [FeaturedCard]) {
     // Stage 1: our own database — free and authoritative for identity already
     // persisted by an earlier featured request, even when the token has no market
     // row yet. Read name/symbol and artwork together in one batch.
-    match tokens::database::get_token_info_batch_async(missing.clone()).await {
+    match tokens::database::get_token_info_batch_async(
+        crate::chains::active_chain(),
+        missing.clone(),
+    )
+    .await
+    {
         Ok(info) => {
             let identities = info
                 .into_iter()

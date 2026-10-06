@@ -472,7 +472,8 @@ impl PoolDiscovery {
                     &effective_canonical_pool.base_mint
                 };
 
-                if let Some(db) = crate::tokens::database::get_global_database() {
+                if let Some(db) = crate::tokens::database::database(crate::chains::ChainId::Solana)
+                {
                     // is_blacklisted is a synchronous function that uses an internal Mutex,
                     // so we can call it directly without blocking wrappers
                     if let Ok(is_blacklisted) = db.is_blacklisted(token_mint) {

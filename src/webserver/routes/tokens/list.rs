@@ -12,6 +12,7 @@ use std::collections::HashMap;
 
 use super::types::*;
 use crate::{
+    chains::ChainScope,
     filtering::{self, FilteringView, SnapshotState},
     logger::{self, LogTag},
 };
@@ -39,7 +40,11 @@ pub(crate) async fn get_tokens_list(
         ));
     }
 
-    match filtering::query_tokens(filtering_query).await {
+    let listed = match ChainScope::All.sole_chain() {
+        Ok(chain) => filtering::query_tokens(chain, filtering_query).await,
+        Err(err) => Err(err.into()),
+    };
+    match listed {
         Ok(result) => {
             logger::debug(
                 LogTag::Webserver,
@@ -109,7 +114,7 @@ pub async fn get_tokens_stats() -> Result<Json<TokenStatsResponse>, StatusCode> 
         }));
     }
 
-    let snapshot = filtering::try_fetch_stats().await;
+    let snapshot = filtering::try_fetch_stats(ChainScope::All).await;
 
     if let Some(snapshot) = snapshot.as_ref() {
         logger::info(
@@ -155,7 +160,11 @@ pub async fn filter_tokens(
     let view = FilteringView::from_str(&filter.view);
     let filtering_query = filter.into_filtering_query(max_page_size);
 
-    match filtering::query_tokens(filtering_query).await {
+    let listed = match ChainScope::All.sole_chain() {
+        Ok(chain) => filtering::query_tokens(chain, filtering_query).await,
+        Err(err) => Err(err.into()),
+    };
+    match listed {
         Ok(result) => Ok(Json(build_token_list_response(result, view))),
         Err(err) => {
             logger::info(LogTag::Webserver, &format!("Filtering query failed: {err}"));
@@ -190,7 +199,11 @@ pub async fn search_tokens(
         ),
     );
 
-    match crate::tokens::search_tokens(search_query, query.limit).await {
+    let found = match ChainScope::All.sole_chain() {
+        Ok(chain) => crate::tokens::search_tokens(chain, search_query, query.limit).await,
+        Err(err) => Err(err.into()),
+    };
+    match found {
         Ok(results) => {
             logger::info(
                 LogTag::Webserver,

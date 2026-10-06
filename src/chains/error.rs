@@ -24,6 +24,25 @@ pub enum Error {
     /// The account address is not valid for the identity's chain.
     #[error("invalid {chain} account '{value}'")]
     InvalidAccount { chain: ChainId, value: String },
+    /// The account does not exist on the chain.
+    #[error("{chain} account '{address}' was not found")]
+    AccountNotFound { chain: ChainId, address: String },
+    /// Reading or decoding an account from the chain failed.
+    #[error("could not read {chain} account '{address}': {detail}")]
+    AccountRead {
+        chain: ChainId,
+        address: String,
+        detail: String,
+    },
+    /// No enabled chain accepts the value as an address.
+    #[error("'{value}' is not an address on any enabled chain")]
+    UnrecognizedAddress { value: String },
+    /// More than one enabled chain could be meant, so none is chosen.
+    #[error("the chain is ambiguous between {candidates:?}")]
+    AmbiguousChain { candidates: Vec<ChainId> },
+    /// The chain is supported by this build but not enabled in config.
+    #[error("chain {chain} is not enabled")]
+    ChainNotEnabled { chain: ChainId },
     /// An on-chain execution attempt failed.
     #[error(transparent)]
     Execution(#[from] ExecutionFailure),
@@ -36,10 +55,15 @@ impl ErrorClass for Error {
     fn is_retryable(&self) -> bool {
         match self {
             Error::Execution(e) => e.is_retryable(),
+            Error::AccountRead { .. } => true,
             Error::UnsupportedChain { .. }
             | Error::EmptyIdentifier { .. }
             | Error::WrongChain { .. }
-            | Error::InvalidAccount { .. } => false,
+            | Error::InvalidAccount { .. }
+            | Error::AccountNotFound { .. }
+            | Error::UnrecognizedAddress { .. }
+            | Error::AmbiguousChain { .. }
+            | Error::ChainNotEnabled { .. } => false,
         }
     }
 
@@ -56,17 +80,27 @@ impl ErrorClass for Error {
             Error::UnsupportedChain { .. }
             | Error::EmptyIdentifier { .. }
             | Error::WrongChain { .. }
-            | Error::InvalidAccount { .. } => Severity::Warning,
+            | Error::InvalidAccount { .. }
+            | Error::AccountNotFound { .. }
+            | Error::AccountRead { .. }
+            | Error::UnrecognizedAddress { .. }
+            | Error::AmbiguousChain { .. }
+            | Error::ChainNotEnabled { .. } => Severity::Warning,
         }
     }
 
     fn http_status(&self) -> u16 {
         match self {
             Error::Execution(e) => e.http_status(),
+            Error::AccountNotFound { .. } => 404,
+            Error::AccountRead { .. } => 502,
             Error::UnsupportedChain { .. }
             | Error::EmptyIdentifier { .. }
             | Error::WrongChain { .. }
-            | Error::InvalidAccount { .. } => 400,
+            | Error::InvalidAccount { .. }
+            | Error::UnrecognizedAddress { .. }
+            | Error::AmbiguousChain { .. }
+            | Error::ChainNotEnabled { .. } => 400,
         }
     }
 }

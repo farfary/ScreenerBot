@@ -9,6 +9,7 @@ use std::collections::HashSet;
 
 use chrono::{DateTime, Duration as ChronoDuration, Utc};
 
+use crate::chains::{ChainId, ChainScope};
 use crate::logger::{self, LogTag};
 use crate::pools;
 use crate::tokens::types::Token;
@@ -283,7 +284,10 @@ pub(super) fn overlay_pool_price_data(tokens: &mut [Token]) {
     }
 }
 
-pub(super) async fn build_stats(snapshot: &FilteringSnapshot) -> FilteringStatsSnapshot {
+pub(super) async fn build_stats(
+    chain: ChainId,
+    snapshot: &FilteringSnapshot,
+) -> FilteringStatsSnapshot {
     let mut with_pool_price = 0usize;
     let mut open_positions = 0usize;
     let mut blacklisted = 0usize;
@@ -307,7 +311,7 @@ pub(super) async fn build_stats(snapshot: &FilteringSnapshot) -> FilteringStatsS
         .count();
 
     // Query actual database count (includes tokens without market data)
-    let total_in_database = match crate::tokens::count_tokens_async().await {
+    let total_in_database = match crate::tokens::count_tokens_async(ChainScope::One(chain)).await {
         Ok(count) => count,
         Err(e) => {
             logger::warning(

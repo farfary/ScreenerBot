@@ -5,9 +5,10 @@
 
 use axum::response::Json;
 
+use crate::chains::ChainScope;
 use crate::config::with_config;
 use crate::connectivity::state::are_critical_endpoints_healthy;
-use crate::filtering::{global_store, SnapshotState};
+use crate::filtering::{try_fetch_stats, SnapshotState};
 use crate::global::are_core_services_ready;
 use crate::rpc::get_global_rpc_stats;
 use crate::services::get_service_manager;
@@ -38,11 +39,10 @@ pub(super) async fn get_header_metrics() -> Json<HeaderMetricsResponse> {
     // built, so on every launch this endpoint — and with it the whole top bar — stalled for
     // that entire timeout while the initial snapshot ground through the corpus. Counts that
     // are briefly absent cost nothing here; the very next poll picks them up.
-    let store = global_store();
     let (today_stats, start_balance, filtering_stats, system) = tokio::join!(
         crate::positions::get_period_trading_stats(today_start, Some(now)),
         get_balance_at_time(today_start),
-        store.stats_if_ready(),
+        try_fetch_stats(ChainScope::All),
         calculate_system_health(),
     );
 

@@ -26,12 +26,16 @@
 mod common;
 
 use common::{config_guard, filters_all_disabled, filters_default_dex_only, per_item_micros};
+use screenerbot::chains::{ChainId, ChainScope};
 use screenerbot::config::FilteringConfig;
 use screenerbot::filtering::sources::{FilterRejectionReason, FilterSource};
 use screenerbot::filtering::{evaluate_token, FilteringQuery, FilteringView};
 use screenerbot::tokens::types::{DataSource, Token};
 use std::collections::HashMap;
 use std::time::Instant;
+
+/// The cloned real database is the Solana token database.
+const CHAIN: ChainId = ChainId::Solana;
 
 /// Tokens sampled per test unless `SB_TEST_REALDB_FULL=1` asks for everything.
 const DEFAULT_SAMPLE: usize = 40_000;
@@ -47,13 +51,14 @@ fn full_corpus_requested() -> bool {
 async fn load_candidates() -> Vec<Token> {
     let started = Instant::now();
     let tokens = if full_corpus_requested() {
-        screenerbot::tokens::get_all_tokens_for_filtering_async()
+        screenerbot::tokens::get_all_tokens_for_filtering_async(CHAIN)
             .await
             .expect("load tokens with market data")
     } else {
         // Same query, bounded. `require_market_data` is false here, so filter down to the
         // rows a snapshot would actually consider.
         let page = screenerbot::tokens::get_all_tokens_optional_market_async(
+            CHAIN,
             DEFAULT_SAMPLE * 2,
             0,
             None,
@@ -453,7 +458,9 @@ async fn realdata_the_meta_stage_never_pays_for_a_decimals_lookup() {
          pass {second_us:.1} us/token ({ratio:.1}x)"
     );
 
-    let corpus = screenerbot::tokens::count_tokens_async().await.unwrap_or(0);
+    let corpus = screenerbot::tokens::count_tokens_async(ChainScope::One(CHAIN))
+        .await
+        .unwrap_or(0);
     eprintln!(
         "REALDATA meta stage over {corpus} tokens at the first-pass rate: {:.2}s",
         first_us * corpus as f64 / 1_000_000.0
@@ -578,7 +585,9 @@ async fn realdata_evaluation_fits_the_refresh_interval() {
     outcome.report("timing run");
 
     let per_token_secs = outcome.elapsed.as_secs_f64() / outcome.total().max(1) as f64;
-    let corpus = screenerbot::tokens::count_tokens_async().await.unwrap_or(0);
+    let corpus = screenerbot::tokens::count_tokens_async(ChainScope::One(CHAIN))
+        .await
+        .unwrap_or(0);
     let projected = per_token_secs * corpus as f64;
     let budget = screenerbot::filtering::background::refresh_interval_secs() as f64;
 
@@ -681,12 +690,12 @@ async fn realdata_snapshot_refresh_and_query_views() {
     });
 
     let started = Instant::now();
-    screenerbot::filtering::refresh()
+    screenerbot::filtering::refresh(ChainScope::One(CHAIN))
         .await
         .expect("snapshot refresh");
     eprintln!("REALDATA snapshot refresh took {:?}", started.elapsed());
 
-    let stats = screenerbot::filtering::fetch_stats()
+    let stats = screenerbot::filtering::fetch_stats(ChainScope::One(CHAIN))
         .await
         .expect("filtering stats");
     eprintln!(
@@ -720,12 +729,15 @@ async fn realdata_snapshot_refresh_and_query_views() {
         FilteringView::Recent,
     ] {
         let started = Instant::now();
-        let result = screenerbot::filtering::query_tokens(FilteringQuery {
-            view,
-            page: 1,
-            page_size: 50,
-            ..Default::default()
-        })
+        let result = screenerbot::filtering::query_tokens(
+            CHAIN,
+            FilteringQuery {
+                view,
+                page: 1,
+                page_size: 50,
+                ..Default::default()
+            },
+        )
         .await
         .unwrap_or_else(|e| panic!("query {} failed: {e}", view.as_str()));
         eprintln!(
@@ -765,19 +777,22 @@ async fn realdata_pagination_never_repeats_or_skips_a_token() {
     let _cfg = config_guard();
     common::set_config(|cfg| cfg.filtering.geckoterminal.enabled = false);
 
-    screenerbot::filtering::refresh()
+    screenerbot::filtering::refresh(ChainScope::One(CHAIN))
         .await
         .expect("snapshot refresh");
 
     let page_size = 50;
     let mut seen: Vec<String> = Vec::new();
     for page in 1..=5 {
-        let result = screenerbot::filtering::query_tokens(FilteringQuery {
-            view: FilteringView::All,
-            page,
-            page_size,
-            ..Default::default()
-        })
+        let result = screenerbot::filtering::query_tokens(
+            CHAIN,
+            FilteringQuery {
+                view: FilteringView::All,
+                page,
+                page_size,
+                ..Default::default()
+            },
+        )
         .await
         .expect("query All view");
 
@@ -809,20 +824,23 @@ async fn realdata_query_latency_is_interactive() {
     let _cfg = config_guard();
     common::set_config(|cfg| cfg.filtering.geckoterminal.enabled = false);
 
-    screenerbot::filtering::refresh()
+    screenerbot::filtering::refresh(ChainScope::One(CHAIN))
         .await
         .expect("snapshot refresh");
 
     let mut samples = Vec::new();
     for _ in 0..10 {
         let started = Instant::now();
-        let _ = screenerbot::filtering::query_tokens(FilteringQuery {
-            view: FilteringView::Pool,
-            page: 1,
-            page_size: 50,
-            search: Some("a".to_owned()),
-            ..Default::default()
-        })
+        let _ = screenerbot::filtering::query_tokens(
+            CHAIN,
+            FilteringQuery {
+                view: FilteringView::Pool,
+                page: 1,
+                page_size: 50,
+                search: Some("a".to_owned()),
+                ..Default::default()
+            },
+        )
         .await
         .expect("query");
         samples.push(started.elapsed());

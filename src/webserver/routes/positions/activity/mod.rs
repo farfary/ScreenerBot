@@ -380,11 +380,14 @@ fn settle_closed_rounds(
 /// survives the market-data loss that empties an assembled token for a delisted or rugged
 /// mint — the exact case where the activity view still has to render correct amounts.
 async fn load_decimals(mint: &str) -> u8 {
-    tokens::database::get_token_decimals_batch_async(vec![mint.to_owned()])
-        .await
-        .ok()
-        .and_then(|map| map.get(mint).copied())
-        .unwrap_or(FALLBACK_DECIMALS)
+    tokens::database::get_token_decimals_batch_async(
+        crate::chains::active_chain(),
+        vec![mint.to_owned()],
+    )
+    .await
+    .ok()
+    .and_then(|map| map.get(mint).copied())
+    .unwrap_or(FALLBACK_DECIMALS)
 }
 
 async fn load_records(position: &Position) -> (Vec<EntryRecordResponse>, Vec<ExitRecordResponse>) {

@@ -76,11 +76,12 @@ async fn open_position_impl(
     // Ensure the token exists in the local DB. For manual/force buys this lets the user
     // trade tokens that were never tracked by the pool service or that failed filtering
     // (decimals fetched from chain + metadata fetched from APIs on demand).
-    let api_token = crate::tokens::ensure_token_available(token_mint)
-        .await
-        .map_err(|_| Error::TokenNotFound {
-            mint: token_mint.to_owned(),
-        })?;
+    let api_token =
+        crate::tokens::ensure_token_available(crate::chains::active_chain(), token_mint)
+            .await
+            .map_err(|_| Error::TokenNotFound {
+                mint: token_mint.to_owned(),
+            })?;
 
     // Get price with fallback to API when pool price unavailable
     // This enables trading for tokens not yet tracked by pool service
@@ -392,7 +393,7 @@ async fn open_position_impl(
 
     // Bug #25 fix: Set token priority to OpenPosition (100) for fastest updates (5s interval)
     // This ensures price tracking is responsive during active trading
-    if let Some(db) = crate::tokens::database::get_global_database() {
+    if let Some(db) = crate::tokens::database::database(crate::chains::active_chain()) {
         let _ = db.update_priority(
             &api_token.mint,
             crate::tokens::priorities::Priority::OpenPosition.to_value(),

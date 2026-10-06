@@ -3,7 +3,7 @@
 
 //! Caching layer for pool snapshots with TTL and stale fallback.
 
-use crate::chains::ChainId;
+use crate::chains::{ChainId, PerChain};
 use crate::events::{record_token_event, Severity};
 use crate::logger::{self, LogTag};
 use crate::tokens::database;
@@ -51,24 +51,33 @@ fn pool_cache_key(chain: ChainId, mint: &str) -> PoolCacheKey {
     (chain, mint.trim().to_owned())
 }
 
-static TOKEN_POOLS_CACHE: LazyLock<moka::sync::Cache<PoolCacheKey, TokenPoolCacheEntry>> =
-    LazyLock::new(|| {
-        moka::sync::Cache::builder()
-            .max_capacity(5_000)
-            .time_to_live(Duration::from_secs(TOKEN_POOLS_TTL_SECS * 2))
-            .build()
-    });
+/// Key inside one chain's cache slot.
+fn slot_key(mint: &str) -> String {
+    mint.trim().to_owned()
+}
+
+static TOKEN_POOLS_CACHE: PerChain<moka::sync::Cache<String, TokenPoolCacheEntry>> =
+    PerChain::new(new_token_pools_cache);
+
+fn new_token_pools_cache(_chain: ChainId) -> moka::sync::Cache<String, TokenPoolCacheEntry> {
+    moka::sync::Cache::builder()
+        .max_capacity(5_000)
+        .time_to_live(Duration::from_secs(TOKEN_POOLS_TTL_SECS * 2))
+        .build()
+}
 
 static POOL_REFRESH_INFLIGHT: LazyLock<AsyncMutex<HashMap<PoolCacheKey, std::sync::Arc<Notify>>>> =
     LazyLock::new(|| AsyncMutex::new(HashMap::new()));
 
-static POOL_PREFETCH_STATE: LazyLock<moka::sync::Cache<PoolCacheKey, Instant>> =
-    LazyLock::new(|| {
-        moka::sync::Cache::builder()
-            .max_capacity(5_000)
-            .time_to_live(Duration::from_secs(POOL_PREFETCH_DEBOUNCE_SECS * 3))
-            .build()
-    });
+static POOL_PREFETCH_STATE: PerChain<moka::sync::Cache<String, Instant>> =
+    PerChain::new(new_pool_prefetch_state);
+
+fn new_pool_prefetch_state(_chain: ChainId) -> moka::sync::Cache<String, Instant> {
+    moka::sync::Cache::builder()
+        .max_capacity(5_000)
+        .time_to_live(Duration::from_secs(POOL_PREFETCH_DEBOUNCE_SECS * 3))
+        .build()
+}
 
 static POOL_PREFETCH_SCHEDULER: LazyLock<Arc<PrefetchScheduler>> =
     LazyLock::new(|| Arc::new(PrefetchScheduler::new()));
@@ -221,9 +230,9 @@ impl PrefetchScheduler {
             )
             .await;
 
-            POOL_PREFETCH_STATE.invalidate(&pool_cache_key(chain, &mint));
+            POOL_PREFETCH_STATE.get(chain).invalidate(&slot_key(&mint));
         } else {
-            POOL_PREFETCH_STATE.invalidate(&pool_cache_key(chain, &mint));
+            POOL_PREFETCH_STATE.get(chain).invalidate(&slot_key(&mint));
         }
     }
 }
@@ -280,13 +289,14 @@ async fn schedule_background_refresh_if_due(
     }
 
     let now = Instant::now();
-    let key = pool_cache_key(chain, trimmed);
-    if let Some(last) = POOL_PREFETCH_STATE.get(&key) {
+    let prefetch_state = POOL_PREFETCH_STATE.get(chain);
+    let key = slot_key(trimmed);
+    if let Some(last) = prefetch_state.get(&key) {
         if now.duration_since(last) < Duration::from_secs(POOL_PREFETCH_DEBOUNCE_SECS) {
             return;
         }
     }
-    POOL_PREFETCH_STATE.insert(key, now);
+    prefetch_state.insert(key, now);
 
     enqueue_background_refresh(chain, trimmed.to_string(), priority, allow_stale).await;
 }
@@ -312,7 +322,7 @@ fn is_pool_entry_fresh(entry: &TokenPoolCacheEntry) -> bool {
 }
 
 fn get_cached_pool_snapshot(chain: ChainId, mint: &str) -> Option<TokenPoolsSnapshot> {
-    let entry = TOKEN_POOLS_CACHE.get(&pool_cache_key(chain, mint))?;
+    let entry = TOKEN_POOLS_CACHE.get(chain).get(&slot_key(mint))?;
     if is_pool_entry_fresh(&entry) {
         Some(entry.snapshot.clone())
     } else {
@@ -322,13 +332,14 @@ fn get_cached_pool_snapshot(chain: ChainId, mint: &str) -> Option<TokenPoolsSnap
 
 fn get_cached_pool_snapshot_allow_stale(chain: ChainId, mint: &str) -> Option<TokenPoolsSnapshot> {
     TOKEN_POOLS_CACHE
-        .get(&pool_cache_key(chain, mint))
+        .get(chain)
+        .get(&slot_key(mint))
         .map(|entry| entry.snapshot.clone())
 }
 
 fn store_pool_snapshot(chain: ChainId, snapshot: TokenPoolsSnapshot) {
-    TOKEN_POOLS_CACHE.insert(
-        pool_cache_key(chain, &snapshot.mint),
+    TOKEN_POOLS_CACHE.get(chain).insert(
+        slot_key(&snapshot.mint),
         TokenPoolCacheEntry {
             refreshed_at: refreshed_at_from_snapshot(&snapshot),
             snapshot,
@@ -361,7 +372,7 @@ async fn refresh_token_pools_and_cache(
     }
 
     // Pull persisted snapshot for reuse/fallback
-    let persisted_snapshot = database::get_token_pools_async(mint_trimmed).await?;
+    let persisted_snapshot = database::get_token_pools_async(chain, mint_trimmed).await?;
     if let Some(snapshot) = persisted_snapshot.as_ref() {
         if is_snapshot_fresh(snapshot) {
             store_pool_snapshot(chain, snapshot.clone());
@@ -496,7 +507,7 @@ async fn refresh_token_pools_and_cache(
         pool_data_last_fetched_at: Utc::now(),
     };
 
-    database::replace_token_pools_async(snapshot.clone()).await?;
+    database::replace_token_pools_async(chain, snapshot.clone()).await?;
     store_pool_snapshot(chain, snapshot.clone());
 
     let (top_pool, top_metric) = snapshot
@@ -601,7 +612,7 @@ async fn get_snapshot_internal(
             if let Some(snapshot) = get_cached_pool_snapshot_allow_stale(chain, trimmed) {
                 return Ok(Some(snapshot));
             }
-            return database::get_token_pools_async(trimmed).await;
+            return database::get_token_pools_async(chain, trimmed).await;
         }
         return Ok(get_cached_pool_snapshot(chain, trimmed));
     }
@@ -654,8 +665,8 @@ pub async fn prefetch(chain: ChainId, mints: &[String]) {
                 }
             }
 
-            let key = pool_cache_key(chain, trimmed);
-            if let Some(last) = POOL_PREFETCH_STATE.get(&key) {
+            let key = slot_key(trimmed);
+            if let Some(last) = POOL_PREFETCH_STATE.get(chain).get(&key) {
                 if now.duration_since(last) < Duration::from_secs(POOL_PREFETCH_DEBOUNCE_SECS) {
                     continue;
                 }
@@ -669,7 +680,7 @@ pub async fn prefetch(chain: ChainId, mints: &[String]) {
                 PrefetchPriority::Low
             };
 
-            POOL_PREFETCH_STATE.insert(key, now);
+            POOL_PREFETCH_STATE.get(chain).insert(key, now);
             schedule.push((trimmed.to_string(), priority));
         }
     }
@@ -767,21 +778,26 @@ async fn server_only_snapshot(chain: ChainId, mint: &str) -> Option<TokenPoolsSn
 
     // Persist so the OHLCV monitor and other consumers see it immediately; the
     // in-flight full refresh will overwrite it with the enriched snapshot.
-    let _ = database::replace_token_pools_async(snapshot.clone()).await;
+    let _ = database::replace_token_pools_async(chain, snapshot.clone()).await;
     store_pool_snapshot(chain, snapshot.clone());
     Some(snapshot)
 }
 
 /// Clear pool cache (for testing/reset)
 pub fn clear_cache(chain: ChainId) {
-    TOKEN_POOLS_CACHE.invalidate_entries_if(move |(entry_chain, _), _| *entry_chain == chain);
-    POOL_PREFETCH_STATE.invalidate_entries_if(move |(entry_chain, _), _| *entry_chain == chain);
+    TOKEN_POOLS_CACHE.get(chain).invalidate_all();
+    POOL_PREFETCH_STATE.get(chain).invalidate_all();
 }
 
 /// Get pool cache metrics
 pub fn metrics() -> PoolCacheMetrics {
-    TOKEN_POOLS_CACHE.run_pending_tasks();
-    let entries = TOKEN_POOLS_CACHE.entry_count() as usize;
+    let entries = TOKEN_POOLS_CACHE
+        .built()
+        .map(|(_, cache)| {
+            cache.run_pending_tasks();
+            cache.entry_count() as usize
+        })
+        .sum();
     // moka auto-evicts expired entries, so all remaining are within TTL window
     PoolCacheMetrics {
         entries,
@@ -799,5 +815,10 @@ mod tests {
         let key = pool_cache_key(ChainId::Solana, " mint ");
 
         assert_eq!(key, (ChainId::Solana, "mint".to_owned()));
+    }
+
+    #[test]
+    fn slot_keys_are_the_trimmed_mint() {
+        assert_eq!(slot_key(" mint "), "mint");
     }
 }

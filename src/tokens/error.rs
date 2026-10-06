@@ -20,19 +20,15 @@ pub enum Error {
     #[error(transparent)]
     Internal(#[from] InternalError),
 
-    /// A Solana-side read (mint account fetch, decimals) failed. Carried
-    /// typed so callers keep the chain's classification instead of a rendered
-    /// string.
+    /// A chain-side read (token account fetch, decimals) failed, or the chain
+    /// it needed is not enabled. Carried typed so callers keep the chain's
+    /// classification instead of a rendered string.
     #[error(transparent)]
-    Chain(#[from] crate::chains::solana::Error),
+    Chain(#[from] crate::chains::Error),
 
     /// A search request was not usable as submitted.
     #[error("search query is not usable: {reason}")]
     InvalidSearchQuery { reason: String },
-    /// The global token database is scoped to a different chain than the
-    /// caller asked about.
-    #[error("token database is scoped to {expected}, not {actual}")]
-    ChainMismatch { expected: String, actual: String },
 
     /// An external data source (DexScreener, GeckoTerminal, Rugcheck, ...)
     /// returned an error.
@@ -45,8 +41,8 @@ pub enum Error {
     /// A supplied mint address is not usable.
     #[error("'{value}' is not a valid mint address")]
     InvalidMint { value: String },
-    /// A resource this call depends on has not been initialized yet (the
-    /// global database, the rate-limit coordinator, ...).
+    /// A resource this call depends on has not been initialized yet (a
+    /// chain's token database, the rate-limit coordinator, ...).
     #[error("{resource} is not initialized")]
     NotInitialized { resource: String },
     /// A SQLite row could not be decoded into its expected shape.
@@ -76,7 +72,6 @@ impl ErrorClass for Error {
             Error::Api { .. } | Error::RateLimit { .. } => true,
             Error::InvalidMint { .. }
             | Error::InvalidSearchQuery { .. }
-            | Error::ChainMismatch { .. }
             | Error::NotInitialized { .. }
             | Error::RowDecode { .. }
             | Error::InvalidPriority { .. }
@@ -103,7 +98,6 @@ impl ErrorClass for Error {
             Error::Chain(e) => e.severity(),
             Error::Api { .. } | Error::RateLimit { .. } => Severity::Warning,
             Error::InvalidMint { .. } | Error::InvalidSearchQuery { .. } => Severity::Info,
-            Error::ChainMismatch { .. } => Severity::Critical,
             Error::NotInitialized { .. } => Severity::Error,
             Error::RowDecode { .. } => Severity::Warning,
             Error::InvalidPriority { .. } => Severity::Warning,
@@ -120,7 +114,6 @@ impl ErrorClass for Error {
             Error::Api { .. } => 502,
             Error::RateLimit { .. } => 429,
             Error::InvalidMint { .. } | Error::InvalidSearchQuery { .. } => 400,
-            Error::ChainMismatch { .. } => 500,
             Error::NotInitialized { .. } => 503,
             Error::RowDecode { .. } => 500,
             Error::InvalidPriority { .. } => 400,

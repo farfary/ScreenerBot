@@ -11,13 +11,13 @@ use crate::pools::db::{
     BlacklistedPoolRecord,
 };
 use crate::tokens::cleanup::get_blacklist_summary;
-use crate::tokens::database::get_global_database;
+use crate::tokens::database::database;
 
 use super::types::*;
 
 /// Get blacklist statistics
 pub(super) async fn get_blacklist_stats() -> Json<BlacklistStatsResponse> {
-    let db = match get_global_database() {
+    let db = match database(crate::chains::active_chain()) {
         Some(db) => db,
         None => {
             return Json(BlacklistStatsResponse {

@@ -26,7 +26,7 @@ use crate::pools::types::{PoolDescriptor, PriceResult};
 use crate::chains::solana::constants::SOL_MINT;
 use crate::events::{record_safe, Event, EventCategory};
 use crate::logger::{self, LogTag};
-use crate::tokens::database::get_global_database;
+use crate::tokens::database::database;
 
 use crate::chains::solana::solana_sdk::pubkey::Pubkey;
 use std::collections::HashMap;
@@ -200,7 +200,7 @@ impl PriceCalculator {
                                     // Update cache with calculated price
                                     cache::update_price(price_result.clone());
 
-                                    if let Some(db) = get_global_database() {
+                                    if let Some(db) = database(crate::chains::ChainId::Solana) {
                                         if let Err(e) = db.mark_pool_price_calculated(
                                             &price_result.mint,
                                             &price_result.pool_address,

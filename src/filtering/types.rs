@@ -9,6 +9,7 @@ use std::sync::Arc;
 use chrono::{DateTime, Utc};
 use serde::{Deserialize, Serialize};
 
+use crate::chains::ChainId;
 use crate::tokens::types::Token;
 
 /// Maximum number of historical decisions to keep in memory per category
@@ -44,6 +45,8 @@ impl SnapshotState {
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct PassedToken {
+    /// The chain whose filtering snapshot this token passed.
+    pub chain: ChainId,
     pub mint: String,
     pub symbol: String,
     pub name: Option<String>,

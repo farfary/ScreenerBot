@@ -383,7 +383,7 @@ async fn record_solana_decision_fixture() {
     turn_llm_off();
 
     let recorded_at = Utc::now();
-    let source_tokens = screenerbot::tokens::get_all_tokens_for_filtering_async()
+    let source_tokens = screenerbot::tokens::get_all_tokens_for_filtering_async(db.chain())
         .await
         .expect("load tokens for filtering");
     let adapter = screenerbot::chains::adapter();

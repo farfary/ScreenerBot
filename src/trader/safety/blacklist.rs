@@ -23,7 +23,7 @@ use chrono::Utc;
 /// blocking entry for tokens with valid alternative pools.
 pub async fn is_blacklisted(mint: &str) -> bool {
     // Check token-level blacklist in DB (the authoritative source for "bad token")
-    match crate::tokens::get_global_database() {
+    match crate::tokens::database::database(crate::chains::active_chain()) {
         Some(db) => db.is_blacklisted(mint).unwrap_or(false),
         None => {
             // DB not initialized yet — fall back to in-memory filtered list

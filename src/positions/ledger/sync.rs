@@ -784,9 +784,21 @@ async fn resolve_metadata(
         .into_iter()
         .collect();
 
-    let info = crate::tokens::database::get_token_info_batch_async(mints.clone())
-        .await
-        .unwrap_or_default();
+    // One batch per chain; a mint no enabled chain accepts has no stored metadata.
+    let mut mints_by_chain: HashMap<crate::chains::ChainId, Vec<String>> = HashMap::new();
+    for mint in &mints {
+        if let Ok(chain) = crate::chains::chain_for_address(mint) {
+            mints_by_chain.entry(chain).or_default().push(mint.clone());
+        }
+    }
+    let mut info = HashMap::new();
+    for (chain, chain_mints) in mints_by_chain {
+        info.extend(
+            crate::tokens::database::get_token_info_batch_async(chain, chain_mints)
+                .await
+                .unwrap_or_default(),
+        );
+    }
 
     mints
         .into_iter()

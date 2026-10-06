@@ -37,6 +37,9 @@ pub enum Error {
     NotFoundBySignature { signature: String },
     #[error("token {mint} is not in the token store")]
     TokenNotFound { mint: String },
+    /// The chain of a token could not be resolved from its address.
+    #[error(transparent)]
+    Chain(#[from] crate::chains::Error),
 
     // --- state conflicts ---
     #[error("an open position already exists for token {mint}")]
@@ -104,6 +107,7 @@ impl ErrorClass for Error {
             // Startup race — the caller may succeed if it waits for init.
             Error::NotInitialised => true,
             Error::Database(e) => e.is_retryable(),
+            Error::Chain(e) => e.is_retryable(),
             // Lookups are a final verdict at the time of the call; nothing
             // about repeating the same call changes the answer.
             Error::NotFound { .. }
@@ -139,6 +143,7 @@ impl ErrorClass for Error {
         match self {
             Error::NotInitialised => Some(Duration::from_millis(500)),
             Error::Database(e) => e.retry_after(),
+            Error::Chain(e) => e.retry_after(),
             Error::WalletHistorySync { .. } => Some(Duration::from_secs(2)),
             _ => None,
         }
@@ -148,6 +153,7 @@ impl ErrorClass for Error {
         match self {
             Error::NotInitialised => Severity::Warning,
             Error::Database(e) => e.severity(),
+            Error::Chain(e) => e.severity(),
             Error::RowDecode { .. } | Error::SchemaMigration { .. } => Severity::Critical,
             Error::Maintenance { .. } => Severity::Error,
             Error::NotFound { .. }
@@ -177,6 +183,7 @@ impl ErrorClass for Error {
         match self {
             Error::NotInitialised => 503,
             Error::Database(e) => e.http_status(),
+            Error::Chain(e) => e.http_status(),
             Error::NotFound { .. }
             | Error::NotFoundById { .. }
             | Error::NotFoundBySignature { .. }

@@ -31,11 +31,14 @@ pub async fn force_buy(
     slippage_pct: Option<f64>,
 ) -> Result<TradeResult, Error> {
     // Get token symbol for action display
-    let symbol = crate::tokens::get_full_token_async(mint)
-        .await
-        .ok()
-        .flatten()
-        .map(|t| t.symbol);
+    let symbol = match crate::chains::chain_for_address(mint) {
+        Ok(chain) => crate::tokens::get_full_token_async(chain, mint)
+            .await
+            .ok()
+            .flatten(),
+        Err(_) => None,
+    }
+    .map(|t| t.symbol);
 
     // Create action tracker
     let action = ManualBuyAction::new(mint, symbol.as_deref(), size_native).await?;
@@ -178,11 +181,14 @@ pub async fn force_sell(
     let exit_percentage = percentage.unwrap_or(100.0);
 
     // Get token symbol and position for action display
-    let symbol = crate::tokens::get_full_token_async(mint)
-        .await
-        .ok()
-        .flatten()
-        .map(|t| t.symbol);
+    let symbol = match crate::chains::chain_for_address(mint) {
+        Ok(chain) => crate::tokens::get_full_token_async(chain, mint)
+            .await
+            .ok()
+            .flatten(),
+        Err(_) => None,
+    }
+    .map(|t| t.symbol);
 
     // Validate position exists first (needed for action metadata)
     let position = positions::get_position_by_mint(mint).await;

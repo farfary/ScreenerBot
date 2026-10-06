@@ -168,10 +168,12 @@ pub(super) fn assemble_token(
     // Provider pictures rank below the token's own metadata logo and published
     // profile media (`tokens::media`).
     let resolved_image_url = crate::tokens::media::resolve_logo(
+        chain,
         &metadata.mint,
         primary_image_url.or(fallback_image_url),
     );
     let resolved_header_url = crate::tokens::media::resolve_banner(
+        chain,
         &metadata.mint,
         primary_header_url.or(fallback_header_url),
     );
@@ -372,8 +374,8 @@ pub(super) fn assemble_token_without_market_data(
         name: metadata.name.unwrap_or_else(|| "Unknown Token".to_owned()),
         decimals: resolved_decimals,
         description: None,
-        image_url: crate::tokens::media::override_logo(&metadata.mint),
-        header_image_url: crate::tokens::media::override_banner(&metadata.mint),
+        image_url: crate::tokens::media::override_logo(chain, &metadata.mint),
+        header_image_url: crate::tokens::media::override_banner(chain, &metadata.mint),
         supply: None,
 
         // Data source

@@ -18,13 +18,14 @@
 //! then stand as before, and the last fetched overrides survive a restart.
 
 use std::collections::HashMap;
-use std::sync::{Arc, LazyLock, RwLock};
+use std::sync::{Arc, RwLock};
 use std::time::Duration;
 
 use serde::Deserialize;
 use tokio::sync::Notify;
 use tokio::task::JoinHandle;
 
+use crate::chains::{ChainId, PerChain};
 use crate::errors::InternalError;
 use crate::logger::{self, LogTag};
 use crate::tokens::database::TokenDatabase;
@@ -53,32 +54,36 @@ pub struct MediaUpdate {
     pub next_fetch_at: i64,
 }
 
-static OVERRIDES: LazyLock<RwLock<HashMap<String, MediaOverride>>> =
-    LazyLock::new(|| RwLock::new(HashMap::new()));
+static OVERRIDES: PerChain<RwLock<HashMap<String, MediaOverride>>> =
+    PerChain::new(new_override_map);
 
-fn override_for(mint: &str) -> Option<MediaOverride> {
-    OVERRIDES.read().ok()?.get(mint).cloned()
+fn new_override_map(_chain: ChainId) -> RwLock<HashMap<String, MediaOverride>> {
+    RwLock::new(HashMap::new())
+}
+
+fn override_for(chain: ChainId, mint: &str) -> Option<MediaOverride> {
+    OVERRIDES.get(chain).read().ok()?.get(mint).cloned()
 }
 
 /// The logo that outranks the market providers (on-chain metadata or a published
 /// profile), when the data service reported one.
-pub fn override_logo(mint: &str) -> Option<String> {
-    override_for(mint)?.logo_url
+pub fn override_logo(chain: ChainId, mint: &str) -> Option<String> {
+    override_for(chain, mint)?.logo_url
 }
 
 /// A published profile banner, when the data service reported one.
-pub fn override_banner(mint: &str) -> Option<String> {
-    override_for(mint)?.banner_url
+pub fn override_banner(chain: ChainId, mint: &str) -> Option<String> {
+    override_for(chain, mint)?.banner_url
 }
 
 /// The token's logo: an override first, then the provider's.
-pub fn resolve_logo(mint: &str, provider: Option<String>) -> Option<String> {
-    override_logo(mint).or(provider)
+pub fn resolve_logo(chain: ChainId, mint: &str, provider: Option<String>) -> Option<String> {
+    override_logo(chain, mint).or(provider)
 }
 
 /// The token's banner: an override first, then the provider's.
-pub fn resolve_banner(mint: &str, provider: Option<String>) -> Option<String> {
-    override_banner(mint).or(provider)
+pub fn resolve_banner(chain: ChainId, mint: &str, provider: Option<String>) -> Option<String> {
+    override_banner(chain, mint).or(provider)
 }
 
 #[derive(Debug, Deserialize)]
@@ -141,8 +146,8 @@ fn updates_from(
         .collect()
 }
 
-fn apply(updates: &[MediaUpdate]) {
-    let Ok(mut overrides) = OVERRIDES.write() else {
+fn apply(chain: ChainId, updates: &[MediaUpdate]) {
+    let Ok(mut overrides) = OVERRIDES.get(chain).write() else {
         return;
     };
     for update in updates {
@@ -188,19 +193,20 @@ async fn sync_pass(db: &Arc<TokenDatabase>) -> TokenResult<usize> {
         tokio::task::spawn_blocking(move || store_db.store_media_updates(&to_store))
             .await
             .map_err(|error| Error::Internal(InternalError::from(error)))??;
-        apply(&updates);
+        apply(db.chain(), &updates);
         stored += updates.len();
     }
     Ok(stored)
 }
 
-/// Load persisted overrides, then keep them current from the data service.
+/// Load the database's chain's persisted overrides, then keep them current from the
+/// data service. Only that chain's overrides are replaced.
 pub fn start_media_sync_loop(db: Arc<TokenDatabase>, shutdown: Arc<Notify>) -> JoinHandle<()> {
     tokio::spawn(async move {
         let load_db = db.clone();
         match tokio::task::spawn_blocking(move || load_db.load_media_overrides()).await {
             Ok(Ok(overrides)) => {
-                if let Ok(mut current) = OVERRIDES.write() {
+                if let Ok(mut current) = OVERRIDES.get(db.chain()).write() {
                     *current = overrides;
                 }
             }

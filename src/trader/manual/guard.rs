@@ -42,7 +42,7 @@ async fn record_failure(kind: ManualTradeKind, mint: &str, error: &Error) {
 }
 
 async fn is_blacklisted(mint: &str) -> bool {
-    let Some(db) = crate::tokens::database::get_global_database() else {
+    let Some(db) = crate::tokens::database::database(crate::chains::active_chain()) else {
         return false;
     };
     let mint = mint.to_owned();

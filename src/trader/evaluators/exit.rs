@@ -111,7 +111,11 @@ pub(crate) async fn evaluate_policy_exit(
     // Priority 3: LLM exit analysis (high priority - if enabled)
     if llm_analysis::should_analyze_exit() {
         // Get token data for LLM analysis
-        match crate::tokens::get_full_token_async(&position.mint).await {
+        let stored = match crate::chains::chain_for_address(&position.mint) {
+            Ok(chain) => crate::tokens::get_full_token_async(chain, &position.mint).await,
+            Err(_) => Ok(None),
+        };
+        match stored {
             Ok(Some(token)) => {
                 match llm_analysis::analyze_exit(position, &token).await {
                     Some(result) => {

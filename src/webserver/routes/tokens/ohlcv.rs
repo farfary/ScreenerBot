@@ -499,7 +499,7 @@ pub async fn get_token_dexscreener(
     // Get DexScreener data from token database
     let mint_clone = mint.clone();
     let data = tokio::task::spawn_blocking(move || {
-        let db = crate::tokens::get_global_database()
+        let db = crate::tokens::database::database(crate::chains::active_chain())
             .ok_or_else(|| "Token database not initialized".to_owned())?;
         db.get_dexscreener_data(&mint_clone)
             .map_err(|e| format!("Database error: {e}"))

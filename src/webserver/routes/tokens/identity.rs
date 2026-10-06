@@ -60,7 +60,10 @@ pub async fn get_token_identities(
             break;
         }
 
-        if let Ok(Some(token)) = crate::tokens::get_full_token_async(mint).await {
+        let Ok(chain) = crate::chains::chain_for_address(mint) else {
+            continue;
+        };
+        if let Ok(Some(token)) = crate::tokens::get_full_token_async(chain, mint).await {
             identities.insert(
                 mint.to_string(),
                 TokenIdentity {

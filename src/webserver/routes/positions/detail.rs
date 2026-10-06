@@ -34,10 +34,11 @@ pub async fn get_position_details(Path(key): Path<String>) -> Response {
             );
 
             // Fetch token data from database
-            let token_data = tokens::database::get_full_token_async(mint)
-                .await
-                .ok()
-                .flatten();
+            let token_data =
+                tokens::database::get_full_token_async(crate::chains::active_chain(), mint)
+                    .await
+                    .ok()
+                    .flatten();
 
             // Build token info from token database
             let token_info = token_data.as_ref().map(|token| {

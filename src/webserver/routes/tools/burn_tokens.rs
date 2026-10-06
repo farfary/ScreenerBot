@@ -75,7 +75,7 @@ pub async fn scan_burnable_tokens() -> Response {
     let mints: Vec<String> = all_accounts.iter().map(|acc| acc.mint.clone()).collect();
     let mut metadata_map: HashMap<String, (Option<String>, Option<String>)> = HashMap::new();
 
-    if let Some(db) = crate::tokens::database::get_global_database() {
+    if let Some(db) = crate::tokens::database::database(crate::chains::active_chain()) {
         for mint in &mints {
             if let Ok(Some(meta)) = db.get_token(mint) {
                 metadata_map.insert(mint.clone(), (meta.symbol.clone(), meta.name.clone()));

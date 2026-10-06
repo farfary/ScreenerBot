@@ -12,7 +12,7 @@ use axum::{extract::Path, Json};
 use super::types::*;
 use crate::{
     logger::{self, LogTag},
-    tokens::{cleanup, database::get_global_database},
+    tokens::{cleanup, database::database},
 };
 
 /// POST /api/tokens/:mint/blacklist
@@ -31,7 +31,21 @@ pub async fn add_to_blacklist(
         &format!("Adding to blacklist: mint={mint}, reason={reason}"),
     );
 
-    let db = match get_global_database() {
+    let chain = match crate::chains::chain_for_address(&mint) {
+        Ok(chain) => chain,
+        Err(e) => {
+            logger::warning(
+                LogTag::Webserver,
+                &format!("Failed to blacklist token mint={mint}: {e}"),
+            );
+            return Err(ApiError::new(
+                ApiErrorCode::InvalidInput,
+                ids::ERRORS_TOKENS_BLACKLIST_FAILED,
+            )
+            .details(e.to_string()));
+        }
+    };
+    let db = match database(chain) {
         Some(db) => db,
         None => {
             return Err(ApiError::new(
@@ -95,7 +109,21 @@ pub async fn remove_from_blacklist(
         &format!("Removing from blacklist: mint={mint}"),
     );
 
-    let db = match get_global_database() {
+    let chain = match crate::chains::chain_for_address(&mint) {
+        Ok(chain) => chain,
+        Err(e) => {
+            logger::warning(
+                LogTag::Webserver,
+                &format!("Failed to remove from blacklist mint={mint}: {e}"),
+            );
+            return Err(ApiError::new(
+                ApiErrorCode::InvalidInput,
+                ids::ERRORS_TOKENS_UNBLACKLIST_FAILED,
+            )
+            .details(e.to_string()));
+        }
+    };
+    let db = match database(chain) {
         Some(db) => db,
         None => {
             return Err(ApiError::new(
@@ -158,7 +186,21 @@ pub async fn get_blacklist_status(
         &format!("Checking blacklist status: mint={mint}"),
     );
 
-    let db = match get_global_database() {
+    let chain = match crate::chains::chain_for_address(&mint) {
+        Ok(chain) => chain,
+        Err(e) => {
+            logger::warning(
+                LogTag::Webserver,
+                &format!("Failed to check blacklist status mint={mint}: {e}"),
+            );
+            return Err(ApiError::new(
+                ApiErrorCode::InvalidInput,
+                ids::ERRORS_TOKENS_BLACKLIST_STATUS_FAILED,
+            )
+            .details(e.to_string()));
+        }
+    };
+    let db = match database(chain) {
         Some(db) => db,
         None => {
             return Err(ApiError::new(
@@ -210,5 +252,34 @@ pub async fn get_blacklist_status(
             )
             .details(join_err.to_string()))
         }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use axum::{http::StatusCode, response::IntoResponse};
+
+    const NOT_AN_ADDRESS: &str = "not-a-mint-address";
+
+    fn status_of(result: Result<Json<BlacklistResponse>, ApiError>) -> StatusCode {
+        match result {
+            Ok(_) => StatusCode::OK,
+            Err(error) => error.into_response().status(),
+        }
+    }
+
+    /// A mint that no enabled chain accepts is client input, so every
+    /// blacklist route answers 400 before it reaches the token database.
+    #[tokio::test]
+    async fn a_mint_that_is_not_an_address_is_rejected_as_input() {
+        let add = add_to_blacklist(Path(NOT_AN_ADDRESS.to_owned()), Json(None)).await;
+        assert_eq!(status_of(add), StatusCode::BAD_REQUEST);
+
+        let remove = remove_from_blacklist(Path(NOT_AN_ADDRESS.to_owned())).await;
+        assert_eq!(status_of(remove), StatusCode::BAD_REQUEST);
+
+        let status = get_blacklist_status(Path(NOT_AN_ADDRESS.to_owned())).await;
+        assert_eq!(status_of(status), StatusCode::BAD_REQUEST);
     }
 }

@@ -25,12 +25,13 @@ use std::collections::HashMap;
 use std::sync::{Arc, LazyLock, Mutex};
 use std::time::Duration;
 
-use crate::chains::ChainId;
+use crate::chains::{adapter_for, runtime_for, ChainId, PerChain, TokenAccountFacts};
 use crate::logger::{self, LogTag};
+use crate::tokens::database::{database, require_database};
 
 use tokio::sync::Mutex as AsyncMutex;
 
-/// Largest decimals value any Solana mint can carry. Anything above this is junk from a
+/// Largest decimals value any token this app trades can carry. Anything above this is junk from a
 /// bad data source (the production database holds values like 123 and 186).
 pub const MAX_DECIMALS: u8 = 18;
 
@@ -53,46 +54,42 @@ pub const CACHE_CAPACITY: u64 = 100_000;
 /// without evicting a preloaded pool mint the synchronous decoders depend on.
 pub const PRELOAD_CAPACITY: usize = (CACHE_CAPACITY as usize) * 4 / 5;
 
-// In-memory decimals cache — bounded moka cache for fast synchronous lookups.
-// Populated at startup + updated on every DB write.
+// Single-flight fetch locks are keyed by chain and mint together.
 type CacheKey = (ChainId, String);
 
 fn cache_key(chain: ChainId, mint: &str) -> CacheKey {
     (chain, mint.to_owned())
 }
 
-static DECIMALS_CACHE: LazyLock<moka::sync::Cache<CacheKey, u8>> = LazyLock::new(|| {
+// In-memory decimals cache — one bounded moka cache per chain for fast synchronous
+// lookups. Populated at startup + updated on every DB write.
+static DECIMALS_CACHE: PerChain<moka::sync::Cache<String, u8>> = PerChain::new(new_decimals_cache);
+
+fn new_decimals_cache(_chain: ChainId) -> moka::sync::Cache<String, u8> {
     moka::sync::Cache::builder()
         .max_capacity(CACHE_CAPACITY)
         .build()
-});
+}
 
 // Single-flight locks to prevent duplicate fetches
 static FETCH_LOCKS: LazyLock<Mutex<HashMap<CacheKey, Arc<AsyncMutex<()>>>>> =
     LazyLock::new(|| Mutex::new(HashMap::new()));
 
 // Track mints with unresolved decimals to avoid repeated expensive lookups
-// Bounded moka cache (max 50K entries, 24-hour TTL) to prevent unbounded growth
-static FAILED_CACHE: LazyLock<moka::sync::Cache<CacheKey, ()>> = LazyLock::new(|| {
-    moka::sync::Cache::builder()
-        .max_capacity(50_000)
-        .time_to_live(Duration::from_secs(86400)) // 24 hours
-        .build()
-});
-
-// Cache for Token2022 detection — bounded moka cache (max 100K entries).
-// true = Token2022, false = standard SPL token
-static TOKEN_2022_CACHE: LazyLock<moka::sync::Cache<CacheKey, bool>> =
-    LazyLock::new(|| moka::sync::Cache::builder().max_capacity(100_000).build());
+// Bounded moka cache per chain (max 50K entries, 24-hour TTL) to prevent unbounded growth
+static FAILED_CACHE: PerChain<moka::sync::Cache<String, ()>> = PerChain::new(new_marker_cache);
 
 // Mints we have already warned about for invalid (>18) decimals, so the warning
-// fires once per mint instead of on every token upsert. Bounded + TTL'd.
-static INVALID_DECIMALS_WARNED: LazyLock<moka::sync::Cache<CacheKey, ()>> = LazyLock::new(|| {
+// fires once per mint instead of on every token upsert. Bounded + TTL'd, per chain.
+static INVALID_DECIMALS_WARNED: PerChain<moka::sync::Cache<String, ()>> =
+    PerChain::new(new_marker_cache);
+
+fn new_marker_cache(_chain: ChainId) -> moka::sync::Cache<String, ()> {
     moka::sync::Cache::builder()
         .max_capacity(50_000)
         .time_to_live(Duration::from_secs(86400)) // 24 hours
         .build()
-});
+}
 
 // =============================================================================
 // PUBLIC API
@@ -107,71 +104,17 @@ static INVALID_DECIMALS_WARNED: LazyLock<moka::sync::Cache<CacheKey, ()>> = Lazy
 ///
 /// Returns None if not in cache - caller should handle appropriately
 pub fn get_cached(chain: ChainId, mint: &str) -> Option<u8> {
-    // SOL always has 9 decimals
-    if crate::chains::adapter().is_native_asset(mint) {
-        return Some(crate::chains::adapter().native_asset_decimals());
+    // The native asset's decimals are a chain fact
+    let adapter = adapter_for(chain);
+    if adapter.is_native_asset(mint) {
+        return Some(adapter.native_asset_decimals());
     }
 
     if is_marked_failure(chain, mint) {
         return None;
     }
 
-    let result = DECIMALS_CACHE.get(&cache_key(chain, mint));
-
-    result
-}
-
-/// Check if a mint is Token2022 from cache only (sync, instant)
-///
-/// Returns None if not in cache - caller should use is_token_2022() for async check
-pub fn is_token_2022_cached(chain: ChainId, mint: &str) -> Option<bool> {
-    // SOL/WSOL is always standard SPL
-    if crate::chains::adapter().is_native_asset(mint) {
-        return Some(false);
-    }
-
-    TOKEN_2022_CACHE.get(&cache_key(chain, mint))
-}
-
-/// Check if a mint is Token2022 (async with RPC fallback)
-///
-/// Checks cache first, then fetches from chain if needed.
-/// Result is cached for future calls.
-pub async fn is_token_2022(chain: ChainId, mint: &str) -> bool {
-    // SOL/WSOL is always standard SPL
-    if crate::chains::adapter().is_native_asset(mint) {
-        return false;
-    }
-
-    // Check cache first
-    if let Some(is_2022) = is_token_2022_cached(chain, mint) {
-        return is_2022;
-    }
-
-    match crate::chains::solana::assets::mint::is_token_2022_mint(mint).await {
-        Ok(is_2022) => {
-            cache_token_2022(chain, mint, is_2022);
-            if is_2022 {
-                logger::debug(LogTag::Tokens, &format!("Token2022 detected: mint={mint}"));
-            }
-            is_2022
-        }
-        Err(e) => {
-            logger::warning(
-                LogTag::Tokens,
-                &format!("Failed to check Token2022 status: mint={mint} err={e}"),
-            );
-            // On error (including invalid mint / not found), assume standard
-            // SPL — safer default for fee collection — without caching a
-            // guess so a transient RPC failure gets re-checked next time.
-            false
-        }
-    }
-}
-
-/// Cache Token2022 detection result
-fn cache_token_2022(chain: ChainId, mint: &str, is_2022: bool) {
-    TOKEN_2022_CACHE.insert(cache_key(chain, mint), is_2022);
+    DECIMALS_CACHE.get(chain).get(mint)
 }
 
 /// Get decimals with fallback chain (cache → DB → chain)
@@ -287,23 +230,25 @@ pub async fn get(chain: ChainId, mint: &str) -> Option<u8> {
     None
 }
 
-/// Fetch token decimals directly from Solana blockchain (public for debug bins)
+/// Fetch token decimals directly from the chain's token account (public for debug bins)
 pub async fn get_token_decimals_from_chain(
     chain: ChainId,
     mint: &str,
 ) -> crate::tokens::Result<u8> {
-    // SOL always has 9 decimals
-    if crate::chains::adapter().is_native_asset(mint) {
-        return Ok(crate::chains::adapter().native_asset_decimals());
+    // The native asset's decimals are a chain fact
+    let adapter = adapter_for(chain);
+    if adapter.is_native_asset(mint) {
+        return Ok(adapter.native_asset_decimals());
     }
 
-    let mint_data = crate::chains::solana::assets::mint::fetch_mint_account(mint).await?;
+    let runtime = runtime_for(chain).ok_or(crate::chains::Error::ChainNotEnabled { chain })?;
+    let facts = runtime.read_token_account(mint).await?;
 
     // Cache authority data as a side effect of the fetch we already paid for
     // (zero extra RPC cost).
-    cache_authorities(chain, mint, &mint_data);
+    cache_authorities(chain, mint, &facts);
 
-    Ok(mint_data.decimals)
+    Ok(facts.decimals)
 }
 
 /// Manually cache a decimals value (used when fetched from other sources)
@@ -313,8 +258,9 @@ pub fn cache(chain: ChainId, mint: &str, decimals: u8) {
         // Warn once per mint — this is called on every token upsert, so a token
         // carrying a junk decimals value (from a bad data source) would otherwise
         // re-log on every market update and flood the log (observed 1800+ lines).
-        if !INVALID_DECIMALS_WARNED.contains_key(&cache_key(chain, mint)) {
-            INVALID_DECIMALS_WARNED.insert(cache_key(chain, mint), ());
+        let warned = INVALID_DECIMALS_WARNED.get(chain);
+        if !warned.contains_key(mint) {
+            warned.insert(mint.to_owned(), ());
             crate::logger::warning(
                 crate::logger::LogTag::Tokens,
                 &format!(
@@ -326,20 +272,24 @@ pub fn cache(chain: ChainId, mint: &str, decimals: u8) {
         return;
     }
 
-    DECIMALS_CACHE.insert(cache_key(chain, mint), decimals);
+    DECIMALS_CACHE.get(chain).insert(mint.to_owned(), decimals);
     clear_failure(chain, mint);
 }
 
 /// Clear cached decimals for a specific mint
 pub fn clear_cache(chain: ChainId, mint: &str) {
-    DECIMALS_CACHE.invalidate(&cache_key(chain, mint));
+    DECIMALS_CACHE.get(chain).invalidate(mint);
     clear_failure(chain, mint);
 }
 
-/// Clear all cached decimals
+/// Clear all cached decimals, on every chain
 pub fn clear_all_cache() {
-    DECIMALS_CACHE.invalidate_all();
-    FAILED_CACHE.invalidate_all();
+    for (_, cache) in DECIMALS_CACHE.built() {
+        cache.invalidate_all();
+    }
+    for (_, cache) in FAILED_CACHE.built() {
+        cache.invalidate_all();
+    }
 }
 
 // =============================================================================
@@ -348,17 +298,11 @@ pub fn clear_all_cache() {
 
 /// Try to get decimals from database
 async fn get_from_db(chain: ChainId, mint: &str) -> Option<u8> {
-    use crate::tokens::database::get_global_database;
-
-    let db = get_global_database()?;
-    if db.chain() != chain {
-        return None;
-    }
+    let db = database(chain)?;
     let mint_owned = mint.to_string();
-    let db_clone = db.clone();
 
     // Use spawn_blocking for synchronous database access
-    let join_result = tokio::task::spawn_blocking(move || db_clone.get_token(&mint_owned))
+    let join_result = tokio::task::spawn_blocking(move || db.get_token(&mint_owned))
         .await
         .ok()?;
 
@@ -392,16 +336,10 @@ async fn get_from_server(mint: &str) -> Option<u8> {
 }
 
 async fn get_from_rugcheck(chain: ChainId, mint: &str) -> Option<u8> {
-    use crate::tokens::database::get_global_database;
-
-    let db = get_global_database()?;
-    if db.chain() != chain {
-        return None;
-    }
+    let db = database(chain)?;
     let mint_owned = mint.to_string();
-    let db_clone = db.clone();
 
-    let join_result = tokio::task::spawn_blocking(move || db_clone.get_rugcheck_data(&mint_owned))
+    let join_result = tokio::task::spawn_blocking(move || db.get_rugcheck_data(&mint_owned))
         .await
         .ok()?;
 
@@ -419,17 +357,7 @@ async fn get_from_rugcheck(chain: ChainId, mint: &str) -> Option<u8> {
 /// NOTE: This calls upsert_token() which will ALSO update the cache automatically.
 /// This ensures cache and DB stay synchronized.
 async fn persist_to_db(chain: ChainId, mint: &str, decimals: u8) -> crate::tokens::Result<()> {
-    use crate::tokens::database::get_global_database;
-
-    let db = get_global_database().ok_or_else(|| crate::tokens::Error::NotInitialized {
-        resource: "token database".to_owned(),
-    })?;
-    if db.chain() != chain {
-        return Err(crate::tokens::Error::ChainMismatch {
-            expected: db.chain().to_string(),
-            actual: chain.to_string(),
-        });
-    }
+    let db = require_database(chain)?;
     let mint = mint.to_string();
 
     // Use spawn_blocking for synchronous database access
@@ -467,15 +395,15 @@ fn release_lock_if_idle(chain: ChainId, mint: &str) {
 }
 
 fn mark_failure(chain: ChainId, mint: &str) {
-    FAILED_CACHE.insert(cache_key(chain, mint), ());
+    FAILED_CACHE.get(chain).insert(mint.to_owned(), ());
 }
 
 fn clear_failure(chain: ChainId, mint: &str) {
-    FAILED_CACHE.invalidate(&cache_key(chain, mint));
+    FAILED_CACHE.get(chain).invalidate(mint);
 }
 
 fn is_marked_failure(chain: ChainId, mint: &str) -> bool {
-    FAILED_CACHE.contains_key(&cache_key(chain, mint))
+    FAILED_CACHE.get(chain).contains_key(mint)
 }
 
 // ============================================================================
@@ -483,18 +411,13 @@ fn is_marked_failure(chain: ChainId, mint: &str) -> bool {
 // ============================================================================
 
 /// Cache the mint/freeze authority data a chain fetch already carried.
-fn cache_authorities(
-    chain: ChainId,
-    mint: &str,
-    mint_data: &crate::chains::solana::assets::MintAccountData,
-) {
+fn cache_authorities(chain: ChainId, mint: &str, facts: &TokenAccountFacts) {
     crate::tokens::authority_cache::cache_mint_authorities(
         chain,
         mint,
         crate::tokens::authority_cache::MintAuthorities {
-            mint_authority: mint_data.mint_authority.clone(),
-            freeze_authority: mint_data.freeze_authority.clone(),
-            supply: mint_data.supply,
+            mint_authority: facts.mint_authority.clone(),
+            freeze_authority: facts.freeze_authority.clone(),
         },
     );
 }
