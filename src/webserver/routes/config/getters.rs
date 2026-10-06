@@ -461,13 +461,7 @@ where
         })?;
 
         // Merge updates into existing config
-        if let (Some(section_obj), Some(updates_obj)) =
-            (section_json.as_object_mut(), updates.as_object())
-        {
-            for (key, value) in updates_obj {
-                section_obj.insert(key.clone(), value.clone());
-            }
-        }
+        config::merge_document(&mut section_json, &updates);
 
         // Now update the config with merged values
         let section_json = section_json; // Make immutable for the closure

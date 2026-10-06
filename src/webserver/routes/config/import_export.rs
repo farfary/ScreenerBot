@@ -599,13 +599,7 @@ pub async fn import_config(Json(request): Json<ImportConfigRequest>) -> Response
 
                 if let Some(mut curr) = current {
                     // Merge: imported values override current
-                    if let (Some(curr_obj), Some(imp_obj)) =
-                        (curr.as_object_mut(), value.as_object())
-                    {
-                        for (key, val) in imp_obj {
-                            curr_obj.insert(key.clone(), val.clone());
-                        }
-                    }
+                    config::merge_document(&mut curr, &value);
                     curr
                 } else {
                     value

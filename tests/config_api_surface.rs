@@ -20,11 +20,12 @@
 
 mod common;
 
+use axum::Json;
 use screenerbot::config::metadata::collect_config_metadata;
-use screenerbot::config::schemas::Config;
+use screenerbot::config::schemas::{Config, GuiConfig};
 use screenerbot::config::updates::update_config_section;
 use screenerbot::config::utils::{load_config_from_path, save_config_to_file, with_config};
-use screenerbot::webserver::routes::config::getters::get_full_config;
+use screenerbot::webserver::routes::config::getters::{get_full_config, patch_any_config};
 use serde_json::Value;
 use std::collections::BTreeSet;
 use std::sync::Once;
@@ -57,6 +58,8 @@ fn init_config() {
 fn init_config_once() {
     let dir = tempfile::tempdir().expect("temp dir");
     std::env::set_var("SCREENERBOT_DATA_DIR", dir.path());
+    // Persisting updates writes to `<data dir>/data/config.toml`.
+    std::fs::create_dir_all(dir.path().join("data")).expect("create data dir");
     let path = dir.path().join("config.toml");
     let path_str = path.to_str().expect("utf-8 temp path").to_owned();
     save_config_to_file(&Config::default(), &path_str, false).expect("write default config");
@@ -288,4 +291,46 @@ fn a_config_that_enables_no_chain_is_refused_at_load() {
         error.to_string().contains("at least one supported chain"),
         "unexpected refusal message: {error}"
     );
+}
+
+/// A PATCH body naming one nested field must leave that field's siblings, and
+/// the sibling sub-sections, at their stored values.
+#[tokio::test]
+async fn patch_of_one_nested_field_keeps_its_siblings() {
+    init_config();
+    update_config_section(
+        |cfg| {
+            cfg.gui.dashboard.interface.show_hints = false;
+            cfg.gui.dashboard.interface.table_page_size = 50;
+            cfg.gui.dashboard.lockscreen.password_hash = "stored-hash".to_owned();
+            cfg.gui.dashboard.lockscreen.password_salt = "stored-salt".to_owned();
+            cfg.gui.dashboard.startup.default_page = "positions".to_owned();
+        },
+        false,
+    )
+    .expect("seed gui settings");
+
+    let response = patch_any_config::<GuiConfig>(Json(
+        serde_json::json!({"dashboard": {"interface": {"sounds_enabled": false}}}),
+    ))
+    .await;
+    let status = response.status();
+    let body = axum::body::to_bytes(response.into_body(), usize::MAX)
+        .await
+        .expect("read response body");
+    assert!(
+        status.is_success(),
+        "patch rejected: {status} {}",
+        String::from_utf8_lossy(&body)
+    );
+
+    with_config(|cfg| {
+        let dashboard = &cfg.gui.dashboard;
+        assert!(!dashboard.interface.sounds_enabled);
+        assert!(!dashboard.interface.show_hints);
+        assert_eq!(dashboard.interface.table_page_size, 50);
+        assert_eq!(dashboard.lockscreen.password_hash, "stored-hash");
+        assert_eq!(dashboard.lockscreen.password_salt, "stored-salt");
+        assert_eq!(dashboard.startup.default_page, "positions");
+    });
 }

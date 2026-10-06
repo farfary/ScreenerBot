@@ -92,6 +92,10 @@ pub mod schemas;
 // Export utilities (loading, reloading, access)
 pub mod utils;
 
+// Deep merge of partial section updates (PATCH bodies, merging imports)
+mod merge;
+pub(crate) use merge::merge_document;
+
 // One-time migration of legacy [ai] / [agents] TOML into the canonical sections
 mod migrate;
 
