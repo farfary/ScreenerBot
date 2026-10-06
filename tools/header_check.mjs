@@ -81,7 +81,9 @@ for (const [fam, patterns] of Object.entries(SETS)) {
     checked += 1;
     const lines = readFileSync(join(REPO, rel), "utf8").split("\n");
     if (!CHECKERS[fam](lines)) violations.push(`${rel}: missing or malformed standard header`);
-    else if (lines.filter((l) => l.includes(HOLDER)).length !== 1)
+    // Only comment lines count: a source line that merely names the holder
+    // (as this checker's own constant does) is not a second license block.
+    else if (lines.filter((l) => /^\s*(\/\/|\/\*|\*|#|<!--)/.test(l) && l.includes(HOLDER)).length !== 1)
       violations.push(`${rel}: license block appears more than once`);
   }
 }
