@@ -225,7 +225,8 @@ async fn migration_bumps_version_rebuilds_tables_and_is_idempotent() {
     let db = TransactionDatabase::new(screenerbot::chains::ChainId::Solana)
         .await
         .expect("open + migrate v4 database");
-
+    // 1. Version is current: chain-aware keys (v7) keep every legacy row as Solana, and
+    //    subject amounts are stored as decimal TEXT (v8).
     // 1. Version is 7 (chain-aware keys preserve every legacy row as Solana).
     let conn = Connection::open(&db_path).expect("reopen migrated database");
     let stored_version: String = conn
@@ -235,7 +236,7 @@ async fn migration_bumps_version_rebuilds_tables_and_is_idempotent() {
             |row| row.get(0),
         )
         .expect("read migrated schema_version");
-    assert_eq!(stored_version, "7");
+    assert_eq!(stored_version, "8");
 
     // 2. The composite key exists on every migrated table.
     for table in [
@@ -377,7 +378,7 @@ async fn migration_bumps_version_rebuilds_tables_and_is_idempotent() {
     assert_eq!(target_detail.sol_balance_change, 2.0);
 
     // 7. Idempotent: opening the now-migrated database a second time is a clean
-    // no-op -- no error, version stays 5, and nothing seeded above is lost (a second
+    // no-op -- no error, the version is unchanged, and nothing seeded above is lost (a second
     // destructive rebuild would have dropped it). Deliberately reuses this test's
     // single `isolated_env()` rather than a second test function: `paths::
     // get_data_directory()` memoises its base directory in a process-wide
@@ -396,7 +397,7 @@ async fn migration_bumps_version_rebuilds_tables_and_is_idempotent() {
             |row| row.get(0),
         )
         .expect("read schema_version after second open");
-    assert_eq!(stored_version_again, "7");
+    assert_eq!(stored_version_again, "8");
 
     assert!(
         db_again
@@ -487,7 +488,7 @@ async fn migration_preserves_the_real_transactions_database_shape_and_rows() {
             |row| row.get(0),
         )
         .expect("read schema version from real clone");
-    assert_eq!(stored_version, "7");
+    assert_eq!(stored_version, "8");
 
     // Keep the configured subject used for backfills observable in failure output.
     assert!(!own_wallet.is_empty());
