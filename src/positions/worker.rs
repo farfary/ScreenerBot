@@ -987,12 +987,14 @@ mod verdict_tests {
                 native_received: 0.0,
                 fee_raw: 0,
                 exit_time: chrono::Utc::now(),
+                exit_signature: "sig".to_owned(),
             }),
             Some(Ok(()))
         ));
         assert_eq!(
             text(verification_verdict(&T::ExitFailedClearForRetry {
-                position_id: 1
+                position_id: 1,
+                exit_signature: "sig".to_owned(),
             })),
             "The sell transaction failed on chain"
         );

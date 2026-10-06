@@ -1,7 +1,7 @@
 // Copyright (c) 2024-2026 ScreenerBot (screenerbot.io)
 // SPDX-License-Identifier: BUSL-1.1
 
-//! Atomic booking: a position row, its idempotence guard and its history record in one transaction.
+//! Atomic booking: a position row read, decided on and written back with its history record in one transaction.
 
 use rusqlite::{params, Connection, OptionalExtension};
 
@@ -12,20 +12,8 @@ use crate::positions::types::{EntryRecord, ExitRecord, Position};
 use crate::positions::{Error, Result};
 
 use super::operations::write_position_row;
-use super::types::PositionsDatabase;
-
-/// The condition, read inside the booking transaction, under which a booking has not
-/// happened yet.
-pub(crate) enum BookingGuard<'a> {
-    /// Always book; the transition overwrites rather than accumulates.
-    Unconditional,
-    /// Book only while the stored row is not exit-verified.
-    ExitNotVerified,
-    /// Book only while no exit record exists for this position and signature.
-    ExitRecordAbsent(&'a str),
-    /// Book only while no entry record exists for this position and signature.
-    EntryRecordAbsent(&'a str),
-}
+use super::queries::{query_trader_swap_legs, TraderSwapLeg};
+use super::types::{PositionsDatabase, POSITION_SELECT_COLUMNS};
 
 /// The history record written in the same transaction as the row.
 pub(crate) enum BookingRecord {
@@ -33,128 +21,138 @@ pub(crate) enum BookingRecord {
     Entry(EntryRecord),
 }
 
+/// What a booking decided for the row it was handed.
+pub(crate) enum Booking<T> {
+    /// Write the row as the booking left it, with its record when there is one.
+    Write {
+        record: Option<BookingRecord>,
+        outcome: T,
+    },
+    /// Write nothing: the booking is already on the row, or does not apply to it.
+    Skip(T),
+}
+
 /// Outcome of a booking transaction.
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
-pub(crate) enum BookingCommit {
-    /// The row and the record were written and committed.
-    Committed,
-    /// The guard found the booking already present; nothing was written.
-    AlreadyBooked,
+pub(crate) enum Committed<T> {
+    /// The row, as written, and its record were committed.
+    Written { row: Position, outcome: T },
+    /// Nothing was written.
+    Skipped(T),
+}
+
+/// The reads a booking may make inside its transaction, consistent with the row it was
+/// handed.
+pub(crate) struct BookingReads<'a> {
+    conn: &'a Connection,
+    position_id: i64,
+    wallet_address: &'a Result<&'a str>,
+}
+
+impl BookingReads<'_> {
+    /// True when this position already has an entry record for `signature`.
+    pub(crate) fn entry_record_exists(&self, signature: &str) -> Result<bool> {
+        self.record_exists(
+            "SELECT 1 FROM position_entries WHERE position_id = ?1 AND transaction_signature = ?2 LIMIT 1",
+            signature,
+        )
+    }
+
+    /// True when this position already has an exit record for `signature`.
+    pub(crate) fn exit_record_exists(&self, signature: &str) -> Result<bool> {
+        self.record_exists(
+            "SELECT 1 FROM position_exits WHERE position_id = ?1 AND transaction_signature = ?2 LIMIT 1",
+            signature,
+        )
+    }
+
+    /// The swap legs the trader booked for this position.
+    pub(crate) fn trader_swap_legs(&self) -> Result<Vec<TraderSwapLeg>> {
+        let wallet_address = self.wallet_address.clone()?;
+        query_trader_swap_legs(self.conn, wallet_address, Some(self.position_id))
+            .map_err(|e| DatabaseError::classify_sqlite_failure("commit_booking", e).into())
+    }
+
+    fn record_exists(&self, query: &str, signature: &str) -> Result<bool> {
+        Ok(self
+            .conn
+            .query_row(query, params![self.position_id, signature], |_| Ok(()))
+            .optional()
+            .map_err(|e| DatabaseError::classify_sqlite_failure("commit_booking", e))?
+            .is_some())
+    }
 }
 
 impl PositionsDatabase {
-    /// Writes `position`'s row and `record` in one IMMEDIATE transaction when `guard`
-    /// holds. Every failure rolls the transaction back, leaving the row and the records
-    /// as they were.
-    pub(crate) fn commit_booking(
+    /// Books onto the stored row in one IMMEDIATE transaction: reads the row, hands it and
+    /// the in-transaction reads to `book`, then writes the row it left and its record.
+    /// Every failure, including one returned by `book`, rolls the transaction back and
+    /// leaves the row and the records as they were.
+    pub(crate) fn commit_booking<T>(
         &self,
-        position: &Position,
-        guard: BookingGuard<'_>,
-        record: Option<&BookingRecord>,
-        wallet_address: Option<&str>,
-    ) -> Result<BookingCommit> {
-        let position_id = position.id.ok_or_else(|| Error::TransitionFailed {
-            transition: "update",
-            mint: position.mint.clone(),
-            detail: "position has no id".to_owned(),
-        })?;
-        let record = match (record, wallet_address) {
-            (Some(record), Some(wallet_address)) => Some((record, wallet_address)),
-            (None, _) => None,
-            (Some(_), None) => {
-                return Err(Error::WalletUnavailable {
-                    detail: "no wallet address supplied for the booking record".to_owned(),
-                })
+        position_id: i64,
+        wallet_address: Result<&str>,
+        book: impl FnOnce(&mut Position, &BookingReads<'_>) -> Result<Booking<T>>,
+    ) -> Result<Committed<T>> {
+        let mut conn = self.get_connection()?;
+        let committed = self.run_booking(&mut conn, position_id, wallet_address, book)?;
+
+        if let Committed::Written { .. } = committed {
+            if let Ok(mut stmt) = conn.prepare("PRAGMA wal_checkpoint(PASSIVE);") {
+                let _ = stmt.query([]);
             }
+        }
+        Ok(committed)
+    }
+
+    fn run_booking<T>(
+        &self,
+        conn: &mut Connection,
+        position_id: i64,
+        wallet_address: Result<&str>,
+        book: impl FnOnce(&mut Position, &BookingReads<'_>) -> Result<Booking<T>>,
+    ) -> Result<Committed<T>> {
+        let chain = self.chain.as_str();
+        let sqlite = |e| DatabaseError::classify_sqlite_failure("commit_booking", e);
+        let tx = conn.write_tx().map_err(sqlite)?;
+
+        let mut row = tx
+            .query_row(
+                &format!(
+                    "SELECT {POSITION_SELECT_COLUMNS} FROM positions WHERE id = ?1 AND chain_id = ?2"
+                ),
+                params![position_id, chain],
+                |row| self.row_to_position(row),
+            )
+            .optional()
+            .map_err(sqlite)?
+            .ok_or(Error::NotFoundById { position_id })?;
+
+        let reads = BookingReads {
+            conn: &tx,
+            position_id,
+            wallet_address: &wallet_address,
+        };
+        let (record, outcome) = match book(&mut row, &reads)? {
+            Booking::Skip(outcome) => return Ok(Committed::Skipped(outcome)),
+            Booking::Write { record, outcome } => (record, outcome),
         };
 
-        let mut conn = self.get_connection()?;
-        let written = run_booking(
-            &mut conn,
-            self.chain.as_str(),
-            position_id,
-            position,
-            &guard,
-            record,
-        )
-        .map_err(|e| DatabaseError::classify_sqlite_failure("commit_booking", e))?;
-
-        match written {
-            None => Ok(BookingCommit::AlreadyBooked),
-            Some(0) => Err(Error::NotFoundById { position_id }),
-            Some(_) => {
-                if let Some((record, _)) = record {
-                    log_saved_record(record);
-                }
-                if let Ok(mut stmt) = conn.prepare("PRAGMA wal_checkpoint(PASSIVE);") {
-                    let _ = stmt.query([]);
-                }
-                Ok(BookingCommit::Committed)
+        write_position_row(&tx, chain, position_id, &row).map_err(sqlite)?;
+        if let Some(record) = &record {
+            let wallet_address = wallet_address.clone()?;
+            match record {
+                BookingRecord::Exit(record) => insert_exit_record(&tx, wallet_address, record),
+                BookingRecord::Entry(record) => insert_entry_record(&tx, wallet_address, record),
             }
+            .map_err(sqlite)?;
         }
-    }
-}
+        tx.commit().map_err(sqlite)?;
 
-/// Runs the booking transaction. `None` means the guard found the booking already
-/// present; `Some(0)` means no row matched, and the transaction was rolled back.
-fn run_booking(
-    conn: &mut Connection,
-    chain: &str,
-    position_id: i64,
-    position: &Position,
-    guard: &BookingGuard<'_>,
-    record: Option<(&BookingRecord, &str)>,
-) -> rusqlite::Result<Option<usize>> {
-    let tx = conn.write_tx()?;
-
-    let already_booked = match guard {
-        BookingGuard::Unconditional => false,
-        BookingGuard::ExitNotVerified => tx
-            .query_row(
-                "SELECT transaction_exit_verified FROM positions WHERE id = ?1 AND chain_id = ?2",
-                params![position_id, chain],
-                |row| row.get::<_, bool>(0),
-            )
-            .optional()?
-            .unwrap_or(false),
-        BookingGuard::ExitRecordAbsent(signature) => tx
-            .query_row(
-                "SELECT 1 FROM position_exits WHERE position_id = ?1 AND transaction_signature = ?2 LIMIT 1",
-                params![position_id, signature],
-                |_| Ok(()),
-            )
-            .optional()?
-            .is_some(),
-        BookingGuard::EntryRecordAbsent(signature) => tx
-            .query_row(
-                "SELECT 1 FROM position_entries WHERE position_id = ?1 AND transaction_signature = ?2 LIMIT 1",
-                params![position_id, signature],
-                |_| Ok(()),
-            )
-            .optional()?
-            .is_some(),
-    };
-    if already_booked {
-        return Ok(None);
-    }
-
-    let written = write_position_row(&tx, chain, position_id, position)?;
-    if written == 0 {
-        return Ok(Some(0));
-    }
-
-    match record {
-        Some((BookingRecord::Exit(record), wallet_address)) => {
-            insert_exit_record(&tx, wallet_address, record)?;
+        if let Some(record) = &record {
+            log_saved_record(record);
         }
-        Some((BookingRecord::Entry(record), wallet_address)) => {
-            insert_entry_record(&tx, wallet_address, record)?;
-        }
-        None => {}
+        Ok(Committed::Written { row, outcome })
     }
-
-    tx.commit()?;
-    Ok(Some(written))
 }
 
 /// Inserts an exit record unless one already exists for its position and signature: one

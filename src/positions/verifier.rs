@@ -145,6 +145,7 @@ async fn failed_exit_outcome(item: &VerificationItem, reason: String) -> Verific
         Ok(balance) if residual_balance_requires_retry(Some(position_id), balance).await => {
             VerificationOutcome::Transition(PositionTransition::ExitFailedClearForRetry {
                 position_id,
+                exit_signature: item.signature.clone(),
             })
         }
         _ => VerificationOutcome::PermanentFailure(
@@ -303,6 +304,7 @@ pub async fn verify_transaction(item: &VerificationItem) -> VerificationOutcome 
                                         return VerificationOutcome::Transition(
                                             PositionTransition::ExitFailedClearForRetry {
                                                 position_id,
+                                                exit_signature: item.signature.clone(),
                                             },
                                         );
                                     } else {
@@ -396,6 +398,7 @@ pub async fn verify_transaction(item: &VerificationItem) -> VerificationOutcome 
                                                         return VerificationOutcome::Transition(
                               PositionTransition::ExitFailedClearForRetry {
                                 position_id,
+                                exit_signature: item.signature.clone(),
                               }
                             );
                                                     } else {
@@ -823,6 +826,7 @@ pub async fn verify_transaction(item: &VerificationItem) -> VerificationOutcome 
                 native_received: swap_info.effective_sol_received.abs(),
                 fee_raw: adapter().native_to_raw(swap_info.fee_sol),
                 exit_time,
+                exit_signature: item.signature.clone(),
             })
         }
     }

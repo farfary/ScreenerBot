@@ -74,17 +74,16 @@ pub use db::{
     get_position_by_id as get_db_position_by_id, get_positions_database,
     get_recent_closed_positions_for_mint, get_token_snapshot, get_token_snapshots,
     initialize_positions_database, load_all_positions, save_position, save_token_snapshot,
-    set_position_archived_db, set_position_management_db, update_position,
-    update_position_price_fields, with_positions_database, with_positions_database_async,
-    DailyTradingStats, PeriodTradingStats, PositionState, PositionStateHistory, PositionTracking,
-    PositionsDatabase, PositionsDatabaseStats, TokenSnapshot,
+    set_position_archived_db, set_position_management_db, update_position_price_fields,
+    with_positions_database, with_positions_database_async, DailyTradingStats, PeriodTradingStats,
+    PositionState, PositionStateHistory, PositionTracking, PositionsDatabase,
+    PositionsDatabaseStats, TokenSnapshot,
 };
 
 pub use helpers::{
     add_signature_to_index, calculate_position_pnl, calculate_position_pnl_safe,
     calculate_position_total_fees, calculate_split_pnl, get_position_index_by_mint,
-    remove_position_by_signature, save_position_token_snapshot, sync_position_to_database,
-    update_mint_position_index,
+    remove_position_by_signature, save_position_token_snapshot, update_mint_position_index,
 };
 
 // Core types re-exports

@@ -6,9 +6,9 @@
 use chrono::Utc;
 
 use crate::logger::{self, LogTag};
-use crate::positions::apply::publish_booking;
+use crate::positions::apply::book_position;
 use crate::positions::booking::ForceCloseFill;
-use crate::positions::db::{commit_booking, BookingCommit, BookingGuard};
+use crate::positions::db::{Booking, Committed};
 use crate::positions::state::{get_position_by_id, release_position_slot};
 use crate::positions::{Error, Result, FORCE_CLOSED_PREFIX};
 
@@ -23,13 +23,16 @@ pub struct ForceClosed {
 /// Writes a position off: whatever is still held is booked as exited with no proceeds,
 /// while the proceeds of earlier partial exits stay on the books.
 ///
-/// The booking is committed under the stored exit-verified guard before memory changes,
-/// so a close verified concurrently and this write-off cannot both book. Slot release and
+/// The booking is made on the row read inside its own transaction, and refused when that
+/// row's exit is already verified, so a close verified concurrently and this write-off
+/// cannot both book. Memory adopts the committed row. Slot release and
 /// realized-loss accounting run once, after the commit. On any error the row and memory
 /// are unchanged.
 pub async fn force_close_position(position_id: i64, note: &str) -> Result<ForceClosed> {
     let closed_reason = format!("{FORCE_CLOSED_PREFIX} {note}");
 
+    // The snapshot supplies the mint and the last known price; the booking itself reads the
+    // stored row.
     let (snapshot, in_memory) = match get_position_by_id(position_id).await {
         Some(position) => (position, true),
         None => match crate::positions::db::get_position_by_id(position_id).await? {
@@ -55,19 +58,24 @@ pub async fn force_close_position(position_id: i64, note: &str) -> Result<ForceC
         closed_reason: closed_reason.clone(),
     };
 
-    let mut candidate = snapshot;
-    let realized_pnl = candidate.book_force_close(&fill)?;
-
-    match commit_booking(&candidate, BookingGuard::ExitNotVerified, None).await? {
-        BookingCommit::AlreadyBooked => return Err(Error::AlreadyClosed { position_id }),
-        BookingCommit::Committed => {}
-    }
-    if in_memory {
-        publish_booking(position_id, &candidate, |live| {
-            live.book_force_close(&fill).map(|_| ())
+    let committed = book_position(position_id, |row, _| {
+        if row.transaction_exit_verified {
+            return Ok(Booking::Skip(None));
+        }
+        let realized_pnl = row.book_force_close(&fill)?;
+        Ok(Booking::Write {
+            record: None,
+            outcome: Some(realized_pnl),
         })
-        .await;
-    }
+    })
+    .await?;
+    let (candidate, realized_pnl) = match committed {
+        Committed::Written {
+            row,
+            outcome: Some(realized_pnl),
+        } => (row, realized_pnl),
+        _ => return Err(Error::AlreadyClosed { position_id }),
+    };
 
     // Idempotent: a queued exit verification for this position does not hand the slot
     // back a second time.

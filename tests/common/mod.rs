@@ -194,6 +194,36 @@ pub fn load_keypair(path: &str) -> screenerbot::chains::solana::solana_sdk::sign
 /// correct under BOTH runners.
 static CONFIG_MUTEX: OnceLock<Mutex<()>> = OnceLock::new();
 
+/// Set in the child process [`run_isolated`] launches.
+const ISOLATED_CHILD_ENV: &str = "SCREENERBOT_ISOLATED_TEST_CHILD";
+
+/// Runs `body` on a multi-thread runtime in a child process of its own, whichever harness
+/// launched the test. For tests that open the process-wide stores and in-memory state:
+/// the child re-runs this test binary with `--exact test_name`.
+pub fn run_isolated<F, Fut>(test_name: &str, body: F)
+where
+    F: FnOnce() -> Fut,
+    Fut: std::future::Future<Output = ()>,
+{
+    if std::env::var_os(ISOLATED_CHILD_ENV).is_some() {
+        tokio::runtime::Builder::new_multi_thread()
+            .enable_all()
+            .build()
+            .expect("create multi-thread runtime")
+            .block_on(body());
+        return;
+    }
+
+    let status = std::process::Command::new(std::env::current_exe().expect("test executable"))
+        .arg("--exact")
+        .arg(test_name)
+        .arg("--nocapture")
+        .env(ISOLATED_CHILD_ENV, "1")
+        .status()
+        .expect("run isolated child");
+    assert!(status.success(), "{test_name} failed in its child process");
+}
+
 /// Take the config-mutation guard and initialise config to DEFAULTS.
 ///
 /// Returns the guard — bind it (`let _cfg = common::config_guard();`) for the test's

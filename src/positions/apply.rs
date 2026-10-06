@@ -4,24 +4,25 @@
 //! Position transition effects.
 //!
 //! Applies verified or failed position transitions (entry, exit, DCA, partial-exit).
-//! A transition that writes the position row books a candidate copy, commits the row, its
-//! idempotence guard and its history record in one transaction, and only then replays the
-//! same booking on the in-memory position. Side effects (slot release, loss accounting,
-//! events, notifications, pending clears) run after the commit. A failed commit leaves
-//! memory, the row and the records unchanged.
+//! A transition that writes the position row books onto the row read inside its own
+//! transaction: the idempotence check, the booking, the row and its history record commit
+//! together, and memory then adopts the committed row. Side effects (slot release, loss
+//! accounting, events, notifications, pending clears) run after the commit. A failed
+//! commit leaves memory, the row and the records unchanged.
 
 use super::booking::{CloseFill, DcaAverage, DcaFill, EntryFill, PartialExitFill};
 use super::db::{
-    commit_booking, force_database_sync, update_position_price_fields, BookingCommit, BookingGuard,
-    BookingRecord,
+    commit_booking, force_database_sync, update_position_price_fields, Booking, BookingReads,
+    BookingRecord, Committed,
 };
+use super::pnl::position_pnl;
 use super::types::{EntryRecord, ExitRecord, Position};
 use super::{
     loss_detection::process_position_loss_detection,
     state::{
-        clear_pending_dca_swap, get_position_by_id, get_position_by_mint, release_position_slot,
-        remove_position, remove_signature_from_index, update_position_state,
-        update_position_state_by_id, POSITIONS,
+        clear_pending_dca_swap, get_position_by_id, get_position_by_mint, publish_committed,
+        release_position_slot, remove_position, remove_signature_from_index, update_position_state,
+        with_booking_lock, POSITIONS,
     },
     transitions::PositionTransition,
 };
@@ -66,26 +67,35 @@ pub async fn apply_transition(transition: PositionTransition) -> Result<ApplyEff
             fee_raw,
             native_size,
         } => {
-            let Some(snapshot) = get_position_by_id(position_id).await else {
+            if get_position_by_id(position_id).await.is_none() {
                 log_missing_position(position_id, "entry verification");
                 return Ok(effects);
-            };
+            }
             let fill = EntryFill {
                 effective_entry_price,
                 token_amount: token_amount_units,
                 fee_raw,
                 native_size,
             };
-            let mut candidate = snapshot;
-            candidate.apply_entry_fill(&fill);
-            let record = candidate
-                .entry_transaction_signature
-                .clone()
-                .map(|signature| {
+            // IDEMPOTENCE: the entry fill OVERWRITES the held amount and the size, so booking
+            // it again after a partial exit or a DCA would undo them. The verified flag and
+            // the entry record, read inside the booking transaction, decide whether the entry
+            // is already booked.
+            let committed = book_position(position_id, |row, reads| {
+                let booked = row.transaction_entry_verified
+                    || match row.entry_transaction_signature.as_deref() {
+                        Some(signature) => reads.entry_record_exists(signature)?,
+                        None => false,
+                    };
+                if booked {
+                    return Ok(Booking::Skip(()));
+                }
+                row.apply_entry_fill(&fill);
+                let record = row.entry_transaction_signature.clone().map(|signature| {
                     BookingRecord::Entry(EntryRecord {
                         id: None,
                         position_id,
-                        timestamp: candidate.entry_time,
+                        timestamp: row.entry_time,
                         amount: token_amount_units,
                         price: effective_entry_price,
                         native_spent: native_size,
@@ -94,25 +104,27 @@ pub async fn apply_transition(transition: PositionTransition) -> Result<ApplyEff
                         fees_raw: Some(fee_raw),
                     })
                 });
-
-            if commit_booking(&candidate, BookingGuard::Unconditional, record.as_ref()).await?
-                == BookingCommit::AlreadyBooked
-            {
-                return Ok(effects);
-            }
-            publish_booking(position_id, &candidate, |live| {
-                live.apply_entry_fill(&fill);
-                Ok(())
+                Ok(Booking::Write {
+                    record,
+                    outcome: (),
+                })
             })
-            .await;
+            .await?;
+            let Committed::Written { row: position, .. } = committed else {
+                logger::debug(
+                    LogTag::Positions,
+                    &format!("Entry for position {position_id} already verified - skipping"),
+                );
+                return Ok(effects);
+            };
 
             effects.db_updated = true;
             let _ = force_database_sync().await;
             crate::events::record_position_event(
                 &position_id.to_string(),
-                &candidate.mint,
+                &position.mint,
                 "entry_verified",
-                candidate.entry_transaction_signature.as_deref(),
+                position.entry_transaction_signature.as_deref(),
                 None,
                 native_size,
                 token_amount_units,
@@ -124,8 +136,8 @@ pub async fn apply_transition(transition: PositionTransition) -> Result<ApplyEff
             // Queue Telegram notification for position opened
             if with_config(|c| c.telegram.enabled && c.telegram.notify_position_opened) {
                 queue_notification(Notification::position_opened(
-                    candidate.symbol.clone(),
-                    candidate.mint.clone(),
+                    position.symbol.clone(),
+                    position.mint.clone(),
                     native_size,
                     effective_entry_price,
                 ));
@@ -141,57 +153,55 @@ pub async fn apply_transition(transition: PositionTransition) -> Result<ApplyEff
             native_received,
             fee_raw,
             exit_time,
+            exit_signature,
         } => {
             // IDEMPOTENCE: this transition ACCUMULATES (`native_received +=`,
             // `total_exited_amount +=`), so the same close must be booked at most once. The
             // queue dedupes by signature only while an item is IN it, so a re-enqueue can hand
             // the same exit back. The stored `transaction_exit_verified` flag, read inside the
             // booking transaction, decides whether this close is already booked.
-            let Some(snapshot) = get_position_by_id(position_id).await else {
+            if get_position_by_id(position_id).await.is_none() {
                 log_missing_position(position_id, "exit verification");
                 return Ok(effects);
-            };
+            }
 
-            // Closed P&L is computed from the position as booked, before anything is written.
-            let mut fill = CloseFill {
-                effective_exit_price,
-                native_received,
-                fee_raw,
-                exit_time,
-                pnl: None,
-            };
-            let mut probe = snapshot.clone();
-            probe.book_close(&fill)?;
-            let (pnl_native, pnl_pct) =
-                crate::positions::calculate_position_pnl(&probe, None).await;
-            fill.pnl = Some((pnl_native, pnl_pct));
-
-            // A full close sells whatever is left: the amount moved is what THIS close sold.
-            let mut candidate = snapshot;
-            let closed_amount = candidate.book_close(&fill)?;
-            // The exit record for the FULL close: the position-details History tab and the
-            // chart's exit markers are built from these records.
-            let record = candidate
-                .exit_transaction_signature
-                .clone()
-                .map(|signature| {
-                    BookingRecord::Exit(ExitRecord {
+            let committed = book_position(position_id, |row, _| {
+                if row.transaction_exit_verified {
+                    return Ok(Booking::Skip(()));
+                }
+                // A submission whose row write failed left the exit signature in memory
+                // only; the verified swap supplies it to the row.
+                if row.exit_transaction_signature.is_none() {
+                    row.exit_transaction_signature = Some(exit_signature.clone());
+                }
+                // A full close sells whatever is left: the amount moved is what THIS close sold.
+                let closed_amount = row.book_close(&CloseFill {
+                    effective_exit_price,
+                    native_received,
+                    fee_raw,
+                    exit_time,
+                })?;
+                // The exit record for the FULL close: the position-details History tab and
+                // the chart's exit markers are built from these records.
+                Ok(Booking::Write {
+                    record: Some(BookingRecord::Exit(ExitRecord {
                         id: None,
                         position_id,
                         timestamp: exit_time,
                         amount: closed_amount,
                         price: effective_exit_price,
                         native_received,
-                        transaction_signature: signature,
+                        transaction_signature: exit_signature.clone(),
                         is_partial: false,
                         percentage: 100.0,
                         fees_raw: Some(fee_raw),
-                    })
-                });
-
-            match commit_booking(&candidate, BookingGuard::ExitNotVerified, record.as_ref()).await?
-            {
-                BookingCommit::AlreadyBooked => {
+                    })),
+                    outcome: (),
+                })
+            })
+            .await?;
+            let (candidate, pnl_native) = match committed {
+                Committed::Skipped(_) => {
                     logger::debug(
                         LogTag::Positions,
                         &format!("Exit for position {position_id} already verified - skipping"),
@@ -199,12 +209,11 @@ pub async fn apply_transition(transition: PositionTransition) -> Result<ApplyEff
                     release_position_slot(position_id).await;
                     return Ok(effects);
                 }
-                BookingCommit::Committed => {}
-            }
-            publish_booking(position_id, &candidate, |live| {
-                live.book_close(&fill).map(|_| ())
-            })
-            .await;
+                Committed::Written { row, .. } => {
+                    let pnl_native = row.pnl.unwrap_or_default();
+                    (row, pnl_native)
+                }
+            };
 
             effects.db_updated = true;
             effects.position_closed = true;
@@ -305,21 +314,34 @@ pub async fn apply_transition(transition: PositionTransition) -> Result<ApplyEff
         // =================================================================
         // EXIT FAILURE / RETRY
         // =================================================================
-        PositionTransition::ExitFailedClearForRetry { position_id } => {
-            let Some(snapshot) = get_position_by_id(position_id).await else {
+        PositionTransition::ExitFailedClearForRetry {
+            position_id,
+            exit_signature,
+        } => {
+            if get_position_by_id(position_id).await.is_none() {
                 log_missing_position(position_id, "exit retry clear");
                 return Ok(effects);
-            };
-            let mut candidate = snapshot;
-            // The old signature is purged from the index once the clear is stored, so no stale
-            // sig->mint mapping remains.
-            let old_sig = candidate.clear_failed_exit();
-
+            }
             // A failed sell must never reopen a close that is already verified (a force close
             // or a synthetic exit committed while the sell was still being verified). The
-            // stored verified flag is read inside the clear's own transaction.
-            match commit_booking(&candidate, BookingGuard::ExitNotVerified, None).await? {
-                BookingCommit::AlreadyBooked => {
+            // stored verified flag is read inside the clear's own transaction. Once the clear
+            // is stored, the failed swap's signature, and the row's if it named another, are
+            // purged from the index, so no stale sig->mint mapping remains. The failed swap
+            // comes from the transition: a submission whose row write failed never put it on
+            // the row.
+            let committed = book_position(position_id, |row, _| {
+                if row.transaction_exit_verified {
+                    return Ok(Booking::Skip(None));
+                }
+                let row_sig = row.clear_failed_exit();
+                Ok(Booking::Write {
+                    record: None,
+                    outcome: row_sig,
+                })
+            })
+            .await?;
+            let row_sig = match committed {
+                Committed::Skipped(_) => {
                     logger::warning(
                         LogTag::Positions,
                         &format!(
@@ -328,28 +350,24 @@ pub async fn apply_transition(transition: PositionTransition) -> Result<ApplyEff
                     );
                     return Err(Error::AlreadyClosed { position_id });
                 }
-                BookingCommit::Committed => {}
-            }
-            publish_booking(position_id, &candidate, |live| {
-                live.clear_failed_exit();
-                Ok(())
-            })
-            .await;
+                Committed::Written { outcome, .. } => outcome,
+            };
             effects.db_updated = true;
 
-            if let Some(sig) = old_sig {
-                remove_signature_from_index(&sig).await;
-                crate::events::record_position_event_flexible(
-                    "exit_retry_cleared",
-                    crate::events::Severity::Warn,
-                    None,
-                    Some(&sig),
-                    serde_json::json!({
-                      "position_id": position_id
-                    }),
-                )
-                .await;
+            if let Some(row_sig) = row_sig.filter(|sig| *sig != exit_signature) {
+                remove_signature_from_index(&row_sig).await;
             }
+            remove_signature_from_index(&exit_signature).await;
+            crate::events::record_position_event_flexible(
+                "exit_retry_cleared",
+                crate::events::Severity::Warn,
+                None,
+                Some(&exit_signature),
+                serde_json::json!({
+                  "position_id": position_id
+                }),
+            )
+            .await;
         }
 
         PositionTransition::ExitPermanentFailureSynthetic {
@@ -362,24 +380,28 @@ pub async fn apply_transition(transition: PositionTransition) -> Result<ApplyEff
             // Realized proceeds from earlier partial exits still stand; only the remainder is
             // written off. The stored `transaction_exit_verified` flag guards against booking
             // (and counting the loss) twice.
-            let Some(snapshot) = get_position_by_id(position_id).await else {
+            if get_position_by_id(position_id).await.is_none() {
                 log_missing_position(position_id, "synthetic exit");
                 return Ok(effects);
-            };
-            let mut candidate = snapshot;
-            let realized_pnl = match candidate.book_synthetic_close(exit_time) {
-                Ok(realized_pnl) => realized_pnl,
-                Err(error) => {
+            }
+            let committed = book_position(position_id, |row, _| {
+                if row.transaction_exit_verified {
+                    return Ok(Booking::Skip(0.0));
+                }
+                let realized_pnl = row.book_synthetic_close(exit_time).inspect_err(|error| {
                     logger::error(
                         LogTag::Positions,
                         &format!("Synthetic exit for position {position_id} not applied: {error}"),
                     );
-                    return Err(error);
-                }
-            };
-
-            match commit_booking(&candidate, BookingGuard::ExitNotVerified, None).await? {
-                BookingCommit::AlreadyBooked => {
+                })?;
+                Ok(Booking::Write {
+                    record: None,
+                    outcome: realized_pnl,
+                })
+            })
+            .await?;
+            let (candidate, realized_pnl) = match committed {
+                Committed::Skipped(_) => {
                     logger::debug(
                         LogTag::Positions,
                         &format!(
@@ -389,12 +411,8 @@ pub async fn apply_transition(transition: PositionTransition) -> Result<ApplyEff
                     release_position_slot(position_id).await;
                     return Ok(effects);
                 }
-                BookingCommit::Committed => {}
-            }
-            publish_booking(position_id, &candidate, |live| {
-                live.book_synthetic_close(exit_time).map(|_| ())
-            })
-            .await;
+                Committed::Written { row, outcome } => (row, outcome),
+            };
             effects.db_updated = true;
             effects.position_closed = true;
 
@@ -549,76 +567,73 @@ pub async fn apply_transition(transition: PositionTransition) -> Result<ApplyEff
                 log_missing_position(position_id, "partial exit verification");
                 return Ok(effects);
             };
-
-            // Unrealized P&L after the partial is computed from the position as booked, so it
-            // is current at once instead of on the next price tick.
-            let mut fill = PartialExitFill {
-                exit_amount,
-                native_received,
-                effective_exit_price,
-                unrealized_pnl: None,
-            };
-            let mut probe = snapshot.clone();
-            probe.book_partial_exit(&fill)?;
-            if let Some(current_price) = probe.current_price {
-                fill.unrealized_pnl = Some(
-                    crate::positions::calculate_position_pnl(&probe, Some(current_price)).await,
-                );
-            } else {
+            // The live price is the price updater's, in memory; the token's decimals value
+            // the tokens still held and the tokens sold.
+            let live_price = snapshot.current_price;
+            let decimals =
+                crate::tokens::get_decimals(crate::chains::active_chain(), &snapshot.mint).await;
+            if live_price.is_none() {
                 logger::debug(
                     LogTag::Positions,
                     &format!(
                         "No current price available for {} after partial exit, PnL will update on next price tick",
-                        probe.symbol
+                        snapshot.symbol
                     ),
                 );
             }
 
-            // CRITICAL: the booking sets neither exit_time nor the exit signature - the
-            // position is still open.
-            let mut candidate = snapshot;
-            candidate.book_partial_exit(&fill)?;
-            let record = BookingRecord::Exit(ExitRecord {
-                id: None,
-                position_id,
-                timestamp: exit_time,
-                amount: exit_amount,
-                price: effective_exit_price,
-                native_received,
-                transaction_signature: exit_signature.clone(),
-                is_partial: true,
-                percentage: exit_percentage,
-                fees_raw: Some(fee_raw),
-            });
-
-            match commit_booking(
-                &candidate,
-                BookingGuard::ExitRecordAbsent(&exit_signature),
-                Some(&record),
-            )
-            .await?
-            {
-                BookingCommit::AlreadyBooked => {
-                    logger::debug(
-                        LogTag::Positions,
-                        &format!(
-                            "Partial exit {exit_signature} already recorded for position {position_id} - skipping"
-                        ),
-                    );
-                    // Still drop the pending marks, or the mint stays flagged as "a partial
-                    // exit is confirming" and every later exit for it is refused. The per-mint
-                    // counter drops only once the detail is gone: it must fall exactly once per
-                    // signature, or a later in-flight partial loses its serialization.
-                    super::state::clear_pending_partial_exit(&exit_signature).await?;
-                    super::state::clear_partial_exit_pending(&candidate.mint).await;
-                    return Ok(effects);
+            let committed = book_position(position_id, |row, reads| {
+                if reads.exit_record_exists(&exit_signature)? {
+                    return Ok(Booking::Skip(()));
                 }
-                BookingCommit::Committed => {}
-            }
-            publish_booking(position_id, &candidate, |live| {
-                live.book_partial_exit(&fill).map(|_| ())
+                // Unrealized P&L after the partial is computed from the position as booked,
+                // so it is current at once instead of on the next price tick.
+                let mut fill = PartialExitFill {
+                    exit_amount,
+                    native_received,
+                    effective_exit_price,
+                    unrealized_pnl: None,
+                };
+                let mut probe = row.clone();
+                probe.book_partial_exit(&fill)?;
+                fill.unrealized_pnl =
+                    live_price.map(|price| position_pnl(&probe, Some(price), decimals));
+
+                // CRITICAL: the booking sets neither exit_time nor the exit signature - the
+                // position is still open.
+                row.book_partial_exit(&fill)?;
+                Ok(Booking::Write {
+                    record: Some(BookingRecord::Exit(ExitRecord {
+                        id: None,
+                        position_id,
+                        timestamp: exit_time,
+                        amount: exit_amount,
+                        price: effective_exit_price,
+                        native_received,
+                        transaction_signature: exit_signature.clone(),
+                        is_partial: true,
+                        percentage: exit_percentage,
+                        fees_raw: Some(fee_raw),
+                    })),
+                    outcome: (),
+                })
             })
-            .await;
+            .await?;
+            let Committed::Written { row: candidate, .. } = committed else {
+                logger::debug(
+                    LogTag::Positions,
+                    &format!(
+                        "Partial exit {exit_signature} already recorded for position {position_id} - skipping"
+                    ),
+                );
+                // Still drop the pending marks, or the mint stays flagged as "a partial
+                // exit is confirming" and every later exit for it is refused. The per-mint
+                // counter drops only once the detail is gone: it must fall exactly once per
+                // signature, or a later in-flight partial loses its serialization.
+                super::state::clear_pending_partial_exit(&exit_signature).await?;
+                super::state::clear_partial_exit_pending(&snapshot.mint).await;
+                return Ok(effects);
+            };
 
             effects.db_updated = true;
             let _ = force_database_sync().await;
@@ -638,13 +653,10 @@ pub async fn apply_transition(transition: PositionTransition) -> Result<ApplyEff
 
             // Realized P&L for THIS partial: proceeds minus the cost basis of the tokens
             // sold, scaled by the token's real decimals.
-            let sold_tokens =
-                match crate::tokens::get_decimals(crate::chains::active_chain(), &candidate.mint)
-                    .await
-                {
-                    Some(decimals) => exit_amount.to_whole_units(decimals),
-                    None => 0.0,
-                };
+            let sold_tokens = match decimals {
+                Some(decimals) => exit_amount.to_whole_units(decimals),
+                None => 0.0,
+            };
             let partial_pnl = if sold_tokens > 0.0 {
                 Some(native_received - (sold_tokens * candidate.average_entry_price))
             } else {
@@ -751,13 +763,16 @@ pub async fn apply_transition(transition: PositionTransition) -> Result<ApplyEff
                 effective_exit_price,
                 fee_raw,
                 exit_time,
-                exit_signature,
+                exit_signature: exit_signature.clone(),
                 exit_percentage,
             }))
             .await?;
 
             let cleared = Box::pin(apply_transition(
-                PositionTransition::ExitFailedClearForRetry { position_id },
+                PositionTransition::ExitFailedClearForRetry {
+                    position_id,
+                    exit_signature,
+                },
             ))
             .await?;
 
@@ -873,60 +888,54 @@ pub async fn apply_transition(transition: PositionTransition) -> Result<ApplyEff
                 dca_time,
                 decimals,
             };
-            let mut candidate = snapshot;
-            let booking = candidate.book_dca(&fill)?;
-            match booking.average {
-                DcaAverage::Recomputed => {}
-                DcaAverage::InvalidNormalization => logger::error(
-                    LogTag::Positions,
-                    &format!(
-                        "DCA: Invalid token normalization for position {} (remaining={}, decimals={})",
-                        position_id, booking.remaining, decimals
-                    ),
-                ),
-                DcaAverage::InvalidState => logger::error(
-                    LogTag::Positions,
-                    &format!(
-                        "DCA: Invalid position state for average price calculation - position_id={}, remaining_tokens={}, total_size_native={}",
-                        position_id, booking.remaining, candidate.total_size_native
-                    ),
-                ),
-            }
-            let record = BookingRecord::Entry(EntryRecord {
-                id: None,
-                position_id,
-                timestamp: dca_time,
-                amount: tokens_bought,
-                price: effective_price,
-                native_spent,
-                transaction_signature: dca_signature.clone(),
-                is_dca: true,
-                fees_raw: Some(fee_raw),
-            });
-
-            match commit_booking(
-                &candidate,
-                BookingGuard::EntryRecordAbsent(&dca_signature),
-                Some(&record),
-            )
-            .await?
-            {
-                BookingCommit::AlreadyBooked => {
-                    logger::debug(
+            let committed = book_position(position_id, |row, reads| {
+                if reads.entry_record_exists(&dca_signature)? {
+                    return Ok(Booking::Skip(()));
+                }
+                let booking = row.book_dca(&fill)?;
+                match booking.average {
+                    DcaAverage::Recomputed => {}
+                    DcaAverage::InvalidNormalization => logger::error(
                         LogTag::Positions,
                         &format!(
-                            "DCA {dca_signature} already recorded for position {position_id} - skipping"
+                            "DCA: Invalid token normalization for position {} (remaining={}, decimals={})",
+                            position_id, booking.remaining, decimals
                         ),
-                    );
-                    clear_pending_dca_swap(&dca_signature).await?;
-                    return Ok(effects);
+                    ),
+                    DcaAverage::InvalidState => logger::error(
+                        LogTag::Positions,
+                        &format!(
+                            "DCA: Invalid position state for average price calculation - position_id={}, remaining_tokens={}, total_size_native={}",
+                            position_id, booking.remaining, row.total_size_native
+                        ),
+                    ),
                 }
-                BookingCommit::Committed => {}
-            }
-            publish_booking(position_id, &candidate, |live| {
-                live.book_dca(&fill).map(|_| ())
+                Ok(Booking::Write {
+                    record: Some(BookingRecord::Entry(EntryRecord {
+                        id: None,
+                        position_id,
+                        timestamp: dca_time,
+                        amount: tokens_bought,
+                        price: effective_price,
+                        native_spent,
+                        transaction_signature: dca_signature.clone(),
+                        is_dca: true,
+                        fees_raw: Some(fee_raw),
+                    })),
+                    outcome: (),
+                })
             })
-            .await;
+            .await?;
+            let Committed::Written { row: candidate, .. } = committed else {
+                logger::debug(
+                    LogTag::Positions,
+                    &format!(
+                        "DCA {dca_signature} already recorded for position {position_id} - skipping"
+                    ),
+                );
+                clear_pending_dca_swap(&dca_signature).await?;
+                return Ok(effects);
+            };
 
             effects.db_updated = true;
             let _ = force_database_sync().await;
@@ -1073,38 +1082,28 @@ pub async fn apply_transition(transition: PositionTransition) -> Result<ApplyEff
     Ok(effects)
 }
 
-/// Publishes a committed booking to the in-memory position by replaying the same pure
-/// booking on it. A replay that fails publishes the committed candidate instead.
-pub(super) async fn publish_booking(
+/// Books onto the stored row of `position_id` (see [`commit_booking`]) and publishes the
+/// committed row to memory, both under the position's booking lock, so memory adopts the
+/// rows of one position in commit order.
+pub(crate) async fn book_position<T>(
     position_id: i64,
-    candidate: &Position,
-    replay: impl FnOnce(&mut Position) -> Result<()>,
-) {
-    let mut replay_error = None;
-    let published = update_position_state_by_id(position_id, |live| {
-        if let Err(error) = replay(live) {
-            *live = candidate.clone();
-            replay_error = Some(error);
+    book: impl FnOnce(&mut Position, &BookingReads<'_>) -> Result<Booking<T>>,
+) -> Result<Committed<T>> {
+    with_booking_lock(position_id, async {
+        let committed = commit_booking(position_id, book).await?;
+        if let Committed::Written { row, .. } = &committed {
+            if !publish_committed(row).await {
+                logger::debug(
+                    LogTag::Positions,
+                    &format!(
+                        "Position {position_id} is not in memory; its committed row is not published"
+                    ),
+                );
+            }
         }
+        Ok(committed)
     })
-    .await;
-
-    if let Some(error) = replay_error {
-        logger::error(
-            LogTag::Positions,
-            &format!(
-                "Replaying the committed booking on position {position_id} failed ({error}); published the committed state"
-            ),
-        );
-    }
-    if !published {
-        logger::warning(
-            LogTag::Positions,
-            &format!(
-                "Position {position_id} left memory before its committed booking was published"
-            ),
-        );
-    }
+    .await
 }
 
 fn log_missing_position(position_id: i64, transition: &str) {

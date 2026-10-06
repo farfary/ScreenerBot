@@ -1,14 +1,13 @@
 // Copyright (c) 2024-2026 ScreenerBot (screenerbot.io)
 // SPDX-License-Identifier: BUSL-1.1
 
-//! Position helpers — utility functions for index maintenance, snapshots, and database sync.
+//! Position helpers — utility functions for index maintenance and snapshots.
 
 use crate::{
     logger::{self, LogTag},
     positions::{
-        acquire_position_lock, delete_position_by_id, save_position, save_token_snapshot,
-        update_position, Position, TokenSnapshot, MINT_TO_POSITION_INDEX, POSITIONS,
-        SIG_TO_MINT_INDEX,
+        acquire_position_lock, delete_position_by_id, save_token_snapshot, TokenSnapshot,
+        MINT_TO_POSITION_INDEX, POSITIONS, SIG_TO_MINT_INDEX,
     },
 };
 use chrono::Utc;
@@ -374,22 +373,4 @@ pub async fn remove_position_by_signature(signature: &str) -> Result<()> {
     }
 
     Ok(())
-}
-
-/// Sync a position between memory and database
-pub async fn sync_position_to_database(position: &Position) -> Result<()> {
-    let _lock = acquire_position_lock(&position.mint).await;
-
-    if let Some(_position_id) = position.id {
-        // Update existing position
-        update_position(position).await
-    } else {
-        // Insert new position
-        let new_id = save_position(position).await?;
-        logger::info(
-            LogTag::Positions,
-            &format!("Position synced to database with new ID {new_id}"),
-        );
-        Ok(())
-    }
 }

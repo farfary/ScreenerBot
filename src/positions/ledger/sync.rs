@@ -57,6 +57,7 @@ use super::{
 };
 use crate::chains::RawAmount;
 use crate::logger::{self, LogTag};
+use crate::positions::db::{Booking, Committed};
 use crate::positions::types::{Position, PositionManagement, PositionOrigin, HOLDING_STATE_FROZEN};
 
 /// `closed_reason` for a bot-executed position whose token left the wallet through a
@@ -108,7 +109,21 @@ pub struct RoundMetadata {
 #[derive(Debug, Default)]
 pub struct SyncPlan {
     pub inserts: Vec<Position>,
-    pub updates: Vec<Position>,
+    pub updates: Vec<PlannedUpdate>,
+    /// The planning clock, reused when an update is re-derived at write time.
+    pub now: DateTime<Utc>,
+}
+
+/// A rewrite of an existing row, with the round and metadata it was derived from.
+///
+/// `position` is the rewrite as planned against the rows read for the plan. The write
+/// re-derives it from the same round on the row read inside its own transaction, so a
+/// booking committed after the plan was made is kept instead of overwritten.
+#[derive(Debug, Clone)]
+pub struct PlannedUpdate {
+    pub position: Position,
+    round: LedgerRound,
+    meta: RoundMetadata,
 }
 
 impl SyncPlan {
@@ -124,6 +139,15 @@ pub struct SyncSummary {
     pub inserted: usize,
     pub updated: usize,
     pub unchanged: usize,
+}
+
+/// The rows [`apply_plan`] wrote. A planned update found busy or already current at write
+/// time is `skipped`; a row that failed to write is logged and counted in neither.
+#[derive(Debug, Default, Clone, Copy, PartialEq, Eq)]
+pub struct AppliedPlan {
+    pub inserted: usize,
+    pub updated: usize,
+    pub skipped: usize,
 }
 
 /// Decide which position rows must be created, rewritten or reconciled.
@@ -178,7 +202,10 @@ pub fn plan_position_writes(
     }
 
     let mut claimed: HashSet<i64> = HashSet::new();
-    let mut plan = SyncPlan::default();
+    let mut plan = SyncPlan {
+        now,
+        ..SyncPlan::default()
+    };
 
     for round in rounds {
         let meta = metadata.get(&round.mint).cloned().unwrap_or_default();
@@ -188,22 +215,14 @@ pub fn plan_position_writes(
             .or_else(|| adopt_row(round, &adoptable, &mut claimed));
 
         match current {
-            // The bot's own row. Reconcile it against the chain; never rewrite what the
-            // trader owns, and never insert a second row for the same round.
-            Some(owned) if !owned.is_wallet_derived() => {
-                if is_busy(owned, busy_mints) {
-                    continue;
-                }
-                let legs = owned.id.and_then(|id| trader_legs.get(&id));
-                let fresh = reconcile_owned_position(owned, round, &meta, legs, now);
-                if differs_owned(owned, &fresh) {
-                    plan.updates.push(fresh);
-                }
-            }
-            Some(derived) => {
-                let fresh = build_position(round, &meta, Some(derived), now);
-                if differs(derived, &fresh) {
-                    plan.updates.push(fresh);
+            Some(current) => {
+                let legs = current.id.and_then(|id| trader_legs.get(&id));
+                if let Some(position) = rewrite_row(current, round, &meta, legs, busy_mints, now) {
+                    plan.updates.push(PlannedUpdate {
+                        position,
+                        round: round.clone(),
+                        meta,
+                    });
                 }
             }
             None => plan.inserts.push(build_position(round, &meta, None, now)),
@@ -211,6 +230,31 @@ pub fn plan_position_writes(
     }
 
     plan
+}
+
+/// The rewrite a round implies for a row it claimed, or `None` when the row must be left
+/// as it is.
+///
+/// A row the bot executed is reconciled against the chain, never rewritten, and left
+/// alone while the trader has work in flight on it. A wallet-derived row is rebuilt from
+/// the round. Either way, a rewrite that changes nothing is not written.
+fn rewrite_row(
+    current: &Position,
+    round: &LedgerRound,
+    meta: &RoundMetadata,
+    legs: Option<&TraderLegs>,
+    busy_mints: &HashSet<String>,
+    now: DateTime<Utc>,
+) -> Option<Position> {
+    if current.is_wallet_derived() {
+        let fresh = build_position(round, meta, Some(current), now);
+        return differs(current, &fresh).then_some(fresh);
+    }
+    if is_busy(current, busy_mints) {
+        return None;
+    }
+    let fresh = reconcile_owned_position(current, round, meta, legs, now);
+    differs_owned(current, &fresh).then_some(fresh)
 }
 
 /// True when the trader still has work in flight on this position, so the ledger must
@@ -750,14 +794,14 @@ pub async fn sync_wallet_history() -> super::super::error::Result<SyncSummary> {
         Utc::now(),
     );
 
+    let planned_unchanged = rounds.len() - plan.inserts.len() - plan.updates.len();
+    let applied = apply_plan(plan).await;
     let summary = SyncSummary {
         rounds: rounds.len(),
-        inserted: plan.inserts.len(),
-        updated: plan.updates.len(),
-        unchanged: rounds.len() - plan.inserts.len() - plan.updates.len(),
+        inserted: applied.inserted,
+        updated: applied.updated,
+        unchanged: planned_unchanged + applied.skipped,
     };
-
-    apply_plan(plan).await;
 
     if summary.inserted > 0 || summary.updated > 0 {
         logger::info(
@@ -822,12 +866,19 @@ async fn resolve_metadata(
 
 /// Write the plan to the database and mirror it into in-memory state.
 ///
+/// An update is re-derived from its round on the row read inside its own booking
+/// transaction (see [`rewrite_row`]), so a booking committed between planning and writing
+/// is kept, and memory adopts the committed row. A row that became busy or no longer
+/// differs is left untouched.
+///
 /// A single failed row is logged and skipped: one unwritable position must not abort the
-/// import of the rest of the wallet's history.
-async fn apply_plan(plan: SyncPlan) {
+/// import of the rest of the wallet's history. Returns the rows actually written.
+pub async fn apply_plan(plan: SyncPlan) -> AppliedPlan {
+    let mut applied = AppliedPlan::default();
     for mut position in plan.inserts {
         match crate::positions::db::save_position(&position).await {
             Ok(id) => {
+                applied.inserted += 1;
                 position.id = Some(id);
                 // Mirror into memory. If the positions service has not loaded yet, its
                 // load replaces the whole vector from the database (which now contains
@@ -844,23 +895,60 @@ async fn apply_plan(plan: SyncPlan) {
         }
     }
 
-    for position in plan.updates {
-        let Some(id) = position.id else { continue };
-        if let Err(e) = crate::positions::db::update_position(&position).await {
-            logger::warning(
-                LogTag::Positions,
-                &format!("Wallet-history sync failed to update position {id}: {e}"),
-            );
+    for update in plan.updates {
+        let Some(id) = update.position.id else {
             continue;
-        }
+        };
+        let busy_mints = crate::positions::state::mints_with_pending_swaps().await;
+        let committed = crate::positions::apply::book_position(id, |row, reads| {
+            let legs = if row.is_wallet_derived() {
+                None
+            } else {
+                Some(
+                    TraderLegs::from_rows(reads.trader_swap_legs()?)
+                        .remove(&id)
+                        .unwrap_or_default(),
+                )
+            };
+            Ok(
+                match rewrite_row(
+                    row,
+                    &update.round,
+                    &update.meta,
+                    legs.as_ref(),
+                    &busy_mints,
+                    plan.now,
+                ) {
+                    Some(fresh) => {
+                        *row = fresh;
+                        Booking::Write {
+                            record: None,
+                            outcome: (),
+                        }
+                    }
+                    None => Booking::Skip(()),
+                },
+            )
+        })
+        .await;
+        let position = match committed {
+            Ok(Committed::Written { row, .. }) => row,
+            Ok(Committed::Skipped(())) => {
+                applied.skipped += 1;
+                continue;
+            }
+            Err(e) => {
+                logger::warning(
+                    LogTag::Positions,
+                    &format!("Wallet-history sync failed to update position {id}: {e}"),
+                );
+                continue;
+            }
+        };
+        applied.updated += 1;
 
         let closed_a_bot_position =
             !position.is_wallet_derived() && !crate::positions::state::is_position_open(&position);
-
-        crate::positions::state::update_position_state_by_id(id, |stored| {
-            *stored = position.clone();
-        })
-        .await;
 
         // A bot position the ledger just closed still holds the trading slot it took
         // when it opened. Releasing it is idempotent, so a row that was already closed
@@ -891,6 +979,7 @@ async fn apply_plan(plan: SyncPlan) {
             .await;
         }
     }
+    applied
 }
 
 // =============================================================================

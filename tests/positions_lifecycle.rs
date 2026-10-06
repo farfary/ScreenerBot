@@ -141,8 +141,12 @@ fn all_transitions() -> Vec<PositionTransition> {
             native_received: 2.0,
             fee_raw: 5_000,
             exit_time: now,
+            exit_signature: "exit-sig".to_owned(),
         },
-        PositionTransition::ExitFailedClearForRetry { position_id: 1 },
+        PositionTransition::ExitFailedClearForRetry {
+            position_id: 1,
+            exit_signature: "exit-sig".to_owned(),
+        },
         PositionTransition::ExitPermanentFailureSynthetic {
             position_id: 1,
             exit_time: now,

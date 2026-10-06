@@ -248,6 +248,18 @@ async fn a_closed_position_is_proceeds_minus_cost() {
 }
 
 #[tokio::test]
+async fn a_closed_position_with_proceeds_needs_no_market_exit_price() {
+    // The market exit price is stamped when the sell is submitted, and that write can
+    // fail. A close verified on chain still carries its proceeds, which alone fix the
+    // realized result.
+    let mut position = closed_position(1.0, 2.5);
+    position.exit_price = None;
+    let (pnl, pct) = calculate_position_pnl(&position, None).await;
+    assert_close(pnl, 1.5, "pnl");
+    assert_close(pct, 150.0, "pnl percent");
+}
+
+#[tokio::test]
 async fn a_closed_position_needs_no_current_price() {
     // Realized P&L is history. Passing a live price must not change it, or a closed
     // position's recorded result would drift with the market forever.

@@ -34,7 +34,8 @@ pub use global::{
     with_positions_database_async,
 };
 
-pub(crate) use booking::{BookingCommit, BookingGuard, BookingRecord};
+pub(crate) use booking::{Booking, BookingReads, BookingRecord, Committed};
+pub(crate) use operations::carry_columns_not_booked;
 
 // Re-export convenience functions
 pub(crate) use convenience::commit_booking;
@@ -46,6 +47,5 @@ pub use convenience::{
     get_position_by_id, get_recent_closed_positions_for_mint, get_token_snapshot,
     get_token_snapshots, get_trader_swap_legs, load_all_positions, record_exit_submission,
     save_position, save_token_snapshot, set_metadata, set_position_archived_db,
-    set_position_management_db, update_position, update_position_price_and_pnl_fields,
-    update_position_price_fields,
+    set_position_management_db, update_position_price_and_pnl_fields, update_position_price_fields,
 };

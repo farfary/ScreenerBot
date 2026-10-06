@@ -35,8 +35,8 @@ impl PositionsDatabase {
     /// Archival is a reversible flag — it does NOT delete any data. Archived
     /// positions are hidden from the open/closed lists and surfaced in the
     /// Archived tab. `archived_at` is stamped when archiving and cleared when
-    /// unarchiving. Deliberately separate from `update_position` so routine
-    /// price/state writes never clobber the flag.
+    /// unarchiving. Deliberately separate from the booking row write, which
+    /// does not carry the flag, so routine price/state writes never clobber it.
     pub async fn set_position_archived(&self, id: i64, archived: bool) -> Result<bool> {
         let conn = self.get_connection()?;
 

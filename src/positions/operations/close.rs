@@ -12,7 +12,7 @@ use crate::positions::db::record_exit_submission;
 use crate::positions::price_resolution::get_price_with_api_fallback;
 use crate::positions::queue::{enqueue_verification, VerificationItem};
 use crate::positions::state::{
-    acquire_position_lock, add_signature_to_index, set_exit_submission_in_memory,
+    acquire_position_lock, add_signature_to_index, set_exit_submission_in_memory, with_booking_lock,
 };
 use crate::positions::types::VerificationKind;
 use crate::positions::PENDING_VERIFICATION_SUFFIX;
@@ -405,7 +405,7 @@ pub async fn close_position_direct(
                 Err(error) => logger::error(
                     LogTag::Positions,
                     &format!(
-                        "Exit {} for position {} was not written to the database ({}); memory holds it and verification books the whole row",
+                        "Exit {} for position {} was not written to the database ({}); memory holds it, and verification stores the signature with the close",
                         transaction_signature, id, error
                     ),
                 ),
@@ -465,43 +465,54 @@ pub async fn close_position_direct(
     Ok(transaction_signature)
 }
 
-/// Records a submitted full-exit swap on its position: the row first, then memory.
+/// Records a submitted full-exit swap on its position: the row first, then memory, both
+/// under the position's booking lock so no booking publishes a row read before the write.
 ///
 /// A retryable row failure is retried with the position-save backoff, up to
 /// `POSITION_SAVE_MAX_RETRIES` attempts. The swap is already submitted, so memory takes
 /// the exit even when the row write finally fails: without it the exit monitor would sell
-/// again and verification could not match the exit to its position. The verification
-/// booking writes the whole row, so the row catches up there. A position whose exit is
-/// already verified keeps its booking in the row and in memory, and the call returns
-/// [`Error::AlreadyClosed`]. Returns the result of the row write.
+/// again and verification could not match the exit to its position. The row then lacks
+/// the submission until verification: a verified close stores the swap's signature with
+/// the close, its exit record and its realized P&L, and a failed one clears the exit by
+/// the swap's signature. The market exit price and the pending reason stay memory-only. A
+/// position whose exit is already verified keeps its booking in the row and in memory,
+/// and the call returns [`Error::AlreadyClosed`]. Returns the result of the row write.
 pub async fn mark_exit_submitted(
     position_id: i64,
     exit_signature: &str,
     exit_price: f64,
     closed_reason: &str,
 ) -> Result<()> {
-    let mut attempt = 1;
-    let persisted = loop {
-        match record_exit_submission(position_id, exit_signature, exit_price, closed_reason).await {
-            Err(error) if error.is_retryable() && attempt < super::POSITION_SAVE_MAX_RETRIES => {
-                logger::warning(
-                    LogTag::Positions,
-                    &format!(
-                        "Recording exit {exit_signature} for position {position_id} failed on attempt {attempt}: {error}"
-                    ),
-                );
-                sleep(Duration::from_millis(super::position_save_backoff_ms(
-                    attempt,
-                )))
-                .await;
-                attempt += 1;
+    with_booking_lock(position_id, async {
+        let mut attempt = 1;
+        let persisted = loop {
+            match record_exit_submission(position_id, exit_signature, exit_price, closed_reason)
+                .await
+            {
+                Err(error)
+                    if error.is_retryable() && attempt < super::POSITION_SAVE_MAX_RETRIES =>
+                {
+                    logger::warning(
+                        LogTag::Positions,
+                        &format!(
+                            "Recording exit {exit_signature} for position {position_id} failed on attempt {attempt}: {error}"
+                        ),
+                    );
+                    sleep(Duration::from_millis(super::position_save_backoff_ms(
+                        attempt,
+                    )))
+                    .await;
+                    attempt += 1;
+                }
+                result => break result,
             }
-            result => break result,
+        };
+        if matches!(persisted, Err(Error::AlreadyClosed { .. })) {
+            return persisted;
         }
-    };
-    if matches!(persisted, Err(Error::AlreadyClosed { .. })) {
-        return persisted;
-    }
-    set_exit_submission_in_memory(position_id, exit_signature, exit_price, closed_reason).await;
-    persisted
+        set_exit_submission_in_memory(position_id, exit_signature, exit_price, closed_reason)
+            .await;
+        persisted
+    })
+    .await
 }

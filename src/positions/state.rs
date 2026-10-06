@@ -5,11 +5,13 @@
 
 pub use super::state_pending::*;
 
+use super::db::carry_columns_not_booked;
 use super::types::Position;
 use crate::logger::{self, LogTag};
 use chrono::{DateTime, Utc};
 use std::{
     collections::HashMap,
+    future::Future,
     sync::{Arc, LazyLock, OnceLock},
 };
 use tokio::sync::{Mutex, OwnedMutexGuard, RwLock};
@@ -26,6 +28,10 @@ pub static MINT_TO_POSITION_INDEX: LazyLock<RwLock<HashMap<String, usize>>> =
 
 // Per-position locks
 static POSITION_LOCKS: LazyLock<RwLock<HashMap<String, Arc<Mutex<()>>>>> =
+    LazyLock::new(|| RwLock::new(HashMap::new()));
+
+// Per-position booking locks, keyed by database id
+static BOOKING_LOCKS: LazyLock<RwLock<HashMap<i64, Arc<Mutex<()>>>>> =
     LazyLock::new(|| RwLock::new(HashMap::new()));
 
 // Pending open-swap registry: guards against duplicate opens when the first swap lands on-chain
@@ -106,6 +112,56 @@ pub async fn acquire_position_lock(mint: &str) -> PositionLockGuard {
         mint: mint_key,
         _owned_guard: Some(owned_guard),
     }
+}
+
+/// Runs `work` under the booking lock of one position. A booking holds it from its read
+/// until memory has adopted the committed row, so memory adopts the rows of one position
+/// in commit order; the exit-submission write and its memory mirror hold it too, so no
+/// booking publishes a row read before that write. Lock order: the mint lock, then this
+/// lock, then `POSITIONS`. The lock is dropped from the map once no other caller holds or
+/// awaits it.
+pub(crate) async fn with_booking_lock<F: Future>(position_id: i64, work: F) -> F::Output {
+    let lock = BOOKING_LOCKS
+        .write()
+        .await
+        .entry(position_id)
+        .or_insert_with(|| Arc::new(Mutex::new(())))
+        .clone();
+    let guard = lock.lock_owned().await;
+    let output = work.await;
+    drop(guard);
+    prune_booking_lock(position_id).await;
+    output
+}
+
+/// Drops the booking lock of a position unless a caller holds or awaits it.
+async fn prune_booking_lock(position_id: i64) {
+    let mut locks = BOOKING_LOCKS.write().await;
+    if locks
+        .get(&position_id)
+        .is_some_and(|lock| Arc::strong_count(lock) == 1)
+    {
+        locks.remove(&position_id);
+    }
+}
+
+/// Makes `live` the committed row: every column a booking writes comes from `committed`,
+/// while the columns other writers own and the fields that are never persisted keep their
+/// in-memory values.
+fn adopt_committed(live: &mut Position, committed: &Position) {
+    let mut adopted = committed.clone();
+    carry_columns_not_booked(&mut adopted, live);
+    adopted.phantom_remove = live.phantom_remove;
+    *live = adopted;
+}
+
+/// Publishes a committed row to the in-memory position of the same id. Returns false
+/// when the position is not in memory.
+pub(crate) async fn publish_committed(committed: &Position) -> bool {
+    let Some(position_id) = committed.id else {
+        return false;
+    };
+    update_position_state_by_id(position_id, |live| adopt_committed(live, committed)).await
 }
 
 /// Acquire a global position creation permit to enforce MAX_OPEN_POSITIONS atomically
@@ -714,4 +770,22 @@ pub async fn is_token_in_cooldown(mint: &str) -> bool {
             && p.transaction_exit_verified
             && p.exit_time.is_some_and(|exit_time| exit_time > cutoff)
     })
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[tokio::test]
+    async fn a_released_booking_lock_leaves_no_entry_behind() {
+        const POSITION_ID: i64 = -7;
+        let first = tokio::spawn(with_booking_lock(POSITION_ID, async {
+            tokio::task::yield_now().await;
+        }));
+        let second = tokio::spawn(with_booking_lock(POSITION_ID, async {}));
+        first.await.expect("first booking");
+        second.await.expect("second booking");
+
+        assert!(!BOOKING_LOCKS.read().await.contains_key(&POSITION_ID));
+    }
 }

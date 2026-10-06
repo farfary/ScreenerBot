@@ -20,6 +20,26 @@ use crate::tokens::get_decimals;
 /// NOTE: Returns (0.0, 0.0) if calculation fails due to invalid prices.
 /// Use calculate_position_pnl_safe() wrapper to distinguish between zero PnL and errors.
 pub async fn calculate_position_pnl(position: &Position, current_price: Option<f64>) -> (f64, f64) {
+    // Decimals value a token amount: an open or closing position at a price, and a closed
+    // position with no recorded proceeds. A closed position with proceeds needs none.
+    let needs_decimals = current_price.is_some()
+        || (position.exit_time.is_some() && position.native_received.is_none());
+    let decimals = if needs_decimals {
+        get_decimals(crate::chains::active_chain(), &position.mint).await
+    } else {
+        None
+    };
+    position_pnl(position, current_price, decimals)
+}
+
+/// [`calculate_position_pnl`] with the token's decimals already resolved: pure, so a
+/// booking can compute P&L on the row it reads inside its transaction. `None` decimals
+/// give the zero P&L of a token whose decimals are unknown.
+pub(crate) fn position_pnl(
+    position: &Position,
+    current_price: Option<f64>,
+    decimals: Option<u8>,
+) -> (f64, f64) {
     // Use average_entry_price for positions with DCA support
     let entry_price =
         if position.average_entry_price > 0.0 && position.average_entry_price.is_finite() {
@@ -68,9 +88,7 @@ pub async fn calculate_position_pnl(position: &Position, current_price: Option<f
             // what is LEFT — after partial exits the original token_amount is no longer in
             // the wallet.
             if let Some(token_amount) = position.held_amount() {
-                let token_decimals_opt =
-                    get_decimals(crate::chains::active_chain(), &position.mint).await;
-                if let Some(token_decimals) = token_decimals_opt {
+                if let Some(token_decimals) = decimals {
                     let ui_token_amount = token_amount.to_whole_units(token_decimals);
                     let current_value = ui_token_amount * current;
 
@@ -112,35 +130,11 @@ pub async fn calculate_position_pnl(position: &Position, current_price: Option<f
     // loss on a healthy position. check_risk_limits force-exits at >90% loss on that number.
     let is_closed = position.exit_time.is_some();
 
-    // For closed positions, prioritize native_received for most accurate P&L
-    if let (true, Some(_exit_price), Some(native_received)) =
-        (is_closed, position.exit_price, position.native_received)
-    {
-        // Total native units invested vs received. `total_size_native` includes every DCA add
-        // (it equals entry_size_native when there was none), whereas entry_size_native counts only
-        // the first buy — so averaging down understated the cost basis and overstated profit.
-        // `native_received` accumulates partial exits plus the final close.
-        let native_invested = position.total_size_native;
-
-        // Use actual transaction fees only — profit_extra_needed is a decision buffer,
-        // not an actual cost. Including it here inflates losses by ~2% on small trades.
-        let buy_fee = position
-            .entry_fee_raw
-            .map_or(0.0, |fee| adapter().raw_to_native(fee));
-        let sell_fee = position
-            .exit_fee_raw
-            .map_or(0.0, |fee| adapter().raw_to_native(fee));
-        let total_fees = buy_fee + sell_fee;
-
-        let net_pnl_native = native_received - native_invested - total_fees;
-        let safe_invested = if native_invested < 0.00001 {
-            0.00001
-        } else {
-            native_invested
-        };
-        let net_pnl_percent = (net_pnl_native / safe_invested) * 100.0;
-
-        return (net_pnl_native, net_pnl_percent);
+    // A closed position with recorded proceeds is fully determined by them. The market
+    // exit price is not needed: it is stamped at submission, and a close whose submission
+    // write failed is verified and booked without it.
+    if is_closed && position.native_received.is_some() {
+        return realized_pnl(position);
     }
 
     // Fallback for closed positions without native_received.
@@ -154,12 +148,8 @@ pub async fn calculate_position_pnl(position: &Position, current_price: Option<f
 
         // For closed positions: actual transaction-based calculation
         if let Some(token_amount) = position.token_amount {
-            // Get token decimals from cache (async)
-            let token_decimals_opt =
-                get_decimals(crate::chains::active_chain(), &position.mint).await;
-
             // CRITICAL: Skip P&L calculation if decimals are not available
-            let token_decimals = match token_decimals_opt {
+            let token_decimals = match decimals {
                 Some(decimals) => decimals,
                 None => {
                     logger::error(
@@ -213,12 +203,8 @@ pub async fn calculate_position_pnl(position: &Position, current_price: Option<f
         let remaining_amount = position.held_amount();
 
         if let Some(token_amount) = remaining_amount {
-            // Get token decimals from cache (async)
-            let token_decimals_opt =
-                get_decimals(crate::chains::active_chain(), &position.mint).await;
-
             // CRITICAL: Skip P&L calculation if decimals are not available
-            let token_decimals = match token_decimals_opt {
+            let token_decimals = match decimals {
                 Some(decimals) => decimals,
                 None => {
                     logger::info(
@@ -274,6 +260,37 @@ pub async fn calculate_position_pnl(position: &Position, current_price: Option<f
 
     // No price available
     (0.0, 0.0)
+}
+
+/// Realized P&L of a closed position: everything received minus everything invested and
+/// the fees actually paid. Returns (pnl_sol, pnl_percent).
+pub(crate) fn realized_pnl(position: &Position) -> (f64, f64) {
+    // Total native units invested vs received. `total_size_native` includes every DCA add
+    // (it equals entry_size_native when there was none), whereas entry_size_native counts only
+    // the first buy — so averaging down understated the cost basis and overstated profit.
+    // `native_received` accumulates partial exits plus the final close.
+    let native_invested = position.total_size_native;
+    let native_received = position.native_received.unwrap_or_default();
+
+    // Use actual transaction fees only — profit_extra_needed is a decision buffer,
+    // not an actual cost. Including it here inflates losses by ~2% on small trades.
+    let buy_fee = position
+        .entry_fee_raw
+        .map_or(0.0, |fee| adapter().raw_to_native(fee));
+    let sell_fee = position
+        .exit_fee_raw
+        .map_or(0.0, |fee| adapter().raw_to_native(fee));
+    let total_fees = buy_fee + sell_fee;
+
+    let net_pnl_native = native_received - native_invested - total_fees;
+    let safe_invested = if native_invested < 0.00001 {
+        0.00001
+    } else {
+        native_invested
+    };
+    let net_pnl_percent = (net_pnl_native / safe_invested) * 100.0;
+
+    (net_pnl_native, net_pnl_percent)
 }
 
 /// Calculate total fees for a position

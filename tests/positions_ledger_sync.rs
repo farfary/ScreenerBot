@@ -14,18 +14,27 @@
 //!     the live price fields, or a position the bot executed itself, a restart would
 //!     quietly undo the user's decisions and the trader's own bookkeeping.
 //!
-//! No database, no wallet, no clock: rounds are built inline and `now` is passed in.
+//! The planner cases use no database, no wallet and no clock: rounds are built inline
+//! and `now` is passed in. The application cases run against a real positions database
+//! in a child process of their own.
+
+mod common;
 
 use chrono::{DateTime, TimeZone, Utc};
 use std::collections::{HashMap, HashSet};
 
-use screenerbot::chains::ChainId;
+use screenerbot::chains::{ChainId, RawAmount};
+use screenerbot::positions::apply::apply_transition;
 use screenerbot::positions::ledger::reduce_rounds;
-use screenerbot::positions::ledger::sync::{plan_position_writes, RoundMetadata, TraderLegs};
+use screenerbot::positions::ledger::sync::{
+    apply_plan, plan_position_writes, AppliedPlan, RoundMetadata, TraderLegs,
+};
 use screenerbot::positions::ledger::{
     LedgerEvent, LedgerEventKind, LedgerRound, QuoteAsset, QuoteLeg,
 };
-use screenerbot::positions::{Position, PositionManagement, PositionOrigin};
+use screenerbot::positions::{
+    db, state, PendingPartialExit, Position, PositionManagement, PositionOrigin, PositionTransition,
+};
 use screenerbot::transactions::deltas::{DeltaKind, SubjectAssetDelta, NATIVE_SOL_SENTINEL};
 
 const MINT: &str = "So11111111111111111111111111111111111111112";
@@ -461,9 +470,9 @@ fn a_row_the_user_archived_stays_archived_across_a_resync() {
     let plan = plan_position_writes(&[moved], &existing, &meta, &no_legs(), &no_busy(), now());
 
     assert_eq!(plan.updates.len(), 1);
-    assert!(plan.updates[0].archived);
-    assert_eq!(plan.updates[0].archived_at, Some(now()));
-    assert_eq!(plan.updates[0].id, Some(1));
+    assert!(plan.updates[0].position.archived);
+    assert_eq!(plan.updates[0].position.archived_at, Some(now()));
+    assert_eq!(plan.updates[0].position.id, Some(1));
 }
 
 #[test]
@@ -480,7 +489,7 @@ fn live_price_fields_survive_a_resync() {
     moved.balance_raw = 500_000;
     let plan = plan_position_writes(&[moved], &existing, &meta, &no_legs(), &no_busy(), now());
 
-    let updated = &plan.updates[0];
+    let updated = &plan.updates[0].position;
     // These belong to the price updater. Resetting them would blank the dashboard's
     // current price and P&L on every restart.
     assert_eq!(updated.current_price, Some(9.0));
@@ -513,7 +522,7 @@ fn a_round_the_bot_executed_is_adopted_instead_of_duplicated() {
     assert!(plan.inserts.is_empty(), "no second row for the same buy");
     assert_eq!(plan.updates.len(), 1);
 
-    let adopted = &plan.updates[0];
+    let adopted = &plan.updates[0].position;
     assert_eq!(adopted.id, bot_row.id, "the trader's own row is updated");
     assert_eq!(adopted.round_key.as_deref(), Some("open-sig:MINT"));
     assert_eq!(adopted.origin, bot_row.origin, "origin is the trader's");
@@ -561,7 +570,7 @@ fn a_bot_position_sold_somewhere_else_is_closed_from_wallet_history() {
     );
 
     assert!(plan.inserts.is_empty());
-    let reconciled = &plan.updates[0];
+    let reconciled = &plan.updates[0].position;
 
     assert_eq!(
         reconciled.exit_time,
@@ -619,7 +628,7 @@ fn a_close_we_could_not_time_is_dated_by_the_last_time_we_saw_the_holding() {
         now(),
     );
 
-    let reconciled = &plan.updates[0];
+    let reconciled = &plan.updates[0].position;
     assert_eq!(
         reconciled.exit_time,
         Some(Utc.timestamp_opt(1_600_000_500, 0).unwrap()),
@@ -652,7 +661,7 @@ fn a_partial_sale_elsewhere_lowers_the_holding_but_leaves_it_open() {
         now(),
     );
 
-    let reconciled = &plan.updates[0];
+    let reconciled = &plan.updates[0].position;
     assert_eq!(reconciled.remaining_token_amount, Some(raw(400_000)));
     assert_eq!(reconciled.total_exited_amount, raw(600_000));
     assert!(reconciled.exit_time.is_none(), "still holding something");
@@ -721,7 +730,7 @@ fn a_buy_made_elsewhere_grows_the_bot_s_own_position() {
     );
 
     assert_eq!(plan.updates.len(), 1);
-    let grown = &plan.updates[0];
+    let grown = &plan.updates[0].position;
     assert_eq!(grown.remaining_token_amount, Some(raw(5_000_000)));
     assert_eq!(grown.token_amount, Some(raw(5_000_000)));
     assert_eq!(grown.dca_count, 2);
@@ -759,7 +768,7 @@ fn absorbing_an_outside_buy_is_idempotent() {
         &no_busy(),
         now(),
     );
-    let settled = first.updates[0].clone();
+    let settled = first.updates[0].position.clone();
 
     let second = plan_position_writes(
         &[grown_round()],
@@ -793,7 +802,7 @@ fn an_unpriced_outside_buy_takes_the_holding_but_not_a_basis() {
         now(),
     );
 
-    let reconciled = &plan.updates[0];
+    let reconciled = &plan.updates[0].position;
     assert_eq!(reconciled.remaining_token_amount, Some(raw(5_000_000)));
     assert!(!reconciled.basis_complete);
     assert!(!reconciled.has_trustworthy_pnl());
@@ -824,8 +833,11 @@ fn a_holding_that_grew_on_broken_history_is_not_claimed() {
     );
 
     assert_eq!(plan.updates.len(), 1, "only the round key is stamped");
-    assert_eq!(plan.updates[0].remaining_token_amount, Some(raw(1_000_000)));
-    assert!((plan.updates[0].total_size_native - 2.0).abs() < 1e-9);
+    assert_eq!(
+        plan.updates[0].position.remaining_token_amount,
+        Some(raw(1_000_000))
+    );
+    assert!((plan.updates[0].position.total_size_native - 2.0).abs() < 1e-9);
 }
 
 #[test]
@@ -980,9 +992,9 @@ fn a_frozen_account_flags_the_bot_position_too() {
         now(),
     );
 
-    assert!(plan.updates[0].is_frozen());
+    assert!(plan.updates[0].position.is_frozen());
     assert!(
-        plan.updates[0].exit_time.is_none(),
+        plan.updates[0].position.exit_time.is_none(),
         "freezing is a flag, never a close"
     );
 }
@@ -1009,7 +1021,7 @@ fn an_entry_time_is_never_re_invented_for_a_round_with_no_block_time() {
     let plan = plan_position_writes(&[moved], &existing, &meta, &no_legs(), &no_busy(), later);
 
     assert_eq!(plan.updates.len(), 1);
-    assert_eq!(plan.updates[0].entry_time, first_entry_time);
+    assert_eq!(plan.updates[0].position.entry_time, first_entry_time);
 }
 
 // =============================================================================
@@ -1070,7 +1082,7 @@ fn thawing_a_holding_clears_the_flag() {
     );
 
     assert_eq!(plan.updates.len(), 1);
-    assert!(!plan.updates[0].is_frozen());
+    assert!(!plan.updates[0].position.is_frozen());
 }
 
 // =============================================================================
@@ -1183,7 +1195,7 @@ fn a_bot_buy_then_a_sale_made_elsewhere_closes_exactly_one_position() {
     );
     assert_eq!(plan.updates.len(), 1);
 
-    let closed = &plan.updates[0];
+    let closed = &plan.updates[0].position;
     assert_eq!(closed.id, bot_row.id);
     assert_eq!(closed.round_key, Some(format!("bot-buy:{TRADED_MINT}")));
     assert!(closed.exit_time.is_some(), "the position is closed");
@@ -1195,4 +1207,176 @@ fn a_bot_buy_then_a_sale_made_elsewhere_closes_exactly_one_position() {
     assert_eq!(closed.closed_reason.as_deref(), Some("closed_externally"));
     assert_eq!(closed.native_received, Some(1.5));
     assert_eq!(closed.pnl, Some(0.5));
+}
+
+#[test]
+fn a_ledger_write_keeps_a_booking_committed_after_the_plan() {
+    common::run_isolated(
+        "a_ledger_write_keeps_a_booking_committed_after_the_plan",
+        || async {
+            const PARTIAL: &str = "partial-exit-sig";
+            let _dir = common::isolated_env();
+            let _cfg = common::config_guard();
+            screenerbot::paths::ensure_all_directories().expect("create data directories");
+            common::configure_own_wallet();
+            common::seed_decimals(common::TEST_MINT, 6);
+            screenerbot::positions::initialize_positions_database()
+                .await
+                .expect("initialise positions database");
+
+            let mut position = common::test_position(1.0, 1.0);
+            position.id = None;
+            position.token_amount = Some(RawAmount::new(1_000_000));
+            position.remaining_token_amount = Some(RawAmount::new(1_000_000));
+            let id = db::save_position(&position)
+                .await
+                .expect("persist test position");
+            position.id = Some(id);
+            state::add_position(position.clone()).await;
+
+            // The chain already shows the partial sale the trader has yet to book.
+            let round_key = format!("entry-sig:{}", common::TEST_MINT);
+            let held = LedgerRound {
+                entry_signature: position.entry_transaction_signature.clone(),
+                balance_raw: 600_000,
+                total_disposed_raw: 400_000,
+                exit_count: 1,
+                ..open_round(common::TEST_MINT, &round_key)
+            };
+            let existing = db::load_all_positions().await.expect("load positions");
+            let plan = plan_position_writes(
+                &[held],
+                &existing,
+                &metadata(common::TEST_MINT, false),
+                &no_legs(),
+                &no_busy(),
+                now(),
+            );
+            assert_eq!(plan.updates.len(), 1, "the round claims the bot row");
+
+            state::register_pending_partial_exit(PendingPartialExit {
+                signature: PARTIAL.to_owned(),
+                mint: common::TEST_MINT.to_owned(),
+                position_id: id,
+                expected_exit_amount: RawAmount::new(400_000),
+                requested_exit_percentage: 40.0,
+                expiry_height: None,
+                created_at: Utc::now(),
+            })
+            .await
+            .expect("register pending partial exit");
+            state::mark_partial_exit_pending(common::TEST_MINT).await;
+            apply_transition(PositionTransition::PartialExitVerified {
+                position_id: id,
+                exit_amount: RawAmount::new(400_000),
+                native_received: 0.8,
+                effective_exit_price: 2.0,
+                fee_raw: 5_000,
+                exit_time: Utc::now(),
+                exit_signature: PARTIAL.to_owned(),
+                exit_percentage: 40.0,
+            })
+            .await
+            .expect("the partial exit commits");
+
+            assert_eq!(
+                apply_plan(plan).await,
+                AppliedPlan {
+                    inserted: 0,
+                    updated: 1,
+                    skipped: 0,
+                }
+            );
+
+            let stored = db::get_position_by_id(id)
+                .await
+                .expect("read stored position")
+                .expect("position stored");
+            assert_eq!(
+                stored.native_received,
+                Some(0.8),
+                "the partial exit's proceeds vanished from the row"
+            );
+            assert_eq!(stored.partial_exit_count, 1);
+            assert_eq!(stored.remaining_token_amount, Some(RawAmount::new(600_000)));
+            assert_eq!(stored.total_exited_amount, RawAmount::new(400_000));
+            assert_eq!(stored.round_key.as_deref(), Some(round_key.as_str()));
+
+            let live = state::get_position_by_id(id)
+                .await
+                .expect("position in memory");
+            assert_eq!(live.native_received, stored.native_received);
+            assert_eq!(live.partial_exit_count, stored.partial_exit_count);
+            assert_eq!(live.remaining_token_amount, stored.remaining_token_amount);
+            assert_eq!(live.total_exited_amount, stored.total_exited_amount);
+            assert_eq!(live.round_key, stored.round_key);
+        },
+    );
+}
+
+#[test]
+fn a_planned_update_skipped_at_write_time_is_not_counted_as_written() {
+    common::run_isolated(
+        "a_planned_update_skipped_at_write_time_is_not_counted_as_written",
+        || async {
+            let _dir = common::isolated_env();
+            let _cfg = common::config_guard();
+            screenerbot::paths::ensure_all_directories().expect("create data directories");
+            common::configure_own_wallet();
+            common::seed_decimals(common::TEST_MINT, 6);
+            screenerbot::positions::initialize_positions_database()
+                .await
+                .expect("initialise positions database");
+
+            let mut position = common::test_position(1.0, 1.0);
+            position.id = None;
+            position.token_amount = Some(RawAmount::new(1_000_000));
+            position.remaining_token_amount = Some(RawAmount::new(1_000_000));
+            let id = db::save_position(&position)
+                .await
+                .expect("persist test position");
+            position.id = Some(id);
+            state::add_position(position.clone()).await;
+
+            let round_key = format!("entry-sig:{}", common::TEST_MINT);
+            let held = LedgerRound {
+                entry_signature: position.entry_transaction_signature.clone(),
+                balance_raw: 600_000,
+                total_disposed_raw: 400_000,
+                exit_count: 1,
+                ..open_round(common::TEST_MINT, &round_key)
+            };
+            let existing = db::load_all_positions().await.expect("load positions");
+            let plan = plan_position_writes(
+                &[held],
+                &existing,
+                &metadata(common::TEST_MINT, false),
+                &no_legs(),
+                &no_busy(),
+                now(),
+            );
+            assert_eq!(plan.updates.len(), 1, "the round claims the bot row");
+
+            // A partial exit is submitted after the plan: the row is busy at write time.
+            state::mark_partial_exit_pending(common::TEST_MINT).await;
+
+            assert_eq!(
+                apply_plan(plan).await,
+                AppliedPlan {
+                    inserted: 0,
+                    updated: 0,
+                    skipped: 1,
+                }
+            );
+            let stored = db::get_position_by_id(id)
+                .await
+                .expect("read stored position")
+                .expect("position stored");
+            assert_eq!(stored.round_key, None, "a busy row was rewritten");
+            assert_eq!(
+                stored.remaining_token_amount,
+                Some(RawAmount::new(1_000_000))
+            );
+        },
+    );
 }

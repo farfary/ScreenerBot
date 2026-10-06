@@ -5,9 +5,6 @@
 
 mod common;
 
-use std::future::Future;
-use std::process::Command;
-
 use chrono::{DateTime, Utc};
 use rusqlite::types::Value;
 use rusqlite::Connection;
@@ -18,14 +15,10 @@ use screenerbot::positions::operations::{force_close_position, mark_exit_submitt
 use screenerbot::positions::price_updater::update_position_price_and_pnl;
 use screenerbot::positions::{
     db, state, ApplyFailureDisposition, Error, GiveUpReason, PendingDcaSwap, PendingPartialExit,
-    Position, PositionTransition, PriceSource, VerificationItem, VerificationKind,
-    FORCE_CLOSED_PREFIX,
+    Position, PositionManagement, PositionTransition, PriceSource, VerificationItem,
+    VerificationKind, FORCE_CLOSED_PREFIX,
 };
 use screenerbot::trader::safety::loss_limit::{get_loss_limit_status, reset_loss_limit_state};
-
-/// Each test opens the process-wide positions store and in-memory state, so it runs in a
-/// child process of its own whichever harness launched it.
-const CHILD_ENV: &str = "SCREENERBOT_POSITIONS_APPLY_CHILD";
 
 const HELD: u128 = 1_000_000;
 const PARTIAL_SIGNATURE: &str = "partial-exit-sig";
@@ -37,30 +30,6 @@ const INJECT_ROW: &str =
 const INJECT_EXIT: &str = "CREATE TRIGGER inject_exit BEFORE INSERT ON position_exits BEGIN SELECT RAISE(ABORT,'injected'); END;";
 const INJECT_ENTRY: &str = "CREATE TRIGGER inject_entry BEFORE INSERT ON position_entries BEGIN SELECT RAISE(ABORT,'injected'); END;";
 const INJECT_METADATA: &str = "CREATE TRIGGER inject_meta BEFORE INSERT ON position_metadata BEGIN SELECT RAISE(ABORT,'injected'); END;";
-
-fn run_isolated<F, Fut>(test_name: &str, body: F)
-where
-    F: FnOnce() -> Fut,
-    Fut: Future<Output = ()>,
-{
-    if std::env::var_os(CHILD_ENV).is_some() {
-        tokio::runtime::Builder::new_multi_thread()
-            .enable_all()
-            .build()
-            .expect("create multi-thread runtime")
-            .block_on(body());
-        return;
-    }
-
-    let status = Command::new(std::env::current_exe().expect("test executable"))
-        .arg("--exact")
-        .arg(test_name)
-        .arg("--nocapture")
-        .env(CHILD_ENV, "1")
-        .status()
-        .expect("run isolated child");
-    assert!(status.success(), "{test_name} failed in its child process");
-}
 
 /// The booking columns a verified transition may change.
 #[derive(Debug, Clone, PartialEq)]
@@ -249,7 +218,7 @@ async fn assert_partial_booked_once(id: i64, before: &Booked) {
 
 #[test]
 fn a_failed_partial_exit_write_changes_nothing_and_a_retry_books_once() {
-    run_isolated(
+    common::run_isolated(
         "a_failed_partial_exit_write_changes_nothing_and_a_retry_books_once",
         || async {
             let _dir = common::isolated_env();
@@ -289,7 +258,7 @@ fn a_failed_partial_exit_write_changes_nothing_and_a_retry_books_once() {
 
 #[test]
 fn a_failed_exit_record_insert_rolls_back_the_partial_exit_row() {
-    run_isolated(
+    common::run_isolated(
         "a_failed_exit_record_insert_rolls_back_the_partial_exit_row",
         || async {
             let _dir = common::isolated_env();
@@ -331,7 +300,7 @@ fn a_failed_exit_record_insert_rolls_back_the_partial_exit_row() {
 
 #[test]
 fn a_failed_pending_clear_keeps_the_mint_counter_until_the_detail_is_cleared() {
-    run_isolated(
+    common::run_isolated(
         "a_failed_pending_clear_keeps_the_mint_counter_until_the_detail_is_cleared",
         || async {
             let _dir = common::isolated_env();
@@ -386,7 +355,7 @@ fn a_failed_pending_clear_keeps_the_mint_counter_until_the_detail_is_cleared() {
 
 #[test]
 fn a_failed_dca_write_changes_nothing_and_a_retry_books_once() {
-    run_isolated(
+    common::run_isolated(
         "a_failed_dca_write_changes_nothing_and_a_retry_books_once",
         || async {
             let _dir = common::isolated_env();
@@ -437,7 +406,7 @@ fn a_failed_dca_write_changes_nothing_and_a_retry_books_once() {
 
 #[test]
 fn a_failed_close_write_leaves_the_position_open_and_a_retry_closes_it_once() {
-    run_isolated(
+    common::run_isolated(
         "a_failed_close_write_leaves_the_position_open_and_a_retry_closes_it_once",
         || async {
             let _dir = common::isolated_env();
@@ -452,13 +421,7 @@ fn a_failed_close_write_leaves_the_position_open_and_a_retry_closes_it_once() {
             let injector = injector();
             injector.execute_batch(INJECT_ROW).expect("install trigger");
 
-            let close = || PositionTransition::ExitVerified {
-                position_id: id,
-                effective_exit_price: 1.5,
-                native_received: 1.5,
-                fee_raw: 5_000,
-                exit_time: Utc::now(),
-            };
+            let close = || verified_close(id);
 
             let error = apply_transition(close())
                 .await
@@ -496,7 +459,7 @@ fn a_failed_close_write_leaves_the_position_open_and_a_retry_closes_it_once() {
 
 #[test]
 fn a_busy_store_fails_retryably_and_changes_nothing() {
-    run_isolated(
+    common::run_isolated(
         "a_busy_store_fails_retryably_and_changes_nothing",
         || async {
             let _dir = common::isolated_env();
@@ -535,7 +498,7 @@ fn a_busy_store_fails_retryably_and_changes_nothing() {
 
 #[test]
 fn partial_exit_overflow_changes_nothing_and_records_nothing() {
-    run_isolated(
+    common::run_isolated(
         "partial_exit_overflow_changes_nothing_and_records_nothing",
         || async {
             let _dir = common::isolated_env();
@@ -564,7 +527,7 @@ fn partial_exit_overflow_changes_nothing_and_records_nothing() {
 
 #[test]
 fn dca_overflow_changes_nothing_and_records_nothing() {
-    run_isolated(
+    common::run_isolated(
         "dca_overflow_changes_nothing_and_records_nothing",
         || async {
             let _dir = common::isolated_env();
@@ -654,6 +617,13 @@ fn recorded_loss() -> f64 {
     get_loss_limit_status().cumulative_loss_native
 }
 
+fn failed_close(id: i64) -> PositionTransition {
+    PositionTransition::ExitFailedClearForRetry {
+        position_id: id,
+        exit_signature: CLOSE_SIGNATURE.to_owned(),
+    }
+}
+
 fn verified_close(id: i64) -> PositionTransition {
     PositionTransition::ExitVerified {
         position_id: id,
@@ -661,12 +631,13 @@ fn verified_close(id: i64) -> PositionTransition {
         native_received: 1.5,
         fee_raw: 5_000,
         exit_time: Utc::now(),
+        exit_signature: CLOSE_SIGNATURE.to_owned(),
     }
 }
 
 #[test]
 fn a_price_update_from_a_stale_snapshot_leaves_a_committed_close_intact() {
-    run_isolated(
+    common::run_isolated(
         "a_price_update_from_a_stale_snapshot_leaves_a_committed_close_intact",
         || async {
             let _dir = common::isolated_env();
@@ -707,7 +678,7 @@ fn a_price_update_from_a_stale_snapshot_leaves_a_committed_close_intact() {
 
 #[test]
 fn a_price_update_writes_only_the_price_and_pnl_columns() {
-    run_isolated(
+    common::run_isolated(
         "a_price_update_writes_only_the_price_and_pnl_columns",
         || async {
             let _dir = common::isolated_env();
@@ -759,7 +730,7 @@ fn a_price_update_writes_only_the_price_and_pnl_columns() {
 
 #[test]
 fn a_failed_force_close_write_changes_nothing_and_returns_the_error() {
-    run_isolated(
+    common::run_isolated(
         "a_failed_force_close_write_changes_nothing_and_returns_the_error",
         || async {
             let _dir = common::isolated_env();
@@ -813,7 +784,7 @@ fn a_failed_force_close_write_changes_nothing_and_returns_the_error() {
 
 #[test]
 fn a_force_close_of_a_row_already_verified_returns_already_closed() {
-    run_isolated(
+    common::run_isolated(
         "a_force_close_of_a_row_already_verified_returns_already_closed",
         || async {
             let _dir = common::isolated_env();
@@ -849,7 +820,7 @@ fn a_force_close_of_a_row_already_verified_returns_already_closed() {
 
 #[test]
 fn a_force_close_of_a_position_not_in_memory_books_the_row_once() {
-    run_isolated(
+    common::run_isolated(
         "a_force_close_of_a_position_not_in_memory_books_the_row_once",
         || async {
             let _dir = common::isolated_env();
@@ -892,7 +863,7 @@ fn a_force_close_of_a_position_not_in_memory_books_the_row_once() {
 
 #[test]
 fn a_force_close_then_a_retried_exit_verification_records_the_loss_once() {
-    run_isolated(
+    common::run_isolated(
         "a_force_close_then_a_retried_exit_verification_records_the_loss_once",
         || async {
             let _dir = common::isolated_env();
@@ -934,7 +905,7 @@ fn a_force_close_then_a_retried_exit_verification_records_the_loss_once() {
 
 #[test]
 fn a_failed_exit_clear_after_a_force_close_leaves_the_close_intact() {
-    run_isolated(
+    common::run_isolated(
         "a_failed_exit_clear_after_a_force_close_leaves_the_close_intact",
         || async {
             let _dir = common::isolated_env();
@@ -952,10 +923,9 @@ fn a_failed_exit_clear_after_a_force_close_leaves_the_close_intact() {
             assert_eq!(booked, in_memory(id).await, "memory and storage disagree");
             assert_eq!(recorded_loss(), 1.0);
 
-            let error =
-                apply_transition(PositionTransition::ExitFailedClearForRetry { position_id: id })
-                    .await
-                    .expect_err("a verified close refuses the failed-exit clear");
+            let error = apply_transition(failed_close(id))
+                .await
+                .expect_err("a verified close refuses the failed-exit clear");
             assert!(
                 matches!(error, Error::AlreadyClosed { position_id } if position_id == id),
                 "expected already closed, got {error:?}"
@@ -1008,7 +978,7 @@ fn a_failed_exit_clear_after_a_force_close_leaves_the_close_intact() {
 
 #[test]
 fn a_failed_exit_clear_on_an_unverified_exit_clears_it_for_retry() {
-    run_isolated(
+    common::run_isolated(
         "a_failed_exit_clear_on_an_unverified_exit_clears_it_for_retry",
         || async {
             let _dir = common::isolated_env();
@@ -1021,10 +991,9 @@ fn a_failed_exit_clear_on_an_unverified_exit_clears_it_for_retry() {
             .await;
             let before = in_storage(id).await;
 
-            let effects =
-                apply_transition(PositionTransition::ExitFailedClearForRetry { position_id: id })
-                    .await
-                    .expect("an unverified exit is cleared");
+            let effects = apply_transition(failed_close(id))
+                .await
+                .expect("an unverified exit is cleared");
             assert!(effects.db_updated);
 
             for position in [stored_position(id).await, memory_position(id).await] {
@@ -1045,7 +1014,7 @@ fn a_failed_exit_clear_on_an_unverified_exit_clears_it_for_retry() {
 
 #[test]
 fn a_submitted_exit_is_stored_without_a_price_update() {
-    run_isolated(
+    common::run_isolated(
         "a_submitted_exit_is_stored_without_a_price_update",
         || async {
             let _dir = common::isolated_env();
@@ -1075,7 +1044,7 @@ fn a_submitted_exit_is_stored_without_a_price_update() {
 
 #[test]
 fn a_failed_exit_submission_write_still_marks_the_exit_in_memory() {
-    run_isolated(
+    common::run_isolated(
         "a_failed_exit_submission_write_still_marks_the_exit_in_memory",
         || async {
             let _dir = common::isolated_env();
@@ -1104,8 +1073,66 @@ fn a_failed_exit_submission_write_still_marks_the_exit_in_memory() {
 }
 
 #[test]
+fn a_full_exit_whose_submission_write_failed_is_booked_in_full_at_verification() {
+    common::run_isolated(
+        "a_full_exit_whose_submission_write_failed_is_booked_in_full_at_verification",
+        || async {
+            let _dir = common::isolated_env();
+            let _cfg = common::config_guard();
+            enable_loss_limit();
+            let id = open_position(|_| {}).await;
+            let injector = injector();
+            injector.execute_batch(INJECT_ROW).expect("install trigger");
+            mark_exit_submitted(id, CLOSE_SIGNATURE, 1.25, "stop_loss_pending_verification")
+                .await
+                .expect_err("an injected row failure must surface");
+            injector
+                .execute_batch("DROP TRIGGER inject_row;")
+                .expect("remove trigger");
+
+            apply_transition(PositionTransition::ExitVerified {
+                position_id: id,
+                effective_exit_price: 0.6,
+                native_received: 0.6,
+                fee_raw: 5_000,
+                exit_time: Utc::now(),
+                exit_signature: CLOSE_SIGNATURE.to_owned(),
+            })
+            .await
+            .expect("the close commits");
+
+            let stored = stored_position(id).await;
+            assert!(stored.transaction_exit_verified);
+            assert_eq!(
+                stored.exit_transaction_signature.as_deref(),
+                Some(CLOSE_SIGNATURE),
+                "the verified exit signature is not on the row"
+            );
+            assert_eq!(
+                memory_position(id)
+                    .await
+                    .exit_transaction_signature
+                    .as_deref(),
+                Some(CLOSE_SIGNATURE),
+                "memory lost the exit signature"
+            );
+            assert_eq!(exit_records(id).await, 1, "no exit record was written");
+            // Proceeds minus the invested total minus the 5 000-lamport exit fee.
+            let expected = 0.6 - 1.0 - 0.000_005;
+            let pnl = stored.pnl.expect("a closed row carries its P&L");
+            assert!((pnl - expected).abs() < 1e-9, "P&L {pnl}");
+            assert!(
+                (recorded_loss() - expected.abs()).abs() < 1e-9,
+                "the loss limiter recorded {}",
+                recorded_loss()
+            );
+        },
+    );
+}
+
+#[test]
 fn an_exit_submitted_after_a_force_close_leaves_the_close_intact() {
-    run_isolated(
+    common::run_isolated(
         "an_exit_submitted_after_a_force_close_leaves_the_close_intact",
         || async {
             let _dir = common::isolated_env();
@@ -1149,7 +1176,7 @@ fn an_exit_submitted_after_a_force_close_leaves_the_close_intact() {
 
 #[test]
 fn a_busy_exit_submission_write_is_retried_until_it_lands() {
-    run_isolated(
+    common::run_isolated(
         "a_busy_exit_submission_write_is_retried_until_it_lands",
         || async {
             let _dir = common::isolated_env();
@@ -1190,7 +1217,7 @@ fn a_busy_exit_submission_write_is_retried_until_it_lands() {
 
 #[test]
 fn a_price_update_leaves_the_unrealized_pnl_of_a_closed_position_unchanged() {
-    run_isolated(
+    common::run_isolated(
         "a_price_update_leaves_the_unrealized_pnl_of_a_closed_position_unchanged",
         || async {
             let _dir = common::isolated_env();
@@ -1216,6 +1243,311 @@ fn a_price_update_leaves_the_unrealized_pnl_of_a_closed_position_unchanged() {
             assert_eq!(live.unrealized_pnl, stored.unrealized_pnl);
             assert_eq!(live.unrealized_pnl_percent, stored.unrealized_pnl_percent);
             assert_eq!(live.current_price, Some(2.0));
+        },
+    );
+}
+
+/// Replaces the in-memory position with `stale`, as a transition that read memory before
+/// an earlier booking was published would see it.
+async fn make_memory_stale(id: i64, stale: Position) {
+    assert!(
+        state::update_position_state_by_id(id, |live| *live = stale).await,
+        "position in memory"
+    );
+}
+
+fn entry_verified(id: i64) -> PositionTransition {
+    PositionTransition::EntryVerified {
+        position_id: id,
+        effective_entry_price: 1.0,
+        token_amount_units: RawAmount::new(HELD),
+        fee_raw: 5_000,
+        native_size: 1.0,
+    }
+}
+
+#[test]
+fn a_close_booked_from_a_stale_snapshot_keeps_a_committed_dca_in_the_row() {
+    common::run_isolated(
+        "a_close_booked_from_a_stale_snapshot_keeps_a_committed_dca_in_the_row",
+        || async {
+            let _dir = common::isolated_env();
+            let _cfg = common::config_guard();
+            let id = open_position(|position| {
+                position.exit_transaction_signature = Some(CLOSE_SIGNATURE.to_owned());
+            })
+            .await;
+            let stale = memory_position(id).await;
+            register_dca(id).await;
+            apply_transition(dca(id)).await.expect("the DCA commits");
+
+            make_memory_stale(id, stale).await;
+            apply_transition(verified_close(id))
+                .await
+                .expect("the close commits");
+
+            let booked = in_storage(id).await;
+            assert_eq!(booked, in_memory(id).await, "memory and storage disagree");
+            assert!(booked.transaction_exit_verified);
+            assert_eq!(booked.dca_count, 1, "the DCA was reverted");
+            assert_eq!(booked.total_size_native, 1.5, "the DCA cost was reverted");
+            assert_eq!(booked.total_exited_amount, RawAmount::new(1_500_000));
+            assert_eq!(booked.remaining_token_amount, Some(RawAmount::ZERO));
+            assert_eq!(entry_records(id).await, 1);
+            assert_eq!(exit_records(id).await, 1);
+        },
+    );
+}
+
+#[test]
+fn a_force_close_from_a_stale_snapshot_keeps_a_committed_partial_exit() {
+    common::run_isolated(
+        "a_force_close_from_a_stale_snapshot_keeps_a_committed_partial_exit",
+        || async {
+            let _dir = common::isolated_env();
+            let _cfg = common::config_guard();
+            let id = open_position(|_| {}).await;
+            let stale = memory_position(id).await;
+            register_partial(id).await;
+            apply_transition(partial_exit(id))
+                .await
+                .expect("the partial exit commits");
+
+            make_memory_stale(id, stale).await;
+            force_close_position(id, "stuck")
+                .await
+                .expect("the force close commits");
+
+            let booked = in_storage(id).await;
+            assert_eq!(booked, in_memory(id).await, "memory and storage disagree");
+            assert!(booked.transaction_exit_verified);
+            assert_eq!(booked.partial_exit_count, 1);
+            assert_eq!(
+                booked.native_received,
+                Some(0.8),
+                "the partial exit's proceeds were reverted"
+            );
+            assert_eq!(booked.total_exited_amount, RawAmount::new(HELD));
+            assert_eq!(booked.remaining_token_amount, Some(RawAmount::ZERO));
+            let pnl = booked.pnl.expect("a written-off row carries its P&L");
+            assert!((pnl - (0.8 - 1.0)).abs() < 1e-9, "P&L {pnl}");
+            assert_eq!(exit_records(id).await, 1);
+        },
+    );
+}
+
+#[test]
+fn a_dca_from_a_stale_snapshot_keeps_a_committed_partial_exit() {
+    common::run_isolated(
+        "a_dca_from_a_stale_snapshot_keeps_a_committed_partial_exit",
+        || async {
+            let _dir = common::isolated_env();
+            let _cfg = common::config_guard();
+            let id = open_position(|_| {}).await;
+            let stale = memory_position(id).await;
+            register_partial(id).await;
+            apply_transition(partial_exit(id))
+                .await
+                .expect("the partial exit commits");
+
+            make_memory_stale(id, stale).await;
+            register_dca(id).await;
+            apply_transition(dca(id)).await.expect("the DCA commits");
+
+            let booked = in_storage(id).await;
+            assert_eq!(booked, in_memory(id).await, "memory and storage disagree");
+            assert_eq!(
+                booked.partial_exit_count, 1,
+                "the partial exit was reverted"
+            );
+            assert_eq!(booked.native_received, Some(0.8));
+            assert_eq!(booked.total_exited_amount, RawAmount::new(400_000));
+            assert_eq!(
+                booked.remaining_token_amount,
+                Some(RawAmount::new(1_100_000))
+            );
+            assert_eq!(booked.dca_count, 1);
+            assert_eq!(booked.total_size_native, 1.5);
+            assert_eq!(exit_records(id).await, 1);
+            assert_eq!(entry_records(id).await, 1);
+        },
+    );
+}
+
+#[test]
+fn an_entry_verified_twice_books_once() {
+    common::run_isolated("an_entry_verified_twice_books_once", || async {
+        let _dir = common::isolated_env();
+        let _cfg = common::config_guard();
+        let id = open_position(|position| {
+            position.transaction_entry_verified = false;
+        })
+        .await;
+        apply_transition(entry_verified(id))
+            .await
+            .expect("the entry commits");
+        register_partial(id).await;
+        apply_transition(partial_exit(id))
+            .await
+            .expect("the partial exit commits");
+        let booked = in_storage(id).await;
+
+        apply_transition(entry_verified(id))
+            .await
+            .expect("a repeated entry verification is a no-op");
+
+        assert_eq!(in_storage(id).await, booked, "the entry was booked twice");
+        assert_eq!(in_memory(id).await, booked, "memory changed");
+        assert_eq!(booked.remaining_token_amount, Some(RawAmount::new(600_000)));
+        assert_eq!(entry_records(id).await, 1);
+    });
+}
+
+#[test]
+fn memory_adopts_the_committed_row_in_commit_order() {
+    common::run_isolated(
+        "memory_adopts_the_committed_row_in_commit_order",
+        || async {
+            const ADDS: u32 = 8;
+            let _dir = common::isolated_env();
+            let _cfg = common::config_guard();
+            let id = open_position(|_| {}).await;
+
+            let mut bookings = tokio::task::JoinSet::new();
+            for add in 0..ADDS {
+                bookings.spawn(apply_transition(PositionTransition::DcaVerified {
+                    position_id: id,
+                    tokens_bought: RawAmount::new(500_000),
+                    native_spent: 0.5,
+                    effective_price: 1.0,
+                    fee_raw: 5_000,
+                    dca_time: Utc::now(),
+                    dca_signature: format!("{DCA_SIGNATURE}-{add}"),
+                }));
+            }
+            while let Some(booked) = bookings.join_next().await {
+                booked.expect("booking task").expect("the DCA commits");
+            }
+
+            let booked = in_storage(id).await;
+            assert_eq!(booked, in_memory(id).await, "memory and storage disagree");
+            assert_eq!(booked.dca_count, ADDS, "a concurrent DCA was lost");
+            assert_eq!(booked.total_size_native, 1.0 + 0.5 * f64::from(ADDS));
+            assert_eq!(
+                booked.remaining_token_amount,
+                Some(RawAmount::new(HELD + 500_000 * u128::from(ADDS)))
+            );
+            assert_eq!(entry_records(id).await, ADDS as usize);
+        },
+    );
+}
+
+#[test]
+fn adopting_a_committed_row_keeps_the_columns_other_writers_own() {
+    common::run_isolated(
+        "adopting_a_committed_row_keeps_the_columns_other_writers_own",
+        || async {
+            let _dir = common::isolated_env();
+            let _cfg = common::config_guard();
+            let id = open_position(|_| {}).await;
+            let priced_at = Utc::now();
+            let archived_at = Utc::now();
+            // Writes that landed after the booking below read its row: a price tick and
+            // the operator archiving the position and taking it over.
+            assert!(
+                state::update_position_state_by_id(id, |live| {
+                    live.current_price = Some(2.5);
+                    live.current_price_updated = Some(priced_at);
+                    live.current_price_source = Some(PriceSource::Api);
+                    live.price_highest = 3.0;
+                    live.price_lowest = 0.5;
+                    live.archived = true;
+                    live.archived_at = Some(archived_at);
+                    live.management = PositionManagement::UserOnly;
+                })
+                .await,
+                "position in memory"
+            );
+
+            register_dca(id).await;
+            apply_transition(dca(id)).await.expect("the DCA commits");
+
+            let live = memory_position(id).await;
+            assert_eq!(live.dca_count, 1, "memory did not adopt the DCA");
+            assert_eq!(live.current_price, Some(2.5), "the live price was reverted");
+            assert_eq!(live.current_price_updated, Some(priced_at));
+            assert_eq!(live.current_price_source, Some(PriceSource::Api));
+            assert_eq!(live.price_highest, 3.0);
+            assert_eq!(live.price_lowest, 0.5);
+            assert!(live.archived, "the archive flag was reverted");
+            assert_eq!(live.archived_at, Some(archived_at));
+            assert_eq!(
+                live.management,
+                PositionManagement::UserOnly,
+                "the management mode was reverted"
+            );
+        },
+    );
+}
+
+#[test]
+fn an_exit_submission_waits_for_a_committed_booking_to_be_adopted() {
+    common::run_isolated(
+        "an_exit_submission_waits_for_a_committed_booking_to_be_adopted",
+        || async {
+            let _dir = common::isolated_env();
+            let _cfg = common::config_guard();
+            let id = open_position(|_| {}).await;
+            register_dca(id).await;
+
+            // Holding memory keeps the DCA between its commit and its publish.
+            let memory = state::POSITIONS.read().await;
+            let booking = tokio::spawn(apply_transition(dca(id)));
+            let deadline = std::time::Instant::now() + std::time::Duration::from_secs(10);
+            while in_storage(id).await.dca_count == 0 {
+                assert!(
+                    std::time::Instant::now() < deadline,
+                    "the DCA never committed"
+                );
+                tokio::time::sleep(std::time::Duration::from_millis(10)).await;
+            }
+
+            let submission = tokio::spawn(async move {
+                mark_exit_submitted(id, CLOSE_SIGNATURE, 1.25, "stop_loss_pending_verification")
+                    .await
+            });
+            tokio::time::sleep(std::time::Duration::from_millis(300)).await;
+            assert_eq!(
+                stored_position(id).await.exit_transaction_signature,
+                None,
+                "the exit submission was written while a booking that read the row before it was unpublished"
+            );
+
+            drop(memory);
+            booking
+                .await
+                .expect("booking task")
+                .expect("the DCA commits");
+            submission
+                .await
+                .expect("submission task")
+                .expect("the exit submission is written");
+
+            let live = memory_position(id).await;
+            assert_eq!(
+                live.exit_transaction_signature.as_deref(),
+                Some(CLOSE_SIGNATURE),
+                "memory lost the exit in flight"
+            );
+            assert_eq!(
+                stored_position(id)
+                    .await
+                    .exit_transaction_signature
+                    .as_deref(),
+                Some(CLOSE_SIGNATURE)
+            );
+            assert_eq!(in_storage(id).await, in_memory(id).await);
+            assert_eq!(live.dca_count, 1);
         },
     );
 }

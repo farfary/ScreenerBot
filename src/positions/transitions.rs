@@ -15,15 +15,21 @@ pub enum PositionTransition {
         fee_raw: u64,
         native_size: f64,
     },
+    /// A full-exit swap verified on chain. `exit_signature` is the verified swap, so the
+    /// booking does not depend on the submission having been stored on the row.
     ExitVerified {
         position_id: i64,
         effective_exit_price: f64,
         native_received: f64,
         fee_raw: u64,
         exit_time: DateTime<Utc>,
+        exit_signature: String,
     },
+    /// A full-exit swap that failed: the exit is cleared so the close can be retried.
+    /// `exit_signature` is the failed swap, removed from the signature index.
     ExitFailedClearForRetry {
         position_id: i64,
+        exit_signature: String,
     },
     ExitPermanentFailureSynthetic {
         position_id: i64,
@@ -106,7 +112,7 @@ impl PositionTransition {
         match self {
             Self::EntryVerified { position_id, .. }
             | Self::ExitVerified { position_id, .. }
-            | Self::ExitFailedClearForRetry { position_id }
+            | Self::ExitFailedClearForRetry { position_id, .. }
             | Self::ExitPermanentFailureSynthetic { position_id, .. }
             | Self::RemoveOrphanEntry { position_id }
             | Self::PartialExitSubmitted { position_id, .. }

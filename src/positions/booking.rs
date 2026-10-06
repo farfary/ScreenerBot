@@ -8,6 +8,7 @@ use chrono::{DateTime, Utc};
 
 use crate::chains::RawAmount;
 
+use super::pnl::realized_pnl;
 use super::types::Position;
 use super::Result;
 
@@ -19,13 +20,12 @@ pub(crate) struct EntryFill {
     pub native_size: f64,
 }
 
-/// A verified full-close swap. `pnl` is the closed (P&L, percent) once computed.
+/// A verified full-close swap.
 pub(crate) struct CloseFill {
     pub effective_exit_price: f64,
     pub native_received: f64,
     pub fee_raw: u64,
     pub exit_time: DateTime<Utc>,
-    pub pnl: Option<(f64, f64)>,
 }
 
 /// An operator write-off of a position, with no swap behind it.
@@ -83,9 +83,9 @@ impl Position {
         self.average_entry_price = fill.effective_entry_price;
     }
 
-    /// Books a verified full close: the remaining amount moves into the exited total and
-    /// the proceeds accumulate onto those of earlier partial exits. Returns the amount this
-    /// close sold.
+    /// Books a verified full close: the remaining amount moves into the exited total, the
+    /// proceeds accumulate onto those of earlier partial exits, and the realized P&L is
+    /// taken from the booked totals. Returns the amount this close sold.
     pub(crate) fn book_close(&mut self, fill: &CloseFill) -> Result<RawAmount> {
         let closed = self.book_remaining_as_exited()?;
         self.transaction_exit_verified = true;
@@ -107,10 +107,9 @@ impl Position {
             }
         }
 
-        if let Some((pnl, pnl_percent)) = fill.pnl {
-            self.pnl = Some(pnl);
-            self.pnl_percent = Some(pnl_percent);
-        }
+        let (pnl, pnl_percent) = realized_pnl(self);
+        self.pnl = Some(pnl);
+        self.pnl_percent = Some(pnl_percent);
         self.unrealized_pnl = None;
         self.unrealized_pnl_percent = None;
         Ok(closed)

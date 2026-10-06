@@ -4,7 +4,7 @@
 //! Position database queries — read-only methods for fetching positions.
 
 use chrono::{DateTime, Utc};
-use rusqlite::{params, OptionalExtension};
+use rusqlite::{params, Connection, OptionalExtension};
 
 use crate::errors::DatabaseError;
 use crate::positions::types::Position;
@@ -773,5 +773,43 @@ impl PositionsDatabase {
         }
 
         Ok(positions)
+    }
+}
+
+/// A swap leg the trader booked: `(position_id, transaction_signature, is_exit, sol)`.
+pub type TraderSwapLeg = (i64, String, bool, f64);
+
+/// Every swap leg the trader booked for `wallet_address`, from the entry and exit records,
+/// limited to one position when `position_id` is given.
+pub(super) fn query_trader_swap_legs(
+    conn: &Connection,
+    wallet_address: &str,
+    position_id: Option<i64>,
+) -> rusqlite::Result<Vec<TraderSwapLeg>> {
+    let position_filter = if position_id.is_some() {
+        " AND position_id = ?2"
+    } else {
+        ""
+    };
+    let mut stmt = conn.prepare(&format!(
+        "SELECT position_id, transaction_signature, 0 AS is_exit, native_spent AS sol
+           FROM position_entries WHERE wallet_address = ?1{position_filter}
+         UNION ALL
+         SELECT position_id, transaction_signature, 1 AS is_exit, native_received AS sol
+           FROM position_exits WHERE wallet_address = ?1{position_filter}"
+    ))?;
+    let leg = |row: &rusqlite::Row<'_>| {
+        Ok((
+            row.get::<_, i64>(0)?,
+            row.get::<_, String>(1)?,
+            row.get::<_, i64>(2)? != 0,
+            row.get::<_, f64>(3)?,
+        ))
+    };
+    match position_id {
+        Some(position_id) => stmt
+            .query_map(params![wallet_address, position_id], leg)?
+            .collect(),
+        None => stmt.query_map(params![wallet_address], leg)?.collect(),
     }
 }

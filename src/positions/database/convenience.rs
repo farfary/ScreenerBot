@@ -11,8 +11,9 @@ use crate::logger::{self, LogTag};
 use crate::positions::types::{EntryRecord, ExitRecord, Position, PositionManagement};
 use crate::positions::{Error, Result};
 
-use super::booking::{BookingCommit, BookingGuard, BookingRecord};
+use super::booking::{Booking, BookingReads, Committed};
 use super::global::GLOBAL_POSITIONS_DB;
+use super::queries::{query_trader_swap_legs, TraderSwapLeg};
 use super::types::{DailyTradingStats, PeriodTradingStats, TokenSnapshot};
 
 // =============================================================================
@@ -28,40 +29,32 @@ pub async fn load_all_positions() -> Result<Vec<Position>> {
     }
 }
 
-/// Save position to database
+/// Insert a new position row and return its id. An existing row changes only through a
+/// booking ([`commit_booking`]), so a position that already has an id is refused.
 pub async fn save_position(position: &Position) -> Result<i64> {
+    if let Some(position_id) = position.id {
+        return Err(Error::AlreadyStored { position_id });
+    }
     logger::debug(
         LogTag::Positions,
         &format!(
-            "Saving position for mint {} (ID: {:?}) with entry price {:.6} SOL",
-            position.mint, position.id, position.entry_price
+            "Saving position for mint {} with entry price {:.6} SOL",
+            position.mint, position.entry_price
         ),
     );
 
     let db_guard = GLOBAL_POSITIONS_DB.lock().await;
     match db_guard.as_ref() {
         Some(db) => {
-            if let Some(id) = position.id {
-                db.update_position(position).await?;
-                logger::debug(
-                    LogTag::Positions,
-                    &format!(
-                        "Updated existing position ID {} for mint {}",
-                        id, position.mint
-                    ),
-                );
-                Ok(id)
-            } else {
-                let new_id = db.insert_position(position).await?;
-                logger::debug(
-                    LogTag::Positions,
-                    &format!(
-                        "Created new position ID {} for mint {}",
-                        new_id, position.mint
-                    ),
-                );
-                Ok(new_id)
-            }
+            let new_id = db.insert_position(position).await?;
+            logger::debug(
+                LogTag::Positions,
+                &format!(
+                    "Created new position ID {} for mint {}",
+                    new_id, position.mint
+                ),
+            );
+            Ok(new_id)
         }
         None => Err(Error::NotInitialised),
     }
@@ -99,44 +92,6 @@ pub async fn delete_archived_positions() -> Result<usize> {
     let db_guard = GLOBAL_POSITIONS_DB.lock().await;
     match db_guard.as_ref() {
         Some(db) => db.delete_archived_positions().await,
-        None => Err(Error::NotInitialised),
-    }
-}
-
-/// Update position in database
-pub async fn update_position(position: &Position) -> Result<()> {
-    logger::debug(
-        LogTag::Positions,
-        &format!(
-            "Updating position ID {:?} for mint {} with current price {:.11} SOL",
-            position.id,
-            position.mint,
-            position.current_price.unwrap_or_default()
-        ),
-    );
-
-    let db_guard = GLOBAL_POSITIONS_DB.lock().await;
-    match db_guard.as_ref() {
-        Some(db) => {
-            let result = db.update_position(position).await;
-            match &result {
-                Ok(_) => logger::debug(
-                    LogTag::Positions,
-                    &format!(
-                        "Successfully updated position ID {:?} for mint {}",
-                        position.id, position.mint
-                    ),
-                ),
-                Err(e) => logger::debug(
-                    LogTag::Positions,
-                    &format!(
-                        "Failed to update position ID {:?} for mint {}: {}",
-                        position.id, position.mint, e
-                    ),
-                ),
-            }
-            result
-        }
         None => Err(Error::NotInitialised),
     }
 }
@@ -410,27 +365,25 @@ pub async fn get_all_positions_for_mint(mint: &str) -> Result<Vec<Position>> {
 
 // ==================== EXIT/ENTRY HISTORY FUNCTIONS ====================
 
-/// Commit a booking: the position row, its guard and its history record in one
-/// transaction. See [`PositionsDatabase::commit_booking`].
-pub(crate) async fn commit_booking(
-    position: &Position,
-    guard: BookingGuard<'_>,
-    record: Option<&BookingRecord>,
-) -> Result<BookingCommit> {
-    let wallet_address = match record {
-        Some(_) => {
-            Some(
-                crate::utils::get_wallet_address().map_err(|e| Error::WalletUnavailable {
-                    detail: e.to_string(),
-                })?,
-            )
-        }
-        None => None,
-    };
+/// Book onto the stored row of `position_id` in one transaction. See
+/// [`PositionsDatabase::commit_booking`].
+pub(crate) async fn commit_booking<T>(
+    position_id: i64,
+    book: impl FnOnce(&mut Position, &BookingReads<'_>) -> Result<Booking<T>>,
+) -> Result<Committed<T>> {
+    // Records and trader legs are wallet-scoped; a booking that needs neither still
+    // commits without a wallet, and one that needs it reports why it is unavailable.
+    let wallet_address = crate::utils::get_wallet_address().map_err(|e| Error::WalletUnavailable {
+        detail: e.to_string(),
+    });
 
     let db_guard = GLOBAL_POSITIONS_DB.lock().await;
     match db_guard.as_ref() {
-        Some(db) => db.commit_booking(position, guard, record, wallet_address.as_deref()),
+        Some(db) => db.commit_booking(
+            position_id,
+            wallet_address.as_deref().map_err(Clone::clone),
+            book,
+        ),
         None => Err(Error::NotInitialised),
     }
 }
@@ -561,11 +514,10 @@ pub async fn get_entry_history(position_id: i64) -> Result<Vec<EntryRecord>> {
 
 /// Every swap leg the TRADER itself booked, for the whole wallet, in one query.
 ///
-/// Returns `(position_id, transaction_signature, is_exit, sol)`. The wallet-history
-/// ledger uses it to tell the legs it already has a fee-exact number for apart from the
-/// ones the user executed elsewhere, so a bot-owned position can absorb an outside buy
-/// without double-counting its own.
-pub async fn get_trader_swap_legs() -> Result<Vec<(i64, String, bool, f64)>> {
+/// The wallet-history ledger uses it to tell the legs it already has a fee-exact number
+/// for apart from the ones the user executed elsewhere, so a bot-owned position can absorb
+/// an outside buy without double-counting its own.
+pub async fn get_trader_swap_legs() -> Result<Vec<TraderSwapLeg>> {
     let db_guard = GLOBAL_POSITIONS_DB.lock().await;
     let db = db_guard.as_ref().ok_or(Error::NotInitialised)?;
 
@@ -578,37 +530,6 @@ pub async fn get_trader_swap_legs() -> Result<Vec<(i64, String, bool, f64)>> {
             detail: e.to_string(),
         })?;
 
-    let mut stmt = conn
-        .prepare(
-            "SELECT position_id, transaction_signature, 0 AS is_exit, native_spent AS sol
-               FROM position_entries WHERE wallet_address = ?1
-             UNION ALL
-             SELECT position_id, transaction_signature, 1 AS is_exit, native_received AS sol
-               FROM position_exits WHERE wallet_address = ?1",
-        )
-        .map_err(|e| DatabaseError::Query {
-            operation: "prepare statement".to_owned(),
-            message: e.to_string(),
-        })?;
-
-    let legs = stmt
-        .query_map(params![wallet_address], |row| {
-            Ok((
-                row.get::<_, i64>(0)?,
-                row.get::<_, String>(1)?,
-                row.get::<_, i64>(2)? != 0,
-                row.get::<_, f64>(3)?,
-            ))
-        })
-        .map_err(|e| DatabaseError::Query {
-            operation: "query trader swap legs".to_owned(),
-            message: e.to_string(),
-        })?
-        .collect::<std::result::Result<Vec<_>, _>>()
-        .map_err(|e| DatabaseError::Query {
-            operation: "read trader swap legs".to_owned(),
-            message: e.to_string(),
-        })?;
-
-    Ok(legs)
+    Ok(query_trader_swap_legs(&conn, &wallet_address, None)
+        .map_err(|e| DatabaseError::classify_sqlite_failure("get_trader_swap_legs", e))?)
 }

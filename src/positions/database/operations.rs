@@ -540,51 +540,6 @@ impl PositionsDatabase {
         Ok(position_id)
     }
 
-    /// Update existing position by ID
-    pub async fn update_position(&self, position: &Position) -> Result<()> {
-        let position_id = position.id.ok_or_else(|| Error::TransitionFailed {
-            transition: "update",
-            mint: position.mint.clone(),
-            detail: "position has no id".to_owned(),
-        })?;
-
-        logger::debug(
-            LogTag::Positions,
-            &format!(
-                "Updating position ID {} for mint {} with current price {:.11} SOL",
-                position_id,
-                position.mint,
-                position.current_price.unwrap_or_default()
-            ),
-        );
-
-        let conn = self.get_connection()?;
-
-        let rows_affected =
-            write_position_row(&conn, self.chain.as_str(), position_id, position)
-                .map_err(|e| DatabaseError::classify_sqlite_failure("update_position", e))?;
-
-        if rows_affected == 0 {
-            return Err(Error::NotFoundById { position_id });
-        }
-
-        logger::debug(
-            LogTag::Positions,
-            &format!(
-                "Successfully updated position ID {} ({} rows affected)",
-                position_id, rows_affected
-            ),
-        );
-
-        // Force WAL checkpoint to ensure all connections see the update immediately
-        // This is critical for preventing race conditions in concurrent read operations
-        if let Ok(mut stmt) = conn.prepare("PRAGMA wal_checkpoint(PASSIVE);") {
-            let _ = stmt.query([]);
-        }
-
-        Ok(())
-    }
-
     /// Update only the price-related fields for a position
     pub async fn update_position_prices(
         &self,
@@ -996,6 +951,25 @@ impl PositionsDatabase {
     }
 }
 
+/// Carries from `live` onto `row` the columns a booking does not own, so adopting a
+/// committed row never reverts what their own writers set:
+/// - the prices [`PositionsDatabase::update_position_prices_and_pnl`] writes, and the source
+///   of the current price, which is never persisted. A booking writes these back as it read
+///   them, so the in-memory values are the newer ones;
+/// - the archive flag, the management mode and the origin, which [`write_position_row`]
+///   never writes. Their writers store the row, then mirror memory.
+pub(crate) fn carry_columns_not_booked(row: &mut Position, live: &Position) {
+    row.current_price = live.current_price;
+    row.current_price_updated = live.current_price_updated;
+    row.current_price_source = live.current_price_source;
+    row.price_highest = live.price_highest;
+    row.price_lowest = live.price_lowest;
+    row.archived = live.archived;
+    row.archived_at = live.archived_at;
+    row.management = live.management;
+    row.origin = live.origin.clone();
+}
+
 /// Writes every persisted column of `position` to its row. Returns the number of rows
 /// written: zero when no row has this id on this chain.
 pub(super) fn write_position_row(
@@ -1085,6 +1059,7 @@ mod tests {
 
     use crate::chains::RawAmount;
 
+    use super::super::booking::Booking;
     use super::{PositionsDatabase, POSITIONS_INDEXES, POSITIONS_SCHEMA_VERSION};
 
     fn test_database() -> (PositionsDatabase, tempfile::TempDir) {
@@ -1313,7 +1288,7 @@ mod tests {
             "INSERT INTO positions (id, chain_id, wallet_address, mint, symbol, name, entry_price, entry_time, position_type, entry_size_native, total_size_native, price_highest, price_lowest, token_amount, remaining_token_amount, total_exited_amount, origin_kind, management) VALUES (41, 'solana', 'wallet', 'mint', 'SYM', 'Token', 0.5, '2026-01-01T00:00:00Z', 'buy', 1.0, 1.0, 0.5, 0.5, '340282366920938463463374607431768211455', '18446744073709551616', '18446744073709551617', 'manual', 'user_only')",
             [],
         ).unwrap();
-        let mut position = {
+        let position = {
             let connection = database.get_connection().unwrap();
             connection
                 .query_row(
@@ -1336,8 +1311,21 @@ mod tests {
             RawAmount::new((1u128 << 64) + 1)
         );
 
-        position.remaining_token_amount = Some(RawAmount::new((1u128 << 64) + 5));
-        database.update_position(&position).await.unwrap();
+        database
+            .commit_booking(
+                41,
+                Err(crate::positions::Error::WalletUnavailable {
+                    detail: "no wallet in this store".to_owned(),
+                }),
+                |row, _| {
+                    row.remaining_token_amount = Some(RawAmount::new((1u128 << 64) + 5));
+                    Ok(Booking::Write {
+                        record: None,
+                        outcome: (),
+                    })
+                },
+            )
+            .unwrap();
         let stored: (String, String, String) = database
             .get_connection()
             .unwrap()

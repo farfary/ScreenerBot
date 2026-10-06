@@ -46,6 +46,10 @@ pub enum Error {
     AlreadyOpen { mint: String },
     #[error("position {position_id} is already closed")]
     AlreadyClosed { position_id: i64 },
+    /// An insert was asked for a position that already has a row; an existing row changes
+    /// only through a booking.
+    #[error("position {position_id} is already stored")]
+    AlreadyStored { position_id: i64 },
     #[error("persisted position {field} has unknown value '{value}'")]
     UnknownPersistedValue { field: &'static str, value: String },
 
@@ -117,6 +121,7 @@ impl ErrorClass for Error {
             // State conflicts describe the world as it is right now.
             Error::AlreadyOpen { .. }
             | Error::AlreadyClosed { .. }
+            | Error::AlreadyStored { .. }
             | Error::UnknownPersistedValue { .. } => false,
             // Validation failures are a property of the input, not the attempt.
             Error::InvalidPrice { .. }
@@ -163,6 +168,7 @@ impl ErrorClass for Error {
             Error::AlreadyOpen { .. }
             | Error::AlreadyClosed { .. }
             | Error::UnknownPersistedValue { .. } => Severity::Warning,
+            Error::AlreadyStored { .. } => Severity::Error,
             Error::InvalidPrice { .. }
             | Error::InvalidTradeSize { .. }
             | Error::InvalidExitPercentage { .. }
@@ -190,6 +196,7 @@ impl ErrorClass for Error {
             | Error::TokenNotFound { .. } => 404,
             Error::AlreadyOpen { .. }
             | Error::AlreadyClosed { .. }
+            | Error::AlreadyStored { .. }
             | Error::ZeroExitAmount { .. } => 409,
             Error::UnknownPersistedValue { .. }
             | Error::InvalidPrice { .. }
