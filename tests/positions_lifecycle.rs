@@ -24,13 +24,18 @@ use screenerbot::positions::state::{
 use screenerbot::positions::PositionTransition;
 use screenerbot::swaps::calculate_partial_amount;
 
+/// A raw token amount in whatever integer type the field under test uses.
+fn raw<T: From<u64>>(value: u64) -> T {
+    T::from(value)
+}
+
 // ==================== PARTIAL EXIT SIZING ====================
 
 #[test]
 fn a_partial_amount_is_the_requested_share_of_the_balance() {
-    assert_eq!(calculate_partial_amount(1_000, 25.0), 250);
-    assert_eq!(calculate_partial_amount(1_000, 50.0), 500);
-    assert_eq!(calculate_partial_amount(1_000, 99.0), 990);
+    assert_eq!(calculate_partial_amount(raw(1_000), 25.0), raw::<u64>(250));
+    assert_eq!(calculate_partial_amount(raw(1_000), 50.0), raw::<u64>(500));
+    assert_eq!(calculate_partial_amount(raw(1_000), 99.0), raw::<u64>(990));
 }
 
 #[test]
@@ -38,12 +43,12 @@ fn a_full_percentage_sells_the_entire_balance() {
     // Exactly 100 must return the balance itself, not a rounded product — selling
     // 999_999_999 of 1_000_000_000 units leaves dust that blocks the account close.
     assert_eq!(
-        calculate_partial_amount(1_000_000_000, 100.0),
-        1_000_000_000
+        calculate_partial_amount(raw(1_000_000_000), 100.0),
+        raw::<u64>(1_000_000_000)
     );
     assert_eq!(
-        calculate_partial_amount(1_000_000_000, 150.0),
-        1_000_000_000
+        calculate_partial_amount(raw(1_000_000_000), 150.0),
+        raw::<u64>(1_000_000_000)
     );
 }
 
@@ -53,7 +58,7 @@ fn a_partial_amount_can_never_exceed_the_balance() {
     // swap outright rather than partially filling.
     for pct in [100.0, 100.000_001, 1_000.0, f64::INFINITY] {
         assert!(
-            calculate_partial_amount(12_345, pct) <= 12_345,
+            calculate_partial_amount(raw(12_345), pct) <= raw::<u64>(12_345),
             "percentage {pct} produced more than the balance"
         );
     }
@@ -61,25 +66,28 @@ fn a_partial_amount_can_never_exceed_the_balance() {
 
 #[test]
 fn a_zero_balance_or_non_positive_percentage_sells_nothing() {
-    assert_eq!(calculate_partial_amount(0, 50.0), 0);
-    assert_eq!(calculate_partial_amount(1_000, 0.0), 0);
-    assert_eq!(calculate_partial_amount(1_000, -25.0), 0);
-    assert_eq!(calculate_partial_amount(1_000, f64::NAN), 0);
+    assert_eq!(calculate_partial_amount(raw(0), 50.0), raw::<u64>(0));
+    assert_eq!(calculate_partial_amount(raw(1_000), 0.0), raw::<u64>(0));
+    assert_eq!(calculate_partial_amount(raw(1_000), -25.0), raw::<u64>(0));
+    assert_eq!(
+        calculate_partial_amount(raw(1_000), f64::NAN),
+        raw::<u64>(0)
+    );
 }
 
 #[test]
 fn a_partial_amount_truncates_rather_than_rounding_up() {
     // Truncating keeps the result inside the balance for every input. Rounding up on
     // the last percent would try to sell one unit more than is held.
-    assert_eq!(calculate_partial_amount(7, 50.0), 3);
-    assert_eq!(calculate_partial_amount(3, 99.9), 2);
+    assert_eq!(calculate_partial_amount(raw(7), 50.0), raw::<u64>(3));
+    assert_eq!(calculate_partial_amount(raw(3), 99.9), raw::<u64>(2));
 }
 
 #[test]
 fn a_dust_sized_share_of_a_small_balance_is_zero() {
     // The caller must treat 0 as "do not submit" — `partial_close_position` refuses a
     // zero exit amount rather than sending a swap that cannot fill.
-    assert_eq!(calculate_partial_amount(10, 1.0), 0);
+    assert_eq!(calculate_partial_amount(raw(10), 1.0), raw::<u64>(0));
 }
 
 // ==================== TRANSITION CLASSIFICATION ====================
@@ -90,7 +98,7 @@ fn all_transitions() -> Vec<PositionTransition> {
         PositionTransition::EntryVerified {
             position_id: 1,
             effective_entry_price: 0.01,
-            token_amount_units: 100,
+            token_amount_units: raw(100),
             fee_lamports: 5_000,
             sol_size: 1.0,
         },
@@ -116,13 +124,13 @@ fn all_transitions() -> Vec<PositionTransition> {
         PositionTransition::PartialExitSubmitted {
             position_id: 1,
             exit_signature: "sig".to_owned(),
-            exit_amount: 50,
+            exit_amount: raw(50),
             exit_percentage: 50.0,
             market_price: 0.02,
         },
         PositionTransition::PartialExitVerified {
             position_id: 1,
-            exit_amount: 50,
+            exit_amount: raw(50),
             sol_received: 1.0,
             effective_exit_price: 0.02,
             fee_lamports: 5_000,
@@ -136,7 +144,7 @@ fn all_transitions() -> Vec<PositionTransition> {
         },
         PositionTransition::ExitResidualClearForRetry {
             position_id: 1,
-            exit_amount: 50,
+            exit_amount: raw(50),
             sol_received: 1.0,
             effective_exit_price: 0.02,
             fee_lamports: 5_000,
@@ -152,7 +160,7 @@ fn all_transitions() -> Vec<PositionTransition> {
         },
         PositionTransition::DcaVerified {
             position_id: 1,
-            tokens_bought: 50,
+            tokens_bought: raw(50),
             sol_spent: 0.5,
             effective_price: 0.01,
             fee_lamports: 5_000,

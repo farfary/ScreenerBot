@@ -33,8 +33,13 @@ const DECIMALS: u8 = 9;
 const UNIT: f64 = 1_000_000_000.0; // 10^DECIMALS
 
 /// Raw on-chain units for a UI token amount at [`DECIMALS`].
-fn units(ui_amount: f64) -> u64 {
-    (ui_amount * UNIT) as u64
+fn units<T: From<u64>>(ui_amount: f64) -> T {
+    T::from((ui_amount * UNIT) as u64)
+}
+
+/// A raw token amount in whatever integer type the field under test uses.
+fn raw<T: From<u64>>(value: u64) -> T {
+    T::from(value)
 }
 
 /// 1 SOL spent at 0.01 SOL/token = 100 tokens held, nothing sold, no fees recorded.
@@ -229,7 +234,7 @@ fn closed_position(invested: f64, received: f64) -> Position {
     position.exit_transaction_signature = Some("exit-sig".to_owned());
     position.transaction_exit_verified = true;
     position.sol_received = Some(received);
-    position.remaining_token_amount = Some(0);
+    position.remaining_token_amount = Some(raw(0));
     position.total_exited_amount = units(100.0);
     position
 }

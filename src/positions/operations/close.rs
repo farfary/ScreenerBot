@@ -5,6 +5,7 @@
 
 use crate::chains::solana::assets::ata::{get_token_balance, get_total_token_balance};
 use crate::chains::solana::rpc::{get_rpc_client, RpcClientMethods};
+use crate::chains::RawAmount;
 use crate::logger::{self, LogTag};
 use crate::positions::price_resolution::get_price_with_api_fallback;
 use crate::positions::queue::{enqueue_verification, VerificationItem};
@@ -112,7 +113,7 @@ pub async fn close_position_direct(
                 existing_position.entry_transaction_signature.as_deref(),
                 Some(pending_sig),
                 0.0,
-                0,
+                RawAmount::ZERO,
                 None,
                 None,
             )

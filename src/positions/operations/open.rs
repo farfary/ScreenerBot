@@ -5,6 +5,7 @@
 
 use crate::chains::adapter;
 use crate::chains::solana::rpc::{get_rpc_client, RpcClientMethods};
+use crate::chains::RawAmount;
 use crate::config::with_config;
 use crate::logger::{self, LogTag};
 use crate::positions::db as positions_db;
@@ -126,7 +127,7 @@ async fn open_position_impl(
             None,
             None,
             trade_size_sol,
-            0,
+            RawAmount::ZERO,
             None,
             None,
         )
@@ -175,7 +176,7 @@ async fn open_position_impl(
                     db_pos.entry_transaction_signature.as_deref(),
                     db_pos.exit_transaction_signature.as_deref(),
                     trade_size_sol,
-                    0,
+                    RawAmount::ZERO,
                     None,
                     None,
                 )
@@ -349,7 +350,7 @@ async fn open_position_impl(
         unrealized_pnl_percent: None,
         // Initialize partial exit and DCA fields
         remaining_token_amount: None, // Will be set after entry verification
-        total_exited_amount: 0,
+        total_exited_amount: Default::default(),
         average_exit_price: None,
         partial_exit_count: 0,
         dca_count: 0,

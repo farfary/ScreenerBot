@@ -5,6 +5,7 @@
 
 use crate::chains::adapter;
 use crate::chains::solana::rpc::{get_rpc_client, RpcClientMethods};
+use crate::chains::RawAmount;
 use crate::config::with_config;
 use crate::logger::{self, LogTag};
 use crate::positions::price_resolution::get_price_with_api_fallback;
@@ -102,7 +103,7 @@ pub async fn add_to_position(
         position.entry_transaction_signature.as_deref(),
         None,
         dca_amount_sol,
-        0,
+        RawAmount::ZERO,
         None,
         None,
     )

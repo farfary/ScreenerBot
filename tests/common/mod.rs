@@ -308,7 +308,7 @@ pub fn test_position(entry_price: f64, size_sol: f64) -> Position {
         unrealized_pnl: None,
         unrealized_pnl_percent: None,
         remaining_token_amount: None,
-        total_exited_amount: 0,
+        total_exited_amount: Default::default(),
         average_exit_price: None,
         partial_exit_count: 0,
         dca_count: 0,

@@ -71,6 +71,18 @@ impl RawAmount {
     pub fn checked_mul_div(self, multiplier: Self, divisor: Self) -> Option<Self> {
         math::mul_div_floor(self.0, multiplier.0, divisor.0).map(Self)
     }
+
+    /// Whole units for display and price arithmetic; bit-identical to `raw as f64 / 10^decimals`.
+    pub fn to_whole_units(self, decimals: u8) -> f64 {
+        self.0 as f64 / 10_f64.powi(i32::from(decimals))
+    }
+
+    /// The amount equal to a finite, nonnegative, integral value below 2^128. Callers round or
+    /// truncate first; anything else is `None`.
+    pub fn from_integral_f64(value: f64) -> Option<Self> {
+        (value.is_finite() && value >= 0.0 && value.fract() == 0.0 && value < u128::MAX as f64)
+            .then(|| Self(value as u128))
+    }
 }
 
 impl From<u64> for RawAmount {
@@ -181,6 +193,34 @@ impl FromSql for RawAmount {
 mod tests {
     use super::*;
     use rusqlite::Connection;
+
+    #[test]
+    fn whole_units_match_the_integer_float_conversion() {
+        assert_eq!(RawAmount::from(1_500_000u64).to_whole_units(6), 1.5);
+        let raw = 12_345_678_123_456_789u64;
+        assert_eq!(
+            RawAmount::from(raw).to_whole_units(9).to_bits(),
+            (raw as f64 / 10_f64.powi(9)).to_bits()
+        );
+    }
+
+    #[test]
+    fn integral_floats_convert_exactly_or_not_at_all() {
+        assert_eq!(RawAmount::from_integral_f64(0.0), Some(RawAmount::ZERO));
+        assert_eq!(RawAmount::from_integral_f64(-0.0), Some(RawAmount::ZERO));
+        assert_eq!(
+            RawAmount::from_integral_f64(2f64.powi(64)),
+            Some(RawAmount::new(1u128 << 64))
+        );
+        let largest_below_2_128 = f64::from_bits((u128::MAX as f64).to_bits() - 1);
+        assert_eq!(
+            RawAmount::from_integral_f64(largest_below_2_128),
+            Some(RawAmount::new(u128::MAX >> 75 << 75))
+        );
+        for value in [0.5, -1.0, f64::NAN, f64::INFINITY, u128::MAX as f64] {
+            assert_eq!(RawAmount::from_integral_f64(value), None, "{value}");
+        }
+    }
 
     #[test]
     fn raw_amount_constants_and_integer_conversions_preserve_values() {

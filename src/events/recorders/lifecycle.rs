@@ -4,6 +4,7 @@
 //! Recorders for transactions, swaps, pools and positions.
 
 use super::super::maintenance::is_category_enabled;
+use crate::chains::RawAmount;
 use crate::events::{Event, EventCategory, Severity};
 use chrono::Utc;
 use serde_json::{json, Map, Value};
@@ -155,7 +156,7 @@ pub async fn record_position_event(
     entry_signature: Option<&str>,
     exit_signature: Option<&str>,
     amount_sol: f64,
-    amount_tokens: u64,
+    amount_tokens: impl Into<RawAmount>,
     pnl_sol: Option<f64>,
     pnl_percent: Option<f64>,
 ) {
@@ -169,7 +170,7 @@ pub async fn record_position_event(
         "entry_signature": entry_signature,
         "exit_signature": exit_signature,
         "amount_sol": amount_sol,
-        "amount_tokens": amount_tokens,
+        "amount_tokens": raw_amount_payload(amount_tokens.into()),
         "pnl_sol": pnl_sol,
         "pnl_percent": pnl_percent,
         "event_time": Utc::now().to_rfc3339()
@@ -187,6 +188,11 @@ pub async fn record_position_event(
     );
 
     crate::events::record_safe(event).await;
+}
+
+/// A token amount as a JSON number while it fits u64, otherwise as its exact decimal string.
+fn raw_amount_payload(amount: RawAmount) -> Value {
+    u64::try_from(amount).map_or_else(|_| Value::String(amount.to_string()), Value::from)
 }
 
 /// Record a position event with flexible payload (for complex position operations)
@@ -228,4 +234,22 @@ pub async fn record_position_event_flexible(
     );
 
     crate::events::record_safe(event).await;
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn position_event_amounts_stay_numbers_within_u64() {
+        assert_eq!(
+            json!({ "amount_tokens": raw_amount_payload(2_167_137u64.into()) }).to_string(),
+            json!({ "amount_tokens": 2_167_137u64 }).to_string()
+        );
+        assert_eq!(raw_amount_payload(u64::MAX.into()), json!(u64::MAX));
+        assert_eq!(
+            raw_amount_payload(RawAmount::new(u128::from(u64::MAX) + 1)),
+            json!("18446744073709551616")
+        );
+    }
 }
