@@ -179,7 +179,6 @@ use crate::chains::solana::constants::{
 use crate::chains::solana::layout::mint_decimals;
 use crate::chains::solana::pools::layouts::moonit::{ConfigAccountState, CurveAccountState};
 use crate::chains::solana::pools::types::ProgramKind;
-use crate::chains::solana::rpc::{get_rpc_client, RpcClientMethods};
 use crate::chains::solana::solana_sdk::{
     account::Account,
     instruction::{AccountMeta, Instruction},
@@ -188,7 +187,7 @@ use crate::chains::solana::solana_sdk::{
 use crate::chains::solana::spl_associated_token_account::get_associated_token_address_with_program_id;
 use crate::chains::solana::swaps::direct::error::{DirectSwapError, DirectSwapResult};
 use crate::chains::solana::swaps::direct::venue::{
-    PoolMarket, PoolVenue, SwapAccounts, VenueQuote,
+    AccountReader, PoolMarket, PoolVenue, SwapAccounts, VenueQuote,
 };
 use async_trait::async_trait;
 use std::str::FromStr;
@@ -252,6 +251,7 @@ impl PoolVenue for MoonitVenue {
         &self,
         pool: &Pubkey,
         pool_account: &Account,
+        reader: &dyn AccountReader,
     ) -> DirectSwapResult<Box<dyn PoolMarket>> {
         let curve = CurveAccountState::decode(*pool, &pool_account.data).ok_or_else(|| {
             DirectSwapError::PoolUndecodable {
@@ -302,13 +302,7 @@ impl PoolVenue for MoonitVenue {
 
         let config = config_account_address();
         let addresses = [curve.mint, config];
-        let accounts = get_rpc_client()
-            .get_multiple_accounts(&addresses)
-            .await
-            .map_err(|e| DirectSwapError::AccountUnavailable {
-                address: *pool,
-                detail: format!("Moonit accounts could not be read: {e}"),
-            })?;
+        let accounts = reader.read_accounts(&addresses).await?;
 
         let required = |index: usize| -> DirectSwapResult<&Account> {
             accounts.get(index).and_then(Option::as_ref).ok_or(
@@ -420,7 +414,7 @@ pub struct MoonitMarket {
 }
 
 impl MoonitMarket {
-    /// Build a market directly from decoded parts, for the offline test tier.
+    /// Build a market from decoded parts.
     pub fn new(
         curve: CurveAccountState,
         token_program: Pubkey,

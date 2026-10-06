@@ -191,7 +191,6 @@ use crate::chains::solana::constants::METEORA_DBC_PROGRAM_ID;
 use crate::chains::solana::layout::{mint_decimals, token_account_amount};
 use crate::chains::solana::pools::layouts::meteora_dbc::{PoolConfigState, VirtualPoolState};
 use crate::chains::solana::pools::types::ProgramKind;
-use crate::chains::solana::rpc::{get_rpc_client, RpcClientMethods};
 use crate::chains::solana::solana_sdk::{
     account::Account,
     instruction::{AccountMeta, Instruction},
@@ -199,7 +198,7 @@ use crate::chains::solana::solana_sdk::{
 };
 use crate::chains::solana::swaps::direct::error::{DirectSwapError, DirectSwapResult};
 use crate::chains::solana::swaps::direct::venue::{
-    PoolMarket, PoolVenue, SwapAccounts, VenueQuote,
+    AccountReader, PoolMarket, PoolVenue, SwapAccounts, VenueQuote,
 };
 use async_trait::async_trait;
 use std::str::FromStr;
@@ -246,6 +245,7 @@ impl PoolVenue for MeteoraDbcVenue {
         &self,
         pool: &Pubkey,
         pool_account: &Account,
+        reader: &dyn AccountReader,
     ) -> DirectSwapResult<Box<dyn PoolMarket>> {
         let state = VirtualPoolState::decode(*pool, &pool_account.data).ok_or_else(|| {
             DirectSwapError::PoolUndecodable {
@@ -268,13 +268,9 @@ impl PoolVenue for MeteoraDbcVenue {
         // config it points at -- and it is needed to build the rest of the
         // address list below, so the config is fetched on its own first
         // rather than folded into one batch with everything else.
-        let config_account = get_rpc_client()
-            .get_multiple_accounts(&[state.config])
-            .await
-            .map_err(|e| DirectSwapError::AccountUnavailable {
-                address: state.config,
-                detail: format!("PoolConfig could not be read: {e}"),
-            })?
+        let config_account = reader
+            .read_accounts(&[state.config])
+            .await?
             .into_iter()
             .next()
             .flatten()
@@ -333,13 +329,7 @@ impl PoolVenue for MeteoraDbcVenue {
             state.base_vault,
             state.quote_vault,
         ];
-        let accounts = get_rpc_client()
-            .get_multiple_accounts(&addresses)
-            .await
-            .map_err(|e| DirectSwapError::AccountUnavailable {
-                address: *pool,
-                detail: format!("DBC accounts could not be read: {e}"),
-            })?;
+        let accounts = reader.read_accounts(&addresses).await?;
 
         let required = |index: usize| -> DirectSwapResult<&Account> {
             accounts.get(index).and_then(Option::as_ref).ok_or(
@@ -445,7 +435,8 @@ pub struct DbcMarket {
 }
 
 impl DbcMarket {
-    /// Build a market directly from decoded parts, for the offline test tier.
+    /// Build a market directly from decoded parts, for this module's unit tests.
+    #[cfg(test)]
     #[allow(clippy::too_many_arguments)]
     pub fn new(
         state: VirtualPoolState,

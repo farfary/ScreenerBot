@@ -172,7 +172,6 @@ use crate::chains::solana::pools::layouts::meteora_dlmm::{
     MAX_BIN_PER_ARRAY,
 };
 use crate::chains::solana::pools::types::ProgramKind;
-use crate::chains::solana::rpc::{get_rpc_client, RpcClientMethods};
 use crate::chains::solana::solana_sdk::{
     account::Account,
     instruction::{AccountMeta, Instruction},
@@ -184,7 +183,7 @@ use crate::chains::solana::spl_token_2022::extension::{
 use crate::chains::solana::spl_token_2022::state::Mint;
 use crate::chains::solana::swaps::direct::error::{DirectSwapError, DirectSwapResult};
 use crate::chains::solana::swaps::direct::venue::{
-    PoolMarket, PoolVenue, SwapAccounts, VenueQuote,
+    AccountReader, PoolMarket, PoolVenue, SwapAccounts, VenueQuote,
 };
 use async_trait::async_trait;
 use std::str::FromStr;
@@ -239,6 +238,7 @@ impl PoolVenue for MeteoraDlmmVenue {
         &self,
         pool: &Pubkey,
         pool_account: &Account,
+        reader: &dyn AccountReader,
     ) -> DirectSwapResult<Box<dyn PoolMarket>> {
         let state = LbPairState::decode(*pool, &pool_account.data).ok_or_else(|| {
             DirectSwapError::PoolUndecodable {
@@ -284,13 +284,7 @@ impl PoolVenue for MeteoraDlmmVenue {
         let mut addresses = fixed_addresses.to_vec();
         addresses.extend(array_addresses.iter().copied());
 
-        let accounts = get_rpc_client()
-            .get_multiple_accounts(&addresses)
-            .await
-            .map_err(|e| DirectSwapError::AccountUnavailable {
-                address: *pool,
-                detail: format!("LbPair accounts could not be read: {e}"),
-            })?;
+        let accounts = reader.read_accounts(&addresses).await?;
 
         let required = |index: usize| -> DirectSwapResult<&Account> {
             accounts.get(index).and_then(Option::as_ref).ok_or(
@@ -482,7 +476,8 @@ pub struct DlmmMarket {
 }
 
 impl DlmmMarket {
-    /// Build a market directly from decoded parts, for the offline test tier.
+    /// Build a market directly from decoded parts, for this module's unit tests.
+    #[cfg(test)]
     #[allow(clippy::too_many_arguments)]
     pub fn new(
         state: LbPairState,

@@ -142,7 +142,6 @@ use crate::chains::solana::constants::FLUXBEAM_AMM_PROGRAM_ID;
 use crate::chains::solana::layout::mint_decimals;
 use crate::chains::solana::pools::layouts::fluxbeam::FluxbeamPoolState;
 use crate::chains::solana::pools::types::ProgramKind;
-use crate::chains::solana::rpc::{get_rpc_client, RpcClientMethods};
 use crate::chains::solana::solana_sdk::{
     account::Account,
     instruction::{AccountMeta, Instruction},
@@ -150,7 +149,7 @@ use crate::chains::solana::solana_sdk::{
 };
 use crate::chains::solana::swaps::direct::error::{DirectSwapError, DirectSwapResult};
 use crate::chains::solana::swaps::direct::venue::{
-    PoolMarket, PoolVenue, SwapAccounts, VenueQuote,
+    AccountReader, PoolMarket, PoolVenue, SwapAccounts, VenueQuote,
 };
 use async_trait::async_trait;
 use std::str::FromStr;
@@ -186,6 +185,7 @@ impl PoolVenue for FluxbeamVenue {
         &self,
         pool: &Pubkey,
         pool_account: &Account,
+        reader: &dyn AccountReader,
     ) -> DirectSwapResult<Box<dyn PoolMarket>> {
         let state = FluxbeamPoolState::decode(*pool, &pool_account.data).ok_or_else(|| {
             DirectSwapError::PoolUndecodable {
@@ -224,13 +224,7 @@ impl PoolVenue for FluxbeamVenue {
             state.mint_b,
             state.pool_mint,
         ];
-        let accounts = get_rpc_client()
-            .get_multiple_accounts(&addresses)
-            .await
-            .map_err(|e| DirectSwapError::AccountUnavailable {
-                address: *pool,
-                detail: format!("FluxBeam pool accounts could not be read: {e}"),
-            })?;
+        let accounts = reader.read_accounts(&addresses).await?;
 
         let fetched = |index: usize| -> DirectSwapResult<&Account> {
             accounts.get(index).and_then(Option::as_ref).ok_or(
@@ -321,31 +315,6 @@ pub struct FluxbeamMarket {
 }
 
 impl FluxbeamMarket {
-    /// Build a market directly from decoded parts. The offline test tier uses
-    /// this to drive real captured state without any RPC.
-    #[allow(clippy::too_many_arguments)]
-    pub fn new(
-        state: FluxbeamPoolState,
-        vault_a_balance: u64,
-        vault_b_balance: u64,
-        decimals_a: u8,
-        decimals_b: u8,
-        program_a: Pubkey,
-        program_b: Pubkey,
-        program_pool: Pubkey,
-    ) -> Self {
-        Self {
-            state,
-            vault_a_balance,
-            vault_b_balance,
-            decimals_a,
-            decimals_b,
-            program_a,
-            program_b,
-            program_pool,
-        }
-    }
-
     /// Whether `mint` is the pool's token_a side.
     fn is_side_a(&self, mint: &Pubkey) -> Option<bool> {
         if *mint == self.state.mint_a {

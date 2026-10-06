@@ -25,7 +25,7 @@ mod common;
 
 use screenerbot::chains::solana::solana_sdk::pubkey::Pubkey;
 use screenerbot::chains::solana::swaps::direct::{
-    self, DirectSwapIntent, FeeSide, PlatformFee, SwapAccounts,
+    self, DirectSwapIntent, FeeSide, NodeAccounts, PlatformFee, SwapAccounts,
 };
 use std::str::FromStr;
 
@@ -232,9 +232,12 @@ async fn simulate_direction(pool: &str, input_mint: &str, output_mint: &str, amo
 
 /// The other side of the pair a SOL pool trades.
 async fn paired_token(pool: &str) -> String {
-    let market = direct::load_market(&Pubkey::from_str(pool).expect("pool constant"))
-        .await
-        .unwrap_or_else(|e| panic!("{pool} must decode: {e}"));
+    let market = direct::load_market(
+        &Pubkey::from_str(pool).expect("pool constant"),
+        &NodeAccounts,
+    )
+    .await
+    .unwrap_or_else(|e| panic!("{pool} must decode: {e}"));
     let (mint_a, mint_b) = market.mints();
     if mint_a.to_string() == WSOL {
         mint_b.to_string()
@@ -376,7 +379,7 @@ async fn amm_v4_accepts_a_minimum_sol_to_usdc_swap() {
 #[ignore = "live network"]
 async fn cpmm_accepts_a_minimum_sol_to_token_swap() {
     let _guard = common::isolated_env();
-    let market = direct::load_market(&Pubkey::from_str(CPMM_POOL).unwrap())
+    let market = direct::load_market(&Pubkey::from_str(CPMM_POOL).unwrap(), &NodeAccounts)
         .await
         .expect("the CPMM pool must decode");
     let (mint_a, mint_b) = market.mints();
@@ -411,7 +414,7 @@ async fn clmm_accepts_a_minimum_sol_to_usdc_swap() {
 async fn a_clmm_swap_reaches_different_tick_arrays_in_each_direction() {
     let _guard = common::isolated_env();
     let pool = Pubkey::from_str(CLMM_SOL_USDC).unwrap();
-    let market = direct::load_market(&pool)
+    let market = direct::load_market(&pool, &NodeAccounts)
         .await
         .expect("the CLMM pool decodes");
     let owner = simulation_owner();
@@ -599,7 +602,7 @@ async fn meteora_dlmm_swaps_a_pool_that_has_no_bin_array_bitmap_extension() {
 async fn an_orca_whirlpool_swap_reaches_different_tick_arrays_in_each_direction() {
     let _guard = common::isolated_env();
     let pool = Pubkey::from_str(ORCA_SOL_USDC).unwrap();
-    let market = direct::load_market(&pool)
+    let market = direct::load_market(&pool, &NodeAccounts)
         .await
         .expect("the Orca Whirlpool pool decodes");
     let owner = simulation_owner();
@@ -720,7 +723,9 @@ async fn a_pump_amm_quote_is_exact_to_the_raw_unit() {
 async fn pump_amm_swaps_a_pool_whose_sol_side_is_the_quote() {
     let _guard = common::isolated_env();
     let pool = Pubkey::from_str(PUMP_AMM_SOL_QUOTE_POOL).unwrap();
-    let market = direct::load_market(&pool).await.expect("pool decodes");
+    let market = direct::load_market(&pool, &NodeAccounts)
+        .await
+        .expect("pool decodes");
     let (base, quote) = market.mints();
     assert_eq!(
         quote.to_string(),
@@ -875,7 +880,9 @@ async fn a_pool_quotes_both_directions_of_its_pair() {
     let _guard = common::isolated_env();
     let pool = Pubkey::from_str(AMM_V4_SOL_USDC).unwrap();
     let owner = simulation_owner();
-    let market = direct::load_market(&pool).await.expect("pool decodes");
+    let market = direct::load_market(&pool, &NodeAccounts)
+        .await
+        .expect("pool decodes");
 
     let buy = DirectSwapIntent {
         pool,
@@ -984,7 +991,7 @@ async fn a_real_round_trip_through_cpmm_settles_and_pays_the_platform_fee() {
     let Some(ctx) = common::require_mainnet() else {
         return;
     };
-    let market = direct::load_market(&Pubkey::from_str(CPMM_POOL).unwrap())
+    let market = direct::load_market(&Pubkey::from_str(CPMM_POOL).unwrap(), &NodeAccounts)
         .await
         .expect("the CPMM pool must decode");
     let (mint_a, mint_b) = market.mints();
@@ -1416,7 +1423,7 @@ async fn holders_from_the_token_programme(
 /// test.
 async fn simulate_sell_with_no_slippage_room(pool: &str, label: &str) {
     let pool_key = Pubkey::from_str(pool).expect("pool constant must be a pubkey");
-    let market = direct::load_market(&pool_key)
+    let market = direct::load_market(&pool_key, &NodeAccounts)
         .await
         .unwrap_or_else(|e| panic!("{label}: pool must decode: {e}"));
 

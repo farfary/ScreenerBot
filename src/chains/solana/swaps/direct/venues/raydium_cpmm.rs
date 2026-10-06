@@ -33,7 +33,6 @@ use crate::chains::solana::constants::RAYDIUM_CPMM_PROGRAM_ID;
 use crate::chains::solana::layout::token_account_amount;
 use crate::chains::solana::pools::layouts::raydium_cpmm::{CpmmFeeConfig, CpmmPoolState};
 use crate::chains::solana::pools::types::ProgramKind;
-use crate::chains::solana::rpc::{get_rpc_client, RpcClientMethods};
 use crate::chains::solana::solana_sdk::{
     account::Account,
     instruction::{AccountMeta, Instruction},
@@ -41,7 +40,7 @@ use crate::chains::solana::solana_sdk::{
 };
 use crate::chains::solana::swaps::direct::error::{DirectSwapError, DirectSwapResult};
 use crate::chains::solana::swaps::direct::venue::{
-    PoolMarket, PoolVenue, SwapAccounts, VenueQuote,
+    AccountReader, PoolMarket, PoolVenue, SwapAccounts, VenueQuote,
 };
 use async_trait::async_trait;
 use std::str::FromStr;
@@ -76,6 +75,7 @@ impl PoolVenue for RaydiumCpmmVenue {
         &self,
         pool: &Pubkey,
         pool_account: &Account,
+        reader: &dyn AccountReader,
     ) -> DirectSwapResult<Box<dyn PoolMarket>> {
         let state = CpmmPoolState::decode(*pool, &pool_account.data).ok_or_else(|| {
             DirectSwapError::PoolUndecodable {
@@ -110,13 +110,7 @@ impl PoolVenue for RaydiumCpmmVenue {
             state.mint_0,
             state.mint_1,
         ];
-        let accounts = get_rpc_client()
-            .get_multiple_accounts(&addresses)
-            .await
-            .map_err(|e| DirectSwapError::AccountUnavailable {
-                address: *pool,
-                detail: format!("CP-Swap pool accounts could not be read: {e}"),
-            })?;
+        let accounts = reader.read_accounts(&addresses).await?;
 
         let fetched = |index: usize| -> DirectSwapResult<&Account> {
             accounts.get(index).and_then(Option::as_ref).ok_or(
@@ -177,8 +171,8 @@ pub struct CpmmMarket {
 }
 
 impl CpmmMarket {
-    /// Build a market directly from decoded parts. The offline test tier uses
-    /// this to drive real captured state without any RPC.
+    /// Build a market directly from decoded parts, for this module's unit tests.
+    #[cfg(test)]
     pub fn new(
         state: CpmmPoolState,
         config: CpmmFeeConfig,

@@ -26,7 +26,7 @@
 
 mod common;
 
-use screenerbot::chains::solana::layout::{mint_decimals, token_account_amount, u64_at, u8_at};
+use screenerbot::chains::solana::layout::{token_account_amount, u64_at};
 use screenerbot::chains::solana::pools::layouts::fluxbeam::FluxbeamPoolState;
 use screenerbot::chains::solana::pools::layouts::meteora_damm::DammPoolState;
 use screenerbot::chains::solana::pools::layouts::meteora_dbc::PoolConfigState as DbcPoolConfigState;
@@ -36,9 +36,7 @@ use screenerbot::chains::solana::pools::layouts::moonit::{ConfigAccountState, Cu
 use screenerbot::chains::solana::pools::layouts::orca_whirlpool::{
     decode_tick_array as orca_decode_tick_array, WhirlpoolState,
 };
-use screenerbot::chains::solana::pools::layouts::pumpfun_amm::{
-    FeeTierTable, GlobalConfig, PumpAmmPoolState,
-};
+use screenerbot::chains::solana::pools::layouts::pumpfun_amm::PumpAmmPoolState;
 use screenerbot::chains::solana::pools::layouts::pumpfun_legacy::{
     BondingCurve, GlobalFeeRecipients,
 };
@@ -48,24 +46,13 @@ use screenerbot::chains::solana::pools::layouts::raydium_clmm::{
 };
 use screenerbot::chains::solana::pools::layouts::raydium_cpmm::{CpmmFeeConfig, CpmmPoolState};
 use screenerbot::chains::solana::solana_sdk::pubkey::Pubkey;
-use screenerbot::chains::solana::swaps::direct::venues::fluxbeam::FluxbeamMarket;
-use screenerbot::chains::solana::swaps::direct::venues::meteora_damm::DammMarket;
-use screenerbot::chains::solana::swaps::direct::venues::meteora_dbc::DbcMarket;
 use screenerbot::chains::solana::swaps::direct::venues::meteora_dlmm::{
     bin_array_address, bitmap_extension_address as dlmm_bitmap_extension_address,
-    event_authority_address, oracle_address as dlmm_oracle_address, DlmmMarket,
+    event_authority_address, oracle_address as dlmm_oracle_address,
 };
-use screenerbot::chains::solana::swaps::direct::venues::moonit::MoonitMarket;
 use screenerbot::chains::solana::swaps::direct::venues::orca_whirlpool::{
-    candidate_tick_array_starts, oracle_address, tick_array_address as orca_tick_array_address,
-    WhirlpoolMarket,
+    candidate_tick_array_starts, tick_array_address as orca_tick_array_address,
 };
-use screenerbot::chains::solana::swaps::direct::venues::pumpfun_amm::PumpAmmMarket;
-use screenerbot::chains::solana::swaps::direct::venues::pumpfun_legacy::PumpLegacyMarket;
-use screenerbot::chains::solana::swaps::direct::venues::raydium_amm_v4::AmmV4Market;
-use screenerbot::chains::solana::swaps::direct::venues::raydium_clmm::ClmmMarket;
-use screenerbot::chains::solana::swaps::direct::venues::raydium_cpmm::CpmmMarket;
-use screenerbot::chains::solana::swaps::direct::venues::token2022::transfer_fee_schedule;
 use screenerbot::chains::solana::swaps::direct::{
     self, DirectSwapIntent, FeeSide, PoolMarket, SwapAccounts,
 };
@@ -131,309 +118,6 @@ impl Fixture {
     }
 }
 
-fn cpmm_market() -> CpmmMarket {
-    let fixture = Fixture::load("raydium_cpmm", "direct-swap");
-    let state = CpmmPoolState::decode(fixture.pool, fixture.data(&fixture.pool))
-        .expect("the captured CPMM pool must decode");
-    let config = CpmmFeeConfig::decode(fixture.data(&state.amm_config))
-        .expect("the captured AmmConfig must decode");
-    CpmmMarket::new(
-        state,
-        config,
-        fixture.balance(&state.vault_0),
-        fixture.balance(&state.vault_1),
-        transfer_fee_schedule(fixture.account(&state.mint_0)),
-        transfer_fee_schedule(fixture.account(&state.mint_1)),
-    )
-}
-
-fn amm_v4_market() -> AmmV4Market {
-    let fixture = Fixture::load("raydium_legacy_amm", "direct-swap");
-    let state = AmmV4PoolState::decode(fixture.pool, fixture.data(&fixture.pool))
-        .expect("the captured AMM v4 pool must decode");
-    AmmV4Market::new(
-        state,
-        fixture.balance(&state.coin_vault),
-        fixture.balance(&state.pc_vault),
-    )
-}
-
-fn clmm_market() -> ClmmMarket {
-    use screenerbot::chains::solana::swaps::direct::venues::clmm_ticks::{
-        bitmap_extension_address, tick_array_address,
-    };
-
-    let fixture = Fixture::load("raydium_clmm", "direct-swap");
-    let program = fixture.account(&fixture.pool).owner;
-    let state = ClmmPoolState::decode(fixture.pool, fixture.data(&fixture.pool))
-        .expect("the captured CLMM pool must decode");
-    let config = ClmmFeeConfig::decode(fixture.data(&state.amm_config))
-        .expect("the captured AmmConfig must decode");
-
-    // Same derivation `load()` uses: the pool's own bitmap picks which tick
-    // arrays to fetch, both directions, before the extension is known.
-    let initial_bitmap = TickArrayBitmap::from_pool_state(fixture.data(&fixture.pool))
-        .expect("the captured bitmap decodes");
-    let tick_array_addresses: Vec<Pubkey> = [true, false]
-        .into_iter()
-        .flat_map(|zero_for_one| {
-            initial_bitmap.arrays_for_swap(state.tick_current, state.tick_spacing, zero_for_one)
-        })
-        .map(|start| tick_array_address(&program, &fixture.pool, start))
-        .collect();
-
-    let bitmap_extension_address = bitmap_extension_address(&program, &fixture.pool);
-    let mut bitmap = initial_bitmap;
-    if let Some(extension) = fixture.accounts.get(&bitmap_extension_address.to_string()) {
-        bitmap = bitmap.with_extension(&fixture.pool, &extension.data);
-    }
-
-    let mut ticks = Vec::new();
-    for address in tick_array_addresses {
-        if let Some(account) = fixture.accounts.get(&address.to_string()) {
-            let decoded = decode_tick_array(&fixture.pool, &account.data)
-                .expect("a captured tick array must match the expected layout");
-            ticks.extend(decoded);
-        }
-    }
-
-    ClmmMarket::new(
-        state,
-        config,
-        bitmap,
-        bitmap_extension_address,
-        fixture.account(&state.mint_0).owner,
-        fixture.account(&state.mint_1).owner,
-        fixture.balance(&state.vault_0),
-        fixture.balance(&state.vault_1),
-        transfer_fee_schedule(fixture.account(&state.mint_0)),
-        transfer_fee_schedule(fixture.account(&state.mint_1)),
-        ticks,
-    )
-}
-
-fn orca_market() -> WhirlpoolMarket {
-    let fixture = Fixture::load("orca_whirlpool", "direct-swap");
-    let program = fixture.account(&fixture.pool).owner;
-    let state = WhirlpoolState::decode(fixture.pool, fixture.data(&fixture.pool))
-        .expect("the captured Whirlpool state must decode");
-
-    // Same derivation `load()` uses: candidates in both directions, arithmetic
-    // only, since a Whirlpool carries no bitmap -- existence is learned from
-    // which accounts the fixture actually captured.
-    let mut tick_array_starts: Vec<i32> = Vec::new();
-    for zero_for_one in [true, false] {
-        for start in
-            candidate_tick_array_starts(state.tick_current, state.tick_spacing, zero_for_one)
-        {
-            if !tick_array_starts.contains(&start) {
-                tick_array_starts.push(start);
-            }
-        }
-    }
-
-    let mut ticks = Vec::new();
-    let mut available_starts: Vec<i32> = Vec::new();
-    for start in &tick_array_starts {
-        let address = orca_tick_array_address(&program, &fixture.pool, *start);
-        if let Some(account) = fixture.accounts.get(&address.to_string()) {
-            available_starts.push(*start);
-            ticks.extend(
-                orca_decode_tick_array(&account.data, *start, state.tick_spacing)
-                    .expect("a captured tick array must match the expected layout"),
-            );
-        }
-    }
-
-    let oracle = oracle_address(&program, &fixture.pool);
-    // The captured fixture has no oracle account at all -- this pool is
-    // classic (non-adaptive-fee), matching the module's own on-chain finding.
-    assert!(
-        !fixture.accounts.contains_key(&oracle.to_string()),
-        "the fixture pool is expected to be a classic Whirlpool with no oracle account; \
-         re-check the adaptive-fee refusal test if this fixture is ever refreshed"
-    );
-
-    WhirlpoolMarket::new(
-        state,
-        oracle,
-        fixture.account(&state.mint_a).owner,
-        fixture.account(&state.mint_b).owner,
-        (
-            mint_decimals(fixture.data(&state.mint_a)).expect("mint_a decimals"),
-            mint_decimals(fixture.data(&state.mint_b)).expect("mint_b decimals"),
-        ),
-        fixture.balance(&state.vault_a),
-        fixture.balance(&state.vault_b),
-        transfer_fee_schedule(fixture.account(&state.mint_a)),
-        transfer_fee_schedule(fixture.account(&state.mint_b)),
-        ticks,
-        available_starts,
-    )
-}
-
-fn dlmm_market() -> DlmmMarket {
-    let fixture = Fixture::load("meteora_dlmm", "direct-swap");
-    let program = fixture.account(&fixture.pool).owner;
-    let state = LbPairState::decode(fixture.pool, fixture.data(&fixture.pool))
-        .expect("the captured LbPair must decode");
-    let raw_v_params = LbPairState::decode_v_parameters(fixture.data(&fixture.pool))
-        .expect("the captured LbPair's v_parameters must decode");
-
-    // Same derivation `load()` uses, but against the CLOCK CAPTURED IN THE
-    // FIXTURE rather than the current wall clock -- the bin arrays and
-    // reserves were captured at that same instant, so re-deriving against
-    // "now" would apply a fee-reference decay the captured bins never saw.
-    let clock_address = Pubkey::from_str("SysvarC1ock11111111111111111111111111111111").unwrap();
-    let clock_data = fixture.data(&clock_address);
-    let now = i64::from_le_bytes(
-        clock_data[32..40]
-            .try_into()
-            .expect("the fixture's clock sysvar is 40 bytes"),
-    );
-    let v_params = raw_v_params.update_references(now, state.active_id, &state.parameters);
-
-    // Same derivation `load()` uses: consecutive candidate array indices in
-    // both directions out from the active bin, keeping only what the
-    // fixture actually captured.
-    let active_array_index = state.active_id.div_euclid(70) as i64;
-    let mut array_indices: Vec<i64> = Vec::new();
-    for step in [-1i64, 1] {
-        let mut index = active_array_index;
-        for _ in 0..3 {
-            if !array_indices.contains(&index) {
-                array_indices.push(index);
-            }
-            index += step;
-        }
-    }
-
-    let mut bins: Vec<(i32, u64, u64)> = Vec::new();
-    let mut available: Vec<i64> = Vec::new();
-    for index in array_indices {
-        let address = bin_array_address(&program, &fixture.pool, index);
-        if let Some(account) = fixture.accounts.get(&address.to_string()) {
-            available.push(index);
-            for i in 0..70i32 {
-                let offset = 56 + (i as usize) * 144;
-                let amount_x = u64_at(&account.data, offset).expect("bin amount_x");
-                let amount_y = u64_at(&account.data, offset + 8).expect("bin amount_y");
-                let id = (index * 70) as i32 + i;
-                bins.push((id, amount_x, amount_y));
-            }
-        }
-    }
-
-    let mint_x = fixture.account(&state.token_x_mint);
-    let mint_y = fixture.account(&state.token_y_mint);
-
-    // Optional account: read from the fixture the same way `load()` reads it
-    // from the batch, rather than assumed either way.
-    let has_bitmap_extension = fixture
-        .accounts
-        .contains_key(&dlmm_bitmap_extension_address(&program, &fixture.pool).to_string());
-
-    DlmmMarket::new(
-        state,
-        v_params,
-        mint_x.owner,
-        mint_y.owner,
-        (
-            mint_decimals(&mint_x.data).expect("token_x_mint decimals"),
-            mint_decimals(&mint_y.data).expect("token_y_mint decimals"),
-        ),
-        fixture.balance(&state.reserve_x),
-        fixture.balance(&state.reserve_y),
-        transfer_fee_schedule(mint_x),
-        transfer_fee_schedule(mint_y),
-        bins,
-        available,
-        has_bitmap_extension,
-    )
-}
-
-fn damm_market() -> DammMarket {
-    let fixture = Fixture::load("meteora_damm_v2", "direct-swap");
-    let state = DammPoolState::decode(fixture.pool, fixture.data(&fixture.pool))
-        .expect("the captured DAMM v2 pool must decode");
-    let mint_a = fixture.account(&state.mint_a);
-    let mint_b = fixture.account(&state.mint_b);
-    let decimals_a = u8_at(&mint_a.data, 44).expect("mint_a carries a decimals byte");
-    let decimals_b = u8_at(&mint_b.data, 44).expect("mint_b carries a decimals byte");
-
-    // The fixture's fee schedule is keyed on the wall clock (activation_type
-    // 1, a unix timestamp) rather than the slot -- `load()` reads the same
-    // clock live, so re-reading it here rather than freezing a captured value
-    // is what keeps this fixture from rotting the day the cliff period ends.
-    let current_point = chrono::Utc::now().timestamp().max(0) as u64;
-
-    DammMarket::new(
-        state,
-        mint_a.owner,
-        mint_b.owner,
-        decimals_a,
-        decimals_b,
-        fixture.balance(&state.vault_a),
-        fixture.balance(&state.vault_b),
-        transfer_fee_schedule(mint_a),
-        transfer_fee_schedule(mint_b),
-        current_point,
-    )
-}
-
-/// pump-swap's own programme id, for deriving the `GlobalConfig` and
-/// `FeeConfig` PDAs the fixture captured. Kept local to this test rather than
-/// imported: the venue does not expose these addresses as `pub`, since
-/// production always derives them itself.
-fn pump_amm_program_id_for_test() -> Pubkey {
-    Pubkey::from_str("pAMMBay6oceH9fJKBRHGP5D4bD4sWpmSwMn52FMfXEA").unwrap()
-}
-
-fn pump_amm_market() -> PumpAmmMarket {
-    let fixture = Fixture::load("pumpfun_amm", "direct-swap");
-    let state = PumpAmmPoolState::decode(fixture.pool, fixture.data(&fixture.pool))
-        .expect("the captured pump-swap pool must decode");
-
-    let program = pump_amm_program_id_for_test();
-    let fee_program = Pubkey::from_str("pfeeUxB6jkeY1Hxd7CsFCAjcbHA9rWtchMGdZ6VojVZ").unwrap();
-    let (global_config, _) = Pubkey::find_program_address(&[b"global_config"], &program);
-    let (fee_config, _) =
-        Pubkey::find_program_address(&[b"fee_config", program.as_ref()], &fee_program);
-
-    let global = GlobalConfig::decode(fixture.data(&global_config))
-        .expect("the captured GlobalConfig must decode");
-    let protocol_fee_recipient = global
-        .first_fee_recipient()
-        .expect("the captured global config lists a protocol fee recipient");
-    let buyback_fee_recipient = global
-        .first_buyback_recipient()
-        .expect("the captured global config lists a buyback fee recipient");
-    let tiers = FeeTierTable::decode(fixture.data(&fee_config));
-
-    let base_mint = fixture.account(&state.base_mint);
-    let quote_mint = fixture.account(&state.quote_mint);
-    let base_supply = u64_at(&base_mint.data, 36).expect("base mint carries a supply");
-    let base_decimals = u8_at(&base_mint.data, 44).expect("base mint carries a decimals byte");
-    let quote_decimals = u8_at(&quote_mint.data, 44).expect("quote mint carries a decimals byte");
-
-    PumpAmmMarket::new(
-        state,
-        protocol_fee_recipient,
-        buyback_fee_recipient,
-        tiers,
-        global.flat_fees(),
-        base_mint.owner,
-        quote_mint.owner,
-        base_decimals,
-        quote_decimals,
-        base_supply,
-        fixture.balance(&state.base_token_account),
-        fixture.balance(&state.quote_token_account),
-        transfer_fee_schedule(base_mint),
-        transfer_fee_schedule(quote_mint),
-    )
-}
-
 /// pump.fun legacy's own programme id, for deriving the `Global` and
 /// `FeeConfig` PDAs the fixture captured. Kept local to this test rather than
 /// imported: the venue does not expose these addresses as `pub`, since
@@ -442,45 +126,16 @@ fn pump_legacy_program_id_for_test() -> Pubkey {
     Pubkey::from_str("6EF8rrecthR5Dkzon8Nwu78hRvfCKubJ14M5uBEwF6P").unwrap()
 }
 
-fn pump_legacy_market() -> PumpLegacyMarket {
-    let fixture = Fixture::load("pumpfun_legacy", "direct-swap");
-    let mut curve = BondingCurve::decode(fixture.pool, fixture.data(&fixture.pool))
-        .expect("the captured bonding curve must decode");
-    // The account carries no mint field of its own (see the venue's module
-    // docs) -- `load()` recovers it from the curve's own token account via
-    // `getTokenAccountsByOwner`, which the offline tier does not call. The
-    // fixture was captured against a known live trade, so the mint is known.
-    curve.mint = Pubkey::from_str("2xJGewx1p72WFCAwBvmbpejZxqa7EN3mS3PiGjgrpump").unwrap();
+/// The market the venue's own `load` builds from the `direct-swap` case of `venue`, replayed
+/// through the production dispatch and account reads.
+fn fixture_market(venue: &str) -> Box<dyn PoolMarket> {
+    fixture_market_case(venue, "direct-swap")
+}
 
-    let program = pump_legacy_program_id_for_test();
-    let fee_program = Pubkey::from_str("pfeeUxB6jkeY1Hxd7CsFCAjcbHA9rWtchMGdZ6VojVZ").unwrap();
-    let (global, _) = Pubkey::find_program_address(&[b"global"], &program);
-    let (fee_config, _) =
-        Pubkey::find_program_address(&[b"fee_config", program.as_ref()], &fee_program);
-
-    let global_state = GlobalFeeRecipients::decode(fixture.data(&global))
-        .expect("the captured Global must decode");
-    let fee_recipient = global_state
-        .first_fee_recipient()
-        .expect("the captured Global lists a protocol fee recipient");
-    let (buyback_wallet, buyback_paid) = global_state
-        .two_buyback_recipients()
-        .expect("the captured Global lists at least two buyback fee recipients");
-    let tiers = FeeTierTable::decode(fixture.data(&fee_config));
-
-    let mint_account = fixture.account(&curve.mint);
-    let mint_decimals = u8_at(&mint_account.data, 44).expect("mint carries a decimals byte");
-
-    PumpLegacyMarket::new(
-        curve,
-        mint_account.owner,
-        mint_decimals,
-        transfer_fee_schedule(mint_account),
-        fee_recipient,
-        buyback_wallet,
-        buyback_paid,
-        tiers,
-    )
+fn fixture_market_case(venue: &str, case: &str) -> Box<dyn PoolMarket> {
+    let case = common::solana_pools::load_case(venue, case);
+    common::solana_pools::load_market(&case)
+        .unwrap_or_else(|e| panic!("the recorded {venue} pool must load: {e}"))
 }
 
 // ============================================================================
@@ -635,7 +290,7 @@ fn the_clmm_captured_tick_arrays_hold_real_ticks_not_padding() {
 
 #[test]
 fn a_clmm_quote_off_real_state_walks_ticks_and_charges_the_configured_rate() {
-    let market = clmm_market();
+    let market = fixture_market("raydium_clmm");
     let (mint_0, mint_1) = market.mints();
     let amount_in = 5_000_000; // 0.005 SOL
 
@@ -737,7 +392,7 @@ fn the_orca_whirlpool_captured_tick_arrays_hold_real_ticks_not_padding() {
 
 #[test]
 fn an_orca_whirlpool_quote_off_real_state_walks_ticks_and_charges_the_configured_rate() {
-    let market = orca_market();
+    let market = fixture_market("orca_whirlpool");
     let (mint_a, mint_b) = market.mints();
     let amount_in = 5_000_000; // 0.005 SOL
 
@@ -798,7 +453,7 @@ fn the_damm_v2_layout_reads_real_values_at_every_offset_it_claims() {
 
 #[test]
 fn a_damm_v2_quote_off_real_state_charges_a_fee_and_is_monotonic() {
-    let market = damm_market();
+    let market = fixture_market("meteora_damm_v2");
     let (mint_a, mint_b) = market.mints();
     let amount_in = 5_000_000; // 0.005 SOL
 
@@ -845,16 +500,22 @@ fn the_pump_amm_layout_reads_real_values_at_every_offset_it_claims() {
         "this fixture was chosen to be a plain pool this venue can quote"
     );
 
-    let market = pump_amm_market();
+    // The venue prices its fee tier off the market cap, which needs a non-empty base reserve
+    // and a non-zero base supply, so the recorded pool must load and hold both.
+    fixture_market("pumpfun_amm");
     assert!(
-        market.market_cap().is_some(),
-        "a real pool with real reserves must have a computable market cap"
+        fixture.balance(&state.base_token_account) > 0,
+        "a real pool holds base tokens"
+    );
+    assert!(
+        u64_at(&fixture.account(&state.base_mint).data, 36).is_some_and(|supply| supply > 0),
+        "a real mint has a supply"
     );
 }
 
 #[test]
 fn a_pump_amm_quote_off_real_state_charges_a_fee_and_is_monotonic() {
-    let market = pump_amm_market();
+    let market = fixture_market("pumpfun_amm");
     let (base, quote) = market.mints();
     let amount_in = 5_000_000; // 0.005 SOL
 
@@ -896,7 +557,7 @@ fn a_pump_amm_quote_off_real_state_charges_a_fee_and_is_monotonic() {
 
 #[test]
 fn a_cpmm_quote_off_real_state_charges_the_configured_rate() {
-    let market = cpmm_market();
+    let market = fixture_market("raydium_cpmm");
     let (mint_0, mint_1) = market.mints();
     let amount_in = 5_000_000; // 0.005 SOL
 
@@ -928,9 +589,15 @@ fn a_cpmm_quote_off_real_state_charges_the_configured_rate() {
 
 #[test]
 fn an_amm_v4_quote_off_real_state_is_monotonic_and_concave_in_size() {
-    let market = amm_v4_market();
+    let fixture = Fixture::load("raydium_legacy_amm", "direct-swap");
+    let state = AmmV4PoolState::decode(fixture.pool, fixture.data(&fixture.pool))
+        .expect("the captured AMM v4 pool must decode");
+    let (coin_reserve, _) = state.tradable_reserves(
+        fixture.balance(&state.coin_vault),
+        fixture.balance(&state.pc_vault),
+    );
+    let market = fixture_market("raydium_legacy_amm");
     let (coin, _) = market.mints();
-    let (coin_reserve, _) = market.reserves();
 
     let small = market.quote(&coin, 5_000_000).expect("quote");
     let large = market.quote(&coin, 50_000_000).expect("quote");
@@ -970,8 +637,12 @@ fn an_amm_v4_quote_off_real_state_is_monotonic_and_concave_in_size() {
 #[test]
 fn both_venues_refuse_a_mint_the_pool_does_not_hold() {
     let stranger = Pubkey::new_unique();
-    assert!(cpmm_market().quote(&stranger, 5_000_000).is_err());
-    assert!(amm_v4_market().quote(&stranger, 5_000_000).is_err());
+    assert!(fixture_market("raydium_cpmm")
+        .quote(&stranger, 5_000_000)
+        .is_err());
+    assert!(fixture_market("raydium_legacy_amm")
+        .quote(&stranger, 5_000_000)
+        .is_err());
 }
 
 // ============================================================================
@@ -981,7 +652,7 @@ fn both_venues_refuse_a_mint_the_pool_does_not_hold() {
 #[test]
 fn a_sol_funded_buy_holds_back_the_fee_before_the_pool_sees_it() {
     let _guard = common::config_guard();
-    let market = cpmm_market();
+    let market = fixture_market("raydium_cpmm");
     let (mint_0, mint_1) = market.mints();
     let intent = DirectSwapIntent {
         pool: market.pool(),
@@ -992,7 +663,7 @@ fn a_sol_funded_buy_holds_back_the_fee_before_the_pool_sees_it() {
         slippage_bps: 300,
     };
 
-    let quote = direct::quote_with_market(&intent, &market).expect("quotes offline");
+    let quote = direct::quote_with_market(&intent, market.as_ref()).expect("quotes offline");
     assert_eq!(quote.fee.side, FeeSide::Input, "SOL is the input leg here");
     assert_eq!(quote.fee.amount, 25_000, "0.5% of 0.005 SOL");
     assert_eq!(
@@ -1009,7 +680,7 @@ fn a_sol_funded_buy_holds_back_the_fee_before_the_pool_sees_it() {
 #[test]
 fn a_sell_back_to_sol_takes_the_fee_out_of_the_proceeds() {
     let _guard = common::config_guard();
-    let market = cpmm_market();
+    let market = fixture_market("raydium_cpmm");
     let (mint_0, mint_1) = market.mints();
     let intent = DirectSwapIntent {
         pool: market.pool(),
@@ -1020,7 +691,7 @@ fn a_sell_back_to_sol_takes_the_fee_out_of_the_proceeds() {
         slippage_bps: 300,
     };
 
-    let quote = direct::quote_with_market(&intent, &market).expect("quotes offline");
+    let quote = direct::quote_with_market(&intent, market.as_ref()).expect("quotes offline");
     assert_eq!(
         quote.fee.side,
         FeeSide::Output,
@@ -1041,7 +712,7 @@ fn a_sell_back_to_sol_takes_the_fee_out_of_the_proceeds() {
 #[test]
 fn the_plan_carries_the_fee_transfer_in_the_same_transaction_as_the_swap() {
     let _guard = common::config_guard();
-    let market = amm_v4_market();
+    let market = fixture_market("raydium_legacy_amm");
     let (coin, pc) = market.mints();
     let intent = DirectSwapIntent {
         pool: market.pool(),
@@ -1052,8 +723,8 @@ fn the_plan_carries_the_fee_transfer_in_the_same_transaction_as_the_swap() {
         slippage_bps: 300,
     };
 
-    let quote = direct::quote_with_market(&intent, &market).expect("quotes");
-    let plan = direct::build_plan(&intent, &market, &quote).expect("plans");
+    let quote = direct::quote_with_market(&intent, market.as_ref()).expect("quotes");
+    let plan = direct::build_plan(&intent, market.as_ref(), &quote).expect("plans");
 
     let destination = quote
         .fee
@@ -1093,7 +764,7 @@ fn the_plan_carries_the_fee_transfer_in_the_same_transaction_as_the_swap() {
 #[test]
 fn the_plan_leads_with_a_compute_budget_and_creates_both_accounts_idempotently() {
     let _guard = common::config_guard();
-    let market = amm_v4_market();
+    let market = fixture_market("raydium_legacy_amm");
     let (coin, pc) = market.mints();
     let intent = DirectSwapIntent {
         pool: market.pool(),
@@ -1103,8 +774,8 @@ fn the_plan_leads_with_a_compute_budget_and_creates_both_accounts_idempotently()
         amount_in: 5_000_000,
         slippage_bps: 300,
     };
-    let quote = direct::quote_with_market(&intent, &market).expect("quotes");
-    let plan = direct::build_plan(&intent, &market, &quote).expect("plans");
+    let quote = direct::quote_with_market(&intent, market.as_ref()).expect("quotes");
+    let plan = direct::build_plan(&intent, market.as_ref(), &quote).expect("plans");
 
     assert_eq!(
         plan.instructions[0].data.first(),
@@ -1127,7 +798,7 @@ fn the_plan_leads_with_a_compute_budget_and_creates_both_accounts_idempotently()
 
 #[test]
 fn the_cpmm_instruction_pairs_each_wallet_account_with_the_matching_vault() {
-    let market = cpmm_market();
+    let market = fixture_market("raydium_cpmm");
     let (mint_0, mint_1) = market.mints();
     let owner = Pubkey::new_unique();
     let ata_in = Pubkey::new_unique();
@@ -1249,7 +920,7 @@ fn the_dlmm_captured_bin_arrays_hold_real_bins_not_padding() {
 
 #[test]
 fn a_dlmm_quote_off_real_state_walks_bins_and_charges_the_configured_rate() {
-    let market = dlmm_market();
+    let market = fixture_market("meteora_dlmm");
     let (mint_x, mint_y) = market.mints();
     let amount_in = 5_000_000; // 0.005 SOL
 
@@ -1286,7 +957,7 @@ fn a_dlmm_quote_off_real_state_walks_bins_and_charges_the_configured_rate() {
 
 #[test]
 fn a_dlmm_swap_instruction_names_the_event_authority_and_orients_from_the_input_mint() {
-    let market = dlmm_market();
+    let market = fixture_market("meteora_dlmm");
     let (mint_x, mint_y) = market.mints();
     let program =
         Pubkey::from_str(screenerbot::chains::solana::constants::METEORA_DLMM_PROGRAM_ID).unwrap();
@@ -1380,7 +1051,7 @@ fn the_pump_legacy_layout_reads_real_values_at_every_offset_it_claims() {
     assert!(global_state.first_fee_recipient().is_some());
     assert!(global_state.two_buyback_recipients().is_some());
 
-    let market = pump_legacy_market();
+    let market = fixture_market("pumpfun_legacy");
     assert!(
         market.quote(&market.mints().0, 5_000_000).is_ok(),
         "a real curve with real reserves must quote a small buy"
@@ -1389,7 +1060,7 @@ fn the_pump_legacy_layout_reads_real_values_at_every_offset_it_claims() {
 
 #[test]
 fn a_pump_legacy_quote_off_real_state_charges_both_fees_and_is_monotonic() {
-    let market = pump_legacy_market();
+    let market = fixture_market("pumpfun_legacy");
     let (mint, sol) = market.mints();
     assert_eq!(sol.to_string(), WSOL);
     let amount_in = 5_000_000; // 0.005 SOL, already net of the platform fee
@@ -1426,7 +1097,7 @@ fn a_pump_legacy_quote_off_real_state_charges_both_fees_and_is_monotonic() {
 
 #[test]
 fn a_pump_legacy_swap_instruction_names_the_curve_creator_vault_and_trailing_buyback_pair() {
-    let market = pump_legacy_market();
+    let market = fixture_market("pumpfun_legacy");
     let (mint, sol) = market.mints();
     let owner = Pubkey::new_unique();
     let ata_in = Pubkey::new_unique();
@@ -1501,57 +1172,6 @@ fn a_pump_legacy_swap_instruction_names_the_curve_creator_vault_and_trailing_buy
 // ============================================================================
 // METEORA DBC
 // ============================================================================
-
-fn dbc_market() -> DbcMarket {
-    let fixture = Fixture::load("meteora_dbc", "direct-swap");
-    let state = VirtualPoolState::decode(fixture.pool, fixture.data(&fixture.pool))
-        .expect("the captured VirtualPool must decode");
-    let config = DbcPoolConfigState::decode(fixture.data(&state.config))
-        .expect("the captured PoolConfig must decode");
-
-    let base_mint = fixture.account(&state.base_mint);
-    let quote_mint = fixture.account(&config.quote_mint);
-
-    DbcMarket::new(
-        state,
-        config,
-        mint_decimals(&base_mint.data).expect("base mint carries a decimals byte"),
-        mint_decimals(&quote_mint.data).expect("quote mint carries a decimals byte"),
-        base_mint.owner,
-        quote_mint.owner,
-        transfer_fee_schedule(base_mint),
-        transfer_fee_schedule(quote_mint),
-        fixture.balance(&state.base_vault),
-        fixture.balance(&state.quote_vault),
-    )
-}
-
-/// The second fixture: a different pool whose config carries
-/// `collect_fee_mode = 1` (`OutputToken`) rather than the primary fixture's
-/// `0` (`QuoteToken`) -- the other branch of `DbcMarket::fee_on_input`.
-fn dbc_output_fee_market() -> DbcMarket {
-    let fixture = Fixture::load("meteora_dbc", "direct-swap-output-fee");
-    let state = VirtualPoolState::decode(fixture.pool, fixture.data(&fixture.pool))
-        .expect("the captured VirtualPool must decode");
-    let config = DbcPoolConfigState::decode(fixture.data(&state.config))
-        .expect("the captured PoolConfig must decode");
-
-    let base_mint = fixture.account(&state.base_mint);
-    let quote_mint = fixture.account(&config.quote_mint);
-
-    DbcMarket::new(
-        state,
-        config,
-        mint_decimals(&base_mint.data).expect("base mint carries a decimals byte"),
-        mint_decimals(&quote_mint.data).expect("quote mint carries a decimals byte"),
-        base_mint.owner,
-        quote_mint.owner,
-        transfer_fee_schedule(base_mint),
-        transfer_fee_schedule(quote_mint),
-        fixture.balance(&state.base_vault),
-        fixture.balance(&state.quote_vault),
-    )
-}
 
 #[test]
 fn the_dbc_layout_reads_real_values_at_every_offset_it_claims() {
@@ -1647,7 +1267,7 @@ fn the_dbc_curve_points_are_real_segments_not_padding() {
 
 #[test]
 fn a_dbc_quote_off_real_state_charges_a_fee_and_is_monotonic() {
-    let market = dbc_market();
+    let market = fixture_market("meteora_dbc");
     let (base, quote) = market.mints();
     let amount_in = 5_000_000; // 0.005 SOL
 
@@ -1678,7 +1298,7 @@ fn a_dbc_quote_off_real_state_charges_a_fee_and_is_monotonic() {
 
 #[test]
 fn a_dbc_quote_orients_from_the_input_mint_not_a_hardcoded_side() {
-    let market = dbc_market();
+    let market = fixture_market("meteora_dbc");
     let (base, quote) = market.mints();
 
     let buy = market.quote(&quote, 5_000_000).expect("buy quotes");
@@ -1711,7 +1331,7 @@ fn the_output_token_collect_fee_mode_is_a_real_second_pool_not_a_toy() {
 
     // A buy on THIS pool charges the fee on the OUTPUT (base) leg, not the
     // input -- the opposite of the primary fixture's QuoteToken pool.
-    let market = dbc_output_fee_market();
+    let market = fixture_market_case("meteora_dbc", "direct-swap-output-fee");
     let (_, quote) = market.mints();
     let buy = market.quote(&quote, 5_000_000);
     // This pool is essentially untouched (chosen for the branch, not depth),
@@ -1726,7 +1346,7 @@ fn the_output_token_collect_fee_mode_is_a_real_second_pool_not_a_toy() {
 
 #[test]
 fn a_dbc_swap_instruction_carries_the_confirmed_account_order_and_discriminator() {
-    let market = dbc_market();
+    let market = fixture_market("meteora_dbc");
     let (base, quote) = market.mints();
     let owner = Pubkey::new_unique();
     let ata_in = Pubkey::new_unique();
@@ -1798,31 +1418,6 @@ fn moonit_program_id_for_test() -> Pubkey {
     Pubkey::from_str("MoonCVVNZFSYkqNXP6bxHLPL6QQJiMagDL3qcqUQTrG").unwrap()
 }
 
-fn moonit_market() -> MoonitMarket {
-    let fixture = Fixture::load("moonit_amm", "direct-swap");
-    let curve = CurveAccountState::decode(fixture.pool, fixture.data(&fixture.pool))
-        .expect("the captured Moonit curve must decode");
-
-    let program = moonit_program_id_for_test();
-    let (config_address, bump) = Pubkey::find_program_address(&[b"config_account"], &program);
-    assert_eq!(bump, 251, "the live ConfigAccount's own stored bump is 251");
-    let config = ConfigAccountState::decode(fixture.data(&config_address))
-        .expect("the captured ConfigAccount must decode");
-
-    let mint_account = fixture.account(&curve.mint);
-    let mint_decimals =
-        mint_decimals(&mint_account.data).expect("the curve's mint carries a decimals byte");
-
-    MoonitMarket::new(
-        curve,
-        mint_account.owner,
-        mint_decimals,
-        config.dex_fee,
-        config.helio_fee,
-        config.fee_bps,
-    )
-}
-
 #[test]
 fn the_moonit_layout_reads_real_values_at_every_offset_it_claims() {
     let fixture = Fixture::load("moonit_amm", "direct-swap");
@@ -1868,7 +1463,7 @@ fn the_moonit_layout_reads_real_values_at_every_offset_it_claims() {
         "5K5RtTWzzLp4P8Npi84ocf7F1vBsAu29N1irG4iiUnzt"
     );
 
-    let market = moonit_market();
+    let market = fixture_market("moonit_amm");
     assert!(
         market.quote(&market.mints().1, 5_000_000).is_ok(),
         "a real curve with real reserves must quote a small buy"
@@ -1877,7 +1472,7 @@ fn the_moonit_layout_reads_real_values_at_every_offset_it_claims() {
 
 #[test]
 fn a_moonit_quote_off_real_state_is_monotonic_and_settles_native_sol() {
-    let market = moonit_market();
+    let market = fixture_market("moonit_amm");
     let (mint, sol) = market.mints();
     assert_eq!(sol.to_string(), WSOL);
     assert!(market.settles_native_sol());
@@ -1914,7 +1509,7 @@ fn a_moonit_quote_off_real_state_is_monotonic_and_settles_native_sol() {
 
 #[test]
 fn a_moonit_swap_instruction_carries_the_eleven_idl_accounts_in_order() {
-    let market = moonit_market();
+    let market = fixture_market("moonit_amm");
     let (mint, sol) = market.mints();
     let owner = Pubkey::new_unique();
     let ata_in = Pubkey::new_unique();
@@ -1993,27 +1588,6 @@ fn fluxbeam_program_id_for_test() -> Pubkey {
     Pubkey::from_str("FLUXubRmkEi2q6K3Y9kBPg9248ggaZVsoSFhtJHSrm1X").unwrap()
 }
 
-fn fluxbeam_market() -> FluxbeamMarket {
-    let fixture = Fixture::load("fluxbeam_amm", "direct-swap");
-    let state = FluxbeamPoolState::decode(fixture.pool, fixture.data(&fixture.pool))
-        .expect("the captured FluxBeam SwapV1 state must decode");
-
-    let mint_a_account = fixture.account(&state.mint_a);
-    let mint_b_account = fixture.account(&state.mint_b);
-    let pool_mint_account = fixture.account(&state.pool_mint);
-
-    FluxbeamMarket::new(
-        state,
-        fixture.balance(&state.vault_a),
-        fixture.balance(&state.vault_b),
-        mint_decimals(&mint_a_account.data).expect("mint_a carries a decimals byte"),
-        mint_decimals(&mint_b_account.data).expect("mint_b carries a decimals byte"),
-        mint_a_account.owner,
-        mint_b_account.owner,
-        pool_mint_account.owner,
-    )
-}
-
 #[test]
 fn the_fluxbeam_layout_reads_real_values_at_every_offset_it_claims() {
     let fixture = Fixture::load("fluxbeam_amm", "direct-swap");
@@ -2066,7 +1640,7 @@ fn the_fluxbeam_layout_reads_real_values_at_every_offset_it_claims() {
 
 #[test]
 fn a_fluxbeam_quote_off_real_state_charges_the_pools_own_rate() {
-    let market = fluxbeam_market();
+    let market = fixture_market("fluxbeam_amm");
     let (mint_a, mint_b) = market.mints();
     let amount_in = 5_000_000; // 0.005 SOL
 
@@ -2103,7 +1677,7 @@ fn a_fluxbeam_quote_off_real_state_charges_the_pools_own_rate() {
 
 #[test]
 fn a_fluxbeam_quote_is_monotonic_and_concave_in_size() {
-    let market = fluxbeam_market();
+    let market = fixture_market("fluxbeam_amm");
     let (mint_a, _) = market.mints();
 
     let small = market.quote(&mint_a, 5_000_000).expect("quote");
@@ -2127,12 +1701,14 @@ fn a_fluxbeam_quote_is_monotonic_and_concave_in_size() {
 #[test]
 fn fluxbeam_refuses_a_mint_the_pool_does_not_hold() {
     let stranger = Pubkey::new_unique();
-    assert!(fluxbeam_market().quote(&stranger, 5_000_000).is_err());
+    assert!(fixture_market("fluxbeam_amm")
+        .quote(&stranger, 5_000_000)
+        .is_err());
 }
 
 #[test]
 fn the_fluxbeam_instruction_orients_from_the_input_mint_and_matches_the_confirmed_shape() {
-    let market = fluxbeam_market();
+    let market = fixture_market("fluxbeam_amm");
     let (mint_a, mint_b) = market.mints();
     let fixture = Fixture::load("fluxbeam_amm", "direct-swap");
     let state = FluxbeamPoolState::decode(fixture.pool, fixture.data(&fixture.pool)).unwrap();
@@ -2243,7 +1819,7 @@ fn the_fluxbeam_instruction_orients_from_the_input_mint_and_matches_the_confirme
 #[test]
 fn a_fluxbeam_funded_buy_holds_back_the_platform_fee_before_the_pool_sees_it() {
     let _guard = common::config_guard();
-    let market = fluxbeam_market();
+    let market = fixture_market("fluxbeam_amm");
     let (mint_a, mint_b) = market.mints();
     let intent = DirectSwapIntent {
         pool: market.pool(),
@@ -2254,7 +1830,7 @@ fn a_fluxbeam_funded_buy_holds_back_the_platform_fee_before_the_pool_sees_it() {
         slippage_bps: 300,
     };
 
-    let quote = direct::quote_with_market(&intent, &market).expect("quotes offline");
+    let quote = direct::quote_with_market(&intent, market.as_ref()).expect("quotes offline");
     assert_eq!(quote.fee.side, FeeSide::Input, "SOL is the input leg here");
     assert_eq!(quote.fee.amount, 25_000, "0.5% of 0.005 SOL");
     assert_eq!(
@@ -2271,21 +1847,21 @@ fn a_fluxbeam_funded_buy_holds_back_the_platform_fee_before_the_pool_sees_it() {
 /// Every fixture market, paired with the name a failure should name.
 fn every_fixture_market() -> Vec<(&'static str, Box<dyn PoolMarket>)> {
     vec![
+        ("raydium_amm_v4", fixture_market("raydium_legacy_amm")),
+        ("raydium_cpmm", fixture_market("raydium_cpmm")),
+        ("raydium_clmm", fixture_market("raydium_clmm")),
+        ("orca_whirlpool", fixture_market("orca_whirlpool")),
+        ("meteora_dlmm", fixture_market("meteora_dlmm")),
+        ("meteora_damm", fixture_market("meteora_damm_v2")),
+        ("meteora_dbc", fixture_market("meteora_dbc")),
         (
-            "raydium_amm_v4",
-            Box::new(amm_v4_market()) as Box<dyn PoolMarket>,
+            "meteora_dbc_output_fee",
+            fixture_market_case("meteora_dbc", "direct-swap-output-fee"),
         ),
-        ("raydium_cpmm", Box::new(cpmm_market())),
-        ("raydium_clmm", Box::new(clmm_market())),
-        ("orca_whirlpool", Box::new(orca_market())),
-        ("meteora_dlmm", Box::new(dlmm_market())),
-        ("meteora_damm", Box::new(damm_market())),
-        ("meteora_dbc", Box::new(dbc_market())),
-        ("meteora_dbc_output_fee", Box::new(dbc_output_fee_market())),
-        ("pumpfun_amm", Box::new(pump_amm_market())),
-        ("pumpfun_legacy", Box::new(pump_legacy_market())),
-        ("moonit", Box::new(moonit_market())),
-        ("fluxbeam", Box::new(fluxbeam_market())),
+        ("pumpfun_amm", fixture_market("pumpfun_amm")),
+        ("pumpfun_legacy", fixture_market("pumpfun_legacy")),
+        ("moonit", fixture_market("moonit_amm")),
+        ("fluxbeam", fixture_market("fluxbeam_amm")),
     ]
 }
 

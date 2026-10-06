@@ -58,29 +58,30 @@ pub use fee::{FeeSide, PlatformFee};
 pub use intent::DirectSwapIntent;
 pub use plan::{build_plan, SwapPlan};
 pub use quote::DirectQuote;
-pub use venue::{PoolMarket, PoolVenue, SwapAccounts, VenueQuote};
+pub use venue::{AccountReader, NodeAccounts, PoolMarket, PoolVenue, SwapAccounts, VenueQuote};
 pub use verify::Receipt;
 
-use crate::chains::solana::rpc::{get_rpc_client, RpcClientMethods};
 use crate::chains::solana::solana_sdk::{pubkey::Pubkey, signature::Keypair};
 
-/// Load and decode a pool into a quotable market, choosing the venue from the
-/// account's owner.
-pub async fn load_market(pool: &Pubkey) -> DirectSwapResult<Box<dyn PoolMarket>> {
-    let account = get_rpc_client()
-        .get_account(pool)
-        .await
-        .map_err(|e| DirectSwapError::AccountUnavailable {
-            address: *pool,
-            detail: e.to_string(),
-        })?
+/// Load and decode a pool into a quotable market through `accounts`, choosing the
+/// venue from the pool account's owner.
+pub async fn load_market(
+    pool: &Pubkey,
+    accounts: &dyn AccountReader,
+) -> DirectSwapResult<Box<dyn PoolMarket>> {
+    let account = accounts
+        .read_accounts(&[*pool])
+        .await?
+        .into_iter()
+        .next()
+        .flatten()
         .ok_or(DirectSwapError::AccountUnavailable {
             address: *pool,
             detail: "pool account does not exist".to_owned(),
         })?;
 
     let venue = registry::require_venue(&account.owner)?;
-    venue.load(pool, &account).await
+    venue.load(pool, &account, accounts).await
 }
 
 /// Price `intent` against an already-loaded market. Pure apart from config reads:
@@ -137,7 +138,7 @@ pub async fn quote(
     intent: &DirectSwapIntent,
 ) -> DirectSwapResult<(DirectQuote, Box<dyn PoolMarket>)> {
     intent.validate()?;
-    let market = load_market(&intent.pool).await?;
+    let market = load_market(&intent.pool, &NodeAccounts).await?;
     let quote = quote_with_market(intent, market.as_ref())?;
     Ok((quote, market))
 }

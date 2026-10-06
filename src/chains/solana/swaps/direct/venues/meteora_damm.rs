@@ -52,7 +52,7 @@ use crate::chains::solana::solana_sdk::{
 };
 use crate::chains::solana::swaps::direct::error::{DirectSwapError, DirectSwapResult};
 use crate::chains::solana::swaps::direct::venue::{
-    PoolMarket, PoolVenue, SwapAccounts, VenueQuote,
+    AccountReader, PoolMarket, PoolVenue, SwapAccounts, VenueQuote,
 };
 use async_trait::async_trait;
 use std::str::FromStr;
@@ -104,6 +104,7 @@ impl PoolVenue for MeteoraDammVenue {
         &self,
         pool: &Pubkey,
         pool_account: &Account,
+        reader: &dyn AccountReader,
     ) -> DirectSwapResult<Box<dyn PoolMarket>> {
         let state = DammPoolState::decode(*pool, &pool_account.data).ok_or_else(|| {
             DirectSwapError::PoolUndecodable {
@@ -130,13 +131,7 @@ impl PoolVenue for MeteoraDammVenue {
         }
 
         let addresses = [state.vault_a, state.vault_b, state.mint_a, state.mint_b];
-        let accounts = get_rpc_client()
-            .get_multiple_accounts(&addresses)
-            .await
-            .map_err(|e| DirectSwapError::AccountUnavailable {
-                address: *pool,
-                detail: format!("DAMM v2 pool accounts could not be read: {e}"),
-            })?;
+        let accounts = reader.read_accounts(&addresses).await?;
 
         let required = |index: usize| -> DirectSwapResult<&Account> {
             accounts.get(index).and_then(Option::as_ref).ok_or(
@@ -357,7 +352,8 @@ pub struct DammMarket {
 }
 
 impl DammMarket {
-    /// Build a market directly from decoded parts, for the offline test tier.
+    /// Build a market directly from decoded parts, for this module's unit tests.
+    #[cfg(test)]
     #[allow(clippy::too_many_arguments)]
     pub fn new(
         state: DammPoolState,

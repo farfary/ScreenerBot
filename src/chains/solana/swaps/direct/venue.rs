@@ -6,7 +6,9 @@
 //! A venue is one DEX program. It is split deliberately into two halves:
 //!
 //! * [`PoolVenue`] — the async half. It knows which accounts a pool needs and
-//!   reads them from chain. This is the only part that touches RPC.
+//!   reads them through an [`AccountReader`]. This is the only part that reads
+//!   chain state: production hands it [`NodeAccounts`], the offline tier hands it
+//!   recorded accounts.
 //! * [`PoolMarket`] — the PURE half. Given decoded bytes it answers what the pool
 //!   trades, what a swap would return, and what the swap instruction looks like.
 //!   No RPC, no clock, no config. That is what makes the offline test tier able
@@ -15,13 +17,19 @@
 //! Adding a DEX means implementing this pair in `venues/` and registering it in
 //! `super::registry` — nothing else in the engine changes.
 
-use super::error::DirectSwapResult;
+use super::error::{DirectSwapError, DirectSwapResult};
 use crate::chains::solana::pools::types::ProgramKind;
+use crate::chains::solana::rpc::types::TokenAccountInfo;
+use crate::chains::solana::rpc::{get_rpc_client, RpcClientMethods};
 use crate::chains::solana::solana_sdk::{
     account::Account, instruction::Instruction, pubkey::Pubkey,
 };
 use async_trait::async_trait;
 use std::fmt::Debug;
+use std::future::Future;
+
+/// The most accounts one `getMultipleAccounts` request may name.
+pub const MAX_ACCOUNTS_PER_REQUEST: usize = 50;
 
 /// What a venue's own math says a swap returns, before slippage and before the
 /// platform fee. All amounts are raw units.
@@ -125,12 +133,173 @@ pub trait PoolVenue: Send + Sync {
     /// The on-chain program that owns pools of this kind.
     fn program_id(&self) -> Pubkey;
 
-    /// Fetch whatever else this venue needs (config, vaults, tick arrays) and
-    /// decode everything into a market. `pool_account` is already loaded so the
-    /// dispatcher can identify the venue by owner without a second read.
+    /// Fetch whatever else this venue needs (config, vaults, tick arrays) through
+    /// `reader` and decode everything into a market. `pool_account` is already
+    /// loaded so the dispatcher can identify the venue by owner without a second
+    /// read.
     async fn load(
         &self,
         pool: &Pubkey,
         pool_account: &Account,
+        reader: &dyn AccountReader,
     ) -> DirectSwapResult<Box<dyn PoolMarket>>;
+}
+
+/// Where a venue's `load` gets chain state from.
+///
+/// Production reads a node ([`NodeAccounts`]); the offline tier replays recorded
+/// accounts. A venue names every account it needs through this seam and reads
+/// nothing else, so the accounts a recorded case must hold are exactly the
+/// accounts production reads.
+#[async_trait]
+pub trait AccountReader: Send + Sync {
+    /// The accounts at `addresses`, positionally aligned with the request: entry
+    /// `i` is `None` when the account at `addresses[i]` does not exist.
+    async fn read_accounts(&self, addresses: &[Pubkey]) -> DirectSwapResult<Vec<Option<Account>>>;
+
+    /// Every SPL token account (legacy and Token-2022) owned by `owner`.
+    ///
+    /// For a pool account that does not record its own mint: the mint is
+    /// recovered from what the pool holds.
+    async fn token_accounts_of(&self, owner: &Pubkey) -> DirectSwapResult<Vec<TokenAccountInfo>>;
+}
+
+/// The production reader: the shared RPC client, at most
+/// [`MAX_ACCOUNTS_PER_REQUEST`] accounts per `getMultipleAccounts` request.
+pub struct NodeAccounts;
+
+#[async_trait]
+impl AccountReader for NodeAccounts {
+    async fn read_accounts(&self, addresses: &[Pubkey]) -> DirectSwapResult<Vec<Option<Account>>> {
+        read_in_chunks(addresses, |chunk| async move {
+            get_rpc_client()
+                .get_multiple_accounts(&chunk)
+                .await
+                .map_err(|e| DirectSwapError::AccountUnavailable {
+                    address: chunk[0],
+                    detail: format!(
+                        "getMultipleAccounts over {} accounts failed: {e}",
+                        chunk.len()
+                    ),
+                })
+        })
+        .await
+    }
+
+    async fn token_accounts_of(&self, owner: &Pubkey) -> DirectSwapResult<Vec<TokenAccountInfo>> {
+        get_rpc_client()
+            .get_all_token_accounts(owner)
+            .await
+            .map_err(|e| DirectSwapError::AccountUnavailable {
+                address: *owner,
+                detail: format!("the token accounts of {owner} could not be read: {e}"),
+            })
+    }
+}
+
+/// Run `fetch` over `addresses` in requests of at most [`MAX_ACCOUNTS_PER_REQUEST`]
+/// and join the answers in request order.
+async fn read_in_chunks<F, Fut>(
+    addresses: &[Pubkey],
+    mut fetch: F,
+) -> DirectSwapResult<Vec<Option<Account>>>
+where
+    F: FnMut(Vec<Pubkey>) -> Fut,
+    Fut: Future<Output = DirectSwapResult<Vec<Option<Account>>>>,
+{
+    let mut accounts = Vec::with_capacity(addresses.len());
+    for chunk in addresses.chunks(MAX_ACCOUNTS_PER_REQUEST) {
+        accounts.extend(fetch(chunk.to_vec()).await?);
+    }
+    Ok(accounts)
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use std::sync::Mutex;
+
+    fn account(lamports: u64) -> Account {
+        Account {
+            lamports,
+            ..Account::default()
+        }
+    }
+
+    #[tokio::test]
+    async fn a_large_request_is_split_into_requests_of_at_most_the_node_limit_and_rejoined_in_order(
+    ) {
+        let addresses: Vec<Pubkey> = (0..2 * MAX_ACCOUNTS_PER_REQUEST + 7)
+            .map(|_| Pubkey::new_unique())
+            .collect();
+        let sizes = Mutex::new(Vec::new());
+
+        let accounts = read_in_chunks(&addresses, |chunk| {
+            sizes.lock().unwrap().push(chunk.len());
+            let answer: Vec<Option<Account>> = chunk
+                .iter()
+                .map(|address| Some(account(address.to_bytes()[0] as u64)))
+                .collect();
+            async move { Ok(answer) }
+        })
+        .await
+        .expect("every chunk answers");
+
+        assert_eq!(
+            *sizes.lock().unwrap(),
+            vec![MAX_ACCOUNTS_PER_REQUEST, MAX_ACCOUNTS_PER_REQUEST, 7]
+        );
+        assert_eq!(accounts.len(), addresses.len());
+        for (address, account) in addresses.iter().zip(&accounts) {
+            assert_eq!(
+                account.as_ref().map(|a| a.lamports),
+                Some(address.to_bytes()[0] as u64),
+                "answers stay aligned with the request"
+            );
+        }
+    }
+
+    #[tokio::test]
+    async fn an_empty_request_reads_nothing() {
+        let accounts = read_in_chunks(&[], |_| async {
+            panic!("no request is sent for no addresses");
+            #[allow(unreachable_code)]
+            Ok(Vec::new())
+        })
+        .await
+        .expect("an empty read succeeds");
+        assert!(accounts.is_empty());
+    }
+
+    #[tokio::test]
+    async fn a_failing_chunk_fails_the_whole_read_instead_of_returning_a_partial_answer() {
+        let addresses: Vec<Pubkey> = (0..MAX_ACCOUNTS_PER_REQUEST + 1)
+            .map(|_| Pubkey::new_unique())
+            .collect();
+        let calls = Mutex::new(0usize);
+
+        let result = read_in_chunks(&addresses, |chunk| {
+            let call = {
+                let mut calls = calls.lock().unwrap();
+                *calls += 1;
+                *calls
+            };
+            async move {
+                if call == 1 {
+                    Ok(vec![None; chunk.len()])
+                } else {
+                    Err(DirectSwapError::AccountUnavailable {
+                        address: chunk[0],
+                        detail: "node refused".to_owned(),
+                    })
+                }
+            }
+        })
+        .await;
+
+        assert!(matches!(
+            result,
+            Err(DirectSwapError::AccountUnavailable { .. })
+        ));
+    }
 }

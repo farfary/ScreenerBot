@@ -29,7 +29,6 @@ use crate::chains::solana::constants::RAYDIUM_LEGACY_AMM_PROGRAM_ID;
 use crate::chains::solana::layout::token_account_amount;
 use crate::chains::solana::pools::layouts::raydium_amm_v4::AmmV4PoolState;
 use crate::chains::solana::pools::types::ProgramKind;
-use crate::chains::solana::rpc::{get_rpc_client, RpcClientMethods};
 use crate::chains::solana::solana_sdk::{
     account::Account,
     instruction::{AccountMeta, Instruction},
@@ -37,7 +36,7 @@ use crate::chains::solana::solana_sdk::{
 };
 use crate::chains::solana::swaps::direct::error::{DirectSwapError, DirectSwapResult};
 use crate::chains::solana::swaps::direct::venue::{
-    PoolMarket, PoolVenue, SwapAccounts, VenueQuote,
+    AccountReader, PoolMarket, PoolVenue, SwapAccounts, VenueQuote,
 };
 use async_trait::async_trait;
 use std::str::FromStr;
@@ -70,6 +69,7 @@ impl PoolVenue for RaydiumAmmV4Venue {
         &self,
         pool: &Pubkey,
         pool_account: &Account,
+        reader: &dyn AccountReader,
     ) -> DirectSwapResult<Box<dyn PoolMarket>> {
         let state = AmmV4PoolState::decode(*pool, &pool_account.data).ok_or_else(|| {
             DirectSwapError::PoolUndecodable {
@@ -89,13 +89,7 @@ impl PoolVenue for RaydiumAmmV4Venue {
         }
 
         let addresses = [state.coin_vault, state.pc_vault];
-        let accounts = get_rpc_client()
-            .get_multiple_accounts(&addresses)
-            .await
-            .map_err(|e| DirectSwapError::AccountUnavailable {
-                address: *pool,
-                detail: format!("AMM v4 vaults could not be read: {e}"),
-            })?;
+        let accounts = reader.read_accounts(&addresses).await?;
 
         let balance = |index: usize| -> DirectSwapResult<u64> {
             let account = accounts.get(index).and_then(Option::as_ref).ok_or(
@@ -127,7 +121,8 @@ pub struct AmmV4Market {
 }
 
 impl AmmV4Market {
-    /// Build a market directly from decoded parts, for the offline test tier.
+    /// Build a market directly from decoded parts, for this module's unit tests.
+    #[cfg(test)]
     pub fn new(state: AmmV4PoolState, coin_balance: u64, pc_balance: u64) -> Self {
         Self {
             state,

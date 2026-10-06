@@ -137,7 +137,6 @@ use crate::chains::solana::constants::{PUMP_FUN_LEGACY_PROGRAM_ID, SOL_MINT, SYS
 use crate::chains::solana::pools::layouts::pumpfun_amm::{FeeTierTable, PumpFees};
 use crate::chains::solana::pools::layouts::pumpfun_legacy::{BondingCurve, GlobalFeeRecipients};
 use crate::chains::solana::pools::types::ProgramKind;
-use crate::chains::solana::rpc::{get_rpc_client, RpcClientMethods};
 use crate::chains::solana::solana_sdk::{
     account::Account,
     instruction::{AccountMeta, Instruction},
@@ -146,7 +145,7 @@ use crate::chains::solana::solana_sdk::{
 use crate::chains::solana::spl_associated_token_account::get_associated_token_address_with_program_id;
 use crate::chains::solana::swaps::direct::error::{DirectSwapError, DirectSwapResult};
 use crate::chains::solana::swaps::direct::venue::{
-    PoolMarket, PoolVenue, SwapAccounts, VenueQuote,
+    AccountReader, PoolMarket, PoolVenue, SwapAccounts, VenueQuote,
 };
 use async_trait::async_trait;
 use std::str::FromStr;
@@ -202,6 +201,7 @@ impl PoolVenue for PumpFunLegacyVenue {
         &self,
         pool: &Pubkey,
         pool_account: &Account,
+        reader: &dyn AccountReader,
     ) -> DirectSwapResult<Box<dyn PoolMarket>> {
         let mut curve = BondingCurve::decode(*pool, &pool_account.data).ok_or_else(|| {
             DirectSwapError::PoolUndecodable {
@@ -220,13 +220,9 @@ impl PoolVenue for PumpFunLegacyVenue {
         // curve owns, across both SPL programmes (every pump.fun mint
         // observed while building this venue was Token-2022, but this does
         // not assume that).
-        curve.mint = get_rpc_client()
-            .get_all_token_accounts(pool)
-            .await
-            .map_err(|e| DirectSwapError::AccountUnavailable {
-                address: *pool,
-                detail: format!("could not read the curve's own token account: {e}"),
-            })?
+        curve.mint = reader
+            .token_accounts_of(pool)
+            .await?
             .into_iter()
             .max_by_key(|info| info.balance)
             .ok_or_else(|| DirectSwapError::PoolUndecodable {
@@ -277,13 +273,7 @@ impl PoolVenue for PumpFunLegacyVenue {
         let global = global_address();
         let fee_config = fee_config_address();
         let addresses = [curve.mint, global, fee_config];
-        let accounts = get_rpc_client()
-            .get_multiple_accounts(&addresses)
-            .await
-            .map_err(|e| DirectSwapError::AccountUnavailable {
-                address: *pool,
-                detail: format!("pump.fun legacy accounts could not be read: {e}"),
-            })?;
+        let accounts = reader.read_accounts(&addresses).await?;
 
         let required = |index: usize| -> DirectSwapResult<&Account> {
             accounts.get(index).and_then(Option::as_ref).ok_or(
@@ -352,30 +342,6 @@ pub struct PumpLegacyMarket {
 }
 
 impl PumpLegacyMarket {
-    /// Build a market directly from decoded parts, for the offline test tier.
-    #[allow(clippy::too_many_arguments)]
-    pub fn new(
-        curve: BondingCurve,
-        token_program: Pubkey,
-        mint_decimals: u8,
-        transfer_fee: Option<TransferFeeSchedule>,
-        fee_recipient: Pubkey,
-        buyback_wallet: Pubkey,
-        buyback_paid: Pubkey,
-        tiers: Option<FeeTierTable>,
-    ) -> Self {
-        Self {
-            curve,
-            token_program,
-            mint_decimals,
-            transfer_fee,
-            fee_recipient,
-            buyback_wallet,
-            buyback_paid,
-            tiers,
-        }
-    }
-
     fn is_base(&self, mint: &Pubkey) -> Option<bool> {
         if *mint == self.curve.mint {
             Some(true)
