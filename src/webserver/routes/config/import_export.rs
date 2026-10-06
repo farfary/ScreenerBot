@@ -165,6 +165,10 @@ fn section_value(cfg: &config::Config, section: &str) -> Option<serde_json::Valu
         "ohlcv" => serde_json::to_value(&cfg.ohlcv).ok(),
         "gui" => serde_json::to_value(&cfg.gui).ok(),
         "telegram" => serde_json::to_value(&cfg.telegram).ok(),
+        "llm" => serde_json::to_value(&cfg.llm).ok(),
+        "llm_analysis" => serde_json::to_value(&cfg.llm_analysis).ok(),
+        "assistant" => serde_json::to_value(&cfg.assistant).ok(),
+        "agent_control" => serde_json::to_value(&cfg.agent_control).ok(),
         _ => None,
     }
 }
@@ -300,6 +304,27 @@ fn apply_section_to_config(
             cfg.telegram = serde_json::from_value(value).map_err(|e| Error::InvalidImport {
                 detail: format!("Invalid TelegramConfig: {e}"),
             })?;
+        }
+        "llm" => {
+            cfg.llm = serde_json::from_value(value).map_err(|e| Error::InvalidImport {
+                detail: format!("Invalid LlmConfig: {e}"),
+            })?;
+        }
+        "llm_analysis" => {
+            cfg.llm_analysis = serde_json::from_value(value).map_err(|e| Error::InvalidImport {
+                detail: format!("Invalid LlmAnalysisConfig: {e}"),
+            })?;
+        }
+        "assistant" => {
+            cfg.assistant = serde_json::from_value(value).map_err(|e| Error::InvalidImport {
+                detail: format!("Invalid AssistantConfig: {e}"),
+            })?;
+        }
+        "agent_control" => {
+            cfg.agent_control =
+                serde_json::from_value(value).map_err(|e| Error::InvalidImport {
+                    detail: format!("Invalid AgentControlConfig: {e}"),
+                })?;
         }
         _ => {
             return Err(Error::UnknownConfigKey {
@@ -640,4 +665,22 @@ pub async fn import_config(Json(request): Json<ImportConfigRequest>) -> Response
         saved_to_disk,
         timestamp: chrono::Utc::now().to_rfc3339(),
     })
+}
+
+#[cfg(test)]
+mod tests {
+    use super::{apply_section_to_config, section_value, CONFIG_SECTIONS};
+
+    #[test]
+    fn every_listed_section_exports_and_imports() {
+        let source = crate::config::Config::default();
+        let mut target = crate::config::Config::default();
+        for section in CONFIG_SECTIONS {
+            let value = section_value(&source, section)
+                .unwrap_or_else(|| panic!("section `{section}` has no export arm"));
+            apply_section_to_config(&mut target, section, value.clone())
+                .unwrap_or_else(|e| panic!("section `{section}` does not import: {e}"));
+            assert_eq!(section_value(&target, section), Some(value), "{section}");
+        }
+    }
 }
