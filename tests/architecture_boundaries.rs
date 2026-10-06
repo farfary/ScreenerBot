@@ -934,8 +934,6 @@ fn pre_chains_layout_chain_is_read_only_by_the_legacy_relocation() {
 const PROCESS_CHAIN_SEAM_CALLER_FILES: &[&str] = &[
     "agent_control/tools/analysis.rs",
     "agent_control/tools/portfolio.rs",
-    "apis/coingecko/mod.rs",
-    "apis/defillama/mod.rs",
     "apis/dexscreener/mod.rs",
     "apis/geckoterminal/mod.rs",
     "apis/native_price.rs",
@@ -961,8 +959,6 @@ const PROCESS_CHAIN_SEAM_CALLER_FILES: &[&str] = &[
     "swaps/operations.rs",
     "swaps/registry.rs",
     "telegram/wallet_alerts.rs",
-    "tokens/discovery.rs",
-    "tokens/discovery_sources.rs",
     "tools/ata_cleanup/operations.rs",
     "tools/multi_wallet/buy.rs",
     "tools/multi_wallet/consolidate.rs",

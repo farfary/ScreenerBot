@@ -11,7 +11,7 @@
 //!
 //! This service coordinates the new architecture with proper lifecycle management.
 
-use crate::chains::{enabled_chains, ChainId};
+use crate::chains::{enabled_chains, ChainId, PerChain};
 use crate::global::TOKENS_SYSTEM_READY;
 use crate::logger::{self, LogTag};
 use crate::paths::{chain_db_path, DbKind};
@@ -23,17 +23,20 @@ use crate::tokens::updates;
 use crate::tokens::updates::RateLimitCoordinator;
 use async_trait::async_trait;
 use std::sync::Arc;
-use std::sync::OnceLock;
 use std::time::Duration;
 use tokio::sync::Notify;
 use tokio::task::JoinHandle;
 
-// Global rate limit coordinator for force update API
-static RATE_COORDINATOR: OnceLock<Arc<RateLimitCoordinator>> = OnceLock::new();
+/// Each chain's share of the provider rate budget, built on first use.
+static RATE_BUDGETS: PerChain<Arc<RateLimitCoordinator>> = PerChain::new(new_rate_budget);
 
-/// Get global rate limit coordinator (for force update API)
-pub fn get_rate_coordinator() -> Option<Arc<RateLimitCoordinator>> {
-    RATE_COORDINATOR.get().cloned()
+fn new_rate_budget(chain: ChainId) -> Arc<RateLimitCoordinator> {
+    Arc::new(RateLimitCoordinator::for_chain(chain))
+}
+
+/// The rate budget every provider call made for `chain` draws from.
+pub fn rate_budget(chain: ChainId) -> Arc<RateLimitCoordinator> {
+    RATE_BUDGETS.get(chain).clone()
 }
 
 /// New tokens service using clean architecture
@@ -243,22 +246,18 @@ impl Service for TokensServiceNew {
         );
         let _ = monitor;
 
-        // Create a single shared rate limit coordinator for all token tasks on every chain,
-        // so the provider budget stays one budget however many chains run.
-        let coordinator = Arc::new(RateLimitCoordinator::new());
-
-        // Store coordinator globally for force update API
-        let _ = RATE_COORDINATOR.set(coordinator.clone());
-
-        // Start a single refill task (every minute) shared by all loops
-        let coord_refill = coordinator.clone();
+        // A single refill task (every minute) tops up every chain's rate budget. Each
+        // chain holds a fair share of one provider budget, so the total stays one budget
+        // however many chains run.
         let shutdown_refill = shutdown.clone();
         let refill_handle = tokio::spawn(async move {
             loop {
                 tokio::select! {
                     _ = shutdown_refill.notified() => break,
                     _ = tokio::time::sleep(Duration::from_secs(60)) => {
-                        coord_refill.refill_all();
+                        for (_, budget) in RATE_BUDGETS.built() {
+                            budget.top_up_all();
+                        }
                     }
                 }
             }
@@ -266,6 +265,8 @@ impl Service for TokensServiceNew {
         let mut handles = vec![refill_handle];
 
         for db in &self.databases {
+            let coordinator = rate_budget(db.chain());
+
             // Start update loops (critical, high, low priority)
             handles.extend(updates::start_update_loop(
                 db.clone(),

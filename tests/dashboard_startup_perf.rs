@@ -25,7 +25,7 @@
 //! # Safety
 //!
 //! Filtering WRITES (rejection status, priorities, stats), so this never touches the live
-//! files: [`common::real_db_env`] clones the databases into a temp directory and repoints
+//! files: [`common::real_db_env_offline_filtering`] clones the databases into a temp directory and repoints
 //! `SCREENERBOT_DATA_DIR` at the clone. The bot may be running throughout.
 //!
 //! # Tier
@@ -66,7 +66,7 @@ const CONTENDED_COUNT_CEILING: Duration = Duration::from_secs(2);
 /// Shared setup: clone the real databases, register the token DB, warm the decimals cache.
 /// Returns `None` (already having printed a SKIP line) when there is no real database.
 fn setup() -> Option<tempfile::TempDir> {
-    let env = common::real_db_env()?;
+    let env = common::real_db_env_offline_filtering()?;
     common::init_real_token_db();
     Some(env)
 }

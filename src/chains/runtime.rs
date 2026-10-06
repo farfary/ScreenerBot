@@ -5,9 +5,9 @@
 //! behaviour.
 //!
 //! The two injected factories (swap routers, the wallet-watch
-//! runtime), the token-account read and the filter profile behind it. Later units add
-//! methods as their domains thread the chain through (discovery, pool
-//! pricing, OHLCV, wallets, trading) — a method without a caller is
+//! runtime), the token-account read, the filter profile and the discovery
+//! feeds behind it. Later units add methods as their domains thread the chain
+//! through (pool pricing, OHLCV, wallets, trading) — a method without a caller is
 //! forbidden until then. Neutral code resolves an instance through
 //! [`crate::chains::runtime_for`] and never names a concrete chain module.
 
@@ -39,4 +39,8 @@ pub trait ChainRuntime: Send + Sync + 'static {
     async fn read_token_account(&self, address: &str) -> crate::chains::Result<TokenAccountFacts>;
     /// The filter stages this chain's tokens are evaluated through, in canonical order.
     fn filter_profile(&self) -> Arc<crate::filtering::FilterProfile>;
+    /// The discovery feeds this chain contributes beyond the shared market-data
+    /// providers, enabled per current config and in discovery order. Read on
+    /// every discovery run.
+    fn discovery_feeds(&self) -> Vec<crate::tokens::DiscoveryFeed>;
 }

@@ -726,7 +726,7 @@ pub fn real_db_env() -> Option<TempDir> {
 
 /// [`real_db_env`] for tests that evaluate tokens through the filter pipeline: the clone is
 /// pruned of tokens that would reach the decimals network fallback, so the run stays offline.
-/// Tests that only measure storage or startup keep the full clone.
+/// Tests that never evaluate tokens (storage, migrations) keep the full clone.
 pub fn real_db_env_offline_filtering() -> Option<TempDir> {
     let dir = real_db_env()?;
     prune_unresolved_decimals(&dir.path().join("data").join("tokens.db"));

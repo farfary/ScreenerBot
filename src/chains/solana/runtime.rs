@@ -5,7 +5,7 @@
 //!
 //! Stateless: every capability delegates to the chain-owned builders.
 //! `install_process_seams` performs the registrations the neutral
-//! consumers (tokens discovery, featured boards, the OHLCV fallback, the
+//! consumers (featured boards, the OHLCV fallback, the
 //! native-price last resort, the connectivity checker) resolve at call time;
 //! each surface moves behind a `ChainRuntime` method when its domain threads
 //! the chain through.
@@ -15,6 +15,7 @@ use std::sync::Arc;
 use crate::chains::runtime::{ChainRuntime, TokenAccountFacts};
 use crate::chains::ChainId;
 use crate::swaps::router::SwapRouter;
+use crate::tokens::{DiscoveryFeed, DiscoveryFeedFn};
 use crate::wallets::watch::runtime::WalletWatchRuntime;
 
 /// The Solana implementation of the process chain runtime.
@@ -58,6 +59,42 @@ impl ChainRuntime for SolanaRuntime {
     fn filter_profile(&self) -> Arc<crate::filtering::FilterProfile> {
         crate::chains::solana::filtering::profile()
     }
+
+    fn discovery_feeds(&self) -> Vec<DiscoveryFeed> {
+        use crate::chains::solana::apis::jupiter::sources;
+
+        let jupiter = crate::config::with_config(|cfg| cfg.tokens.discovery.jupiter.clone());
+        if !jupiter.enabled {
+            return Vec::new();
+        }
+        let candidates = [
+            (
+                jupiter.recent_enabled,
+                "jupiter.recent",
+                sources::recent as DiscoveryFeedFn,
+            ),
+            (
+                jupiter.top_organic_enabled,
+                "jupiter.top_organic",
+                sources::top_organic,
+            ),
+            (
+                jupiter.top_traded_enabled,
+                "jupiter.top_traded",
+                sources::top_traded,
+            ),
+            (
+                jupiter.top_trending_enabled,
+                "jupiter.top_trending",
+                sources::top_trending,
+            ),
+        ];
+        candidates
+            .into_iter()
+            .filter(|(enabled, _, _)| *enabled)
+            .map(|(_, label, fetch)| DiscoveryFeed { label, fetch })
+            .collect()
+    }
 }
 
 /// A runtime instance for the chain registry (called once per boot by
@@ -69,12 +106,6 @@ pub fn runtime() -> Arc<dyn ChainRuntime> {
 /// Install the process seams the neutral consumers resolve, owned by
 /// this chain's runtime. Called once per boot, only for an enabled chain.
 pub fn install_process_seams() {
-    crate::tokens::install_jupiter_sources(
-        crate::chains::solana::apis::jupiter::sources::recent,
-        crate::chains::solana::apis::jupiter::sources::top_organic,
-        crate::chains::solana::apis::jupiter::sources::top_traded,
-        crate::chains::solana::apis::jupiter::sources::top_trending,
-    );
     crate::webserver::routes::featured::install_jupiter_boards(
         crate::chains::solana::apis::jupiter::sources::featured_organic,
         crate::chains::solana::apis::jupiter::sources::featured_traded,

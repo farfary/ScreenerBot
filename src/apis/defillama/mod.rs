@@ -15,6 +15,7 @@ use self::types::{DefiLlamaPriceResponse, DefiLlamaProtocol};
 use crate::apis::client::HttpClient;
 use crate::apis::stats::ApiStatsTracker;
 use crate::apis::Error;
+use crate::chains::{adapter_for, ChainId};
 use crate::errors::{DataError, NetworkError};
 use std::sync::Arc;
 use std::time::Instant;
@@ -188,60 +189,27 @@ impl DefiLlamaClient {
             })
     }
 
-    /// Extract Solana token addresses from protocols
-    pub fn extract_solana_addresses(protocols: &[DefiLlamaProtocol]) -> Vec<String> {
-        protocols
-            .iter()
-            .filter_map(|protocol| {
-                // Check if protocol supports Solana
-                let has_solana = protocol
-                    .chains
-                    .as_ref()
-                    .map(|chains| {
-                        chains.iter().any(|chain| {
-                            chain
-                                .to_lowercase()
-                                .contains(crate::chains::adapter().market_data_network())
-                        })
-                    })
-                    .unwrap_or_default();
-
-                if has_solana {
-                    protocol.address.as_ref().and_then(|addr| {
-                        if !addr.is_empty() && addr.len() > 32 && addr.len() < 50 {
-                            Some(addr.clone())
-                        } else {
-                            None
-                        }
-                    })
-                } else {
-                    None
-                }
-            })
-            .collect()
-    }
-
-    /// Extract Solana token addresses with names
-    pub fn extract_solana_addresses_with_names(
+    /// Extract `chain`'s token addresses with names
+    pub fn extract_addresses_with_names(
+        chain: ChainId,
         protocols: &[DefiLlamaProtocol],
     ) -> Vec<(String, String)> {
+        let network = adapter_for(chain).market_data_network();
         protocols
             .iter()
             .filter_map(|protocol| {
-                // Check if protocol supports Solana
-                let has_solana = protocol
+                // Check if protocol supports the chain
+                let on_chain = protocol
                     .chains
                     .as_ref()
                     .map(|chains| {
-                        chains.iter().any(|chain| {
-                            chain
-                                .to_lowercase()
-                                .contains(crate::chains::adapter().market_data_network())
-                        })
+                        chains
+                            .iter()
+                            .any(|name| name.to_lowercase().contains(network))
                     })
                     .unwrap_or_default();
 
-                if has_solana {
+                if on_chain {
                     protocol.address.as_ref().and_then(|addr| {
                         if !addr.is_empty() && addr.len() > 32 && addr.len() < 50 {
                             Some((protocol.name.clone(), addr.clone()))

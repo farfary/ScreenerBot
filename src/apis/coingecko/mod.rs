@@ -14,6 +14,7 @@ use self::types::CoinGeckoCoin;
 use crate::apis::client::HttpClient;
 use crate::apis::stats::ApiStatsTracker;
 use crate::apis::Error;
+use crate::chains::{adapter_for, ChainId};
 use crate::errors::{DataError, NetworkError};
 use std::sync::Arc;
 use std::time::Instant;
@@ -124,41 +125,23 @@ impl CoinGeckoClient {
         Ok(coins)
     }
 
-    /// Extract Solana token addresses from coins list
-    pub fn extract_solana_addresses(coins: &[CoinGeckoCoin]) -> Vec<String> {
+    /// Extract `chain`'s token addresses with names
+    pub fn extract_addresses_with_names(
+        chain: ChainId,
+        coins: &[CoinGeckoCoin],
+    ) -> Vec<(String, String)> {
+        let network = adapter_for(chain).market_data_network();
         coins
             .iter()
             .filter_map(|coin| {
                 coin.platforms.as_ref().and_then(|platforms| {
-                    platforms
-                        .get(crate::chains::adapter().market_data_network())
-                        .and_then(|addr| {
-                            if !addr.is_empty() && addr.len() > 32 && addr.len() < 50 {
-                                Some(addr.clone())
-                            } else {
-                                None
-                            }
-                        })
-                })
-            })
-            .collect()
-    }
-
-    /// Extract Solana token addresses with names
-    pub fn extract_solana_addresses_with_names(coins: &[CoinGeckoCoin]) -> Vec<(String, String)> {
-        coins
-            .iter()
-            .filter_map(|coin| {
-                coin.platforms.as_ref().and_then(|platforms| {
-                    platforms
-                        .get(crate::chains::adapter().market_data_network())
-                        .and_then(|addr| {
-                            if !addr.is_empty() && addr.len() > 32 && addr.len() < 50 {
-                                Some((coin.name.clone(), addr.clone()))
-                            } else {
-                                None
-                            }
-                        })
+                    platforms.get(network).and_then(|addr| {
+                        if !addr.is_empty() && addr.len() > 32 && addr.len() < 50 {
+                            Some((coin.name.clone(), addr.clone()))
+                        } else {
+                            None
+                        }
+                    })
                 })
             })
             .collect()

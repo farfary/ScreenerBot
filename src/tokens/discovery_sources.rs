@@ -7,6 +7,7 @@
 //! [`DiscoveryRecord`] candidates. Called from [`super::discovery::run_discovery_once`].
 
 use crate::apis::ApiManager;
+use crate::chains::{adapter_for, ChainId};
 use crate::tokens::updates::RateLimitCoordinator;
 use crate::tokens::Error;
 use std::future::Future;
@@ -54,6 +55,7 @@ fn collect_pool_tokens(pool: &crate::apis::geckoterminal::types::GeckoTerminalPo
 pub(super) async fn fetch_dexscreener_profiles(
     api: &Arc<ApiManager>,
     coordinator: Arc<RateLimitCoordinator>,
+    chain: ChainId,
 ) -> crate::tokens::Result<Vec<DiscoveryRecord>> {
     // Use profiles-specific rate limit (60/min, separate from market data updates)
     let permit = coordinator.acquire_dexscreener_profiles().await?;
@@ -73,8 +75,8 @@ pub(super) async fn fetch_dexscreener_profiles(
             profile
                 .chain_id
                 .as_ref()
-                .map(|chain| {
-                    chain.eq_ignore_ascii_case(crate::chains::adapter().market_data_network())
+                .map(|profile_chain| {
+                    profile_chain.eq_ignore_ascii_case(adapter_for(chain).market_data_network())
                 })
                 .unwrap_or_default()
         })
@@ -90,6 +92,7 @@ pub(super) async fn fetch_dexscreener_profiles(
 pub(super) async fn fetch_dexscreener_latest_boosts(
     api: &Arc<ApiManager>,
     coordinator: Arc<RateLimitCoordinator>,
+    chain: ChainId,
 ) -> crate::tokens::Result<Vec<DiscoveryRecord>> {
     // Use boosts-specific rate limit (60/min, separate from market data updates)
     let permit = coordinator.acquire_dexscreener_boosts().await?;
@@ -108,7 +111,7 @@ pub(super) async fn fetch_dexscreener_latest_boosts(
         .filter(|boost| {
             boost
                 .chain_id
-                .eq_ignore_ascii_case(crate::chains::adapter().market_data_network())
+                .eq_ignore_ascii_case(adapter_for(chain).market_data_network())
         })
         .map(|boost| DiscoveryRecord {
             mint: boost.token_address,
@@ -122,12 +125,13 @@ pub(super) async fn fetch_dexscreener_latest_boosts(
 pub(super) async fn fetch_dexscreener_top_boosts(
     api: &Arc<ApiManager>,
     coordinator: Arc<RateLimitCoordinator>,
+    chain: ChainId,
 ) -> crate::tokens::Result<Vec<DiscoveryRecord>> {
     // Use boosts-specific rate limit (60/min, separate from market data updates)
     let permit = coordinator.acquire_dexscreener_boosts().await?;
     let boosts = api
         .dexscreener
-        .get_top_boosted_tokens(Some(crate::chains::adapter().market_data_network()))
+        .get_top_boosted_tokens(Some(adapter_for(chain).market_data_network()))
         .await
         .map_err(|e| Error::Api {
             provider: "DexScreener".to_owned(),
@@ -151,15 +155,12 @@ pub(super) async fn fetch_dexscreener_top_boosts(
 pub(super) async fn fetch_gecko_new_pools(
     api: &Arc<ApiManager>,
     coordinator: Arc<RateLimitCoordinator>,
+    chain: ChainId,
 ) -> crate::tokens::Result<Vec<DiscoveryRecord>> {
     let permit = coordinator.acquire_geckoterminal().await?;
     let pools = api
         .geckoterminal
-        .fetch_new_pools_by_network(
-            crate::chains::adapter().market_data_network(),
-            None,
-            Some(1),
-        )
+        .fetch_new_pools_by_network(adapter_for(chain).market_data_network(), None, Some(1))
         .await
         .map_err(|e| Error::Api {
             provider: "GeckoTerminal".to_owned(),
@@ -185,11 +186,12 @@ pub(super) async fn fetch_gecko_new_pools(
 pub(super) async fn fetch_gecko_recent_updates(
     api: &Arc<ApiManager>,
     coordinator: Arc<RateLimitCoordinator>,
+    chain: ChainId,
 ) -> crate::tokens::Result<Vec<DiscoveryRecord>> {
     let permit = coordinator.acquire_geckoterminal().await?;
     let response = api
         .geckoterminal
-        .fetch_recently_updated_tokens(None, Some(crate::chains::adapter().market_data_network()))
+        .fetch_recently_updated_tokens(None, Some(adapter_for(chain).market_data_network()))
         .await
         .map_err(|e| Error::Api {
             provider: "GeckoTerminal".to_owned(),
@@ -212,12 +214,13 @@ pub(super) async fn fetch_gecko_recent_updates(
 pub(super) async fn fetch_gecko_trending(
     api: &Arc<ApiManager>,
     coordinator: Arc<RateLimitCoordinator>,
+    chain: ChainId,
 ) -> crate::tokens::Result<Vec<DiscoveryRecord>> {
     let permit = coordinator.acquire_geckoterminal().await?;
     let pools = api
         .geckoterminal
         .fetch_trending_pools_by_network(
-            Some(crate::chains::adapter().market_data_network()),
+            Some(adapter_for(chain).market_data_network()),
             Some(1),
             None,
             None,
@@ -353,89 +356,24 @@ pub(super) async fn fetch_rugcheck_verified_tokens(
         .collect())
 }
 
-// ── Jupiter ──────────────────────────────────────────────────────────────────
+// ── Chain feeds ──────────────────────────────────────────────────────────────
 
-/// The Jupiter discovery feeds, registered by the composition root.
-/// Deleted when discovery spawns per chain.
-type JupiterFeedFn =
+/// Fetches one chain-owned discovery feed.
+pub type DiscoveryFeedFn =
     fn() -> Pin<Box<dyn Future<Output = crate::tokens::Result<Vec<DiscoveryRecord>>> + Send>>;
 
-static JUPITER_SOURCES: std::sync::OnceLock<JupiterFeeds> = std::sync::OnceLock::new();
-
-struct JupiterFeeds {
-    recent: JupiterFeedFn,
-    top_organic: JupiterFeedFn,
-    top_traded: JupiterFeedFn,
-    top_trending: JupiterFeedFn,
-}
-
-/// Install the chain-owned Jupiter discovery feeds (composition root only).
-pub fn install_jupiter_sources(
-    recent: JupiterFeedFn,
-    top_organic: JupiterFeedFn,
-    top_traded: JupiterFeedFn,
-    top_trending: JupiterFeedFn,
-) {
-    let _ = JUPITER_SOURCES.set(JupiterFeeds {
-        recent,
-        top_organic,
-        top_traded,
-        top_trending,
-    });
-}
-
-pub(super) async fn fetch_jupiter_recent(
-    _api: &Arc<ApiManager>,
-) -> crate::tokens::Result<Vec<DiscoveryRecord>> {
-    let Some(feeds) = JUPITER_SOURCES.get() else {
-        return Err(Error::Api {
-            provider: "Jupiter".to_owned(),
-            message: "jupiter discovery feeds not installed".to_owned(),
-        });
-    };
-    (feeds.recent)().await
-}
-
-pub(super) async fn fetch_jupiter_top_organic(
-    _api: &Arc<ApiManager>,
-) -> crate::tokens::Result<Vec<DiscoveryRecord>> {
-    let Some(feeds) = JUPITER_SOURCES.get() else {
-        return Err(Error::Api {
-            provider: "Jupiter".to_owned(),
-            message: "jupiter discovery feeds not installed".to_owned(),
-        });
-    };
-    (feeds.top_organic)().await
-}
-
-pub(super) async fn fetch_jupiter_top_traded(
-    _api: &Arc<ApiManager>,
-) -> crate::tokens::Result<Vec<DiscoveryRecord>> {
-    let Some(feeds) = JUPITER_SOURCES.get() else {
-        return Err(Error::Api {
-            provider: "Jupiter".to_owned(),
-            message: "jupiter discovery feeds not installed".to_owned(),
-        });
-    };
-    (feeds.top_traded)().await
-}
-
-pub(super) async fn fetch_jupiter_top_trending(
-    _api: &Arc<ApiManager>,
-) -> crate::tokens::Result<Vec<DiscoveryRecord>> {
-    let Some(feeds) = JUPITER_SOURCES.get() else {
-        return Err(Error::Api {
-            provider: "Jupiter".to_owned(),
-            message: "jupiter discovery feeds not installed".to_owned(),
-        });
-    };
-    (feeds.top_trending)().await
+/// A discovery feed a chain contributes beyond the shared market-data providers,
+/// recorded under `label` in the discovery stats and the `token_discovered` event.
+pub struct DiscoveryFeed {
+    pub label: &'static str,
+    pub fetch: DiscoveryFeedFn,
 }
 
 // ── CoinGecko ────────────────────────────────────────────────────────────────
 
 pub(super) async fn fetch_coingecko_markets(
     api: &Arc<ApiManager>,
+    chain: ChainId,
 ) -> crate::tokens::Result<Vec<DiscoveryRecord>> {
     let coins = api
         .coingecko
@@ -447,7 +385,7 @@ pub(super) async fn fetch_coingecko_markets(
         })?;
 
     let entries =
-        crate::apis::coingecko::CoinGeckoClient::extract_solana_addresses_with_names(&coins);
+        crate::apis::coingecko::CoinGeckoClient::extract_addresses_with_names(chain, &coins);
 
     Ok(entries
         .into_iter()
@@ -464,6 +402,7 @@ pub(super) async fn fetch_coingecko_markets(
 
 pub(super) async fn fetch_defillama_protocols(
     api: &Arc<ApiManager>,
+    chain: ChainId,
 ) -> crate::tokens::Result<Vec<DiscoveryRecord>> {
     let protocols = api
         .defillama
@@ -475,7 +414,7 @@ pub(super) async fn fetch_defillama_protocols(
         })?;
 
     let entries =
-        crate::apis::defillama::DefiLlamaClient::extract_solana_addresses_with_names(&protocols);
+        crate::apis::defillama::DefiLlamaClient::extract_addresses_with_names(chain, &protocols);
 
     Ok(entries
         .into_iter()

@@ -3,22 +3,21 @@
 
 //! Token discovery engine.
 //!
-//! Polls multiple data sources (DexScreener, GeckoTerminal, RugCheck, Jupiter)
-//! on a configurable interval to find new and trending tokens. Discovered tokens
-//! are deduplicated, validated, and stored in the token database for further
-//! analysis by the filtering and strategy pipelines.
+//! Polls multiple data sources (DexScreener, GeckoTerminal, RugCheck, the
+//! chain's own feeds) on a configurable interval to find new and trending
+//! tokens. One loop runs per chain against that chain's token database and rate
+//! budget. Discovered tokens are deduplicated, validated, and stored for
+//! further analysis by the filtering and strategy pipelines.
 
 use crate::apis::get_api_manager;
+use crate::chains::{adapter_for, runtime_for, ChainId};
 use crate::config;
 use crate::events::{record_token_event, Severity};
 use crate::logger::{self, LogTag};
-use crate::pools::utils::{is_sol_mint, is_stablecoin_mint};
 use crate::tokens::database::TokenDatabase;
-use crate::tokens::events::{self, TokenEvent};
 use crate::tokens::priorities::Priority;
 use crate::tokens::updates::RateLimitCoordinator;
 use crate::utils::{check_shutdown_or_delay, run_or_shutdown};
-use chrono::Utc;
 use futures::future::{join_all, BoxFuture};
 use std::collections::{HashMap, HashSet};
 use std::sync::Arc;
@@ -56,11 +55,11 @@ impl DiscoveryStats {
     }
 }
 
-/// Start background discovery loop
+/// Start the background discovery loop for the chain of `db`
 pub fn start_discovery_loop(
     db: Arc<TokenDatabase>,
     shutdown: Arc<Notify>,
-    coordinator: Arc<RateLimitCoordinator>,
+    budget: Arc<RateLimitCoordinator>,
 ) -> JoinHandle<()> {
     tokio::spawn(async move {
         let mut wait = Duration::from_secs(INITIAL_DELAY_SECS);
@@ -75,7 +74,7 @@ pub fn start_discovery_loop(
             // Race the discovery run (network API calls) against shutdown so a stop
             // mid-run returns at once and stays parked on notified() to never miss the
             // one-shot shutdown broadcast.
-            match run_or_shutdown(&shutdown, run_discovery_once(&db, coordinator.clone())).await {
+            match run_or_shutdown(&shutdown, run_discovery_once(&db, budget.clone())).await {
                 None => break,
                 Some(Ok(stats)) => {
                     if let Some(reason) = stats.skip_reason.clone() {
@@ -172,11 +171,13 @@ pub fn start_discovery_loop(
     })
 }
 
-/// Perform a single discovery run
+/// Perform a single discovery run for the chain of `db`
 pub async fn run_discovery_once(
     db: &TokenDatabase,
-    coordinator: Arc<RateLimitCoordinator>,
+    budget: Arc<RateLimitCoordinator>,
 ) -> crate::tokens::Result<DiscoveryStats> {
+    let chain = db.chain();
+
     // Check if tools are running - skip discovery to reduce RPC contention
     if crate::global::are_tools_active() {
         return Ok(DiscoveryStats::skipped(
@@ -208,33 +209,33 @@ pub async fn run_discovery_once(
     if discovery_cfg.dexscreener.enabled && sources_cfg.dexscreener.enabled {
         if discovery_cfg.dexscreener.latest_profiles_enabled {
             let api = apis.clone();
-            let coord = coordinator.clone();
+            let coord = budget.clone();
             tasks.push(Box::pin(async move {
                 (
                     "dexscreener.latest_profiles".to_owned(),
-                    fetch_dexscreener_profiles(&api, coord.clone()).await,
+                    fetch_dexscreener_profiles(&api, coord, chain).await,
                 )
             }));
         }
 
         if discovery_cfg.dexscreener.latest_boosts_enabled {
             let api = apis.clone();
-            let coord = coordinator.clone();
+            let coord = budget.clone();
             tasks.push(Box::pin(async move {
                 (
                     "dexscreener.latest_boosts".to_owned(),
-                    fetch_dexscreener_latest_boosts(&api, coord.clone()).await,
+                    fetch_dexscreener_latest_boosts(&api, coord, chain).await,
                 )
             }));
         }
 
         if discovery_cfg.dexscreener.top_boosts_enabled {
             let api = apis.clone();
-            let coord = coordinator.clone();
+            let coord = budget.clone();
             tasks.push(Box::pin(async move {
                 (
                     "dexscreener.top_boosts".to_owned(),
-                    fetch_dexscreener_top_boosts(&api, coord.clone()).await,
+                    fetch_dexscreener_top_boosts(&api, coord, chain).await,
                 )
             }));
         }
@@ -243,124 +244,95 @@ pub async fn run_discovery_once(
     if discovery_cfg.geckoterminal.enabled && sources_cfg.geckoterminal.enabled {
         if discovery_cfg.geckoterminal.new_pools_enabled {
             let api = apis.clone();
-            let coord = coordinator.clone();
+            let coord = budget.clone();
             tasks.push(Box::pin(async move {
                 (
                     "geckoterminal.new_pools".to_owned(),
-                    fetch_gecko_new_pools(&api, coord.clone()).await,
+                    fetch_gecko_new_pools(&api, coord, chain).await,
                 )
             }));
         }
 
         if discovery_cfg.geckoterminal.recently_updated_enabled {
             let api = apis.clone();
-            let coord = coordinator.clone();
+            let coord = budget.clone();
             tasks.push(Box::pin(async move {
                 (
                     "geckoterminal.recently_updated".to_owned(),
-                    fetch_gecko_recent_updates(&api, coord.clone()).await,
+                    fetch_gecko_recent_updates(&api, coord, chain).await,
                 )
             }));
         }
 
         if discovery_cfg.geckoterminal.trending_enabled {
             let api = apis.clone();
-            let coord = coordinator.clone();
+            let coord = budget.clone();
             tasks.push(Box::pin(async move {
                 (
                     "geckoterminal.trending".to_owned(),
-                    fetch_gecko_trending(&api, coord.clone()).await,
+                    fetch_gecko_trending(&api, coord, chain).await,
                 )
             }));
         }
     }
 
-    if discovery_cfg.rugcheck.enabled && sources_cfg.rugcheck.enabled {
+    if discovery_cfg.rugcheck.enabled
+        && sources_cfg.rugcheck.enabled
+        && adapter_for(chain).has_rugcheck_reports()
+    {
         if discovery_cfg.rugcheck.new_tokens_enabled {
             let api = apis.clone();
-            let coord = coordinator.clone();
+            let coord = budget.clone();
             tasks.push(Box::pin(async move {
                 (
                     "rugcheck.new_tokens".to_owned(),
-                    fetch_rugcheck_new_tokens(&api, coord.clone()).await,
+                    fetch_rugcheck_new_tokens(&api, coord).await,
                 )
             }));
         }
 
         if discovery_cfg.rugcheck.recent_enabled {
             let api = apis.clone();
-            let coord = coordinator.clone();
+            let coord = budget.clone();
             tasks.push(Box::pin(async move {
                 (
                     "rugcheck.recent".to_owned(),
-                    fetch_rugcheck_recent_tokens(&api, coord.clone()).await,
+                    fetch_rugcheck_recent_tokens(&api, coord).await,
                 )
             }));
         }
 
         if discovery_cfg.rugcheck.trending_enabled {
             let api = apis.clone();
-            let coord = coordinator.clone();
+            let coord = budget.clone();
             tasks.push(Box::pin(async move {
                 (
                     "rugcheck.trending".to_owned(),
-                    fetch_rugcheck_trending_tokens(&api, coord.clone()).await,
+                    fetch_rugcheck_trending_tokens(&api, coord).await,
                 )
             }));
         }
 
         if discovery_cfg.rugcheck.verified_enabled {
             let api = apis.clone();
-            let coord = coordinator.clone();
+            let coord = budget.clone();
             tasks.push(Box::pin(async move {
                 (
                     "rugcheck.verified".to_owned(),
-                    fetch_rugcheck_verified_tokens(&api, coord.clone()).await,
+                    fetch_rugcheck_verified_tokens(&api, coord).await,
                 )
             }));
         }
     }
 
-    if discovery_cfg.jupiter.enabled {
-        if discovery_cfg.jupiter.recent_enabled {
-            let api = apis.clone();
-            tasks.push(Box::pin(async move {
-                (
-                    "jupiter.recent".to_owned(),
-                    fetch_jupiter_recent(&api).await,
-                )
-            }));
-        }
-
-        if discovery_cfg.jupiter.top_organic_enabled {
-            let api = apis.clone();
-            tasks.push(Box::pin(async move {
-                (
-                    "jupiter.top_organic".to_owned(),
-                    fetch_jupiter_top_organic(&api).await,
-                )
-            }));
-        }
-
-        if discovery_cfg.jupiter.top_traded_enabled {
-            let api = apis.clone();
-            tasks.push(Box::pin(async move {
-                (
-                    "jupiter.top_traded".to_owned(),
-                    fetch_jupiter_top_traded(&api).await,
-                )
-            }));
-        }
-
-        if discovery_cfg.jupiter.top_trending_enabled {
-            let api = apis.clone();
-            tasks.push(Box::pin(async move {
-                (
-                    "jupiter.top_trending".to_owned(),
-                    fetch_jupiter_top_trending(&api).await,
-                )
-            }));
-        }
+    // Feeds the chain contributes itself; each reads its own config on every run.
+    let chain_feeds = runtime_for(chain)
+        .map(|runtime| runtime.discovery_feeds())
+        .unwrap_or_default();
+    for feed in chain_feeds {
+        tasks.push(Box::pin(async move {
+            (feed.label.to_owned(), (feed.fetch)().await)
+        }));
     }
 
     if discovery_cfg.coingecko.enabled && discovery_cfg.coingecko.markets_enabled {
@@ -368,7 +340,7 @@ pub async fn run_discovery_once(
         tasks.push(Box::pin(async move {
             (
                 "coingecko.markets".to_owned(),
-                fetch_coingecko_markets(&api).await,
+                fetch_coingecko_markets(&api, chain).await,
             )
         }));
     }
@@ -378,7 +350,7 @@ pub async fn run_discovery_once(
         tasks.push(Box::pin(async move {
             (
                 "defillama.protocols".to_owned(),
-                fetch_defillama_protocols(&api).await,
+                fetch_defillama_protocols(&api, chain).await,
             )
         }));
     }
@@ -397,7 +369,7 @@ pub async fn run_discovery_once(
                 let mut valid_from_source = 0usize;
                 for record in records {
                     stats.total_candidates += 1;
-                    match normalize_mint(&record.mint) {
+                    match normalize_mint(chain, &record.mint) {
                         Some(mint) => {
                             valid_from_source += 1;
                             let entry = candidates
@@ -470,12 +442,6 @@ pub async fn run_discovery_once(
         sources.sort();
         let source_summary = sources.join(",");
 
-        events::emit(TokenEvent::TokenDiscovered {
-            mint: mint.clone(),
-            source: source_summary.clone(),
-            at: Utc::now(),
-        });
-
         // Record token discovery event (sampled - every 10th to avoid spam)
         if stats.newly_added % 10 == 0 {
             tokio::spawn({
@@ -521,24 +487,76 @@ struct CandidateAggregate {
     sources: HashSet<String>,
 }
 
-fn normalize_mint(candidate: &str) -> Option<String> {
+/// The candidate as a discoverable token address on `chain`, or `None` when it is
+/// not a valid address there or is the chain's native or stablecoin asset.
+fn normalize_mint(chain: ChainId, candidate: &str) -> Option<String> {
     let trimmed = candidate.trim();
     if trimmed.is_empty() {
         return None;
     }
 
-    let len = trimmed.len();
-    if len < 32 || len > 44 {
+    let adapter = adapter_for(chain);
+    if adapter.validate_address(trimmed).is_err() {
         return None;
     }
 
-    if crate::chains::adapter().validate_address(trimmed).is_err() {
-        return None;
-    }
-
-    if is_sol_mint(trimmed) || is_stablecoin_mint(trimmed) {
+    if adapter.is_native_asset(trimmed) || adapter.is_stable_asset(trimmed) {
         return None;
     }
 
     Some(trimmed.to_string())
+}
+
+#[cfg(test)]
+mod tests {
+    use super::normalize_mint;
+    use crate::chains::{adapter_for, ChainId};
+
+    const SOL: &str = "So11111111111111111111111111111111111111112";
+    const USDC: &str = "EPjFWdd5AufqSSqeM2qN1xzybapC8G4wEGGkZwyTDt1v";
+    const VALID_MINT: &str = "DezXAZ8z7PnrnRJjz3wXBoRgixCa6xjnB7YaB1pPB263";
+
+    /// An explicit 32-44 character window ahead of address validation and the
+    /// native and stablecoin checks. Address validation alone must agree with it.
+    fn length_window_rule(candidate: &str) -> Option<String> {
+        let trimmed = candidate.trim();
+        if trimmed.is_empty() || trimmed.len() < 32 || trimmed.len() > 44 {
+            return None;
+        }
+        let adapter = adapter_for(ChainId::Solana);
+        if adapter.validate_address(trimmed).is_err()
+            || adapter.is_native_asset(trimmed)
+            || adapter.is_stable_asset(trimmed)
+        {
+            return None;
+        }
+        Some(trimmed.to_string())
+    }
+
+    #[test]
+    fn normalize_mint_matches_the_length_window_rule() {
+        let thirty_one = "1".repeat(31);
+        let forty_five = format!("{VALID_MINT}A");
+        let cases: [(&str, Option<&str>); 9] = [
+            (SOL, None),
+            (USDC, None),
+            (VALID_MINT, Some(VALID_MINT)),
+            (
+                "  DezXAZ8z7PnrnRJjz3wXBoRgixCa6xjnB7YaB1pPB263 ",
+                Some(VALID_MINT),
+            ),
+            (&thirty_one, None),
+            (&forty_five, None),
+            ("0OIl0OIl0OIl0OIl0OIl0OIl0OIl0OIl0OIl", None),
+            ("11111111111111111111111111111111", None),
+            ("", None),
+        ];
+        for (candidate, expected) in cases {
+            let normalized = normalize_mint(ChainId::Solana, candidate);
+            assert_eq!(normalized.as_deref(), expected, "{candidate:?}");
+            assert_eq!(normalized, length_window_rule(candidate), "{candidate:?}");
+        }
+        assert_eq!(thirty_one.len(), 31);
+        assert_eq!(forty_five.len(), 45);
+    }
 }

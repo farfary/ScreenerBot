@@ -24,9 +24,7 @@ pub mod database;
 pub mod decimals;
 pub mod discovery;
 mod discovery_sources;
-pub(crate) use discovery_sources::install_jupiter_sources;
 mod error;
-pub mod events;
 pub mod favorites;
 pub mod filtered;
 pub mod market;
@@ -75,6 +73,8 @@ pub use database::{
     TokenBlacklistRecord,
     TokenDatabase,
 };
+pub use discovery::DiscoveryRecord;
+pub use discovery_sources::{DiscoveryFeed, DiscoveryFeedFn};
 pub use filtered::{
     clear_filtered_results, get_blacklisted_tokens, get_counts as get_filtered_counts,
     get_filtered_lists, get_last_update_time as get_filtered_last_update, get_passed_tokens,
@@ -98,7 +98,6 @@ pub use crate::apis::geckoterminal::types::GeckoTerminalPool;
 pub use crate::apis::rugcheck::types::RugcheckInfo;
 
 // Re-export common types from new modules
-pub use events::{subscribe as subscribe_events, TokenEvent};
 pub use priorities::Priority;
 
 // Re-export store APIs
@@ -183,11 +182,7 @@ pub async fn request_immediate_update(chain: ChainId, mint: &str) -> TokenResult
 
     let db = database::require_database(chain)?;
 
-    let coordinator = service::get_rate_coordinator().ok_or_else(|| Error::NotInitialized {
-        resource: "Rate limit coordinator not available".to_owned(),
-    })?;
-
-    updates::force_update_token(mint, db, coordinator).await
+    updates::force_update_token(mint, db, service::rate_budget(chain)).await
 }
 
 /// Ensure a token is available for manual trading, fetching it on demand if missing.

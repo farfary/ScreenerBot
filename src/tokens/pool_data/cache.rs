@@ -7,7 +7,7 @@ use crate::chains::{ChainId, PerChain};
 use crate::events::{record_token_event, Severity};
 use crate::logger::{self, LogTag};
 use crate::tokens::database;
-use crate::tokens::service::get_rate_coordinator;
+use crate::tokens::service::rate_budget;
 use crate::tokens::types::{TokenPoolInfo, TokenPoolsSnapshot, TokenResult};
 use crate::tokens::Error;
 use chrono::Utc;
@@ -395,12 +395,11 @@ async fn refresh_token_pools_and_cache(
         return Ok(None);
     }
 
-    let coordinator = get_rate_coordinator().ok_or_else(|| Error::NotInitialized {
-        resource: "Rate limit coordinator not initialized".to_owned(),
-    })?;
-
-    let (pools_map, success_sources) = match api::fetch_from_sources(mint_trimmed, coordinator)
-        .await
+    let (pools_map, success_sources) = match api::fetch_from_sources(
+        mint_trimmed,
+        rate_budget(chain),
+    )
+    .await
     {
         Ok(result) => result,
         Err(err) => {

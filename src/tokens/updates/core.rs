@@ -6,7 +6,7 @@
 use super::blocking::blocking_db;
 use super::helpers::{clear_in_flight, try_mark_in_flight};
 use super::rate_limiter::RateLimitCoordinator;
-use crate::chains::ChainId;
+use crate::chains::{adapter_for, ChainId};
 use crate::events::{record_token_event, Severity};
 use crate::logger::{self, LogTag};
 use crate::pools;
@@ -502,6 +502,11 @@ pub(super) async fn update_security_data(
     db: &Arc<TokenDatabase>,
     coordinator: &RateLimitCoordinator,
 ) {
+    // Rugcheck only reports on some chains; elsewhere there is nothing to fetch.
+    if !adapter_for(db.chain()).has_rugcheck_reports() {
+        return;
+    }
+
     // Skip the Rugcheck fetch while the internet is confirmed offline — it would
     // only time out and log errors. Resumes automatically on reconnect.
     if crate::connectivity::is_network_offline() {
@@ -696,6 +701,7 @@ pub async fn force_update_token(
     let mint_str = mint.to_string();
     let db_ref = &db;
     let coord_ref = &coordinator;
+    let rugcheck_applies = adapter_for(db.chain()).has_rugcheck_reports();
 
     // Fetch from ALL sources in parallel using tokio::join!
     let (dex_result, gecko_result, rug_result) = tokio::join!(
@@ -745,8 +751,11 @@ pub async fn force_update_token(
             }
             result
         },
-        // Rugcheck security data
+        // Rugcheck security data, only on a chain Rugcheck reports on
         async {
+            if !rugcheck_applies {
+                return None;
+            }
             let permit =
                 match tokio::time::timeout(ON_DEMAND_PERMIT_WAIT, coord_ref.acquire_rugcheck())
                     .await
@@ -762,7 +771,7 @@ pub async fn force_update_token(
                     p.forget();
                 }
             }
-            result
+            Some(result)
         }
     );
 
@@ -782,9 +791,10 @@ pub async fn force_update_token(
 
     // Process Rugcheck result
     match rug_result {
-        Ok(Some(_)) => successes.push("Rugcheck".to_owned()),
-        Ok(None) => failures.push("Rugcheck: No security data available".to_owned()),
-        Err(e) => failures.push(format!("Rugcheck: {e}")),
+        Some(Ok(Some(_))) => successes.push("Rugcheck".to_owned()),
+        Some(Ok(None)) => failures.push("Rugcheck: No security data available".to_owned()),
+        Some(Err(e)) => failures.push(format!("Rugcheck: {e}")),
+        None => {}
     }
 
     // Update tracking timestamp if any market data source succeeded
