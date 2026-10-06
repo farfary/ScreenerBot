@@ -82,31 +82,20 @@
 //! its full GROSS constant-product output and the fee is deducted AFTERWARD,
 //! from what the seller receives.
 //!
-//! # `CurveAccount`, verified byte-for-byte against two live pools
+//! # `CurveAccount`
 //!
-//! Matches the on-chain IDL's `CurveAccount` struct exactly (409-byte
-//! account, most of it unused reserved padding):
-//!
-//! ```text
-//!  8 total_supply u64        16 curve_amount u64        24 mint pubkey
-//! 56 decimals u8             57 collateral_currency u8  58 curve_type u8
-//! 59 marketcap_threshold u64 67 marketcap_currency u8   68 migration_fee u64
-//! 76 coef_b u32              80 bump u8                 81 migration_target u8
-//! ```
+//! The `CurveAccount` and `ConfigAccount` layouts, their byte-offset tables and
+//! how they were verified live in `crate::chains::solana::pools::layouts::moonit`.
 //!
 //! `collateral_currency == 0` is SOL (the only value this venue trades);
 //! `curve_type == 1` is `ConstantProductV1` (the only value this formula was
 //! verified against — `curve_type == 0`, `LinearV1`, uses a DIFFERENT SDK
 //! class this venue does not implement and refuses rather than guesses at).
-//! `curve_amount` was independently confirmed to equal the curve's own SPL
-//! token account balance to the raw unit on both live pools, so this venue
-//! reads it directly rather than fetching a second account for the same
-//! number. `coef_b` and the undocumented trailing `price_increase` field
-//! (`u16` @82, the deployed programme's account carries this one field
-//! beyond its own published IDL, mirroring the existing price DECODER at
-//! `pools/decoders/moonit_amm.rs`) play NO role in swap pricing — verified by
-//! the exact four-trade replay reproducing outputs without ever reading
-//! either.
+//! `curve_amount` equals the curve's own SPL token account balance, so this
+//! venue reads it directly rather than fetching a second account for the same
+//! number. `coef_b` and the trailing `price_increase` field play NO role in
+//! swap pricing — verified by the exact four-trade replay reproducing outputs
+//! without ever reading either.
 //!
 //! The programme itself enforces `total_supply == 1_000_000_000_000_000_000`
 //! and `decimals == 9` for `ConstantProductV1` (Anchor errors
@@ -187,7 +176,8 @@
 use crate::chains::solana::constants::{
     ASSOCIATED_TOKEN_PROGRAM_ID, MOONIT_AMM_PROGRAM_ID, SOL_MINT, SYSTEM_PROGRAM_ID,
 };
-use crate::chains::solana::layout::{mint_decimals, pubkey_at, u16_at, u64_at, u8_at};
+use crate::chains::solana::layout::mint_decimals;
+use crate::chains::solana::pools::layouts::moonit::{ConfigAccountState, CurveAccountState};
 use crate::chains::solana::pools::types::ProgramKind;
 use crate::chains::solana::rpc::{get_rpc_client, RpcClientMethods};
 use crate::chains::solana::solana_sdk::{
@@ -363,63 +353,10 @@ impl PoolVenue for MoonitVenue {
     }
 }
 
-/// The parts of Moonit's `CurveAccount` a swap needs.
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
-pub struct CurveAccountState {
-    pub pool: Pubkey,
-    pub total_supply: u64,
-    pub curve_amount: u64,
-    pub mint: Pubkey,
-    pub decimals: u8,
-    pub collateral_currency: u8,
-    pub curve_type: u8,
-}
-
 impl CurveAccountState {
-    /// Decode a `CurveAccount`. Pure. Layout verified byte-for-byte against
-    /// two live pools -- see the module docs.
-    pub fn decode(pool: Pubkey, data: &[u8]) -> Option<Self> {
-        if data.len() < 82 {
-            return None;
-        }
-        Some(Self {
-            pool,
-            total_supply: u64_at(data, 8)?,
-            curve_amount: u64_at(data, 16)?,
-            mint: pubkey_at(data, 24)?,
-            decimals: u8_at(data, 56)?,
-            collateral_currency: u8_at(data, 57)?,
-            curve_type: u8_at(data, 58)?,
-        })
-    }
-
     /// Tokens sold so far, the reference curve's own `curvePosition`.
     fn curve_position(&self) -> u128 {
         (self.total_supply as u128).saturating_sub(self.curve_amount as u128)
-    }
-}
-
-/// The parts of Moonit's global `ConfigAccount` a swap needs -- fetched fresh
-/// at `load()` time rather than hardcoded, even though the reference SDK
-/// hardcodes its own copies of these same values.
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
-pub struct ConfigAccountState {
-    pub helio_fee: Pubkey,
-    pub dex_fee: Pubkey,
-    pub fee_bps: u16,
-}
-
-impl ConfigAccountState {
-    /// Decode a `ConfigAccount`. Pure. Verified against the live account:
-    /// `fee_bps = 100`, `dex_fee_share = 50`, and `helio_fee`/`dex_fee` match
-    /// the addresses every replayed real trade paid.
-    pub fn decode(data: &[u8]) -> Option<Self> {
-        Some(Self {
-            // migration_authority @8, backend_authority @40, config_authority @72
-            helio_fee: pubkey_at(data, 104)?,
-            dex_fee: pubkey_at(data, 136)?,
-            fee_bps: u16_at(data, 168)?,
-        })
     }
 }
 

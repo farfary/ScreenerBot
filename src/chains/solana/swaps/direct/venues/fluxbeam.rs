@@ -18,38 +18,15 @@
 //! `meta.preTokenBalances`/`postTokenBalances` actually recorded. See the field
 //! comments below for the exact transactions and accounts.
 //!
-//! # `SwapV1`, 324 bytes, ONE extra leading byte the vanilla struct does not have
+//! # `SwapV1`
 //!
-//! ```text
-//!  0 version u8        1 is_initialized bool   2 bump_seed u8
-//!  3 token_program_id (legacy, vestigial -- see below)
-//! 35 token_a_vault     67 token_b_vault        99 pool_mint
-//! 131 token_a_mint     163 token_b_mint        195 pool_fee_account
-//! 227 fees: trade_fee_numerator/denominator, owner_trade_fee_numerator/
-//!     denominator, owner_withdraw_fee_numerator/denominator, host_fee_numerator/
-//!     denominator -- eight u64s, 64 bytes
-//! 291 curve_type u8    292 curve_parameters (32 bytes, unused here)
-//! ```
-//! `3 + 1 + 1 + 32*8 + 64 + 1 + 32 == 324`, the real account length, confirmed
-//! against pool `7uajENggf2MaiZ5XGff91uoVsch1y5QN3bqjisv7eP6V` (a SOL /
-//! Token-2022 pool) AND `5oA8PtzRTkvw8qfY6GWaaEGBfXscut25JtZq5XHLCHwi`. Both
-//! decode `version == 1`, `is_initialized == true`, and `pool_fee_account`
-//! matching the exact address a real swap passed as its fee account. The
-//! existing PRICE decoder at `pools/decoders/fluxbeam_amm.rs` reads
-//! `token_a_vault@35`, `token_b_vault@67`, `token_a_mint@131`,
-//! `token_b_mint@163` -- all four CONFIRMED correct here independently.
-//!
-//! `token_program_id@3` is a single, pool-wide field left over from the vanilla
-//! struct. On the confirmed Token-2022 pool it read the Token-2022 programme
-//! id even though `token_a` (SOL) is a LEGACY mint -- it does not describe
-//! either side reliably, so this venue never reads it. Each side's real token
-//! programme is read from the MINT ACCOUNT's own owner (`load()`'s batch),
-//! exactly like `raydium_cpmm.rs`.
-//!
-//! No status/pause bit exists anywhere in these 324 bytes (every byte between
-//! the header and the curve is accounted for above) -- tradability is just
-//! `is_initialized` plus non-empty reserves once the curve type is one this
-//! venue understands.
+//! The `SwapV1` account layout, its byte-offset table and how each offset was
+//! confirmed live in `crate::chains::solana::pools::layouts::fluxbeam`. This
+//! venue never reads the vestigial pool-wide `token_program_id` field: each
+//! side's real token programme is read from the MINT ACCOUNT's own owner
+//! (`load()`'s batch), exactly like `raydium_cpmm.rs`. The account carries no
+//! status/pause bit, so tradability is just `is_initialized` plus non-empty
+//! reserves once the curve type is one this venue understands.
 //!
 //! # The authority PDA: `find_program_address(&[pool], programme)`, bump 255
 //!
@@ -162,7 +139,8 @@
 use super::math::{fee_amount, mul_div_ceil, price_impact_pct};
 use super::token2022::transfer_fee_schedule;
 use crate::chains::solana::constants::FLUXBEAM_AMM_PROGRAM_ID;
-use crate::chains::solana::layout::{mint_decimals, pubkey_at, u64_at, u8_at};
+use crate::chains::solana::layout::mint_decimals;
+use crate::chains::solana::pools::layouts::fluxbeam::FluxbeamPoolState;
 use crate::chains::solana::pools::types::ProgramKind;
 use crate::chains::solana::rpc::{get_rpc_client, RpcClientMethods};
 use crate::chains::solana::solana_sdk::{
@@ -326,50 +304,6 @@ impl PoolVenue for FluxbeamVenue {
             program_b: mint_b_account.owner,
             program_pool: pool_mint_account.owner,
         }))
-    }
-}
-
-/// The parts of a `SwapV1` account a swap needs. See the module docs for the
-/// full byte-offset table and how it was confirmed.
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
-pub struct FluxbeamPoolState {
-    pub pool: Pubkey,
-    pub is_initialized: bool,
-    pub vault_a: Pubkey,
-    pub vault_b: Pubkey,
-    pub pool_mint: Pubkey,
-    pub mint_a: Pubkey,
-    pub mint_b: Pubkey,
-    pub fee_account: Pubkey,
-    pub trade_fee_numerator: u64,
-    pub trade_fee_denominator: u64,
-    pub owner_trade_fee_numerator: u64,
-    pub owner_trade_fee_denominator: u64,
-    pub curve_type: u8,
-}
-
-impl FluxbeamPoolState {
-    /// Decode a `SwapV1` account. Pure: no RPC, no cache, no clock. Layout
-    /// confirmed byte-for-byte against two live pools -- see the module docs.
-    pub fn decode(pool: Pubkey, data: &[u8]) -> Option<Self> {
-        if data.len() != 324 {
-            return None;
-        }
-        Some(Self {
-            pool,
-            is_initialized: u8_at(data, 1)? != 0,
-            vault_a: pubkey_at(data, 35)?,
-            vault_b: pubkey_at(data, 67)?,
-            pool_mint: pubkey_at(data, 99)?,
-            mint_a: pubkey_at(data, 131)?,
-            mint_b: pubkey_at(data, 163)?,
-            fee_account: pubkey_at(data, 195)?,
-            trade_fee_numerator: u64_at(data, 227)?,
-            trade_fee_denominator: u64_at(data, 235)?,
-            owner_trade_fee_numerator: u64_at(data, 243)?,
-            owner_trade_fee_denominator: u64_at(data, 251)?,
-            curve_type: u8_at(data, 291)?,
-        })
     }
 }
 

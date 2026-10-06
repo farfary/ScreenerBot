@@ -12,20 +12,11 @@
 //! `swap_v2` discriminator is `2b04ed0b1ac91e62`, confirmed both by hashing
 //! `global:swap_v2` and by decoding live mainnet swaps of the SOL/USDC pool.
 //!
-//! # Layout, verified against mainnet
+//! # Layout
 //!
-//! `PoolState` is 1544 bytes:
-//!
-//! ```text
-//!   9 amm_config      73 token_mint_0  105 token_mint_1
-//! 137 token_vault_0  169 token_vault_1 201 observation_key
-//! 233 mint_decimals_0 234 mint_decimals_1 235 tick_spacing u16
-//! 237 liquidity u128 253 sqrt_price_x64 u128  269 tick_current i32
-//! 389 status u8      904 tick_array_bitmap [u64; 16]
-//! ```
-//!
-//! `AmmConfig` is 117 bytes: `43 protocol_fee_rate u32 · 47 trade_fee_rate u32 ·
-//! 51 tick_spacing u16 · 53 fund_fee_rate u32`, over a denominator of 1_000_000.
+//! The `PoolState`, `AmmConfig`, `TickArrayState` and tick-array bitmap layouts,
+//! their byte-offset tables and how they were verified live in
+//! `crate::chains::solana::pools::layouts::raydium_clmm`.
 //!
 //! # What the quote can and cannot promise
 //!
@@ -43,13 +34,14 @@
 //! free rather than by the pool for a priority fee.
 
 use super::clmm_ticks::{
-    bitmap_extension_address, decode_tick_array, tick_array_address, ticks_ahead, walk_ticks,
-    InitializedTick, TickArrayBitmap, TICK_ARRAYS_PER_SWAP,
+    bitmap_extension_address, tick_array_address, ticks_ahead, walk_ticks, TICK_ARRAYS_PER_SWAP,
 };
 use super::token2022::{transfer_fee_schedule, TransferFeeSchedule};
 use crate::chains::solana::constants::{MEMO_PROGRAM_ID, RAYDIUM_CLMM_PROGRAM_ID};
-use crate::chains::solana::layout::{
-    i32_at, pubkey_at, token_account_amount, u128_at, u16_at, u32_at, u8_at,
+use crate::chains::solana::layout::token_account_amount;
+use crate::chains::solana::pools::layouts::clmm_ticks::InitializedTick;
+use crate::chains::solana::pools::layouts::raydium_clmm::{
+    decode_tick_array, ClmmFeeConfig, ClmmPoolState, TickArrayBitmap,
 };
 use crate::chains::solana::pools::types::ProgramKind;
 use crate::chains::solana::rpc::{get_rpc_client, RpcClientMethods};
@@ -70,9 +62,6 @@ const SWAP_V2: [u8; 8] = [0x2b, 0x04, 0xed, 0x0b, 0x1a, 0xc9, 0x1e, 0x62];
 
 /// Denominator every CLMM fee rate is expressed over.
 const FEE_RATE_DENOMINATOR: u64 = 1_000_000;
-
-/// Bit index of the swap permission inside `PoolState::status`, a DISABLE flag.
-const STATUS_BIT_SWAP_DISABLED: u8 = 2;
 
 /// Compute units a CLMM swap needs. Higher than a constant-product venue because
 /// the programme may load and cross several tick arrays.
@@ -240,71 +229,6 @@ impl PoolVenue for RaydiumClmmVenue {
             transfer_fee_1,
             ticks,
         }))
-    }
-}
-
-/// The parts of the CLMM `PoolState` a swap needs.
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
-pub struct ClmmPoolState {
-    pub pool: Pubkey,
-    pub amm_config: Pubkey,
-    pub mint_0: Pubkey,
-    pub mint_1: Pubkey,
-    pub vault_0: Pubkey,
-    pub vault_1: Pubkey,
-    pub observation: Pubkey,
-    pub decimals_0: u8,
-    pub decimals_1: u8,
-    pub tick_spacing: u16,
-    pub liquidity: u128,
-    pub sqrt_price_x64: u128,
-    pub tick_current: i32,
-    pub status: u8,
-}
-
-impl ClmmPoolState {
-    /// Decode a CLMM pool account. Pure: no RPC, no cache, no clock.
-    pub fn decode(pool: Pubkey, data: &[u8]) -> Option<Self> {
-        Some(Self {
-            pool,
-            amm_config: pubkey_at(data, 9)?,
-            mint_0: pubkey_at(data, 73)?,
-            mint_1: pubkey_at(data, 105)?,
-            vault_0: pubkey_at(data, 137)?,
-            vault_1: pubkey_at(data, 169)?,
-            observation: pubkey_at(data, 201)?,
-            decimals_0: u8_at(data, 233)?,
-            decimals_1: u8_at(data, 234)?,
-            tick_spacing: u16_at(data, 235)?,
-            liquidity: u128_at(data, 237)?,
-            sqrt_price_x64: u128_at(data, 253)?,
-            tick_current: i32_at(data, 269)?,
-            status: u8_at(data, 389)?,
-        })
-    }
-
-    /// Whether the swap permission bit is clear.
-    pub fn swap_enabled(&self) -> bool {
-        self.status & (1 << STATUS_BIT_SWAP_DISABLED) == 0
-    }
-}
-
-/// The fee rates from the CLMM `AmmConfig`. Stored as `u32`, unlike CP-Swap.
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
-pub struct ClmmFeeConfig {
-    pub protocol_fee_rate: u32,
-    pub trade_fee_rate: u32,
-    pub fund_fee_rate: u32,
-}
-
-impl ClmmFeeConfig {
-    /// Decode a CLMM `AmmConfig` account. Pure.
-    pub fn decode(data: &[u8]) -> Option<Self> {
-        Some(Self {
-            protocol_fee_rate: u32_at(data, 43)?,
-            trade_fee_rate: u32_at(data, 47)?,
-            fund_fee_rate: u32_at(data, 53)?,
-        })
     }
 }
 

@@ -65,6 +65,13 @@ pub fn i32_at(data: &[u8], offset: usize) -> Option<i32> {
     ))
 }
 
+/// Read a signed little-endian `i64` at `offset`.
+pub fn i64_at(data: &[u8], offset: usize) -> Option<i64> {
+    Some(i64::from_le_bytes(
+        data.get(offset..offset + 8)?.try_into().ok()?,
+    ))
+}
+
 /// Read a single byte at `offset`.
 pub fn u8_at(data: &[u8], offset: usize) -> Option<u8> {
     data.get(offset).copied()

@@ -1,13 +1,21 @@
 // Copyright (c) 2024-2026 ScreenerBot (screenerbot.io)
 // SPDX-License-Identifier: BUSL-1.1
 
-//! Meteora Dynamic Bonding Curve (`dbcij3LW…`) `VirtualPool` account.
+//! Meteora Dynamic Bonding Curve (`dbcij3LW…`) `VirtualPool` and `PoolConfig`
+//! accounts.
 //!
 //! # Layout, verified against mainnet
 //!
-//! Read from the programme's on-chain Anchor IDL and cross-checked against live
-//! pools; the IDL's `VirtualPool` discriminator (`d5e005d16245775c`) matches a
-//! live pool account's first 8 bytes. 424 bytes:
+//! Both account layouts were read from the programme's own on-chain Anchor
+//! IDL (`create_with_seed(find_program_address([], program), "anchor:idl",
+//! program)`) and cross-checked field-by-field against a live pool
+//! (`A95th9YTiZrGYRsZ4eBXLvMLpr7pfqPVWwY1LFQ8f27U`) and its config
+//! (`7wr6arSoaxQEppcSakvouxpKF9bfcYLCRRn4HNMxj2cZ`): the IDL's own
+//! discriminator for `VirtualPool` (`d5e005d16245775c`) matches the pool
+//! account's first 8 bytes exactly, and `PoolConfig`'s (`1a6c0e7b74e6812b`)
+//! matches the config account's.
+//!
+//! `VirtualPool`, 424 bytes:
 //!
 //! ```text
 //!   0 discriminator        8 volatility_tracker (64B, unused here)
@@ -24,13 +32,35 @@
 //! them plus the uncollected protocol, partner and creator fees, which are not
 //! liquidity. `quote_mint` is not stored here; it lives on the `PoolConfig` the
 //! pool points at.
+//!
+//! `PoolConfig`, 1048 bytes:
+//!
+//! ```text
+//!   0 discriminator         8 quote_mint          40 fee_claimer
+//! 104 base_fee.cliff_fee_numerator u64  112 second_factor u64
+//! 120 third_factor u64      128 first_factor u16   130 base_fee_mode u8
+//! 136 dynamic_fee.initialized u8
+//! 144 max_volatility_accumulator u32    148 variable_fee_control u32
+//! 152 bin_step u16          154 filter_period u16  156 decay_period u16
+//! 158 reduction_factor u16
+//! 232 collect_fee_mode u8   235 token_decimal u8
+//! 392 sqrt_start_price u128
+//! 408 curve: [LiquidityDistributionConfig; 20], 32B each
+//!       (sqrt_price u128, liquidity u128)
+//! ```
 
-use crate::chains::solana::layout::{pubkey_at, u128_at, u64_at, u8_at};
+use crate::chains::solana::layout::{pubkey_at, u128_at, u16_at, u64_at, u8_at};
 use crate::chains::solana::solana_sdk::pubkey::Pubkey;
 
 /// `VirtualPool`'s own Anchor discriminator, confirmed against the on-chain
 /// IDL and a live pool account's first 8 bytes.
 pub(crate) const VIRTUAL_POOL_DISCRIMINATOR: [u8; 8] = [213, 224, 5, 209, 98, 69, 119, 92];
+
+/// `PoolConfig`'s own Anchor discriminator, confirmed the same way.
+const POOL_CONFIG_DISCRIMINATOR: [u8; 8] = [26, 108, 14, 123, 116, 230, 129, 43];
+
+/// Curve checkpoints a `PoolConfig` may carry.
+const MAX_CURVE_POINTS: usize = 20;
 
 /// The parts of a DBC `VirtualPool` that swapping and pricing read.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -64,6 +94,71 @@ impl VirtualPoolState {
             sqrt_price: u128_at(data, 280)?,
             is_migrated: u8_at(data, 305)? != 0,
         })
+    }
+}
+
+/// One `LiquidityDistributionConfig` checkpoint: the curve's price at this
+/// point and the constant liquidity of the segment ENDING here.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub(crate) struct CurvePoint {
+    pub(crate) sqrt_price: u128,
+    pub(crate) liquidity: u128,
+}
+
+/// The parts of a DBC `PoolConfig` a swap needs.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct PoolConfigState {
+    pub quote_mint: Pubkey,
+    pub cliff_fee_numerator: u64,
+    pub second_factor: u64,
+    pub third_factor: u64,
+    pub first_factor: u16,
+    pub base_fee_mode: u8,
+    pub dynamic_fee_initialized: bool,
+    pub collect_fee_mode: u8,
+    pub sqrt_start_price: u128,
+    pub(crate) curve: Vec<CurvePoint>,
+}
+
+impl PoolConfigState {
+    pub fn decode(data: &[u8]) -> Option<Self> {
+        if data.len() < 1048 || data[0..8] != POOL_CONFIG_DISCRIMINATOR {
+            return None;
+        }
+        let mut curve = Vec::with_capacity(MAX_CURVE_POINTS);
+        for i in 0..MAX_CURVE_POINTS {
+            let offset = 408 + i * 32;
+            let sqrt_price = u128_at(data, offset)?;
+            let liquidity = u128_at(data, offset + 16)?;
+            if sqrt_price == 0 {
+                break;
+            }
+            curve.push(CurvePoint {
+                sqrt_price,
+                liquidity,
+            });
+        }
+        Some(Self {
+            quote_mint: pubkey_at(data, 8)?,
+            cliff_fee_numerator: crate::chains::solana::layout::u64_at(data, 104)?,
+            second_factor: crate::chains::solana::layout::u64_at(data, 112)?,
+            third_factor: crate::chains::solana::layout::u64_at(data, 120)?,
+            first_factor: u16_at(data, 128)?,
+            base_fee_mode: u8_at(data, 130)?,
+            dynamic_fee_initialized: u8_at(data, 136)? != 0,
+            collect_fee_mode: u8_at(data, 232)?,
+            sqrt_start_price: u128_at(data, 392)?,
+            curve,
+        })
+    }
+
+    /// The real, non-zero curve checkpoints this config carries -- exposed for
+    /// the offline test tier to assert they are genuine segments, not padding.
+    pub fn curve_points(&self) -> Vec<(u128, u128)> {
+        self.curve
+            .iter()
+            .map(|p| (p.sqrt_price, p.liquidity))
+            .collect()
     }
 }
 
