@@ -87,7 +87,7 @@ pub async fn get_token_detail(Path(mint): Path<String>) -> Json<TokenDetailRespo
                 market_cap: None,
                 pool_address: None,
                 pool_program: None,
-                pool_reserves_sol: None,
+                pool_reserves_native: None,
                 pool_reserves_token: None,
                 txn_periods: PeriodStats::empty(),
                 buys_24h: None,
@@ -200,7 +200,7 @@ pub async fn get_token_detail(Path(mint): Path<String>) -> Json<TokenDetailRespo
         _price_updated_at,
         pool_address,
         price_source_pool,
-        pool_reserves_sol,
+        pool_reserves_native,
         pool_reserves_token,
     ) = if let Some(price_result) = pools::get_pool_price(&mint) {
         let age_secs = price_result.timestamp.elapsed().as_secs();
@@ -744,7 +744,7 @@ pub async fn get_token_detail(Path(mint): Path<String>) -> Json<TokenDetailRespo
         market_cap: token.market_cap,
         pool_address,
         pool_program,
-        pool_reserves_sol,
+        pool_reserves_native,
         pool_reserves_token,
         txn_periods,
         buys_24h,
@@ -964,7 +964,7 @@ pub async fn get_token_analysis(
 
     // Build liquidity analysis from pool descriptors
     let liquidity = if !pool_descriptors.is_empty() {
-        let total_liquidity_sol: f64 = pool_descriptors
+        let total_liquidity_native: f64 = pool_descriptors
             .iter()
             .map(|p| {
                 // liquidity_usd / sol_price gives approximate SOL liquidity
@@ -981,7 +981,7 @@ pub async fn get_token_analysis(
         let pools: Vec<AnalysisPoolInfo> = pool_descriptors
             .iter()
             .map(|p| {
-                let liquidity_sol = if p.liquidity_usd > 0.0 && sol_price_usd > 0.0 {
+                let liquidity_native = if p.liquidity_usd > 0.0 && sol_price_usd > 0.0 {
                     p.liquidity_usd / sol_price_usd
                 } else {
                     0.0
@@ -989,14 +989,14 @@ pub async fn get_token_analysis(
                 AnalysisPoolInfo {
                     address: p.pool_id.address().to_owned(),
                     dex: p.program_kind.as_str().to_owned(),
-                    liquidity_sol,
+                    liquidity_native,
                     is_canonical: canonical_pool_id.as_deref() == Some(p.pool_id.address()),
                 }
             })
             .collect();
 
         Some(LiquidityAnalysis {
-            total_liquidity_sol,
+            total_liquidity_native,
             total_liquidity_usd: if total_liquidity_usd > 0.0 {
                 Some(total_liquidity_usd)
             } else {

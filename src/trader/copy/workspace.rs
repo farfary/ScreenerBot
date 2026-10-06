@@ -484,7 +484,6 @@ pub struct CopyDefaults {
     pub min_slippage_pct: f64,
     pub max_slippage_pct: f64,
     /// The smallest copy sizing will place; a smaller size or per-trade cap never copies.
-    #[serde(rename = "min_trade_size_sol")]
     pub min_trade_size_native: f64,
     /// The swap fee every paper and live fill pays on each side, in percent.
     pub swap_fee_pct: f64,

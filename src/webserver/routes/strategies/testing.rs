@@ -49,7 +49,7 @@ pub async fn test_strategy(
 
     // Convert test data to evaluation context
     let market_data = request.market_data.map(|md| MarketData {
-        liquidity_sol: md.liquidity_sol,
+        liquidity_sol: md.liquidity_native,
         volume_24h: md.volume_24h,
         market_cap: md.market_cap,
         holder_count: md.holder_count,
@@ -62,7 +62,7 @@ pub async fn test_strategy(
             .map(|entry_time| PositionData {
                 entry_price: pd.entry_price,
                 entry_time: entry_time.with_timezone(&Utc),
-                current_size_sol: pd.current_size_sol,
+                current_size_sol: pd.current_size_native,
                 unrealized_profit_pct: pd.unrealized_profit_pct,
                 position_age_hours: pd.position_age_hours,
             })

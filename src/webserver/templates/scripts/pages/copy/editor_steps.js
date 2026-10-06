@@ -196,7 +196,7 @@ export function costPreview(draft) {
 function sizingStep({ draft, defaults }, esc) {
   const fixedKind = draft.sizing.kind === "fixed";
   const maxSlippage = defaults?.max_slippage_pct ?? null;
-  const minSol = defaults?.min_trade_size_sol ?? 0;
+  const minSol = defaults?.min_trade_size_native ?? 0;
   const solUnit = I18n.t("copy-unit-sol");
   const copySize = I18n.t("copy-editor-copy-size");
   return `<div class="copy-field"><span>${esc(copySize)}</span>${segmented(
@@ -424,7 +424,7 @@ export function validate(id, draft, { mode, defaults }) {
     ) {
       return I18n.t("copy-editor-error-sizing");
     }
-    const minSol = defaults?.min_trade_size_sol ?? 0;
+    const minSol = defaults?.min_trade_size_native ?? 0;
     if (draft.sizing.kind === "fixed" && draft.sizing.sol < minSol)
       return I18n.t("copy-editor-error-min-copy", { minimum: sol(minSol, 3) });
     if (draft.max_sol_per_trade < minSol)

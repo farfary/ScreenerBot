@@ -73,7 +73,7 @@ pub(super) async fn get_wallet_current() -> Result<Json<Option<WalletCurrentResp
         // The live snapshot already carries its token balances — no second query.
         return Ok(Json(Some(WalletCurrentResponse {
             sol_balance: snapshot.native_balance,
-            sol_balance_lamports: snapshot.native_balance_raw,
+            native_balance_raw: snapshot.native_balance_raw,
             total_tokens_count: snapshot.total_tokens_count,
             token_balances: snapshot
                 .token_balances
@@ -111,7 +111,7 @@ pub(super) async fn get_wallet_current() -> Result<Json<Option<WalletCurrentResp
 
             Ok(Json(Some(WalletCurrentResponse {
                 sol_balance: snapshot.native_balance,
-                sol_balance_lamports: snapshot.native_balance_raw,
+                native_balance_raw: snapshot.native_balance_raw,
                 total_tokens_count: snapshot.total_tokens_count,
                 token_balances,
                 snapshot_time: snapshot.snapshot_time.to_rfc3339(),
@@ -336,7 +336,7 @@ mod raw_balance_wire_tests {
             };
             let response = WalletCurrentResponse {
                 sol_balance: 1.0,
-                sol_balance_lamports: 1_000_000_000,
+                native_balance_raw: 1_000_000_000,
                 total_tokens_count: 1,
                 token_balances: vec![token_balance_info(&token).unwrap()],
                 snapshot_time: "2026-10-05T00:00:00Z".to_owned(),

@@ -182,7 +182,7 @@ pub async fn get_positions_stats() -> Json<PositionsStatsResponse> {
     let closed = closed_positions.len();
 
     // Capital currently at work is the CUMULATIVE cost basis, not the first entry:
-    // `entry_size_sol` never grows on a DCA, so a position averaged into three times
+    // `entry_size_native` never grows on a DCA, so a position averaged into three times
     // reported only its first buy and the card understated the portfolio.
     //
     // A round with no established cost basis (an imported airdrop, a USD-quoted fill)
@@ -194,7 +194,7 @@ pub async fn get_positions_stats() -> Json<PositionsStatsResponse> {
         .sum();
 
     // Realized P&L is the stored, fee-aware `pnl` — the one the position itself booked
-    // at close. Recomputing it as `sol_received - entry_size_sol` double-counted DCA
+    // at close. Recomputing it as `native_received - entry_size_native` double-counted DCA
     // adds as pure profit and ignored fees entirely. `pnl` is None exactly when there is
     // no honest number, so those rounds drop out instead of being guessed at.
     let total_pnl: f64 = closed_positions

@@ -75,8 +75,8 @@ fn summary_for(position: &Position) -> ActivityPositionSummary {
         is_open: false,
         archived: false,
         swaps: 0,
-        sol_invested: 0.0,
-        sol_returned: 0.0,
+        native_invested: 0.0,
+        native_returned: 0.0,
         realized_pnl: 0.0,
     }
 }
@@ -92,7 +92,7 @@ fn closed_externally_round_reports_the_stored_proceeds_and_pnl() {
         native_spent: 0.01304544,
         transaction_signature: ENTRY_SIG.to_owned(),
         is_dca: false,
-        fees_sol: None,
+        fees_native: None,
     }];
 
     let mut events: Vec<ActivityEvent> =
@@ -112,7 +112,7 @@ fn closed_externally_round_reports_the_stored_proceeds_and_pnl() {
         .expect("the close is on the timeline");
     assert_eq!(exit.signature.as_deref(), Some(EXIT_SIG));
     assert!(!exit.recorded);
-    assert_eq!(summaries[0].sol_returned, 0.0);
+    assert_eq!(summaries[0].native_returned, 0.0);
 
     let settled = HashMap::from([(205, StoredClose::of(&position).expect("closed row"))]);
     settle_closed_rounds(&mut summaries, &settled, &mut totals);
@@ -120,10 +120,10 @@ fn closed_externally_round_reports_the_stored_proceeds_and_pnl() {
     let stored_received = position.native_received.unwrap();
     let stored_pnl = position.pnl.unwrap();
     assert_eq!(summaries[0].swaps, 2);
-    assert_eq!(summaries[0].sol_invested, position.total_size_native);
-    assert_eq!(summaries[0].sol_returned, stored_received);
+    assert_eq!(summaries[0].native_invested, position.total_size_native);
+    assert_eq!(summaries[0].native_returned, stored_received);
     assert_eq!(summaries[0].realized_pnl, stored_pnl);
-    assert_eq!(totals.sol_returned, stored_received);
+    assert_eq!(totals.native_returned, stored_received);
     assert_eq!(totals.realized_pnl, stored_pnl);
 }
 

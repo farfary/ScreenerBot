@@ -68,7 +68,7 @@ pub fn apply_promo_status(snapshot: &mut StatusSnapshot) {
     let wallet = get_promo_wallet_current();
     snapshot.wallet = Some(WalletStatusSnapshot {
         sol_balance: wallet.sol_balance,
-        sol_balance_lamports: wallet.sol_balance_lamports,
+        native_balance_raw: wallet.native_balance_raw,
         usdc_balance: 0.0,
         total_tokens_count: wallet.total_tokens_count,
         snapshot_time: Some(now),

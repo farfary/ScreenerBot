@@ -101,7 +101,7 @@ export function applyHeaderMixin(PositionDetailsDialog) {
 
     const pnlSub = (pnl, pct) =>
       [pct != null ? this._formatPct(pct) : "", this._formatUsd(pnl)].filter(Boolean).join(" · ");
-    const invested = pos.total_size_sol;
+    const invested = pos.total_size_native;
     const avgEntry = pos.average_entry_price || pos.entry_price;
     const entryMetric = metric(
       I18n.t("positions-header-avg-entry"),
@@ -354,7 +354,7 @@ export function applyHeaderMixin(PositionDetailsDialog) {
     // preselected at 100%, which that flow submits as `close_all`, so no dust is left.
     const context =
       action === "add"
-        ? { entrySize: pos.entry_size_sol }
+        ? { entrySize: pos.entry_size_native }
         : action === "close"
           ? { preselect: 100 }
           : {};

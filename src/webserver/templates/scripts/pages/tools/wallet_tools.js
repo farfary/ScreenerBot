@@ -143,13 +143,13 @@ async function handleScanATAs() {
     const cleanupBtn = $("#cleanup-atas-btn");
 
     if (countEl) countEl.textContent = stats.empty_count || 0;
-    if (solEl) solEl.textContent = Utils.formatSol(stats.reclaimable_sol || 0);
+    if (solEl) solEl.textContent = Utils.formatSol(stats.reclaimable_native || 0);
     if (failedEl) failedEl.textContent = stats.failed_count || 0;
 
     if (stats.empty_count > 0) {
       const found = I18n.t("tools-wallet-cleanup-found", {
         count: stats.empty_count,
-        amount: Utils.formatSol(stats.reclaimable_sol || 0),
+        amount: Utils.formatSol(stats.reclaimable_native || 0),
       });
       listEl.innerHTML = `
         <div class="success-state">
@@ -327,7 +327,7 @@ async function handleScanBurnTokens() {
     const rentEl = $("#burn-rent-reclaimable");
 
     if (totalEl) totalEl.textContent = burnTokensState.tokens.length;
-    if (rentEl) rentEl.textContent = Utils.formatSol(data.total_rent_reclaimable_sol || 0);
+    if (rentEl) rentEl.textContent = Utils.formatSol(data.total_rent_reclaimable_native || 0);
 
     // Render token list
     renderBurnTokenList();
@@ -470,7 +470,7 @@ function renderBurnTokenRow(token) {
         }
       </div>
       <div class="burn-token-rent">
-        ${token.can_burn ? Utils.escapeHtml(I18n.t("tools-wallet-amount-gain", { amount: Utils.formatSol(token.rent_reclaimable_sol) })) : "—"}
+        ${token.can_burn ? Utils.escapeHtml(I18n.t("tools-wallet-amount-gain", { amount: Utils.formatSol(token.rent_reclaimable_native) })) : "—"}
       </div>
     </div>
   `;
@@ -631,7 +631,7 @@ async function handleBurnSelectedTokens() {
         I18n.t("tools-burn-toast-burned", {
           successful: data.successful,
           total: data.total,
-          amount: Utils.formatSol(data.sol_reclaimed),
+          amount: Utils.formatSol(data.native_reclaimed),
         }),
         "success"
       );
@@ -1218,7 +1218,7 @@ async function loadConsolidationData() {
     const reclaimable = $("#wc-reclaimable");
 
     if (walletCount) walletCount.textContent = data.wallet_count || 0;
-    if (totalSol) totalSol.textContent = Utils.formatSol(data.total_sol || 0);
+    if (totalSol) totalSol.textContent = Utils.formatSol(data.total_native || 0);
     if (totalTokens) totalTokens.textContent = data.token_types || 0;
     if (reclaimable) {
       reclaimable.textContent = I18n.t("tools-wallet-amount-approx", {
@@ -1468,7 +1468,7 @@ async function handleConsolidateCleanup() {
     Utils.showToast(
       I18n.t("tools-consolidation-cleaned", {
         count: result.atas_closed,
-        amount: Utils.formatSol(result.sol_reclaimed),
+        amount: Utils.formatSol(result.native_reclaimed),
       }),
       "success"
     );

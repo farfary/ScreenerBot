@@ -52,7 +52,7 @@ pub fn get_promo_wallet_current() -> WalletCurrentResponse {
 
     WalletCurrentResponse {
         sol_balance: PROMO_SOL_BALANCE,
-        sol_balance_lamports: PROMO_SOL_LAMPORTS,
+        native_balance_raw: PROMO_SOL_LAMPORTS,
         total_tokens_count: token_balances.len() as u32,
         token_balances,
         snapshot_time: now.to_rfc3339(),

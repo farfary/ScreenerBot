@@ -296,13 +296,13 @@ function createLifecycle() {
     // Headline: total equity (cash + holdings).
     const balanceEl = document.getElementById("walletBalance");
     if (balanceEl) {
-      balanceEl.innerHTML = solHtml(wallet.total_equity_sol, 4);
+      balanceEl.innerHTML = solHtml(wallet.total_equity_native, 4);
     }
 
     // Approximate USD value of total equity.
     const usdEl = document.getElementById("walletUsd");
     if (usdEl) {
-      const usd = (wallet.total_equity_sol || 0) * (wallet.sol_price_usd || 0);
+      const usd = (wallet.total_equity_native || 0) * (wallet.native_price_usd || 0);
       if (usd > 0) {
         usdEl.textContent = withApprox(withUsdSymbol(Utils.formatNumber(usd, 2)));
         usdEl.style.display = "";
@@ -315,8 +315,8 @@ function createLifecycle() {
     const changeEl = document.getElementById("homeWalletChange");
     if (changeEl) {
       // Without a start-of-day baseline the change is unknown: a dash, as in the header.
-      const known = Number.isFinite(wallet.change_sol);
-      const cls = known ? pnlClass(wallet.change_sol, 4) : "flat";
+      const known = Number.isFinite(wallet.change_native);
+      const cls = known ? pnlClass(wallet.change_native, 4) : "flat";
       changeEl.className = `hero-change ${cls}`;
       const percent = Number.isFinite(wallet.change_percent)
         ? `<span class="change-percent ${cls}">(${Utils.formatPercent(wallet.change_percent, {
@@ -325,7 +325,7 @@ function createLifecycle() {
         : "";
       changeEl.innerHTML = `
         <span class="hero-change-value change-value ${cls}">${
-          known ? Utils.formatSignedSol(wallet.change_sol) : "—"
+          known ? Utils.formatSignedSol(wallet.change_native) : "—"
         }</span>
         ${percent}
       `;
@@ -334,13 +334,13 @@ function createLifecycle() {
     // Cash tile — free SOL available to trade.
     const cashEl = document.getElementById("heroCash");
     if (cashEl) {
-      cashEl.innerHTML = solHtml(wallet.current_balance_sol, 4);
+      cashEl.innerHTML = solHtml(wallet.current_balance_native, 4);
     }
 
     // Holdings tile — SOL value of held tokens, with a token-count subscript.
     const holdingsEl = document.getElementById("heroHoldings");
     if (holdingsEl) {
-      holdingsEl.innerHTML = solHtml(wallet.tokens_worth_sol, 4);
+      holdingsEl.innerHTML = solHtml(wallet.tokens_worth_native, 4);
     }
     const holdingsCountEl = document.getElementById("heroHoldingsCount");
     if (holdingsCountEl) {
@@ -395,7 +395,7 @@ function createLifecycle() {
         decimals: 4,
       });
     if (avgSizeEl)
-      avgSizeEl.textContent = Utils.formatSol(positions.avg_position_size_sol, {
+      avgSizeEl.textContent = Utils.formatSol(positions.avg_position_size_native, {
         decimals: 4,
       });
     if (avgHoldEl) {

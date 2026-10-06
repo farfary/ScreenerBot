@@ -42,7 +42,7 @@ fn trade_response(
             success: true,
             mint,
             signature: tr.tx_signature,
-            effective_price_sol: tr.executed_price_native,
+            effective_price_native: tr.executed_price_native,
             size_sol: tr.executed_size_native,
             position_id: tr.position_id,
             timestamp: chrono::Utc::now().to_rfc3339(),
@@ -341,7 +341,7 @@ pub async fn quote_preview_handler(Query(req): Query<QuotePreviewRequest>) -> Re
             // router that produced this quote could state it in SOL honestly.
             let platform_fee_pct =
                 f64::from(crate::chains::solana::swaps::revenue::PLATFORM_FEE_BPS) / 100.0;
-            let platform_fee_sol = quote
+            let platform_fee_native = quote
                 .platform_fee_lamports
                 .map(|lamports| crate::chains::adapter().raw_to_native(lamports));
             let network_fee_sol = quote
@@ -367,10 +367,10 @@ pub async fn quote_preview_handler(Query(req): Query<QuotePreviewRequest>) -> Re
                 output_amount: output_display,
                 minimum_output_amount,
                 output_formatted,
-                price_per_token_sol: price_per_token,
+                price_per_token_native: price_per_token,
                 price_impact_pct: quote.price_impact_pct,
                 platform_fee_pct,
-                platform_fee_sol,
+                platform_fee_native,
                 network_fee_sol,
                 route: quote.route_plan,
                 slippage_bps: quote.slippage_bps,

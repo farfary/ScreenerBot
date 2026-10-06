@@ -520,8 +520,8 @@ import {
     lines.push("[Price & Market]");
     lines.push(
       `Price (SOL): ${
-        price.pool_price_sol != null
-          ? formatPriceSol(price.pool_price_sol, { fallback: "N/A" })
+        price.pool_price_native != null
+          ? formatPriceSol(price.pool_price_native, { fallback: "N/A" })
           : "N/A"
       }`
     );
@@ -623,7 +623,7 @@ import {
           );
           lines.push(
             `  Entry Size: ${
-              o.entry_size_sol != null ? formatSol(o.entry_size_sol, { decimals: 4 }) : "N/A"
+              o.entry_size_native != null ? formatSol(o.entry_size_native, { decimals: 4 }) : "N/A"
             }`
           );
           lines.push(
@@ -762,13 +762,13 @@ import {
       if (pd.fee_details) {
         lines.push("Fees:");
         lines.push(
-          `  Entry: ${withSolUnit(formatFixed(pd.fee_details.entry_fee_sol, { decimals: 6, fallback: "N/A" }))} (${
-            pd.fee_details.entry_fee_lamports || 0
+          `  Entry: ${withSolUnit(formatFixed(pd.fee_details.entry_fee_native, { decimals: 6, fallback: "N/A" }))} (${
+            pd.fee_details.entry_fee_raw || 0
           } lamports)`
         );
         lines.push(
-          `  Exit: ${withSolUnit(formatFixed(pd.fee_details.exit_fee_sol, { decimals: 6, fallback: "N/A" }))} (${
-            pd.fee_details.exit_fee_lamports || 0
+          `  Exit: ${withSolUnit(formatFixed(pd.fee_details.exit_fee_native, { decimals: 6, fallback: "N/A" }))} (${
+            pd.fee_details.exit_fee_raw || 0
           } lamports)`
         );
         lines.push(`  Total: ${withSolUnit(formatFixed(pd.fee_details.total_fees_sol, { decimals: 6 }))}`);

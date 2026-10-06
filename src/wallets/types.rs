@@ -134,7 +134,6 @@ pub struct WalletsSummary {
     /// Main wallet name (if any)
     pub main_wallet_name: Option<String>,
     /// Total SOL across all active wallets (placeholder, populated by balance fetching)
-    #[serde(rename = "total_sol")]
     pub total_native: f64,
 }
 

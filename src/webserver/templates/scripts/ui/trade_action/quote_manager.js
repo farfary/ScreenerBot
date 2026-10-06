@@ -262,7 +262,7 @@ export function applyQuoteManagerMixin(TradeActionDialog) {
       knowsOutUnit ? formatAmount(quote.output_amount, outUnit) : quote.output_formatted
     );
     if (this.quoteUnitPriceEl) {
-      const pp = quote.price_per_token_sol;
+      const pp = quote.price_per_token_native;
       this.quoteUnitPriceEl.textContent =
         typeof pp === "number" && pp > 0 ? `1 ${tokenUnit} ${withApprox(withSolUnit(trimSol(pp)))}` : "";
     }
@@ -293,9 +293,9 @@ export function applyQuoteManagerMixin(TradeActionDialog) {
 
     // Fees
     this.quotePlatformFeeEl.textContent =
-      quote.platform_fee_sol == null
+      quote.platform_fee_native == null
         ? withPercentUnit(quote.platform_fee_pct)
-        : `${withPercentUnit(quote.platform_fee_pct)} · ${withSolUnit(trimSol(quote.platform_fee_sol))}`;
+        : `${withPercentUnit(quote.platform_fee_pct)} · ${withSolUnit(trimSol(quote.platform_fee_native))}`;
     this.quoteNetworkFeeEl.textContent =
       quote.network_fee_sol == null ? "—" : withApprox(withSolUnit(trimSol(quote.network_fee_sol)));
 

@@ -102,8 +102,8 @@ pub async fn get_home_dashboard(State(state): State<Arc<AppState>>) -> Json<Home
                 Ok(stats) => TradingPeriodStats {
                     buys: stats.buys,
                     sells: stats.sells,
-                    profit_sol: stats.profit_native,
-                    loss_sol: stats.loss_native,
+                    profit_native: stats.profit_native,
+                    loss_native: stats.loss_native,
                     net_pnl_sol: stats.net_pnl_native,
                     drawdown_percent: stats.drawdown_percent,
                     win_rate: stats.win_rate,
@@ -111,8 +111,8 @@ pub async fn get_home_dashboard(State(state): State<Arc<AppState>>) -> Json<Home
                 Err(_) => TradingPeriodStats {
                     buys: 0,
                     sells: 0,
-                    profit_sol: 0.0,
-                    loss_sol: 0.0,
+                    profit_native: 0.0,
+                    loss_native: 0.0,
                     net_pnl_sol: 0.0,
                     drawdown_percent: 0.0,
                     win_rate: 0.0,
@@ -140,9 +140,9 @@ pub async fn get_home_dashboard(State(state): State<Arc<AppState>>) -> Json<Home
 
     // No baseline means the change is unknown, not zero: falling back to the
     // current worth reported a flat day the header shows as unknown.
-    let start_of_day_balance_sol = start_of_day_balance_result.ok().flatten();
-    let change_sol = start_of_day_balance_sol.map(|start| worth.total_equity_native - start);
-    let change_percent = start_of_day_balance_sol
+    let start_of_day_balance_native = start_of_day_balance_result.ok().flatten();
+    let change_native = start_of_day_balance_native.map(|start| worth.total_equity_native - start);
+    let change_percent = start_of_day_balance_native
         .filter(|start| *start > 0.0)
         .map(|start| (worth.total_equity_native - start) / start * 100.0);
 
@@ -157,15 +157,15 @@ pub async fn get_home_dashboard(State(state): State<Arc<AppState>>) -> Json<Home
 
     let wallet = WalletAnalytics {
         wallet_address: main_wallet_address_result.unwrap_or_default(),
-        current_balance_sol: worth.native_balance,
+        current_balance_native: worth.native_balance,
         token_count: worth.token_count,
-        tokens_worth_sol: worth.tokens_worth_native,
-        total_equity_sol: worth.total_equity_native,
+        tokens_worth_native: worth.tokens_worth_native,
+        total_equity_native: worth.total_equity_native,
         unpriced_token_count: worth.unpriced_token_count,
-        start_of_day_balance_sol,
-        change_sol,
+        start_of_day_balance_native,
+        change_native,
         change_percent,
-        sol_price_usd: crate::native_price::get_native_price(),
+        native_price_usd: crate::native_price::get_native_price(),
         balance_history,
     };
 
@@ -277,7 +277,7 @@ pub async fn get_home_dashboard(State(state): State<Arc<AppState>>) -> Json<Home
         0.0
     };
 
-    let avg_position_size_sol = if open_count > 0 {
+    let avg_position_size_native = if open_count > 0 {
         total_invested_sol / open_count as f64
     } else {
         0.0
@@ -294,7 +294,7 @@ pub async fn get_home_dashboard(State(state): State<Arc<AppState>>) -> Json<Home
         total_invested_sol,
         unrealized_pnl_sol,
         unrealized_pnl_percent,
-        avg_position_size_sol,
+        avg_position_size_native,
         avg_hold_duration_mins,
         best_performer,
         worst_performer,

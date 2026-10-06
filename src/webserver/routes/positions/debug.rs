@@ -40,7 +40,6 @@ pub struct PositionSummary {
     pub id: Option<i64>,
     pub entry_price: f64,
     pub entry_time: i64,
-    #[serde(rename = "entry_size_sol")]
     pub entry_size_native: f64,
     pub current_price: Option<f64>,
     pub unrealized_pnl: Option<f64>,
@@ -61,7 +60,7 @@ pub struct TokenInfo {
 
 #[derive(Debug, Serialize)]
 pub struct PriceData {
-    pub pool_price_sol: f64,
+    pub pool_price_native: f64,
     pub pool_price_usd: Option<f64>,
     pub confidence: f32,
     pub last_updated: i64,
@@ -138,12 +137,10 @@ pub struct TransactionDetails {
 
 #[derive(Debug, Serialize)]
 pub struct FeeDetails {
-    #[serde(rename = "entry_fee_lamports")]
     pub entry_fee_raw: Option<u64>,
-    pub entry_fee_sol: Option<f64>,
-    #[serde(rename = "exit_fee_lamports")]
+    pub entry_fee_native: Option<f64>,
     pub exit_fee_raw: Option<u64>,
-    pub exit_fee_sol: Option<f64>,
+    pub exit_fee_native: Option<f64>,
     pub total_fees_sol: f64,
 }
 
@@ -230,7 +227,7 @@ pub async fn get_position_debug_info(Path(mint): Path<String>) -> Json<PositionD
         (0, 0.0, 0.0)
     } else {
         let count = matching_closed.len();
-        // Cost basis is total_size_sol (entry + every DCA add), not entry_size_sol — the
+        // Cost basis is total_size_native (entry + every DCA add), not entry_size_native — the
         // first buy alone. Against the latter, an averaged-down position looked profitable
         // whenever it merely recovered its FIRST buy.
         let total_pnl: f64 = matching_closed
@@ -295,7 +292,7 @@ pub async fn get_position_debug_info(Path(mint): Path<String>) -> Json<PositionD
         let price_unix_time = now_unix - (age_seconds as i64);
 
         PriceData {
-            pool_price_sol: price_result.price_native,
+            pool_price_native: price_result.price_native,
             pool_price_usd: None,
             confidence: price_result.confidence,
             last_updated: price_unix_time,
@@ -373,15 +370,16 @@ pub async fn get_position_debug_info(Path(mint): Path<String>) -> Json<PositionD
         };
 
         // Fee details
-        let entry_fee_sol = pos.entry_fee_raw.map(|l| adapter().raw_to_native(l));
-        let exit_fee_sol = pos.exit_fee_raw.map(|l| adapter().raw_to_native(l));
-        let total_fees_sol = entry_fee_sol.unwrap_or_default() + exit_fee_sol.unwrap_or_default();
+        let entry_fee_native = pos.entry_fee_raw.map(|l| adapter().raw_to_native(l));
+        let exit_fee_native = pos.exit_fee_raw.map(|l| adapter().raw_to_native(l));
+        let total_fees_sol =
+            entry_fee_native.unwrap_or_default() + exit_fee_native.unwrap_or_default();
 
         let fee_details = FeeDetails {
             entry_fee_raw: pos.entry_fee_raw,
-            entry_fee_sol,
+            entry_fee_native,
             exit_fee_raw: pos.exit_fee_raw,
-            exit_fee_sol,
+            exit_fee_native,
             total_fees_sol,
         };
 

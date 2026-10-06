@@ -129,7 +129,7 @@ function renderPositionSummary(position) {
     position.entry_price
   );
   const current = position.current_price;
-  const sizeSol = basisUnknown ? null : (position.total_size_sol ?? position.entry_size_sol);
+  const sizeSol = basisUnknown ? null : (position.total_size_native ?? position.entry_size_native);
   const tokensHeld = isClosed
     ? position.token_amount
     : (position.remaining_token_amount ?? position.token_amount);

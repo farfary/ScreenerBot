@@ -35,7 +35,7 @@ pub async fn get_dashboard_overview(State(state): State<Arc<AppState>>) -> Json<
     let worth = get_wallet_worth();
     let wallet_info = WalletInfo {
         sol_balance: worth.native_balance,
-        sol_balance_lamports: crate::chains::adapter().native_to_raw(worth.native_balance),
+        native_balance_raw: crate::chains::adapter().native_to_raw(worth.native_balance),
         total_tokens_count: worth.token_count,
         last_updated: worth.has_snapshot.then(|| worth.updated_at.to_rfc3339()),
     };
@@ -43,8 +43,8 @@ pub async fn get_dashboard_overview(State(state): State<Arc<AppState>>) -> Json<
     // Get positions summary
     let open_positions = positions::get_db_open_positions().await.unwrap_or_default();
 
-    // Cost basis is the CUMULATIVE `total_size_sol` (entry + every DCA add), not
-    // `entry_size_sol`, which never grows after the first buy and understated any
+    // Cost basis is the CUMULATIVE `total_size_native` (entry + every DCA add), not
+    // `entry_size_native`, which never grows after the first buy and understated any
     // averaged-into position. Rounds with no established basis contribute nothing rather
     // than a zero that would read as free capital.
     let total_invested_sol: f64 = open_positions

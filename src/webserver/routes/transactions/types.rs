@@ -90,7 +90,6 @@ pub struct TransactionDetailResponse {
     pub error_message: Option<String>,
     #[serde(rename = "fee_sol")]
     pub fee_native: f64,
-    #[serde(rename = "fee_lamports")]
     pub fee_raw: Option<u64>,
     pub compute_units_consumed: Option<u64>,
     pub instructions_count: usize,

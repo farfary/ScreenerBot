@@ -185,7 +185,7 @@ pub struct TokenDetailResponse {
     pub pool_address: Option<String>,
     /// Program of the pricing pool, as `ProgramKind::protocol_slug()`.
     pub pool_program: Option<String>,
-    pub pool_reserves_sol: Option<f64>,
+    pub pool_reserves_native: Option<f64>,
     pub pool_reserves_token: Option<f64>,
 
     // Transactions
@@ -337,7 +337,7 @@ pub struct MarketAnalysis {
 /// Liquidity analysis data
 #[derive(Debug, Serialize)]
 pub struct LiquidityAnalysis {
-    pub total_liquidity_sol: f64,
+    pub total_liquidity_native: f64,
     pub total_liquidity_usd: Option<f64>,
     pub pool_count: i32,
     pub pools: Vec<AnalysisPoolInfo>,
@@ -348,7 +348,7 @@ pub struct LiquidityAnalysis {
 pub struct AnalysisPoolInfo {
     pub address: String,
     pub dex: String,
-    pub liquidity_sol: f64,
+    pub liquidity_native: f64,
     pub is_canonical: bool,
 }
 

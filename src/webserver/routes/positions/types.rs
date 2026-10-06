@@ -53,9 +53,7 @@ pub struct PositionResponse {
     pub exit_time: Option<i64>,
     pub position_type: String,
     pub status: PositionStatus,
-    #[serde(rename = "entry_size_sol")]
     pub entry_size_native: f64,
-    #[serde(rename = "total_size_sol")]
     pub total_size_native: f64,
     pub price_highest: f64,
     pub price_lowest: f64,
@@ -72,9 +70,7 @@ pub struct PositionResponse {
     pub liquidity_tier: Option<String>,
     pub transaction_entry_verified: bool,
     pub transaction_exit_verified: bool,
-    #[serde(rename = "entry_fee_lamports")]
     pub entry_fee_raw: Option<u64>,
-    #[serde(rename = "exit_fee_lamports")]
     pub exit_fee_raw: Option<u64>,
     pub current_price: Option<f64>,
     pub current_price_updated: Option<i64>,
@@ -133,7 +129,7 @@ pub struct EntryRecordResponse {
     pub native_spent: f64,
     pub transaction_signature: String,
     pub is_dca: bool,
-    pub fees_sol: Option<f64>,
+    pub fees_native: Option<f64>,
 }
 
 #[derive(Debug, Serialize)]
@@ -148,7 +144,7 @@ pub struct ExitRecordResponse {
     pub transaction_signature: String,
     pub is_partial: bool,
     pub percentage: f64,
-    pub fees_sol: Option<f64>,
+    pub fees_native: Option<f64>,
 }
 
 /// Token information for position detail view
@@ -190,7 +186,7 @@ pub struct PositionPoolInfo {
     pub pool_address: Option<String>,
     /// Program of the pricing pool, as `ProgramKind::protocol_slug()`.
     pub pool_program: Option<String>,
-    pub liquidity_sol: Option<f64>,
+    pub liquidity_native: Option<f64>,
 }
 
 /// External links for blockchain explorers and tools
@@ -232,11 +228,11 @@ pub struct PositionDetailResponse {
     pub pool_info: Option<PositionPoolInfo>,
     pub external_links: ExternalLinks,
     pub position_age_seconds: Option<i64>,
-    pub sol_price_usd: Option<f64>,
+    pub native_price_usd: Option<f64>,
     /// Swaps submitted for this position that the verifier has not applied yet.
     ///
     /// A manual add returns success the moment the swap is SUBMITTED, but the position's
-    /// numbers (`total_size_sol`, `average_entry_price`, `dca_count`) only move when
+    /// numbers (`total_size_native`, `average_entry_price`, `dca_count`) only move when
     /// `DcaVerified` lands seconds later. Without this the dialog looked frozen for the
     /// whole confirmation window: the toast said "Added to position!" while every figure
     /// still showed the pre-trade state and nothing said why.
@@ -300,7 +296,7 @@ pub struct TokenActivityResponse {
     pub totals: ActivityTotals,
     /// Position state changes, tagged with the position they belong to.
     pub state_history: Vec<ActivityStateChange>,
-    pub sol_price_usd: Option<f64>,
+    pub native_price_usd: Option<f64>,
     pub fetched_at: String,
 }
 
@@ -315,8 +311,8 @@ pub struct ActivityPositionSummary {
     pub is_open: bool,
     pub archived: bool,
     pub swaps: usize,
-    pub sol_invested: f64,
-    pub sol_returned: f64,
+    pub native_invested: f64,
+    pub native_returned: f64,
     /// Realized P&L of this position: the stored row value once it has closed, else the sum
     /// of its recorded exits.
     pub realized_pnl: f64,
@@ -362,7 +358,7 @@ pub struct ActivityEvent {
     /// Exits only — percentage of the then-remaining position this swap sold.
     pub exit_percentage: Option<f64>,
     /// Swap fee booked on the record, when it carried one.
-    pub record_fee_sol: Option<f64>,
+    pub record_fee_native: Option<f64>,
 
     // --- on-chain transaction ---
     /// False when the transaction is not in the local cache — the record half still stands.
@@ -412,10 +408,10 @@ pub struct ActivityTotals {
     /// UI amounts (whole tokens), position swaps only.
     pub tokens_bought: f64,
     pub tokens_sold: f64,
-    pub sol_invested: f64,
-    pub sol_returned: f64,
+    pub native_invested: f64,
+    pub native_returned: f64,
     /// Network fees across EVERY event that reported one, wallet events included.
-    pub network_fees_sol: f64,
+    pub network_fees_native: f64,
     /// Sum of every position's realized P&L (`ActivityPositionSummary::realized_pnl`).
     pub realized_pnl: f64,
 }

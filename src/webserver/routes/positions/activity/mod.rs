@@ -121,8 +121,8 @@ async fn build_token_activity(current: &Position) -> TokenActivityResponse {
             is_open: position.exit_time.is_none() && !position.synthetic_exit,
             archived: position.archived,
             swaps: 0,
-            sol_invested: 0.0,
-            sol_returned: 0.0,
+            native_invested: 0.0,
+            native_returned: 0.0,
             realized_pnl: 0.0,
         });
     }
@@ -186,7 +186,7 @@ async fn build_token_activity(current: &Position) -> TokenActivityResponse {
         events,
         totals,
         state_history,
-        sol_price_usd: Some(native_price::get_native_price()).filter(|price| *price > 0.0),
+        native_price_usd: Some(native_price::get_native_price()).filter(|price| *price > 0.0),
         fetched_at: Utc::now().to_rfc3339(),
     }
 }
@@ -250,7 +250,7 @@ fn walk(events: &mut [ActivityEvent], summaries: &mut [ActivityPositionSummary])
             _ => {}
         }
         if let Some(fee) = event.fee_sol {
-            totals.network_fees_sol += fee;
+            totals.network_fees_native += fee;
         }
 
         let summary = event
@@ -294,12 +294,12 @@ fn walk(events: &mut [ActivityEvent], summaries: &mut [ActivityPositionSummary])
             *invested = (*invested - basis).max(0.0);
 
             totals.tokens_sold += amount;
-            totals.sol_returned += sol;
+            totals.native_returned += sol;
             totals.realized_pnl += pnl;
 
             if let Some(slot) = by_id.get(&position_id).copied() {
                 if let Some(summary) = summaries.get_mut(slot) {
-                    summary.sol_returned += sol;
+                    summary.native_returned += sol;
                     summary.realized_pnl += pnl;
                 }
             }
@@ -308,11 +308,11 @@ fn walk(events: &mut [ActivityEvent], summaries: &mut [ActivityPositionSummary])
             *invested += sol;
 
             totals.tokens_bought += amount;
-            totals.sol_invested += sol;
+            totals.native_invested += sol;
 
             if let Some(slot) = by_id.get(&position_id).copied() {
                 if let Some(summary) = summaries.get_mut(slot) {
-                    summary.sol_invested += sol;
+                    summary.native_invested += sol;
                 }
             }
         }
@@ -366,8 +366,8 @@ fn settle_closed_rounds(
             continue;
         };
         if let Some(received) = close.sol_received {
-            totals.sol_returned += received - summary.sol_returned;
-            summary.sol_returned = received;
+            totals.native_returned += received - summary.native_returned;
+            summary.native_returned = received;
         }
         if let Some(pnl) = close.pnl {
             totals.realized_pnl += pnl - summary.realized_pnl;
@@ -404,7 +404,7 @@ async fn load_records(position: &Position) -> (Vec<EntryRecordResponse>, Vec<Exi
             native_spent: record.native_spent,
             transaction_signature: record.transaction_signature,
             is_dca: record.is_dca,
-            fees_sol: record.fees_raw.map(|l| adapter().raw_to_native(l)),
+            fees_native: record.fees_raw.map(|l| adapter().raw_to_native(l)),
         })
         .collect();
 
@@ -421,7 +421,7 @@ async fn load_records(position: &Position) -> (Vec<EntryRecordResponse>, Vec<Exi
             transaction_signature: record.transaction_signature,
             is_partial: record.is_partial,
             percentage: record.percentage,
-            fees_sol: record.fees_raw.map(|l| adapter().raw_to_native(l)),
+            fees_native: record.fees_raw.map(|l| adapter().raw_to_native(l)),
         })
         .collect();
 

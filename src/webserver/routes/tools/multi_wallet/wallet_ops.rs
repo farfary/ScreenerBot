@@ -38,7 +38,7 @@ pub async fn get_wallets_summary() -> Response {
     let rpc = get_rpc_client();
     let mut wallets_info = Vec::new();
     let mut main_wallet_info = None;
-    let mut total_sol = 0.0;
+    let mut total_native = 0.0;
     let mut secondary_count = 0;
 
     for wallet in &all_wallets {
@@ -48,7 +48,7 @@ pub async fn get_wallets_summary() -> Response {
             .await
             .unwrap_or_default();
 
-        total_sol += sol_balance;
+        total_native += sol_balance;
 
         let info = WalletInfoResponse {
             id: wallet.id,
@@ -72,7 +72,7 @@ pub async fn get_wallets_summary() -> Response {
         total_wallets: all_wallets.len(),
         secondary_wallets: secondary_count,
         main_wallet: main_wallet_info,
-        total_sol,
+        total_native,
         wallets: wallets_info,
     })
 }

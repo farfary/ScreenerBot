@@ -106,7 +106,7 @@ pub struct SystemMetricsSnapshot {
 #[derive(Clone, Debug, Serialize)]
 pub struct WalletStatusSnapshot {
     pub sol_balance: f64,
-    pub sol_balance_lamports: u64,
+    pub native_balance_raw: u64,
     pub usdc_balance: f64,
     pub total_tokens_count: u32,
     #[serde(skip_serializing_if = "Option::is_none")]

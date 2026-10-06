@@ -198,7 +198,7 @@ pub(super) async fn collect_wallet_snapshot() -> Option<WalletStatusSnapshot> {
 
             Some(WalletStatusSnapshot {
                 sol_balance: snapshot.native_balance,
-                sol_balance_lamports: snapshot.native_balance_raw,
+                native_balance_raw: snapshot.native_balance_raw,
                 usdc_balance: 0.0,
                 total_tokens_count: snapshot.total_tokens_count,
                 snapshot_time: Some(snapshot.snapshot_time),

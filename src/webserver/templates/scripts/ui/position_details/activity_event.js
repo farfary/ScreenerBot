@@ -214,7 +214,7 @@ function renderSignature(event) {
 }
 
 function renderDetails(event, ctx) {
-  const fee = event.fee_sol ?? event.record_fee_sol;
+  const fee = event.fee_sol ?? event.record_fee_native;
   const details = [
     metric(
       I18n.t("positions-event-token-amount"),

@@ -230,7 +230,7 @@ export function applyTransactionsTabMixin(DialogClass) {
         const price = tx.price_sol
           ? Utils.formatPriceSubscript(tx.price_sol, { precision: 5 })
           : "—";
-        const amount = tx.amount_sol !== undefined ? tx.amount_sol : Math.abs(tx.sol_delta || 0);
+        const amount = tx.amount_sol !== undefined ? tx.amount_sol : Math.abs(tx.native_delta || 0);
         const total = withSolUnit(Utils.formatNumber(amount, { decimals: 2 }));
 
         const rowInner = `

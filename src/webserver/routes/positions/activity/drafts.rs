@@ -57,7 +57,7 @@ pub(super) struct Draft {
     pub price: Option<f64>,
     pub sol_amount: Option<f64>,
     pub exit_percentage: Option<f64>,
-    pub record_fee_sol: Option<f64>,
+    pub record_fee_native: Option<f64>,
     pub synthetic: bool,
     /// Wallet events carry their own chain data — no per-signature lookup needed.
     pub wallet: Option<TransactionListRow>,
@@ -78,7 +78,7 @@ impl Draft {
             price: None,
             sol_amount: None,
             exit_percentage: None,
-            record_fee_sol: None,
+            record_fee_native: None,
             synthetic: false,
             wallet: None,
         }
@@ -115,7 +115,7 @@ pub(super) fn position_drafts(
         draft.token_amount = Some(to_ui(entry.amount));
         draft.price = Some(entry.price);
         draft.sol_amount = Some(entry.native_spent);
-        draft.record_fee_sol = entry.fees_sol;
+        draft.record_fee_native = entry.fees_native;
         push(draft, &mut drafts);
     }
 
@@ -138,7 +138,7 @@ pub(super) fn position_drafts(
         draft.price = Some(exit.price);
         draft.sol_amount = Some(exit.native_received);
         draft.exit_percentage = Some(exit.percentage);
-        draft.record_fee_sol = exit.fees_sol;
+        draft.record_fee_native = exit.fees_native;
         push(draft, &mut drafts);
     }
 

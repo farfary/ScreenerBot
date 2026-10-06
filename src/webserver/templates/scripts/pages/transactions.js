@@ -421,7 +421,7 @@ function createLifecycle() {
           render: (value, row) => formatStatusBadge(value, row?.success),
         },
         {
-          id: "sol_delta",
+          id: "native_delta",
           label: I18n.t("transactions-col-sol-delta"),
           minWidth: 140,
           render: (value) => Utils.formatPnL(value, { decimals: 6, fallback: "—" }),

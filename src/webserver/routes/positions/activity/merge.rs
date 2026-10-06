@@ -64,7 +64,7 @@ pub(super) fn merge_position_event(
         price: draft.price,
         sol_amount: draft.sol_amount,
         exit_percentage: draft.exit_percentage,
-        record_fee_sol: draft.record_fee_sol,
+        record_fee_native: draft.record_fee_native,
 
         available: tx.is_some(),
         status: tx.map(|tx| describe_status(&tx.status)),
@@ -126,7 +126,7 @@ pub(super) fn wallet_event(draft: Draft) -> ActivityEvent {
         price: None,
         sol_amount: None,
         exit_percentage: None,
-        record_fee_sol: None,
+        record_fee_native: None,
 
         available: true,
         status: Some(row.status.clone()),

@@ -64,7 +64,8 @@ pub async fn scan_atas() -> Response {
     let failed_count = get_failed_ata_count();
 
     // Estimate rent reclaimable (approximately 0.00203928 SOL per ATA)
-    let reclaimable_sol = adapter().raw_to_native(empty_accounts.len() as u64 * ATA_RENT_LAMPORTS);
+    let reclaimable_native =
+        adapter().raw_to_native(empty_accounts.len() as u64 * ATA_RENT_LAMPORTS);
 
     // Build empty ATA info list
     let empty_atas: Vec<EmptyAtaInfo> = empty_accounts
@@ -72,7 +73,7 @@ pub async fn scan_atas() -> Response {
         .map(|acc| EmptyAtaInfo {
             mint: acc.mint.clone(),
             ata_address: acc.account.clone(),
-            rent_lamports: ATA_RENT_LAMPORTS,
+            rent_raw: ATA_RENT_LAMPORTS,
         })
         .collect();
 
@@ -82,7 +83,7 @@ pub async fn scan_atas() -> Response {
             "ATA scan complete: {} total, {} empty (reclaimable: {:.6} SOL), {} non-empty",
             all_accounts.len(),
             empty_accounts.len(),
-            reclaimable_sol,
+            reclaimable_native,
             non_empty_count
         ),
     );
@@ -92,7 +93,7 @@ pub async fn scan_atas() -> Response {
         empty_count: empty_accounts.len(),
         non_empty_count,
         failed_count,
-        reclaimable_sol,
+        reclaimable_native,
         empty_atas,
     })
 }

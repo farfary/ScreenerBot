@@ -162,8 +162,8 @@ export function createCalendar(fetcher) {
         ? Utils.formatSignedSol(pnl, { decimals: PNL_DECIMALS, unit: false })
         : "";
       const valText =
-        d.portfolio_value_sol != null
-          ? `${Utils.formatSol(d.portfolio_value_sol, { decimals: 2, suffix: "" })}`
+        d.portfolio_value_native != null
+          ? `${Utils.formatSol(d.portfolio_value_native, { decimals: 2, suffix: "" })}`
           : "";
 
       // Only days with trade activity are hoverable; expose them for the popover.
@@ -184,7 +184,7 @@ export function createCalendar(fetcher) {
 
     const pnlEl = document.getElementById("calendarMonthPnl");
     if (pnlEl) {
-      const mp = data.month_net_pnl_sol || 0;
+      const mp = data.month_net_pnl_native || 0;
       const cls = PNL_CLASSES[Utils.signedTone(mp, PNL_DECIMALS)];
       pnlEl.textContent = Utils.formatSignedSol(mp, { decimals: PNL_DECIMALS });
       pnlEl.className = `calendar-summary-value ${cls}`;
@@ -262,17 +262,17 @@ export function createCalendar(fetcher) {
         })
       ),
     ];
-    if (d.profit_sol) {
+    if (d.profit_native) {
       rows.push(
         popoverRow(
           I18n.t("home-calendar-pop-gross-profit"),
-          Utils.formatSignedSol(d.profit_sol, { decimals: PNL_DECIMALS }),
-          POPOVER_PNL_CLASSES[Utils.signedTone(d.profit_sol, PNL_DECIMALS)]
+          Utils.formatSignedSol(d.profit_native, { decimals: PNL_DECIMALS }),
+          POPOVER_PNL_CLASSES[Utils.signedTone(d.profit_native, PNL_DECIMALS)]
         )
       );
     }
-    if (d.loss_sol) {
-      const loss = -Math.abs(d.loss_sol);
+    if (d.loss_native) {
+      const loss = -Math.abs(d.loss_native);
       rows.push(
         popoverRow(
           I18n.t("home-calendar-pop-gross-loss"),
@@ -281,8 +281,8 @@ export function createCalendar(fetcher) {
         )
       );
     }
-    if (d.portfolio_value_sol != null) {
-      rows.push(popoverRow(I18n.t("home-calendar-pop-end-balance"), fmtSol(d.portfolio_value_sol)));
+    if (d.portfolio_value_native != null) {
+      rows.push(popoverRow(I18n.t("home-calendar-pop-end-balance"), fmtSol(d.portfolio_value_native)));
     }
 
     return (

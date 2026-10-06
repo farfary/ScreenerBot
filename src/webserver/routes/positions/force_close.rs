@@ -82,8 +82,8 @@ pub(super) async fn force_close_position(
     //
     // A force close writes off only what is STILL HELD — it recovers no SOL for the
     // remaining tokens. But SOL already realized by partial exits is money in the wallet
-    // and stays on the books. Booking a flat -total_size_sol (as this did, while also
-    // zeroing sol_received below) reported a position that took 80% profit before the
+    // and stays on the books. Booking a flat -total_size_native (as this did, while also
+    // zeroing native_received below) reported a position that took 80% profit before the
     // token died as a TOTAL LOSS of everything invested.
     let realized_native = position.native_received.unwrap_or_default();
     let pnl = realized_native - position.total_size_native;

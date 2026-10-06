@@ -68,12 +68,10 @@ pub struct TransactionListRow {
     pub token_mint: Option<String>,
     pub token_symbol: Option<String>,
     pub router: Option<String>,
-    #[serde(rename = "sol_delta")]
     pub native_delta: f64,
     pub token_amount: Option<f64>,
     #[serde(rename = "fee_sol")]
     pub fee_native: f64,
-    #[serde(rename = "fee_lamports")]
     pub fee_raw: Option<u64>,
     pub ata_rents: f64,
     pub instructions_count: usize,

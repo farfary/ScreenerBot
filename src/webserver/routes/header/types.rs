@@ -41,7 +41,7 @@ pub struct SolHeaderInfo {
 pub struct TraderHeaderInfo {
     pub enabled: bool,
     pub state: TraderHeaderState,
-    pub today_pnl_sol: f64,
+    pub today_pnl_native: f64,
     pub today_pnl_percent: f64,
 }
 
@@ -57,18 +57,18 @@ pub enum TraderHeaderState {
     Running,
 }
 
-/// The header's wallet card. `total_equity_sol` is the headline and MUST be the same
+/// The header's wallet card. `total_equity_native` is the headline and MUST be the same
 /// number the home hero shows — both come from `wallet::get_wallet_worth()`.
 #[derive(Debug, Serialize)]
 pub struct WalletHeaderInfo {
     /// Free (uninvested) SOL.
     pub sol_balance: f64,
     /// SOL value of the held tokens.
-    pub tokens_worth_sol: f64,
+    pub tokens_worth_native: f64,
     /// Full wallet worth: cash + holdings. The card's headline.
-    pub total_equity_sol: f64,
+    pub total_equity_native: f64,
     /// Change vs the start-of-day WORTH (same quantity as the headline, never cash).
-    pub change_today_sol: Option<f64>,
+    pub change_today_native: Option<f64>,
     pub change_today_percent: Option<f64>,
     pub token_count: usize,
     pub last_updated: String,

@@ -167,7 +167,7 @@ pub async fn scan_burnable_tokens() -> Response {
             has_liquidity,
             can_burn,
             burn_warning,
-            rent_reclaimable_sol: if can_burn { ATA_RENT_COST_SOL } else { 0.0 },
+            rent_reclaimable_native: if can_burn { ATA_RENT_COST_SOL } else { 0.0 },
         });
     }
 
@@ -210,7 +210,7 @@ pub async fn scan_burnable_tokens() -> Response {
     success_response(BurnTokensScanResponse {
         tokens,
         categories,
-        total_rent_reclaimable_sol: total_rent_reclaimable,
+        total_rent_reclaimable_native: total_rent_reclaimable,
     })
 }
 
@@ -261,7 +261,7 @@ pub async fn burn_selected_tokens(Json(request): Json<BurnTokensRequest>) -> Res
     let mut results: Vec<BurnResult> = Vec::new();
     let mut successful = 0;
     let mut failed = 0;
-    let mut sol_reclaimed = 0.0f64;
+    let mut native_reclaimed = 0.0f64;
 
     for mint in &request.mints {
         // Skip SOL
@@ -344,7 +344,7 @@ pub async fn burn_selected_tokens(Json(request): Json<BurnTokensRequest>) -> Res
                     error: None,
                 });
                 successful += 1;
-                sol_reclaimed += ATA_RENT_COST_SOL; // Will be reclaimed when ATA is closed
+                native_reclaimed += ATA_RENT_COST_SOL; // Will be reclaimed when ATA is closed
             }
             Err(e) => {
                 logger::error(
@@ -374,7 +374,7 @@ pub async fn burn_selected_tokens(Json(request): Json<BurnTokensRequest>) -> Res
             "Burn tokens complete: {}/{} successful, ~{:.6} SOL to reclaim via ATA cleanup",
             successful,
             request.mints.len(),
-            sol_reclaimed
+            native_reclaimed
         ),
     );
 
@@ -383,7 +383,7 @@ pub async fn burn_selected_tokens(Json(request): Json<BurnTokensRequest>) -> Res
         successful,
         failed,
         results,
-        sol_reclaimed,
+        native_reclaimed,
     })
 }
 

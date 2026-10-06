@@ -118,16 +118,19 @@ pub async fn preview_multi_buy(Json(request): Json<MultiBuyPreviewRequest>) -> R
 
     // Calculate SOL needed
     let avg_buy = (request.min_amount_sol + request.max_amount_sol) / 2.0;
-    let per_wallet_sol = avg_buy + request.sol_buffer;
-    let total_sol_needed = per_wallet_sol * request.wallet_count as f64;
+    let per_wallet_native = avg_buy + request.sol_buffer;
+    let total_native_needed = per_wallet_native * request.wallet_count as f64;
 
     // Check if we can proceed
-    let can_proceed = main_balance >= total_sol_needed;
+    let can_proceed = main_balance >= total_native_needed;
     let warning = if !can_proceed {
-        Some(insufficient_balance_warning(total_sol_needed, main_balance))
+        Some(insufficient_balance_warning(
+            total_native_needed,
+            main_balance,
+        ))
     } else if let Some(limit) = request.total_sol_limit {
-        if total_sol_needed > limit {
-            Some(over_limit_warning(total_sol_needed, limit))
+        if total_native_needed > limit {
+            Some(over_limit_warning(total_native_needed, limit))
         } else {
             None
         }
@@ -139,9 +142,9 @@ pub async fn preview_multi_buy(Json(request): Json<MultiBuyPreviewRequest>) -> R
     let mut wallet_plans = Vec::new();
     for w in existing_wallets.iter().take(request.wallet_count) {
         let sol_balance = rpc.get_sol_balance(&w.address).await.unwrap_or_default();
-        let needs_funding = sol_balance < per_wallet_sol;
+        let needs_funding = sol_balance < per_wallet_native;
         let funding_amount = if needs_funding {
-            per_wallet_sol - sol_balance
+            per_wallet_native - sol_balance
         } else {
             0.0
         };
@@ -159,8 +162,8 @@ pub async fn preview_multi_buy(Json(request): Json<MultiBuyPreviewRequest>) -> R
     success_response(MultiBuyPreviewResponse {
         wallets_to_create,
         existing_wallets: existing_count,
-        total_sol_needed,
-        per_wallet_sol,
+        total_native_needed,
+        per_wallet_native,
         main_wallet_balance: main_balance,
         can_proceed,
         warning,

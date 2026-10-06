@@ -821,7 +821,7 @@ function renderTaOverviewTab() {
           </div>
           <div class="ta-stat-item">
             <span class="ta-stat-label" data-l10n-id="tools-analyzer-stat-liquidity"></span>
-            <span class="ta-stat-value">${liquidity?.total_liquidity_sol ? Utils.formatSol(liquidity.total_liquidity_sol) : "—"}</span>
+            <span class="ta-stat-value">${liquidity?.total_liquidity_native ? Utils.formatSol(liquidity.total_liquidity_native) : "—"}</span>
           </div>
         </div>
       </div>
@@ -1135,7 +1135,7 @@ function renderTaLiquidityTab() {
           <i class="icon-droplet"></i> <span data-l10n-id="tools-analyzer-card-total-liquidity"></span>
         </div>
         <div class="ta-liquidity-total">
-          <div class="ta-liquidity-sol">${Utils.formatSol(liquidity.total_liquidity_sol)}</div>
+          <div class="ta-liquidity-sol">${Utils.formatSol(liquidity.total_liquidity_native)}</div>
           ${liquidity.total_liquidity_usd ? `<div class="ta-liquidity-usd">${Utils.formatCurrencyUSD(liquidity.total_liquidity_usd)}</div>` : ""}
         </div>
       </div>
@@ -1173,7 +1173,7 @@ function renderTaLiquidityTab() {
                 <tr class="${pool.is_canonical ? "canonical" : ""}">
                   <td class="dex">${escapeHtml(venueLabel(pool.dex))}</td>
                   <td class="address mono" dir="ltr">${escapeHtml(pool.address.slice(0, 8))}...${escapeHtml(pool.address.slice(-6))}</td>
-                  <td class="liquidity">${Utils.formatSol(pool.liquidity_sol)}</td>
+                  <td class="liquidity">${Utils.formatSol(pool.liquidity_native)}</td>
                   <td class="status">${pool.is_canonical ? '<span class="canonical-badge" data-l10n-id="tools-analyzer-pool-primary"></span>' : ""}</td>
                 </tr>
               `
@@ -1276,7 +1276,7 @@ function copyAnalysisReport() {
       "",
       I18n.t("tools-analyzer-report-liquidity"),
       I18n.t("tools-analyzer-report-liquidity-total", {
-        amount: Utils.formatSol(liquidity.total_liquidity_sol),
+        amount: Utils.formatSol(liquidity.total_liquidity_native),
       }),
       I18n.t("tools-analyzer-report-pools", { count: formatNumber(liquidity.pool_count, 0) })
     );

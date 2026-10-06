@@ -84,7 +84,7 @@ pub async fn preview_multi_sell(Json(request): Json<MultiSellPreviewRequest>) ->
             wallets_with_balance: 0,
             total_token_balance: 0.0,
             token_to_sell: 0.0,
-            estimated_sol: None,
+            estimated_native: None,
             can_proceed: false,
             warning: Some(UiText::new(ids::TOOLS_MULTI_SELL_WARNING_NO_WALLETS)),
             wallets: vec![],
@@ -130,7 +130,7 @@ pub async fn preview_multi_sell(Json(request): Json<MultiSellPreviewRequest>) ->
                 wallet_name: wallet.name.clone(),
                 sol_balance,
                 token_balance,
-                needs_sol_topup: sol_balance < 0.01,
+                needs_native_topup: sol_balance < 0.01,
             });
         }
     }
@@ -148,7 +148,7 @@ pub async fn preview_multi_sell(Json(request): Json<MultiSellPreviewRequest>) ->
         wallets_with_balance: wallets_with_balance.len(),
         total_token_balance,
         token_to_sell,
-        estimated_sol: None, // Would need price oracle
+        estimated_native: None, // Would need price oracle
         can_proceed,
         warning,
         wallets: wallets_with_balance,

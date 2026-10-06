@@ -1189,7 +1189,7 @@ export class TradeActionDialog {
       // remaining_token_amount reflects partial exits; token_amount is the original.
       holdings: position.remaining_token_amount ?? position.token_amount ?? 0,
       decimals: position.token_decimals ?? data?.token_info?.decimals ?? null,
-      currentSize: position.total_size_sol ?? position.entry_size_sol ?? null,
+      currentSize: position.total_size_native ?? position.entry_size_native ?? null,
     };
   }
 

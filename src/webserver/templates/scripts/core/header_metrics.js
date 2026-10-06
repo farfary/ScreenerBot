@@ -68,7 +68,7 @@ function updateBotCard(trader, state) {
     return;
   }
 
-  const value = finiteNumber(trader.today_pnl_sol);
+  const value = finiteNumber(trader.today_pnl_native);
   if (!Number.isFinite(value)) {
     pnl.textContent = "—";
     pnl.classList.remove("positive", "negative", "neutral");
@@ -81,7 +81,7 @@ function updateBotCard(trader, state) {
 
 // The card headlines the wallet's full WORTH (cash + every token held), which is the
 // identical figure — and identical formatting — the home hero renders. Both read
-// `total_equity_sol` off the backend's one wallet-worth source, so they cannot drift.
+// `total_equity_native` off the backend's one wallet-worth source, so they cannot drift.
 // The bottom row breaks the headline down into its cash part and the token count.
 function updateWalletCard(wallet, state) {
   const card = document.getElementById("walletCard");
@@ -102,7 +102,7 @@ function updateWalletCard(wallet, state) {
     return;
   }
 
-  const equity = finiteNumber(wallet.total_equity_sol);
+  const equity = finiteNumber(wallet.total_equity_native);
   worth.textContent = formatNumber(equity, WALLET_SOL_DECIMALS);
 
   const balance = finiteNumber(wallet.sol_balance);
@@ -237,7 +237,7 @@ function updateTicker(metrics) {
   if (rejectedCount) rejectedCount.textContent = formatNumber(metrics.filtering?.rejected_count, 0);
 
   if (todayPnl) {
-    const pnl = finiteNumber(metrics.trader?.today_pnl_sol);
+    const pnl = finiteNumber(metrics.trader?.today_pnl_native);
     const percent = finiteNumber(metrics.trader?.today_pnl_percent);
     if (Number.isFinite(pnl) && Number.isFinite(percent)) {
       todayPnl.textContent = `${formatSignedSol(pnl, { decimals: 3 })} (${formatPercentValue(percent, { decimals: 1 })})`;

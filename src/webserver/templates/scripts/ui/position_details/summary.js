@@ -222,16 +222,16 @@ export function applySummaryMixin(PositionDetailsDialog) {
 
   proto._buildCostsSection = function (pos) {
     // The position's own fee fields cover only the entry and the final close; every DCA add
-    // and partial exit carries its fee on its RECORD, reported in SOL (`fees_sol`).
-    const recordFees = (records) => records.reduce((sum, r) => sum + (r.fees_sol || 0), 0);
+    // and partial exit carries its fee on its RECORD, reported in SOL (`fees_native`).
+    const recordFees = (records) => records.reduce((sum, r) => sum + (r.fees_native || 0), 0);
     const entryFees =
-      recordFees(this.fullDetails?.entries || []) || this._lamportsToSol(pos.entry_fee_lamports);
+      recordFees(this.fullDetails?.entries || []) || this._lamportsToSol(pos.entry_fee_raw);
     const exitFees =
-      recordFees(this.fullDetails?.exits || []) || this._lamportsToSol(pos.exit_fee_lamports);
+      recordFees(this.fullDetails?.exits || []) || this._lamportsToSol(pos.exit_fee_raw);
     const total = entryFees + exitFees;
     if (!(total > 0)) return "";
 
-    const invested = pos.total_size_sol || 0;
+    const invested = pos.total_size_native || 0;
     const share =
       invested > 0
         ? I18n.t("positions-fact-share-of-invested", {
@@ -287,16 +287,16 @@ export function applySummaryMixin(PositionDetailsDialog) {
     const usd = (value) => (value ? Utils.formatCurrencyUSD(value) : "—");
     const rows = [];
 
-    if (pool?.pool_program || pool?.liquidity_sol != null) {
+    if (pool?.pool_program || pool?.liquidity_native != null) {
       rows.push(
         fact(
           I18n.t("positions-fact-pool"),
           pool.pool_program ? Utils.escapeHtml(venueLabel(pool.pool_program)) : "—",
           {
             sub:
-              pool.liquidity_sol != null
+              pool.liquidity_native != null
                 ? I18n.t("positions-fact-pool-liquidity", {
-                    amount: Utils.formatCompactNumber(pool.liquidity_sol),
+                    amount: Utils.formatCompactNumber(pool.liquidity_native),
                   })
                 : "",
           }

@@ -22,15 +22,15 @@ pub struct CalendarDay {
     /// Realized net P&L (SOL) from trades closed that day.
     pub net_pnl_sol: f64,
     /// Gross realized profit (SOL) from winning trades that day.
-    pub profit_sol: f64,
+    pub profit_native: f64,
     /// Gross realized loss (SOL, positive magnitude) from losing trades that day.
-    pub loss_sol: f64,
+    pub loss_native: f64,
     /// Number of positions closed that day.
     pub trades: i64,
     /// Number of profitable positions closed that day.
     pub wins: i64,
     /// End-of-day wallet SOL balance, if a snapshot exists for that day.
-    pub portfolio_value_sol: Option<f64>,
+    pub portfolio_value_native: Option<f64>,
     /// Whether the day has any P&L or trade activity.
     pub has_data: bool,
 }
@@ -45,7 +45,7 @@ pub struct PortfolioCalendarResponse {
     /// Number of days in the month.
     pub days_in_month: u32,
     pub days: Vec<CalendarDay>,
-    pub month_net_pnl_sol: f64,
+    pub month_net_pnl_native: f64,
     pub month_trades: i64,
 }
 
@@ -67,7 +67,7 @@ pub struct DashboardOverview {
 #[derive(Debug, Serialize, Deserialize)]
 pub struct WalletInfo {
     pub sol_balance: f64,
-    pub sol_balance_lamports: u64,
+    pub native_balance_raw: u64,
     pub total_tokens_count: usize,
     pub last_updated: Option<String>,
 }
@@ -165,8 +165,8 @@ pub struct TraderAnalytics {
 pub struct TradingPeriodStats {
     pub buys: i64,
     pub sells: i64,
-    pub profit_sol: f64,
-    pub loss_sol: f64,
+    pub profit_native: f64,
+    pub loss_native: f64,
     pub net_pnl_sol: f64,
     pub drawdown_percent: f64,
     pub win_rate: f64,
@@ -179,26 +179,26 @@ pub struct WalletAnalytics {
     /// Public address of the active main wallet; empty in Explore Mode.
     pub wallet_address: String,
     /// Free (uninvested) SOL sitting in the wallet.
-    pub current_balance_sol: f64,
+    pub current_balance_native: f64,
     /// Number of distinct fungible tokens held.
     pub token_count: usize,
     /// SOL value of the held tokens.
-    pub tokens_worth_sol: f64,
+    pub tokens_worth_native: f64,
     /// Total portfolio value: cash SOL + token holdings value. The hero headline.
-    pub total_equity_sol: f64,
+    pub total_equity_native: f64,
     /// Held tokens with no price available — they contribute 0, so a non-zero count
     /// means the worth is a known-low estimate rather than the whole truth.
     pub unpriced_token_count: usize,
     /// Wallet WORTH at 00:00 UTC today — the change baseline (same quantity as the
     /// headline; using cash here reported a phantom gain the size of the holdings).
     /// None until a snapshot from today exists, as in the header.
-    pub start_of_day_balance_sol: Option<f64>,
-    /// total_equity_sol - start_of_day_balance_sol; None without a baseline.
-    pub change_sol: Option<f64>,
+    pub start_of_day_balance_native: Option<f64>,
+    /// total_equity_native - start_of_day_balance_native; None without a baseline.
+    pub change_native: Option<f64>,
     /// None without a positive baseline.
     pub change_percent: Option<f64>,
     /// Current SOL/USD price so the client can render an approximate USD value.
-    pub sol_price_usd: f64,
+    pub native_price_usd: f64,
     /// Recent wallet WORTH samples, OLDEST first, for a trend sparkline.
     pub balance_history: Vec<f64>,
 }
@@ -210,7 +210,7 @@ pub struct PositionsSnapshot {
     pub unrealized_pnl_sol: f64,
     pub unrealized_pnl_percent: f64,
     // Enhanced metrics
-    pub avg_position_size_sol: f64,
+    pub avg_position_size_native: f64,
     pub avg_hold_duration_mins: i64,
     pub best_performer: Option<PositionPerformer>,
     pub worst_performer: Option<PositionPerformer>,

@@ -42,9 +42,9 @@ pub struct MultiBuyPreviewResponse {
     /// Existing secondary wallets available
     pub existing_wallets: usize,
     /// Total SOL needed for operation
-    pub total_sol_needed: f64,
+    pub total_native_needed: f64,
     /// Average SOL per wallet buy
-    pub per_wallet_sol: f64,
+    pub per_wallet_native: f64,
     /// Current main wallet balance
     pub main_wallet_balance: f64,
     /// Whether operation can proceed
@@ -139,7 +139,7 @@ pub struct MultiSellPreviewResponse {
     /// Token amount to be sold
     pub token_to_sell: f64,
     /// Estimated SOL proceeds (if available)
-    pub estimated_sol: Option<f64>,
+    pub estimated_native: Option<f64>,
     /// Whether operation can proceed
     pub can_proceed: bool,
     /// Warning text if any
@@ -156,7 +156,7 @@ pub struct WalletTokenBalanceResponse {
     pub wallet_name: String,
     pub sol_balance: f64,
     pub token_balance: f64,
-    pub needs_sol_topup: bool,
+    pub needs_native_topup: bool,
 }
 
 /// Request to start multi-sell operation
@@ -262,7 +262,7 @@ pub struct WalletsSummaryResponse {
     /// Main wallet info
     pub main_wallet: Option<WalletInfoResponse>,
     /// Total SOL across all wallets
-    pub total_sol: f64,
+    pub total_native: f64,
     /// Per-wallet details
     pub wallets: Vec<WalletInfoResponse>,
 }
@@ -366,7 +366,7 @@ pub struct AtaScanResponse {
     pub empty_count: usize,
     pub non_empty_count: usize,
     pub failed_count: usize,
-    pub reclaimable_sol: f64,
+    pub reclaimable_native: f64,
     pub empty_atas: Vec<EmptyAtaInfo>,
 }
 
@@ -375,7 +375,7 @@ pub struct AtaScanResponse {
 pub struct EmptyAtaInfo {
     pub mint: String,
     pub ata_address: String,
-    pub rent_lamports: u64,
+    pub rent_raw: u64,
 }
 
 /// ATA cleanup execution result
@@ -499,7 +499,7 @@ pub struct BurnableTokenInfo {
     pub can_burn: bool,
     pub burn_warning: Option<UiText>,
     /// Estimated SOL to reclaim from closing ATA after burn
-    pub rent_reclaimable_sol: f64,
+    pub rent_reclaimable_native: f64,
 }
 
 /// Response for burn tokens scan
@@ -507,7 +507,7 @@ pub struct BurnableTokenInfo {
 pub struct BurnTokensScanResponse {
     pub tokens: Vec<BurnableTokenInfo>,
     pub categories: BurnTokensCategories,
-    pub total_rent_reclaimable_sol: f64,
+    pub total_rent_reclaimable_native: f64,
 }
 
 /// Category counts for summary
@@ -541,7 +541,7 @@ pub struct BurnTokensResponse {
     pub successful: usize,
     pub failed: usize,
     pub results: Vec<BurnResult>,
-    pub sol_reclaimed: f64,
+    pub native_reclaimed: f64,
 }
 
 #[cfg(test)]

@@ -155,7 +155,7 @@ export function applyActivityMixin(PositionDetailsDialog) {
     const currentPositionId = this._position()?.id ?? null;
     const ctx = {
       symbol: this._activity.symbol || this._position()?.symbol || I18n.t("positions-event-tokens-fallback"),
-      solPriceUsd: this._activity.sol_price_usd || null,
+      solPriceUsd: this._activity.native_price_usd || null,
       expanded: this._activityExpanded,
       formatPrice: (price) => this._formatPrice(price),
       formatSol: (value, options) => this._formatSol(value, options),
@@ -245,9 +245,9 @@ export function applyActivityMixin(PositionDetailsDialog) {
     return `
       <div class="pdd-act-totals" aria-label="${esc(I18n.attr("positions-activity-totals", "aria-label"))}">
         ${item(I18n.t("positions-activity-realized-all"), this._formatSol(realized, { sign: true }), this._toneClass(realized))}
-        ${item(I18n.t("positions-activity-invested"), this._formatSol(totals.sol_invested))}
-        ${item(I18n.t("positions-activity-returned"), this._formatSol(totals.sol_returned))}
-        ${item(I18n.t("positions-summary-network-fees"), this._formatSol(totals.network_fees_sol))}
+        ${item(I18n.t("positions-activity-invested"), this._formatSol(totals.native_invested))}
+        ${item(I18n.t("positions-activity-returned"), this._formatSol(totals.native_returned))}
+        ${item(I18n.t("positions-summary-network-fees"), this._formatSol(totals.network_fees_native))}
       </div>`;
   };
 
@@ -329,8 +329,8 @@ export function applyActivityMixin(PositionDetailsDialog) {
             <span class="pdd-act-round-date">${esc(dates)} · ${esc(I18n.t("positions-activity-event-count", { count: position.swaps }))}</span>
           </span>
           <span class="pdd-act-round-facts">
-            ${fact(I18n.t("positions-activity-invested"), this._formatSol(position.sol_invested || 0))}
-            ${fact(I18n.t("positions-activity-returned"), this._formatSol(position.sol_returned || 0))}
+            ${fact(I18n.t("positions-activity-invested"), this._formatSol(position.native_invested || 0))}
+            ${fact(I18n.t("positions-activity-returned"), this._formatSol(position.native_returned || 0))}
             <span class="pdd-act-round-fact is-pnl"><small>${esc(I18n.t("positions-fact-realized"))}</small><strong class="${this._toneClass(pnl)}">${this._formatSol(pnl, { sign: true })}</strong></span>
             <i class="icon-chevron-down"></i>
           </span>

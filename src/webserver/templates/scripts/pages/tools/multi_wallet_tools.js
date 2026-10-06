@@ -331,7 +331,7 @@ async function handleMultiBuyPreview() {
       </div>
       <div class="mw-preview-item">
         <span class="mw-preview-label" data-l10n-id="tools-multi-buy-preview-total"></span>
-        <span class="mw-preview-value">${Utils.formatSol(preview.total_sol_needed)}</span>
+        <span class="mw-preview-value">${Utils.formatSol(preview.total_native_needed)}</span>
       </div>
       <div class="mw-preview-item ${preview.can_proceed ? "success" : "error"}">
         <span class="mw-preview-label" data-l10n-id="tools-multi-buy-preview-balance"></span>
@@ -866,7 +866,7 @@ async function handleMultiSellScan() {
               <td>${Utils.escapeHtml(w.wallet_name)}</td>
               <td class="mono">${Utils.formatNumber(w.token_balance)}</td>
               <td class="mono">${Utils.formatSol(w.sol_balance, { suffix: "" })}</td>
-              <td>${w.needs_sol_topup ? `<span class="warning">${Utils.escapeHtml(I18n.t("format-yes"))}</span>` : `<span class="success">${Utils.escapeHtml(I18n.t("format-no"))}</span>`}</td>
+              <td>${w.needs_native_topup ? `<span class="warning">${Utils.escapeHtml(I18n.t("format-yes"))}</span>` : `<span class="success">${Utils.escapeHtml(I18n.t("format-no"))}</span>`}</td>
             </tr>
           `
             )

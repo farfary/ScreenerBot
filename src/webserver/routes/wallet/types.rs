@@ -14,7 +14,7 @@ pub struct WalletQrResponse {
 #[derive(Debug, Serialize, Deserialize)]
 pub struct WalletCurrentResponse {
     pub sol_balance: f64,
-    pub sol_balance_lamports: u64,
+    pub native_balance_raw: u64,
     pub total_tokens_count: u32,
     pub token_balances: Vec<TokenBalanceInfo>,
     pub snapshot_time: String,

@@ -395,7 +395,7 @@ export function applyQuickTradeMixin(TradeActionDialog) {
         this.currentContext.mint = mint;
         this.currentContext.hasPosition = true;
         this.currentContext.decimals = pos.token_decimals ?? null;
-        this.currentContext.currentSize = pos.total_size_sol ?? pos.entry_size_sol ?? null;
+        this.currentContext.currentSize = pos.total_size_native ?? pos.entry_size_native ?? null;
 
         this._quickContinueBtnEl.classList.remove("loading");
       } catch {

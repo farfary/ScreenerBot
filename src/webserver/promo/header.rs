@@ -43,7 +43,7 @@ pub fn get_promo_header_metrics() -> HeaderMetricsResponse {
     let trader = TraderHeaderInfo {
         enabled: true,
         state: TraderHeaderState::Running,
-        today_pnl_sol: today.net_pnl_sol,
+        today_pnl_native: today.net_pnl_sol,
         today_pnl_percent,
     };
 
@@ -51,13 +51,13 @@ pub fn get_promo_header_metrics() -> HeaderMetricsResponse {
     // against the start-of-day worth — identical to the home hero's promo numbers. Showing
     // cash here while the hero showed equity made the two cards disagree on screen.
     let promo_equity = PROMO_SOL_BALANCE + open.current_value_sol;
-    let change_today_sol = promo_equity - PROMO_START_BALANCE;
+    let change_today_native = promo_equity - PROMO_START_BALANCE;
     let wallet = WalletHeaderInfo {
         sol_balance: PROMO_SOL_BALANCE,
-        tokens_worth_sol: open.current_value_sol,
-        total_equity_sol: promo_equity,
-        change_today_sol: Some(change_today_sol),
-        change_today_percent: Some(change_today_sol / PROMO_START_BALANCE * 100.0),
+        tokens_worth_native: open.current_value_sol,
+        total_equity_native: promo_equity,
+        change_today_native: Some(change_today_native),
+        change_today_percent: Some(change_today_native / PROMO_START_BALANCE * 100.0),
         token_count: open.count,
         last_updated: now.to_rfc3339(),
     };

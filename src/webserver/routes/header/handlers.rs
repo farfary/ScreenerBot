@@ -75,28 +75,28 @@ pub(super) async fn get_header_metrics() -> Json<HeaderMetricsResponse> {
         TraderHeaderState::Running
     };
 
-    let today_pnl_sol = today_stats
+    let today_pnl_native = today_stats
         .as_ref()
         .map(|stats| stats.net_pnl_native)
         .unwrap_or_default();
     let start_balance_sol = start_balance.ok().flatten();
     let today_pnl_percent = start_balance_sol
         .filter(|balance| *balance > f64::EPSILON)
-        .map(|balance| today_pnl_sol / balance * 100.0)
+        .map(|balance| today_pnl_native / balance * 100.0)
         .unwrap_or_default();
 
     let trader = TraderHeaderInfo {
         enabled: !explore && trader_enabled,
         state: trader_state,
-        today_pnl_sol,
+        today_pnl_native,
         today_pnl_percent,
     };
 
     let wallet = WalletHeaderInfo {
         sol_balance: worth.native_balance,
-        tokens_worth_sol: worth.tokens_worth_native,
-        total_equity_sol: worth.total_equity_native,
-        change_today_sol: start_balance_sol.map(|start| worth.total_equity_native - start),
+        tokens_worth_native: worth.tokens_worth_native,
+        total_equity_native: worth.total_equity_native,
+        change_today_native: start_balance_sol.map(|start| worth.total_equity_native - start),
         change_today_percent: start_balance_sol
             .filter(|start| *start > f64::EPSILON)
             .map(|start| (worth.total_equity_native - start) / start * 100.0),

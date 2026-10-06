@@ -59,7 +59,7 @@ const ACTION_SELL_TYPES = new Set(["swap_sell", "position_close", "position_part
 // A DCA ("add to position") acts on a position that ALREADY exists, so it is neither a
 // pending-buy row nor a sell. It had no state at all here, which left the add invisible:
 // the row's Total Invested and Holdings only move once the DCA is VERIFIED on chain
-// (`total_size_sol += sol_spent`, `remaining_token_amount += tokens_bought`), several
+// (`total_size_native += sol_spent`, `remaining_token_amount += tokens_bought`), several
 // seconds later — so the table just sat there showing the pre-DCA numbers with no hint
 // that anything was happening.
 const ACTION_DCA_TYPES = new Set(["position_dca"]);
@@ -334,7 +334,7 @@ function createLifecycle() {
       render: (v, r) => basisCell(r, () => priceCell(v || r.entry_price)),
     },
     {
-      id: "total_size_sol",
+      id: "total_size_native",
       label: I18n.t("positions-column-total-invested"),
       sortable: true,
       minWidth: 120,
@@ -408,7 +408,7 @@ function createLifecycle() {
           render: (v) => (v == null ? "—" : priceCell(v)),
         },
         {
-          id: "total_size_sol",
+          id: "total_size_native",
           label: I18n.t("positions-column-total-invested"),
           sortable: true,
           minWidth: 120,
@@ -486,7 +486,7 @@ function createLifecycle() {
           render: (v, r) => (v == null ? priceCell(r.exit_price) : priceCell(v)),
         },
         {
-          id: "total_size_sol",
+          id: "total_size_native",
           label: I18n.t("positions-column-total-invested"),
           sortable: true,
           minWidth: 120,
@@ -684,7 +684,7 @@ function createLifecycle() {
         _stepLabel: failed ? null : info.step,
         _error: info.error || null,
         entry_time: nowSec,
-        total_size_sol: info.size,
+        total_size_native: info.size,
         average_entry_price: null,
         current_price: null,
         dca_count: 0,

@@ -76,7 +76,7 @@ pub struct StrategyTestRequest {
 
 #[derive(Debug, Deserialize)]
 pub struct TestMarketData {
-    pub liquidity_sol: Option<f64>,
+    pub liquidity_native: Option<f64>,
     pub volume_24h: Option<f64>,
     pub market_cap: Option<f64>,
     pub holder_count: Option<u32>,
@@ -87,7 +87,7 @@ pub struct TestMarketData {
 pub struct TestPositionData {
     pub entry_price: f64,
     pub entry_time: String,
-    pub current_size_sol: f64,
+    pub current_size_native: f64,
     pub unrealized_profit_pct: Option<f64>,
     pub position_age_hours: f64,
 }

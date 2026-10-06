@@ -24,8 +24,8 @@ fn period_stats(agg: &PeriodAgg, extra_open_buys: i64) -> TradingPeriodStats {
     TradingPeriodStats {
         buys: agg.sells + extra_open_buys,
         sells: agg.sells,
-        profit_sol: agg.profit_sol,
-        loss_sol: agg.loss_sol,
+        profit_native: agg.profit_sol,
+        loss_native: agg.loss_sol,
         net_pnl_sol: agg.net_pnl_sol,
         drawdown_percent: agg.drawdown_percent,
         win_rate: agg.win_rate,
@@ -52,15 +52,15 @@ pub fn get_promo_home_dashboard() -> HomeDashboardResponse {
     let promo_equity = PROMO_SOL_BALANCE + open.current_value_sol;
     let wallet = WalletAnalytics {
         wallet_address: PROMO_WALLET_ADDRESS.to_owned(),
-        current_balance_sol: PROMO_SOL_BALANCE,
+        current_balance_native: PROMO_SOL_BALANCE,
         token_count: open.count,
-        tokens_worth_sol: open.current_value_sol,
-        total_equity_sol: promo_equity,
+        tokens_worth_native: open.current_value_sol,
+        total_equity_native: promo_equity,
         unpriced_token_count: 0,
-        start_of_day_balance_sol: Some(PROMO_START_BALANCE),
-        change_sol: Some(promo_equity - PROMO_START_BALANCE),
+        start_of_day_balance_native: Some(PROMO_START_BALANCE),
+        change_native: Some(promo_equity - PROMO_START_BALANCE),
         change_percent: Some((promo_equity - PROMO_START_BALANCE) / PROMO_START_BALANCE * 100.0),
-        sol_price_usd: 180.0,
+        native_price_usd: 180.0,
         balance_history: vec![
             PROMO_START_BALANCE,
             PROMO_START_BALANCE * 1.01,
@@ -75,7 +75,7 @@ pub fn get_promo_home_dashboard() -> HomeDashboardResponse {
         total_invested_sol: open.invested_sol,
         unrealized_pnl_sol: open.unrealized_pnl_sol,
         unrealized_pnl_percent: open.unrealized_pnl_percent,
-        avg_position_size_sol: if open.count > 0 {
+        avg_position_size_native: if open.count > 0 {
             open.invested_sol / open.count as f64
         } else {
             0.0
@@ -139,7 +139,7 @@ pub fn get_promo_dashboard_overview() -> DashboardOverview {
 
     let wallet = WalletInfo {
         sol_balance: PROMO_SOL_BALANCE,
-        sol_balance_lamports: PROMO_SOL_LAMPORTS,
+        native_balance_raw: PROMO_SOL_LAMPORTS,
         total_tokens_count: open.count,
         last_updated: Some(now.to_rfc3339()),
     };
@@ -246,7 +246,7 @@ pub fn get_promo_portfolio_calendar(
 
     let today = now.date_naive();
     let mut days = Vec::with_capacity(days_in_month as usize);
-    let mut month_net_pnl_sol = 0.0f64;
+    let mut month_net_pnl_native = 0.0f64;
     let mut month_trades = 0i64;
     let mut balance = PROMO_START_BALANCE;
 
@@ -267,18 +267,18 @@ pub fn get_promo_portfolio_calendar(
         };
 
         balance += net;
-        month_net_pnl_sol += net;
+        month_net_pnl_native += net;
         month_trades += trades_n;
 
         days.push(CalendarDay {
             day,
             date,
             net_pnl_sol: net,
-            profit_sol: profit,
-            loss_sol: loss,
+            profit_native: profit,
+            loss_native: loss,
             trades: trades_n,
             wins,
-            portfolio_value_sol: if is_future { None } else { Some(balance) },
+            portfolio_value_native: if is_future { None } else { Some(balance) },
             has_data: trades_n > 0 || net != 0.0,
         });
     }
@@ -289,7 +289,7 @@ pub fn get_promo_portfolio_calendar(
         first_weekday,
         days_in_month,
         days,
-        month_net_pnl_sol,
+        month_net_pnl_native,
         month_trades,
     }
 }

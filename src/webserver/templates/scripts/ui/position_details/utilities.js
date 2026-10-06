@@ -84,7 +84,7 @@ export function applyUtilitiesMixin(PositionDetailsDialog) {
 
   /** A signed SOL amount in USD at today's SOL price, or "" when that price is unknown. */
   proto._formatUsd = function (sol) {
-    const solPrice = this.fullDetails?.sol_price_usd;
+    const solPrice = this.fullDetails?.native_price_usd;
     const num = Number(sol);
     if (!solPrice || sol === null || sol === undefined || !Number.isFinite(num) || num === 0) {
       return "";

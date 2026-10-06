@@ -158,7 +158,7 @@ function buildHeadlineMetrics(token) {
       </div>
       <div class="overview-headline-item">
         <span class="overview-headline-label">${esc(I18n.t("tokens-overview-liquidity"))}</span>
-        <span class="overview-headline-value">${token.liquidity_usd ? Utils.formatCompactNumber(token.liquidity_usd, { usd: true }) : token.pool_reserves_sol ? Utils.formatSol(token.pool_reserves_sol, { decimals: 2 }) : "—"}</span>
+        <span class="overview-headline-value">${token.liquidity_usd ? Utils.formatCompactNumber(token.liquidity_usd, { usd: true }) : token.pool_reserves_native ? Utils.formatSol(token.pool_reserves_native, { decimals: 2 }) : "—"}</span>
       </div>
       <div class="overview-headline-item">
         <span class="overview-headline-label">${esc(I18n.t("tokens-overview-volume-24h"))}</span>
@@ -279,7 +279,7 @@ function buildLiquiditySection(token, options) {
           </div>
           <div class="overview-fact">
             <span class="overview-fact-label">${esc(I18n.t("tokens-overview-fact-pool-sol"))}</span>
-            <span class="overview-fact-value">${token.pool_reserves_sol ? withSolUnit(Utils.formatNumber(token.pool_reserves_sol, { decimals: 2 })) : "—"}</span>
+            <span class="overview-fact-value">${token.pool_reserves_native ? withSolUnit(Utils.formatNumber(token.pool_reserves_native, { decimals: 2 })) : "—"}</span>
           </div>
           <div class="overview-fact">
             <span class="overview-fact-label">${esc(I18n.t("tokens-overview-fact-pool-token"))}</span>

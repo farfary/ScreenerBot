@@ -71,31 +71,31 @@ pub async fn get_portfolio_calendar(
         balances_result.unwrap_or_default().into_iter().collect();
 
     let mut days = Vec::with_capacity(days_in_month as usize);
-    let mut month_net_pnl_sol = 0.0f64;
+    let mut month_net_pnl_native = 0.0f64;
     let mut month_trades = 0i64;
 
     for day in 1..=days_in_month {
         let date = format!("{year:04}-{month:02}-{day:02}");
         let stats = stats_by_day.get(&date);
         let net_pnl_sol = stats.map(|s| s.net_pnl_native).unwrap_or(0.0);
-        let profit_sol = stats.map(|s| s.profit_native).unwrap_or(0.0);
-        let loss_sol = stats.map(|s| s.loss_native).unwrap_or(0.0);
+        let profit_native = stats.map(|s| s.profit_native).unwrap_or(0.0);
+        let loss_native = stats.map(|s| s.loss_native).unwrap_or(0.0);
         let trades = stats.map(|s| s.trades).unwrap_or(0);
         let wins = stats.map(|s| s.wins).unwrap_or(0);
-        let portfolio_value_sol = balances_by_day.get(&date).copied();
+        let portfolio_value_native = balances_by_day.get(&date).copied();
 
-        month_net_pnl_sol += net_pnl_sol;
+        month_net_pnl_native += net_pnl_sol;
         month_trades += trades;
 
         days.push(CalendarDay {
             day,
             date,
             net_pnl_sol,
-            profit_sol,
-            loss_sol,
+            profit_native,
+            loss_native,
             trades,
             wins,
-            portfolio_value_sol,
+            portfolio_value_native,
             has_data: trades > 0 || net_pnl_sol != 0.0,
         });
     }
@@ -106,7 +106,7 @@ pub async fn get_portfolio_calendar(
         first_weekday,
         days_in_month,
         days,
-        month_net_pnl_sol,
+        month_net_pnl_native,
         month_trades,
     })
 }

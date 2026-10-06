@@ -108,7 +108,7 @@ pub async fn get_position_details(Path(key): Path<String>) -> Response {
                     &price_result.pool_address,
                 )
                 .map(str::to_owned),
-                liquidity_sol: Some(price_result.native_reserves),
+                liquidity_native: Some(price_result.native_reserves),
             });
 
             // Build external links
@@ -122,7 +122,7 @@ pub async fn get_position_details(Path(key): Path<String>) -> Response {
             );
 
             // Get SOL price in USD
-            let sol_price_usd = {
+            let native_price_usd = {
                 let price = native_price::get_native_price();
                 if price > 0.0 {
                     Some(price)
@@ -141,7 +141,7 @@ pub async fn get_position_details(Path(key): Path<String>) -> Response {
                 pool_info,
                 external_links,
                 position_age_seconds,
-                sol_price_usd,
+                native_price_usd,
                 pending_swaps,
                 fetched_at: Utc::now().to_rfc3339(),
             })
@@ -257,7 +257,7 @@ async fn load_entry_exit_history(
                 native_spent: r.native_spent,
                 transaction_signature: r.transaction_signature,
                 is_dca: r.is_dca,
-                fees_sol: r.fees_raw.map(|l| adapter().raw_to_native(l)),
+                fees_native: r.fees_raw.map(|l| adapter().raw_to_native(l)),
             })
             .collect(),
         Err(err) => {
@@ -282,7 +282,7 @@ async fn load_entry_exit_history(
                 transaction_signature: r.transaction_signature,
                 is_partial: r.is_partial,
                 percentage: r.percentage,
-                fees_sol: r.fees_raw.map(|l| adapter().raw_to_native(l)),
+                fees_native: r.fees_raw.map(|l| adapter().raw_to_native(l)),
             })
             .collect(),
         Err(err) => {

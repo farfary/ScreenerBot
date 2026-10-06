@@ -20,7 +20,6 @@ pub struct LossLimitState {
     /// Current period start time
     pub period_start: DateTime<Utc>,
     /// Cumulative realized loss in SOL (absolute value)
-    #[serde(rename = "cumulative_loss_sol")]
     pub cumulative_loss_native: f64,
     /// Whether trading is paused due to loss limit
     pub is_limited: bool,
