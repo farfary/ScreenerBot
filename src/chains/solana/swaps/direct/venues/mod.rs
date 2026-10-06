@@ -3,14 +3,15 @@
 
 //! One module per DEX program the direct engine can swap in.
 //!
-//! Each venue owns the exact byte layout of its program's accounts, the exact
-//! curve those accounts describe, and the exact instruction that program expects.
-//! Nothing here is shared with the PRICE decoders in
-//! `crate::chains::solana::pools::decoders`: those answer "what is this token
-//! worth", depend on a decimals cache, and may fall back to an approximation. A
-//! swap venue may not — it reads decimals out of the pool state itself and fails
-//! rather than guess, because its numbers become a `min_out` that real money is
-//! settled against.
+//! Each venue owns the exact curve its program's accounts describe and the exact
+//! instruction that program expects. A pool account's byte layout is decoded in
+//! `crate::chains::solana::pools::layouts` where one exists (Raydium AMM v4,
+//! Meteora DBC), shared with the PRICE decoders in
+//! `crate::chains::solana::pools::decoders`; the other venues still decode their
+//! own layout. The price decoders answer "what is this token worth" and depend on
+//! a decimals cache. A swap venue reads decimals out of the pool state itself and
+//! fails rather than guess, because its numbers become a `min_out` that real money
+//! is settled against.
 
 pub mod clmm_ticks;
 pub mod fluxbeam;

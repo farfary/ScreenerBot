@@ -27,6 +27,8 @@
 mod common;
 
 use screenerbot::chains::solana::layout::{mint_decimals, token_account_amount, u64_at, u8_at};
+use screenerbot::chains::solana::pools::layouts::meteora_dbc::VirtualPoolState;
+use screenerbot::chains::solana::pools::layouts::raydium_amm_v4::AmmV4PoolState;
 use screenerbot::chains::solana::solana_sdk::pubkey::Pubkey;
 use screenerbot::chains::solana::swaps::direct::venues::clmm_ticks::{
     decode_tick_array, TickArrayBitmap,
@@ -36,7 +38,7 @@ use screenerbot::chains::solana::swaps::direct::venues::fluxbeam::{
 };
 use screenerbot::chains::solana::swaps::direct::venues::meteora_damm::{DammMarket, DammPoolState};
 use screenerbot::chains::solana::swaps::direct::venues::meteora_dbc::{
-    DbcMarket, PoolConfigState as DbcPoolConfigState, VirtualPoolState,
+    DbcMarket, PoolConfigState as DbcPoolConfigState,
 };
 use screenerbot::chains::solana::swaps::direct::venues::meteora_dlmm::{
     bin_array_address, bitmap_extension_address as dlmm_bitmap_extension_address,
@@ -55,9 +57,7 @@ use screenerbot::chains::solana::swaps::direct::venues::pumpfun_amm::{
 use screenerbot::chains::solana::swaps::direct::venues::pumpfun_legacy::{
     BondingCurve, GlobalFeeRecipients, PumpLegacyMarket,
 };
-use screenerbot::chains::solana::swaps::direct::venues::raydium_amm_v4::{
-    AmmV4Market, AmmV4PoolState,
-};
+use screenerbot::chains::solana::swaps::direct::venues::raydium_amm_v4::AmmV4Market;
 use screenerbot::chains::solana::swaps::direct::venues::raydium_clmm::{
     ClmmFeeConfig, ClmmMarket, ClmmPoolState,
 };

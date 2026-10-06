@@ -67,7 +67,9 @@
 //! account's first 8 bytes exactly, and `PoolConfig`'s (`1a6c0e7b74e6812b`)
 //! matches the config account's.
 //!
-//! `VirtualPool`, 424 bytes:
+//! `VirtualPool`, 424 bytes (decoded by
+//! `crate::chains::solana::pools::layouts::meteora_dbc`, shared with the price
+//! decoder and the pool analyzer):
 //!
 //! ```text
 //!   0 discriminator        8 volatility_tracker (64B, unused here)
@@ -225,6 +227,7 @@ use crate::chains::solana::constants::METEORA_DBC_PROGRAM_ID;
 use crate::chains::solana::layout::{
     mint_decimals, pubkey_at, token_account_amount, u128_at, u16_at, u8_at,
 };
+use crate::chains::solana::pools::layouts::meteora_dbc::VirtualPoolState;
 use crate::chains::solana::pools::types::ProgramKind;
 use crate::chains::solana::rpc::{get_rpc_client, RpcClientMethods};
 use crate::chains::solana::solana_sdk::{
@@ -249,10 +252,6 @@ const POOL_AUTHORITY: &str = "FhVo3mqL8PW5pH5U2CN4XE33DokiyZnUwuGpH2hmHLuM";
 
 /// Seed of the Anchor event-CPI authority every instruction carries.
 const EVENT_AUTHORITY_SEED: &[u8] = b"__event_authority";
-
-/// `VirtualPool`'s own Anchor discriminator, confirmed against the on-chain
-/// IDL and a live pool account's first 8 bytes.
-const VIRTUAL_POOL_DISCRIMINATOR: [u8; 8] = [213, 224, 5, 209, 98, 69, 119, 92];
 
 /// `PoolConfig`'s own Anchor discriminator, confirmed the same way.
 const POOL_CONFIG_DISCRIMINATOR: [u8; 8] = [26, 108, 14, 123, 116, 230, 129, 43];
@@ -439,35 +438,6 @@ impl PoolVenue for MeteoraDbcVenue {
             base_vault_balance,
             quote_vault_balance,
         }))
-    }
-}
-
-/// The parts of a DBC `VirtualPool` a swap needs.
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
-pub struct VirtualPoolState {
-    pub pool: Pubkey,
-    pub config: Pubkey,
-    pub base_mint: Pubkey,
-    pub base_vault: Pubkey,
-    pub quote_vault: Pubkey,
-    pub sqrt_price: u128,
-    pub is_migrated: bool,
-}
-
-impl VirtualPoolState {
-    pub fn decode(pool: Pubkey, data: &[u8]) -> Option<Self> {
-        if data.len() < 306 || data[0..8] != VIRTUAL_POOL_DISCRIMINATOR {
-            return None;
-        }
-        Some(Self {
-            pool,
-            config: pubkey_at(data, 72)?,
-            base_mint: pubkey_at(data, 136)?,
-            base_vault: pubkey_at(data, 168)?,
-            quote_vault: pubkey_at(data, 200)?,
-            sqrt_price: u128_at(data, 280)?,
-            is_migrated: u8_at(data, 305)? != 0,
-        })
     }
 }
 
@@ -1088,6 +1058,8 @@ mod tests {
                 base_mint: Pubkey::new_unique(),
                 base_vault: Pubkey::new_unique(),
                 quote_vault: Pubkey::new_unique(),
+                base_reserve: 0,
+                quote_reserve: 0,
                 sqrt_price,
                 is_migrated: false,
             },

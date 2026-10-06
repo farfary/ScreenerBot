@@ -477,7 +477,7 @@ impl PoolAnalyzer {
         rpc_client: &RpcClient,
     ) -> Result<PoolDescriptor, PoolAnalysisFailure> {
         // First, try to determine the actual program type by fetching the pool account
-        let actual_program_id = if program_id == Pubkey::default() {
+        let (actual_program_id, prefetched_account) = if program_id == Pubkey::default() {
             // This is an Unknown pool from discovery - fetch the account to get the real program ID
             match rpc_client.get_account(&pool_id).await {
                 Ok(Some(account)) => {
@@ -485,7 +485,7 @@ impl PoolAnalyzer {
                         LogTag::PoolAnalyzer,
                         &format!("Pool {} owner: {}", pool_id, account.owner),
                     );
-                    account.owner
+                    (account.owner, Some(account))
                 }
                 Ok(None) => {
                     let target_mint = if is_sol_mint(&base_mint.to_string()) {
@@ -552,7 +552,7 @@ impl PoolAnalyzer {
                 }
             }
         } else {
-            program_id
+            (program_id, None)
         };
 
         // Classify the program type using the actual program ID
@@ -594,15 +594,29 @@ impl PoolAnalyzer {
             ),
         );
 
-        // Extract reserve accounts based on program type
-        let reserve_accounts = Self::extract_reserve_accounts(
+        // Derive the reserve account set from the pool account's own bytes
+        let pool_account = match prefetched_account {
+            Some(account) => account,
+            None => Self::fetch_pool_account(&pool_id, rpc_client).await?,
+        };
+        let reserve_accounts = Self::reserve_account_set(
+            program_kind,
             &pool_id,
-            &program_kind,
+            &pool_account.data,
             &base_mint,
             &quote_mint,
-            rpc_client,
         )
-        .await?;
+        .ok_or_else(|| {
+            logger::warning(
+                LogTag::PoolAnalyzer,
+                &format!(
+                    "Failed to extract reserve accounts from {} pool {}",
+                    program_kind.display_name(),
+                    pool_id
+                ),
+            );
+            PoolAnalysisFailure::Structural
+        })?;
 
         logger::debug(
             LogTag::PoolAnalyzer,
@@ -672,124 +686,6 @@ impl PoolAnalyzer {
     fn classify_program_static(program_id: &Pubkey) -> ProgramKind {
         let program_str = program_id.to_string();
         ProgramKind::from_program_id(&program_str)
-    }
-
-    /// Extract reserve account addresses based on program type
-    async fn extract_reserve_accounts(
-        pool_id: &Pubkey,
-        program_kind: &ProgramKind,
-        base_mint: &Pubkey,
-        quote_mint: &Pubkey,
-        rpc_client: &RpcClient,
-    ) -> Result<Vec<Pubkey>, PoolAnalysisFailure> {
-        match program_kind {
-            ProgramKind::RaydiumCpmm => {
-                Self::extract_raydium_cpmm_accounts(pool_id, base_mint, quote_mint, rpc_client)
-                    .await
-            }
-
-            ProgramKind::RaydiumLegacyAmm => {
-                Self::extract_raydium_legacy_accounts(pool_id, base_mint, quote_mint, rpc_client)
-                    .await
-            }
-
-            ProgramKind::RaydiumClmm => {
-                Self::extract_raydium_clmm_accounts(pool_id, base_mint, quote_mint, rpc_client)
-                    .await
-            }
-
-            ProgramKind::OrcaWhirlpool => {
-                Self::extract_orca_whirlpool_accounts(pool_id, base_mint, quote_mint, rpc_client)
-                    .await
-            }
-
-            ProgramKind::MeteoraDamm => {
-                Self::extract_meteora_damm_accounts(pool_id, base_mint, quote_mint, rpc_client)
-                    .await
-            }
-
-            ProgramKind::MeteoraDlmm => {
-                Self::extract_meteora_dlmm_accounts(pool_id, base_mint, quote_mint, rpc_client)
-                    .await
-            }
-
-            ProgramKind::MeteoraDbc => {
-                logger::debug(
-                    LogTag::PoolAnalyzer,
-                    &format!("Extracting DBC accounts for pool {pool_id}"),
-                );
-
-                let mut accounts = vec![*pool_id];
-
-                let pool_account = Self::fetch_pool_account(pool_id, rpc_client).await?;
-                let Some(vault_addresses) =
-                    super::decoders::meteora_dbc::MeteoraDbcDecoder::extract_reserve_accounts(
-                        &pool_account.data,
-                    )
-                else {
-                    logger::warning(
-                        LogTag::PoolAnalyzer,
-                        &format!("Failed to extract vault addresses from DBC pool {pool_id}"),
-                    );
-                    return Err(PoolAnalysisFailure::Structural);
-                };
-                let vault_count = vault_addresses.len();
-                for vault_str in vault_addresses {
-                    if let Ok(vault_pubkey) = Pubkey::from_str(&vault_str) {
-                        accounts.push(vault_pubkey);
-                    }
-                }
-
-                logger::debug(
-                    LogTag::PoolAnalyzer,
-                    &format!(
-                        "DBC pool {} extracted {} vault accounts",
-                        pool_id, vault_count
-                    ),
-                );
-
-                // Always include the mints
-                accounts.push(*base_mint);
-                accounts.push(*quote_mint);
-
-                Ok(accounts)
-            }
-
-            ProgramKind::PumpFunAmm => {
-                Self::extract_pump_fun_accounts(pool_id, base_mint, quote_mint, rpc_client).await
-            }
-
-            ProgramKind::PumpFunLegacy => {
-                // PumpFun Legacy (bonding curves) don't have vaults - just need the pool account
-                logger::debug(
-                    LogTag::PoolAnalyzer,
-                    &format!(
-                        "Extracting PumpFun Legacy (bonding curve) accounts for pool {}",
-                        pool_id
-                    ),
-                );
-                Ok(vec![*pool_id])
-            }
-
-            ProgramKind::Moonit => {
-                Self::extract_moonit_accounts(pool_id, base_mint, quote_mint, rpc_client).await
-            }
-
-            ProgramKind::FluxbeamAmm => {
-                Self::extract_fluxbeam_accounts(pool_id, base_mint, quote_mint, rpc_client).await
-            }
-
-            ProgramKind::Unknown => {
-                logger::warning(
-                    LogTag::PoolAnalyzer,
-                    &format!(
-                        "Cannot extract accounts for unknown program type: {}",
-                        pool_id
-                    ),
-                );
-                Err(PoolAnalysisFailure::Structural)
-            }
-        }
     }
 
     /// Get analyzed pool by ID

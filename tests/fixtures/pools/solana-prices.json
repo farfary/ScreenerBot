@@ -20,7 +20,7 @@
       "source_pool": "METEORA DBC",
       "pool_address": "J1YvC19EHXGjmthszo7sM5FwL3mn3qjS8Bf3zTMjeX2T",
       "slot": 453946864,
-      "native_reserves": 0.035248579,
+      "native_reserves": 0.007586677,
       "token_reserves": 999738453.5469658
     },
     {
@@ -92,13 +92,13 @@
     {
       "mint": "EPjFWdd5AufqSSqeM2qN1xzybapC8G4wEGGkZwyTDt1v",
       "price_usd": 0.0,
-      "price_native": 0.008249257492708174,
+      "price_native": 0.00824925750300484,
       "confidence": 1.0,
       "source_pool": null,
       "pool_address": "58oQChx4yWmvKdwLLZzBi4ChoCc2fqCUWBkwMihLYQo2",
       "slot": 0,
-      "native_reserves": 111808.512676811,
-      "token_reserves": 13553766.842124
+      "native_reserves": 111808.427358533,
+      "token_reserves": 13553756.482666
     },
     {
       "mint": "EPjFWdd5AufqSSqeM2qN1xzybapC8G4wEGGkZwyTDt1v",

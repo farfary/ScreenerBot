@@ -25,9 +25,8 @@
 //! * `solana-price-inputs.json` — per entry: the program kind slug, the pool, the target
 //!   and quote mints, their decimals, and the account bundle the decoder receives as
 //!   `{owner, lamports, slot, data_base64}`. The bundle is the set the pool analyzer
-//!   registers for the venue (pool, vaults, and the non-WSOL mint where the analyzer adds
-//!   mints), because the fetcher prices from exactly that set. Raydium AMM v4 and Meteora
-//!   DBC take their vaults from the direct-swap fixture instead; see `fetcher_bundle`.
+//!   registers for the venue (`PoolAnalyzer::reserve_account_set`) less the WSOL mint,
+//!   because the fetcher prices from exactly that set; see `fetched_account_set`.
 //! * `solana-prices.json` — the recording target and, per entry in input order, every
 //!   `PriceResult` field except `timestamp`.
 //!
@@ -58,14 +57,8 @@ mod common;
 
 use base64::Engine;
 use screenerbot::chains::solana::constants::SOL_MINT;
+use screenerbot::chains::solana::pools::analyzer::PoolAnalyzer;
 use screenerbot::chains::solana::pools::decoders::decode_pool;
-use screenerbot::chains::solana::pools::decoders::fluxbeam_amm::FluxbeamAmmDecoder;
-use screenerbot::chains::solana::pools::decoders::meteora_damm::MeteoraDammDecoder;
-use screenerbot::chains::solana::pools::decoders::meteora_dlmm::MeteoraDlmmDecoder;
-use screenerbot::chains::solana::pools::decoders::orca_whirlpool::OrcaWhirlpoolDecoder;
-use screenerbot::chains::solana::pools::decoders::pumpfun_amm::PumpFunAmmDecoder;
-use screenerbot::chains::solana::pools::decoders::raydium_clmm::RaydiumClmmDecoder;
-use screenerbot::chains::solana::pools::decoders::RaydiumCpmmDecoder;
 use screenerbot::chains::solana::pools::fetcher::AccountData;
 use screenerbot::chains::solana::pools::types::ProgramKind;
 use screenerbot::chains::solana::solana_sdk::pubkey::Pubkey;
@@ -250,10 +243,17 @@ fn account_map(input: &PriceInput) -> HashMap<String, AccountData> {
 /// Decode one input exactly as the pool calculator dispatches it: the program kind comes
 /// from the pool account's owner, the base mint is the target and the quote mint is WSOL.
 fn decode_input(input: &PriceInput) -> Option<RecordedPrice> {
+    decode_accounts(input, &account_map(input))
+}
+
+/// Decode `accounts` as the bundle of `input`'s pool, with `input`'s decimals seeded.
+fn decode_accounts(
+    input: &PriceInput,
+    accounts: &HashMap<String, AccountData>,
+) -> Option<RecordedPrice> {
     for (mint, decimals) in &input.decimals {
         common::seed_decimals(mint, *decimals);
     }
-    let accounts = account_map(input);
     let pool = accounts
         .get(&input.pool)
         .unwrap_or_else(|| panic!("input for {} lacks its pool account", input.pool));
@@ -264,7 +264,7 @@ fn decode_input(input: &PriceInput) -> Option<RecordedPrice> {
         "pool {} classifies as a different program kind",
         input.pool
     );
-    decode_pool(kind, &accounts, &input.target_mint, SOL_MINT).map(|price| RecordedPrice {
+    decode_pool(kind, accounts, &input.target_mint, SOL_MINT).map(|price| RecordedPrice {
         mint: price.mint,
         price_usd: price.price_usd,
         price_native: price.price_native,
@@ -351,62 +351,198 @@ fn solana_pool_prices_match_the_recorded_snapshot() {
     }
 }
 
+#[test]
+fn recorded_inputs_hold_exactly_the_analyzer_account_set() {
+    let inputs = parse_inputs(&read_file(fixture_dir().join(INPUTS_FILE)));
+    let mut mismatches = Vec::new();
+    for input in &inputs {
+        let accounts = account_map(input);
+        let pool = &accounts[&input.pool];
+        let kind = ProgramKind::classify(&pool.owner);
+        let derived: BTreeSet<String> =
+            fetched_account_set(kind, &input.pool, &pool.data, &input.target_mint)
+                .into_iter()
+                .collect();
+        let recorded: BTreeSet<String> = input.accounts.keys().cloned().collect();
+        if derived != recorded {
+            mismatches.push(format!(
+                "{} pool {}: derived {derived:?}, recorded {recorded:?}",
+                input.kind, input.pool
+            ));
+        }
+    }
+    assert!(
+        mismatches.is_empty(),
+        "the analyzer derives a different account set than the recorded bundle:\n{}",
+        mismatches.join("\n")
+    );
+}
+
+/// The recorded inputs of one program kind.
+fn inputs_of(kind: ProgramKind) -> Vec<PriceInput> {
+    parse_inputs(&read_file(fixture_dir().join(INPUTS_FILE)))
+        .into_iter()
+        .filter(|input| input.kind == kind.protocol_slug())
+        .collect()
+}
+
+/// The venues whose pool layout the swap engine and the pricing path share: the vaults
+/// the analyzer derives from a pool are exactly the token accounts its direct-swap
+/// fixture recorded for the swap.
+#[test]
+fn shared_layout_vaults_match_the_direct_swap_fixtures() {
+    for (file, target_mint) in ENTRIES {
+        let (pool, swap_vaults) = swap_fixture_pool(file, target_mint);
+        let json: serde_json::Value =
+            serde_json::from_str(&read_file(swap_fixture_dir().join(file))).expect("parse fixture");
+        let pool_account = &json["accounts"][&pool];
+        let kind = ProgramKind::classify(&pubkey(
+            pool_account["owner"].as_str().expect("pool has an owner"),
+        ));
+        if !matches!(
+            kind,
+            ProgramKind::RaydiumLegacyAmm | ProgramKind::MeteoraDbc
+        ) {
+            continue;
+        }
+        let pool_data = base64::engine::general_purpose::STANDARD
+            .decode(pool_account["data"].as_str().expect("pool carries data"))
+            .expect("pool data is valid base64");
+        let derived: BTreeSet<String> = fetched_account_set(kind, &pool, &pool_data, target_mint)
+            .into_iter()
+            .filter(|account| *account != pool && account != target_mint)
+            .collect();
+        let swap_vaults: BTreeSet<String> = swap_vaults.into_iter().collect();
+        assert_eq!(
+            derived, swap_vaults,
+            "{file}: the analyzer's vaults differ from the vaults the swap reads"
+        );
+    }
+}
+
+#[test]
+fn a_dbc_price_does_not_depend_on_account_order_or_unrelated_accounts() {
+    let inputs = inputs_of(ProgramKind::MeteoraDbc);
+    assert!(!inputs.is_empty(), "the recorded inputs carry a DBC pool");
+    for input in &inputs {
+        let expected = serde_json::to_value(decode_input(input).expect("recorded pool prices"))
+            .expect("serialize price");
+        let mut accounts = account_map(input);
+        // A second token account of the base mint, and a second account of the DBC
+        // program that is not a pool, sit in the bundle beside the real ones.
+        let pool = accounts[&input.pool].clone();
+        let base_vault = accounts
+            .values()
+            .find(|account| account.pubkey != pool.pubkey && account.data.len() >= 72)
+            .expect("bundle carries a vault")
+            .clone();
+        let decoy_vault = Pubkey::new_unique();
+        accounts.insert(
+            decoy_vault.to_string(),
+            AccountData {
+                pubkey: decoy_vault,
+                ..base_vault
+            },
+        );
+        let decoy_program_account = Pubkey::new_unique();
+        let mut not_a_pool = pool.data.clone();
+        not_a_pool[0] ^= 1;
+        accounts.insert(
+            decoy_program_account.to_string(),
+            AccountData {
+                pubkey: decoy_program_account,
+                data: not_a_pool,
+                ..pool
+            },
+        );
+        let mut entries: Vec<(String, AccountData)> = accounts.into_iter().collect();
+        for rotation in 0..entries.len() {
+            entries.rotate_left(1);
+            let reordered: HashMap<String, AccountData> = entries.iter().cloned().collect();
+            let got = serde_json::to_value(
+                decode_accounts(input, &reordered).expect("the pool still prices"),
+            )
+            .expect("serialize price");
+            assert_eq!(
+                got, expected,
+                "pool {} prices differently at rotation {rotation}",
+                input.pool
+            );
+        }
+    }
+}
+
+#[test]
+fn a_migrated_dbc_pool_yields_no_price() {
+    for input in inputs_of(ProgramKind::MeteoraDbc) {
+        let mut accounts = account_map(&input);
+        let pool = accounts
+            .get_mut(&input.pool)
+            .expect("bundle carries the pool");
+        pool.data[305] = 1;
+        assert!(
+            decode_accounts(&input, &accounts).is_none(),
+            "migrated pool {} must not price",
+            input.pool
+        );
+    }
+}
+
+#[test]
+fn an_amm_v4_vault_holding_the_wrong_mint_yields_no_price() {
+    let inputs = inputs_of(ProgramKind::RaydiumLegacyAmm);
+    assert!(
+        !inputs.is_empty(),
+        "the recorded inputs carry an AMM v4 pool"
+    );
+    for input in inputs {
+        let mut accounts = account_map(&input);
+        let vaults: Vec<String> = accounts
+            .iter()
+            .filter(|(_, account)| account.data.len() == TOKEN_ACCOUNT_BASE_LEN)
+            .map(|(address, _)| address.clone())
+            .collect();
+        assert_eq!(vaults.len(), 2, "pool {} bundles two vaults", input.pool);
+        // Each vault keeps its address but carries the other side's bytes.
+        let first = accounts[&vaults[0]].data.clone();
+        let second = accounts[&vaults[1]].data.clone();
+        accounts.get_mut(&vaults[0]).unwrap().data = second;
+        accounts.get_mut(&vaults[1]).unwrap().data = first;
+        assert!(
+            decode_accounts(&input, &accounts).is_none(),
+            "pool {} must not price from vaults holding the other mint",
+            input.pool
+        );
+    }
+}
+
 // ============================================================================
 // RECORDER
 // ============================================================================
 
 /// The account bundle the pool fetcher prices a pool from: the set the pool analyzer
-/// registers (the pool, the vaults the venue's decoder names in the pool data, and the
-/// pair's mints for the venues whose analyzer adds them), less the WSOL mint, which the
-/// fetcher never requests. Several decoders find their pool by scanning for the program
-/// owner, so the recorded map holds this bundle and nothing else (a config or tick-array
-/// account with the same owner would make that scan ambiguous).
-///
-/// Two venues take their vaults from the direct-swap fixture instead, because their
-/// analyzer extractor names accounts that do not exist, so a live bundle built from it is
-/// never complete:
-/// - Raydium AMM v4: the extractor reads pubkeys at 0x150, 0x160, 0x170 and 0x180, but the
-///   vaults sit at 0x150 and 0x170; the other two straddle field boundaries.
-/// - Meteora DBC: the extractor takes the first two non-default pubkeys from offset 32,
-///   which lie inside the volatility tracker. The entry also carries no mint, because the
-///   DBC decoder takes every non-pool account of at least 72 bytes as a vault.
-fn fetcher_bundle(
+/// registers, less the WSOL mint, which the fetcher never requests. Several decoders find
+/// their pool by scanning for the program owner, so the recorded map holds this bundle and
+/// nothing else (a config or tick-array account with the same owner would make that scan
+/// ambiguous).
+fn fetched_account_set(
     kind: ProgramKind,
     pool: &str,
     pool_data: &[u8],
     target_mint: &str,
-    fixture_vaults: &[String],
 ) -> Vec<String> {
-    if kind == ProgramKind::MeteoraDbc {
-        let mut set = vec![pool.to_owned()];
-        set.extend(fixture_vaults.iter().cloned());
-        return set;
-    }
-    let vaults = match kind {
-        ProgramKind::RaydiumCpmm => RaydiumCpmmDecoder::extract_reserve_accounts(pool_data),
-        ProgramKind::RaydiumLegacyAmm => Some(fixture_vaults.to_vec()),
-        ProgramKind::RaydiumClmm => RaydiumClmmDecoder::extract_reserve_accounts(pool_data),
-        ProgramKind::OrcaWhirlpool => OrcaWhirlpoolDecoder::extract_reserve_accounts(pool_data),
-        ProgramKind::MeteoraDamm => MeteoraDammDecoder::extract_reserve_accounts(pool_data),
-        ProgramKind::MeteoraDlmm => MeteoraDlmmDecoder::extract_reserve_accounts(pool_data),
-        ProgramKind::PumpFunAmm => PumpFunAmmDecoder::extract_reserve_accounts(pool_data),
-        ProgramKind::FluxbeamAmm => FluxbeamAmmDecoder::extract_reserve_accounts(pool_data),
-        ProgramKind::PumpFunLegacy | ProgramKind::Moonit => Some(Vec::new()),
-        ProgramKind::MeteoraDbc | ProgramKind::Unknown => {
-            panic!("pool {pool} has no analyzer account set")
-        }
-    }
-    .unwrap_or_else(|| panic!("pool {pool}: vault addresses do not decode"));
-    let with_mints = !matches!(
+    PoolAnalyzer::reserve_account_set(
         kind,
-        ProgramKind::PumpFunAmm | ProgramKind::PumpFunLegacy | ProgramKind::Moonit
-    );
-    let mut set = vec![pool.to_owned()];
-    set.extend(vaults);
-    if with_mints {
-        set.push(target_mint.to_owned());
-    }
-    set
+        &pubkey(pool),
+        pool_data,
+        &pubkey(target_mint),
+        &pubkey(SOL_MINT),
+    )
+    .unwrap_or_else(|| panic!("pool {pool}: the analyzer derives no account set"))
+    .into_iter()
+    .map(|account| account.to_string())
+    .filter(|account| account != SOL_MINT)
+    .collect()
 }
 
 fn is_token_program(owner: &str) -> bool {
@@ -521,14 +657,14 @@ async fn record_solana_price_inputs() {
     let mut inputs = Vec::with_capacity(ENTRIES.len());
     for (file, target_mint) in ENTRIES {
         let target_mint = target_mint.to_owned();
-        let (pool, fixture_vaults) = swap_fixture_pool(file, &target_mint);
+        let (pool, _) = swap_fixture_pool(file, &target_mint);
         let (_, pool_only) = fetch_accounts(std::slice::from_ref(&pool)).await;
         let pool_account = &pool_only[&pool];
         let kind = ProgramKind::classify(&pubkey(&pool_account.owner));
         let pool_data = base64::engine::general_purpose::STANDARD
             .decode(&pool_account.data_base64)
             .expect("recorded data is valid base64");
-        let set = fetcher_bundle(kind, &pool, &pool_data, &target_mint, &fixture_vaults);
+        let set = fetched_account_set(kind, &pool, &pool_data, &target_mint);
 
         // One snapshot of the bundle plus the mints its decimals come from.
         let mut addresses = set.clone();

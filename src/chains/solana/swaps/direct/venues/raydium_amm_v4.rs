@@ -3,24 +3,9 @@
 
 //! Raydium AMM v4 (`675kPX9M…`) — the original "Standard" constant-product pool.
 //!
-//! # Layout, verified against mainnet
-//!
-//! `AmmInfo` is 752 bytes:
-//!
-//! ```text
-//!   0 status u64        32 coin_decimals u64   40 pc_decimals u64
-//! 144 swap_fee?         (see the fee block below)
-//! 192 need_take_pnl_coin 200 need_take_pnl_pc
-//! 336 coin_vault        368 pc_vault
-//! 400 coin_mint         432 pc_mint            464 lp_mint
-//! 496 open_orders       528 market             560 market_program
-//! 592 target_orders
-//! ```
-//!
-//! The fee block at 128 is eight `u64`s: `min_separate_numerator/denominator`,
-//! `trade_fee_numerator/denominator`, `pnl_numerator/denominator`,
-//! `swap_fee_numerator/denominator`. The swap charges the LAST pair (offsets
-//! 176/184), which is 25/10000 on a standard pool.
+//! The `AmmInfo` layout and its decoder live in
+//! `crate::chains::solana::pools::layouts::raydium_amm_v4`, shared with the price
+//! decoder and the pool analyzer.
 //!
 //! # The OpenBook accounts
 //!
@@ -34,13 +19,15 @@
 //!
 //! # The curve
 //!
-//! Tradable reserves are `vault − need_take_pnl` per side. `need_take_pnl` is
-//! profit already earmarked for the pool's owner and sitting in the vault; it is
-//! not swappable, and quoting off the raw vault over-states both reserves.
+//! Tradable reserves are `vault − need_take_pnl` per side
+//! (`AmmV4PoolState::tradable_reserves`). `need_take_pnl` is profit already
+//! earmarked for the pool's owner and sitting in the vault; it is not swappable,
+//! and quoting off the raw vault over-states both reserves.
 
 use super::math::{constant_product_out, fee_amount, price_impact_pct};
 use crate::chains::solana::constants::RAYDIUM_LEGACY_AMM_PROGRAM_ID;
-use crate::chains::solana::layout::{pubkey_at, token_account_amount, u64_at};
+use crate::chains::solana::layout::token_account_amount;
+use crate::chains::solana::pools::layouts::raydium_amm_v4::AmmV4PoolState;
 use crate::chains::solana::pools::types::ProgramKind;
 use crate::chains::solana::rpc::{get_rpc_client, RpcClientMethods};
 use crate::chains::solana::solana_sdk::{
@@ -61,10 +48,6 @@ const SWAP_BASE_IN_TAG: u8 = 9;
 
 /// The programme's single global authority PDA, derived once from a fixed seed.
 const AUTHORITY_SEED: &[u8] = &[97, 109, 109, 32, 97, 117, 116, 104, 111, 114, 105, 116, 121]; // "amm authority"
-
-/// Status values that permit swapping. 1 = Initialized, 6 = SwapOnly,
-/// 7 = WaitingTrade.
-const SWAPPABLE_STATUSES: [u64; 3] = [1, 6, 7];
 
 /// Compute units an AMM v4 swap needs.
 const COMPUTE_UNITS: u32 = 100_000;
@@ -135,56 +118,6 @@ impl PoolVenue for RaydiumAmmV4Venue {
     }
 }
 
-/// The parts of `AmmInfo` a swap needs.
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
-pub struct AmmV4PoolState {
-    pub pool: Pubkey,
-    pub status: u64,
-    pub coin_decimals: u8,
-    pub pc_decimals: u8,
-    pub swap_fee_numerator: u64,
-    pub swap_fee_denominator: u64,
-    pub need_take_pnl_coin: u64,
-    pub need_take_pnl_pc: u64,
-    pub coin_vault: Pubkey,
-    pub pc_vault: Pubkey,
-    pub coin_mint: Pubkey,
-    pub pc_mint: Pubkey,
-    pub open_orders: Pubkey,
-    pub market: Pubkey,
-    pub market_program: Pubkey,
-    pub target_orders: Pubkey,
-}
-
-impl AmmV4PoolState {
-    /// Decode an `AmmInfo` account. Pure: no RPC, no cache, no clock.
-    pub fn decode(pool: Pubkey, data: &[u8]) -> Option<Self> {
-        Some(Self {
-            pool,
-            status: u64_at(data, 0)?,
-            coin_decimals: u64_at(data, 32)?.min(u8::MAX as u64) as u8,
-            pc_decimals: u64_at(data, 40)?.min(u8::MAX as u64) as u8,
-            swap_fee_numerator: u64_at(data, 176)?,
-            swap_fee_denominator: u64_at(data, 184)?,
-            need_take_pnl_coin: u64_at(data, 192)?,
-            need_take_pnl_pc: u64_at(data, 200)?,
-            coin_vault: pubkey_at(data, 336)?,
-            pc_vault: pubkey_at(data, 368)?,
-            coin_mint: pubkey_at(data, 400)?,
-            pc_mint: pubkey_at(data, 432)?,
-            open_orders: pubkey_at(data, 496)?,
-            market: pubkey_at(data, 528)?,
-            market_program: pubkey_at(data, 560)?,
-            target_orders: pubkey_at(data, 592)?,
-        })
-    }
-
-    /// Whether the pool's status permits swapping.
-    pub fn swap_enabled(&self) -> bool {
-        SWAPPABLE_STATUSES.contains(&self.status)
-    }
-}
-
 /// A decoded, quotable AMM v4 pool.
 #[derive(Debug, Clone)]
 pub struct AmmV4Market {
@@ -205,11 +138,8 @@ impl AmmV4Market {
 
     /// Swappable reserves: vaults less the profit earmarked out of them.
     pub fn reserves(&self) -> (u64, u64) {
-        (
-            self.coin_balance
-                .saturating_sub(self.state.need_take_pnl_coin),
-            self.pc_balance.saturating_sub(self.state.need_take_pnl_pc),
-        )
+        self.state
+            .tradable_reserves(self.coin_balance, self.pc_balance)
     }
 
     /// Whether `mint` is the coin (base) side.
@@ -403,21 +333,6 @@ mod tests {
     }
 
     #[test]
-    fn only_the_swappable_statuses_are_tradable() {
-        for status in [1u64, 6, 7] {
-            let s = AmmV4PoolState { status, ..state() };
-            assert!(s.swap_enabled(), "status {status} should permit swapping");
-        }
-        for status in [0u64, 2, 3, 4, 5] {
-            let s = AmmV4PoolState { status, ..state() };
-            assert!(
-                !s.swap_enabled(),
-                "status {status} must not permit swapping"
-            );
-        }
-    }
-
-    #[test]
     fn reserves_exclude_the_profit_earmarked_inside_the_vaults() {
         let s = AmmV4PoolState {
             need_take_pnl_coin: 500,
@@ -551,10 +466,5 @@ mod tests {
             "the user source follows direction"
         );
         assert_eq!(ix.accounts[15].pubkey, src);
-    }
-
-    #[test]
-    fn a_truncated_pool_account_decodes_to_none_instead_of_panicking() {
-        assert!(AmmV4PoolState::decode(Pubkey::new_unique(), &[0u8; 300]).is_none());
     }
 }

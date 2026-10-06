@@ -3,16 +3,20 @@
 
 //! Pool analyzer extractor methods.
 //!
-//! Per-DEX reserve account extraction logic for each supported program type.
-//! These methods are called from the `extract_reserve_accounts` router in `analyzer.rs`.
+//! Per-DEX derivation of the account set the pool fetcher must hold to price a pool.
+//! Every derivation is pure: it reads the pool account's bytes and the pair's mints and
+//! touches no RPC, so the analyzer and the recorded price snapshot derive the same set
+//! from the same function, [`PoolAnalyzer::reserve_account_set`].
 
 use super::analyzer::{classify_account_fetch_error, PoolAnalysisFailure, PoolAnalyzer};
 use super::decoders::{
-    meteora_damm::MeteoraDammDecoder, meteora_dlmm::MeteoraDlmmDecoder,
-    orca_whirlpool::OrcaWhirlpoolDecoder, pumpfun_amm::PumpFunAmmDecoder,
-    raydium_clmm::RaydiumClmmDecoder, raydium_cpmm::RaydiumCpmmDecoder,
-    raydium_legacy_amm::RaydiumLegacyAmmDecoder,
+    fluxbeam_amm::FluxbeamAmmDecoder, meteora_damm::MeteoraDammDecoder,
+    meteora_dlmm::MeteoraDlmmDecoder, orca_whirlpool::OrcaWhirlpoolDecoder,
+    pumpfun_amm::PumpFunAmmDecoder, raydium_clmm::RaydiumClmmDecoder,
+    raydium_cpmm::RaydiumCpmmDecoder,
 };
+use super::layouts::{meteora_dbc::VirtualPoolState, raydium_amm_v4::AmmV4PoolState};
+use super::types::ProgramKind;
 
 use crate::chains::solana::rpc::{RpcClient, RpcClientMethods};
 use crate::logger::{self, LogTag};
@@ -57,355 +61,138 @@ impl PoolAnalyzer {
         }
     }
 
-    /// Reserve vaults decoded from a pool account; a layout that does not
-    /// decode is structural.
-    fn decoded_vaults(
+    /// The accounts the pool fetcher must hold before `pool_id` can be priced, in
+    /// registration order: the pool, then the venue's reserve accounts, then the
+    /// pair's mints for the venues that register them. The fetcher never requests
+    /// the WSOL mint, so it is listed here but never fetched.
+    ///
+    /// `None` when `pool_data` does not decode as `program_kind`'s pool layout, or
+    /// when the program has no decoder.
+    pub fn reserve_account_set(
+        program_kind: ProgramKind,
         pool_id: &Pubkey,
-        venue: &str,
-        vaults: Option<Vec<String>>,
-    ) -> Result<Vec<String>, PoolAnalysisFailure> {
-        vaults.ok_or_else(|| {
-            logger::warning(
-                LogTag::PoolAnalyzer,
-                &format!("Failed to extract vault addresses from {venue} pool {pool_id}"),
-            );
-            PoolAnalysisFailure::Structural
-        })
-    }
-
-    /// Extract Raydium CPMM pool accounts
-    pub(crate) async fn extract_raydium_cpmm_accounts(
-        pool_id: &Pubkey,
+        pool_data: &[u8],
         base_mint: &Pubkey,
         quote_mint: &Pubkey,
-        rpc_client: &RpcClient,
-    ) -> Result<Vec<Pubkey>, PoolAnalysisFailure> {
-        let pool_account = Self::fetch_pool_account(pool_id, rpc_client).await?;
-        let vault_addresses = Self::decoded_vaults(
-            pool_id,
-            "Raydium CPMM",
-            RaydiumCpmmDecoder::extract_reserve_accounts(&pool_account.data),
-        )?;
-
-        let mut accounts = vec![*pool_id];
-
-        // Add vault addresses to accounts list
-        for vault_str in vault_addresses {
-            if let Ok(vault_pubkey) = Pubkey::from_str(&vault_str) {
-                accounts.push(vault_pubkey);
+    ) -> Option<Vec<Pubkey>> {
+        let mints = [*base_mint, *quote_mint];
+        match program_kind {
+            ProgramKind::RaydiumCpmm => Self::raydium_cpmm_accounts(pool_id, pool_data, &mints),
+            ProgramKind::RaydiumLegacyAmm => {
+                Self::raydium_legacy_accounts(pool_id, pool_data, &mints)
             }
+            ProgramKind::RaydiumClmm => Self::raydium_clmm_accounts(pool_id, pool_data, &mints),
+            ProgramKind::OrcaWhirlpool => Self::orca_whirlpool_accounts(pool_id, pool_data, &mints),
+            ProgramKind::MeteoraDamm => Self::meteora_damm_accounts(pool_id, pool_data, &mints),
+            ProgramKind::MeteoraDlmm => Self::meteora_dlmm_accounts(pool_id, pool_data, &mints),
+            ProgramKind::MeteoraDbc => Self::meteora_dbc_accounts(pool_id, pool_data),
+            ProgramKind::PumpFunAmm => Self::pump_fun_accounts(pool_id, pool_data),
+            // A bonding curve holds its own reserves; the pool account is the whole set.
+            ProgramKind::PumpFunLegacy | ProgramKind::Moonit => Some(vec![*pool_id]),
+            ProgramKind::FluxbeamAmm => Self::fluxbeam_accounts(pool_id, pool_data, &mints),
+            ProgramKind::Unknown => None,
         }
-
-        // Add the mints for reference
-        accounts.push(*base_mint);
-        accounts.push(*quote_mint);
-
-        Ok(accounts)
     }
 
-    /// Extract Raydium Legacy AMM pool accounts
-    pub(crate) async fn extract_raydium_legacy_accounts(
+    /// Raydium CPMM: the pool, its two vaults and the mints.
+    fn raydium_cpmm_accounts(
         pool_id: &Pubkey,
-        base_mint: &Pubkey,
-        quote_mint: &Pubkey,
-        rpc_client: &RpcClient,
-    ) -> Result<Vec<Pubkey>, PoolAnalysisFailure> {
-        logger::debug(
-            LogTag::PoolAnalyzer,
-            &format!(
-                "Extracting Raydium Legacy AMM accounts for pool {}",
-                pool_id
-            ),
-        );
-
-        let mut accounts = vec![*pool_id];
-
-        let pool_account = Self::fetch_pool_account(pool_id, rpc_client).await?;
-        let vault_addresses = Self::decoded_vaults(
-            pool_id,
-            "Raydium Legacy AMM",
-            RaydiumLegacyAmmDecoder::extract_reserve_accounts(&pool_account.data),
-        )?;
-        let vault_count = vault_addresses.len();
-        for vault_str in vault_addresses {
-            if let Ok(vault_pubkey) = Pubkey::from_str(&vault_str) {
-                accounts.push(vault_pubkey);
-            }
-        }
-
-        logger::debug(
-            LogTag::PoolAnalyzer,
-            &format!(
-                "Raydium Legacy AMM pool {} extracted {} vault accounts",
-                pool_id, vault_count
-            ),
-        );
-
-        // Always include the mints
-        accounts.push(*base_mint);
-        accounts.push(*quote_mint);
-
-        Ok(accounts)
+        pool_data: &[u8],
+        mints: &[Pubkey],
+    ) -> Option<Vec<Pubkey>> {
+        let vaults = RaydiumCpmmDecoder::extract_reserve_accounts(pool_data)?;
+        pool_vaults_and_mints(pool_id, &vaults, mints)
     }
 
-    /// Extract Raydium CLMM pool accounts
-    pub(crate) async fn extract_raydium_clmm_accounts(
+    /// Raydium AMM v4: the pool, its coin and pc vaults and the mints.
+    fn raydium_legacy_accounts(
         pool_id: &Pubkey,
-        base_mint: &Pubkey,
-        quote_mint: &Pubkey,
-        rpc_client: &RpcClient,
-    ) -> Result<Vec<Pubkey>, PoolAnalysisFailure> {
-        // For CLMM pools, we need:
-        // - Pool account itself
-        // - Token vaults (extracted from pool data)
-
-        logger::debug(
-            LogTag::PoolAnalyzer,
-            &format!("Extracting CLMM accounts for pool {pool_id}"),
-        );
-
-        let mut accounts = vec![*pool_id];
-
-        let pool_account = Self::fetch_pool_account(pool_id, rpc_client).await?;
-        let vault_addresses = Self::decoded_vaults(
-            pool_id,
-            "Raydium CLMM",
-            RaydiumClmmDecoder::extract_reserve_accounts(&pool_account.data),
-        )?;
-        let vault_count = vault_addresses.len();
-        for vault_str in vault_addresses {
-            if let Ok(vault_pubkey) = Pubkey::from_str(&vault_str) {
-                accounts.push(vault_pubkey);
-            }
-        }
-
-        logger::debug(
-            LogTag::PoolAnalyzer,
-            &format!(
-                "CLMM pool {} extracted {} vault accounts",
-                pool_id, vault_count
-            ),
-        );
-
-        // Always include the mints
-        accounts.push(*base_mint);
-        accounts.push(*quote_mint);
-
-        Ok(accounts)
+        pool_data: &[u8],
+        mints: &[Pubkey],
+    ) -> Option<Vec<Pubkey>> {
+        let state = AmmV4PoolState::decode(*pool_id, pool_data)?;
+        let mut accounts = vec![*pool_id, state.coin_vault, state.pc_vault];
+        accounts.extend_from_slice(mints);
+        Some(accounts)
     }
 
-    /// Extract Orca Whirlpool accounts
-    pub(crate) async fn extract_orca_whirlpool_accounts(
+    /// Raydium CLMM: the pool, its two vaults and the mints.
+    fn raydium_clmm_accounts(
         pool_id: &Pubkey,
-        base_mint: &Pubkey,
-        quote_mint: &Pubkey,
-        rpc_client: &RpcClient,
-    ) -> Result<Vec<Pubkey>, PoolAnalysisFailure> {
-        logger::debug(
-            LogTag::PoolAnalyzer,
-            &format!("Extracting Orca Whirlpool accounts for pool {pool_id}"),
-        );
-
-        let mut accounts = vec![*pool_id];
-
-        let pool_account = Self::fetch_pool_account(pool_id, rpc_client).await?;
-        let vault_addresses = Self::decoded_vaults(
-            pool_id,
-            "Orca Whirlpool",
-            OrcaWhirlpoolDecoder::extract_reserve_accounts(&pool_account.data),
-        )?;
-        let vault_count = vault_addresses.len();
-        for vault_str in vault_addresses {
-            if let Ok(vault_pubkey) = Pubkey::from_str(&vault_str) {
-                accounts.push(vault_pubkey);
-            }
-        }
-
-        logger::debug(
-            LogTag::PoolAnalyzer,
-            &format!(
-                "Orca Whirlpool pool {} extracted {} vault accounts",
-                pool_id, vault_count
-            ),
-        );
-
-        // Always include the mints
-        accounts.push(*base_mint);
-        accounts.push(*quote_mint);
-
-        Ok(accounts)
+        pool_data: &[u8],
+        mints: &[Pubkey],
+    ) -> Option<Vec<Pubkey>> {
+        let vaults = RaydiumClmmDecoder::extract_reserve_accounts(pool_data)?;
+        pool_vaults_and_mints(pool_id, &vaults, mints)
     }
 
-    /// Extract Meteora DAMM accounts
-    pub(crate) async fn extract_meteora_damm_accounts(
+    /// Orca Whirlpool: the pool, its two vaults and the mints.
+    fn orca_whirlpool_accounts(
         pool_id: &Pubkey,
-        base_mint: &Pubkey,
-        quote_mint: &Pubkey,
-        rpc_client: &RpcClient,
-    ) -> Result<Vec<Pubkey>, PoolAnalysisFailure> {
-        logger::debug(
-            LogTag::PoolAnalyzer,
-            &format!("Extracting DAMM accounts for pool {pool_id}"),
-        );
-
-        let mut accounts = vec![*pool_id];
-
-        let pool_account = Self::fetch_pool_account(pool_id, rpc_client).await?;
-        let vault_addresses = Self::decoded_vaults(
-            pool_id,
-            "Meteora DAMM",
-            MeteoraDammDecoder::extract_reserve_accounts(&pool_account.data),
-        )?;
-        let vault_count = vault_addresses.len();
-        for vault_str in vault_addresses {
-            if let Ok(vault_pubkey) = Pubkey::from_str(&vault_str) {
-                accounts.push(vault_pubkey);
-            }
-        }
-
-        logger::debug(
-            LogTag::PoolAnalyzer,
-            &format!(
-                "DAMM pool {} extracted {} vault accounts",
-                pool_id, vault_count
-            ),
-        );
-
-        // Always include the mints
-        accounts.push(*base_mint);
-        accounts.push(*quote_mint);
-
-        Ok(accounts)
+        pool_data: &[u8],
+        mints: &[Pubkey],
+    ) -> Option<Vec<Pubkey>> {
+        let vaults = OrcaWhirlpoolDecoder::extract_reserve_accounts(pool_data)?;
+        pool_vaults_and_mints(pool_id, &vaults, mints)
     }
 
-    /// Extract Meteora DLMM accounts
-    pub(crate) async fn extract_meteora_dlmm_accounts(
+    /// Meteora DAMM v2: the pool, its two vaults and the mints.
+    fn meteora_damm_accounts(
         pool_id: &Pubkey,
-        base_mint: &Pubkey,
-        quote_mint: &Pubkey,
-        rpc_client: &RpcClient,
-    ) -> Result<Vec<Pubkey>, PoolAnalysisFailure> {
-        let pool_account = Self::fetch_pool_account(pool_id, rpc_client).await?;
-        let vault_addresses = Self::decoded_vaults(
-            pool_id,
-            "Meteora DLMM",
-            MeteoraDlmmDecoder::extract_reserve_accounts(&pool_account.data),
-        )?;
-
-        let mut accounts = vec![*pool_id];
-
-        // Add vault addresses to accounts list
-        for vault_str in vault_addresses {
-            if let Ok(vault_pubkey) = Pubkey::from_str(&vault_str) {
-                accounts.push(vault_pubkey);
-            }
-        }
-
-        // Add the mints for reference
-        accounts.push(*base_mint);
-        accounts.push(*quote_mint);
-
-        Ok(accounts)
+        pool_data: &[u8],
+        mints: &[Pubkey],
+    ) -> Option<Vec<Pubkey>> {
+        let vaults = MeteoraDammDecoder::extract_reserve_accounts(pool_data)?;
+        pool_vaults_and_mints(pool_id, &vaults, mints)
     }
 
-    /// Extract Pump.fun AMM accounts
-    pub(crate) async fn extract_pump_fun_accounts(
+    /// Meteora DLMM: the pair, its two reserves and the mints.
+    fn meteora_dlmm_accounts(
         pool_id: &Pubkey,
-        _base_mint: &Pubkey,
-        _quote_mint: &Pubkey,
-        rpc_client: &RpcClient,
-    ) -> Result<Vec<Pubkey>, PoolAnalysisFailure> {
-        logger::debug(
-            LogTag::PoolAnalyzer,
-            &format!("Extracting PumpFun AMM accounts for pool {pool_id}"),
-        );
-
-        let mut accounts = vec![*pool_id];
-
-        let pool_account = Self::fetch_pool_account(pool_id, rpc_client).await?;
-        let vault_addresses = Self::decoded_vaults(
-            pool_id,
-            "PumpFun AMM",
-            PumpFunAmmDecoder::extract_reserve_accounts(&pool_account.data),
-        )?;
-        let vault_count = vault_addresses.len();
-        for vault_str in vault_addresses {
-            if let Ok(vault_pubkey) = Pubkey::from_str(&vault_str) {
-                accounts.push(vault_pubkey);
-            }
-        }
-
-        logger::debug(
-            LogTag::PoolAnalyzer,
-            &format!(
-                "PumpFun AMM pool {} extracted {} vault accounts",
-                pool_id, vault_count
-            ),
-        );
-
-        Ok(accounts)
+        pool_data: &[u8],
+        mints: &[Pubkey],
+    ) -> Option<Vec<Pubkey>> {
+        let vaults = MeteoraDlmmDecoder::extract_reserve_accounts(pool_data)?;
+        pool_vaults_and_mints(pool_id, &vaults, mints)
     }
 
-    /// Extract Moonit AMM accounts
-    pub(crate) async fn extract_moonit_accounts(
+    /// Meteora DBC: the pool and its base and quote vaults. The decoder reads the
+    /// base mint from the pool account and requires the quote vault to hold WSOL.
+    fn meteora_dbc_accounts(pool_id: &Pubkey, pool_data: &[u8]) -> Option<Vec<Pubkey>> {
+        let state = VirtualPoolState::decode(*pool_id, pool_data)?;
+        Some(vec![*pool_id, state.base_vault, state.quote_vault])
+    }
+
+    /// pump.fun AMM: the pool and its two vaults; the decoder reads both mints
+    /// from the pool account.
+    fn pump_fun_accounts(pool_id: &Pubkey, pool_data: &[u8]) -> Option<Vec<Pubkey>> {
+        let vaults = PumpFunAmmDecoder::extract_reserve_accounts(pool_data)?;
+        pool_vaults_and_mints(pool_id, &vaults, &[])
+    }
+
+    /// FluxBeam: the pool, its two vaults and the mints.
+    fn fluxbeam_accounts(
         pool_id: &Pubkey,
-        _base_mint: &Pubkey,
-        _quote_mint: &Pubkey,
-        _rpc_client: &RpcClient,
-    ) -> Result<Vec<Pubkey>, PoolAnalysisFailure> {
-        let accounts = vec![*pool_id];
-
-        logger::debug(
-            LogTag::PoolAnalyzer,
-            &format!(
-                "Extracted Moonit accounts: curve={}, total_accounts={}",
-                pool_id,
-                accounts.len()
-            ),
-        );
-
-        Ok(accounts)
+        pool_data: &[u8],
+        mints: &[Pubkey],
+    ) -> Option<Vec<Pubkey>> {
+        let vaults = FluxbeamAmmDecoder::extract_reserve_accounts(pool_data)?;
+        pool_vaults_and_mints(pool_id, &vaults, mints)
     }
+}
 
-    pub(crate) async fn extract_fluxbeam_accounts(
-        pool_id: &Pubkey,
-        base_mint: &Pubkey,
-        quote_mint: &Pubkey,
-        rpc_client: &RpcClient,
-    ) -> Result<Vec<Pubkey>, PoolAnalysisFailure> {
-        let pool_account = Self::fetch_pool_account(pool_id, rpc_client).await?;
-        let vault_addresses = Self::decoded_vaults(
-            pool_id,
-            "FluxBeam",
-            super::decoders::fluxbeam_amm::FluxbeamAmmDecoder::extract_reserve_accounts(
-                &pool_account.data,
-            ),
-        )?;
-
-        let mut accounts = vec![*pool_id];
-        let vault_count = vault_addresses.len();
-
-        // Add vault addresses to accounts list
-        for vault_str in vault_addresses {
-            if let Ok(vault_pubkey) = Pubkey::from_str(&vault_str) {
-                accounts.push(vault_pubkey);
-            }
-        }
-
-        // Add the mints for reference
-        accounts.push(*base_mint);
-        accounts.push(*quote_mint);
-
-        logger::debug(
-            LogTag::PoolAnalyzer,
-            &format!(
-                "Extracted FluxBeam accounts: pool={}, vaults={}, total_accounts={}",
-                pool_id,
-                vault_count,
-                accounts.len()
-            ),
-        );
-
-        Ok(accounts)
+/// `pool_id`, then `vaults` in decoder order, then `mints`. A vault address that
+/// does not parse rejects the whole set rather than shrinking it.
+fn pool_vaults_and_mints(
+    pool_id: &Pubkey,
+    vaults: &[String],
+    mints: &[Pubkey],
+) -> Option<Vec<Pubkey>> {
+    let mut accounts = Vec::with_capacity(1 + vaults.len() + mints.len());
+    accounts.push(*pool_id);
+    for vault in vaults {
+        accounts.push(Pubkey::from_str(vault).ok()?);
     }
+    accounts.extend_from_slice(mints);
+    Some(accounts)
 }

@@ -6,7 +6,8 @@
 //! This module owns everything Solana-specific about finding and reading pools:
 //! RPC account fetching (`fetcher`), program account discovery (`discovery`),
 //! protocol classification and reserve-account extraction (`analyzer`,
-//! `analyzer_extractors`, `types::ProgramKind`), and per-DEX byte decoding
+//! `analyzer_extractors`, `types::ProgramKind`), program account layouts shared
+//! with the direct-swap venues (`layouts`), and per-DEX price decoding
 //! (`decoders`). The pricing driver (`driver`) is the only door into these
 //! components from neutral code, reached through the chain runtime.
 //! Chain-neutral pool persistence, caching, pricing policy and service
@@ -23,6 +24,7 @@ pub mod driver;
 pub mod fetcher;
 mod fetcher_ops;
 mod fetcher_types;
+pub mod layouts;
 pub mod reserve_accounts;
 pub mod selection;
 pub mod service;

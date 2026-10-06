@@ -1,15 +1,20 @@
 // Copyright (c) 2024-2026 ScreenerBot (screenerbot.io)
 // SPDX-License-Identifier: BUSL-1.1
 
-//! Raydium Legacy AMM decoder
+//! Raydium Legacy AMM (AMM v4) decoder
 //!
-//! Parses and decodes Raydium Legacy AMM pool accounts. Uses fixed offsets to locate mints and vaults.
-//! Fetches vault token account balances from provided accounts map and computes SOL price.
+//! Decodes the pool with the shared `AmmInfo` layout
+//! (`crate::chains::solana::pools::layouts::raydium_amm_v4`), reads the two vaults it
+//! names and prices the token from the tradable reserves: each vault less the profit
+//! earmarked out of it (`need_take_pnl`). A pool whose status does not permit
+//! swapping, a vault missing from the bundle, or a vault holding a different mint
+//! than the pool names for that side yields no price.
 
 use super::{AccountData, PoolDecoder};
-use crate::chains::solana::pools::decode_utils::read_pubkey_at;
 
-use crate::chains::solana::constants::{SOL_DECIMALS, SOL_MINT};
+use crate::chains::solana::constants::{RAYDIUM_LEGACY_AMM_PROGRAM_ID, SOL_DECIMALS, SOL_MINT};
+use crate::chains::solana::layout::{pubkey_at, token_account_amount};
+use crate::chains::solana::pools::layouts::raydium_amm_v4::AmmV4PoolState;
 use crate::chains::solana::pools::types::ProgramKind;
 use crate::logger::{self, LogTag};
 use crate::pools::types::PriceResult;
@@ -27,93 +32,60 @@ impl PoolDecoder for RaydiumLegacyAmmDecoder {
 
     fn decode_and_calculate(
         accounts: &HashMap<String, AccountData>,
-        base_mint: &str,
-        quote_mint: &str,
+        _base_mint: &str,
+        _quote_mint: &str,
     ) -> Option<PriceResult> {
-        // Pick pool account (largest length heuristic)
-        let pool_account = accounts.values().max_by_key(|a| a.data.len())?;
-        let pool_data = &pool_account.data;
-        if pool_data.len() < 600 {
+        let pool_account = accounts
+            .values()
+            .find(|a| a.owner.to_string() == RAYDIUM_LEGACY_AMM_PROGRAM_ID)?;
+        let Some(state) = AmmV4PoolState::decode(pool_account.pubkey, &pool_account.data) else {
             logger::error(
                 LogTag::PoolDecoder,
-                &format!("Legacy AMM pool data too small: {}", pool_data.len()),
+                &format!(
+                    "Legacy AMM pool {} does not match the AmmInfo layout ({} bytes)",
+                    pool_account.pubkey,
+                    pool_account.data.len()
+                ),
+            );
+            return None;
+        };
+        if !state.swap_enabled() {
+            logger::debug(
+                LogTag::PoolDecoder,
+                &format!(
+                    "Legacy AMM pool {} status {} does not permit swapping",
+                    state.pool, state.status
+                ),
             );
             return None;
         }
-        let info = LegacyPoolInfo::parse(pool_data)?;
-        // Adjust vaults if initial offsets missing in accounts map
-        let adjusted = adjust_vaults(&info, accounts);
-        let info = adjusted.unwrap_or(info);
 
-        // Determine target token mint
-        let target_mint = if info.coin_mint == base_mint {
-            base_mint
-        } else if info.coin_mint == quote_mint {
-            quote_mint
-        } else {
-            &info.coin_mint
-        }; // fallback token mint
+        let coin_balance =
+            vault_balance(accounts, &state.pool, &state.coin_vault, &state.coin_mint)?;
+        let pc_balance = vault_balance(accounts, &state.pool, &state.pc_vault, &state.pc_mint)?;
+        let (coin_reserve, pc_reserve) = state.tradable_reserves(coin_balance, pc_balance);
 
-        // Fetch reserves from vault token accounts (must be present)
-        let coin_reserve = get_token_account_amount(accounts, &info.coin_vault);
-        let pc_reserve = get_token_account_amount(accounts, &info.pc_vault);
-
-        // If vault fetch failed, try extracting reserves directly from pool data
-        let (coin_reserve, pc_reserve) = match (coin_reserve, pc_reserve) {
-            (Some(c), Some(p)) => {
-                logger::debug(
-                    LogTag::PoolDecoder,
-                    &format!("Using vault reserves: coin={c} pc={p}"),
-                );
-                (c, p)
-            }
-            _ => {
-                logger::warning(
-                    LogTag::PoolDecoder,
-                    "Vault fetch failed, extracting reserves from pool data",
-                );
-                extract_reserves_from_pool_data(pool_data)?
-            }
-        };
-
-        // Map SOL vs token - CRITICAL: decimals must be cached, no fallback
-        let (sol_reserve_raw, token_reserve_raw, token_decimals) = if info.pc_mint == SOL_MINT {
-            // pc=SOL vault at pc_vault, coin=token vault at coin_vault
-            let decimals = match get_cached_decimals(
-                crate::chains::ChainId::Solana,
-                &info.coin_mint,
-            ) {
-                Some(decimals) => decimals,
-                None => {
-                    logger::error(
-                        LogTag::PoolDecoder,
-                        &format!(
-                            "Legacy AMM: Token decimals not found for {}, skipping price calculation",
-                            info.coin_mint
-                        ),
-                    );
-                    return None;
-                }
-            };
-            (pc_reserve, coin_reserve, decimals)
-        } else if info.coin_mint == SOL_MINT {
-            let decimals = match get_cached_decimals(crate::chains::ChainId::Solana, &info.pc_mint)
-            {
-                Some(decimals) => decimals,
-                None => {
-                    logger::error(
-                        LogTag::PoolDecoder,
-                        &format!(
-                            "Legacy AMM: Token decimals not found for {}, skipping price calculation",
-                            info.pc_mint
-                        ),
-                    );
-                    return None;
-                }
-            };
-            (coin_reserve, pc_reserve, decimals)
+        let coin_mint = state.coin_mint.to_string();
+        let pc_mint = state.pc_mint.to_string();
+        let (sol_reserve_raw, token_reserve_raw, token_mint) = if pc_mint == SOL_MINT {
+            (pc_reserve, coin_reserve, coin_mint)
+        } else if coin_mint == SOL_MINT {
+            (coin_reserve, pc_reserve, pc_mint)
         } else {
             logger::error(LogTag::PoolDecoder, "Legacy AMM pool missing SOL mint");
+            return None;
+        };
+
+        // CRITICAL: decimals must be cached, no fallback
+        let Some(token_decimals) = get_cached_decimals(crate::chains::ChainId::Solana, &token_mint)
+        else {
+            logger::error(
+                LogTag::PoolDecoder,
+                &format!(
+                    "Legacy AMM: Token decimals not found for {}, skipping price calculation",
+                    token_mint
+                ),
+            );
             return None;
         };
 
@@ -148,281 +120,148 @@ impl PoolDecoder for RaydiumLegacyAmmDecoder {
                 sol_adjusted,
                 token_adjusted,
                 token_decimals,
-                info.coin_mint,
-                info.pc_mint
+                state.coin_mint,
+                state.pc_mint
             ),
         );
 
         Some(PriceResult::new(
-            target_mint.to_string(),
+            token_mint,
             0.0,
             price_sol,
             sol_adjusted,
             token_adjusted,
-            pool_account.pubkey.to_string(),
+            state.pool.to_string(),
         ))
     }
 }
 
-impl RaydiumLegacyAmmDecoder {
-    /// Extract reserve account addresses from Legacy AMM pool data for analyzer use
-    /// Returns the account addresses that need to be fetched: [coin_vault, pc_vault]
-    pub fn extract_reserve_accounts(pool_data: &[u8]) -> Option<Vec<String>> {
-        if pool_data.len() < 0x1c0 {
-            return None;
-        }
-        let mut out = Vec::new();
-        for off in [0x150usize, 0x160, 0x170, 0x180] {
-            if let Some(pk) = read_pubkey_at(pool_data, off) {
-                out.push(pk);
-            }
-        }
-        if out.is_empty() {
-            None
-        } else {
-            Some(out)
-        }
+/// The balance of `vault`, refused when the bundle lacks it or when it holds a
+/// different mint than `mint`, the side the pool names it for.
+fn vault_balance(
+    accounts: &HashMap<String, AccountData>,
+    pool: &Pubkey,
+    vault: &Pubkey,
+    mint: &Pubkey,
+) -> Option<u64> {
+    let Some(account) = accounts.get(&vault.to_string()) else {
+        logger::warning(
+            LogTag::PoolDecoder,
+            &format!("Legacy AMM pool {pool}: vault {vault} is not in the account bundle"),
+        );
+        return None;
+    };
+    let held = pubkey_at(&account.data, 0)?;
+    if held != *mint {
+        logger::warning(
+            LogTag::PoolDecoder,
+            &format!(
+                "Legacy AMM pool {pool}: vault {vault} holds mint {held}, the pool names {mint}"
+            ),
+        );
+        return None;
     }
-}
-
-struct LegacyPoolInfo {
-    coin_mint: String,
-    pc_mint: String,
-    coin_vault: String,
-    pc_vault: String,
-}
-
-impl LegacyPoolInfo {
-    fn parse(data: &[u8]) -> Option<Self> {
-        if data.len() < 0x1c0 {
-            return None;
-        }
-        // Extract mints and vaults from fixed offsets, but don't assume which is which
-        let vault_a = read_pubkey_at(data, 0x150)?; // vault at 0x150
-        let vault_b = read_pubkey_at(data, 0x160)?; // vault at 0x160
-        let mint_a = read_pubkey_at(data, 0x190)?; // mint at 0x190
-        let mint_b = read_pubkey_at(data, 0x1b0)?; // mint at 0x1b0
-
-        // Determine which mint is SOL and which is token
-        let (coin_mint, pc_mint, coin_vault, pc_vault) = if mint_a == SOL_MINT {
-            // mint_a is SOL, mint_b is token
-            (mint_b, mint_a, vault_b, vault_a)
-        } else if mint_b == SOL_MINT {
-            // mint_b is SOL, mint_a is token
-            (mint_a, mint_b, vault_a, vault_b)
-        } else {
-            // Neither mint is SOL, use original assumption (mint_a=token, mint_b=SOL)
-            // This handles wrapped SOL cases
-            (mint_a, mint_b, vault_a, vault_b)
-        };
-
-        Some(Self {
-            coin_mint,
-            pc_mint,
-            coin_vault,
-            pc_vault,
-        })
-    }
+    token_account_amount(&account.data)
 }
 
 #[cfg(test)]
 mod tests {
     use super::*;
     use std::str::FromStr;
+    use std::time::Instant;
 
-    #[test]
-    fn short_data_is_rejected_without_panicking() {
-        assert!(LegacyPoolInfo::parse(&[]).is_none());
-        assert!(LegacyPoolInfo::parse(&vec![0u8; 0x1c0 - 1]).is_none());
-        assert!(RaydiumLegacyAmmDecoder::extract_reserve_accounts(&[]).is_none());
+    struct Pool {
+        accounts: HashMap<String, AccountData>,
+        coin_vault: Pubkey,
+        pc_vault: Pubkey,
+        coin_mint: Pubkey,
+        pc_mint: Pubkey,
     }
 
-    #[test]
-    fn valid_layout_orients_coin_and_pc_around_the_sol_mint() {
-        let mut data = vec![0u8; 0x1b0 + 32];
+    fn account(pubkey: Pubkey, owner: Pubkey, data: Vec<u8>) -> AccountData {
+        AccountData {
+            pubkey,
+            data,
+            slot: 1,
+            fetched_at: Instant::now(),
+            lamports: 0,
+            owner,
+        }
+    }
+
+    fn token_account(mint: &Pubkey, amount: u64) -> Vec<u8> {
+        let mut data = vec![0u8; 165];
+        data[0..32].copy_from_slice(mint.as_ref());
+        data[64..72].copy_from_slice(&amount.to_le_bytes());
+        data
+    }
+
+    /// A swappable token/WSOL pool with both vaults in the bundle.
+    fn pool(status: u64) -> Pool {
+        let pool = Pubkey::new_unique();
         let coin_vault = Pubkey::new_unique();
-        let sol_vault = Pubkey::new_unique();
+        let pc_vault = Pubkey::new_unique();
         let coin_mint = Pubkey::new_unique();
-        let sol_mint = Pubkey::from_str(SOL_MINT).unwrap();
+        let pc_mint = Pubkey::from_str(SOL_MINT).unwrap();
 
-        data[0x150..0x150 + 32].copy_from_slice(&coin_vault.to_bytes()); // vault_a
-        data[0x160..0x160 + 32].copy_from_slice(&sol_vault.to_bytes()); // vault_b
-        data[0x190..0x190 + 32].copy_from_slice(&coin_mint.to_bytes()); // mint_a
-        data[0x1b0..0x1b0 + 32].copy_from_slice(&sol_mint.to_bytes()); // mint_b = SOL
+        let mut data = vec![0u8; 752];
+        data[0..8].copy_from_slice(&status.to_le_bytes());
+        data[336..368].copy_from_slice(coin_vault.as_ref());
+        data[368..400].copy_from_slice(pc_vault.as_ref());
+        data[400..432].copy_from_slice(coin_mint.as_ref());
+        data[432..464].copy_from_slice(pc_mint.as_ref());
 
-        let info = LegacyPoolInfo::parse(&data).expect("well-formed legacy AMM data decodes");
-        // Field spacing (0x150/0x160 for the two vaults, 16 bytes apart) leaves the
-        // vault reads overlapping for a full 32-byte pubkey, so only the mint
-        // orientation — which uses the non-overlapping 0x190/0x1b0 fields — is
-        // asserted precisely here.
-        assert_eq!(info.pc_mint, SOL_MINT, "mint_b (SOL) becomes pc_mint");
-        assert_eq!(info.coin_mint, coin_mint.to_string());
-        let _ = (coin_vault, sol_vault);
-    }
-}
-
-fn get_token_account_amount(accounts: &HashMap<String, AccountData>, key: &str) -> Option<u64> {
-    let acc = accounts.get(key)?;
-    if acc.data.len() < 72 {
-        return None;
-    }
-    let amount = u64::from_le_bytes(acc.data[64..72].try_into().ok()?);
-    Some(amount)
-}
-
-fn adjust_vaults(
-    info: &LegacyPoolInfo,
-    accounts: &HashMap<String, AccountData>,
-) -> Option<LegacyPoolInfo> {
-    let mut coin_vault = info.coin_vault.clone();
-    let mut pc_vault = info.pc_vault.clone();
-    let need_coin = !accounts.contains_key(&coin_vault);
-    let need_pc = !accounts.contains_key(&pc_vault);
-
-    // Check if existing vaults have wrong mints
-    let mut coin_vault_wrong_mint = false;
-    let mut pc_vault_wrong_mint = false;
-
-    if !need_coin {
-        if let Some(acc) = accounts.get(&coin_vault) {
-            if acc.data.len() >= 32 {
-                if let Ok(mint_bytes) = acc.data[0..32].try_into() {
-                    let mint = Pubkey::new_from_array(mint_bytes).to_string();
-                    if mint != info.coin_mint {
-                        coin_vault_wrong_mint = true;
-                        logger::warning(
-                            LogTag::PoolDecoder,
-                            &format!(
-                                "coin_vault {} has wrong mint {} expected {}",
-                                coin_vault, mint, info.coin_mint
-                            ),
-                        );
-                    }
-                }
-            }
+        let program = Pubkey::from_str(RAYDIUM_LEGACY_AMM_PROGRAM_ID).unwrap();
+        let token_program = crate::chains::solana::spl_token::id();
+        let accounts = HashMap::from([
+            (pool.to_string(), account(pool, program, data)),
+            (
+                coin_vault.to_string(),
+                account(coin_vault, token_program, token_account(&coin_mint, 1_000)),
+            ),
+            (
+                pc_vault.to_string(),
+                account(pc_vault, token_program, token_account(&pc_mint, 2_000)),
+            ),
+        ]);
+        Pool {
+            accounts,
+            coin_vault,
+            pc_vault,
+            coin_mint,
+            pc_mint,
         }
     }
 
-    if !need_pc {
-        if let Some(acc) = accounts.get(&pc_vault) {
-            if acc.data.len() >= 32 {
-                if let Ok(mint_bytes) = acc.data[0..32].try_into() {
-                    let mint = Pubkey::new_from_array(mint_bytes).to_string();
-                    if mint != info.pc_mint {
-                        pc_vault_wrong_mint = true;
-                        logger::warning(
-                            LogTag::PoolDecoder,
-                            &format!(
-                                "pc_vault {} has wrong mint {} expected {}",
-                                pc_vault, mint, info.pc_mint
-                            ),
-                        );
-                    }
-                }
-            }
-        }
+    fn decode(pool: &Pool) -> Option<PriceResult> {
+        RaydiumLegacyAmmDecoder::decode_and_calculate(&pool.accounts, "", "")
     }
 
-    let need_adjustment = need_coin || need_pc || coin_vault_wrong_mint || pc_vault_wrong_mint;
-    if !need_adjustment {
-        return None;
+    #[test]
+    fn a_vault_holding_the_other_sides_mint_yields_no_price() {
+        let mut p = pool(6);
+        let swapped = token_account(&p.coin_mint, 2_000);
+        p.accounts.get_mut(&p.pc_vault.to_string()).unwrap().data = swapped;
+        assert!(decode(&p).is_none());
     }
 
-    logger::debug(
-        LogTag::PoolDecoder,
-        &format!(
-            "adjust_vaults: need_coin={} need_pc={} wrong_coin_mint={} wrong_pc_mint={}",
-            need_coin || coin_vault_wrong_mint,
-            need_pc || pc_vault_wrong_mint,
-            coin_vault_wrong_mint,
-            pc_vault_wrong_mint
-        ),
-    );
-
-    // Build map from mint->vault pubkey where account present
-    for (k, acc) in accounts {
-        // Only consider accounts that look like token accounts (>=80 bytes)
-        if acc.data.len() >= 80 {
-            if let Ok(mint_bytes) = acc.data[0..32].try_into() {
-                let mint = Pubkey::new_from_array(mint_bytes).to_string();
-                if mint == info.coin_mint && (need_coin || coin_vault_wrong_mint) {
-                    coin_vault = k.clone();
-                    logger::debug(
-                        LogTag::PoolDecoder,
-                        &format!("Found coin_vault: {coin_vault}"),
-                    );
-                }
-                if mint == info.pc_mint && (need_pc || pc_vault_wrong_mint) {
-                    pc_vault = k.clone();
-                    logger::debug(LogTag::PoolDecoder, &format!("Found pc_vault: {pc_vault}"));
-                }
-            }
-        }
+    #[test]
+    fn the_vault_balances_are_read_from_the_vaults_the_pool_names() {
+        let p = pool(6);
+        let coin = vault_balance(&p.accounts, &Pubkey::default(), &p.coin_vault, &p.coin_mint);
+        let pc = vault_balance(&p.accounts, &Pubkey::default(), &p.pc_vault, &p.pc_mint);
+        assert_eq!((coin, pc), (Some(1_000), Some(2_000)));
     }
 
-    // Ensure we don't use the same vault for both (emergency fallback)
-    if coin_vault == pc_vault {
-        logger::error(
-            LogTag::PoolDecoder,
-            "Same vault found for both coin and pc - this will cause incorrect pricing",
-        );
-        return None;
+    #[test]
+    fn a_vault_missing_from_the_bundle_yields_no_price() {
+        let mut p = pool(6);
+        p.accounts.remove(&p.coin_vault.to_string());
+        assert!(decode(&p).is_none());
     }
 
-    logger::debug(
-        LogTag::PoolDecoder,
-        &format!(
-            "Adjusted vaults: coin_vault={} pc_vault={}",
-            coin_vault, pc_vault
-        ),
-    );
-
-    Some(LegacyPoolInfo {
-        coin_mint: info.coin_mint.clone(),
-        pc_mint: info.pc_mint.clone(),
-        coin_vault,
-        pc_vault,
-    })
-}
-
-/// Extract reserves directly from pool data when vault fetch fails
-fn extract_reserves_from_pool_data(data: &[u8]) -> Option<(u64, u64)> {
-    let promising_offsets = [
-        (208, 216), // Primary candidate: quoteTotalPnl, baseTotalPnl
-        (256, 272), // Secondary alternative
-        (288, 296), // Backup alternative
-    ];
-
-    for &(offset1, offset2) in &promising_offsets {
-        if offset1 + 8 <= data.len() && offset2 + 8 <= data.len() {
-            if let (Ok(reserve1_bytes), Ok(reserve2_bytes)) = (
-                data[offset1..offset1 + 8].try_into(),
-                data[offset2..offset2 + 8].try_into(),
-            ) {
-                let reserve1 = u64::from_le_bytes(reserve1_bytes);
-                let reserve2 = u64::from_le_bytes(reserve2_bytes);
-
-                if reserve1 > 10_000_000
-                    && reserve1 < 1_000_000_000_000_000
-                    && reserve2 > 10_000_000
-                    && reserve2 < 1_000_000_000_000_000
-                {
-                    logger::debug(
-                        LogTag::PoolDecoder,
-                        &format!(
-                            "Found pool data reserves at offsets {} and {}: {} and {}",
-                            offset1, offset2, reserve1, reserve2
-                        ),
-                    );
-                    // Return (coin_reserve, pc_reserve) - token first, SOL second based on size heuristic
-                    return if reserve1 < reserve2 {
-                        Some((reserve1, reserve2)) // Smaller value likely token, larger SOL
-                    } else {
-                        Some((reserve2, reserve1)) // Ensure token gets smaller reserve
-                    };
-                }
-            }
-        }
+    #[test]
+    fn a_pool_whose_status_does_not_permit_swapping_yields_no_price() {
+        assert!(decode(&pool(4)).is_none());
     }
-    None
 }
