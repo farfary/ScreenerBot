@@ -166,7 +166,7 @@ pub async fn add_to_position(
     let transaction_signature = match execute_swap_with_fallback(
         &api_token,
         quote,
-        crate::swaps::SwapAmountLimit::U64,
+        crate::swaps::SwapAmountLimit::Unrestricted,
     )
     .await
     {

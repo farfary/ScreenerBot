@@ -201,8 +201,12 @@ pub async fn partial_close_position(
             ),
         );
 
-        match execute_swap_with_fallback(&api_token, quote, crate::swaps::SwapAmountLimit::U64)
-            .await
+        match execute_swap_with_fallback(
+            &api_token,
+            quote,
+            crate::swaps::SwapAmountLimit::Unrestricted,
+        )
+        .await
         {
             Ok(res) => {
                 swap_result = Some(res);
@@ -246,7 +250,7 @@ pub async fn partial_close_position(
                             match execute_swap_with_fallback(
                                 &api_token,
                                 retry_quote,
-                                crate::swaps::SwapAmountLimit::U64,
+                                crate::swaps::SwapAmountLimit::Unrestricted,
                             )
                             .await
                             {
