@@ -1,0 +1,126 @@
+{
+  "target": "x86_64-macos",
+  "prices": [
+    {
+      "mint": "5zcqoA4zmeLnLdc6GonaFLzxFRna6kQX9F1cLNvZWFd4",
+      "price_usd": 0.0,
+      "price_native": 4.157307885403973e-8,
+      "confidence": 0.9,
+      "source_pool": "METEORA_DAMM_Q64_CANON",
+      "pool_address": "3CVNnECvuyPtUys2QpaLSNRrQMvbqArsNJqKvbp3zmt1",
+      "slot": 0,
+      "native_reserves": 42.193684657,
+      "token_reserves": 998922872.407238
+    },
+    {
+      "mint": "9rcxe6nSq9GT56KyGV8QHhBYKgjNaGmW2JyDDfsZBAGS",
+      "price_usd": 0.0,
+      "price_native": 2.901213134789504e-8,
+      "confidence": 1.0,
+      "source_pool": "METEORA DBC",
+      "pool_address": "J1YvC19EHXGjmthszo7sM5FwL3mn3qjS8Bf3zTMjeX2T",
+      "slot": 453946864,
+      "native_reserves": 0.035248579,
+      "token_reserves": 999738453.5469658
+    },
+    {
+      "mint": "9b41s5Uvz8cBXR4zwUPENx3HCThJc8Z1DAjRPzfnEb2U",
+      "price_usd": 0.0,
+      "price_native": 4.249999999999999e-6,
+      "confidence": 1.0,
+      "source_pool": "METEORA DBC",
+      "pool_address": "F71peWVSaCjEL5bsMJMrhguuEN7K8vhiKvFN6tf91Ymk",
+      "slot": 453946870,
+      "native_reserves": 0.0,
+      "token_reserves": 1000000000.0
+    },
+    {
+      "mint": "EPjFWdd5AufqSSqeM2qN1xzybapC8G4wEGGkZwyTDt1v",
+      "price_usd": 0.0,
+      "price_native": 0.008267875243676387,
+      "confidence": 0.9,
+      "source_pool": "METEORA DLMM",
+      "pool_address": "5rCf1DM8LjKTw4YqhnoLcngyZYeNnQqztScTogYHAS6",
+      "slot": 453946875,
+      "native_reserves": 15925.239653706,
+      "token_reserves": 5391374.643864
+    },
+    {
+      "mint": "DqExwRSP2TYfNu5J4PhxNy6JV8PfCz9sjd8jPEoAmoon",
+      "price_usd": 9.316706901074955e-6,
+      "price_native": 6.21113793404997e-8,
+      "confidence": 1.0,
+      "source_pool": null,
+      "pool_address": "",
+      "slot": 0,
+      "native_reserves": 2.075559582,
+      "token_reserves": 930684790.2538829
+    },
+    {
+      "mint": "EPjFWdd5AufqSSqeM2qN1xzybapC8G4wEGGkZwyTDt1v",
+      "price_usd": 0.0,
+      "price_native": 0.008266099068318768,
+      "confidence": 1.0,
+      "source_pool": null,
+      "pool_address": "",
+      "slot": 0,
+      "native_reserves": 137878298889585.0,
+      "token_reserves": 14580593996224.0
+    },
+    {
+      "mint": "5UUH9RTDiSpq6HKS6bp4NdU9PNJpXRXuiw6ShBTBhgH2",
+      "price_usd": 0.0,
+      "price_native": 0.0003671352867338878,
+      "confidence": 0.9,
+      "source_pool": "PumpFun",
+      "pool_address": "4w2cysotX6czaUGmmWg13hDpY4QEMG2CzeKYEQyK9Ama",
+      "slot": 0,
+      "native_reserves": 13941.076693781,
+      "token_reserves": 37972587.211117
+    },
+    {
+      "mint": "2xJGewx1p72WFCAwBvmbpejZxqa7EN3mS3PiGjgrpump",
+      "price_usd": 0.0,
+      "price_native": 2.797856733526357e-8,
+      "confidence": 1.0,
+      "source_pool": "PumpFun Bonding Curve",
+      "pool_address": "AUKZMypBMmVi3gPMNmY46eb841La2mZufkdkPSh3PWEj",
+      "slot": 0,
+      "native_reserves": 30.010499751,
+      "token_reserves": 1072624605.519934
+    },
+    {
+      "mint": "EPjFWdd5AufqSSqeM2qN1xzybapC8G4wEGGkZwyTDt1v",
+      "price_usd": 0.0,
+      "price_native": 0.008249257492708174,
+      "confidence": 1.0,
+      "source_pool": null,
+      "pool_address": "58oQChx4yWmvKdwLLZzBi4ChoCc2fqCUWBkwMihLYQo2",
+      "slot": 0,
+      "native_reserves": 111808.512676811,
+      "token_reserves": 13553766.842124
+    },
+    {
+      "mint": "EPjFWdd5AufqSSqeM2qN1xzybapC8G4wEGGkZwyTDt1v",
+      "price_usd": 0.0,
+      "price_native": 0.008266025397619866,
+      "confidence": 0.9,
+      "source_pool": "RAYDIUM_CLMM",
+      "pool_address": "3ucNos4NbumPLZNWztqGHNFFgkHeRMBQAVemeeomsUxv",
+      "slot": 0,
+      "native_reserves": 34387.112794817,
+      "token_reserves": 4017996.165758
+    },
+    {
+      "mint": "Dz9mQ9NzkBcCsuGPFJ3r1bS4wgqKMHBPiVuniW8Mbonk",
+      "price_usd": 0.0,
+      "price_native": 0.001940427443631596,
+      "confidence": 1.0,
+      "source_pool": null,
+      "pool_address": "",
+      "slot": 0,
+      "native_reserves": 22085.832348991,
+      "token_reserves": 11381941.861045
+    }
+  ]
+}

@@ -1275,14 +1275,17 @@ fn tokens_and_filtering_never_resolve_a_chain_implicitly() {
     );
 }
 
-/// Statics in the trading domains whose map is keyed by a bare `String` —
-/// an address, a signature, a mint — carry no chain scope, so a second chain
+/// Statics in the trading domains whose map is keyed by a bare `String`, or
+/// whose set or vector holds bare `String`s — an address, a signature, a
+/// mint — carry no chain scope, so a second chain
 /// would silently share (or collide with) every entry. Entries are
 /// `file::STATIC` and freeze today's set; each shrinks away as its map is
 /// keyed through the chain runtime with an explicit chain-scoped key.
 const BARE_STRING_KEYED_STATICS: &[&str] = &[
+    "pools/cache.rs::OPEN_MINTS_SNAPSHOT",
     "pools/cache.rs::PRICE_CACHE",
     "pools/cache.rs::PRICE_HISTORY",
+    "pools/service.rs::DEBUG_TOKEN_OVERRIDE",
     "positions/price_resolution.rs::FORCE_FETCH_COOLDOWN",
     "positions/state.rs::MINT_TO_POSITION_INDEX",
     "positions/state.rs::PENDING_OPEN_SWAPS",
@@ -1293,6 +1296,7 @@ const BARE_STRING_KEYED_STATICS: &[&str] = &[
     "positions/state_pending.rs::PENDING_PARTIAL_EXIT_DETAILS",
     "positions/verifier.rs::LAST_TOKEN_ACCOUNTS_CHECK",
     "swaps/operations.rs::NO_ROUTE_STRIKES",
+    "trader/copy/paper_exits.rs::HELD_PAPER_MINTS",
     "trader/entry.rs::ENTRY_CYCLE_RESERVATIONS",
     "transactions/utils.rs::GLOBAL_KNOWN_SIGNATURES",
     "transactions/utils.rs::GLOBAL_PENDING_TRANSACTIONS",
@@ -1355,10 +1359,48 @@ fn per_chain_declarations_are_recognized_by_their_outermost_type() {
     }
 }
 
-/// A trading-domain static must not key its map by a bare `String`. The
-/// declaration header (everything from `static NAME` up to the `=`) is
-/// scanned for the `<String,` map-key pattern; the allowlist ratchets the
-/// current set in both directions.
+/// True when the declared type of a `static NAME: TYPE` header holds bare
+/// `String` keys or members — a `String`-keyed map, a set of `String`s or a
+/// vector of `String`s — outside a `PerChain` slot.
+fn declares_bare_string_keys(declared_type: &str) -> bool {
+    let holds_strings = declared_type.contains("<String,")
+        || declared_type.contains("Set<String>")
+        || declared_type.contains("Vec<String>");
+    holds_strings && !is_per_chain_declaration(declared_type)
+}
+
+#[test]
+fn bare_string_key_declarations_cover_maps_sets_and_vectors() {
+    let cases = [
+        ("static CACHE: LazyLock<HashMap<String, u8>> ", true),
+        ("static CACHE: LazyLock<DashMap<String, u8>> ", true),
+        (
+            "static MINTS: LazyLock<RwLock<std::collections::HashSet<String>>> ",
+            true,
+        ),
+        ("static MINTS: LazyLock<BTreeSet<String>> ", true),
+        ("static MINTS: LazyLock<DashSet<String>> ", true),
+        ("static MINTS: LazyLock<RwLock<Vec<String>>> ", true),
+        ("static MINTS: LazyLock<RwLock<Option<Vec<String>>>> ", true),
+        ("static MINTS: PerChain<ArcSwap<HashSet<String>>> ", false),
+        (
+            "static CACHE: LazyLock<HashMap<(ChainId, String), u8>> ",
+            false,
+        ),
+        ("static NAMES: LazyLock<Vec<&'static str>> ", false),
+        ("static COUNT: AtomicU64 ", false),
+    ];
+    for (header, expected) in cases {
+        assert_eq!(declares_bare_string_keys(header), expected, "{header}");
+    }
+}
+
+/// A trading-domain static must not key its map by a bare `String`, nor hold
+/// bare `String`s in a set or vector. The declaration header (everything from
+/// `static NAME` up to the `=`) is scanned for the `<String,` map-key
+/// pattern and the `Set<String>` and `Vec<String>` member patterns, which
+/// cover `HashSet`, `BTreeSet`, `DashSet` and `Option<Vec<String>>`; the
+/// allowlist ratchets the current set in both directions.
 ///
 /// A conforming chain-scoped static takes one of two shapes, neither of
 /// which needs an entry:
@@ -1372,9 +1414,8 @@ fn per_chain_declarations_are_recognized_by_their_outermost_type() {
 /// shapes instead.
 ///
 /// Known latent gaps: [`static_declaration_name`] does not recognize
-/// `pub(in path)` visibility (none exist today), and String-keyed SETS
-/// (`HashSet<String>`, e.g. `OPEN_MINTS_SNAPSHOT` in src/pools/cache.rs)
-/// carry no `<String,` map-key pattern and are not covered.
+/// `pub(in path)` visibility (none exist today), and a `String` reached
+/// through a type alias or a wrapper type is not seen in the header.
 #[test]
 fn no_bare_string_keyed_statics() {
     let mut hits: Vec<String> = Vec::new();
@@ -1408,14 +1449,14 @@ fn no_bare_string_keyed_statics() {
                 continue;
             }
             let declared_type = header.split('=').next().unwrap_or("");
-            if !declared_type.contains("<String,") || is_per_chain_declaration(declared_type) {
+            if !declares_bare_string_keys(declared_type) {
                 continue;
             }
             let key = format!("{path}::{name}");
             hits.push(key.clone());
             if !BARE_STRING_KEYED_STATICS.contains(&key.as_str()) {
                 new_violations.push(format!(
-                    "src/{path}:{}: static {name} is keyed by a bare String",
+                    "src/{path}:{}: static {name} holds bare String keys",
                     idx + 1
                 ));
             }
