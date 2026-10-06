@@ -15,7 +15,6 @@ use super::types::ProgramKind;
 
 use crate::chains::solana::pools::service::get_pool_analyzer;
 use crate::chains::{adapter_for, AssetId, ChainId, PoolId};
-use crate::config::with_config;
 use crate::events::{record_safe, Event, EventCategory};
 use crate::logger::{self, LogTag};
 use crate::pools::types::{max_watched_tokens, PoolDescriptor};
@@ -33,21 +32,6 @@ use tokio::sync::Notify;
 
 // Timing constants
 const DISCOVERY_TICK_INTERVAL_SECS: u64 = 5;
-
-/// Returns whether DexScreener discovery is enabled via configuration
-pub fn is_dexscreener_discovery_enabled() -> bool {
-    with_config(|cfg| cfg.pools.enable_dexscreener_discovery)
-}
-
-/// Returns whether GeckoTerminal discovery is enabled via configuration
-pub fn is_geckoterminal_discovery_enabled() -> bool {
-    with_config(|cfg| cfg.pools.enable_geckoterminal_discovery)
-}
-
-/// Returns whether Raydium discovery is enabled via configuration
-pub fn is_raydium_discovery_enabled() -> bool {
-    with_config(|cfg| cfg.pools.enable_raydium_discovery)
-}
 
 /// Pool discovery service state
 pub struct PoolDiscovery {
@@ -83,83 +67,6 @@ impl PoolDiscovery {
         )
     }
 
-    /// Get current discovery source configuration
-    pub fn get_source_config() -> (bool, bool, bool) {
-        (
-            is_dexscreener_discovery_enabled(),
-            is_geckoterminal_discovery_enabled(),
-            is_raydium_discovery_enabled(),
-        )
-    }
-
-    /// Log the current discovery source configuration
-    pub fn log_source_config() {
-        let (dex_enabled, gecko_enabled, raydium_enabled) = Self::get_source_config();
-        let enabled_sources: Vec<&str> = [
-            if dex_enabled {
-                Some("DexScreener")
-            } else {
-                None
-            },
-            if gecko_enabled {
-                Some("GeckoTerminal")
-            } else {
-                None
-            },
-            if raydium_enabled {
-                Some("Raydium")
-            } else {
-                None
-            },
-        ]
-        .iter()
-        .filter_map(|&s| s)
-        .collect();
-
-        if enabled_sources.is_empty() {
-            logger::warning(LogTag::PoolDiscovery, "No pool discovery sources enabled!");
-        } else {
-            logger::info(
-                LogTag::PoolDiscovery,
-                &format!(
-                    "Pool discovery sources enabled: {}",
-                    enabled_sources.join(", ")
-                ),
-            );
-        }
-
-        let disabled_sources: Vec<&str> = [
-            if !dex_enabled {
-                Some("DexScreener")
-            } else {
-                None
-            },
-            if !gecko_enabled {
-                Some("GeckoTerminal")
-            } else {
-                None
-            },
-            if !raydium_enabled {
-                Some("Raydium")
-            } else {
-                None
-            },
-        ]
-        .iter()
-        .filter_map(|&s| s)
-        .collect();
-
-        if !disabled_sources.is_empty() {
-            logger::debug(
-                LogTag::PoolDiscovery,
-                &format!(
-                    "Pool discovery sources disabled: {}",
-                    disabled_sources.join(", ")
-                ),
-            );
-        }
-    }
-
     /// Claim this instance's single discovery loop; `false` when a loop was
     /// already started.
     pub(super) fn claim_loop(&self) -> bool {
@@ -172,8 +79,6 @@ impl PoolDiscovery {
     /// abandoned on shutdown.
     pub(super) async fn run_discovery_loop(self: Arc<Self>, shutdown: Arc<Notify>) {
         logger::info(LogTag::PoolDiscovery, "Starting pool discovery task");
-
-        Self::log_source_config();
 
         let interval_seed = DISCOVERY_TICK_INTERVAL_SECS;
 
@@ -224,13 +129,6 @@ impl PoolDiscovery {
     ) -> crate::chains::solana::Result<usize> {
         let tick_start = Instant::now();
 
-        let (dex_enabled, gecko_enabled, raydium_enabled) = with_config(|cfg| {
-            (
-                cfg.pools.enable_dexscreener_discovery,
-                cfg.pools.enable_geckoterminal_discovery,
-                cfg.pools.enable_raydium_discovery,
-            )
-        });
         let max_watched = max_watched_tokens();
 
         record_safe(Event::info(
@@ -238,21 +136,9 @@ impl PoolDiscovery {
             Some("discovery_tick_started".to_owned()),
             None,
             None,
-            serde_json::json!({
-              "dexscreener_enabled": dex_enabled,
-              "geckoterminal_enabled": gecko_enabled,
-              "raydium_enabled": raydium_enabled
-            }),
+            serde_json::json!({}),
         ))
         .await;
-
-        if !dex_enabled && !gecko_enabled && !raydium_enabled {
-            logger::warning(
-                LogTag::PoolDiscovery,
-                "All pool discovery sources disabled - skipping tick",
-            );
-            return Ok(0);
-        }
 
         // Build token list from the tokens that passed filtering
         let mut tokens: Vec<String> = crate::tokens::get_passed_tokens(ChainId::Solana);

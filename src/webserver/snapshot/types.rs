@@ -191,7 +191,6 @@ pub struct OhlcvGapSummarySnapshot {
 pub struct PoolServiceStatusSnapshot {
     pub running: bool,
     pub system_ready: bool,
-    pub single_pool_mode: bool,
     pub monitored_tokens: usize,
     pub monitored_capacity: usize,
     pub price_subscribers: usize,
@@ -200,8 +199,6 @@ pub struct PoolServiceStatusSnapshot {
     pub analyzer: Option<PoolAnalyzerSnapshot>,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub fetcher: Option<PoolFetcherSnapshot>,
-    #[serde(skip_serializing_if = "Option::is_none")]
-    pub discovery: Option<PoolDiscoverySnapshot>,
 }
 
 #[derive(Clone, Debug, Serialize)]
@@ -229,11 +226,6 @@ pub struct PoolFetcherSnapshot {
     pub total_bundles: usize,
     pub bundles_with_data: usize,
     pub total_accounts_tracked: usize,
-}
-
-#[derive(Clone, Debug, Serialize)]
-pub struct PoolDiscoverySnapshot {
-    pub sources_enabled: Vec<String>,
 }
 
 #[derive(Clone, Debug, Serialize)]

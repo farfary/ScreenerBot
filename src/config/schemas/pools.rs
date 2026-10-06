@@ -11,26 +11,6 @@ config_struct! {
     /// Pool service configuration
     pub struct PoolsConfig {
         #[metadata(field_metadata! {
-            impact: ConfigImpact::High,
-            category: ConfigCategory::Monitoring,
-        })]
-        enable_single_pool_mode: bool = true,
-        #[metadata(field_metadata! {
-            impact: ConfigImpact::Critical,
-            category: ConfigCategory::Discovery,
-        })]
-        enable_dexscreener_discovery: bool = true,
-        #[metadata(field_metadata! {
-            impact: ConfigImpact::Medium,
-            category: ConfigCategory::Discovery,
-        })]
-        enable_geckoterminal_discovery: bool = false,
-        #[metadata(field_metadata! {
-            impact: ConfigImpact::Medium,
-            category: ConfigCategory::Discovery,
-        })]
-        enable_raydium_discovery: bool = false,
-        #[metadata(field_metadata! {
             min: 100,
             max: 5000,
             step: 50,

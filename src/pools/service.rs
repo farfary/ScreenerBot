@@ -14,7 +14,6 @@ use super::driver::{PricingDriver, PricingStage, PricingStageMetrics};
 use super::types::max_watched_tokens;
 use super::{cache, db, Error};
 use crate::chains::{adapter_for, enabled_chains, runtime_for, ChainId};
-use crate::config::with_config;
 use crate::events::{record_safe, Event, EventCategory};
 use crate::logger::{self, LogTag};
 
@@ -45,13 +44,7 @@ pub(super) fn pricing_driver(chain: ChainId) -> Result<Arc<dyn PricingDriver>, E
 ///
 /// Returns an error if already initialized or if initialization fails.
 pub async fn initialize_pool_components() -> Result<(), Error> {
-    let (single_pool_mode, dexscreener_enabled, fetch_interval_ms) = with_config(|cfg| {
-        (
-            cfg.pools.enable_single_pool_mode,
-            cfg.pools.enable_dexscreener_discovery,
-            FETCH_INTERVAL_MS,
-        )
-    });
+    let fetch_interval_ms = FETCH_INTERVAL_MS;
     let max_tokens = max_watched_tokens();
     let refresh_interval_seconds = (fetch_interval_ms as f64) / 1000.0;
 
@@ -62,11 +55,9 @@ pub async fn initialize_pool_components() -> Result<(), Error> {
         None,
         None,
         serde_json::json!({
-          "single_pool_mode": single_pool_mode,
           "max_watched_tokens": max_tokens,
           "refresh_interval_seconds": refresh_interval_seconds,
-          "fetch_interval_ms": fetch_interval_ms,
-          "dexscreener_enabled": dexscreener_enabled
+          "fetch_interval_ms": fetch_interval_ms
         }),
     ))
     .await;
@@ -93,23 +84,10 @@ pub async fn initialize_pool_components() -> Result<(), Error> {
     logger::info(LogTag::PoolService, "Starting pool service...");
 
     for &chain in enabled_chains() {
-        if let Err(e) = initialize_chain(chain, dexscreener_enabled).await {
+        if let Err(e) = initialize_chain(chain).await {
             SERVICE_RUNNING.store(false, Ordering::Relaxed);
             return Err(e);
         }
-    }
-
-    // Log pool monitoring mode configuration
-    if single_pool_mode {
-        logger::info(
-            LogTag::PoolService,
-            "Pool monitoring mode: SINGLE POOL (highest liquidity only)",
-        );
-    } else {
-        logger::info(
-            LogTag::PoolService,
-            "Pool monitoring mode: ALL POOLS (comprehensive coverage)",
-        );
     }
 
     logger::info(
@@ -124,7 +102,6 @@ pub async fn initialize_pool_components() -> Result<(), Error> {
         None,
         serde_json::json!({
           "status": "initialized",
-          "single_pool_mode": single_pool_mode,
           "components_ready": true
         }),
     ))
@@ -135,7 +112,7 @@ pub async fn initialize_pool_components() -> Result<(), Error> {
 
 /// Bring up one chain: open its database, load its open positions' price
 /// history, initialize its pricing driver, then warm its token pool cache.
-async fn initialize_chain(chain: ChainId, dexscreener_enabled: bool) -> Result<(), Error> {
+async fn initialize_chain(chain: ChainId) -> Result<(), Error> {
     if let Err(e) = db::initialize_database(chain).await {
         logger::error(
             LogTag::PoolService,
@@ -168,7 +145,6 @@ async fn initialize_chain(chain: ChainId, dexscreener_enabled: bool) -> Result<(
         None,
         None,
         serde_json::json!({
-          "dexscreener_enabled": dexscreener_enabled,
           "action": "component_initialization"
         }),
     ))
@@ -346,11 +322,6 @@ pub fn pricing_stage_metrics(stage: PricingStage) -> Option<PricingStageMetrics>
 /// Check if the pool service is currently running
 pub fn is_pool_service_running() -> bool {
     SERVICE_RUNNING.load(Ordering::SeqCst)
-}
-
-/// Check if single pool mode is enabled
-pub fn is_single_pool_mode_enabled() -> bool {
-    with_config(|cfg| cfg.pools.enable_single_pool_mode)
 }
 
 /// The open positions' mints that `chain` accepts as addresses. Positions

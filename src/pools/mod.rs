@@ -51,7 +51,7 @@ pub use driver::{
 pub use error::{Error, Result};
 pub use maintenance::start_maintenance_task;
 pub use service::{
-    initialize_pool_components, is_pool_service_running, is_single_pool_mode_enabled,
-    pricing_stage_metrics, pricing_stage_ready, start_pricing_stage, stop_pool_service,
+    initialize_pool_components, is_pool_service_running, pricing_stage_metrics,
+    pricing_stage_ready, start_pricing_stage, stop_pool_service,
 };
 pub use types::{CacheStats, PoolMintVaultInfo, PriceResult, TokenPairInfo};

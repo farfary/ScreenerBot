@@ -933,7 +933,9 @@ api_key = "sk-ant-secret"
         assert_eq!(endpoints.rpc.timeout_secs, 6);
         assert_eq!(endpoints.rugcheck.timeout_secs, 12);
 
-        assert!(config.pools.enable_raydium_discovery);
+        let written = table(&config);
+        let pools = written["pools"].as_table().expect("pools table");
+        assert!(!pools.contains_key("enable_raydium_discovery"));
 
         // Trading amounts keep their sections.
         assert_eq!(config.trader.max_open_positions, 4);

@@ -300,30 +300,9 @@ pub(super) fn collect_pool_service_snapshot() -> Option<PoolServiceStatusSnapsho
         total_accounts_tracked: fetch.total_accounts_tracked,
     });
 
-    let (dexs_enabled, gecko_enabled, raydium_enabled) = config::with_config(|cfg| {
-        (
-            cfg.pools.enable_dexscreener_discovery,
-            cfg.pools.enable_geckoterminal_discovery,
-            cfg.pools.enable_raydium_discovery,
-        )
-    });
-    let mut sources_enabled = Vec::new();
-    if dexs_enabled {
-        sources_enabled.push("DexScreener".to_owned());
-    }
-    if gecko_enabled {
-        sources_enabled.push("GeckoTerminal".to_owned());
-    }
-    if raydium_enabled {
-        sources_enabled.push("Raydium".to_owned());
-    }
-
-    let discovery_snapshot = PoolDiscoverySnapshot { sources_enabled };
-
     Some(PoolServiceStatusSnapshot {
         running,
         system_ready,
-        single_pool_mode: crate::pools::is_single_pool_mode_enabled(),
         monitored_tokens: monitored_tokens_count,
         monitored_capacity: crate::pools::types::max_watched_tokens(),
         price_subscribers,
@@ -334,7 +313,6 @@ pub(super) fn collect_pool_service_snapshot() -> Option<PoolServiceStatusSnapsho
         },
         analyzer: analyzer_snapshot,
         fetcher: fetcher_snapshot,
-        discovery: Some(discovery_snapshot),
     })
 }
 
