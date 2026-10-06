@@ -184,8 +184,28 @@ pub enum VerificationKind {
 
 #[derive(Debug, Clone, Serialize)]
 pub enum GiveUpReason {
-    MaxAttemptsReached { attempts: u8, max: u8 },
-    MaxAgeReached { age_hours: i64, max: i64 },
+    MaxAttemptsReached {
+        attempts: u8,
+        max: u8,
+    },
+    MaxAgeReached {
+        age_hours: i64,
+        max: i64,
+    },
+    /// Applying a confirmed outcome failed with an error that a repeat of the
+    /// same apply cannot resolve.
+    ApplyRejected {
+        error: String,
+    },
+}
+
+/// What the verification worker does with an item whose transition failed to apply.
+#[derive(Debug, Clone, Serialize)]
+pub enum ApplyFailureDisposition {
+    /// Retry the apply after the item's backoff.
+    Requeue,
+    /// Stop verifying the signature for the rest of the session.
+    Drop(GiveUpReason),
 }
 
 #[derive(Debug)]

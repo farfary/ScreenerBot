@@ -93,9 +93,9 @@ pub use queue::{enqueue_verification, VerificationItem};
 pub use state::PositionLockGuard;
 pub use transitions::PositionTransition;
 pub use types::{
-    EntryRecord, EntrySubmission, ExitRecord, GiveUpReason, PendingDcaSwap, PendingPartialExit,
-    Position, PositionManagement, PositionOrigin, PriceSource, TradeOrigin, VerificationKind,
-    VerificationOutcome,
+    ApplyFailureDisposition, EntryRecord, EntrySubmission, ExitRecord, GiveUpReason,
+    PendingDcaSwap, PendingPartialExit, Position, PositionManagement, PositionOrigin, PriceSource,
+    TradeOrigin, VerificationKind, VerificationOutcome,
 };
 
 #[cfg(test)]

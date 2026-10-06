@@ -3,10 +3,12 @@
 
 //! Position verification queue — tracks pending transaction verifications with retry logic.
 
-use super::types::{GiveUpReason, VerificationKind};
+use super::types::{ApplyFailureDisposition, GiveUpReason, VerificationKind};
+use super::Error;
 use crate::chains::RawAmount;
+use crate::errors::ErrorClass;
 use chrono::{DateTime, Duration as ChronoDuration, Utc};
-use std::collections::VecDeque;
+use std::collections::{HashSet, VecDeque};
 use std::sync::LazyLock;
 use tokio::sync::{Notify, RwLock};
 
@@ -19,6 +21,10 @@ const MAX_VERIFICATION_ATTEMPTS: u8 = 40;
 /// delayed; we keep verifying (across restarts) for a full day rather than
 /// abandoning a position whose exit already landed.
 const MAX_VERIFICATION_AGE_HOURS: i64 = 24;
+
+/// Attempts after which `requeue` stops re-inserting an item. The first twelve backoffs
+/// sum to about four hours.
+pub const MAX_REQUEUE_ATTEMPTS: u8 = 12;
 
 /// Backoff intervals in seconds for verification retries (dynamic, widening).
 /// Front-loaded for sub-minute confirmation in the common case, then ramping up
@@ -51,6 +57,9 @@ pub struct VerificationItem {
     pub requested_exit_percentage: Option<f64>,
     // DCA support
     pub is_dca: bool,
+    /// The swap is confirmed on-chain and only applying it to the position failed.
+    /// A confirmed swap is never an orphan, so such an item never expires.
+    pub swap_confirmed: bool,
 }
 
 impl VerificationItem {
@@ -75,6 +84,7 @@ impl VerificationItem {
             expected_exit_amount: None,
             requested_exit_percentage: None,
             is_dca: false,
+            swap_confirmed: false,
         }
     }
 
@@ -101,6 +111,7 @@ impl VerificationItem {
             expected_exit_amount: Some(expected_exit_amount),
             requested_exit_percentage: Some(exit_percentage),
             is_dca: false,
+            swap_confirmed: false,
         }
     }
 
@@ -143,6 +154,27 @@ impl VerificationItem {
         }
 
         None
+    }
+
+    /// Decides whether an item whose transition failed to apply is retried or dropped.
+    /// A non-retryable error drops first, then the verification give-up limits, then
+    /// the requeue cap that `requeue` enforces.
+    pub fn apply_failure_disposition(&self, error: &Error) -> ApplyFailureDisposition {
+        if !error.is_retryable() {
+            return ApplyFailureDisposition::Drop(GiveUpReason::ApplyRejected {
+                error: error.to_string(),
+            });
+        }
+        if let Some(reason) = self.should_give_up() {
+            return ApplyFailureDisposition::Drop(reason);
+        }
+        if self.attempts >= MAX_REQUEUE_ATTEMPTS {
+            return ApplyFailureDisposition::Drop(GiveUpReason::MaxAttemptsReached {
+                attempts: self.attempts,
+                max: MAX_REQUEUE_ATTEMPTS,
+            });
+        }
+        ApplyFailureDisposition::Requeue
     }
 
     pub fn with_retry(&self) -> Self {
@@ -188,10 +220,14 @@ impl VerificationItem {
             expected_exit_amount: self.expected_exit_amount,
             requested_exit_percentage: self.requested_exit_percentage,
             is_dca: self.is_dca,
+            swap_confirmed: self.swap_confirmed,
         }
     }
 
     pub fn is_expired(&self, current_height: Option<u64>) -> bool {
+        if self.swap_confirmed {
+            return false;
+        }
         if let (Some(expiry), Some(current)) = (self.expiry_height, current_height) {
             current > expiry
         } else {
@@ -228,20 +264,34 @@ impl VerificationItem {
 /// Verification queue
 pub struct VerificationQueue {
     items: VecDeque<VerificationItem>,
+    /// Signatures dropped after a failed apply. Held in memory only, so a restart
+    /// gives each of them one more attempt.
+    abandoned: HashSet<String>,
 }
 
 impl VerificationQueue {
     pub fn new() -> Self {
         Self {
             items: VecDeque::new(),
+            abandoned: HashSet::new(),
         }
     }
 
-    pub fn enqueue(&mut self, item: VerificationItem) {
-        // Check if already exists
-        if !self.items.iter().any(|i| i.signature == item.signature) {
-            self.items.push_back(item);
+    /// Inserts the item unless its signature is already queued or abandoned.
+    /// Returns whether it was inserted.
+    pub fn enqueue(&mut self, item: VerificationItem) -> bool {
+        if self.abandoned.contains(&item.signature)
+            || self.items.iter().any(|i| i.signature == item.signature)
+        {
+            return false;
         }
+        self.items.push_back(item);
+        true
+    }
+
+    /// Refuses every later `enqueue` of the signature for the rest of the session.
+    pub fn abandon(&mut self, signature: String) {
+        self.abandoned.insert(signature);
     }
 
     pub fn poll_batch(&mut self, limit: usize) -> Vec<VerificationItem> {
@@ -284,7 +334,7 @@ impl VerificationQueue {
 
     pub fn requeue(&mut self, item: VerificationItem) {
         // Allow more retries but with backoff; hard cap attempts to avoid infinite loops
-        if item.attempts < 12 {
+        if item.attempts < MAX_REQUEUE_ATTEMPTS {
             self.items.push_back(item.with_retry());
         }
     }
@@ -347,13 +397,23 @@ static VERIFICATION_QUEUE: LazyLock<RwLock<VerificationQueue>> =
 /// `notify_one` stores a permit, so a signal fired while the worker is mid-cycle is not lost.
 static QUEUE_SIGNAL: LazyLock<Notify> = LazyLock::new(Notify::new);
 
-/// Enqueue verification item
-pub async fn enqueue_verification(item: VerificationItem) {
-    {
+/// Enqueue verification item. Returns whether it was inserted; the worker is
+/// signalled only then.
+pub async fn enqueue_verification(item: VerificationItem) -> bool {
+    let inserted = {
         let mut queue = VERIFICATION_QUEUE.write().await;
-        queue.enqueue(item);
+        queue.enqueue(item)
+    };
+    if inserted {
+        QUEUE_SIGNAL.notify_one();
     }
-    QUEUE_SIGNAL.notify_one();
+    inserted
+}
+
+/// Stop verifying a signature for the rest of the session.
+pub async fn abandon_verification(signature: String) {
+    let mut queue = VERIFICATION_QUEUE.write().await;
+    queue.abandon(signature);
 }
 
 /// Resolves as soon as new work is enqueued (see [`QUEUE_SIGNAL`]).

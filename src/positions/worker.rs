@@ -7,19 +7,21 @@ use super::db::initialize_positions_database;
 use super::{
     apply::apply_transition,
     queue::{
-        enqueue_verification, gc_expired_verifications, poll_verification_batch,
-        queue_has_items_with_expiry, remove_verification, requeue_verification, VerificationItem,
+        abandon_verification, enqueue_verification, gc_expired_verifications,
+        poll_verification_batch, queue_has_items_with_expiry, remove_verification,
+        requeue_verification, VerificationItem,
     },
     state::{
         reconcile_global_position_semaphore, rehydrate_pending_dca_swaps, MINT_TO_POSITION_INDEX,
         POSITIONS, SIG_TO_MINT_INDEX,
     },
-    types::{VerificationKind, VerificationOutcome},
+    types::{ApplyFailureDisposition, GiveUpReason, VerificationKind, VerificationOutcome},
     verifier::verify_transaction,
 };
 use crate::chains::solana::rpc::{get_rpc_client, RpcClientMethods};
+use crate::errors::ErrorClass;
 use crate::logger::{self, LogTag};
-use crate::positions::Result;
+use crate::positions::{Error, Result};
 use serde_json::json;
 use std::sync::Arc;
 use std::time::Instant;
@@ -349,8 +351,9 @@ async fn verification_worker(shutdown: Arc<Notify>) {
                            VerificationKind::Entry,
                            None,
                          );
-                         enqueue_verification(item).await;
-                         requeued_count += 1;
+                         if enqueue_verification(item).await {
+                           requeued_count += 1;
+                         }
                        }
                      }
                    }
@@ -380,8 +383,9 @@ async fn verification_worker(shutdown: Arc<Notify>) {
                              None,
                            )
                          };
-                         enqueue_verification(item).await;
-                         requeued_count += 1;
+                         if enqueue_verification(item).await {
+                           requeued_count += 1;
+                         }
                        }
                      }
                    }
@@ -449,13 +453,29 @@ async fn verification_worker(shutdown: Arc<Notify>) {
                            dca_signature: item.signature.clone(),
                            reason: "Verification expired".to_owned(),
                          };
-                         let _ = apply_transition(transition).await;
+                         if let Err(e) = apply_transition(transition).await {
+                           logger::error(
+                             LogTag::Positions,
+                             &format!(
+                               "Failed to mark expired DCA {} for position {} as failed: {}",
+                               item.signature, position_id, e
+                             ),
+                           );
+                         }
                        }
                      } else if let Some(position_id) = item.position_id {
                        let transition = super::transitions::PositionTransition::RemoveOrphanEntry {
                          position_id,
                        };
-                       let _ = apply_transition(transition).await;
+                       if let Err(e) = apply_transition(transition).await {
+                         logger::error(
+                           LogTag::Positions,
+                           &format!(
+                             "Failed to remove expired orphan entry {} for position {}: {}",
+                             item.signature, position_id, e
+                           ),
+                         );
+                       }
                      }
                    } else if item.kind == VerificationKind::Exit {
                      // An exit that reached the 24h cap without confirming. Never drop
@@ -624,7 +644,25 @@ async fn verification_worker(shutdown: Arc<Notify>) {
                                "position_id": item.position_id
                              }),
                            ).await;
-                           requeue_verification(item).await;
+                           match item.apply_failure_disposition(&e) {
+                             ApplyFailureDisposition::Requeue => {
+                               let mut confirmed = item;
+                               confirmed.swap_confirmed = true;
+                               requeue_verification(confirmed).await;
+                             }
+                             ApplyFailureDisposition::Drop(reason) => {
+                               let details = format!("{reason:?}");
+                               abandon_after_apply_failure(&item, reason, &e).await;
+                               crate::actions::settle_verification(
+                                 &item.signature,
+                                 Err(crate::actions::ActionFailure::with_details(
+                                   crate::i18n::ids::ACTIONS_FAILURE_VERIFICATION_GAVE_UP,
+                                   details,
+                                 )),
+                               )
+                               .await;
+                             }
+                           }
                          }
                        }
                      }
@@ -694,7 +732,9 @@ async fn verification_worker(shutdown: Arc<Notify>) {
                                      give_up_reason
                                    ),
                                  };
-                                 let _ = super::apply::apply_transition(transition).await;
+                                 if let Err(e) = super::apply::apply_transition(transition).await {
+                                   logger::error(LogTag::Positions, &format!("Failed to mark abandoned DCA {} for position {position_id} as failed: {e}", item.signature));
+                                 }
                                }
                              } else if let Some(position_id) = item.position_id {
                                logger::warning(LogTag::Positions, &format!("Removing orphan entry position {position_id} after verification abandonment (will release semaphore permit)"));
@@ -723,7 +763,9 @@ async fn verification_worker(shutdown: Arc<Notify>) {
                                    position_id,
                                    reason: format!("Abandoned after {:?}", give_up_reason),
                                  };
-                                 let _ = super::apply::apply_transition(transition).await;
+                                 if let Err(e) = super::apply::apply_transition(transition).await {
+                                   logger::error(LogTag::Positions, &format!("Failed to mark abandoned partial exit {} for position {position_id} as failed: {e}", item.signature));
+                                 }
                                } else {
                                  // Force synthetic exit after timeout
                                  logger::warning(LogTag::Positions, &format!("Forcing synthetic exit for position {position_id} after verification abandonment - manual wallet check recommended"));
@@ -732,7 +774,9 @@ async fn verification_worker(shutdown: Arc<Notify>) {
                                    position_id,
                                    exit_time: chrono::Utc::now(),
                                  };
-                                 let _ = super::apply::apply_transition(transition).await;
+                                 if let Err(e) = super::apply::apply_transition(transition).await {
+                                   logger::error(LogTag::Positions, &format!("Failed to apply synthetic exit for position {position_id} after abandoning {}: {e}", item.signature));
+                                 }
                                }
                              }
                            }
@@ -799,8 +843,28 @@ async fn verification_worker(shutdown: Arc<Notify>) {
                          )
                        );
 
-                       let _ = apply_transition(transition).await;
+                       let applied = apply_transition(transition).await;
                        remove_verification(&item.signature).await;
+                       if let Err(e) = applied {
+                         logger::error(
+                           LogTag::Positions,
+                           &format!(
+        "Failed to apply permanent-failure cleanup for {} (mint {} kind {:?}): {}",
+                             item.signature,
+                             item.mint,
+                             item.kind,
+                             e
+                           )
+                         );
+                         match item.apply_failure_disposition(&e) {
+                           ApplyFailureDisposition::Requeue => {
+                             requeue_verification(item.clone()).await;
+                           }
+                           ApplyFailureDisposition::Drop(reason) => {
+                             abandon_after_apply_failure(&item, reason, &e).await;
+                           }
+                         }
+                       }
                        crate::actions::settle_verification(
                          &item.signature,
                          Err(crate::actions::ActionFailure::new(
@@ -833,6 +897,47 @@ async fn verification_worker(shutdown: Arc<Notify>) {
              }
            }
     }
+}
+
+/// Stops verifying an item whose transition failed to apply and will not be retried.
+///
+/// The position is left exactly as stored: no kind-specific abandonment transition runs,
+/// because the swap may be confirmed and the row only lacks its booking. The signature is
+/// refused by every later enqueue for the rest of the session; a restart re-enqueues the
+/// still-pending state from storage.
+async fn abandon_after_apply_failure(item: &VerificationItem, reason: GiveUpReason, error: &Error) {
+    crate::positions::metrics::VERIFICATION_METRICS
+        .abandoned
+        .fetch_add(1, std::sync::atomic::Ordering::Relaxed);
+
+    logger::error(
+        LogTag::Positions,
+        &format!(
+            "Abandoning verification for {} (mint={}, kind={:?}) after apply failure: {:?} - last error: {}",
+            item.signature, item.mint, item.kind, reason, error
+        ),
+    );
+
+    crate::events::record_position_event_flexible(
+        "verification_abandoned",
+        crate::events::Severity::Error,
+        Some(&item.mint),
+        Some(&item.signature),
+        json!({
+            "give_up_reason": reason,
+            "last_error": error.to_string(),
+            "attempts": item.attempts,
+            "age_hours": (chrono::Utc::now() - item.created_at).num_hours(),
+            "kind": format!("{:?}", item.kind),
+            "position_id": item.position_id,
+            "created_at": item.created_at.to_rfc3339(),
+            "stage": "apply",
+            "error_retryable": error.is_retryable(),
+        }),
+    )
+    .await;
+
+    abandon_verification(item.signature.clone()).await;
 }
 
 /// What a verified transition means for a trade action waiting on its

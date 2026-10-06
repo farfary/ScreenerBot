@@ -469,3 +469,151 @@ async fn a_reentered_token_resolves_to_its_live_round() {
 
     set_positions(Vec::new()).await;
 }
+
+// ==================== APPLY-FAILURE DISPOSITION ====================
+
+use screenerbot::errors::DatabaseError;
+use screenerbot::positions::queue::{VerificationQueue, MAX_REQUEUE_ATTEMPTS};
+use screenerbot::positions::{
+    ApplyFailureDisposition, Error as PositionError, GiveUpReason, VerificationItem,
+    VerificationKind,
+};
+
+const DISPOSITION_MINT: &str = "DispositionMint1111111111111111111111111111";
+
+fn entry_item(signature: &str, expiry_height: Option<u64>) -> VerificationItem {
+    VerificationItem::new(
+        signature.to_owned(),
+        DISPOSITION_MINT.to_owned(),
+        Some(1),
+        VerificationKind::Entry,
+        expiry_height,
+    )
+}
+
+fn non_retryable_apply_errors() -> Vec<PositionError> {
+    vec![
+        PositionError::AmountOverflow {
+            mint: DISPOSITION_MINT.to_owned(),
+            operation: "booking a partial exit",
+        },
+        PositionError::Database(DatabaseError::Query {
+            operation: "commit_booking".to_owned(),
+            message: "constraint failed".to_owned(),
+        }),
+        PositionError::NotFoundById { position_id: 1 },
+        PositionError::TransitionFailed {
+            transition: "ExitVerified",
+            mint: DISPOSITION_MINT.to_owned(),
+            detail: "position has no id".to_owned(),
+        },
+    ]
+}
+
+fn retryable_apply_errors() -> Vec<PositionError> {
+    vec![
+        PositionError::Database(DatabaseError::Busy {
+            operation: "commit_booking".to_owned(),
+            message: "database is locked".to_owned(),
+        }),
+        PositionError::Database(DatabaseError::Connection {
+            message: "pool timed out".to_owned(),
+        }),
+        PositionError::NotInitialised,
+    ]
+}
+
+#[test]
+fn a_non_retryable_apply_error_drops_the_item_on_its_first_attempt() {
+    let item = entry_item("sig-rejected", None);
+    for error in non_retryable_apply_errors() {
+        let disposition = item.apply_failure_disposition(&error);
+        assert!(
+            matches!(
+                disposition,
+                ApplyFailureDisposition::Drop(GiveUpReason::ApplyRejected { .. })
+            ),
+            "{error} must drop as rejected, got {disposition:?}"
+        );
+    }
+}
+
+#[test]
+fn a_retryable_apply_error_requeues_the_item_within_its_limits() {
+    let item = entry_item("sig-retryable", None);
+    for error in retryable_apply_errors() {
+        let disposition = item.apply_failure_disposition(&error);
+        assert!(
+            matches!(disposition, ApplyFailureDisposition::Requeue),
+            "{error} must requeue, got {disposition:?}"
+        );
+    }
+}
+
+#[test]
+fn a_retryable_apply_error_at_the_requeue_cap_drops_the_item() {
+    let mut item = entry_item("sig-capped", None);
+    item.attempts = MAX_REQUEUE_ATTEMPTS;
+    for error in retryable_apply_errors() {
+        let disposition = item.apply_failure_disposition(&error);
+        assert!(
+            matches!(
+                disposition,
+                ApplyFailureDisposition::Drop(GiveUpReason::MaxAttemptsReached { max: 12, .. })
+            ),
+            "{error} at the requeue cap must drop, got {disposition:?}"
+        );
+    }
+}
+
+#[test]
+fn a_retryable_apply_error_past_the_verification_age_drops_the_item() {
+    let mut item = entry_item("sig-aged", None);
+    item.created_at = Utc::now() - chrono::Duration::hours(25);
+    for error in retryable_apply_errors() {
+        let disposition = item.apply_failure_disposition(&error);
+        assert!(
+            matches!(
+                disposition,
+                ApplyFailureDisposition::Drop(GiveUpReason::MaxAgeReached { .. })
+            ),
+            "{error} past the age limit must drop, got {disposition:?}"
+        );
+    }
+}
+
+#[test]
+fn an_abandoned_signature_is_never_enqueued_again() {
+    let mut queue = VerificationQueue::new();
+    queue.abandon("sig-dropped".to_owned());
+
+    assert!(!queue.enqueue(entry_item("sig-dropped", None)));
+    assert_eq!(queue.len(), 0);
+
+    assert!(queue.enqueue(entry_item("sig-other", None)));
+    assert_eq!(queue.len(), 1);
+    assert!(
+        !queue.enqueue(entry_item("sig-other", None)),
+        "an already queued signature is not inserted twice"
+    );
+    assert_eq!(queue.len(), 1);
+}
+
+#[test]
+fn a_confirmed_swap_never_expires() {
+    let mut confirmed = entry_item("sig-confirmed", Some(100));
+    confirmed.swap_confirmed = true;
+    assert!(!confirmed.is_expired(Some(1_000)));
+
+    let unconfirmed = entry_item("sig-unconfirmed", Some(100));
+    assert!(unconfirmed.is_expired(Some(1_000)));
+
+    let mut confirmed_without_height = entry_item("sig-confirmed-no-height", None);
+    confirmed_without_height.swap_confirmed = true;
+    confirmed_without_height.created_at = Utc::now() - chrono::Duration::hours(1);
+    assert!(!confirmed_without_height.is_expired(None));
+
+    let retried = confirmed.with_retry();
+    assert!(retried.swap_confirmed, "a retry keeps the confirmation");
+    assert!(!retried.is_expired(Some(1_000)));
+}
