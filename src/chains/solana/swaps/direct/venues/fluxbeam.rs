@@ -159,10 +159,10 @@
 //! (`PoolNotTradable`) -- the Token-2022 SIDE of the account list is still
 //! fully exercised by every other pool, which is the actual common case.
 
-use super::layout::{mint_decimals, pubkey_at, u64_at, u8_at};
 use super::math::{fee_amount, mul_div_ceil, price_impact_pct};
 use super::token2022::transfer_fee_schedule;
 use crate::chains::solana::constants::FLUXBEAM_AMM_PROGRAM_ID;
+use crate::chains::solana::layout::{mint_decimals, pubkey_at, u64_at, u8_at};
 use crate::chains::solana::pools::types::ProgramKind;
 use crate::chains::solana::rpc::{get_rpc_client, RpcClientMethods};
 use crate::chains::solana::solana_sdk::{
@@ -265,19 +265,15 @@ impl PoolVenue for FluxbeamVenue {
 
         let vault_a = fetched(0)?;
         let vault_b = fetched(1)?;
-        let vault_a_balance =
-            super::layout::token_account_amount(&vault_a.data).ok_or_else(|| {
-                DirectSwapError::PoolUndecodable {
-                    pool: *pool,
-                    detail: "token_a vault is not a token account".to_owned(),
-                }
+        let vault_a_balance = crate::chains::solana::layout::token_account_amount(&vault_a.data)
+            .ok_or_else(|| DirectSwapError::PoolUndecodable {
+                pool: *pool,
+                detail: "token_a vault is not a token account".to_owned(),
             })?;
-        let vault_b_balance =
-            super::layout::token_account_amount(&vault_b.data).ok_or_else(|| {
-                DirectSwapError::PoolUndecodable {
-                    pool: *pool,
-                    detail: "token_b vault is not a token account".to_owned(),
-                }
+        let vault_b_balance = crate::chains::solana::layout::token_account_amount(&vault_b.data)
+            .ok_or_else(|| DirectSwapError::PoolUndecodable {
+                pool: *pool,
+                detail: "token_b vault is not a token account".to_owned(),
             })?;
 
         let mint_a_account = fetched(2)?;

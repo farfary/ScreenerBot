@@ -10,11 +10,11 @@
 use super::{AccountData, PoolDecoder};
 use crate::chains::solana::constants::METEORA_DLMM_PROGRAM_ID;
 use crate::chains::solana::constants::{SOL_DECIMALS, SOL_MINT};
+use crate::chains::solana::pools::decode_utils::is_sol_mint;
 use crate::chains::solana::pools::types::ProgramKind;
 use crate::chains::solana::solana_sdk::pubkey::Pubkey;
 use crate::logger::{self, LogTag};
 use crate::pools::types::PriceResult;
-use crate::pools::utils::is_sol_mint;
 use crate::tokens::get_cached_decimals;
 use std::collections::HashMap;
 use std::time::Instant;

@@ -17,13 +17,13 @@ use super::fetcher_types::{
 use super::reserve_accounts::reserve_pubkeys;
 use super::types::ProgramKind;
 
+use super::decode_utils::is_sol_mint;
 use crate::chains::solana::rpc::{get_rpc_client, RpcClientMethods};
 use crate::events::{record_safe, Event, EventCategory};
 use crate::logger::{self, LogTag};
 use crate::pools::types::{
     account_blacklist_threshold, failure_window_secs, pool_blacklist_threshold, PoolDescriptor,
 };
-use crate::pools::utils::is_sol_mint;
 
 use crate::chains::solana::solana_sdk::pubkey::Pubkey;
 use futures::future::join_all;

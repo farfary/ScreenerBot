@@ -217,12 +217,14 @@
 //! exactly, so it is what this venue builds; `swap2` additionally supports
 //! exact-out and partial-fill modes this engine has no caller for.
 
-use super::layout::{mint_decimals, pubkey_at, token_account_amount, u128_at, u16_at, u8_at};
 use super::math::{
     fee_amount, mul_div_ceil, mul_div_floor, mul_shr128_ceil, mul_shr128_floor, shl128_div_floor,
 };
 use super::token2022::{transfer_fee_schedule, TransferFeeSchedule};
 use crate::chains::solana::constants::METEORA_DBC_PROGRAM_ID;
+use crate::chains::solana::layout::{
+    mint_decimals, pubkey_at, token_account_amount, u128_at, u16_at, u8_at,
+};
 use crate::chains::solana::pools::types::ProgramKind;
 use crate::chains::solana::rpc::{get_rpc_client, RpcClientMethods};
 use crate::chains::solana::solana_sdk::{
@@ -512,9 +514,9 @@ impl PoolConfigState {
         }
         Some(Self {
             quote_mint: pubkey_at(data, 8)?,
-            cliff_fee_numerator: super::layout::u64_at(data, 104)?,
-            second_factor: super::layout::u64_at(data, 112)?,
-            third_factor: super::layout::u64_at(data, 120)?,
+            cliff_fee_numerator: crate::chains::solana::layout::u64_at(data, 104)?,
+            second_factor: crate::chains::solana::layout::u64_at(data, 112)?,
+            third_factor: crate::chains::solana::layout::u64_at(data, 120)?,
             first_factor: u16_at(data, 128)?,
             base_fee_mode: u8_at(data, 130)?,
             dynamic_fee_initialized: u8_at(data, 136)? != 0,

@@ -38,7 +38,6 @@ pub use database as db;
 
 pub mod service;
 pub mod types;
-pub mod utils;
 
 pub use api::{
     get_available_tokens, get_cache_stats, get_pool_price, pool_protocol, pricing_status,
@@ -54,4 +53,4 @@ pub use service::{
     initialize_pool_components, is_pool_service_running, pricing_stage_metrics,
     pricing_stage_ready, start_pricing_stage, stop_pool_service,
 };
-pub use types::{CacheStats, PoolMintVaultInfo, PriceResult, TokenPairInfo};
+pub use types::{CacheStats, PriceResult};

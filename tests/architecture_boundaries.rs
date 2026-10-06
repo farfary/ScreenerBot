@@ -249,7 +249,7 @@ fn shared_pools_module_does_not_reexport_solana_discovery_types() {
 }
 
 /// `PoolDescriptor` and the rest of the shared pool domain
-/// (`src/pools/types.rs`, `cache.rs`, `api.rs`, `utils.rs`, `database/`) must
+/// (`src/pools/types.rs`, `cache.rs`, `api.rs`, `database/`) must
 /// stay chain-neutral: no `Pubkey`, no `crate::chains::solana::pools::types`
 /// (the Solana `ProgramKind` enum), and no vendor-crate façade for Solana
 /// address types. This is a regression guard for the leak fixed by moving
@@ -934,7 +934,6 @@ const PROCESS_CHAIN_SEAM_CALLER_FILES: &[&str] = &[
     "ohlcvs/fetcher.rs",
     "ohlcvs/manager.rs",
     "ohlcvs/service.rs",
-    "pools/utils.rs",
     "positions/apply.rs",
     "positions/database/global.rs",
     "positions/ledger/reducer.rs",

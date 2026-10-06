@@ -29,9 +29,6 @@ pub enum Error {
     /// The background price-history write queue could not accept a price.
     #[error("price-history queue is unavailable: {detail}")]
     QueueUnavailable { detail: String },
-    /// Raw account bytes could not be decoded into the expected field.
-    #[error("could not decode {field}: {detail}")]
-    Decode { field: &'static str, detail: String },
     /// A pool's mint/vault pairing does not qualify as a SOL pair.
     #[error("pool is not a valid SOL pair: {reason}")]
     InvalidPool { reason: String },
@@ -75,7 +72,6 @@ impl ErrorClass for Error {
             Error::ComponentInit { .. } => true,
             Error::NotInitialized
             | Error::QueueUnavailable { .. }
-            | Error::Decode { .. }
             | Error::InvalidPool { .. }
             | Error::MigrationIntegrity { .. }
             | Error::AlreadyRunning
@@ -99,7 +95,6 @@ impl ErrorClass for Error {
             Error::Internal(e) => e.severity(),
             Error::NotInitialized | Error::QueueUnavailable { .. } => Severity::Error,
             Error::MigrationIntegrity { .. } => Severity::Critical,
-            Error::Decode { .. } => Severity::Warning,
             Error::InvalidPool { .. } => Severity::Info,
             Error::AlreadyRunning => Severity::Warning,
             Error::ComponentInit { .. } => Severity::Error,
@@ -113,7 +108,7 @@ impl ErrorClass for Error {
             Error::Internal(e) => e.http_status(),
             Error::NotInitialized | Error::QueueUnavailable { .. } => 503,
             Error::MigrationIntegrity { .. } => 500,
-            Error::Decode { .. } | Error::InvalidPool { .. } => 422,
+            Error::InvalidPool { .. } => 422,
             Error::AlreadyRunning => 409,
             Error::ComponentInit { .. } => 503,
             Error::RuntimeUnavailable { .. } | Error::StageUnavailable { .. } => 503,

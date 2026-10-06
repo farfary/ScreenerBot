@@ -24,6 +24,7 @@ pub mod connectivity;
 pub mod constants;
 mod error;
 pub mod filtering;
+pub mod layout;
 pub mod pools;
 pub mod rpc;
 pub mod runtime;

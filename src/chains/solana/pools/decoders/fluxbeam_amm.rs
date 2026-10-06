@@ -7,7 +7,7 @@
 //! processes vault information, and calculates token prices.
 
 use super::{AccountData, PoolDecoder};
-use crate::pools::utils::is_sol_mint;
+use crate::chains::solana::pools::decode_utils::is_sol_mint;
 
 use crate::chains::solana::constants::FLUXBEAM_AMM_PROGRAM_ID;
 use crate::chains::solana::constants::SOL_DECIMALS;

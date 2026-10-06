@@ -9,6 +9,9 @@
 //! `ProtocolId` — a stable machine identity produced from `ProgramKind` at
 //! this boundary (`protocol_id()` / `from_protocol_id()`), never the enum
 //! itself.
+//!
+//! `PoolMintVaultInfo` and `TokenPairInfo` carry a decoded pool's raw
+//! mint/vault pairing and its SOL-pair orientation (see `decode_utils`).
 
 use crate::chains::solana::constants::{
     FLUXBEAM_AMM_PROGRAM_ID, METEORA_DAMM_PROGRAM_ID, METEORA_DBC_PROGRAM_ID,
@@ -168,6 +171,32 @@ impl ProgramKind {
             _ => ProgramKind::Unknown,
         }
     }
+}
+
+/// Result of mint and vault analysis for a pool
+#[derive(Debug, Clone)]
+pub struct TokenPairInfo {
+    /// The token mint (non-SOL)
+    pub token_mint: String,
+    /// The SOL mint (always normalized to wrapped SOL)
+    pub sol_mint: String,
+    /// Vault address for the token
+    pub token_vault: String,
+    /// Vault address for SOL
+    pub sol_vault: String,
+    /// Whether the original pool has SOL as the first mint (affects price calculation)
+    pub sol_is_first: bool,
+    /// Whether this is a valid SOL-based pair
+    pub is_native_pair: bool,
+}
+
+/// Pool mint and vault extraction result
+#[derive(Debug, Clone)]
+pub struct PoolMintVaultInfo {
+    pub mint1: String,
+    pub mint2: String,
+    pub vault1: String,
+    pub vault2: String,
 }
 
 #[cfg(test)]

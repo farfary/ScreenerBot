@@ -184,10 +184,10 @@
 //!   impossible given the programme's own `ConstantProductV1` invariants, but
 //!   are checked rather than assumed.
 
-use super::layout::{mint_decimals, pubkey_at, u16_at, u64_at, u8_at};
 use crate::chains::solana::constants::{
     ASSOCIATED_TOKEN_PROGRAM_ID, MOONIT_AMM_PROGRAM_ID, SOL_MINT, SYSTEM_PROGRAM_ID,
 };
+use crate::chains::solana::layout::{mint_decimals, pubkey_at, u16_at, u64_at, u8_at};
 use crate::chains::solana::pools::types::ProgramKind;
 use crate::chains::solana::rpc::{get_rpc_client, RpcClientMethods};
 use crate::chains::solana::solana_sdk::{

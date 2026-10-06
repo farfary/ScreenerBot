@@ -129,11 +129,11 @@
 //! rather than assumed constant past that point.
 
 use super::clmm_ticks::{ticks_ahead, walk_ticks, InitializedTick};
-use super::layout::{
-    i128_at, i32_at, mint_decimals, pubkey_at, token_account_amount, u128_at, u16_at,
-};
 use super::token2022::{transfer_fee_schedule, TransferFeeSchedule};
 use crate::chains::solana::constants::{MEMO_PROGRAM_ID, ORCA_WHIRLPOOL_PROGRAM_ID};
+use crate::chains::solana::layout::{
+    i128_at, i32_at, mint_decimals, pubkey_at, token_account_amount, u128_at, u16_at,
+};
 use crate::chains::solana::pools::types::ProgramKind;
 use crate::chains::solana::rpc::{get_rpc_client, RpcClientMethods};
 use crate::chains::solana::solana_sdk::{
@@ -414,8 +414,8 @@ impl WhirlpoolState {
             liquidity: u128_at(data, 49)?,
             sqrt_price: u128_at(data, 65)?,
             tick_current: i32_at(data, 81)?,
-            protocol_fee_owed_a: super::layout::u64_at(data, 85)?,
-            protocol_fee_owed_b: super::layout::u64_at(data, 93)?,
+            protocol_fee_owed_a: crate::chains::solana::layout::u64_at(data, 85)?,
+            protocol_fee_owed_b: crate::chains::solana::layout::u64_at(data, 93)?,
             mint_a: pubkey_at(data, 101)?,
             vault_a: pubkey_at(data, 133)?,
             mint_b: pubkey_at(data, 181)?,
@@ -430,7 +430,7 @@ impl WhirlpoolState {
 /// we do not understand, and a `false` there would quote a pool whose real
 /// fee may exceed `fee_rate`. The caller refuses on `None` for that reason.
 fn oracle_has_active_adaptive_fee(data: &[u8]) -> Option<bool> {
-    super::layout::u32_at(data, 54).map(|factor| factor != 0)
+    crate::chains::solana::layout::u32_at(data, 54).map(|factor| factor != 0)
 }
 
 /// A decoded, quotable Whirlpool.

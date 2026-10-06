@@ -10,13 +10,13 @@
 use super::selection::{self, SelectedPools};
 use super::types::ProgramKind;
 
+use super::decode_utils::is_sol_mint;
 use crate::chains::solana::pools::service;
 use crate::chains::solana::rpc::{get_rpc_client, RpcClient, RpcClientMethods};
 use crate::chains::{AccountId, AssetId, ChainId, PoolId};
 use crate::events::{record_safe, Event, EventCategory};
 use crate::logger::{self, LogTag};
 use crate::pools::types::{pool_blacklist_threshold, PoolDescriptor};
-use crate::pools::utils::is_sol_mint;
 use crate::rpc::RpcError;
 use crate::utils::run_or_shutdown;
 

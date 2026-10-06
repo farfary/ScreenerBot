@@ -38,9 +38,9 @@
 //! profit already earmarked for the pool's owner and sitting in the vault; it is
 //! not swappable, and quoting off the raw vault over-states both reserves.
 
-use super::layout::{pubkey_at, token_account_amount, u64_at};
 use super::math::{constant_product_out, fee_amount, price_impact_pct};
 use crate::chains::solana::constants::RAYDIUM_LEGACY_AMM_PROGRAM_ID;
+use crate::chains::solana::layout::{pubkey_at, token_account_amount, u64_at};
 use crate::chains::solana::pools::types::ProgramKind;
 use crate::chains::solana::rpc::{get_rpc_client, RpcClientMethods};
 use crate::chains::solana::solana_sdk::{

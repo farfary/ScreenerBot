@@ -16,8 +16,8 @@ use std::time::Instant;
 
 // Import centralized utilities
 use crate::chains::solana::pools::decode_utils::read_pubkey_at_offset;
-use crate::pools::types::PoolMintVaultInfo;
-use crate::pools::utils::validate_sol_pool;
+use crate::chains::solana::pools::decode_utils::validate_sol_pool;
+use crate::chains::solana::pools::types::PoolMintVaultInfo;
 
 /// PumpFun AMM pool decoder and calculator
 pub struct PumpFunAmmDecoder;
@@ -425,7 +425,8 @@ impl PumpFunAmmDecoder {
         let pool_info = Self::extract_pumpfun_mints_and_vaults(data)?;
 
         // Get vaults in the correct order for the decoder
-        let vault_addresses = crate::pools::utils::get_analyzer_vault_order(pool_info);
+        let vault_addresses =
+            crate::chains::solana::pools::decode_utils::get_analyzer_vault_order(pool_info);
 
         if vault_addresses.is_empty() {
             return None;

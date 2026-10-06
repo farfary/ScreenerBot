@@ -21,11 +21,11 @@
 use super::{AccountData, PoolDecoder};
 use crate::chains::solana::constants::METEORA_DBC_PROGRAM_ID;
 use crate::chains::solana::constants::{SOL_DECIMALS, SOL_MINT};
+use crate::chains::solana::layout::token_account_amount;
 use crate::chains::solana::pools::decode_utils::read_pubkey_at;
 use crate::chains::solana::pools::types::ProgramKind;
 use crate::logger::{self, LogTag};
 use crate::pools::types::PriceResult;
-use crate::pools::utils::read_token_account_amount;
 use crate::tokens::get_cached_decimals;
 use std::collections::HashMap;
 
@@ -139,8 +139,8 @@ impl PoolDecoder for MeteoraDbcDecoder {
         }
 
         // Get actual vault balances for liquidity calculation
-        let sol_balance = read_token_account_amount(&sol_vault.data)?;
-        let token_balance = read_token_account_amount(&token_vault.data)?;
+        let sol_balance = token_account_amount(&sol_vault.data)?;
+        let token_balance = token_account_amount(&token_vault.data)?;
 
         if sol_decimals > 18 || token_decimals > 18 {
             logger::error(

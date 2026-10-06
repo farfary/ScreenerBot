@@ -222,15 +222,14 @@ pub async fn preflight_balance(plan: &SwapPlan, owner: &Pubkey) -> DirectSwapRes
         return Ok(());
     }
 
-    let token_balance =
-        match input_account {
-            None => 0,
-            Some(account) => super::venues::layout::token_account_amount(&account.data)
-                .ok_or_else(|| DirectSwapError::AccountUnavailable {
-                    address: plan.input_account,
-                    detail: "source token-account data is malformed".to_owned(),
-                })?,
-        };
+    let token_balance = match input_account {
+        None => 0,
+        Some(account) => crate::chains::solana::layout::token_account_amount(&account.data)
+            .ok_or_else(|| DirectSwapError::AccountUnavailable {
+                address: plan.input_account,
+                detail: "source token-account data is malformed".to_owned(),
+            })?,
+    };
     if token_balance < plan.quote.amount_in {
         return Err(DirectSwapError::InsufficientBalance {
             mint: plan.quote.input_mint,

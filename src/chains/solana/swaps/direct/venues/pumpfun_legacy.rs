@@ -150,11 +150,11 @@
 //! balance, the way pump-swap AMM caps a boosted pool's payout at its real
 //! vault.
 
-use super::layout::{pubkey_at, u64_at, u8_at};
 use super::math::{constant_product_out, price_impact_pct};
 use super::pumpfun_amm::{FeeTierTable, PumpFees};
 use super::token2022::{transfer_fee_schedule, TransferFeeSchedule};
 use crate::chains::solana::constants::{PUMP_FUN_LEGACY_PROGRAM_ID, SOL_MINT, SYSTEM_PROGRAM_ID};
+use crate::chains::solana::layout::{pubkey_at, u64_at, u8_at};
 use crate::chains::solana::pools::types::ProgramKind;
 use crate::chains::solana::rpc::{get_rpc_client, RpcClientMethods};
 use crate::chains::solana::solana_sdk::{
@@ -317,12 +317,11 @@ impl PoolVenue for PumpFunLegacyVenue {
         };
 
         let mint_account = required(0)?;
-        let mint_decimals = super::layout::u8_at(&mint_account.data, 44).ok_or_else(|| {
-            DirectSwapError::PoolUndecodable {
+        let mint_decimals = crate::chains::solana::layout::u8_at(&mint_account.data, 44)
+            .ok_or_else(|| DirectSwapError::PoolUndecodable {
                 pool: *pool,
                 detail: "the curve's mint is not a mint account".to_owned(),
-            }
-        })?;
+            })?;
 
         let global_state = GlobalFeeRecipients::decode(&required(1)?.data).ok_or_else(|| {
             DirectSwapError::PoolUndecodable {

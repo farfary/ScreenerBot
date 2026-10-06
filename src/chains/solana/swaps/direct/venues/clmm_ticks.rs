@@ -26,8 +26,8 @@
 //! an uninitialised tick array is an account that does not exist, and passing
 //! one fails the instruction on deserialisation.
 
-use super::layout::{i128_at, i32_at, pubkey_at, u128_at, u64_at};
 use super::math::{ceil_div, mul_div_ceil, mul_div_floor};
+use crate::chains::solana::layout::{i128_at, i32_at, pubkey_at, u128_at, u64_at};
 use crate::chains::solana::solana_sdk::pubkey::Pubkey;
 use crate::chains::solana::swaps::direct::error::{DirectSwapError, DirectSwapResult};
 

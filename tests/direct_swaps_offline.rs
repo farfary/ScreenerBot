@@ -26,15 +26,13 @@
 
 mod common;
 
+use screenerbot::chains::solana::layout::{mint_decimals, token_account_amount, u64_at, u8_at};
 use screenerbot::chains::solana::solana_sdk::pubkey::Pubkey;
 use screenerbot::chains::solana::swaps::direct::venues::clmm_ticks::{
     decode_tick_array, TickArrayBitmap,
 };
 use screenerbot::chains::solana::swaps::direct::venues::fluxbeam::{
     FluxbeamMarket, FluxbeamPoolState,
-};
-use screenerbot::chains::solana::swaps::direct::venues::layout::{
-    mint_decimals, token_account_amount, u64_at, u8_at,
 };
 use screenerbot::chains::solana::swaps::direct::venues::meteora_damm::{DammMarket, DammPoolState};
 use screenerbot::chains::solana::swaps::direct::venues::meteora_dbc::{
@@ -1645,11 +1643,9 @@ fn the_dbc_curve_points_are_real_segments_not_padding() {
     // the same target performed when the config was created, not a decode
     // error (an offset error produces a wildly different value, not an
     // agreement to eleven significant figures).
-    let migration_sqrt_price = screenerbot::chains::solana::swaps::direct::venues::layout::u128_at(
-        fixture.data(&state.config),
-        280,
-    )
-    .expect("migration_sqrt_price is at offset 280");
+    let migration_sqrt_price =
+        screenerbot::chains::solana::layout::u128_at(fixture.data(&state.config), 280)
+            .expect("migration_sqrt_price is at offset 280");
     let last = points.last().expect("checked non-empty above").0;
     let diff = last.abs_diff(migration_sqrt_price);
     assert!(

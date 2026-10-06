@@ -13,12 +13,12 @@
 
 use super::types::ProgramKind;
 
+use super::decode_utils::{is_sol_mint, is_stablecoin_mint};
 use crate::chains::solana::pools::service::get_pool_analyzer;
 use crate::chains::{adapter_for, AssetId, ChainId, PoolId};
 use crate::events::{record_safe, Event, EventCategory};
 use crate::logger::{self, LogTag};
 use crate::pools::types::{max_watched_tokens, PoolDescriptor};
-use crate::pools::utils::{is_sol_mint, is_stablecoin_mint};
 use crate::tokens::{get_token_pools_snapshot, prefetch_token_pools};
 use crate::utils::run_or_shutdown;
 
