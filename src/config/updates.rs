@@ -48,8 +48,12 @@ where
                 message: format!("Failed to acquire config write lock: {e}"),
             })?;
 
-        // Apply the update
-        update_fn(&mut config);
+        // Apply the update to a candidate and publish it only if the whole config
+        // still validates, so no caller can install a config the loader would refuse.
+        let mut candidate = config.clone();
+        update_fn(&mut candidate);
+        validate_config(&candidate)?;
+        *config = candidate;
     } // Lock released here
 
     // Optionally save to disk (without holding the lock)

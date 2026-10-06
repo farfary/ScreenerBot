@@ -22,7 +22,7 @@ mod common;
 
 use axum::Json;
 use screenerbot::config::metadata::collect_config_metadata;
-use screenerbot::config::schemas::{Config, GuiConfig};
+use screenerbot::config::schemas::{Config, GuiConfig, TraderConfig};
 use screenerbot::config::updates::update_config_section;
 use screenerbot::config::utils::{load_config_from_path, save_config_to_file, with_config};
 use screenerbot::webserver::routes::config::getters::{get_full_config, patch_any_config};
@@ -342,6 +342,28 @@ async fn patch_of_one_nested_field_keeps_its_siblings() {
         assert_eq!(dashboard.lockscreen.password_salt, "stored-salt");
         assert_eq!(dashboard.startup.default_page, "positions");
     });
+}
+
+#[tokio::test]
+async fn patch_that_fails_validation_is_refused_and_changes_nothing() {
+    init_config();
+    let _writes = CONFIG_WRITES.lock().await;
+    let before = with_config(|cfg| cfg.trader.max_open_positions);
+    assert!(before > 0);
+
+    let response =
+        patch_any_config::<TraderConfig>(Json(serde_json::json!({"max_open_positions": 0}))).await;
+    assert!(
+        !response.status().is_success(),
+        "an invalid trader config was accepted: {}",
+        response.status()
+    );
+    assert_eq!(with_config(|cfg| cfg.trader.max_open_positions), before);
+
+    let err = update_config_section(|cfg| cfg.trader.trade_size_sol = f64::NAN, false)
+        .expect_err("a non-finite trade size must be refused");
+    assert!(err.to_string().contains("trade_size_sol"), "{err}");
+    assert!(with_config(|cfg| cfg.trader.trade_size_sol.is_finite()));
 }
 
 /// The config layout written by v0.2.13, as a TOML document.
