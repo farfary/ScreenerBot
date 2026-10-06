@@ -1,5 +1,4 @@
 {
-  "target": "x86_64-macos",
   "prices": [
     {
       "mint": "5zcqoA4zmeLnLdc6GonaFLzxFRna6kQX9F1cLNvZWFd4",
@@ -92,17 +91,6 @@
     {
       "mint": "EPjFWdd5AufqSSqeM2qN1xzybapC8G4wEGGkZwyTDt1v",
       "price_usd": 0.0,
-      "price_native": 0.00824925750300484,
-      "confidence": 1.0,
-      "source_pool": null,
-      "pool_address": "58oQChx4yWmvKdwLLZzBi4ChoCc2fqCUWBkwMihLYQo2",
-      "slot": 0,
-      "native_reserves": 111808.427358533,
-      "token_reserves": 13553756.482666
-    },
-    {
-      "mint": "EPjFWdd5AufqSSqeM2qN1xzybapC8G4wEGGkZwyTDt1v",
-      "price_usd": 0.0,
       "price_native": 0.008266025397619866,
       "confidence": 0.9,
       "source_pool": "RAYDIUM_CLMM",
@@ -121,6 +109,17 @@
       "slot": 0,
       "native_reserves": 22085.832348991,
       "token_reserves": 11381941.861045
+    },
+    {
+      "mint": "EPjFWdd5AufqSSqeM2qN1xzybapC8G4wEGGkZwyTDt1v",
+      "price_usd": 0.0,
+      "price_native": 0.00824925750300484,
+      "confidence": 1.0,
+      "source_pool": null,
+      "pool_address": "58oQChx4yWmvKdwLLZzBi4ChoCc2fqCUWBkwMihLYQo2",
+      "slot": 0,
+      "native_reserves": 111808.427358533,
+      "token_reserves": 13553756.482666
     }
   ]
 }

@@ -29,6 +29,9 @@
 
 #![allow(dead_code)] // each test binary compiles only the part of this module it uses.
 
+pub mod pool_cases;
+pub mod solana_pools;
+
 use chrono::{DateTime, Duration, Utc};
 use screenerbot::ohlcvs::{Candle, TimeframeBundle};
 use screenerbot::positions::Position;

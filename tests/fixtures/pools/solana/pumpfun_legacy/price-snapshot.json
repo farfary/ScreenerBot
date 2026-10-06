@@ -1,0 +1,22 @@
+{
+  "schema": 1,
+  "chain": "solana",
+  "venue": "pumpfun_legacy",
+  "program": "6EF8rrecthR5Dkzon8Nwu78hRvfCKubJ14M5uBEwF6P",
+  "pool": "AUKZMypBMmVi3gPMNmY46eb841La2mZufkdkPSh3PWEj",
+  "target_mint": "2xJGewx1p72WFCAwBvmbpejZxqa7EN3mS3PiGjgrpump",
+  "quote_mint": "So11111111111111111111111111111111111111112",
+  "slot": "453946898",
+  "purpose": "price-snapshot",
+  "decimals": {
+    "2xJGewx1p72WFCAwBvmbpejZxqa7EN3mS3PiGjgrpump": 6,
+    "So11111111111111111111111111111111111111112": 9
+  },
+  "accounts": {
+    "AUKZMypBMmVi3gPMNmY46eb841La2mZufkdkPSh3PWEj": {
+      "owner": "6EF8rrecthR5Dkzon8Nwu78hRvfCKubJ14M5uBEwF6P",
+      "lamports": "12441591",
+      "data": "F7f4N2DYrGA+4Jbgi88DAKfiw/wGAAAAPkiElPrQAgCnNqAAAAAAAACAxqR+jQMAADFvaxLI/IAJRfDFQViyTKAwVBe/Kpd/ZSrnsO7sYftvAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA=="
+    }
+  }
+}
