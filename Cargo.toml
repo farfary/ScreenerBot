@@ -263,7 +263,8 @@ dirs = "7.0.0"
 # see only dev-dependencies, so these mirror the lib's own versions and compile once.
 axum = { version = "0.8", features = ["ws", "macros", "multipart"] }
 tower = { version = "0.5", features = ["util"] }
-serde_json = "1.0"
+# float_roundtrip: the price snapshot parses recorded floats back bit-exactly for its per-entry diff.
+serde_json = { version = "1.0", features = ["float_roundtrip"] }
 # Async runtime for #[tokio::test] in the L1/L2 integration suite (tests/). Integration
 # test crates only see dev-dependencies, not the lib's regular deps; features match the
 # main tokio dep so cargo compiles it once.

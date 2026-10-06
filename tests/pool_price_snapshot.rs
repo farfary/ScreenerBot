@@ -33,8 +33,8 @@
 //! The pool addresses are the public chain accounts already used by
 //! `tests/fixtures/direct_swaps/`. The target mint is the pool's non-WSOL mint, so a SOL/USDC
 //! pool prices USDC in SOL. Floats are written by `serde_json` (shortest round-trip), so equal
-//! text means equal bits; the decoders use only IEEE arithmetic and `powi`, which are
-//! deterministic on one target. A run on another target fails with both targets named.
+//! text means equal bits; the decoders use only IEEE arithmetic and `powi`. The recorded target
+//! is information: a run on another target prints it and still compares every decoded entry.
 //!
 //! # Offline guarantee
 //!
@@ -311,22 +311,26 @@ fn solana_pool_prices_match_the_recorded_snapshot() {
         BTreeSet::from(COVERED_KINDS),
         "the recorded inputs cover a different set of program kinds"
     );
-    let actual = PriceSnapshot {
-        target: current_target(),
-        prices: decode_all(&inputs),
-    };
-    let actual_text = pretty(&actual);
+    let prices = decode_all(&inputs);
 
     let expected_text = read_file(fixture_dir().join(PRICES_FILE));
-    if actual_text != expected_text {
-        let expected: PriceSnapshot =
-            serde_json::from_str(&expected_text).expect("parse recorded prices");
-        if expected.target != actual.target {
-            eprintln!(
-                "DIFF target: recorded on {}, running on {}",
-                expected.target, actual.target
-            );
-        }
+    let expected: PriceSnapshot =
+        serde_json::from_str(&expected_text).expect("parse recorded prices");
+    if expected.target != current_target() {
+        eprintln!(
+            "NOTE recorded on {}, running on {}",
+            expected.target,
+            current_target()
+        );
+    }
+
+    // The recording target is information only. The decoded entries are rendered into the
+    // recorded file's own shape under the recorded target, so equal text means equal bits.
+    let actual = PriceSnapshot {
+        target: expected.target.clone(),
+        prices,
+    };
+    if pretty(&actual) != expected_text {
         if expected.prices.len() != actual.prices.len() {
             eprintln!(
                 "DIFF entry count: recorded {}, decoded {}",
