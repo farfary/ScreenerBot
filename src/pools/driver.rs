@@ -6,8 +6,8 @@
 //! (`ChainRuntime::pricing_driver`).
 //!
 //! The pools service initializes and clears each enabled chain's driver; the
-//! stage services start one stage loop per enabled chain through
-//! [`PricingDriver::start_stage`] and own the returned handles. Status and
+//! pool pricing service starts every stage loop on every enabled chain through
+//! [`PricingDriver::start_stage`] and owns the returned handles. Status and
 //! pool-directory reads go through [`super::api`], which merges every chain in
 //! the requested scope.
 

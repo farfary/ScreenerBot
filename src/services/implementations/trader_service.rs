@@ -45,15 +45,7 @@ impl Service for TraderService {
     }
 
     fn dependencies(&self) -> Vec<&'static str> {
-        vec![
-            "positions",
-            "pool_discovery",
-            "pool_fetcher",
-            "pool_calculator",
-            "pools",
-            "tokens",
-            "filtering",
-        ]
+        vec!["positions", "pool_pricing", "pools", "tokens", "filtering"]
     }
 
     fn is_enabled(&self) -> bool {

@@ -31,11 +31,8 @@ pub fn register_all_services(manager: &mut ServiceManager) {
     manager.register(Box::new(CopyTradingService));
     manager.register(Box::new(SolPriceService));
 
-    // Pool services (4 sub-services + 1 helper coordinator)
-    manager.register(Box::new(PoolDiscoveryService));
-    manager.register(Box::new(PoolFetcherService));
-    manager.register(Box::new(PoolCalculatorService));
-    manager.register(Box::new(PoolAnalyzerService));
+    // Pool services: the price cache and database, then the pricing pipeline
+    manager.register(Box::new(PoolPricingService));
     manager.register(Box::new(PoolsService));
 
     // Centralized Tokens service

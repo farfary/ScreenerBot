@@ -10,6 +10,8 @@ mod label_tests;
 mod logging;
 mod metrics;
 pub mod startup;
+#[cfg(test)]
+mod startup_order_tests;
 
 pub use global::*;
 pub use health::ServiceHealth;

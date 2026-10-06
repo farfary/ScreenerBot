@@ -22,11 +22,8 @@ pub mod wallet_service;
 pub mod wallet_watch_service;
 pub mod webserver_service;
 
-// Pool sub-services
-pub mod pool_analyzer_service;
-pub mod pool_calculator_service;
-pub mod pool_discovery_service;
-pub mod pool_fetcher_service;
+// Pool pricing pipeline
+pub mod pool_pricing_service;
 
 // Centralized tokens service
 pub mod tokens_service;
@@ -57,11 +54,8 @@ pub use wallet_service::WalletService;
 pub use wallet_watch_service::WalletWatchService;
 pub use webserver_service::WebserverService;
 
-// Pool sub-services
-pub use pool_analyzer_service::PoolAnalyzerService;
-pub use pool_calculator_service::PoolCalculatorService;
-pub use pool_discovery_service::PoolDiscoveryService;
-pub use pool_fetcher_service::PoolFetcherService;
+// Pool pricing pipeline
+pub use pool_pricing_service::PoolPricingService;
 
 // Centralized tokens service
 pub use tokens_service::TokensService;

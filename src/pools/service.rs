@@ -7,7 +7,7 @@
 //! database and history initialization plus the chain's pricing driver
 //! (`ChainRuntime::pricing_driver`), which brings up the chain-owned
 //! discovery/analysis/fetch/calculation components. The stage loops are
-//! started by the stage services; periodic upkeep runs in the maintenance
+//! started by the pool pricing service; periodic upkeep runs in the maintenance
 //! task (`super::maintenance`).
 
 use super::driver::{PricingDriver, PricingStage, PricingStageMetrics};
