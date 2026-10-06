@@ -53,9 +53,10 @@ impl DbPriceResult {
         }
     }
 
-    /// Convert to PriceResult
-    pub fn to_price_result(&self) -> PriceResult {
-        PriceResult {
+    /// Convert to PriceResult carrying the row's true age; `None` when the
+    /// row's timestamp cannot be represented as an `Instant`.
+    pub fn to_price_result(&self) -> Option<PriceResult> {
+        Some(PriceResult {
             mint: self.mint.clone(),
             price_usd: self.price_usd,
             price_native: self.price_sol,
@@ -63,10 +64,10 @@ impl DbPriceResult {
             source_pool: self.source_pool.clone(),
             pool_address: self.pool_address.clone(),
             slot: self.slot,
-            timestamp: Self::instant_from_unix_timestamp(self.timestamp_unix),
+            timestamp: Self::instant_from_unix_timestamp(self.timestamp_unix)?,
             native_reserves: self.native_reserves,
             token_reserves: self.token_reserves,
-        }
+        })
     }
 
     /// Create from database row
@@ -114,10 +115,17 @@ impl DbPriceResult {
         }
     }
 
-    /// Recreate an Instant from a unix timestamp (seconds precision)
-    fn instant_from_unix_timestamp(timestamp_unix: i64) -> std::time::Instant {
+    /// Recreate an Instant from a unix timestamp (seconds precision).
+    ///
+    /// `Instant` cannot represent a time before its monotonic clock's origin
+    /// (system boot, or the awake time since boot on macOS). Such a row, and a
+    /// row without a recorded time, returns `None`: stamping it "now" would make
+    /// an old price pass every freshness check, and clamping it to the oldest
+    /// representable instant can still land inside the freshness TTL shortly
+    /// after boot.
+    fn instant_from_unix_timestamp(timestamp_unix: i64) -> Option<std::time::Instant> {
         if timestamp_unix <= 0 {
-            return std::time::Instant::now();
+            return None;
         }
 
         let now = SystemTime::now()
@@ -132,9 +140,7 @@ impl DbPriceResult {
         };
         let duration = Duration::from_secs(diff);
 
-        std::time::Instant::now()
-            .checked_sub(duration)
-            .unwrap_or_else(std::time::Instant::now)
+        std::time::Instant::now().checked_sub(duration)
     }
 }
 

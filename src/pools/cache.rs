@@ -260,7 +260,12 @@ fn evict_stale_histories(chain: ChainId, protected: &HashSet<String>, now: Insta
 }
 
 /// Load `chain`'s recorded price history for `mints` (the open positions'
-/// tokens) from its database into memory, caching each token's latest price.
+/// tokens) from its database into the history map only.
+///
+/// The latest-price map is never seeded from history: a recorded price is not
+/// a live one, and only [`update_price`] (the calculator's publish) writes it.
+/// With no cached price, `cached_price_age` is `None`, which triggers an
+/// immediate calculation for each loaded token.
 pub async fn load_history(chain: ChainId, mints: &[String]) {
     logger::info(
         LogTag::PoolCache,
@@ -284,8 +289,6 @@ pub async fn load_history(chain: ChainId, mints: &[String]) {
         ),
     );
 
-    let prices = PRICES.get(chain);
-    let histories = HISTORIES.get(chain);
     let mut loaded_count = 0;
     let mut failed_count = 0;
 
@@ -293,22 +296,8 @@ pub async fn load_history(chain: ChainId, mints: &[String]) {
         match db::load_historical_data_for_token(chain, mint).await {
             Ok(historical_prices) => {
                 if !historical_prices.is_empty() {
-                    let mut new_history =
-                        PriceHistory::new(mint.clone(), PRICE_HISTORY_MAX_ENTRIES);
                     let prices_count = historical_prices.len();
-
-                    // Add all historical prices and cache the latest
-                    let mut latest_price = None;
-                    for price in historical_prices {
-                        new_history.add_price(price.clone());
-                        latest_price = Some(price);
-                    }
-
-                    if let Some(price) = latest_price {
-                        prices.insert(mint.clone(), price);
-                    }
-
-                    histories.insert(mint.clone(), new_history);
+                    insert_loaded_history(chain, mint, historical_prices);
                     loaded_count += 1;
 
                     logger::debug(
@@ -340,6 +329,16 @@ pub async fn load_history(chain: ChainId, mints: &[String]) {
             chain, loaded_count, failed_count
         ),
     );
+}
+
+/// Install a token's recorded prices (oldest first) as its in-memory history
+/// on `chain`, leaving the latest-price map untouched.
+fn insert_loaded_history(chain: ChainId, mint: &str, historical_prices: Vec<PriceResult>) {
+    let mut history = PriceHistory::new(mint.to_owned(), PRICE_HISTORY_MAX_ENTRIES);
+    for price in historical_prices {
+        history.add_price(price);
+    }
+    HISTORIES.get(chain).insert(mint.to_owned(), history);
 }
 
 /// Remove gapped data from every in-memory history on `chain`. Returns
@@ -403,6 +402,31 @@ mod tests {
         }
     }
 
+    fn recorded_row(mint: &str, timestamp_unix: i64) -> db::DbPriceResult {
+        db::DbPriceResult {
+            id: None,
+            chain_id: CHAIN,
+            mint: mint.to_owned(),
+            pool_address: format!("{mint}-pool"),
+            price_usd: 0.0,
+            price_sol: 0.000_123_4,
+            confidence: 0.9,
+            slot: 42,
+            timestamp_unix,
+            native_reserves: 10.0,
+            token_reserves: 1_000.0,
+            source_pool: Some(format!("{mint}-source")),
+            created_at: chrono::Utc::now(),
+        }
+    }
+
+    fn unix_now() -> i64 {
+        std::time::SystemTime::now()
+            .duration_since(std::time::UNIX_EPOCH)
+            .expect("clock after the unix epoch")
+            .as_secs() as i64
+    }
+
     fn history_len(mint: &str) -> usize {
         HISTORIES
             .get(CHAIN)
@@ -420,6 +444,35 @@ mod tests {
             interval - Duration::from_millis(1)
         )));
         assert!(should_record_history(Some(interval)));
+    }
+
+    #[test]
+    fn a_price_loaded_from_history_at_boot_is_never_served_as_fresh() {
+        let _maps = lock_maps();
+        let mint = "cache-boot-history-mint";
+        let now = unix_now();
+        let ttl = price_cache_ttl_seconds() as i64;
+        // Oldest first, as the database load returns them: a row older than any
+        // monotonic clock origin, one older than the TTL and one inside it.
+        let loaded: Vec<PriceResult> = [1, now - ttl - 90, now - 5]
+            .into_iter()
+            .filter_map(|timestamp_unix| recorded_row(mint, timestamp_unix).to_price_result())
+            .collect();
+        insert_loaded_history(CHAIN, mint, loaded);
+
+        assert!(get_fresh_price(CHAIN, mint).is_none());
+        assert!(cached_price_age(CHAIN, mint).is_none());
+        assert!(!available_tokens(CHAIN).contains(&mint.to_owned()));
+        let latest_age = HISTORIES
+            .get(CHAIN)
+            .get(mint)
+            .and_then(|history| {
+                history
+                    .get_latest()
+                    .map(|latest| latest.timestamp.elapsed())
+            })
+            .expect("loaded history");
+        assert!(latest_age >= Duration::from_secs(4));
     }
 
     #[test]

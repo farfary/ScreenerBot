@@ -271,9 +271,21 @@ impl PoolsDatabase {
                 .map_err(|e| DatabaseError::Query { operation: "query price history".to_owned(), message: e.to_string() })?;
 
             let mut results = Vec::new();
+            let mut unrepresentable = 0usize;
             for row in rows {
                 let db_price = row.map_err(|e| DatabaseError::Query { operation: "read row".to_owned(), message: e.to_string() })?;
-                results.push(db_price.to_price_result());
+                match db_price.to_price_result() {
+                    Some(price) => results.push(price),
+                    None => unrepresentable += 1,
+                }
+            }
+            if unrepresentable > 0 {
+                logger::debug(
+                    LogTag::PoolService,
+                    &format!(
+                        "Skipped {unrepresentable} price history rows for {mint_str} whose timestamp cannot be represented"
+                    ),
+                );
             }
 
             // Reverse so oldest comes first
@@ -562,5 +574,41 @@ mod tests {
         assert!(pools
             .iter()
             .all(|record| record.chain_id == ChainId::Solana));
+    }
+
+    #[tokio::test]
+    async fn history_rows_without_a_representable_time_are_never_stamped_now() {
+        let (db, _dir) = pooled_legacy_database("unrepresentable-time");
+        let now = std::time::SystemTime::now()
+            .duration_since(std::time::UNIX_EPOCH)
+            .expect("clock after the unix epoch")
+            .as_secs() as i64;
+        {
+            let conn = db
+                .shared_pool()
+                .expect("test pool")
+                .get()
+                .expect("checkout test connection");
+            for timestamp_unix in [-7, 0, 1, now - 120] {
+                conn.execute(
+                    "INSERT INTO price_history (chain_id, mint, pool_address, price_usd, price_sol, confidence, slot, timestamp_unix, native_reserves, token_reserves, created_at)
+                     VALUES ('solana', 'aged-mint', 'pool', 1.0, 2.0, 1.0, 8, ?1, 3.0, 4.0, '2026-01-01T00:00:20Z')",
+                    params![timestamp_unix],
+                )
+                .expect("insert aged row");
+            }
+        }
+
+        let history = db
+            .load_recent_price_history("aged-mint", crate::pools::types::PRICE_HISTORY_MAX_ENTRIES)
+            .await
+            .expect("read aged history");
+
+        // The rows without a recorded time are dropped; the 1970 row is dropped
+        // where the monotonic clock cannot reach it and otherwise keeps its age.
+        assert!((1..=2).contains(&history.len()));
+        assert!(history
+            .iter()
+            .all(|price| price.timestamp.elapsed() >= std::time::Duration::from_secs(119)));
     }
 }
