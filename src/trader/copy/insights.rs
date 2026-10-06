@@ -47,9 +47,12 @@ pub struct CopyRound {
     pub book: CopyBook,
     pub opened_at: DateTime<Utc>,
     pub closed_at: DateTime<Utc>,
-    pub invested_sol: f64,
-    pub proceeds_sol: f64,
-    pub pnl_sol: f64,
+    #[serde(rename = "invested_sol")]
+    pub invested_native: f64,
+    #[serde(rename = "proceeds_sol")]
+    pub proceeds_native: f64,
+    #[serde(rename = "pnl_sol")]
+    pub pnl_native: f64,
     pub pnl_pct: Option<f64>,
     pub hold_seconds: i64,
     /// What closed it: `target_sell`, an exit rule, or the live close reason.
@@ -59,8 +62,10 @@ pub struct CopyRound {
 #[derive(Debug, Clone, Serialize)]
 pub struct CurvePoint {
     pub at: DateTime<Utc>,
-    pub cumulative_pnl_sol: f64,
-    pub round_pnl_sol: f64,
+    #[serde(rename = "cumulative_pnl_sol")]
+    pub cumulative_pnl_native: f64,
+    #[serde(rename = "round_pnl_sol")]
+    pub round_pnl_native: f64,
     pub mint: String,
 }
 
@@ -68,7 +73,8 @@ pub struct CurvePoint {
 pub struct ExitBucket {
     pub exit: String,
     pub legs: usize,
-    pub pnl_sol: f64,
+    #[serde(rename = "pnl_sol")]
+    pub pnl_native: f64,
 }
 
 #[derive(Debug, Clone, Serialize)]
@@ -110,11 +116,16 @@ pub struct CopyInsights {
     pub wins: usize,
     pub losses: usize,
     pub win_rate_pct: Option<f64>,
-    pub realized_pnl_sol: f64,
-    pub average_win_sol: Option<f64>,
-    pub average_loss_sol: Option<f64>,
-    pub best_round_sol: Option<f64>,
-    pub worst_round_sol: Option<f64>,
+    #[serde(rename = "realized_pnl_sol")]
+    pub realized_pnl_native: f64,
+    #[serde(rename = "average_win_sol")]
+    pub average_win_native: Option<f64>,
+    #[serde(rename = "average_loss_sol")]
+    pub average_loss_native: Option<f64>,
+    #[serde(rename = "best_round_sol")]
+    pub best_round_native: Option<f64>,
+    #[serde(rename = "worst_round_sol")]
+    pub worst_round_native: Option<f64>,
     pub profit_factor: Option<f64>,
     pub average_hold_seconds: Option<f64>,
     pub decisions: DecisionCounts,
@@ -167,7 +178,7 @@ struct OpenRound {
 struct ExitLeg {
     at: DateTime<Utc>,
     exit: String,
-    pnl_sol: f64,
+    pnl_native: f64,
 }
 
 /// Replay the paper book from its decisions, oldest first.
@@ -205,7 +216,7 @@ fn replay_paper(rows: &[&CopyActivityRow]) -> (Vec<CopyRound>, Vec<ExitLeg>) {
                 legs.push(ExitLeg {
                     at,
                     exit: exit.clone(),
-                    pnl_sol: fill.net_proceeds_sol - cost_sold,
+                    pnl_native: fill.net_proceeds_sol - cost_sold,
                 });
                 if round.tokens <= held * CLOSE_RESIDUE_FRACTION {
                     if let Some(closed) = open.remove(decision.mint.as_str()) {
@@ -216,9 +227,9 @@ fn replay_paper(rows: &[&CopyActivityRow]) -> (Vec<CopyRound>, Vec<ExitLeg>) {
                             book: CopyBook::Paper,
                             opened_at,
                             closed_at: at,
-                            invested_sol: closed.realized_cost,
-                            proceeds_sol: closed.proceeds,
-                            pnl_sol: pnl,
+                            invested_native: closed.realized_cost,
+                            proceeds_native: closed.proceeds,
+                            pnl_native: pnl,
                             pnl_pct: (closed.realized_cost > 0.0)
                                 .then(|| pnl / closed.realized_cost * 100.0),
                             hold_seconds: (at - opened_at).num_seconds(),
@@ -249,9 +260,9 @@ fn live_rounds(task_id: i64, positions: &[Position]) -> Vec<CopyRound> {
                 book: CopyBook::Live,
                 opened_at: position.entry_time,
                 closed_at,
-                invested_sol: position.total_size_native,
-                proceeds_sol: position.native_received.unwrap_or_default(),
-                pnl_sol: pnl,
+                invested_native: position.total_size_native,
+                proceeds_native: position.native_received.unwrap_or_default(),
+                pnl_native: pnl,
                 pnl_pct: position.pnl_percent,
                 hold_seconds: (closed_at - position.entry_time).num_seconds(),
                 exit: position
@@ -408,20 +419,20 @@ pub fn build_insights(
     };
     let (wins, losses): (Vec<f64>, Vec<f64>) = rounds
         .iter()
-        .map(|round| round.pnl_sol)
+        .map(|round| round.pnl_native)
         .partition(|pnl| *pnl > 0.0);
     insights.wins = wins.len();
     insights.losses = losses.len();
-    insights.realized_pnl_sol = rounds.iter().map(|round| round.pnl_sol).sum();
+    insights.realized_pnl_native = rounds.iter().map(|round| round.pnl_native).sum();
     let average = |values: &[f64]| {
         (!values.is_empty()).then(|| values.iter().sum::<f64>() / values.len() as f64)
     };
     insights.win_rate_pct =
         (!rounds.is_empty()).then(|| wins.len() as f64 / rounds.len() as f64 * 100.0);
-    insights.average_win_sol = average(&wins);
-    insights.average_loss_sol = average(&losses);
-    insights.best_round_sol = rounds.iter().map(|round| round.pnl_sol).reduce(f64::max);
-    insights.worst_round_sol = rounds.iter().map(|round| round.pnl_sol).reduce(f64::min);
+    insights.average_win_native = average(&wins);
+    insights.average_loss_native = average(&losses);
+    insights.best_round_native = rounds.iter().map(|round| round.pnl_native).reduce(f64::max);
+    insights.worst_round_native = rounds.iter().map(|round| round.pnl_native).reduce(f64::min);
     let gross_loss = -losses.iter().sum::<f64>();
     insights.profit_factor = (gross_loss > 0.0).then(|| wins.iter().sum::<f64>() / gross_loss);
     insights.average_hold_seconds = average(
@@ -434,11 +445,11 @@ pub fn build_insights(
     insights.pnl_curve = rounds
         .iter()
         .map(|round| {
-            cumulative += round.pnl_sol;
+            cumulative += round.pnl_native;
             CurvePoint {
                 at: round.closed_at,
-                cumulative_pnl_sol: cumulative,
-                round_pnl_sol: round.pnl_sol,
+                cumulative_pnl_native: cumulative,
+                round_pnl_native: round.pnl_native,
                 mint: round.mint.clone(),
             }
         })
@@ -450,14 +461,14 @@ pub fn build_insights(
             for leg in legs.iter().filter(|leg| range.contains(leg.at)) {
                 let bucket = exits.entry(leg.exit.clone()).or_default();
                 bucket.legs += 1;
-                bucket.pnl_sol += leg.pnl_sol;
+                bucket.pnl_native += leg.pnl_native;
             }
         }
         CopyBook::Live => {
             for round in &rounds {
                 let bucket = exits.entry(round.exit.clone()).or_default();
                 bucket.legs += 1;
-                bucket.pnl_sol += round.pnl_sol;
+                bucket.pnl_native += round.pnl_native;
             }
         }
     }

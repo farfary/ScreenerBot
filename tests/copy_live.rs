@@ -30,11 +30,11 @@ fn task(exit_mode: ExitMode) -> CopyTask {
         sizing: SizingMode::RatioOfTarget { pct: 50.0 },
         exit_mode,
         exit_policy_overrides: Default::default(),
-        max_sol_per_trade: 1.0,
-        max_sol_per_token: 2.0,
-        total_budget_sol: 5.0,
-        min_target_trade_sol: None,
-        max_target_trade_sol: None,
+        max_native_per_trade: 1.0,
+        max_native_per_token: 2.0,
+        total_budget_native: 5.0,
+        min_target_trade_native: None,
+        max_target_trade_native: None,
         buy_once_per_token: false,
         slippage_pct: 2.0,
         created_at: now,
@@ -55,11 +55,11 @@ fn input(mode: CopyMode) -> CopyTaskInput {
         sizing: task.sizing,
         exit_mode: task.exit_mode,
         exit_policy_overrides: task.exit_policy_overrides,
-        max_sol_per_trade: task.max_sol_per_trade,
-        max_sol_per_token: task.max_sol_per_token,
-        total_budget_sol: task.total_budget_sol,
-        min_target_trade_sol: task.min_target_trade_sol,
-        max_target_trade_sol: task.max_target_trade_sol,
+        max_native_per_trade: task.max_native_per_trade,
+        max_native_per_token: task.max_native_per_token,
+        total_budget_native: task.total_budget_native,
+        min_target_trade_native: task.min_target_trade_native,
+        max_target_trade_native: task.max_target_trade_native,
         buy_once_per_token: task.buy_once_per_token,
         slippage_pct: task.slippage_pct,
         require_filter_pass: None,
@@ -99,7 +99,7 @@ fn plan(exit_mode: ExitMode) -> screenerbot::trader::copy::PreparedLiveEntry {
         },
         PipelinePolicy {
             require_filter_pass: true,
-            engine_trade_size_sol: 1.0,
+            engine_trade_size_native: 1.0,
         },
         Utc.timestamp_opt(12, 0).unwrap(),
     )
@@ -146,7 +146,7 @@ fn exit_mode_maps_to_typed_position_ownership_and_copy_origin() {
                 source_wallet: "target-wallet".to_owned()
             }
         );
-        assert_eq!(plan.decision.size_sol, Some(0.2));
+        assert_eq!(plan.decision.size_native, Some(0.2));
     }
 }
 
@@ -165,7 +165,7 @@ fn confirmation_pending_trade_result_is_never_reported_as_confirmed() {
         LiveSubmitResult::from_trade_result(Some(result)),
         LiveSubmitResult::Submitted {
             transaction_signature,
-            fill_price_sol: Some(0.005)
+            fill_price_native: Some(0.005)
         } if transaction_signature == "ours-ambiguous"
     ));
 }
@@ -208,7 +208,7 @@ async fn injected_submission_distinguishes_confirmed_ambiguous_and_definite_fail
         |_, _| async {
             LiveSubmitResult::Confirmed {
                 transaction_signature: "ours-confirmed".to_owned(),
-                fill_price_sol: Some(0.005),
+                fill_price_native: Some(0.005),
             }
         },
     )
@@ -226,7 +226,7 @@ async fn injected_submission_distinguishes_confirmed_ambiguous_and_definite_fail
         |_, _| async {
             LiveSubmitResult::Submitted {
                 transaction_signature: "ours-ambiguous".to_owned(),
-                fill_price_sol: Some(0.005),
+                fill_price_native: Some(0.005),
             }
         },
     )

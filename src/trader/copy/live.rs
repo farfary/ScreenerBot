@@ -24,7 +24,7 @@ use super::types::{
 pub struct PreparedLiveEntry {
     pub task: CopyTask,
     pub target_signature: String,
-    pub target_size_sol: f64,
+    pub target_size_native: f64,
     pub target_token_amount: f64,
     pub decision: TradeDecision,
     pub context: EntryContext,
@@ -35,11 +35,11 @@ pub struct PreparedLiveEntry {
 pub enum LiveSubmitResult {
     Confirmed {
         transaction_signature: String,
-        fill_price_sol: Option<f64>,
+        fill_price_native: Option<f64>,
     },
     Submitted {
         transaction_signature: String,
-        fill_price_sol: Option<f64>,
+        fill_price_native: Option<f64>,
     },
     Failed {
         error: String,
@@ -63,12 +63,12 @@ impl LiveSubmitResult {
             if result.confirmation_pending {
                 Self::Submitted {
                     transaction_signature,
-                    fill_price_sol: result.executed_price_sol,
+                    fill_price_native: result.executed_price_native,
                 }
             } else {
                 Self::Confirmed {
                     transaction_signature,
-                    fill_price_sol: result.executed_price_sol,
+                    fill_price_native: result.executed_price_native,
                 }
             }
         } else {
@@ -135,20 +135,25 @@ pub fn prepare_live_entry(
     let ActivityKind::Swap {
         mint,
         side: SwapSide::Buy,
-        sol_amount: target_size_sol,
+        sol_amount: target_size_native,
         token_amount: target_token_amount,
-        price_sol: target_price_sol,
+        price_sol: target_price_native,
         ..
     } = &activity.kind
     else {
         return Err(CopySkip::NotBuySwap);
     };
-    precheck(task, *target_size_sol, spend, risk, policy)?;
-    let sized_sol = size_for(task, *target_size_sol, spend, policy.engine_trade_size_sol)?;
+    precheck(task, *target_size_native, spend, risk, policy)?;
+    let sized_native = size_for(
+        task,
+        *target_size_native,
+        spend,
+        policy.engine_trade_size_native,
+    )?;
     Ok(PreparedLiveEntry {
         task: task.clone(),
         target_signature: activity.signature.clone(),
-        target_size_sol: *target_size_sol,
+        target_size_native: *target_size_native,
         target_token_amount: *target_token_amount,
         decision: TradeDecision {
             position_id: None,
@@ -158,8 +163,8 @@ pub fn prepare_live_entry(
             strategy_id: None,
             timestamp: decided_at,
             priority: TradePriority::High,
-            price_sol: *target_price_sol,
-            size_sol: Some(sized_sol),
+            price_native: *target_price_native,
+            size_native: Some(sized_native),
             exit_percentage: None,
             slippage_pct: Some(task.slippage_pct),
         },
@@ -177,7 +182,7 @@ pub fn prepare_live_entry(
             decided_at,
             submitted_at: None,
             confirmed_at: None,
-            target_price_sol: *target_price_sol,
+            target_price_sol: *target_price_native,
             fill_price_sol: None,
             backfill: activity.backfill,
         },
@@ -205,21 +210,21 @@ where
     match result {
         LiveSubmitResult::Confirmed {
             transaction_signature,
-            fill_price_sol,
+            fill_price_native,
         } => {
             decision.telemetry.submitted_at = Some(submit_started_at);
             decision.transaction_signature = Some(transaction_signature);
             decision.telemetry.confirmed_at = Some(Utc::now());
-            decision.telemetry.fill_price_sol = fill_price_sol;
+            decision.telemetry.fill_price_sol = fill_price_native;
             CopyOutcome::LiveConfirmed(decision)
         }
         LiveSubmitResult::Submitted {
             transaction_signature,
-            fill_price_sol,
+            fill_price_native,
         } => {
             decision.telemetry.submitted_at = Some(submit_started_at);
             decision.transaction_signature = Some(transaction_signature);
-            decision.telemetry.fill_price_sol = fill_price_sol;
+            decision.telemetry.fill_price_sol = fill_price_native;
             CopyOutcome::LiveSubmitted(decision)
         }
         LiveSubmitResult::Failed { error } => {
@@ -235,9 +240,9 @@ fn live_decision(plan: &PreparedLiveEntry) -> LiveDecision {
         target_address: plan.task.target_address.clone(),
         target_signature: plan.target_signature.clone(),
         mint: plan.decision.mint.clone(),
-        target_size_sol: plan.target_size_sol,
+        target_size_sol: plan.target_size_native,
         target_token_amount: plan.target_token_amount,
-        sized_sol: plan.decision.size_sol.unwrap_or_default(),
+        sized_sol: plan.decision.size_native.unwrap_or_default(),
         transaction_signature: None,
         error: None,
         telemetry: plan.telemetry.clone(),

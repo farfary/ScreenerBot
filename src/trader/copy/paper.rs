@@ -11,8 +11,8 @@ pub const PAPER_REFERRAL_FEE_BPS: u16 = 50;
 
 #[derive(Debug, Clone, Copy, PartialEq)]
 pub struct PaperCosts {
-    pub network_fee_sol: f64,
-    pub priority_fee_sol: f64,
+    pub network_fee_native: f64,
+    pub priority_fee_native: f64,
 }
 
 /// The decision-time price a paper fill trades at, and where it came from. A
@@ -21,52 +21,52 @@ pub struct PaperCosts {
 /// target by construction, so it measures nothing about execution.
 #[derive(Debug, Clone, Copy, PartialEq)]
 pub struct PaperMarket {
-    pub price_sol: f64,
+    pub price_native: f64,
     pub from_pool: bool,
 }
 
 impl PaperMarket {
-    pub const fn pool(price_sol: f64) -> Self {
+    pub const fn pool(price_native: f64) -> Self {
         Self {
-            price_sol,
+            price_native,
             from_pool: true,
         }
     }
 
-    pub const fn observed(price_sol: f64) -> Self {
+    pub const fn observed(price_native: f64) -> Self {
         Self {
-            price_sol,
+            price_native,
             from_pool: false,
         }
     }
 }
 
 pub fn simulate_fill(
-    input_sol: f64,
+    input_native: f64,
     market: PaperMarket,
     slippage_pct: f64,
     costs: PaperCosts,
 ) -> Result<PaperFill, CopySkip> {
-    if !input_sol.is_finite() || input_sol <= 0.0 {
+    if !input_native.is_finite() || input_native <= 0.0 {
         return Err(CopySkip::InvalidSizing);
     }
-    let market_price_sol = market.price_sol;
-    if !market_price_sol.is_finite() || market_price_sol <= 0.0 {
+    let market_price_native = market.price_native;
+    if !market_price_native.is_finite() || market_price_native <= 0.0 {
         return Err(CopySkip::InvalidPrice);
     }
-    let fill_price_sol = market_price_sol * (1.0 + slippage_pct / 100.0);
-    let referral_fee_sol = input_sol * f64::from(PAPER_REFERRAL_FEE_BPS) / 10_000.0;
-    let token_amount = (input_sol - referral_fee_sol) / fill_price_sol;
+    let fill_price_native = market_price_native * (1.0 + slippage_pct / 100.0);
+    let referral_fee_native = input_native * f64::from(PAPER_REFERRAL_FEE_BPS) / 10_000.0;
+    let token_amount = (input_native - referral_fee_native) / fill_price_native;
     Ok(PaperFill {
-        input_sol,
-        market_price_sol,
+        input_sol: input_native,
+        market_price_sol: market_price_native,
         priced_from_pool: market.from_pool,
-        fill_price_sol,
+        fill_price_sol: fill_price_native,
         token_amount,
-        referral_fee_sol,
-        network_fee_sol: costs.network_fee_sol,
-        priority_fee_sol: costs.priority_fee_sol,
-        total_cost_sol: input_sol + costs.network_fee_sol + costs.priority_fee_sol,
+        referral_fee_sol: referral_fee_native,
+        network_fee_sol: costs.network_fee_native,
+        priority_fee_sol: costs.priority_fee_native,
+        total_cost_sol: input_native + costs.network_fee_native + costs.priority_fee_native,
     })
 }
 
@@ -81,26 +81,26 @@ pub fn simulate_sell(
     if !token_amount.is_finite() || token_amount <= 0.0 {
         return Err(CopySkip::CopyPositionNotFound);
     }
-    let market_price_sol = market.price_sol;
-    if !market_price_sol.is_finite() || market_price_sol <= 0.0 {
+    let market_price_native = market.price_native;
+    if !market_price_native.is_finite() || market_price_native <= 0.0 {
         return Err(CopySkip::InvalidPrice);
     }
-    let fill_price_sol = market_price_sol * (1.0 - slippage_pct / 100.0).max(0.0);
-    let gross_sol = token_amount * fill_price_sol;
-    let referral_fee_sol = gross_sol * f64::from(PAPER_REFERRAL_FEE_BPS) / 10_000.0;
+    let fill_price_native = market_price_native * (1.0 - slippage_pct / 100.0).max(0.0);
+    let gross_native = token_amount * fill_price_native;
+    let referral_fee_native = gross_native * f64::from(PAPER_REFERRAL_FEE_BPS) / 10_000.0;
     Ok(PaperSellFill {
         token_amount,
-        market_price_sol,
+        market_price_sol: market_price_native,
         priced_from_pool: market.from_pool,
-        fill_price_sol,
-        gross_sol,
-        referral_fee_sol,
-        network_fee_sol: costs.network_fee_sol,
-        priority_fee_sol: costs.priority_fee_sol,
-        net_proceeds_sol: gross_sol
-            - referral_fee_sol
-            - costs.network_fee_sol
-            - costs.priority_fee_sol,
+        fill_price_sol: fill_price_native,
+        gross_sol: gross_native,
+        referral_fee_sol: referral_fee_native,
+        network_fee_sol: costs.network_fee_native,
+        priority_fee_sol: costs.priority_fee_native,
+        net_proceeds_sol: gross_native
+            - referral_fee_native
+            - costs.network_fee_native
+            - costs.priority_fee_native,
     })
 }
 
@@ -109,15 +109,15 @@ mod tests {
     use super::*;
 
     const COSTS: PaperCosts = PaperCosts {
-        network_fee_sol: 0.000005,
-        priority_fee_sol: 0.0,
+        network_fee_native: 0.000005,
+        priority_fee_native: 0.0,
     };
 
     #[test]
     fn a_round_trip_at_an_unchanged_price_loses_exactly_slippage_and_fees() {
         let buy = simulate_fill(1.0, PaperMarket::pool(0.01), 1.0, COSTS).unwrap();
         let sell = simulate_sell(buy.token_amount, PaperMarket::pool(0.01), 1.0, COSTS).unwrap();
-        let expected = buy.token_amount * 0.01 * 0.99 * (1.0 - 0.005) - COSTS.network_fee_sol;
+        let expected = buy.token_amount * 0.01 * 0.99 * (1.0 - 0.005) - COSTS.network_fee_native;
         assert!((sell.net_proceeds_sol - expected).abs() < 1e-12);
         assert!(sell.net_proceeds_sol < buy.total_cost_sol);
     }

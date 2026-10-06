@@ -227,10 +227,10 @@ async fn process_activity(
             },
         );
     }
-    let trade_size_sol = with_config(|config| config.trader.trade_size_sol);
+    let trade_size_native = with_config(|config| config.trader.trade_size_sol);
     let policy = PipelinePolicy {
         require_filter_pass: any_requires_filter,
-        engine_trade_size_sol: trade_size_sol,
+        engine_trade_size_native: trade_size_native,
     };
     let paper_tasks = tasks
         .iter()
@@ -426,19 +426,19 @@ async fn process_sell_activity(
 /// Pool price first (the trading price system); the target's own swap price when
 /// the pool service does not track the token. NaN means no price at all, which
 /// the paper simulators refuse as `InvalidPrice`.
-fn decision_price(mint: &str, target_price_sol: Option<f64>) -> PaperMarket {
+fn decision_price(mint: &str, target_price_native: Option<f64>) -> PaperMarket {
     match crate::pools::get_pool_price(mint) {
         Some(price) => PaperMarket::pool(price.price_sol),
-        None => PaperMarket::observed(target_price_sol.unwrap_or(f64::NAN)),
+        None => PaperMarket::observed(target_price_native.unwrap_or(f64::NAN)),
     }
 }
 
 pub(super) fn paper_costs() -> PaperCosts {
-    let priority_lamports =
+    let priority_raw =
         crate::chains::solana::swaps::routers::JupiterRouter::estimated_priority_fee_lamports();
     PaperCosts {
-        network_fee_sol: 0.000005,
-        priority_fee_sol: crate::chains::adapter().raw_to_native(priority_lamports),
+        network_fee_native: 0.000005,
+        priority_fee_native: crate::chains::adapter().raw_to_native(priority_raw),
     }
 }
 

@@ -81,17 +81,22 @@ pub fn book_of(task: &CopyTask) -> CopyBook {
 /// Where the task's exit rules act on a holding, from its entry price and peak.
 #[derive(Debug, Clone, Serialize)]
 pub struct HoldingExitWatch {
-    pub stop_loss_price_sol: Option<f64>,
+    #[serde(rename = "stop_loss_price_sol")]
+    pub stop_loss_price_native: Option<f64>,
     /// The stop loss is held off until this moment (its minimum hold).
     pub stop_loss_armed_at: Option<DateTime<Utc>>,
-    pub take_profit_price_sol: Option<f64>,
-    pub trailing_activation_price_sol: Option<f64>,
+    #[serde(rename = "take_profit_price_sol")]
+    pub take_profit_price_native: Option<f64>,
+    #[serde(rename = "trailing_activation_price_sol")]
+    pub trailing_activation_price_native: Option<f64>,
     pub trailing_armed: bool,
-    pub trailing_stop_price_sol: Option<f64>,
+    #[serde(rename = "trailing_stop_price_sol")]
+    pub trailing_stop_price_native: Option<f64>,
     /// From this moment the time rule sells while the price is at or below
-    /// `time_rule_price_sol`.
+    /// `time_rule_price_native`.
     pub time_rule_from: Option<DateTime<Utc>>,
-    pub time_rule_price_sol: Option<f64>,
+    #[serde(rename = "time_rule_price_sol")]
+    pub time_rule_price_native: Option<f64>,
 }
 
 fn exit_watch(position: &PaperPosition, entry: f64, policy: &ExitPolicy) -> HoldingExitWatch {
@@ -102,28 +107,28 @@ fn exit_watch(position: &PaperPosition, entry: f64, policy: &ExitPolicy) -> Hold
         .enabled
         .then(|| entry * (1.0 + trailing.activation_pct / 100.0));
     let armed_peak = position
-        .peak_price_sol
+        .peak_price_native
         .filter(|peak| activation.is_some_and(|activation| *peak >= activation));
     HoldingExitWatch {
-        stop_loss_price_sol: stop
+        stop_loss_price_native: stop
             .enabled
             .then(|| entry * (1.0 - stop.threshold_pct / 100.0)),
         stop_loss_armed_at: (stop.enabled && stop.min_hold_seconds > 0).then(|| {
             position.opened_at
                 + Duration::seconds(stop.min_hold_seconds.min(i64::MAX as u64) as i64)
         }),
-        take_profit_price_sol: policy
+        take_profit_price_native: policy
             .roi
             .enabled
             .then(|| entry * (1.0 + policy.roi.target_profit_pct / 100.0)),
-        trailing_activation_price_sol: activation,
+        trailing_activation_price_native: activation,
         trailing_armed: armed_peak.is_some(),
-        trailing_stop_price_sol: armed_peak
+        trailing_stop_price_native: armed_peak
             .map(|peak| peak * (1.0 - trailing.distance_pct / 100.0)),
         time_rule_from: time.enabled.then(|| {
             position.opened_at + Duration::milliseconds((time.duration_seconds * 1000.0) as i64)
         }),
-        time_rule_price_sol: time
+        time_rule_price_native: time
             .enabled
             .then(|| entry * (1.0 + time.loss_threshold_pct / 100.0)),
     }
@@ -135,14 +140,22 @@ pub struct PaperHolding {
     pub mint: String,
     pub open: bool,
     pub token_amount: f64,
-    pub cost_basis_sol: f64,
-    pub invested_sol: f64,
-    pub realized_proceeds_sol: f64,
-    pub realized_pnl_sol: f64,
-    pub entry_price_sol: Option<f64>,
-    pub mark_price_sol: Option<f64>,
-    pub market_value_sol: Option<f64>,
-    pub unrealized_pnl_sol: Option<f64>,
+    #[serde(rename = "cost_basis_sol")]
+    pub cost_basis_native: f64,
+    #[serde(rename = "invested_sol")]
+    pub invested_native: f64,
+    #[serde(rename = "realized_proceeds_sol")]
+    pub realized_proceeds_native: f64,
+    #[serde(rename = "realized_pnl_sol")]
+    pub realized_pnl_native: f64,
+    #[serde(rename = "entry_price_sol")]
+    pub entry_price_native: Option<f64>,
+    #[serde(rename = "mark_price_sol")]
+    pub mark_price_native: Option<f64>,
+    #[serde(rename = "market_value_sol")]
+    pub market_value_native: Option<f64>,
+    #[serde(rename = "unrealized_pnl_sol")]
+    pub unrealized_pnl_native: Option<f64>,
     pub unrealized_pnl_pct: Option<f64>,
     pub buys: u64,
     pub sells: u64,
@@ -150,7 +163,8 @@ pub struct PaperHolding {
     pub closed_at: Option<DateTime<Utc>>,
     pub held_seconds: i64,
     /// Highest pool price of the open round; what arms the paper trailing stop.
-    pub peak_price_sol: Option<f64>,
+    #[serde(rename = "peak_price_sol")]
+    pub peak_price_native: Option<f64>,
     /// `None` when the policy does not manage this task's exits.
     pub exit_watch: Option<HoldingExitWatch>,
 }
@@ -166,30 +180,30 @@ fn paper_holding(
     let open = position.is_open();
     let mark = mark.filter(|price| open && price.is_finite() && *price > 0.0);
     let entry = (open && position.token_amount > 0.0)
-        .then(|| position.cost_basis_sol / position.token_amount);
+        .then(|| position.cost_basis_native / position.token_amount);
     let market_value = mark.map(|price| position.token_amount * price);
-    let unrealized = market_value.map(|value| value - position.cost_basis_sol);
+    let unrealized = market_value.map(|value| value - position.cost_basis_native);
     PaperHolding {
         mint: position.mint.clone(),
         open,
         token_amount: position.token_amount,
-        cost_basis_sol: position.cost_basis_sol,
-        invested_sol: position.invested_sol,
-        realized_proceeds_sol: position.realized_proceeds_sol,
-        realized_pnl_sol: position.realized_proceeds_sol - position.realized_cost_sol,
-        entry_price_sol: entry,
-        mark_price_sol: mark,
-        market_value_sol: market_value,
-        unrealized_pnl_sol: unrealized,
+        cost_basis_native: position.cost_basis_native,
+        invested_native: position.invested_native,
+        realized_proceeds_native: position.realized_proceeds_native,
+        realized_pnl_native: position.realized_proceeds_native - position.realized_cost_native,
+        entry_price_native: entry,
+        mark_price_native: mark,
+        market_value_native: market_value,
+        unrealized_pnl_native: unrealized,
         unrealized_pnl_pct: unrealized
-            .filter(|_| position.cost_basis_sol > 0.0)
-            .map(|pnl| pnl / position.cost_basis_sol * 100.0),
+            .filter(|_| position.cost_basis_native > 0.0)
+            .map(|pnl| pnl / position.cost_basis_native * 100.0),
         buys: position.buys,
         sells: position.sells,
         opened_at: position.opened_at,
         closed_at: position.closed_at,
         held_seconds: (position.closed_at.unwrap_or(now) - position.opened_at).num_seconds(),
-        peak_price_sol: position.peak_price_sol.filter(|_| open),
+        peak_price_native: position.peak_price_native.filter(|_| open),
         exit_watch: entry
             .zip(policy)
             .map(|(entry, policy)| exit_watch(position, entry, policy)),
@@ -207,7 +221,8 @@ pub struct CopyTaskWorkspace {
     pub effective_policy: EffectiveExitPolicy,
     /// What the task may still spend once live. Paper and live spend are separate
     /// ledgers, so this is the budget less live spend only, whatever paper spent.
-    pub live_remaining_budget_sol: f64,
+    #[serde(rename = "live_remaining_budget_sol")]
+    pub live_remaining_budget_native: f64,
     pub policy_manages_exits: bool,
     pub global_require_filter_pass: bool,
     pub paper_holdings: Vec<PaperHolding>,
@@ -226,20 +241,20 @@ pub async fn task_workspace(id: i64) -> Result<CopyTaskWorkspace> {
     let positions = control::all_positions().await;
     let activity = db.list_task_activity(id, TASK_ACTIVITY_WINDOW).await?;
     let paper_book = db.paper_positions(id).await?;
-    let spent_sol = db.task_total_spent(id, task.mode).await?;
-    let live_spent_sol = db.task_total_spent(id, CopyMode::Live).await?;
+    let spent_native = db.task_total_spent(id, task.mode).await?;
+    let live_spent_native = db.task_total_spent(id, CopyMode::Live).await?;
     let (summary, _) = control::summarize(
         &status,
         task,
         &activity,
         &positions,
         &paper_book,
-        spent_sol,
+        spent_native,
         control::paper_mark,
     );
     Ok(build_workspace(
         summary,
-        live_spent_sol,
+        live_spent_native,
         &activity,
         &positions,
         &paper_book,
@@ -249,14 +264,14 @@ pub async fn task_workspace(id: i64) -> Result<CopyTaskWorkspace> {
     ))
 }
 
-/// The workspace from what was already read: the task's `live_spent_sol`,
+/// The workspace from what was already read: the task's `live_spent_native`,
 /// `activity` newest first, the task's paper ledger (read in either mode; a live
 /// task can still hold paper history), `mark` pricing a paper holding and `block`
 /// why live execution is unavailable.
 #[allow(clippy::too_many_arguments)]
 pub fn build_workspace(
     summary: CopyTaskSummary,
-    live_spent_sol: f64,
+    live_spent_native: f64,
     activity: &[CopyActivityRow],
     positions: &[Position],
     paper_book: &[PaperPosition],
@@ -273,7 +288,8 @@ pub fn build_workspace(
     let paper_rounds = closed_rounds(summary.task.id, CopyBook::Paper, activity, positions);
     let readiness = readiness::readiness(&summary, &paper_rounds, &paper_holdings, block);
     CopyTaskWorkspace {
-        live_remaining_budget_sol: (summary.task.total_budget_sol - live_spent_sol).max(0.0),
+        live_remaining_budget_native: (summary.task.total_budget_native - live_spent_native)
+            .max(0.0),
         summary,
         trader_defaults: (&ExitPolicy::from_config()).into(),
         effective_policy: (&policy).into(),
@@ -402,7 +418,8 @@ pub struct TaskComparison {
     pub rounds: usize,
     pub wins: usize,
     pub win_rate_pct: Option<f64>,
-    pub realized_pnl_sol: f64,
+    #[serde(rename = "realized_pnl_sol")]
+    pub realized_pnl_native: f64,
     pub profit_factor: Option<f64>,
     pub average_hold_seconds: Option<f64>,
     pub arrival_median_ms: Option<u64>,
@@ -422,7 +439,7 @@ pub fn comparison(task: &CopyTask, insights: CopyInsights) -> TaskComparison {
         rounds: insights.rounds,
         wins: insights.wins,
         win_rate_pct: insights.win_rate_pct,
-        realized_pnl_sol: insights.realized_pnl_sol,
+        realized_pnl_native: insights.realized_pnl_native,
         profit_factor: insights.profit_factor,
         average_hold_seconds: insights.average_hold_seconds,
         arrival_median_ms: insights.arrival.median_ms,
@@ -467,7 +484,8 @@ pub struct CopyDefaults {
     pub min_slippage_pct: f64,
     pub max_slippage_pct: f64,
     /// The smallest copy sizing will place; a smaller size or per-trade cap never copies.
-    pub min_trade_size_sol: f64,
+    #[serde(rename = "min_trade_size_sol")]
+    pub min_trade_size_native: f64,
     /// The swap fee every paper and live fill pays on each side, in percent.
     pub swap_fee_pct: f64,
     pub max_active_tasks: usize,
@@ -486,7 +504,7 @@ pub fn defaults() -> CopyDefaults {
         default_slippage_pct: config.default_slippage_pct,
         min_slippage_pct: super::MIN_COPY_SLIPPAGE_PCT,
         max_slippage_pct: crate::trader::constants::MAX_MANUAL_SLIPPAGE_PCT,
-        min_trade_size_sol: crate::trader::constants::MIN_TRADE_SIZE_SOL,
+        min_trade_size_native: crate::trader::constants::MIN_TRADE_SIZE_NATIVE,
         swap_fee_pct: f64::from(super::PAPER_REFERRAL_FEE_BPS) / 100.0,
         max_active_tasks: config.max_active_tasks,
         latency_kill_switch_enabled: config.latency_kill_switch_enabled,

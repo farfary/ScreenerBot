@@ -79,11 +79,16 @@ pub struct CopyTask {
     pub sizing: SizingMode,
     pub exit_mode: ExitMode,
     pub exit_policy_overrides: ExitPolicyOverrides,
-    pub max_sol_per_trade: f64,
-    pub max_sol_per_token: f64,
-    pub total_budget_sol: f64,
-    pub min_target_trade_sol: Option<f64>,
-    pub max_target_trade_sol: Option<f64>,
+    #[serde(rename = "max_sol_per_trade")]
+    pub max_native_per_trade: f64,
+    #[serde(rename = "max_sol_per_token")]
+    pub max_native_per_token: f64,
+    #[serde(rename = "total_budget_sol")]
+    pub total_budget_native: f64,
+    #[serde(rename = "min_target_trade_sol")]
+    pub min_target_trade_native: Option<f64>,
+    #[serde(rename = "max_target_trade_sol")]
+    pub max_target_trade_native: Option<f64>,
     pub buy_once_per_token: bool,
     pub slippage_pct: f64,
     pub created_at: DateTime<Utc>,
@@ -115,11 +120,16 @@ pub struct CopyTaskInput {
     pub exit_mode: ExitMode,
     #[serde(default)]
     pub exit_policy_overrides: ExitPolicyOverrides,
-    pub max_sol_per_trade: f64,
-    pub max_sol_per_token: f64,
-    pub total_budget_sol: f64,
-    pub min_target_trade_sol: Option<f64>,
-    pub max_target_trade_sol: Option<f64>,
+    #[serde(rename = "max_sol_per_trade")]
+    pub max_native_per_trade: f64,
+    #[serde(rename = "max_sol_per_token")]
+    pub max_native_per_token: f64,
+    #[serde(rename = "total_budget_sol")]
+    pub total_budget_native: f64,
+    #[serde(rename = "min_target_trade_sol")]
+    pub min_target_trade_native: Option<f64>,
+    #[serde(rename = "max_target_trade_sol")]
+    pub max_target_trade_native: Option<f64>,
     pub buy_once_per_token: bool,
     pub slippage_pct: f64,
     #[serde(default)]
@@ -153,14 +163,14 @@ impl CopyTaskInput {
         mode: CopyMode,
     ) -> Result<CopyTask, CopySkip> {
         if self.target_address.trim().is_empty()
-            || !self.max_sol_per_trade.is_finite()
-            || self.max_sol_per_trade <= 0.0
-            || !self.max_sol_per_token.is_finite()
-            || self.max_sol_per_token <= 0.0
-            || !self.total_budget_sol.is_finite()
-            || self.total_budget_sol <= 0.0
-            || self.max_sol_per_trade > self.max_sol_per_token
-            || self.max_sol_per_token > self.total_budget_sol
+            || !self.max_native_per_trade.is_finite()
+            || self.max_native_per_trade <= 0.0
+            || !self.max_native_per_token.is_finite()
+            || self.max_native_per_token <= 0.0
+            || !self.total_budget_native.is_finite()
+            || self.total_budget_native <= 0.0
+            || self.max_native_per_trade > self.max_native_per_token
+            || self.max_native_per_token > self.total_budget_native
         {
             return Err(CopySkip::InvalidSizing);
         }
@@ -169,11 +179,11 @@ impl CopyTaskInput {
         }
         let valid_optional_limit =
             |value: Option<f64>| value.is_none_or(|amount| amount.is_finite() && amount >= 0.0);
-        if !valid_optional_limit(self.min_target_trade_sol)
-            || !valid_optional_limit(self.max_target_trade_sol)
+        if !valid_optional_limit(self.min_target_trade_native)
+            || !valid_optional_limit(self.max_target_trade_native)
             || self
-                .min_target_trade_sol
-                .zip(self.max_target_trade_sol)
+                .min_target_trade_native
+                .zip(self.max_target_trade_native)
                 .is_some_and(|(minimum, maximum)| minimum > maximum)
         {
             return Err(CopySkip::InvalidSizing);
@@ -189,11 +199,13 @@ impl CopyTaskInput {
         }
         // Sizing clamps every copy to the per-trade cap and refuses one below the
         // minimum trade size, so a smaller cap or fixed size could never copy.
-        let minimum_sol = crate::trader::constants::MIN_TRADE_SIZE_SOL;
-        if self.max_sol_per_trade < minimum_sol
-            || matches!(self.sizing, SizingMode::Fixed { sol } if sol < minimum_sol)
+        let minimum_native = crate::trader::constants::MIN_TRADE_SIZE_NATIVE;
+        if self.max_native_per_trade < minimum_native
+            || matches!(self.sizing, SizingMode::Fixed { sol } if sol < minimum_native)
         {
-            return Err(CopySkip::BelowMinimumSize { minimum_sol });
+            return Err(CopySkip::BelowMinimumSize {
+                minimum_sol: minimum_native,
+            });
         }
         if !self.slippage_pct.is_finite()
             || self.slippage_pct < MIN_COPY_SLIPPAGE_PCT
@@ -216,11 +228,11 @@ impl CopyTaskInput {
             sizing: self.sizing,
             exit_mode: self.exit_mode,
             exit_policy_overrides: self.exit_policy_overrides,
-            max_sol_per_trade: self.max_sol_per_trade,
-            max_sol_per_token: self.max_sol_per_token,
-            total_budget_sol: self.total_budget_sol,
-            min_target_trade_sol: self.min_target_trade_sol,
-            max_target_trade_sol: self.max_target_trade_sol,
+            max_native_per_trade: self.max_native_per_trade,
+            max_native_per_token: self.max_native_per_token,
+            total_budget_native: self.total_budget_native,
+            min_target_trade_native: self.min_target_trade_native,
+            max_target_trade_native: self.max_target_trade_native,
             buy_once_per_token: self.buy_once_per_token,
             slippage_pct: self.slippage_pct,
             created_at: now,
@@ -244,11 +256,11 @@ impl From<&CopyTask> for CopyTaskInput {
             sizing: task.sizing.clone(),
             exit_mode: task.exit_mode,
             exit_policy_overrides: task.exit_policy_overrides.clone(),
-            max_sol_per_trade: task.max_sol_per_trade,
-            max_sol_per_token: task.max_sol_per_token,
-            total_budget_sol: task.total_budget_sol,
-            min_target_trade_sol: task.min_target_trade_sol,
-            max_target_trade_sol: task.max_target_trade_sol,
+            max_native_per_trade: task.max_native_per_trade,
+            max_native_per_token: task.max_native_per_token,
+            total_budget_native: task.total_budget_native,
+            min_target_trade_native: task.min_target_trade_native,
+            max_target_trade_native: task.max_target_trade_native,
             buy_once_per_token: task.buy_once_per_token,
             slippage_pct: task.slippage_pct,
             require_filter_pass: task.require_filter_pass,
@@ -274,8 +286,8 @@ pub fn confirm_mode_transition(
 /// updated atomically with the successful paper decision.
 #[derive(Debug, Clone, Copy, Default, PartialEq)]
 pub struct SpendState {
-    pub total_spent_sol: f64,
-    pub token_spent_sol: f64,
+    pub total_spent_native: f64,
+    pub token_spent_native: f64,
     pub token_buy_count: u64,
 }
 
@@ -289,7 +301,7 @@ pub struct RiskContext {
 #[derive(Debug, Clone, Copy, PartialEq)]
 pub struct PipelinePolicy {
     pub require_filter_pass: bool,
-    pub engine_trade_size_sol: f64,
+    pub engine_trade_size_native: f64,
 }
 
 /// Every declined copy is a value suitable for persistence and UI dictionaries.
@@ -379,25 +391,31 @@ pub struct PaperSellFill {
 }
 
 /// One task's paper holding in one token, accumulated across its buys and sells.
-/// `cost_basis_sol` is the cost of the tokens still held; realized figures only
+/// `cost_basis_native` is the cost of the tokens still held; realized figures only
 /// ever grow.
 #[derive(Debug, Clone, PartialEq, Serialize)]
 pub struct PaperPosition {
     pub task_id: i64,
     pub mint: String,
     pub token_amount: f64,
-    pub cost_basis_sol: f64,
-    pub invested_sol: f64,
-    pub realized_proceeds_sol: f64,
-    pub realized_cost_sol: f64,
+    #[serde(rename = "cost_basis_sol")]
+    pub cost_basis_native: f64,
+    #[serde(rename = "invested_sol")]
+    pub invested_native: f64,
+    #[serde(rename = "realized_proceeds_sol")]
+    pub realized_proceeds_native: f64,
+    #[serde(rename = "realized_cost_sol")]
+    pub realized_cost_native: f64,
     pub buys: u64,
     pub sells: u64,
-    pub last_price_sol: Option<f64>,
+    #[serde(rename = "last_price_sol")]
+    pub last_price_native: Option<f64>,
     pub last_price_at: Option<DateTime<Utc>>,
     pub opened_at: DateTime<Utc>,
     pub closed_at: Option<DateTime<Utc>>,
     /// Highest pool price seen while this round was open; arms the trailing stop.
-    pub peak_price_sol: Option<f64>,
+    #[serde(rename = "peak_price_sol")]
+    pub peak_price_native: Option<f64>,
 }
 
 impl PaperPosition {
@@ -583,8 +601,10 @@ pub struct CopyTaskStats {
     pub failed: usize,
     pub open_positions: usize,
     pub closed_positions: usize,
-    pub realized_pnl_sol: f64,
-    pub unrealized_pnl_sol: f64,
+    #[serde(rename = "realized_pnl_sol")]
+    pub realized_pnl_native: f64,
+    #[serde(rename = "unrealized_pnl_sol")]
+    pub unrealized_pnl_native: f64,
     pub book: CopyBook,
     /// Open positions with no price to mark them at; excluded from unrealized P&L.
     pub unpriced_positions: usize,
@@ -643,11 +663,11 @@ mod tests {
             sizing: SizingMode::Fixed { sol: 0.05 },
             exit_mode: ExitMode::BuyOnly,
             exit_policy_overrides: Default::default(),
-            max_sol_per_trade: 0.1,
-            max_sol_per_token: 0.5,
-            total_budget_sol: 2.0,
-            min_target_trade_sol: None,
-            max_target_trade_sol: None,
+            max_native_per_trade: 0.1,
+            max_native_per_token: 0.5,
+            total_budget_native: 2.0,
+            min_target_trade_native: None,
+            max_target_trade_native: None,
             buy_once_per_token: true,
             slippage_pct: 2.0,
             require_filter_pass: None,
@@ -660,7 +680,7 @@ mod tests {
 
     #[test]
     fn a_task_that_could_never_place_a_copy_is_refused() {
-        let minimum_sol = crate::trader::constants::MIN_TRADE_SIZE_SOL;
+        let minimum_native = crate::trader::constants::MIN_TRADE_SIZE_NATIVE;
         assert!(validate(input()).is_ok());
         let tiny_size = CopyTaskInput {
             sizing: SizingMode::Fixed { sol: 0.0005 },
@@ -668,16 +688,20 @@ mod tests {
         };
         assert_eq!(
             validate(tiny_size),
-            Err(CopySkip::BelowMinimumSize { minimum_sol })
+            Err(CopySkip::BelowMinimumSize {
+                minimum_sol: minimum_native
+            })
         );
         let tiny_cap = CopyTaskInput {
             sizing: SizingMode::RatioOfTarget { pct: 10.0 },
-            max_sol_per_trade: 0.0005,
+            max_native_per_trade: 0.0005,
             ..input()
         };
         assert_eq!(
             validate(tiny_cap),
-            Err(CopySkip::BelowMinimumSize { minimum_sol })
+            Err(CopySkip::BelowMinimumSize {
+                minimum_sol: minimum_native
+            })
         );
     }
 

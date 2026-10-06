@@ -176,8 +176,8 @@ impl AutoCloseAction {
     }
 
     /// Complete swap step
-    pub async fn complete_swap(&self, signature: &str, sol_received: Option<f64>) {
-        let metadata = json!({"signature": signature, "sol_received": sol_received});
+    pub async fn complete_swap(&self, signature: &str, native_received: Option<f64>) {
+        let metadata = json!({"signature": signature, "sol_received": native_received});
         update_step(
             &self.action_id,
             2,

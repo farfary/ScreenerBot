@@ -22,8 +22,8 @@ use std::time::Duration;
 /// `0.0` is what an API-derived price result carries for `sol_reserves` — it means
 /// nobody measured the pool, not that the pool is empty. Passed through as a reading it
 /// would satisfy every "liquidity below X" rule on a token whose liquidity is unknown.
-fn usable_liquidity(sol_reserves: f64) -> Option<f64> {
-    (sol_reserves.is_finite() && sol_reserves > 0.0).then_some(sol_reserves)
+fn usable_liquidity(native_reserves: f64) -> Option<f64> {
+    (native_reserves.is_finite() && native_reserves > 0.0).then_some(native_reserves)
 }
 
 /// Evaluator for applying strategies to trading decisions
@@ -155,8 +155,8 @@ impl StrategyEvaluator {
                     strategy_id: Some(strategy_id),
                     timestamp: Utc::now(),
                     priority: TradePriority::Normal,
-                    price_sol: Some(price_info.price_sol),
-                    size_sol: None, // Will use config default
+                    price_native: Some(price_info.price_sol),
+                    size_native: None, // Will use config default
                     exit_percentage: None,
                     // Auto-trader slippage always follows config.
                     slippage_pct: None,
@@ -351,8 +351,8 @@ impl StrategyEvaluator {
                     strategy_id: Some(strategy_id),
                     timestamp: Utc::now(),
                     priority: TradePriority::Normal,
-                    price_sol: Some(current_price),
-                    size_sol: None, // Will sell full position or use config
+                    price_native: Some(current_price),
+                    size_native: None, // Will sell full position or use config
                     exit_percentage: None,
                     // Auto-trader slippage always follows config.
                     slippage_pct: None,

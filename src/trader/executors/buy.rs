@@ -71,19 +71,19 @@ pub async fn execute_buy_managed(
     );
 
     // Note: Trade size is read from config by open_position_direct
-    // decision.size_sol is informational only - actual size comes from cfg.trader.trade_size_sol
-    let trade_size_sol = decision
-        .size_sol
-        .unwrap_or_else(|| config::get_trade_size_sol());
+    // decision.size_native is informational only - actual size comes from cfg.trader.trade_size_sol
+    let trade_size_native = decision
+        .size_native
+        .unwrap_or_else(|| config::get_trade_size_native());
 
     // Enforce maximum trade size limit
     let max_allowed =
-        config::get_trade_size_sol() * crate::trader::constants::MAX_TRADE_SIZE_MULTIPLIER;
-    let trade_size_sol = trade_size_sol.min(max_allowed);
+        config::get_trade_size_native() * crate::trader::constants::MAX_TRADE_SIZE_MULTIPLIER;
+    let trade_size_native = trade_size_native.min(max_allowed);
 
     match positions::open_position_with_size(
         &decision.mint,
-        trade_size_sol,
+        trade_size_native,
         origin,
         management,
         decision.slippage_pct,
@@ -96,7 +96,7 @@ pub async fn execute_buy_managed(
                 LogTag::Trader,
                 &format!(
                     "Buy executed: {} | ~{} SOL | TX: {}",
-                    decision.mint, trade_size_sol, transaction_signature
+                    decision.mint, trade_size_native, transaction_signature
                 ),
             );
 
@@ -104,7 +104,7 @@ pub async fn execute_buy_managed(
                 decision.clone(),
                 transaction_signature,
                 submission.entry_price_native,
-                trade_size_sol,
+                trade_size_native,
                 None, // Position ID will be set by verification
             );
             result.confirmation_pending = submission.confirmation_pending;
@@ -186,14 +186,14 @@ pub async fn execute_dca(decision: &TradeDecision) -> crate::trader::Result<Trad
     // Determine DCA amount from decision, else the configured DCA size (a fraction of
     // the trade size). Never hardcode the fraction — `trader.dca_size_percentage` is
     // the single source of truth for it.
-    let dca_amount_sol = decision.size_sol.unwrap_or_else(|| {
-        config::get_trade_size_sol() * (config::get_dca_size_percentage() / 100.0)
+    let dca_amount_native = decision.size_native.unwrap_or_else(|| {
+        config::get_trade_size_native() * (config::get_dca_size_percentage() / 100.0)
     });
 
     // Call positions::add_to_position to handle DCA entry
     match positions::add_to_position(
         &decision.mint,
-        dca_amount_sol,
+        dca_amount_native,
         decision.slippage_pct,
         origin,
     )
@@ -204,15 +204,15 @@ pub async fn execute_dca(decision: &TradeDecision) -> crate::trader::Result<Trad
                 LogTag::Trader,
                 &format!(
                     "DCA executed: {} | {} SOL | TX: {}",
-                    decision.mint, dca_amount_sol, transaction_signature
+                    decision.mint, dca_amount_native, transaction_signature
                 ),
             );
 
             Ok(TradeResult::success(
                 decision.clone(),
                 transaction_signature,
-                decision.price_sol.unwrap_or_default(),
-                dca_amount_sol,
+                decision.price_native.unwrap_or_default(),
+                dca_amount_native,
                 decision.position_id.clone(),
             ))
         }

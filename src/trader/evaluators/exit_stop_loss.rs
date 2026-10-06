@@ -125,8 +125,8 @@ pub async fn check_stop_loss(
         strategy_id: None,
         timestamp: Utc::now(),
         priority: TradePriority::High,
-        price_sol: Some(current_price),
-        size_sol: None,
+        price_native: Some(current_price),
+        size_native: None,
         exit_percentage,
         // Auto-trader slippage always follows config.
         slippage_pct: None,

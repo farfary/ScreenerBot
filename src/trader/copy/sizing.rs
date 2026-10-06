@@ -3,20 +3,20 @@
 
 //! Pure copy sizing with every hard cap applied in one place.
 
-use crate::trader::constants::{MAX_TRADE_SIZE_MULTIPLIER, MIN_TRADE_SIZE_SOL};
+use crate::trader::constants::{MAX_TRADE_SIZE_MULTIPLIER, MIN_TRADE_SIZE_NATIVE};
 
 use super::types::{CopySkip, CopyTask, SizingMode, SpendState};
 
 pub fn size_for(
     task: &CopyTask,
-    target_size_sol: f64,
+    target_size_native: f64,
     spend: SpendState,
-    engine_trade_size_sol: f64,
+    engine_trade_size_native: f64,
 ) -> Result<f64, CopySkip> {
     let requested = match task.sizing {
         SizingMode::Fixed { sol } => sol,
         SizingMode::RatioOfTarget { pct } if pct.is_finite() && pct > 0.0 => {
-            target_size_sol * pct / 100.0
+            target_size_native * pct / 100.0
         }
         SizingMode::RatioOfTarget { .. } => return Err(CopySkip::InvalidSizing),
         SizingMode::PercentOfTargetPortfolio { .. } => return Err(CopySkip::UnsupportedSizingMode),
@@ -24,31 +24,31 @@ pub fn size_for(
 
     if !requested.is_finite()
         || requested <= 0.0
-        || !engine_trade_size_sol.is_finite()
-        || engine_trade_size_sol <= 0.0
+        || !engine_trade_size_native.is_finite()
+        || engine_trade_size_native <= 0.0
     {
         return Err(CopySkip::InvalidSizing);
     }
 
-    let budget_remaining = (task.total_budget_sol - spend.total_spent_sol).max(0.0);
-    if budget_remaining < MIN_TRADE_SIZE_SOL {
+    let budget_remaining = (task.total_budget_native - spend.total_spent_native).max(0.0);
+    if budget_remaining < MIN_TRADE_SIZE_NATIVE {
         return Err(CopySkip::BudgetExhausted);
     }
-    let token_remaining = (task.max_sol_per_token - spend.token_spent_sol).max(0.0);
-    if token_remaining < MIN_TRADE_SIZE_SOL {
+    let token_remaining = (task.max_native_per_token - spend.token_spent_native).max(0.0);
+    if token_remaining < MIN_TRADE_SIZE_NATIVE {
         return Err(CopySkip::TokenCapReached);
     }
 
-    let engine_ceiling = engine_trade_size_sol * MAX_TRADE_SIZE_MULTIPLIER;
+    let engine_ceiling = engine_trade_size_native * MAX_TRADE_SIZE_MULTIPLIER;
     let sized = requested
-        .min(task.max_sol_per_trade)
+        .min(task.max_native_per_trade)
         .min(token_remaining)
         .min(budget_remaining)
         .min(engine_ceiling);
 
-    if !sized.is_finite() || sized < MIN_TRADE_SIZE_SOL {
+    if !sized.is_finite() || sized < MIN_TRADE_SIZE_NATIVE {
         return Err(CopySkip::BelowMinimumSize {
-            minimum_sol: MIN_TRADE_SIZE_SOL,
+            minimum_sol: MIN_TRADE_SIZE_NATIVE,
         });
     }
     Ok(sized)

@@ -90,10 +90,10 @@ async fn stop_loss_fires_once_the_loss_reaches_the_threshold() {
     assert_eq!(decision.reason, TradeReason::StopLoss);
     assert_eq!(decision.priority, TradePriority::High);
     assert_eq!(decision.mint, position.mint);
-    assert_eq!(decision.price_sol, Some(0.75));
+    assert_eq!(decision.price_native, Some(0.75));
     // A sell's size is carried by `exit_percentage`; `size_sol` is a BUY concept and
     // must stay None or it would be read as SOL to spend.
-    assert!(decision.size_sol.is_none());
+    assert!(decision.size_native.is_none());
 }
 
 #[tokio::test]

@@ -9,8 +9,8 @@ use crate::trader::copy::types::CopyTask;
 
 /// Column order `row_to_task` decodes; every task SELECT interpolates it.
 pub(super) const TASK_COLUMNS: &str = "id, chain_id, target_address, label, enabled, mode_json, \
-     sizing_json, exit_mode_json, exit_policy_json, max_sol_per_trade, max_sol_per_token, \
-     total_budget_sol, min_target_trade_sol, max_target_trade_sol, buy_once_per_token, \
+     sizing_json, exit_mode_json, exit_policy_json, max_native_per_trade, max_native_per_token, \
+     total_budget_native, min_target_trade_native, max_target_trade_native, buy_once_per_token, \
      slippage_pct, created_at, updated_at, require_filter_pass, pause_reason_json, paused_at";
 
 pub(super) fn row_to_task(row: &rusqlite::Row<'_>) -> rusqlite::Result<CopyTask> {
@@ -33,11 +33,11 @@ pub(super) fn row_to_task(row: &rusqlite::Row<'_>) -> rusqlite::Result<CopyTask>
         sizing: serde_json::from_str(&parse_json(6)?).map_err(json_error)?,
         exit_mode: serde_json::from_str(&parse_json(7)?).map_err(json_error)?,
         exit_policy_overrides: serde_json::from_str(&parse_json(8)?).map_err(json_error)?,
-        max_sol_per_trade: row.get(9)?,
-        max_sol_per_token: row.get(10)?,
-        total_budget_sol: row.get(11)?,
-        min_target_trade_sol: row.get(12)?,
-        max_target_trade_sol: row.get(13)?,
+        max_native_per_trade: row.get(9)?,
+        max_native_per_token: row.get(10)?,
+        total_budget_native: row.get(11)?,
+        min_target_trade_native: row.get(12)?,
+        max_target_trade_native: row.get(13)?,
         buy_once_per_token: row.get(14)?,
         slippage_pct: row.get(15)?,
         created_at: parse_datetime(&created, 16)?,

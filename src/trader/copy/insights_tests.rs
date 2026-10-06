@@ -129,7 +129,7 @@ fn paper_rounds_replay_partial_exits_into_one_closed_round() {
     );
     assert_eq!(insights.rounds, 2, "the open round in c is not closed");
     assert_eq!((insights.wins, insights.losses), (1, 1));
-    assert!((insights.realized_pnl_sol - 0.1).abs() < 1e-9);
+    assert!((insights.realized_pnl_native - 0.1).abs() < 1e-9);
     assert_eq!(insights.recent_rounds[0].exit, "manual");
     assert_eq!(insights.recent_rounds[1].hold_seconds, 30 * 60);
     let stop = insights
@@ -137,9 +137,9 @@ fn paper_rounds_replay_partial_exits_into_one_closed_round() {
         .iter()
         .find(|bucket| bucket.exit == "stop_loss")
         .unwrap();
-    assert!((stop.pnl_sol - 0.3).abs() < 1e-9);
+    assert!((stop.pnl_native - 0.3).abs() < 1e-9);
     assert_eq!(insights.pnl_curve.len(), 2);
-    assert!((insights.pnl_curve[1].cumulative_pnl_sol - 0.1).abs() < 1e-9);
+    assert!((insights.pnl_curve[1].cumulative_pnl_native - 0.1).abs() < 1e-9);
     assert_eq!(insights.decisions.fills, 3);
     assert_eq!(insights.slippage.samples, 3);
     assert!((insights.slippage.median_pct.unwrap() - 1.0).abs() < 1e-6);
@@ -167,7 +167,7 @@ fn a_range_keeps_rounds_that_closed_inside_it() {
     };
     let insights = build_insights(1, CopyBook::Paper, &activity, &[], range, None);
     assert_eq!(insights.rounds, 1);
-    assert!((insights.realized_pnl_sol + 0.5).abs() < 1e-9);
+    assert!((insights.realized_pnl_native + 0.5).abs() < 1e-9);
     assert_eq!(insights.decisions.fills, 1);
 }
 

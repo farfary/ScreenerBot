@@ -283,9 +283,9 @@ mod tests {
             assert!(row.rounds > 0, "task {} has closed rounds", row.task_id);
             assert_eq!(summary.stats.wins, row.wins);
             assert_eq!(summary.stats.wins + summary.stats.losses, row.rounds);
-            assert!((summary.stats.realized_pnl_sol - row.realized_pnl_sol).abs() < 1e-9);
+            assert!((summary.stats.realized_pnl_native - row.realized_pnl_native).abs() < 1e-9);
             assert_eq!(summary.stats.unpriced_positions, 0);
-            assert!(summary.remaining_budget_sol < summary.task.total_budget_sol);
+            assert!(summary.remaining_budget_native < summary.task.total_budget_native);
             let stats = get_promo_copy_task_stats(summary.task.id).unwrap();
             assert_eq!(
                 (stats.wins, stats.losses),
@@ -314,7 +314,9 @@ mod tests {
             .filter(|holding| holding.open)
             .collect::<Vec<_>>();
         assert_eq!(open.len(), 3);
-        assert!(open.iter().all(|holding| holding.mark_price_sol.is_some()));
+        assert!(open
+            .iter()
+            .all(|holding| holding.mark_price_native.is_some()));
         let armed = open
             .iter()
             .filter(|holding| {

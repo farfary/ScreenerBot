@@ -304,7 +304,7 @@ pub(super) async fn execute_sell(
                                 "amount",
                                 text_arg(format!(
                                     "{:.4}",
-                                    result.executed_size_sol.unwrap_or_default()
+                                    result.executed_size_native.unwrap_or_default()
                                 )),
                             ),
                     );

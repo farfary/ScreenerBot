@@ -26,7 +26,8 @@ pub struct TraderStats {
     // Live exposure (not window-bound).
     pub open_positions_count: usize,
     pub max_open_positions: usize,
-    pub locked_sol: f64,
+    #[serde(rename = "locked_sol")]
+    pub locked_native: f64,
 
     // Trade counts.
     pub total_trades: usize,
@@ -37,12 +38,17 @@ pub struct TraderStats {
     pub excluded_untrusted: usize,
 
     // Realized money, in SOL — the single monetary unit.
-    pub total_pnl_sol: f64,
-    pub gross_profit_sol: f64,
-    pub gross_loss_sol: f64,
+    #[serde(rename = "total_pnl_sol")]
+    pub total_pnl_native: f64,
+    #[serde(rename = "gross_profit_sol")]
+    pub gross_profit_native: f64,
+    #[serde(rename = "gross_loss_sol")]
+    pub gross_loss_native: f64,
     pub profit_factor: Option<f64>,
-    pub expectancy_sol: Option<f64>,
-    pub max_drawdown_sol: f64,
+    #[serde(rename = "expectancy_sol")]
+    pub expectancy_native: Option<f64>,
+    #[serde(rename = "max_drawdown_sol")]
+    pub max_drawdown_native: f64,
 
     // Quality.
     pub win_rate_pct: Option<f64>,
@@ -65,7 +71,8 @@ pub struct TraderStats {
 pub struct DailyPnlPoint {
     /// UTC calendar day, `YYYY-MM-DD`.
     pub date: String,
-    pub net_pnl_sol: f64,
+    #[serde(rename = "net_pnl_sol")]
+    pub net_pnl_native: f64,
     pub trades: usize,
 }
 
@@ -75,7 +82,8 @@ pub struct ExitBreakdown {
     pub count: usize,
     pub avg_profit_pct: f64,
     /// Realized SOL attributable to this exit reason.
-    pub net_pnl_sol: f64,
+    #[serde(rename = "net_pnl_sol")]
+    pub net_pnl_native: f64,
 }
 
 /// Aggregate closed rounds in the last `period_days` (clamped to 1..=365) with
@@ -85,7 +93,7 @@ pub async fn trader_stats(period_days: u32) -> TraderStats {
     // how far back the realized window reaches.
     let open_positions = positions::get_open_positions().await;
     let open_positions_count = open_positions.len();
-    let locked_sol: f64 = open_positions.iter().map(|p| p.total_size_native).sum();
+    let locked_native: f64 = open_positions.iter().map(|p| p.total_size_native).sum();
     let max_open_positions = with_config(|cfg| cfg.trader.max_open_positions);
 
     let window_start = chrono::Utc::now() - chrono::Duration::days(i64::from(period_days));
@@ -173,15 +181,15 @@ pub async fn trader_stats(period_days: u32) -> TraderStats {
     // Realized P&L in SOL across the window.
     //
     // Uses the `pnl` the position booked at close — fee-aware and DCA-aware. Deriving it
-    // as `sol_received - entry_size_sol` counted every DCA add as pure profit, because
-    // `entry_size_sol` is only the FIRST buy and never grows.
-    let total_pnl_sol: f64 = closed.iter().filter_map(|p| p.pnl).sum();
-    let gross_profit_sol: f64 = closed
+    // as `native_received - entry_size_native` counted every DCA add as pure profit, because
+    // `entry_size_native` is only the FIRST buy and never grows.
+    let total_pnl_native: f64 = closed.iter().filter_map(|p| p.pnl).sum();
+    let gross_profit_native: f64 = closed
         .iter()
         .filter_map(|p| p.pnl)
         .filter(|v| *v > 0.0)
         .sum();
-    let gross_loss_sol: f64 = closed
+    let gross_loss_native: f64 = closed
         .iter()
         .filter_map(|p| p.pnl)
         .filter(|v| *v < 0.0)
@@ -189,8 +197,8 @@ pub async fn trader_stats(period_days: u32) -> TraderStats {
         .sum();
     // Profit factor is undefined without a loss to divide by — a losing streak with
     // no wins is 0.0, but a clean run with no losses is "no answer yet", not infinity.
-    let profit_factor = (gross_loss_sol > 0.0).then(|| gross_profit_sol / gross_loss_sol);
-    let expectancy_sol = (total_trades > 0).then(|| total_pnl_sol / total_trades as f64);
+    let profit_factor = (gross_loss_native > 0.0).then(|| gross_profit_native / gross_loss_native);
+    let expectancy_native = (total_trades > 0).then(|| total_pnl_native / total_trades as f64);
 
     let avg_win_pct = {
         let wins: Vec<f64> = closed
@@ -214,13 +222,13 @@ pub async fn trader_stats(period_days: u32) -> TraderStats {
     let mut per_day: HashMap<String, (f64, usize)> = HashMap::new();
     let mut equity = 0.0_f64;
     let mut peak = 0.0_f64;
-    let mut max_drawdown_sol = 0.0_f64;
+    let mut max_drawdown_native = 0.0_f64;
 
     for pos in closed.iter().rev() {
         let pnl = pos.pnl.unwrap_or_default();
         equity += pnl;
         peak = peak.max(equity);
-        max_drawdown_sol = max_drawdown_sol.max(peak - equity);
+        max_drawdown_native = max_drawdown_native.max(peak - equity);
 
         if let Some(exit) = pos.exit_time {
             let entry = per_day
@@ -239,10 +247,10 @@ pub async fn trader_stats(period_days: u32) -> TraderStats {
     let mut day = first_day;
     while day <= today {
         let key = day.format("%Y-%m-%d").to_string();
-        let (net_pnl_sol, trades) = per_day.get(&key).copied().unwrap_or((0.0, 0));
+        let (net_pnl_native, trades) = per_day.get(&key).copied().unwrap_or((0.0, 0));
         daily_pnl.push(DailyPnlPoint {
             date: key,
-            net_pnl_sol,
+            net_pnl_native,
             trades,
         });
         day = match day.succ_opt() {
@@ -270,16 +278,18 @@ pub async fn trader_stats(period_days: u32) -> TraderStats {
 
     let mut exit_breakdown: Vec<ExitBreakdown> = exit_stats
         .into_iter()
-        .map(|(exit_type, (count, profits, net_pnl_sol))| ExitBreakdown {
-            exit_type,
-            count,
-            avg_profit_pct: if profits.is_empty() {
-                0.0
-            } else {
-                profits.iter().sum::<f64>() / profits.len() as f64
+        .map(
+            |(exit_type, (count, profits, net_pnl_native))| ExitBreakdown {
+                exit_type,
+                count,
+                avg_profit_pct: if profits.is_empty() {
+                    0.0
+                } else {
+                    profits.iter().sum::<f64>() / profits.len() as f64
+                },
+                net_pnl_native,
             },
-            net_pnl_sol,
-        })
+        )
         .collect();
     exit_breakdown.sort_by(|a, b| b.count.cmp(&a.count));
 
@@ -287,17 +297,17 @@ pub async fn trader_stats(period_days: u32) -> TraderStats {
         period_days,
         open_positions_count,
         max_open_positions,
-        locked_sol,
+        locked_native,
         total_trades,
         winners,
         losers,
         excluded_untrusted,
-        total_pnl_sol,
-        gross_profit_sol,
-        gross_loss_sol,
+        total_pnl_native,
+        gross_profit_native,
+        gross_loss_native,
         profit_factor,
-        expectancy_sol,
-        max_drawdown_sol,
+        expectancy_native,
+        max_drawdown_native,
         win_rate_pct,
         avg_win_pct,
         avg_loss_pct,

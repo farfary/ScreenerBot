@@ -39,7 +39,8 @@ pub struct DcaCalculations {
     pub minutes_since_last: Option<i64>,
     pub pnl_pct: f64,
     pub required_drop_pct: f64,
-    pub dca_amount_sol: f64,
+    #[serde(rename = "dca_amount_sol")]
+    pub dca_amount_native: f64,
     pub entry_price: f64,
     pub current_price: f64,
 }
@@ -72,7 +73,7 @@ impl DcaEvaluation {
                         minutes_since_last: None,
                         pnl_pct: 0.0,
                         required_drop_pct: config.threshold_pct.abs(),
-                        dca_amount_sol: 0.0,
+                        dca_amount_native: 0.0,
                         entry_price: position.average_entry_price,
                         current_price: 0.0,
                     },
@@ -91,7 +92,7 @@ impl DcaEvaluation {
                     minutes_since_last: None,
                     pnl_pct: 0.0,
                     required_drop_pct: config.threshold_pct.abs(),
-                    dca_amount_sol: 0.0,
+                    dca_amount_native: 0.0,
                     entry_price,
                     current_price,
                 },
@@ -101,7 +102,7 @@ impl DcaEvaluation {
         // Calculate metrics
         let pnl_pct = ((current_price - entry_price) / entry_price) * 100.0;
         let required_drop_pct = config.threshold_pct.abs();
-        let dca_amount_sol = position.entry_size_native * (config.size_percentage / 100.0);
+        let dca_amount_native = position.entry_size_native * (config.size_percentage / 100.0);
 
         let minutes_since_last = position
             .last_dca_time
@@ -112,7 +113,7 @@ impl DcaEvaluation {
             minutes_since_last,
             pnl_pct,
             required_drop_pct,
-            dca_amount_sol,
+            dca_amount_native,
             entry_price,
             current_price,
         };
@@ -175,12 +176,12 @@ impl DcaEvaluation {
         }
 
         // Check if DCA amount is valid and above minimum trade size
-        use crate::trader::constants::MIN_TRADE_SIZE_SOL;
-        if calculations.dca_amount_sol < MIN_TRADE_SIZE_SOL {
+        use crate::trader::constants::MIN_TRADE_SIZE_NATIVE;
+        if calculations.dca_amount_native < MIN_TRADE_SIZE_NATIVE {
             should_trigger = false;
             reasons.push(format!(
                 "DCA amount {:.6} SOL below minimum {:.6} SOL",
-                calculations.dca_amount_sol, MIN_TRADE_SIZE_SOL
+                calculations.dca_amount_native, MIN_TRADE_SIZE_NATIVE
             ));
         }
 
@@ -206,7 +207,7 @@ impl DcaEvaluation {
                 "DCA #{}: {:.2}% loss, amount: {:.4} SOL",
                 self.calculations.current_dca_count + 1,
                 self.calculations.pnl_pct,
-                self.calculations.dca_amount_sol
+                self.calculations.dca_amount_native
             )
         } else {
             self.reasons.join(", ")
@@ -269,8 +270,8 @@ pub async fn process_dca_opportunities() -> crate::trader::Result<Vec<TradeDecis
                 strategy_id: None,
                 timestamp: Utc::now(),
                 priority: TradePriority::Normal,
-                price_sol: Some(evaluation.calculations.current_price),
-                size_sol: Some(evaluation.calculations.dca_amount_sol),
+                price_native: Some(evaluation.calculations.current_price),
+                size_native: Some(evaluation.calculations.dca_amount_native),
                 exit_percentage: None,
                 // Auto-trader slippage always follows config.
                 slippage_pct: None,

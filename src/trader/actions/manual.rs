@@ -97,11 +97,11 @@ fn swap_stage_listener(action_id: &str, slot: &RouterSlot) -> crate::swaps::Swap
             crate::swaps::SwapStage::CostRejected {
                 router,
                 venue,
-                extra_lamports,
+                extra_lamports: extra_raw,
             } => Box::pin(async move {
                 let metadata = json!({
                     "router": router,
-                    "cost_guard": {"venue": venue, "extra_lamports": extra_lamports},
+                    "cost_guard": {"venue": venue, "extra_lamports": extra_raw},
                 });
                 update_step(
                     &action_id,
@@ -124,13 +124,13 @@ pub struct ManualBuyAction {
 
 impl ManualBuyAction {
     /// Create and register a new manual buy action
-    pub async fn new(mint: &str, symbol: Option<&str>, size_sol: f64) -> Result<Self, Error> {
+    pub async fn new(mint: &str, symbol: Option<&str>, size_native: f64) -> Result<Self, Error> {
         let action_id = Uuid::new_v4().to_string();
 
         let metadata = json!({
             "mint": mint,
             "symbol": symbol.unwrap_or("Unknown"),
-            "size_sol": size_sol,
+            "size_sol": size_native,
             "operation": "manual_buy"
         });
 
@@ -453,10 +453,10 @@ impl ManualSellAction {
     }
 
     /// Complete swap step
-    pub async fn complete_swap(&self, signature: &str, sol_received: Option<f64>) {
+    pub async fn complete_swap(&self, signature: &str, native_received: Option<f64>) {
         let metadata = json!({
             "signature": signature,
-            "sol_received": sol_received
+            "sol_received": native_received
         });
         update_step(
             &self.action_id,
@@ -541,7 +541,7 @@ impl ManualAddAction {
     pub async fn new(
         mint: &str,
         symbol: Option<&str>,
-        size_sol: f64,
+        size_native: f64,
         position_id: Option<i64>,
     ) -> Result<Self, Error> {
         let action_id = Uuid::new_v4().to_string();
@@ -549,7 +549,7 @@ impl ManualAddAction {
         let metadata = json!({
             "mint": mint,
             "symbol": symbol.unwrap_or("Unknown"),
-            "size_sol": size_sol,
+            "size_sol": size_native,
             "position_id": position_id,
             "operation": "manual_dca"
         });

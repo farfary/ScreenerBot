@@ -265,7 +265,7 @@ pub async fn monitor_positions(
                                 a.complete_quote().await;
                                 a.start_swap().await;
                                 let sig = result.tx_signature.as_deref().unwrap_or("unknown");
-                                a.complete_swap(sig, result.executed_size_sol).await;
+                                a.complete_swap(sig, result.executed_size_native).await;
                                 a.complete(result.tx_signature.as_deref()).await;
                             }
 

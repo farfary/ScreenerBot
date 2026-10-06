@@ -135,7 +135,7 @@ pub async fn execute_sell(decision: &TradeDecision) -> crate::trader::Result<Tra
                 Ok(TradeResult::success(
                     decision.clone(),
                     transaction_signature,
-                    decision.price_sol.unwrap_or_default(),
+                    decision.price_native.unwrap_or_default(),
                     0.0, // Exit size will be calculated by verification
                     decision.position_id.clone(),
                 ))
@@ -168,7 +168,7 @@ pub async fn execute_sell(decision: &TradeDecision) -> crate::trader::Result<Tra
                 Ok(TradeResult::success(
                     decision.clone(),
                     transaction_signature,
-                    decision.price_sol.unwrap_or_default(),
+                    decision.price_native.unwrap_or_default(),
                     0.0, // Exit size will be calculated by verification
                     decision.position_id.clone(),
                 ))

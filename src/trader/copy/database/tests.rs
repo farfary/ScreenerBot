@@ -19,11 +19,11 @@ fn task() -> CopyTask {
         sizing: SizingMode::Fixed { sol: 0.1 },
         exit_mode: ExitMode::BuyOnly,
         exit_policy_overrides: Default::default(),
-        max_sol_per_trade: 0.2,
-        max_sol_per_token: 1.0,
-        total_budget_sol: 5.0,
-        min_target_trade_sol: None,
-        max_target_trade_sol: None,
+        max_native_per_trade: 0.2,
+        max_native_per_token: 1.0,
+        total_budget_native: 5.0,
+        min_target_trade_native: None,
+        max_target_trade_native: None,
         buy_once_per_token: false,
         slippage_pct: 1.0,
         created_at: Utc::now(),
@@ -88,8 +88,8 @@ async fn task_and_outcome_round_trip_with_idempotent_spend() {
             .await
             .unwrap(),
         SpendState {
-            total_spent_sol: 0.1,
-            token_spent_sol: 0.1,
+            total_spent_native: 0.1,
+            token_spent_native: 0.1,
             token_buy_count: 1,
         }
     );
@@ -174,8 +174,8 @@ async fn live_submission_consumes_spend_once_and_confirmation_only_upgrades_stat
             .await
             .unwrap(),
         SpendState {
-            total_spent_sol: 0.1,
-            token_spent_sol: 0.1,
+            total_spent_native: 0.1,
+            token_spent_native: 0.1,
             token_buy_count: 1,
         }
     );
@@ -348,7 +348,7 @@ async fn chain_migration_preserves_legacy_task_children_and_allows_chain_qualifi
     );
     let connection = rusqlite::Connection::open(&path).unwrap();
     connection.execute(
-        "INSERT INTO copy_tasks (id, chain_id, target_address, label, enabled, mode_json, sizing_json, exit_mode_json, exit_policy_json, max_sol_per_trade, max_sol_per_token, total_budget_sol, buy_once_per_token, slippage_pct, created_at, updated_at) VALUES (10, 'future-chain', 'target', NULL, 1, '\"paper\"', '{\"kind\":\"fixed\",\"sol\":1.0}', '\"buy_only\"', '{}', 1, 1, 1, 0, 1, '2026-01-01T00:00:00Z', '2026-01-01T00:00:00Z')",
+        "INSERT INTO copy_tasks (id, chain_id, target_address, label, enabled, mode_json, sizing_json, exit_mode_json, exit_policy_json, max_native_per_trade, max_native_per_token, total_budget_native, buy_once_per_token, slippage_pct, created_at, updated_at) VALUES (10, 'future-chain', 'target', NULL, 1, '\"paper\"', '{\"kind\":\"fixed\",\"sol\":1.0}', '\"buy_only\"', '{}', 1, 1, 1, 0, 1, '2026-01-01T00:00:00Z', '2026-01-01T00:00:00Z')",
         [],
     ).unwrap();
     assert_eq!(
@@ -510,9 +510,9 @@ async fn the_paper_book_books_buys_and_partial_then_full_sells_exactly_once() {
     assert!(position.is_open());
     assert_eq!((position.buys, position.sells), (2, 1));
     assert!((position.token_amount - 100.0).abs() < 1e-9);
-    assert!((position.cost_basis_sol - 1.0).abs() < 1e-9);
-    assert!((position.realized_proceeds_sol - 1.5).abs() < 1e-9);
-    assert!((position.realized_cost_sol - 1.0).abs() < 1e-9);
+    assert!((position.cost_basis_native - 1.0).abs() < 1e-9);
+    assert!((position.realized_proceeds_native - 1.5).abs() < 1e-9);
+    assert!((position.realized_cost_native - 1.0).abs() < 1e-9);
 
     db.record_outcome(paper_sell(&configured, "sell-2", 100.0, 0.5))
         .await
@@ -524,7 +524,7 @@ async fn the_paper_book_books_buys_and_partial_then_full_sells_exactly_once() {
         .unwrap();
     assert!(!closed.is_open());
     assert_eq!(closed.token_amount, 0.0);
-    assert!((closed.realized_proceeds_sol - closed.realized_cost_sol - 0.0).abs() < 1e-9);
+    assert!((closed.realized_proceeds_native - closed.realized_cost_native - 0.0).abs() < 1e-9);
 
     assert_eq!(
         db.spend_state(configured.id, CopyMode::Paper, "book-mint")
@@ -596,7 +596,7 @@ async fn schema_v5_splits_shared_spend_by_mode_and_rebuilds_the_paper_book() {
         .unwrap()
         .expect("paper fill rebuilt into the book");
     assert_eq!(
-        (position.token_amount, position.cost_basis_sol),
+        (position.token_amount, position.cost_basis_native),
         (50.0, 0.5)
     );
     drop(db);

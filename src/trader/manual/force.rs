@@ -27,7 +27,7 @@ use chrono::Utc;
 /// Action progress is broadcast to dashboard via SSE.
 pub async fn force_buy(
     mint: &str,
-    size_sol: f64,
+    size_native: f64,
     slippage_pct: Option<f64>,
 ) -> Result<TradeResult, Error> {
     // Get token symbol for action display
@@ -38,25 +38,25 @@ pub async fn force_buy(
         .map(|t| t.symbol);
 
     // Create action tracker
-    let action = ManualBuyAction::new(mint, symbol.as_deref(), size_sol).await?;
+    let action = ManualBuyAction::new(mint, symbol.as_deref(), size_native).await?;
 
     // Step 1: Validation
     action.start_validation().await;
 
     // Validate SOL amount (even for force operations)
-    if !size_sol.is_finite() {
+    if !size_native.is_finite() {
         let error = "Invalid SOL amount: must be finite";
         action.fail_validation(error).await;
         return Err(Error::InvalidSolAmount {
-            amount_sol: size_sol,
+            amount_native: size_native,
             reason: "must be finite".to_owned(),
         });
     }
-    if size_sol <= 0.0 {
-        let error = format!("Invalid SOL amount: {size_sol}. Must be positive");
+    if size_native <= 0.0 {
+        let error = format!("Invalid SOL amount: {size_native}. Must be positive");
         action.fail_validation(&error).await;
         return Err(Error::InvalidSolAmount {
-            amount_sol: size_sol,
+            amount_native: size_native,
             reason: "must be positive".to_owned(),
         });
     }
@@ -65,14 +65,14 @@ pub async fn force_buy(
     use crate::trader::constants::MAX_TRADE_SIZE_MULTIPLIER;
     let default_trade_size = with_config(|cfg| cfg.trader.trade_size_sol);
     let max_trade_size = default_trade_size * MAX_TRADE_SIZE_MULTIPLIER;
-    if size_sol > max_trade_size {
+    if size_native > max_trade_size {
         let error = format!(
             "SOL amount {:.4} exceeds maximum trade size of {:.4} SOL ({}x default)",
-            size_sol, max_trade_size, MAX_TRADE_SIZE_MULTIPLIER as u32
+            size_native, max_trade_size, MAX_TRADE_SIZE_MULTIPLIER as u32
         );
         action.fail_validation(&error).await;
         return Err(Error::InvalidSolAmount {
-            amount_sol: size_sol,
+            amount_native: size_native,
             reason: format!(
                 "exceeds maximum trade size of {:.4} SOL ({}x default)",
                 max_trade_size, MAX_TRADE_SIZE_MULTIPLIER as u32
@@ -86,7 +86,7 @@ pub async fn force_buy(
         LogTag::Trader,
         &format!(
             "Processing FORCE buy (safety checks bypassed): mint={}, size={} SOL",
-            mint, size_sol
+            mint, size_native
         ),
     );
 
@@ -101,8 +101,8 @@ pub async fn force_buy(
         strategy_id: None,
         timestamp: Utc::now(),
         priority: TradePriority::High,
-        price_sol: None,
-        size_sol: Some(size_sol),
+        price_native: None,
+        size_native: Some(size_native),
         exit_percentage: None,
         // Manual trade: honour the user's slippage override (None = config).
         slippage_pct,
@@ -242,8 +242,8 @@ pub async fn force_sell(
         strategy_id: None,
         timestamp: Utc::now(),
         priority: TradePriority::Emergency,
-        price_sol: None,
-        size_sol: None,
+        price_native: None,
+        size_native: None,
         exit_percentage: Some(exit_percentage),
         // Manual trade: honour the user's slippage override (None = config).
         slippage_pct,
@@ -275,7 +275,7 @@ pub async fn force_sell(
     action.start_swap().await;
 
     if let Some(ref sig) = result.tx_signature {
-        action.complete_swap(sig, result.executed_size_sol).await;
+        action.complete_swap(sig, result.executed_size_native).await;
         action.await_verification(Some(sig)).await;
     } else {
         action.complete_swap("unknown", None).await;

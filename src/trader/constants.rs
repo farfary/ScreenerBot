@@ -21,7 +21,7 @@ pub const EMERGENCY_LOSS_THRESHOLD_PCT: f64 = 90.0;
 
 // Trade size limits
 pub const MAX_TRADE_SIZE_MULTIPLIER: f64 = 100.0;
-pub const MIN_TRADE_SIZE_SOL: f64 = 0.001;
+pub const MIN_TRADE_SIZE_NATIVE: f64 = 0.001;
 
 /// Hard ceiling on a MANUAL per-trade slippage override, in percent.
 ///

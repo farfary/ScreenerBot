@@ -30,11 +30,11 @@ fn task(exit_mode: ExitMode, mode: CopyMode) -> CopyTask {
         sizing: SizingMode::Fixed { sol: 0.1 },
         exit_mode,
         exit_policy_overrides: Default::default(),
-        max_sol_per_trade: 1.0,
-        max_sol_per_token: 2.0,
-        total_budget_sol: 5.0,
-        min_target_trade_sol: None,
-        max_target_trade_sol: None,
+        max_native_per_trade: 1.0,
+        max_native_per_token: 2.0,
+        total_budget_native: 5.0,
+        min_target_trade_native: None,
+        max_target_trade_native: None,
         buy_once_per_token: false,
         slippage_pct: 2.0,
         created_at: now,
@@ -164,8 +164,8 @@ fn exit_mode_force_stop_and_user_ownership_are_typed_skips() {
 }
 
 const PAPER_COSTS: PaperCosts = PaperCosts {
-    network_fee_sol: 0.000005,
-    priority_fee_sol: 0.0,
+    network_fee_native: 0.000005,
+    priority_fee_native: 0.0,
 };
 
 #[test]

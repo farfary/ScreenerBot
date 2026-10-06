@@ -20,7 +20,8 @@ pub struct LossLimitState {
     /// Current period start time
     pub period_start: DateTime<Utc>,
     /// Cumulative realized loss in SOL (absolute value)
-    pub cumulative_loss_sol: f64,
+    #[serde(rename = "cumulative_loss_sol")]
+    pub cumulative_loss_native: f64,
     /// Whether trading is paused due to loss limit
     pub is_limited: bool,
     /// Timestamp when limit was hit (if limited)
@@ -33,7 +34,7 @@ pub struct LossLimitState {
 static LOSS_LIMIT_STATE: LazyLock<RwLock<LossLimitStateInternal>> = LazyLock::new(|| {
     RwLock::new(LossLimitStateInternal {
         period_start: Utc::now(),
-        cumulative_loss_sol: 0.0,
+        cumulative_loss_native: 0.0,
         is_limited: false,
         limited_at: None,
     })
@@ -42,7 +43,7 @@ static LOSS_LIMIT_STATE: LazyLock<RwLock<LossLimitStateInternal>> = LazyLock::ne
 #[derive(Debug, Clone)]
 struct LossLimitStateInternal {
     period_start: DateTime<Utc>,
-    cumulative_loss_sol: f64,
+    cumulative_loss_native: f64,
     is_limited: bool,
     limited_at: Option<DateTime<Utc>>,
 }
@@ -78,7 +79,7 @@ pub fn get_loss_limit_status() -> LossLimitState {
 
         LossLimitState {
             period_start: state.period_start,
-            cumulative_loss_sol: state.cumulative_loss_sol,
+            cumulative_loss_native: state.cumulative_loss_native,
             is_limited: state.is_limited,
             limited_at: state.limited_at,
             period_remaining_secs: remaining,
@@ -86,7 +87,7 @@ pub fn get_loss_limit_status() -> LossLimitState {
     } else {
         LossLimitState {
             period_start: Utc::now(),
-            cumulative_loss_sol: 0.0,
+            cumulative_loss_native: 0.0,
             is_limited: false,
             limited_at: None,
             period_remaining_secs: 0,
@@ -96,27 +97,27 @@ pub fn get_loss_limit_status() -> LossLimitState {
 
 /// Record a realized loss from a closed position
 /// Called when a position is closed with negative P&L
-pub fn record_realized_loss(loss_sol: f64) {
+pub fn record_realized_loss(loss_native: f64) {
     if !config::is_loss_limit_enabled() {
         return;
     }
 
-    let loss_amount = loss_sol.abs();
-    let limit = config::get_loss_limit_sol();
+    let loss_amount = loss_native.abs();
+    let limit = config::get_loss_limit_native();
 
     if let Ok(mut state) = LOSS_LIMIT_STATE.write() {
-        state.cumulative_loss_sol += loss_amount;
+        state.cumulative_loss_native += loss_amount;
 
         logger::debug(
             LogTag::Trader,
             &format!(
                 "Loss recorded: -{:.4} SOL, cumulative: {:.4}/{:.4} SOL",
-                loss_amount, state.cumulative_loss_sol, limit
+                loss_amount, state.cumulative_loss_native, limit
             ),
         );
 
         // Check if limit exceeded
-        if !state.is_limited && state.cumulative_loss_sol >= limit {
+        if !state.is_limited && state.cumulative_loss_native >= limit {
             state.is_limited = true;
             state.limited_at = Some(Utc::now());
 
@@ -124,7 +125,7 @@ pub fn record_realized_loss(loss_sol: f64) {
                 LogTag::Trader,
                 &format!(
                     "LOSS LIMIT REACHED: {:.4}/{:.4} SOL - Entry monitor paused",
-                    state.cumulative_loss_sol, limit
+                    state.cumulative_loss_native, limit
                 ),
             );
         }
@@ -149,7 +150,7 @@ pub fn resume_from_loss_limit() {
 pub fn reset_loss_limit_state() {
     if let Ok(mut state) = LOSS_LIMIT_STATE.write() {
         state.period_start = Utc::now();
-        state.cumulative_loss_sol = 0.0;
+        state.cumulative_loss_native = 0.0;
         state.is_limited = false;
         state.limited_at = None;
         logger::info(
@@ -178,7 +179,7 @@ fn check_and_reset_period_if_needed() {
 
             // Then reset period data
             state.period_start = Utc::now();
-            state.cumulative_loss_sol = 0.0;
+            state.cumulative_loss_native = 0.0;
 
             // NOTE: Race window between write() release and next read() is negligible.
             // All state changes happen atomically within single write lock scope.
@@ -211,11 +212,11 @@ pub async fn initialize_from_history() {
     match crate::positions::get_period_trading_stats(period_start, None).await {
         Ok(stats) => {
             let loss = stats.loss_native; // Already absolute value
-            let limit = config::get_loss_limit_sol();
+            let limit = config::get_loss_limit_native();
 
             if let Ok(mut state) = LOSS_LIMIT_STATE.write() {
                 state.period_start = period_start;
-                state.cumulative_loss_sol = loss;
+                state.cumulative_loss_native = loss;
 
                 if loss >= limit {
                     state.is_limited = true;

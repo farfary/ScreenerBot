@@ -25,8 +25,10 @@ pub struct ManualTradeRecord {
     pub reason: String,
     pub success: bool,
     pub tx_signature: Option<String>,
-    pub size_sol: Option<f64>,
-    pub price_sol: Option<f64>,
+    #[serde(rename = "size_sol")]
+    pub size_native: Option<f64>,
+    #[serde(rename = "price_sol")]
+    pub price_native: Option<f64>,
     pub error: Option<String>,
 }
 
@@ -39,8 +41,8 @@ pub async fn record_manual_trade(result: &TradeResult) -> crate::trader::Result<
         reason: format!("{:?}", result.decision.reason),
         success: result.success,
         tx_signature: result.tx_signature.clone(),
-        size_sol: result.executed_size_sol,
-        price_sol: result.executed_price_sol,
+        size_native: result.executed_size_native,
+        price_native: result.executed_price_native,
         error: result.error.clone(),
     };
 

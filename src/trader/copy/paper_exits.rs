@@ -21,24 +21,24 @@ use super::{
     CopySkip, CopyTask, CopyTelemetry, PaperCosts, PaperExitRule, PaperMarket, PaperPosition,
 };
 
-/// Which rule, if any, closes this holding at `mark_price_sol`, checked in the
+/// Which rule, if any, closes this holding at `mark_price_native`, checked in the
 /// live monitor's order. The inner percentage is a partial exit; `None` sells all.
 /// `Err` carries [`crate::trader::Error::InvalidExitPolicy`].
 pub fn evaluate_paper_exit(
     position: &PaperPosition,
-    mark_price_sol: f64,
-    peak_price_sol: f64,
+    mark_price_native: f64,
+    peak_price_native: f64,
     policy: &ExitPolicy,
     now: DateTime<Utc>,
 ) -> crate::trader::Result<Option<(PaperExitRule, Option<f64>)>> {
-    if !position.is_open() || !mark_price_sol.is_finite() || mark_price_sol <= 0.0 {
+    if !position.is_open() || !mark_price_native.is_finite() || mark_price_native <= 0.0 {
         return Ok(None);
     }
-    let entry_price = position.cost_basis_sol / position.token_amount;
+    let entry_price = position.cost_basis_native / position.token_amount;
     let held_seconds = (now - position.opened_at).num_seconds();
     if let Some(exit_percentage) = exit_stop_loss::stop_loss_exit(
         entry_price,
-        mark_price_sol,
+        mark_price_native,
         held_seconds,
         position.sells > 0,
         &policy.stop_loss,
@@ -47,18 +47,18 @@ pub fn evaluate_paper_exit(
     }
     if exit_trailing::trailing_stop_triggered(
         entry_price,
-        peak_price_sol,
-        mark_price_sol,
+        peak_price_native,
+        mark_price_native,
         &policy.trailing,
     )? {
         return Ok(Some((PaperExitRule::TrailingStop, None)));
     }
-    if exit_roi::roi_target_reached(entry_price, mark_price_sol, &policy.roi) {
+    if exit_roi::roi_target_reached(entry_price, mark_price_native, &policy.roi) {
         return Ok(Some((PaperExitRule::TakeProfit, None)));
     }
     if exit_time::time_override_triggered(
         entry_price,
-        mark_price_sol,
+        mark_price_native,
         held_seconds as f64,
         &policy.time,
     )? {
@@ -75,7 +75,7 @@ pub fn paper_exit_outcome(
     position: &PaperPosition,
     rule: PaperExitRule,
     exit_percentage: Option<f64>,
-    mark_price_sol: f64,
+    mark_price_native: f64,
     costs: PaperCosts,
     now: DateTime<Utc>,
 ) -> Result<CopyOutcome, CopySkip> {
@@ -85,7 +85,7 @@ pub fn paper_exit_outcome(
     };
     let fill = simulate_sell(
         sell_amount,
-        PaperMarket::pool(mark_price_sol),
+        PaperMarket::pool(mark_price_native),
         task.slippage_pct,
         costs,
     )?;
@@ -175,7 +175,9 @@ pub async fn sweep(database: &CopyDatabase, costs: PaperCosts) -> crate::trader:
             else {
                 continue;
             };
-            let peak = position.peak_price_sol.map_or(mark, |peak| peak.max(mark));
+            let peak = position
+                .peak_price_native
+                .map_or(mark, |peak| peak.max(mark));
             database
                 .raise_paper_peak(task.id, &position.mint, peak)
                 .await?;
@@ -267,17 +269,17 @@ mod tests {
             task_id: 1,
             mint: "mint".to_owned(),
             token_amount: 100.0,
-            cost_basis_sol: 1.0,
-            invested_sol: 1.0,
-            realized_proceeds_sol: 0.0,
-            realized_cost_sol: 0.0,
+            cost_basis_native: 1.0,
+            invested_native: 1.0,
+            realized_proceeds_native: 0.0,
+            realized_cost_native: 0.0,
             buys: 1,
             sells,
-            last_price_sol: None,
+            last_price_native: None,
             last_price_at: None,
             opened_at: now - age,
             closed_at: None,
-            peak_price_sol: Some(0.01),
+            peak_price_native: Some(0.01),
         }
     }
 
@@ -352,11 +354,11 @@ mod tests {
             sizing: super::super::SizingMode::Fixed { sol: 0.1 },
             exit_mode: super::super::ExitMode::Hybrid,
             exit_policy_overrides: Default::default(),
-            max_sol_per_trade: 1.0,
-            max_sol_per_token: 1.0,
-            total_budget_sol: 1.0,
-            min_target_trade_sol: None,
-            max_target_trade_sol: None,
+            max_native_per_trade: 1.0,
+            max_native_per_token: 1.0,
+            total_budget_native: 1.0,
+            min_target_trade_native: None,
+            max_target_trade_native: None,
             buy_once_per_token: true,
             slippage_pct: 1.0,
             created_at: Utc::now(),
@@ -366,8 +368,8 @@ mod tests {
             paused_at: None,
         };
         let costs = PaperCosts {
-            network_fee_sol: 0.0,
-            priority_fee_sol: 0.0,
+            network_fee_native: 0.0,
+            priority_fee_native: 0.0,
         };
         let signature = |sells| match paper_exit_outcome(
             &task,

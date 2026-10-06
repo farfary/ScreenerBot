@@ -48,8 +48,8 @@ fn finish(
             mint,
             signature: trade.tx_signature,
             position_id: trade.position_id,
-            executed_size_sol: trade.executed_size_sol,
-            executed_price_sol: trade.executed_price_sol,
+            executed_size_sol: trade.executed_size_native,
+            executed_price_sol: trade.executed_price_native,
             message,
         })),
         Ok(trade) => ToolResult::error(format!(

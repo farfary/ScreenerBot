@@ -47,8 +47,10 @@ pub struct CopyTaskSummary {
     #[serde(flatten)]
     pub task: CopyTask,
     pub stats: CopyTaskStats,
-    pub spent_sol: f64,
-    pub remaining_budget_sol: f64,
+    #[serde(rename = "spent_sol")]
+    pub spent_native: f64,
+    #[serde(rename = "remaining_budget_sol")]
+    pub remaining_budget_native: f64,
     pub effective_state: &'static str,
     /// The filter rule the task runs under after its own override.
     pub effective_require_filter_pass: bool,
@@ -62,15 +64,19 @@ pub struct CopyTaskSummary {
 /// still hold what they bought); budget and arrival count enabled tasks only.
 #[derive(Debug, Default, Serialize)]
 pub struct CopyTotals {
-    pub realized_pnl_sol: f64,
-    pub unrealized_pnl_sol: f64,
+    #[serde(rename = "realized_pnl_sol")]
+    pub realized_pnl_native: f64,
+    #[serde(rename = "unrealized_pnl_sol")]
+    pub unrealized_pnl_native: f64,
     pub open_holdings: usize,
     pub unpriced_holdings: usize,
     pub wins: usize,
     pub losses: usize,
     pub win_rate_pct: Option<f64>,
-    pub active_budget_sol: f64,
-    pub active_spent_sol: f64,
+    #[serde(rename = "active_budget_sol")]
+    pub active_budget_native: f64,
+    #[serde(rename = "active_spent_sol")]
+    pub active_spent_native: f64,
     pub active_arrival: ArrivalDistanceStats,
 }
 
@@ -81,15 +87,15 @@ impl CopyTotals {
         let mut totals = Self::default();
         for summary in summaries {
             let stats = &summary.stats;
-            totals.realized_pnl_sol += stats.realized_pnl_sol;
-            totals.unrealized_pnl_sol += stats.unrealized_pnl_sol;
+            totals.realized_pnl_native += stats.realized_pnl_native;
+            totals.unrealized_pnl_native += stats.unrealized_pnl_native;
             totals.open_holdings += stats.open_positions;
             totals.unpriced_holdings += stats.unpriced_positions;
             totals.wins += stats.wins;
             totals.losses += stats.losses;
             if summary.task.enabled {
-                totals.active_budget_sol += summary.task.total_budget_sol;
-                totals.active_spent_sol += summary.spent_sol;
+                totals.active_budget_native += summary.task.total_budget_native;
+                totals.active_spent_native += summary.spent_native;
             }
         }
         let rounds = totals.wins + totals.losses;
@@ -215,7 +221,7 @@ pub fn book_stats(
         apply_paper_book(&mut stats, paper_book, mark);
     }
     let rounds = closed_rounds(task.id, stats.book, activity, positions);
-    stats.wins = rounds.iter().filter(|round| round.pnl_sol > 0.0).count();
+    stats.wins = rounds.iter().filter(|round| round.pnl_native > 0.0).count();
     stats.losses = rounds.len() - stats.wins;
     (stats, rounds)
 }
@@ -272,7 +278,7 @@ pub fn summarize(
     activity: &[CopyActivityRow],
     positions: &[Position],
     paper_book: &[PaperPosition],
-    spent_sol: f64,
+    spent_native: f64,
     mark: impl Fn(&PaperPosition) -> Option<f64>,
 ) -> (CopyTaskSummary, Vec<u64>) {
     let (stats, rounds) = book_stats(&task, activity, positions, paper_book, mark);
@@ -280,7 +286,7 @@ pub fn summarize(
     let mut pnl_trend = rounds
         .iter()
         .map(|round| {
-            cumulative += round.pnl_sol;
+            cumulative += round.pnl_native;
             cumulative
         })
         .collect::<Vec<_>>();
@@ -297,8 +303,8 @@ pub fn summarize(
     (
         CopyTaskSummary {
             stats,
-            remaining_budget_sol: (task.total_budget_sol - spent_sol).max(0.0),
-            spent_sol,
+            remaining_budget_native: (task.total_budget_native - spent_native).max(0.0),
+            spent_native,
             effective_state: effective_state(status, &task),
             effective_require_filter_pass: task.requires_filter_pass(global_filter),
             pnl_trend,
@@ -330,14 +336,14 @@ pub async fn overview(activity_limit: usize) -> Result<CopyTradingOverview> {
     .await?;
     let mut active_samples = Vec::new();
     let mut summaries = Vec::with_capacity(tasks.len());
-    for (task, (task_activity, book, spent_sol)) in tasks.into_iter().zip(reads) {
+    for (task, (task_activity, book, spent_native)) in tasks.into_iter().zip(reads) {
         let (summary, samples) = summarize(
             &status,
             task,
             &task_activity,
             &positions,
             &book,
-            spent_sol,
+            spent_native,
             paper_mark,
         );
         if summary.task.enabled {
@@ -619,11 +625,11 @@ mod tests {
             sizing: SizingMode::Fixed { sol: 0.1 },
             exit_mode: ExitMode::Mirror,
             exit_policy_overrides: Default::default(),
-            max_sol_per_trade: 0.2,
-            max_sol_per_token: 1.0,
-            total_budget_sol: 5.0,
-            min_target_trade_sol: None,
-            max_target_trade_sol: None,
+            max_native_per_trade: 0.2,
+            max_native_per_token: 1.0,
+            total_budget_native: 5.0,
+            min_target_trade_native: None,
+            max_target_trade_native: None,
             buy_once_per_token: false,
             slippage_pct: 1.0,
             created_at: Utc::now(),
@@ -640,7 +646,7 @@ mod tests {
         assert!(!merged.enabled);
         assert_eq!(merged.label.as_deref(), Some("Kept"));
         assert_eq!(merged.exit_mode, ExitMode::Mirror);
-        assert_eq!(merged.total_budget_sol, 5.0);
+        assert_eq!(merged.total_budget_native, 5.0);
     }
 
     #[test]

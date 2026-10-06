@@ -89,8 +89,8 @@ pub enum Error {
     },
     #[error("no open position for token {mint}")]
     NoOpenPosition { mint: String },
-    #[error("invalid trade size {amount_sol} SOL: {reason}")]
-    InvalidSolAmount { amount_sol: f64, reason: String },
+    #[error("invalid trade size {amount_native} SOL: {reason}")]
+    InvalidSolAmount { amount_native: f64, reason: String },
     /// A manual trade's `PositionManagement` is not valid for its origin (no fitting
     /// variant above: this is a request-shape validation, not a SOL-amount one).
     #[error("invalid position management {management}: {reason}")]

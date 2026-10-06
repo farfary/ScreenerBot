@@ -174,8 +174,10 @@ pub fn set_monitor_enabled(monitor: Monitor, enabled: bool) -> Result<(), Error>
 #[derive(Debug, Clone, serde::Serialize)]
 pub struct LossLimitSnapshot {
     pub enabled: bool,
-    pub limit_sol: f64,
-    pub current_loss_sol: f64,
+    #[serde(rename = "limit_sol")]
+    pub limit_native: f64,
+    #[serde(rename = "current_loss_sol")]
+    pub current_loss_native: f64,
     pub is_limited: bool,
     pub limited_at: Option<chrono::DateTime<chrono::Utc>>,
     pub period_start: chrono::DateTime<chrono::Utc>,
@@ -187,17 +189,17 @@ pub fn loss_limit_snapshot() -> LossLimitSnapshot {
     use super::config;
     use super::safety::loss_limit;
     let status = loss_limit::get_loss_limit_status();
-    let limit = config::get_loss_limit_sol();
+    let limit = config::get_loss_limit_native();
     LossLimitSnapshot {
         enabled: config::is_loss_limit_enabled(),
-        limit_sol: limit,
-        current_loss_sol: status.cumulative_loss_sol,
+        limit_native: limit,
+        current_loss_native: status.cumulative_loss_native,
         is_limited: status.is_limited,
         limited_at: status.limited_at,
         period_start: status.period_start,
         period_remaining_secs: status.period_remaining_secs,
         progress_percent: if limit > 0.0 {
-            (status.cumulative_loss_sol / limit * 100.0).min(100.0)
+            (status.cumulative_loss_native / limit * 100.0).min(100.0)
         } else {
             0.0
         },

@@ -38,7 +38,7 @@ fn a_fresh_period_blocks_nothing() {
     enable_limit(1.0);
 
     assert!(!is_entry_blocked_by_loss_limit());
-    assert_eq!(get_loss_limit_status().cumulative_loss_sol, 0.0);
+    assert_eq!(get_loss_limit_status().cumulative_loss_native, 0.0);
     assert!(!get_loss_limit_status().is_limited);
 }
 
@@ -51,7 +51,7 @@ fn losses_accumulate_across_positions() {
 
     record_realized_loss(0.2);
     record_realized_loss(0.3);
-    assert!((get_loss_limit_status().cumulative_loss_sol - 0.5).abs() < 1e-12);
+    assert!((get_loss_limit_status().cumulative_loss_native - 0.5).abs() < 1e-12);
     assert!(!is_entry_blocked_by_loss_limit());
 }
 
@@ -80,7 +80,7 @@ fn a_single_loss_past_the_budget_trips_it_immediately() {
 
     record_realized_loss(5.0);
     assert!(is_entry_blocked_by_loss_limit());
-    assert!((get_loss_limit_status().cumulative_loss_sol - 5.0).abs() < 1e-12);
+    assert!((get_loss_limit_status().cumulative_loss_native - 5.0).abs() < 1e-12);
 }
 
 #[test]
@@ -95,13 +95,13 @@ fn the_recorded_amount_is_a_magnitude_not_a_signed_pnl() {
 
     record_realized_loss(-2.0);
     assert!(
-        (get_loss_limit_status().cumulative_loss_sol - 2.0).abs() < 1e-12,
+        (get_loss_limit_status().cumulative_loss_native - 2.0).abs() < 1e-12,
         "a negative P&L is recorded as its magnitude"
     );
 
     record_realized_loss(3.0);
     assert!(
-        (get_loss_limit_status().cumulative_loss_sol - 5.0).abs() < 1e-12,
+        (get_loss_limit_status().cumulative_loss_native - 5.0).abs() < 1e-12,
         "a positive value is ALSO taken as a loss — callers must guard on pnl < 0"
     );
 }
@@ -115,7 +115,7 @@ fn a_disabled_limit_records_nothing_and_blocks_nothing() {
     record_realized_loss(100.0);
     assert!(!is_entry_blocked_by_loss_limit());
     assert_eq!(
-        get_loss_limit_status().cumulative_loss_sol,
+        get_loss_limit_status().cumulative_loss_native,
         0.0,
         "a disabled limit must not accumulate a hidden balance"
     );
@@ -134,7 +134,7 @@ fn a_manual_resume_reopens_entries_without_clearing_the_tally() {
     resume_from_loss_limit();
     assert!(!is_entry_blocked_by_loss_limit());
     assert!(
-        (get_loss_limit_status().cumulative_loss_sol - 2.0).abs() < 1e-12,
+        (get_loss_limit_status().cumulative_loss_native - 2.0).abs() < 1e-12,
         "the period's realized loss is not erased by a resume"
     );
     assert!(get_loss_limit_status().limited_at.is_none());
@@ -169,7 +169,7 @@ fn a_reset_starts_a_brand_new_period() {
 
     reset_loss_limit_state();
     let status = get_loss_limit_status();
-    assert_eq!(status.cumulative_loss_sol, 0.0);
+    assert_eq!(status.cumulative_loss_native, 0.0);
     assert!(!status.is_limited);
     assert!(status.limited_at.is_none());
     assert!(!is_entry_blocked_by_loss_limit());
@@ -197,7 +197,7 @@ fn an_elapsed_period_auto_resumes_when_configured() {
         !is_entry_blocked_by_loss_limit(),
         "an elapsed period must auto-resume"
     );
-    assert_eq!(get_loss_limit_status().cumulative_loss_sol, 0.0);
+    assert_eq!(get_loss_limit_status().cumulative_loss_native, 0.0);
 }
 
 #[test]
@@ -218,7 +218,7 @@ fn an_elapsed_period_keeps_the_pause_when_auto_resume_is_off() {
         "without auto-resume the pause survives the period rollover"
     );
     assert_eq!(
-        get_loss_limit_status().cumulative_loss_sol,
+        get_loss_limit_status().cumulative_loss_native,
         0.0,
         "the tally still rolls over"
     );

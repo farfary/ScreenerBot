@@ -77,9 +77,9 @@ pub(super) fn trader_failure(error: &trader::Error) -> Response {
         Error::NoOpenPosition { mint } => {
             ApiError::new(code, ids::ERRORS_TRADE_NO_OPEN_POSITION).text_arg("mint", mint.clone())
         }
-        Error::InvalidSolAmount { amount_sol, .. } => {
+        Error::InvalidSolAmount { amount_native, .. } => {
             ApiError::new(code, ids::ERRORS_TRADE_SIZE_INVALID)
-                .arg("amount", UiArg::Sol(amount_sol.to_string()))
+                .arg("amount", UiArg::Sol(amount_native.to_string()))
         }
         Error::InvalidManagement { management, .. } => {
             ApiError::new(code, ids::ERRORS_TRADE_MANAGEMENT_INVALID)

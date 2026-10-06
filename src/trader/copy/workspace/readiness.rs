@@ -29,7 +29,7 @@ pub struct Readiness {
 }
 
 /// A signed SOL figure as the dashboard writes one, with a true minus sign.
-fn signed_sol(value: f64) -> String {
+fn signed_native(value: f64) -> String {
     let sign = if value > 0.0 {
         "+"
     } else if value < 0.0 {
@@ -71,12 +71,12 @@ pub(super) fn readiness(
             config.copy_trading.max_arrival_distance_ms,
         )
     });
-    let realized: f64 = rounds.iter().map(|round| round.pnl_sol).sum();
-    let wins = rounds.iter().filter(|round| round.pnl_sol > 0.0).count();
+    let realized: f64 = rounds.iter().map(|round| round.pnl_native).sum();
+    let wins = rounds.iter().filter(|round| round.pnl_native > 0.0).count();
     let p95 = summary.stats.arrival_distance.p95_ms;
     let unpriced = holdings
         .iter()
-        .filter(|holding| holding.open && holding.mark_price_sol.is_none())
+        .filter(|holding| holding.open && holding.mark_price_native.is_none())
         .count();
     let checks = vec![
         ReadinessCheck {
@@ -96,7 +96,7 @@ pub(super) fn readiness(
             text: UiText::new(ids::COPY_READINESS_PROFIT),
             passed: realized > 0.0,
             detail: UiText::new(ids::COPY_READINESS_PROFIT_DETAIL)
-                .arg("realized", UiArg::Text(signed_sol(realized)))
+                .arg("realized", UiArg::Text(signed_native(realized)))
                 .arg("count", count(rounds.len()))
                 .arg("wins", count(wins)),
         },
@@ -161,7 +161,7 @@ mod tests {
     fn readiness_details_keep_their_figures_and_plurals() {
         let en: LanguageIdentifier = "en".parse().unwrap();
         let profit = UiText::new(ids::COPY_READINESS_PROFIT_DETAIL)
-            .arg("realized", UiArg::Text(signed_sol(-0.12345)))
+            .arg("realized", UiArg::Text(signed_native(-0.12345)))
             .arg("count", count(1))
             .arg("wins", count(0));
         assert_eq!(

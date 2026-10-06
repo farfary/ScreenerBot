@@ -144,8 +144,8 @@ pub(crate) async fn evaluate_policy_exit(
                                     }
                                     _ => crate::trader::types::TradePriority::Normal,
                                 },
-                                price_sol: Some(current_price),
-                                size_sol: None,
+                                price_native: Some(current_price),
+                                size_native: None,
                                 exit_percentage: None, // Full exit
                                 // Auto-trader slippage always follows config.
                                 slippage_pct: None,

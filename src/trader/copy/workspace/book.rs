@@ -82,7 +82,8 @@ pub struct ClosedHolding {
     pub mint: String,
     /// No pool price: the holding was closed at zero proceeds.
     pub written_off: bool,
-    pub mark_price_sol: Option<f64>,
+    #[serde(rename = "mark_price_sol")]
+    pub mark_price_native: Option<f64>,
 }
 
 /// An unpriced holding cannot be sold at a price that does not exist, so the
@@ -165,6 +166,6 @@ pub async fn close_paper_holding(id: i64, mint: &str) -> Result<ClosedHolding> {
         task_id: id,
         mint: mint.to_owned(),
         written_off: mark.is_none(),
-        mark_price_sol: mark,
+        mark_price_native: mark,
     })
 }

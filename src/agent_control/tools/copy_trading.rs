@@ -306,11 +306,11 @@ impl Tool for CreateCopyTaskTool {
             sizing: p.sizing,
             exit_mode: p.exit_mode,
             exit_policy_overrides: p.exit_policy_overrides,
-            max_sol_per_trade: p.max_sol_per_trade,
-            max_sol_per_token: p.max_sol_per_token,
-            total_budget_sol: p.total_budget_sol,
-            min_target_trade_sol: p.min_target_trade_sol,
-            max_target_trade_sol: p.max_target_trade_sol,
+            max_native_per_trade: p.max_sol_per_trade,
+            max_native_per_token: p.max_sol_per_token,
+            total_budget_native: p.total_budget_sol,
+            min_target_trade_native: p.min_target_trade_sol,
+            max_target_trade_native: p.max_target_trade_sol,
             buy_once_per_token: p.buy_once_per_token,
             slippage_pct: p
                 .slippage_pct

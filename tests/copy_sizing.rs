@@ -22,11 +22,11 @@ fn task(sizing: SizingMode) -> CopyTask {
         sizing,
         exit_mode: ExitMode::BuyOnly,
         exit_policy_overrides: Default::default(),
-        max_sol_per_trade: 0.5,
-        max_sol_per_token: 1.0,
-        total_budget_sol: 2.0,
-        min_target_trade_sol: None,
-        max_target_trade_sol: None,
+        max_native_per_trade: 0.5,
+        max_native_per_token: 1.0,
+        total_budget_native: 2.0,
+        min_target_trade_native: None,
+        max_target_trade_native: None,
         buy_once_per_token: false,
         slippage_pct: 1.0,
         created_at: Utc::now(),
@@ -46,17 +46,17 @@ fn fixed_and_ratio_modes_are_clamped_by_every_hard_cap() {
     assert_eq!(size_for(&ratio, 1.0, SpendState::default(), 1.0), Ok(0.25));
 
     let spend = SpendState {
-        total_spent_sol: 1.9,
-        token_spent_sol: 0.95,
+        total_spent_native: 1.9,
+        token_spent_native: 0.95,
         token_buy_count: 1,
     };
     let remaining = size_for(&fixed, 10.0, spend, 1.0).unwrap();
     assert!((remaining - 0.05).abs() < 1e-12);
 
     let mut engine_capped = fixed.clone();
-    engine_capped.max_sol_per_trade = 1_000.0;
-    engine_capped.max_sol_per_token = 1_000.0;
-    engine_capped.total_budget_sol = 1_000.0;
+    engine_capped.max_native_per_trade = 1_000.0;
+    engine_capped.max_native_per_token = 1_000.0;
+    engine_capped.total_budget_native = 1_000.0;
     assert_eq!(
         size_for(&engine_capped, 10.0, SpendState::default(), 0.01),
         Ok(0.01 * MAX_TRADE_SIZE_MULTIPLIER)
@@ -71,7 +71,7 @@ fn exhausted_budget_token_cap_and_v2_mode_are_typed_skips() {
             &fixed,
             1.0,
             SpendState {
-                total_spent_sol: 2.0,
+                total_spent_native: 2.0,
                 ..SpendState::default()
             },
             1.0
@@ -83,7 +83,7 @@ fn exhausted_budget_token_cap_and_v2_mode_are_typed_skips() {
             &fixed,
             1.0,
             SpendState {
-                token_spent_sol: 1.0,
+                token_spent_native: 1.0,
                 ..SpendState::default()
             },
             1.0
@@ -104,11 +104,11 @@ fn exhausted_budget_token_cap_and_v2_mode_are_typed_skips() {
 #[test]
 fn target_filters_buy_once_self_copy_and_slippage_are_enforced() {
     let mut configured = task(SizingMode::Fixed { sol: 0.1 });
-    configured.min_target_trade_sol = Some(0.2);
-    configured.max_target_trade_sol = Some(2.0);
+    configured.min_target_trade_native = Some(0.2);
+    configured.max_target_trade_native = Some(2.0);
     let policy = PipelinePolicy {
         require_filter_pass: false,
-        engine_trade_size_sol: 1.0,
+        engine_trade_size_native: 1.0,
     };
     assert!(matches!(
         precheck(
@@ -184,7 +184,7 @@ fn live_mode_uses_the_same_risk_precheck_as_paper() {
             RiskContext::default(),
             PipelinePolicy {
                 require_filter_pass: false,
-                engine_trade_size_sol: 1.0
+                engine_trade_size_native: 1.0
             }
         ),
         Ok(())
@@ -201,11 +201,11 @@ fn task_input_rejects_invalid_mode_sizing_ranges_and_slippage() {
         sizing,
         exit_mode: ExitMode::BuyOnly,
         exit_policy_overrides: Default::default(),
-        max_sol_per_trade: 0.2,
-        max_sol_per_token: 1.0,
-        total_budget_sol: 2.0,
-        min_target_trade_sol: None,
-        max_target_trade_sol: None,
+        max_native_per_trade: 0.2,
+        max_native_per_token: 1.0,
+        total_budget_native: 2.0,
+        min_target_trade_native: None,
+        max_target_trade_native: None,
         buy_once_per_token: true,
         slippage_pct: 1.0,
         require_filter_pass: None,
@@ -220,7 +220,7 @@ fn task_input_rejects_invalid_mode_sizing_ranges_and_slippage() {
         Err(CopySkip::InvalidSizing)
     );
     let mut invalid_range = input(SizingMode::Fixed { sol: 0.1 });
-    invalid_range.min_target_trade_sol = Some(-1.0);
+    invalid_range.min_target_trade_native = Some(-1.0);
     assert_eq!(
         invalid_range.into_task(ChainId::Solana, Utc::now()),
         Err(CopySkip::InvalidSizing)

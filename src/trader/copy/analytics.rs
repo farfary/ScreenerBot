@@ -115,10 +115,10 @@ pub fn build_task_stats(
     }) {
         if position.transaction_exit_verified {
             stats.closed_positions += 1;
-            stats.realized_pnl_sol += position.pnl.unwrap_or_default();
+            stats.realized_pnl_native += position.pnl.unwrap_or_default();
         } else if !position.archived {
             stats.open_positions += 1;
-            stats.unrealized_pnl_sol += position.unrealized_pnl.unwrap_or_default();
+            stats.unrealized_pnl_native += position.unrealized_pnl.unwrap_or_default();
         }
     }
     stats.arrival_distance = summarize_arrival_distances(arrival);
@@ -135,11 +135,12 @@ pub fn apply_paper_book(
     stats.book = CopyBook::Paper;
     stats.open_positions = 0;
     stats.closed_positions = 0;
-    stats.realized_pnl_sol = 0.0;
-    stats.unrealized_pnl_sol = 0.0;
+    stats.realized_pnl_native = 0.0;
+    stats.unrealized_pnl_native = 0.0;
     stats.unpriced_positions = 0;
     for position in positions {
-        stats.realized_pnl_sol += position.realized_proceeds_sol - position.realized_cost_sol;
+        stats.realized_pnl_native +=
+            position.realized_proceeds_native - position.realized_cost_native;
         if !position.is_open() {
             stats.closed_positions += 1;
             continue;
@@ -147,7 +148,8 @@ pub fn apply_paper_book(
         stats.open_positions += 1;
         match mark(position).filter(|price| price.is_finite() && *price > 0.0) {
             Some(price) => {
-                stats.unrealized_pnl_sol += position.token_amount * price - position.cost_basis_sol
+                stats.unrealized_pnl_native +=
+                    position.token_amount * price - position.cost_basis_native
             }
             None => stats.unpriced_positions += 1,
         }
@@ -171,17 +173,17 @@ mod tests {
             task_id: 1,
             mint: mint.to_owned(),
             token_amount: tokens,
-            cost_basis_sol: cost,
-            invested_sol: cost + realized_cost,
-            realized_proceeds_sol: proceeds,
-            realized_cost_sol: realized_cost,
+            cost_basis_native: cost,
+            invested_native: cost + realized_cost,
+            realized_proceeds_native: proceeds,
+            realized_cost_native: realized_cost,
             buys: 1,
             sells: u64::from(proceeds > 0.0),
-            last_price_sol: None,
+            last_price_native: None,
             last_price_at: None,
             opened_at: Utc::now(),
             closed_at: (tokens == 0.0).then(Utc::now),
-            peak_price_sol: None,
+            peak_price_native: None,
         }
     }
 
@@ -197,7 +199,7 @@ mod tests {
         assert_eq!(stats.book, CopyBook::Paper);
         assert_eq!((stats.open_positions, stats.closed_positions), (2, 1));
         assert_eq!(stats.unpriced_positions, 1);
-        assert!((stats.realized_pnl_sol - 0.6).abs() < 1e-12);
-        assert!((stats.unrealized_pnl_sol - 0.2).abs() < 1e-12);
+        assert!((stats.realized_pnl_native - 0.6).abs() < 1e-12);
+        assert!((stats.unrealized_pnl_native - 0.2).abs() < 1e-12);
     }
 }

@@ -30,7 +30,7 @@ pub fn get_promo_trader_stats() -> TraderStats {
     let exit_breakdown = aggregates::reason_breakdown(&trades)
         .into_iter()
         .map(|r| ExitBreakdown {
-            net_pnl_sol: exit_pnl.get(&r.reason).copied().unwrap_or_default(),
+            net_pnl_native: exit_pnl.get(&r.reason).copied().unwrap_or_default(),
             exit_type: r.reason,
             count: r.count,
             avg_profit_pct: r.avg_profit_pct,
@@ -63,7 +63,7 @@ pub fn get_promo_trader_stats() -> TraderStats {
         let (net_pnl_sol, count) = per_day.get(&date).copied().unwrap_or((0.0, 0));
         daily_pnl.push(DailyPnlPoint {
             date,
-            net_pnl_sol,
+            net_pnl_native: net_pnl_sol,
             trades: count,
         });
         day = match day.succ_opt() {
@@ -105,18 +105,18 @@ pub fn get_promo_trader_stats() -> TraderStats {
         period_days: PROMO_PERIOD_DAYS,
         open_positions_count: open.count,
         max_open_positions: open.count.max(1),
-        locked_sol: open.invested_sol,
+        locked_native: open.invested_sol,
         total_trades,
         winners,
         losers,
         excluded_untrusted: 0,
         // Trader stats reports REALIZED P&L (closed trades) like the live handler.
-        total_pnl_sol: realized.net_pnl_sol,
-        gross_profit_sol: realized.profit_sol,
-        gross_loss_sol: realized.loss_sol,
+        total_pnl_native: realized.net_pnl_sol,
+        gross_profit_native: realized.profit_sol,
+        gross_loss_native: realized.loss_sol,
         profit_factor: (realized.loss_sol > 0.0).then(|| realized.profit_sol / realized.loss_sol),
-        expectancy_sol: (total_trades > 0).then(|| realized.net_pnl_sol / total_trades as f64),
-        max_drawdown_sol,
+        expectancy_native: (total_trades > 0).then(|| realized.net_pnl_sol / total_trades as f64),
+        max_drawdown_native: max_drawdown_sol,
         win_rate_pct: (total_trades > 0).then_some(realized.win_rate),
         avg_win_pct: (!win_pcts.is_empty())
             .then(|| win_pcts.iter().sum::<f64>() / win_pcts.len() as f64),

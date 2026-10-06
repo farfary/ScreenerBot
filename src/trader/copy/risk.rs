@@ -11,7 +11,7 @@ use super::types::{
 
 pub fn precheck(
     task: &CopyTask,
-    target_size_sol: f64,
+    target_size_native: f64,
     spend: SpendState,
     context: RiskContext,
     policy: PipelinePolicy,
@@ -22,17 +22,21 @@ pub fn precheck(
     if context.is_self_wallet {
         return Err(CopySkip::SelfCopy);
     }
-    if !target_size_sol.is_finite() || target_size_sol <= 0.0 {
+    if !target_size_native.is_finite() || target_size_native <= 0.0 {
         return Err(CopySkip::InvalidSizing);
     }
-    if let Some(minimum_sol) = task.min_target_trade_sol {
-        if target_size_sol < minimum_sol {
-            return Err(CopySkip::TargetBelowMinimum { minimum_sol });
+    if let Some(minimum_native) = task.min_target_trade_native {
+        if target_size_native < minimum_native {
+            return Err(CopySkip::TargetBelowMinimum {
+                minimum_sol: minimum_native,
+            });
         }
     }
-    if let Some(maximum_sol) = task.max_target_trade_sol {
-        if target_size_sol > maximum_sol {
-            return Err(CopySkip::TargetAboveMaximum { maximum_sol });
+    if let Some(maximum_native) = task.max_target_trade_native {
+        if target_size_native > maximum_native {
+            return Err(CopySkip::TargetAboveMaximum {
+                maximum_sol: maximum_native,
+            });
         }
     }
     if task.buy_once_per_token && spend.token_buy_count > 0 {

@@ -24,9 +24,9 @@ fn mode_key(mode: CopyMode) -> &'static str {
     }
 }
 
-const PAPER_POSITION_COLUMNS: &str = "task_id, mint, token_amount, cost_basis_sol, invested_sol, \
-     realized_proceeds_sol, realized_cost_sol, buys, sells, last_price_sol, last_price_at, \
-     opened_at, closed_at, peak_price_sol";
+const PAPER_POSITION_COLUMNS: &str = "task_id, mint, token_amount, cost_basis_native, invested_native, \
+     realized_proceeds_native, realized_cost_native, buys, sells, last_price_native, last_price_at, \
+     opened_at, closed_at, peak_price_native";
 
 impl CopyDatabase {
     /// Spend in one execution mode. Paper and live budgets are separate ledgers:
@@ -55,7 +55,7 @@ impl CopyDatabase {
         tokio::task::spawn_blocking(move || {
             db.connection()?
                 .query_row(
-                    "SELECT COALESCE(SUM(spent_sol), 0) FROM copy_spend WHERE task_id = ?1 AND mode = ?2",
+                    "SELECT COALESCE(SUM(spent_native), 0) FROM copy_spend WHERE task_id = ?1 AND mode = ?2",
                     params![task_id, mode_key(mode)],
                     |row| row.get(0),
                 )
@@ -74,16 +74,16 @@ impl CopyDatabase {
         mint: &str,
     ) -> crate::trader::Result<SpendState> {
         let connection = self.connection()?;
-        let total_spent_sol: f64 = connection
+        let total_spent_native: f64 = connection
             .query_row(
-                "SELECT COALESCE(SUM(spent_sol), 0) FROM copy_spend WHERE task_id = ?1 AND mode = ?2",
+                "SELECT COALESCE(SUM(spent_native), 0) FROM copy_spend WHERE task_id = ?1 AND mode = ?2",
                 params![task_id, mode_key(mode)],
                 |row| row.get(0),
             )
             .map_err(crate::errors::DatabaseError::from)?;
         let token = connection
             .query_row(
-                "SELECT spent_sol, buy_count FROM copy_spend WHERE task_id = ?1 AND mode = ?2 AND mint = ?3",
+                "SELECT spent_native, buy_count FROM copy_spend WHERE task_id = ?1 AND mode = ?2 AND mint = ?3",
                 params![task_id, mode_key(mode), mint],
                 |row| Ok((row.get::<_, f64>(0)?, row.get::<_, u64>(1)?)),
             )
@@ -91,8 +91,8 @@ impl CopyDatabase {
             .map_err(crate::errors::DatabaseError::from)?
             .unwrap_or_default();
         Ok(SpendState {
-            total_spent_sol,
-            token_spent_sol: token.0,
+            total_spent_native,
+            token_spent_native: token.0,
             token_buy_count: token.1,
         })
     }
@@ -121,12 +121,12 @@ impl CopyDatabase {
         })?
     }
 
-    /// Raise an open paper holding's running peak to `price_sol` when it is higher.
+    /// Raise an open paper holding's running peak to `price_native` when it is higher.
     pub async fn raise_paper_peak(
         &self,
         task_id: i64,
         mint: &str,
-        price_sol: f64,
+        price_native: f64,
     ) -> crate::trader::Result<()> {
         let db = self.clone();
         let mint = mint.to_owned();
@@ -134,9 +134,9 @@ impl CopyDatabase {
             db.connection()?
                 .execute(
                     "UPDATE copy_paper_positions \
-                     SET peak_price_sol = MAX(COALESCE(peak_price_sol, ?3), ?3) \
+                     SET peak_price_native = MAX(COALESCE(peak_price_native, ?3), ?3) \
                      WHERE task_id = ?1 AND mint = ?2 AND closed_at IS NULL",
-                    params![task_id, mint, price_sol],
+                    params![task_id, mint, price_native],
                 )
                 .map(|_| ())
                 .map_err(|e| Error::from(crate::errors::DatabaseError::from(e)))
@@ -373,20 +373,20 @@ fn add_spend(
     task_id: i64,
     mode: CopyMode,
     mint: &str,
-    spent_sol: f64,
+    spent_native: f64,
 ) -> crate::trader::Result<()> {
     transaction
         .execute(
-            "INSERT INTO copy_spend (task_id, mode, mint, spent_sol, buy_count, updated_at) \
+            "INSERT INTO copy_spend (task_id, mode, mint, spent_native, buy_count, updated_at) \
              VALUES (?1, ?2, ?3, ?4, 1, ?5) \
              ON CONFLICT(task_id, mode, mint) DO UPDATE SET \
-             spent_sol = spent_sol + excluded.spent_sol, \
+             spent_native = spent_native + excluded.spent_native, \
              buy_count = buy_count + 1, updated_at = excluded.updated_at",
             params![
                 task_id,
                 mode_key(mode),
                 mint,
-                spent_sol,
+                spent_native,
                 Utc::now().to_rfc3339()
             ],
         )
@@ -403,19 +403,19 @@ pub(super) fn apply_paper_buy(
     let at = decision.telemetry.decided_at.to_rfc3339();
     transaction
         .execute(
-            "INSERT INTO copy_paper_positions (task_id, mint, token_amount, cost_basis_sol, invested_sol, \
-             buys, last_price_sol, last_price_at, opened_at, updated_at, peak_price_sol) \
+            "INSERT INTO copy_paper_positions (task_id, mint, token_amount, cost_basis_native, invested_native, \
+             buys, last_price_native, last_price_at, opened_at, updated_at, peak_price_native) \
              VALUES (?1, ?2, ?3, ?4, ?4, 1, ?5, ?6, ?6, ?6, ?5) \
              ON CONFLICT(task_id, mint) DO UPDATE SET \
              token_amount = token_amount + excluded.token_amount, \
-             cost_basis_sol = cost_basis_sol + excluded.cost_basis_sol, \
-             invested_sol = invested_sol + excluded.invested_sol, \
+             cost_basis_native = cost_basis_native + excluded.cost_basis_native, \
+             invested_native = invested_native + excluded.invested_native, \
              buys = buys + 1, \
-             last_price_sol = excluded.last_price_sol, last_price_at = excluded.last_price_at, \
+             last_price_native = excluded.last_price_native, last_price_at = excluded.last_price_at, \
              opened_at = CASE WHEN closed_at IS NULL THEN opened_at ELSE excluded.opened_at END, \
-             peak_price_sol = CASE WHEN closed_at IS NULL \
-                 THEN MAX(COALESCE(peak_price_sol, excluded.peak_price_sol), excluded.peak_price_sol) \
-                 ELSE excluded.peak_price_sol END, \
+             peak_price_native = CASE WHEN closed_at IS NULL \
+                 THEN MAX(COALESCE(peak_price_native, excluded.peak_price_native), excluded.peak_price_native) \
+                 ELSE excluded.peak_price_native END, \
              closed_at = NULL, updated_at = excluded.updated_at",
             params![
                 decision.task_id,
@@ -438,13 +438,13 @@ fn apply_paper_sell(
     task_id: i64,
     mint: &str,
     token_amount: f64,
-    net_proceeds_sol: f64,
-    price_sol: f64,
+    net_proceeds_native: f64,
+    price_native: f64,
     at: DateTime<Utc>,
 ) -> crate::trader::Result<()> {
     let Some((held, cost_basis)) = transaction
         .query_row(
-            "SELECT token_amount, cost_basis_sol FROM copy_paper_positions \
+            "SELECT token_amount, cost_basis_native FROM copy_paper_positions \
              WHERE task_id = ?1 AND mint = ?2 AND closed_at IS NULL",
             params![task_id, mint],
             |row| Ok((row.get::<_, f64>(0)?, row.get::<_, f64>(1)?)),
@@ -465,10 +465,10 @@ fn apply_paper_sell(
     transaction
         .execute(
             "UPDATE copy_paper_positions SET \
-             token_amount = ?3, cost_basis_sol = ?4, \
-             realized_proceeds_sol = realized_proceeds_sol + ?5, \
-             realized_cost_sol = realized_cost_sol + ?6, \
-             sells = sells + 1, last_price_sol = ?7, last_price_at = ?8, \
+             token_amount = ?3, cost_basis_native = ?4, \
+             realized_proceeds_native = realized_proceeds_native + ?5, \
+             realized_cost_native = realized_cost_native + ?6, \
+             sells = sells + 1, last_price_native = ?7, last_price_at = ?8, \
              closed_at = ?9, updated_at = ?8 \
              WHERE task_id = ?1 AND mint = ?2",
             params![
@@ -476,9 +476,9 @@ fn apply_paper_sell(
                 mint,
                 if closes { 0.0 } else { remaining },
                 if closes { 0.0 } else { cost_basis - cost_sold },
-                net_proceeds_sol,
+                net_proceeds_native,
                 if closes { cost_basis } else { cost_sold },
-                price_sol,
+                price_native,
                 at,
                 closes.then_some(at.as_str()),
             ],
@@ -497,16 +497,16 @@ fn row_to_paper_position(row: &rusqlite::Row<'_>) -> rusqlite::Result<PaperPosit
         task_id: row.get(0)?,
         mint: row.get(1)?,
         token_amount: row.get(2)?,
-        cost_basis_sol: row.get(3)?,
-        invested_sol: row.get(4)?,
-        realized_proceeds_sol: row.get(5)?,
-        realized_cost_sol: row.get(6)?,
+        cost_basis_native: row.get(3)?,
+        invested_native: row.get(4)?,
+        realized_proceeds_native: row.get(5)?,
+        realized_cost_native: row.get(6)?,
         buys: row.get(7)?,
         sells: row.get(8)?,
-        last_price_sol: row.get(9)?,
+        last_price_native: row.get(9)?,
         last_price_at: optional_time(10)?,
         opened_at: parse_datetime(&row.get::<_, String>(11)?, 11)?,
         closed_at: optional_time(12)?,
-        peak_price_sol: row.get(13)?,
+        peak_price_native: row.get(13)?,
     })
 }

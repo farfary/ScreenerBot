@@ -17,17 +17,17 @@ pub struct TradeDecision {
     pub strategy_id: Option<String>,
     pub timestamp: DateTime<Utc>,
     pub priority: TradePriority,
-    pub price_sol: Option<f64>,
+    pub price_native: Option<f64>,
     /// Trade size in SOL — for BUY and DCA only.
     ///
     /// It does NOT carry a sell size: a Sell's size is a percentage of the position, and
     /// that lives in [`TradeDecision::exit_percentage`].
-    pub size_sol: Option<f64>,
+    pub size_native: Option<f64>,
     /// How much of the position a SELL exits, in percent (0, 100].
     ///
-    /// `None` = a full exit. This used to be smuggled through `size_sol` ("Use size_sol for
+    /// `None` = a full exit. This used to be smuggled through `size_native` ("Use size_native for
     /// percentage"), so the same field meant SOL on a buy and a PERCENTAGE on a sell —
-    /// silently, with nothing to catch a value put in the wrong one. A 50 in `size_sol` was
+    /// silently, with nothing to catch a value put in the wrong one. A 50 in `size_native` was
     /// either half a position or 50 SOL depending only on the action.
     pub exit_percentage: Option<f64>,
     /// Per-trade slippage override, in percent.
@@ -166,8 +166,8 @@ pub struct TradeResult {
     pub decision: TradeDecision,
     pub success: bool,
     pub tx_signature: Option<String>,
-    pub executed_price_sol: Option<f64>,
-    pub executed_size_sol: Option<f64>,
+    pub executed_price_native: Option<f64>,
+    pub executed_size_native: Option<f64>,
     pub error: Option<String>,
     pub position_id: Option<String>,
     pub execution_timestamp: DateTime<Utc>,
@@ -250,16 +250,16 @@ impl TradeResult {
     pub fn success(
         decision: TradeDecision,
         tx_signature: String,
-        executed_price_sol: f64,
-        executed_size_sol: f64,
+        executed_price_native: f64,
+        executed_size_native: f64,
         position_id: Option<String>,
     ) -> Self {
         Self {
             decision,
             success: true,
             tx_signature: Some(tx_signature),
-            executed_price_sol: Some(executed_price_sol),
-            executed_size_sol: Some(executed_size_sol),
+            executed_price_native: Some(executed_price_native),
+            executed_size_native: Some(executed_size_native),
             error: None,
             position_id,
             execution_timestamp: Utc::now(),
@@ -281,8 +281,8 @@ impl TradeResult {
             decision,
             success: false,
             tx_signature: None,
-            executed_price_sol: None,
-            executed_size_sol: None,
+            executed_price_native: None,
+            executed_size_native: None,
             error: Some(error),
             position_id: None,
             execution_timestamp: Utc::now(),

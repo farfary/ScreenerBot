@@ -26,7 +26,7 @@ use chrono::Utc;
 /// `management` selects the automation policy; provenance remains manual.
 pub async fn manual_buy(
     mint: &str,
-    size_sol: f64,
+    size_native: f64,
     management: positions::PositionManagement,
     slippage_pct: Option<f64>,
 ) -> Result<TradeResult, Error> {
@@ -45,7 +45,7 @@ pub async fn manual_buy(
         .map(|t| t.symbol);
 
     // Create action tracker
-    let action = ManualBuyAction::new(mint, symbol.as_deref(), size_sol).await?;
+    let action = ManualBuyAction::new(mint, symbol.as_deref(), size_native).await?;
 
     // Step 1: Validation
     action.start_validation().await;
@@ -66,19 +66,19 @@ pub async fn manual_buy(
     }
 
     // Validate SOL amount
-    if !size_sol.is_finite() {
+    if !size_native.is_finite() {
         let error = "Invalid SOL amount: must be finite";
         action.fail_validation(error).await;
         return Err(Error::InvalidSolAmount {
-            amount_sol: size_sol,
+            amount_native: size_native,
             reason: "must be finite".to_owned(),
         });
     }
-    if size_sol <= 0.0 {
-        let error = format!("Invalid SOL amount: {size_sol}. Must be positive");
+    if size_native <= 0.0 {
+        let error = format!("Invalid SOL amount: {size_native}. Must be positive");
         action.fail_validation(&error).await;
         return Err(Error::InvalidSolAmount {
-            amount_sol: size_sol,
+            amount_native: size_native,
             reason: "must be positive".to_owned(),
         });
     }
@@ -86,14 +86,14 @@ pub async fn manual_buy(
     // Check against reasonable upper bound
     let default_trade_size = with_config(|cfg| cfg.trader.trade_size_sol);
     let max_trade_size = default_trade_size * MAX_TRADE_SIZE_MULTIPLIER;
-    if size_sol > max_trade_size {
+    if size_native > max_trade_size {
         let error = format!(
             "SOL amount {:.4} exceeds maximum trade size of {:.4} SOL ({}x default)",
-            size_sol, max_trade_size, MAX_TRADE_SIZE_MULTIPLIER as u32
+            size_native, max_trade_size, MAX_TRADE_SIZE_MULTIPLIER as u32
         );
         action.fail_validation(&error).await;
         return Err(Error::InvalidSolAmount {
-            amount_sol: size_sol,
+            amount_native: size_native,
             reason: format!(
                 "exceeds maximum trade size of {:.4} SOL ({}x default)",
                 max_trade_size, MAX_TRADE_SIZE_MULTIPLIER as u32
@@ -107,7 +107,7 @@ pub async fn manual_buy(
         LogTag::Trader,
         &format!(
             "Processing manual buy: mint={}, size={} SOL",
-            mint, size_sol
+            mint, size_native
         ),
     );
 
@@ -122,8 +122,8 @@ pub async fn manual_buy(
         strategy_id: None,
         timestamp: Utc::now(),
         priority: TradePriority::High,
-        price_sol: None,
-        size_sol: Some(size_sol),
+        price_native: None,
+        size_native: Some(size_native),
         exit_percentage: None,
         // Manual trade: honour the user's slippage override (None = config).
         slippage_pct,
@@ -259,8 +259,8 @@ pub async fn manual_sell(
         strategy_id: None,
         timestamp: Utc::now(),
         priority: TradePriority::High,
-        price_sol: None,
-        size_sol: None,
+        price_native: None,
+        size_native: None,
         exit_percentage: Some(exit_percentage),
         // Manual trade: honour the user's slippage override (None = config).
         slippage_pct,
@@ -292,7 +292,7 @@ pub async fn manual_sell(
     action.start_swap().await;
 
     if let Some(ref sig) = result.tx_signature {
-        action.complete_swap(sig, result.executed_size_sol).await;
+        action.complete_swap(sig, result.executed_size_native).await;
         action.await_verification(Some(sig)).await;
     } else {
         action.complete_swap("unknown", None).await;
@@ -318,13 +318,13 @@ pub async fn manual_sell(
 ///
 /// # Parameters
 /// - `mint`: Token mint address
-/// - `size_sol`: Amount in SOL to add to position
+/// - `size_native`: Amount in SOL to add to position
 ///
 /// # Returns
 /// TradeResult with transaction details
 pub async fn manual_add(
     mint: &str,
-    size_sol: f64,
+    size_native: f64,
     slippage_pct: Option<f64>,
 ) -> Result<TradeResult, Error> {
     // Get token symbol and position for action display
@@ -339,7 +339,7 @@ pub async fn manual_add(
     let position_id = position.as_ref().and_then(|p| p.id);
 
     // Create action tracker
-    let action = ManualAddAction::new(mint, symbol.as_deref(), size_sol, position_id).await?;
+    let action = ManualAddAction::new(mint, symbol.as_deref(), size_native, position_id).await?;
 
     // Step 1: Validation
     action.start_validation().await;
@@ -357,19 +357,19 @@ pub async fn manual_add(
     };
 
     // Validate SOL amount
-    if !size_sol.is_finite() {
+    if !size_native.is_finite() {
         let error = "Invalid SOL amount: must be finite";
         action.fail_validation(error).await;
         return Err(Error::InvalidSolAmount {
-            amount_sol: size_sol,
+            amount_native: size_native,
             reason: "must be finite".to_owned(),
         });
     }
-    if size_sol <= 0.0 {
-        let error = format!("Invalid SOL amount: {size_sol}. Must be positive");
+    if size_native <= 0.0 {
+        let error = format!("Invalid SOL amount: {size_native}. Must be positive");
         action.fail_validation(&error).await;
         return Err(Error::InvalidSolAmount {
-            amount_sol: size_sol,
+            amount_native: size_native,
             reason: "must be positive".to_owned(),
         });
     }
@@ -377,14 +377,14 @@ pub async fn manual_add(
     // Check against reasonable upper bound
     let default_trade_size = with_config(|cfg| cfg.trader.trade_size_sol);
     let max_trade_size = default_trade_size * MAX_TRADE_SIZE_MULTIPLIER;
-    if size_sol > max_trade_size {
+    if size_native > max_trade_size {
         let error = format!(
             "SOL amount {:.4} exceeds maximum trade size of {:.4} SOL ({}x default)",
-            size_sol, max_trade_size, MAX_TRADE_SIZE_MULTIPLIER as u32
+            size_native, max_trade_size, MAX_TRADE_SIZE_MULTIPLIER as u32
         );
         action.fail_validation(&error).await;
         return Err(Error::InvalidSolAmount {
-            amount_sol: size_sol,
+            amount_native: size_native,
             reason: format!(
                 "exceeds maximum trade size of {:.4} SOL ({}x default)",
                 max_trade_size, MAX_TRADE_SIZE_MULTIPLIER as u32
@@ -398,7 +398,7 @@ pub async fn manual_add(
         LogTag::Trader,
         &format!(
             "Processing manual add (DCA): mint={}, size={} SOL",
-            mint, size_sol
+            mint, size_native
         ),
     );
 
@@ -413,8 +413,8 @@ pub async fn manual_add(
         strategy_id: None,
         timestamp: Utc::now(),
         priority: TradePriority::High,
-        price_sol: None,
-        size_sol: Some(size_sol),
+        price_native: None,
+        size_native: Some(size_native),
         exit_percentage: None,
         // Manual trade: honour the user's slippage override (None = config).
         slippage_pct,

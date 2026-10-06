@@ -3,7 +3,7 @@
 
 //! Schema and migrations for the copy-trading database - copy_tasks, copy_spend and copy_paper_positions tables plus the mode-scoped spend rebuild.
 
-use rusqlite::{Connection, OptionalExtension};
+use rusqlite::{Connection, OptionalExtension, Transaction};
 
 use crate::trader::copy::types::CopyOutcome;
 use crate::trader::error::Error;
@@ -25,11 +25,11 @@ CREATE TABLE IF NOT EXISTS copy_tasks (
     sizing_json TEXT NOT NULL,
     exit_mode_json TEXT NOT NULL,
     exit_policy_json TEXT NOT NULL DEFAULT '{}',
-    max_sol_per_trade REAL NOT NULL,
-    max_sol_per_token REAL NOT NULL,
-    total_budget_sol REAL NOT NULL,
-    min_target_trade_sol REAL,
-    max_target_trade_sol REAL,
+    max_native_per_trade REAL NOT NULL,
+    max_native_per_token REAL NOT NULL,
+    total_budget_native REAL NOT NULL,
+    min_target_trade_native REAL,
+    max_target_trade_native REAL,
     buy_once_per_token INTEGER NOT NULL,
     slippage_pct REAL NOT NULL,
     created_at TEXT NOT NULL,
@@ -44,7 +44,7 @@ CREATE TABLE IF NOT EXISTS copy_spend (
     task_id INTEGER NOT NULL,
     mode TEXT NOT NULL,
     mint TEXT NOT NULL,
-    spent_sol REAL NOT NULL DEFAULT 0,
+    spent_native REAL NOT NULL DEFAULT 0,
     buy_count INTEGER NOT NULL DEFAULT 0,
     updated_at TEXT NOT NULL,
     PRIMARY KEY (task_id, mode, mint),
@@ -54,18 +54,18 @@ CREATE TABLE IF NOT EXISTS copy_paper_positions (
     task_id INTEGER NOT NULL,
     mint TEXT NOT NULL,
     token_amount REAL NOT NULL DEFAULT 0,
-    cost_basis_sol REAL NOT NULL DEFAULT 0,
-    invested_sol REAL NOT NULL DEFAULT 0,
-    realized_proceeds_sol REAL NOT NULL DEFAULT 0,
-    realized_cost_sol REAL NOT NULL DEFAULT 0,
+    cost_basis_native REAL NOT NULL DEFAULT 0,
+    invested_native REAL NOT NULL DEFAULT 0,
+    realized_proceeds_native REAL NOT NULL DEFAULT 0,
+    realized_cost_native REAL NOT NULL DEFAULT 0,
     buys INTEGER NOT NULL DEFAULT 0,
     sells INTEGER NOT NULL DEFAULT 0,
-    last_price_sol REAL,
+    last_price_native REAL,
     last_price_at TEXT,
     opened_at TEXT NOT NULL,
     closed_at TEXT,
     updated_at TEXT NOT NULL,
-    peak_price_sol REAL,
+    peak_price_native REAL,
     PRIMARY KEY (task_id, mint),
     FOREIGN KEY (task_id) REFERENCES copy_tasks(id) ON DELETE CASCADE
 );
@@ -127,7 +127,9 @@ CREATE TABLE IF NOT EXISTS copy_position_links (
 );
 "#;
 
-pub(super) fn migrate(connection: &Connection) -> crate::trader::Result<()> {
+/// Every schema step of one open. Runs inside the opener's transaction, so a
+/// step refused here leaves the stored schema exactly as it was.
+pub(super) fn migrate(connection: &Transaction<'_>) -> crate::trader::Result<()> {
     let mut statement = connection
         .prepare("PRAGMA table_info(copy_tasks)")
         .map_err(crate::errors::DatabaseError::from)?;
@@ -184,16 +186,13 @@ pub(super) fn migrate(connection: &Connection) -> crate::trader::Result<()> {
         .map_err(crate::errors::DatabaseError::from)?;
     drop(statement);
     if !columns.iter().any(|column| column == "chain_id") {
-        let transaction = connection
-            .unchecked_transaction()
-            .map_err(crate::errors::DatabaseError::from)?;
-        transaction
+        connection
             .execute(
                 "ALTER TABLE copy_tasks ADD COLUMN chain_id TEXT NOT NULL DEFAULT 'solana'",
                 [],
             )
             .map_err(crate::errors::DatabaseError::from)?;
-        let invalid = transaction
+        let invalid = connection
             .query_row("PRAGMA foreign_key_check", [], |_| Ok(1_i64))
             .optional()
             .map_err(crate::errors::DatabaseError::from)?
@@ -203,19 +202,18 @@ pub(super) fn migrate(connection: &Connection) -> crate::trader::Result<()> {
                 detail: "chain migration failed foreign-key validation".to_owned(),
             });
         }
-        transaction
-            .commit()
-            .map_err(crate::errors::DatabaseError::from)?;
     }
     // v6: the paper book tracks each round's peak for the trailing stop. Added
     // before the v5 rebuild, which books paper fills through `apply_paper_buy`.
+    // A legacy book may still carry the pre-rename column, which the unit
+    // rename below moves to the canonical name.
     if !table_columns(connection, "copy_paper_positions")?
         .iter()
-        .any(|column| column == "peak_price_sol")
+        .any(|column| column == "peak_price_native" || column == "peak_price_sol")
     {
         connection
             .execute(
-                "ALTER TABLE copy_paper_positions ADD COLUMN peak_price_sol REAL",
+                "ALTER TABLE copy_paper_positions ADD COLUMN peak_price_native REAL",
                 [],
             )
             .map_err(crate::errors::DatabaseError::from)?;
@@ -237,10 +235,16 @@ pub(super) fn migrate(connection: &Connection) -> crate::trader::Result<()> {
         }
     }
     migrate_mode_scoped_spend(connection)?;
+    // Unit-neutral column names come last, so every step above reads the
+    // historical shape it was written for.
+    super::column_names::rename_unit_neutral_columns(connection)?;
     Ok(())
 }
 
-fn table_columns(connection: &Connection, table: &str) -> crate::trader::Result<Vec<String>> {
+pub(super) fn table_columns(
+    connection: &Connection,
+    table: &str,
+) -> crate::trader::Result<Vec<String>> {
     let mut statement = connection
         .prepare(&format!("PRAGMA table_info({table})"))
         .map_err(crate::errors::DatabaseError::from)?;
@@ -257,16 +261,13 @@ fn table_columns(connection: &Connection, table: &str) -> crate::trader::Result<
 /// mode from the recorded decisions (the source of every spend increment); spend no
 /// decision explains is kept under the task's current mode rather than dropped.
 /// Every recorded paper fill is booked into the new paper position ledger.
-fn migrate_mode_scoped_spend(connection: &Connection) -> crate::trader::Result<()> {
-    if table_columns(connection, "copy_spend")?
+fn migrate_mode_scoped_spend(transaction: &Transaction<'_>) -> crate::trader::Result<()> {
+    if table_columns(transaction, "copy_spend")?
         .iter()
         .any(|column| column == "mode")
     {
         return Ok(());
     }
-    let transaction = connection
-        .unchecked_transaction()
-        .map_err(crate::errors::DatabaseError::from)?;
     transaction
         .execute_batch(
             "CREATE TABLE copy_spend_v5 (
@@ -318,11 +319,8 @@ fn migrate_mode_scoped_spend(connection: &Connection) -> crate::trader::Result<(
     };
     for json in fills {
         if let Ok(CopyOutcome::PaperFilled(decision)) = serde_json::from_str(&json) {
-            super::ledger::apply_paper_buy(&transaction, &decision)?;
+            super::ledger::apply_paper_buy(transaction, &decision)?;
         }
     }
-    transaction
-        .commit()
-        .map_err(crate::errors::DatabaseError::from)?;
     Ok(())
 }

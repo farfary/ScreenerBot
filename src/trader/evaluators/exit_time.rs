@@ -91,8 +91,8 @@ pub async fn check_time_override(
         strategy_id: None,
         timestamp: Utc::now(),
         priority: TradePriority::High,
-        price_sol: Some(current_price),
-        size_sol: None, // Sell entire position
+        price_native: Some(current_price),
+        size_native: None, // Sell entire position
         exit_percentage: None,
         // Auto-trader slippage always follows config.
         slippage_pct: None,

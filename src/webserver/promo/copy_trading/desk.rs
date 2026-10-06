@@ -55,8 +55,8 @@ pub(in crate::webserver::promo) const PROMO_COPY_WALLETS: [(i64, &str, &str, i64
 ];
 
 const COSTS: PaperCosts = PaperCosts {
-    network_fee_sol: 0.000_005,
-    priority_fee_sol: 0.000_1,
+    network_fee_native: 0.000_005,
+    priority_fee_native: 0.000_1,
 };
 
 /// Real positions each live task opened: (task id, `PROMO_OPEN_TOKENS` indices,
@@ -128,11 +128,11 @@ fn base_task(wallet: (i64, &str, &str, i64), now: DateTime<Utc>) -> CopyTask {
         sizing: SizingMode::Fixed { sol: 0.1 },
         exit_mode: ExitMode::Hybrid,
         exit_policy_overrides: ExitPolicyOverrides::default(),
-        max_sol_per_trade: 0.1,
-        max_sol_per_token: 0.3,
-        total_budget_sol: 1.0,
-        min_target_trade_sol: Some(0.5),
-        max_target_trade_sol: Some(40.0),
+        max_native_per_trade: 0.1,
+        max_native_per_token: 0.3,
+        total_budget_native: 1.0,
+        min_target_trade_native: Some(0.5),
+        max_target_trade_native: Some(40.0),
         buy_once_per_token: true,
         slippage_pct: 1.5,
         created_at,
@@ -152,25 +152,25 @@ pub(super) fn tasks(now: DateTime<Utc>) -> Vec<CopyTask> {
         CopyTask {
             mode: CopyMode::Live,
             sizing: SizingMode::RatioOfTarget { pct: 2.5 },
-            max_sol_per_trade: 0.25,
-            max_sol_per_token: 0.5,
-            total_budget_sol: 6.0,
-            min_target_trade_sol: Some(2.0),
+            max_native_per_trade: 0.25,
+            max_native_per_token: 0.5,
+            total_budget_native: 6.0,
+            min_target_trade_native: Some(2.0),
             ..base_task(whale, now)
         },
         CopyTask {
             exit_policy_overrides: paper_overrides(),
-            total_budget_sol: 8.0,
-            max_target_trade_sol: Some(25.0),
+            total_budget_native: 8.0,
+            max_target_trade_native: Some(25.0),
             ..base_task(scout, now)
         },
         CopyTask {
             mode: CopyMode::Live,
             sizing: SizingMode::Fixed { sol: 0.15 },
             exit_mode: ExitMode::BuyOnly,
-            max_sol_per_trade: 0.15,
-            max_sol_per_token: 0.45,
-            total_budget_sol: 10.0,
+            max_native_per_trade: 0.15,
+            max_native_per_token: 0.45,
+            total_budget_native: 10.0,
             ..base_task(momentum, now)
         },
     ]
@@ -575,17 +575,17 @@ fn paper_desk(
             task_id: task.id,
             mint: mint.to_owned(),
             token_amount: 0.0,
-            cost_basis_sol: 0.0,
-            invested_sol: fill.total_cost_sol,
-            realized_proceeds_sol: sell.net_proceeds_sol,
-            realized_cost_sol: fill.total_cost_sol,
+            cost_basis_native: 0.0,
+            invested_native: fill.total_cost_sol,
+            realized_proceeds_native: sell.net_proceeds_sol,
+            realized_cost_native: fill.total_cost_sol,
             buys: 1,
             sells: 1,
-            last_price_sol: Some(exit),
+            last_price_native: Some(exit),
             last_price_at: Some(closed_at),
             opened_at,
             closed_at: Some(closed_at),
-            peak_price_sol: None,
+            peak_price_native: None,
         });
         decisions.push((
             closed_at,
@@ -619,17 +619,17 @@ fn paper_desk(
             task_id: task.id,
             mint: mint.to_owned(),
             token_amount: fill.token_amount,
-            cost_basis_sol: fill.total_cost_sol,
-            invested_sol: fill.total_cost_sol,
-            realized_proceeds_sol: 0.0,
-            realized_cost_sol: 0.0,
+            cost_basis_native: fill.total_cost_sol,
+            invested_native: fill.total_cost_sol,
+            realized_proceeds_native: 0.0,
+            realized_cost_native: 0.0,
             buys: 1,
             sells: 0,
-            last_price_sol: Some(current),
+            last_price_native: Some(current),
             last_price_at: Some(now),
             opened_at,
             closed_at: None,
-            peak_price_sol: Some((current * (1.0 + peak_pct / 100.0)).max(fill.fill_price_sol)),
+            peak_price_native: Some((current * (1.0 + peak_pct / 100.0)).max(fill.fill_price_sol)),
         });
     }
     spent

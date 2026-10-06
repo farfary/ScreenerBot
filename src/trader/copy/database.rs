@@ -12,6 +12,7 @@ use r2d2_sqlite::SqliteConnectionManager;
 use rusqlite::{params, OptionalExtension};
 
 use crate::database;
+use crate::database::WriteTransaction;
 use crate::trader::error::Error;
 
 use super::types::{
@@ -20,6 +21,8 @@ use super::types::{
 
 #[path = "database/claims.rs"]
 mod claims;
+#[path = "database/column_names.rs"]
+mod column_names;
 #[path = "database/ledger.rs"]
 mod ledger;
 #[path = "database/maintenance.rs"]
@@ -107,18 +110,26 @@ impl CopyDatabase {
             .map_err(crate::errors::DatabaseError::from)?)
     }
 
+    /// Schema creation, every migration and the version stamp commit together:
+    /// a refused or failed open leaves the stored schema exactly as it was.
     fn initialize(&self) -> crate::trader::Result<()> {
-        let connection = self.connection()?;
-        connection
+        let mut connection = self.connection()?;
+        let transaction = connection
+            .write_tx()
+            .map_err(crate::errors::DatabaseError::from)?;
+        transaction
             .execute_batch(SCHEMA)
             .map_err(crate::errors::DatabaseError::from)?;
-        migrate(&connection)?;
-        connection
+        migrate(&transaction)?;
+        transaction
             .execute(
                 "INSERT INTO copy_metadata (key, value) VALUES ('schema_version', ?1) \
                  ON CONFLICT(key) DO UPDATE SET value = excluded.value",
                 params![SCHEMA_VERSION.to_string()],
             )
+            .map_err(crate::errors::DatabaseError::from)?;
+        transaction
+            .commit()
             .map_err(crate::errors::DatabaseError::from)?;
         Ok(())
     }
@@ -168,8 +179,8 @@ impl CopyDatabase {
         connection
             .execute(
                 "INSERT INTO copy_tasks (chain_id, target_address, label, enabled, mode_json, sizing_json, \
-                 exit_mode_json, exit_policy_json, max_sol_per_trade, max_sol_per_token, total_budget_sol, \
-                 min_target_trade_sol, max_target_trade_sol, buy_once_per_token, slippage_pct, \
+                 exit_mode_json, exit_policy_json, max_native_per_trade, max_native_per_token, total_budget_native, \
+                 min_target_trade_native, max_target_trade_native, buy_once_per_token, slippage_pct, \
                  created_at, updated_at, require_filter_pass, pause_reason_json, paused_at) VALUES \
                  (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11, ?12, ?13, ?14, ?15, ?16, ?17, ?18, ?19, ?20)",
                 params![
@@ -180,11 +191,11 @@ impl CopyDatabase {
                     sizing,
                     exit_mode,
                     exit_policy,
-                    task.max_sol_per_trade,
-                    task.max_sol_per_token,
-                    task.total_budget_sol,
-                    task.min_target_trade_sol,
-                    task.max_target_trade_sol,
+                    task.max_native_per_trade,
+                    task.max_native_per_token,
+                    task.total_budget_native,
+                    task.min_target_trade_native,
+                    task.max_target_trade_native,
                     task.buy_once_per_token,
                     task.slippage_pct,
                     task.created_at.to_rfc3339(),
@@ -301,8 +312,8 @@ impl CopyDatabase {
         let affected = connection
             .execute(
                 "UPDATE copy_tasks SET label=?1, enabled=?2, mode_json=?3, sizing_json=?4, \
-                 exit_mode_json=?5, exit_policy_json=?6, max_sol_per_trade=?7, max_sol_per_token=?8, \
-                 total_budget_sol=?9, min_target_trade_sol=?10, max_target_trade_sol=?11, \
+                 exit_mode_json=?5, exit_policy_json=?6, max_native_per_trade=?7, max_native_per_token=?8, \
+                 total_budget_native=?9, min_target_trade_native=?10, max_target_trade_native=?11, \
                  buy_once_per_token=?12, slippage_pct=?13, updated_at=?14, require_filter_pass=?15, \
                  pause_reason_json=?16, paused_at=?17 WHERE id=?18 AND chain_id=?19",
                 params![
@@ -312,11 +323,11 @@ impl CopyDatabase {
                     serialize("sizing", serde_json::to_string(&task.sizing))?,
                     serialize("exit_mode", serde_json::to_string(&task.exit_mode))?,
                     serialize("exit_policy", serde_json::to_string(&task.exit_policy_overrides))?,
-                    task.max_sol_per_trade,
-                    task.max_sol_per_token,
-                    task.total_budget_sol,
-                    task.min_target_trade_sol,
-                    task.max_target_trade_sol,
+                    task.max_native_per_trade,
+                    task.max_native_per_token,
+                    task.total_budget_native,
+                    task.min_target_trade_native,
+                    task.max_target_trade_native,
                     task.buy_once_per_token,
                     task.slippage_pct,
                     task.updated_at.to_rfc3339(),

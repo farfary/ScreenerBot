@@ -11,7 +11,7 @@ pub fn get_max_open_positions() -> usize {
 }
 
 /// Get the default trade size in SOL
-pub fn get_trade_size_sol() -> f64 {
+pub fn get_trade_size_native() -> f64 {
     with_config(|cfg| cfg.trader.trade_size_sol)
 }
 
@@ -156,7 +156,7 @@ pub fn is_loss_limit_enabled() -> bool {
 }
 
 /// Get loss limit threshold in SOL
-pub fn get_loss_limit_sol() -> f64 {
+pub fn get_loss_limit_native() -> f64 {
     with_config(|cfg| cfg.trader.loss_limit_sol)
 }
 
