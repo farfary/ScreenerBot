@@ -28,17 +28,18 @@ pub use types::{
     ExitType, Quote, QuoteRequest, RouterChoice, SwapAmountLimit, SwapMode, SwapResult,
 };
 
-/// Calculate the token amount for a partial exit
-/// Returns 0 if total_amount is 0 or percentage is <= 0
-/// Returns total_amount if percentage is >= 100
-pub fn calculate_partial_amount(total_amount: u64, percentage: f64) -> u64 {
-    if total_amount == 0 || percentage <= 0.0 {
-        return 0;
+use crate::chains::RawAmount;
+
+/// The share of `total_amount` for `percentage`, truncated toward zero and never above the
+/// total. Zero for an empty total or a NaN or nonpositive percentage; the whole total at 100%
+/// or more.
+pub fn calculate_partial_amount(total_amount: RawAmount, percentage: f64) -> RawAmount {
+    if total_amount == RawAmount::ZERO || percentage.is_nan() || percentage <= 0.0 {
+        return RawAmount::ZERO;
     }
     if percentage >= 100.0 {
         return total_amount;
     }
-
-    let partial = (total_amount as f64 * percentage / 100.0) as u64;
-    partial.min(total_amount)
+    let partial = (total_amount.raw() as f64 * percentage / 100.0).trunc();
+    RawAmount::from_integral_f64(partial).map_or(total_amount, |partial| partial.min(total_amount))
 }

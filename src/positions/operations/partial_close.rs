@@ -69,8 +69,7 @@ pub async fn partial_close_position(
 
     // Get remaining token amount
     let remaining_amount = position
-        .remaining_token_amount
-        .or(position.token_amount)
+        .held_amount()
         .ok_or_else(|| Error::TransitionFailed {
             transition: "partial_exit",
             mint: token_mint.to_owned(),
@@ -89,6 +88,7 @@ pub async fn partial_close_position(
 
     let sell_base = match get_total_token_balance(&wallet_address, token_mint).await {
         Ok(on_chain) if on_chain > 0 => {
+            let on_chain = RawAmount::from(on_chain);
             if on_chain != remaining_amount {
                 logger::warning(
                     LogTag::Positions,
@@ -108,7 +108,7 @@ pub async fn partial_close_position(
     // Calculate partial exit amount
     let exit_amount = calculate_partial_amount(sell_base, exit_percentage);
 
-    if exit_amount == 0 {
+    if exit_amount == RawAmount::ZERO {
         return Err(Error::ZeroExitAmount {
             mint: token_mint.to_owned(),
         });
@@ -170,7 +170,7 @@ pub async fn partial_close_position(
             chain: crate::chains::active_chain(),
             input_mint: token_mint.to_string(),
             output_mint: adapter().native_asset_address().to_string(),
-            input_amount: exit_amount.into(),
+            input_amount: exit_amount,
             wallet_address: wallet_address.clone(),
             slippage_pct: *slippage,
             swap_mode: SwapMode::ExactIn,
@@ -332,7 +332,7 @@ pub async fn partial_close_position(
         signature: transaction_signature.clone(),
         mint: token_mint.to_string(),
         position_id,
-        expected_exit_amount: RawAmount::from(exit_amount),
+        expected_exit_amount: exit_amount,
         requested_exit_percentage: exit_percentage,
         expiry_height: Some(expiry_height),
         created_at: Utc::now(),
@@ -408,7 +408,7 @@ pub async fn partial_close_position(
         transaction_signature.clone(),
         token_mint.to_string(),
         Some(position_id),
-        RawAmount::from(exit_amount),
+        exit_amount,
         exit_percentage,
         Some(expiry_height),
     );

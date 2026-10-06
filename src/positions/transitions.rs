@@ -3,6 +3,7 @@
 
 //! Position transitions — state machine logic for position lifecycle changes.
 
+use crate::chains::RawAmount;
 use chrono::{DateTime, Utc};
 
 #[derive(Debug, Clone)]
@@ -41,9 +42,9 @@ pub enum PositionTransition {
     PartialExitSubmitted {
         position_id: i64,
         exit_signature: String,
-        exit_amount: u64,     // Tokens to sell
-        exit_percentage: f64, // % of position
-        market_price: f64,    // Price at submission
+        exit_amount: RawAmount, // Tokens to sell
+        exit_percentage: f64,   // % of position
+        market_price: f64,      // Price at submission
     },
     PartialExitVerified {
         position_id: i64,
