@@ -17,7 +17,6 @@ static PENDING_PARTIAL_EXITS: LazyLock<RwLock<HashMap<String, u32>>> =
 
 static PENDING_PARTIAL_EXIT_DETAILS: LazyLock<RwLock<HashMap<String, PendingPartialExit>>> =
     LazyLock::new(|| RwLock::new(HashMap::new()));
-const PENDING_PARTIAL_EXIT_METADATA_KEY: &str = "pending_partial_exits";
 
 // Pending DCA swaps registry: ensures DCA verifications survive restarts and duplicate submissions
 static PENDING_DCA_SWAPS: LazyLock<RwLock<HashMap<String, PendingDcaSwap>>> =
@@ -200,7 +199,7 @@ async fn persist_pending_partial_exits() -> Result<()> {
         detail: e.to_string(),
     })?;
 
-    db::set_metadata(PENDING_PARTIAL_EXIT_METADATA_KEY, &serialized).await
+    db::set_metadata(db::PENDING_PARTIAL_EXIT_METADATA_KEY, &serialized).await
 }
 
 /// Register a pending partial exit for durability
@@ -294,7 +293,7 @@ pub async fn mints_with_pending_swaps() -> std::collections::HashSet<String> {
 
 /// Load pending partial exits from metadata into memory (used at startup)
 pub async fn rehydrate_pending_partial_exits() -> Result<Vec<PendingPartialExit>> {
-    let raw = db::get_metadata(PENDING_PARTIAL_EXIT_METADATA_KEY).await?;
+    let raw = db::get_metadata(db::PENDING_PARTIAL_EXIT_METADATA_KEY).await?;
 
     let entries: Vec<PendingPartialExit> = match raw {
         Some(payload) if !payload.is_empty() => {

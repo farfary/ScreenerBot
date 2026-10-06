@@ -1,14 +1,16 @@
 // Copyright (c) 2024-2026 ScreenerBot (screenerbot.io)
 // SPDX-License-Identifier: BUSL-1.1
 
-//! Exact migration of the released position amount columns to decimal TEXT.
+//! Exact migration of the released position amounts to decimal TEXT: the amount columns and the persisted pending partial exits.
 
-use rusqlite::{params_from_iter, types::Value, Connection};
+use rusqlite::{params, params_from_iter, types::Value, Connection, OptionalExtension};
 
+use crate::chains::RawAmount;
 use crate::positions::{Error, Result};
 
 use super::types::{
-    POSITIONS_INDEXES, SCHEMA_POSITIONS, SCHEMA_POSITION_ENTRIES, SCHEMA_POSITION_EXITS,
+    PENDING_PARTIAL_EXIT_METADATA_KEY, POSITIONS_INDEXES, SCHEMA_POSITIONS,
+    SCHEMA_POSITION_ENTRIES, SCHEMA_POSITION_EXITS,
 };
 
 const TABLES: [(&str, &str, &[&str]); 3] = [
@@ -356,6 +358,57 @@ fn rebuild(
 }
 
 pub(super) fn migrate_position_amounts(conn: &Connection) -> Result<()> {
+    migrate_amount_columns(conn)?;
+    migrate_pending_partial_exit_amounts(conn)
+}
+
+/// Pending partial exits persisted before amounts were raw store `expected_exit_amount` as a
+/// JSON number; the canonical form is the decimal string. Unreadable payloads are left for
+/// rehydration to report.
+fn migrate_pending_partial_exit_amounts(conn: &Connection) -> Result<()> {
+    let stored: Option<String> = conn
+        .query_row(
+            "SELECT value FROM position_metadata WHERE key = ?1",
+            [PENDING_PARTIAL_EXIT_METADATA_KEY],
+            |row| row.get(0),
+        )
+        .optional()
+        .map_err(|e| Error::SchemaMigration {
+            detail: format!("read pending partial exits: {e}"),
+        })?;
+    let Some(stored) = stored else {
+        return Ok(());
+    };
+    let Ok(mut pending) = serde_json::from_str::<serde_json::Value>(&stored) else {
+        return Ok(());
+    };
+    let Some(entries) = pending.as_array_mut() else {
+        return Ok(());
+    };
+    let mut changed = false;
+    for entry in entries {
+        let Some(amount) = entry.get_mut("expected_exit_amount") else {
+            continue;
+        };
+        if let Some(raw) = amount.as_u64() {
+            *amount = serde_json::Value::String(RawAmount::from(raw).to_string());
+            changed = true;
+        }
+    }
+    if !changed {
+        return Ok(());
+    }
+    conn.execute(
+        "UPDATE position_metadata SET value = ?1, updated_at = datetime('now') WHERE key = ?2",
+        params![pending.to_string(), PENDING_PARTIAL_EXIT_METADATA_KEY],
+    )
+    .map_err(|e| Error::SchemaMigration {
+        detail: format!("rewrite pending partial exits: {e}"),
+    })?;
+    Ok(())
+}
+
+fn migrate_amount_columns(conn: &Connection) -> Result<()> {
     let inspected = TABLES
         .iter()
         .map(|(table, ddl, amounts)| validate_table(conn, table, ddl, amounts))
@@ -434,7 +487,86 @@ pub(super) fn migrate_position_amounts(conn: &Connection) -> Result<()> {
 
 #[cfg(test)]
 mod tests {
+    use super::super::types::SCHEMA_POSITION_METADATA;
     use super::*;
+
+    fn metadata_connection() -> Connection {
+        let conn = Connection::open_in_memory().unwrap();
+        conn.execute(SCHEMA_POSITION_METADATA, []).unwrap();
+        conn
+    }
+
+    fn store_pending(conn: &Connection, value: &str) {
+        conn.execute(
+            "INSERT INTO position_metadata (key, value) VALUES (?1, ?2)",
+            params![PENDING_PARTIAL_EXIT_METADATA_KEY, value],
+        )
+        .unwrap();
+    }
+
+    fn stored_pending(conn: &Connection) -> String {
+        conn.query_row(
+            "SELECT value FROM position_metadata WHERE key = ?1",
+            [PENDING_PARTIAL_EXIT_METADATA_KEY],
+            |row| row.get(0),
+        )
+        .unwrap()
+    }
+
+    #[test]
+    fn pending_amounts_become_decimal_strings() {
+        let conn = metadata_connection();
+        let input = r#"[{"signature":"s","mint":"m","position_id":1,"expected_exit_amount":18446744073709551615,"requested_exit_percentage":25.0,"expiry_height":null,"created_at":"2025-01-02T00:00:00Z"}]"#;
+        store_pending(&conn, input);
+
+        migrate_pending_partial_exit_amounts(&conn).unwrap();
+        let first = stored_pending(&conn);
+        let migrated: serde_json::Value = serde_json::from_str(&first).unwrap();
+        let original: serde_json::Value = serde_json::from_str(input).unwrap();
+        let migrated_entry = migrated[0].as_object().unwrap();
+        let original_entry = original[0].as_object().unwrap();
+        assert_eq!(
+            migrated_entry["expected_exit_amount"],
+            serde_json::Value::String("18446744073709551615".to_owned())
+        );
+        assert_eq!(migrated_entry.len(), original_entry.len());
+        for (key, value) in original_entry {
+            if key != "expected_exit_amount" {
+                assert_eq!(&migrated_entry[key], value, "field {key}");
+            }
+        }
+
+        migrate_pending_partial_exit_amounts(&conn).unwrap();
+        assert_eq!(stored_pending(&conn), first);
+    }
+
+    #[test]
+    fn unreadable_pending_payloads_are_left_unchanged() {
+        for payload in [
+            "not json",
+            r#"{"a":1}"#,
+            r#"[{"expected_exit_amount":1.5}]"#,
+            r#"[{"expected_exit_amount":-3}]"#,
+            "[]",
+        ] {
+            let conn = metadata_connection();
+            store_pending(&conn, payload);
+            migrate_pending_partial_exit_amounts(&conn).unwrap();
+            assert_eq!(stored_pending(&conn), payload);
+        }
+    }
+
+    #[test]
+    fn a_missing_pending_entry_is_a_no_op() {
+        let conn = metadata_connection();
+        migrate_pending_partial_exit_amounts(&conn).unwrap();
+        let rows: i64 = conn
+            .query_row("SELECT COUNT(*) FROM position_metadata", [], |row| {
+                row.get(0)
+            })
+            .unwrap();
+        assert_eq!(rows, 0);
+    }
 
     #[test]
     fn canonical_wide_amount_is_rejected_by_the_u64_domain_reader() {

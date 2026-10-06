@@ -12,6 +12,7 @@ use super::{
 use crate::{
     chains::adapter,
     chains::solana::assets::ata::get_total_token_balance,
+    chains::RawAmount,
     logger::{self, LogTag},
     tokens::get_decimals,
     transactions::{get_transaction, reprocess_transaction, TransactionStatus},
@@ -680,9 +681,11 @@ pub async fn verify_transaction(item: &VerificationItem) -> VerificationOutcome 
                             // position. Record the amount that actually executed and log the
                             // discrepancy.
                             if let Some(expected) = item.expected_exit_amount {
+                                let expected = expected.raw();
+                                let actual = u128::from(exit_amount);
                                 let tolerance = (expected / 1000).max(10); // 0.1% tolerance or 10 units
-                                if exit_amount < expected.saturating_sub(tolerance)
-                                    || exit_amount > expected.saturating_add(tolerance)
+                                if actual < expected.saturating_sub(tolerance)
+                                    || actual > expected.saturating_add(tolerance)
                                 {
                                     logger::warning(
                                         LogTag::Positions,
@@ -721,12 +724,14 @@ pub async fn verify_transaction(item: &VerificationItem) -> VerificationOutcome 
                                         item.expected_exit_amount,
                                         item.requested_exit_percentage,
                                     ) {
-                                        (Some(expected), Some(requested)) if expected > 0 => {
-                                            let ratio = exit_amount as f64 / expected as f64;
+                                        (Some(expected), Some(requested))
+                                            if expected > RawAmount::ZERO =>
+                                        {
+                                            let ratio = exit_amount as f64 / expected.raw() as f64;
                                             (requested * ratio).clamp(0.0, 100.0)
                                         }
-                                        (Some(expected), _) if expected > 0 => {
-                                            ((exit_amount as f64 / expected as f64) * 100.0)
+                                        (Some(expected), _) if expected > RawAmount::ZERO => {
+                                            ((exit_amount as f64 / expected.raw() as f64) * 100.0)
                                                 .max(0.0)
                                                 .min(100.0)
                                         }

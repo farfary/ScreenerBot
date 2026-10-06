@@ -4,6 +4,7 @@
 //! Position verification queue — tracks pending transaction verifications with retry logic.
 
 use super::types::{GiveUpReason, VerificationKind};
+use crate::chains::RawAmount;
 use chrono::{DateTime, Duration as ChronoDuration, Utc};
 use std::collections::VecDeque;
 use std::sync::LazyLock;
@@ -46,7 +47,7 @@ pub struct VerificationItem {
     pub expiry_height: Option<u64>,
     // Partial exit support
     pub is_partial_exit: bool,
-    pub expected_exit_amount: Option<u64>,
+    pub expected_exit_amount: Option<RawAmount>,
     pub requested_exit_percentage: Option<f64>,
     // DCA support
     pub is_dca: bool,
@@ -82,7 +83,7 @@ impl VerificationItem {
         signature: String,
         mint: String,
         position_id: Option<i64>,
-        expected_exit_amount: u64,
+        expected_exit_amount: RawAmount,
         exit_percentage: f64,
         expiry_height: Option<u64>,
     ) -> Self {

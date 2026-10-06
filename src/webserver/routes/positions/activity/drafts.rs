@@ -219,7 +219,7 @@ pub(super) async fn pending_drafts(
             Some(pending.created_at.timestamp()),
         )
         .in_position(position, index);
-        draft.token_amount = Some(to_ui(RawAmount::from(pending.expected_exit_amount)));
+        draft.token_amount = Some(to_ui(pending.expected_exit_amount));
         draft.exit_percentage = Some(pending.requested_exit_percentage);
         drafts.push(draft);
     }

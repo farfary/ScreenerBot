@@ -64,6 +64,26 @@ fn released_position_amounts_survive_initialization() {
         [],
     )
     .unwrap();
+    let pending: Vec<serde_json::Value> = CASES
+        .iter()
+        .enumerate()
+        .map(|(i, amount)| {
+            serde_json::json!({
+                "signature": format!("pending-{i}"),
+                "mint": format!("mint-{i}"),
+                "position_id": 21 + i as i64,
+                "expected_exit_amount": amount,
+                "requested_exit_percentage": 25.0,
+                "expiry_height": null,
+                "created_at": "2025-01-02T00:00:00Z"
+            })
+        })
+        .collect();
+    conn.execute(
+        "INSERT INTO position_metadata (key, value) VALUES ('pending_partial_exits', ?1)",
+        [serde_json::Value::Array(pending).to_string()],
+    )
+    .unwrap();
     drop(conn);
 
     boot(dir.path(), true);
@@ -147,6 +167,27 @@ fn released_position_amounts_survive_initialization() {
         .unwrap(),
         "kept"
     );
+    let stored: String = conn
+        .query_row(
+            "SELECT value FROM position_metadata WHERE key = 'pending_partial_exits'",
+            [],
+            |row| row.get(0),
+        )
+        .unwrap();
+    let migrated: serde_json::Value = serde_json::from_str(&stored).unwrap();
+    let rehydrated: Vec<screenerbot::positions::PendingPartialExit> =
+        serde_json::from_str(&stored).unwrap();
+    assert_eq!(rehydrated.len(), CASES.len());
+    for (i, amount) in CASES.iter().enumerate() {
+        assert_eq!(
+            migrated[i]["expected_exit_amount"],
+            serde_json::Value::String(amount.to_string())
+        );
+        assert_eq!(
+            rehydrated[i].expected_exit_amount,
+            screenerbot::chains::RawAmount::from(*amount)
+        );
+    }
     assert_eq!(
         conn.query_row("PRAGMA integrity_check", [], |row| row.get::<_, String>(0))
             .unwrap(),

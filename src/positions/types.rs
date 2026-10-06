@@ -202,7 +202,7 @@ pub struct PendingPartialExit {
     pub signature: String,
     pub mint: String,
     pub position_id: i64,
-    pub expected_exit_amount: u64,
+    pub expected_exit_amount: RawAmount,
     pub requested_exit_percentage: f64,
     pub expiry_height: Option<u64>,
     pub created_at: DateTime<Utc>,

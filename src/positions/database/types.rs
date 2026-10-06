@@ -182,6 +182,8 @@ CREATE TABLE IF NOT EXISTS position_metadata (
 );
 "#;
 
+pub(crate) const PENDING_PARTIAL_EXIT_METADATA_KEY: &str = "pending_partial_exits";
+
 pub(super) const SCHEMA_TOKEN_SNAPSHOTS: &str = r#"
 CREATE TABLE IF NOT EXISTS token_snapshots (
   id INTEGER PRIMARY KEY AUTOINCREMENT,

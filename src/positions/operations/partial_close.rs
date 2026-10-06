@@ -6,6 +6,7 @@
 use crate::chains::adapter;
 use crate::chains::solana::assets::ata::get_total_token_balance;
 use crate::chains::solana::rpc::{get_rpc_client, RpcClientMethods};
+use crate::chains::RawAmount;
 use crate::logger::{self, LogTag};
 use crate::positions::queue::{enqueue_verification, VerificationItem};
 use crate::positions::state::{
@@ -331,7 +332,7 @@ pub async fn partial_close_position(
         signature: transaction_signature.clone(),
         mint: token_mint.to_string(),
         position_id,
-        expected_exit_amount: exit_amount,
+        expected_exit_amount: RawAmount::from(exit_amount),
         requested_exit_percentage: exit_percentage,
         expiry_height: Some(expiry_height),
         created_at: Utc::now(),
@@ -407,7 +408,7 @@ pub async fn partial_close_position(
         transaction_signature.clone(),
         token_mint.to_string(),
         Some(position_id),
-        exit_amount,
+        RawAmount::from(exit_amount),
         exit_percentage,
         Some(expiry_height),
     );
