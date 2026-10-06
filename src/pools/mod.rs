@@ -10,25 +10,25 @@
 //! - get_pool_price(chain, mint) -> current fresh price for a token
 //! - get_available_tokens(chain) -> tokens of that chain with fresh prices
 //! - get_cache_stats(scope) -> cache counts summed over the scope's chains
+//! - token_pools(chain, mint) / pool_protocol(chain, mint, pool) -> the
+//!   chain's known pools of a token
+//! - pricing_status(scope) -> the pricing pipelines' state, merged over the
+//!   scope's chains
 //!
 //! Chain-neutral: persistence (`database`), caching (`cache`), service
-//! lifecycle (`service`) and periodic upkeep (`maintenance`) live here, and
-//! the `PoolDescriptor` domain model (`types`) is a chain-neutral value object — no `Pubkey`, no Solana vendor
-//! type, anywhere in this module. Solana-specific pool discovery, RPC account
-//! fetching, protocol recognition, DEX byte decoding and price calculation
-//! (which dispatches on the concrete `ProgramKind` and reads `Pubkey`-keyed
-//! RPC account bundles) live under `crate::chains::solana::pools` — this
-//! module consumes its output (`PoolDescriptor` instances, built through
-//! explicit conversions at that boundary) but owns no Solana program IDs,
-//! account layouts or Pubkey-shaped decode logic itself. Chain-specific
-//! discovery/fetcher/calculator types (`PoolDiscovery`, `AccountData`,
-//! `PriceCalculator`) are NOT re-exported here — callers that need them
-//! import `crate::chains::solana::pools` directly, so this module's public
-//! surface stays chain-neutral. Solana swap instruction building/execution
-//! lives under `crate::chains::solana::swaps`.
+//! lifecycle (`service`), periodic upkeep (`maintenance`) and the
+//! `PricingDriver` contract (`driver`) live here, and the `PoolDescriptor`
+//! domain model (`types`) is a chain-neutral value object — no `Pubkey`, no
+//! Solana vendor type, anywhere in this module. Each chain's pool discovery,
+//! account fetching, protocol recognition, decoding and price calculation is
+//! its pricing driver, owned by the chain module and reached only through
+//! `ChainRuntime::pricing_driver`. This module consumes the driver's output
+//! (`PoolDescriptor` instances and published prices) but owns no program IDs,
+//! account layouts or chain-specific decode logic itself.
 
 mod api;
 pub(crate) mod cache;
+mod driver;
 mod error;
 mod maintenance;
 
@@ -40,11 +40,18 @@ pub mod service;
 pub mod types;
 pub mod utils;
 
-pub use api::{get_available_tokens, get_cache_stats, get_pool_price};
+pub use api::{
+    get_available_tokens, get_cache_stats, get_pool_price, pool_protocol, pricing_status,
+    token_pools,
+};
+pub use driver::{
+    sort_protocol_counts, AccountFetchStatus, PoolDirectoryStatus, PricingDriver, PricingInit,
+    PricingStage, PricingStageMetrics, PricingStatus,
+};
 pub use error::{Error, Result};
 pub use maintenance::start_maintenance_task;
 pub use service::{
     initialize_pool_components, is_pool_service_running, is_single_pool_mode_enabled,
-    stop_pool_service,
+    pricing_stage_metrics, pricing_stage_ready, start_pricing_stage, stop_pool_service,
 };
 pub use types::{CacheStats, PoolMintVaultInfo, PriceResult, TokenPairInfo};

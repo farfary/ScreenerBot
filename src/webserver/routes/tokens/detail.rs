@@ -129,7 +129,7 @@ pub async fn get_token_detail(Path(mint): Path<String>) -> Json<TokenDetailRespo
     // Extract token from snapshot for processing
     let token = &snapshot;
 
-    let pool_descriptors = crate::chains::solana::pools::service::get_token_pools(&mint);
+    let pool_descriptors = pools::token_pools(crate::chains::active_chain(), &mint);
     let canonical_pool_id = pool_descriptors
         .first()
         .map(|pool| pool.pool_id.address().to_owned());
@@ -222,7 +222,7 @@ pub async fn get_token_detail(Path(mint): Path<String>) -> Json<TokenDetailRespo
         (None, None, None, None, None, None, None)
     };
     let pool_program = pool_address.as_deref().and_then(|address| {
-        crate::chains::solana::pools::service::get_pool_program(&mint, address).map(str::to_owned)
+        pools::pool_protocol(crate::chains::active_chain(), &mint, address).map(str::to_owned)
     });
 
     logger::debug(
@@ -856,7 +856,7 @@ pub async fn get_token_analysis(
         };
 
     // Get pool data for liquidity analysis
-    let pool_descriptors = crate::chains::solana::pools::service::get_token_pools(&mint);
+    let pool_descriptors = pools::token_pools(crate::chains::active_chain(), &mint);
     let canonical_pool_id = pool_descriptors
         .first()
         .map(|p| p.pool_id.address().to_owned());

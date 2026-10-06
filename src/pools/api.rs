@@ -8,8 +8,9 @@
 //! implementation details are hidden.
 
 use super::cache;
+use super::driver::PricingStatus;
 use super::service;
-use super::types::{CacheStats, PriceResult};
+use super::types::{CacheStats, PoolDescriptor, PriceResult};
 use crate::chains::{ChainId, ChainScope};
 
 /// Get the current pool price for a token on `chain`
@@ -64,4 +65,35 @@ pub fn get_cache_stats(scope: ChainScope) -> CacheStats {
             history_entries: sum.history_entries + chain_stats.history_entries,
         },
     )
+}
+
+/// The pools `chain`'s pricing driver knows for `mint`, its selected pricing
+/// pool first. Empty while the pool service is not running.
+pub fn token_pools(chain: ChainId, mint: &str) -> Vec<PoolDescriptor> {
+    if !service::is_pool_service_running() {
+        return Vec::new();
+    }
+    service::pricing_driver(chain)
+        .map(|driver| driver.token_pools(mint))
+        .unwrap_or_default()
+}
+
+/// The stable protocol slug of `pool`, a known pool of `mint` on `chain`.
+pub fn pool_protocol(chain: ChainId, mint: &str, pool: &str) -> Option<&'static str> {
+    if !service::is_pool_service_running() {
+        return None;
+    }
+    service::pricing_driver(chain)
+        .ok()?
+        .pool_protocol(mint, pool)
+}
+
+/// The pricing pipelines' state, merged over the chains of `scope`.
+pub fn pricing_status(scope: ChainScope) -> PricingStatus {
+    scope
+        .chains()
+        .into_iter()
+        .filter_map(|chain| service::pricing_driver(chain).ok())
+        .map(|driver| driver.status())
+        .fold(PricingStatus::default(), PricingStatus::merge)
 }

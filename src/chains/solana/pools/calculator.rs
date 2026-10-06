@@ -108,8 +108,19 @@ impl PriceCalculator {
         self.calculator_tx.clone()
     }
 
-    /// Start calculator background task
-    pub async fn start_calculator_task(&self, shutdown: Arc<Notify>) {
+    /// Take the request receiver the calculation loop consumes; `None` once a
+    /// loop has taken it.
+    pub(super) fn take_receiver(&self) -> Option<mpsc::UnboundedReceiver<CalculatorMessage>> {
+        self.calculator_rx.write().ok()?.take()
+    }
+
+    /// Run the calculation loop until shutdown, a shutdown message or a
+    /// closed channel.
+    pub(super) async fn run_calculator_loop(
+        self: Arc<Self>,
+        mut calculator_rx: mpsc::UnboundedReceiver<CalculatorMessage>,
+        shutdown: Arc<Notify>,
+    ) {
         logger::info(LogTag::PoolCalculator, "Starting price calculator task");
 
         let selected_pools = self.selected_pools.clone();
@@ -120,217 +131,209 @@ impl PriceCalculator {
         let errors = Arc::clone(&self.errors);
         let prices_calculated = Arc::clone(&self.prices_calculated);
 
-        // Take the receiver from the Arc<RwLock>
-        let mut calculator_rx = {
-            let mut rx_lock = self.calculator_rx.write().unwrap();
-            rx_lock.take().expect("Calculator receiver already taken")
-        };
+        logger::info(LogTag::PoolCalculator, "Price calculator task started");
 
-        tokio::spawn(async move {
-            logger::info(LogTag::PoolCalculator, "Price calculator task started");
+        loop {
+            tokio::select! {
+                _ = shutdown.notified() => {
+                    logger::info(LogTag::PoolCalculator, "Price calculator task shutting down");
+                    break;
+                }
 
-            loop {
-                tokio::select! {
-                    _ = shutdown.notified() => {
-                        logger::info(LogTag::PoolCalculator, "Price calculator task shutting down");
-                        break;
-                    }
+                message = calculator_rx.recv() => {
+                    match message {
+                        Some(CalculatorMessage::CalculatePool {
+                            pool_id,
+                            pool_descriptor,
+                            account_bundle
+                        }) => {
+                            let calculation_start = Instant::now();
+                            let token_mint = if pool_descriptor.base_mint.address() != SOL_MINT {
+                                pool_descriptor.base_mint.address().to_owned()
+                            } else {
+                                pool_descriptor.quote_mint.address().to_owned()
+                            };
 
-                    message = calculator_rx.recv() => {
-                        match message {
-                            Some(CalculatorMessage::CalculatePool {
+                            // A token has one price source: its selected pool. A pool
+                            // superseded while this request was queued is not priced.
+                            if !Self::publishes_price(&selected_pools, &token_mint, &pool_id) {
+                                logger::debug(
+                                    LogTag::PoolCalculator,
+                                    &format!("Skipping calculation for pool {pool_id}: not the selected pool of token {token_mint}"),
+                                );
+                                continue;
+                            }
+
+                            record_safe(Event::info(
+                                EventCategory::Pool,
+                                Some("price_calculation_started".to_owned()),
+                                Some(token_mint.clone()),
+                                Some(pool_id.to_string()),
+                                serde_json::json!({
+                                    "pool_id": pool_id.to_string(),
+                                    "program_kind": pool_descriptor.program_kind.as_str(),
+                                    "base_mint": pool_descriptor.base_mint.address(),
+                                    "quote_mint": pool_descriptor.quote_mint.address()
+                                })
+                            )).await;
+
+                            let result = Self::calculate_pool_price_static(
                                 pool_id,
-                                pool_descriptor,
-                                account_bundle
-                            }) => {
-                                let calculation_start = Instant::now();
-                                let token_mint = if pool_descriptor.base_mint.address() != SOL_MINT {
-                                    pool_descriptor.base_mint.address().to_owned()
-                                } else {
-                                    pool_descriptor.quote_mint.address().to_owned()
-                                };
+                                &pool_descriptor,
+                                &account_bundle,
+                                &sol_reference_price,
+                            ).await;
 
-                                // A token has one price source: its selected pool. A pool
-                                // superseded while this request was queued is not priced.
+                            let calculation_duration = calculation_start.elapsed();
+
+                            if let Some(price_result) = result.price_result {
+                                // The selection can change while the calculation runs;
+                                // publish only while this pool is still the token's source.
                                 if !Self::publishes_price(&selected_pools, &token_mint, &pool_id) {
                                     logger::debug(
                                         LogTag::PoolCalculator,
-                                        &format!("Skipping calculation for pool {pool_id}: not the selected pool of token {token_mint}"),
+                                        &format!("Discarding price from pool {pool_id}: no longer the selected pool of token {token_mint}"),
                                     );
                                     continue;
                                 }
 
+                                // Track metrics
+                                operations.fetch_add(1, std::sync::atomic::Ordering::Relaxed);
+                                prices_calculated.fetch_add(1, std::sync::atomic::Ordering::Relaxed);
+
+                                // Update cache with calculated price
+                                cache::update_price(crate::chains::ChainId::Solana, price_result.clone());
+
+                                if let Some(db) = database(crate::chains::ChainId::Solana) {
+                                    if let Err(e) = db.mark_pool_price_calculated(
+                                        &price_result.mint,
+                                        &price_result.pool_address,
+                                    ) {
+                                        logger::warning(
+                                            LogTag::PoolCalculator,
+                                            &format!(
+                                                "Failed to persist pool price timestamp for mint={} pool={} error={}",
+                                                price_result.mint,
+                                                price_result.pool_address,
+                                                e
+                                            ),
+                                        );
+                                    }
+                                } else {
+                                    logger::warning(
+                                        LogTag::PoolCalculator,
+                                        &format!(
+                                            "Token database unavailable; skipping pool price timestamp persist for mint={} pool={}",
+                                            price_result.mint,
+                                            price_result.pool_address
+                                        ),
+                                    );
+                                }
+
                                 record_safe(Event::info(
                                     EventCategory::Pool,
-                                    Some("price_calculation_started".to_owned()),
+                                    Some("price_calculation_success".to_owned()),
                                     Some(token_mint.clone()),
                                     Some(pool_id.to_string()),
                                     serde_json::json!({
                                         "pool_id": pool_id.to_string(),
-                                        "program_kind": pool_descriptor.program_kind.as_str(),
-                                        "base_mint": pool_descriptor.base_mint.address(),
-                                        "quote_mint": pool_descriptor.quote_mint.address()
+                                        "token_mint": token_mint,
+                                        "price_sol": price_result.price_native,
+                                        "sol_reserves": price_result.native_reserves,
+                                        "token_reserves": price_result.token_reserves,
+                                        "duration_ms": calculation_duration.as_millis(),
+                                        "program_kind": pool_descriptor.program_kind.as_str()
                                     })
                                 )).await;
 
-                                let result = Self::calculate_pool_price_static(
-                                    pool_id,
-                                    &pool_descriptor,
-                                    &account_bundle,
-                                    &sol_reference_price,
-                                ).await;
+                                logger::debug(
+                                    LogTag::PoolCalculator,
+                                    &format!(
+                                        "Calculated price for token {} in pool {}: {} SOL",
+                                        price_result.mint,
+                                        pool_id,
+                                        price_result.price_native
+                                    ),
+                                );
+                            } else if let Some(error) = result.error {
+                                // Track error
+                                errors.fetch_add(1, std::sync::atomic::Ordering::Relaxed);
 
-                                let calculation_duration = calculation_start.elapsed();
+                                record_safe(Event::error(
+                                    EventCategory::Pool,
+                                    Some("price_calculation_failed".to_owned()),
+                                    Some(token_mint.clone()),
+                                    Some(pool_id.to_string()),
+                                    serde_json::json!({
+                                        "pool_id": pool_id.to_string(),
+                                        "token_mint": token_mint,
+                                        "error": error,
+                                        "duration_ms": calculation_duration.as_millis(),
+                                        "program_kind": pool_descriptor.program_kind.as_str(),
+                                        "account_count": account_bundle.accounts.len()
+                                    })
+                                )).await;
 
-                                if let Some(price_result) = result.price_result {
-                                    // The selection can change while the calculation runs;
-                                    // publish only while this pool is still the token's source.
-                                    if !Self::publishes_price(&selected_pools, &token_mint, &pool_id) {
-                                        logger::debug(
-                                            LogTag::PoolCalculator,
-                                            &format!("Discarding price from pool {pool_id}: no longer the selected pool of token {token_mint}"),
-                                        );
-                                        continue;
-                                    }
+                                logger::warning(
+                                    LogTag::PoolCalculator,
+                                    &format!(
+                                        "Failed to calculate price for token {} in pool {}: {}",
+                                        token_mint,
+                                        pool_id,
+                                        error
+                                    ),
+                                );
 
-                                    // Track metrics
-                                    operations.fetch_add(1, std::sync::atomic::Ordering::Relaxed);
-                                    prices_calculated.fetch_add(1, std::sync::atomic::Ordering::Relaxed);
-
-                                    // Update cache with calculated price
-                                    cache::update_price(crate::chains::ChainId::Solana, price_result.clone());
-
-                                    if let Some(db) = database(crate::chains::ChainId::Solana) {
-                                        if let Err(e) = db.mark_pool_price_calculated(
-                                            &price_result.mint,
-                                            &price_result.pool_address,
-                                        ) {
-                                            logger::warning(
-                                                LogTag::PoolCalculator,
-                                                &format!(
-                                                    "Failed to persist pool price timestamp for mint={} pool={} error={}",
-                                                    price_result.mint,
-                                                    price_result.pool_address,
-                                                    e
-                                                ),
-                                            );
-                                        }
-                                    } else {
-                                        logger::warning(
-                                            LogTag::PoolCalculator,
-                                            &format!(
-                                                "Token database unavailable; skipping pool price timestamp persist for mint={} pool={}",
-                                                price_result.mint,
-                                                price_result.pool_address
-                                            ),
-                                        );
-                                    }
-
-                                    record_safe(Event::info(
-                                        EventCategory::Pool,
-                                        Some("price_calculation_success".to_owned()),
-                                        Some(token_mint.clone()),
-                                        Some(pool_id.to_string()),
-                                        serde_json::json!({
-                                            "pool_id": pool_id.to_string(),
-                                            "token_mint": token_mint,
-                                            "price_sol": price_result.price_native,
-                                            "sol_reserves": price_result.native_reserves,
-                                            "token_reserves": price_result.token_reserves,
-                                            "duration_ms": calculation_duration.as_millis(),
-                                            "program_kind": pool_descriptor.program_kind.as_str()
-                                        })
-                                    )).await;
-
-                                    logger::debug(
-                                        LogTag::PoolCalculator,
-                                        &format!(
-                                            "Calculated price for token {} in pool {}: {} SOL",
-                                            price_result.mint,
-                                            pool_id,
-                                            price_result.price_native
-                                        ),
-                                    );
-                                } else if let Some(error) = result.error {
-                                    // Track error
-                                    errors.fetch_add(1, std::sync::atomic::Ordering::Relaxed);
-
-                                    record_safe(Event::error(
-                                        EventCategory::Pool,
-                                        Some("price_calculation_failed".to_owned()),
-                                        Some(token_mint.clone()),
-                                        Some(pool_id.to_string()),
-                                        serde_json::json!({
-                                            "pool_id": pool_id.to_string(),
-                                            "token_mint": token_mint,
-                                            "error": error,
-                                            "duration_ms": calculation_duration.as_millis(),
-                                            "program_kind": pool_descriptor.program_kind.as_str(),
-                                            "account_count": account_bundle.accounts.len()
-                                        })
-                                    )).await;
-
-                                    logger::warning(
-                                        LogTag::PoolCalculator,
-                                        &format!(
-                                            "Failed to calculate price for token {} in pool {}: {}",
-                                            token_mint,
-                                            pool_id,
-                                            error
-                                        ),
-                                    );
-
-                                    // Record the failure; once the pool blacklist threshold is
-                                    // reached, discovery selects another pool for the token
-                                    // (e.g. migrated PumpFunLegacy bonding curves with zero reserves)
-                                    let pool_id_str = pool_id.to_string();
-                                    let token_mint_clone = token_mint.clone();
-                                    let program_kind_str = pool_descriptor.program_kind.as_str().to_owned();
-                                    tokio::spawn(async move {
-                                        match crate::pools::database::add_pool_to_blacklist(
-                                            crate::chains::ChainId::Solana,
-                                            &pool_id_str,
-                                            "decoder_failed",
-                                            Some(&token_mint_clone),
-                                            Some(&program_kind_str),
-                                            1,
-                                        ).await {
-                                            Ok(outcome) => {
-                                                if let Some(until) = outcome.blacklisted_until {
-                                                    logger::warning(
-                                                        LogTag::PoolCalculator,
-                                                        &format!(
-                                                            "Pool {} (token {}) blacklisted until unix {} after {} price calculation failures",
-                                                            pool_id_str, token_mint_clone, until, outcome.error_count
-                                                        ),
-                                                    );
-                                                }
+                                // Record the failure; once the pool blacklist threshold is
+                                // reached, discovery selects another pool for the token
+                                // (e.g. migrated PumpFunLegacy bonding curves with zero reserves)
+                                let pool_id_str = pool_id.to_string();
+                                let token_mint_clone = token_mint.clone();
+                                let program_kind_str = pool_descriptor.program_kind.as_str().to_owned();
+                                tokio::spawn(async move {
+                                    match crate::pools::database::add_pool_to_blacklist(
+                                        crate::chains::ChainId::Solana,
+                                        &pool_id_str,
+                                        "decoder_failed",
+                                        Some(&token_mint_clone),
+                                        Some(&program_kind_str),
+                                        1,
+                                    ).await {
+                                        Ok(outcome) => {
+                                            if let Some(until) = outcome.blacklisted_until {
+                                                logger::warning(
+                                                    LogTag::PoolCalculator,
+                                                    &format!(
+                                                        "Pool {} (token {}) blacklisted until unix {} after {} price calculation failures",
+                                                        pool_id_str, token_mint_clone, until, outcome.error_count
+                                                    ),
+                                                );
                                             }
-                                            Err(e) => logger::warning(
-                                                LogTag::PoolCalculator,
-                                                &format!("Failed to record calculation failure of pool {}: {}", pool_id_str, e),
-                                            ),
                                         }
-                                    });
-                                }
+                                        Err(e) => logger::warning(
+                                            LogTag::PoolCalculator,
+                                            &format!("Failed to record calculation failure of pool {}: {}", pool_id_str, e),
+                                        ),
+                                    }
+                                });
                             }
+                        }
 
-                            Some(CalculatorMessage::Shutdown) => {
-                                logger::info(LogTag::PoolCalculator, "Calculator received shutdown signal");
-                                break;
-                            }
+                        Some(CalculatorMessage::Shutdown) => {
+                            logger::info(LogTag::PoolCalculator, "Calculator received shutdown signal");
+                            break;
+                        }
 
-                            None => {
-                                logger::info(LogTag::PoolCalculator, "Calculator channel closed");
-                                break;
-                            }
+                        None => {
+                            logger::info(LogTag::PoolCalculator, "Calculator channel closed");
+                            break;
                         }
                     }
                 }
             }
+        }
 
-            logger::info(LogTag::PoolCalculator, "Price calculator task completed");
-        });
+        logger::info(LogTag::PoolCalculator, "Price calculator task completed");
     }
 
     /// Calculate price for a pool (static version for task)

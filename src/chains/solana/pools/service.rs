@@ -1,12 +1,12 @@
 // Copyright (c) 2024-2026 ScreenerBot (screenerbot.io)
 // SPDX-License-Identifier: BUSL-1.1
 
-//! Solana pool runtime supervisor — owns the concrete discovery/analyzer/fetcher/
-//! calculator components and their lifecycle. Chain-neutral orchestration (the
-//! running flag, shutdown protocol, event recording, db/cache init) stays in
-//! `crate::pools::service`, which selects this module's `initialize_components`
-//! and `clear_components` as its Solana implementation — see that module's doc
-//! comment for the composition boundary.
+//! Solana pool runtime state — owns the concrete discovery/analyzer/fetcher/
+//! calculator components. Chain-neutral orchestration (the running flag, event
+//! recording, db/cache init) stays in `crate::pools::service`, which reaches
+//! these components only through the Solana pricing driver (`super::driver`).
+//! The components reference each other through the getters below, which no
+//! code outside the Solana module can call.
 
 use crate::chains::solana::pools::analyzer::PoolAnalyzer;
 use crate::chains::solana::pools::calculator::PriceCalculator;
@@ -31,22 +31,22 @@ static PRICE_CALCULATOR: LazyLock<RwLock<Option<Arc<PriceCalculator>>>> =
     LazyLock::new(|| RwLock::new(None));
 
 /// Get the shared pool discovery component, if initialized.
-pub fn get_pool_discovery() -> Option<Arc<PoolDiscovery>> {
+pub(in crate::chains::solana) fn get_pool_discovery() -> Option<Arc<PoolDiscovery>> {
     POOL_DISCOVERY.read().ok()?.clone()
 }
 
 /// Get the shared account fetcher component, if initialized.
-pub fn get_account_fetcher() -> Option<Arc<AccountFetcher>> {
+pub(in crate::chains::solana) fn get_account_fetcher() -> Option<Arc<AccountFetcher>> {
     ACCOUNT_FETCHER.read().ok()?.clone()
 }
 
 /// Get the shared price calculator component, if initialized.
-pub fn get_price_calculator() -> Option<Arc<PriceCalculator>> {
+pub(in crate::chains::solana) fn get_price_calculator() -> Option<Arc<PriceCalculator>> {
     PRICE_CALCULATOR.read().ok()?.clone()
 }
 
 /// Get the shared pool analyzer component, if initialized.
-pub fn get_pool_analyzer() -> Option<Arc<PoolAnalyzer>> {
+pub(in crate::chains::solana) fn get_pool_analyzer() -> Option<Arc<PoolAnalyzer>> {
     POOL_ANALYZER.read().ok()?.clone()
 }
 
@@ -56,7 +56,7 @@ pub fn get_pool_analyzer() -> Option<Arc<PoolAnalyzer>> {
 /// Requires the pool runtime to be running (checked by the caller via
 /// `crate::pools::service::is_pool_service_running`); returns an empty list
 /// when the analyzer is not yet initialized.
-pub fn get_token_pools(mint: &str) -> Vec<PoolDescriptor> {
+pub(in crate::chains::solana) fn get_token_pools(mint: &str) -> Vec<PoolDescriptor> {
     if !crate::pools::service::is_pool_service_running() {
         return Vec::new();
     }
@@ -87,7 +87,10 @@ pub fn get_token_pools(mint: &str) -> Vec<PoolDescriptor> {
 /// that presentation layers label (the dashboard's `POOL_PROGRAM_LABELS`), never the
 /// display name. A legacy display-name identity maps to its slug; a pool the analyzer
 /// does not know returns `None`.
-pub fn get_pool_program(mint: &str, pool_address: &str) -> Option<&'static str> {
+pub(in crate::chains::solana) fn get_pool_program(
+    mint: &str,
+    pool_address: &str,
+) -> Option<&'static str> {
     get_token_pools(mint)
         .into_iter()
         .find(|pool| pool.pool_id.address() == pool_address)
@@ -95,9 +98,9 @@ pub fn get_pool_program(mint: &str, pool_address: &str) -> Option<&'static str> 
 }
 
 /// Initialize the concrete Solana pool runtime components (discovery, analyzer,
-/// fetcher, calculator) and store them in global state. Returns the RPC provider
-/// count for logging/event purposes.
-pub async fn initialize_components() -> crate::chains::solana::Result<u32> {
+/// fetcher, calculator) and store them in global state, replacing any previous
+/// set. Returns the RPC provider count for logging/event purposes.
+pub(super) async fn initialize_components() -> crate::chains::solana::Result<usize> {
     logger::debug(
         LogTag::PoolService,
         "Initializing Solana pool runtime components...",
@@ -106,6 +109,20 @@ pub async fn initialize_components() -> crate::chains::solana::Result<u32> {
     let rpc_client = get_rpc_client();
     let rpc_urls_count = rpc_client.provider_count().await;
 
+    install_components();
+
+    logger::debug(
+        LogTag::PoolService,
+        "Solana pool runtime components initialized",
+    );
+
+    Ok(rpc_urls_count)
+}
+
+/// Build a fresh set of components around one shared pool directory and
+/// install it. Each fresh component holds an untaken request receiver, so its
+/// stage loop can be started once.
+pub(super) fn install_components() {
     // Pool directory shared between analyzer/fetcher/calculator
     let pool_directory = Arc::new(RwLock::new(HashMap::new()));
     // Pool each token is priced from: written by the analyzer, read by the calculator
@@ -131,18 +148,11 @@ pub async fn initialize_components() -> crate::chains::solana::Result<u32> {
     if let Ok(mut calculator) = PRICE_CALCULATOR.write() {
         *calculator = Some(price_calculator);
     }
-
-    logger::debug(
-        LogTag::PoolService,
-        "Solana pool runtime components initialized",
-    );
-
-    Ok(rpc_urls_count as u32)
 }
 
 /// Clear the concrete Solana pool runtime components from global state.
-/// Called by the composition root when the pool service stops.
-pub fn clear_components() {
+/// Called through the pricing driver when the pool service stops.
+pub(super) fn clear_components() {
     if let Ok(mut discovery) = POOL_DISCOVERY.write() {
         *discovery = None;
     }

@@ -6,6 +6,8 @@
 
 use std::time::Duration;
 
+use super::driver::PricingStage;
+use crate::chains::ChainId;
 use crate::errors::{DatabaseError, ErrorClass, InternalError, Severity};
 
 /// Everything that can go wrong maintaining chain-neutral pool prices,
@@ -47,6 +49,19 @@ pub enum Error {
     /// chain-neutral and must not name a chain adapter's error type.
     #[error("pool component initialization failed: {detail}")]
     ComponentInit { detail: String },
+    /// An enabled chain has no installed runtime to reach its pricing driver
+    /// through.
+    #[error("no chain runtime is installed for {chain}")]
+    RuntimeUnavailable { chain: ChainId },
+    /// A pricing stage could not be started on a chain: its component is not
+    /// initialized, or its loop was already started since the last
+    /// initialization.
+    #[error("{stage} stage unavailable on {chain}: {detail}")]
+    StageUnavailable {
+        chain: ChainId,
+        stage: PricingStage,
+        detail: String,
+    },
 }
 
 /// Result alias for the pools module.
@@ -63,7 +78,9 @@ impl ErrorClass for Error {
             | Error::Decode { .. }
             | Error::InvalidPool { .. }
             | Error::MigrationIntegrity { .. }
-            | Error::AlreadyRunning => false,
+            | Error::AlreadyRunning
+            | Error::RuntimeUnavailable { .. }
+            | Error::StageUnavailable { .. } => false,
         }
     }
 
@@ -86,6 +103,7 @@ impl ErrorClass for Error {
             Error::InvalidPool { .. } => Severity::Info,
             Error::AlreadyRunning => Severity::Warning,
             Error::ComponentInit { .. } => Severity::Error,
+            Error::RuntimeUnavailable { .. } | Error::StageUnavailable { .. } => Severity::Error,
         }
     }
 
@@ -98,6 +116,7 @@ impl ErrorClass for Error {
             Error::Decode { .. } | Error::InvalidPool { .. } => 422,
             Error::AlreadyRunning => 409,
             Error::ComponentInit { .. } => 503,
+            Error::RuntimeUnavailable { .. } | Error::StageUnavailable { .. } => 503,
         }
     }
 }

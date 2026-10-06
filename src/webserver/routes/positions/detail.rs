@@ -106,7 +106,8 @@ pub async fn get_position_details(Path(key): Path<String>) -> Response {
                 pools::get_pool_price(crate::chains::active_chain(), mint).map(|price_result| {
                     PositionPoolInfo {
                         pool_address: Some(price_result.pool_address.clone()),
-                        pool_program: crate::chains::solana::pools::service::get_pool_program(
+                        pool_program: pools::pool_protocol(
+                            crate::chains::active_chain(),
                             mint,
                             &price_result.pool_address,
                         )

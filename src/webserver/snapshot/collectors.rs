@@ -283,46 +283,30 @@ pub(super) fn collect_pool_service_snapshot() -> Option<PoolServiceStatusSnapsho
         .sum();
     let price_subscribers = 0;
 
-    let analyzer_snapshot =
-        crate::chains::solana::pools::service::get_pool_analyzer().and_then(|analyzer| {
-            let directory = analyzer.get_pool_directory();
-            let guard = directory.read().ok()?;
+    let pricing = crate::pools::pricing_status(crate::chains::ChainScope::All);
 
-            let total_pools = guard.len();
-            let mut program_counts: HashMap<String, usize> = HashMap::new();
-            for descriptor in guard.values() {
-                let label = descriptor.program_kind.as_str().to_string();
-                *program_counts.entry(label).or_default() += 1;
-            }
+    let analyzer_snapshot = pricing.directory.map(|directory| PoolAnalyzerSnapshot {
+        total_pools: directory.total_pools,
+        program_distribution: directory
+            .pools_by_protocol
+            .into_iter()
+            .map(|(program, count)| PoolProgramCount { program, count })
+            .collect(),
+    });
 
-            let mut program_distribution: Vec<PoolProgramCount> = program_counts
-                .into_iter()
-                .map(|(program, count)| PoolProgramCount { program, count })
-                .collect();
-            program_distribution.sort_by(|a, b| {
-                b.count
-                    .cmp(&a.count)
-                    .then_with(|| a.program.cmp(&b.program))
-            });
+    let fetcher_snapshot = pricing.fetch.map(|fetch| PoolFetcherSnapshot {
+        total_bundles: fetch.total_bundles,
+        bundles_with_data: fetch.bundles_with_data,
+        total_accounts_tracked: fetch.total_accounts_tracked,
+    });
 
-            Some(PoolAnalyzerSnapshot {
-                total_pools,
-                program_distribution,
-            })
-        });
-
-    let fetcher_snapshot =
-        crate::chains::solana::pools::service::get_account_fetcher().map(|fetcher| {
-            let stats = fetcher.get_fetch_stats();
-            PoolFetcherSnapshot {
-                total_bundles: stats.total_bundles,
-                bundles_with_data: stats.bundles_with_data,
-                total_accounts_tracked: stats.total_accounts_tracked,
-            }
-        });
-
-    let (dexs_enabled, gecko_enabled, raydium_enabled) =
-        crate::chains::solana::pools::discovery::PoolDiscovery::get_source_config();
+    let (dexs_enabled, gecko_enabled, raydium_enabled) = config::with_config(|cfg| {
+        (
+            cfg.pools.enable_dexscreener_discovery,
+            cfg.pools.enable_geckoterminal_discovery,
+            cfg.pools.enable_raydium_discovery,
+        )
+    });
     let mut sources_enabled = Vec::new();
     if dexs_enabled {
         sources_enabled.push("DexScreener".to_owned());

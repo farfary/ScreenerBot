@@ -5,10 +5,10 @@
 //! behaviour.
 //!
 //! The two injected factories (swap routers, the wallet-watch
-//! runtime), the token-account read, the filter profile and the discovery
-//! feeds behind it. Later units add methods as their domains thread the chain
-//! through (pool pricing, OHLCV, wallets, trading) — a method without a caller is
-//! forbidden until then. Neutral code resolves an instance through
+//! runtime), the token-account read, the filter profile, the discovery
+//! feeds and the pool pricing driver behind it. Later units add methods as
+//! their domains thread the chain through (OHLCV, wallets, trading) — a
+//! method without a caller is forbidden until then. Neutral code resolves an instance through
 //! [`crate::chains::runtime_for`] and never names a concrete chain module.
 
 use std::sync::Arc;
@@ -43,4 +43,6 @@ pub trait ChainRuntime: Send + Sync + 'static {
     /// providers, enabled per current config and in discovery order. Read on
     /// every discovery run.
     fn discovery_feeds(&self) -> Vec<crate::tokens::DiscoveryFeed>;
+    /// The pipeline that discovers, reads and prices this chain's pools.
+    fn pricing_driver(&self) -> Arc<dyn crate::pools::PricingDriver>;
 }

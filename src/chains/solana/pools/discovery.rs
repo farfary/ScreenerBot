@@ -14,17 +14,19 @@
 use super::types::ProgramKind;
 
 use crate::chains::solana::pools::service::get_pool_analyzer;
-use crate::chains::{AssetId, ChainId, PoolId};
+use crate::chains::{adapter_for, AssetId, ChainId, PoolId};
 use crate::config::with_config;
 use crate::events::{record_safe, Event, EventCategory};
 use crate::logger::{self, LogTag};
 use crate::pools::types::{max_watched_tokens, PoolDescriptor};
 use crate::pools::utils::{is_sol_mint, is_stablecoin_mint};
 use crate::tokens::{get_token_pools_snapshot, prefetch_token_pools};
+use crate::utils::run_or_shutdown;
 
 use crate::chains::solana::solana_sdk::pubkey::Pubkey;
 use std::collections::HashMap;
 use std::str::FromStr;
+use std::sync::atomic::AtomicBool;
 use std::sync::Arc;
 use std::time::{Duration, Instant};
 use tokio::sync::Notify;
@@ -51,6 +53,8 @@ pub fn is_raydium_discovery_enabled() -> bool {
 pub struct PoolDiscovery {
     known_pools: HashMap<Pubkey, PoolDescriptor>,
     watched_tokens: Vec<String>,
+    /// Set once a discovery loop has been started for this instance.
+    loop_claimed: AtomicBool,
     operations: Arc<std::sync::atomic::AtomicU64>,
     errors: Arc<std::sync::atomic::AtomicU64>,
     pools_discovered: Arc<std::sync::atomic::AtomicU64>,
@@ -62,6 +66,7 @@ impl PoolDiscovery {
         Self {
             known_pools: HashMap::new(),
             watched_tokens: Vec::new(),
+            loop_claimed: AtomicBool::new(false),
             operations: Arc::new(std::sync::atomic::AtomicU64::new(0)),
             errors: Arc::new(std::sync::atomic::AtomicU64::new(0)),
             pools_discovered: Arc::new(std::sync::atomic::AtomicU64::new(0)),
@@ -155,8 +160,17 @@ impl PoolDiscovery {
         }
     }
 
-    /// Start discovery background task
-    pub async fn start_discovery_task(&self, shutdown: Arc<Notify>) {
+    /// Claim this instance's single discovery loop; `false` when a loop was
+    /// already started.
+    pub(super) fn claim_loop(&self) -> bool {
+        !self
+            .loop_claimed
+            .swap(true, std::sync::atomic::Ordering::SeqCst)
+    }
+
+    /// Run the discovery loop until shutdown. A discovery tick in flight is
+    /// abandoned on shutdown.
+    pub(super) async fn run_discovery_loop(self: Arc<Self>, shutdown: Arc<Notify>) {
         logger::info(LogTag::PoolDiscovery, "Starting pool discovery task");
 
         Self::log_source_config();
@@ -167,36 +181,39 @@ impl PoolDiscovery {
         let errors = Arc::clone(&self.errors);
         let pools_discovered = Arc::clone(&self.pools_discovered);
 
-        tokio::spawn(async move {
-            let mut current_interval = interval_seed;
-            let mut interval = tokio::time::interval(Duration::from_secs(current_interval));
+        let mut current_interval = interval_seed;
+        let mut interval = tokio::time::interval(Duration::from_secs(current_interval));
 
-            loop {
-                tokio::select! {
-                  _ = shutdown.notified() => {
+        loop {
+            tokio::select! {
+              _ = shutdown.notified() => {
+                logger::info(LogTag::PoolDiscovery, "Pool discovery task shutting down");
+                break;
+              }
+              _ = interval.tick() => {
+                let tick = Self::batched_discovery_tick_with_metrics(&operations, &errors, &pools_discovered);
+                match run_or_shutdown(&shutdown, tick).await {
+                  None => {
                     logger::info(LogTag::PoolDiscovery, "Pool discovery task shutting down");
                     break;
                   }
-                  _ = interval.tick() => {
-                    match Self::batched_discovery_tick_with_metrics(&operations, &errors, &pools_discovered).await {
-                      Ok(discovered) => {
-                        operations.fetch_add(1, std::sync::atomic::Ordering::Relaxed);
-                        pools_discovered.fetch_add(discovered as u64, std::sync::atomic::Ordering::Relaxed);
-                      }
-                      Err(_) => {
-                        errors.fetch_add(1, std::sync::atomic::Ordering::Relaxed);
-                      }
-                    }
-
-                    let updated_interval = DISCOVERY_TICK_INTERVAL_SECS;
-                    if updated_interval != current_interval {
-                      current_interval = updated_interval;
-                      interval = tokio::time::interval(Duration::from_secs(current_interval));
-                    }
+                  Some(Ok(discovered)) => {
+                    operations.fetch_add(1, std::sync::atomic::Ordering::Relaxed);
+                    pools_discovered.fetch_add(discovered as u64, std::sync::atomic::Ordering::Relaxed);
+                  }
+                  Some(Err(_)) => {
+                    errors.fetch_add(1, std::sync::atomic::Ordering::Relaxed);
                   }
                 }
+
+                let updated_interval = DISCOVERY_TICK_INTERVAL_SECS;
+                if updated_interval != current_interval {
+                  current_interval = updated_interval;
+                  interval = tokio::time::interval(Duration::from_secs(current_interval));
+                }
+              }
             }
-        });
+        }
     }
 
     /// Execute one batched discovery tick: fetch canonical pools from tokens module and stream to analyzer
@@ -240,16 +257,26 @@ impl PoolDiscovery {
         // Build token list from the tokens that passed filtering
         let mut tokens: Vec<String> = crate::tokens::get_passed_tokens(ChainId::Solana);
 
+        // These lists carry no chain; only addresses valid on Solana enter
+        // Solana discovery.
+        let adapter = adapter_for(ChainId::Solana);
+        let on_solana = |mints: Vec<String>| -> Vec<String> {
+            mints
+                .into_iter()
+                .filter(|mint| adapter.validate_address(mint).is_ok())
+                .collect()
+        };
+
         // Always include tokens with open positions for price monitoring
-        let open_position_mints: Vec<String> = crate::positions::get_open_mints().await;
+        let open_position_mints: Vec<String> = on_solana(crate::positions::get_open_mints().await);
         // ...and everything the wallet actually holds. A token the bot never traded (an
         // airdrop, a buy made elsewhere) would otherwise never be priced, so it would
         // count as zero in the wallet's worth — silently understating the headline.
         // These are the mints whose price the reported worth depends on, so they rank
         // with position tokens, not with the discovery tail.
-        let held_mints: Vec<String> = crate::wallet::get_held_mints();
+        let held_mints: Vec<String> = on_solana(crate::wallet::get_held_mints());
         // Paper copy holdings are marked and exited at the pool price, so they rank here too.
-        let paper_mints: Vec<String> = crate::trader::copy::held_paper_mints();
+        let paper_mints: Vec<String> = on_solana(crate::trader::copy::held_paper_mints());
         let initial_count = tokens.len();
 
         let mut token_set: std::collections::HashSet<String> = tokens.iter().cloned().collect();

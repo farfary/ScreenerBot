@@ -3,14 +3,17 @@
 
 //! Pool calculator service — computes token prices from pool reserves.
 
-use crate::errors::ServiceError;
 use crate::i18n::{ids, UiArg, UiText};
 use crate::logger::{self, LogTag};
+use crate::pools::PricingStage;
 use crate::services::{Service, ServiceHealth, ServiceMetrics};
 use async_trait::async_trait;
 use std::sync::Arc;
 use tokio::sync::Notify;
 use tokio::task::JoinHandle;
+
+/// The pricing stage this service runs on every enabled chain.
+const STAGE: PricingStage = PricingStage::Calculation;
 
 pub struct PoolCalculatorService;
 
@@ -50,26 +53,16 @@ impl Service for PoolCalculatorService {
             &"Starting pool calculator service...".to_owned(),
         );
 
-        // Get the PriceCalculator component from global state
-        let calculator =
-            crate::chains::solana::pools::service::get_price_calculator().ok_or_else(|| {
-                crate::Error::Service(ServiceError::Start {
-                    service: self.name().to_string(),
-                    message: "PriceCalculator component not initialized".to_owned(),
-                })
-            })?;
-
-        // Spawn calculator task
-        let handle = tokio::spawn(monitor.instrument(async move {
-            calculator.start_calculator_task(shutdown).await;
-        }));
+        // One loop per enabled chain, each spawned under this service's
+        // shutdown and monitor; the handles are the loops themselves.
+        let handles = crate::pools::start_pricing_stage(STAGE, shutdown, monitor)?;
 
         logger::info(
             LogTag::PoolService,
             &"Pool calculator service started (instrumented)".to_owned(),
         );
 
-        Ok(vec![handle])
+        Ok(handles)
     }
 
     async fn stop(&mut self) -> crate::Result<()> {
@@ -81,7 +74,7 @@ impl Service for PoolCalculatorService {
     }
 
     async fn health(&self) -> ServiceHealth {
-        if crate::chains::solana::pools::service::get_price_calculator().is_some() {
+        if crate::pools::pricing_stage_ready(STAGE) {
             ServiceHealth::Healthy
         } else {
             ServiceHealth::Unhealthy(
@@ -94,11 +87,20 @@ impl Service for PoolCalculatorService {
     async fn metrics(&self) -> ServiceMetrics {
         let mut metrics = ServiceMetrics::default();
 
-        // Get metrics from the component if available
-        if let Some(calculator) = crate::chains::solana::pools::service::get_price_calculator() {
-            let (operations, errors, prices_calculated) = calculator.get_metrics();
+        // Counters summed over every enabled chain; ratios are derived from
+        // the sums.
+        if let Some(stage) = crate::pools::pricing_stage_metrics(STAGE) {
+            let counter = |key: &str| {
+                stage
+                    .counters
+                    .iter()
+                    .find(|(k, _)| *k == key)
+                    .map_or(0, |(_, value)| *value)
+            };
+            let operations = stage.operations;
             metrics.operations_total = operations;
-            metrics.errors_total = errors;
+            metrics.errors_total = stage.errors;
+            let prices_calculated = counter("prices_calculated");
             metrics
                 .custom_metrics
                 .insert("prices_calculated".to_owned(), prices_calculated as f64);

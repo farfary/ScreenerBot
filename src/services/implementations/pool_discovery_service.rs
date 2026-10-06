@@ -3,14 +3,17 @@
 
 //! Pool discovery service — discovers new liquidity pools from on-chain transactions.
 
-use crate::errors::ServiceError;
 use crate::i18n::{ids, UiArg, UiText};
 use crate::logger::{self, LogTag};
+use crate::pools::PricingStage;
 use crate::services::{Service, ServiceHealth, ServiceMetrics};
 use async_trait::async_trait;
 use std::sync::Arc;
 use tokio::sync::Notify;
 use tokio::task::JoinHandle;
+
+/// The pricing stage this service runs on every enabled chain.
+const STAGE: PricingStage = PricingStage::Discovery;
 
 pub struct PoolDiscoveryService;
 
@@ -47,26 +50,16 @@ impl Service for PoolDiscoveryService {
     ) -> crate::Result<Vec<JoinHandle<()>>> {
         logger::debug(LogTag::PoolService, "Starting pool discovery service...");
 
-        // Get the PoolDiscovery component from global state
-        let discovery =
-            crate::chains::solana::pools::service::get_pool_discovery().ok_or_else(|| {
-                crate::Error::Service(ServiceError::Start {
-                    service: self.name().to_string(),
-                    message: "PoolDiscovery component not initialized".to_owned(),
-                })
-            })?;
-
-        // Spawn discovery task (instrumented) - component tracks its own metrics
-        let handle = tokio::spawn(monitor.instrument(async move {
-            discovery.start_discovery_task(shutdown).await;
-        }));
+        // One loop per enabled chain, each spawned under this service's
+        // shutdown and monitor; the handles are the loops themselves.
+        let handles = crate::pools::start_pricing_stage(STAGE, shutdown, monitor)?;
 
         logger::info(
             LogTag::PoolService,
             "Pool discovery service started (instrumented)",
         );
 
-        Ok(vec![handle])
+        Ok(handles)
     }
 
     async fn stop(&mut self) -> crate::Result<()> {
@@ -78,7 +71,7 @@ impl Service for PoolDiscoveryService {
     }
 
     async fn health(&self) -> ServiceHealth {
-        if crate::chains::solana::pools::service::get_pool_discovery().is_some() {
+        if crate::pools::pricing_stage_ready(STAGE) {
             ServiceHealth::Healthy
         } else {
             ServiceHealth::Unhealthy(
@@ -91,11 +84,20 @@ impl Service for PoolDiscoveryService {
     async fn metrics(&self) -> ServiceMetrics {
         let mut metrics = ServiceMetrics::default();
 
-        // Get metrics from the component if available
-        if let Some(discovery) = crate::chains::solana::pools::service::get_pool_discovery() {
-            let (operations, errors, pools_discovered) = discovery.get_metrics();
+        // Counters summed over every enabled chain; ratios are derived from
+        // the sums.
+        if let Some(stage) = crate::pools::pricing_stage_metrics(STAGE) {
+            let counter = |key: &str| {
+                stage
+                    .counters
+                    .iter()
+                    .find(|(k, _)| *k == key)
+                    .map_or(0, |(_, value)| *value)
+            };
+            let operations = stage.operations;
             metrics.operations_total = operations;
-            metrics.errors_total = errors;
+            metrics.errors_total = stage.errors;
+            let pools_discovered = counter("pools_discovered");
             metrics
                 .custom_metrics
                 .insert("pools_discovered".to_owned(), pools_discovered as f64);

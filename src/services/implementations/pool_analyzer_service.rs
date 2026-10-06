@@ -3,14 +3,17 @@
 
 //! Pool analyzer service — analyzes pool metrics and token scoring.
 
-use crate::errors::ServiceError;
 use crate::i18n::{ids, UiArg, UiText};
 use crate::logger::{self, LogTag};
+use crate::pools::PricingStage;
 use crate::services::{Service, ServiceHealth, ServiceMetrics};
 use async_trait::async_trait;
 use std::sync::Arc;
 use tokio::sync::Notify;
 use tokio::task::JoinHandle;
+
+/// The pricing stage this service runs on every enabled chain.
+const STAGE: PricingStage = PricingStage::Analysis;
 
 pub struct PoolAnalyzerService;
 
@@ -50,26 +53,16 @@ impl Service for PoolAnalyzerService {
             &"Starting pool analyzer service...".to_owned(),
         );
 
-        // Get the PoolAnalyzer component from global state
-        let analyzer =
-            crate::chains::solana::pools::service::get_pool_analyzer().ok_or_else(|| {
-                crate::Error::Service(ServiceError::Start {
-                    service: self.name().to_string(),
-                    message: "PoolAnalyzer component not initialized".to_owned(),
-                })
-            })?;
-
-        // Spawn analyzer task
-        let handle = tokio::spawn(monitor.instrument(async move {
-            analyzer.start_analyzer_task(shutdown).await;
-        }));
+        // One loop per enabled chain, each spawned under this service's
+        // shutdown and monitor; the handles are the loops themselves.
+        let handles = crate::pools::start_pricing_stage(STAGE, shutdown, monitor)?;
 
         logger::info(
             LogTag::PoolService,
             &"Pool analyzer service started (instrumented)".to_owned(),
         );
 
-        Ok(vec![handle])
+        Ok(handles)
     }
 
     async fn stop(&mut self) -> crate::Result<()> {
@@ -81,7 +74,7 @@ impl Service for PoolAnalyzerService {
     }
 
     async fn health(&self) -> ServiceHealth {
-        if crate::chains::solana::pools::service::get_pool_analyzer().is_some() {
+        if crate::pools::pricing_stage_ready(STAGE) {
             ServiceHealth::Healthy
         } else {
             ServiceHealth::Unhealthy(
@@ -94,11 +87,20 @@ impl Service for PoolAnalyzerService {
     async fn metrics(&self) -> ServiceMetrics {
         let mut metrics = ServiceMetrics::default();
 
-        // Get metrics from the component if available
-        if let Some(analyzer) = crate::chains::solana::pools::service::get_pool_analyzer() {
-            let (operations, errors, pools_analyzed) = analyzer.get_metrics();
+        // Counters summed over every enabled chain; ratios are derived from
+        // the sums.
+        if let Some(stage) = crate::pools::pricing_stage_metrics(STAGE) {
+            let counter = |key: &str| {
+                stage
+                    .counters
+                    .iter()
+                    .find(|(k, _)| *k == key)
+                    .map_or(0, |(_, value)| *value)
+            };
+            let operations = stage.operations;
             metrics.operations_total = operations;
-            metrics.errors_total = errors;
+            metrics.errors_total = stage.errors;
+            let pools_analyzed = counter("pools_analyzed");
             metrics
                 .custom_metrics
                 .insert("pools_analyzed".to_owned(), pools_analyzed as f64);

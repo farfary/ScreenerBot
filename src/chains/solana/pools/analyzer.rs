@@ -18,6 +18,7 @@ use crate::logger::{self, LogTag};
 use crate::pools::types::{pool_blacklist_threshold, PoolDescriptor};
 use crate::pools::utils::is_sol_mint;
 use crate::rpc::RpcError;
+use crate::utils::run_or_shutdown;
 
 use crate::chains::solana::solana_sdk::pubkey::Pubkey;
 use std::collections::HashMap;
@@ -58,6 +59,16 @@ pub(crate) fn classify_account_fetch_error(error: &crate::Error) -> PoolAnalysis
 struct TransientBackoff {
     retry_at: Instant,
     delay: Duration,
+}
+
+/// One pool the analysis loop was asked to analyze.
+struct AnalysisRequest {
+    pool_id: Pubkey,
+    program_id: Pubkey,
+    base_mint: Pubkey,
+    quote_mint: Pubkey,
+    liquidity_usd: f64,
+    volume_h24_usd: f64,
 }
 
 /// Wait before the next re-analysis attempt: starts at `TRANSIENT_RETRY_INITIAL`
@@ -148,211 +159,275 @@ impl PoolAnalyzer {
         self.pool_directory.clone()
     }
 
-    /// Start analyzer background task
-    pub async fn start_analyzer_task(&self, shutdown: Arc<Notify>) {
+    /// Take the request receiver the analysis loop consumes; `None` once a
+    /// loop has taken it.
+    pub(super) fn take_receiver(&self) -> Option<mpsc::UnboundedReceiver<AnalyzerMessage>> {
+        self.analyzer_rx.write().ok()?.take()
+    }
+
+    /// Run the analysis loop until shutdown, a shutdown message or a closed
+    /// channel. An analysis in flight is abandoned on shutdown.
+    pub(super) async fn run_analyzer_loop(
+        self: Arc<Self>,
+        mut analyzer_rx: mpsc::UnboundedReceiver<AnalyzerMessage>,
+        shutdown: Arc<Notify>,
+    ) {
         logger::info(LogTag::PoolAnalyzer, "Starting pool analyzer task");
+        logger::info(LogTag::PoolAnalyzer, "Pool analyzer task started");
 
-        let pool_directory = self.pool_directory.clone();
-        let selected_pools = self.selected_pools.clone();
+        let rpc_client = get_rpc_client();
+        let mut transient_backoff: HashMap<Pubkey, TransientBackoff> = HashMap::new();
 
-        // Clone metrics for tracking in background task
-        let operations = Arc::clone(&self.operations);
-        let errors = Arc::clone(&self.errors);
-        let pools_analyzed = Arc::clone(&self.pools_analyzed);
+        loop {
+            tokio::select! {
+                _ = shutdown.notified() => {
+                    logger::info(LogTag::PoolAnalyzer, "Pool analyzer task shutting down");
+                    break;
+                }
 
-        // Take the receiver from the Arc<RwLock>
-        let mut analyzer_rx = {
-            let mut rx_lock = self.analyzer_rx.write().unwrap();
-            rx_lock.take().expect("Analyzer receiver already taken")
-        };
-
-        tokio::spawn(async move {
-            logger::info(LogTag::PoolAnalyzer, "Pool analyzer task started");
-
-            // Get RPC client inside the task
-            let rpc_client = get_rpc_client();
-            let mut transient_backoff: HashMap<Pubkey, TransientBackoff> = HashMap::new();
-
-            loop {
-                tokio::select! {
-                    _ = shutdown.notified() => {
-                        logger::info(LogTag::PoolAnalyzer, "Pool analyzer task shutting down");
-                        break;
-                    }
-
-                    message = analyzer_rx.recv() => {
-                        match message {
-                            Some(AnalyzerMessage::AnalyzePool {
+                message = analyzer_rx.recv() => {
+                    match message {
+                        Some(AnalyzerMessage::AnalyzePool {
+                            pool_id,
+                            program_id,
+                            base_mint,
+                            quote_mint,
+                            liquidity_usd,
+                            volume_h24_usd
+                        }) => {
+                            let request = AnalysisRequest {
                                 pool_id,
                                 program_id,
                                 base_mint,
                                 quote_mint,
                                 liquidity_usd,
-                                volume_h24_usd
-                            }) => {
-                                // Check if pool is blacklisted in database
-                                if let Ok(is_blacklisted) = crate::pools::db::is_pool_blacklisted(crate::chains::ChainId::Solana, &pool_id.to_string()).await {
-                                    if is_blacklisted {
-                                        logger::debug(
-                                            LogTag::PoolAnalyzer,
-                                            &format!("Skipping blacklisted pool: {pool_id}"),
-                                        );
-                                        continue;
-                                    }
-                                }
-
-                                // The non-SOL side: the token this pool prices
-                                let token_mint = if is_sol_mint(&base_mint.to_string()) { quote_mint } else { base_mint };
-                                let token_mint_str = token_mint.to_string();
-
-                                // Discovery re-sends its choice every tick. An analyzed pool
-                                // only needs its selection confirmed, never another RPC fetch.
-                                let analyzed = !needs_analysis(&pool_directory.read().unwrap(), &pool_id);
-                                if analyzed {
-                                    Self::select_pool_for_token(&selected_pools, &pool_directory, &token_mint_str, pool_id).await;
-                                    continue;
-                                }
-
-                                let now = Instant::now();
-                                if transient_backoff.get(&pool_id).is_some_and(|backoff| now < backoff.retry_at) {
-                                    continue;
-                                }
-
-                                match Self::analyze_pool_static(
-                                    pool_id,
-                                    program_id,
-                                    base_mint,
-                                    quote_mint,
-                                    liquidity_usd,
-                                    volume_h24_usd,
-                                    rpc_client
-                                ).await {
-                                    Ok(descriptor) => {
-                                        transient_backoff.remove(&pool_id);
-
-                                        // Track metrics
-                                        operations.fetch_add(1, std::sync::atomic::Ordering::Relaxed);
-                                        pools_analyzed.fetch_add(1, std::sync::atomic::Ordering::Relaxed);
-
-                                        // Store analyzed pool in directory, then make it the
-                                        // token's pricing pool (evicting any superseded pool)
-                                        pool_directory.write().unwrap().insert(pool_id, descriptor.clone());
-                                        Self::select_pool_for_token(&selected_pools, &pool_directory, &token_mint_str, pool_id).await;
-
-                                        // Trigger account fetch for this pool's reserve accounts
-                                        if let Some(fetcher) = service::get_account_fetcher() {
-                                            let reserve_accounts: Vec<Pubkey> = descriptor
-                                                .reserve_accounts
-                                                .iter()
-                                                .filter_map(|account| {
-                                                    Pubkey::from_str(account.address()).ok()
-                                                })
-                                                .collect();
-                                            if let Err(e) = fetcher.request_pool_fetch(pool_id, reserve_accounts) {
-                                                // The analyzer and the fetcher wake on the SAME
-                                                // shutdown broadcast, so the fetcher can drop its
-                                                // receiver while the analyzer is still finishing
-                                                // the batch in hand. A closed channel is then the
-                                                // expected outcome, not a fault: the work is
-                                                // deliberately being abandoned because the process
-                                                // is exiting. Logging it at warning buried the
-                                                // real shutdown sequence under a dozen identical
-                                                // lines every run.
-                                                if crate::process::shutdown::is_shutdown_requested() {
-                                                    logger::debug(LogTag::PoolAnalyzer, &format!("Dropping fetch request for pool {pool_id} during shutdown: {e}"));
-                                                } else {
-                                                    logger::warning(LogTag::PoolAnalyzer, &format!("Failed to request fetch for analyzed pool {pool_id}: {e}"));
-                                                }
-                                            }
-                                        }
-
-                                        logger::debug(
-                                            LogTag::PoolAnalyzer,
-                                            &format!(
-                                                "Analyzed pool {} for token {} ({}) - {}/{}",
-                                                pool_id,
-                                                token_mint_str,
-                                                descriptor.program_kind.as_str(),
-                                                base_mint,
-                                                quote_mint
-                                            ),
-                                        );
-                                    }
-                                    Err(PoolAnalysisFailure::Transient) => {
-                                        errors.fetch_add(1, std::sync::atomic::Ordering::Relaxed);
-
-                                        // Forget backoffs that ran out long ago so the map stays
-                                        // bounded by the pools that are currently failing.
-                                        transient_backoff.retain(|_, backoff| {
-                                            now.saturating_duration_since(backoff.retry_at) < TRANSIENT_RETRY_MAX
-                                        });
-                                        let delay = next_transient_delay(
-                                            transient_backoff.get(&pool_id).map(|backoff| backoff.delay),
-                                        );
-                                        transient_backoff.insert(pool_id, TransientBackoff { retry_at: now + delay, delay });
-
-                                        logger::debug(
-                                            LogTag::PoolAnalyzer,
-                                            &format!(
-                                                "Analysis of pool {pool_id} for token {token_mint_str} hit a transient RPC failure; retrying in {}s",
-                                                delay.as_secs()
-                                            ),
-                                        );
-                                    }
-                                    Err(PoolAnalysisFailure::Structural) => {
-                                        errors.fetch_add(1, std::sync::atomic::Ordering::Relaxed);
-                                        transient_backoff.remove(&pool_id);
-
-                                        match crate::pools::db::add_pool_to_blacklist(
-                                            crate::chains::ChainId::Solana,
-                                            &pool_id.to_string(),
-                                            "analysis_failed",
-                                            Some(&token_mint_str),
-                                            Some(&program_id.to_string()),
-                                            1,
-                                        ).await {
-                                            Ok(outcome) => match outcome.blacklisted_until {
-                                                Some(until) => logger::warning(
-                                                    LogTag::PoolAnalyzer,
-                                                    &format!(
-                                                        "Failed to analyze pool {pool_id} for token {token_mint_str}; blacklisted until unix {until} after {} failures",
-                                                        outcome.error_count
-                                                    ),
-                                                ),
-                                                None => logger::warning(
-                                                    LogTag::PoolAnalyzer,
-                                                    &format!(
-                                                        "Failed to analyze pool {pool_id} for token {token_mint_str} (failure {} of {})",
-                                                        outcome.error_count,
-                                                        pool_blacklist_threshold()
-                                                    ),
-                                                ),
-                                            },
-                                            Err(e) => logger::warning(
-                                                LogTag::PoolAnalyzer,
-                                                &format!("Failed to record analysis failure of pool {pool_id}: {e}"),
-                                            ),
-                                        }
-                                    }
-                                }
-                            }
-
-                            Some(AnalyzerMessage::Shutdown) => {
-                                logger::info(LogTag::PoolAnalyzer, "Pool analyzer received shutdown signal");
+                                volume_h24_usd,
+                            };
+                            let analysis = self.analyze_request(request, rpc_client, &mut transient_backoff);
+                            if run_or_shutdown(&shutdown, analysis).await.is_none() {
+                                logger::info(LogTag::PoolAnalyzer, "Pool analyzer task shutting down");
                                 break;
                             }
+                        }
 
-                            None => {
-                                logger::info(LogTag::PoolAnalyzer, "Pool analyzer channel closed");
-                                break;
-                            }
+                        Some(AnalyzerMessage::Shutdown) => {
+                            logger::info(LogTag::PoolAnalyzer, "Pool analyzer received shutdown signal");
+                            break;
+                        }
+
+                        None => {
+                            logger::info(LogTag::PoolAnalyzer, "Pool analyzer channel closed");
+                            break;
                         }
                     }
                 }
             }
+        }
 
-            logger::info(LogTag::PoolAnalyzer, "Pool analyzer task completed");
-        });
+        logger::info(LogTag::PoolAnalyzer, "Pool analyzer task completed");
+    }
+
+    /// Handle one analysis request: skip a blacklisted pool, confirm the
+    /// selection of an analyzed one, otherwise analyze it, record the outcome
+    /// and request its reserve accounts.
+    async fn analyze_request(
+        &self,
+        request: AnalysisRequest,
+        rpc_client: &RpcClient,
+        transient_backoff: &mut HashMap<Pubkey, TransientBackoff>,
+    ) {
+        let AnalysisRequest {
+            pool_id,
+            program_id,
+            base_mint,
+            quote_mint,
+            liquidity_usd,
+            volume_h24_usd,
+        } = request;
+        let pool_directory = &self.pool_directory;
+        let selected_pools = &self.selected_pools;
+        let operations = &self.operations;
+        let errors = &self.errors;
+        let pools_analyzed = &self.pools_analyzed;
+
+        // Check if pool is blacklisted in database
+        if let Ok(is_blacklisted) = crate::pools::db::is_pool_blacklisted(
+            crate::chains::ChainId::Solana,
+            &pool_id.to_string(),
+        )
+        .await
+        {
+            if is_blacklisted {
+                logger::debug(
+                    LogTag::PoolAnalyzer,
+                    &format!("Skipping blacklisted pool: {pool_id}"),
+                );
+                return;
+            }
+        }
+
+        // The non-SOL side: the token this pool prices
+        let token_mint = if is_sol_mint(&base_mint.to_string()) {
+            quote_mint
+        } else {
+            base_mint
+        };
+        let token_mint_str = token_mint.to_string();
+
+        // Discovery re-sends its choice every tick. An analyzed pool
+        // only needs its selection confirmed, never another RPC fetch.
+        let analyzed = !needs_analysis(&pool_directory.read().unwrap(), &pool_id);
+        if analyzed {
+            Self::select_pool_for_token(selected_pools, pool_directory, &token_mint_str, pool_id)
+                .await;
+            return;
+        }
+
+        let now = Instant::now();
+        if transient_backoff
+            .get(&pool_id)
+            .is_some_and(|backoff| now < backoff.retry_at)
+        {
+            return;
+        }
+
+        match Self::analyze_pool_static(
+            pool_id,
+            program_id,
+            base_mint,
+            quote_mint,
+            liquidity_usd,
+            volume_h24_usd,
+            rpc_client,
+        )
+        .await
+        {
+            Ok(descriptor) => {
+                transient_backoff.remove(&pool_id);
+
+                // Track metrics
+                operations.fetch_add(1, std::sync::atomic::Ordering::Relaxed);
+                pools_analyzed.fetch_add(1, std::sync::atomic::Ordering::Relaxed);
+
+                // Store analyzed pool in directory, then make it the
+                // token's pricing pool (evicting any superseded pool)
+                pool_directory
+                    .write()
+                    .unwrap()
+                    .insert(pool_id, descriptor.clone());
+                Self::select_pool_for_token(
+                    selected_pools,
+                    pool_directory,
+                    &token_mint_str,
+                    pool_id,
+                )
+                .await;
+
+                // Trigger account fetch for this pool's reserve accounts
+                if let Some(fetcher) = service::get_account_fetcher() {
+                    let reserve_accounts: Vec<Pubkey> = descriptor
+                        .reserve_accounts
+                        .iter()
+                        .filter_map(|account| Pubkey::from_str(account.address()).ok())
+                        .collect();
+                    if let Err(e) = fetcher.request_pool_fetch(pool_id, reserve_accounts) {
+                        // The analyzer and the fetcher wake on the SAME
+                        // shutdown broadcast, so the fetcher can drop its
+                        // receiver while the analyzer is still finishing
+                        // the batch in hand. A closed channel is then the
+                        // expected outcome, not a fault: the work is
+                        // deliberately being abandoned because the process
+                        // is exiting. Logging it at warning buried the
+                        // real shutdown sequence under a dozen identical
+                        // lines every run.
+                        if crate::process::shutdown::is_shutdown_requested() {
+                            logger::debug(LogTag::PoolAnalyzer, &format!("Dropping fetch request for pool {pool_id} during shutdown: {e}"));
+                        } else {
+                            logger::warning(
+                                LogTag::PoolAnalyzer,
+                                &format!(
+                                    "Failed to request fetch for analyzed pool {pool_id}: {e}"
+                                ),
+                            );
+                        }
+                    }
+                }
+
+                logger::debug(
+                    LogTag::PoolAnalyzer,
+                    &format!(
+                        "Analyzed pool {} for token {} ({}) - {}/{}",
+                        pool_id,
+                        token_mint_str,
+                        descriptor.program_kind.as_str(),
+                        base_mint,
+                        quote_mint
+                    ),
+                );
+            }
+            Err(PoolAnalysisFailure::Transient) => {
+                errors.fetch_add(1, std::sync::atomic::Ordering::Relaxed);
+
+                // Forget backoffs that ran out long ago so the map stays
+                // bounded by the pools that are currently failing.
+                transient_backoff.retain(|_, backoff| {
+                    now.saturating_duration_since(backoff.retry_at) < TRANSIENT_RETRY_MAX
+                });
+                let delay = next_transient_delay(
+                    transient_backoff.get(&pool_id).map(|backoff| backoff.delay),
+                );
+                transient_backoff.insert(
+                    pool_id,
+                    TransientBackoff {
+                        retry_at: now + delay,
+                        delay,
+                    },
+                );
+
+                logger::debug(
+                    LogTag::PoolAnalyzer,
+                    &format!(
+                        "Analysis of pool {pool_id} for token {token_mint_str} hit a transient RPC failure; retrying in {}s",
+                        delay.as_secs()
+                    ),
+                );
+            }
+            Err(PoolAnalysisFailure::Structural) => {
+                errors.fetch_add(1, std::sync::atomic::Ordering::Relaxed);
+                transient_backoff.remove(&pool_id);
+
+                match crate::pools::db::add_pool_to_blacklist(
+                    crate::chains::ChainId::Solana,
+                    &pool_id.to_string(),
+                    "analysis_failed",
+                    Some(&token_mint_str),
+                    Some(&program_id.to_string()),
+                    1,
+                ).await {
+                    Ok(outcome) => match outcome.blacklisted_until {
+                        Some(until) => logger::warning(
+                            LogTag::PoolAnalyzer,
+                            &format!(
+                                "Failed to analyze pool {pool_id} for token {token_mint_str}; blacklisted until unix {until} after {} failures",
+                                outcome.error_count
+                            ),
+                        ),
+                        None => logger::warning(
+                            LogTag::PoolAnalyzer,
+                            &format!(
+                                "Failed to analyze pool {pool_id} for token {token_mint_str} (failure {} of {})",
+                                outcome.error_count,
+                                pool_blacklist_threshold()
+                            ),
+                        ),
+                    },
+                    Err(e) => logger::warning(
+                        LogTag::PoolAnalyzer,
+                        &format!("Failed to record analysis failure of pool {pool_id}: {e}"),
+                    ),
+                }
+            }
+        }
     }
 
     /// Make `pool_id` the pool `mint` is priced from. A superseded pool leaves

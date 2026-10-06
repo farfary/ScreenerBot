@@ -368,13 +368,12 @@ fn wallet_ownership_never_names_a_solana_key_type() {
 }
 
 /// Pool runtime composition boundary: `src/pools/service.rs` (the
-/// chain-neutral supervisor: running flag, shutdown protocol, event
-/// recording, db/cache init) must never import the concrete Solana pool
-/// runtime — it selects an implementation via an injected closure instead
-/// (see `initialize_pool_components`/`stop_pool_service` and their caller in
-/// `src/services/implementations/pools_service.rs`). Regression guard for
-/// the leak fixed by moving `PoolAnalyzer`/`PoolDiscovery`/`AccountFetcher`/
-/// `PriceCalculator` management to `crate::chains::solana::pools::service`.
+/// chain-neutral supervisor: running flag, event recording, db/cache init)
+/// must never import the concrete Solana pool runtime — it reaches each
+/// chain's components through `ChainRuntime::pricing_driver`. Regression
+/// guard for the leak fixed by moving `PoolAnalyzer`/`PoolDiscovery`/
+/// `AccountFetcher`/`PriceCalculator` management to
+/// `crate::chains::solana::pools::service`.
 #[test]
 fn shared_pools_service_never_imports_solana_runtime() {
     let path = "pools/service.rs";
@@ -384,7 +383,7 @@ fn shared_pools_service_never_imports_solana_runtime() {
     assert!(
         !code_lines(&contents).contains("chains::solana"),
         "src/{path} must not import crate::chains::solana — it orchestrates lifecycle \
-         generically and takes the concrete runtime as an injected closure"
+         generically and reaches the concrete runtime through its pricing driver"
     );
 }
 
@@ -740,11 +739,6 @@ const NEUTRAL_FILES_NAMING_CHAINS_SOLANA: &[&str] = &[
     "positions/operations/partial_close.rs",
     "positions/verifier.rs",
     "positions/worker.rs",
-    "services/implementations/pool_analyzer_service.rs",
-    "services/implementations/pool_calculator_service.rs",
-    "services/implementations/pool_discovery_service.rs",
-    "services/implementations/pool_fetcher_service.rs",
-    "services/implementations/pools_service.rs",
     "services/implementations/referral_service.rs",
     "swaps/operations.rs",
     "telegram/commands/status.rs",
@@ -772,8 +766,6 @@ const NEUTRAL_FILES_NAMING_CHAINS_SOLANA: &[&str] = &[
     "wallets/manager/migration.rs",
     "webserver/routes/initialization/handlers.rs",
     "webserver/routes/initialization/types.rs",
-    "webserver/routes/positions/detail.rs",
-    "webserver/routes/tokens/detail.rs",
     "webserver/routes/tools/ata_cleanup.rs",
     "webserver/routes/tools/burn_tokens.rs",
     "webserver/routes/tools/multi_wallet/multi_buy.rs",
@@ -781,7 +773,6 @@ const NEUTRAL_FILES_NAMING_CHAINS_SOLANA: &[&str] = &[
     "webserver/routes/tools/multi_wallet/wallet_ops.rs",
     "webserver/routes/trader/manual.rs",
     "webserver/routes/transactions/handlers.rs",
-    "webserver/snapshot/collectors.rs",
 ];
 
 /// Neutral code — everything outside `src/chains/` — must reach chains only

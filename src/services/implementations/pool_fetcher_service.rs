@@ -3,14 +3,17 @@
 
 //! Pool fetcher service — fetches and updates pool account data via RPC.
 
-use crate::errors::ServiceError;
 use crate::i18n::{ids, UiArg, UiText};
 use crate::logger::{self, LogTag};
+use crate::pools::PricingStage;
 use crate::services::{Service, ServiceHealth, ServiceMetrics};
 use async_trait::async_trait;
 use std::sync::Arc;
 use tokio::sync::Notify;
 use tokio::task::JoinHandle;
+
+/// The pricing stage this service runs on every enabled chain.
+const STAGE: PricingStage = PricingStage::Fetch;
 
 pub struct PoolFetcherService;
 
@@ -50,26 +53,16 @@ impl Service for PoolFetcherService {
             &"Starting pool fetcher service...".to_owned(),
         );
 
-        // Get the AccountFetcher component from global state
-        let fetcher =
-            crate::chains::solana::pools::service::get_account_fetcher().ok_or_else(|| {
-                crate::Error::Service(ServiceError::Start {
-                    service: self.name().to_string(),
-                    message: "AccountFetcher component not initialized".to_owned(),
-                })
-            })?;
-
-        // Spawn fetcher task
-        let handle = tokio::spawn(monitor.instrument(async move {
-            fetcher.start_fetcher_task(shutdown).await;
-        }));
+        // One loop per enabled chain, each spawned under this service's
+        // shutdown and monitor; the handles are the loops themselves.
+        let handles = crate::pools::start_pricing_stage(STAGE, shutdown, monitor)?;
 
         logger::info(
             LogTag::PoolService,
             &"Pool fetcher service started (instrumented)".to_owned(),
         );
 
-        Ok(vec![handle])
+        Ok(handles)
     }
 
     async fn stop(&mut self) -> crate::Result<()> {
@@ -81,7 +74,7 @@ impl Service for PoolFetcherService {
     }
 
     async fn health(&self) -> ServiceHealth {
-        if crate::chains::solana::pools::service::get_account_fetcher().is_some() {
+        if crate::pools::pricing_stage_ready(STAGE) {
             ServiceHealth::Healthy
         } else {
             ServiceHealth::Unhealthy(
@@ -94,11 +87,21 @@ impl Service for PoolFetcherService {
     async fn metrics(&self) -> ServiceMetrics {
         let mut metrics = ServiceMetrics::default();
 
-        // Get metrics from the component if available
-        if let Some(fetcher) = crate::chains::solana::pools::service::get_account_fetcher() {
-            let (operations, errors, accounts_fetched, rpc_batches) = fetcher.get_metrics();
+        // Counters summed over every enabled chain; ratios are derived from
+        // the sums.
+        if let Some(stage) = crate::pools::pricing_stage_metrics(STAGE) {
+            let counter = |key: &str| {
+                stage
+                    .counters
+                    .iter()
+                    .find(|(k, _)| *k == key)
+                    .map_or(0, |(_, value)| *value)
+            };
+            let operations = stage.operations;
             metrics.operations_total = operations;
-            metrics.errors_total = errors;
+            metrics.errors_total = stage.errors;
+            let accounts_fetched = counter("accounts_fetched");
+            let rpc_batches = counter("rpc_batches");
             metrics
                 .custom_metrics
                 .insert("accounts_fetched".to_owned(), accounts_fetched as f64);

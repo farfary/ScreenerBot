@@ -3,25 +3,25 @@
 
 //! Pool service supervisor - chain-neutral lifecycle for the pool runtime
 //!
-//! Owns the running flag, event recording and the per-chain database and
-//! history initialization every enabled chain's pool runtime needs. The
-//! concrete runtime components (discovery/analyzer/fetcher/calculator) are
-//! chain-owned — for Solana that is `crate::chains::solana::pools::service`.
-//! The composition root (`src/services/implementations/pools_service.rs`)
-//! selects that implementation and passes its
-//! `initialize_components`/`clear_components` functions in here, so this
-//! module never imports `crate::chains::solana`. Periodic upkeep runs in the
-//! maintenance task (`super::maintenance`).
+//! Owns the running flag, event recording and, for every enabled chain, the
+//! database and history initialization plus the chain's pricing driver
+//! (`ChainRuntime::pricing_driver`), which brings up the chain-owned
+//! discovery/analysis/fetch/calculation components. The stage loops are
+//! started by the stage services; periodic upkeep runs in the maintenance
+//! task (`super::maintenance`).
 
+use super::driver::{PricingDriver, PricingStage, PricingStageMetrics};
 use super::types::max_watched_tokens;
 use super::{cache, db, Error};
-use crate::chains::{adapter_for, enabled_chains, ChainId};
+use crate::chains::{adapter_for, enabled_chains, runtime_for, ChainId};
 use crate::config::with_config;
 use crate::events::{record_safe, Event, EventCategory};
 use crate::logger::{self, LogTag};
 
-use std::future::Future;
 use std::sync::atomic::{AtomicBool, Ordering};
+use std::sync::Arc;
+use tokio::sync::Notify;
+use tokio::task::JoinHandle;
 
 // Timing constants
 const FETCH_INTERVAL_MS: u64 = 500;
@@ -29,20 +29,22 @@ const FETCH_INTERVAL_MS: u64 = 500;
 // Global service state
 static SERVICE_RUNNING: AtomicBool = AtomicBool::new(false);
 
+/// The pricing driver of an enabled `chain`; a missing runtime is an
+/// invariant error, because every enabled chain installs one at boot.
+pub(super) fn pricing_driver(chain: ChainId) -> Result<Arc<dyn PricingDriver>, Error> {
+    runtime_for(chain)
+        .map(|runtime| runtime.pricing_driver())
+        .ok_or(Error::RuntimeUnavailable { chain })
+}
+
 /// Initialize pool components only (no background tasks)
 ///
-/// Opens every enabled chain's pools database and loads its open positions'
-/// price history, then runs `init_chain_components` once to bring up the
-/// concrete runtime the composition root selected, and finally warms each
-/// chain's token pool cache for its open positions.
+/// For each enabled chain, in order: opens its pools database, loads its
+/// open positions' price history, initializes its pricing driver, and warms
+/// its token pool cache for those positions.
 ///
 /// Returns an error if already initialized or if initialization fails.
-pub async fn initialize_pool_components<F, Fut, E>(init_chain_components: F) -> Result<(), Error>
-where
-    F: FnOnce() -> Fut,
-    Fut: Future<Output = Result<u32, E>>,
-    E: std::fmt::Display,
-{
+pub async fn initialize_pool_components() -> Result<(), Error> {
     let (single_pool_mode, dexscreener_enabled, fetch_interval_ms) = with_config(|cfg| {
         (
             cfg.pools.enable_single_pool_mode,
@@ -90,87 +92,10 @@ where
 
     logger::info(LogTag::PoolService, "Starting pool service...");
 
-    // Open each enabled chain's database, then load the price history of
-    // that chain's open positions into its cache.
     for &chain in enabled_chains() {
-        if let Err(e) = db::initialize_database(chain).await {
-            logger::error(
-                LogTag::PoolService,
-                &format!("Failed to initialize database on {chain}: {e}"),
-            );
+        if let Err(e) = initialize_chain(chain, dexscreener_enabled).await {
             SERVICE_RUNNING.store(false, Ordering::Relaxed);
-
-            record_safe(Event::error(
-                EventCategory::System,
-                Some("pool_service_db_init_failed".to_owned()),
-                None,
-                None,
-                serde_json::json!({
-                  "error": e.to_string(),
-                  "component": "database",
-                  "action": "initialize"
-                }),
-            ))
-            .await;
-
             return Err(e);
-        }
-
-        let open_mints = open_mints_on(chain).await;
-        cache::load_history(chain, &open_mints).await;
-    }
-
-    // Initialize the chain-specific runtime components
-    record_safe(Event::info(
-        EventCategory::System,
-        Some("pool_components_init_start".to_owned()),
-        None,
-        None,
-        serde_json::json!({
-          "dexscreener_enabled": dexscreener_enabled,
-          "action": "component_initialization"
-        }),
-    ))
-    .await;
-
-    match init_chain_components().await {
-        Ok(rpc_urls_count) => {
-            record_safe(Event::info(
-                EventCategory::System,
-                Some("pool_components_initialized".to_owned()),
-                None,
-                None,
-                serde_json::json!({
-                  "components": ["pool_discovery", "pool_analyzer", "account_fetcher", "price_calculator"],
-                  "rpc_urls_count": rpc_urls_count,
-                  "status": "ready"
-                }),
-            ))
-            .await;
-            logger::info(
-                LogTag::PoolService,
-                "Service components initialized successfully",
-            );
-        }
-        Err(e) => {
-            SERVICE_RUNNING.store(false, Ordering::Relaxed);
-
-            record_safe(Event::error(
-                EventCategory::System,
-                Some("pool_service_component_init_failed".to_owned()),
-                None,
-                None,
-                serde_json::json!({
-                  "error": e.to_string(),
-                  "component": "service_components",
-                  "action": "initialize"
-                }),
-            ))
-            .await;
-
-            return Err(Error::ComponentInit {
-                detail: e.to_string(),
-            });
         }
     }
 
@@ -185,11 +110,6 @@ where
             LogTag::PoolService,
             "Pool monitoring mode: ALL POOLS (comprehensive coverage)",
         );
-    }
-
-    // Warm cache for open positions - ensures fresh price data at startup
-    for &chain in enabled_chains() {
-        warm_cache_for_open_positions(chain).await;
     }
 
     logger::info(
@@ -213,15 +133,101 @@ where
     Ok(())
 }
 
+/// Bring up one chain: open its database, load its open positions' price
+/// history, initialize its pricing driver, then warm its token pool cache.
+async fn initialize_chain(chain: ChainId, dexscreener_enabled: bool) -> Result<(), Error> {
+    if let Err(e) = db::initialize_database(chain).await {
+        logger::error(
+            LogTag::PoolService,
+            &format!("Failed to initialize database on {chain}: {e}"),
+        );
+
+        record_safe(Event::error(
+            EventCategory::System,
+            Some("pool_service_db_init_failed".to_owned()),
+            None,
+            None,
+            serde_json::json!({
+              "error": e.to_string(),
+              "component": "database",
+              "action": "initialize"
+            }),
+        ))
+        .await;
+
+        return Err(e);
+    }
+
+    let open_mints = open_mints_on(chain).await;
+    cache::load_history(chain, &open_mints).await;
+
+    // Initialize the chain's pricing pipeline components
+    record_safe(Event::info(
+        EventCategory::System,
+        Some("pool_components_init_start".to_owned()),
+        None,
+        None,
+        serde_json::json!({
+          "dexscreener_enabled": dexscreener_enabled,
+          "action": "component_initialization"
+        }),
+    ))
+    .await;
+
+    let initialized = match pricing_driver(chain) {
+        Ok(driver) => driver.initialize().await,
+        Err(e) => Err(e),
+    };
+    match initialized {
+        Ok(init) => {
+            record_safe(Event::info(
+                EventCategory::System,
+                Some("pool_components_initialized".to_owned()),
+                None,
+                None,
+                serde_json::json!({
+                  "chain": chain,
+                  "components": init.components,
+                  "rpc_urls_count": init.rpc_urls_count,
+                  "status": "ready"
+                }),
+            ))
+            .await;
+            logger::info(
+                LogTag::PoolService,
+                &format!("Service components initialized successfully on {chain}"),
+            );
+        }
+        Err(e) => {
+            record_safe(Event::error(
+                EventCategory::System,
+                Some("pool_service_component_init_failed".to_owned()),
+                None,
+                None,
+                serde_json::json!({
+                  "chain": chain,
+                  "error": e.to_string(),
+                  "component": "service_components",
+                  "action": "initialize"
+                }),
+            ))
+            .await;
+
+            return Err(e);
+        }
+    }
+
+    // Warm cache for open positions - ensures fresh price data at startup
+    warm_cache_for_open_positions(chain).await;
+    Ok(())
+}
+
 /// Stop the pool service
 ///
-/// Clears the running flag and calls `clear_chain_components` to release the
-/// concrete runtime the composition root selected. The maintenance task stops
-/// on the service manager's shutdown signal.
-pub async fn stop_pool_service<F>(clear_chain_components: F)
-where
-    F: FnOnce(),
-{
+/// Clears the running flag and releases every enabled chain's pricing
+/// components. The maintenance task and the stage loops stop on the service
+/// manager's shutdown signal.
+pub async fn stop_pool_service() {
     record_safe(Event::info(
         EventCategory::System,
         Some("pool_service_stop_attempt".to_owned()),
@@ -252,7 +258,15 @@ where
     }
 
     SERVICE_RUNNING.store(false, Ordering::Relaxed);
-    clear_chain_components();
+    for &chain in enabled_chains() {
+        match pricing_driver(chain) {
+            Ok(driver) => driver.clear(),
+            Err(e) => logger::warning(
+                LogTag::PoolService,
+                &format!("Pricing components not cleared on {chain}: {e}"),
+            ),
+        }
+    }
 
     logger::info(LogTag::PoolService, "Pool service stopped successfully");
 
@@ -267,6 +281,66 @@ where
         }),
     ))
     .await;
+}
+
+/// Start `stage`'s loop on every enabled chain under the service manager's
+/// `shutdown` and `monitor`, returning every loop handle. Never awaits a loop.
+/// On a failure, the loops already started are aborted and the error is
+/// returned.
+pub fn start_pricing_stage(
+    stage: PricingStage,
+    shutdown: Arc<Notify>,
+    monitor: tokio_metrics::TaskMonitor,
+) -> Result<Vec<JoinHandle<()>>, Error> {
+    let mut handles = Vec::new();
+    for &chain in enabled_chains() {
+        let started = pricing_driver(chain)
+            .and_then(|driver| driver.start_stage(stage, shutdown.clone(), monitor.clone()));
+        match started {
+            Ok(Some(handle)) => handles.push(handle),
+            Ok(None) => {}
+            Err(e) => {
+                for handle in &handles {
+                    handle.abort();
+                }
+                return Err(e);
+            }
+        }
+    }
+    Ok(handles)
+}
+
+/// Whether `stage`'s component is initialized on every enabled chain.
+pub fn pricing_stage_ready(stage: PricingStage) -> bool {
+    enabled_chains().iter().all(|&chain| {
+        pricing_driver(chain)
+            .map(|driver| driver.stage_ready(stage))
+            .unwrap_or(false)
+    })
+}
+
+/// `stage`'s counters summed by key over every enabled chain; `None` while
+/// no chain has the stage initialized.
+pub fn pricing_stage_metrics(stage: PricingStage) -> Option<PricingStageMetrics> {
+    let mut sum: Option<PricingStageMetrics> = None;
+    for &chain in enabled_chains() {
+        let Some(metrics) = pricing_driver(chain)
+            .ok()
+            .and_then(|driver| driver.stage_metrics(stage))
+        else {
+            continue;
+        };
+        let sum = sum.get_or_insert_with(PricingStageMetrics::default);
+        sum.operations += metrics.operations;
+        sum.errors += metrics.errors;
+        for (key, value) in metrics.counters {
+            match sum.counters.iter_mut().find(|(k, _)| *k == key) {
+                Some((_, total)) => *total += value,
+                None => sum.counters.push((key, value)),
+            }
+        }
+    }
+    sum
 }
 
 /// Check if the pool service is currently running

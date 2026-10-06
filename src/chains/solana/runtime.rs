@@ -95,6 +95,9 @@ impl ChainRuntime for SolanaRuntime {
             .map(|(_, label, fetch)| DiscoveryFeed { label, fetch })
             .collect()
     }
+    fn pricing_driver(&self) -> Arc<dyn crate::pools::PricingDriver> {
+        Arc::new(crate::chains::solana::pools::driver::SolanaPricingDriver)
+    }
 }
 
 /// A runtime instance for the chain registry (called once per boot by

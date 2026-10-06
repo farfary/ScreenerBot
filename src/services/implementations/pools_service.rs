@@ -35,21 +35,16 @@ impl Service for PoolsService {
     async fn initialize(&mut self) -> crate::Result<()> {
         logger::info(LogTag::PoolService, "Initializing pool components...");
 
-        // Initialize all pool components (database, cache, RPC, components),
-        // selecting the Solana runtime as the concrete implementation.
-        // `initialize_pool_components` is generic over the chain adapter's own
-        // error type (pools stays chain-neutral and never names it) so the
-        // Solana result is passed straight through.
-        crate::pools::initialize_pool_components(|| {
-            crate::chains::solana::pools::service::initialize_components()
-        })
-        .await
-        .map_err(|e| {
-            crate::Error::Service(crate::errors::ServiceError::Initialize {
-                service: "pools".to_owned(),
-                message: format!("Failed to initialize pool components: {e}"),
-            })
-        })?;
+        // Open each enabled chain's database and history, and initialize its
+        // pricing driver through the chain runtime.
+        crate::pools::initialize_pool_components()
+            .await
+            .map_err(|e| {
+                crate::Error::Service(crate::errors::ServiceError::Initialize {
+                    service: "pools".to_owned(),
+                    message: format!("Failed to initialize pool components: {e}"),
+                })
+            })?;
 
         logger::info(LogTag::PoolService, "Pool components initialized");
         Ok(())
@@ -79,9 +74,8 @@ impl Service for PoolsService {
     async fn stop(&mut self) -> crate::Result<()> {
         logger::info(LogTag::PoolService, "Stopping pool service...");
 
-        // Stop the pool service, releasing the Solana runtime components.
-        crate::pools::stop_pool_service(crate::chains::solana::pools::service::clear_components)
-            .await;
+        // Stop the pool service, releasing every chain's pricing components.
+        crate::pools::stop_pool_service().await;
 
         Ok(())
     }

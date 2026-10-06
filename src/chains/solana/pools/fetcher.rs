@@ -18,6 +18,7 @@ use super::fetcher_types::{MissingAccountState, MissingPoolState};
 
 use crate::logger::{self, LogTag};
 use crate::pools::types::PoolDescriptor;
+use crate::utils::run_or_shutdown;
 
 use crate::chains::solana::solana_sdk::pubkey::Pubkey;
 use std::collections::{HashMap, HashSet};
@@ -89,8 +90,19 @@ impl AccountFetcher {
         self.account_bundles.clone()
     }
 
-    /// Start fetcher background task
-    pub async fn start_fetcher_task(&self, shutdown: Arc<Notify>) {
+    /// Take the request receiver the fetch loop consumes; `None` once a loop
+    /// has taken it.
+    pub(super) fn take_receiver(&self) -> Option<mpsc::UnboundedReceiver<FetcherMessage>> {
+        self.fetcher_rx.write().ok()?.take()
+    }
+
+    /// Run the fetch loop until shutdown, a shutdown message or a closed
+    /// channel. A fetch cycle in flight is abandoned on shutdown.
+    pub(super) async fn run_fetcher_loop(
+        self: Arc<Self>,
+        mut fetcher_rx: mpsc::UnboundedReceiver<FetcherMessage>,
+        shutdown: Arc<Notify>,
+    ) {
         logger::info(LogTag::PoolFetcher, "Starting account fetcher task");
 
         let pool_directory = self.pool_directory.clone();
@@ -103,58 +115,52 @@ impl AccountFetcher {
         let accounts_fetched = Arc::clone(&self.accounts_fetched);
         let rpc_batches = Arc::clone(&self.rpc_batches);
 
-        // Take the receiver from the Arc<RwLock>
-        let mut fetcher_rx = {
-            let mut rx_lock = self.fetcher_rx.write().unwrap();
-            rx_lock.take().expect("Fetcher receiver already taken")
-        };
+        let mut interval = tokio::time::interval(Duration::from_millis(FETCH_INTERVAL_MS));
+        let mut pending_accounts: HashSet<Pubkey> = HashSet::new();
+        let mut account_failure_tracker: HashMap<Pubkey, MissingAccountState> = HashMap::new();
+        let mut pool_failure_tracker: HashMap<Pubkey, MissingPoolState> = HashMap::new();
 
-        tokio::spawn(async move {
-            let mut interval = tokio::time::interval(Duration::from_millis(FETCH_INTERVAL_MS));
-            let mut pending_accounts: HashSet<Pubkey> = HashSet::new();
-            let mut account_failure_tracker: HashMap<Pubkey, MissingAccountState> = HashMap::new();
-            let mut pool_failure_tracker: HashMap<Pubkey, MissingPoolState> = HashMap::new();
+        logger::info(LogTag::PoolFetcher, "Account fetcher task started");
 
-            logger::info(LogTag::PoolFetcher, "Account fetcher task started");
+        loop {
+            tokio::select! {
+                _ = shutdown.notified() => {
+                    logger::info(LogTag::PoolFetcher, "Account fetcher task shutting down");
+                    break;
+                }
 
-            loop {
-                tokio::select! {
-                    _ = shutdown.notified() => {
-                        logger::info(LogTag::PoolFetcher, "Account fetcher task shutting down");
-                        break;
-                    }
+                message = fetcher_rx.recv() => {
+                    match message {
+                        Some(FetcherMessage::FetchPool { pool_id, accounts }) => {
+                            logger::debug(
+                                LogTag::PoolFetcher,
+                                &format!("Received fetch request for pool {} with {} accounts", pool_id, accounts.len())
+                            );
+                            pending_accounts.extend(accounts);
+                        }
 
-                    message = fetcher_rx.recv() => {
-                        match message {
-                            Some(FetcherMessage::FetchPool { pool_id, accounts }) => {
-                                logger::debug(
-                                    LogTag::PoolFetcher,
-                                    &format!("Received fetch request for pool {} with {} accounts", pool_id, accounts.len())
-                                );
-                                pending_accounts.extend(accounts);
-                            }
+                        Some(FetcherMessage::FetchAccounts { accounts }) => {
+                            logger::debug(
+                                LogTag::PoolFetcher,
+                                &format!("Received fetch request for {} accounts", accounts.len())
+                            );
+                            pending_accounts.extend(accounts);
+                        }
 
-                            Some(FetcherMessage::FetchAccounts { accounts }) => {
-                                logger::debug(
-                                    LogTag::PoolFetcher,
-                                    &format!("Received fetch request for {} accounts", accounts.len())
-                                );
-                                pending_accounts.extend(accounts);
-                            }
+                        Some(FetcherMessage::Shutdown) => {
+                            logger::info(LogTag::PoolFetcher, "Fetcher received shutdown signal");
+                            break;
+                        }
 
-                            Some(FetcherMessage::Shutdown) => {
-                                logger::info(LogTag::PoolFetcher, "Fetcher received shutdown signal");
-                                break;
-                            }
-
-                            None => {
-                                logger::info(LogTag::PoolFetcher, "Fetcher channel closed");
-                                break;
-                            }
+                        None => {
+                            logger::info(LogTag::PoolFetcher, "Fetcher channel closed");
+                            break;
                         }
                     }
+                }
 
-                    _ = interval.tick() => {
+                _ = interval.tick() => {
+                    let cycle = async {
                         // Add accounts that need refresh from pool directory
                         Self::add_stale_accounts_to_pending(
                             &pool_directory,
@@ -189,12 +195,16 @@ impl AccountFetcher {
                                 }
                             }
                         }
+                    };
+                    if run_or_shutdown(&shutdown, cycle).await.is_none() {
+                        logger::info(LogTag::PoolFetcher, "Account fetcher task shutting down");
+                        break;
                     }
                 }
             }
+        }
 
-            logger::info(LogTag::PoolFetcher, "Account fetcher task completed");
-        });
+        logger::info(LogTag::PoolFetcher, "Account fetcher task completed");
     }
 
     /// Public interface: Request fetching of accounts for a pool
