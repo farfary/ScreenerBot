@@ -25,24 +25,18 @@ const TABLES: [(&str, &str, &[&str]); 3] = [
     ("position_exits", SCHEMA_POSITION_EXITS, &["amount"]),
 ];
 
-fn failure(detail: impl Into<String>) -> Error {
-    Error::SchemaMigration {
-        detail: detail.into(),
-    }
-}
-
 fn sql_items(sql: &str) -> Result<Vec<String>> {
     let clean = sql
         .lines()
         .map(|line| line.split("--").next().unwrap_or(""))
         .collect::<Vec<_>>()
         .join(" ");
-    let start = clean
-        .find('(')
-        .ok_or_else(|| failure("missing table definition"))?;
-    let end = clean
-        .rfind(')')
-        .ok_or_else(|| failure("missing table closing delimiter"))?;
+    let start = clean.find('(').ok_or_else(|| Error::SchemaMigration {
+        detail: "missing table definition".into(),
+    })?;
+    let end = clean.rfind(')').ok_or_else(|| Error::SchemaMigration {
+        detail: "missing table closing delimiter".into(),
+    })?;
     let mut items = Vec::new();
     let mut depth = 0;
     let mut quoted = false;
@@ -81,7 +75,9 @@ fn columns(
 ) -> Result<Vec<(String, String, i64, Option<String>, i64, i64)>> {
     let mut stmt = conn
         .prepare(&format!("PRAGMA table_xinfo({table})"))
-        .map_err(|e| failure(format!("inspect {table}: {e}")))?;
+        .map_err(|e| Error::SchemaMigration {
+            detail: format!("inspect {table}: {e}"),
+        })?;
     let result = stmt
         .query_map([], |row| {
             Ok((
@@ -93,9 +89,13 @@ fn columns(
                 row.get(6)?,
             ))
         })
-        .map_err(|e| failure(format!("inspect {table}: {e}")))?
+        .map_err(|e| Error::SchemaMigration {
+            detail: format!("inspect {table}: {e}"),
+        })?
         .collect::<rusqlite::Result<Vec<_>>>()
-        .map_err(|e| failure(format!("decode {table} columns: {e}")))?;
+        .map_err(|e| Error::SchemaMigration {
+            detail: format!("decode {table} columns: {e}"),
+        })?;
     Ok(result)
 }
 
@@ -111,12 +111,18 @@ fn validate_table(
             [table],
             |row| row.get(0),
         )
-        .map_err(|e| failure(format!("inspect {table} definition: {e}")))?;
+        .map_err(|e| Error::SchemaMigration {
+            detail: format!("inspect {table} definition: {e}"),
+        })?;
     let actual = columns(conn, table)?;
-    let canonical_db = Connection::open_in_memory().map_err(|e| failure(e.to_string()))?;
+    let canonical_db = Connection::open_in_memory().map_err(|e| Error::SchemaMigration {
+        detail: e.to_string(),
+    })?;
     canonical_db
         .execute(canonical, [])
-        .map_err(|e| failure(e.to_string()))?;
+        .map_err(|e| Error::SchemaMigration {
+            detail: e.to_string(),
+        })?;
     let expected = columns(&canonical_db, table)?;
     let mut expected_items = sql_items(canonical)?;
     let actual_items = sql_items(&stored)?;
@@ -150,9 +156,9 @@ fn validate_table(
     }
     expected_items.sort();
     if actual_items != expected_items {
-        return Err(failure(format!(
-            "unrecognized {table} definition would be lost by rebuild"
-        )));
+        return Err(Error::SchemaMigration {
+            detail: format!("unrecognized {table} definition would be lost by rebuild"),
+        });
     }
     if actual.len() != expected.len()
         || actual.iter().zip(expected.iter()).any(|(a, b)| {
@@ -170,7 +176,9 @@ fn validate_table(
                     && !(a.0 == "total_exited_amount" && a.3.as_deref() == Some("0")))
         })
     {
-        return Err(failure(format!("unrecognized {table} column metadata")));
+        return Err(Error::SchemaMigration {
+            detail: format!("unrecognized {table} column metadata"),
+        });
     }
     let amount_types = amounts
         .iter()
@@ -184,9 +192,9 @@ fn validate_table(
     let legacy = amount_types.iter().all(|ty| *ty == Some("INTEGER"));
     let current = amount_types.iter().all(|ty| *ty == Some("TEXT"));
     if !legacy && !current {
-        return Err(failure(format!(
-            "mixed or unknown {table} amount column types"
-        )));
+        return Err(Error::SchemaMigration {
+            detail: format!("mixed or unknown {table} amount column types"),
+        });
     }
     Ok((
         stored,
@@ -198,7 +206,7 @@ fn validate_table(
 fn validate_objects(conn: &Connection) -> Result<()> {
     let mut stmt = conn.prepare(
         "SELECT type, name, sql FROM sqlite_master WHERE tbl_name IN ('positions', 'position_entries', 'position_exits') AND type IN ('index', 'trigger') AND sql IS NOT NULL",
-    ).map_err(|e| failure(e.to_string()))?;
+    ).map_err(|e| Error::SchemaMigration { detail: e.to_string() })?;
     let objects = stmt
         .query_map([], |row| {
             Ok((
@@ -207,39 +215,49 @@ fn validate_objects(conn: &Connection) -> Result<()> {
                 row.get::<_, String>(2)?,
             ))
         })
-        .map_err(|e| failure(e.to_string()))?;
+        .map_err(|e| Error::SchemaMigration {
+            detail: e.to_string(),
+        })?;
     for object in objects {
-        let (kind, name, sql) = object.map_err(|e| failure(e.to_string()))?;
+        let (kind, name, sql) = object.map_err(|e| Error::SchemaMigration {
+            detail: e.to_string(),
+        })?;
         let accepted = POSITIONS_INDEXES.iter().any(|index| {
             let canonical = index.replace(" IF NOT EXISTS", "");
             (canonical.trim_end_matches(';') == sql || index.trim_end_matches(';') == sql)
                 && canonical.contains(&format!("INDEX {name} ON "))
         });
         if kind != "index" || !accepted {
-            return Err(failure(format!(
-                "unrecognized {kind} {name} would be lost by rebuild"
-            )));
+            return Err(Error::SchemaMigration {
+                detail: format!("unrecognized {kind} {name} would be lost by rebuild"),
+            });
         }
     }
     for (table, _, _) in TABLES {
         let mut stmt = conn
             .prepare(&format!("PRAGMA index_list({table})"))
-            .map_err(|e| failure(e.to_string()))?;
+            .map_err(|e| Error::SchemaMigration {
+                detail: e.to_string(),
+            })?;
         let indexes = stmt
             .query_map([], |row| {
                 Ok((row.get::<_, String>(1)?, row.get::<_, String>(3)?))
             })
-            .map_err(|e| failure(e.to_string()))?;
+            .map_err(|e| Error::SchemaMigration {
+                detail: e.to_string(),
+            })?;
         for index in indexes {
-            let (name, origin) = index.map_err(|e| failure(e.to_string()))?;
+            let (name, origin) = index.map_err(|e| Error::SchemaMigration {
+                detail: e.to_string(),
+            })?;
             if origin != "c"
                 || !POSITIONS_INDEXES
                     .iter()
                     .any(|sql| sql.contains(&format!("INDEX IF NOT EXISTS {name} ON ")))
             {
-                return Err(failure(format!(
-                    "unrecognized index {name} would be lost by rebuild"
-                )));
+                return Err(Error::SchemaMigration {
+                    detail: format!("unrecognized index {name} would be lost by rebuild"),
+                });
             }
         }
     }
@@ -253,9 +271,9 @@ fn rebuild(
     names: &[String],
     amounts: &[&str],
 ) -> Result<()> {
-    let start = ddl
-        .find('(')
-        .ok_or_else(|| failure(format!("missing {table} definition")))?;
+    let start = ddl.find('(').ok_or_else(|| Error::SchemaMigration {
+        detail: format!("missing {table} definition"),
+    })?;
     let mut create = format!("CREATE TABLE {table}__raw_new {}", &ddl[start..]);
     for amount in amounts {
         create = create.replacen(&format!("{amount} INTEGER"), &format!("{amount} TEXT"), 1);
@@ -268,49 +286,71 @@ fn rebuild(
         );
     }
     conn.execute(&create, [])
-        .map_err(|e| failure(format!("create {table} replacement: {e}")))?;
+        .map_err(|e| Error::SchemaMigration {
+            detail: format!("create {table} replacement: {e}"),
+        })?;
     let names_sql = names.join(", ");
     let mut stmt = conn
         .prepare(&format!("SELECT {names_sql} FROM {table}"))
-        .map_err(|e| failure(e.to_string()))?;
-    let mut rows = stmt.query([]).map_err(|e| failure(e.to_string()))?;
+        .map_err(|e| Error::SchemaMigration {
+            detail: e.to_string(),
+        })?;
+    let mut rows = stmt.query([]).map_err(|e| Error::SchemaMigration {
+        detail: e.to_string(),
+    })?;
     let insert = format!(
         "INSERT INTO {table}__raw_new ({names_sql}) VALUES ({})",
         vec!["?"; names.len()].join(", ")
     );
-    while let Some(row) = rows.next().map_err(|e| failure(e.to_string()))? {
+    while let Some(row) = rows.next().map_err(|e| Error::SchemaMigration {
+        detail: e.to_string(),
+    })? {
         let mut values = Vec::with_capacity(names.len());
         for (i, name) in names.iter().enumerate() {
-            let value: Value = row.get(i).map_err(|e| failure(e.to_string()))?;
+            let value: Value = row.get(i).map_err(|e| Error::SchemaMigration {
+                detail: e.to_string(),
+            })?;
             values.push(if amounts.contains(&name.as_str()) {
                 match value {
                     Value::Integer(bits) => {
                         Value::Text(u64::from_ne_bytes(bits.to_ne_bytes()).to_string())
                     }
                     Value::Null if name != "total_exited_amount" => Value::Null,
-                    _ => return Err(failure(format!("invalid legacy {table}.{name} storage"))),
+                    _ => {
+                        return Err(Error::SchemaMigration {
+                            detail: format!("invalid legacy {table}.{name} storage"),
+                        })
+                    }
                 }
             } else {
                 value
             });
         }
         conn.execute(&insert, params_from_iter(values.iter()))
-            .map_err(|e| failure(format!("copy {table}: {e}")))?;
+            .map_err(|e| Error::SchemaMigration {
+                detail: format!("copy {table}: {e}"),
+            })?;
     }
     let before: i64 = conn
         .query_row(&format!("SELECT COUNT(*) FROM {table}"), [], |row| {
             row.get(0)
         })
-        .map_err(|e| failure(e.to_string()))?;
+        .map_err(|e| Error::SchemaMigration {
+            detail: e.to_string(),
+        })?;
     let after: i64 = conn
         .query_row(
             &format!("SELECT COUNT(*) FROM {table}__raw_new"),
             [],
             |row| row.get(0),
         )
-        .map_err(|e| failure(e.to_string()))?;
+        .map_err(|e| Error::SchemaMigration {
+            detail: e.to_string(),
+        })?;
     if before != after {
-        return Err(failure(format!("{table} row count changed during rebuild")));
+        return Err(Error::SchemaMigration {
+            detail: format!("{table} row count changed during rebuild"),
+        });
     }
     Ok(())
 }
@@ -324,18 +364,26 @@ pub(super) fn migrate_position_amounts(conn: &Connection) -> Result<()> {
         return Ok(());
     }
     if inspected.iter().any(|(_, _, legacy)| !legacy) {
-        return Err(failure("mixed legacy and canonical position amount tables"));
+        return Err(Error::SchemaMigration {
+            detail: "mixed legacy and canonical position amount tables".into(),
+        });
     }
     validate_objects(conn)?;
     let foreign_keys: i64 = conn
         .query_row("PRAGMA foreign_keys", [], |row| row.get(0))
-        .map_err(|e| failure(e.to_string()))?;
+        .map_err(|e| Error::SchemaMigration {
+            detail: e.to_string(),
+        })?;
     conn.pragma_update(None, "foreign_keys", 0)
-        .map_err(|e| failure(e.to_string()))?;
+        .map_err(|e| Error::SchemaMigration {
+            detail: e.to_string(),
+        })?;
     let result = (|| -> Result<()> {
         let tx = conn
             .unchecked_transaction()
-            .map_err(|e| failure(e.to_string()))?;
+            .map_err(|e| Error::SchemaMigration {
+                detail: e.to_string(),
+            })?;
         for ((table, _, amounts), (ddl, names, _)) in TABLES.iter().zip(inspected.iter()) {
             rebuild(&tx, table, ddl, names, amounts)?;
         }
@@ -343,34 +391,44 @@ pub(super) fn migrate_position_amounts(conn: &Connection) -> Result<()> {
         // ON DELETE CASCADE from clearing state, tracking, and snapshot rows.
         for table in ["position_entries", "position_exits", "positions"] {
             tx.execute(&format!("DROP TABLE {table}"), [])
-                .map_err(|e| failure(e.to_string()))?;
+                .map_err(|e| Error::SchemaMigration {
+                    detail: e.to_string(),
+                })?;
         }
         for table in ["positions", "position_entries", "position_exits"] {
             tx.execute(
                 &format!("ALTER TABLE {table}__raw_new RENAME TO {table}"),
                 [],
             )
-            .map_err(|e| failure(e.to_string()))?;
+            .map_err(|e| Error::SchemaMigration {
+                detail: e.to_string(),
+            })?;
         }
         for index in POSITIONS_INDEXES {
-            tx.execute(index, [])
-                .map_err(|e| failure(format!("restore position indexes: {e}")))?;
+            tx.execute(index, []).map_err(|e| Error::SchemaMigration {
+                detail: format!("restore position indexes: {e}"),
+            })?;
         }
         let violations: i64 = tx
             .query_row("SELECT COUNT(*) FROM pragma_foreign_key_check", [], |row| {
                 row.get(0)
             })
-            .map_err(|e| failure(e.to_string()))?;
+            .map_err(|e| Error::SchemaMigration {
+                detail: e.to_string(),
+            })?;
         if violations != 0 {
-            return Err(failure(format!(
-                "{violations} position foreign-key violations"
-            )));
+            return Err(Error::SchemaMigration {
+                detail: format!("{violations} position foreign-key violations"),
+            });
         }
-        tx.commit()
-            .map_err(|e| failure(format!("commit position amount migration: {e}")))
+        tx.commit().map_err(|e| Error::SchemaMigration {
+            detail: format!("commit position amount migration: {e}"),
+        })
     })();
     conn.pragma_update(None, "foreign_keys", foreign_keys)
-        .map_err(|e| failure(format!("restore foreign keys: {e}")))?;
+        .map_err(|e| Error::SchemaMigration {
+            detail: format!("restore foreign keys: {e}"),
+        })?;
     result
 }
 

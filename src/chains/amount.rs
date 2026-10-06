@@ -5,24 +5,12 @@
 
 use std::{fmt, num::TryFromIntError, str::FromStr};
 
+mod error;
 pub(crate) mod math;
+pub use error::AmountParseError;
 
 use rusqlite::types::{FromSql, FromSqlError, FromSqlResult, ToSql, ToSqlOutput, Value, ValueRef};
 use serde::{de, Deserialize, Deserializer, Serialize, Serializer};
-
-/// A canonical decimal amount could not be parsed.
-#[derive(Debug, Clone, Copy, PartialEq, Eq, thiserror::Error)]
-pub enum AmountParseError {
-    /// The input contained no digits.
-    #[error("amount cannot be empty")]
-    Empty,
-    /// The input was not a canonical unsigned decimal integer.
-    #[error("amount must be a canonical unsigned decimal integer")]
-    InvalidFormat,
-    /// The input exceeds the range of `u128`.
-    #[error("amount exceeds the u128 range")]
-    Overflow,
-}
 
 /// An exact unsigned amount in the smallest units defined by its asset.
 #[derive(Debug, Default, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash)]

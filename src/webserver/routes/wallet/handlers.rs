@@ -80,7 +80,10 @@ pub(super) async fn get_wallet_current() -> Result<Json<Option<WalletCurrentResp
                 .iter()
                 .map(token_balance_info)
                 .collect::<crate::wallets::Result<Vec<_>>>()
-                .map_err(balance_response_error)?,
+                .map_err(|err| {
+                    ApiError::new(ApiErrorCode::Internal, ids::ERRORS_WALLET_UNAVAILABLE)
+                        .details(err.to_string())
+                })?,
             snapshot_time: snapshot.snapshot_time.to_rfc3339(),
         })));
     }
@@ -89,9 +92,10 @@ pub(super) async fn get_wallet_current() -> Result<Json<Option<WalletCurrentResp
         Ok(Some(snapshot)) => {
             // token_balances is not populated by get_recent_snapshots — load separately
             let raw_balances = if let Some(id) = snapshot.id {
-                get_snapshot_token_balances(id)
-                    .await
-                    .map_err(balance_response_error)?
+                get_snapshot_token_balances(id).await.map_err(|err| {
+                    ApiError::new(ApiErrorCode::Internal, ids::ERRORS_WALLET_UNAVAILABLE)
+                        .details(err.to_string())
+                })?
             } else {
                 vec![]
             };
@@ -100,7 +104,10 @@ pub(super) async fn get_wallet_current() -> Result<Json<Option<WalletCurrentResp
                 .iter()
                 .map(token_balance_info)
                 .collect::<crate::wallets::Result<Vec<_>>>()
-                .map_err(balance_response_error)?;
+                .map_err(|err| {
+                    ApiError::new(ApiErrorCode::Internal, ids::ERRORS_WALLET_UNAVAILABLE)
+                        .details(err.to_string())
+                })?;
 
             Ok(Json(Some(WalletCurrentResponse {
                 sol_balance: snapshot.sol_balance,
@@ -146,9 +153,10 @@ pub(super) async fn get_wallet_tokens() -> Result<Json<WalletTokensResponse>, Ap
     };
 
     Ok(Json(WalletTokensResponse {
-        tokens: enrich_token_holdings(&snapshot)
-            .await
-            .map_err(balance_response_error)?,
+        tokens: enrich_token_holdings(&snapshot).await.map_err(|err| {
+            ApiError::new(ApiErrorCode::Internal, ids::ERRORS_WALLET_UNAVAILABLE)
+                .details(err.to_string())
+        })?,
     }))
 }
 
@@ -177,14 +185,11 @@ pub(super) async fn refresh_wallet_tokens() -> Result<Json<WalletTokensResponse>
     };
 
     Ok(Json(WalletTokensResponse {
-        tokens: enrich_token_holdings(&snapshot)
-            .await
-            .map_err(balance_response_error)?,
+        tokens: enrich_token_holdings(&snapshot).await.map_err(|err| {
+            ApiError::new(ApiErrorCode::Internal, ids::ERRORS_WALLET_UNAVAILABLE)
+                .details(err.to_string())
+        })?,
     }))
-}
-
-fn balance_response_error(err: crate::wallets::Error) -> ApiError {
-    ApiError::new(ApiErrorCode::Internal, ids::ERRORS_WALLET_UNAVAILABLE).details(err.to_string())
 }
 
 fn token_balance_info(
