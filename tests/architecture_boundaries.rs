@@ -1274,12 +1274,18 @@ fn chain_threaded_domains_never_resolve_a_chain_implicitly() {
 
 /// Pools never reads candle data: OHLCV drives strategies and indicators
 /// only, and no OHLCV value may reach the pool price that trading and P&L
-/// read.
+/// read. The chain-neutral `src/pools` and every chain's price producers under
+/// `src/chains/<id>/pools` are both in scope.
 #[test]
 fn pools_never_read_ohlcv() {
     let mut violations = Vec::new();
     for (relative, contents) in walk_src() {
-        if !relative.starts_with("pools") {
+        let in_chain_pools = relative.starts_with("chains")
+            && relative
+                .components()
+                .nth(2)
+                .is_some_and(|component| component.as_os_str() == "pools");
+        if !relative.starts_with("pools") && !in_chain_pools {
             continue;
         }
         for (idx, line) in code_lines(&contents).lines().enumerate() {
@@ -1290,7 +1296,7 @@ fn pools_never_read_ohlcv() {
     }
     assert!(
         violations.is_empty(),
-        "src/pools must never read OHLCV data:\n{}",
+        "src/pools and src/chains/*/pools must never read OHLCV data:\n{}",
         violations.join("\n")
     );
 }
