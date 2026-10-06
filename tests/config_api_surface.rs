@@ -550,6 +550,50 @@ async fn sanitized_chains_export_round_trips_without_losing_the_jupiter_key() {
     });
 }
 
+#[tokio::test]
+async fn sanitized_full_export_carries_no_secret() {
+    init_config();
+    let _writes = CONFIG_WRITES.lock().await;
+    const MARK: &str = "planted-secret-value";
+    update_config_section(
+        |cfg| {
+            cfg.chains.solana.swaps.jupiter.api_key = format!("{MARK}-jupiter");
+            cfg.chains.solana.rpc.urls = vec![format!("https://rpc.example.invalid/{MARK}-rpc")];
+            cfg.telegram.bot_token = format!("{MARK}-telegram");
+            cfg.gui.dashboard.lockscreen.password_hash = format!("{MARK}-lock-hash");
+            cfg.gui.dashboard.lockscreen.password_salt = format!("{MARK}-lock-salt");
+            cfg.webserver.auth_password_hash = format!("{MARK}-web-hash");
+            cfg.webserver.auth_password_salt = format!("{MARK}-web-salt");
+            cfg.webserver.auth_totp_secret = format!("{MARK}-totp");
+            cfg.llm.providers.openai.api_key = format!("{MARK}-openai");
+            cfg.llm.providers.mistral.api_key = format!("{MARK}-mistral");
+            cfg.ohlcv.sources.solana_tracker.api_key = format!("{MARK}-tracker");
+            cfg.tokens.discovery.coingecko.api_key = Some(format!("{MARK}-coingecko"));
+        },
+        false,
+    )
+    .expect("seed secrets");
+
+    let request = serde_json::from_value(serde_json::json!({ "sanitize_secrets": true }))
+        .expect("valid export request");
+    let (status, export) = response_json(export_config(Json(request)).await).await;
+    assert!(status.is_success(), "export rejected: {status} {export}");
+    let body = export["config"].to_string();
+    assert!(
+        !body.contains(MARK),
+        "a sanitized export leaked a secret: {body}"
+    );
+
+    let restore_urls = vec!["https://api.mainnet-beta.solana.com".to_owned()];
+    update_config_section(
+        |cfg| {
+            cfg.chains.solana.rpc.urls = restore_urls;
+        },
+        false,
+    )
+    .expect("restore rpc urls");
+}
+
 /// A legacy export holding only `swaps` builds `trader` and `chains` sections
 /// that carry just the moved fields; importing them with merge unchecked must
 /// not reset the rest of either section.

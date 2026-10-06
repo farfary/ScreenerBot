@@ -105,7 +105,12 @@ pub const CONFIG_SECTIONS: &[&str] = &[
 
 /// Sensitive fields that should be sanitized on export (path format: "section.nested.field")
 pub const SENSITIVE_FIELDS: &[(&str, &[&str])] = &[
-    ("chains", &["solana.swaps.jupiter.api_key"]),
+    // RPC URLs commonly carry a provider key in their path or query.
+    (
+        "chains",
+        &["solana.swaps.jupiter.api_key", "solana.rpc.urls"],
+    ),
+    ("tokens", &["discovery.coingecko.api_key"]),
     ("telegram", &["bot_token"]),
     (
         "gui",

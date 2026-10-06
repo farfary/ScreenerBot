@@ -434,17 +434,21 @@ async function loadDataOverview(content) {
  */
 async function exportConfig() {
   try {
-    const response = await fetch("/api/config");
+    // The server export removes every secret listed in its sensitive-field set
+    // (API keys, bot token, password hashes, RPC URLs), and never includes the wallet.
+    const response = await fetch("/api/config/export", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ include_gui: true, include_metadata: true, sanitize_secrets: true }),
+    });
     if (!response.ok) throw new Error(I18n.t("settings-data-config-fetch-failed"));
 
-    const config = await response.json();
+    const exported = await response.json();
+    if (!exported || !exported.config) {
+      throw new Error(I18n.t("settings-data-config-fetch-failed"));
+    }
 
-    // Remove sensitive data
-    const exportData = { ...config };
-    delete exportData.wallet_encrypted;
-    delete exportData.wallet_nonce;
-
-    const dataStr = JSON.stringify(exportData, null, 2);
+    const dataStr = JSON.stringify(exported.config, null, 2);
     const blob = new Blob([dataStr], { type: "application/json" });
     const url = URL.createObjectURL(blob);
     const a = document.createElement("a");
