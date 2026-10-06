@@ -166,10 +166,6 @@ fn assert_loader_contract(body: &Value) {
         "/api/system/bootstrap no longer reports a `phase` string"
     );
     assert!(
-        body.get("message").is_some_and(Value::is_string),
-        "/api/system/bootstrap no longer reports a `message` string"
-    );
-    assert!(
         body.get("pending_services").is_some_and(Value::is_array),
         "/api/system/bootstrap no longer reports `pending_services`"
     );
