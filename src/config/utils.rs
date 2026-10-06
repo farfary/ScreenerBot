@@ -192,9 +192,9 @@ pub fn parse_config_document(raw: &str) -> Result<ParsedConfig> {
 }
 
 /// Serialize `config` and replace `path` as atomically as the platform allows
-/// (write a sibling temp file, fsync it, then rename over `path`). Used by the
-/// legacy-section migration so the rewrite is crash-safe and never widens access
-/// to the secrets in `config.toml`.
+/// (write a sibling temp file, fsync it, then rename over `path`). Every write
+/// of `config.toml` goes through here, so a crash or a full disk mid-write never
+/// leaves a truncated file, and a write never widens access to its secrets.
 ///
 /// Permissions: `config.toml` holds provider API keys, so the temp file is
 /// created with mode `0600` **before its first byte is written** (via
@@ -206,10 +206,8 @@ pub fn parse_config_document(raw: &str) -> Result<ParsedConfig> {
 /// Atomicity: on Unix `rename(2)` replaces the destination atomically. On
 /// Windows `std::fs::rename` fails if the destination exists, so the existing
 /// file is removed first and the replacement is therefore **not** atomic there;
-/// a crash between the two steps can leave `path` missing. The migration only
-/// runs on the local desktop config and re-derives from the still-present
-/// legacy tables on the next start, so this is acceptable but not silently
-/// claimed to be atomic.
+/// a crash between the two steps can leave `path` missing. This is documented
+/// rather than silently claimed to be atomic.
 ///
 /// Concurrency: the sibling temp path carries the pid **and** a process-monotonic
 /// counter, and is opened `O_EXCL` (`create_new`) with a bounded retry. Two
@@ -220,7 +218,7 @@ pub(crate) fn write_config_atomic(config: &Config, path: &str) -> Result<()> {
     use std::io::Write;
 
     let body = toml::to_string_pretty(config).map_err(|e| Error::WriteFailed {
-        detail: format!("Failed to serialize migrated config: {e}"),
+        detail: format!("Failed to serialize config: {e}"),
     })?;
 
     let dest = std::path::Path::new(path);
@@ -340,7 +338,7 @@ pub(crate) fn write_config_atomic(config: &Config, path: &str) -> Result<()> {
     std::fs::rename(&tmp, dest).map_err(|e| {
         let _ = std::fs::remove_file(&tmp);
         Error::WriteFailed {
-            detail: format!("Failed to persist migrated config to '{path}': {e}"),
+            detail: format!("Failed to persist config to '{path}': {e}"),
         }
     })?;
 
@@ -858,17 +856,7 @@ pub fn save_config(path: Option<&str>) -> Result<()> {
     let default_path_str = default_path.to_string_lossy();
     let path = path.unwrap_or(&default_path_str);
 
-    let config_str = with_config(|cfg| {
-        toml::to_string_pretty(cfg).map_err(|e| Error::WriteFailed {
-            detail: format!("Failed to serialize config: {e}"),
-        })
-    })?;
-
-    std::fs::write(path, config_str).map_err(|e| Error::WriteFailed {
-        detail: format!("Failed to write config file '{path}': {e}"),
-    })?;
-
-    Ok(())
+    with_config(|cfg| write_config_atomic(cfg, path))
 }
 
 /// Save a specific configuration to disk and optionally load it into global CONFIG
@@ -900,11 +888,6 @@ pub fn save_config_to_file(config: &Config, path: &str, set_global: bool) -> Res
     // Validate configuration before saving
     validate_config(config)?;
 
-    // Serialize to TOML
-    let config_str = toml::to_string_pretty(config).map_err(|e| Error::WriteFailed {
-        detail: format!("Failed to serialize config: {e}"),
-    })?;
-
     // Ensure parent directory exists
     if let Some(parent) = std::path::Path::new(path).parent() {
         std::fs::create_dir_all(parent).map_err(|e| IoError::Generic {
@@ -912,29 +895,11 @@ pub fn save_config_to_file(config: &Config, path: &str, set_global: bool) -> Res
         })?;
     }
 
-    // Write to file
-    std::fs::write(path, config_str).map_err(|e| Error::WriteFailed {
-        detail: format!("Failed to write config file '{path}': {e}"),
-    })?;
-
-    // Set restrictive permissions on Unix systems (owner read/write only)
-    #[cfg(unix)]
-    {
-        use std::os::unix::fs::PermissionsExt;
-        let mut perms = std::fs::metadata(path)
-            .map_err(|e| IoError::Generic {
-                message: format!("Failed to get file metadata: {e}"),
-            })?
-            .permissions();
-        perms.set_mode(0o600); // rw------- (owner read/write only)
-        std::fs::set_permissions(path, perms).map_err(|e| IoError::Generic {
-            message: format!("Failed to set file permissions: {e}"),
-        })?;
-    }
+    write_config_atomic(config, path)?;
 
     logger::info(
         LogTag::System,
-        &format!("Config saved to '{path}'with secure permissions"),
+        &format!("Config saved to '{path}' with secure permissions"),
     );
 
     // Optionally set as global config
