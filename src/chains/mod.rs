@@ -12,6 +12,7 @@ mod adapter;
 mod amount;
 mod config;
 mod error;
+pub mod evm;
 mod execution;
 mod per_chain;
 mod registry;

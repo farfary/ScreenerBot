@@ -8,7 +8,8 @@
 //! concrete Solana mechanics; app/service composition selects it through
 //! `ChainId` or the router/discovery registries. These tests fail fast if
 //! that boundary regresses — e.g. a new file bypassing the
-//! `crate::chains::solana` vendor façade, or a shared module re-exporting a
+//! `crate::chains::solana` vendor façade, an alloy crate named outside the
+//! `crate::chains::evm` façade, or a shared module re-exporting a
 //! chain-specific type as its own public API.
 //!
 //! Pure source-text scans: no network, no DB, no compilation. The venue-coverage guard also
@@ -100,6 +101,57 @@ fn shared_modules_never_import_solana_vendor_crates_raw() {
         violations.is_empty(),
         "shared (non-Solana-owned) modules must reach Solana vendor crates through the \
          crate::chains::solana façade, never import them raw:\n{}",
+        violations.join("\n")
+    );
+}
+
+/// Line numbers in `source` whose code (comments stripped) names an EVM vendor
+/// crate: the `alloy` meta-crate or an `alloy_*` sub-crate, as a raw import, a
+/// fully-qualified path or a path through the `chains::evm` façade.
+fn evm_vendor_crate_lines(source: &str) -> Vec<usize> {
+    let pattern = regex::Regex::new(r"\balloy(?:_\w+)?\b").expect("the vendor pattern is valid");
+    strip_comment_text(source)
+        .lines()
+        .enumerate()
+        .filter(|(_, line)| pattern.is_match(line))
+        .map(|(idx, _)| idx + 1)
+        .collect()
+}
+
+#[test]
+fn evm_vendor_matcher_names_crates_only() {
+    let source = "\
+use alloy::primitives::Address;
+use crate::chains::evm::alloy::primitives::U256;
+fn decode() -> alloy_sol_types::Result<()> { todo!() }
+extern crate alloy;
+// alloy named in a comment
+/* alloy_primitives in a block comment */
+let alloyed = 1;
+fn non_alloy_helper() {}
+";
+    assert_eq!(evm_vendor_crate_lines(source), vec![1, 2, 3, 4]);
+}
+
+/// The alloy crates are reached only inside `src/chains/evm`, the EVM vendor
+/// façade. Unlike the Solana façade, no path through it is open to shared
+/// code either: an EVM value crosses into neutral modules as a neutral type
+/// (`RawAmount`, `AssetId`, `AccountId`), never as an alloy type. Test code is
+/// held to the same rule.
+#[test]
+fn evm_vendor_crates_only_in_chains_evm() {
+    let mut violations = Vec::new();
+    for (relative, contents) in walk_src() {
+        if relative.starts_with("chains/evm") {
+            continue;
+        }
+        for line in evm_vendor_crate_lines(&contents) {
+            violations.push(format!("src/{}:{line}", relative.display()));
+        }
+    }
+    assert!(
+        violations.is_empty(),
+        "alloy crates may be named only under src/chains/evm:\n{}",
         violations.join("\n")
     );
 }

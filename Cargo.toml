@@ -162,6 +162,20 @@ spl-associated-token-account = { version = "6.0.0", default-features = false, fe
   "no-entrypoint",
 ] }
 
+# EVM dependencies - reached only through src/chains/evm; HTTP transport over the
+# shared reqwest/rustls stack, local hex-key signing, no contract or WebSocket layer
+alloy = { version = "2.5", default-features = false, features = [
+  "std",
+  "reqwest-rustls-tls",
+  "provider-http",
+  "rpc-types",
+  "network",
+  "consensus",
+  "eips",
+  "signer-local",
+  "sol-types",
+] }
+
 # Web and networking
 futures = "0.3"
 futures-util = "0.3"
