@@ -152,6 +152,21 @@ config_struct! {
 config_struct! {
     /// Swap router configuration
     pub struct SwapsConfig {
+        /// How long the route comparison keeps waiting for the remaining
+        /// routers once the first valid quote has arrived. A router still
+        /// pending then is dropped from this comparison as timed out; before
+        /// any valid quote exists the comparison waits on each router's own
+        /// transport timeout, so a market where every router is slow still
+        /// trades.
+        #[metadata(field_metadata! {
+            min: 100,
+            max: 10000,
+            step: 100,
+            impact: ConfigImpact::Medium,
+            category: ConfigCategory::Timeouts,
+        })]
+        quote_deadline_ms: u64 = 1_500,
+
         /// Jupiter router configuration
         #[metadata(field_metadata! {
             impact: ConfigImpact::High,

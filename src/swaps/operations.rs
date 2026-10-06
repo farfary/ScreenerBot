@@ -12,8 +12,9 @@ use crate::swaps::router::SwapRouter;
 use crate::swaps::types::{Quote, QuoteRequest, SwapAmountLimit, SwapResult};
 use crate::tokens::Token;
 use crate::{Error, Result};
-use futures::future;
-use std::time::Instant;
+use futures::stream::{FuturesUnordered, StreamExt};
+use std::sync::Arc;
+use std::time::{Duration, Instant};
 
 // ============================================================================
 // CONCURRENT QUOTE FETCHING
@@ -73,37 +74,11 @@ pub(crate) async fn best_quote_on(
         ),
     );
 
-    // Fetch all quotes concurrently
+    let deadline = crate::config::with_config(|cfg| {
+        Duration::from_millis(cfg.chains.swaps(request.chain).quote_deadline_ms)
+    });
     let start = Instant::now();
-    let futures: Vec<_> = enabled
-        .iter()
-        .map(|router| {
-            let req = request.clone();
-            let r = router.clone();
-            async move {
-                match r.get_quote(&req).await {
-                    Ok(quote) => {
-                        logger::info(
-                            LogTag::Swap,
-                            &format!(
-                                "{}: {} output, {:.2}% impact",
-                                r.name(),
-                                quote.output_amount,
-                                quote.price_impact_pct
-                            ),
-                        );
-                        validate_quote_with_net(r.as_ref(), &req, quote)
-                    }
-                    Err(e) => {
-                        logger::warning(LogTag::Swap, &format!("{} quote failed: {e}", r.name()));
-                        Err(e)
-                    }
-                }
-            }
-        })
-        .collect();
-
-    let results = future::join_all(futures).await;
+    let results = collect_quotes(&enabled, &request, deadline).await;
     let elapsed = start.elapsed();
 
     // Partition into successful quotes and per-router failures. Keeping the
@@ -156,6 +131,99 @@ pub(crate) async fn best_quote_on(
     );
 
     Ok(best)
+}
+
+/// Ask every router at once and collect each answer, validated, in router order.
+///
+/// The comparison waits for every router until the first VALID quote arrives;
+/// from then on the remaining routers get `deadline` more, and a router still
+/// pending after it becomes [`QuoteError::Timeout`] for this request. Before any
+/// valid quote exists nothing is cut off: each router is bounded only by its
+/// own transport timeout, so a market where every router is slow still trades,
+/// and a fast refusal never arms the deadline against a slower router that can
+/// still price the trade. A straggler's timeout is operational, never evidence
+/// about the token, and it is only ever reported beside a valid quote.
+async fn collect_quotes(
+    routers: &[Arc<dyn SwapRouter>],
+    request: &QuoteRequest,
+    deadline: Duration,
+) -> Vec<QuoteResult<(Quote, RawAmount)>> {
+    let mut pending: FuturesUnordered<_> = routers
+        .iter()
+        .enumerate()
+        .map(|(index, router)| {
+            let router = router.clone();
+            async move { (index, quote_from(router.as_ref(), request).await) }
+        })
+        .collect();
+
+    let mut answers: Vec<Option<QuoteResult<(Quote, RawAmount)>>> =
+        routers.iter().map(|_| None).collect();
+    let mut cutoff: Option<tokio::time::Instant> = None;
+    loop {
+        let next = match cutoff {
+            None => pending.next().await,
+            Some(at) => match tokio::time::timeout_at(at, pending.next()).await {
+                Ok(next) => next,
+                Err(_) => break,
+            },
+        };
+        let Some((index, answer)) = next else {
+            break;
+        };
+        if cutoff.is_none() && answer.is_ok() {
+            cutoff = Some(tokio::time::Instant::now() + deadline);
+        }
+        answers[index] = Some(answer);
+    }
+
+    routers
+        .iter()
+        .zip(answers)
+        .map(|(router, answer)| {
+            answer.unwrap_or_else(|| {
+                logger::warning(
+                    LogTag::Swap,
+                    &format!(
+                        "{} did not quote within {} ms of the first valid quote; compared without it",
+                        router.name(),
+                        deadline.as_millis()
+                    ),
+                );
+                Err(QuoteError::Timeout {
+                    router: router.name().to_owned(),
+                })
+            })
+        })
+        .collect()
+}
+
+/// One router's quote, validated and paired with its fee-net output.
+async fn quote_from(
+    router: &dyn SwapRouter,
+    request: &QuoteRequest,
+) -> QuoteResult<(Quote, RawAmount)> {
+    match router.get_quote(request).await {
+        Ok(quote) => {
+            logger::info(
+                LogTag::Swap,
+                &format!(
+                    "{}: {} output, {:.2}% impact",
+                    router.name(),
+                    quote.output_amount,
+                    quote.price_impact_pct
+                ),
+            );
+            validate_quote_with_net(router, request, quote)
+        }
+        Err(e) => {
+            logger::warning(
+                LogTag::Swap,
+                &format!("{} quote failed: {e}", router.name()),
+            );
+            Err(e)
+        }
+    }
 }
 
 /// A quote's output with its estimated network fee taken out, so routers that
@@ -1443,7 +1511,7 @@ mod tests {
 
     #[tokio::test]
     async fn auto_skips_invalid_fee_quote_and_specific_validation_refuses_it() {
-        use std::sync::Arc;
+        crate::config::utils::install_default_config();
         let request = request();
         let invalid = Arc::new(FeeRouter {
             id: "invalid",
@@ -1467,7 +1535,7 @@ mod tests {
 
     #[tokio::test]
     async fn wide_quotes_rank_by_exact_fee_net_output() {
-        use std::sync::Arc;
+        crate::config::utils::install_default_config();
 
         let mut request = request();
         request.input_amount = RawAmount::new(u128::from(u64::MAX) + 1);
@@ -1510,5 +1578,178 @@ mod tests {
             output_after_network_fee(&quote, &StubRouter).unwrap(),
             max.checked_sub(u64::MAX.into()).unwrap()
         );
+    }
+
+    fn configured_deadline() -> Duration {
+        crate::config::utils::install_default_config();
+        crate::config::with_config(|cfg| {
+            Duration::from_millis(cfg.chains.swaps(ChainId::Solana).quote_deadline_ms)
+        })
+    }
+
+    /// What a [`TimedRouter`] answers once its delay has passed.
+    #[derive(Clone, Copy)]
+    enum Answer {
+        Quote(u64),
+        NoRoute,
+        NotTradable,
+        TransportTimeout,
+    }
+
+    /// A router that answers after a fixed delay on the (paused) tokio clock.
+    struct TimedRouter {
+        id: &'static str,
+        priority: u8,
+        delay: Duration,
+        answer: Answer,
+    }
+
+    impl TimedRouter {
+        fn new(id: &'static str, priority: u8, delay: Duration, answer: Answer) -> Arc<Self> {
+            Arc::new(Self {
+                id,
+                priority,
+                delay,
+                answer,
+            })
+        }
+    }
+
+    #[async_trait]
+    impl SwapRouter for TimedRouter {
+        fn id(&self) -> &'static str {
+            self.id
+        }
+        fn name(&self) -> &'static str {
+            self.id
+        }
+        fn is_enabled(&self) -> bool {
+            true
+        }
+        fn priority(&self) -> u8 {
+            self.priority
+        }
+        fn chain(&self) -> ChainId {
+            ChainId::Solana
+        }
+        async fn get_quote(&self, request: &QuoteRequest) -> QuoteResult<Quote> {
+            tokio::time::sleep(self.delay).await;
+            let router = self.id.to_owned();
+            match self.answer {
+                Answer::Quote(output) => {
+                    let mut quote = quote_for(request);
+                    quote.router_id = router.clone();
+                    quote.router_name = router;
+                    quote.output_amount = output.into();
+                    quote.minimum_output_amount = (output / 2).max(1).into();
+                    Ok(quote)
+                }
+                Answer::NoRoute => Err(no_route(&router)),
+                Answer::NotTradable => Err(not_tradable(&router)),
+                Answer::TransportTimeout => Err(timeout(&router)),
+            }
+        }
+        async fn execute_swap(&self, _token: &Token, _quote: &Quote) -> crate::Result<SwapResult> {
+            Err(crate::Error::internal_error("stub"))
+        }
+    }
+
+    fn registry_of(routers: Vec<Arc<TimedRouter>>) -> RouterRegistry {
+        RouterRegistry::new(
+            routers
+                .into_iter()
+                .map(|router| router as Arc<dyn SwapRouter>)
+                .collect(),
+        )
+    }
+
+    /// A router that has not answered `deadline` after the first valid quote is
+    /// dropped from the comparison, even when it would have paid more, and the
+    /// comparison returns at the deadline instead of waiting for it. A router
+    /// that answers inside the deadline still competes and can win.
+    #[tokio::test(start_paused = true)]
+    async fn a_router_slower_than_the_deadline_is_dropped_from_the_comparison() {
+        let deadline = configured_deadline();
+        let first = Duration::from_millis(300);
+        let registry = registry_of(vec![
+            TimedRouter::new("fast", 0, first, Answer::Quote(1_000)),
+            TimedRouter::new("inside", 1, first + deadline / 2, Answer::Quote(1_500)),
+            TimedRouter::new("straggler", 2, first + deadline * 20, Answer::Quote(9_000)),
+        ]);
+
+        let started = tokio::time::Instant::now();
+        let best = best_quote_on(&registry, request()).await.unwrap();
+        assert_eq!(best.router_id, "inside");
+        assert_eq!(started.elapsed(), first + deadline);
+
+        let enabled = registry.enabled_routers_for(ChainId::Solana);
+        let answers = collect_quotes(&enabled, &request(), deadline).await;
+        assert!(answers[0].is_ok() && answers[1].is_ok());
+        assert!(
+            matches!(&answers[2], Err(QuoteError::Timeout { router }) if router == "straggler")
+        );
+    }
+
+    /// The deadline is armed by the first valid quote, never by the clock alone:
+    /// when every router is slower than the deadline, the first one to answer
+    /// still trades, and only routers slower than that answer plus the
+    /// deadline are dropped.
+    #[tokio::test(start_paused = true)]
+    async fn when_every_router_is_slow_the_first_answer_still_trades() {
+        let deadline = configured_deadline();
+        let first = deadline * 7;
+        let registry = registry_of(vec![
+            TimedRouter::new("slow", 0, first, Answer::Quote(1_000)),
+            TimedRouter::new("slower", 1, first + deadline * 3, Answer::Quote(5_000)),
+        ]);
+
+        let started = tokio::time::Instant::now();
+        let best = best_quote_on(&registry, request()).await.unwrap();
+        assert_eq!(best.router_id, "slow");
+        assert_eq!(started.elapsed(), first + deadline);
+    }
+
+    /// A deadline can only drop a router beside a valid quote, so it never
+    /// produces a verdict about the token: a fast refusal does not arm it
+    /// against a slower router that prices the trade, a straggler's own
+    /// verdict is never heard, and a router that runs into its transport
+    /// timeout beside a refusal leaves an operational failure, not a strike.
+    #[tokio::test(start_paused = true)]
+    async fn the_deadline_never_yields_a_token_verdict() {
+        let deadline = configured_deadline();
+        let fast = Duration::from_millis(100);
+        let late = deadline * 20;
+
+        let refused_then_priced = registry_of(vec![
+            TimedRouter::new("refuses", 0, fast, Answer::NoRoute),
+            TimedRouter::new("prices", 1, late, Answer::Quote(1_000)),
+        ]);
+        let best = best_quote_on(&refused_then_priced, request())
+            .await
+            .unwrap();
+        assert_eq!(best.router_id, "prices");
+
+        let priced_then_condemned = registry_of(vec![
+            TimedRouter::new("prices", 0, fast, Answer::Quote(1_000)),
+            TimedRouter::new("condemns", 1, late, Answer::NotTradable),
+        ]);
+        let enabled = priced_then_condemned.enabled_routers_for(ChainId::Solana);
+        let answers = collect_quotes(&enabled, &request(), deadline).await;
+        let straggler = answers[1].as_ref().unwrap_err();
+        assert!(matches!(straggler, QuoteError::Timeout { .. }));
+        assert!(!straggler.is_route_failure());
+        assert!(best_quote_on(&priced_then_condemned, request())
+            .await
+            .is_ok());
+
+        let refused_then_unreachable = registry_of(vec![
+            TimedRouter::new("refuses", 0, fast, Answer::NoRoute),
+            TimedRouter::new("unreachable", 1, late, Answer::TransportTimeout),
+        ]);
+        let failure = best_quote_on(&refused_then_unreachable, request())
+            .await
+            .unwrap_err();
+        assert!(!failure.is_route_failure(), "got {failure}");
+        assert!(failure.permanent_token_verdict().is_none());
     }
 }

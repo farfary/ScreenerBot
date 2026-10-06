@@ -6,7 +6,7 @@
 //! method chooses a chain on the caller's behalf.
 
 use crate::chains::ChainId;
-use crate::config::ChainsConfig;
+use crate::config::{ChainsConfig, SwapsConfig};
 
 /// The chain whose settings the config layout before `[chains]` kept in global
 /// sections (`[rpc]`, `[swaps]`, the Jupiter/Raptor endpoint monitors). A fact
@@ -19,6 +19,13 @@ impl ChainsConfig {
     pub fn is_enabled(&self, chain: ChainId) -> bool {
         match chain {
             ChainId::Solana => self.solana.enabled,
+        }
+    }
+
+    /// Swap routing settings of `chain`.
+    pub fn swaps(&self, chain: ChainId) -> &SwapsConfig {
+        match chain {
+            ChainId::Solana => &self.solana.swaps,
         }
     }
 }

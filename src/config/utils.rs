@@ -715,6 +715,17 @@ fn validate_solana_chain(chain: &SolanaChainConfig) -> Result<()> {
         .into());
     }
 
+    // Matches the field's own declared range. Zero would turn the comparison
+    // into "first valid quote wins", and a deadline beyond the slider's
+    // maximum would let one slow router hold every exit again.
+    if !(100..=10_000).contains(&chain.swaps.quote_deadline_ms) {
+        return Err(ConfigurationError::Generic {
+            message: "chains.solana.swaps.quote_deadline_ms must be between 100 and 10000"
+                .to_owned(),
+        }
+        .into());
+    }
+
     // RPC validation
     if chain.rpc.urls.is_empty() {
         return Err(ConfigurationError::Generic {
@@ -929,6 +940,13 @@ pub fn is_config_initialized() -> bool {
     CONFIG.get().is_some()
 }
 
+/// Seed the global config with its defaults unless a test already loaded one,
+/// for unit tests that reach code reading the config through `with_config`.
+#[cfg(test)]
+pub(crate) fn install_default_config() {
+    let _ = CONFIG.get_or_init(|| RwLock::new(Config::default()));
+}
+
 #[cfg(test)]
 mod atomic_write_tests {
     use super::*;
@@ -1054,5 +1072,26 @@ mod atomic_write_tests {
             !has_temp_file(dir.path()),
             "a concurrent writer leaked its temp"
         );
+    }
+}
+
+#[cfg(test)]
+mod solana_chain_validation_tests {
+    use super::*;
+
+    /// The route comparison's deadline is refused outside the range the field
+    /// declares, at both edges; the default sits inside it.
+    #[test]
+    fn the_quote_deadline_is_bounded_by_its_declared_range() {
+        let mut config = Config::default();
+        assert!(validate_config(&config).is_ok());
+        for (deadline_ms, valid) in [(99, false), (100, true), (10_000, true), (10_001, false)] {
+            config.chains.solana.swaps.quote_deadline_ms = deadline_ms;
+            assert_eq!(
+                validate_config(&config).is_ok(),
+                valid,
+                "quote_deadline_ms = {deadline_ms}"
+            );
+        }
     }
 }

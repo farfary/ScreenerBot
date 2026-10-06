@@ -212,7 +212,9 @@ mod tests {
         }
     }
 
+    /// `best_quote_on` reads its quote deadline from the global config.
     fn registry(routers: Vec<StubRouter>) -> RouterRegistry {
+        crate::config::utils::install_default_config();
         RouterRegistry::new(
             routers
                 .into_iter()
@@ -537,6 +539,7 @@ mod tests {
             }
         }
 
+        crate::config::utils::install_default_config();
         let registry = RouterRegistry::new(vec![Arc::new(DefaultRouter)]);
         let err = quote_and_execute_for_wallet_on(
             &registry,
