@@ -578,7 +578,7 @@ fn adopt_external_growth(
 
     position.total_size_sol = booked_sol + external_sol;
 
-    let acquired = super::raw_to_whole(round.total_acquired_raw as i128, round.decimals);
+    let acquired = RawAmount::new(round.total_acquired_raw).to_whole_units(round.decimals);
     if acquired > DUST {
         position.average_entry_price = position.total_size_sol / acquired;
     }
@@ -714,7 +714,7 @@ pub async fn sync_wallet_history() -> super::super::error::Result<SyncSummary> {
             .filter(|account| !account.is_nft && account.balance > 0)
             .map(|account| WalletHolding {
                 mint: account.mint.clone(),
-                amount_raw: account.balance as u128,
+                amount_raw: u128::from(account.balance),
                 decimals: account.decimals,
             })
             .collect();

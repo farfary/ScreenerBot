@@ -43,6 +43,8 @@ pub use sync::{
     CLOSED_EXTERNALLY,
 };
 
+use crate::chains::RawAmount;
+
 /// Whole-unit amounts below this are treated as zero. Raw integer balances are exact;
 /// this guards only the derived `f64` money math.
 pub const DUST: f64 = 1e-12;
@@ -172,7 +174,7 @@ pub struct LedgerRound {
 impl LedgerRound {
     /// Balance in whole tokens.
     pub fn balance(&self) -> f64 {
-        raw_to_whole(self.balance_raw as i128, self.decimals)
+        RawAmount::new(self.balance_raw).to_whole_units(self.decimals)
     }
 
     /// True when this round was reconstructed without ever seeing its opening
@@ -203,9 +205,4 @@ pub struct WalletHolding {
     pub mint: String,
     pub amount_raw: u128,
     pub decimals: u8,
-}
-
-/// Convert raw base units to whole units.
-pub(crate) fn raw_to_whole(raw: i128, decimals: u8) -> f64 {
-    raw as f64 / 10f64.powi(decimals as i32)
 }

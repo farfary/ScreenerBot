@@ -8,12 +8,10 @@
 
 use std::collections::{HashMap, HashSet};
 
+use crate::chains::RawAmount;
 use crate::transactions::deltas::{DeltaKind, SubjectAssetDelta, NATIVE_SOL_SENTINEL};
 
-use super::{
-    raw_to_whole, LedgerEvent, LedgerEventKind, LedgerRound, QuoteAsset, QuoteLeg, WalletHolding,
-    DUST,
-};
+use super::{LedgerEvent, LedgerEventKind, LedgerRound, QuoteAsset, QuoteLeg, WalletHolding, DUST};
 
 /// Reduce every observed delta into rounds, oldest first.
 ///
@@ -300,7 +298,16 @@ impl Round {
 
         let before = self.balance.max(0);
         let reported_after = delta.after_raw.and_then(|v| i128::try_from(v).ok());
-        let computed_after = (before + delta.delta_raw).max(0);
+        let (Some(moved), Some(_)) = (
+            before.checked_add(delta.delta_raw),
+            delta.delta_raw.checked_neg(),
+        ) else {
+            // A delta the round cannot represent is a hole in the history, never a wrapped balance.
+            self.history_complete = false;
+            self.basis_complete = false;
+            return;
+        };
+        let computed_after = moved.max(0);
         let after = reported_after.unwrap_or(computed_after);
         if reported_after.is_none() || reported_after != Some(computed_after) {
             // Either the chain did not tell us the resulting balance, or it disagrees
@@ -360,7 +367,13 @@ impl Round {
             self.basis_complete = false;
             LedgerEventKind::Receive
         };
-        self.total_acquired += amount_raw;
+        match self.total_acquired.checked_add(amount_raw) {
+            Some(total) => self.total_acquired = total,
+            None => {
+                self.history_complete = false;
+                self.basis_complete = false;
+            }
+        }
 
         if self.entry_signature.is_none() && kind == LedgerEventKind::Entry {
             self.entry_signature = Some(delta.signature.clone());
@@ -369,7 +382,7 @@ impl Round {
             self.opened_at = delta.block_time;
         }
 
-        let amount = raw_to_whole(amount_raw, self.decimals);
+        let amount = RawAmount::new(amount_raw.unsigned_abs()).to_whole_units(self.decimals);
         let quote = traded
             .then(|| quote_for(group, &delta.mint, true))
             .flatten();
@@ -399,7 +412,7 @@ impl Round {
             block_time: delta.block_time,
             kind,
             amount,
-            balance_after: raw_to_whole(after, self.decimals),
+            balance_after: RawAmount::new(after.unsigned_abs()).to_whole_units(self.decimals),
             quote,
             price_sol,
             venue: delta.venue.clone(),
@@ -454,7 +467,13 @@ impl Round {
             self.proceeds_complete = false;
             LedgerEventKind::Send
         };
-        self.total_disposed += amount_raw;
+        match self.total_disposed.checked_add(amount_raw) {
+            Some(total) => self.total_disposed = total,
+            None => {
+                self.history_complete = false;
+                self.basis_complete = false;
+            }
+        }
 
         if closing && traded {
             self.exit_signature = Some(delta.signature.clone());
@@ -471,7 +490,7 @@ impl Round {
         };
         self.remaining_basis = (self.remaining_basis - allocated_basis).max(0.0);
 
-        let amount = raw_to_whole(amount_raw, self.decimals);
+        let amount = RawAmount::new(amount_raw.unsigned_abs()).to_whole_units(self.decimals);
         let quote = traded
             .then(|| quote_for(group, &delta.mint, false))
             .flatten();
@@ -500,7 +519,7 @@ impl Round {
             block_time: delta.block_time,
             kind,
             amount,
-            balance_after: raw_to_whole(after, self.decimals),
+            balance_after: RawAmount::new(after.unsigned_abs()).to_whole_units(self.decimals),
             quote,
             price_sol,
             venue: delta.venue.clone(),
@@ -537,9 +556,9 @@ impl Round {
             opened_at: self.opened_at,
             closed_at: if still_open { None } else { self.closed_at },
             is_open: still_open,
-            balance_raw: self.balance.max(0) as u128,
-            total_acquired_raw: self.total_acquired.max(0) as u128,
-            total_disposed_raw: self.total_disposed.max(0) as u128,
+            balance_raw: self.balance.max(0).unsigned_abs(),
+            total_acquired_raw: self.total_acquired.max(0).unsigned_abs(),
+            total_disposed_raw: self.total_disposed.max(0).unsigned_abs(),
             entry_count: self.entry_count,
             exit_count: self.exit_count,
             invested_sol: self.invested,
@@ -597,7 +616,7 @@ fn quote_for(
 
     let candidate = |delta: &SubjectAssetDelta| -> Option<f64> {
         (delta.mint != target_mint && matches_direction(delta.delta_raw))
-            .then(|| raw_to_whole(delta.delta_raw.abs(), delta.decimals))
+            .then(|| RawAmount::new(delta.delta_raw.unsigned_abs()).to_whole_units(delta.decimals))
     };
 
     let find = |wanted: &dyn Fn(&str) -> bool| -> Option<f64> {

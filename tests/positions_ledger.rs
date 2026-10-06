@@ -800,3 +800,78 @@ fn a_held_mint_never_reuses_a_closed_genesis_key() {
     let held = rounds.iter().find(|round| round.is_open).expect("held");
     assert_eq!(held.balance_raw, 5_000_000);
 }
+
+// ==================== unrepresentable arithmetic ====================
+
+#[test]
+fn a_delta_that_cannot_be_negated_is_a_hole_not_a_wrap() {
+    let mut deltas = buy("sig1", 10, MINT_A, 1_000.0, 1.0);
+    deltas.push(token(
+        "sig2",
+        11,
+        MINT_A,
+        i128::MIN,
+        1_000_000_000,
+        0,
+        DeltaKind::Trade,
+    ));
+
+    let rounds = reduce_rounds(&deltas);
+    let round = round_for(&rounds, MINT_A);
+    assert!(!round.history_complete);
+    assert!(!round.basis_complete);
+    assert_eq!(round.total_disposed_raw, 0);
+    assert_eq!(round.balance_raw, 1_000_000_000);
+}
+
+#[test]
+fn a_delta_that_overflows_the_balance_is_a_hole_not_a_wrap() {
+    let mut deltas = buy("sig1", 10, MINT_A, 1_000.0, 1.0);
+    deltas.push(token(
+        "sig2",
+        11,
+        MINT_A,
+        i128::MAX,
+        1_000_000_000,
+        0,
+        DeltaKind::Trade,
+    ));
+
+    let rounds = reduce_rounds(&deltas);
+    let round = round_for(&rounds, MINT_A);
+    assert!(!round.history_complete);
+    assert_eq!(round.total_acquired_raw, 1_000_000_000);
+    assert_eq!(round.balance_raw, 1_000_000_000);
+}
+
+#[test]
+fn an_overflowing_round_total_is_a_hole_not_a_wrap() {
+    let s1 = token(
+        "s1",
+        10,
+        MINT_A,
+        i128::MAX,
+        0,
+        i128::MAX as u128,
+        DeltaKind::Trade,
+    );
+    let s2 = token(
+        "s2",
+        11,
+        MINT_A,
+        -(i128::MAX - 1),
+        i128::MAX as u128,
+        1,
+        DeltaKind::Trade,
+    );
+    let s3 = token("s3", 12, MINT_A, 1, 1, 2, DeltaKind::Trade);
+
+    let control = reduce_rounds(&[s1.clone(), s2.clone()]);
+    assert!(round_for(&control, MINT_A).history_complete);
+
+    let rounds = reduce_rounds(&[s1, s2, s3]);
+    let round = round_for(&rounds, MINT_A);
+    assert!(!round.history_complete);
+    assert_eq!(round.total_acquired_raw, i128::MAX as u128);
+    assert_eq!(round.balance_raw, 2);
+}
