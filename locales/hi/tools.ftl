@@ -427,19 +427,19 @@ tools-generator-exported = वॉलेट एक्सपोर्ट हो �
 
 tools-consolidation-summary-title = सारांश
 tools-consolidation-stat-wallets = सब-वॉलेट
-tools-consolidation-stat-sol = कुल { -sol }
+tools-consolidation-stat-native = कुल { -sol }
 tools-consolidation-stat-tokens = टोकन के प्रकार
 tools-consolidation-stat-rent = वापस पाने योग्य रेंट
 tools-consolidation-wallets-title = वॉलेट
 tools-consolidation-loading-wallets = वॉलेट लोड हो रहे हैं...
 tools-consolidation-loading-data = वॉलेट डेटा लोड हो रहा है...
-tools-consolidation-action-transfer-sol = { -sol } ट्रांसफ़र करें
+tools-consolidation-action-transfer-native = { -sol } ट्रांसफ़र करें
 tools-consolidation-action-transfer-tokens = सभी टोकन ट्रांसफ़र करें
 tools-consolidation-action-cleanup = ATA साफ़ करें
 tools-consolidation-action-transferring = ट्रांसफ़र हो रहा है...
 tools-consolidation-column-name = नाम
 tools-consolidation-column-address = एड्रेस
-tools-consolidation-column-sol = { -sol } बैलेंस
+tools-consolidation-column-native = { -sol } बैलेंस
 tools-consolidation-column-tokens = टोकन
 tools-consolidation-column-atas = खाली ATA
 tools-consolidation-empty = कोई सब-वॉलेट नहीं मिला
@@ -454,7 +454,7 @@ tools-consolidation-selection-totals =
         [one] { $atas } खाली ATA
        *[other] { $atas } खाली ATA
     }
-tools-consolidation-transferred-sol = मुख्य वॉलेट में { $amount } ट्रांसफ़र किए गए
+tools-consolidation-transferred-native = मुख्य वॉलेट में { $amount } ट्रांसफ़र किए गए
 tools-consolidation-transferred-tokens =
     { $count ->
         [one] { $count } टोकन मुख्य वॉलेट में ट्रांसफ़र किया गया
@@ -553,7 +553,7 @@ tools-multi-sell-close-atas-hint = प्रति ATA लगभग 0.002 { -sol
 tools-multi-sell-wallets-title = टोकन वाले वॉलेट
 tools-multi-sell-empty = किसी सब-वॉलेट में यह टोकन नहीं है
 tools-multi-sell-column-tokens = टोकन
-tools-multi-sell-column-sol = { -sol } बैलेंस
+tools-multi-sell-column-native = { -sol } बैलेंस
 tools-multi-sell-column-topup = टॉप अप ज़रूरी
 tools-multi-sell-none-selected = कोई वॉलेट नहीं चुना गया
 tools-multi-sell-select-required = कृपया कम से कम एक वॉलेट चुनें

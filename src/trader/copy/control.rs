@@ -47,9 +47,7 @@ pub struct CopyTaskSummary {
     #[serde(flatten)]
     pub task: CopyTask,
     pub stats: CopyTaskStats,
-    #[serde(rename = "spent_sol")]
     pub spent_native: f64,
-    #[serde(rename = "remaining_budget_sol")]
     pub remaining_budget_native: f64,
     pub effective_state: &'static str,
     /// The filter rule the task runs under after its own override.
@@ -64,18 +62,14 @@ pub struct CopyTaskSummary {
 /// still hold what they bought); budget and arrival count enabled tasks only.
 #[derive(Debug, Default, Serialize)]
 pub struct CopyTotals {
-    #[serde(rename = "realized_pnl_sol")]
     pub realized_pnl_native: f64,
-    #[serde(rename = "unrealized_pnl_sol")]
     pub unrealized_pnl_native: f64,
     pub open_holdings: usize,
     pub unpriced_holdings: usize,
     pub wins: usize,
     pub losses: usize,
     pub win_rate_pct: Option<f64>,
-    #[serde(rename = "active_budget_sol")]
     pub active_budget_native: f64,
-    #[serde(rename = "active_spent_sol")]
     pub active_spent_native: f64,
     pub active_arrival: ArrivalDistanceStats,
 }

@@ -341,7 +341,7 @@ telegram-update-how-installer = Masaüstü yükleyicisinin bir kez çalıştır�
 telegram-value-unknown = Bilinmiyor
 telegram-value-na = Yok
 telegram-percent-value = { $percent }%
-telegram-price-sol = { $price } { -sol }
+telegram-price-native = { $price } { -sol }
 telegram-amount-usd = ${ $amount }
 telegram-amount-usd-thousands = ${ $amount }K
 telegram-amount-usd-millions = ${ $amount }M
@@ -353,7 +353,7 @@ telegram-duration-hours-minutes = { $hours }sa { $minutes }dk
 telegram-duration-days = { $days }g
 telegram-duration-days-hours = { $days }g { $hours }sa
 telegram-pnl = { $sol } { -sol } ({ $percent }%)
-telegram-amount-sol = { $amount } { -sol }
+telegram-amount-native = { $amount } { -sol }
 telegram-error-line = Hata: { $detail }
 telegram-ai-reasoning =
     <b>LLM Analizi</b>

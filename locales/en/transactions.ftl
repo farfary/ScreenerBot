@@ -76,7 +76,7 @@ transactions-col-signature = Signature
 transactions-col-type = Type
 transactions-col-direction = Direction
 transactions-col-status = Status
-transactions-col-sol-delta = Δ { -sol }
+transactions-col-native-delta = Δ { -sol }
 transactions-col-fees = Fees ({ -sol })
 transactions-col-token = Token
 transactions-col-router = Router
@@ -127,7 +127,7 @@ transactions-dialog-metric-effective-received = Effective received
 transactions-dialog-metric-effective-spent = Effective spent
 transactions-dialog-metric-network-fee = Network fee
 transactions-dialog-metric-estimated-pnl = Estimated P&L
-transactions-dialog-metric-net-sol-change = Net { -sol } change
+transactions-dialog-metric-net-native-change = Net { -sol } change
 transactions-dialog-route-title = Route and assets
 transactions-dialog-route-router = Router
 transactions-dialog-route-input-asset = Input asset
@@ -147,11 +147,11 @@ transactions-dialog-tech-token-decimals = Token decimals
 
 ## Transaction details dialog: balances, instructions, logs, ATA and raw tabs
 
-transactions-dialog-balances-sol-title = { -sol } Balance Changes
-transactions-dialog-balances-sol-empty = No { -sol } balance changes
+transactions-dialog-balances-native-title = { -sol } Balance Changes
+transactions-dialog-balances-native-empty = No { -sol } balance changes
 transactions-dialog-balances-token-title = Token Balance Changes
 transactions-dialog-balances-token-empty = No token balance changes
-transactions-dialog-balances-net-sol = Net { -sol } Change
+transactions-dialog-balances-net-native = Net { -sol } Change
 transactions-dialog-balances-fee = Transaction Fee
 transactions-dialog-col-account = Account
 transactions-dialog-col-token = Token

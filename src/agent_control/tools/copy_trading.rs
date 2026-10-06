@@ -73,11 +73,11 @@ fn task_field_schema() -> serde_json::Value {
                     "duration_seconds": { "type": "number" } } }
             }
         },
-        "max_sol_per_trade": { "type": "number", "description": "Cap per copied buy; <= max_sol_per_token" },
-        "max_sol_per_token": { "type": "number", "description": "Cap per token; <= total_budget_sol" },
-        "total_budget_sol": { "type": "number", "description": "Lifetime spend cap of the task" },
-        "min_target_trade_sol": { "type": ["number", "null"], "description": "Ignore target buys smaller than this (filters noise)" },
-        "max_target_trade_sol": { "type": ["number", "null"], "description": "Ignore target buys larger than this" },
+        "max_native_per_trade": { "type": "number", "description": "Cap per copied buy; <= max_native_per_token" },
+        "max_native_per_token": { "type": "number", "description": "Cap per token; <= total_budget_native" },
+        "total_budget_native": { "type": "number", "description": "Lifetime spend cap of the task" },
+        "min_target_trade_native": { "type": ["number", "null"], "description": "Ignore target buys smaller than this (filters noise)" },
+        "max_target_trade_native": { "type": ["number", "null"], "description": "Ignore target buys larger than this" },
         "buy_once_per_token": { "type": "boolean", "description": "Copy only the first buy of each token" },
         "slippage_pct": { "type": "number", "description": "Slippage for copied trades in percent" },
         "require_filter_pass": { "type": ["boolean", "null"], "description": "Per-task override of copy_trading.require_filter_pass (only copy tokens the filtering pipeline passed); null inherits the global setting" }
@@ -247,13 +247,13 @@ struct CreateParams {
     exit_mode: ExitMode,
     #[serde(default)]
     exit_policy_overrides: ExitPolicyOverrides,
-    max_sol_per_trade: f64,
-    max_sol_per_token: f64,
-    total_budget_sol: f64,
+    max_native_per_trade: f64,
+    max_native_per_token: f64,
+    total_budget_native: f64,
     #[serde(default)]
-    min_target_trade_sol: Option<f64>,
+    min_target_trade_native: Option<f64>,
     #[serde(default)]
-    max_target_trade_sol: Option<f64>,
+    max_target_trade_native: Option<f64>,
     #[serde(default = "enabled_default")]
     buy_once_per_token: bool,
     #[serde(default)]
@@ -286,7 +286,7 @@ impl Tool for CreateCopyTaskTool {
             parameters: json!({
                 "type": "object",
                 "properties": properties,
-                "required": ["target_address", "sizing", "exit_mode", "max_sol_per_trade", "max_sol_per_token", "total_budget_sol"]
+                "required": ["target_address", "sizing", "exit_mode", "max_native_per_trade", "max_native_per_token", "total_budget_native"]
             }),
             mutating: true,
             requires_confirmation: true,
@@ -306,11 +306,11 @@ impl Tool for CreateCopyTaskTool {
             sizing: p.sizing,
             exit_mode: p.exit_mode,
             exit_policy_overrides: p.exit_policy_overrides,
-            max_native_per_trade: p.max_sol_per_trade,
-            max_native_per_token: p.max_sol_per_token,
-            total_budget_native: p.total_budget_sol,
-            min_target_trade_native: p.min_target_trade_sol,
-            max_target_trade_native: p.max_target_trade_sol,
+            max_native_per_trade: p.max_native_per_trade,
+            max_native_per_token: p.max_native_per_token,
+            total_budget_native: p.total_budget_native,
+            min_target_trade_native: p.min_target_trade_native,
+            max_target_trade_native: p.max_target_trade_native,
             buy_once_per_token: p.buy_once_per_token,
             slippage_pct: p
                 .slippage_pct

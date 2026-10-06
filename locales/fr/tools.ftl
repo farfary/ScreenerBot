@@ -467,19 +467,19 @@ tools-generator-exported = Portefeuilles exportés - conservez-les en lieu sûr
 
 tools-consolidation-summary-title = Résumé
 tools-consolidation-stat-wallets = Sous-portefeuilles
-tools-consolidation-stat-sol = { -sol } total
+tools-consolidation-stat-native = { -sol } total
 tools-consolidation-stat-tokens = Types de tokens
 tools-consolidation-stat-rent = Rent récupérable
 tools-consolidation-wallets-title = Portefeuilles
 tools-consolidation-loading-wallets = Chargement des portefeuilles...
 tools-consolidation-loading-data = Chargement des données du portefeuille...
-tools-consolidation-action-transfer-sol = Transférer le { -sol }
+tools-consolidation-action-transfer-native = Transférer le { -sol }
 tools-consolidation-action-transfer-tokens = Transférer tous les tokens
 tools-consolidation-action-cleanup = Nettoyer les ATA
 tools-consolidation-action-transferring = Transfert en cours...
 tools-consolidation-column-name = Nom
 tools-consolidation-column-address = Adresse
-tools-consolidation-column-sol = Solde en { -sol }
+tools-consolidation-column-native = Solde en { -sol }
 tools-consolidation-column-tokens = Tokens
 tools-consolidation-column-atas = ATA vides
 tools-consolidation-empty = Aucun sous-portefeuille trouvé
@@ -496,7 +496,7 @@ tools-consolidation-selection-totals =
         [many] { $atas } ATA vides
        *[other] { $atas } ATA vides
     }
-tools-consolidation-transferred-sol = { $amount } transféré vers le portefeuille principal
+tools-consolidation-transferred-native = { $amount } transféré vers le portefeuille principal
 tools-consolidation-transferred-tokens =
     { $count ->
         [one] { $count } token transféré vers le portefeuille principal
@@ -604,7 +604,7 @@ tools-multi-sell-close-atas-hint = Récupérer environ 0.002 { -sol } par ATA
 tools-multi-sell-wallets-title = Portefeuilles détenant le token
 tools-multi-sell-empty = Aucun sous-portefeuille ne détient ce token
 tools-multi-sell-column-tokens = Tokens
-tools-multi-sell-column-sol = Solde en { -sol }
+tools-multi-sell-column-native = Solde en { -sol }
 tools-multi-sell-column-topup = Recharge requise
 tools-multi-sell-none-selected = Aucun portefeuille sélectionné
 tools-multi-sell-select-required = Veuillez sélectionner au moins un portefeuille

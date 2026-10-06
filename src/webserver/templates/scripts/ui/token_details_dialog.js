@@ -1312,7 +1312,7 @@ export class TokenDetailsDialog {
           <span class="market-value-label">${esc(I18n.t("tokens-overview-price"))}</span>
           <div class="price-sol-row">
             <span class="price-sol" data-live-value="price-sol">—</span>
-            <span class="price-sol-unit">${esc(I18n.t("tokens-dialog-unit-sol"))}</span>
+            <span class="price-sol-unit">${esc(I18n.t("tokens-dialog-unit-native"))}</span>
           </div>
           <span class="price-usd" data-live-value="price-usd">—</span>
         </div>

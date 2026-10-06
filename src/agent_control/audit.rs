@@ -287,13 +287,13 @@ mod tests {
             "apiKey": "xyz",
             "X-ScreenerBot-Pairing-Secret": "s",
             "token_mint": "So11111111111111111111111111111111111111112",
-            "amount_sol": 1.5
+            "amount_native": 1.5
         });
         let out = sanitize(&v);
         assert!(!out.contains("abc") && !out.contains("xyz"));
         assert!(out.contains("[redacted]"));
         assert!(out.contains("So11111111111111111111111111111111111111112"));
-        assert!(out.contains("amount_sol"));
+        assert!(out.contains("amount_native"));
     }
 
     #[test]

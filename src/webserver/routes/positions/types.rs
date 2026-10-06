@@ -114,7 +114,7 @@ pub struct PositionsStatsResponse {
     pub total: usize,
     pub open: usize,
     pub closed: usize,
-    pub total_invested_sol: f64,
+    pub total_invested_native: f64,
     pub total_pnl: f64,
 }
 

@@ -76,7 +76,7 @@ transactions-col-signature = 签名
 transactions-col-type = 类型
 transactions-col-direction = 方向
 transactions-col-status = 状态
-transactions-col-sol-delta = Δ { -sol }
+transactions-col-native-delta = Δ { -sol }
 transactions-col-fees = 费用（{ -sol }）
 transactions-col-token = 代币
 transactions-col-router = 路由
@@ -127,7 +127,7 @@ transactions-dialog-metric-effective-received = 实际收到
 transactions-dialog-metric-effective-spent = 实际支出
 transactions-dialog-metric-network-fee = 网络费用
 transactions-dialog-metric-estimated-pnl = 预估盈亏
-transactions-dialog-metric-net-sol-change = { -sol } 净变动
+transactions-dialog-metric-net-native-change = { -sol } 净变动
 transactions-dialog-route-title = 路由与资产
 transactions-dialog-route-router = 路由
 transactions-dialog-route-input-asset = 输入资产
@@ -147,11 +147,11 @@ transactions-dialog-tech-token-decimals = 代币小数位数
 
 ## Transaction details dialog: balances, instructions, logs, ATA and raw tabs
 
-transactions-dialog-balances-sol-title = { -sol } 余额变动
-transactions-dialog-balances-sol-empty = 没有 { -sol } 余额变动
+transactions-dialog-balances-native-title = { -sol } 余额变动
+transactions-dialog-balances-native-empty = 没有 { -sol } 余额变动
 transactions-dialog-balances-token-title = 代币余额变动
 transactions-dialog-balances-token-empty = 没有代币余额变动
-transactions-dialog-balances-net-sol = { -sol } 净变动
+transactions-dialog-balances-net-native = { -sol } 净变动
 transactions-dialog-balances-fee = 交易费用
 transactions-dialog-col-account = 账户
 transactions-dialog-col-token = 代币

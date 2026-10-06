@@ -47,7 +47,7 @@ pub async fn get_dashboard_overview(State(state): State<Arc<AppState>>) -> Json<
     // `entry_size_native`, which never grows after the first buy and understated any
     // averaged-into position. Rounds with no established basis contribute nothing rather
     // than a zero that would read as free capital.
-    let total_invested_sol: f64 = open_positions
+    let total_invested_native: f64 = open_positions
         .iter()
         .filter(|p| p.has_trustworthy_pnl())
         .map(|p| p.total_size_native)
@@ -106,7 +106,7 @@ pub async fn get_dashboard_overview(State(state): State<Arc<AppState>>) -> Json<
         total_positions: (open_positions.len() as i64 + closed_positions_count),
         open_positions: open_positions.len() as i64,
         closed_positions: closed_positions_count,
-        total_invested_sol,
+        total_invested_native,
         total_pnl,
         win_rate,
         open_position_details,

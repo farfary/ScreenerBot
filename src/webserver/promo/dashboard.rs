@@ -26,7 +26,7 @@ fn period_stats(agg: &PeriodAgg, extra_open_buys: i64) -> TradingPeriodStats {
         sells: agg.sells,
         profit_native: agg.profit_sol,
         loss_native: agg.loss_sol,
-        net_pnl_sol: agg.net_pnl_sol,
+        net_pnl_native: agg.net_pnl_sol,
         drawdown_percent: agg.drawdown_percent,
         win_rate: agg.win_rate,
     }
@@ -72,8 +72,8 @@ pub fn get_promo_home_dashboard() -> HomeDashboardResponse {
 
     let positions = PositionsSnapshot {
         open_count: open.count as i64,
-        total_invested_sol: open.invested_sol,
-        unrealized_pnl_sol: open.unrealized_pnl_sol,
+        total_invested_native: open.invested_sol,
+        unrealized_pnl_native: open.unrealized_pnl_sol,
         unrealized_pnl_percent: open.unrealized_pnl_percent,
         avg_position_size_native: if open.count > 0 {
             open.invested_sol / open.count as f64
@@ -162,7 +162,7 @@ pub fn get_promo_dashboard_overview() -> DashboardOverview {
         total_positions: (open.count + trades.len()) as i64,
         open_positions: open.count as i64,
         closed_positions: trades.len() as i64,
-        total_invested_sol: open.invested_sol,
+        total_invested_native: open.invested_sol,
         total_pnl: realized.net_pnl_sol + open.unrealized_pnl_sol,
         win_rate: realized.win_rate,
         open_position_details,
@@ -273,7 +273,7 @@ pub fn get_promo_portfolio_calendar(
         days.push(CalendarDay {
             day,
             date,
-            net_pnl_sol: net,
+            net_pnl_native: net,
             profit_native: profit,
             loss_native: loss,
             trades: trades_n,

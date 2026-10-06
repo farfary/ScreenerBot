@@ -70,9 +70,9 @@ function results(insights, esc) {
   return `<div class="copy-metrics">${[
     metric(
       I18n.t("copy-metric-realized-pnl"),
-      signedSol(insights.realized_pnl_sol),
+      signedSol(insights.realized_pnl_native),
       I18n.t("copy-count-closed-rounds", { count: rounds }),
-      toneClass(insights.realized_pnl_sol),
+      toneClass(insights.realized_pnl_native),
       esc
     ),
     metric(
@@ -84,9 +84,9 @@ function results(insights, esc) {
     ),
     metric(
       I18n.t("copy-overview-average-win"),
-      signedSol(insights.average_win_sol),
-      I18n.t("copy-overview-average-loss", { amount: signedSol(insights.average_loss_sol) }),
-      toneClass(insights.average_win_sol),
+      signedSol(insights.average_win_native),
+      I18n.t("copy-overview-average-loss", { amount: signedSol(insights.average_loss_native) }),
+      toneClass(insights.average_win_native),
       esc
     ),
     metric(
@@ -105,9 +105,9 @@ function results(insights, esc) {
     ),
     metric(
       I18n.t("copy-overview-best-round"),
-      signedSol(insights.best_round_sol),
-      I18n.t("copy-overview-worst-round", { amount: signedSol(insights.worst_round_sol) }),
-      toneClass(insights.best_round_sol),
+      signedSol(insights.best_round_native),
+      I18n.t("copy-overview-worst-round", { amount: signedSol(insights.worst_round_native) }),
+      toneClass(insights.best_round_native),
       esc
     ),
   ].join("")}</div>
@@ -133,7 +133,7 @@ function book(ws, esc) {
     .map(([id, count]) => `<span>${I18n.markup(id, { count: count ?? 0 })}</span>`)
     .join("");
   const marked = unrealizedFigure(
-    stats.unrealized_pnl_sol,
+    stats.unrealized_pnl_native,
     stats.open_positions,
     stats.unpriced_positions
   );
@@ -148,18 +148,18 @@ function book(ws, esc) {
       ),
       metric(
         I18n.t("copy-metric-realized-pnl"),
-        signedSol(stats.realized_pnl_sol),
+        signedSol(stats.realized_pnl_native),
         I18n.t("copy-book-closed", { count: stats.closed_positions ?? 0 }),
-        toneClass(stats.realized_pnl_sol),
+        toneClass(stats.realized_pnl_native),
         esc
       ),
       metric(
         I18n.t("copy-metric-budget-spent"),
-        sol(ws.spent_sol, 3),
+        sol(ws.spent_native, 3),
         I18n.t("copy-book-budget-note", {
           mode: modeLabel(ws.mode),
-          total: fixed(ws.total_budget_sol, 3),
-          remaining: fixed(ws.remaining_budget_sol, 3),
+          total: fixed(ws.total_budget_native, 3),
+          remaining: fixed(ws.remaining_budget_native, 3),
         }),
         "",
         esc

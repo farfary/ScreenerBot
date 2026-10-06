@@ -489,19 +489,19 @@ tools-generator-exported = Wallets exported - store securely
 
 tools-consolidation-summary-title = Summary
 tools-consolidation-stat-wallets = Sub-wallets
-tools-consolidation-stat-sol = Total { -sol }
+tools-consolidation-stat-native = Total { -sol }
 tools-consolidation-stat-tokens = Token Types
 tools-consolidation-stat-rent = Reclaimable Rent
 tools-consolidation-wallets-title = Wallets
 tools-consolidation-loading-wallets = Loading wallets...
 tools-consolidation-loading-data = Loading wallet data...
-tools-consolidation-action-transfer-sol = Transfer { -sol }
+tools-consolidation-action-transfer-native = Transfer { -sol }
 tools-consolidation-action-transfer-tokens = Transfer All Tokens
 tools-consolidation-action-cleanup = Cleanup ATAs
 tools-consolidation-action-transferring = Transferring...
 tools-consolidation-column-name = Name
 tools-consolidation-column-address = Address
-tools-consolidation-column-sol = { -sol } Balance
+tools-consolidation-column-native = { -sol } Balance
 tools-consolidation-column-tokens = Tokens
 tools-consolidation-column-atas = Empty ATAs
 tools-consolidation-empty = No sub-wallets found
@@ -518,7 +518,7 @@ tools-consolidation-selection-totals =
        *[other] { $atas } empty ATAs
     }
 # $amount is the transferred balance with its unit.
-tools-consolidation-transferred-sol = Transferred { $amount } to main wallet
+tools-consolidation-transferred-native = Transferred { $amount } to main wallet
 tools-consolidation-transferred-tokens =
     { $count ->
         [one] Transferred { $count } token to main wallet
@@ -628,7 +628,7 @@ tools-multi-sell-close-atas-hint = Reclaim ~0.002 { -sol } per ATA
 tools-multi-sell-wallets-title = Wallets with Token
 tools-multi-sell-empty = No sub-wallets hold this token
 tools-multi-sell-column-tokens = Tokens
-tools-multi-sell-column-sol = { -sol } Balance
+tools-multi-sell-column-native = { -sol } Balance
 tools-multi-sell-column-topup = Needs Topup
 tools-multi-sell-none-selected = No wallets selected
 tools-multi-sell-select-required = Please select at least one wallet

@@ -181,7 +181,7 @@ function renderPositionSummary(position) {
         I18n.t("tokens-positions-fact-exit-price"),
         fmtPrice(position.effective_exit_price ?? position.exit_price),
       ],
-      [I18n.t("tokens-positions-fact-sol-received"), fmtSol(position.sol_received)]
+      [I18n.t("tokens-positions-fact-native-received"), fmtSol(position.sol_received)]
     );
     if (position.closed_reason) {
       marketFacts.push([

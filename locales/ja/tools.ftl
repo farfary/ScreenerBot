@@ -450,19 +450,19 @@ tools-generator-exported = ウォレットをエクスポートしました。�
 
 tools-consolidation-summary-title = サマリー
 tools-consolidation-stat-wallets = サブウォレット
-tools-consolidation-stat-sol = { -sol } 合計
+tools-consolidation-stat-native = { -sol } 合計
 tools-consolidation-stat-tokens = トークンの種類
 tools-consolidation-stat-rent = 回収可能なレント
 tools-consolidation-wallets-title = ウォレット
 tools-consolidation-loading-wallets = ウォレットを読み込み中...
 tools-consolidation-loading-data = ウォレットデータを読み込み中...
-tools-consolidation-action-transfer-sol = { -sol } を送金
+tools-consolidation-action-transfer-native = { -sol } を送金
 tools-consolidation-action-transfer-tokens = すべてのトークンを送金
 tools-consolidation-action-cleanup = ATA をクリーンアップ
 tools-consolidation-action-transferring = 送金中...
 tools-consolidation-column-name = 名前
 tools-consolidation-column-address = アドレス
-tools-consolidation-column-sol = { -sol } 残高
+tools-consolidation-column-native = { -sol } 残高
 tools-consolidation-column-tokens = トークン
 tools-consolidation-column-atas = 空の ATA
 tools-consolidation-empty = サブウォレットが見つかりません
@@ -475,7 +475,7 @@ tools-consolidation-selection-totals =
     } | { $atas ->
        *[other] 空の ATA { $atas }個
     }
-tools-consolidation-transferred-sol = { $amount } をメインウォレットに送金しました
+tools-consolidation-transferred-native = { $amount } をメインウォレットに送金しました
 tools-consolidation-transferred-tokens =
     { $count ->
        *[other] { $count }個のトークンをメインウォレットに送金しました
@@ -577,7 +577,7 @@ tools-multi-sell-close-atas-hint = ATA 1 つあたり約 0.002 { -sol } を回�
 tools-multi-sell-wallets-title = トークンを保有するウォレット
 tools-multi-sell-empty = このトークンを保有するサブウォレットはありません
 tools-multi-sell-column-tokens = トークン
-tools-multi-sell-column-sol = { -sol } 残高
+tools-multi-sell-column-native = { -sol } 残高
 tools-multi-sell-column-topup = 補充が必要
 tools-multi-sell-none-selected = ウォレットが選択されていません
 tools-multi-sell-select-required = ウォレットを1つ以上選択してください

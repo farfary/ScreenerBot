@@ -24,7 +24,7 @@ pub enum NotificationType {
         token_symbol: String,
         token_mint: String,
         trade_type: String, // "buy" or "sell"
-        amount_sol: f64,
+        amount_native: f64,
         wallet: String, // external wallet that traded
     },
 
@@ -32,7 +32,7 @@ pub enum NotificationType {
     PositionOpened {
         token_symbol: String,
         token_mint: String,
-        amount_sol: f64,
+        amount_native: f64,
         entry_price: f64,
         ai_reasoning: Option<String>,
     },
@@ -41,7 +41,7 @@ pub enum NotificationType {
     PositionClosed {
         token_symbol: String,
         token_mint: String,
-        pnl_sol: f64,
+        pnl_native: f64,
         pnl_percent: f64,
         exit_reason: Option<String>,
         entry_price: f64,
@@ -57,7 +57,7 @@ pub enum NotificationType {
         token_symbol: String,
         token_mint: String,
         exit_percent: f64,
-        pnl_sol: f64,
+        pnl_native: f64,
         remaining_percent: f64,
     },
 
@@ -65,8 +65,8 @@ pub enum NotificationType {
     DcaExecuted {
         token_symbol: String,
         token_mint: String,
-        dca_amount_sol: f64,
-        total_invested_sol: f64,
+        dca_amount_native: f64,
+        total_invested_native: f64,
         dca_count: u32,
     },
 
@@ -82,7 +82,7 @@ pub enum NotificationType {
         total_trades: u32,
         winning_trades: u32,
         losing_trades: u32,
-        total_pnl_sol: f64,
+        total_pnl_native: f64,
         open_positions: u32,
     },
 
@@ -210,14 +210,14 @@ impl Notification {
         token_symbol: String,
         token_mint: String,
         trade_type: &str,
-        amount_sol: f64,
+        amount_native: f64,
         wallet: String,
     ) -> Self {
         Self::new(NotificationType::TradeAlert {
             token_symbol,
             token_mint,
             trade_type: trade_type.to_string(),
-            amount_sol,
+            amount_native,
             wallet,
         })
     }
@@ -241,13 +241,13 @@ impl Notification {
     pub fn position_opened(
         token_symbol: String,
         token_mint: String,
-        amount_sol: f64,
+        amount_native: f64,
         entry_price: f64,
     ) -> Self {
         Self::new(NotificationType::PositionOpened {
             token_symbol,
             token_mint,
-            amount_sol,
+            amount_native,
             entry_price,
             ai_reasoning: None,
         })
@@ -257,14 +257,14 @@ impl Notification {
     pub fn position_opened_with_ai(
         token_symbol: String,
         token_mint: String,
-        amount_sol: f64,
+        amount_native: f64,
         entry_price: f64,
         ai_reasoning: Option<String>,
     ) -> Self {
         Self::new(NotificationType::PositionOpened {
             token_symbol,
             token_mint,
-            amount_sol,
+            amount_native,
             entry_price,
             ai_reasoning,
         })
@@ -274,7 +274,7 @@ impl Notification {
     pub fn position_closed(
         token_symbol: String,
         token_mint: String,
-        pnl_sol: f64,
+        pnl_native: f64,
         pnl_percent: f64,
         exit_reason: Option<String>,
         entry_price: f64,
@@ -286,7 +286,7 @@ impl Notification {
         Self::new(NotificationType::PositionClosed {
             token_symbol,
             token_mint,
-            pnl_sol,
+            pnl_native,
             pnl_percent,
             exit_reason,
             entry_price,
@@ -302,7 +302,7 @@ impl Notification {
     pub fn position_closed_with_ai(
         token_symbol: String,
         token_mint: String,
-        pnl_sol: f64,
+        pnl_native: f64,
         pnl_percent: f64,
         exit_reason: Option<String>,
         entry_price: f64,
@@ -315,7 +315,7 @@ impl Notification {
         Self::new(NotificationType::PositionClosed {
             token_symbol,
             token_mint,
-            pnl_sol,
+            pnl_native,
             pnl_percent,
             exit_reason,
             entry_price,
@@ -332,14 +332,14 @@ impl Notification {
         token_symbol: String,
         token_mint: String,
         exit_percent: f64,
-        pnl_sol: f64,
+        pnl_native: f64,
         remaining_percent: f64,
     ) -> Self {
         Self::new(NotificationType::PartialExit {
             token_symbol,
             token_mint,
             exit_percent,
-            pnl_sol,
+            pnl_native,
             remaining_percent,
         })
     }
@@ -348,15 +348,15 @@ impl Notification {
     pub fn dca_executed(
         token_symbol: String,
         token_mint: String,
-        dca_amount_sol: f64,
-        total_invested_sol: f64,
+        dca_amount_native: f64,
+        total_invested_native: f64,
         dca_count: u32,
     ) -> Self {
         Self::new(NotificationType::DcaExecuted {
             token_symbol,
             token_mint,
-            dca_amount_sol,
-            total_invested_sol,
+            dca_amount_native,
+            total_invested_native,
             dca_count,
         })
     }
@@ -372,7 +372,7 @@ impl Notification {
         total_trades: u32,
         winning_trades: u32,
         losing_trades: u32,
-        total_pnl_sol: f64,
+        total_pnl_native: f64,
         open_positions: u32,
     ) -> Self {
         Self::new(NotificationType::DailySummary {
@@ -380,7 +380,7 @@ impl Notification {
             total_trades,
             winning_trades,
             losing_trades,
-            total_pnl_sol,
+            total_pnl_native,
             open_positions,
         })
     }

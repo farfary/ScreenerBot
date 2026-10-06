@@ -187,7 +187,7 @@ pub async fn get_positions_stats() -> Json<PositionsStatsResponse> {
     //
     // A round with no established cost basis (an imported airdrop, a USD-quoted fill)
     // contributes nothing rather than a zero that would silently read as "free".
-    let total_invested_sol: f64 = open_positions
+    let total_invested_native: f64 = open_positions
         .iter()
         .filter(|p| p.has_trustworthy_pnl())
         .map(|p| p.total_size_native)
@@ -207,7 +207,7 @@ pub async fn get_positions_stats() -> Json<PositionsStatsResponse> {
         total,
         open,
         closed,
-        total_invested_sol,
+        total_invested_native,
         total_pnl,
     })
 }

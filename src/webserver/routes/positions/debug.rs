@@ -141,7 +141,7 @@ pub struct FeeDetails {
     pub entry_fee_native: Option<f64>,
     pub exit_fee_raw: Option<u64>,
     pub exit_fee_native: Option<f64>,
-    pub total_fees_sol: f64,
+    pub total_fees_native: f64,
 }
 
 #[derive(Debug, Serialize)]
@@ -372,7 +372,7 @@ pub async fn get_position_debug_info(Path(mint): Path<String>) -> Json<PositionD
         // Fee details
         let entry_fee_native = pos.entry_fee_raw.map(|l| adapter().raw_to_native(l));
         let exit_fee_native = pos.exit_fee_raw.map(|l| adapter().raw_to_native(l));
-        let total_fees_sol =
+        let total_fees_native =
             entry_fee_native.unwrap_or_default() + exit_fee_native.unwrap_or_default();
 
         let fee_details = FeeDetails {
@@ -380,7 +380,7 @@ pub async fn get_position_debug_info(Path(mint): Path<String>) -> Json<PositionD
             entry_fee_native,
             exit_fee_raw: pos.exit_fee_raw,
             exit_fee_native,
-            total_fees_sol,
+            total_fees_native,
         };
 
         // Profit targets

@@ -345,7 +345,7 @@ telegram-update-how-installer = Нужно один раз запустить у
 telegram-value-unknown = Неизвестно
 telegram-value-na = Н/Д
 telegram-percent-value = { $percent }%
-telegram-price-sol = { $price } { -sol }
+telegram-price-native = { $price } { -sol }
 telegram-amount-usd = ${ $amount }
 telegram-amount-usd-thousands = ${ $amount }K
 telegram-amount-usd-millions = ${ $amount }M
@@ -357,7 +357,7 @@ telegram-duration-hours-minutes = { $hours } ч { $minutes } мин
 telegram-duration-days = { $days } д
 telegram-duration-days-hours = { $days } д { $hours } ч
 telegram-pnl = { $sol } { -sol } ({ $percent }%)
-telegram-amount-sol = { $amount } { -sol }
+telegram-amount-native = { $amount } { -sol }
 telegram-error-line = Ошибка: { $detail }
 telegram-ai-reasoning =
     <b>Анализ LLM</b>

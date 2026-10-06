@@ -81,21 +81,16 @@ pub fn book_of(task: &CopyTask) -> CopyBook {
 /// Where the task's exit rules act on a holding, from its entry price and peak.
 #[derive(Debug, Clone, Serialize)]
 pub struct HoldingExitWatch {
-    #[serde(rename = "stop_loss_price_sol")]
     pub stop_loss_price_native: Option<f64>,
     /// The stop loss is held off until this moment (its minimum hold).
     pub stop_loss_armed_at: Option<DateTime<Utc>>,
-    #[serde(rename = "take_profit_price_sol")]
     pub take_profit_price_native: Option<f64>,
-    #[serde(rename = "trailing_activation_price_sol")]
     pub trailing_activation_price_native: Option<f64>,
     pub trailing_armed: bool,
-    #[serde(rename = "trailing_stop_price_sol")]
     pub trailing_stop_price_native: Option<f64>,
     /// From this moment the time rule sells while the price is at or below
     /// `time_rule_price_native`.
     pub time_rule_from: Option<DateTime<Utc>>,
-    #[serde(rename = "time_rule_price_sol")]
     pub time_rule_price_native: Option<f64>,
 }
 
@@ -140,21 +135,13 @@ pub struct PaperHolding {
     pub mint: String,
     pub open: bool,
     pub token_amount: f64,
-    #[serde(rename = "cost_basis_sol")]
     pub cost_basis_native: f64,
-    #[serde(rename = "invested_sol")]
     pub invested_native: f64,
-    #[serde(rename = "realized_proceeds_sol")]
     pub realized_proceeds_native: f64,
-    #[serde(rename = "realized_pnl_sol")]
     pub realized_pnl_native: f64,
-    #[serde(rename = "entry_price_sol")]
     pub entry_price_native: Option<f64>,
-    #[serde(rename = "mark_price_sol")]
     pub mark_price_native: Option<f64>,
-    #[serde(rename = "market_value_sol")]
     pub market_value_native: Option<f64>,
-    #[serde(rename = "unrealized_pnl_sol")]
     pub unrealized_pnl_native: Option<f64>,
     pub unrealized_pnl_pct: Option<f64>,
     pub buys: u64,
@@ -163,7 +150,6 @@ pub struct PaperHolding {
     pub closed_at: Option<DateTime<Utc>>,
     pub held_seconds: i64,
     /// Highest pool price of the open round; what arms the paper trailing stop.
-    #[serde(rename = "peak_price_sol")]
     pub peak_price_native: Option<f64>,
     /// `None` when the policy does not manage this task's exits.
     pub exit_watch: Option<HoldingExitWatch>,
@@ -221,7 +207,6 @@ pub struct CopyTaskWorkspace {
     pub effective_policy: EffectiveExitPolicy,
     /// What the task may still spend once live. Paper and live spend are separate
     /// ledgers, so this is the budget less live spend only, whatever paper spent.
-    #[serde(rename = "live_remaining_budget_sol")]
     pub live_remaining_budget_native: f64,
     pub policy_manages_exits: bool,
     pub global_require_filter_pass: bool,
@@ -418,7 +403,6 @@ pub struct TaskComparison {
     pub rounds: usize,
     pub wins: usize,
     pub win_rate_pct: Option<f64>,
-    #[serde(rename = "realized_pnl_sol")]
     pub realized_pnl_native: f64,
     pub profit_factor: Option<f64>,
     pub average_hold_seconds: Option<f64>,

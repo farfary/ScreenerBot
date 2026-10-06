@@ -31,7 +31,7 @@ trade-quote-impact-warning = O impacto no preço de { $impact } está acima do s
 
 ## Units
 
-trade-unit-sol = { -sol }
+trade-unit-native = { -sol }
 trade-unit-tokens = tokens
 
 ## Actions. Ids are the dialog actions: buy, sell, add.

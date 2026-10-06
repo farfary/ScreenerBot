@@ -477,7 +477,7 @@ export function formatSol(amount, { decimals = 4, fallback = HYPHEN, suffix } = 
   }
   const formatted = localizeDecimal(num.toFixed(decimals));
   if (suffix === undefined) {
-    return plain(I18n.t("format-sol-amount", { amount: formatted }));
+    return plain(I18n.t("format-native-amount", { amount: formatted }));
   }
   return `${formatted}${suffix}`;
 }
@@ -489,7 +489,7 @@ export function withAgo(span, count = 0) {
 
 /** An already formatted SOL amount with the SOL term ("0.1500" -> "0.1500 SOL"). */
 export function withSolUnit(amount) {
-  return plain(I18n.t("format-sol-amount", { amount }));
+  return plain(I18n.t("format-native-amount", { amount }));
 }
 
 /**

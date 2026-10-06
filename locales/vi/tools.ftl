@@ -447,19 +447,19 @@ tools-generator-exported = Đã xuất ví - hãy lưu giữ an toàn
 
 tools-consolidation-summary-title = Tóm tắt
 tools-consolidation-stat-wallets = Ví phụ
-tools-consolidation-stat-sol = Tổng { -sol }
+tools-consolidation-stat-native = Tổng { -sol }
 tools-consolidation-stat-tokens = Số loại token
 tools-consolidation-stat-rent = Phí rent có thể thu hồi
 tools-consolidation-wallets-title = Ví
 tools-consolidation-loading-wallets = Đang tải các ví...
 tools-consolidation-loading-data = Đang tải dữ liệu ví...
-tools-consolidation-action-transfer-sol = Chuyển { -sol }
+tools-consolidation-action-transfer-native = Chuyển { -sol }
 tools-consolidation-action-transfer-tokens = Chuyển tất cả token
 tools-consolidation-action-cleanup = Dọn dẹp ATA
 tools-consolidation-action-transferring = Đang chuyển...
 tools-consolidation-column-name = Tên
 tools-consolidation-column-address = Địa chỉ
-tools-consolidation-column-sol = Số dư { -sol }
+tools-consolidation-column-native = Số dư { -sol }
 tools-consolidation-column-tokens = Token
 tools-consolidation-column-atas = ATA trống
 tools-consolidation-empty = Không tìm thấy ví phụ nào
@@ -472,7 +472,7 @@ tools-consolidation-selection-totals =
     } | { $atas ->
        *[other] { $atas } ATA trống
     }
-tools-consolidation-transferred-sol = Đã chuyển { $amount } về ví chính
+tools-consolidation-transferred-native = Đã chuyển { $amount } về ví chính
 tools-consolidation-transferred-tokens =
     { $count ->
        *[other] Đã chuyển { $count } token về ví chính
@@ -574,7 +574,7 @@ tools-multi-sell-close-atas-hint = Thu hồi khoảng 0.002 { -sol } cho mỗi A
 tools-multi-sell-wallets-title = Các ví có token
 tools-multi-sell-empty = Không có ví phụ nào nắm giữ token này
 tools-multi-sell-column-tokens = Token
-tools-multi-sell-column-sol = Số dư { -sol }
+tools-multi-sell-column-native = Số dư { -sol }
 tools-multi-sell-column-topup = Cần nạp thêm
 tools-multi-sell-none-selected = Chưa chọn ví nào
 tools-multi-sell-select-required = Vui lòng chọn ít nhất một ví

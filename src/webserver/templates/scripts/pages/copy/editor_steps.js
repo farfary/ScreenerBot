@@ -62,12 +62,12 @@ export const STEPS = [
 ];
 
 const NUMBER_FIELDS = [
-  "max_sol_per_trade",
-  "max_sol_per_token",
-  "total_budget_sol",
+  "max_native_per_trade",
+  "max_native_per_token",
+  "total_budget_native",
   "slippage_pct",
-  "min_target_trade_sol",
-  "max_target_trade_sol",
+  "min_target_trade_native",
+  "max_target_trade_native",
 ];
 
 const EXIT_MODES = [
@@ -163,9 +163,9 @@ function walletStep(context, esc) {
 /** What a copy costs under the draft's sizing, before network and priority fees. */
 export function costPreview(draft) {
   const amount = draft.sizing.kind === "fixed" ? draft.sizing.sol : draft.sizing.pct;
-  const cap = draft.max_sol_per_trade;
-  const perToken = draft.max_sol_per_token;
-  const budget = draft.total_budget_sol;
+  const cap = draft.max_native_per_trade;
+  const perToken = draft.max_native_per_token;
+  const budget = draft.total_budget_native;
   if (![amount, cap, perToken, budget].every((value) => Number.isFinite(value) && value > 0)) {
     return `<p>${escapeHtml(I18n.t("copy-editor-preview-empty"))}</p>`;
   }
@@ -197,7 +197,7 @@ function sizingStep({ draft, defaults }, esc) {
   const fixedKind = draft.sizing.kind === "fixed";
   const maxSlippage = defaults?.max_slippage_pct ?? null;
   const minSol = defaults?.min_trade_size_native ?? 0;
-  const solUnit = I18n.t("copy-unit-sol");
+  const solUnit = I18n.t("copy-unit-native");
   const copySize = I18n.t("copy-editor-copy-size");
   return `<div class="copy-field"><span>${esc(copySize)}</span>${segmented(
     "sizing-kind",
@@ -211,9 +211,9 @@ function sizingStep({ draft, defaults }, esc) {
   )}</div>
     <div class="copy-fields">
       ${numberInput(esc, { attr: "data-field", name: "sizing_amount", label: fixedKind ? I18n.t("copy-editor-amount-fixed") : I18n.t("copy-editor-amount-ratio"), unit: fixedKind ? solUnit : "%", value: valueAttr(fixedKind ? draft.sizing.sol : draft.sizing.pct), min: fixedKind ? minSol : 0, required: true, help: fixedKind ? I18n.t("copy-editor-amount-help-fixed", { minimum: sol(minSol, 3) }) : I18n.t("copy-editor-amount-help-ratio") })}
-      ${numberInput(esc, { attr: "data-field", name: "max_sol_per_trade", label: I18n.t("copy-field-per-trade-cap"), unit: solUnit, value: valueAttr(draft.max_sol_per_trade), min: minSol, required: true, help: I18n.t("copy-editor-help-trade-cap") })}
-      ${numberInput(esc, { attr: "data-field", name: "max_sol_per_token", label: I18n.t("copy-field-per-token-cap"), unit: solUnit, value: valueAttr(draft.max_sol_per_token), min: minSol, required: true, help: I18n.t("copy-editor-help-token-cap") })}
-      ${numberInput(esc, { attr: "data-field", name: "total_budget_sol", label: I18n.t("copy-field-total-budget"), unit: solUnit, value: valueAttr(draft.total_budget_sol), min: minSol, required: true, help: I18n.t("copy-editor-help-budget") })}
+      ${numberInput(esc, { attr: "data-field", name: "max_native_per_trade", label: I18n.t("copy-field-per-trade-cap"), unit: solUnit, value: valueAttr(draft.max_native_per_trade), min: minSol, required: true, help: I18n.t("copy-editor-help-trade-cap") })}
+      ${numberInput(esc, { attr: "data-field", name: "max_native_per_token", label: I18n.t("copy-field-per-token-cap"), unit: solUnit, value: valueAttr(draft.max_native_per_token), min: minSol, required: true, help: I18n.t("copy-editor-help-token-cap") })}
+      ${numberInput(esc, { attr: "data-field", name: "total_budget_native", label: I18n.t("copy-field-total-budget"), unit: solUnit, value: valueAttr(draft.total_budget_native), min: minSol, required: true, help: I18n.t("copy-editor-help-budget") })}
       ${numberInput(esc, { attr: "data-field", name: "slippage_pct", label: I18n.t("copy-field-slippage"), unit: "%", value: valueAttr(draft.slippage_pct), min: defaults?.min_slippage_pct ?? 0, max: maxSlippage, required: true, placeholder: defaults ? String(defaults.default_slippage_pct) : "" })}
     </div>
     <section class="copy-preview" aria-live="polite"><h4>${esc(I18n.t("copy-editor-preview-title"))}</h4><div id="copy-editor-preview">${costPreview(draft)}</div></section>`;
@@ -224,11 +224,11 @@ function entryStep({ draft, defaults }, esc) {
   const filterMode =
     draft.require_filter_pass == null ? "inherit" : draft.require_filter_pass ? "require" : "skip";
   const requires = draft.require_filter_pass ?? global;
-  const solUnit = I18n.t("copy-unit-sol");
+  const solUnit = I18n.t("copy-unit-native");
   const filterLabel = I18n.t("copy-rules-filter-pass");
   return `<div class="copy-fields">
-      ${numberInput(esc, { attr: "data-field", name: "min_target_trade_sol", label: I18n.t("copy-editor-target-min"), unit: solUnit, value: valueAttr(draft.min_target_trade_sol), min: 0, placeholder: I18n.t("copy-editor-any"), help: I18n.t("copy-editor-target-min-help") })}
-      ${numberInput(esc, { attr: "data-field", name: "max_target_trade_sol", label: I18n.t("copy-editor-target-max"), unit: solUnit, value: valueAttr(draft.max_target_trade_sol), min: 0, placeholder: I18n.t("copy-editor-any"), help: I18n.t("copy-editor-target-max-help") })}
+      ${numberInput(esc, { attr: "data-field", name: "min_target_trade_native", label: I18n.t("copy-editor-target-min"), unit: solUnit, value: valueAttr(draft.min_target_trade_native), min: 0, placeholder: I18n.t("copy-editor-any"), help: I18n.t("copy-editor-target-min-help") })}
+      ${numberInput(esc, { attr: "data-field", name: "max_target_trade_native", label: I18n.t("copy-editor-target-max"), unit: solUnit, value: valueAttr(draft.max_target_trade_native), min: 0, placeholder: I18n.t("copy-editor-any"), help: I18n.t("copy-editor-target-max-help") })}
     </div>
     ${toggleRow(esc, { name: "buy_once_per_token", title: I18n.t("copy-editor-buy-once-title"), help: I18n.t("copy-editor-buy-once-help"), checked: draft.buy_once_per_token })}
     <div class="copy-field"><span>${esc(filterLabel)}</span>${segmented(
@@ -418,7 +418,7 @@ export function validate(id, draft, { mode, defaults }) {
   } else if (id === "sizing") {
     const amount = draft.sizing.kind === "fixed" ? draft.sizing.sol : draft.sizing.pct;
     if (
-      ![amount, draft.max_sol_per_trade, draft.max_sol_per_token, draft.total_budget_sol].every(
+      ![amount, draft.max_native_per_trade, draft.max_native_per_token, draft.total_budget_native].every(
         positive
       )
     ) {
@@ -427,11 +427,11 @@ export function validate(id, draft, { mode, defaults }) {
     const minSol = defaults?.min_trade_size_native ?? 0;
     if (draft.sizing.kind === "fixed" && draft.sizing.sol < minSol)
       return I18n.t("copy-editor-error-min-copy", { minimum: sol(minSol, 3) });
-    if (draft.max_sol_per_trade < minSol)
+    if (draft.max_native_per_trade < minSol)
       return I18n.t("copy-editor-error-min-cap", { minimum: sol(minSol, 3) });
-    if (draft.max_sol_per_trade > draft.max_sol_per_token)
+    if (draft.max_native_per_trade > draft.max_native_per_token)
       return I18n.t("copy-editor-error-trade-cap");
-    if (draft.max_sol_per_token > draft.total_budget_sol)
+    if (draft.max_native_per_token > draft.total_budget_native)
       return I18n.t("copy-editor-error-token-cap");
     const minSlippage = defaults?.min_slippage_pct ?? 0;
     const maxSlippage = defaults?.max_slippage_pct ?? Infinity;
@@ -446,7 +446,7 @@ export function validate(id, draft, { mode, defaults }) {
       });
     }
   } else if (id === "entry") {
-    const { min_target_trade_sol: min, max_target_trade_sol: max } = draft;
+    const { min_target_trade_native: min, max_target_trade_native: max } = draft;
     if ([min, max].some((value) => value !== null && !(Number.isFinite(value) && value >= 0))) {
       return I18n.t("copy-editor-error-target-limits");
     }

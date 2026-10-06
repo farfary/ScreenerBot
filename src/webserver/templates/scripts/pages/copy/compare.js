@@ -54,14 +54,14 @@ export function createCompare(page) {
 
   function table(rows) {
     const body = [...rows]
-      .sort((a, b) => b.realized_pnl_sol - a.realized_pnl_sol)
+      .sort((a, b) => b.realized_pnl_native - a.realized_pnl_native)
       .map(
         (row) => `<tr>
           <td><button class="copy-token-link" type="button" data-compare-task="${row.task_id}">${esc(row.name)}</button></td>
           <td><span class="copy-row-mode copy-mode-${esc(row.mode)}">${esc(modeLabel(row.mode))}</span>${row.enabled ? "" : `<small class="copy-muted"> ${esc(I18n.t("copy-paused-suffix"))}</small>`}</td>
           <td class="num">${row.rounds}</td>
           <td class="num">${esc(row.rounds ? pct(row.win_rate_pct, 0) : "—")}</td>
-          <td class="num ${toneClass(row.realized_pnl_sol)}">${esc(signedSol(row.realized_pnl_sol))}</td>
+          <td class="num ${toneClass(row.realized_pnl_native)}">${esc(signedSol(row.realized_pnl_native))}</td>
           <td class="num">${esc(fixed(row.profit_factor, 2))}</td>
           <td class="num">${esc(duration(row.average_hold_seconds))}</td>
           <td class="num">${esc(seconds(row.arrival_median_ms))}</td>

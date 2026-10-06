@@ -350,7 +350,7 @@ telegram-update-how-installer = يتطلب تشغيل مثبّت سطح المك
 telegram-value-unknown = غير معروف
 telegram-value-na = غير متاح
 telegram-percent-value = { $percent }%
-telegram-price-sol = { $price } { -sol }
+telegram-price-native = { $price } { -sol }
 telegram-amount-usd = ${ $amount }
 telegram-amount-usd-thousands = ${ $amount }K
 telegram-amount-usd-millions = ${ $amount }M
@@ -362,7 +362,7 @@ telegram-duration-hours-minutes = { $hours }س { $minutes }د
 telegram-duration-days = { $days }ي
 telegram-duration-days-hours = { $days }ي { $hours }س
 telegram-pnl = { $sol } { -sol } ({ $percent }%)
-telegram-amount-sol = { $amount } { -sol }
+telegram-amount-native = { $amount } { -sol }
 telegram-error-line = الخطأ: { $detail }
 telegram-ai-reasoning =
     <b>تحليل LLM</b>

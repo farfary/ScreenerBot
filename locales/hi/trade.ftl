@@ -21,7 +21,7 @@ trade-quote-disclaimer = प्राइस चेन से लाइव अप
 trade-quote-impact-tiny = { "<0.01%" }
 trade-quote-impact-warning = प्राइस इम्पैक्ट { $impact } आपके { $tolerance }% अधिकतम स्लिपेज से ज़्यादा है — यह साइज़ पूल को हिला देता है। कम राशि बाज़ार प्राइस के ज़्यादा करीब फ़िल होती है।
 
-trade-unit-sol = { -sol }
+trade-unit-native = { -sol }
 trade-unit-tokens = टोकन
 
 trade-buy-title = टोकन खरीदें

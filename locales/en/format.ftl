@@ -10,7 +10,7 @@ format-no = No
 format-unknown = Unknown
 
 # Amount of SOL, for example "0.1500 SOL".
-format-sol-amount = { $amount } { -sol }
+format-native-amount = { $amount } { -sol }
 
 # Amount in US dollars, for example "$1.23K". $amount is the formatted number.
 format-usd-amount = ${ $amount }

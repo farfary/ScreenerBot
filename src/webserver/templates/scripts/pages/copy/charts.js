@@ -69,10 +69,10 @@ function frame({ lines, min, max, start, end, label, escapeHtml, tall = false })
   </figure>`;
 }
 
-/** Cumulative P&L over time from `{ at, cumulative_pnl_sol }` points. */
+/** Cumulative P&L over time from `{ at, cumulative_pnl_native }` points. */
 export function pnlCurve(points, { escapeHtml = String } = {}) {
   const data = (points || [])
-    .map((point) => ({ at: new Date(point.at).getTime(), value: Number(point.cumulative_pnl_sol) }))
+    .map((point) => ({ at: new Date(point.at).getTime(), value: Number(point.cumulative_pnl_native) }))
     .filter((point) => Number.isFinite(point.at) && Number.isFinite(point.value));
   if (!data.length) {
     return `<div class="copy-chart-empty">${escapeHtml(I18n.t("copy-chart-empty-curve"))}</div>`;
@@ -134,7 +134,7 @@ export function comparisonCurves(series, { escapeHtml = String } = {}) {
       points: (entry.points || [])
         .map((point) => ({
           at: new Date(point.at).getTime(),
-          value: Number(point.cumulative_pnl_sol),
+          value: Number(point.cumulative_pnl_native),
         }))
         .filter((point) => Number.isFinite(point.at) && Number.isFinite(point.value)),
     }))

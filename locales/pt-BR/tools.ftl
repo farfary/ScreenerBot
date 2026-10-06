@@ -468,19 +468,19 @@ tools-generator-exported = Carteiras exportadas - guarde com segurança
 
 tools-consolidation-summary-title = Resumo
 tools-consolidation-stat-wallets = Subcarteiras
-tools-consolidation-stat-sol = Total de { -sol }
+tools-consolidation-stat-native = Total de { -sol }
 tools-consolidation-stat-tokens = Tipos de token
 tools-consolidation-stat-rent = Rent recuperável
 tools-consolidation-wallets-title = Carteiras
 tools-consolidation-loading-wallets = Carregando carteiras...
 tools-consolidation-loading-data = Carregando dados da carteira...
-tools-consolidation-action-transfer-sol = Transferir { -sol }
+tools-consolidation-action-transfer-native = Transferir { -sol }
 tools-consolidation-action-transfer-tokens = Transferir todos os tokens
 tools-consolidation-action-cleanup = Limpar ATAs
 tools-consolidation-action-transferring = Transferindo...
 tools-consolidation-column-name = Nome
 tools-consolidation-column-address = Endereço
-tools-consolidation-column-sol = Saldo em { -sol }
+tools-consolidation-column-native = Saldo em { -sol }
 tools-consolidation-column-tokens = Tokens
 tools-consolidation-column-atas = ATAs vazias
 tools-consolidation-empty = Nenhuma subcarteira encontrada
@@ -497,7 +497,7 @@ tools-consolidation-selection-totals =
         [many] { $atas } ATAs vazias
        *[other] { $atas } ATAs vazias
     }
-tools-consolidation-transferred-sol = { $amount } transferidos para a carteira principal
+tools-consolidation-transferred-native = { $amount } transferidos para a carteira principal
 tools-consolidation-transferred-tokens =
     { $count ->
         [one] { $count } token transferido para a carteira principal
@@ -605,7 +605,7 @@ tools-multi-sell-close-atas-hint = Recupere ~0.002 { -sol } por ATA
 tools-multi-sell-wallets-title = Carteiras com o token
 tools-multi-sell-empty = Nenhuma subcarteira possui este token
 tools-multi-sell-column-tokens = Tokens
-tools-multi-sell-column-sol = Saldo em { -sol }
+tools-multi-sell-column-native = Saldo em { -sol }
 tools-multi-sell-column-topup = Precisa de recarga
 tools-multi-sell-none-selected = Nenhuma carteira selecionada
 tools-multi-sell-select-required = Selecione pelo menos uma carteira

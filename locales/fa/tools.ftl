@@ -489,19 +489,19 @@ tools-generator-exported = خروجی کیف پول‌ها ذخیره شد - آ�
 
 tools-consolidation-summary-title = خلاصه
 tools-consolidation-stat-wallets = کیف پول‌های فرعی
-tools-consolidation-stat-sol = مجموع { -sol }
+tools-consolidation-stat-native = مجموع { -sol }
 tools-consolidation-stat-tokens = انواع توکن
 tools-consolidation-stat-rent = رنت قابل بازپس‌گیری
 tools-consolidation-wallets-title = کیف پول‌ها
 tools-consolidation-loading-wallets = در حال بارگیری کیف پول‌ها...
 tools-consolidation-loading-data = در حال بارگیری داده‌های کیف پول...
-tools-consolidation-action-transfer-sol = انتقال { -sol }
+tools-consolidation-action-transfer-native = انتقال { -sol }
 tools-consolidation-action-transfer-tokens = انتقال همه توکن‌ها
 tools-consolidation-action-cleanup = پاکسازی ATAها
 tools-consolidation-action-transferring = در حال انتقال...
 tools-consolidation-column-name = نام
 tools-consolidation-column-address = آدرس
-tools-consolidation-column-sol = موجودی { -sol }
+tools-consolidation-column-native = موجودی { -sol }
 tools-consolidation-column-tokens = توکن‌ها
 tools-consolidation-column-atas = ATAهای خالی
 tools-consolidation-empty = کیف پول فرعی پیدا نشد
@@ -518,7 +518,7 @@ tools-consolidation-selection-totals =
        *[other] { $atas } ATA خالی
     }
 # $amount is the transferred balance with its unit.
-tools-consolidation-transferred-sol = { $amount } به کیف پول اصلی منتقل شد
+tools-consolidation-transferred-native = { $amount } به کیف پول اصلی منتقل شد
 tools-consolidation-transferred-tokens =
     { $count ->
         [one] { $count } توکن به کیف پول اصلی منتقل شد
@@ -628,7 +628,7 @@ tools-multi-sell-close-atas-hint = بازپس‌گیری حدود 0.002 { -sol }
 tools-multi-sell-wallets-title = کیف پول‌های دارای توکن
 tools-multi-sell-empty = هیچ کیف پول فرعی این توکن را ندارد
 tools-multi-sell-column-tokens = توکن‌ها
-tools-multi-sell-column-sol = موجودی { -sol }
+tools-multi-sell-column-native = موجودی { -sol }
 tools-multi-sell-column-topup = نیازمند شارژ
 tools-multi-sell-none-selected = کیف پولی انتخاب نشده
 tools-multi-sell-select-required = لطفاً دست‌کم یک کیف پول انتخاب کنید

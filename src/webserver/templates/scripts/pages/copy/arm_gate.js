@@ -57,13 +57,13 @@ export function createArmGate(page) {
     const exposure = definitionRows(
       [
         [I18n.t("copy-arm-per-copy"), size],
-        [I18n.t("copy-field-per-trade-cap"), sol(ws.max_sol_per_trade, 3)],
-        [I18n.t("copy-field-per-token-cap"), sol(ws.max_sol_per_token, 3)],
+        [I18n.t("copy-field-per-trade-cap"), sol(ws.max_native_per_trade, 3)],
+        [I18n.t("copy-field-per-token-cap"), sol(ws.max_native_per_token, 3)],
         [
           I18n.t("copy-arm-budget-left"),
           I18n.t("copy-arm-budget-left-value", {
-            left: fixed(ws.live_remaining_budget_sol, 3),
-            total: fixed(ws.total_budget_sol, 3),
+            left: fixed(ws.live_remaining_budget_native, 3),
+            total: fixed(ws.total_budget_native, 3),
           }),
           I18n.t("copy-arm-budget-left-note"),
         ],
@@ -99,9 +99,9 @@ export function createArmGate(page) {
       ? `<p class="copy-warning" role="alert"><i class="icon-triangle-alert" aria-hidden="true"></i>${esc(I18n.t("copy-arm-unavailable"))}</p>`
       : [
           ack(
-            I18n.t("copy-arm-ack-real-sol", {
-              budget: fixed(ws.live_remaining_budget_sol, 3),
-              trade: fixed(ws.max_sol_per_trade, 3),
+            I18n.t("copy-arm-ack-real-native", {
+              budget: fixed(ws.live_remaining_budget_native, 3),
+              trade: fixed(ws.max_native_per_trade, 3),
             })
           ),
           ack(I18n.t("copy-arm-ack-fees")),

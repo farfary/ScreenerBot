@@ -20,7 +20,7 @@ pub struct CalendarDay {
     /// Full date, YYYY-MM-DD (UTC).
     pub date: String,
     /// Realized net P&L (SOL) from trades closed that day.
-    pub net_pnl_sol: f64,
+    pub net_pnl_native: f64,
     /// Gross realized profit (SOL) from winning trades that day.
     pub profit_native: f64,
     /// Gross realized loss (SOL, positive magnitude) from losing trades that day.
@@ -77,7 +77,7 @@ pub struct PositionsSummary {
     pub total_positions: i64,
     pub open_positions: i64,
     pub closed_positions: i64,
-    pub total_invested_sol: f64,
+    pub total_invested_native: f64,
     pub total_pnl: f64,
     pub win_rate: f64,
     pub open_position_details: Vec<OpenPositionDetail>,
@@ -167,7 +167,7 @@ pub struct TradingPeriodStats {
     pub sells: i64,
     pub profit_native: f64,
     pub loss_native: f64,
-    pub net_pnl_sol: f64,
+    pub net_pnl_native: f64,
     pub drawdown_percent: f64,
     pub win_rate: f64,
 }
@@ -206,8 +206,8 @@ pub struct WalletAnalytics {
 #[derive(Debug, Serialize, Deserialize)]
 pub struct PositionsSnapshot {
     pub open_count: i64,
-    pub total_invested_sol: f64,
-    pub unrealized_pnl_sol: f64,
+    pub total_invested_native: f64,
+    pub unrealized_pnl_native: f64,
     pub unrealized_pnl_percent: f64,
     // Enhanced metrics
     pub avg_position_size_native: f64,

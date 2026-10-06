@@ -19,7 +19,7 @@ use crate::positions::Position;
 /// decimals are unknown rather than reporting an unscaled amount.
 struct Holding {
     token_amount: Option<f64>,
-    current_value_sol: Option<f64>,
+    current_value_native: Option<f64>,
 }
 
 async fn position_holding(position: &Position) -> Holding {
@@ -27,12 +27,12 @@ async fn position_holding(position: &Position) -> Holding {
     let token_amount = crate::tokens::get_decimals(crate::chains::active_chain(), &position.mint)
         .await
         .map(|decimals| raw_amount.to_whole_units(decimals));
-    let current_value_sol = token_amount
+    let current_value_native = token_amount
         .zip(position.current_price)
         .map(|(amount, price)| amount * price);
     Holding {
         token_amount,
-        current_value_sol,
+        current_value_native,
     }
 }
 
@@ -48,12 +48,12 @@ struct PositionSummary {
     mint: String,
     #[serde(skip_serializing_if = "Option::is_none")]
     symbol: Option<String>,
-    entry_price_sol: f64,
+    entry_price_native: f64,
     current_price_sol: Option<f64>,
     token_amount: Option<f64>,
-    cost_sol: f64,
-    current_value_sol: Option<f64>,
-    unrealized_pnl_sol: Option<f64>,
+    cost_native: f64,
+    current_value_native: Option<f64>,
+    unrealized_pnl_native: Option<f64>,
     unrealized_pnl_percent: Option<f64>,
     opened_at: String,
 }
@@ -87,12 +87,12 @@ impl Tool for GetPositionsTool {
                 position_id: pos.id.unwrap_or_default(),
                 mint: pos.mint.clone(),
                 symbol: Some(pos.symbol.clone()),
-                entry_price_sol: pos.average_entry_price,
+                entry_price_native: pos.average_entry_price,
                 current_price_sol: pos.current_price,
                 token_amount: holding.token_amount,
-                cost_sol: pos.total_size_native,
-                current_value_sol: holding.current_value_sol,
-                unrealized_pnl_sol: pnl.as_ref().map(|p| p.0),
+                cost_native: pos.total_size_native,
+                current_value_native: holding.current_value_native,
+                unrealized_pnl_native: pnl.as_ref().map(|p| p.0),
                 unrealized_pnl_percent: pnl.as_ref().map(|p| p.1),
                 opened_at: pos.entry_time.to_rfc3339(),
             });
@@ -122,19 +122,19 @@ struct PositionDetails {
     mint: String,
     #[serde(skip_serializing_if = "Option::is_none")]
     symbol: Option<String>,
-    entry_price_sol: f64,
+    entry_price_native: f64,
     current_price_sol: Option<f64>,
     token_amount: Option<f64>,
-    cost_sol: f64,
-    current_value_sol: Option<f64>,
-    unrealized_pnl_sol: Option<f64>,
+    cost_native: f64,
+    current_value_native: Option<f64>,
+    unrealized_pnl_native: Option<f64>,
     unrealized_pnl_percent: Option<f64>,
     opened_at: String,
     entry_signature: String,
     #[serde(skip_serializing_if = "Option::is_none")]
     partial_close_count: Option<usize>,
     #[serde(skip_serializing_if = "Option::is_none")]
-    total_fees_sol: Option<f64>,
+    total_fees_native: Option<f64>,
 }
 
 #[async_trait]
@@ -181,12 +181,12 @@ impl Tool for GetPositionTool {
             position_id: position.id.unwrap_or_default(),
             mint: position.mint.clone(),
             symbol: Some(position.symbol.clone()),
-            entry_price_sol: position.average_entry_price,
+            entry_price_native: position.average_entry_price,
             current_price_sol: position.current_price,
             token_amount: holding.token_amount,
-            cost_sol: position.total_size_native,
-            current_value_sol: holding.current_value_sol,
-            unrealized_pnl_sol: pnl.as_ref().map(|p| p.0),
+            cost_native: position.total_size_native,
+            current_value_native: holding.current_value_native,
+            unrealized_pnl_native: pnl.as_ref().map(|p| p.0),
             unrealized_pnl_percent: pnl.as_ref().map(|p| p.1),
             opened_at: position.entry_time.to_rfc3339(),
             entry_signature: position
@@ -194,7 +194,7 @@ impl Tool for GetPositionTool {
                 .clone()
                 .unwrap_or_default(),
             partial_close_count: Some(position.partial_exit_count as usize),
-            total_fees_sol: Some(total_fees),
+            total_fees_native: Some(total_fees),
         };
 
         match serde_json::to_value(details) {
@@ -271,9 +271,9 @@ struct GetPnLParams {
 #[derive(Serialize)]
 struct PnLStats {
     period: String,
-    total_realized_pnl_sol: f64,
-    total_unrealized_pnl_sol: f64,
-    total_pnl_sol: f64,
+    total_realized_pnl_native: f64,
+    total_unrealized_pnl_native: f64,
+    total_pnl_native: f64,
     total_wins: usize,
     total_losses: usize,
     /// Null when no position closed in the period.
@@ -334,18 +334,18 @@ impl Tool for GetPnLTool {
         let open_positions = positions::get_open_positions().await;
         let mut total_unrealized = 0.0;
         for pos in open_positions.iter() {
-            if let Some((pnl_sol, _pnl_pct)) =
+            if let Some((pnl_native, _pnl_pct)) =
                 positions::calculate_position_pnl_safe(pos, pos.current_price).await
             {
-                total_unrealized += pnl_sol;
+                total_unrealized += pnl_native;
             }
         }
 
         let pnl_stats = PnLStats {
             period: period.clone(),
-            total_realized_pnl_sol: stats.net_pnl_native,
-            total_unrealized_pnl_sol: total_unrealized,
-            total_pnl_sol: stats.net_pnl_native + total_unrealized,
+            total_realized_pnl_native: stats.net_pnl_native,
+            total_unrealized_pnl_native: total_unrealized,
+            total_pnl_native: stats.net_pnl_native + total_unrealized,
             total_wins: stats.wins as usize,
             total_losses: (stats.closed_positions - stats.wins) as usize,
             win_rate_percent: (stats.closed_positions > 0).then_some(stats.win_rate),

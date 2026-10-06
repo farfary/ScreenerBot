@@ -21,7 +21,7 @@ trade-quote-disclaimer = Цены обновляются в реальном в�
 trade-quote-impact-tiny = { "<0.01%" }
 trade-quote-impact-warning = Влияние на цену { $impact } превышает ваше макс. проскальзывание { $tolerance }% — такой объём двигает пул. При меньшей сумме исполнение будет ближе к рыночной цене.
 
-trade-unit-sol = { -sol }
+trade-unit-native = { -sol }
 trade-unit-tokens = токенов
 
 trade-buy-title = Купить токен

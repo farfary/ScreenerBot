@@ -31,7 +31,7 @@ trade-quote-impact-warning = 价格影响 { $impact } 高于您设置的 { $tole
 
 ## Units
 
-trade-unit-sol = { -sol }
+trade-unit-native = { -sol }
 trade-unit-tokens = 个代币
 
 ## Actions. Ids are the dialog actions: buy, sell, add.

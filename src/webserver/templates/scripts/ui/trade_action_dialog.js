@@ -44,7 +44,7 @@ const LIVE_SYNC_INTERVAL_MS = 5000;
 
 // Message key of a preset's caption; presets carry the id in `tag`.
 const PRESET_TAG_LABELS = Object.freeze({
-  sol: "trade-unit-sol",
+  sol: "trade-unit-native",
   partial: "trade-preset-partial",
   half: "trade-preset-half",
   most: "trade-preset-most",
@@ -232,7 +232,7 @@ export class TradeActionDialog {
               <!-- data-stepper="off": MAX and the percentage slider already own
                    this field's gutter, and an amount is chosen, not incremented. -->
               <input type="number" id="trade-action-input" class="trade-action-input" step="any" min="0" inputmode="decimal" data-stepper="off" />
-              <span class="trade-action-input-suffix" data-l10n-id="trade-unit-sol"></span>
+              <span class="trade-action-input-suffix" data-l10n-id="trade-unit-native"></span>
               <button type="button" class="trade-action-input-max" data-action="max" data-l10n-id="trade-input-max"></button>
             </div>
             <div class="trade-action-slider-row" data-visible="false">
@@ -795,7 +795,7 @@ export class TradeActionDialog {
     this.inputField.placeholder = text.inputPlaceholder;
 
     // Update input suffix based on action
-    this.inputSuffix.textContent = action === "sell" ? "%" : I18n.t("trade-unit-sol");
+    this.inputSuffix.textContent = action === "sell" ? "%" : I18n.t("trade-unit-native");
     this.inputSuffix.style.display = "block";
 
     // Manual-management choice is only meaningful when opening a position (buy).
@@ -1000,7 +1000,7 @@ export class TradeActionDialog {
           <span class="trade-action-context-label">${Utils.escapeHtml(I18n.t("trade-context-available"))}</span>
           <span class="trade-action-context-value ${balanceClass}">
             <span class="trade-action-balance-amount">${Utils.escapeHtml(balance)}</span>
-            <span class="trade-action-balance-unit">${Utils.escapeHtml(I18n.t("trade-unit-sol"))}</span>
+            <span class="trade-action-balance-unit">${Utils.escapeHtml(I18n.t("trade-unit-native"))}</span>
           </span>
         </div>
       `);
@@ -1016,7 +1016,7 @@ export class TradeActionDialog {
           <span class="trade-action-context-label">${Utils.escapeHtml(I18n.t("trade-context-position-size"))}</span>
           <span class="trade-action-context-value">
             <span class="trade-action-balance-amount">${formatFixed(context.currentSize, { decimals: 4 })}</span>
-            <span class="trade-action-balance-unit">${Utils.escapeHtml(I18n.t("trade-unit-sol"))}</span>
+            <span class="trade-action-balance-unit">${Utils.escapeHtml(I18n.t("trade-unit-native"))}</span>
           </span>
         </div>
       `);

@@ -37,7 +37,7 @@ const SORTS = [
 ];
 
 const pnlOf = (task) =>
-  (Number(task.stats?.realized_pnl_sol) || 0) + (Number(task.stats?.unrealized_pnl_sol) || 0);
+  (Number(task.stats?.realized_pnl_native) || 0) + (Number(task.stats?.unrealized_pnl_native) || 0);
 
 function sorted(tasks, sort) {
   const list = [...tasks];
@@ -83,8 +83,8 @@ export function createTaskList(page) {
 
   function row(task) {
     const selected = state.view === "task" && task.id === state.selectedId;
-    const budget = Number(task.total_budget_sol) || 0;
-    const spent = Number(task.spent_sol) || 0;
+    const budget = Number(task.total_budget_native) || 0;
+    const spent = Number(task.spent_native) || 0;
     const budgetPct = budget > 0 ? Math.min(100, (spent / budget) * 100) : 0;
     const pnl = pnlOf(task);
     const stateClass = task.enabled ? `is-${task.effective_state}` : "is-paused";

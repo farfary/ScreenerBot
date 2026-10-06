@@ -47,9 +47,7 @@ pub struct CopyRound {
     pub book: CopyBook,
     pub opened_at: DateTime<Utc>,
     pub closed_at: DateTime<Utc>,
-    #[serde(rename = "invested_sol")]
     pub invested_native: f64,
-    #[serde(rename = "proceeds_sol")]
     pub proceeds_native: f64,
     #[serde(rename = "pnl_sol")]
     pub pnl_native: f64,
@@ -62,9 +60,7 @@ pub struct CopyRound {
 #[derive(Debug, Clone, Serialize)]
 pub struct CurvePoint {
     pub at: DateTime<Utc>,
-    #[serde(rename = "cumulative_pnl_sol")]
     pub cumulative_pnl_native: f64,
-    #[serde(rename = "round_pnl_sol")]
     pub round_pnl_native: f64,
     pub mint: String,
 }
@@ -116,15 +112,10 @@ pub struct CopyInsights {
     pub wins: usize,
     pub losses: usize,
     pub win_rate_pct: Option<f64>,
-    #[serde(rename = "realized_pnl_sol")]
     pub realized_pnl_native: f64,
-    #[serde(rename = "average_win_sol")]
     pub average_win_native: Option<f64>,
-    #[serde(rename = "average_loss_sol")]
     pub average_loss_native: Option<f64>,
-    #[serde(rename = "best_round_sol")]
     pub best_round_native: Option<f64>,
-    #[serde(rename = "worst_round_sol")]
     pub worst_round_native: Option<f64>,
     pub profit_factor: Option<f64>,
     pub average_hold_seconds: Option<f64>,

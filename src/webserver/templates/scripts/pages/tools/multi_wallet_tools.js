@@ -853,7 +853,7 @@ async function handleMultiSellScan() {
             <th><input type="checkbox" id="ms-check-all" checked /></th>
             <th data-l10n-id="tools-multi-column-wallet"></th>
             <th data-l10n-id="tools-multi-sell-column-tokens"></th>
-            <th data-l10n-id="tools-multi-sell-column-sol"></th>
+            <th data-l10n-id="tools-multi-sell-column-native"></th>
             <th data-l10n-id="tools-multi-sell-column-topup"></th>
           </tr>
         </thead>

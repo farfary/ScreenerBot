@@ -76,7 +76,7 @@ transactions-col-signature = امضا
 transactions-col-type = نوع
 transactions-col-direction = جهت
 transactions-col-status = وضعیت
-transactions-col-sol-delta = Δ { -sol }
+transactions-col-native-delta = Δ { -sol }
 transactions-col-fees = کارمزدها ({ -sol })
 transactions-col-token = توکن
 transactions-col-router = روتر
@@ -127,7 +127,7 @@ transactions-dialog-metric-effective-received = دریافت مؤثر
 transactions-dialog-metric-effective-spent = پرداخت مؤثر
 transactions-dialog-metric-network-fee = کارمزد شبکه
 transactions-dialog-metric-estimated-pnl = سود و زیان تخمینی
-transactions-dialog-metric-net-sol-change = تغییر خالص { -sol }
+transactions-dialog-metric-net-native-change = تغییر خالص { -sol }
 transactions-dialog-route-title = مسیر و دارایی‌ها
 transactions-dialog-route-router = روتر
 transactions-dialog-route-input-asset = دارایی ورودی
@@ -147,11 +147,11 @@ transactions-dialog-tech-token-decimals = اعشار توکن
 
 ## Transaction details dialog: balances, instructions, logs, ATA and raw tabs
 
-transactions-dialog-balances-sol-title = تغییرات موجودی { -sol }
-transactions-dialog-balances-sol-empty = تغییری در موجودی { -sol } وجود ندارد
+transactions-dialog-balances-native-title = تغییرات موجودی { -sol }
+transactions-dialog-balances-native-empty = تغییری در موجودی { -sol } وجود ندارد
 transactions-dialog-balances-token-title = تغییرات موجودی توکن
 transactions-dialog-balances-token-empty = تغییری در موجودی توکن وجود ندارد
-transactions-dialog-balances-net-sol = تغییر خالص { -sol }
+transactions-dialog-balances-net-native = تغییر خالص { -sol }
 transactions-dialog-balances-fee = کارمزد تراکنش
 transactions-dialog-col-account = حساب
 transactions-dialog-col-token = توکن

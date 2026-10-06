@@ -120,13 +120,13 @@ mod tests {
             NotificationType::TradeAlert {
                 token_mint,
                 trade_type,
-                amount_sol,
+                amount_native,
                 wallet,
                 ..
             } => {
                 assert_eq!(token_mint, "Mint111111111111111111111111111111111111111");
                 assert_eq!(trade_type, "buy");
-                assert_eq!(amount_sol, 0.25);
+                assert_eq!(amount_native, 0.25);
                 assert_eq!(wallet, "11111111111111111111111111111111");
             }
             other => panic!("unexpected notification: {other:?}"),

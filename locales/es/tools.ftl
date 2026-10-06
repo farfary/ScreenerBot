@@ -437,19 +437,19 @@ tools-generator-exported = Billeteras exportadas: guárdalas de forma segura
 
 tools-consolidation-summary-title = Resumen
 tools-consolidation-stat-wallets = Subbilleteras
-tools-consolidation-stat-sol = { -sol } total
+tools-consolidation-stat-native = { -sol } total
 tools-consolidation-stat-tokens = Tipos de token
 tools-consolidation-stat-rent = Renta recuperable
 tools-consolidation-wallets-title = Billeteras
 tools-consolidation-loading-wallets = Cargando billeteras...
 tools-consolidation-loading-data = Cargando datos de la billetera...
-tools-consolidation-action-transfer-sol = Transferir { -sol }
+tools-consolidation-action-transfer-native = Transferir { -sol }
 tools-consolidation-action-transfer-tokens = Transferir todos los tokens
 tools-consolidation-action-cleanup = Limpiar ATA
 tools-consolidation-action-transferring = Transfiriendo...
 tools-consolidation-column-name = Nombre
 tools-consolidation-column-address = Dirección
-tools-consolidation-column-sol = Saldo de { -sol }
+tools-consolidation-column-native = Saldo de { -sol }
 tools-consolidation-column-tokens = Tokens
 tools-consolidation-column-atas = ATA vacías
 tools-consolidation-empty = No se encontraron subbilleteras
@@ -466,7 +466,7 @@ tools-consolidation-selection-totals =
         [many] { $atas } ATA vacías
        *[other] { $atas } ATA vacías
     }
-tools-consolidation-transferred-sol = { $amount } transferidos a la billetera principal
+tools-consolidation-transferred-native = { $amount } transferidos a la billetera principal
 tools-consolidation-transferred-tokens =
     { $count ->
         [one] Se transfirió { $count } token a la billetera principal
@@ -568,7 +568,7 @@ tools-multi-sell-close-atas-hint = Recupera ~0.002 { -sol } por ATA
 tools-multi-sell-wallets-title = Billeteras con el token
 tools-multi-sell-empty = Ninguna subbilletera tiene este token
 tools-multi-sell-column-tokens = Tokens
-tools-multi-sell-column-sol = Saldo de { -sol }
+tools-multi-sell-column-native = Saldo de { -sol }
 tools-multi-sell-column-topup = Necesita recarga
 tools-multi-sell-none-selected = Ninguna billetera seleccionada
 tools-multi-sell-select-required = Selecciona al menos una billetera

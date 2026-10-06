@@ -21,7 +21,7 @@ trade-quote-disclaimer = Fiyatlar zincirden canlı olarak güncellenir. Takas, g
 trade-quote-impact-tiny = { "<0.01%" }
 trade-quote-impact-warning = Fiyat etkisi { $impact }, maks. kayma sınırınızı (%{ $tolerance }) aşıyor — bu büyüklük havuzu hareket ettirir. Daha küçük bir miktar piyasa fiyatına daha yakın dolar.
 
-trade-unit-sol = { -sol }
+trade-unit-native = { -sol }
 trade-unit-tokens = token
 
 trade-buy-title = Token al

@@ -117,7 +117,7 @@ export function createCalendar(fetcher) {
     // Heatmap scale: largest absolute daily P&L in the month.
     let maxAbs = 0;
     for (const d of data.days) {
-      const a = Math.abs(d.net_pnl_sol || 0);
+      const a = Math.abs(d.net_pnl_native || 0);
       if (a > maxAbs) maxAbs = a;
     }
 
@@ -131,7 +131,7 @@ export function createCalendar(fetcher) {
     }
 
     for (const d of data.days) {
-      const pnl = d.net_pnl_sol || 0;
+      const pnl = d.net_pnl_native || 0;
       const isFuture = d.date > todayIso;
       const isToday = d.date === todayIso;
       let cls = "calendar-cell";
@@ -236,7 +236,7 @@ export function createCalendar(fetcher) {
   }
 
   function buildPopoverHtml(d) {
-    const pnl = d.net_pnl_sol || 0;
+    const pnl = d.net_pnl_native || 0;
     const pnlCls = POPOVER_PNL_CLASSES[Utils.signedTone(pnl, PNL_DECIMALS)];
     const dt = new Date(`${d.date}T00:00:00Z`);
     const dateStr = Utils.formatDate(dt, {

@@ -76,7 +76,7 @@ transactions-col-signature = التوقيع
 transactions-col-type = النوع
 transactions-col-direction = الاتجاه
 transactions-col-status = الحالة
-transactions-col-sol-delta = Δ { -sol }
+transactions-col-native-delta = Δ { -sol }
 transactions-col-fees = الرسوم ({ -sol })
 transactions-col-token = الرمز
 transactions-col-router = الموجّه
@@ -127,7 +127,7 @@ transactions-dialog-metric-effective-received = المستلَم الفعلي
 transactions-dialog-metric-effective-spent = المصروف الفعلي
 transactions-dialog-metric-network-fee = رسوم الشبكة
 transactions-dialog-metric-estimated-pnl = الأرباح والخسائر المقدّرة
-transactions-dialog-metric-net-sol-change = صافي تغير { -sol }
+transactions-dialog-metric-net-native-change = صافي تغير { -sol }
 transactions-dialog-route-title = المسار والأصول
 transactions-dialog-route-router = الموجّه
 transactions-dialog-route-input-asset = أصل الإدخال
@@ -147,11 +147,11 @@ transactions-dialog-tech-token-decimals = الخانات العشرية للرم
 
 ## Transaction details dialog: balances, instructions, logs, ATA and raw tabs
 
-transactions-dialog-balances-sol-title = تغيرات رصيد { -sol }
-transactions-dialog-balances-sol-empty = لا توجد تغيرات في رصيد { -sol }
+transactions-dialog-balances-native-title = تغيرات رصيد { -sol }
+transactions-dialog-balances-native-empty = لا توجد تغيرات في رصيد { -sol }
 transactions-dialog-balances-token-title = تغيرات رصيد الرموز
 transactions-dialog-balances-token-empty = لا توجد تغيرات في رصيد الرموز
-transactions-dialog-balances-net-sol = صافي تغير { -sol }
+transactions-dialog-balances-net-native = صافي تغير { -sol }
 transactions-dialog-balances-fee = رسوم المعاملة
 transactions-dialog-col-account = الحساب
 transactions-dialog-col-token = الرمز

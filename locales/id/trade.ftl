@@ -23,7 +23,7 @@ trade-quote-disclaimer = Harga diperbarui langsung dari chain. Swap dibatalkan j
 trade-quote-impact-tiny = { "<0.01%" }
 trade-quote-impact-warning = Dampak harga { $impact } di atas slippage maks { $tolerance }% Anda — ukuran ini menggerakkan pool. Jumlah yang lebih kecil terisi lebih dekat ke harga pasar.
 
-trade-unit-sol = { -sol }
+trade-unit-native = { -sol }
 trade-unit-tokens = token
 
 trade-buy-title = Beli Token

@@ -652,7 +652,7 @@ export class TransactionDetailsDialog {
     if (!swap && Number.isFinite(Number(tx.sol_balance_change))) {
       const change = Number(tx.sol_balance_change);
       add(
-        I18n.t("transactions-dialog-metric-net-sol-change"),
+        I18n.t("transactions-dialog-metric-net-native-change"),
         Utils.formatPnL(change, { decimals: 6 }),
         change > 0 ? "positive" : change < 0 ? "negative" : ""
       );
@@ -744,10 +744,10 @@ export class TransactionDetailsDialog {
       <div class="tx-balances-layout">
         <div class="balance-section">
           <div class="section-header">
-            <span class="section-title">${renderTokenLogo(SOL_MINT, { size: "xs" })} ${Utils.escapeHtml(I18n.t("transactions-dialog-balances-sol-title"))}</span>
+            <span class="section-title">${renderTokenLogo(SOL_MINT, { size: "xs" })} ${Utils.escapeHtml(I18n.t("transactions-dialog-balances-native-title"))}</span>
             <span class="section-count">${solChanges.length}</span>
           </div>
-          ${solChanges.length > 0 ? this._buildSolChangesTable(solChanges) : `<div class="empty-message">${Utils.escapeHtml(I18n.t("transactions-dialog-balances-sol-empty"))}</div>`}
+          ${solChanges.length > 0 ? this._buildSolChangesTable(solChanges) : `<div class="empty-message">${Utils.escapeHtml(I18n.t("transactions-dialog-balances-native-empty"))}</div>`}
         </div>
 
         <div class="balance-section">
@@ -760,7 +760,7 @@ export class TransactionDetailsDialog {
 
         <div class="balance-summary">
           <div class="summary-item">
-            <span class="summary-label">${Utils.escapeHtml(I18n.t("transactions-dialog-balances-net-sol"))}</span>
+            <span class="summary-label">${Utils.escapeHtml(I18n.t("transactions-dialog-balances-net-native"))}</span>
             <span class="summary-value ${Utils.signedTone(tx.sol_balance_change, 9)}">${renderTokenLogo(SOL_MINT, { size: "xs" })} ${Utils.formatPnL(tx.sol_balance_change, { decimals: 9 })}</span>
           </div>
           <div class="summary-item">

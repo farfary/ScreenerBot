@@ -505,19 +505,19 @@ tools-generator-exported = تم تصدير المحافظ - احفظها بأم�
 
 tools-consolidation-summary-title = الملخص
 tools-consolidation-stat-wallets = المحافظ الفرعية
-tools-consolidation-stat-sol = إجمالي { -sol }
+tools-consolidation-stat-native = إجمالي { -sol }
 tools-consolidation-stat-tokens = أنواع الرموز
 tools-consolidation-stat-rent = الإيجار القابل للاسترداد
 tools-consolidation-wallets-title = المحافظ
 tools-consolidation-loading-wallets = جارٍ تحميل المحافظ...
 tools-consolidation-loading-data = جارٍ تحميل بيانات المحفظة...
-tools-consolidation-action-transfer-sol = تحويل { -sol }
+tools-consolidation-action-transfer-native = تحويل { -sol }
 tools-consolidation-action-transfer-tokens = تحويل كل الرموز
 tools-consolidation-action-cleanup = تنظيف حسابات ATA
 tools-consolidation-action-transferring = جارٍ التحويل...
 tools-consolidation-column-name = الاسم
 tools-consolidation-column-address = العنوان
-tools-consolidation-column-sol = رصيد { -sol }
+tools-consolidation-column-native = رصيد { -sol }
 tools-consolidation-column-tokens = الرموز
 tools-consolidation-column-atas = حسابات ATA الفارغة
 tools-consolidation-empty = لم يتم العثور على محافظ فرعية
@@ -527,7 +527,7 @@ tools-consolidation-select-prompt = اختر المحافظ المراد تجم�
 # $amount is the selected balance with its unit.
 tools-consolidation-selection-totals = | { $amount } | الرموز: { $tokens } | حسابات ATA الفارغة: { $atas }
 # $amount is the transferred balance with its unit.
-tools-consolidation-transferred-sol = تم تحويل { $amount } إلى المحفظة الرئيسية
+tools-consolidation-transferred-native = تم تحويل { $amount } إلى المحفظة الرئيسية
 tools-consolidation-transferred-tokens = الرموز المحوّلة إلى المحفظة الرئيسية: { $count }
 # $amount is the reclaimed rent with its unit.
 tools-consolidation-cleaned = تم إغلاق حسابات ATA: { $count }، والمسترد: { $amount }
@@ -633,7 +633,7 @@ tools-multi-sell-close-atas-hint = استرداد نحو 0.002 { -sol } لكل �
 tools-multi-sell-wallets-title = المحافظ التي تحتوي على الرمز
 tools-multi-sell-empty = لا توجد محافظ فرعية تحتفظ بهذا الرمز
 tools-multi-sell-column-tokens = الرموز
-tools-multi-sell-column-sol = رصيد { -sol }
+tools-multi-sell-column-native = رصيد { -sol }
 tools-multi-sell-column-topup = تحتاج تعبئة
 tools-multi-sell-none-selected = لم يتم تحديد أي محافظ
 tools-multi-sell-select-required = يرجى تحديد محفظة واحدة على الأقل

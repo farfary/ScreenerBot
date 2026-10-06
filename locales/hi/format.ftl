@@ -6,7 +6,7 @@ format-yes = हाँ
 format-no = नहीं
 format-unknown = अज्ञात
 
-format-sol-amount = { $amount } { -sol }
+format-native-amount = { $amount } { -sol }
 
 format-usd-amount = ${ $amount }
 

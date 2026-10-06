@@ -104,7 +104,7 @@ pub async fn get_home_dashboard(State(state): State<Arc<AppState>>) -> Json<Home
                     sells: stats.sells,
                     profit_native: stats.profit_native,
                     loss_native: stats.loss_native,
-                    net_pnl_sol: stats.net_pnl_native,
+                    net_pnl_native: stats.net_pnl_native,
                     drawdown_percent: stats.drawdown_percent,
                     win_rate: stats.win_rate,
                 },
@@ -113,7 +113,7 @@ pub async fn get_home_dashboard(State(state): State<Arc<AppState>>) -> Json<Home
                     sells: 0,
                     profit_native: 0.0,
                     loss_native: 0.0,
-                    net_pnl_sol: 0.0,
+                    net_pnl_native: 0.0,
                     drawdown_percent: 0.0,
                     win_rate: 0.0,
                 },
@@ -174,7 +174,7 @@ pub async fn get_home_dashboard(State(state): State<Arc<AppState>>) -> Json<Home
     let open_count = open_positions.len() as i64;
     // See `dashboard/overview.rs`: the basis is cumulative, and a round without one
     // contributes nothing.
-    let total_invested_sol: f64 = open_positions
+    let total_invested_native: f64 = open_positions
         .iter()
         .filter(|p| p.has_trustworthy_pnl())
         .map(|p| p.total_size_native)
@@ -186,7 +186,7 @@ pub async fn get_home_dashboard(State(state): State<Arc<AppState>>) -> Json<Home
     let mut total_hold_duration_mins: i64 = 0;
     let mut dca_count: i64 = 0;
 
-    let unrealized_pnl_sol: f64 = open_positions
+    let unrealized_pnl_native: f64 = open_positions
         .iter()
         .filter_map(|p| {
             // Track DCA positions
@@ -271,14 +271,14 @@ pub async fn get_home_dashboard(State(state): State<Arc<AppState>>) -> Json<Home
         })
         .sum();
 
-    let unrealized_pnl_percent = if total_invested_sol > 0.0 {
-        (unrealized_pnl_sol / total_invested_sol) * 100.0
+    let unrealized_pnl_percent = if total_invested_native > 0.0 {
+        (unrealized_pnl_native / total_invested_native) * 100.0
     } else {
         0.0
     };
 
     let avg_position_size_native = if open_count > 0 {
-        total_invested_sol / open_count as f64
+        total_invested_native / open_count as f64
     } else {
         0.0
     };
@@ -291,8 +291,8 @@ pub async fn get_home_dashboard(State(state): State<Arc<AppState>>) -> Json<Home
 
     let positions_snapshot = PositionsSnapshot {
         open_count,
-        total_invested_sol,
-        unrealized_pnl_sol,
+        total_invested_native,
+        unrealized_pnl_native,
         unrealized_pnl_percent,
         avg_position_size_native,
         avg_hold_duration_mins,

@@ -79,15 +79,10 @@ pub struct CopyTask {
     pub sizing: SizingMode,
     pub exit_mode: ExitMode,
     pub exit_policy_overrides: ExitPolicyOverrides,
-    #[serde(rename = "max_sol_per_trade")]
     pub max_native_per_trade: f64,
-    #[serde(rename = "max_sol_per_token")]
     pub max_native_per_token: f64,
-    #[serde(rename = "total_budget_sol")]
     pub total_budget_native: f64,
-    #[serde(rename = "min_target_trade_sol")]
     pub min_target_trade_native: Option<f64>,
-    #[serde(rename = "max_target_trade_sol")]
     pub max_target_trade_native: Option<f64>,
     pub buy_once_per_token: bool,
     pub slippage_pct: f64,
@@ -120,15 +115,10 @@ pub struct CopyTaskInput {
     pub exit_mode: ExitMode,
     #[serde(default)]
     pub exit_policy_overrides: ExitPolicyOverrides,
-    #[serde(rename = "max_sol_per_trade")]
     pub max_native_per_trade: f64,
-    #[serde(rename = "max_sol_per_token")]
     pub max_native_per_token: f64,
-    #[serde(rename = "total_budget_sol")]
     pub total_budget_native: f64,
-    #[serde(rename = "min_target_trade_sol")]
     pub min_target_trade_native: Option<f64>,
-    #[serde(rename = "max_target_trade_sol")]
     pub max_target_trade_native: Option<f64>,
     pub buy_once_per_token: bool,
     pub slippage_pct: f64,
@@ -398,23 +388,17 @@ pub struct PaperPosition {
     pub task_id: i64,
     pub mint: String,
     pub token_amount: f64,
-    #[serde(rename = "cost_basis_sol")]
     pub cost_basis_native: f64,
-    #[serde(rename = "invested_sol")]
     pub invested_native: f64,
-    #[serde(rename = "realized_proceeds_sol")]
     pub realized_proceeds_native: f64,
-    #[serde(rename = "realized_cost_sol")]
     pub realized_cost_native: f64,
     pub buys: u64,
     pub sells: u64,
-    #[serde(rename = "last_price_sol")]
     pub last_price_native: Option<f64>,
     pub last_price_at: Option<DateTime<Utc>>,
     pub opened_at: DateTime<Utc>,
     pub closed_at: Option<DateTime<Utc>>,
     /// Highest pool price seen while this round was open; arms the trailing stop.
-    #[serde(rename = "peak_price_sol")]
     pub peak_price_native: Option<f64>,
 }
 
@@ -601,9 +585,7 @@ pub struct CopyTaskStats {
     pub failed: usize,
     pub open_positions: usize,
     pub closed_positions: usize,
-    #[serde(rename = "realized_pnl_sol")]
     pub realized_pnl_native: f64,
-    #[serde(rename = "unrealized_pnl_sol")]
     pub unrealized_pnl_native: f64,
     pub book: CopyBook,
     /// Open positions with no price to mark them at; excluded from unrealized P&L.

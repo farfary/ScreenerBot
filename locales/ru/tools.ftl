@@ -475,19 +475,19 @@ tools-generator-exported = Кошельки экспортированы — х�
 
 tools-consolidation-summary-title = Сводка
 tools-consolidation-stat-wallets = Дополнительные кошельки
-tools-consolidation-stat-sol = Всего { -sol }
+tools-consolidation-stat-native = Всего { -sol }
 tools-consolidation-stat-tokens = Типы токенов
 tools-consolidation-stat-rent = Возвращаемая рента
 tools-consolidation-wallets-title = Кошельки
 tools-consolidation-loading-wallets = Загрузка кошельков...
 tools-consolidation-loading-data = Загрузка данных кошелька...
-tools-consolidation-action-transfer-sol = Перевести { -sol }
+tools-consolidation-action-transfer-native = Перевести { -sol }
 tools-consolidation-action-transfer-tokens = Перевести все токены
 tools-consolidation-action-cleanup = Очистить ATA
 tools-consolidation-action-transferring = Перевод...
 tools-consolidation-column-name = Название
 tools-consolidation-column-address = Адрес
-tools-consolidation-column-sol = Баланс { -sol }
+tools-consolidation-column-native = Баланс { -sol }
 tools-consolidation-column-tokens = Токены
 tools-consolidation-column-atas = Пустые ATA
 tools-consolidation-empty = Дополнительные кошельки не найдены
@@ -506,7 +506,7 @@ tools-consolidation-selection-totals =
         [many] { $atas } пустых ATA
        *[other] { $atas } пустых ATA
     }
-tools-consolidation-transferred-sol = Переведено на основной кошелёк: { $amount }
+tools-consolidation-transferred-native = Переведено на основной кошелёк: { $amount }
 tools-consolidation-transferred-tokens =
     { $count ->
         [one] На основной кошелёк переведён { $count } токен
@@ -617,7 +617,7 @@ tools-multi-sell-close-atas-hint = Возвращает ~0,002 { -sol } за к�
 tools-multi-sell-wallets-title = Кошельки с токеном
 tools-multi-sell-empty = Ни на одном дополнительном кошельке нет этого токена
 tools-multi-sell-column-tokens = Токены
-tools-multi-sell-column-sol = Баланс { -sol }
+tools-multi-sell-column-native = Баланс { -sol }
 tools-multi-sell-column-topup = Нужно пополнение
 tools-multi-sell-none-selected = Кошельки не выбраны
 tools-multi-sell-select-required = Выберите хотя бы один кошелёк

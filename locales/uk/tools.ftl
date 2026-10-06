@@ -475,19 +475,19 @@ tools-generator-exported = Гаманці експортовано — збер�
 
 tools-consolidation-summary-title = Підсумок
 tools-consolidation-stat-wallets = Субгаманці
-tools-consolidation-stat-sol = Усього { -sol }
+tools-consolidation-stat-native = Усього { -sol }
 tools-consolidation-stat-tokens = Типи токенів
 tools-consolidation-stat-rent = Рента до повернення
 tools-consolidation-wallets-title = Гаманці
 tools-consolidation-loading-wallets = Завантаження гаманців...
 tools-consolidation-loading-data = Завантаження даних гаманця...
-tools-consolidation-action-transfer-sol = Перевести { -sol }
+tools-consolidation-action-transfer-native = Перевести { -sol }
 tools-consolidation-action-transfer-tokens = Перевести всі токени
 tools-consolidation-action-cleanup = Очистити ATA
 tools-consolidation-action-transferring = Переказ...
 tools-consolidation-column-name = Назва
 tools-consolidation-column-address = Адреса
-tools-consolidation-column-sol = Баланс { -sol }
+tools-consolidation-column-native = Баланс { -sol }
 tools-consolidation-column-tokens = Токени
 tools-consolidation-column-atas = Порожні ATA
 tools-consolidation-empty = Субгаманців не знайдено
@@ -506,7 +506,7 @@ tools-consolidation-selection-totals =
         [many] { $atas } порожніх ATA
        *[other] { $atas } порожнього ATA
     }
-tools-consolidation-transferred-sol = { $amount } переведено на основний гаманець
+tools-consolidation-transferred-native = { $amount } переведено на основний гаманець
 tools-consolidation-transferred-tokens =
     { $count ->
         [one] На основний гаманець переведено { $count } токен
@@ -617,7 +617,7 @@ tools-multi-sell-close-atas-hint = Повернення ~0.002 { -sol } за к�
 tools-multi-sell-wallets-title = Гаманці з токеном
 tools-multi-sell-empty = Жоден субгаманець не володіє цим токеном
 tools-multi-sell-column-tokens = Токени
-tools-multi-sell-column-sol = Баланс { -sol }
+tools-multi-sell-column-native = Баланс { -sol }
 tools-multi-sell-column-topup = Потрібне поповнення
 tools-multi-sell-none-selected = Гаманці не вибрано
 tools-multi-sell-select-required = Виберіть принаймні один гаманець

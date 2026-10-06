@@ -422,7 +422,7 @@ function createLifecycle() {
         },
         {
           id: "native_delta",
-          label: I18n.t("transactions-col-sol-delta"),
+          label: I18n.t("transactions-col-native-delta"),
           minWidth: 140,
           render: (value) => Utils.formatPnL(value, { decimals: 6, fallback: "—" }),
         },

@@ -221,7 +221,7 @@ function renderDetails(event, ctx) {
       event.token_amount != null ? Utils.formatNumber(event.token_amount) : null
     ),
     metric(I18n.t("positions-event-trade-price"), event.price != null ? withSolUnit(ctx.formatPrice(event.price)) : null),
-    metric(I18n.t("positions-event-sol-amount"), event.sol_amount != null ? ctx.formatSol(event.sol_amount) : null),
+    metric(I18n.t("positions-event-native-amount"), event.sol_amount != null ? ctx.formatSol(event.sol_amount) : null),
     metric(I18n.t("positions-event-cost-basis"), event.cost_basis != null ? ctx.formatSol(event.cost_basis) : null),
     metric(
       I18n.t("positions-event-usd-value"),
@@ -245,7 +245,7 @@ function renderDetails(event, ctx) {
       event.direction ? esc(directionLabel(event.direction)) : null
     ),
     metric(
-      I18n.t("positions-event-wallet-sol-change"),
+      I18n.t("positions-event-wallet-native-change"),
       event.sol_change != null ? ctx.formatSol(event.sol_change, { sign: true }) : null
     ),
     metric(I18n.t("positions-event-instructions"), event.instructions_count ?? null),

@@ -640,7 +640,7 @@ copy-arm-stop-note = Not before a { $hold } hold: a faster fall closes lower
 copy-arm-shared = This wallet is also copied by { $tasks }: each task copies its trades on its own budget.
 copy-arm-unavailable = Live execution is unavailable right now; see the last check.
 # $budget and $trade are decimal SOL amounts.
-copy-arm-ack-real-sol = Real { -sol }: this task can spend up to { $budget } { -sol } from your wallet, at most { $trade } { -sol } per copy.
+copy-arm-ack-real-native = Real { -sol }: this task can spend up to { $budget } { -sol } from your wallet, at most { $trade } { -sol } per copy.
 copy-arm-ack-fees = Live copies pay real network fees and slippage; paper results do not promise live results.
 copy-arm-ack-unready = Some readiness checks have not passed. Arm this task anyway.
 # $name is the task name.
@@ -813,7 +813,7 @@ copy-editor-keep-editing = Keep editing
 copy-editor-toast-updated = Task updated
 copy-editor-toast-clone = Clone created
 copy-editor-toast-created = Paper task created
-copy-unit-sol = { -sol }
+copy-unit-native = { -sol }
 copy-editor-any = Any
 # $tasks lists the tasks already copying the wallet.
 copy-editor-duplicate = Already copied by { $tasks }. This task copies the same trades again, with its own rules and budget.

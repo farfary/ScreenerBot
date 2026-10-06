@@ -76,7 +76,7 @@ transactions-col-signature = Підпис
 transactions-col-type = Тип
 transactions-col-direction = Напрямок
 transactions-col-status = Статус
-transactions-col-sol-delta = Δ { -sol }
+transactions-col-native-delta = Δ { -sol }
 transactions-col-fees = Комісії ({ -sol })
 transactions-col-token = Токен
 transactions-col-router = Маршрутизатор
@@ -127,7 +127,7 @@ transactions-dialog-metric-effective-received = Фактично отриман�
 transactions-dialog-metric-effective-spent = Фактично витрачено
 transactions-dialog-metric-network-fee = Комісія мережі
 transactions-dialog-metric-estimated-pnl = Оцінений прибуток/збиток
-transactions-dialog-metric-net-sol-change = Чиста зміна { -sol }
+transactions-dialog-metric-net-native-change = Чиста зміна { -sol }
 transactions-dialog-route-title = Маршрут і активи
 transactions-dialog-route-router = Маршрутизатор
 transactions-dialog-route-input-asset = Вхідний актив
@@ -147,11 +147,11 @@ transactions-dialog-tech-token-decimals = Десяткові знаки токе
 
 ## Transaction details dialog: balances, instructions, logs, ATA and raw tabs
 
-transactions-dialog-balances-sol-title = Зміни балансу { -sol }
-transactions-dialog-balances-sol-empty = Немає змін балансу { -sol }
+transactions-dialog-balances-native-title = Зміни балансу { -sol }
+transactions-dialog-balances-native-empty = Немає змін балансу { -sol }
 transactions-dialog-balances-token-title = Зміни балансу токенів
 transactions-dialog-balances-token-empty = Немає змін балансу токенів
-transactions-dialog-balances-net-sol = Чиста зміна { -sol }
+transactions-dialog-balances-net-native = Чиста зміна { -sol }
 transactions-dialog-balances-fee = Комісія за транзакцію
 transactions-dialog-col-account = Акаунт
 transactions-dialog-col-token = Токен

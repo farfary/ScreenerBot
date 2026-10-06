@@ -68,7 +68,7 @@ strategies-value-candles =
     }
 
 strategies-unit-percent = %
-strategies-unit-sol = { -sol }
+strategies-unit-native = { -sol }
 strategies-unit-hours = Std.
 strategies-unit-multiplier = ×
 

@@ -76,7 +76,7 @@ transactions-col-signature = シグネチャ
 transactions-col-type = 種類
 transactions-col-direction = 方向
 transactions-col-status = ステータス
-transactions-col-sol-delta = Δ { -sol }
+transactions-col-native-delta = Δ { -sol }
 transactions-col-fees = 手数料（{ -sol }）
 transactions-col-token = トークン
 transactions-col-router = ルーター
@@ -127,7 +127,7 @@ transactions-dialog-metric-effective-received = 実質受取額
 transactions-dialog-metric-effective-spent = 実質支払額
 transactions-dialog-metric-network-fee = ネットワーク手数料
 transactions-dialog-metric-estimated-pnl = 推定損益
-transactions-dialog-metric-net-sol-change = { -sol } の正味増減
+transactions-dialog-metric-net-native-change = { -sol } の正味増減
 transactions-dialog-route-title = ルートと資産
 transactions-dialog-route-router = ルーター
 transactions-dialog-route-input-asset = 入力資産
@@ -147,11 +147,11 @@ transactions-dialog-tech-token-decimals = トークンの小数桁数
 
 ## Transaction details dialog: balances, instructions, logs, ATA and raw tabs
 
-transactions-dialog-balances-sol-title = { -sol } 残高の増減
-transactions-dialog-balances-sol-empty = { -sol } 残高の増減はありません
+transactions-dialog-balances-native-title = { -sol } 残高の増減
+transactions-dialog-balances-native-empty = { -sol } 残高の増減はありません
 transactions-dialog-balances-token-title = トークン残高の増減
 transactions-dialog-balances-token-empty = トークン残高の増減はありません
-transactions-dialog-balances-net-sol = { -sol } の正味増減
+transactions-dialog-balances-net-native = { -sol } の正味増減
 transactions-dialog-balances-fee = トランザクション手数料
 transactions-dialog-col-account = アカウント
 transactions-dialog-col-token = トークン

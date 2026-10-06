@@ -82,7 +82,6 @@ pub struct ClosedHolding {
     pub mint: String,
     /// No pool price: the holding was closed at zero proceeds.
     pub written_off: bool,
-    #[serde(rename = "mark_price_sol")]
     pub mark_price_native: Option<f64>,
 }
 

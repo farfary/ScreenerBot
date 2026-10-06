@@ -771,7 +771,7 @@ import {
             pd.fee_details.exit_fee_raw || 0
           } lamports)`
         );
-        lines.push(`  Total: ${withSolUnit(formatFixed(pd.fee_details.total_fees_sol, { decimals: 6 }))}`);
+        lines.push(`  Total: ${withSolUnit(formatFixed(pd.fee_details.total_fees_native, { decimals: 6 }))}`);
       }
       if (pd.profit_targets) {
         lines.push(

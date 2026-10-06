@@ -62,21 +62,21 @@ export function renderFigures(page) {
   if (!root || !totals) return;
   const esc = Utils.escapeHtml;
   const rounds = totals.wins + totals.losses;
-  const budget = Number(totals.active_budget_sol) || 0;
-  const spent = Number(totals.active_spent_sol) || 0;
+  const budget = Number(totals.active_budget_native) || 0;
+  const spent = Number(totals.active_spent_native) || 0;
   const budgetPct = budget > 0 ? Math.min(100, (spent / budget) * 100) : 0;
   const arrival = totals.active_arrival || {};
   const marked = unrealizedFigure(
-    totals.unrealized_pnl_sol,
+    totals.unrealized_pnl_native,
     totals.open_holdings,
     totals.unpriced_holdings
   );
   root.innerHTML = [
     figure(
       I18n.t("copy-metric-realized-pnl"),
-      signedSol(totals.realized_pnl_sol),
+      signedSol(totals.realized_pnl_native),
       {
-        tone: toneClass(totals.realized_pnl_sol),
+        tone: toneClass(totals.realized_pnl_native),
         note: I18n.t("copy-count-closed-rounds", { count: rounds }),
       },
       esc

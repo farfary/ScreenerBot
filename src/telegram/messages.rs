@@ -11,8 +11,8 @@ use crate::events::ScheduledTaskOutcome;
 use crate::i18n::{ids, UiText};
 use crate::telegram::formatters::{
     bold, code, duration_text, format_ai_reasoning, format_mint_display, format_pnl,
-    format_pnl_bold, format_tokens_f64, nested_arg, pnl_plain, price_arg, row, sol_arg, text_arg,
-    ticker,
+    format_pnl_bold, format_tokens_f64, native_arg, nested_arg, pnl_plain, price_arg, row,
+    text_arg, ticker,
 };
 use crate::telegram::text::{tg, tg_escape, tg_id, with_icon};
 use crate::telegram::types::{ErrorSeverity, StartMode, StopReason};
@@ -28,7 +28,7 @@ fn symbol_pnl_line(symbol: &str, pnl: String) -> String {
 pub fn msg_position_opened(
     symbol: &str,
     mint: &str,
-    amount_sol: f64,
+    amount_native: f64,
     entry_price: f64,
     tokens: f64,
     dex: Option<&str>,
@@ -41,7 +41,7 @@ pub fn msg_position_opened(
     let rows = [
         row(
             "💰",
-            UiText::new(ids::TELEGRAM_NOTIFY_OPENED_SIZE).arg("amount", sol_arg(amount_sol)),
+            UiText::new(ids::TELEGRAM_NOTIFY_OPENED_SIZE).arg("amount", native_arg(amount_native)),
         ),
         row(
             "💎",
@@ -71,7 +71,7 @@ pub fn msg_position_opened(
 /// absent when the position was closed without one.
 pub fn msg_position_closed(
     symbol: &str,
-    pnl_sol: f64,
+    pnl_native: f64,
     pnl_pct: f64,
     entry_price: f64,
     exit_price: f64,
@@ -85,7 +85,7 @@ pub fn msg_position_closed(
         Some(stored) => closed_reason_text(stored),
         None => UiText::new(ids::TELEGRAM_NOTIFY_CLOSED_REASON_UNSPECIFIED),
     };
-    let (header_emoji, title) = if pnl_sol >= 0.0 {
+    let (header_emoji, title) = if pnl_native >= 0.0 {
         let emoji = if pnl_pct >= 100.0 {
             "🎉"
         } else if pnl_pct >= 50.0 {
@@ -111,11 +111,11 @@ pub fn msg_position_closed(
         ),
         row(
             "💵",
-            UiText::new(ids::TELEGRAM_ROW_INVESTED).arg("amount", sol_arg(invested)),
+            UiText::new(ids::TELEGRAM_ROW_INVESTED).arg("amount", native_arg(invested)),
         ),
         row(
             "💰",
-            UiText::new(ids::TELEGRAM_ROW_RECEIVED).arg("amount", sol_arg(received)),
+            UiText::new(ids::TELEGRAM_ROW_RECEIVED).arg("amount", native_arg(received)),
         ),
         row(
             "⏱️",
@@ -131,7 +131,7 @@ pub fn msg_position_closed(
     format!(
         "{}\n\n{}\n\n{}{}",
         with_icon(header_emoji, &tg_id(title)),
-        symbol_pnl_line(symbol, format_pnl_bold(pnl_sol, pnl_pct)),
+        symbol_pnl_line(symbol, format_pnl_bold(pnl_native, pnl_pct)),
         rows.join("\n"),
         format_ai_reasoning(ai_reasoning),
     )
@@ -141,20 +141,20 @@ pub fn msg_position_closed(
 pub fn msg_partial_exit(
     symbol: &str,
     exit_pct: f64,
-    pnl_sol: f64,
+    pnl_native: f64,
     pnl_pct: f64,
-    received_sol: f64,
+    received_native: f64,
     remaining_pct: f64,
 ) -> String {
-    let emoji = if pnl_sol >= 0.0 { "🟡" } else { "🟠" };
+    let emoji = if pnl_native >= 0.0 { "🟡" } else { "🟠" };
     let rows = [
         row(
             "💰",
-            UiText::new(ids::TELEGRAM_ROW_RECEIVED).arg("amount", sol_arg(received_sol)),
+            UiText::new(ids::TELEGRAM_ROW_RECEIVED).arg("amount", native_arg(received_native)),
         ),
         row(
             "📊",
-            UiText::new(ids::TELEGRAM_ROW_PNL).arg("pnl", text_arg(pnl_plain(pnl_sol, pnl_pct))),
+            UiText::new(ids::TELEGRAM_ROW_PNL).arg("pnl", text_arg(pnl_plain(pnl_native, pnl_pct))),
         ),
         row(
             "📦",
@@ -176,7 +176,7 @@ pub fn msg_partial_exit(
 /// Format DCA executed notification
 pub fn msg_dca_executed(
     symbol: &str,
-    dca_amount_sol: f64,
+    dca_amount_native: f64,
     total_invested: f64,
     dca_count: u32,
     new_avg_price: f64,
@@ -184,11 +184,12 @@ pub fn msg_dca_executed(
     let rows = [
         row(
             "➕",
-            UiText::new(ids::TELEGRAM_NOTIFY_DCA_ADDED).arg("amount", sol_arg(dca_amount_sol)),
+            UiText::new(ids::TELEGRAM_NOTIFY_DCA_ADDED)
+                .arg("amount", native_arg(dca_amount_native)),
         ),
         row(
             "💰",
-            UiText::new(ids::TELEGRAM_ROW_TOTAL).arg("amount", sol_arg(total_invested)),
+            UiText::new(ids::TELEGRAM_ROW_TOTAL).arg("amount", native_arg(total_invested)),
         ),
         row(
             "💎",
@@ -318,7 +319,7 @@ pub fn msg_daily_summary(
     total_trades: u32,
     winning: u32,
     losing: u32,
-    total_pnl_sol: f64,
+    total_pnl_native: f64,
     open_positions: u32,
 ) -> String {
     let win_rate = if total_trades > 0 {
@@ -327,8 +328,16 @@ pub fn msg_daily_summary(
         0.0
     };
 
-    let emoji = if total_pnl_sol >= 0.0 { "📈" } else { "📉" };
-    let pnl_emoji = if total_pnl_sol >= 0.0 { "🟢" } else { "🔴" };
+    let emoji = if total_pnl_native >= 0.0 {
+        "📈"
+    } else {
+        "📉"
+    };
+    let pnl_emoji = if total_pnl_native >= 0.0 {
+        "🟢"
+    } else {
+        "🔴"
+    };
 
     let lines = [
         tg_id(ids::TELEGRAM_NOTIFY_SUMMARY_PERFORMANCE),
@@ -341,7 +350,7 @@ pub fn msg_daily_summary(
         tg(&UiText::new(ids::TELEGRAM_NOTIFY_SUMMARY_WIN_RATE)
             .arg("percent", text_arg(format!("{win_rate:.0}")))),
         tg(&UiText::new(ids::TELEGRAM_NOTIFY_SUMMARY_PNL)
-            .arg("amount", sol_arg(total_pnl_sol))
+            .arg("amount", native_arg(total_pnl_native))
             .arg("icon", text_arg(pnl_emoji))),
     ];
 
@@ -366,7 +375,7 @@ pub fn msg_position_detail(
     mint: &str,
     entry_price: f64,
     current_price: f64,
-    pnl_sol: f64,
+    pnl_native: f64,
     pnl_pct: f64,
     invested: f64,
     value: f64,
@@ -386,11 +395,11 @@ pub fn msg_position_detail(
         ),
         row(
             "💵",
-            UiText::new(ids::TELEGRAM_ROW_INVESTED).arg("amount", sol_arg(invested)),
+            UiText::new(ids::TELEGRAM_ROW_INVESTED).arg("amount", native_arg(invested)),
         ),
         row(
             "💰",
-            UiText::new(ids::TELEGRAM_ROW_VALUE).arg("amount", sol_arg(value)),
+            UiText::new(ids::TELEGRAM_ROW_VALUE).arg("amount", native_arg(value)),
         ),
         row(
             "🪙",
@@ -414,7 +423,7 @@ pub fn msg_position_detail(
         "{}\n{}\n\n{}\n\n{}",
         with_icon(emoji, &ticker(symbol)),
         code(&format_mint_display(mint)),
-        format_pnl_bold(pnl_sol, pnl_pct),
+        format_pnl_bold(pnl_native, pnl_pct),
         rows.join("\n"),
     )
 }
@@ -422,7 +431,7 @@ pub fn msg_position_detail(
 /// Format confirmation message for close position
 pub fn msg_confirm_close(
     symbol: &str,
-    pnl_sol: f64,
+    pnl_native: f64,
     pnl_pct: f64,
     tokens: f64,
     est_receive: f64,
@@ -430,11 +439,11 @@ pub fn msg_confirm_close(
     format!(
         "{}\n\n{}\n\n{}\n{}\n\n{}",
         with_icon("⚠️", &tg_id(ids::TELEGRAM_POSITION_CONFIRM_CLOSE_TITLE)),
-        symbol_pnl_line(symbol, format_pnl(pnl_sol, pnl_pct)),
+        symbol_pnl_line(symbol, format_pnl(pnl_native, pnl_pct)),
         tg(&UiText::new(ids::TELEGRAM_POSITION_CONFIRM_CLOSE_SELLING)
             .arg("tokens", text_arg(format_tokens_f64(tokens)))),
         tg(&UiText::new(ids::TELEGRAM_POSITION_CONFIRM_CLOSE_ESTIMATED)
-            .arg("amount", sol_arg(est_receive))),
+            .arg("amount", native_arg(est_receive))),
         with_icon("⏰", &tg_id(ids::TELEGRAM_POSITION_CONFIRM_CLOSE_HINT)),
     )
 }

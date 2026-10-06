@@ -278,7 +278,7 @@ function buildLiquiditySection(token, options) {
             <span class="overview-fact-value">${token.liquidity_usd ? Utils.formatCurrencyUSD(token.liquidity_usd) : "—"}</span>
           </div>
           <div class="overview-fact">
-            <span class="overview-fact-label">${esc(I18n.t("tokens-overview-fact-pool-sol"))}</span>
+            <span class="overview-fact-label">${esc(I18n.t("tokens-overview-fact-pool-native"))}</span>
             <span class="overview-fact-value">${token.pool_reserves_native ? withSolUnit(Utils.formatNumber(token.pool_reserves_native, { decimals: 2 })) : "—"}</span>
           </div>
           <div class="overview-fact">

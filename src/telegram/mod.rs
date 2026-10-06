@@ -125,4 +125,4 @@ pub use discovery::{
 };
 
 // Formatters (commonly used)
-pub use formatters::{format_duration, format_pnl, format_price, format_sol, html_escape};
+pub use formatters::{format_duration, format_native, format_pnl, format_price, html_escape};

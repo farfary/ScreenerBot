@@ -64,7 +64,7 @@ export function optionValue(option) {
 /** Text written beside a numeric input, or `null` when the parameter has none. */
 export function inputUnitText(spec) {
   if (spec.type === "percent") return I18n.t("strategies-unit-percent");
-  if (spec.type === "sol") return I18n.t("strategies-unit-sol");
+  if (spec.type === "sol") return I18n.t("strategies-unit-native");
   if (Object.hasOwn(PARAM_UNIT_INPUT_LABELS, spec.unit)) {
     return I18n.label(PARAM_UNIT_INPUT_LABELS, spec.unit);
   }

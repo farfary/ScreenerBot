@@ -353,7 +353,7 @@ export function createWalletRenderers({
           },
         },
         summary: [
-          { id: "wt-sol-balance", label: I18n.t("wallets-summary-sol"), value: "—" },
+          { id: "wt-sol-balance", label: I18n.t("wallets-summary-native"), value: "—" },
           {
             id: "wt-tokens-count",
             label: I18n.t("wallets-holdings-tokens"),

@@ -455,19 +455,19 @@ tools-generator-exported = 지갑을 내보냈습니다 - 안전하게 보관하
 
 tools-consolidation-summary-title = 요약
 tools-consolidation-stat-wallets = 하위 지갑
-tools-consolidation-stat-sol = 총 { -sol }
+tools-consolidation-stat-native = 총 { -sol }
 tools-consolidation-stat-tokens = 토큰 종류
 tools-consolidation-stat-rent = 회수 가능한 렌트
 tools-consolidation-wallets-title = 지갑
 tools-consolidation-loading-wallets = 지갑을 불러오는 중...
 tools-consolidation-loading-data = 지갑 데이터를 불러오는 중...
-tools-consolidation-action-transfer-sol = { -sol } 전송
+tools-consolidation-action-transfer-native = { -sol } 전송
 tools-consolidation-action-transfer-tokens = 모든 토큰 전송
 tools-consolidation-action-cleanup = ATA 정리
 tools-consolidation-action-transferring = 전송 중...
 tools-consolidation-column-name = 이름
 tools-consolidation-column-address = 주소
-tools-consolidation-column-sol = { -sol } 잔액
+tools-consolidation-column-native = { -sol } 잔액
 tools-consolidation-column-tokens = 토큰
 tools-consolidation-column-atas = 빈 ATA
 tools-consolidation-empty = 하위 지갑이 없습니다
@@ -476,7 +476,7 @@ tools-consolidation-load-failed = 불러오기 실패: { $reason }
 tools-consolidation-select-prompt = 통합할 지갑을 선택하세요
 tools-consolidation-selection-totals =
     | { $amount } | 토큰 { $tokens }개 | 빈 ATA { $atas }개
-tools-consolidation-transferred-sol = 메인 지갑으로 { $amount } 전송됨
+tools-consolidation-transferred-native = 메인 지갑으로 { $amount } 전송됨
 tools-consolidation-transferred-tokens =
     { $count ->
        *[other] 토큰 { $count }개를 메인 지갑으로 전송했습니다
@@ -579,7 +579,7 @@ tools-multi-sell-close-atas-hint = ATA당 약 0.002 { -sol } 회수
 tools-multi-sell-wallets-title = 토큰 보유 지갑
 tools-multi-sell-empty = 이 토큰을 보유한 하위 지갑이 없습니다
 tools-multi-sell-column-tokens = 토큰
-tools-multi-sell-column-sol = { -sol } 잔액
+tools-multi-sell-column-native = { -sol } 잔액
 tools-multi-sell-column-topup = 충전 필요
 tools-multi-sell-none-selected = 선택한 지갑이 없습니다
 tools-multi-sell-select-required = 지갑을 하나 이상 선택하세요

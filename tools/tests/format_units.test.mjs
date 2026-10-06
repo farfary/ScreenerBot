@@ -118,7 +118,7 @@ test("the scanner flags hand-built units and spares CSS, ids and regexes", () =>
     "el.style.setProperty('--fill', `${pct}%`);",
     '<div style="width: ${pct}%"></div>',
     "const re = /^\\d{2}%$/;",
-    'I18n.t("format-sol-amount", { amount });',
+    'I18n.t("format-native-amount", { amount });',
     "// note: `${x} SOL` is built by the owner",
     "const price = `${x}`; // format-ok: machine value",
   ];

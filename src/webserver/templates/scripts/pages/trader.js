@@ -450,17 +450,17 @@ function createLifecycle() {
       // Net P&L — the booked, fee- and DCA-aware SOL the window actually returned.
       setValue(
         "net-pnl",
-        Number.isFinite(data.total_pnl_sol)
-          ? Utils.formatSignedSol(data.total_pnl_sol, { fallback: "—" })
+        Number.isFinite(data.total_pnl_native)
+          ? Utils.formatSignedSol(data.total_pnl_native, { fallback: "—" })
           : "—",
-        tone(data.total_pnl_sol)
+        tone(data.total_pnl_native)
       );
       setDetail(
         "net-pnl-detail",
         data.total_trades > 0
           ? I18n.t("trader-stats-won-lost", {
-              won: sol(data.gross_profit_sol),
-              lost: sol(data.gross_loss_sol),
+              won: sol(data.gross_profit_native),
+              lost: sol(data.gross_loss_native),
             })
           : I18n.t("trader-stats-empty")
       );
@@ -501,19 +501,19 @@ function createLifecycle() {
       );
       setDetail(
         "profit-factor-detail",
-        Number.isFinite(data.expectancy_sol)
-          ? I18n.t("trader-stats-expected", { amount: sol(data.expectancy_sol) })
+        Number.isFinite(data.expectancy_native)
+          ? I18n.t("trader-stats-expected", { amount: sol(data.expectancy_native) })
           : I18n.t("trader-stats-profit-factor-basis")
       );
 
       setValue(
         "max-drawdown",
-        data.total_trades > 0 ? sol(data.max_drawdown_sol) : "—",
-        data.max_drawdown_sol > 0 ? "negative" : null
+        data.total_trades > 0 ? sol(data.max_drawdown_native) : "—",
+        data.max_drawdown_native > 0 ? "negative" : null
       );
       setDetail("max-drawdown-detail", I18n.t("trader-stats-drawdown-basis"));
 
-      setValue("capital-at-work", sol(data.locked_sol));
+      setValue("capital-at-work", sol(data.locked_native));
       setDetail(
         "capital-at-work-detail",
         I18n.t("trader-stats-slots", {
@@ -563,7 +563,7 @@ function createLifecycle() {
             : I18n.t("trader-stats-excluded", { count: n, amount: String(n) });
       }
 
-      renderDailyPnl(data.daily_pnl, data.total_pnl_sol);
+      renderDailyPnl(data.daily_pnl, data.total_pnl_native);
       renderExtremes(data);
       renderExitBreakdown(data.exit_breakdown, data.period_days);
     } catch (error) {
@@ -628,7 +628,7 @@ function createLifecycle() {
       return;
     }
 
-    const key = days.map((d) => `${d.date}:${d.net_pnl_sol.toFixed(6)}`).join("|");
+    const key = days.map((d) => `${d.date}:${d.net_pnl_native.toFixed(6)}`).join("|");
     if (key === _lastDailyKey) return;
     _lastDailyKey = key;
 
@@ -637,21 +637,21 @@ function createLifecycle() {
     const slot = W / days.length;
     const barW = Math.max(slot * 0.62, 0.35);
 
-    const peak = Math.max(...days.map((d) => Math.abs(d.net_pnl_sol)), 1e-9);
+    const peak = Math.max(...days.map((d) => Math.abs(d.net_pnl_native)), 1e-9);
     const mid = H / 2;
     const bars = days
       .map((d, i) => {
-        const h = (Math.abs(d.net_pnl_sol) / peak) * (mid - 1);
+        const h = (Math.abs(d.net_pnl_native) / peak) * (mid - 1);
         const x = i * slot + (slot - barW) / 2;
-        const y = d.net_pnl_sol >= 0 ? mid - h : mid;
-        const cls = d.net_pnl_sol >= 0 ? "positive" : "negative";
+        const y = d.net_pnl_native >= 0 ? mid - h : mid;
+        const cls = d.net_pnl_native >= 0 ? "positive" : "negative";
         return `<rect class="daily-pnl-bar ${cls}" x="${x.toFixed(2)}" y="${y.toFixed(2)}" width="${barW.toFixed(2)}" height="${Math.max(h, 0.4).toFixed(2)}"></rect>`;
       })
       .join("");
 
     // Cumulative line on its own scale, so a flat run of small days stays readable.
     let running = 0;
-    const cumulative = days.map((d) => (running += d.net_pnl_sol));
+    const cumulative = days.map((d) => (running += d.net_pnl_native));
     const cMin = Math.min(0, ...cumulative);
     const cMax = Math.max(0, ...cumulative);
     const cSpan = cMax - cMin || 1e-9;
@@ -735,7 +735,7 @@ function createLifecycle() {
     }
 
     const key = breakdown
-      .map((e) => `${e.exit_type}:${e.count}:${(e.net_pnl_sol || 0).toFixed(6)}`)
+      .map((e) => `${e.exit_type}:${e.count}:${(e.net_pnl_native || 0).toFixed(6)}`)
       .join("|");
     if (key === _lastExitKey) return;
     _lastExitKey = key;
@@ -746,7 +746,7 @@ function createLifecycle() {
       .map((e) => {
         const count = e.count || 0;
         const avgPct = e.avg_profit_pct || 0;
-        const netSol = e.net_pnl_sol || 0;
+        const netSol = e.net_pnl_native || 0;
         const share = Math.round((count / totalCount) * 100);
         const barClass = netSol >= 0 ? "positive" : "negative";
         return `

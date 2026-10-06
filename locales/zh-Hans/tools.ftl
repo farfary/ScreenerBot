@@ -448,19 +448,19 @@ tools-generator-exported = 钱包已导出，请妥善保管
 
 tools-consolidation-summary-title = 摘要
 tools-consolidation-stat-wallets = 子钱包
-tools-consolidation-stat-sol = { -sol } 总额
+tools-consolidation-stat-native = { -sol } 总额
 tools-consolidation-stat-tokens = 代币种类
 tools-consolidation-stat-rent = 可回收租金
 tools-consolidation-wallets-title = 钱包
 tools-consolidation-loading-wallets = 正在加载钱包…
 tools-consolidation-loading-data = 正在加载钱包数据…
-tools-consolidation-action-transfer-sol = 转移 { -sol }
+tools-consolidation-action-transfer-native = 转移 { -sol }
 tools-consolidation-action-transfer-tokens = 转移所有代币
 tools-consolidation-action-cleanup = 清理 ATA
 tools-consolidation-action-transferring = 转移中…
 tools-consolidation-column-name = 名称
 tools-consolidation-column-address = 地址
-tools-consolidation-column-sol = { -sol } 余额
+tools-consolidation-column-native = { -sol } 余额
 tools-consolidation-column-tokens = 代币
 tools-consolidation-column-atas = 空 ATA
 tools-consolidation-empty = 未找到子钱包
@@ -472,7 +472,7 @@ tools-consolidation-selection-totals = | { $amount } | { $tokens ->
     } | { $atas ->
        *[other] { $atas } 个空 ATA
     }
-tools-consolidation-transferred-sol = 已将 { $amount } 转入主钱包
+tools-consolidation-transferred-native = 已将 { $amount } 转入主钱包
 tools-consolidation-transferred-tokens =
     { $count ->
        *[other] 已将 { $count } 个代币转入主钱包
@@ -574,7 +574,7 @@ tools-multi-sell-close-atas-hint = 每个 ATA 可回收约 0.002 { -sol }
 tools-multi-sell-wallets-title = 持有该代币的钱包
 tools-multi-sell-empty = 没有子钱包持有该代币
 tools-multi-sell-column-tokens = 代币
-tools-multi-sell-column-sol = { -sol } 余额
+tools-multi-sell-column-native = { -sol } 余额
 tools-multi-sell-column-topup = 需要充值
 tools-multi-sell-none-selected = 未选择钱包
 tools-multi-sell-select-required = 请至少选择一个钱包

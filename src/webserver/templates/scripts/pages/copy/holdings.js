@@ -92,41 +92,41 @@ export function createHoldings(page, { rerender, showActivityFor }) {
     if (!watch) {
       return `<span class="copy-muted">${esc(I18n.t("copy-rules-wallet-sells-only"))}</span>`;
     }
-    const entry = holding.entry_price_sol;
+    const entry = holding.entry_price_native;
     const items = [];
-    if (watch.stop_loss_price_sol != null) {
+    if (watch.stop_loss_price_native != null) {
       items.push([
-        stopText(signedPct(relative(watch.stop_loss_price_sol, entry)), watch.stop_loss_armed_at),
-        watch.stop_loss_price_sol,
+        stopText(signedPct(relative(watch.stop_loss_price_native, entry)), watch.stop_loss_armed_at),
+        watch.stop_loss_price_native,
       ]);
     }
-    if (watch.take_profit_price_sol != null) {
+    if (watch.take_profit_price_native != null) {
       items.push([
         I18n.t("copy-holdings-watch-take", {
-          level: signedPct(relative(watch.take_profit_price_sol, entry)),
+          level: signedPct(relative(watch.take_profit_price_native, entry)),
         }),
-        watch.take_profit_price_sol,
+        watch.take_profit_price_native,
       ]);
     }
-    if (watch.trailing_armed && watch.trailing_stop_price_sol != null) {
+    if (watch.trailing_armed && watch.trailing_stop_price_native != null) {
       items.push([
         I18n.t("copy-holdings-watch-trail", {
-          level: signedPct(relative(watch.trailing_stop_price_sol, entry)),
+          level: signedPct(relative(watch.trailing_stop_price_native, entry)),
         }),
-        watch.trailing_stop_price_sol,
+        watch.trailing_stop_price_native,
       ]);
-    } else if (watch.trailing_activation_price_sol != null) {
+    } else if (watch.trailing_activation_price_native != null) {
       items.push([
         I18n.t("copy-holdings-watch-trail-arms", {
-          level: signedPct(relative(watch.trailing_activation_price_sol, entry)),
+          level: signedPct(relative(watch.trailing_activation_price_native, entry)),
         }),
-        watch.trailing_activation_price_sol,
+        watch.trailing_activation_price_native,
       ]);
     }
-    if (watch.time_rule_price_sol != null) {
+    if (watch.time_rule_price_native != null) {
       items.push([
-        timeText(signedPct(relative(watch.time_rule_price_sol, entry)), watch.time_rule_from),
-        watch.time_rule_price_sol,
+        timeText(signedPct(relative(watch.time_rule_price_native, entry)), watch.time_rule_from),
+        watch.time_rule_price_native,
       ]);
     }
     if (ws.exit_mode === "hybrid") items.push([I18n.t("copy-holdings-watch-wallet-sells"), null]);
@@ -148,16 +148,16 @@ export function createHoldings(page, { rerender, showActivityFor }) {
     const shared = sharedSymbols(holdings.map((holding) => holding.mint));
     const rows = holdings
       .map((holding) => {
-        const priced = holding.mark_price_sol != null;
+        const priced = holding.mark_price_native != null;
         const pnl = priced
-          ? `<span class="${toneClass(holding.unrealized_pnl_sol)}">${esc(signedSol(holding.unrealized_pnl_sol))}</span><small>${esc(signedPct(holding.unrealized_pnl_pct))}</small>`
+          ? `<span class="${toneClass(holding.unrealized_pnl_native)}">${esc(signedSol(holding.unrealized_pnl_native))}</span><small>${esc(signedPct(holding.unrealized_pnl_pct))}</small>`
           : `<span class="copy-warning-text">${esc(I18n.t("copy-holdings-no-pool-price"))}</span>`;
         return `<tr>
           <td>${tokenCell(holding.mint, shared)}</td>
-          <td class="num">${esc(sol(holding.cost_basis_sol))}</td>
-          <td class="num">${esc(price(holding.entry_price_sol))}</td>
-          <td class="num">${esc(price(holding.mark_price_sol))}</td>
-          ${relativeCell(holding.peak_price_sol, holding.entry_price_sol)}
+          <td class="num">${esc(sol(holding.cost_basis_native))}</td>
+          <td class="num">${esc(price(holding.entry_price_native))}</td>
+          <td class="num">${esc(price(holding.mark_price_native))}</td>
+          ${relativeCell(holding.peak_price_native, holding.entry_price_native)}
           <td class="num copy-cell-stack">${pnl}</td>
           <td>${exitCell(holding, ws)}</td>
           <td class="num" title="${esc(I18n.t("copy-holdings-opened", { time: dateTime(holding.opened_at) }))}">${esc(duration(holding.held_seconds))}</td>
@@ -197,8 +197,8 @@ export function createHoldings(page, { rerender, showActivityFor }) {
       .map(
         (round) => `<tr>
           <td>${tokenCell(round.mint, shared)}</td>
-          <td class="num">${esc(sol(round.invested_sol))}</td>
-          <td class="num">${esc(sol(round.proceeds_sol))}</td>
+          <td class="num">${esc(sol(round.invested_native))}</td>
+          <td class="num">${esc(sol(round.proceeds_native))}</td>
           <td class="num copy-cell-stack"><span class="${toneClass(round.pnl_sol)}">${esc(signedSol(round.pnl_sol))}</span><small>${esc(signedPct(round.pnl_pct))}</small></td>
           <td>${esc(exitLabel(round.exit))}</td>
           <td class="num">${esc(duration(round.hold_seconds))}</td>
@@ -249,14 +249,14 @@ export function createHoldings(page, { rerender, showActivityFor }) {
     const holding = lastWs?.paper_holdings?.find((item) => item.mint === mint && item.open);
     if (!holding) return;
     const name = tokenName(mint);
-    const priced = holding.mark_price_sol != null;
+    const priced = holding.mark_price_native != null;
     const result = await confirm(
       priced
         ? {
             title: I18n.t("copy-holdings-close-title"),
             message: I18n.t("copy-holdings-close-message", {
               token: name,
-              price: priceSol(holding.mark_price_sol),
+              price: priceSol(holding.mark_price_native),
             }),
             confirmLabel: I18n.t("copy-holdings-close-confirm"),
             cancelLabel: I18n.t("copy-holdings-keep"),
@@ -266,7 +266,7 @@ export function createHoldings(page, { rerender, showActivityFor }) {
             title: I18n.t("copy-holdings-write-off-title"),
             message: I18n.t("copy-holdings-write-off-message", {
               token: name,
-              cost: sol(holding.cost_basis_sol),
+              cost: sol(holding.cost_basis_native),
             }),
             confirmLabel: I18n.t("copy-holdings-write-off"),
             cancelLabel: I18n.t("copy-holdings-keep"),
@@ -288,7 +288,7 @@ export function createHoldings(page, { rerender, showActivityFor }) {
             }),
         closed.written_off
           ? I18n.t("copy-holdings-written-off-detail")
-          : I18n.t("copy-holdings-sold-at", { price: priceSol(closed.mark_price_sol) })
+          : I18n.t("copy-holdings-sold-at", { price: priceSol(closed.mark_price_native) })
       );
       await page.reload();
     } catch (error) {

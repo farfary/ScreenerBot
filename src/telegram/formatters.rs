@@ -31,8 +31,8 @@ pub(crate) fn text_arg(value: impl Into<String>) -> UiArg {
 }
 
 /// SOL amount argument with the fixed Telegram precision.
-pub(crate) fn sol_arg(amount: f64) -> UiArg {
-    UiArg::Text(format_sol(amount))
+pub(crate) fn native_arg(amount: f64) -> UiArg {
+    UiArg::Text(format_native(amount))
 }
 
 /// Price argument with the adaptive Telegram precision.
@@ -93,7 +93,7 @@ pub fn format_price(price: f64) -> String {
 }
 
 /// Format SOL amount with 4 decimal places
-pub fn format_sol(amount: f64) -> String {
+pub fn format_native(amount: f64) -> String {
     if amount.abs() < 0.0001 {
         format!("{:.6}", amount)
     } else {
@@ -120,8 +120,8 @@ pub fn format_tokens_f64(amount: f64) -> String {
 }
 
 /// Emoji for a P&L result.
-fn pnl_icon(pnl_sol: f64, pnl_pct: f64) -> &'static str {
-    if pnl_sol >= 0.0 {
+fn pnl_icon(pnl_native: f64, pnl_pct: f64) -> &'static str {
+    if pnl_native >= 0.0 {
         if pnl_pct >= 100.0 {
             "🎉"
         } else if pnl_pct >= 50.0 {
@@ -137,37 +137,40 @@ fn pnl_icon(pnl_sol: f64, pnl_pct: f64) -> &'static str {
 }
 
 /// Signed P&L amount and percent, without markup or emoji.
-fn pnl_text(pnl_sol: f64, pnl_pct: f64) -> UiText {
-    let sign = if pnl_sol >= 0.0 { "+" } else { "" };
+fn pnl_text(pnl_native: f64, pnl_pct: f64) -> UiText {
+    let sign = if pnl_native >= 0.0 { "+" } else { "" };
     UiText::new(ids::TELEGRAM_PNL)
-        .arg("sol", text_arg(format!("{sign}{}", format_sol(pnl_sol))))
+        .arg(
+            "sol",
+            text_arg(format!("{sign}{}", format_native(pnl_native))),
+        )
         .arg("percent", text_arg(format!("{sign}{pnl_pct:.1}")))
 }
 
 /// Format P&L with sign and emoji
-pub fn format_pnl(pnl_sol: f64, pnl_pct: f64) -> String {
+pub fn format_pnl(pnl_native: f64, pnl_pct: f64) -> String {
     format!(
         "{} {}",
-        tg(&pnl_text(pnl_sol, pnl_pct)),
-        pnl_icon(pnl_sol, pnl_pct)
+        tg(&pnl_text(pnl_native, pnl_pct)),
+        pnl_icon(pnl_native, pnl_pct)
     )
 }
 
 /// Format P&L with bold for emphasis
-pub(crate) fn format_pnl_bold(pnl_sol: f64, pnl_pct: f64) -> String {
+pub(crate) fn format_pnl_bold(pnl_native: f64, pnl_pct: f64) -> String {
     format!(
         "<b>{}</b> {}",
-        tg(&pnl_text(pnl_sol, pnl_pct)),
-        pnl_icon(pnl_sol, pnl_pct)
+        tg(&pnl_text(pnl_native, pnl_pct)),
+        pnl_icon(pnl_native, pnl_pct)
     )
 }
 
 /// P&L as plain text, for use as a message argument.
-pub(crate) fn pnl_plain(pnl_sol: f64, pnl_pct: f64) -> String {
+pub(crate) fn pnl_plain(pnl_native: f64, pnl_pct: f64) -> String {
     format!(
         "{} {}",
-        tg_plain(&pnl_text(pnl_sol, pnl_pct)),
-        pnl_icon(pnl_sol, pnl_pct)
+        tg_plain(&pnl_text(pnl_native, pnl_pct)),
+        pnl_icon(pnl_native, pnl_pct)
     )
 }
 

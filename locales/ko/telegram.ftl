@@ -337,7 +337,7 @@ telegram-update-how-installer = 데스크톱 설치 프로그램을 한 번 실�
 telegram-value-unknown = 알 수 없음
 telegram-value-na = 해당 없음
 telegram-percent-value = { $percent }%
-telegram-price-sol = { $price } { -sol }
+telegram-price-native = { $price } { -sol }
 telegram-amount-usd = ${ $amount }
 telegram-amount-usd-thousands = ${ $amount }K
 telegram-amount-usd-millions = ${ $amount }M
@@ -349,7 +349,7 @@ telegram-duration-hours-minutes = { $hours }시간 { $minutes }분
 telegram-duration-days = { $days }일
 telegram-duration-days-hours = { $days }일 { $hours }시간
 telegram-pnl = { $sol } { -sol } ({ $percent }%)
-telegram-amount-sol = { $amount } { -sol }
+telegram-amount-native = { $amount } { -sol }
 telegram-error-line = 오류: { $detail }
 telegram-ai-reasoning =
     <b>LLM 분석</b>

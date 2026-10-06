@@ -4,7 +4,7 @@ format-yes = Да
 format-no = Нет
 format-unknown = Неизвестно
 
-format-sol-amount = { $amount } { -sol }
+format-native-amount = { $amount } { -sol }
 
 format-usd-amount = ${ $amount }
 

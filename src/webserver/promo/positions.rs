@@ -257,7 +257,7 @@ pub fn get_promo_positions_stats() -> PositionsStatsResponse {
         total: open.count + trades.len(),
         open: open.count,
         closed: trades.len(),
-        total_invested_sol: open.invested_sol,
+        total_invested_native: open.invested_sol,
         // Realized (closed) P&L plus current unrealized on open positions.
         total_pnl: realized.net_pnl_sol + open.unrealized_pnl_sol,
     }

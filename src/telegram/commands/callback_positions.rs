@@ -93,7 +93,7 @@ pub(super) async fn send_history(bot: &Bot, chat_id: ChatId) -> Result<()> {
             &format!(
                 "{}: {}",
                 formatters::bold(&pos.symbol),
-                tg(&UiText::new(ids::TELEGRAM_AMOUNT_SOL)
+                tg(&UiText::new(ids::TELEGRAM_AMOUNT_NATIVE)
                     .arg("amount", text_arg(format!("{pnl_sign}{pnl:.4}"))))
             ),
         ));

@@ -358,7 +358,7 @@ function createLifecycle() {
     // Open P&L tile — unrealized, from the positions snapshot.
     const openPnlEl = document.getElementById("heroOpenPnl");
     if (openPnlEl && data.positions) {
-      const v = data.positions.unrealized_pnl_sol || 0;
+      const v = data.positions.unrealized_pnl_native || 0;
       const pct = data.positions.unrealized_pnl_percent || 0;
       openPnlEl.innerHTML = `${signedSolHtml(
         v
@@ -369,7 +369,7 @@ function createLifecycle() {
     // Realized Today — banked net P&L today, from trader analytics.
     const realizedEl = document.getElementById("heroRealizedToday");
     if (realizedEl && data.trader && data.trader.today) {
-      const v = data.trader.today.net_pnl_sol || 0;
+      const v = data.trader.today.net_pnl_native || 0;
       realizedEl.innerHTML = signedSolHtml(v);
       realizedEl.className = `hero-stat-value ${pnlClass(v, 4)}`;
     }
@@ -391,7 +391,7 @@ function createLifecycle() {
 
     if (countEl) animateValue(countEl, positions.open_count);
     if (investedEl)
-      investedEl.textContent = Utils.formatSol(positions.total_invested_sol, {
+      investedEl.textContent = Utils.formatSol(positions.total_invested_native, {
         decimals: 4,
       });
     if (avgSizeEl)

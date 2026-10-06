@@ -341,7 +341,7 @@ telegram-update-how-installer = Der Desktop-Installer muss einmal ausgeführt we
 telegram-value-unknown = Unbekannt
 telegram-value-na = k. A.
 telegram-percent-value = { $percent }%
-telegram-price-sol = { $price } { -sol }
+telegram-price-native = { $price } { -sol }
 telegram-amount-usd = ${ $amount }
 telegram-amount-usd-thousands = ${ $amount }K
 telegram-amount-usd-millions = ${ $amount }M
@@ -353,7 +353,7 @@ telegram-duration-hours-minutes = { $hours } Std. { $minutes } Min.
 telegram-duration-days = { $days } T.
 telegram-duration-days-hours = { $days } T. { $hours } Std.
 telegram-pnl = { $sol } { -sol } ({ $percent }%)
-telegram-amount-sol = { $amount } { -sol }
+telegram-amount-native = { $amount } { -sol }
 telegram-error-line = Fehler: { $detail }
 telegram-ai-reasoning =
     <b>LLM-Analyse</b>

@@ -321,7 +321,7 @@ telegram-update-how-installer = डेस्कटॉप इंस्टॉल�
 telegram-value-unknown = अज्ञात
 telegram-value-na = लागू नहीं
 telegram-percent-value = { $percent }%
-telegram-price-sol = { $price } { -sol }
+telegram-price-native = { $price } { -sol }
 telegram-amount-usd = ${ $amount }
 telegram-amount-usd-thousands = ${ $amount }K
 telegram-amount-usd-millions = ${ $amount }M
@@ -345,7 +345,7 @@ telegram-duration-days-hours =
        *[other] { $hours } घंटे
     }
 telegram-pnl = { $sol } { -sol } ({ $percent }%)
-telegram-amount-sol = { $amount } { -sol }
+telegram-amount-native = { $amount } { -sol }
 telegram-error-line = त्रुटि: { $detail }
 telegram-ai-reasoning =
     <b>LLM विश्लेषण</b>

@@ -39,7 +39,6 @@ pub struct DcaCalculations {
     pub minutes_since_last: Option<i64>,
     pub pnl_pct: f64,
     pub required_drop_pct: f64,
-    #[serde(rename = "dca_amount_sol")]
     pub dca_amount_native: f64,
     pub entry_price: f64,
     pub current_price: f64,

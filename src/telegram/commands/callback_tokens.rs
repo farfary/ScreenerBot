@@ -143,7 +143,7 @@ pub(super) async fn send_tokens_page(
 
         let price = if token.price_sol > 0.0 {
             nested_arg(
-                UiText::new(ids::TELEGRAM_PRICE_SOL)
+                UiText::new(ids::TELEGRAM_PRICE_NATIVE)
                     .arg("price", formatters::price_arg(token.price_sol)),
             )
         } else {

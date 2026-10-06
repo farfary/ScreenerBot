@@ -14,8 +14,8 @@ function sizeText(task) {
 }
 
 function targetRange(task) {
-  const min = task.min_target_trade_sol;
-  const max = task.max_target_trade_sol;
+  const min = task.min_target_trade_native;
+  const max = task.max_target_trade_native;
   if (min == null && max == null) return I18n.t("copy-rules-target-any");
   if (max == null) return I18n.t("copy-rules-target-min", { amount: sol(min, 3) });
   if (min == null) return I18n.t("copy-rules-target-max", { amount: sol(max, 3) });
@@ -61,15 +61,15 @@ function ruleTable({ task, effective, traderDefaults, managesExits }, esc) {
 /** Sizing, entry and exit sections for a task-shaped object. */
 export function rulesHtml(context, esc) {
   const { task, effective, managesExits, requireFilter, globalRequireFilter, feePct } = context;
-  const budgetNote = Number.isFinite(Number(task.spent_sol))
+  const budgetNote = Number.isFinite(Number(task.spent_native))
     ? I18n.t("copy-rules-budget-note", {
-        spent: fixed(task.spent_sol, 3),
+        spent: fixed(task.spent_native, 3),
         mode: modeLabel(task.mode),
-        remaining: fixed(task.remaining_budget_sol, 3),
+        remaining: fixed(task.remaining_budget_native, 3),
       })
     : "";
-  const perToken = Number(task.max_sol_per_token);
-  const perTrade = Number(task.max_sol_per_trade);
+  const perToken = Number(task.max_native_per_token);
+  const perTrade = Number(task.max_native_per_trade);
   const sizing = definitionRows(
     [
       [I18n.t("copy-rules-copy-size"), sizeText(task)],
@@ -83,7 +83,7 @@ export function rulesHtml(context, esc) {
             })
           : "",
       ],
-      [I18n.t("copy-field-total-budget"), sol(task.total_budget_sol, 3), budgetNote],
+      [I18n.t("copy-field-total-budget"), sol(task.total_budget_native, 3), budgetNote],
       [I18n.t("copy-field-slippage"), pct(task.slippage_pct, 1)],
     ],
     esc

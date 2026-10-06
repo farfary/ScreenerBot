@@ -10,7 +10,7 @@ use crate::config::with_config;
 use crate::i18n::{ids, UiArg, UiText};
 use crate::native_price;
 use crate::positions;
-use crate::telegram::formatters::{format_duration, format_mint_display, format_sol};
+use crate::telegram::formatters::{format_duration, format_mint_display, format_native};
 use crate::telegram::text::{tg, tg_escape, tg_id, with_icon};
 use crate::version::VERSION;
 
@@ -80,7 +80,7 @@ pub async fn handle_positions_command() -> String {
 
     for (_i, pos) in positions.iter().take(10).enumerate() {
         let pnl_pct = pos.unrealized_pnl_percent.unwrap_or_default();
-        let pnl_sol = pos.unrealized_pnl.unwrap_or_default();
+        let pnl_native = pos.unrealized_pnl.unwrap_or_default();
         let pnl_emoji = if pnl_pct >= 0.0 { "🟢" } else { "🔴" };
         let sign = if pnl_pct >= 0.0 { "+" } else { "" };
         // Count characters, not bytes: symbols may be multibyte.
@@ -96,14 +96,14 @@ pub async fn handle_positions_command() -> String {
                 .arg("symbol", UiArg::Text(symbol))
                 .arg(
                     "pnl_sol",
-                    UiArg::Text(format!("{sign}{}", format_sol(pnl_sol))),
+                    UiArg::Text(format!("{sign}{}", format_native(pnl_native))),
                 )
                 .arg("pnl_pct", UiArg::Text(format!("{sign}{pnl_pct:.1}")))),
         ));
         response.push('\n');
 
         total_invested += pos.total_size_native;
-        total_pnl += pnl_sol;
+        total_pnl += pnl_native;
     }
 
     if positions.len() > 10 {
@@ -116,10 +116,10 @@ pub async fn handle_positions_command() -> String {
     let sign = if total_pnl >= 0.0 { "+" } else { "" };
     response.push('\n');
     response.push_str(&tg(&UiText::new(ids::TELEGRAM_POSITIONS_SUMMARY)
-        .arg("invested", UiArg::Text(format_sol(total_invested)))
+        .arg("invested", UiArg::Text(format_native(total_invested)))
         .arg(
             "pnl",
-            UiArg::Text(format!("{sign}{}", format_sol(total_pnl))),
+            UiArg::Text(format!("{sign}{}", format_native(total_pnl))),
         )));
 
     response
@@ -132,20 +132,20 @@ pub async fn handle_balance_command() -> String {
         Err(e) => return with_icon("❌", &tg_escape(&e.to_string())),
     };
 
-    let sol_balance = match get_sol_balance(&wallet_address).await {
+    let native_balance = match get_sol_balance(&wallet_address).await {
         Ok(balance) => balance,
         Err(e) => return with_icon("❌", &tg_escape(&e.to_string())),
     };
 
-    let sol_price_usd = native_price::get_native_price();
-    let usd_value = sol_balance * sol_price_usd;
+    let native_price_usd = native_price::get_native_price();
+    let usd_value = native_balance * native_price_usd;
 
     format!(
         "{}\n\n<a href=\"https://solscan.io/account/{}\">{}</a>",
         with_icon(
             "💰",
             &tg(&UiText::new(ids::TELEGRAM_BALANCE_BODY)
-                .arg("sol", UiArg::Text(format_sol(sol_balance)))
+                .arg("sol", UiArg::Text(format_native(native_balance)))
                 .arg("usd", UiArg::Usd(format!("{usd_value:.2}")))),
         ),
         wallet_address,
@@ -174,10 +174,10 @@ pub async fn handle_stats_command() -> String {
             "📈",
             &tg(&UiText::new(ids::TELEGRAM_STATS_BODY)
                 .arg("positions", UiArg::Text(positions.len().to_string()))
-                .arg("invested", UiArg::Text(format_sol(total_invested)))
+                .arg("invested", UiArg::Text(format_native(total_invested)))
                 .arg(
                     "pnl",
-                    UiArg::Text(format!("{sign}{}", format_sol(total_pnl)))
+                    UiArg::Text(format!("{sign}{}", format_native(total_pnl)))
                 )),
         )
     )

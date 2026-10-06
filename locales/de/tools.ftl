@@ -457,19 +457,19 @@ tools-generator-exported = Wallets exportiert – sicher aufbewahren
 
 tools-consolidation-summary-title = Zusammenfassung
 tools-consolidation-stat-wallets = Sub-Wallets
-tools-consolidation-stat-sol = { -sol } gesamt
+tools-consolidation-stat-native = { -sol } gesamt
 tools-consolidation-stat-tokens = Token-Typen
 tools-consolidation-stat-rent = Zurückholbare Miete
 tools-consolidation-wallets-title = Wallets
 tools-consolidation-loading-wallets = Wallets werden geladen...
 tools-consolidation-loading-data = Wallet-Daten werden geladen...
-tools-consolidation-action-transfer-sol = { -sol } übertragen
+tools-consolidation-action-transfer-native = { -sol } übertragen
 tools-consolidation-action-transfer-tokens = Alle Tokens übertragen
 tools-consolidation-action-cleanup = ATAs bereinigen
 tools-consolidation-action-transferring = Wird übertragen...
 tools-consolidation-column-name = Name
 tools-consolidation-column-address = Adresse
-tools-consolidation-column-sol = { -sol }-Guthaben
+tools-consolidation-column-native = { -sol }-Guthaben
 tools-consolidation-column-tokens = Tokens
 tools-consolidation-column-atas = Leere ATAs
 tools-consolidation-empty = Keine Sub-Wallets gefunden
@@ -484,7 +484,7 @@ tools-consolidation-selection-totals =
         [one] { $atas } leeres ATA
        *[other] { $atas } leere ATAs
     }
-tools-consolidation-transferred-sol = { $amount } an die Haupt-Wallet übertragen
+tools-consolidation-transferred-native = { $amount } an die Haupt-Wallet übertragen
 tools-consolidation-transferred-tokens =
     { $count ->
         [one] { $count } Token an die Haupt-Wallet übertragen
@@ -589,7 +589,7 @@ tools-multi-sell-close-atas-hint = Ca. 0,002 { -sol } pro ATA zurückholen
 tools-multi-sell-wallets-title = Wallets mit Token
 tools-multi-sell-empty = Keine Sub-Wallet hält diesen Token
 tools-multi-sell-column-tokens = Tokens
-tools-multi-sell-column-sol = { -sol }-Guthaben
+tools-multi-sell-column-native = { -sol }-Guthaben
 tools-multi-sell-column-topup = Benötigt Aufladung
 tools-multi-sell-none-selected = Keine Wallets ausgewählt
 tools-multi-sell-select-required = Bitte wählen Sie mindestens eine Wallet aus

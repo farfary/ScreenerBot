@@ -308,8 +308,8 @@ export function createTraderControls({
     }
 
     if (value) {
-      const currentLoss = Utils.formatSol(data.current_loss_sol, { suffix: "", fallback: "—" });
-      const limitSol = Utils.formatSol(data.limit_sol, { fallback: "—" });
+      const currentLoss = Utils.formatSol(data.current_loss_native, { suffix: "", fallback: "—" });
+      const limitSol = Utils.formatSol(data.limit_native, { fallback: "—" });
       value.textContent = `${currentLoss} / ${limitSol}`;
     }
 

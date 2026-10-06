@@ -23,9 +23,9 @@ struct TradeResponse {
     #[serde(skip_serializing_if = "Option::is_none")]
     position_id: Option<String>,
     #[serde(skip_serializing_if = "Option::is_none")]
-    executed_size_sol: Option<f64>,
+    executed_size_native: Option<f64>,
     #[serde(skip_serializing_if = "Option::is_none")]
-    executed_price_sol: Option<f64>,
+    executed_price_native: Option<f64>,
     message: String,
 }
 
@@ -48,8 +48,8 @@ fn finish(
             mint,
             signature: trade.tx_signature,
             position_id: trade.position_id,
-            executed_size_sol: trade.executed_size_native,
-            executed_price_sol: trade.executed_price_native,
+            executed_size_native: trade.executed_size_native,
+            executed_price_native: trade.executed_price_native,
             message,
         })),
         Ok(trade) => ToolResult::error(format!(
@@ -63,11 +63,11 @@ fn finish(
 /// Agent trades are capped at the configured trade size: an agent can size down,
 /// never past what the owner set the auto trader to risk per trade.
 fn checked_size(
-    size_sol: Option<f64>,
-    default_sol: f64,
+    size_native: Option<f64>,
+    default_native: f64,
 ) -> Result<f64, crate::agent_control::Error> {
     let cap = with_config(|cfg| cfg.trader.trade_size_sol);
-    let size = size_sol.unwrap_or(default_sol);
+    let size = size_native.unwrap_or(default_native);
     if !size.is_finite() || size <= 0.0 {
         return Err(crate::agent_control::Error::InvalidParameters {
             detail: "Amount must be greater than 0".to_owned(),
@@ -90,10 +90,11 @@ fn checked_size(
 pub struct BuyTokenTool;
 
 #[derive(Deserialize)]
+#[serde(deny_unknown_fields)]
 struct BuyTokenParams {
     mint_address: String,
     #[serde(default)]
-    amount_sol: Option<f64>,
+    amount_native: Option<f64>,
     #[serde(default)]
     management: Option<PositionManagement>,
     #[serde(default)]
@@ -115,7 +116,7 @@ impl Tool for BuyTokenTool {
                 "type": "object",
                 "properties": {
                     "mint_address": { "type": "string", "description": "Token mint address to buy" },
-                    "amount_sol": {
+                    "amount_native": {
                         "type": "number",
                         "description": "SOL to spend. Defaults to trader.trade_size_sol, which is also the maximum."
                     },
@@ -139,7 +140,7 @@ impl Tool for BuyTokenTool {
             Err(e) => return ToolResult::error(format!("Invalid parameters: {e}")),
         };
         let size = match checked_size(
-            params.amount_sol,
+            params.amount_native,
             with_config(|cfg| cfg.trader.trade_size_sol),
         ) {
             Ok(size) => size,
@@ -178,10 +179,11 @@ impl Tool for BuyTokenTool {
 pub struct AddToPositionTool;
 
 #[derive(Deserialize)]
+#[serde(deny_unknown_fields)]
 struct AddToPositionParams {
     mint_address: String,
     #[serde(default)]
-    amount_sol: Option<f64>,
+    amount_native: Option<f64>,
     #[serde(default)]
     slippage_pct: Option<f64>,
 }
@@ -200,7 +202,7 @@ impl Tool for AddToPositionTool {
                 "type": "object",
                 "properties": {
                     "mint_address": { "type": "string", "description": "Mint of the open position" },
-                    "amount_sol": {
+                    "amount_native": {
                         "type": "number",
                         "description": "SOL to add. Defaults to trader.trade_size_sol * trader.dca_size_percentage / 100."
                     },
@@ -220,7 +222,7 @@ impl Tool for AddToPositionTool {
         };
         let dca_default =
             with_config(|cfg| cfg.trader.trade_size_sol * (cfg.trader.dca_size_percentage / 100.0));
-        let size = match checked_size(params.amount_sol, dca_default) {
+        let size = match checked_size(params.amount_native, dca_default) {
             Ok(size) => size,
             Err(crate::agent_control::Error::InvalidParameters { detail }) => {
                 return ToolResult::error(detail)
@@ -374,5 +376,29 @@ impl Tool for ClosePositionTool {
             return ToolResult::error(format!("Position {} is already closed", params.position_id));
         }
         sell(position.mint, None, params.slippage_pct).await
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::{AddToPositionParams, BuyTokenParams};
+    use serde_json::json;
+
+    #[test]
+    fn trade_size_params_reject_unknown_fields() {
+        let mint = "So11111111111111111111111111111111111111112";
+        assert!(serde_json::from_value::<BuyTokenParams>(
+            json!({ "mint_address": mint, "amount_sol": 1.0 })
+        )
+        .is_err());
+        assert!(serde_json::from_value::<AddToPositionParams>(
+            json!({ "mint_address": mint, "amount_sol": 1.0 })
+        )
+        .is_err());
+
+        let buy: BuyTokenParams =
+            serde_json::from_value(json!({ "mint_address": mint, "amount_native": 0.5 }))
+                .expect("buy params");
+        assert_eq!(buy.amount_native, Some(0.5));
     }
 }

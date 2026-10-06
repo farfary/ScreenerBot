@@ -76,7 +76,7 @@ transactions-col-signature = Firma
 transactions-col-type = Tipo
 transactions-col-direction = Dirección
 transactions-col-status = Estado
-transactions-col-sol-delta = Δ { -sol }
+transactions-col-native-delta = Δ { -sol }
 transactions-col-fees = Comisiones ({ -sol })
 transactions-col-token = Token
 transactions-col-router = Enrutador
@@ -127,7 +127,7 @@ transactions-dialog-metric-effective-received = Recibido efectivo
 transactions-dialog-metric-effective-spent = Gastado efectivo
 transactions-dialog-metric-network-fee = Comisión de red
 transactions-dialog-metric-estimated-pnl = P&L estimado
-transactions-dialog-metric-net-sol-change = Variación neta de { -sol }
+transactions-dialog-metric-net-native-change = Variación neta de { -sol }
 transactions-dialog-route-title = Ruta y activos
 transactions-dialog-route-router = Enrutador
 transactions-dialog-route-input-asset = Activo de entrada
@@ -147,11 +147,11 @@ transactions-dialog-tech-token-decimals = Decimales del token
 
 ## Transaction details dialog: balances, instructions, logs, ATA and raw tabs
 
-transactions-dialog-balances-sol-title = Variaciones de saldo de { -sol }
-transactions-dialog-balances-sol-empty = Sin variaciones de saldo de { -sol }
+transactions-dialog-balances-native-title = Variaciones de saldo de { -sol }
+transactions-dialog-balances-native-empty = Sin variaciones de saldo de { -sol }
 transactions-dialog-balances-token-title = Variaciones de saldo de tokens
 transactions-dialog-balances-token-empty = Sin variaciones de saldo de tokens
-transactions-dialog-balances-net-sol = Variación neta de { -sol }
+transactions-dialog-balances-net-native = Variación neta de { -sol }
 transactions-dialog-balances-fee = Comisión de transacción
 transactions-dialog-col-account = Cuenta
 transactions-dialog-col-token = Token

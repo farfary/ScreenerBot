@@ -349,7 +349,7 @@ telegram-update-how-installer = نصب‌کننده دسکتاپ باید یک �
 telegram-value-unknown = نامشخص
 telegram-value-na = ندارد
 telegram-percent-value = { $percent }%
-telegram-price-sol = { $price } { -sol }
+telegram-price-native = { $price } { -sol }
 telegram-amount-usd = ${ $amount }
 telegram-amount-usd-thousands = ${ $amount }K
 telegram-amount-usd-millions = ${ $amount }M
@@ -361,7 +361,7 @@ telegram-duration-hours-minutes = { $hours } ساعت و { $minutes } دقیقه
 telegram-duration-days = { $days } روز
 telegram-duration-days-hours = { $days } روز و { $hours } ساعت
 telegram-pnl = { $sol } { -sol } ({ $percent }%)
-telegram-amount-sol = { $amount } { -sol }
+telegram-amount-native = { $amount } { -sol }
 telegram-error-line = خطا: { $detail }
 telegram-ai-reasoning =
     <b>تحلیل LLM</b>

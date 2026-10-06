@@ -26,7 +26,6 @@ pub struct TraderStats {
     // Live exposure (not window-bound).
     pub open_positions_count: usize,
     pub max_open_positions: usize,
-    #[serde(rename = "locked_sol")]
     pub locked_native: f64,
 
     // Trade counts.
@@ -38,16 +37,11 @@ pub struct TraderStats {
     pub excluded_untrusted: usize,
 
     // Realized money, in SOL — the single monetary unit.
-    #[serde(rename = "total_pnl_sol")]
     pub total_pnl_native: f64,
-    #[serde(rename = "gross_profit_sol")]
     pub gross_profit_native: f64,
-    #[serde(rename = "gross_loss_sol")]
     pub gross_loss_native: f64,
     pub profit_factor: Option<f64>,
-    #[serde(rename = "expectancy_sol")]
     pub expectancy_native: Option<f64>,
-    #[serde(rename = "max_drawdown_sol")]
     pub max_drawdown_native: f64,
 
     // Quality.
@@ -71,7 +65,6 @@ pub struct TraderStats {
 pub struct DailyPnlPoint {
     /// UTC calendar day, `YYYY-MM-DD`.
     pub date: String,
-    #[serde(rename = "net_pnl_sol")]
     pub net_pnl_native: f64,
     pub trades: usize,
 }
@@ -82,7 +75,6 @@ pub struct ExitBreakdown {
     pub count: usize,
     pub avg_profit_pct: f64,
     /// Realized SOL attributable to this exit reason.
-    #[serde(rename = "net_pnl_sol")]
     pub net_pnl_native: f64,
 }
 

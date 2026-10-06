@@ -448,19 +448,19 @@ tools-generator-exported = Dompet diekspor - simpan dengan aman
 
 tools-consolidation-summary-title = Ringkasan
 tools-consolidation-stat-wallets = Sub-dompet
-tools-consolidation-stat-sol = Total { -sol }
+tools-consolidation-stat-native = Total { -sol }
 tools-consolidation-stat-tokens = Jenis Token
 tools-consolidation-stat-rent = Rent yang Dapat Diklaim
 tools-consolidation-wallets-title = Dompet
 tools-consolidation-loading-wallets = Memuat dompet...
 tools-consolidation-loading-data = Memuat data dompet...
-tools-consolidation-action-transfer-sol = Transfer { -sol }
+tools-consolidation-action-transfer-native = Transfer { -sol }
 tools-consolidation-action-transfer-tokens = Transfer Semua Token
 tools-consolidation-action-cleanup = Bersihkan ATA
 tools-consolidation-action-transferring = Mentransfer...
 tools-consolidation-column-name = Nama
 tools-consolidation-column-address = Alamat
-tools-consolidation-column-sol = Saldo { -sol }
+tools-consolidation-column-native = Saldo { -sol }
 tools-consolidation-column-tokens = Token
 tools-consolidation-column-atas = ATA Kosong
 tools-consolidation-empty = Sub-dompet tidak ditemukan
@@ -473,7 +473,7 @@ tools-consolidation-selection-totals =
     } | { $atas ->
        *[other] { $atas } ATA kosong
     }
-tools-consolidation-transferred-sol = { $amount } ditransfer ke dompet utama
+tools-consolidation-transferred-native = { $amount } ditransfer ke dompet utama
 tools-consolidation-transferred-tokens =
     { $count ->
        *[other] { $count } token ditransfer ke dompet utama
@@ -575,7 +575,7 @@ tools-multi-sell-close-atas-hint = Klaim kembali ~0.002 { -sol } per ATA
 tools-multi-sell-wallets-title = Dompet dengan Token
 tools-multi-sell-empty = Tidak ada sub-dompet yang memiliki token ini
 tools-multi-sell-column-tokens = Token
-tools-multi-sell-column-sol = Saldo { -sol }
+tools-multi-sell-column-native = Saldo { -sol }
 tools-multi-sell-column-topup = Perlu Isi Ulang
 tools-multi-sell-none-selected = Belum ada dompet dipilih
 tools-multi-sell-select-required = Pilih setidaknya satu dompet

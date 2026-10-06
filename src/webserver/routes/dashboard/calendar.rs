@@ -77,26 +77,26 @@ pub async fn get_portfolio_calendar(
     for day in 1..=days_in_month {
         let date = format!("{year:04}-{month:02}-{day:02}");
         let stats = stats_by_day.get(&date);
-        let net_pnl_sol = stats.map(|s| s.net_pnl_native).unwrap_or(0.0);
+        let net_pnl_native = stats.map(|s| s.net_pnl_native).unwrap_or(0.0);
         let profit_native = stats.map(|s| s.profit_native).unwrap_or(0.0);
         let loss_native = stats.map(|s| s.loss_native).unwrap_or(0.0);
         let trades = stats.map(|s| s.trades).unwrap_or(0);
         let wins = stats.map(|s| s.wins).unwrap_or(0);
         let portfolio_value_native = balances_by_day.get(&date).copied();
 
-        month_net_pnl_native += net_pnl_sol;
+        month_net_pnl_native += net_pnl_native;
         month_trades += trades;
 
         days.push(CalendarDay {
             day,
             date,
-            net_pnl_sol,
+            net_pnl_native,
             profit_native,
             loss_native,
             trades,
             wins,
             portfolio_value_native,
-            has_data: trades > 0 || net_pnl_sol != 0.0,
+            has_data: trades > 0 || net_pnl_native != 0.0,
         });
     }
 

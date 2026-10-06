@@ -464,19 +464,19 @@ tools-generator-exported = Cüzdanlar dışa aktarıldı - güvenle saklayın
 
 tools-consolidation-summary-title = Özet
 tools-consolidation-stat-wallets = Alt cüzdanlar
-tools-consolidation-stat-sol = Toplam { -sol }
+tools-consolidation-stat-native = Toplam { -sol }
 tools-consolidation-stat-tokens = Token Türleri
 tools-consolidation-stat-rent = Geri Alınabilir Kira
 tools-consolidation-wallets-title = Cüzdanlar
 tools-consolidation-loading-wallets = Cüzdanlar yükleniyor...
 tools-consolidation-loading-data = Cüzdan verileri yükleniyor...
-tools-consolidation-action-transfer-sol = { -sol } Aktar
+tools-consolidation-action-transfer-native = { -sol } Aktar
 tools-consolidation-action-transfer-tokens = Tüm Tokenları Aktar
 tools-consolidation-action-cleanup = ATA'ları Temizle
 tools-consolidation-action-transferring = Aktarılıyor...
 tools-consolidation-column-name = Ad
 tools-consolidation-column-address = Adres
-tools-consolidation-column-sol = { -sol } Bakiyesi
+tools-consolidation-column-native = { -sol } Bakiyesi
 tools-consolidation-column-tokens = Tokenlar
 tools-consolidation-column-atas = Boş ATA'lar
 tools-consolidation-empty = Alt cüzdan bulunamadı
@@ -491,7 +491,7 @@ tools-consolidation-selection-totals =
         [one] { $atas } boş ATA
        *[other] { $atas } boş ATA
     }
-tools-consolidation-transferred-sol = { $amount } ana cüzdana aktarıldı
+tools-consolidation-transferred-native = { $amount } ana cüzdana aktarıldı
 tools-consolidation-transferred-tokens =
     { $count ->
         [one] Ana cüzdana aktarılan token: { $count }
@@ -597,7 +597,7 @@ tools-multi-sell-close-atas-hint = ATA başına ~0,002 { -sol } geri alın
 tools-multi-sell-wallets-title = Tokenı Tutan Cüzdanlar
 tools-multi-sell-empty = Hiçbir alt cüzdan bu tokenı tutmuyor
 tools-multi-sell-column-tokens = Tokenlar
-tools-multi-sell-column-sol = { -sol } Bakiyesi
+tools-multi-sell-column-native = { -sol } Bakiyesi
 tools-multi-sell-column-topup = Bakiye Yükleme Gerekli
 tools-multi-sell-none-selected = Cüzdan seçilmedi
 tools-multi-sell-select-required = Lütfen en az bir cüzdan seçin

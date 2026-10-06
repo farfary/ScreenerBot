@@ -347,7 +347,7 @@ telegram-update-how-installer = デスクトップのインストーラーを1�
 telegram-value-unknown = 不明
 telegram-value-na = 該当なし
 telegram-percent-value = { $percent }%
-telegram-price-sol = { $price } { -sol }
+telegram-price-native = { $price } { -sol }
 telegram-amount-usd = ${ $amount }
 telegram-amount-usd-thousands = ${ $amount }K
 telegram-amount-usd-millions = ${ $amount }M
@@ -359,7 +359,7 @@ telegram-duration-hours-minutes = { $hours }時間{ $minutes }分
 telegram-duration-days = { $days }日
 telegram-duration-days-hours = { $days }日{ $hours }時間
 telegram-pnl = { $sol } { -sol }（{ $percent }%）
-telegram-amount-sol = { $amount } { -sol }
+telegram-amount-native = { $amount } { -sol }
 telegram-error-line = エラー: { $detail }
 telegram-ai-reasoning =
     <b>LLM 分析</b>

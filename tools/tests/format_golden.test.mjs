@@ -207,9 +207,9 @@ test("UiText arguments use the formatters", () => {
   const { context } = load("en-u-nu-latn");
   const { I18n } = context;
   vm.runInContext(FORMAT_JS.replace(/^export /gm, ""), context);
-  // format-sol-amount is the only catalog message carrying an $amount placeable.
+  // format-native-amount is the only catalog message carrying an $amount placeable.
   const render = (type, value) =>
-    I18n.text({ id: "format-sol-amount", args: { amount: { type, value } } }).replace(
+    I18n.text({ id: "format-native-amount", args: { amount: { type, value } } }).replace(
       /[\u2068\u2069]/g,
       ""
     );

@@ -76,7 +76,7 @@ transactions-col-signature = 서명
 transactions-col-type = 유형
 transactions-col-direction = 방향
 transactions-col-status = 상태
-transactions-col-sol-delta = Δ { -sol }
+transactions-col-native-delta = Δ { -sol }
 transactions-col-fees = 수수료 ({ -sol })
 transactions-col-token = 토큰
 transactions-col-router = 라우터
@@ -127,7 +127,7 @@ transactions-dialog-metric-effective-received = 실수령액
 transactions-dialog-metric-effective-spent = 실지출액
 transactions-dialog-metric-network-fee = 네트워크 수수료
 transactions-dialog-metric-estimated-pnl = 추정 손익
-transactions-dialog-metric-net-sol-change = { -sol } 순변동
+transactions-dialog-metric-net-native-change = { -sol } 순변동
 transactions-dialog-route-title = 경로 및 자산
 transactions-dialog-route-router = 라우터
 transactions-dialog-route-input-asset = 입력 자산
@@ -147,11 +147,11 @@ transactions-dialog-tech-token-decimals = 토큰 소수 자릿수
 
 ## Transaction details dialog: balances, instructions, logs, ATA and raw tabs
 
-transactions-dialog-balances-sol-title = { -sol } 잔액 변동
-transactions-dialog-balances-sol-empty = { -sol } 잔액 변동 없음
+transactions-dialog-balances-native-title = { -sol } 잔액 변동
+transactions-dialog-balances-native-empty = { -sol } 잔액 변동 없음
 transactions-dialog-balances-token-title = 토큰 잔액 변동
 transactions-dialog-balances-token-empty = 토큰 잔액 변동 없음
-transactions-dialog-balances-net-sol = { -sol } 순변동
+transactions-dialog-balances-net-native = { -sol } 순변동
 transactions-dialog-balances-fee = 트랜잭션 수수료
 transactions-dialog-col-account = 계정
 transactions-dialog-col-token = 토큰

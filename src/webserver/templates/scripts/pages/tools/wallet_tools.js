@@ -1113,7 +1113,7 @@ function renderWalletConsolidationTool(container, actionsContainer) {
             </div>
             <div class="wc-summary-item">
               <span class="wc-summary-value" id="wc-total-sol">—</span>
-              <span class="wc-summary-label" data-l10n-id="tools-consolidation-stat-sol"></span>
+              <span class="wc-summary-label" data-l10n-id="tools-consolidation-stat-native"></span>
             </div>
             <div class="wc-summary-item">
               <span class="wc-summary-value" id="wc-total-tokens">—</span>
@@ -1157,7 +1157,7 @@ function renderWalletConsolidationTool(container, actionsContainer) {
 
   actionsContainer.innerHTML = `
     <button class="btn" id="wc-transfer-sol-btn" disabled>
-      <i class="icon-arrow-right"></i> <span data-l10n-id="tools-consolidation-action-transfer-sol"></span>
+      <i class="icon-arrow-right"></i> <span data-l10n-id="tools-consolidation-action-transfer-native"></span>
     </button>
     <button class="btn" id="wc-transfer-tokens-btn" disabled>
       <i class="icon-send"></i> <span data-l10n-id="tools-consolidation-action-transfer-tokens"></span>
@@ -1246,7 +1246,7 @@ async function loadConsolidationData() {
             <th><input type="checkbox" id="wc-check-all" /></th>
             <th data-l10n-id="tools-consolidation-column-name"></th>
             <th data-l10n-id="tools-consolidation-column-address"></th>
-            <th data-l10n-id="tools-consolidation-column-sol"></th>
+            <th data-l10n-id="tools-consolidation-column-native"></th>
             <th data-l10n-id="tools-consolidation-column-tokens"></th>
             <th data-l10n-id="tools-consolidation-column-atas"></th>
           </tr>
@@ -1380,7 +1380,7 @@ async function handleConsolidateSOL() {
 
     const result = await response.json();
     Utils.showToast(
-      I18n.t("tools-consolidation-transferred-sol", {
+      I18n.t("tools-consolidation-transferred-native", {
         amount: Utils.formatSol(result.total_transferred),
       }),
       "success"
@@ -1394,7 +1394,7 @@ async function handleConsolidateSOL() {
     setButton(
       transferSolBtn,
       "icon-arrow-right",
-      I18n.t("tools-consolidation-action-transfer-sol")
+      I18n.t("tools-consolidation-action-transfer-native")
     );
   }
 }

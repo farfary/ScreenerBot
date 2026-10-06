@@ -80,7 +80,7 @@ strategies-value-candles =
 
 # Text written beside a numeric input.
 strategies-unit-percent = %
-strategies-unit-sol = { -sol }
+strategies-unit-native = { -sol }
 strategies-unit-hours = h
 strategies-unit-multiplier = ×
 

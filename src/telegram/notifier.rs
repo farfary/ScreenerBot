@@ -170,7 +170,7 @@ impl TelegramNotifier {
                 token_symbol,
                 token_mint,
                 trade_type,
-                amount_sol,
+                amount_native,
                 wallet,
             } => {
                 let is_buy = trade_type == "buy";
@@ -179,7 +179,7 @@ impl TelegramNotifier {
                 } else {
                     ids::TELEGRAM_NOTIFY_ALERT_SOLD
                 })
-                .arg("amount", text_arg(format!("{amount_sol:.4}")));
+                .arg("amount", text_arg(format!("{amount_native:.4}")));
                 let rows = [
                     tg(&UiText::new(ids::TELEGRAM_NOTIFY_ALERT_TOKEN)
                         .arg("symbol", text_arg(token_symbol.as_str()))),
@@ -204,7 +204,7 @@ impl TelegramNotifier {
             NotificationType::PositionOpened {
                 token_symbol,
                 token_mint,
-                amount_sol,
+                amount_native,
                 entry_price,
                 ai_reasoning,
             } => {
@@ -218,7 +218,7 @@ impl TelegramNotifier {
                 messages::msg_position_opened(
                     token_symbol,
                     token_mint,
-                    *amount_sol,
+                    *amount_native,
                     *entry_price,
                     0.0, // tokens not provided in basic notification
                     None,
@@ -228,7 +228,7 @@ impl TelegramNotifier {
 
             NotificationType::PositionClosed {
                 token_symbol,
-                pnl_sol,
+                pnl_native,
                 pnl_percent,
                 exit_reason,
                 entry_price,
@@ -248,7 +248,7 @@ impl TelegramNotifier {
 
                 messages::msg_position_closed(
                     token_symbol,
-                    *pnl_sol,
+                    *pnl_native,
                     *pnl_percent,
                     *entry_price,
                     *exit_price,
@@ -263,28 +263,28 @@ impl TelegramNotifier {
             NotificationType::PartialExit {
                 token_symbol,
                 exit_percent,
-                pnl_sol,
+                pnl_native,
                 remaining_percent,
                 ..
             } => messages::msg_partial_exit(
                 token_symbol,
                 *exit_percent,
-                *pnl_sol,
+                *pnl_native,
                 0.0, // pnl_pct not provided
-                0.0, // received_sol not provided
+                0.0, // received_native not provided
                 *remaining_percent,
             ),
 
             NotificationType::DcaExecuted {
                 token_symbol,
-                dca_amount_sol,
-                total_invested_sol,
+                dca_amount_native,
+                total_invested_native,
                 dca_count,
                 ..
             } => messages::msg_dca_executed(
                 token_symbol,
-                *dca_amount_sol,
-                *total_invested_sol,
+                *dca_amount_native,
+                *total_invested_native,
                 *dca_count,
                 0.0, // new_avg_price not provided
             ),
@@ -316,14 +316,14 @@ impl TelegramNotifier {
                 total_trades,
                 winning_trades,
                 losing_trades,
-                total_pnl_sol,
+                total_pnl_native,
                 open_positions,
             } => messages::msg_daily_summary(
                 date,
                 *total_trades,
                 *winning_trades,
                 *losing_trades,
-                *total_pnl_sol,
+                *total_pnl_native,
                 *open_positions,
             ),
 
@@ -514,8 +514,8 @@ fn should_send_notification(notification: &Notification) -> bool {
     let config = with_config(|c| c.telegram.clone());
 
     match &notification.notification_type {
-        NotificationType::TradeAlert { amount_sol, .. } => {
-            config.notify_trade_alerts && *amount_sol >= config.trade_alert_min_sol
+        NotificationType::TradeAlert { amount_native, .. } => {
+            config.notify_trade_alerts && *amount_native >= config.trade_alert_min_sol
         }
         NotificationType::PositionOpened { .. } => config.notify_position_opened,
         NotificationType::PositionClosed { .. } => config.notify_position_closed,

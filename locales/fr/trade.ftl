@@ -21,7 +21,7 @@ trade-quote-disclaimer = Les prix se mettent à jour en direct depuis la chaîne
 trade-quote-impact-tiny = { "<0.01%" }
 trade-quote-impact-warning = L'impact sur le prix { $impact } dépasse votre slippage max de { $tolerance } % — ce montant déplace le pool. Un montant plus petit est exécuté plus près du prix du marché.
 
-trade-unit-sol = { -sol }
+trade-unit-native = { -sol }
 trade-unit-tokens = tokens
 
 trade-buy-title = Acheter un token

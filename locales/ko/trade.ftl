@@ -31,7 +31,7 @@ trade-quote-impact-warning = 가격 영향({ $impact })이 최대 슬리피지({
 
 ## Units
 
-trade-unit-sol = { -sol }
+trade-unit-native = { -sol }
 trade-unit-tokens = 토큰
 
 ## Actions. Ids are the dialog actions: buy, sell, add.

@@ -21,7 +21,7 @@ trade-quote-disclaimer = Giá được cập nhật trực tiếp từ chuỗi. 
 trade-quote-impact-tiny = { "<0.01%" }
 trade-quote-impact-warning = Tác động giá { $impact } cao hơn mức trượt giá tối đa { $tolerance }% của bạn - quy mô này làm dịch chuyển pool. Số lượng nhỏ hơn sẽ khớp gần giá thị trường hơn.
 
-trade-unit-sol = { -sol }
+trade-unit-native = { -sol }
 trade-unit-tokens = token
 
 trade-buy-title = Mua token

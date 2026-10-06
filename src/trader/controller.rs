@@ -174,9 +174,7 @@ pub fn set_monitor_enabled(monitor: Monitor, enabled: bool) -> Result<(), Error>
 #[derive(Debug, Clone, serde::Serialize)]
 pub struct LossLimitSnapshot {
     pub enabled: bool,
-    #[serde(rename = "limit_sol")]
     pub limit_native: f64,
-    #[serde(rename = "current_loss_sol")]
     pub current_loss_native: f64,
     pub is_limited: bool,
     pub limited_at: Option<chrono::DateTime<chrono::Utc>>,

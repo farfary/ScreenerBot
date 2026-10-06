@@ -347,7 +347,7 @@ telegram-update-how-installer = Memerlukan penginstal desktop dijalankan sekali.
 telegram-value-unknown = Tidak diketahui
 telegram-value-na = T/A
 telegram-percent-value = { $percent }%
-telegram-price-sol = { $price } { -sol }
+telegram-price-native = { $price } { -sol }
 telegram-amount-usd = ${ $amount }
 telegram-amount-usd-thousands = ${ $amount }K
 telegram-amount-usd-millions = ${ $amount }M
@@ -359,7 +359,7 @@ telegram-duration-hours-minutes = { $hours } jam { $minutes } mnt
 telegram-duration-days = { $days } hari
 telegram-duration-days-hours = { $days } hari { $hours } jam
 telegram-pnl = { $sol } { -sol } ({ $percent }%)
-telegram-amount-sol = { $amount } { -sol }
+telegram-amount-native = { $amount } { -sol }
 telegram-error-line = Error: { $detail }
 telegram-ai-reasoning =
     <b>Analisis LLM</b>
