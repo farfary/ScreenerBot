@@ -842,7 +842,7 @@ async function renderTelegramActions(container) {
   try {
     const response = await fetch("/api/telegram/status");
     const data = await response.json();
-    const isConfigured = data.data?.bot_configured;
+    const isConfigured = data.bot_configured;
 
     if (isConfigured) {
       testBtn.disabled = false;

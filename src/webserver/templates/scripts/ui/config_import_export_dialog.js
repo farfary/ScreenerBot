@@ -728,8 +728,10 @@ export class ConfigImportDialog {
   }
 
   _attachEventListeners() {
-    // Close button
     this._closeHandler = () => this._handleCancel();
+    const closeBtn = this.element.querySelector(".config-dialog-close");
+    on(closeBtn, "click", this._closeHandler);
+    on(this.backdrop, "click", this._closeHandler);
 
     // Keyboard
     this._keydownHandler = (e) => {
@@ -742,11 +744,6 @@ export class ConfigImportDialog {
   }
 
   _attachUploadListeners() {
-    const closeBtn = this.element.querySelector(".config-dialog-close");
-    on(closeBtn, "click", this._closeHandler);
-
-    on(this.backdrop, "click", this._closeHandler);
-
     const cancelBtn = this.element.querySelector('[data-action="cancel"]');
     on(cancelBtn, "click", () => this._handleCancel());
 

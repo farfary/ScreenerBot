@@ -70,8 +70,8 @@ const CARD_SPECS = [
   {
     section: "trader",
     fields: [
-      { id: "close-cooldown", key: "close_cooldown_seconds", type: "minutes-to-seconds" },
-      { id: "entry-concurrency", key: "entry_monitor_concurrency", type: "int" },
+      { id: "close-cooldown", key: "position_close_cooldown_minutes", type: "int" },
+      { id: "entry-concurrency", key: "entry_check_concurrency", type: "int" },
     ],
   },
 ];

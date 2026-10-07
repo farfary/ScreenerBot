@@ -129,7 +129,7 @@ export function createFavoritesModule(deps) {
           ${Utils.escapeHtml(beforeShortcut)}<kbd>⌘K</kbd>${Utils.escapeHtml(afterShortcut)}
         </p>
       `;
-      favoritesContainer.appendChild(emptyState);
+      favoritesContainer.parentNode.insertBefore(emptyState, favoritesContainer.nextSibling);
     }
 
     // Reuse the parent page's exact column set (all/passed token list columns).

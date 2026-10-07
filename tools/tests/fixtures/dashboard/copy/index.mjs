@@ -134,8 +134,6 @@ export const views = [
   },
   {
     name: "holdings",
-    fitDefect:
-      "The holdings table's hidden header label is positioned against the page and widens it on a phone",
     click: [TASK_ROW, "#copy-tab-holdings"],
     populated: [{ selector: "#copy-ws-panel .copy-table tbody tr", min: 3 }],
     empty: [{ selector: "#copy-ws-panel .copy-panel-message", text: "No open paper holdings" }],

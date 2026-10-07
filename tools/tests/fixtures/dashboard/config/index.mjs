@@ -52,7 +52,6 @@ export const views = [
         trigger: "#configImportButton",
         dialog: ".config-import-dialog",
         close: ".config-import-dialog .config-dialog-close",
-        defect: "The import dialog close button has no click handler on its first step",
       },
       {
         trigger: "#configResetButton",
@@ -74,7 +73,8 @@ export const views = [
     click: [sectionItem("icon-send")],
     populated: [
       { selector: `${sectionItem("icon-send")}.active`, min: 1 },
-      { selector: "#configCategories #telegram-test-btn", min: 1 },
+      // The status fixture reports a configured bot, so the test button is enabled.
+      { selector: "#configCategories #telegram-test-btn:not(:disabled)", min: 1 },
       { selector: "#configCategories .telegram-auth-section", min: 1 },
     ],
   },

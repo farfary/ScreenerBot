@@ -285,7 +285,7 @@ function createLifecycle() {
       const data = await requestManager.fetch("/api/config", {
         priority: "normal",
       });
-      state.config = data.config;
+      state.config = data;
       const preserveUnsavedEdits =
         options.preserveUnsavedEdits === true && configCards?.hasDirtyCards?.();
 
@@ -405,13 +405,8 @@ function createLifecycle() {
     if (dcaMaxCount) dcaMaxCount.value = trader.dca_max_count || 2;
     if (dcaSize) dcaSize.value = trader.dca_size_percentage || 50;
     if (dcaCooldown) dcaCooldown.value = trader.dca_cooldown_minutes || 30;
-    if (closeCooldown) {
-      const seconds = Number.isFinite(trader.close_cooldown_seconds)
-        ? trader.close_cooldown_seconds
-        : 600;
-      closeCooldown.value = Math.max(0, Math.round(seconds / 60));
-    }
-    if (entryConcurrency) entryConcurrency.value = trader.entry_monitor_concurrency || 3;
+    if (closeCooldown) closeCooldown.value = trader.position_close_cooldown_minutes ?? 15;
+    if (entryConcurrency) entryConcurrency.value = trader.entry_check_concurrency ?? 10;
   }
 
   /**

@@ -147,8 +147,6 @@ export const views = [
       {
         selector: "#favorites-empty-state",
         text: "No Favorites Yet",
-        defect:
-          "The favorites empty state is rendered inside a container the table replaces, so it never shows",
       },
     ],
   },

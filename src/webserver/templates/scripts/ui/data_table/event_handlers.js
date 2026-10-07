@@ -404,36 +404,35 @@ export function applyEventHandlersMixin(DataTable) {
       this._addEventListener(container, "click", handler);
     });
 
-    // Action button click handlers
-    const actionButtons = this.elements.tbody.querySelectorAll(".dt-action-btn[data-action-id]");
-    actionButtons.forEach((btn) => {
-      const handler = (e) => {
-        e.stopPropagation(); // Prevent row click
-        const actionId = btn.dataset.actionId;
-        const td = btn.closest("td");
-        if (td && td.dataset.rowId) {
-          const rowId = td.dataset.rowId;
-          const row = this.state.filteredData.find(
-            (r) => String(r[this.options.rowIdField]) === String(rowId)
-          );
-          if (row) {
-            const columnId = td.dataset.columnId;
-            const column = this.options.columns.find((c) => c.id === columnId);
-            if (column?.actions?.buttons) {
-              const action = column.actions.buttons.find((a) => a.id === actionId);
-              if (action?.onClick) {
-                try {
-                  action.onClick(row, e);
-                } catch (error) {
-                  this._log("error", `Action button handler failed for action ${actionId}`, error);
-                }
+    // Delegate action clicks so rows added after initialization remain interactive.
+    const actionHandler = (e) => {
+      const btn = e.target.closest(".dt-action-btn[data-action-id]");
+      if (!btn || !this.elements.tbody.contains(btn)) return;
+      e.stopPropagation(); // Prevent row click
+      const actionId = btn.dataset.actionId;
+      const td = btn.closest("td");
+      if (td && td.dataset.rowId) {
+        const rowId = td.dataset.rowId;
+        const row = this.state.filteredData.find(
+          (r) => String(r[this.options.rowIdField]) === String(rowId)
+        );
+        if (row) {
+          const columnId = td.dataset.columnId;
+          const column = this.options.columns.find((c) => c.id === columnId);
+          if (column?.actions?.buttons) {
+            const action = column.actions.buttons.find((a) => a.id === actionId);
+            if (action?.onClick) {
+              try {
+                action.onClick(row, e);
+              } catch (error) {
+                this._log("error", `Action button handler failed for action ${actionId}`, error);
               }
             }
           }
         }
-      };
-      this._addEventListener(btn, "click", handler);
-    });
+      }
+    };
+    this._addEventListener(this.elements.tbody, "click", actionHandler);
 
     // Dropdown toggle handlers
     // Shared descriptor so the global menu coordinator treats this table's open
@@ -594,9 +593,10 @@ export function applyEventHandlersMixin(DataTable) {
           return;
         }
         if (e.key === "Escape") {
-          const menu = this._activeActionDropdown?.trigger === trigger
-            ? this._activeActionDropdown.menu
-            : null;
+          const menu =
+            this._activeActionDropdown?.trigger === trigger
+              ? this._activeActionDropdown.menu
+              : null;
           if (menu && menu.classList.contains("open")) {
             closeAllActionDropdowns("escape");
           }
@@ -613,7 +613,8 @@ export function applyEventHandlersMixin(DataTable) {
       const handler = (e) => {
         e.stopPropagation(); // Prevent row click
         const actionId = item.dataset.actionId;
-        const dropdown = item.closest(".dt-actions-dropdown") || this._activeActionDropdown?.dropdown;
+        const dropdown =
+          item.closest(".dt-actions-dropdown") || this._activeActionDropdown?.dropdown;
         const rowId = dropdown?.dataset.rowId;
 
         if (rowId) {
@@ -774,7 +775,7 @@ export function applyEventHandlersMixin(DataTable) {
         if (this.elements.wrapper) {
           this.elements.wrapper.classList.toggle(
             "is-pinned-scrolled",
-            scrollStart(this.elements.scrollContainer) > 0,
+            scrollStart(this.elements.scrollContainer) > 0
           );
         }
       };

@@ -177,6 +177,5 @@ export const views = [
     "general-settings",
     "general-settings-tab",
     5,
-    "Two General Settings inputs are bound to config keys the trader schema does not define, so they receive no label metadata"
   ),
 ];

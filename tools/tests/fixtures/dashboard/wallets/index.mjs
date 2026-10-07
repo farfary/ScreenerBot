@@ -54,11 +54,6 @@ export const endpoints = [
   },
 ];
 
-const known = (check) => ({
-  ...check,
-  defect: "Row action buttons added after the table is created have no click handler",
-});
-
 export const views = [
   {
     name: "main wallet holdings",
@@ -127,7 +122,7 @@ export const views = [
         "archive-modal",
         "archive-modal-close"
       ),
-    ].map(known),
+    ],
   },
   {
     name: "archived wallet row actions",
@@ -144,6 +139,6 @@ export const views = [
         "delete-modal",
         "delete-modal-close"
       ),
-    ].map(known),
+    ],
   },
 ];

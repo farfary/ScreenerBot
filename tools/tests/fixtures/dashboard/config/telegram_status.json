@@ -1,7 +1,7 @@
 {
   "enabled": false,
   "connected": false,
-  "bot_configured": false,
+  "bot_configured": true,
   "totp_configured": false,
   "active_sessions": 0,
   "commands_enabled": true,

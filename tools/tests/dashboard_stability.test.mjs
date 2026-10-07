@@ -253,6 +253,11 @@ describe("dashboard stability", { concurrency: 4 }, () => {
       scenario("renders populated in the dark theme, dialogs open and close", async () => {
         const session = await open(id);
         for (const view of views) await assertPopulated(session.page, view);
+        if (id === "trader") {
+          await session.page.locator('#subTabsContainer [data-tab-id="general-settings"]').click();
+          assert.equal(await session.page.locator("#close-cooldown").inputValue(), "15");
+          assert.equal(await session.page.locator("#entry-concurrency").inputValue(), "10");
+        }
         await assertTheme(session.page, "dark");
         for (const view of views) await assertDialogs(session.page, view);
         await finish(session);
