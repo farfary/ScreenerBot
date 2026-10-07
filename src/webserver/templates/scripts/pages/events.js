@@ -102,7 +102,6 @@ function formatPayloadPreview(value) {
 function createLifecycle() {
   let table = null;
   let poller = null;
-  let ctxRef = null;
   let detailsDialog = null;
 
   const state = {
@@ -307,9 +306,7 @@ function createLifecycle() {
   };
 
   return {
-    init(ctx) {
-      ctxRef = ctx;
-
+    init() {
       if (!detailsDialog) {
         detailsDialog = new EventDetailsDialog();
       }
@@ -511,8 +508,6 @@ function createLifecycle() {
     },
 
     activate(ctx) {
-      ctxRef = ctx;
-
       if (!poller) {
         poller = ctx.managePoller(
           new Poller(() => requestReload("poll", { silent: true, preserveScroll: true }), {
@@ -548,7 +543,6 @@ function createLifecycle() {
         detailsDialog.destroy();
         detailsDialog = null;
       }
-      ctxRef = null;
       state.filters = { ...DEFAULT_FILTERS };
       state.search = "";
       state.hasLoadedOnce = false;

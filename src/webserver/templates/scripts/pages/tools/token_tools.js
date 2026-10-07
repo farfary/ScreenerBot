@@ -334,7 +334,6 @@ function renderHolderWatchContent(container, actionsContainer, config) {
 
 // Token analyzer state
 let taCurrentMint = null;
-let taCurrentTab = "overview";
 let taAnalysisData = null;
 
 function renderTokenAnalyzerTool(container, actionsContainer) {
@@ -512,7 +511,6 @@ async function analyzeToken(mint) {
     // Store data
     taCurrentMint = mint;
     taAnalysisData = data;
-    taCurrentTab = "overview";
 
     // Enable action buttons
     if (refreshBtn) refreshBtn.disabled = false;
@@ -731,8 +729,6 @@ async function handleTaBlacklistClick(e) {
  * Switch between analysis tabs
  */
 function switchTaTab(tabId) {
-  taCurrentTab = tabId;
-
   // Update tab buttons
   const tabs = $$(".ta-tabs .ta-tab");
   tabs.forEach((tab) => {

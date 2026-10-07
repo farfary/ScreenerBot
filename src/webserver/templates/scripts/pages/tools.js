@@ -27,7 +27,7 @@ import {
   renderTokenWatchTool,
   renderTokenAnalyzerTool,
 } from "./tools/token_tools.js";
-import { renderTradeWatcherTool } from "./tools/trading_tools.js";
+import { cleanupTradeWatcher, renderTradeWatcherTool } from "./tools/trading_tools.js";
 import {
   renderBuyMultiWalletsTool,
   renderSellMultiWalletsTool,
@@ -484,6 +484,9 @@ function createLifecycle() {
       // Clean up Multi-Sell resources
       stopMultiSellPolling();
       resetMultiSellUI();
+
+      // Clean up Trade Watcher resources
+      cleanupTradeWatcher();
     },
   };
 }

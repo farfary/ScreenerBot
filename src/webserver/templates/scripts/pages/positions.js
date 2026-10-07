@@ -76,7 +76,6 @@ const JUST_CLOSED_MS = 12000;
 const shortStep = (step) => stepShortLabel(step || "unknown");
 
 const actionMint = (n) => n?.entity_id || n?.metadata?.mint || "";
-const actionStatus = (n) => n?.state?.status || "";
 const parseTs = (v) => {
   const t = v ? Date.parse(v) : NaN;
   return Number.isFinite(t) ? t : NaN;

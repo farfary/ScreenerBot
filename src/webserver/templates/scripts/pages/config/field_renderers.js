@@ -329,7 +329,7 @@ export function renderObjectWithChildren({
   const normalizedSearch = typeof searchTerm === "string" ? searchTerm.trim().toLowerCase() : "";
   const hasSearch = normalizedSearch.length > 0;
 
-  entries.sort(([keyA, metaA], [keyB, metaB]) => {
+  entries.sort(([, metaA], [, metaB]) => {
     return fieldLabel(metaA.key).localeCompare(fieldLabel(metaB.key));
   });
 

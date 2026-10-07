@@ -31,8 +31,6 @@ const WATCH_TYPE_LABELS = Object.freeze({
 // Trade Watcher state
 let twPoolSelector = null;
 let twSelectedPool = null;
-let twWatchesTable = null;
-let twWatchPoller = null;
 
 function renderTradeWatcherTool(container, actionsContainer) {
   const hint = Hints.getHint("tools.tradeWatcher");
@@ -533,14 +531,6 @@ function cleanupTradeWatcher() {
     twPoolSelector.dispose();
     twPoolSelector = null;
   }
-  if (twWatchesTable) {
-    twWatchesTable.dispose();
-    twWatchesTable = null;
-  }
-  if (twWatchPoller) {
-    twWatchPoller.stop();
-    twWatchPoller = null;
-  }
   twSelectedPool = null;
 }
 
@@ -548,4 +538,4 @@ function cleanupTradeWatcher() {
 // Exports
 // =============================================================================
 
-export { renderTradeWatcherTool };
+export { cleanupTradeWatcher, renderTradeWatcherTool };

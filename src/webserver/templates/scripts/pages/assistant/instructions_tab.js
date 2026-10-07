@@ -355,27 +355,6 @@ export function createInstructionsTab({ state, _eventCleanups }) {
   }
 
   /**
-   * Toggle instruction expanded state
-   */
-  function toggleInstructionExpanded(id) {
-    const card = document.querySelector(`.instruction-card[data-id="${id}"]`);
-    if (!card) return;
-
-    const shortContent = card.querySelector(".instruction-content");
-    const fullContent = card.querySelector(".instruction-full-content");
-
-    if (fullContent.style.display === "none") {
-      shortContent.style.display = "none";
-      fullContent.style.display = "block";
-      card.classList.add("instruction-expanded");
-    } else {
-      shortContent.style.display = "block";
-      fullContent.style.display = "none";
-      card.classList.remove("instruction-expanded");
-    }
-  }
-
-  /**
    * Setup drag and drop for instructions
    */
   function setupDragAndDrop() {
