@@ -22,6 +22,8 @@ use crate::utils::get_wallet_address;
 use serde_json::json;
 use tokio::time::{sleep, Duration};
 
+use super::exit_ladder::{run_exit_ladder, ExitSwap};
+
 /// Close an existing position
 pub async fn close_position_direct(
     token_mint: &str,
@@ -209,149 +211,37 @@ pub async fn close_position_direct(
     // before then, and the sync would otherwise close the position as sold outside the bot.
     let _in_flight =
         mark_swap_in_flight(crate::positions::db::get_store_chain().await?, token_mint);
-    // Slippage retry loop for exit
-    let mut last_err: Option<String> = None;
-    // Why the last swap attempt stopped before it was sent, when it did.
-    let mut last_refusal: Option<crate::swaps::NotSubmittedReason> = None;
-    let mut swap_result = None;
-    // A swap that was SUBMITTED but whose confirmation timed out: the sell may still land,
-    // so retrying the ladder would sell twice. We stop and let verification reconcile it.
-    let mut submitted_signature: Option<String> = None;
-    for (i, slippage) in slippage_exit_retry_steps.iter().enumerate() {
-        let quote_request = QuoteRequest {
-            chain: crate::chains::active_chain(),
-            input_mint: token_mint.to_string(),
-            output_mint: crate::chains::adapter().native_asset_address().to_string(),
-            input_amount: sell_amount.into(),
-            wallet_address: wallet_address.clone(),
-            slippage_pct: *slippage,
-            swap_mode: SwapMode::ExactIn,
-            exclude_dexes: None,
-        };
+    // The ladder sets the slippage and any excluded venue per rung.
+    let base_request = QuoteRequest {
+        chain: crate::chains::active_chain(),
+        input_mint: token_mint.to_string(),
+        output_mint: crate::chains::adapter().native_asset_address().to_string(),
+        input_amount: sell_amount.into(),
+        wallet_address: wallet_address.clone(),
+        slippage_pct: 0.0,
+        swap_mode: SwapMode::ExactIn,
+        exclude_dexes: None,
+    };
+    let token = &api_token;
+    let exit = run_exit_ladder(
+        "Exit",
+        &api_token.symbol,
+        &slippage_exit_retry_steps,
+        |slippage_pct, exclude_dexes| {
+            get_best_quote(QuoteRequest {
+                slippage_pct,
+                exclude_dexes,
+                ..base_request.clone()
+            })
+        },
+        move |quote| {
+            execute_swap_with_fallback(token, quote, crate::swaps::SwapAmountLimit::Unrestricted)
+        },
+    )
+    .await;
 
-        let quote = match get_best_quote(quote_request.clone()).await {
-            Ok(q) => q,
-            Err(e) => {
-                last_refusal = None;
-                last_err = Some(format!(
-                    "Quote failed at step {} ({}%): {}",
-                    i + 1,
-                    slippage,
-                    e
-                ));
-                super::backoff_after(&e).await;
-                continue;
-            }
-        };
-
-        match execute_swap_with_fallback(
-            &api_token,
-            quote,
-            crate::swaps::SwapAmountLimit::Unrestricted,
-        )
-        .await
-        {
-            Ok(res) => {
-                swap_result = Some(res);
-                last_err = None;
-                break;
-            }
-            Err(e) => {
-                // Submitted but unconfirmed — the sell may already be on chain. Stop the
-                // ladder: another rung would be a second real sell.
-                if let Some(signature) = crate::swaps::unconfirmed_swap_signature(&e) {
-                    logger::warning(
-                        LogTag::Positions,
-                        &format!(
-                            "Exit swap {} for {} was submitted but not confirmed in time - not retrying; verification will settle it",
-                            signature, api_token.symbol
-                        ),
-                    );
-                    submitted_signature = Some(signature);
-                    last_err = None;
-                    break;
-                }
-
-                // Check for pump.fun bonding curve error (graduated token routed through closed curve)
-                let msg = e.to_string();
-                let msg_lower = msg.to_lowercase();
-
-                if msg.contains("0x1787") || msg.contains("6023") {
-                    logger::warning(
-                        LogTag::Positions,
-                        &format!(
-                            "Pump.fun bonding curve error detected for {}, retrying with alternative DEX route",
-                            token_mint
-                        ),
-                    );
-                    // Retry once with Pump.fun Amm excluded
-                    let mut retry_request = quote_request.clone();
-                    retry_request.exclude_dexes = Some(vec!["Pump.fun Amm".to_string()]);
-                    let retry_quote = match get_best_quote(retry_request).await {
-                        Ok(q) => q,
-                        Err(e2) => {
-                            last_refusal = None;
-                            last_err = Some(format!(
-                                "Retry without Pump.fun also failed (quote): {e2} (step {} slippage {}%)",
-                                i + 1, slippage
-                            ));
-                            continue;
-                        }
-                    };
-                    match execute_swap_with_fallback(
-                        &api_token,
-                        retry_quote,
-                        crate::swaps::SwapAmountLimit::Unrestricted,
-                    )
-                    .await
-                    {
-                        Ok(res) => {
-                            swap_result = Some(res);
-                            last_err = None;
-                            break;
-                        }
-                        Err(e2) => {
-                            if let Some(signature) = crate::swaps::unconfirmed_swap_signature(&e2) {
-                                submitted_signature = Some(signature);
-                                last_err = None;
-                                break;
-                            }
-                            last_refusal = crate::swaps::not_submitted_reason(&e2);
-                            last_err = Some(format!(
-                                "Retry swap without Pump.fun failed: {e2} (step {} slippage {}%)",
-                                i + 1,
-                                slippage
-                            ));
-                            continue;
-                        }
-                    }
-                }
-
-                // If we attempted to sell the aggregated total and failed with insufficient funds,
-                // hint at likely multi-account cause for easier diagnosis.
-                let enriched = if msg_lower.contains("insufficient funds")
-                    && multi_account_note.is_none()
-                    && total_token_balance > sell_amount
-                {
-                    format!("Swap failed (insufficient funds) - aggregated balance mismatch; consider consolidating ATAs: {msg}")
-                } else {
-                    format!("Swap failed: {msg}")
-                };
-                last_refusal = crate::swaps::not_submitted_reason(&e);
-                last_err = Some(format!(
-                    "{} (step {} slippage {}%)",
-                    enriched,
-                    i + 1,
-                    slippage
-                ));
-                super::backoff_after(&e).await;
-                continue;
-            }
-        }
-    }
-
-    let transaction_signature = match (swap_result, submitted_signature) {
-        (Some(result), _) => {
+    let transaction_signature = match exit {
+        ExitSwap::Executed(result) => {
             let transaction_signature = result.transaction_signature.clone();
 
             // CRITICAL: Log execution vs requested amounts to detect partial execution
@@ -383,12 +273,27 @@ pub async fn close_position_direct(
         // record the signature and enqueue verification, which reads the chain and either
         // settles the exit or (if the transaction never landed) clears it for a retry. What
         // we must NOT do is send it again.
-        (None, Some(signature)) => signature,
-        (None, None) => {
+        ExitSwap::Submitted(signature) => signature,
+        ExitSwap::Failed {
+            detail,
+            not_submitted,
+        } => {
+            // A sell sized from the aggregated balance that the router could
+            // only source from one account fails for want of funds.
+            let detail = if detail.to_lowercase().contains("insufficient funds")
+                && multi_account_note.is_none()
+                && total_token_balance > sell_amount
+            {
+                format!(
+                    "Swap failed (insufficient funds) - aggregated balance mismatch; consider consolidating ATAs: {detail}"
+                )
+            } else {
+                detail
+            };
             return Err(Error::SwapFailed {
                 mint: api_token.mint.clone(),
-                detail: last_err.unwrap_or_else(|| "exit swap failed".to_owned()),
-                not_submitted: last_refusal,
+                detail,
+                not_submitted,
             });
         }
     };

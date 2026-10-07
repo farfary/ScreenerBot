@@ -618,8 +618,8 @@ pub async fn remove_signature_from_index(signature: &str) {
 /// return of the open path: a quote that failed, a swap that provably never
 /// reached the chain. Once the swap may be in flight the caller calls
 /// [`PendingOpenGuard::keep`], and the mark then lives until the position is
-/// added (which clears it), [`PendingOpenGuard::release`] is called on a
-/// proven never-sent failure, or the TTL expires.
+/// added (which clears it), [`PendingOpenGuard::after_failed_swap`] reads a
+/// failure that provably sent nothing, or the TTL expires.
 pub fn hold_pending_open(mint: &str, ttl_secs: i64) -> PendingOpenGuard {
     let expires_at = Utc::now() + chrono::Duration::seconds(ttl_secs);
     pending_open_swaps().insert(mint.to_string(), expires_at);
@@ -652,9 +652,12 @@ impl PendingOpenGuard {
         self.clear_on_drop = false;
     }
 
-    /// Clear the mark now: the swap provably never reached the chain.
-    pub fn release(mut self) {
-        self.clear_on_drop = true;
+    /// End the guard after the open's swap failed: the mark is cleared only
+    /// when the failure proves nothing moved and nothing can still land, and
+    /// kept for its TTL otherwise, so a buy that may land is never opened
+    /// twice.
+    pub fn after_failed_swap(mut self, failure: &crate::swaps::FailedSwap) {
+        self.clear_on_drop = *failure == crate::swaps::FailedSwap::Resendable;
     }
 
     /// Remove this guard's own mark. A mark set again since — by a later open

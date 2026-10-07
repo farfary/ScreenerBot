@@ -3179,62 +3179,285 @@ fn approval_binding_is_unique_and_race_safe() {
     );
 }
 
-/// Directories whose code builds, executes or retries a swap.
-const SWAP_PATHS: &[&str] = &[
-    "swaps",
-    "chains/solana/swaps",
-    "positions",
-    "trader",
-    "tools",
-];
+/// The RPC owners: the manager and the Solana client that speak JSON-RPC.
+fn is_rpc_owner(relative: &Path) -> bool {
+    relative.starts_with("rpc") || relative.starts_with("chains/solana/rpc")
+}
 
-/// Files on a swap path allowed to ask a node to simulate or send a
-/// transaction. The pre-send gate measures every transaction against the
-/// packet limit first and types every refusal; a second caller would send a
-/// transaction nobody measured. Only shrinks.
-const SWAP_FILES_THAT_SIMULATE_OR_SEND: &[&str] = &["chains/solana/swaps/presend.rs"];
+/// Files allowed to ask a node to simulate or send a transaction, with the
+/// calls each may make. The pre-send gate measures every swap against the
+/// packet limit first, types every refusal and settles every send by its
+/// signature; a second caller would send a swap nobody measured or settled.
+/// The asset owners send plain transfers and burns, never a swap. Only
+/// shrinks.
+const SIMULATE_OR_SEND_OWNERS: &[(&str, &[&str])] = &[
+    (
+        "chains/solana/swaps/presend.rs",
+        &["simulate_transaction", "send_transaction"],
+    ),
+    (
+        "chains/solana/assets/burn.rs",
+        &["send_and_confirm_signed_transaction"],
+    ),
+    (
+        "chains/solana/assets/ata/helpers.rs",
+        &["send_and_confirm_signed_transaction"],
+    ),
+    (
+        "chains/solana/assets/transfer.rs",
+        &["send_and_confirm_signed_transaction"],
+    ),
+];
 
 /// RPC client calls that simulate a transaction or hand one to a node.
 const SIMULATE_OR_SEND_CALLS: &[&str] = &[
-    ".simulate_transaction(",
-    ".send_transaction(",
-    ".send_raw_transaction(",
-    ".send_and_confirm_signed_transaction(",
+    "simulate_transaction",
+    "send_transaction",
+    "send_raw_transaction",
+    "send_and_confirm_signed_transaction",
+];
+
+/// Spellings that reach a node's simulate or send without the client's typed
+/// methods: the raw JSON-RPC entry points and the method names themselves.
+const RAW_RPC_SPELLINGS: &[&str] = &[
+    "execute_raw(",
+    "execute_raw_for_provider_kind(",
+    "\"sendTransaction\"",
+    "\"simulateTransaction\"",
 ];
 
 #[test]
-fn only_the_pre_send_gate_simulates_or_sends_on_a_swap_path() {
+fn only_the_pre_send_gate_simulates_or_sends_a_swap() {
+    let call = regex::Regex::new(&format!(
+        r"(?:\.|::)\s*({})\s*\(",
+        SIMULATE_OR_SEND_CALLS.join("|")
+    ))
+    .expect("the call pattern is valid");
     let mut hits: Vec<String> = Vec::new();
     let mut violations = Vec::new();
     for (relative, contents) in walk_src() {
-        if !SWAP_PATHS.iter().any(|dir| relative.starts_with(dir)) {
+        if is_rpc_owner(&relative) || is_test_support_file(&relative) {
             continue;
         }
         let path = relative.to_string_lossy().into_owned();
         let production = strip_comment_text(&production_text(&contents));
+        let allowed = SIMULATE_OR_SEND_OWNERS
+            .iter()
+            .find(|(owner, _)| *owner == path)
+            .map(|(_, calls)| *calls)
+            .unwrap_or(&[]);
         for (idx, line) in production.lines().enumerate() {
-            if SIMULATE_OR_SEND_CALLS
-                .iter()
-                .any(|call| line.contains(call))
-            {
-                hits.push(path.clone());
-                if !SWAP_FILES_THAT_SIMULATE_OR_SEND.contains(&path.as_str()) {
+            for found in call.captures_iter(line) {
+                let method = &found[1];
+                if allowed.contains(&method) {
+                    hits.push(path.clone());
+                } else {
+                    violations.push(format!("src/{path}:{}: {}", idx + 1, line.trim()));
+                }
+            }
+            for spelling in RAW_RPC_SPELLINGS {
+                if line.contains(spelling) {
                     violations.push(format!("src/{path}:{}: {}", idx + 1, line.trim()));
                 }
             }
         }
     }
-    let stale: Vec<&str> = SWAP_FILES_THAT_SIMULATE_OR_SEND
+    let stale: Vec<&str> = SIMULATE_OR_SEND_OWNERS
         .iter()
-        .copied()
-        .filter(|entry| !hits.iter().any(|hit| hit.as_str() == *entry))
+        .map(|(owner, _)| *owner)
+        .filter(|owner| !hits.iter().any(|hit| hit.as_str() == *owner))
         .collect();
     assert!(
         violations.is_empty() && stale.is_empty(),
         "a swap transaction is simulated and sent only through \
-         chains::solana::swaps::presend (gate / send / submit_built_swap):\n{}\n\
+         chains::solana::swaps::presend (gate / send_and_settle / submit_built_swap), and \
+         raw JSON-RPC stays inside rpc/ and chains/solana/rpc/:\n{}\n\
          remove it from the allowlist (entries that no longer simulate or send):\n{}",
         violations.join("\n"),
         stale.join("\n")
+    );
+}
+
+/// `source` with the contents of string and char literals blanked, so braces
+/// and parentheses inside them are not mistaken for code.
+fn blank_literals(source: &str) -> String {
+    let chars: Vec<char> = source.chars().collect();
+    let mut out = String::with_capacity(source.len());
+    let mut index = 0;
+    while index < chars.len() {
+        let c = chars[index];
+        if c == '"' {
+            out.push('"');
+            index += 1;
+            while index < chars.len() && chars[index] != '"' {
+                if chars[index] == '\\' {
+                    out.push(' ');
+                    index += 1;
+                }
+                if index < chars.len() {
+                    out.push(if chars[index] == '\n' { '\n' } else { ' ' });
+                    index += 1;
+                }
+            }
+            if index < chars.len() {
+                out.push('"');
+                index += 1;
+            }
+        } else if c == '\'' && chars.get(index + 2) == Some(&'\'') {
+            out.push_str("' '");
+            index += 3;
+        } else if c == '\''
+            && chars.get(index + 1) == Some(&'\\')
+            && chars.get(index + 3) == Some(&'\'')
+        {
+            out.push_str("'  '");
+            index += 4;
+        } else {
+            out.push(c);
+            index += 1;
+        }
+    }
+    out
+}
+
+/// The byte range from `open` (an opening `{` or `(`) to its matching close.
+fn matching_span(code: &str, open: usize) -> Option<(usize, usize)> {
+    let bytes = code.as_bytes();
+    let (opener, closer) = match bytes[open] {
+        b'{' => (b'{', b'}'),
+        b'(' => (b'(', b')'),
+        _ => return None,
+    };
+    let mut depth = 0i32;
+    for (offset, byte) in bytes[open..].iter().enumerate() {
+        if *byte == opener {
+            depth += 1;
+        } else if *byte == closer {
+            depth -= 1;
+            if depth == 0 {
+                return Some((open, open + offset));
+            }
+        }
+    }
+    None
+}
+
+/// Calls that send a trade, directly or through the exit ladder's sender.
+const SWAP_SENDS: &[&str] = &[
+    "execute_swap_with_fallback(",
+    "execute_with_fallback_on(",
+    "execute_on(",
+    ".execute_swap(",
+    ".execute_swap_for_wallet(",
+    "execute_quote(",
+];
+
+/// Every loop that may send a trade again decides from one reading of the
+/// failure, `swaps::failed_swap`: a signature that may still land is
+/// reconciled, an unproven failure stops, and only a failure that provably
+/// moved nothing is sent again. A loop that asks anything else — or nothing —
+/// re-sends a swap that may have landed: a double buy, or a partial exit that
+/// sells the same share twice.
+#[test]
+fn every_loop_that_may_send_a_trade_again_decides_from_failed_swap() {
+    let loop_keyword =
+        regex::Regex::new(r"\b(?:for|while|loop)\b").expect("the loop pattern is valid");
+    let mut sending_loops = 0;
+    let mut violations = Vec::new();
+    for (relative, contents) in walk_src() {
+        if is_test_support_file(&relative) {
+            continue;
+        }
+        let code = blank_literals(&strip_comment_text(&production_text(&contents)));
+        for keyword in loop_keyword.find_iter(&code) {
+            let Some(open) = code[keyword.end()..].find('{').map(|at| keyword.end() + at) else {
+                continue;
+            };
+            let Some((start, end)) = matching_span(&code, open) else {
+                continue;
+            };
+            let body = &code[start..=end];
+            if !SWAP_SENDS.iter().any(|send| body.contains(send)) {
+                continue;
+            }
+            sending_loops += 1;
+            if !body.contains("failed_swap(") {
+                let line = code[..keyword.start()].lines().count();
+                violations.push(format!("src/{}:{line}", relative.display()));
+            }
+        }
+    }
+    assert!(
+        sending_loops >= 2,
+        "the guard must see the fallback chain and the exit ladder ({sending_loops} seen)"
+    );
+    assert!(
+        violations.is_empty(),
+        "a loop that sends a trade decides whether to send again only from \
+         crate::swaps::failed_swap:\n{}",
+        violations.join("\n")
+    );
+
+    // Both exits sell through the one ladder rather than a loop of their own.
+    for exit in [
+        "positions/operations/close.rs",
+        "positions/operations/partial_close.rs",
+    ] {
+        let source =
+            fs::read_to_string(Path::new(env!("CARGO_MANIFEST_DIR")).join("src").join(exit))
+                .expect("the exit source reads");
+        assert!(
+            source.contains("run_exit_ladder("),
+            "src/{exit} must sell through positions::operations::exit_ladder"
+        );
+    }
+}
+
+/// Trades a webserver handler may start. Each runs in a detached task: hyper
+/// drops a handler's future when its client disconnects, and a trade awaited
+/// inline would be cancelled after its send and before its outcome is
+/// recorded.
+const HANDLER_TRADES: &[&str] = &[
+    "manual::manual_buy(",
+    "manual::manual_add(",
+    "manual::manual_sell(",
+    "manual::force_buy(",
+    "manual::force_sell(",
+    "open_position_direct(",
+    "open_position_with_size(",
+    "close_position_direct(",
+    "partial_close_position(",
+    "add_to_position(",
+];
+
+#[test]
+fn a_webserver_handler_never_awaits_a_trade_inline() {
+    let mut trades = 0;
+    let mut violations = Vec::new();
+    for (relative, contents) in walk_src() {
+        if !relative.starts_with("webserver") || is_test_support_file(&relative) {
+            continue;
+        }
+        let code = blank_literals(&strip_comment_text(&production_text(&contents)));
+        let detached: Vec<(usize, usize)> = code
+            .match_indices("run_detached(")
+            .filter_map(|(at, call)| matching_span(&code, at + call.len() - 1))
+            .collect();
+        for trade in HANDLER_TRADES {
+            for (at, _) in code.match_indices(trade) {
+                trades += 1;
+                if !detached.iter().any(|(start, end)| *start < at && at < *end) {
+                    let line = code[..at].lines().count();
+                    violations.push(format!("src/{}:{line}: {trade}", relative.display()));
+                }
+            }
+        }
+    }
+    assert!(trades > 0, "the guard must see the manual trade handlers");
+    assert!(
+        violations.is_empty(),
+        "a webserver handler runs a trade through run_detached so a dropped request \
+         cannot cancel it:\n{}",
+        violations.join("\n")
     );
 }

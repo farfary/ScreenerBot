@@ -860,7 +860,7 @@ async fn a_buy_that_never_reached_the_chain_leaves_no_pending_open_mark() {
     let mint = "PendingSwapNotSent11111111111111111111111111";
     let mut pending = hold_pending_open(mint, 120);
     pending.keep();
-    pending.release();
+    pending.after_failed_swap(&screenerbot::swaps::FailedSwap::Resendable);
     assert!(!is_open_position(mint).await);
 
     // A stale guard never clears a newer open's mark for the same mint.
@@ -872,6 +872,56 @@ async fn a_buy_that_never_reached_the_chain_leaves_no_pending_open_mark() {
     assert!(is_open_position(mint).await, "the newer mark survives");
     drop(second);
     assert!(!is_open_position(mint).await);
+}
+
+/// The open path ends its kept mark with the swap failure's own reading: only
+/// a failure that provably sent nothing frees the mint for another open. An
+/// unproven send and a signature that may still land both keep it.
+#[tokio::test]
+async fn the_open_path_releases_its_mark_only_on_a_proven_never_sent_failure() {
+    use screenerbot::chains::ExecutionFailure;
+    use screenerbot::positions::state::{hold_pending_open, is_open_position};
+    use screenerbot::swaps::{failed_swap, NotSubmittedReason, SwapExecutionError};
+    let _cfg = config_guard();
+    set_positions(Vec::new()).await;
+
+    let cases = [
+        (
+            "PendingNeverSent111111111111111111111111111",
+            screenerbot::Error::Swaps(SwapExecutionError::NotSubmitted {
+                router: "Jupiter".to_owned(),
+                reason: NotSubmittedReason::TransactionTooLarge {
+                    bytes: 1329,
+                    limit: 1232,
+                },
+            }),
+            false,
+        ),
+        (
+            "PendingUnproven1111111111111111111111111111",
+            screenerbot::Error::Rpc(screenerbot::rpc::RpcError::Network {
+                message: "send timed out".to_owned(),
+                is_timeout: true,
+            }),
+            true,
+        ),
+        (
+            "PendingMayLand11111111111111111111111111111",
+            screenerbot::Error::Solana(screenerbot::chains::solana::Error::Execution(
+                ExecutionFailure::ConfirmationTimeout {
+                    reference: "sig".to_owned(),
+                    waited_ms: 60_000,
+                },
+            )),
+            true,
+        ),
+    ];
+    for (mint, error, kept) in cases {
+        let mut pending = hold_pending_open(mint, 120);
+        pending.keep();
+        pending.after_failed_swap(&failed_swap(&error));
+        assert_eq!(is_open_position(mint).await, kept, "{error}");
+    }
 }
 
 #[tokio::test]

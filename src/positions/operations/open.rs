@@ -301,8 +301,8 @@ async fn open_position_impl(
                     effective_price,
                 )
             }
-            Err(error) => match crate::swaps::unconfirmed_swap_signature(&error) {
-                Some(signature) => {
+            Err(error) => match crate::swaps::failed_swap(&error) {
+                crate::swaps::FailedSwap::Reconcile { signature } => {
                     logger::warning(
                         LogTag::Positions,
                         &format!(
@@ -317,10 +317,8 @@ async fn open_position_impl(
                     .unwrap_or(entry_price);
                     (signature, expected_output_amount, true, effective_price)
                 }
-                None => {
-                    if crate::swaps::is_fallback_safe(&error) {
-                        pending_open.release();
-                    }
+                failure => {
+                    pending_open.after_failed_swap(&failure);
                     return Err(Error::SwapFailed {
                         mint: api_token.mint.clone(),
                         detail: error.to_string(),

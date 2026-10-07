@@ -20,6 +20,8 @@ use crate::swaps::{
 use crate::utils::get_wallet_address;
 use chrono::Utc;
 
+use super::exit_ladder::{run_exit_ladder, ExitSwap};
+
 /// Partially close a position by selling a percentage of remaining tokens
 /// CRITICAL: This does NOT release the semaphore permit - position stays open
 pub async fn partial_close_position(
@@ -153,161 +155,54 @@ pub async fn partial_close_position(
     // what stops a second exit from being sized against tokens this one has already sold.
     crate::positions::state::mark_partial_exit_pending(token_mint).await;
 
-    // ONE ladder: quote and swap at each slippage rung in turn.
-    //
-    // This used to be an initial swap attempt followed by a SECOND loop that started again
-    // at rung 1 — re-submitting the very slippage that had just failed. And any swap error
-    // led to another submission, including the "submitted but not confirmed in time" error,
-    // which means the first sell may well be on chain: retrying it sells the same tokens
-    // TWICE while the position records only one partial.
-    let mut last_err: Option<String> = None;
-    // Why the last swap attempt stopped before it was sent, when it did.
-    let mut last_refusal: Option<crate::swaps::NotSubmittedReason> = None;
-    let mut swap_result = None;
-    let mut submitted_signature: Option<String> = None;
+    // ONE ladder: quote and swap at each slippage rung in turn, sending again
+    // only after a failure that provably sold nothing.
+    let base_request = QuoteRequest {
+        chain: crate::chains::active_chain(),
+        input_mint: token_mint.to_string(),
+        output_mint: adapter().native_asset_address().to_string(),
+        input_amount: exit_amount,
+        wallet_address: wallet_address.clone(),
+        // The ladder sets the slippage and any excluded venue per rung.
+        slippage_pct: 0.0,
+        swap_mode: SwapMode::ExactIn,
+        exclude_dexes: None,
+    };
+    let token = &api_token;
+    let exit = run_exit_ladder(
+        "Partial exit",
+        &api_token.symbol,
+        &slippage_exit_retry_steps,
+        |slippage_pct, exclude_dexes| {
+            get_best_quote(QuoteRequest {
+                slippage_pct,
+                exclude_dexes,
+                ..base_request.clone()
+            })
+        },
+        move |quote| {
+            logger::info(
+                LogTag::Positions,
+                &format!(
+                    "Partial exit quote ({}% slippage): {} tokens -> {} SOL",
+                    f64::from(quote.slippage_bps) / 100.0,
+                    exit_amount,
+                    quote.output_amount.raw() as f64 / adapter().raw_units_per_native() as f64
+                ),
+            );
+            execute_swap_with_fallback(token, quote, crate::swaps::SwapAmountLimit::Unrestricted)
+        },
+    )
+    .await;
 
-    for (i, slippage) in slippage_exit_retry_steps.iter().enumerate() {
-        let quote_request = QuoteRequest {
-            chain: crate::chains::active_chain(),
-            input_mint: token_mint.to_string(),
-            output_mint: adapter().native_asset_address().to_string(),
-            input_amount: exit_amount,
-            wallet_address: wallet_address.clone(),
-            slippage_pct: *slippage,
-            swap_mode: SwapMode::ExactIn,
-            exclude_dexes: None,
-        };
-
-        let quote = match get_best_quote(quote_request.clone()).await {
-            Ok(quote) => quote,
-            Err(e) => {
-                last_refusal = None;
-                last_err = Some(format!(
-                    "Quote failed at step {} ({}%): {}",
-                    i + 1,
-                    slippage,
-                    e
-                ));
-                super::backoff_after(&e).await;
-                continue;
-            }
-        };
-
-        logger::info(
-            LogTag::Positions,
-            &format!(
-                "Partial exit quote ({}% slippage): {} tokens -> {} SOL",
-                slippage,
-                exit_amount,
-                quote.output_amount.raw() as f64 / adapter().raw_units_per_native() as f64
-            ),
-        );
-
-        match execute_swap_with_fallback(
-            &api_token,
-            quote,
-            crate::swaps::SwapAmountLimit::Unrestricted,
-        )
-        .await
-        {
-            Ok(res) => {
-                swap_result = Some(res);
-                last_err = None;
-                break;
-            }
-            Err(e) => {
-                // Submitted, confirmation timed out: the sell may still land. Stop here and
-                // let verification settle it — another rung would be a second real sell.
-                if let Some(signature) = crate::swaps::unconfirmed_swap_signature(&e) {
-                    logger::warning(
-                        LogTag::Positions,
-                        &format!(
-                            "Partial exit swap {} for {} was submitted but not confirmed in time - not retrying; verification will settle it",
-                            signature, api_token.symbol
-                        ),
-                    );
-                    submitted_signature = Some(signature);
-                    last_err = None;
-                    break;
-                }
-
-                let err_msg = e.to_string();
-
-                // Pump.fun bonding curve error (graduated token): one retry with that AMM
-                // excluded, at the same slippage.
-                if err_msg.contains("0x1787") || err_msg.contains("6023") {
-                    logger::warning(
-                        LogTag::Positions,
-                        &format!(
-                            "Pump.fun bonding curve error detected for {}, retrying partial exit with alternative DEX route",
-                            token_mint
-                        ),
-                    );
-
-                    let mut retry_request = quote_request.clone();
-                    retry_request.exclude_dexes = Some(vec!["Pump.fun Amm".to_string()]);
-
-                    match get_best_quote(retry_request).await {
-                        Ok(retry_quote) => {
-                            match execute_swap_with_fallback(
-                                &api_token,
-                                retry_quote,
-                                crate::swaps::SwapAmountLimit::Unrestricted,
-                            )
-                            .await
-                            {
-                                Ok(res) => {
-                                    swap_result = Some(res);
-                                    last_err = None;
-                                    break;
-                                }
-                                Err(e2) => {
-                                    if let Some(signature) =
-                                        crate::swaps::unconfirmed_swap_signature(&e2)
-                                    {
-                                        submitted_signature = Some(signature);
-                                        last_err = None;
-                                        break;
-                                    }
-                                    last_refusal = crate::swaps::not_submitted_reason(&e2);
-                                    last_err = Some(format!(
-                                        "Retry swap without Pump.fun failed: {e2} (step {} slippage {}%)",
-                                        i + 1,
-                                        slippage
-                                    ));
-                                    continue;
-                                }
-                            }
-                        }
-                        Err(e2) => {
-                            last_refusal = None;
-                            last_err = Some(format!(
-                                "Retry without Pump.fun also failed (quote): {e2} (step {} slippage {}%)",
-                                i + 1,
-                                slippage
-                            ));
-                            continue;
-                        }
-                    }
-                }
-
-                last_refusal = crate::swaps::not_submitted_reason(&e);
-                last_err = Some(format!(
-                    "Partial exit swap failed at step {} ({}%): {}",
-                    i + 1,
-                    slippage,
-                    err_msg
-                ));
-                super::backoff_after(&e).await;
-            }
-        }
-    }
-
-    let transaction_signature = match (swap_result, submitted_signature) {
-        (Some(result), _) => result.transaction_signature.clone(),
-        // Submitted but unconfirmed: record the signature and verify it like any other.
-        (None, Some(signature)) => signature,
-        (None, None) => {
+    let transaction_signature = match exit {
+        ExitSwap::Executed(result) => result.transaction_signature,
+        // May still land: record the signature and verify it like any other.
+        ExitSwap::Submitted(signature) => signature,
+        ExitSwap::Failed {
+            detail,
+            not_submitted,
+        } => {
             crate::positions::state::clear_partial_exit_pending(token_mint).await;
 
             // Record partial exit failure
@@ -326,8 +221,8 @@ pub async fn partial_close_position(
 
             return Err(Error::SwapFailed {
                 mint: token_mint.to_owned(),
-                detail: last_err.unwrap_or_else(|| "no route".to_owned()),
-                not_submitted: last_refusal,
+                detail,
+                not_submitted,
             });
         }
     };

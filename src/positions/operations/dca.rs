@@ -175,17 +175,19 @@ pub async fn add_to_position(
     .await
     {
         Ok(result) => result.transaction_signature,
-        Err(error) => match crate::swaps::unconfirmed_swap_signature(&error) {
-            Some(signature) => {
+        Err(error) => match crate::swaps::failed_swap(&error) {
+            crate::swaps::FailedSwap::Reconcile { signature } => {
                 logger::warning(
                     LogTag::Positions,
                     &format!(
-                        "DCA swap {signature} for position {position_id} reached the chain but                          could not be confirmed here; registering it for verification instead of                          failing the DCA"
+                        "DCA swap {signature} for position {position_id} reached the chain but \
+                         could not be confirmed here; registering it for verification instead of \
+                         failing the DCA"
                     ),
                 );
                 signature
             }
-            None => {
+            crate::swaps::FailedSwap::Resendable | crate::swaps::FailedSwap::Unresolved => {
                 return Err(Error::SwapFailed {
                     mint: token_mint.to_owned(),
                     detail: format!("DCA swap failed: {error}"),
