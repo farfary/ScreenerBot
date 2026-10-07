@@ -20,6 +20,7 @@ use super::db::{
     commit_booking, force_database_sync, get_store_chain, update_position_price_fields, Booking,
     BookingReads, BookingRecord, Committed,
 };
+use super::ledger::CLOSED_EXTERNALLY;
 use super::pnl::position_pnl;
 use super::round_state::{attributable_held, follow_round, is_closed, FollowOutcome};
 use super::types::{EntryRecord, ExitRecord, Position};
@@ -38,7 +39,7 @@ use crate::config::with_config;
 use crate::i18n::{ids, UiArg, UiText};
 use crate::logger::{self, LogTag};
 use crate::telegram::{queue_notification, Notification};
-use chrono::Utc;
+use chrono::{DateTime, Utc};
 
 use super::error::{Error, Result};
 
@@ -225,6 +226,15 @@ pub async fn apply_transition(transition: PositionTransition) -> Result<ApplyEff
                         && row.exit_transaction_signature.as_deref()
                             == Some(exit_signature.as_str())
                     {
+                        return Ok(Booking::Skip(None));
+                    }
+                    if ledger_close_counts(row, exit_time) {
+                        logger::info(
+                            LogTag::Positions,
+                            &format!(
+                                "Sale {exit_signature} of position {position_id} is already in the proceeds of its close from wallet history"
+                            ),
+                        );
                         return Ok(Booking::Skip(None));
                     }
                     let after_write_off = row.synthetic_exit;
@@ -1252,6 +1262,17 @@ struct LateFill {
     after_write_off: bool,
     /// What following the round did with the position.
     follow: FollowOutcome,
+}
+
+/// Whether the close of `row` came from the wallet history and its proceeds already count
+/// a sale made at `sale_time`. The ledger books a round's close from the chain, with the
+/// proceeds of every disposal up to the round's close time, and only when the history
+/// reconciles; a sale at or before that time is in them.
+fn ledger_close_counts(row: &Position, sale_time: DateTime<Utc>) -> bool {
+    !row.synthetic_exit
+        && row.history_complete
+        && row.closed_reason.as_deref() == Some(CLOSED_EXTERNALLY)
+        && row.exit_time.is_some_and(|closed| sale_time <= closed)
 }
 
 /// What an exit retry clear decided for the row it read.

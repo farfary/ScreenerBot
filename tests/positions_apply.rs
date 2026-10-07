@@ -2250,6 +2250,66 @@ fn a_full_exit_residual_counts_only_the_positions_own_tokens() {
     );
 }
 
+/// A full sale of [`HELD`] for 1.5 SOL, made at `sold_at`.
+fn sale_at(id: i64, signature: &str, sold_at: DateTime<Utc>) -> PositionTransition {
+    PositionTransition::ExitVerified {
+        position_id: id,
+        effective_exit_price: 1.5,
+        native_received: 1.5,
+        fee_raw: SWAP_FEE_RAW,
+        exit_time: sold_at,
+        exit_signature: signature.to_owned(),
+        exit_amount: RawAmount::new(HELD),
+        held_after: Some(RawAmount::ZERO),
+    }
+}
+
+#[test]
+fn a_sale_the_wallet_history_close_already_counts_is_not_booked_again() {
+    common::run_isolated(
+        "a_sale_the_wallet_history_close_already_counts_is_not_booked_again",
+        || async {
+            let _dir = common::isolated_env();
+            let _cfg = common::config_guard();
+            let closed_at = Utc::now();
+            // The ledger closed the row from the chain: every disposal of the round up to
+            // its close is in the proceeds, and its exit is the round's last disposal.
+            let id = open_position(|position| {
+                position.exit_time = Some(closed_at);
+                position.transaction_exit_verified = true;
+                position.closed_reason =
+                    Some(screenerbot::positions::ledger::CLOSED_EXTERNALLY.to_owned());
+                position.exit_transaction_signature = Some("last-disposal-sig".to_owned());
+                position.native_received = Some(1.5);
+                position.remaining_token_amount = Some(RawAmount::ZERO);
+                position.total_exited_amount = RawAmount::new(HELD);
+            })
+            .await;
+            let before = in_storage(id).await;
+
+            apply_transition(sale_at(
+                id,
+                CLOSE_SIGNATURE,
+                closed_at - chrono::Duration::minutes(5),
+            ))
+            .await
+            .expect("the sale is settled");
+            assert_unchanged(id, &before).await;
+            assert_eq!(exit_records(id).await, 0);
+
+            apply_transition(sale_at(
+                id,
+                "later-sale-sig",
+                closed_at + chrono::Duration::minutes(5),
+            ))
+            .await
+            .expect("a sale after the close is booked");
+            assert_eq!(exit_records(id).await, 1);
+            assert_eq!(in_storage(id).await.native_received, Some(3.0));
+        },
+    );
+}
+
 #[test]
 fn a_partial_exit_after_a_close_keeps_acquired_equal_to_held_plus_exited() {
     common::run_isolated(
