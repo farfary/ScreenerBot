@@ -26,7 +26,7 @@ use super::types::{EntryRecord, ExitRecord, Position};
 use super::{
     loss_detection::process_position_loss_detection,
     state::{
-        clear_pending_dca_swap, get_position_by_id, get_position_by_mint,
+        clear_pending_dca_swap, get_position_by_id, get_position_by_mint, other_swap_in_flight,
         position_has_pending_swap, publish_committed, register_position_slot,
         release_position_slot, remove_position_by_id, remove_signature_from_index,
         try_consume_global_position_permit, update_position_state, with_booking_lock,
@@ -76,10 +76,11 @@ pub async fn apply_transition(transition: PositionTransition) -> Result<ApplyEff
             native_size,
             held_after,
         } => {
-            if get_position_by_id(position_id).await.is_none() {
+            let Some(snapshot) = get_position_by_id(position_id).await else {
                 log_missing_position(position_id, "entry verification");
                 return Ok(effects);
-            }
+            };
+            let reading = LateFillReading::of(&snapshot.mint, position_id, held_after).await;
             let store_chain = get_store_chain().await?;
             let fill = EntryFill {
                 effective_entry_price,
@@ -104,7 +105,7 @@ pub async fn apply_transition(transition: PositionTransition) -> Result<ApplyEff
                 row.apply_entry_fill(&fill);
                 let late = after_write_off
                     .map(|after_write_off| {
-                        late_fill(row, reads, held_after, store_chain, after_write_off)
+                        late_fill(row, reads, reading, store_chain, after_write_off)
                     })
                     .transpose()?;
                 let record = row.entry_transaction_signature.clone().map(|signature| {
@@ -200,10 +201,11 @@ pub async fn apply_transition(transition: PositionTransition) -> Result<ApplyEff
             // queue dedupes by signature only while an item is IN it, so a re-enqueue can hand
             // the same exit back. The exit record of the swap, read inside the booking
             // transaction, decides whether it is already booked.
-            if get_position_by_id(position_id).await.is_none() {
+            let Some(snapshot) = get_position_by_id(position_id).await else {
                 log_missing_position(position_id, "exit verification");
                 return Ok(effects);
-            }
+            };
+            let reading = LateFillReading::of(&snapshot.mint, position_id, held_after).await;
             let store_chain = get_store_chain().await?;
             let fill = CloseFill {
                 effective_exit_price,
@@ -230,7 +232,7 @@ pub async fn apply_transition(transition: PositionTransition) -> Result<ApplyEff
                     Some(late_fill(
                         row,
                         reads,
-                        held_after,
+                        reading,
                         store_chain,
                         after_write_off,
                     )?)
@@ -645,6 +647,7 @@ pub async fn apply_transition(transition: PositionTransition) -> Result<ApplyEff
                 );
             }
 
+            let reading = LateFillReading::of(&snapshot.mint, position_id, held_after).await;
             let store_chain = get_store_chain().await?;
             let committed = book_position(position_id, |row, reads| {
                 if reads.exit_record_exists(&exit_signature)? {
@@ -665,7 +668,7 @@ pub async fn apply_transition(transition: PositionTransition) -> Result<ApplyEff
                 if is_closed(row) {
                     let after_write_off = row.synthetic_exit;
                     row.book_late_partial_exit(native_received);
-                    let late = late_fill(row, reads, held_after, store_chain, after_write_off)?;
+                    let late = late_fill(row, reads, reading, store_chain, after_write_off)?;
                     return Ok(Booking::Write {
                         record: Some(record),
                         outcome: Some(late),
@@ -988,6 +991,7 @@ pub async fn apply_transition(transition: PositionTransition) -> Result<ApplyEff
                 dca_time,
                 decimals,
             };
+            let reading = LateFillReading::of(&snapshot.mint, position_id, held_after).await;
             let store_chain = get_store_chain().await?;
             let committed = book_position(position_id, |row, reads| {
                 if reads.entry_record_exists(&dca_signature)? {
@@ -1014,7 +1018,7 @@ pub async fn apply_transition(transition: PositionTransition) -> Result<ApplyEff
                 }
                 let late = after_write_off
                     .map(|after_write_off| {
-                        late_fill(row, reads, held_after, store_chain, after_write_off)
+                        late_fill(row, reads, reading, store_chain, after_write_off)
                     })
                     .transpose()?;
                 // A reopened position averages its cost over what it now holds.
@@ -1262,18 +1266,48 @@ enum ExitClear {
     WrittenOffSaleDropped,
 }
 
+/// The wallet's holding of a mint after a swap, as a late fill of one position may use it.
+#[derive(Debug, Clone, Copy)]
+struct LateFillReading {
+    /// The holding read after the swap, `None` when it could not be read.
+    held_after: Option<RawAmount>,
+    /// Another bot swap of the mint may still move the holding, so the reading may or may
+    /// not hold its tokens.
+    other_swap_in_flight: bool,
+}
+
+impl LateFillReading {
+    async fn of(mint: &str, position_id: i64, held_after: Option<RawAmount>) -> Self {
+        Self {
+            held_after,
+            other_swap_in_flight: other_swap_in_flight(mint, position_id).await,
+        }
+    }
+}
+
 /// Makes a closed `row`, with a late swap's own leg already booked on it, follow its round.
-/// `held_after` is the wallet's holding of the mint after the swap, of which the row owns
-/// what the other open positions of the mint do not hold, up to what it acquired. Without
-/// that reading nothing can be decided, so the booking fails retryably and is read again.
+/// The reading's holding is the wallet's holding of the mint after the swap, of which the
+/// row owns what the other open positions of the mint do not hold, up to what it acquired.
+/// Without that reading, or while another swap of the mint or another position's entry is
+/// still unsettled, nothing can be decided, so the booking fails retryably and is read
+/// again.
 fn late_fill(
     row: &mut Position,
     reads: &BookingReads<'_>,
-    held_after: Option<RawAmount>,
+    reading: LateFillReading,
     chain: ChainId,
     after_write_off: bool,
 ) -> Result<LateFill> {
-    let Some(held_after) = held_after else {
+    if reading.other_swap_in_flight {
+        return Err(Error::HoldingUnattributable {
+            mint: row.mint.clone(),
+            detail: format!(
+                "another swap of the mint is in flight during a fill on closed position {:?}",
+                row.id
+            ),
+        });
+    }
+    let Some(held_after) = reading.held_after else {
         return Err(crate::chains::Error::SettlementRead {
             chain,
             detail: format!(

@@ -5,7 +5,7 @@
 
 use super::{
     queue::VerificationItem,
-    round_state::is_dust,
+    round_state::{attributable_held, is_dust},
     settle,
     state::get_position_by_id,
     transitions::PositionTransition,
@@ -67,7 +67,9 @@ fn is_transient_verification_error(msg: &str) -> bool {
         || m.contains("blockchain transaction not found")
 }
 
-async fn residual_balance_requires_retry(position_id: Option<i64>, balance: RawAmount) -> bool {
+/// Whether `balance`, the wallet's holding of the mint after a full exit of the position,
+/// leaves a residual of the position's own that another close must sell.
+pub async fn residual_balance_requires_retry(position_id: Option<i64>, balance: RawAmount) -> bool {
     if balance == RawAmount::ZERO {
         return false;
     }
@@ -76,7 +78,9 @@ async fn residual_balance_requires_retry(position_id: Option<i64>, balance: RawA
         if let Some(position) = get_position_by_id(pid).await {
             // Dust is measured against what the position acquired: what it still holds plus
             // what it already sold. Partial exits shrink the remainder, so a remainder-based
-            // threshold drops exactly when a leftover is most clearly dust.
+            // threshold drops exactly when a leftover is most clearly dust. Only the part of
+            // the balance the other open positions of the mint do not hold is this
+            // position's residual: retrying the close on theirs would sell their tokens.
             if let Some(held) = position
                 .remaining_token_amount
                 .filter(|remaining| *remaining > RawAmount::ZERO)
@@ -85,11 +89,14 @@ async fn residual_balance_requires_retry(position_id: Option<i64>, balance: RawA
                 let acquired = held
                     .checked_add(position.total_exited_amount)
                     .unwrap_or(RawAmount::new(u128::MAX));
-                if is_dust(balance, acquired) {
+                let others =
+                    settle::held_by_other_open_positions(&position.mint, position.id).await;
+                let residual = attributable_held(balance, others, acquired);
+                if is_dust(residual, acquired) {
                     logger::debug(
                         LogTag::Positions,
                         &format!(
-                            "Ignoring residual dust balance {balance} (acquired {acquired}) for position {pid}"
+                            "Ignoring residual balance {balance} for position {pid}: {residual} of it is its own (acquired {acquired})"
                         ),
                     );
                     return false;

@@ -15,6 +15,7 @@ use screenerbot::positions::operations::{force_close_position, mark_exit_submitt
 use screenerbot::positions::price_updater::update_position_price_and_pnl;
 use screenerbot::positions::round_state::exit_awaiting_verification;
 use screenerbot::positions::transitions::NotLandedEvidence;
+use screenerbot::positions::verifier::residual_balance_requires_retry;
 use screenerbot::positions::{
     db, state, ApplyFailureDisposition, Error, GiveUpReason, PendingDcaSwap, PendingPartialExit,
     Position, PositionManagement, PositionTransition, PriceSource, VerificationItem,
@@ -2228,6 +2229,28 @@ fn a_sale_with_a_residual_on_a_written_off_row_is_booked_and_not_retried() {
 }
 
 #[test]
+fn a_full_exit_residual_counts_only_the_positions_own_tokens() {
+    common::run_isolated(
+        "a_full_exit_residual_counts_only_the_positions_own_tokens",
+        || async {
+            let _dir = common::isolated_env();
+            let _cfg = common::config_guard();
+            let id = open_position(|_| {}).await;
+            store_position(|_| {}).await;
+
+            assert!(
+                !residual_balance_requires_retry(Some(id), RawAmount::new(HELD)).await,
+                "the other position's tokens are taken for a residual of this one"
+            );
+            assert!(
+                residual_balance_requires_retry(Some(id), RawAmount::new(HELD + HELD / 2)).await,
+                "a residual of the position's own is missed beside another position"
+            );
+        },
+    );
+}
+
+#[test]
 fn a_partial_exit_after_a_close_keeps_acquired_equal_to_held_plus_exited() {
     common::run_isolated(
         "a_partial_exit_after_a_close_keeps_acquired_equal_to_held_plus_exited",
@@ -2472,6 +2495,107 @@ fn a_late_fill_without_a_balance_reading_is_requeued_not_guessed() {
             assert_eq!(entry_records(id).await, 0);
             assert_eq!(exit_records(id).await, 0);
             assert_eq!(recorded_loss(), 1.0);
+        },
+    );
+}
+
+/// Asserts every late fill on `id` is refused retryably, with nothing booked, because the
+/// wallet's holding cannot be split between the positions of the mint yet.
+async fn assert_late_fills_wait(id: i64, held_after: RawAmount) {
+    let before = in_storage(id).await;
+    for transition in [
+        late_dca(id, Some(held_after)),
+        late_partial(id, Some(held_after)),
+        late_sell(id, Some(held_after)),
+    ] {
+        let error = apply_transition(transition)
+            .await
+            .expect_err("the holding cannot be attributed yet");
+        assert!(
+            matches!(error, Error::HoldingUnattributable { .. }),
+            "expected an unattributable holding, got {error:?}"
+        );
+        let item = VerificationItem::new_dca(
+            DCA_SIGNATURE.to_owned(),
+            common::TEST_MINT.to_owned(),
+            Some(id),
+            None,
+        );
+        assert!(matches!(
+            item.apply_failure_disposition(&error),
+            ApplyFailureDisposition::Requeue
+        ));
+    }
+    assert_unchanged(id, &before).await;
+    assert_eq!(entry_records(id).await, 0);
+    assert_eq!(exit_records(id).await, 0);
+}
+
+#[test]
+fn a_late_fill_waits_while_another_position_of_the_mint_has_an_unverified_entry() {
+    common::run_isolated(
+        "a_late_fill_waits_while_another_position_of_the_mint_has_an_unverified_entry",
+        || async {
+            let _dir = common::isolated_env();
+            let _cfg = common::config_guard();
+            let id = written_off(|_| {}).await;
+            // A bot entry's row holds no amount until its entry is verified.
+            let sibling = store_position(|position| {
+                unverified_entry("sibling-entry-sig")(position);
+                position.token_amount = None;
+                position.remaining_token_amount = None;
+            })
+            .await;
+
+            assert_late_fills_wait(id, RawAmount::new(HELD + 500_000 + HELD)).await;
+
+            apply_transition(entry_verified(sibling))
+                .await
+                .expect("the sibling's entry is booked");
+            apply_transition(late_dca(id, Some(RawAmount::new(HELD + 500_000 + HELD))))
+                .await
+                .expect("the late DCA is booked once the sibling's holding is known");
+            for position in [stored_position(id).await, memory_position(id).await] {
+                assert!(position.exit_time.is_none(), "the position is open again");
+                assert_eq!(
+                    position.remaining_token_amount,
+                    Some(RawAmount::new(HELD + 500_000)),
+                    "the reopened position holds the sibling's tokens"
+                );
+            }
+        },
+    );
+}
+
+#[test]
+fn a_late_fill_waits_while_another_swap_of_the_mint_is_in_flight() {
+    common::run_isolated(
+        "a_late_fill_waits_while_another_swap_of_the_mint_is_in_flight",
+        || async {
+            let _dir = common::isolated_env();
+            let _cfg = common::config_guard();
+            let id = written_off(|_| {}).await;
+            let sibling = store_position(|_| {}).await;
+
+            register_partial(sibling).await;
+            assert_late_fills_wait(id, RawAmount::new(HELD)).await;
+            state::clear_pending_partial_exit(PARTIAL_SIGNATURE)
+                .await
+                .expect("clear the sibling's partial exit");
+            state::clear_partial_exit_pending(common::TEST_MINT).await;
+
+            {
+                let _submitting = state::mark_swap_in_flight(
+                    screenerbot::chains::ChainId::Solana,
+                    common::TEST_MINT,
+                );
+                assert_late_fills_wait(id, RawAmount::new(HELD)).await;
+            }
+
+            apply_transition(late_sell(id, Some(RawAmount::new(HELD))))
+                .await
+                .expect("the late sell is booked once no other swap is in flight");
+            assert_eq!(exit_records(id).await, 1);
         },
     );
 }

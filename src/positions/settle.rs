@@ -170,16 +170,26 @@ pub(crate) async fn entry_attributable_is_dust(item: &VerificationItem) -> Optio
         })
         .ok()?;
 
-    let held_by_others = POSITIONS
+    let held_by_others = held_by_other_open_positions(&item.mint, position.id).await;
+    attributable_is_dust(holding.amount, held_by_others, Some(expected))
+}
+
+/// What the open positions of `mint` other than `position_id` hold, as memory has them:
+/// the remaining amount once recorded, otherwise the entry fill. Saturates at the largest
+/// raw amount.
+pub(crate) async fn held_by_other_open_positions(
+    mint: &str,
+    position_id: Option<i64>,
+) -> RawAmount {
+    POSITIONS
         .read()
         .await
         .iter()
-        .filter(|p| p.mint == item.mint && p.id != position.id && is_position_open(p))
+        .filter(|p| p.mint == mint && p.id != position_id && is_position_open(p))
         .filter_map(|p| p.remaining_token_amount.or(p.token_amount))
         .fold(RawAmount::ZERO, |sum, held| {
             sum.checked_add(held).unwrap_or(RawAmount::new(u128::MAX))
-        });
-    attributable_is_dust(holding.amount, held_by_others, Some(expected))
+        })
 }
 
 #[cfg(test)]

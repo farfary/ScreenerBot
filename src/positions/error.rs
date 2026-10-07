@@ -56,6 +56,10 @@ pub enum Error {
         "the entry {signature} of position {position_id} landed; the position was not removed"
     )]
     EntryLanded { position_id: i64, signature: String },
+    /// The wallet's holding of a mint cannot be split between its positions yet: another
+    /// position's holding is not booked, or another swap of the mint is in flight.
+    #[error("the holding of token {mint} cannot be attributed yet: {detail}")]
+    HoldingUnattributable { mint: String, detail: String },
     #[error("persisted position {field} has unknown value '{value}'")]
     UnknownPersistedValue { field: &'static str, value: String },
 
@@ -162,6 +166,8 @@ impl ErrorClass for Error {
             | Error::SwapFailed { .. } => false,
             Error::Maintenance { .. } => false,
             Error::WalletHistorySync { .. } => true,
+            // The other swap or entry settles on its own; the holding is read again then.
+            Error::HoldingUnattributable { .. } => true,
             Error::WalletUnavailable { .. } => false,
             Error::SlotUnavailable { .. } => true,
         }
@@ -191,6 +197,7 @@ impl ErrorClass for Error {
             Error::AlreadyOpen { .. }
             | Error::AlreadyClosed { .. }
             | Error::EntryLanded { .. }
+            | Error::HoldingUnattributable { .. }
             | Error::UnknownPersistedValue { .. } => Severity::Warning,
             Error::AlreadyStored { .. } => Severity::Error,
             Error::InvalidPrice { .. }
@@ -222,6 +229,7 @@ impl ErrorClass for Error {
             | Error::AlreadyClosed { .. }
             | Error::AlreadyStored { .. }
             | Error::EntryLanded { .. }
+            | Error::HoldingUnattributable { .. }
             | Error::ZeroExitAmount { .. } => 409,
             Error::UnknownPersistedValue { .. }
             | Error::InvalidPrice { .. }

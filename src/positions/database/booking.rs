@@ -90,31 +90,46 @@ impl BookingReads<'_> {
 
     /// What the other open positions of `mint` in this wallet hold, archived and
     /// wallet-derived ones included: the remaining amount once recorded, otherwise the entry
-    /// fill. Saturates at the largest raw amount.
+    /// fill. Saturates at the largest raw amount. Fails retryably while one of them has an
+    /// entry that is not verified: its holding is not booked yet, so the wallet's holding
+    /// cannot be split between the positions.
     pub(crate) fn other_open_held(&self, mint: &str) -> Result<RawAmount> {
         let wallet_address = self.wallet_address.clone()?;
         let sqlite = |e| DatabaseError::classify_sqlite_failure("commit_booking", e);
         let mut stmt = self
             .conn
             .prepare(
-                "SELECT COALESCE(remaining_token_amount, token_amount) FROM positions
+                "SELECT id, transaction_entry_verified, COALESCE(remaining_token_amount, token_amount)
+                 FROM positions
                  WHERE chain_id = ?1 AND wallet_address = ?2 AND mint = ?3 AND id != ?4
                    AND exit_time IS NULL",
             )
             .map_err(sqlite)?;
-        let held = stmt
+        let rows = stmt
             .query_map(
                 params![self.chain, wallet_address, mint, self.position_id],
-                |row| row.get::<_, Option<RawAmount>>(0),
+                |row| {
+                    Ok((
+                        row.get::<_, i64>(0)?,
+                        row.get::<_, bool>(1)?,
+                        row.get::<_, Option<RawAmount>>(2)?,
+                    ))
+                },
             )
-            .map_err(sqlite)?
-            .try_fold(RawAmount::ZERO, |sum, held| {
-                Ok::<_, rusqlite::Error>(
-                    sum.checked_add(held?.unwrap_or(RawAmount::ZERO))
-                        .unwrap_or(RawAmount::new(u128::MAX)),
-                )
-            })
             .map_err(sqlite)?;
+        let mut held = RawAmount::ZERO;
+        for row in rows {
+            let (id, entry_verified, amount) = row.map_err(sqlite)?;
+            if !entry_verified {
+                return Err(Error::HoldingUnattributable {
+                    mint: mint.to_owned(),
+                    detail: format!("the entry of position {id} is not verified"),
+                });
+            }
+            held = held
+                .checked_add(amount.unwrap_or(RawAmount::ZERO))
+                .unwrap_or(RawAmount::new(u128::MAX));
+        }
         Ok(held)
     }
 
