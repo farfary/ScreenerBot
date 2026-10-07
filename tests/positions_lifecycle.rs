@@ -901,11 +901,11 @@ async fn a_buy_that_never_reached_the_chain_leaves_no_pending_open_mark() {
     assert!(!is_open_position(mint).await);
 }
 
-/// The open path ends its kept mark with the swap failure's own reading: only
-/// a failure that provably sent nothing frees the mint for another open. An
+/// A kept pending-open mark ends with the swap failure's own reading: only a
+/// failure that provably sent nothing frees the mint for another open. An
 /// unproven send and a signature that may still land both keep it.
 #[tokio::test]
-async fn the_open_path_releases_its_mark_only_on_a_proven_never_sent_failure() {
+async fn a_kept_open_mark_is_released_only_by_a_failure_that_provably_sent_nothing() {
     use screenerbot::chains::ExecutionFailure;
     use screenerbot::positions::state::{hold_pending_open, is_open_position};
     use screenerbot::swaps::{failed_swap, NotSubmittedReason, SwapExecutionError};
