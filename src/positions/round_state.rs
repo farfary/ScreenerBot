@@ -89,6 +89,16 @@ pub fn is_closed(position: &Position) -> bool {
     position.exit_time.is_some() && position.transaction_exit_verified
 }
 
+/// The full-exit signature of `position` whose sale still has to be verified and booked: an
+/// exit not yet verified, or the sale in flight when the position was written off. The
+/// write-off marks the exit verified without booking that sale, so the sale is verified as a
+/// late fill; booking it turns the write-off into a real close, and a sale the chain proves
+/// failed or never landed is dropped from the row, so neither qualifies again.
+pub fn exit_awaiting_verification(position: &Position) -> Option<&str> {
+    let signature = position.exit_transaction_signature.as_deref()?;
+    (!position.transaction_exit_verified || position.synthetic_exit).then_some(signature)
+}
+
 /// Makes a closed position follow its round once a late fill's own leg is booked on it.
 /// `held` is the wallet's holding attributable to the position (see [`attributable_held`]).
 ///

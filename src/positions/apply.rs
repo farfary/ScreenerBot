@@ -400,12 +400,24 @@ pub async fn apply_transition(transition: PositionTransition) -> Result<ApplyEff
             // A failed sell must never reopen a close that is already verified (a force close
             // or a synthetic exit committed while the sell was still being verified), and
             // never clears an exit other than its own: a newer exit submitted after it stays.
-            // The stored row is read inside the clear's own transaction. Once the clear is
-            // stored, the failed swap's signature is purged from the index, so no stale
-            // sig->mint mapping remains. The failed swap comes from the transition: a
+            // On a written-off row the failed sell is the one the write-off left in flight;
+            // it is dropped from the row, so it is not verified again, and the write-off
+            // stands. The stored row is read inside the clear's own transaction. Once the
+            // clear is stored, the failed swap's signature is purged from the index, so no
+            // stale sig->mint mapping remains. The failed swap comes from the transition: a
             // submission whose row write failed never put it on the row.
             let committed = book_position(position_id, |row, _| {
                 if row.transaction_exit_verified {
+                    if row.synthetic_exit
+                        && row.exit_transaction_signature.as_deref()
+                            == Some(exit_signature.as_str())
+                    {
+                        row.drop_failed_written_off_sale();
+                        return Ok(Booking::Write {
+                            record: None,
+                            outcome: ExitClear::WrittenOffSaleDropped,
+                        });
+                    }
                     return Ok(Booking::Skip(ExitClear::ExitVerified));
                 }
                 if let Some(other) = row
@@ -442,7 +454,22 @@ pub async fn apply_transition(transition: PositionTransition) -> Result<ApplyEff
                     remove_signature_from_index(&exit_signature).await;
                     return Ok(effects);
                 }
-                Committed::Skipped(ExitClear::Cleared) | Committed::Written { .. } => {}
+                Committed::Written {
+                    outcome: ExitClear::WrittenOffSaleDropped,
+                    ..
+                } => {
+                    logger::warning(
+                        LogTag::Positions,
+                        &format!(
+                            "Sale {exit_signature} of written-off position {position_id} did not land - the write-off stands"
+                        ),
+                    );
+                    effects.db_updated = true;
+                    remove_signature_from_index(&exit_signature).await;
+                    return Ok(effects);
+                }
+                Committed::Skipped(ExitClear::Cleared | ExitClear::WrittenOffSaleDropped)
+                | Committed::Written { .. } => {}
                 Committed::Deleted { .. } => return Err(Error::NotFoundById { position_id }),
             }
             effects.db_updated = true;
@@ -835,15 +862,20 @@ pub async fn apply_transition(transition: PositionTransition) -> Result<ApplyEff
             }))
             .await?;
 
-            let cleared = Box::pin(apply_transition(
+            // A sale that landed on a closed row leaves no exit to retry: its leg is booked,
+            // and the residual is the round's, not this row's.
+            match Box::pin(apply_transition(
                 PositionTransition::ExitFailedClearForRetry {
                     position_id,
                     exit_signature,
                 },
             ))
-            .await?;
-
-            effects.db_updated = cleared.db_updated;
+            .await
+            {
+                Ok(cleared) => effects.db_updated = cleared.db_updated,
+                Err(Error::AlreadyClosed { .. }) => effects.db_updated = true,
+                Err(error) => return Err(error),
+            }
         }
 
         PositionTransition::PartialExitFailed {
@@ -1225,6 +1257,9 @@ enum ExitClear {
     ExitVerified,
     /// The row's exit is another, newer swap, which the clear leaves in place.
     OtherExit(String),
+    /// The row was written off while this sale was in flight; the sale is dropped and the
+    /// write-off stands.
+    WrittenOffSaleDropped,
 }
 
 /// Makes a closed `row`, with a late swap's own leg already booked on it, follow its round.

@@ -13,6 +13,7 @@ use screenerbot::errors::{DatabaseError, ErrorClass};
 use screenerbot::positions::apply::apply_transition;
 use screenerbot::positions::operations::{force_close_position, mark_exit_submitted};
 use screenerbot::positions::price_updater::update_position_price_and_pnl;
+use screenerbot::positions::round_state::exit_awaiting_verification;
 use screenerbot::positions::transitions::NotLandedEvidence;
 use screenerbot::positions::{
     db, state, ApplyFailureDisposition, Error, GiveUpReason, PendingDcaSwap, PendingPartialExit,
@@ -881,9 +882,9 @@ fn a_force_close_of_a_position_not_in_memory_books_the_row_once() {
 }
 
 #[test]
-fn a_failed_exit_clear_after_a_force_close_leaves_the_close_intact() {
+fn a_failed_sale_after_a_force_close_is_dropped_and_the_write_off_stands() {
     common::run_isolated(
-        "a_failed_exit_clear_after_a_force_close_leaves_the_close_intact",
+        "a_failed_sale_after_a_force_close_is_dropped_and_the_write_off_stands",
         || async {
             let _dir = common::isolated_env();
             let _cfg = common::config_guard();
@@ -899,17 +900,20 @@ fn a_failed_exit_clear_after_a_force_close_leaves_the_close_intact() {
             let booked = in_storage(id).await;
             assert_eq!(booked, in_memory(id).await, "memory and storage disagree");
             assert_eq!(recorded_loss(), 1.0);
-
-            let error = apply_transition(failed_close(id))
-                .await
-                .expect_err("a verified close refuses the failed-exit clear");
-            assert!(
-                matches!(error, Error::AlreadyClosed { position_id } if position_id == id),
-                "expected already closed, got {error:?}"
+            assert_eq!(
+                exit_awaiting_verification(&closed),
+                Some(CLOSE_SIGNATURE),
+                "the sale in flight at the write-off is still to be verified"
             );
+
+            let effects = apply_transition(failed_close(id))
+                .await
+                .expect("the failed sale is settled on the written-off row");
+            assert!(effects.db_updated);
 
             for position in [stored_position(id).await, memory_position(id).await] {
                 assert!(position.transaction_exit_verified);
+                assert!(position.synthetic_exit);
                 assert!(position.exit_time.is_some());
                 assert_eq!(position.closed_reason, closed.closed_reason);
                 assert!(position
@@ -919,10 +923,54 @@ fn a_failed_exit_clear_after_a_force_close_leaves_the_close_intact() {
                 assert_eq!(position.exit_price, closed.exit_price);
                 assert_eq!(position.effective_exit_price, closed.effective_exit_price);
                 assert_eq!(
-                    position.exit_transaction_signature.as_deref(),
-                    Some(CLOSE_SIGNATURE)
+                    position.exit_transaction_signature, None,
+                    "the failed sale stays on the row"
+                );
+                assert_eq!(
+                    exit_awaiting_verification(&position),
+                    None,
+                    "a sale the chain proved failed is verified again"
                 );
             }
+            assert_unchanged(id, &booked).await;
+
+            let error = force_close_position(id, "again")
+                .await
+                .expect_err("the position is still closed");
+            assert!(
+                matches!(error, Error::AlreadyClosed { position_id } if position_id == id),
+                "expected already closed, got {error:?}"
+            );
+            assert_eq!(recorded_loss(), 1.0, "the loss was recorded twice");
+        },
+    );
+}
+
+#[test]
+fn a_failed_exit_clear_on_a_verified_sale_keeps_the_close_and_its_signature() {
+    common::run_isolated(
+        "a_failed_exit_clear_on_a_verified_sale_keeps_the_close_and_its_signature",
+        || async {
+            let _dir = common::isolated_env();
+            let _cfg = common::config_guard();
+            let id = open_position(|position| {
+                position.exit_transaction_signature = Some(CLOSE_SIGNATURE.to_owned());
+            })
+            .await;
+            apply_transition(verified_close(id))
+                .await
+                .expect("the sale is booked as the close");
+            let booked = in_storage(id).await;
+            let before = stored_columns(id);
+
+            let error = apply_transition(failed_close(id))
+                .await
+                .expect_err("a verified close refuses the failed-exit clear");
+            assert!(
+                matches!(error, Error::AlreadyClosed { position_id } if position_id == id),
+                "expected already closed, got {error:?}"
+            );
+            assert_eq!(stored_columns(id), before, "the verified close changed");
             assert_unchanged(id, &booked).await;
 
             let item = VerificationItem::new(
@@ -940,15 +988,6 @@ fn a_failed_exit_clear_after_a_force_close_leaves_the_close_intact() {
                 ),
                 "the verification item must be dropped, got {disposition:?}"
             );
-
-            let error = force_close_position(id, "again")
-                .await
-                .expect_err("the position is still closed");
-            assert!(
-                matches!(error, Error::AlreadyClosed { position_id } if position_id == id),
-                "expected already closed, got {error:?}"
-            );
-            assert_eq!(recorded_loss(), 1.0, "the loss was recorded twice");
         },
     );
 }
@@ -2097,6 +2136,93 @@ fn a_sell_verified_after_a_force_close_books_its_proceeds_and_restates_the_loss(
             );
             assert_eq!(recorded_loss(), 0.0, "the loss is restated away");
             assert_eq!(position_events("fill_after_force_close").await, 1);
+        },
+    );
+}
+
+#[test]
+fn a_sale_in_flight_at_a_write_off_is_verified_after_a_restart_and_booked_once() {
+    common::run_isolated(
+        "a_sale_in_flight_at_a_write_off_is_verified_after_a_restart_and_booked_once",
+        || async {
+            let _dir = common::isolated_env();
+            let _cfg = common::config_guard();
+            enable_loss_limit();
+            let id = written_off(|position| {
+                position.exit_transaction_signature = Some(CLOSE_SIGNATURE.to_owned());
+            })
+            .await;
+
+            screenerbot::positions::initialize_positions_system()
+                .await
+                .expect("the positions system restarts");
+            let (_, queued) = screenerbot::positions::queue::get_queue_status().await;
+            assert!(
+                queued.iter().any(|signature| signature == CLOSE_SIGNATURE),
+                "the restart lost the sale in flight at the write-off: {queued:?}"
+            );
+
+            for _ in 0..2 {
+                apply_transition(late_sell(id, Some(RawAmount::ZERO)))
+                    .await
+                    .expect("the late sell is booked");
+            }
+            assert_eq!(exit_records(id).await, 1, "the sale is booked once");
+            let booked = in_storage(id).await;
+            assert_eq!(booked, in_memory(id).await, "memory and storage disagree");
+            assert_eq!(booked.native_received, Some(1.5));
+            assert_eq!(recorded_loss(), 0.0, "the loss is restated away");
+            for position in [stored_position(id).await, memory_position(id).await] {
+                assert!(!position.synthetic_exit);
+                assert_eq!(
+                    exit_awaiting_verification(&position),
+                    None,
+                    "a booked sale is verified again"
+                );
+            }
+        },
+    );
+}
+
+#[test]
+fn a_sale_with_a_residual_on_a_written_off_row_is_booked_and_not_retried() {
+    common::run_isolated(
+        "a_sale_with_a_residual_on_a_written_off_row_is_booked_and_not_retried",
+        || async {
+            let _dir = common::isolated_env();
+            let _cfg = common::config_guard();
+            let id = written_off(|position| {
+                position.exit_transaction_signature = Some(CLOSE_SIGNATURE.to_owned());
+            })
+            .await;
+
+            let residual = PositionTransition::ExitResidualClearForRetry {
+                position_id: id,
+                exit_amount: RawAmount::new(HELD / 2),
+                native_received: 0.75,
+                effective_exit_price: 1.5,
+                fee_raw: SWAP_FEE_RAW,
+                exit_time: Utc::now(),
+                exit_signature: CLOSE_SIGNATURE.to_owned(),
+                exit_percentage: 50.0,
+                held_after: Some(RawAmount::ZERO),
+            };
+            apply_transition(residual)
+                .await
+                .expect("the sale is booked and nothing is left to retry");
+
+            assert_eq!(exit_records(id).await, 1, "the sale's leg is booked once");
+            let booked = in_storage(id).await;
+            assert_eq!(booked, in_memory(id).await, "memory and storage disagree");
+            assert_eq!(booked.native_received, Some(0.75));
+            for position in [stored_position(id).await, memory_position(id).await] {
+                assert!(position.transaction_exit_verified && position.exit_time.is_some());
+                assert_eq!(
+                    exit_awaiting_verification(&position),
+                    None,
+                    "a booked sale is verified again"
+                );
+            }
         },
     );
 }

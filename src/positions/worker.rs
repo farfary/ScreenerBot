@@ -11,6 +11,7 @@ use super::{
         enqueue_verification, mark_swap_confirmed, poll_verification_batch, remove_verification,
         requeue_verification, settlement_candidates, unbounded_signatures, VerificationItem,
     },
+    round_state::exit_awaiting_verification,
     settle::{self, Disposition},
     state::{
         reconcile_global_position_semaphore, rehydrate_pending_dca_swaps, MINT_TO_POSITION_INDEX,
@@ -71,19 +72,16 @@ pub async fn initialize_positions_system() -> Result<()> {
                     }
                 }
 
-                // Add unverified exit transactions to queue
-                if !position.transaction_exit_verified {
-                    if let Some(exit_sig) = &position.exit_transaction_signature {
-                        let item = VerificationItem::new(
-                            exit_sig.clone(),
-                            position.mint.clone(),
-                            position.id,
-                            VerificationKind::Exit,
-                            None,
-                        );
-                        enqueue_verification(item).await;
-                        unverified_count += 1;
-                    }
+                if let Some(exit_sig) = exit_awaiting_verification(position) {
+                    let item = VerificationItem::new(
+                        exit_sig.to_owned(),
+                        position.mint.clone(),
+                        position.id,
+                        VerificationKind::Exit,
+                        None,
+                    );
+                    enqueue_verification(item).await;
+                    unverified_count += 1;
                 }
 
                 // NOTE: pending PARTIAL exits are NOT recovered from the position here.
@@ -422,8 +420,9 @@ async fn run_verification_cycle(is_first_cycle: bool, last_summary: &mut DateTim
     settle_unresolved(unresolved).await;
 }
 
-/// Re-enqueues the verification of every unverified entry or exit signature of a position
-/// that is missing from the queue. Returns the queue size before and the number re-enqueued.
+/// Re-enqueues the verification of every unverified entry signature, and every exit
+/// signature [`exit_awaiting_verification`] names, of a position that is missing from the
+/// queue. Returns the queue size before and the number re-enqueued.
 /// The items carry no expiry bound; [`settle_queued_signatures`] assigns one.
 async fn reenqueue_missing_verifications() -> (usize, usize) {
     let (queue_size_before, signatures_in_queue) = super::queue::get_queue_status().await;
@@ -447,14 +446,12 @@ async fn reenqueue_missing_verifications() -> (usize, usize) {
             }
         }
 
-        if !position.transaction_exit_verified {
-            if let Some(exit_sig) = &position.exit_transaction_signature {
-                if !signatures_in_queue.contains(exit_sig) {
-                    let item = if let Some(pending) =
-                        super::state::get_pending_partial_exit(exit_sig).await
-                    {
+        if let Some(exit_sig) = exit_awaiting_verification(position) {
+            if !signatures_in_queue.iter().any(|queued| queued == exit_sig) {
+                let item =
+                    if let Some(pending) = super::state::get_pending_partial_exit(exit_sig).await {
                         VerificationItem::new_partial_exit(
-                            exit_sig.clone(),
+                            exit_sig.to_owned(),
                             position.mint.clone(),
                             position.id,
                             pending.expected_exit_amount,
@@ -463,16 +460,15 @@ async fn reenqueue_missing_verifications() -> (usize, usize) {
                         )
                     } else {
                         VerificationItem::new(
-                            exit_sig.clone(),
+                            exit_sig.to_owned(),
                             position.mint.clone(),
                             position.id,
                             VerificationKind::Exit,
                             None,
                         )
                     };
-                    if enqueue_verification(item).await {
-                        requeued_count += 1;
-                    }
+                if enqueue_verification(item).await {
+                    requeued_count += 1;
                 }
             }
         }

@@ -222,6 +222,13 @@ impl Position {
 
     /// Clears a failed close so it can be retried: the exit signature, the verified flag
     /// and the exit prices it stamped.
+    /// Drops the sale that was in flight when the position was written off, once the chain
+    /// proved that sale failed or never landed: the write-off stands as the close, and no
+    /// signature is left that would be verified again.
+    pub(crate) fn drop_failed_written_off_sale(&mut self) {
+        self.exit_transaction_signature = None;
+    }
+
     pub(crate) fn clear_failed_exit(&mut self) {
         self.exit_transaction_signature = None;
         self.transaction_exit_verified = false;
