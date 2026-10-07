@@ -88,8 +88,8 @@ impl BookingReads<'_> {
             .is_some())
     }
 
-    /// What the other open positions of `mint` in this wallet hold; see
-    /// [`query_other_open_held`].
+    /// What the other open positions of `mint` in this wallet hold, failing retryably while
+    /// it is unattributable; see [`query_other_open_held`].
     pub(crate) fn other_open_held(&self, mint: &str) -> Result<RawAmount> {
         let wallet_address = self.wallet_address.clone()?;
         query_other_open_held(
@@ -98,7 +98,8 @@ impl BookingReads<'_> {
             wallet_address,
             mint,
             Some(self.position_id),
-        )
+        )?
+        .booked(mint)
     }
 
     /// The swap legs the trader booked for this position.
@@ -118,19 +119,51 @@ impl BookingReads<'_> {
     }
 }
 
+/// What the other open positions of a mint in the wallet hold.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum OtherOpenHeld {
+    /// Every one of them has a verified entry: together they hold this.
+    Booked(RawAmount),
+    /// The entry of `position_id` is not verified, so its holding is not booked and the
+    /// wallet's holding cannot be split between the positions. A reader that would act on
+    /// the split treats any part of the holding as possibly theirs.
+    Unattributable { position_id: i64 },
+}
+
+impl OtherOpenHeld {
+    /// The booked holding, failing retryably while it is unattributable: a late fill waits
+    /// for the other entry instead of booking a guess.
+    pub fn booked(self, mint: &str) -> Result<RawAmount> {
+        match self {
+            OtherOpenHeld::Booked(held) => Ok(held),
+            OtherOpenHeld::Unattributable { position_id } => Err(Error::HoldingUnattributable {
+                mint: mint.to_owned(),
+                detail: format!("the entry of position {position_id} is not verified"),
+            }),
+        }
+    }
+
+    /// The booked holding, or `None` while it is unattributable.
+    pub fn known(self) -> Option<RawAmount> {
+        match self {
+            OtherOpenHeld::Booked(held) => Some(held),
+            OtherOpenHeld::Unattributable { .. } => None,
+        }
+    }
+}
+
 /// What the open positions of `mint` in this wallet other than `excluded` hold, archived
 /// and wallet-derived ones included: the remaining amount once recorded, otherwise the entry
 /// fill, and nothing for a row that recorded neither. Saturates at the largest raw amount.
-/// Fails retryably while one of them has an entry that is not verified: its holding is not
-/// booked yet, so the wallet's holding cannot be split between the positions. The one owner
-/// of this reading, inside a booking transaction and outside one.
+/// [`OtherOpenHeld::Unattributable`] while one of them has an entry that is not verified.
+/// The one owner of this reading, inside a booking transaction and outside one.
 pub(super) fn query_other_open_held(
     conn: &Connection,
     chain: &str,
     wallet_address: &str,
     mint: &str,
     excluded: Option<i64>,
-) -> Result<RawAmount> {
+) -> Result<OtherOpenHeld> {
     let sqlite = |e| DatabaseError::classify_sqlite_failure("other_open_held", e);
     let mut stmt = conn
         .prepare(
@@ -154,16 +187,13 @@ pub(super) fn query_other_open_held(
     for row in rows {
         let (id, entry_verified, amount) = row.map_err(sqlite)?;
         if !entry_verified {
-            return Err(Error::HoldingUnattributable {
-                mint: mint.to_owned(),
-                detail: format!("the entry of position {id} is not verified"),
-            });
+            return Ok(OtherOpenHeld::Unattributable { position_id: id });
         }
         held = held
             .checked_add(amount.unwrap_or(RawAmount::ZERO))
             .unwrap_or(RawAmount::new(u128::MAX));
     }
-    Ok(held)
+    Ok(OtherOpenHeld::Booked(held))
 }
 
 impl PositionsDatabase {

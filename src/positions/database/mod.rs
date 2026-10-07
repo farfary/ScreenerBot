@@ -34,6 +34,7 @@ pub use global::{
     with_positions_database_async,
 };
 
+pub use booking::OtherOpenHeld;
 pub(crate) use booking::{Booking, BookingReads, BookingRecord, Committed};
 pub(crate) use operations::carry_columns_not_booked;
 

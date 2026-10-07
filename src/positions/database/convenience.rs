@@ -11,7 +11,7 @@ use crate::logger::{self, LogTag};
 use crate::positions::types::{EntryRecord, ExitRecord, Position, PositionManagement};
 use crate::positions::{Error, Result};
 
-use super::booking::{query_other_open_held, Booking, BookingReads, Committed};
+use super::booking::{query_other_open_held, Booking, BookingReads, Committed, OtherOpenHeld};
 use super::global::GLOBAL_POSITIONS_DB;
 use super::queries::{query_trader_swap_legs, TraderSwapLeg};
 use super::types::{DailyTradingStats, PeriodTradingStats, TokenSnapshot};
@@ -25,7 +25,7 @@ use super::types::{DailyTradingStats, PeriodTradingStats, TokenSnapshot};
 pub(crate) async fn get_other_open_held(
     mint: &str,
     excluded: Option<i64>,
-) -> Result<crate::chains::RawAmount> {
+) -> Result<OtherOpenHeld> {
     let db_guard = GLOBAL_POSITIONS_DB.lock().await;
     let db = db_guard.as_ref().ok_or(Error::NotInitialised)?;
     let conn = db.get_connection()?;

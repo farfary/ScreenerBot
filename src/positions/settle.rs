@@ -8,7 +8,7 @@ use std::sync::Arc;
 use crate::chains::{runtime_for, Holding, SettlementReader, SignatureCheck, SignatureVerdict};
 use crate::logger::{self, LogTag};
 
-use super::db::{get_other_open_held, get_store_chain};
+use super::db::{get_other_open_held, get_store_chain, OtherOpenHeld};
 use super::queue::VerificationItem;
 use super::round_state::{attributable_is_dust, expected_acquisition};
 use super::state::get_position_by_id;
@@ -146,8 +146,10 @@ pub(crate) fn disposition(
 }
 
 /// Whether the wallet's holding of the item's mint, less what the other open positions of
-/// the mint hold, is dust against the acquisition the entry price implies. `None` when the
-/// position, the token's decimals or the holding cannot be read, or when that acquisition is
+/// the mint hold, is dust against the acquisition the entry price implies. A holding that is
+/// dust on its own is dust whatever the others hold, so an unverified entry of another
+/// position never holds it up. `None` when the position, the token's decimals or the holding
+/// cannot be read, when a non-dust holding cannot be attributed, or when that acquisition is
 /// too small to tell a holding from dust.
 pub(crate) async fn entry_attributable_is_dust(item: &VerificationItem) -> Option<bool> {
     let position = get_position_by_id(item.position_id?).await?;
@@ -174,13 +176,25 @@ pub(crate) async fn entry_attributable_is_dust(item: &VerificationItem) -> Optio
             logger::warning(
                 LogTag::Positions,
                 &format!(
-                    "Holding of {} cannot be attributed to position {:?}: {error}",
-                    item.mint, position.id
+                    "Holding of {} by the other positions unavailable: {error}",
+                    item.mint
                 ),
             );
         })
         .ok()?;
-    attributable_is_dust(holding.amount, held_by_others, Some(expected))
+    let dust = attributable_is_dust(holding.amount, held_by_others.known(), Some(expected));
+    if dust.is_none() {
+        if let OtherOpenHeld::Unattributable { position_id } = held_by_others {
+            logger::warning(
+                LogTag::Positions,
+                &format!(
+                    "Holding of {} cannot be attributed to position {:?}: the entry of position {position_id} is not verified",
+                    item.mint, position.id
+                ),
+            );
+        }
+    }
+    dust
 }
 
 #[cfg(test)]

@@ -2304,7 +2304,7 @@ fn a_full_exit_residual_counts_only_the_positions_own_tokens() {
 /// The holding of the other positions of a mint is read from storage, the one owner of that
 /// reading: a closed row holds nothing, a row that recorded no amount holds nothing, an
 /// archived open row still holds its tokens, and an unverified entry makes the holding
-/// unattributable rather than guessed.
+/// unattributable rather than guessed, so the residual is never taken for this position's.
 #[test]
 fn a_full_exit_residual_reads_the_other_positions_as_storage_has_them() {
     common::run_isolated(
@@ -2341,12 +2341,43 @@ fn a_full_exit_residual_reads_the_other_positions_as_storage_has_them() {
 
             store_position(|position| position.transaction_entry_verified = false).await;
             assert!(
-                matches!(
-                    residual().await,
-                    Err(screenerbot::positions::Error::HoldingUnattributable { .. })
-                ),
-                "a residual is decided while another entry of the mint is unverified"
+                !residual()
+                    .await
+                    .expect("an unverified entry does not hold the close up"),
+                "a residual is taken for this position's while another entry is unverified"
             );
+        },
+    );
+}
+
+/// An archived open row whose entry never verifies cannot hold another position's close
+/// forever: whatever the balance the close leaves, the close is booked rather than retried,
+/// because the balance may be the archived row's tokens and a retried close sells the
+/// wallet's holding.
+#[test]
+fn an_unverified_entry_of_another_position_never_stalls_a_close() {
+    common::run_isolated(
+        "an_unverified_entry_of_another_position_never_stalls_a_close",
+        || async {
+            let _dir = common::isolated_env();
+            let _cfg = common::config_guard();
+            let id = open_position(|_| {}).await;
+            store_position(|position| {
+                position.archived = true;
+                position.transaction_entry_verified = false;
+                position.token_amount = None;
+                position.remaining_token_amount = None;
+            })
+            .await;
+
+            for balance in [1, HELD / 2, HELD, HELD * 3, u128::MAX] {
+                assert!(
+                    !residual_balance_requires_retry(Some(id), RawAmount::new(balance))
+                        .await
+                        .expect("the residual is decided without the other entry"),
+                    "a balance of {balance} retried the close beside an unverified entry"
+                );
+            }
         },
     );
 }
@@ -2861,6 +2892,97 @@ fn late_fills_on_two_closed_positions_of_a_mint_book_in_send_order() {
                 partial_cleared().await,
                 "the booked partial exit is still pending"
             );
+        },
+    );
+}
+
+/// Deleting a position drops its pending DCA and partial-exit markers, in memory and in
+/// storage: a swap of a row that no longer exists can never be booked, so its marker must not
+/// hold a later late fill of another position of the mint as unattributable.
+#[test]
+fn deleting_a_position_clears_its_pending_swaps_so_later_late_fills_book() {
+    common::run_isolated(
+        "deleting_a_position_clears_its_pending_swaps_so_later_late_fills_book",
+        || async {
+            let _dir = common::isolated_env();
+            let _cfg = common::config_guard();
+            let deleted = written_off(|_| {}).await;
+            let second = store_position(|position| {
+                position.exit_time = Some(Utc::now());
+                position.transaction_exit_verified = true;
+                position.exit_transaction_signature = Some("second-close-sig".to_owned());
+                position.native_received = Some(1.0);
+                position.remaining_token_amount = Some(RawAmount::ZERO);
+                position.total_exited_amount = RawAmount::new(HELD);
+            })
+            .await;
+            let sent = Utc::now();
+            state::register_pending_dca_swap(PendingDcaSwap {
+                signature: DCA_SIGNATURE.to_owned(),
+                mint: common::TEST_MINT.to_owned(),
+                position_id: deleted,
+                expiry_height: None,
+                created_at: sent - chrono::Duration::seconds(30),
+                size_sol: 0.5,
+            })
+            .await
+            .expect("register the deleted position's DCA");
+            for (signature, position_id, created_at) in [
+                (
+                    "deleted-partial-sig",
+                    deleted,
+                    sent - chrono::Duration::seconds(20),
+                ),
+                (PARTIAL_SIGNATURE, second, sent),
+            ] {
+                state::register_pending_partial_exit(PendingPartialExit {
+                    signature: signature.to_owned(),
+                    mint: common::TEST_MINT.to_owned(),
+                    position_id,
+                    expected_exit_amount: RawAmount::new(400_000),
+                    requested_exit_percentage: 40.0,
+                    expiry_height: None,
+                    created_at,
+                })
+                .await
+                .expect("register a partial exit");
+                state::mark_partial_exit_pending(common::TEST_MINT).await;
+            }
+
+            let status = call_dashboard("DELETE", &format!("/api/positions/{deleted}")).await;
+            assert!(status.is_success(), "delete answered {status}");
+
+            assert!(
+                !dca_pending().await,
+                "the deleted position's DCA is pending"
+            );
+            let partials = state::get_pending_partial_exits_for_mint(common::TEST_MINT).await;
+            assert_eq!(
+                partials.iter().map(|p| p.position_id).collect::<Vec<_>>(),
+                vec![second],
+                "only the remaining position's partial exit is pending"
+            );
+            assert!(state::is_partial_exit_pending(common::TEST_MINT).await);
+            assert!(
+                state::rehydrate_pending_dca_swaps()
+                    .await
+                    .expect("read stored DCAs")
+                    .is_empty(),
+                "storage still lists the deleted position's DCA"
+            );
+            let stored = state::rehydrate_pending_partial_exits()
+                .await
+                .expect("read stored partial exits");
+            assert_eq!(
+                stored.iter().map(|p| p.position_id).collect::<Vec<_>>(),
+                vec![second],
+                "storage still lists the deleted position's partial exit"
+            );
+
+            apply_transition(late_partial(second, Some(RawAmount::new(500_000))))
+                .await
+                .expect("the late fill is not held by the deleted position's swaps");
+            assert_eq!(exit_records(second).await, 1);
         },
     );
 }

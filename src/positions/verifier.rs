@@ -4,7 +4,7 @@
 //! Position verifier — confirms transaction success and updates position state accordingly.
 
 use super::{
-    db::get_other_open_held,
+    db::{get_other_open_held, OtherOpenHeld},
     queue::VerificationItem,
     round_state::{attributable_held, is_dust},
     settle,
@@ -69,9 +69,11 @@ fn is_transient_verification_error(msg: &str) -> bool {
 }
 
 /// Whether `balance`, the wallet's holding of the mint after a full exit of the position,
-/// leaves a residual of the position's own that another close must sell. Fails while the
-/// holding of the other open positions of the mint cannot be read or attributed: the
-/// residual cannot be told from their tokens until it can.
+/// leaves a residual of the position's own that another close must sell. A balance that is
+/// dust on its own needs no attribution. While another open position of the mint has an
+/// unverified entry, the balance may be its tokens, and a retried close sells the wallet's
+/// holding: the residual is never taken for the position's own, so the close is booked
+/// instead of retried. Fails only while the other positions' holding cannot be read.
 pub async fn residual_balance_requires_retry(
     position_id: Option<i64>,
     balance: RawAmount,
@@ -95,7 +97,21 @@ pub async fn residual_balance_requires_retry(
                 let acquired = held
                     .checked_add(position.total_exited_amount)
                     .unwrap_or(RawAmount::new(u128::MAX));
-                let others = get_other_open_held(&position.mint, position.id).await?;
+                if is_dust(balance, acquired) {
+                    return Ok(false);
+                }
+                let others = match get_other_open_held(&position.mint, position.id).await? {
+                    OtherOpenHeld::Booked(others) => others,
+                    OtherOpenHeld::Unattributable { position_id } => {
+                        logger::warning(
+                            LogTag::Positions,
+                            &format!(
+                                "Residual balance {balance} for position {pid} is not retried: the entry of position {position_id} of the mint is not verified, so the balance may be its tokens"
+                            ),
+                        );
+                        return Ok(false);
+                    }
+                };
                 let residual = attributable_held(balance, others, acquired);
                 if is_dust(residual, acquired) {
                     logger::debug(
@@ -459,7 +475,7 @@ pub async fn verify_transaction(item: &VerificationItem) -> VerificationOutcome 
                 Ok(requires_retry) => requires_retry,
                 Err(error) => {
                     return VerificationOutcome::RetryTransient(format!(
-                            "Exit residual {remaining_balance} for mint {} cannot be attributed yet: {error}",
+                            "Exit residual {remaining_balance} for mint {} cannot be read against the other positions yet: {error}",
                             item.mint
                         ));
                 }

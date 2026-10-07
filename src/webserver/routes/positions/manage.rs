@@ -230,6 +230,20 @@ pub(super) async fn set_management(
     })
 }
 
+/// Drops the pending DCA and partial-exit markers of a deleted position, so they never hold
+/// a later fill of its mint as unattributable. The row is already gone, so a failure to
+/// persist the cleared set is logged rather than answered.
+async fn clear_pending_swaps_of_deleted(position_id: i64) {
+    if let Err(error) = positions::state::clear_pending_swaps_of_position(position_id).await {
+        logger::warning(
+            LogTag::Positions,
+            &format!(
+                "Pending swaps of deleted position {position_id} were cleared in memory but not in storage: {error}"
+            ),
+        );
+    }
+}
+
 /// DELETE /positions/:id — permanently delete a position and its history.
 pub(super) async fn delete_position(Path(position_id): Path<i64>) -> Response {
     let position = match positions::get_position_by_id(position_id).await {
@@ -265,6 +279,7 @@ pub(super) async fn delete_position(Path(position_id): Path<i64>) -> Response {
     }
 
     positions::remove_position_by_id(position_id).await;
+    clear_pending_swaps_of_deleted(position_id).await;
 
     if was_open {
         positions::state::release_position_slot(position_id).await;
@@ -315,6 +330,7 @@ pub(super) async fn delete_all_archived() -> Response {
 
     for id in ids {
         positions::remove_position_by_id(id).await;
+        clear_pending_swaps_of_deleted(id).await;
     }
     crate::trader::safety::loss_limit::sync_from_books().await;
 

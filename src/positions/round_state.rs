@@ -57,19 +57,28 @@ pub fn expected_acquisition(
 }
 
 /// Whether the wallet's holding attributable to a round that expects to acquire `expected`
-/// is dust. `None` when the expected acquisition is unknown, or is itself within the dust
-/// floor: the attributable holding is capped at `expected`, so it would read as dust whatever
-/// the wallet holds.
+/// is dust. `held_by_other_open_rows` is `None` while what the other open rounds hold is
+/// unknown: a holding that is dust even with nothing subtracted is dust whatever they hold,
+/// and any other holding may be the round's own, so it decides nothing. `None` also when the
+/// expected acquisition is unknown, or is itself within the dust floor: the attributable
+/// holding is capped at `expected`, so it would read as dust whatever the wallet holds.
 pub fn attributable_is_dust(
     wallet_held: RawAmount,
-    held_by_other_open_rows: RawAmount,
+    held_by_other_open_rows: Option<RawAmount>,
     expected: Option<RawAmount>,
 ) -> Option<bool> {
     let expected = expected.filter(|expected| expected.raw() > DUST_FLOOR_RAW)?;
-    Some(is_dust(
-        attributable_held(wallet_held, held_by_other_open_rows, expected),
+    let dust_alone = is_dust(
+        attributable_held(wallet_held, RawAmount::ZERO, expected),
         expected,
-    ))
+    );
+    match held_by_other_open_rows {
+        Some(others) => Some(is_dust(
+            attributable_held(wallet_held, others, expected),
+            expected,
+        )),
+        None => dust_alone.then_some(true),
+    }
 }
 
 /// What [`follow_round`] did with a position.
@@ -225,11 +234,11 @@ mod tests {
     fn a_residue_up_to_a_thousandth_of_the_expected_acquisition_is_attributable_dust() {
         let expected = Some(raw(50_000_000));
         assert_eq!(
-            attributable_is_dust(raw(50_000), raw(0), expected),
+            attributable_is_dust(raw(50_000), Some(raw(0)), expected),
             Some(true)
         );
         assert_eq!(
-            attributable_is_dust(raw(50_001), raw(0), expected),
+            attributable_is_dust(raw(50_001), Some(raw(0)), expected),
             Some(false)
         );
     }
@@ -238,20 +247,35 @@ mod tests {
     fn the_holding_of_other_open_rounds_is_subtracted_before_the_dust_test() {
         let expected = Some(raw(50_000_000));
         assert_eq!(
-            attributable_is_dust(raw(10_050_000), raw(10_000_000), expected),
+            attributable_is_dust(raw(10_050_000), Some(raw(10_000_000)), expected),
             Some(true)
         );
         assert_eq!(
-            attributable_is_dust(raw(10_050_001), raw(10_000_000), expected),
+            attributable_is_dust(raw(10_050_001), Some(raw(10_000_000)), expected),
             Some(false)
         );
     }
 
+    /// While the other rounds' holding is unknown, only a holding that is dust on its own is
+    /// dust: a zero holding needs no attribution, and anything more may be the round's own.
+    #[test]
+    fn an_unknown_other_holding_decides_only_a_holding_that_is_dust_alone() {
+        let expected = Some(raw(50_000_000));
+        assert_eq!(attributable_is_dust(raw(0), None, expected), Some(true));
+        assert_eq!(
+            attributable_is_dust(raw(50_000), None, expected),
+            Some(true)
+        );
+        assert_eq!(attributable_is_dust(raw(50_001), None, expected), None);
+        assert_eq!(attributable_is_dust(raw(10_050_000), None, expected), None);
+        assert_eq!(attributable_is_dust(raw(0), None, None), None);
+    }
+
     #[test]
     fn an_unknown_expected_acquisition_decides_nothing() {
-        assert_eq!(attributable_is_dust(raw(0), raw(0), None), None);
+        assert_eq!(attributable_is_dust(raw(0), Some(raw(0)), None), None);
         assert_eq!(
-            attributable_is_dust(raw(0), raw(0), expected_acquisition(0.2, 0.004, None)),
+            attributable_is_dust(raw(0), Some(raw(0)), expected_acquisition(0.2, 0.004, None)),
             None
         );
     }
@@ -261,16 +285,19 @@ mod tests {
         for expected in [0, 1, DUST_FLOOR_RAW] {
             for held in [0, 1, DUST_FLOOR_RAW, 1_000_000] {
                 assert_eq!(
-                    attributable_is_dust(raw(held), raw(0), Some(raw(expected))),
+                    attributable_is_dust(raw(held), Some(raw(0)), Some(raw(expected))),
                     None,
                     "held {held} against expected {expected}"
                 );
             }
         }
         let just_above = Some(raw(DUST_FLOOR_RAW + 1));
-        assert_eq!(attributable_is_dust(raw(0), raw(0), just_above), Some(true));
         assert_eq!(
-            attributable_is_dust(raw(DUST_FLOOR_RAW + 1), raw(0), just_above),
+            attributable_is_dust(raw(0), Some(raw(0)), just_above),
+            Some(true)
+        );
+        assert_eq!(
+            attributable_is_dust(raw(DUST_FLOOR_RAW + 1), Some(raw(0)), just_above),
             Some(false)
         );
     }

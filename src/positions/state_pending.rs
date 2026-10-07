@@ -278,6 +278,45 @@ pub async fn clear_pending_partial_exit(signature: &str) -> Result<Option<Pendin
     Ok(removed)
 }
 
+/// Drops the pending DCA swaps and partial exits of position `position_id` from memory and
+/// from storage, decrementing the mint's partial-exit count once per partial exit removed.
+/// For a position whose row is deleted: its swaps can no longer be booked on it, and a
+/// marker left behind would hold every later late fill of the mint as unattributable. Memory
+/// is cleared even when persisting fails; the error reports that storage still lists them
+/// until the next persist of the set.
+pub async fn clear_pending_swaps_of_position(position_id: i64) -> Result<()> {
+    let dca_removed = {
+        let mut map = PENDING_DCA_SWAPS.write().await;
+        let before = map.len();
+        map.retain(|_, entry| entry.position_id != position_id);
+        before != map.len()
+    };
+    let partial_mints: Vec<String> = {
+        let mut details = PENDING_PARTIAL_EXIT_DETAILS.write().await;
+        let signatures: Vec<String> = details
+            .iter()
+            .filter(|(_, entry)| entry.position_id == position_id)
+            .map(|(signature, _)| signature.clone())
+            .collect();
+        signatures
+            .iter()
+            .filter_map(|signature| details.remove(signature))
+            .map(|entry| entry.mint)
+            .collect()
+    };
+    for mint in &partial_mints {
+        clear_partial_exit_pending(mint).await;
+    }
+
+    if dca_removed {
+        persist_pending_dca_swaps().await?;
+    }
+    if !partial_mints.is_empty() {
+        persist_pending_partial_exits().await?;
+    }
+    Ok(())
+}
+
 /// Fetch a pending partial exit by signature
 pub async fn get_pending_partial_exit(signature: &str) -> Option<PendingPartialExit> {
     let map = PENDING_PARTIAL_EXIT_DETAILS.read().await;
