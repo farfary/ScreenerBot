@@ -301,7 +301,6 @@ assistant-tool-buy-token = टोकन खरीदें
 assistant-tool-add-to-position = पोज़िशन में जोड़ें
 assistant-tool-sell-token = टोकन बेचें
 assistant-tool-close-position = पोज़िशन बंद करें
-assistant-tool-get-trade-status = ट्रेड की स्थिति प्राप्त करें
 assistant-tool-get-config = कॉन्फ़िगरेशन प्राप्त करें
 assistant-tool-describe-config = कॉन्फ़िगरेशन का विवरण देखें
 assistant-tool-update-config = कॉन्फ़िगरेशन अपडेट करें

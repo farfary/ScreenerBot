@@ -306,6 +306,9 @@ impl McpServer {
                 "failed" => {
                     return error_result_from(value.get("result"), "The approved request failed.")
                 }
+                "interrupted" => {
+                    return error_result_from(value.get("result"), INTERRUPTED_FALLBACK)
+                }
                 "denied" => return error_result("A person denied this request in ScreenerBot."),
                 "expired" => {
                     return error_result(
@@ -402,6 +405,7 @@ impl ServerHandler for McpServer {
                     .unwrap_or("This paired client is not authorized for this tool."),
             )),
             "unknown_tool" => Ok(error_result("Unknown ScreenerBot tool")),
+            "interrupted" => Ok(error_result_from(value.get("result"), INTERRUPTED_FALLBACK)),
             "approval_denied" => Ok(error_result("A person denied this request in ScreenerBot.")),
             "approval_expired" => Ok(error_result(
                 "The approval request expired in ScreenerBot without a decision.",
@@ -482,6 +486,10 @@ fn submitted_to_call(value: &serde_json::Value) -> CallToolResponse {
     }
     CallToolResult::structured(answer).into()
 }
+
+/// The answer to an interrupted request whose stored answer is missing.
+const INTERRUPTED_FALLBACK: &str = "The approved request ended without an answer. It may have \
+     taken effect: read the current state (get_positions for a trade) before repeating it.";
 
 fn error_result(message: &str) -> CallToolResponse {
     CallToolResult::error(vec![ContentBlock::text(message)]).into()

@@ -33,9 +33,7 @@ use trader::{
     ApplyTraderTemplateTool, GetTraderStatsTool, GetTraderStatusTool, ListTraderTemplatesTool,
     ManageLossLimitTool, SetTraderEnabledTool, SetTraderMonitorTool,
 };
-use trading::{
-    AddToPositionTool, BuyTokenTool, ClosePositionTool, GetTradeStatusTool, SellTokenTool,
-};
+use trading::{AddToPositionTool, BuyTokenTool, ClosePositionTool, SellTokenTool};
 
 /// Category of tool for organization and UI display
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq, Hash)]
@@ -113,7 +111,8 @@ pub trait Tool: Send + Sync {
     /// Whether the tool signs and sends an on-chain transaction. Such a tool
     /// answers an agent connection at once with a trade id and runs on its own
     /// task, because its swap can settle past the connection's deadline; the
-    /// outcome is read through `get_trade_status` (`agent_control::submissions`).
+    /// outcome is read through the bridge's `get_trade_status`
+    /// (`agent_control::submissions`).
     fn sends_transaction(&self) -> bool {
         false
     }
@@ -214,7 +213,6 @@ pub fn create_tool_registry() -> ToolRegistry {
     registry.register(Arc::new(AddToPositionTool));
     registry.register(Arc::new(SellTokenTool));
     registry.register(Arc::new(ClosePositionTool));
-    registry.register(Arc::new(GetTradeStatusTool));
 
     // Config tools
     registry.register(Arc::new(GetConfigTool));
@@ -301,7 +299,7 @@ mod tests {
         let definitions = registry.list_definitions();
 
         // Should have all registered tools
-        assert_eq!(definitions.len(), 38);
+        assert_eq!(definitions.len(), 37);
 
         // Check that we have tools in each category
         let by_category = registry.get_tools_by_category();
@@ -343,7 +341,6 @@ mod tests {
             "get_trader_status",
             "get_trader_stats",
             "list_trader_templates",
-            "get_trade_status",
         ] {
             let def = registry
                 .get(name)
@@ -364,7 +361,7 @@ mod tests {
         // Should be an array
         assert!(schema.is_array());
         let tools = schema.as_array().unwrap();
-        assert_eq!(tools.len(), 38);
+        assert_eq!(tools.len(), 37);
 
         // Check format
         let first_tool = &tools[0];
@@ -444,18 +441,44 @@ mod tests {
             assert_eq!(def.category, ToolCategory::Trading);
         }
 
-        let status = registry
-            .get("get_trade_status")
-            .expect("get_trade_status is registered")
-            .definition();
-        let positions = registry
-            .get("get_positions")
-            .expect("get_positions is registered")
-            .definition();
-        assert_eq!(
-            status.category, positions.category,
-            "reading a trade's outcome needs the permission that reads positions"
+        // The status read needs the caller's identity, so the bridge answers it
+        // and no registry tool shadows it.
+        assert!(registry
+            .get(crate::agent_control::bridge::TRADE_STATUS_TOOL)
+            .is_none());
+    }
+
+    /// Every tool that answers an agent connection with a trade id says so, and
+    /// states the reuse window from its one owner, as the status read does.
+    #[test]
+    fn every_trade_tool_describes_its_trade_id_and_reuse_window() {
+        let window = format!(
+            "{} minutes",
+            crate::agent_control::submissions::REUSE_WINDOW.as_secs() / 60
         );
+        let registry = create_tool_registry();
+        let status = crate::agent_control::bridge::trade_status_definition();
+        assert!(status.description.contains(&window));
+        for def in registry.list_definitions() {
+            if !registry
+                .get(&def.name)
+                .is_some_and(|tool| tool.sends_transaction())
+            {
+                continue;
+            }
+            assert!(
+                def.description.ends_with(&trading::submission_note()),
+                "{} does not describe its trade id",
+                def.name
+            );
+            for needle in ["trade_id", "get_trade_status", window.as_str()] {
+                assert!(
+                    def.description.contains(needle),
+                    "{} description lacks {needle}",
+                    def.name
+                );
+            }
+        }
     }
 
     /// Reading configuration is a read: a paired client with `read` scope must

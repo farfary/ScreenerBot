@@ -3602,25 +3602,34 @@ fn every_manual_trade_runs_detached_from_its_caller() {
     }
 
     // A transaction-sending tool submitted by an agent connection answers with
-    // a trade id: its execution runs on a spawned task inside `submit`.
+    // a trade id: `submit` hands it to `run_submitted` on a spawned task, and
+    // `run_submitted` runs the tool on a task of its own so a panic in the
+    // tool is recorded instead of ending the bookkeeping.
     let contents = fs::read_to_string(
         Path::new(env!("CARGO_MANIFEST_DIR")).join("src/agent_control/bridge.rs"),
     )
     .expect("the bridge source reads");
     let code = blank_literals(&strip_comment_text(&production_text(&contents)));
-    let submit = code.find("fn submit(").expect("the bridge submits trades");
-    let body_open = submit + code[submit..].find('{').expect("submit has a body");
-    let (start, end) = matching_span(&code, body_open).expect("submit closes");
-    let body = &code[start..=end];
-    let execute = body.find(".execute(").expect("submit runs the tool");
-    let spawned = body
-        .match_indices("tokio::spawn(")
-        .filter_map(|(open, spawn)| matching_span(body, open + spawn.len() - 1))
-        .any(|(start, end)| start < execute && execute < end);
-    assert!(
-        spawned,
-        "src/agent_control/bridge.rs: a submitted trade runs on its own task"
-    );
+    for (function, call) in [
+        ("fn submit(", "run_submitted("),
+        ("fn run_submitted(", ".execute("),
+    ] {
+        let at = code
+            .find(function)
+            .expect("the bridge defines the function");
+        let body_open = at + code[at..].find('{').expect("the function has a body");
+        let (start, end) = matching_span(&code, body_open).expect("the function closes");
+        let body = &code[start..=end];
+        let called = body.find(call).expect("the function makes the call");
+        let spawned = body
+            .match_indices("tokio::spawn(")
+            .filter_map(|(open, spawn)| matching_span(body, open + spawn.len() - 1))
+            .any(|(start, end)| start < called && called < end);
+        assert!(
+            spawned,
+            "src/agent_control/bridge.rs: {function}..) makes {call}..) on its own task"
+        );
+    }
 }
 
 /// Every position operation that submits a swap marks its mint as busy before the swap and

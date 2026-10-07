@@ -304,7 +304,6 @@ assistant-tool-buy-token = 买入代币
 assistant-tool-add-to-position = 加仓
 assistant-tool-sell-token = 卖出代币
 assistant-tool-close-position = 平仓
-assistant-tool-get-trade-status = 获取交易状态
 assistant-tool-get-config = 获取配置
 assistant-tool-describe-config = 查看配置说明
 assistant-tool-update-config = 更新配置

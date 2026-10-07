@@ -301,7 +301,6 @@ assistant-tool-buy-token = Comprar token
 assistant-tool-add-to-position = Añadir a la posición
 assistant-tool-sell-token = Vender token
 assistant-tool-close-position = Cerrar posición
-assistant-tool-get-trade-status = Obtener estado de la operación
 assistant-tool-get-config = Obtener configuración
 assistant-tool-describe-config = Describir configuración
 assistant-tool-update-config = Actualizar configuración

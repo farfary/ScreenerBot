@@ -1,8 +1,9 @@
 // Copyright (c) 2024-2026 ScreenerBot (screenerbot.io)
 // SPDX-License-Identifier: BUSL-1.1
 
-//! Agent-facing manual trading tools: buy, add to (DCA), partial sell and close,
-//! plus the status read of a trade an agent connection submitted.
+//! Agent-facing manual trading tools: buy, add to (DCA), partial sell and close.
+//! Through an agent connection each answers at once with a trade id, read with
+//! the bridge's `get_trade_status` (`agent_control::bridge`).
 //! Every trade tool passes the same `trader::manual::guard` preflight as the
 //! dashboard trade dialog, then calls the canonical `trader::manual` API.
 
@@ -38,6 +39,19 @@ fn slippage_schema() -> serde_json::Value {
             "Per-trade slippage override in percent, (0, {MAX_MANUAL_SLIPPAGE_PCT}]. Omit to use the configured slippage."
         )
     })
+}
+
+/// How a trade tool answers an agent connection, appended to each trade tool's
+/// description: the trade id, where its outcome is read, and the identical-call
+/// reuse window.
+pub(super) fn submission_note() -> String {
+    format!(
+        " Through an agent connection the call answers at once with a trade_id; read the \
+         outcome with get_trade_status. An identical call within {} minutes returns the same \
+         trade_id instead of trading again, so a deliberate second identical trade needs a \
+         changed argument or a wait.",
+        submissions::REUSE_WINDOW.as_secs() / 60
+    )
 }
 
 fn finish(
@@ -108,11 +122,12 @@ impl Tool for BuyTokenTool {
     fn definition(&self) -> ToolDefinition {
         ToolDefinition {
             name: "buy_token".to_owned(),
-            description: "Open a new position with a real on-chain buy. Refused while the \
-                          emergency stop is active, for blacklisted tokens, or when a position \
-                          is already open (use add_to_position). The size is capped at \
-                          trader.trade_size_sol."
-                .to_owned(),
+            description: format!(
+                "Open a new position with a real on-chain buy. Refused while the emergency \
+                 stop is active, for blacklisted tokens, or when a position is already open \
+                 (use add_to_position). The size is capped at trader.trade_size_sol.{}",
+                submission_note()
+            ),
             category: ToolCategory::Trading,
             parameters: json!({
                 "type": "object",
@@ -198,10 +213,11 @@ impl Tool for AddToPositionTool {
     fn definition(&self) -> ToolDefinition {
         ToolDefinition {
             name: "add_to_position".to_owned(),
-            description: "Add to (DCA into) an open position with a real on-chain buy. The size \
-                          defaults to the configured DCA size and is capped at \
-                          trader.trade_size_sol."
-                .to_owned(),
+            description: format!(
+                "Add to (DCA into) an open position with a real on-chain buy. The size \
+                 defaults to the configured DCA size and is capped at trader.trade_size_sol.{}",
+                submission_note()
+            ),
             category: ToolCategory::Trading,
             parameters: json!({
                 "type": "object",
@@ -305,8 +321,10 @@ impl Tool for SellTokenTool {
     fn definition(&self) -> ToolDefinition {
         ToolDefinition {
             name: "sell_token".to_owned(),
-            description: "Sell part or all of an open position with a real on-chain sell."
-                .to_owned(),
+            description: format!(
+                "Sell part or all of an open position with a real on-chain sell.{}",
+                submission_note()
+            ),
             category: ToolCategory::Trading,
             parameters: json!({
                 "type": "object",
@@ -360,7 +378,10 @@ impl Tool for ClosePositionTool {
     fn definition(&self) -> ToolDefinition {
         ToolDefinition {
             name: "close_position".to_owned(),
-            description: "Close an entire open position (sell 100%) by position id.".to_owned(),
+            description: format!(
+                "Close an entire open position (sell 100%) by position id.{}",
+                submission_note()
+            ),
             category: ToolCategory::Trading,
             parameters: json!({
                 "type": "object",
@@ -390,70 +411,6 @@ impl Tool for ClosePositionTool {
     }
     fn sends_transaction(&self) -> bool {
         true
-    }
-}
-
-// ============================================================================
-// GetTradeStatusTool
-// ============================================================================
-
-pub struct GetTradeStatusTool;
-
-#[derive(Deserialize)]
-#[serde(deny_unknown_fields)]
-struct GetTradeStatusParams {
-    trade_id: String,
-}
-
-#[async_trait]
-impl Tool for GetTradeStatusTool {
-    fn definition(&self) -> ToolDefinition {
-        ToolDefinition {
-            name: "get_trade_status".to_owned(),
-            description: format!(
-                "Read the outcome of a trade an agent connection submitted. buy_token, \
-                 add_to_position, sell_token and close_position answer an agent connection \
-                 at once with a trade_id and run in ScreenerBot; poll this tool with that \
-                 trade_id until the state is no longer submitted. States: submitted (still \
-                 running), done (the result holds the signature and position), failed (the \
-                 result holds the error), interrupted (the app stopped while the trade ran; \
-                 its swap may have been sent, so read get_positions before trading again). \
-                 Repeating the same trade call within {} minutes returns the same trade_id \
-                 instead of trading again.",
-                submissions::REUSE_WINDOW.as_secs() / 60
-            ),
-            category: ToolCategory::Portfolio,
-            parameters: json!({
-                "type": "object",
-                "properties": {
-                    "trade_id": { "type": "string", "description": "The trade_id a trade call returned" }
-                },
-                "required": ["trade_id"]
-            }),
-            mutating: false,
-            requires_confirmation: false,
-        }
-    }
-
-    async fn execute(&self, params: serde_json::Value) -> ToolResult {
-        let params: GetTradeStatusParams = match serde_json::from_value(params) {
-            Ok(p) => p,
-            Err(e) => return ToolResult::error(format!("Invalid parameters: {e}")),
-        };
-        let trade_id = params.trade_id;
-        match tokio::task::spawn_blocking({
-            let trade_id = trade_id.clone();
-            move || submissions::view(&trade_id)
-        })
-        .await
-        {
-            Ok(Ok(Some(handle))) => ToolResult::success(json!(handle)),
-            Ok(Ok(None)) => ToolResult::error(format!(
-                "No trade {trade_id} is retained. Read get_positions for its outcome."
-            )),
-            Ok(Err(error)) => ToolResult::error(error.to_string()),
-            Err(_) => ToolResult::error("The trade status read did not complete."),
-        }
     }
 }
 

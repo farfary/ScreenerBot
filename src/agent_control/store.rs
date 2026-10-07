@@ -7,7 +7,8 @@
 //! One pooled SQLite database (`agent_control.db`) built through the canonical
 //! `database::configure_connection` init hook so the WAL PRAGMAs survive r2d2
 //! connection recycling. Policy lives in `pairing`/`approvals`/`audit`; this
-//! module owns only the pool, the schema and the startup recovery sweep.
+//! module owns the pool, the schema, the startup recovery sweep and the stored
+//! answer of a request that ended without one (`interrupted_result`).
 
 use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::LazyLock;
@@ -16,6 +17,7 @@ use std::time::{Duration, SystemTime, UNIX_EPOCH};
 use r2d2::{Pool, PooledConnection};
 use r2d2_sqlite::SqliteConnectionManager;
 use rusqlite::OptionalExtension;
+use serde_json::{json, Value};
 
 use crate::agent_control::audit::{self, AuditContext, AuditKind};
 use crate::agent_control::error::{Error, Result};
@@ -127,6 +129,26 @@ CREATE TABLE IF NOT EXISTS audit (
 CREATE INDEX IF NOT EXISTS idx_audit_ts ON audit(ts DESC);
 "#;
 
+/// Why a request has no answer: the process stopped while it ran.
+pub(crate) const STOPPED_WHILE_RUNNING: &str = "the app stopped while this ran";
+/// Why a request has no answer: the task running it ended without one.
+pub(crate) const TASK_ENDED: &str = "the task running this ended without an answer";
+/// Why a request has no answer: it finished, but its outcome could not be stored.
+pub(crate) const OUTCOME_NOT_STORED: &str = "this finished but its outcome could not be stored";
+
+/// The stored answer of an approval or a submission whose task ended without an
+/// answer (`cause`). It may have taken effect, so it is never replayed, and the
+/// answer says what to read instead: a trade's swap may have been sent, so the
+/// positions come first. The one wording of that state for both tables.
+pub(crate) fn interrupted_result(cause: &str, sends_transaction: bool) -> Value {
+    let consequence = if sends_transaction {
+        "its swap may have been sent, so read the positions before trading again"
+    } else {
+        "it may have taken effect, so read the current state before repeating it"
+    };
+    json!({ "success": false, "error": format!("{cause}; {consequence}") })
+}
+
 /// Current unix time in whole seconds.
 pub(crate) fn now_unix() -> i64 {
     SystemTime::now()
@@ -186,8 +208,8 @@ pub fn init() -> Result<()> {
         logger::warning(
             LogTag::Security,
             &format!(
-                "agent-control: {recovered} approval(s) were mid-execution at shutdown; \
-                 marked failed and NOT replayed"
+                "agent-control: {recovered} approval(s) were claimed or executing at \
+                 shutdown; marked failed or interrupted and NOT replayed"
             ),
         );
     }
@@ -310,18 +332,41 @@ fn permissions_for_legacy_scope(scope: &str) -> ToolPermissions {
     }
 }
 
-/// After a crash, a `claimed`/`executing` approval is indeterminate: we cannot
-/// prove the live mutation did not land, so it must fail closed with a valid
-/// structured result and never be replayed automatically. Overdue `pending`
-/// rows become `expired`.
-fn recover_interrupted(connection: &rusqlite::Connection) -> Result<usize> {
+/// After a crash, an `executing` approval is indeterminate: its tool started and
+/// the live mutation may have landed, so it becomes `interrupted` with the same
+/// answer as an interrupted submission and is never replayed. A `claimed` row
+/// never started its tool (it runs only once `executing`), so it fails closed as
+/// not run. Overdue `pending` rows become `expired`. Only valid at startup
+/// (`init`): called later, it would discard the result of a request still
+/// running. Returns how many claimed or executing rows were closed.
+pub(crate) fn recover_interrupted(connection: &rusqlite::Connection) -> Result<usize> {
     let now = now_unix();
-    let failed = connection.execute(
+    let executing: Vec<(String, String)> = connection
+        .prepare("SELECT id, tool FROM approvals WHERE state = 'executing'")?
+        .query_map([], |row| Ok((row.get(0)?, row.get(1)?)))?
+        .collect::<std::result::Result<Vec<_>, _>>()?;
+    let registry = crate::agent_control::create_tool_registry();
+    let mut failed = 0;
+    for (id, tool) in executing {
+        let sends_transaction = registry
+            .get(&tool)
+            .is_some_and(|tool| tool.sends_transaction());
+        failed += connection.execute(
+            "UPDATE approvals SET state = 'interrupted', resolved_at = ?1, result_json = ?2
+              WHERE id = ?3 AND state = 'executing'",
+            rusqlite::params![
+                now,
+                interrupted_result(STOPPED_WHILE_RUNNING, sends_transaction).to_string(),
+                id
+            ],
+        )?;
+    }
+    failed += connection.execute(
         "UPDATE approvals
                 SET state = 'failed',
                     resolved_at = ?1,
-                    result_json = '{\"success\":false,\"error\":\"interrupted at shutdown; not retried\"}'
-              WHERE state IN ('claimed', 'executing')",
+                    result_json = '{\"success\":false,\"error\":\"the app stopped before this request ran; it did not run and is not retried\"}'
+              WHERE state = 'claimed'",
         rusqlite::params![now],
     )?;
 
@@ -336,9 +381,7 @@ fn recover_interrupted(connection: &rusqlite::Connection) -> Result<usize> {
             AuditKind::Execution,
             &AuditContext::default(),
             "interrupted_recovery",
-            Some(&format!(
-                "{failed} in-flight approval(s) failed closed on boot"
-            )),
+            Some(&format!("{failed} in-flight approval(s) closed on boot")),
         );
     }
     if expired > 0 {
@@ -351,22 +394,6 @@ fn recover_interrupted(connection: &rusqlite::Connection) -> Result<usize> {
     }
 
     Ok(failed)
-}
-
-/// Run the interrupted-approval recovery sweep on demand (it also runs once at
-/// `init`). A `claimed`/`executing` row becomes `failed` and is never replayed;
-/// overdue `pending` rows become `expired`. Returns how many were failed.
-pub fn recover_interrupted_approvals() -> Result<usize> {
-    let connection = conn()?;
-    recover_interrupted(&connection)
-}
-
-/// Run the interrupted-submission recovery on demand (it also runs once at
-/// `init`). A running agent trade becomes `interrupted` and is never replayed.
-/// Returns how many were marked.
-pub fn recover_interrupted_submissions() -> Result<usize> {
-    let connection = conn()?;
-    submissions::recover_interrupted(&connection)
 }
 
 /// Periodic maintenance: expire overdue pending approvals, prune finished
@@ -412,4 +439,133 @@ pub(crate) fn prune_audit(connection: &rusqlite::Connection) -> Result<()> {
         rusqlite::params![AUDIT_MAX_ROWS],
     )?;
     Ok(())
+}
+
+/// A throwaway store for the crate's own tests, which reach the startup-only
+/// recovery that integration tests cannot.
+#[cfg(test)]
+pub(crate) mod test_support {
+    use std::sync::{LazyLock, Mutex, MutexGuard, PoisonError};
+
+    static SETUP: LazyLock<()> = LazyLock::new(|| {
+        let dir = tempfile::tempdir().expect("tempdir");
+        std::env::set_var(
+            "SCREENERBOT_AGENT_CONTROL_DB",
+            dir.path().join("agent_control.db"),
+        );
+        // Keep the temp dir alive for the whole test process.
+        std::mem::forget(dir);
+        super::init().expect("store init");
+    });
+
+    static TEST_LOCK: Mutex<()> = Mutex::new(());
+
+    /// Point the pool at a temp database before it is first built, initialise
+    /// it, and run the calling test alone against it.
+    pub(crate) fn setup() -> MutexGuard<'static, ()> {
+        LazyLock::force(&SETUP);
+        TEST_LOCK.lock().unwrap_or_else(PoisonError::into_inner)
+    }
+
+    /// Simulate the next startup's recovery sweep over both tables.
+    pub(crate) fn restart() {
+        let connection = super::conn().expect("connection");
+        super::recover_interrupted(&connection).expect("approval recovery");
+        crate::agent_control::submissions::recover_interrupted(&connection)
+            .expect("submission recovery");
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use serde_json::json;
+
+    use super::test_support::{restart, setup};
+    use super::*;
+    use crate::agent_control::approvals;
+    use crate::agent_control::submissions::{self, SubmissionState};
+
+    /// An approved trade and a submitted trade that were running when the app
+    /// stopped give the same state and the same answer: the swap may have been
+    /// sent, nothing is replayed, and an identical call returns that answer.
+    #[test]
+    fn a_trade_running_at_shutdown_reads_interrupted_in_both_tables() {
+        let _guard = setup();
+        let client = "restart-client";
+        let args = json!({ "mint_address": "X", "amount_native": 0.1 });
+
+        let approval = approvals::create_or_reuse(client, "buy_token", &args, "c1").unwrap();
+        approvals::claim(&approval.id).unwrap();
+        approvals::mark_executing(&approval.id).unwrap();
+        let submission = submissions::submit_or_reuse(client, "buy_token", &args, "c1").unwrap();
+
+        restart();
+
+        let approved = approvals::view_for_client(&approval.id, client).unwrap();
+        let submitted = submissions::view_for_client(&submission.trade_id, client)
+            .unwrap()
+            .expect("retained");
+        assert_eq!(approved.state, "interrupted");
+        assert_eq!(submitted.state, SubmissionState::Interrupted);
+        assert_eq!(approved.state, submitted.state.as_str());
+        let expected = interrupted_result(STOPPED_WHILE_RUNNING, true);
+        assert_eq!(approved.result.as_ref(), Some(&expected));
+        assert_eq!(submitted.result.as_ref(), Some(&expected));
+        assert!(expected["error"]
+            .as_str()
+            .is_some_and(|error| error.contains("may have been sent")
+                && error.contains("read the positions before trading again")));
+
+        // Neither is picked up again, a late outcome cannot rewrite either, and
+        // an identical call answers the interruption instead of trading.
+        assert!(matches!(
+            approvals::claim(&approval.id),
+            Err(Error::ApprovalNotPending)
+        ));
+        assert!(matches!(
+            approvals::finish(&approval.id, true, &json!({})),
+            Err(Error::ApprovalNotPending)
+        ));
+        assert!(!submissions::finish(&submission.trade_id, true, &json!({})).unwrap());
+        let retry = approvals::create_or_reuse(client, "buy_token", &args, "c2").unwrap();
+        assert_eq!(retry.id, approval.id);
+        assert_eq!(retry.state, "interrupted");
+        let retry = submissions::submit_or_reuse(client, "buy_token", &args, "c2").unwrap();
+        assert_eq!(retry.trade_id, submission.trade_id);
+        assert_eq!(retry.state, SubmissionState::Interrupted);
+    }
+
+    /// A request that was not a trade says it may have taken effect, not that a
+    /// swap may have been sent; one that was only claimed never ran.
+    #[test]
+    fn recovery_answers_what_each_interrupted_request_could_have_done() {
+        let _guard = setup();
+        let client = "restart-kinds-client";
+        let config =
+            approvals::create_or_reuse(client, "update_config", &json!({ "changes": [] }), "c1")
+                .unwrap();
+        approvals::claim(&config.id).unwrap();
+        approvals::mark_executing(&config.id).unwrap();
+        let claimed =
+            approvals::create_or_reuse(client, "sell_token", &json!({ "mint_address": "Y" }), "c1")
+                .unwrap();
+        approvals::claim(&claimed.id).unwrap();
+
+        restart();
+
+        let config = approvals::view_for_client(&config.id, client).unwrap();
+        assert_eq!(config.state, "interrupted");
+        assert_eq!(
+            config.result,
+            Some(interrupted_result(STOPPED_WHILE_RUNNING, false))
+        );
+        let claimed = approvals::view_for_client(&claimed.id, client).unwrap();
+        assert_eq!(claimed.state, "failed");
+        let error = claimed
+            .result
+            .as_ref()
+            .and_then(|result| result["error"].as_str())
+            .expect("a claimed request explains itself");
+        assert!(error.contains("did not run"), "{error}");
+    }
 }

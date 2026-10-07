@@ -12,10 +12,13 @@
 //! that changes the arguments produces a different digest and therefore a
 //! different, separately-approved request.
 //!
-//! Lifecycle: `pending → claimed → executing → done | failed`, plus terminal
-//! `denied` and `expired`. No DB transaction is held across the async tool
-//! execution: each transition is a single guarded `UPDATE`, and a crash between
-//! `claimed`/`executing` and a terminal state fails closed (see `store`).
+//! Lifecycle: `pending → claimed → executing → done | failed | interrupted`,
+//! plus terminal `denied` and `expired`. No DB transaction is held across the
+//! async tool execution: each transition is a single guarded `UPDATE`. An
+//! `executing` request whose task ended without an answer, the process
+//! stopping included, becomes `interrupted` with the same answer as an
+//! interrupted submission (`store::interrupted_result`); a crash while only
+//! `claimed` fails closed as not run (see `store`).
 
 use std::time::Duration;
 
@@ -26,7 +29,7 @@ use sha2::{Digest, Sha256};
 
 use crate::agent_control::audit::{self, AuditContext, AuditKind};
 use crate::agent_control::error::{Error, Result};
-use crate::agent_control::store::{self, now_unix};
+use crate::agent_control::store::{self, interrupted_result, now_unix};
 use crate::errors::DatabaseError;
 
 /// How long a pending approval stays actionable.
@@ -39,6 +42,9 @@ pub enum ApprovalState {
     Executing,
     Done,
     Failed,
+    /// The tool started and its task ended without an answer. It may have
+    /// taken effect, so it is never replayed.
+    Interrupted,
     Denied,
     Expired,
 }
@@ -51,6 +57,7 @@ impl ApprovalState {
             ApprovalState::Executing => "executing",
             ApprovalState::Done => "done",
             ApprovalState::Failed => "failed",
+            ApprovalState::Interrupted => "interrupted",
             ApprovalState::Denied => "denied",
             ApprovalState::Expired => "expired",
         }
@@ -64,6 +71,7 @@ impl ApprovalState {
             "executing" => ApprovalState::Executing,
             "done" => ApprovalState::Done,
             "failed" => ApprovalState::Failed,
+            "interrupted" => ApprovalState::Interrupted,
             "denied" => ApprovalState::Denied,
             "expired" => ApprovalState::Expired,
             _ => return None,
@@ -205,7 +213,8 @@ fn row_to_handle(
 /// Race-safe: the insert is `ON CONFLICT DO NOTHING` against the UNIQUE binding
 /// index, then the row is read back — concurrent identical calls all land on
 /// the one winning row. EVERY state is reused, terminal ones included: a
-/// `done`/`failed` request returns its stored result and never re-executes, a
+/// `done`/`failed`/`interrupted` request returns its stored result and never
+/// re-executes, a
 /// `denied` one keeps returning `denied`, an `expired` one keeps returning
 /// `expired`. A binding therefore has exactly one row for its whole life.
 pub fn create_or_reuse(
@@ -417,16 +426,40 @@ pub fn mark_executing(id: &str) -> Result<()> {
 /// valid JSON under the size cap — so a retry/poll can always parse it back and
 /// a tool result that echoes configuration cannot leak a secret.
 pub fn finish(id: &str, ok: bool, result: &Value) -> Result<()> {
-    let connection = store::conn()?;
-    let state = if ok { "done" } else { "failed" };
+    let state = if ok {
+        ApprovalState::Done
+    } else {
+        ApprovalState::Failed
+    };
     let stored = serde_json::to_string(&audit::sanitize_value(result)).unwrap_or_else(|_| {
         "{\"success\":false,\"error\":\"result could not be serialized\"}".to_owned()
     });
-    let changed = connection.execute(
-        "UPDATE approvals SET state=?1, result_json=?2, resolved_at=?3
-               WHERE id=?4 AND state='executing'",
-        rusqlite::params![state, stored, now_unix(), id],
-    )?;
+    close_executing(id, state, &stored, "finish_approval")
+}
+
+/// Record that an executing request ended without an answer: its task ended
+/// early, or its outcome could not be stored. `cause` says which.
+pub(crate) fn interrupt(id: &str, cause: &str, sends_transaction: bool) -> Result<()> {
+    let stored = interrupted_result(cause, sends_transaction).to_string();
+    close_executing(
+        id,
+        ApprovalState::Interrupted,
+        &stored,
+        "interrupt_approval",
+    )
+}
+
+/// Move an executing request to its terminal `state`. Lock contention surfaces
+/// as a retryable `DatabaseError::Busy`.
+fn close_executing(id: &str, state: ApprovalState, stored: &str, operation: &str) -> Result<()> {
+    let connection = store::conn()?;
+    let changed = connection
+        .execute(
+            "UPDATE approvals SET state=?1, result_json=?2, resolved_at=?3
+                   WHERE id=?4 AND state='executing'",
+            rusqlite::params![state.as_str(), stored, now_unix(), id],
+        )
+        .map_err(|e| DatabaseError::classify_sqlite_failure(operation, e))?;
     // Exactly one `executing` row must transition. Zero means the row is not in
     // `executing` (never claimed, already terminal, or recovered after a crash);
     // the outcome must not be silently dropped.

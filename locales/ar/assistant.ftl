@@ -322,7 +322,6 @@ assistant-tool-buy-token = شراء رمز
 assistant-tool-add-to-position = إضافة إلى مركز
 assistant-tool-sell-token = بيع رمز
 assistant-tool-close-position = إغلاق مركز
-assistant-tool-get-trade-status = جلب حالة الصفقة
 assistant-tool-get-config = جلب الإعدادات
 assistant-tool-describe-config = وصف الإعدادات
 assistant-tool-update-config = تحديث الإعدادات

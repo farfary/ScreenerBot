@@ -1,9 +1,10 @@
 // Copyright (c) 2024-2026 ScreenerBot (screenerbot.io)
 // SPDX-License-Identifier: BUSL-1.1
 
-//! Agent-control durable store: pairing credentials, the approval state
-//! machine, crash recovery and audit bounds — exercised against a real
-//! throwaway SQLite database.
+//! Agent-control durable store: pairing credentials, the approval and
+//! submission state machines and audit bounds — exercised against a real
+//! throwaway SQLite database. The startup recovery is crate-private and is
+//! tested beside it in `agent_control::store`.
 //!
 //! `store::POOL` is a process-global `LazyLock`. Every test goes through
 //! `setup()`, whose one-time initializer points the pool at a temp file (via
@@ -269,57 +270,6 @@ fn view_is_scoped_to_the_owning_client() {
     ));
 }
 
-#[test]
-fn interrupted_execution_recovers_to_failed_and_is_never_replayed() {
-    let _guard = setup();
-    let client = "crash-client";
-    let handle = approvals::create_or_reuse(
-        client,
-        "buy_token",
-        &serde_json::json!({ "mint": "X", "sol": 3 }),
-        "c1",
-    )
-    .unwrap();
-    let claimed = approvals::claim(&handle.id).unwrap();
-    approvals::mark_executing(&claimed.id).unwrap();
-
-    // Simulate a crash between `executing` and a terminal state.
-    let failed = store::recover_interrupted_approvals().unwrap();
-    assert!(failed >= 1);
-
-    let view = approvals::view_for_client(&handle.id, client).unwrap();
-    assert_eq!(view.state, "failed");
-    // The stored failure result is valid structured JSON, not null.
-    let result = view
-        .result
-        .expect("a structured failure result is preserved");
-    assert_eq!(result.get("success"), Some(&serde_json::json!(false)));
-    assert!(result.get("error").and_then(|e| e.as_str()).is_some());
-
-    // It cannot be picked up again.
-    assert!(matches!(
-        approvals::claim(&handle.id),
-        Err(Error::ApprovalNotPending)
-    ));
-
-    // A retry of the SAME binding recovers the same failed request and its
-    // result — it never opens a fresh pending row that could be re-approved.
-    let retry = approvals::create_or_reuse(
-        client,
-        "buy_token",
-        &serde_json::json!({ "mint": "X", "sol": 3 }),
-        "c2",
-    )
-    .unwrap();
-    assert_eq!(retry.id, handle.id);
-    assert_eq!(retry.state, "failed");
-    assert_eq!(
-        retry.result.and_then(|r| r.get("success").cloned()),
-        Some(serde_json::json!(false))
-    );
-    assert_eq!(approval_row_count(client, "buy_token"), 1);
-}
-
 /// Open the temp store directly, for reads and for ageing rows.
 fn raw_store() -> rusqlite::Connection {
     let path = std::env::var("SCREENERBOT_AGENT_CONTROL_DB").expect("db path set by setup()");
@@ -399,7 +349,7 @@ fn a_finished_trade_is_returned_inside_the_window_and_traded_again_only_after_it
         "an outcome is recorded once"
     );
 
-    let viewed = submissions::view(&submitted.trade_id)
+    let viewed = submissions::view_for_client(&submitted.trade_id, client)
         .unwrap()
         .expect("retained");
     assert_eq!(viewed.state, SubmissionState::Done);
@@ -444,33 +394,92 @@ fn a_running_trade_is_reused_past_the_window() {
     assert!(!retry.created);
 }
 
-/// A trade running when the process stopped may have sent its swap: it is
-/// reported interrupted, keeps its row, and a late finish cannot rewrite it.
+/// A trade's status answers only the connection that submitted it; another
+/// connection's id reads exactly like an id that does not exist.
 #[test]
-fn a_trade_running_at_shutdown_is_interrupted_and_never_replayed() {
+fn a_trade_is_read_only_by_the_connection_that_submitted_it() {
     let _guard = setup();
-    let client = "submit-crash-client";
-    let args = serde_json::json!({ "position_id": 7 });
-    let running = submissions::submit_or_reuse(client, "close_position", &args, "c1").unwrap();
+    let args = serde_json::json!({ "mint_address": "OWN" });
+    let own = submissions::submit_or_reuse("submit-owner", "buy_token", &args, "c1").unwrap();
 
-    assert!(store::recover_interrupted_submissions().unwrap() >= 1);
-    let viewed = submissions::view(&running.trade_id)
+    assert!(submissions::view_for_client(&own.trade_id, "submit-owner")
         .unwrap()
-        .expect("retained");
-    assert_eq!(viewed.state, SubmissionState::Interrupted);
-    let error = viewed
-        .result
-        .as_ref()
-        .and_then(|r| r.get("error"))
-        .and_then(|e| e.as_str())
-        .expect("an interrupted trade explains itself");
-    assert!(error.contains("may have been sent"), "{error}");
-    assert!(!submissions::finish(&running.trade_id, true, &serde_json::json!({})).unwrap());
+        .is_some());
+    assert!(
+        submissions::view_for_client(&own.trade_id, "submit-stranger")
+            .unwrap()
+            .is_none()
+    );
+    assert!(
+        submissions::view_for_client("no-such-trade", "submit-owner")
+            .unwrap()
+            .is_none()
+    );
+}
 
-    let retry = submissions::submit_or_reuse(client, "close_position", &args, "c2").unwrap();
-    assert_eq!(retry.trade_id, running.trade_id);
-    assert_eq!(retry.state, SubmissionState::Interrupted);
-    assert!(submissions::view("no-such-trade").unwrap().is_none());
+/// The row cap never prunes a finished trade still inside the reuse window, so
+/// an identical call inside the window cannot trade again; past the window the
+/// cap still applies.
+#[test]
+fn the_row_cap_keeps_finished_trades_inside_the_reuse_window() {
+    let _guard = setup();
+    let client = "submit-cap-client";
+    let filler = "submit-cap-filler";
+    let args = serde_json::json!({ "mint_address": "CAP" });
+    let window = submissions::REUSE_WINDOW.as_secs() as i64;
+    let now = chrono::Utc::now().timestamp();
+
+    let recent = submissions::submit_or_reuse(client, "buy_token", &args, "c1").unwrap();
+    assert!(submissions::finish(&recent.trade_id, false, &serde_json::json!({})).unwrap());
+    let stale_args = serde_json::json!({ "mint_address": "CAP-OLD" });
+    let stale = submissions::submit_or_reuse(client, "buy_token", &stale_args, "c1").unwrap();
+    assert!(submissions::finish(&stale.trade_id, true, &serde_json::json!({})).unwrap());
+
+    let mut store = raw_store();
+    let tx = store.transaction().unwrap();
+    tx.execute(
+        "UPDATE submissions SET created_at = ?1 WHERE id = ?2",
+        rusqlite::params![now - 60, recent.trade_id],
+    )
+    .unwrap();
+    tx.execute(
+        "UPDATE submissions SET created_at = ?1 WHERE id = ?2",
+        rusqlite::params![now - window - 60, stale.trade_id],
+    )
+    .unwrap();
+    // More finished trades than the cap, all newer than both rows above.
+    for n in 0..=submissions::MAX_ROWS {
+        tx.execute(
+            "INSERT INTO submissions
+                   (id, client_id, tool, args_digest, args_summary, correlation_id, state,
+                    created_at, finished_at, result_json)
+                 VALUES (?1, ?2, 'buy_token', x'00', '{}', 'c', 'done', ?3, ?3, '{}')",
+            rusqlite::params![format!("cap-filler-{n}"), filler, now],
+        )
+        .unwrap();
+    }
+    tx.commit().unwrap();
+
+    // Any new submission prunes.
+    let other = serde_json::json!({ "mint_address": "CAP-NEW" });
+    submissions::submit_or_reuse(client, "sell_token", &other, "c2").unwrap();
+
+    let retry = submissions::submit_or_reuse(client, "buy_token", &args, "c3").unwrap();
+    assert_eq!(retry.trade_id, recent.trade_id, "the retry traded again");
+    assert!(!retry.created);
+    assert!(
+        submissions::view_for_client(&stale.trade_id, client)
+            .unwrap()
+            .is_none(),
+        "a finished trade past the window escaped the cap"
+    );
+
+    raw_store()
+        .execute(
+            "DELETE FROM submissions WHERE client_id = ?1",
+            rusqlite::params![filler],
+        )
+        .unwrap();
 }
 
 #[test]

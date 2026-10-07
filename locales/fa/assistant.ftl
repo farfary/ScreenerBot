@@ -322,7 +322,6 @@ assistant-tool-buy-token = خرید توکن
 assistant-tool-add-to-position = افزودن به پوزیشن
 assistant-tool-sell-token = فروش توکن
 assistant-tool-close-position = بستن پوزیشن
-assistant-tool-get-trade-status = دریافت وضعیت معامله
 assistant-tool-get-config = دریافت پیکربندی
 assistant-tool-describe-config = شرح پیکربندی
 assistant-tool-update-config = به‌روزرسانی پیکربندی

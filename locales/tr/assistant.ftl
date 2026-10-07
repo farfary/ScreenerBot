@@ -311,7 +311,6 @@ assistant-tool-buy-token = Token Al
 assistant-tool-add-to-position = Pozisyona Ekle
 assistant-tool-sell-token = Token Sat
 assistant-tool-close-position = Pozisyonu Kapat
-assistant-tool-get-trade-status = İşlem Durumunu Al
 assistant-tool-get-config = Yapılandırmayı Al
 assistant-tool-describe-config = Yapılandırmayı Açıkla
 assistant-tool-update-config = Yapılandırmayı Güncelle

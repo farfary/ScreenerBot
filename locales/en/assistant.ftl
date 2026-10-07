@@ -322,7 +322,6 @@ assistant-tool-buy-token = Buy Token
 assistant-tool-add-to-position = Add to Position
 assistant-tool-sell-token = Sell Token
 assistant-tool-close-position = Close Position
-assistant-tool-get-trade-status = Get Trade Status
 assistant-tool-get-config = Get Configuration
 assistant-tool-describe-config = Describe Configuration
 assistant-tool-update-config = Update Configuration

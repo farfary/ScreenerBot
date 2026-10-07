@@ -16,10 +16,14 @@
 //! idempotency key, so a retry after a dropped answer can only be recognized by
 //! what it asks for.
 //!
-//! Lifecycle: `submitted → done | failed`. A row still `submitted` at startup
-//! belonged to a process that stopped mid-trade and becomes `interrupted`: its
-//! swap may have been sent, so it is never replayed and its outcome is read
-//! from the positions.
+//! Lifecycle: `submitted → done | failed | interrupted`. A trade whose task
+//! ended without an answer becomes `interrupted`: a row still `submitted` at
+//! startup belonged to a process that stopped mid-trade, and a trade task that
+//! ended early or whose outcome could not be stored leaves no answer either. Its
+//! swap may have been sent, so it is never replayed and its outcome is read from
+//! the positions (`store::interrupted_result`).
+//!
+//! Reads are scoped to the connection that submitted the trade.
 
 use std::time::Duration;
 
@@ -30,7 +34,7 @@ use serde_json::{json, Value};
 use crate::agent_control::approvals::{canonicalize, digest_of};
 use crate::agent_control::audit;
 use crate::agent_control::error::{Error, Result};
-use crate::agent_control::store::{self, now_unix};
+use crate::agent_control::store::{self, interrupted_result, now_unix, STOPPED_WHILE_RUNNING};
 use crate::errors::DatabaseError;
 
 /// How long after a submission an identical call returns that trade instead of
@@ -38,9 +42,11 @@ use crate::errors::DatabaseError;
 pub const REUSE_WINDOW: Duration = Duration::from_secs(10 * 60);
 /// Finished submissions older than this are pruned.
 const RETENTION_SECS: i64 = 24 * 60 * 60;
-/// Hard cap on retained submissions regardless of age. A running one is never
-/// pruned, so its outcome always has a row to land in.
-const MAX_ROWS: i64 = 1_000;
+/// Cap on retained finished submissions past the reuse window. A running one, or
+/// a finished one still inside `REUSE_WINDOW`, is never pruned: the first keeps
+/// a row for its outcome to land in, the second keeps an identical call from
+/// trading again.
+pub const MAX_ROWS: i64 = 1_000;
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize)]
 #[serde(rename_all = "snake_case")]
@@ -51,7 +57,9 @@ pub enum SubmissionState {
     Done,
     /// The trade finished and reported a failure.
     Failed,
-    /// The process stopped while the trade ran. Its swap may have been sent.
+    /// The trade ended without an answer: the process stopped while it ran, its
+    /// task ended early, or its outcome could not be stored. Its swap may have
+    /// been sent.
     Interrupted,
 }
 
@@ -199,7 +207,6 @@ pub fn submit_or_reuse(
 /// state). The result is stored through `audit::sanitize_value`, so it is
 /// redacted, bounded and always valid JSON.
 pub fn finish(trade_id: &str, ok: bool, result: &Value) -> Result<bool> {
-    let connection = store::conn()?;
     let state = if ok {
         SubmissionState::Done
     } else {
@@ -208,55 +215,90 @@ pub fn finish(trade_id: &str, ok: bool, result: &Value) -> Result<bool> {
     let stored = serde_json::to_string(&audit::sanitize_value(result)).unwrap_or_else(|_| {
         "{\"success\":false,\"error\":\"result could not be serialized\"}".to_owned()
     });
-    let changed = connection.execute(
-        "UPDATE submissions SET state = ?1, result_json = ?2, finished_at = ?3
-          WHERE id = ?4 AND state = 'submitted'",
-        rusqlite::params![state.as_str(), stored, now_unix(), trade_id],
-    )?;
+    close_running(trade_id, state, &stored, "finish_submission")
+}
+
+/// Record that a running submission ended without an answer: its task ended
+/// early, or its outcome could not be stored. `cause` says which. Returns false
+/// when the row is not running any more.
+pub(crate) fn interrupt(trade_id: &str, cause: &str) -> Result<bool> {
+    let stored = interrupted_result(cause, true).to_string();
+    close_running(
+        trade_id,
+        SubmissionState::Interrupted,
+        &stored,
+        "interrupt_submission",
+    )
+}
+
+/// Move a running submission to its terminal `state`. Lock contention surfaces
+/// as a retryable `DatabaseError::Busy`.
+fn close_running(
+    trade_id: &str,
+    state: SubmissionState,
+    stored: &str,
+    operation: &str,
+) -> Result<bool> {
+    let connection = store::conn()?;
+    let changed = connection
+        .execute(
+            "UPDATE submissions SET state = ?1, result_json = ?2, finished_at = ?3
+              WHERE id = ?4 AND state = 'submitted'",
+            rusqlite::params![state.as_str(), stored, now_unix(), trade_id],
+        )
+        .map_err(|e| DatabaseError::classify_sqlite_failure(operation, e))?;
     Ok(changed == 1)
 }
 
-/// One submission by its trade id, or `None` when no such trade is retained.
-pub fn view(trade_id: &str) -> Result<Option<SubmissionHandle>> {
+/// One submission of `client_id` by its trade id, or `None` when that
+/// connection has no such trade retained. A trade id of another connection
+/// answers `None` too, so a read reveals nothing about other connections.
+pub fn view_for_client(trade_id: &str, client_id: &str) -> Result<Option<SubmissionHandle>> {
     let connection = store::conn()?;
     let row = connection
         .query_row(
-            &format!("SELECT {SELECT_COLUMNS} FROM submissions WHERE id = ?1"),
-            rusqlite::params![trade_id],
+            &format!("SELECT {SELECT_COLUMNS} FROM submissions WHERE id = ?1 AND client_id = ?2"),
+            rusqlite::params![trade_id, client_id],
             read_row,
         )
         .optional()?;
     row.map(|row| handle_from_row(row, false)).transpose()
 }
 
-/// Mark every submission still running as interrupted. Only valid at startup,
-/// before any trade of this process could have been submitted.
+/// Mark every submission still running as interrupted. Only valid at startup
+/// (`store::init`), before any trade of this process could have been
+/// submitted: called later, it would discard the result of a trade still
+/// running.
 pub(crate) fn recover_interrupted(connection: &rusqlite::Connection) -> Result<usize> {
     Ok(connection.execute(
-        "UPDATE submissions
-            SET state = 'interrupted', finished_at = ?1,
-                result_json = '{\"success\":false,\"error\":\"the app stopped while this trade ran; its swap may have been sent, read the positions for its outcome\"}'
+        "UPDATE submissions SET state = 'interrupted', finished_at = ?1, result_json = ?2
           WHERE state = 'submitted'",
-        rusqlite::params![now_unix()],
+        rusqlite::params![
+            now_unix(),
+            interrupted_result(STOPPED_WHILE_RUNNING, true).to_string()
+        ],
     )?)
 }
 
 /// Drop finished submissions past the retention window, then trim finished
-/// rows to the hard cap, oldest first. Running submissions are kept.
+/// rows past the reuse window to the cap, oldest first. Running submissions and
+/// finished ones inside the reuse window are kept.
 pub(crate) fn prune(connection: &rusqlite::Connection) -> Result<()> {
+    let now = now_unix();
     connection.execute(
         "DELETE FROM submissions WHERE state != 'submitted' AND created_at < ?1",
-        rusqlite::params![now_unix() - RETENTION_SECS],
+        rusqlite::params![now - RETENTION_SECS],
     )?;
     connection.execute(
         "DELETE FROM submissions
           WHERE state != 'submitted'
+            AND created_at <= ?2
             AND id IN (
                 SELECT id FROM submissions
                  ORDER BY created_at DESC, rowid DESC
                  LIMIT -1 OFFSET ?1
             )",
-        rusqlite::params![MAX_ROWS],
+        rusqlite::params![MAX_ROWS, now - REUSE_WINDOW.as_secs() as i64],
     )?;
     Ok(())
 }
