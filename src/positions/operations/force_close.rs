@@ -25,8 +25,8 @@ pub struct ForceClosed {
 ///
 /// The booking is made on the row read inside its own transaction, and refused when that
 /// row's exit is already verified, so a close verified concurrently and this write-off
-/// cannot both book. Memory adopts the committed row. Slot release and
-/// realized-loss accounting run once, after the commit. On any error the row and memory
+/// cannot both book. Memory adopts the committed row. The slot release and the loss
+/// limiter's recompute from the books run once, after the commit. On any error the row and memory
 /// are unchanged.
 pub async fn force_close_position(position_id: i64, note: &str) -> Result<ForceClosed> {
     let closed_reason = format!("{FORCE_CLOSED_PREFIX} {note}");
@@ -60,20 +60,17 @@ pub async fn force_close_position(position_id: i64, note: &str) -> Result<ForceC
 
     let committed = book_position(position_id, |row, _| {
         if row.transaction_exit_verified {
-            return Ok(Booking::Skip(None));
+            return Ok(Booking::Skip(false));
         }
-        let realized_pnl = row.book_force_close(&fill)?;
+        row.book_force_close(&fill)?;
         Ok(Booking::Write {
             record: None,
-            outcome: Some(realized_pnl),
+            outcome: true,
         })
     })
     .await?;
-    let (candidate, realized_pnl) = match committed {
-        Committed::Written {
-            row,
-            outcome: Some(realized_pnl),
-        } => (row, realized_pnl),
+    let candidate = match committed {
+        Committed::Written { row, outcome: true } => row,
         _ => return Err(Error::AlreadyClosed { position_id }),
     };
 
@@ -81,12 +78,9 @@ pub async fn force_close_position(position_id: i64, note: &str) -> Result<ForceC
     // back a second time.
     release_position_slot(position_id).await;
 
-    // A force close realizes the loss on everything still held. A wallet-derived round is
-    // excluded: it is a pre-existing holding, not risk the bot took, and counting it could
-    // pause the trader over money it never risked.
-    if realized_pnl < 0.0 && !candidate.is_wallet_derived() {
-        crate::trader::safety::loss_limit::record_realized_loss(realized_pnl.abs());
-    }
+    // The loss limiter follows the books, which now hold the write-off. A wallet-derived
+    // round is not counted there: it is a pre-existing holding, not risk the bot took.
+    crate::trader::safety::loss_limit::sync_from_books().await;
 
     logger::info(
         LogTag::Positions,

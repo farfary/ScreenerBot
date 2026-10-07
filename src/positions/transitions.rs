@@ -24,9 +24,13 @@ pub enum PositionTransition {
         token_amount_units: RawAmount,
         fee_raw: u64,
         native_size: f64,
+        /// The wallet's holding of the mint after the swap, when it was read. A swap that
+        /// lands on a closed position needs it to decide whether the position reopens.
+        held_after: Option<RawAmount>,
     },
     /// A full-exit swap verified on chain. `exit_signature` is the verified swap, so the
-    /// booking does not depend on the submission having been stored on the row.
+    /// booking does not depend on the submission having been stored on the row, and
+    /// `exit_amount` is what it sold.
     ExitVerified {
         position_id: i64,
         effective_exit_price: f64,
@@ -34,6 +38,10 @@ pub enum PositionTransition {
         fee_raw: u64,
         exit_time: DateTime<Utc>,
         exit_signature: String,
+        exit_amount: RawAmount,
+        /// The wallet's holding of the mint after the swap, when it was read. A swap that
+        /// lands on a closed position needs it to decide whether the position reopens.
+        held_after: Option<RawAmount>,
     },
     /// A full-exit swap that failed: the exit is cleared so the close can be retried.
     /// `exit_signature` is the failed swap, removed from the signature index.
@@ -71,6 +79,9 @@ pub enum PositionTransition {
         exit_time: DateTime<Utc>,
         exit_signature: String,
         exit_percentage: f64,
+        /// The wallet's holding of the mint after the swap, when it was read. A swap that
+        /// lands on a closed position needs it to decide whether the position reopens.
+        held_after: Option<RawAmount>,
     },
     PartialExitFailed {
         position_id: i64,
@@ -93,6 +104,9 @@ pub enum PositionTransition {
         exit_time: DateTime<Utc>,
         exit_signature: String,
         exit_percentage: f64,
+        /// The wallet's holding of the mint after the swap, when it was read. A swap that
+        /// lands on a closed position needs it to decide whether the position reopens.
+        held_after: Option<RawAmount>,
     },
     // ==================== DCA TRANSITIONS ====================
     DcaSubmitted {
@@ -109,6 +123,9 @@ pub enum PositionTransition {
         fee_raw: u64,             // Transaction fee
         dca_time: DateTime<Utc>,
         dca_signature: String,
+        /// The wallet's holding of the mint after the swap, when it was read. A swap that
+        /// lands on a closed position needs it to decide whether the position reopens.
+        held_after: Option<RawAmount>,
     },
     DcaFailed {
         position_id: i64,
@@ -205,6 +222,8 @@ mod tests {
                 fee_raw: 0,
                 exit_time: Utc::now(),
                 exit_signature: "sig".to_owned(),
+                exit_amount: RawAmount::ZERO,
+                held_after: None,
             }
             .action_verdict(),
             Some(Ok(()))

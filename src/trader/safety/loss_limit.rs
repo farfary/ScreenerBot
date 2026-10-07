@@ -33,6 +33,7 @@ pub struct LossLimitState {
 static LOSS_LIMIT_STATE: LazyLock<RwLock<LossLimitStateInternal>> = LazyLock::new(|| {
     RwLock::new(LossLimitStateInternal {
         period_start: Utc::now(),
+        counted_since: Utc::now(),
         cumulative_loss_native: 0.0,
         is_limited: false,
         limited_at: None,
@@ -42,6 +43,9 @@ static LOSS_LIMIT_STATE: LazyLock<RwLock<LossLimitStateInternal>> = LazyLock::ne
 #[derive(Debug, Clone)]
 struct LossLimitStateInternal {
     period_start: DateTime<Utc>,
+    /// Where the window the figure counts begins: the period start, or for the period that
+    /// begins at startup, one period earlier, so losses booked before a restart still count.
+    counted_since: DateTime<Utc>,
     cumulative_loss_native: f64,
     is_limited: bool,
     limited_at: Option<DateTime<Utc>>,
@@ -94,38 +98,64 @@ pub fn get_loss_limit_status() -> LossLimitState {
     }
 }
 
-/// Record a realized loss from a closed position
-/// Called when a position is closed with negative P&L
-pub fn record_realized_loss(loss_native: f64) {
+/// Serialises [`sync_from_books`], so a recompute that read the books earlier never writes
+/// its figure after one that read them later.
+static BOOKS_SYNC: tokio::sync::Mutex<()> = tokio::sync::Mutex::const_new(());
+
+/// Sets the period's loss to what the books realized in the window it counts: the loss of
+/// the bot's closed positions, derived the same way at startup by
+/// [`initialize_from_history`], so a restart finds the figure the live limiter holds. A
+/// figure that rises to the limit pauses entries; one that did not rise never undoes a
+/// manual resume. A correction that lowers the figure never lifts a pause: resuming stays a
+/// deliberate step, never a side effect of fixing the books. When the books cannot be read,
+/// the figure and the pause stay as they were.
+pub async fn sync_from_books() {
     if !config::is_loss_limit_enabled() {
         return;
     }
+    let _serial = BOOKS_SYNC.lock().await;
+    check_and_reset_period_if_needed();
 
-    let loss_amount = loss_native.abs();
+    let Some(counted_since) = LOSS_LIMIT_STATE
+        .read()
+        .ok()
+        .map(|state| state.counted_since)
+    else {
+        return;
+    };
+    let loss = match crate::positions::get_period_trading_stats(counted_since, None).await {
+        Ok(stats) => stats.loss_native,
+        Err(e) => {
+            logger::warning(
+                LogTag::Trader,
+                &format!("Loss limit kept its figure: the books could not be read: {e}"),
+            );
+            return;
+        }
+    };
     let limit = config::get_loss_limit_native();
 
     if let Ok(mut state) = LOSS_LIMIT_STATE.write() {
-        state.cumulative_loss_native += loss_amount;
-
+        // A period that rolled over while the books were read starts from its own figure.
+        if state.counted_since != counted_since {
+            return;
+        }
+        let rose = loss > state.cumulative_loss_native;
+        state.cumulative_loss_native = loss;
         logger::debug(
             LogTag::Trader,
-            &format!(
-                "Loss recorded: -{:.4} SOL, cumulative: {:.4}/{:.4} SOL",
-                loss_amount, state.cumulative_loss_native, limit
-            ),
+            &format!("Loss limit follows the books: {loss:.4}/{limit:.4} SOL"),
         );
 
-        // Check if limit exceeded
-        if !state.is_limited && state.cumulative_loss_native >= limit {
+        // Only a figure that rose can pause: books that did not move never undo a manual
+        // resume.
+        if !state.is_limited && rose && loss >= limit {
             state.is_limited = true;
             state.limited_at = Some(Utc::now());
 
             logger::warning(
                 LogTag::Trader,
-                &format!(
-                    "LOSS LIMIT REACHED: {:.4}/{:.4} SOL - Entry monitor paused",
-                    state.cumulative_loss_native, limit
-                ),
+                &format!("LOSS LIMIT REACHED: {loss:.4}/{limit:.4} SOL - Entry monitor paused"),
             );
         }
     }
@@ -149,6 +179,7 @@ pub fn resume_from_loss_limit() {
 pub fn reset_loss_limit_state() {
     if let Ok(mut state) = LOSS_LIMIT_STATE.write() {
         state.period_start = Utc::now();
+        state.counted_since = state.period_start;
         state.cumulative_loss_native = 0.0;
         state.is_limited = false;
         state.limited_at = None;
@@ -178,6 +209,7 @@ fn check_and_reset_period_if_needed() {
 
             // Then reset period data
             state.period_start = Utc::now();
+            state.counted_since = state.period_start;
             state.cumulative_loss_native = 0.0;
 
             // NOTE: Race window between write() release and next read() is negligible.
@@ -198,51 +230,38 @@ fn check_and_reset_period_if_needed() {
     }
 }
 
-/// Initialize loss limit state on startup
-/// Uses get_period_trading_stats to calculate losses since period start
+/// Initialize loss limit state on startup. A period starts now, and its figure counts the
+/// losses of the period before it as well: a restart neither forgets them nor restarts the
+/// budget. The figure comes from the books exactly as [`sync_from_books`] derives it.
 pub async fn initialize_from_history() {
     if !config::is_loss_limit_enabled() {
         return;
     }
 
     let period_hours = config::get_loss_limit_period_hours();
-    let period_start = Utc::now() - Duration::hours(period_hours as i64);
+    if let Ok(mut state) = LOSS_LIMIT_STATE.write() {
+        state.period_start = Utc::now();
+        state.counted_since = state.period_start - Duration::hours(period_hours as i64);
+    }
+    sync_from_books().await;
 
-    match crate::positions::get_period_trading_stats(period_start, None).await {
-        Ok(stats) => {
-            let loss = stats.loss_native; // Already absolute value
-            let limit = config::get_loss_limit_native();
-
-            if let Ok(mut state) = LOSS_LIMIT_STATE.write() {
-                state.period_start = period_start;
-                state.cumulative_loss_native = loss;
-
-                if loss >= limit {
-                    state.is_limited = true;
-                    state.limited_at = Some(Utc::now());
-                    logger::warning(
-                        LogTag::Trader,
-                        &format!(
-                            "Loss limit active from startup: {:.4}/{:.4} SOL",
-                            loss, limit
-                        ),
-                    );
-                } else {
-                    logger::info(
-                        LogTag::Trader,
-                        &format!(
-                            "Loss limit initialized: {:.4}/{:.4} SOL in current period",
-                            loss, limit
-                        ),
-                    );
-                }
-            }
-        }
-        Err(e) => {
-            logger::warning(
-                LogTag::Trader,
-                &format!("Failed to initialize loss limit from history: {e}"),
-            );
-        }
+    let status = get_loss_limit_status();
+    let limit = config::get_loss_limit_native();
+    if status.is_limited {
+        logger::warning(
+            LogTag::Trader,
+            &format!(
+                "Loss limit active from startup: {:.4}/{:.4} SOL",
+                status.cumulative_loss_native, limit
+            ),
+        );
+    } else {
+        logger::info(
+            LogTag::Trader,
+            &format!(
+                "Loss limit initialized: {:.4}/{:.4} SOL in current period",
+                status.cumulative_loss_native, limit
+            ),
+        );
     }
 }

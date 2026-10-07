@@ -47,6 +47,7 @@ events-connectivity-service-initialized = Konnektivitätsdienst mit { $count } M
 events-connectivity-critical-unhealthy = { $count } kritische(r) Endpunkt(e) fehlerhaft - Das System sollte Vorgänge pausieren
 events-connectivity-endpoint-recovered = Endpunkt von { $from } auf fehlerfrei zurückgekehrt
 events-position-entry-not-landed = Der Kauf von { $symbol } ist nicht on-chain angekommen; die Position wurde entfernt
+events-position-fill-after-force-close = Ein Trade von { $symbol } ist on-chain angekommen, nachdem die Position zwangsgeschlossen wurde; er wurde gebucht und die Position neu berechnet
 
 ## Events page (pages/events.js, ui/event_labels.js)
 

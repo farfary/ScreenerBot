@@ -112,6 +112,10 @@ pub struct SyncPlan {
     pub updates: Vec<PlannedUpdate>,
     /// The planning clock, reused when an update is re-derived at write time.
     pub now: DateTime<Utc>,
+    /// The signatures of every swap leg the trader had booked before the wallet history
+    /// was read, when known. A bot row whose legs include one booked later is not
+    /// reconciled: its round may predate that fill.
+    booked_before: Option<HashSet<String>>,
 }
 
 /// A rewrite of an existing row, with the round and metadata it was derived from.
@@ -129,6 +133,13 @@ pub struct PlannedUpdate {
 impl SyncPlan {
     pub fn is_empty(&self) -> bool {
         self.inserts.is_empty() && self.updates.is_empty()
+    }
+
+    /// The plan, told which swap legs the trader had booked before the wallet history it
+    /// was planned from was read.
+    pub fn booked_before(mut self, signatures: HashSet<String>) -> Self {
+        self.booked_before = Some(signatures);
+        self
     }
 }
 
@@ -719,6 +730,19 @@ pub async fn sync_wallet_history() -> super::super::error::Result<SyncSummary> {
         return Err(Error::NotInitialised);
     };
 
+    // Which legs the trader booked itself, read BEFORE the history: a bot-owned round can
+    // then absorb an outside buy without double-counting the bot's own, and a leg booked
+    // after this read marks a round that may predate it. A failure here is not fatal: the
+    // row falls back to its own recorded total.
+    let booked_legs = crate::positions::db::get_trader_swap_legs()
+        .await
+        .unwrap_or_default();
+    let booked_before: HashSet<String> = booked_legs
+        .iter()
+        .map(|(_, signature, _, _)| signature.clone())
+        .collect();
+    let trader_legs = TraderLegs::from_rows(booked_legs);
+
     let deltas = transactions_db
         .get_subject_deltas(&wallet_address)
         .await
@@ -777,14 +801,6 @@ pub async fn sync_wallet_history() -> super::super::error::Result<SyncSummary> {
     // already in memory is updated in place below.
     let existing = crate::positions::db::load_all_positions().await?;
     let busy_mints = crate::positions::state::mints_with_pending_swaps().await;
-    // Which legs the trader booked itself, so a bot-owned round can absorb an outside
-    // buy without double-counting the bot's own. A failure here is not fatal: the row
-    // falls back to its own recorded total.
-    let trader_legs = TraderLegs::from_rows(
-        crate::positions::db::get_trader_swap_legs()
-            .await
-            .unwrap_or_default(),
-    );
     let plan = plan_position_writes(
         &rounds,
         &existing,
@@ -792,7 +808,8 @@ pub async fn sync_wallet_history() -> super::super::error::Result<SyncSummary> {
         &trader_legs,
         &busy_mints,
         Utc::now(),
-    );
+    )
+    .booked_before(booked_before);
 
     let planned_unchanged = rounds.len() - plan.inserts.len() - plan.updates.len();
     let applied = apply_plan(plan).await;
@@ -868,8 +885,8 @@ async fn resolve_metadata(
 ///
 /// An update is re-derived from its round on the row read inside its own booking
 /// transaction (see [`rewrite_row`]), so a booking committed between planning and writing
-/// is kept, and memory adopts the committed row. A row that became busy or no longer
-/// differs is left untouched.
+/// is kept, and memory adopts the committed row. A row that became busy, no longer
+/// differs, or carries a leg booked after the history was read is left untouched.
 ///
 /// A single failed row is logged and skipped: one unwritable position must not abort the
 /// import of the rest of the wallet's history. Returns the rows actually written.
@@ -900,15 +917,22 @@ pub async fn apply_plan(plan: SyncPlan) -> AppliedPlan {
             continue;
         };
         let busy_mints = crate::positions::state::mints_with_pending_swaps().await;
+        let booked_before = plan.booked_before.as_ref();
         let committed = crate::positions::apply::book_position(id, |row, reads| {
             let legs = if row.is_wallet_derived() {
                 None
             } else {
-                Some(
-                    TraderLegs::from_rows(reads.trader_swap_legs()?)
-                        .remove(&id)
-                        .unwrap_or_default(),
-                )
+                let rows = reads.trader_swap_legs()?;
+                // A fill the trader booked after the history was read is not in the round
+                // yet: reconciling against it would book the fill again as an outside leg,
+                // or shrink the row by it.
+                if booked_before.is_some_and(|seen| {
+                    rows.iter()
+                        .any(|(_, signature, _, _)| !seen.contains(signature))
+                }) {
+                    return Ok(Booking::Skip(()));
+                }
+                Some(TraderLegs::from_rows(rows).remove(&id).unwrap_or_default())
             };
             Ok(
                 match rewrite_row(

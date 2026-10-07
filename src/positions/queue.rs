@@ -12,8 +12,8 @@ use std::collections::{HashSet, VecDeque};
 use std::sync::LazyLock;
 use tokio::sync::{Notify, RwLock};
 
-/// Maximum verification attempts before giving up. Sized to span ~24h together
-/// with the long-tail backoff table below.
+/// Maximum verification attempts before the item goes to its settlement by signature
+/// verdict. Sized to span ~24h together with the long-tail backoff table below.
 const MAX_VERIFICATION_ATTEMPTS: u8 = 40;
 
 /// Maximum age for a verification item before giving up. A swap can be confirmed
@@ -21,10 +21,6 @@ const MAX_VERIFICATION_ATTEMPTS: u8 = 40;
 /// delayed; we keep verifying (across restarts) for a full day rather than
 /// abandoning a position whose exit already landed.
 const MAX_VERIFICATION_AGE_HOURS: i64 = 24;
-
-/// Attempts after which `requeue` stops re-inserting an item. The first twelve backoffs
-/// sum to about four hours.
-pub const MAX_REQUEUE_ATTEMPTS: u8 = 12;
 
 /// Backoff intervals in seconds for verification retries (dynamic, widening).
 /// Front-loaded for sub-minute confirmation in the common case, then ramping up
@@ -172,9 +168,9 @@ impl VerificationItem {
         None
     }
 
-    /// Decides whether an item whose transition failed to apply is retried or dropped.
-    /// A non-retryable error drops first, then the verification give-up limits, then
-    /// the requeue cap that `requeue` enforces.
+    /// Decides what becomes of an item whose transition failed to apply. A non-retryable
+    /// error drops it; past the verification give-up limits it goes to its settlement by
+    /// signature verdict; otherwise it is retried.
     pub fn apply_failure_disposition(&self, error: &Error) -> ApplyFailureDisposition {
         if !error.is_retryable() {
             return ApplyFailureDisposition::Drop(GiveUpReason::ApplyRejected {
@@ -182,13 +178,7 @@ impl VerificationItem {
             });
         }
         if let Some(reason) = self.should_give_up() {
-            return ApplyFailureDisposition::Drop(reason);
-        }
-        if self.attempts >= MAX_REQUEUE_ATTEMPTS {
-            return ApplyFailureDisposition::Drop(GiveUpReason::MaxAttemptsReached {
-                attempts: self.attempts,
-                max: MAX_REQUEUE_ATTEMPTS,
-            });
+            return ApplyFailureDisposition::GiveUp(reason);
         }
         ApplyFailureDisposition::Requeue
     }
@@ -357,11 +347,11 @@ impl VerificationQueue {
         batch
     }
 
+    /// Puts the item back with its next backoff. An item is never dropped here: the
+    /// verification give-up limits are its one way out of the queue, through settlement by
+    /// its signature verdict.
     pub fn requeue(&mut self, item: VerificationItem) {
-        // Allow more retries but with backoff; hard cap attempts to avoid infinite loops
-        if item.attempts < MAX_REQUEUE_ATTEMPTS {
-            self.items.push_back(item.with_retry());
-        }
+        self.items.push_back(item.with_retry());
     }
 
     pub fn remove(&mut self, signature: &str) -> Option<VerificationItem> {

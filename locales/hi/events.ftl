@@ -46,6 +46,7 @@ events-connectivity-service-initialized = कनेक्टिविटी स�
 events-connectivity-critical-unhealthy = { $count } क्रिटिकल एंडपॉइंट अस्वस्थ - सिस्टम को ऑपरेशन रोक देने चाहिए
 events-connectivity-endpoint-recovered = एंडपॉइंट { $from } से स्वस्थ स्थिति में लौटा
 events-position-entry-not-landed = { $symbol } की खरीद ऑन-चेन दर्ज नहीं हुई; उसकी पोज़िशन हटा दी गई
+events-position-fill-after-force-close = { $symbol } का एक ट्रेड उसकी पोज़िशन को ज़बरदस्ती बंद करने के बाद ऑन-चेन दर्ज हुआ; उसे दर्ज कर पोज़िशन फिर से गिनी गई
 
 events-category-swap = स्वैप
 events-category-transaction = ट्रांज़ैक्शन

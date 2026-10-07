@@ -116,9 +116,9 @@ impl Position {
     }
 
     /// Writes the position off by operator action: whatever is still held moves into the
-    /// exited total with no proceeds, while the proceeds of earlier partial exits stand.
-    /// Returns the realized P&L.
-    pub(crate) fn book_force_close(&mut self, fill: &ForceCloseFill) -> Result<f64> {
+    /// exited total with no proceeds, while the proceeds of earlier partial exits stand. The
+    /// realized P&L is taken from the booked legs, fees included.
+    pub(crate) fn book_force_close(&mut self, fill: &ForceCloseFill) -> Result<()> {
         self.book_remaining_as_exited()?;
         self.remaining_token_amount = Some(RawAmount::ZERO);
         self.synthetic_exit = true;
@@ -128,18 +128,35 @@ impl Position {
         self.effective_exit_price = Some(0.0);
         self.closed_reason = Some(fill.closed_reason.clone());
 
-        let realized_native = self.native_received.unwrap_or_default();
-        self.native_received = Some(realized_native);
-        let realized_pnl = realized_native - self.total_size_native;
-        self.pnl = Some(realized_pnl);
-        self.pnl_percent = Some(if self.total_size_native > 0.0 {
-            (realized_pnl / self.total_size_native) * 100.0
-        } else {
-            0.0
-        });
+        self.native_received = Some(self.native_received.unwrap_or_default());
+        let (pnl, pnl_percent) = realized_pnl(self);
+        self.pnl = Some(pnl);
+        self.pnl_percent = Some(pnl_percent);
         self.unrealized_pnl = None;
         self.unrealized_pnl_percent = None;
-        Ok(realized_pnl)
+        Ok(())
+    }
+
+    /// Books the leg of a verified partial exit onto a closed position: its proceeds join
+    /// the books. The exited amount stays, since the close already counted every token it
+    /// held as exited; the round decides what is held afterwards.
+    pub(crate) fn book_late_partial_exit(&mut self, native_received: f64) {
+        self.native_received = Some(self.native_received.unwrap_or_default() + native_received);
+        self.partial_exit_count += 1;
+    }
+
+    /// Books the leg of a verified full-close swap onto a closed position: its proceeds,
+    /// price and fee join the books, and the exited amount stays as the close counted it. A
+    /// write-off is from then on closed by this sale, at the sale's time.
+    pub(crate) fn book_late_close(&mut self, fill: &CloseFill) {
+        self.native_received =
+            Some(self.native_received.unwrap_or_default() + fill.native_received);
+        self.effective_exit_price = Some(fill.effective_exit_price);
+        self.exit_fee_raw = Some(fill.fee_raw);
+        if self.synthetic_exit {
+            self.exit_time = Some(fill.exit_time);
+            self.synthetic_exit = false;
+        }
     }
 
     /// Books a verified partial exit. The position stays open: no exit time or exit
@@ -178,37 +195,40 @@ impl Position {
     pub(crate) fn book_dca(&mut self, fill: &DcaFill) -> Result<DcaBooking> {
         let remaining = self.book_acquisition(fill.tokens_bought)?;
         self.total_size_native += fill.native_spent;
-
-        let average = if remaining > RawAmount::ZERO
-            && self.total_size_native > 0.0
-            && self.total_size_native.is_finite()
-        {
-            let normalized = remaining.to_whole_units(fill.decimals);
-            if normalized > 0.0 && normalized.is_finite() {
-                self.average_entry_price = self.total_size_native / normalized;
-                DcaAverage::Recomputed
-            } else {
-                DcaAverage::InvalidNormalization
-            }
-        } else {
-            DcaAverage::InvalidState
-        };
-
+        let average = self.recompute_average_entry_price(fill.decimals);
         self.dca_count += 1;
         self.last_dca_time = Some(fill.dca_time);
         Ok(DcaBooking { remaining, average })
     }
 
+    /// Recomputes the average entry price from the invested total and the held amount, in a
+    /// token of `decimals`, when both are valid.
+    pub(crate) fn recompute_average_entry_price(&mut self, decimals: u8) -> DcaAverage {
+        let remaining = self.remaining_token_amount.unwrap_or_default();
+        if !(remaining > RawAmount::ZERO
+            && self.total_size_native > 0.0
+            && self.total_size_native.is_finite())
+        {
+            return DcaAverage::InvalidState;
+        }
+        let normalized = remaining.to_whole_units(decimals);
+        if normalized > 0.0 && normalized.is_finite() {
+            self.average_entry_price = self.total_size_native / normalized;
+            DcaAverage::Recomputed
+        } else {
+            DcaAverage::InvalidNormalization
+        }
+    }
+
     /// Clears a failed close so it can be retried: the exit signature, the verified flag
-    /// and the exit prices it stamped. Returns the cleared exit signature.
-    pub(crate) fn clear_failed_exit(&mut self) -> Option<String> {
-        let old_signature = self.exit_transaction_signature.take();
+    /// and the exit prices it stamped.
+    pub(crate) fn clear_failed_exit(&mut self) {
+        self.exit_transaction_signature = None;
         self.transaction_exit_verified = false;
         self.closed_reason = Some("exit_retry_pending".to_owned());
         // The close did not happen: a still-open position carrying exit prices reads as
         // closed to every check that looks at `exit_price`.
         self.exit_price = None;
         self.effective_exit_price = None;
-        old_signature
     }
 }

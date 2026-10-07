@@ -49,6 +49,7 @@ events-connectivity-service-initialized = Layanan konektivitas diinisialisasi de
 events-connectivity-critical-unhealthy = { $count } endpoint kritis tidak sehat - Sistem sebaiknya menjeda operasi
 events-connectivity-endpoint-recovered = Endpoint pulih dari { $from } ke sehat
 events-position-entry-not-landed = Pembelian { $symbol } tidak tercatat on-chain; posisinya dihapus
+events-position-fill-after-force-close = Transaksi { $symbol } tercatat on-chain setelah posisinya ditutup paksa; transaksi dibukukan dan posisinya dihitung ulang
 
 events-category-swap = Swap
 events-category-transaction = Transaksi

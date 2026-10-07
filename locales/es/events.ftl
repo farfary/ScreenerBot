@@ -54,6 +54,7 @@ events-connectivity-service-initialized = Servicio de conectividad inicializado 
 events-connectivity-critical-unhealthy = { $count } endpoint(s) críticos no saludables: el sistema debería pausar las operaciones
 events-connectivity-endpoint-recovered = El endpoint pasó de { $from } a saludable
 events-position-entry-not-landed = La compra de { $symbol } no llegó a la cadena; su posición se eliminó
+events-position-fill-after-force-close = Una operación de { $symbol } llegó a la cadena después del cierre forzado de su posición; se registró y la posición se recalculó
 
 ## Events page (pages/events.js, ui/event_labels.js)
 

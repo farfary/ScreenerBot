@@ -1275,6 +1275,7 @@ fn a_ledger_write_keeps_a_booking_committed_after_the_plan() {
                 exit_time: Utc::now(),
                 exit_signature: PARTIAL.to_owned(),
                 exit_percentage: 40.0,
+                held_after: None,
             })
             .await
             .expect("the partial exit commits");
@@ -1379,4 +1380,135 @@ fn a_planned_update_skipped_at_write_time_is_not_counted_as_written() {
             );
         },
     );
+}
+
+#[test]
+fn a_ledger_write_leaves_a_bot_row_whose_fill_was_booked_after_the_history_was_read() {
+    common::run_isolated(
+        "a_ledger_write_leaves_a_bot_row_whose_fill_was_booked_after_the_history_was_read",
+        || async {
+            const PARTIAL: &str = "partial-exit-sig";
+            let _dir = common::isolated_env();
+            let _cfg = common::config_guard();
+            screenerbot::paths::ensure_all_directories().expect("create data directories");
+            common::configure_own_wallet();
+            common::seed_decimals(common::TEST_MINT, 6);
+            screenerbot::positions::initialize_positions_database()
+                .await
+                .expect("initialise positions database");
+
+            let mut position = common::test_position(1.0, 1.0);
+            position.id = None;
+            position.token_amount = Some(RawAmount::new(1_000_000));
+            position.remaining_token_amount = Some(RawAmount::new(1_000_000));
+            let id = db::save_position(&position)
+                .await
+                .expect("persist test position");
+            position.id = Some(id);
+            state::add_position(position.clone()).await;
+
+            // The history was read before the partial sale reached it: the round still
+            // holds everything the bot bought.
+            let round_key = format!("entry-sig:{}", common::TEST_MINT);
+            let stale = LedgerRound {
+                entry_signature: position.entry_transaction_signature.clone(),
+                ..open_round(common::TEST_MINT, &round_key)
+            };
+            let existing = db::load_all_positions().await.expect("load positions");
+            let plan = plan_position_writes(
+                &[stale],
+                &existing,
+                &metadata(common::TEST_MINT, false),
+                &no_legs(),
+                &no_busy(),
+                now(),
+            )
+            .booked_before(HashSet::new());
+            assert_eq!(plan.updates.len(), 1, "the round claims the bot row");
+
+            state::register_pending_partial_exit(PendingPartialExit {
+                signature: PARTIAL.to_owned(),
+                mint: common::TEST_MINT.to_owned(),
+                position_id: id,
+                expected_exit_amount: RawAmount::new(400_000),
+                requested_exit_percentage: 40.0,
+                expiry_height: None,
+                created_at: Utc::now(),
+            })
+            .await
+            .expect("register pending partial exit");
+            state::mark_partial_exit_pending(common::TEST_MINT).await;
+            apply_transition(PositionTransition::PartialExitVerified {
+                position_id: id,
+                exit_amount: RawAmount::new(400_000),
+                native_received: 0.8,
+                effective_exit_price: 2.0,
+                fee_raw: 5_000,
+                exit_time: Utc::now(),
+                exit_signature: PARTIAL.to_owned(),
+                exit_percentage: 40.0,
+                held_after: None,
+            })
+            .await
+            .expect("the partial exit commits");
+            assert!(
+                !state::mints_with_pending_swaps()
+                    .await
+                    .contains(common::TEST_MINT),
+                "nothing is in flight when the ledger writes"
+            );
+
+            assert_eq!(
+                apply_plan(plan).await,
+                AppliedPlan {
+                    inserted: 0,
+                    updated: 0,
+                    skipped: 1,
+                }
+            );
+            let stored = db::get_position_by_id(id)
+                .await
+                .expect("read stored position")
+                .expect("position stored");
+            assert_eq!(
+                stored.round_key, None,
+                "the row was reconciled to a stale round"
+            );
+            assert_eq!(stored.remaining_token_amount, Some(RawAmount::new(600_000)));
+            assert_eq!(stored.total_exited_amount, RawAmount::new(400_000));
+            assert_eq!(
+                stored.total_size_native, 1.0,
+                "the sold tokens came back as a buy"
+            );
+            assert_eq!(stored.native_received, Some(0.8));
+        },
+    );
+}
+
+#[test]
+fn a_bot_swap_in_flight_keeps_its_mint_busy_until_its_guard_drops() {
+    const IN_FLIGHT_MINT: &str = "InFlightMint11111111111111111111111111111111";
+    let runtime = tokio::runtime::Builder::new_current_thread()
+        .build()
+        .expect("create runtime");
+    runtime.block_on(async {
+        let busy = || async {
+            state::mints_with_pending_swaps()
+                .await
+                .contains(IN_FLIGHT_MINT)
+        };
+        assert!(!busy().await);
+
+        let first = state::mark_swap_in_flight(ChainId::Solana, IN_FLIGHT_MINT);
+        let second = state::mark_swap_in_flight(ChainId::Solana, IN_FLIGHT_MINT);
+        assert!(busy().await, "a submitted swap keeps its mint busy");
+
+        drop(first);
+        assert!(busy().await, "another swap of the mint is still in flight");
+        drop(second);
+        assert!(
+            !busy().await,
+            "the mint is free once every swap is recorded"
+        );
+    });
 }

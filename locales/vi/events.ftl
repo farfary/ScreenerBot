@@ -46,6 +46,7 @@ events-connectivity-service-initialized = Dịch vụ kết nối đã khởi t�
 events-connectivity-critical-unhealthy = { $count } endpoint quan trọng không ổn định - hệ thống nên tạm dừng hoạt động
 events-connectivity-endpoint-recovered = Endpoint đã phục hồi từ { $from } sang ổn định
 events-position-entry-not-landed = Lệnh mua { $symbol } không được ghi nhận trên chuỗi; vị thế đã bị xóa
+events-position-fill-after-force-close = Một giao dịch { $symbol } được ghi nhận trên chuỗi sau khi vị thế bị đóng cưỡng bức; giao dịch đã được ghi sổ và vị thế được tính lại
 
 events-category-swap = Swap
 events-category-transaction = Giao dịch

@@ -681,6 +681,8 @@ fn refused_settlement(item: &VerificationItem, error: &Error) -> RefusedSettleme
     match item.apply_failure_disposition(error) {
         ApplyFailureDisposition::Drop(reason) => RefusedSettlement::Abandon(reason),
         ApplyFailureDisposition::Requeue => RefusedSettlement::Retry(item.deferred()),
+        // The settlement is what a verification gives up to: read it again afresh.
+        ApplyFailureDisposition::GiveUp(_) => RefusedSettlement::Retry(item.renewed().deferred()),
     }
 }
 
@@ -735,8 +737,9 @@ async fn apply_settlement(
 }
 
 /// Books the outcome of one verification attempt: applies its transition, requeues it, or,
-/// when the verifier gives up on it, returns the item for settlement by its signature
-/// verdict. `started_at` is when the attempt began.
+/// when the verifier gives up on it or applying its transition keeps failing past the
+/// verification limits, returns the item for settlement by its signature verdict.
+/// `started_at` is when the attempt began.
 pub(super) async fn process_verification_item(
     item: VerificationItem,
     outcome: VerificationOutcome,
@@ -843,14 +846,26 @@ pub(super) async fn process_verification_item(
                         }),
                     )
                     .await;
-                    match item.apply_failure_disposition(&e) {
+                    // The transaction verified, so the swap is confirmed whatever becomes of
+                    // the item.
+                    let mut confirmed = item;
+                    confirmed.swap_confirmed = true;
+                    match confirmed.apply_failure_disposition(&e) {
                         ApplyFailureDisposition::Requeue => {
-                            let mut confirmed = item;
-                            confirmed.swap_confirmed = true;
                             requeue_verification(confirmed).await;
                         }
+                        ApplyFailureDisposition::GiveUp(reason) => {
+                            logger::warning(
+                                LogTag::Positions,
+                                &format!(
+                                    "Applying the verified {} (mint {}) kept failing ({reason:?}) - settling it by its signature verdict",
+                                    confirmed.signature, confirmed.mint
+                                ),
+                            );
+                            return Some(confirmed);
+                        }
                         ApplyFailureDisposition::Drop(reason) => {
-                            abandon_after_apply_failure(&item, reason, &e).await;
+                            abandon_after_apply_failure(&confirmed, reason, &e).await;
                         }
                     }
                 }

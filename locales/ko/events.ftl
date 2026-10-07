@@ -54,6 +54,7 @@ events-connectivity-service-initialized = 연결 서비스가 모니터 { $count
 events-connectivity-critical-unhealthy = 핵심 엔드포인트 { $count }개가 비정상입니다 - 시스템이 작업을 일시 중지해야 합니다
 events-connectivity-endpoint-recovered = 엔드포인트가 { $from }에서 정상으로 복구되었습니다
 events-position-entry-not-landed = { $symbol } 매수가 온체인에 반영되지 않아 포지션을 삭제했습니다
+events-position-fill-after-force-close = { $symbol } 거래가 포지션 강제 종료 후 온체인에 반영되어 기록하고 포지션을 다시 계산했습니다
 
 ## Events page (pages/events.js, ui/event_labels.js)
 

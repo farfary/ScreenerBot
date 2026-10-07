@@ -54,6 +54,7 @@ events-connectivity-service-initialized = 连接服务已初始化，共 { $coun
 events-connectivity-critical-unhealthy = { $count } 个关键端点不健康，系统应暂停操作
 events-connectivity-endpoint-recovered = 端点已从 { $from } 恢复为健康
 events-position-entry-not-landed = { $symbol } 的买入未在链上确认，已移除其仓位
+events-position-fill-after-force-close = { $symbol } 的一笔交易在其仓位被强制平仓后于链上确认；已记账并重新计算该仓位
 
 ## Events page (pages/events.js, ui/event_labels.js)
 

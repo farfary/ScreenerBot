@@ -9,6 +9,11 @@
 //! together, and memory then adopts the committed row. Side effects (slot release, loss
 //! accounting, events, notifications, pending clears) run after the commit. A failed
 //! commit leaves memory, the row and the records unchanged.
+//!
+//! A verified swap is never refused or dropped. One that lands on a closed position books
+//! its own leg there, and the position then follows its round (`round_state::follow_round`):
+//! it reopens when the wallet still holds more than dust attributable to it, otherwise it
+//! stays closed with its realized P&L restated.
 
 use super::booking::{CloseFill, DcaAverage, DcaFill, EntryFill, PartialExitFill};
 use super::db::{
@@ -16,17 +21,19 @@ use super::db::{
     BookingReads, BookingRecord, Committed,
 };
 use super::pnl::position_pnl;
+use super::round_state::{attributable_held, follow_round, is_closed, FollowOutcome};
 use super::types::{EntryRecord, ExitRecord, Position};
 use super::{
     loss_detection::process_position_loss_detection,
     state::{
         clear_pending_dca_swap, get_position_by_id, get_position_by_mint,
-        position_has_pending_swap, publish_committed, release_position_slot, remove_position_by_id,
-        remove_signature_from_index, update_position_state, with_booking_lock,
+        position_has_pending_swap, publish_committed, register_position_slot,
+        release_position_slot, remove_position_by_id, remove_signature_from_index,
+        try_consume_global_position_permit, update_position_state, with_booking_lock,
     },
     transitions::PositionTransition,
 };
-use crate::chains::RawAmount;
+use crate::chains::{ChainId, RawAmount};
 use crate::config::with_config;
 use crate::i18n::{ids, UiArg, UiText};
 use crate::logger::{self, LogTag};
@@ -67,11 +74,13 @@ pub async fn apply_transition(transition: PositionTransition) -> Result<ApplyEff
             token_amount_units,
             fee_raw,
             native_size,
+            held_after,
         } => {
             if get_position_by_id(position_id).await.is_none() {
                 log_missing_position(position_id, "entry verification");
                 return Ok(effects);
             }
+            let store_chain = get_store_chain().await?;
             let fill = EntryFill {
                 effective_entry_price,
                 token_amount: token_amount_units,
@@ -89,9 +98,15 @@ pub async fn apply_transition(transition: PositionTransition) -> Result<ApplyEff
                         None => false,
                     };
                 if booked {
-                    return Ok(Booking::Skip(()));
+                    return Ok(Booking::Skip(None));
                 }
+                let after_write_off = is_closed(row).then_some(row.synthetic_exit);
                 row.apply_entry_fill(&fill);
+                let late = after_write_off
+                    .map(|after_write_off| {
+                        late_fill(row, reads, held_after, store_chain, after_write_off)
+                    })
+                    .transpose()?;
                 let record = row.entry_transaction_signature.clone().map(|signature| {
                     BookingRecord::Entry(EntryRecord {
                         id: None,
@@ -107,11 +122,15 @@ pub async fn apply_transition(transition: PositionTransition) -> Result<ApplyEff
                 });
                 Ok(Booking::Write {
                     record,
-                    outcome: (),
+                    outcome: late,
                 })
             })
             .await?;
-            let Committed::Written { row: position, .. } = committed else {
+            let Committed::Written {
+                row: position,
+                outcome: late,
+            } = committed
+            else {
                 logger::debug(
                     LogTag::Positions,
                     &format!("Entry for position {position_id} already verified - skipping"),
@@ -143,6 +162,24 @@ pub async fn apply_transition(transition: PositionTransition) -> Result<ApplyEff
                     effective_entry_price,
                 ));
             }
+
+            if let Some(late) = late {
+                let signature = position
+                    .entry_transaction_signature
+                    .clone()
+                    .unwrap_or_default();
+                after_late_fill(
+                    &position,
+                    late,
+                    LateFillLeg {
+                        kind: "entry",
+                        signature: &signature,
+                        tokens: token_amount_units,
+                        native: native_size,
+                    },
+                )
+                .await;
+            }
         }
 
         // =================================================================
@@ -155,41 +192,69 @@ pub async fn apply_transition(transition: PositionTransition) -> Result<ApplyEff
             fee_raw,
             exit_time,
             exit_signature,
+            exit_amount,
+            held_after,
         } => {
             // IDEMPOTENCE: this transition ACCUMULATES (`native_received +=`,
             // `total_exited_amount +=`), so the same close must be booked at most once. The
             // queue dedupes by signature only while an item is IN it, so a re-enqueue can hand
-            // the same exit back. The stored `transaction_exit_verified` flag, read inside the
-            // booking transaction, decides whether this close is already booked.
+            // the same exit back. The exit record of the swap, read inside the booking
+            // transaction, decides whether it is already booked.
             if get_position_by_id(position_id).await.is_none() {
                 log_missing_position(position_id, "exit verification");
                 return Ok(effects);
             }
+            let store_chain = get_store_chain().await?;
+            let fill = CloseFill {
+                effective_exit_price,
+                native_received,
+                fee_raw,
+                exit_time,
+            };
 
-            let committed = book_position(position_id, |row, _| {
-                if row.transaction_exit_verified {
-                    return Ok(Booking::Skip(()));
+            let committed = book_position(position_id, |row, reads| {
+                if reads.exit_record_exists(&exit_signature)? {
+                    return Ok(Booking::Skip(None));
                 }
-                // A submission whose row write failed left the exit signature in memory
-                // only; the verified swap supplies it to the row.
-                if row.exit_transaction_signature.is_none() {
-                    row.exit_transaction_signature = Some(exit_signature.clone());
-                }
-                // A full close sells whatever is left: the amount moved is what THIS close sold.
-                let closed_amount = row.book_close(&CloseFill {
-                    effective_exit_price,
-                    native_received,
-                    fee_raw,
-                    exit_time,
-                })?;
-                // The exit record for the FULL close: the position-details History tab and
-                // the chart's exit markers are built from these records.
+                let late = if is_closed(row) {
+                    // A close verified through this very swap before exit records were
+                    // written already holds it.
+                    if !row.synthetic_exit
+                        && row.exit_transaction_signature.as_deref()
+                            == Some(exit_signature.as_str())
+                    {
+                        return Ok(Booking::Skip(None));
+                    }
+                    let after_write_off = row.synthetic_exit;
+                    row.book_late_close(&fill);
+                    Some(late_fill(
+                        row,
+                        reads,
+                        held_after,
+                        store_chain,
+                        after_write_off,
+                    )?)
+                } else {
+                    if row.transaction_exit_verified {
+                        return Ok(Booking::Skip(None));
+                    }
+                    // A submission whose row write failed left the exit signature in memory
+                    // only; the verified swap supplies it to the row.
+                    if row.exit_transaction_signature.is_none() {
+                        row.exit_transaction_signature = Some(exit_signature.clone());
+                    }
+                    row.book_close(&fill)?;
+                    None
+                };
+                // The exit record for the FULL close, with what the swap sold: the
+                // position-details History tab and the chart's exit markers are built from
+                // these records.
                 Ok(Booking::Write {
                     record: Some(BookingRecord::Exit(ExitRecord {
                         id: None,
                         position_id,
                         timestamp: exit_time,
-                        amount: closed_amount,
+                        amount: exit_amount,
                         price: effective_exit_price,
                         native_received,
                         transaction_signature: exit_signature.clone(),
@@ -197,49 +262,65 @@ pub async fn apply_transition(transition: PositionTransition) -> Result<ApplyEff
                         percentage: 100.0,
                         fees_raw: Some(fee_raw),
                     })),
-                    outcome: (),
+                    outcome: late,
                 })
             })
             .await?;
-            let (candidate, pnl_native) = match committed {
+            let (candidate, late) = match committed {
                 Committed::Skipped(_) => {
                     logger::debug(
                         LogTag::Positions,
-                        &format!("Exit for position {position_id} already verified - skipping"),
+                        &format!(
+                            "Exit {exit_signature} already booked for position {position_id} - skipping"
+                        ),
                     );
-                    release_position_slot(position_id).await;
                     return Ok(effects);
                 }
-                Committed::Written { row, .. } => {
-                    let pnl_native = row.pnl.unwrap_or_default();
-                    (row, pnl_native)
-                }
+                Committed::Written { row, outcome } => (row, outcome),
                 Committed::Deleted { .. } => return Err(Error::NotFoundById { position_id }),
             };
 
             effects.db_updated = true;
-            effects.position_closed = true;
+            effects.position_closed = is_closed(&candidate);
             let _ = force_database_sync().await;
 
-            // Release the global position permit now the close is booked, so new positions
-            // can be opened within max_open_positions.
-            release_position_slot(position_id).await;
-
-            if let Err(e) = process_position_loss_detection(&candidate).await {
-                logger::error(
+            if late.is_none() {
+                // Release the global position permit now the close is booked, so new
+                // positions can be opened within max_open_positions.
+                release_position_slot(position_id).await;
+                logger::info(
                     LogTag::Positions,
-                    &format!(
-                        "Failed to process loss detection for {}: {}",
-                        candidate.symbol, e
-                    ),
+                    &format!("Released position slot for verified exit (ID: {position_id})"),
                 );
-            }
 
-            // Record realized loss for loss limit tracking (full exit only). A wallet-derived
-            // round is excluded: it is the user's own pre-existing holding, not risk the bot
-            // took, and a loss on it must not pause the trader.
-            if pnl_native < 0.0 && !candidate.is_wallet_derived() {
-                crate::trader::safety::loss_limit::record_realized_loss(pnl_native.abs());
+                if let Err(e) = process_position_loss_detection(&candidate).await {
+                    logger::error(
+                        LogTag::Positions,
+                        &format!(
+                            "Failed to process loss detection for {}: {}",
+                            candidate.symbol, e
+                        ),
+                    );
+                }
+
+                // The loss limiter follows the books, which now hold this close.
+                crate::trader::safety::loss_limit::sync_from_books().await;
+
+                // Reset token priority to Standard after the close, so a stale OpenPosition
+                // priority does not outlive the position.
+                if let Some(db) = crate::tokens::database::database(store_chain) {
+                    let _ = db.update_priority(
+                        &candidate.mint,
+                        crate::tokens::priorities::Priority::Standard.to_value(),
+                    );
+                    logger::debug(
+                        LogTag::Positions,
+                        &format!(
+                            "Reset token {} to Standard priority after close",
+                            candidate.symbol
+                        ),
+                    );
+                }
             }
 
             // Record an exit verified event with basic P&L if computable
@@ -260,7 +341,7 @@ pub async fn apply_transition(transition: PositionTransition) -> Result<ApplyEff
                 &candidate.mint,
                 "exit_verified",
                 candidate.entry_transaction_signature.as_deref(),
-                candidate.exit_transaction_signature.as_deref(),
+                Some(&exit_signature),
                 candidate.total_size_native,
                 candidate.token_amount.unwrap_or_default(),
                 event_pnl_native,
@@ -268,32 +349,10 @@ pub async fn apply_transition(transition: PositionTransition) -> Result<ApplyEff
             )
             .await;
 
-            logger::info(
-                LogTag::Positions,
-                &format!(
-                    "Released position slot for verified exit (ID: {})",
-                    position_id
-                ),
-            );
-
-            // Reset token priority to Standard after the close, so a stale OpenPosition
-            // priority does not outlive the position.
-            if let Some(db) = crate::tokens::database::database(crate::chains::active_chain()) {
-                let _ = db.update_priority(
-                    &candidate.mint,
-                    crate::tokens::priorities::Priority::Standard.to_value(),
-                );
-                logger::debug(
-                    LogTag::Positions,
-                    &format!(
-                        "Reset token {} to Standard priority after close",
-                        candidate.symbol
-                    ),
-                );
-            }
-
             // Queue Telegram notification for position closed
-            if with_config(|c| c.telegram.enabled && c.telegram.notify_position_closed) {
+            if effects.position_closed
+                && with_config(|c| c.telegram.enabled && c.telegram.notify_position_closed)
+            {
                 let duration_secs = candidate
                     .exit_time
                     .map(|exit| (exit - candidate.entry_time).num_seconds().max(0) as u64)
@@ -311,6 +370,20 @@ pub async fn apply_transition(transition: PositionTransition) -> Result<ApplyEff
                     duration_secs,
                 ));
             }
+
+            if let Some(late) = late {
+                after_late_fill(
+                    &candidate,
+                    late,
+                    LateFillLeg {
+                        kind: "exit",
+                        signature: &exit_signature,
+                        tokens: exit_amount,
+                        native: native_received,
+                    },
+                )
+                .await;
+            }
         }
 
         // =================================================================
@@ -325,25 +398,32 @@ pub async fn apply_transition(transition: PositionTransition) -> Result<ApplyEff
                 return Ok(effects);
             }
             // A failed sell must never reopen a close that is already verified (a force close
-            // or a synthetic exit committed while the sell was still being verified). The
-            // stored verified flag is read inside the clear's own transaction. Once the clear
-            // is stored, the failed swap's signature, and the row's if it named another, are
-            // purged from the index, so no stale sig->mint mapping remains. The failed swap
-            // comes from the transition: a submission whose row write failed never put it on
-            // the row.
+            // or a synthetic exit committed while the sell was still being verified), and
+            // never clears an exit other than its own: a newer exit submitted after it stays.
+            // The stored row is read inside the clear's own transaction. Once the clear is
+            // stored, the failed swap's signature is purged from the index, so no stale
+            // sig->mint mapping remains. The failed swap comes from the transition: a
+            // submission whose row write failed never put it on the row.
             let committed = book_position(position_id, |row, _| {
                 if row.transaction_exit_verified {
-                    return Ok(Booking::Skip(None));
+                    return Ok(Booking::Skip(ExitClear::ExitVerified));
                 }
-                let row_sig = row.clear_failed_exit();
+                if let Some(other) = row
+                    .exit_transaction_signature
+                    .as_deref()
+                    .filter(|signature| *signature != exit_signature)
+                {
+                    return Ok(Booking::Skip(ExitClear::OtherExit(other.to_owned())));
+                }
+                row.clear_failed_exit();
                 Ok(Booking::Write {
                     record: None,
-                    outcome: row_sig,
+                    outcome: ExitClear::Cleared,
                 })
             })
             .await?;
-            let row_sig = match committed {
-                Committed::Skipped(_) => {
+            match committed {
+                Committed::Skipped(ExitClear::ExitVerified) => {
                     logger::warning(
                         LogTag::Positions,
                         &format!(
@@ -352,14 +432,21 @@ pub async fn apply_transition(transition: PositionTransition) -> Result<ApplyEff
                     );
                     return Err(Error::AlreadyClosed { position_id });
                 }
-                Committed::Written { outcome, .. } => outcome,
+                Committed::Skipped(ExitClear::OtherExit(other)) => {
+                    logger::warning(
+                        LogTag::Positions,
+                        &format!(
+                            "Exit retry clear of {exit_signature} for position {position_id} skipped - its exit is now {other}"
+                        ),
+                    );
+                    remove_signature_from_index(&exit_signature).await;
+                    return Ok(effects);
+                }
+                Committed::Skipped(ExitClear::Cleared) | Committed::Written { .. } => {}
                 Committed::Deleted { .. } => return Err(Error::NotFoundById { position_id }),
-            };
+            }
             effects.db_updated = true;
 
-            if let Some(row_sig) = row_sig.filter(|sig| *sig != exit_signature) {
-                remove_signature_from_index(&row_sig).await;
-            }
             remove_signature_from_index(&exit_signature).await;
             crate::events::record_position_event_flexible(
                 "exit_retry_cleared",
@@ -506,6 +593,7 @@ pub async fn apply_transition(transition: PositionTransition) -> Result<ApplyEff
             exit_time,
             exit_signature,
             exit_percentage,
+            held_after,
         } => {
             // IDEMPOTENCE: the booking ACCUMULATES (remaining -=, total_exited +=,
             // native_received +=, partial_exit_count += 1). Applying the same partial twice
@@ -530,9 +618,31 @@ pub async fn apply_transition(transition: PositionTransition) -> Result<ApplyEff
                 );
             }
 
+            let store_chain = get_store_chain().await?;
             let committed = book_position(position_id, |row, reads| {
                 if reads.exit_record_exists(&exit_signature)? {
-                    return Ok(Booking::Skip(()));
+                    return Ok(Booking::Skip(None));
+                }
+                let record = BookingRecord::Exit(ExitRecord {
+                    id: None,
+                    position_id,
+                    timestamp: exit_time,
+                    amount: exit_amount,
+                    price: effective_exit_price,
+                    native_received,
+                    transaction_signature: exit_signature.clone(),
+                    is_partial: true,
+                    percentage: exit_percentage,
+                    fees_raw: Some(fee_raw),
+                });
+                if is_closed(row) {
+                    let after_write_off = row.synthetic_exit;
+                    row.book_late_partial_exit(native_received);
+                    let late = late_fill(row, reads, held_after, store_chain, after_write_off)?;
+                    return Ok(Booking::Write {
+                        record: Some(record),
+                        outcome: Some(late),
+                    });
                 }
                 // Unrealized P&L after the partial is computed from the position as booked,
                 // so it is current at once instead of on the next price tick.
@@ -551,23 +661,16 @@ pub async fn apply_transition(transition: PositionTransition) -> Result<ApplyEff
                 // position is still open.
                 row.book_partial_exit(&fill)?;
                 Ok(Booking::Write {
-                    record: Some(BookingRecord::Exit(ExitRecord {
-                        id: None,
-                        position_id,
-                        timestamp: exit_time,
-                        amount: exit_amount,
-                        price: effective_exit_price,
-                        native_received,
-                        transaction_signature: exit_signature.clone(),
-                        is_partial: true,
-                        percentage: exit_percentage,
-                        fees_raw: Some(fee_raw),
-                    })),
-                    outcome: (),
+                    record: Some(record),
+                    outcome: None,
                 })
             })
             .await?;
-            let Committed::Written { row: candidate, .. } = committed else {
+            let Committed::Written {
+                row: candidate,
+                outcome: late,
+            } = committed
+            else {
                 logger::debug(
                     LogTag::Positions,
                     &format!(
@@ -674,6 +777,20 @@ pub async fn apply_transition(transition: PositionTransition) -> Result<ApplyEff
                 ));
             }
 
+            if let Some(late) = late {
+                after_late_fill(
+                    &candidate,
+                    late,
+                    LateFillLeg {
+                        kind: "partial_exit",
+                        signature: &exit_signature,
+                        tokens: exit_amount,
+                        native: native_received,
+                    },
+                )
+                .await;
+            }
+
             // IMPORTANT: Do NOT release semaphore permit - position still open!
             pending_cleared?;
         }
@@ -687,6 +804,7 @@ pub async fn apply_transition(transition: PositionTransition) -> Result<ApplyEff
             exit_time,
             exit_signature,
             exit_percentage,
+            held_after,
         } => {
             // The close swap DID sell tokens and DID receive SOL — it just did not empty the
             // wallet (tokens split across accounts; close_position_direct sells the primary
@@ -713,6 +831,7 @@ pub async fn apply_transition(transition: PositionTransition) -> Result<ApplyEff
                 exit_time,
                 exit_signature: exit_signature.clone(),
                 exit_percentage,
+                held_after,
             }))
             .await?;
 
@@ -816,6 +935,7 @@ pub async fn apply_transition(transition: PositionTransition) -> Result<ApplyEff
             fee_raw,
             dca_time,
             dca_signature,
+            held_after,
         } => {
             // IDEMPOTENCE: the booking ACCUMULATES (tokens, invested SOL, dca_count). The
             // entry record is the token: one swap = one record, checked and written in the
@@ -836,10 +956,12 @@ pub async fn apply_transition(transition: PositionTransition) -> Result<ApplyEff
                 dca_time,
                 decimals,
             };
+            let store_chain = get_store_chain().await?;
             let committed = book_position(position_id, |row, reads| {
                 if reads.entry_record_exists(&dca_signature)? {
-                    return Ok(Booking::Skip(()));
+                    return Ok(Booking::Skip(None));
                 }
+                let after_write_off = is_closed(row).then_some(row.synthetic_exit);
                 let booking = row.book_dca(&fill)?;
                 match booking.average {
                     DcaAverage::Recomputed => {}
@@ -858,6 +980,15 @@ pub async fn apply_transition(transition: PositionTransition) -> Result<ApplyEff
                         ),
                     ),
                 }
+                let late = after_write_off
+                    .map(|after_write_off| {
+                        late_fill(row, reads, held_after, store_chain, after_write_off)
+                    })
+                    .transpose()?;
+                // A reopened position averages its cost over what it now holds.
+                if late.is_some_and(|late| late.follow == FollowOutcome::Reopened) {
+                    row.recompute_average_entry_price(decimals);
+                }
                 Ok(Booking::Write {
                     record: Some(BookingRecord::Entry(EntryRecord {
                         id: None,
@@ -870,11 +1001,15 @@ pub async fn apply_transition(transition: PositionTransition) -> Result<ApplyEff
                         is_dca: true,
                         fees_raw: Some(fee_raw),
                     })),
-                    outcome: (),
+                    outcome: late,
                 })
             })
             .await?;
-            let Committed::Written { row: candidate, .. } = committed else {
+            let Committed::Written {
+                row: candidate,
+                outcome: late,
+            } = committed
+            else {
                 logger::debug(
                     LogTag::Positions,
                     &format!(
@@ -933,7 +1068,21 @@ pub async fn apply_transition(transition: PositionTransition) -> Result<ApplyEff
                 ));
             }
 
-            // IMPORTANT: Do NOT consume another semaphore permit - same position!
+            if let Some(late) = late {
+                after_late_fill(
+                    &candidate,
+                    late,
+                    LateFillLeg {
+                        kind: "dca",
+                        signature: &dca_signature,
+                        tokens: tokens_bought,
+                        native: native_spent,
+                    },
+                )
+                .await;
+            }
+
+            // A DCA never consumes a semaphore permit of its own: it is the same position.
             pending_cleared?;
         }
 
@@ -1058,6 +1207,120 @@ pub(crate) async fn book_position<T>(
         Ok(committed)
     })
     .await
+}
+
+/// A verified swap booked onto a position that was already closed.
+#[derive(Debug, Clone, Copy)]
+struct LateFill {
+    /// The position was an operator write-off when the swap was booked.
+    after_write_off: bool,
+    /// What following the round did with the position.
+    follow: FollowOutcome,
+}
+
+/// What an exit retry clear decided for the row it read.
+enum ExitClear {
+    Cleared,
+    /// The row's exit is verified: a failed sell never reopens a close.
+    ExitVerified,
+    /// The row's exit is another, newer swap, which the clear leaves in place.
+    OtherExit(String),
+}
+
+/// Makes a closed `row`, with a late swap's own leg already booked on it, follow its round.
+/// `held_after` is the wallet's holding of the mint after the swap, of which the row owns
+/// what the other open positions of the mint do not hold, up to what it acquired. Without
+/// that reading nothing can be decided, so the booking fails retryably and is read again.
+fn late_fill(
+    row: &mut Position,
+    reads: &BookingReads<'_>,
+    held_after: Option<RawAmount>,
+    chain: ChainId,
+    after_write_off: bool,
+) -> Result<LateFill> {
+    let Some(held_after) = held_after else {
+        return Err(crate::chains::Error::SettlementRead {
+            chain,
+            detail: format!(
+                "the holding of {} after a fill on closed position {:?} was not read",
+                row.mint, row.id
+            ),
+        }
+        .into());
+    };
+    let Some(acquired) = row.acquired_amount() else {
+        return Err(Error::AmountOverflow {
+            mint: row.mint.clone(),
+            operation: "following the round",
+        });
+    };
+    let held = attributable_held(held_after, reads.other_open_held(&row.mint)?, acquired);
+    Ok(LateFill {
+        after_write_off,
+        follow: follow_round(row, held)?,
+    })
+}
+
+/// The leg of a late fill, as the warning event reports it.
+struct LateFillLeg<'a> {
+    kind: &'static str,
+    signature: &'a str,
+    tokens: RawAmount,
+    native: f64,
+}
+
+/// The effects of a late fill once its booking is committed, after the normal effects of its
+/// transition. A reopened position that is not archived takes a trading slot back when one
+/// is free, the loss limiter follows the restated books, and a fill on a written-off
+/// position is recorded as one warning event.
+async fn after_late_fill(position: &Position, late: LateFill, leg: LateFillLeg<'_>) {
+    let reopened = late.follow == FollowOutcome::Reopened;
+    if let (true, false, Some(position_id)) = (reopened, position.archived, position.id) {
+        if try_consume_global_position_permit() {
+            register_position_slot(position_id).await;
+        } else {
+            logger::warning(
+                LogTag::Positions,
+                &format!(
+                    "Position {position_id} ({}) reopened by a late fill, but no trading slot is free",
+                    position.symbol
+                ),
+            );
+        }
+    }
+
+    crate::trader::safety::loss_limit::sync_from_books().await;
+
+    logger::warning(
+        LogTag::Positions,
+        &format!(
+            "A {} fill {} landed on closed position {:?} ({}): {:?}",
+            leg.kind, leg.signature, position.id, position.symbol, late.follow
+        ),
+    );
+    if late.after_write_off {
+        crate::events::record_position_event_flexible(
+            "fill_after_force_close",
+            crate::events::Severity::Warn,
+            Some(&position.mint),
+            Some(leg.signature),
+            crate::events::with_text(
+                serde_json::json!({
+                    "position_id": position.id,
+                    "kind": leg.kind,
+                    "signature": leg.signature,
+                    "tokens": leg.tokens,
+                    "native": leg.native,
+                    "restated_pnl": position.pnl,
+                    "reopened": reopened,
+                    "trigger": "verifier",
+                }),
+                &UiText::new(ids::EVENTS_POSITION_FILL_AFTER_FORCE_CLOSE)
+                    .arg("symbol", UiArg::Text(position.symbol.clone())),
+            ),
+        )
+        .await;
+    }
 }
 
 fn log_missing_position(position_id: i64, transition: &str) {

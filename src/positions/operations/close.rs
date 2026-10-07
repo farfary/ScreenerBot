@@ -11,7 +11,8 @@ use crate::positions::db::record_exit_submission;
 use crate::positions::price_resolution::get_price_with_api_fallback;
 use crate::positions::queue::{enqueue_verification, VerificationItem};
 use crate::positions::state::{
-    acquire_position_lock, add_signature_to_index, set_exit_submission_in_memory, with_booking_lock,
+    acquire_position_lock, add_signature_to_index, mark_swap_in_flight,
+    set_exit_submission_in_memory, with_booking_lock,
 };
 use crate::positions::types::VerificationKind;
 use crate::positions::PENDING_VERIFICATION_SUFFIX;
@@ -203,6 +204,11 @@ pub async fn close_position_direct(
     // which leads to SPL Token "insufficient funds"during Transfer. ExactIn avoids that.
     // Manual override starts the ladder; configured steps above it still escalate.
     let slippage_exit_retry_steps = super::slippage::exit_slippage_ladder(slippage_pct);
+    // From before the first submission until the exit signature is recorded, the
+    // wallet-history sync leaves the mint to the trader: a confirmed sell empties the wallet
+    // before then, and the sync would otherwise close the position as sold outside the bot.
+    let _in_flight =
+        mark_swap_in_flight(crate::positions::db::get_store_chain().await?, token_mint);
     // Slippage retry loop for exit
     let mut last_err: Option<String> = None;
     // Why the last swap attempt stopped before it was sent, when it did.

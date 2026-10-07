@@ -206,6 +206,8 @@ pub enum ApplyFailureDisposition {
     Requeue,
     /// Stop verifying the signature for the rest of the session.
     Drop(GiveUpReason),
+    /// The verification limits are reached: settle the item by its signature verdict.
+    GiveUp(GiveUpReason),
 }
 
 #[derive(Debug)]

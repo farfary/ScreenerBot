@@ -208,6 +208,33 @@ pub async fn verify_transaction(item: &VerificationItem) -> VerificationOutcome 
         return VerificationOutcome::RetryTransient("Verification carries no position".to_owned());
     };
 
+    // The wallet's holding of the mint after the swap, read once. A swap that lands on a
+    // closed position needs it to decide whether the position reopens, an entry caps its
+    // amount by it and a full exit checks it for a residual.
+    if should_throttle_token_accounts(&item.mint).await {
+        logger::debug(
+            LogTag::Positions,
+            &format!("Throttling token accounts check for mint {}", item.mint),
+        );
+        return VerificationOutcome::RetryTransient("Token accounts check throttled".to_owned());
+    }
+    let held_after = match get_wallet_address() {
+        Ok(wallet_address) => settle::holding(&wallet_address, &item.mint)
+            .await
+            .map(|holding| holding.amount)
+            .map_err(|e| e.to_string()),
+        Err(e) => Err(e.to_string()),
+    };
+    if let Err(e) = &held_after {
+        logger::warning(
+            LogTag::Positions,
+            &format!(
+                "Holding of {} after {} unavailable: {e}",
+                item.mint, item.signature
+            ),
+        );
+    }
+
     match item.kind {
         VerificationKind::Entry => {
             if swap_info.swap_type != "Buy" {
@@ -265,43 +292,23 @@ pub async fn verify_transaction(item: &VerificationItem) -> VerificationOutcome 
                     fee_raw: adapter().native_to_raw(swap_info.fee_sol),
                     dca_time,
                     dca_signature: item.signature.clone(),
+                    held_after: held_after.ok(),
                 });
             }
 
-            // Prefer authoritative on-chain balance immediately after entry finalization, if available.
-            // IMPORTANT: Only ever reduce token_amount_units to the on-chain balance if it's smaller.
-            // Never increase to an aggregated wallet balance as that may include subsequent buys and
-            // incorrectly attribute tokens to this entry (causing duplicate-buys to be merged).
-            if let Ok(wallet_address) = get_wallet_address() {
-                // Throttle token accounts query to reduce RPC load
-                if should_throttle_token_accounts(&item.mint).await {
+            // Prefer the authoritative on-chain balance right after the entry, but only ever
+            // REDUCE the transaction-derived amount to it: a larger wallet balance may include
+            // later buys, and attributing them to this entry would merge duplicate buys.
+            if let Ok(Ok(actual_units)) = held_after.as_ref().map(|held| u64::try_from(*held)) {
+                if actual_units > 0 && actual_units < token_amount_units {
                     logger::debug(
                         LogTag::Positions,
                         &format!(
-                            "Throttling token accounts check (entry verify) for mint {}",
-                            item.mint
+                            "Reduced token units to on-chain balance for mint {}: tx-derived={} actual={}",
+                            &item.mint, token_amount_units, actual_units
                         ),
                     );
-                    return VerificationOutcome::RetryTransient(
-                        "Token accounts check throttled".to_owned(),
-                    );
-                }
-                if let Ok(Ok(actual_units)) = settle::holding(&wallet_address, &item.mint)
-                    .await
-                    .map(|holding| u64::try_from(holding.amount))
-                {
-                    if actual_units > 0 && actual_units < token_amount_units {
-                        logger::debug(
-                            LogTag::Positions,
-                            &format!(
-                "Reduced token units to on-chain balance for mint {}: tx-derived={} actual={}",
-                &item.mint,
-                token_amount_units,
-                actual_units
-              ),
-                        );
-                        token_amount_units = actual_units;
-                    }
+                    token_amount_units = actual_units;
                 }
             }
 
@@ -323,6 +330,7 @@ pub async fn verify_transaction(item: &VerificationItem) -> VerificationOutcome 
                 token_amount_units: RawAmount::from(token_amount_units),
                 fee_raw: adapter().native_to_raw(swap_info.fee_sol),
                 native_size: swap_info.sol_amount,
+                held_after: held_after.ok(),
             })
         }
         VerificationKind::Exit => {
@@ -349,170 +357,140 @@ pub async fn verify_transaction(item: &VerificationItem) -> VerificationOutcome 
                 );
             };
 
-            // CRITICAL: For PARTIAL exits, we expect remaining balance
-            // For FULL exits, we must ensure complete closure (ATA closable)
-            if let Ok(wallet_address) = get_wallet_address() {
-                // Throttle token accounts query to reduce RPC load
-                if should_throttle_token_accounts(&item.mint).await {
-                    logger::debug(
+            // A PARTIAL exit expects a remaining balance; a FULL exit must leave none beyond
+            // dust. A full exit cannot be booked without that check.
+            let remaining_balance = match held_after {
+                Ok(remaining_balance) => remaining_balance,
+                Err(e) if !item.is_partial_exit => {
+                    logger::warning(
                         LogTag::Positions,
-                        &format!(
-                            "Throttling token accounts check (exit residual) for mint {}",
-                            item.mint
-                        ),
+                        &format!("Could not verify residual balance after exit: {e}"),
                     );
                     return VerificationOutcome::RetryTransient(
-                        "Token accounts check throttled".to_owned(),
+                        "Residual check failed after exit".to_owned(),
                     );
                 }
-                match settle::holding(&wallet_address, &item.mint)
-                    .await
-                    .map(|holding| holding.amount)
-                {
-                    Ok(remaining_balance) => {
-                        // PARTIAL EXIT: Verify expected amount was sold, balance check is informational
-                        if item.is_partial_exit {
-                            // The transaction is FINAL: what it sold is what it sold. Retrying
-                            // verification on a mismatch (which is what this did) can never
-                            // change the answer — it just burns attempts until the item is
-                            // ABANDONED, and abandonment used to synthetically close the whole
-                            // position. Record the amount that actually executed and log the
-                            // discrepancy.
-                            if let Some(expected) = item.expected_exit_amount {
-                                let expected = expected.raw();
-                                let actual = u128::from(exit_amount);
-                                let tolerance = (expected / 1000).max(10); // 0.1% tolerance or 10 units
-                                if actual < expected.saturating_sub(tolerance)
-                                    || actual > expected.saturating_add(tolerance)
-                                {
-                                    logger::warning(
-                                        LogTag::Positions,
-                                        &format!(
- "Partial exit amount mismatch for mint {}: expected={} actual={} tolerance={} - recording the ACTUAL amount",
-                      item.mint, expected, exit_amount, tolerance
-                    ),
-                                    );
-                                }
-                            }
+                Err(_) => RawAmount::ZERO,
+            };
+            let held_after = held_after.ok();
 
-                            if exit_amount == 0 {
-                                return VerificationOutcome::RetryTransient(
-                                    "Partial exit sold zero tokens - will verify again".to_owned(),
-                                );
-                            }
-
-                            logger::info(
-                                LogTag::Positions,
-                                &format!(
-                                    "Partial exit verified for mint {}: sold={} remaining={}",
-                                    item.mint, exit_amount, remaining_balance
-                                ),
-                            );
-
-                            return VerificationOutcome::Transition(
-                                PositionTransition::PartialExitVerified {
-                                    position_id,
-                                    exit_amount: RawAmount::from(exit_amount),
-                                    native_received: swap_info.effective_sol_received.abs(),
-                                    effective_exit_price: swap_info.calculated_price_sol,
-                                    fee_raw: adapter().native_to_raw(swap_info.fee_sol),
-                                    exit_time,
-                                    exit_signature: item.signature.clone(),
-                                    exit_percentage: match (
-                                        item.expected_exit_amount,
-                                        item.requested_exit_percentage,
-                                    ) {
-                                        (Some(expected), Some(requested))
-                                            if expected > RawAmount::ZERO =>
-                                        {
-                                            let ratio = exit_amount as f64 / expected.raw() as f64;
-                                            (requested * ratio).clamp(0.0, 100.0)
-                                        }
-                                        (Some(expected), _) if expected > RawAmount::ZERO => {
-                                            ((exit_amount as f64 / expected.raw() as f64) * 100.0)
-                                                .max(0.0)
-                                                .min(100.0)
-                                        }
-                                        (Some(_), _) => 0.0,
-                                        (None, _) => 100.0,
-                                    },
-                                },
-                            );
-                        }
-
-                        // FULL EXIT: Ensure complete closure (check for residual)
-                        if residual_balance_requires_retry(item.position_id, remaining_balance)
-                            .await
-                        {
-                            logger::warning(
-                                LogTag::Positions,
-                                &format!(
-                                    "Exit residual {} units for mint {} → will retry another close",
-                                    remaining_balance, item.mint
-                                ),
-                            );
-
-                            crate::events::record_position_event_flexible(
-                                "exit_residual_detected",
-                                crate::events::Severity::Warn,
-                                Some(&item.mint),
-                                item.position_id.map(|id| id.to_string()).as_deref(),
-                                serde_json::json!({
-                                  "position_id": item.position_id,
-                                  "remaining_balance": remaining_balance,
-                                  "sold": exit_amount
-                                }),
-                            )
-                            .await;
-
-                            // The swap SUCCEEDED — it sold `exit_amount` tokens and received
-                            // SOL; it just did not empty the wallet (typically tokens split
-                            // across accounts, where close_position_direct deliberately sells
-                            // the primary ATA only). Returning a bare ExitFailedClearForRetry
-                            // here recorded NOTHING: the SOL received vanished from the
-                            // position's proceeds and the tokens sold were still counted as
-                            // held, so realized P&L silently lost this fill. Record it as a
-                            // partial exit, then clear for a retry of the residual.
-                            let sold_pct = {
-                                let total = remaining_balance.raw() as f64 + exit_amount as f64;
-                                if total > 0.0 {
-                                    ((exit_amount as f64 / total) * 100.0).clamp(0.0, 100.0)
-                                } else {
-                                    0.0
-                                }
-                            };
-
-                            return VerificationOutcome::Transition(
-                                PositionTransition::ExitResidualClearForRetry {
-                                    position_id,
-                                    exit_amount: RawAmount::from(exit_amount),
-                                    native_received: swap_info.effective_sol_received.abs(),
-                                    effective_exit_price: swap_info.calculated_price_sol,
-                                    fee_raw: adapter().native_to_raw(swap_info.fee_sol),
-                                    exit_time,
-                                    exit_signature: item.signature.clone(),
-                                    exit_percentage: sold_pct,
-                                },
-                            );
-                        } else {
-                            logger::info(
-                                LogTag::Positions,
-                                &format!("Exit verified with zero residual for mint {}", item.mint),
-                            );
-                        }
-                    }
-                    Err(e) => {
+            if item.is_partial_exit {
+                // The transaction is FINAL: what it sold is what it sold. Retrying
+                // verification on a mismatch can never change the answer, so the amount
+                // that actually executed is recorded and the discrepancy logged.
+                if let Some(expected) = item.expected_exit_amount {
+                    let expected = expected.raw();
+                    let actual = u128::from(exit_amount);
+                    let tolerance = (expected / 1000).max(10); // 0.1% tolerance or 10 units
+                    if actual < expected.saturating_sub(tolerance)
+                        || actual > expected.saturating_add(tolerance)
+                    {
                         logger::warning(
                             LogTag::Positions,
-                            &format!("Could not verify residual balance after exit: {e}"),
-                        );
-                        // Be conservative, retry later
-                        return VerificationOutcome::RetryTransient(
-                            "Residual check failed after exit".to_owned(),
+                            &format!(
+                                "Partial exit amount mismatch for mint {}: expected={} actual={} tolerance={} - recording the ACTUAL amount",
+                                item.mint, expected, exit_amount, tolerance
+                            ),
                         );
                     }
                 }
+
+                if exit_amount == 0 {
+                    return VerificationOutcome::RetryTransient(
+                        "Partial exit sold zero tokens - will verify again".to_owned(),
+                    );
+                }
+
+                logger::info(
+                    LogTag::Positions,
+                    &format!(
+                        "Partial exit verified for mint {}: sold={} remaining={:?}",
+                        item.mint, exit_amount, held_after
+                    ),
+                );
+
+                return VerificationOutcome::Transition(PositionTransition::PartialExitVerified {
+                    position_id,
+                    exit_amount: RawAmount::from(exit_amount),
+                    native_received: swap_info.effective_sol_received.abs(),
+                    effective_exit_price: swap_info.calculated_price_sol,
+                    fee_raw: adapter().native_to_raw(swap_info.fee_sol),
+                    exit_time,
+                    exit_signature: item.signature.clone(),
+                    exit_percentage: match (
+                        item.expected_exit_amount,
+                        item.requested_exit_percentage,
+                    ) {
+                        (Some(expected), Some(requested)) if expected > RawAmount::ZERO => {
+                            let ratio = exit_amount as f64 / expected.raw() as f64;
+                            (requested * ratio).clamp(0.0, 100.0)
+                        }
+                        (Some(expected), _) if expected > RawAmount::ZERO => {
+                            ((exit_amount as f64 / expected.raw() as f64) * 100.0)
+                                .max(0.0)
+                                .min(100.0)
+                        }
+                        (Some(_), _) => 0.0,
+                        (None, _) => 100.0,
+                    },
+                    held_after,
+                });
             }
+
+            // FULL EXIT: Ensure complete closure (check for residual)
+            if residual_balance_requires_retry(item.position_id, remaining_balance).await {
+                logger::warning(
+                    LogTag::Positions,
+                    &format!(
+                        "Exit residual {} units for mint {} → will retry another close",
+                        remaining_balance, item.mint
+                    ),
+                );
+
+                crate::events::record_position_event_flexible(
+                    "exit_residual_detected",
+                    crate::events::Severity::Warn,
+                    Some(&item.mint),
+                    item.position_id.map(|id| id.to_string()).as_deref(),
+                    serde_json::json!({
+                      "position_id": item.position_id,
+                      "remaining_balance": remaining_balance,
+                      "sold": exit_amount
+                    }),
+                )
+                .await;
+
+                // The swap SUCCEEDED: it sold `exit_amount` tokens and received SOL, it just
+                // did not empty the wallet (typically tokens split across accounts, where
+                // close_position_direct sells the primary ATA only). The fill is recorded as
+                // a partial exit, then the exit is cleared for a retry of the residual.
+                let sold_pct = {
+                    let total = remaining_balance.raw() as f64 + exit_amount as f64;
+                    if total > 0.0 {
+                        ((exit_amount as f64 / total) * 100.0).clamp(0.0, 100.0)
+                    } else {
+                        0.0
+                    }
+                };
+
+                return VerificationOutcome::Transition(
+                    PositionTransition::ExitResidualClearForRetry {
+                        position_id,
+                        exit_amount: RawAmount::from(exit_amount),
+                        native_received: swap_info.effective_sol_received.abs(),
+                        effective_exit_price: swap_info.calculated_price_sol,
+                        fee_raw: adapter().native_to_raw(swap_info.fee_sol),
+                        exit_time,
+                        exit_signature: item.signature.clone(),
+                        exit_percentage: sold_pct,
+                        held_after,
+                    },
+                );
+            }
+            logger::info(
+                LogTag::Positions,
+                &format!("Exit verified with zero residual for mint {}", item.mint),
+            );
 
             // FULL EXIT: Standard verification
             VerificationOutcome::Transition(PositionTransition::ExitVerified {
@@ -522,6 +500,8 @@ pub async fn verify_transaction(item: &VerificationItem) -> VerificationOutcome 
                 fee_raw: adapter().native_to_raw(swap_info.fee_sol),
                 exit_time,
                 exit_signature: item.signature.clone(),
+                exit_amount: RawAmount::from(exit_amount),
+                held_after,
             })
         }
     }

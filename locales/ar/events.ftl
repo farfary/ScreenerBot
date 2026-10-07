@@ -54,6 +54,7 @@ events-connectivity-service-initialized = تمت تهيئة خدمة الاتص�
 events-connectivity-critical-unhealthy = نقاط الاتصال الحرجة غير السليمة: { $count } - ينبغي أن يوقف النظام العمليات مؤقتًا
 events-connectivity-endpoint-recovered = تعافت نقطة الاتصال من { $from } إلى سليمة
 events-position-entry-not-landed = لم تصل عملية شراء { $symbol } إلى السلسلة؛ تمت إزالة مركزها
+events-position-fill-after-force-close = وصلت صفقة على { $symbol } إلى السلسلة بعد الإغلاق القسري لمركزها؛ تم تسجيلها وإعادة احتساب المركز
 
 ## Events page (pages/events.js, ui/event_labels.js)
 

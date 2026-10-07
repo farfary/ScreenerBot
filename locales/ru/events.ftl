@@ -46,6 +46,7 @@ events-connectivity-service-initialized = Сервис соединений ин
 events-connectivity-critical-unhealthy = Неисправных критичных эндпоинтов: { $count } - системе следует приостановить операции
 events-connectivity-endpoint-recovered = Эндпоинт восстановился из состояния «{ $from }» до исправного
 events-position-entry-not-landed = Покупка { $symbol } не попала в блокчейн; позиция удалена
+events-position-fill-after-force-close = Сделка по { $symbol } попала в блокчейн после принудительного закрытия позиции; она учтена, позиция пересчитана
 
 events-category-swap = Своп
 events-category-transaction = Транзакция

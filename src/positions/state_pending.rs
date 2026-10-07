@@ -6,6 +6,7 @@
 use super::db;
 use super::error::{Error, Result};
 pub use super::types::{PendingDcaSwap, PendingPartialExit};
+use crate::chains::ChainId;
 use crate::logger::{self, LogTag};
 use std::{collections::HashMap, sync::LazyLock};
 use tokio::sync::RwLock;
@@ -23,6 +24,47 @@ static PENDING_DCA_SWAPS: LazyLock<RwLock<HashMap<String, PendingDcaSwap>>> =
     LazyLock::new(|| RwLock::new(HashMap::new()));
 
 const PENDING_DCA_METADATA_KEY: &str = "pending_dca_swaps";
+
+// Bot swaps submitted on a mint whose pending state is not recorded yet ((chain, mint) ->
+// count). A
+// swap that confirms moves the wallet before its pending marker or exit signature is
+// written, and the wallet-history sync must not take that movement for an outside trade.
+static SWAPS_IN_FLIGHT: LazyLock<std::sync::Mutex<HashMap<(ChainId, String), u32>>> =
+    LazyLock::new(|| std::sync::Mutex::new(HashMap::new()));
+
+/// A bot swap on a mint, in flight from before its submission until the guard drops, which
+/// is after its pending state is recorded.
+#[derive(Debug)]
+pub struct SwapInFlight {
+    key: (ChainId, String),
+}
+
+impl Drop for SwapInFlight {
+    fn drop(&mut self) {
+        let mut map = SWAPS_IN_FLIGHT
+            .lock()
+            .unwrap_or_else(|poisoned| poisoned.into_inner());
+        if let Some(count) = map.get_mut(&self.key) {
+            if *count > 1 {
+                *count -= 1;
+            } else {
+                map.remove(&self.key);
+            }
+        }
+    }
+}
+
+/// Marks a bot swap on `mint` of `chain` as in flight until the returned guard drops. Take
+/// it before the swap is submitted and hold it until the swap's pending state is recorded.
+pub fn mark_swap_in_flight(chain: ChainId, mint: &str) -> SwapInFlight {
+    let key = (chain, mint.to_owned());
+    let mut map = SWAPS_IN_FLIGHT
+        .lock()
+        .unwrap_or_else(|poisoned| poisoned.into_inner());
+    let count = map.entry(key.clone()).or_default();
+    *count = count.saturating_add(1);
+    SwapInFlight { key }
+}
 
 /// Mark that a partial exit is pending for a mint (increments count)
 pub async fn mark_partial_exit_pending(mint: &str) {
@@ -279,7 +321,8 @@ pub async fn position_has_pending_swap(mint: &str, position_id: i64) -> bool {
             .any(|entry| entry.position_id == position_id)
 }
 
-/// Every mint with a swap in flight — a pending partial exit or a pending DCA add.
+/// Every mint with a swap in flight — a pending partial exit, a pending DCA add, or a bot
+/// swap submitted whose pending state is not recorded yet.
 ///
 /// The wallet-history ledger reads this before reconciling a bot-executed position
 /// against the chain: a mint whose balance is about to move again must be left to the
@@ -300,6 +343,13 @@ pub async fn mints_with_pending_swaps() -> std::collections::HashSet<String> {
             .await
             .values()
             .map(|entry| entry.mint.clone()),
+    );
+    mints.extend(
+        SWAPS_IN_FLIGHT
+            .lock()
+            .unwrap_or_else(|poisoned| poisoned.into_inner())
+            .keys()
+            .map(|(_, mint)| mint.clone()),
     );
 
     mints

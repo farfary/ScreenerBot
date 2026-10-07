@@ -10,7 +10,7 @@ use crate::logger::{self, LogTag};
 use crate::positions::price_resolution::get_price_with_api_fallback;
 use crate::positions::queue::{enqueue_verification, VerificationItem};
 use crate::positions::state::{
-    acquire_position_lock, clear_pending_dca_swap, register_pending_dca_swap,
+    acquire_position_lock, clear_pending_dca_swap, mark_swap_in_flight, register_pending_dca_swap,
 };
 use crate::positions::types::{PendingDcaSwap, TradeOrigin};
 use crate::positions::{Error, Result};
@@ -154,6 +154,11 @@ pub async fn add_to_position(
         LogTag::Positions,
         &format!("DCA quote: {dca_amount_native} SOL → {quoted_tokens} tokens"),
     );
+
+    // From before the submission until its pending marker is registered, the wallet-history
+    // sync leaves the mint to the trader: a confirmed swap is in the wallet before then.
+    let _in_flight =
+        mark_swap_in_flight(crate::positions::db::get_store_chain().await?, token_mint);
 
     // Execute swap. A swap that REACHED THE CHAIN is never discarded as a trade
     // that never happened: `unconfirmed_swap_signature` hands back the signature

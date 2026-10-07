@@ -46,6 +46,7 @@ events-connectivity-service-initialized = Service de connectivité initialisé a
 events-connectivity-critical-unhealthy = { $count } endpoint(s) critique(s) défaillant(s) - le système devrait suspendre ses opérations
 events-connectivity-endpoint-recovered = Endpoint rétabli de l'état { $from } à sain
 events-position-entry-not-landed = L'achat de { $symbol } n'a pas abouti on-chain ; sa position a été supprimée
+events-position-fill-after-force-close = Une transaction de { $symbol } a abouti on-chain après la clôture forcée de sa position ; elle a été comptabilisée et la position recalculée
 
 events-category-swap = Swap
 events-category-transaction = Transaction

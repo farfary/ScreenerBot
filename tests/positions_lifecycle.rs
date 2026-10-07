@@ -135,6 +135,7 @@ fn all_transitions() -> Vec<PositionTransition> {
             token_amount_units: raw(100),
             fee_raw: 5_000,
             native_size: 1.0,
+            held_after: None,
         },
         PositionTransition::ExitVerified {
             position_id: 1,
@@ -143,6 +144,8 @@ fn all_transitions() -> Vec<PositionTransition> {
             fee_raw: 5_000,
             exit_time: now,
             exit_signature: "exit-sig".to_owned(),
+            exit_amount: raw(100),
+            held_after: None,
         },
         PositionTransition::ExitFailedClearForRetry {
             position_id: 1,
@@ -175,6 +178,7 @@ fn all_transitions() -> Vec<PositionTransition> {
             exit_time: now,
             exit_signature: "sig".to_owned(),
             exit_percentage: 50.0,
+            held_after: None,
         },
         PositionTransition::PartialExitFailed {
             position_id: 1,
@@ -189,6 +193,7 @@ fn all_transitions() -> Vec<PositionTransition> {
             exit_time: now,
             exit_signature: "sig".to_owned(),
             exit_percentage: 50.0,
+            held_after: None,
         },
         PositionTransition::DcaSubmitted {
             position_id: 1,
@@ -204,6 +209,7 @@ fn all_transitions() -> Vec<PositionTransition> {
             fee_raw: 5_000,
             dca_time: now,
             dca_signature: "sig".to_owned(),
+            held_after: None,
         },
         PositionTransition::DcaFailed {
             position_id: 1,
@@ -476,9 +482,7 @@ async fn a_reentered_token_resolves_to_its_live_round() {
 // ==================== APPLY-FAILURE DISPOSITION ====================
 
 use screenerbot::errors::DatabaseError;
-use screenerbot::positions::queue::{
-    VerificationQueue, MAX_REQUEUE_ATTEMPTS, NOT_LANDED_CONFIRM_MIN_SECS,
-};
+use screenerbot::positions::queue::{VerificationQueue, NOT_LANDED_CONFIRM_MIN_SECS};
 use screenerbot::positions::{
     ApplyFailureDisposition, Error as PositionError, GiveUpReason, VerificationItem,
     VerificationKind,
@@ -556,34 +560,51 @@ fn a_retryable_apply_error_requeues_the_item_within_its_limits() {
 }
 
 #[test]
-fn a_retryable_apply_error_at_the_requeue_cap_drops_the_item() {
-    let mut item = entry_item("sig-capped", None);
-    item.attempts = MAX_REQUEUE_ATTEMPTS;
-    for error in retryable_apply_errors() {
-        let disposition = item.apply_failure_disposition(&error);
-        assert!(
-            matches!(
-                disposition,
-                ApplyFailureDisposition::Drop(GiveUpReason::MaxAttemptsReached { max: 12, .. })
-            ),
-            "{error} at the requeue cap must drop, got {disposition:?}"
-        );
+fn a_retryable_apply_error_requeues_the_item_at_any_attempt_count_below_the_limits() {
+    for attempts in [12, 39] {
+        let mut item = entry_item("sig-many-attempts", None);
+        item.attempts = attempts;
+        for error in retryable_apply_errors() {
+            let disposition = item.apply_failure_disposition(&error);
+            assert!(
+                matches!(disposition, ApplyFailureDisposition::Requeue),
+                "{error} at {attempts} attempts must requeue, got {disposition:?}"
+            );
+        }
     }
 }
 
 #[test]
-fn a_retryable_apply_error_past_the_verification_age_drops_the_item() {
-    let mut item = entry_item("sig-aged", None);
-    item.created_at = Utc::now() - chrono::Duration::hours(25);
-    for error in retryable_apply_errors() {
-        let disposition = item.apply_failure_disposition(&error);
-        assert!(
-            matches!(
-                disposition,
-                ApplyFailureDisposition::Drop(GiveUpReason::MaxAgeReached { .. })
-            ),
-            "{error} past the age limit must drop, got {disposition:?}"
-        );
+fn a_retryable_apply_error_past_the_verification_limits_goes_to_settlement() {
+    let mut aged = entry_item("sig-aged", None);
+    aged.created_at = Utc::now() - chrono::Duration::hours(25);
+    let mut exhausted = entry_item("sig-exhausted", None);
+    exhausted.attempts = 40;
+    for item in [aged, exhausted] {
+        for error in retryable_apply_errors() {
+            let disposition = item.apply_failure_disposition(&error);
+            assert!(
+                matches!(
+                    disposition,
+                    ApplyFailureDisposition::GiveUp(
+                        GiveUpReason::MaxAgeReached { .. }
+                            | GiveUpReason::MaxAttemptsReached { .. }
+                    )
+                ),
+                "{error} past the limits must go to settlement, got {disposition:?}"
+            );
+        }
+    }
+}
+
+#[test]
+fn a_requeued_item_stays_queued_at_any_attempt_count() {
+    for attempts in [0, 11, 12, 13, 39, u8::MAX] {
+        let mut queue = VerificationQueue::new();
+        let mut item = entry_item("sig-requeued", Some(100));
+        item.attempts = attempts;
+        queue.requeue(item);
+        assert_eq!(queue.len(), 1, "an item at {attempts} attempts was dropped");
     }
 }
 

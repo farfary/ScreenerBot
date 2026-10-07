@@ -19,7 +19,10 @@ use screenerbot::positions::{
     Position, PositionManagement, PositionTransition, PriceSource, VerificationItem,
     VerificationKind, FORCE_CLOSED_PREFIX,
 };
-use screenerbot::trader::safety::loss_limit::{get_loss_limit_status, reset_loss_limit_state};
+use screenerbot::trader::safety::loss_limit::{
+    get_loss_limit_status, initialize_from_history, is_entry_blocked_by_loss_limit,
+    reset_loss_limit_state,
+};
 
 const HELD: u128 = 1_000_000;
 const PARTIAL_SIGNATURE: &str = "partial-exit-sig";
@@ -176,6 +179,7 @@ fn partial_exit(id: i64) -> PositionTransition {
         exit_time: Utc::now(),
         exit_signature: PARTIAL_SIGNATURE.to_owned(),
         exit_percentage: 40.0,
+        held_after: None,
     }
 }
 
@@ -207,6 +211,7 @@ fn dca(id: i64) -> PositionTransition {
         fee_raw: 5_000,
         dca_time: Utc::now(),
         dca_signature: DCA_SIGNATURE.to_owned(),
+        held_after: None,
     }
 }
 
@@ -611,10 +616,16 @@ async fn memory_position(id: i64) -> Position {
 
 /// Enables the period loss limit with a budget no test reaches, from a clean slate.
 fn enable_loss_limit() {
+    enable_loss_limit_at(1_000.0);
+}
+
+/// Enables the period loss limit at `limit_sol`, from a clean slate.
+fn enable_loss_limit_at(limit_sol: f64) {
     common::set_config(|cfg| {
         cfg.trader.loss_limit_enabled = true;
-        cfg.trader.loss_limit_sol = 1_000.0;
+        cfg.trader.loss_limit_sol = limit_sol;
         cfg.trader.loss_limit_period_hours = 24;
+        cfg.trader.loss_limit_auto_resume = true;
     });
     reset_loss_limit_state();
 }
@@ -638,6 +649,8 @@ fn verified_close(id: i64) -> PositionTransition {
         fee_raw: 5_000,
         exit_time: Utc::now(),
         exit_signature: CLOSE_SIGNATURE.to_owned(),
+        exit_amount: RawAmount::new(HELD),
+        held_after: None,
     }
 }
 
@@ -868,48 +881,6 @@ fn a_force_close_of_a_position_not_in_memory_books_the_row_once() {
 }
 
 #[test]
-fn a_force_close_then_a_retried_exit_verification_records_the_loss_once() {
-    common::run_isolated(
-        "a_force_close_then_a_retried_exit_verification_records_the_loss_once",
-        || async {
-            let _dir = common::isolated_env();
-            let _cfg = common::config_guard();
-            enable_loss_limit();
-            let id = open_position(|position| {
-                position.exit_transaction_signature = Some(CLOSE_SIGNATURE.to_owned());
-            })
-            .await;
-
-            force_close_position(id, "stuck")
-                .await
-                .expect("force close commits");
-            let closed = in_storage(id).await;
-            assert_eq!(closed, in_memory(id).await, "memory and storage disagree");
-            assert!(closed.transaction_exit_verified);
-            assert_eq!(closed.native_received, Some(0.0));
-            assert_eq!(recorded_loss(), 1.0);
-
-            apply_transition(verified_close(id))
-                .await
-                .expect("the retried verification is a no-op");
-            assert_eq!(in_memory(id).await, closed);
-            assert_eq!(in_storage(id).await, closed);
-            assert_eq!(exit_records(id).await, 0);
-            assert_eq!(recorded_loss(), 1.0, "the loss was recorded twice");
-
-            let error = force_close_position(id, "again")
-                .await
-                .expect_err("a closed position cannot be force-closed again");
-            assert!(
-                matches!(error, Error::AlreadyClosed { position_id } if position_id == id),
-                "expected already closed, got {error:?}"
-            );
-            assert_eq!(recorded_loss(), 1.0);
-        },
-    );
-}
-
-#[test]
 fn a_failed_exit_clear_after_a_force_close_leaves_the_close_intact() {
     common::run_isolated(
         "a_failed_exit_clear_after_a_force_close_leaves_the_close_intact",
@@ -1103,6 +1074,8 @@ fn a_full_exit_whose_submission_write_failed_is_booked_in_full_at_verification()
                 fee_raw: 5_000,
                 exit_time: Utc::now(),
                 exit_signature: CLOSE_SIGNATURE.to_owned(),
+                exit_amount: RawAmount::new(HELD),
+                held_after: None,
             })
             .await
             .expect("the close commits");
@@ -1269,6 +1242,7 @@ fn entry_verified(id: i64) -> PositionTransition {
         token_amount_units: RawAmount::new(HELD),
         fee_raw: 5_000,
         native_size: 1.0,
+        held_after: None,
     }
 }
 
@@ -1429,6 +1403,7 @@ fn memory_adopts_the_committed_row_in_commit_order() {
                     fee_raw: 5_000,
                     dca_time: Utc::now(),
                     dca_signature: format!("{DCA_SIGNATURE}-{add}"),
+                    held_after: None,
                 }));
             }
             while let Some(booked) = bookings.join_next().await {
@@ -1755,6 +1730,7 @@ fn an_orphan_removal_refuses_a_position_whose_entry_landed() {
                 token_amount_units: RawAmount::new(HELD),
                 fee_raw: 5_000,
                 native_size: 1.0,
+                held_after: None,
             })
             .await
             .expect("the entry is booked");
@@ -1958,4 +1934,579 @@ fn removing_a_row_never_drops_a_held_mint_lock() {
             "the lock is free once its holder drops it"
         );
     });
+}
+
+// ==================== LATE FILLS ON CLOSED POSITIONS ====================
+
+/// The fee of every verified swap in these tests, in raw native units.
+const SWAP_FEE_RAW: u64 = 5_000;
+
+/// A fee in native units.
+fn fee(raw: u64) -> f64 {
+    raw as f64 / 1e9
+}
+
+/// Opens an OPEN position holding [`HELD`] for 1 SOL, configured by `configure`, holding a
+/// trading slot of a one-slot semaphore, and writes it off by force close.
+async fn written_off(configure: impl FnOnce(&mut Position)) -> i64 {
+    state::init_global_position_semaphore(1);
+    let id = open_position(configure).await;
+    assert!(state::try_consume_global_position_permit());
+    state::register_position_slot(id).await;
+    force_close_position(id, "stuck")
+        .await
+        .expect("force close commits");
+    assert!(
+        state::try_consume_global_position_permit(),
+        "the write-off frees the slot"
+    );
+    state::release_global_position_permit();
+    id
+}
+
+fn late_sell(id: i64, held_after: Option<RawAmount>) -> PositionTransition {
+    PositionTransition::ExitVerified {
+        position_id: id,
+        effective_exit_price: 1.5,
+        native_received: 1.5,
+        fee_raw: SWAP_FEE_RAW,
+        exit_time: Utc::now(),
+        exit_signature: CLOSE_SIGNATURE.to_owned(),
+        exit_amount: RawAmount::new(HELD),
+        held_after,
+    }
+}
+
+fn late_partial(id: i64, held_after: Option<RawAmount>) -> PositionTransition {
+    match partial_exit(id) {
+        PositionTransition::PartialExitVerified {
+            position_id,
+            exit_amount,
+            native_received,
+            effective_exit_price,
+            fee_raw,
+            exit_time,
+            exit_signature,
+            exit_percentage,
+            ..
+        } => PositionTransition::PartialExitVerified {
+            position_id,
+            exit_amount,
+            native_received,
+            effective_exit_price,
+            fee_raw,
+            exit_time,
+            exit_signature,
+            exit_percentage,
+            held_after,
+        },
+        _ => unreachable!("a partial exit"),
+    }
+}
+
+fn late_dca(id: i64, held_after: Option<RawAmount>) -> PositionTransition {
+    match dca(id) {
+        PositionTransition::DcaVerified {
+            position_id,
+            tokens_bought,
+            native_spent,
+            effective_price,
+            fee_raw,
+            dca_time,
+            dca_signature,
+            ..
+        } => PositionTransition::DcaVerified {
+            position_id,
+            tokens_bought,
+            native_spent,
+            effective_price,
+            fee_raw,
+            dca_time,
+            dca_signature,
+            held_after,
+        },
+        _ => unreachable!("a DCA"),
+    }
+}
+
+/// The acquired amount equals what is held plus what has exited, in memory and storage.
+async fn assert_acquired_balances(id: i64, acquired: u128) {
+    for position in [stored_position(id).await, memory_position(id).await] {
+        let held = position.remaining_token_amount.unwrap_or_default();
+        assert_eq!(
+            held.raw() + position.total_exited_amount.raw(),
+            acquired,
+            "held {held} + exited {} != acquired {acquired}",
+            position.total_exited_amount
+        );
+    }
+}
+
+/// Turns event recording on and starts the events store.
+async fn start_events() {
+    common::set_config(|cfg| cfg.events.enabled = true);
+    screenerbot::paths::ensure_all_directories().expect("create data directories");
+    screenerbot::events::init().await.expect("start events");
+}
+
+/// The position events of the test mint with `subtype`, once the events writer flushed.
+async fn position_events(subtype: &str) -> usize {
+    tokio::time::sleep(std::time::Duration::from_millis(2_500)).await;
+    screenerbot::events::by_mint(common::TEST_MINT, 500)
+        .await
+        .expect("read events")
+        .iter()
+        .filter(|event| event.subtype.as_deref() == Some(subtype))
+        .count()
+}
+
+#[test]
+fn a_sell_verified_after_a_force_close_books_its_proceeds_and_restates_the_loss() {
+    common::run_isolated(
+        "a_sell_verified_after_a_force_close_books_its_proceeds_and_restates_the_loss",
+        || async {
+            let _dir = common::isolated_env();
+            let _cfg = common::config_guard();
+            enable_loss_limit();
+            start_events().await;
+            let id = written_off(|position| {
+                position.exit_transaction_signature = Some(CLOSE_SIGNATURE.to_owned());
+            })
+            .await;
+            assert_eq!(recorded_loss(), 1.0);
+
+            apply_transition(late_sell(id, Some(RawAmount::ZERO)))
+                .await
+                .expect("the late sell is booked");
+
+            let exits = db::get_exit_history(id).await.expect("read exits");
+            assert_eq!(exits.len(), 1, "one exit record for the sale");
+            assert_eq!(exits[0].amount, RawAmount::new(HELD), "the sold amount");
+            assert!(!exits[0].is_partial);
+            let booked = in_storage(id).await;
+            assert_eq!(booked, in_memory(id).await, "memory and storage disagree");
+            assert_eq!(booked.native_received, Some(1.5));
+            assert_eq!(booked.total_exited_amount, RawAmount::new(HELD));
+            assert_eq!(booked.remaining_token_amount, Some(RawAmount::ZERO));
+            assert!(booked.transaction_exit_verified && booked.exit_time.is_some());
+            let expected_pnl = 1.5 - 1.0 - fee(SWAP_FEE_RAW);
+            assert!(
+                (booked.pnl.expect("a realized P&L") - expected_pnl).abs() < 1e-12,
+                "pnl {:?} is not the booked legs' {expected_pnl}",
+                booked.pnl
+            );
+            assert_eq!(recorded_loss(), 0.0, "the loss is restated away");
+            assert_eq!(position_events("fill_after_force_close").await, 1);
+        },
+    );
+}
+
+#[test]
+fn a_partial_exit_after_a_close_keeps_acquired_equal_to_held_plus_exited() {
+    common::run_isolated(
+        "a_partial_exit_after_a_close_keeps_acquired_equal_to_held_plus_exited",
+        || async {
+            let _dir = common::isolated_env();
+            let _cfg = common::config_guard();
+            enable_loss_limit();
+            let id = written_off(|_| {}).await;
+
+            apply_transition(late_partial(id, Some(RawAmount::ZERO)))
+                .await
+                .expect("the late partial exit is booked");
+
+            let booked = in_storage(id).await;
+            assert_eq!(booked, in_memory(id).await, "memory and storage disagree");
+            assert_eq!(booked.native_received, Some(0.8));
+            assert_eq!(booked.partial_exit_count, 1);
+            assert!(booked.exit_time.is_some(), "the position stays closed");
+            assert_acquired_balances(id, HELD).await;
+            assert_eq!(exit_records(id).await, 1);
+            assert!((recorded_loss() - 0.2).abs() < 1e-12);
+        },
+    );
+}
+
+#[test]
+fn a_dca_after_a_write_off_with_tokens_held_reopens_the_position() {
+    common::run_isolated(
+        "a_dca_after_a_write_off_with_tokens_held_reopens_the_position",
+        || async {
+            let _dir = common::isolated_env();
+            let _cfg = common::config_guard();
+            enable_loss_limit();
+            start_events().await;
+            let id = written_off(|position| {
+                position.exit_transaction_signature = Some(CLOSE_SIGNATURE.to_owned());
+                position.management = PositionManagement::UserOnly;
+            })
+            .await;
+            assert_eq!(recorded_loss(), 1.0);
+            let price_before = memory_position(id).await.current_price;
+
+            apply_transition(late_dca(id, Some(RawAmount::new(HELD + 500_000))))
+                .await
+                .expect("the late DCA is booked");
+
+            for position in [stored_position(id).await, memory_position(id).await] {
+                assert!(position.exit_time.is_none(), "the position is open again");
+                assert!(!position.transaction_exit_verified);
+                assert!(!position.synthetic_exit);
+                assert_eq!(position.exit_transaction_signature, None);
+                assert_eq!(position.closed_reason, None);
+                assert_eq!(position.pnl, None);
+                assert_eq!(position.management, PositionManagement::UserOnly);
+                assert!(!position.archived);
+                assert_eq!(
+                    position.remaining_token_amount,
+                    Some(RawAmount::new(HELD + 500_000))
+                );
+                assert_eq!(position.total_exited_amount, RawAmount::ZERO);
+                assert_eq!(position.total_size_native, 1.5);
+                assert_eq!(position.dca_count, 1);
+                assert!(
+                    (position.average_entry_price - 1.0).abs() < 1e-12,
+                    "the cost is averaged over what is held, got {}",
+                    position.average_entry_price
+                );
+            }
+            assert_eq!(memory_position(id).await.current_price, price_before);
+            assert!(
+                state::get_open_positions()
+                    .await
+                    .iter()
+                    .any(|position| position.id == Some(id)),
+                "the position is in the open list"
+            );
+            assert!(
+                !state::try_consume_global_position_permit(),
+                "the reopened position took the free slot"
+            );
+            assert_eq!(recorded_loss(), 0.0, "an open position realizes no loss");
+            assert_eq!(entry_records(id).await, 1);
+            assert_eq!(position_events("fill_after_force_close").await, 1);
+            assert_eq!(position_events("dca_verified").await, 1);
+        },
+    );
+}
+
+#[test]
+fn a_dca_whose_tokens_the_close_sold_stays_closed_and_restates_the_loss() {
+    common::run_isolated(
+        "a_dca_whose_tokens_the_close_sold_stays_closed_and_restates_the_loss",
+        || async {
+            let _dir = common::isolated_env();
+            let _cfg = common::config_guard();
+            enable_loss_limit();
+            let id = written_off(|_| {}).await;
+
+            apply_transition(late_dca(id, Some(RawAmount::ZERO)))
+                .await
+                .expect("the late DCA is booked");
+
+            let booked = in_storage(id).await;
+            assert_eq!(booked, in_memory(id).await, "memory and storage disagree");
+            assert!(booked.exit_time.is_some(), "the position stays closed");
+            assert_eq!(booked.total_size_native, 1.5);
+            assert_eq!(booked.remaining_token_amount, Some(RawAmount::ZERO));
+            assert_acquired_balances(id, HELD + 500_000).await;
+            assert_eq!(booked.pnl, Some(-1.5));
+            assert_eq!(recorded_loss(), 1.5);
+            assert!(
+                state::try_consume_global_position_permit(),
+                "a position that stays closed takes no slot"
+            );
+        },
+    );
+}
+
+#[test]
+fn an_entry_after_a_write_off_reopens_with_the_real_amount() {
+    common::run_isolated(
+        "an_entry_after_a_write_off_reopens_with_the_real_amount",
+        || async {
+            let _dir = common::isolated_env();
+            let _cfg = common::config_guard();
+            enable_loss_limit();
+            let id = written_off(|position| {
+                position.transaction_entry_verified = false;
+                position.token_amount = None;
+                position.remaining_token_amount = None;
+            })
+            .await;
+
+            apply_transition(PositionTransition::EntryVerified {
+                position_id: id,
+                effective_entry_price: 0.9 / 0.7,
+                token_amount_units: RawAmount::new(700_000),
+                fee_raw: SWAP_FEE_RAW,
+                native_size: 0.9,
+                held_after: Some(RawAmount::new(700_000)),
+            })
+            .await
+            .expect("the late entry is booked");
+
+            for position in [stored_position(id).await, memory_position(id).await] {
+                assert!(position.exit_time.is_none(), "the position is open again");
+                assert!(position.transaction_entry_verified);
+                assert_eq!(position.token_amount, Some(RawAmount::new(700_000)));
+                assert_eq!(
+                    position.remaining_token_amount,
+                    Some(RawAmount::new(700_000))
+                );
+                assert_eq!(position.total_exited_amount, RawAmount::ZERO);
+                assert_eq!(position.total_size_native, 0.9);
+            }
+            assert_eq!(entry_records(id).await, 1);
+            assert_eq!(recorded_loss(), 0.0);
+        },
+    );
+}
+
+#[test]
+fn an_archived_row_reopened_by_a_late_buy_stays_archived_and_takes_no_slot() {
+    common::run_isolated(
+        "an_archived_row_reopened_by_a_late_buy_stays_archived_and_takes_no_slot",
+        || async {
+            let _dir = common::isolated_env();
+            let _cfg = common::config_guard();
+            enable_loss_limit();
+            let id = written_off(|_| {}).await;
+            // Archiving is the user's, outside any booking: set on the row and in memory.
+            injector()
+                .execute(
+                    "UPDATE positions SET archived = 1, archived_at = ?2 WHERE id = ?1",
+                    rusqlite::params![id, Utc::now().to_rfc3339()],
+                )
+                .expect("archive the row");
+            assert!(state::update_position_state_by_id(id, |live| live.archived = true).await);
+
+            apply_transition(late_dca(id, Some(RawAmount::new(HELD + 500_000))))
+                .await
+                .expect("the late DCA is booked");
+
+            for position in [stored_position(id).await, memory_position(id).await] {
+                assert!(position.exit_time.is_none(), "the position is open again");
+                assert!(position.archived, "the position stays archived");
+            }
+            assert!(
+                !state::get_open_positions()
+                    .await
+                    .iter()
+                    .any(|position| position.id == Some(id)),
+                "an archived position stays out of the open list"
+            );
+            assert!(
+                state::try_consume_global_position_permit(),
+                "an archived position takes no slot"
+            );
+        },
+    );
+}
+
+#[test]
+fn a_late_fill_without_a_balance_reading_is_requeued_not_guessed() {
+    common::run_isolated(
+        "a_late_fill_without_a_balance_reading_is_requeued_not_guessed",
+        || async {
+            let _dir = common::isolated_env();
+            let _cfg = common::config_guard();
+            enable_loss_limit();
+            let id = written_off(|_| {}).await;
+            let before = in_storage(id).await;
+
+            for transition in [
+                late_dca(id, None),
+                late_partial(id, None),
+                late_sell(id, None),
+            ] {
+                let error = apply_transition(transition)
+                    .await
+                    .expect_err("a late fill needs the holding after it");
+                assert!(
+                    matches!(
+                        error,
+                        Error::Chain(screenerbot::chains::Error::SettlementRead { .. })
+                    ),
+                    "expected a settlement read error, got {error:?}"
+                );
+                assert!(error.is_retryable());
+                let item = VerificationItem::new_dca(
+                    DCA_SIGNATURE.to_owned(),
+                    common::TEST_MINT.to_owned(),
+                    Some(id),
+                    None,
+                );
+                assert!(matches!(
+                    item.apply_failure_disposition(&error),
+                    ApplyFailureDisposition::Requeue
+                ));
+            }
+            assert_unchanged(id, &before).await;
+            assert_eq!(entry_records(id).await, 0);
+            assert_eq!(exit_records(id).await, 0);
+            assert_eq!(recorded_loss(), 1.0);
+        },
+    );
+}
+
+#[test]
+fn each_late_fill_is_booked_once() {
+    common::run_isolated("each_late_fill_is_booked_once", || async {
+        let _dir = common::isolated_env();
+        let _cfg = common::config_guard();
+        enable_loss_limit();
+        let id = written_off(|position| {
+            position.exit_transaction_signature = Some(CLOSE_SIGNATURE.to_owned());
+        })
+        .await;
+
+        for _ in 0..2 {
+            apply_transition(late_dca(id, Some(RawAmount::ZERO)))
+                .await
+                .expect("the late DCA is booked");
+            apply_transition(late_partial(id, Some(RawAmount::ZERO)))
+                .await
+                .expect("the late partial exit is booked");
+            apply_transition(late_sell(id, Some(RawAmount::ZERO)))
+                .await
+                .expect("the late sell is booked");
+        }
+
+        let booked = in_storage(id).await;
+        assert_eq!(booked, in_memory(id).await, "memory and storage disagree");
+        assert_eq!(entry_records(id).await, 1);
+        assert_eq!(exit_records(id).await, 2);
+        assert_eq!(booked.dca_count, 1);
+        assert_eq!(booked.partial_exit_count, 1);
+        assert_eq!(booked.total_size_native, 1.5);
+        assert_eq!(booked.native_received, Some(0.8 + 1.5));
+        assert_acquired_balances(id, HELD + 500_000).await;
+    });
+}
+
+#[test]
+fn the_loss_figure_after_a_restart_equals_the_live_figure_after_restatement() {
+    common::run_isolated(
+        "the_loss_figure_after_a_restart_equals_the_live_figure_after_restatement",
+        || async {
+            let _dir = common::isolated_env();
+            let _cfg = common::config_guard();
+            enable_loss_limit();
+            let id = written_off(|_| {}).await;
+            // The write-off happened an hour before the limiter's current start.
+            injector()
+                .execute(
+                    "UPDATE positions SET exit_time = ?2 WHERE id = ?1",
+                    rusqlite::params![id, (Utc::now() - chrono::Duration::hours(1)).to_rfc3339()],
+                )
+                .expect("age the write-off");
+            initialize_from_history().await;
+            assert_eq!(recorded_loss(), 1.0, "a startup counts the earlier loss");
+
+            apply_transition(late_partial(id, Some(RawAmount::ZERO)))
+                .await
+                .expect("the late partial exit is booked");
+            let live = recorded_loss();
+            assert!((live - 0.2).abs() < 1e-12, "live figure {live}");
+
+            initialize_from_history().await;
+            assert_eq!(recorded_loss(), live, "a restart finds another figure");
+        },
+    );
+}
+
+#[test]
+fn a_restatement_that_lowers_the_loss_keeps_a_pause_that_already_fired() {
+    common::run_isolated(
+        "a_restatement_that_lowers_the_loss_keeps_a_pause_that_already_fired",
+        || async {
+            let _dir = common::isolated_env();
+            let _cfg = common::config_guard();
+            enable_loss_limit_at(0.5);
+            let id = written_off(|position| {
+                position.exit_transaction_signature = Some(CLOSE_SIGNATURE.to_owned());
+            })
+            .await;
+            assert!(is_entry_blocked_by_loss_limit(), "the write-off pauses");
+
+            apply_transition(late_sell(id, Some(RawAmount::ZERO)))
+                .await
+                .expect("the late sell is booked");
+            assert_eq!(recorded_loss(), 0.0, "the figure follows the books");
+            assert!(
+                is_entry_blocked_by_loss_limit(),
+                "a correction never lifts a pause"
+            );
+        },
+    );
+}
+
+#[test]
+fn a_restatement_that_raises_the_loss_past_the_limit_pauses_entries() {
+    common::run_isolated(
+        "a_restatement_that_raises_the_loss_past_the_limit_pauses_entries",
+        || async {
+            let _dir = common::isolated_env();
+            let _cfg = common::config_guard();
+            enable_loss_limit_at(1.2);
+            let id = written_off(|_| {}).await;
+            assert!(!is_entry_blocked_by_loss_limit());
+
+            apply_transition(late_dca(id, Some(RawAmount::ZERO)))
+                .await
+                .expect("the late DCA is booked");
+            assert_eq!(recorded_loss(), 1.5);
+            assert!(is_entry_blocked_by_loss_limit(), "the restated loss pauses");
+        },
+    );
+}
+
+#[test]
+fn a_synthetic_close_of_a_wallet_derived_row_records_no_loss() {
+    common::run_isolated(
+        "a_synthetic_close_of_a_wallet_derived_row_records_no_loss",
+        || async {
+            let _dir = common::isolated_env();
+            let _cfg = common::config_guard();
+            enable_loss_limit();
+            let id = written_off(|position| {
+                position.origin = screenerbot::positions::PositionOrigin::External;
+            })
+            .await;
+            assert_eq!(stored_position(id).await.pnl, Some(-1.0));
+            assert_eq!(recorded_loss(), 0.0);
+        },
+    );
+}
+
+#[test]
+fn an_exit_clear_with_a_stale_signature_leaves_the_newer_exit_untouched() {
+    common::run_isolated(
+        "an_exit_clear_with_a_stale_signature_leaves_the_newer_exit_untouched",
+        || async {
+            let _dir = common::isolated_env();
+            let _cfg = common::config_guard();
+            let id = open_position(|position| {
+                position.exit_transaction_signature = Some("newer-exit-sig".to_owned());
+                position.exit_price = Some(1.25);
+                position.closed_reason = Some("stop_loss_pending_verification".to_owned());
+            })
+            .await;
+            let before = stored_columns(id);
+
+            let effects = apply_transition(failed_close(id))
+                .await
+                .expect("a stale clear is skipped");
+            assert!(!effects.db_updated);
+            assert_eq!(stored_columns(id), before, "the newer exit was cleared");
+            for position in [stored_position(id).await, memory_position(id).await] {
+                assert_eq!(
+                    position.exit_transaction_signature.as_deref(),
+                    Some("newer-exit-sig")
+                );
+                assert_eq!(position.exit_price, Some(1.25));
+            }
+        },
+    );
 }

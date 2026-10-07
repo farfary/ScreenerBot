@@ -1,9 +1,15 @@
 // Copyright (c) 2024-2026 ScreenerBot (screenerbot.io)
 // SPDX-License-Identifier: BUSL-1.1
 
-//! Pure arithmetic over a round's raw token amounts, free of I/O and of any chain.
+//! Pure rules over a round's raw token amounts, free of I/O: what is dust, what part of a
+//! holding a round owns, and how a closed position follows its round when a fill lands after
+//! its close.
 
 use crate::chains::RawAmount;
+
+use super::pnl::realized_pnl;
+use super::types::Position;
+use super::{Error, Result};
 
 /// One part in this many of what was acquired is dust.
 const DUST_DIVISOR: u128 = 1_000;
@@ -64,6 +70,73 @@ pub fn attributable_is_dust(
         attributable_held(wallet_held, held_by_other_open_rows, expected),
         expected,
     ))
+}
+
+/// What [`follow_round`] did with a position.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, serde::Serialize)]
+#[serde(rename_all = "snake_case")]
+pub enum FollowOutcome {
+    /// The position is not closed; nothing follows.
+    Unchanged,
+    /// The closed position holds more than dust, so it is open again.
+    Reopened,
+    /// The closed position holds dust at most and stays closed, its realized P&L restated.
+    StaysClosed,
+}
+
+/// True when `position` is closed: its exit time is set and its exit verified.
+pub fn is_closed(position: &Position) -> bool {
+    position.exit_time.is_some() && position.transaction_exit_verified
+}
+
+/// Makes a closed position follow its round once a late fill's own leg is booked on it.
+/// `held` is the wallet's holding attributable to the position (see [`attributable_held`]).
+///
+/// Above dust of what the position acquired, the position reopens: its closing state is
+/// cleared, it holds `held` and the rest of what it acquired counts as exited. Every booked
+/// leg stays, and the management, archive flag and price columns are never touched. At or
+/// below dust it stays closed with nothing held and its P&L taken from the booked legs. An
+/// open position is left unchanged.
+pub fn follow_round(position: &mut Position, held: RawAmount) -> Result<FollowOutcome> {
+    if !is_closed(position) {
+        return Ok(FollowOutcome::Unchanged);
+    }
+    let Some(acquired) = position.acquired_amount() else {
+        return Err(Error::AmountOverflow {
+            mint: position.mint.clone(),
+            operation: "following the round",
+        });
+    };
+
+    if is_dust(held, acquired) {
+        position.remaining_token_amount = Some(RawAmount::ZERO);
+        position.total_exited_amount = acquired;
+        let (pnl, pnl_percent) = realized_pnl(position);
+        position.pnl = Some(pnl);
+        position.pnl_percent = Some(pnl_percent);
+        return Ok(FollowOutcome::StaysClosed);
+    }
+
+    // The sale that closed the position is now one of its partial exits; a write-off sold
+    // nothing.
+    if !position.synthetic_exit {
+        position.partial_exit_count += 1;
+    }
+    let held = held.min(acquired);
+    position.remaining_token_amount = Some(held);
+    position.total_exited_amount = acquired.checked_sub(held).unwrap_or(RawAmount::ZERO);
+    position.exit_time = None;
+    position.exit_price = None;
+    position.effective_exit_price = None;
+    position.average_exit_price = None;
+    position.pnl = None;
+    position.pnl_percent = None;
+    position.closed_reason = None;
+    position.transaction_exit_verified = false;
+    position.synthetic_exit = false;
+    // A kept exit signature would be verified again as a full exit of the reopened position.
+    position.exit_transaction_signature = None;
+    Ok(FollowOutcome::Reopened)
 }
 
 #[cfg(test)]

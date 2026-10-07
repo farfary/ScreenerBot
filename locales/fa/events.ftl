@@ -54,6 +54,7 @@ events-connectivity-service-initialized = سرویس اتصال با { $count } 
 events-connectivity-critical-unhealthy = { $count } اندپوینت حیاتی ناسالم است - سیستم باید عملیات را متوقف کند
 events-connectivity-endpoint-recovered = اندپوینت از { $from } به حالت سالم بازگشت
 events-position-entry-not-landed = خرید { $symbol } روی زنجیره ثبت نشد؛ پوزیشن آن حذف شد
+events-position-fill-after-force-close = یک معامله { $symbol } پس از بستن اجباری پوزیشن آن روی زنجیره ثبت شد؛ این معامله ثبت و پوزیشن دوباره محاسبه شد
 
 ## Events page (pages/events.js, ui/event_labels.js)
 

@@ -5,6 +5,7 @@
 
 use rusqlite::{params, Connection, OptionalExtension};
 
+use crate::chains::RawAmount;
 use crate::database::WriteTransaction;
 use crate::errors::DatabaseError;
 use crate::logger::{self, LogTag};
@@ -48,6 +49,7 @@ pub(crate) enum Committed<T> {
 /// handed.
 pub(crate) struct BookingReads<'a> {
     conn: &'a Connection,
+    chain: &'a str,
     position_id: i64,
     wallet_address: &'a Result<&'a str>,
 }
@@ -84,6 +86,36 @@ impl BookingReads<'_> {
             .optional()
             .map_err(|e| DatabaseError::classify_sqlite_failure("commit_booking", e))?
             .is_some())
+    }
+
+    /// What the other open positions of `mint` in this wallet hold, archived and
+    /// wallet-derived ones included: the remaining amount once recorded, otherwise the entry
+    /// fill. Saturates at the largest raw amount.
+    pub(crate) fn other_open_held(&self, mint: &str) -> Result<RawAmount> {
+        let wallet_address = self.wallet_address.clone()?;
+        let sqlite = |e| DatabaseError::classify_sqlite_failure("commit_booking", e);
+        let mut stmt = self
+            .conn
+            .prepare(
+                "SELECT COALESCE(remaining_token_amount, token_amount) FROM positions
+                 WHERE chain_id = ?1 AND wallet_address = ?2 AND mint = ?3 AND id != ?4
+                   AND exit_time IS NULL",
+            )
+            .map_err(sqlite)?;
+        let held = stmt
+            .query_map(
+                params![self.chain, wallet_address, mint, self.position_id],
+                |row| row.get::<_, Option<RawAmount>>(0),
+            )
+            .map_err(sqlite)?
+            .try_fold(RawAmount::ZERO, |sum, held| {
+                Ok::<_, rusqlite::Error>(
+                    sum.checked_add(held?.unwrap_or(RawAmount::ZERO))
+                        .unwrap_or(RawAmount::new(u128::MAX)),
+                )
+            })
+            .map_err(sqlite)?;
+        Ok(held)
     }
 
     /// The swap legs the trader booked for this position.
@@ -150,6 +182,7 @@ impl PositionsDatabase {
 
         let reads = BookingReads {
             conn: &tx,
+            chain,
             position_id,
             wallet_address: &wallet_address,
         };

@@ -46,6 +46,7 @@ events-connectivity-service-initialized = Bağlantı hizmeti başlatıldı, izle
 events-connectivity-critical-unhealthy = Sağlıksız kritik uç nokta sayısı: { $count } - Sistem operasyonları duraklatmalı
 events-connectivity-endpoint-recovered = Uç nokta { $from } durumundan sağlıklı duruma döndü
 events-position-entry-not-landed = { $symbol } alımı zincire ulaşmadı; pozisyonu kaldırıldı
+events-position-fill-after-force-close = { $symbol } için bir işlem, pozisyonu zorla kapatıldıktan sonra zincire ulaştı; işlem kaydedildi ve pozisyon yeniden hesaplandı
 
 events-category-swap = Takas
 events-category-transaction = İşlem
