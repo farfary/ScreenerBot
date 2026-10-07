@@ -39,9 +39,10 @@ use crate::rpc::{
 /// attempt that may have delivered the bytes — a relay or provider that timed
 /// out, failed or answered 5xx after forwarding — the refusal speaks for its
 /// own node alone: a node whose bank lags an address lookup table answers
-/// invalid params for bytes another node accepted.
+/// invalid params for bytes another node accepted, and a node whose state lags
+/// fails a preflight the transaction passes elsewhere.
 fn refusal_answers_for_call(method: &RpcMethod, dispatched: u32, error: &RpcError) -> bool {
-    *method != RpcMethod::SendTransaction || dispatched == 0 || !error.is_request_rejection()
+    *method != RpcMethod::SendTransaction || dispatched == 0 || !error.is_send_refusal()
 }
 
 /// Main RPC manager orchestrating multi-provider operations
@@ -783,13 +784,24 @@ mod tests {
             1,
             &invalid_params()
         ));
-        // A failure that is not a refusal claims nothing either way.
+        // A failed preflight after an ambiguous attempt speaks for its own
+        // node alone, exactly like a refused request.
         let preflight = RpcError::ProviderError {
             code: -32002,
-            message: "preflight".to_owned(),
+            message: "Transaction simulation failed: Error processing Instruction 2: custom \
+                      program error: 0x1771"
+                .to_owned(),
             data: None,
         };
-        assert!(refusal_answers_for_call(&send, 1, &preflight));
+        assert!(!refusal_answers_for_call(&send, 1, &preflight));
+        assert!(refusal_answers_for_call(&send, 0, &preflight));
+        // A failure that is not a refusal claims nothing either way.
+        let server = RpcError::ProviderError {
+            code: -32005,
+            message: "node is behind".to_owned(),
+            data: None,
+        };
+        assert!(refusal_answers_for_call(&send, 1, &server));
 
         // What the manager returns in its place is never read as a refusal.
         let returned = RpcError::RefusedAfterDelivery {
@@ -797,6 +809,7 @@ mod tests {
             refusal: Box::new(invalid_params()),
         };
         assert!(!returned.is_request_rejection());
+        assert!(!returned.is_send_refusal());
         assert!(!returned.is_retryable());
     }
 

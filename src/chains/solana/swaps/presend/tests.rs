@@ -163,8 +163,22 @@ fn rpc_variant(error: &RpcError) -> &'static str {
     }
 }
 
+/// How a node's answer reads, as a simulation and as a first send.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+enum Answer {
+    /// The node refused the request itself.
+    Rejected,
+    /// The node ran the send's preflight and saw it fail; a simulation never
+    /// answers this way.
+    PreflightFailed,
+    /// Not an answer about the transaction.
+    Unanswered,
+}
+
 /// Only a node that answered may refuse a transaction; every other failure is
-/// the one fail-open verdict. A send is refused on exactly the same answers.
+/// the one fail-open verdict. A send is refused on the same answers, and also
+/// when the node's own preflight failed, unless that preflight found the
+/// transaction already processed.
 #[test]
 fn only_a_node_that_answered_refuses_a_transaction() {
     let provider = |code: i64| RpcError::ProviderError {
@@ -172,60 +186,81 @@ fn only_a_node_that_answered_refuses_a_transaction() {
         message: "base64 encoded VersionedTransaction too large".to_owned(),
         data: None,
     };
-    let rows: Vec<(RpcError, bool)> = vec![
+    let rows: Vec<(RpcError, Answer)> = vec![
         (
             RpcError::RateLimited {
                 provider_id: "p".to_owned(),
                 retry_after: None,
             },
-            false,
+            Answer::Unanswered,
         ),
         (
             RpcError::Network {
                 message: "reset".to_owned(),
                 is_timeout: true,
             },
-            false,
+            Answer::Unanswered,
         ),
-        (provider(-32602), true),
-        (provider(-32600), true),
-        (provider(-32700), true),
-        (provider(-32002), false),
-        (provider(-32005), false),
+        (provider(-32602), Answer::Rejected),
+        (provider(-32600), Answer::Rejected),
+        (provider(-32700), Answer::Rejected),
+        (provider(-32002), Answer::PreflightFailed),
+        (
+            RpcError::ProviderError {
+                code: -32002,
+                message: "Transaction simulation failed: This transaction has already been \
+                          processed"
+                    .to_owned(),
+                data: None,
+            },
+            Answer::Unanswered,
+        ),
+        (
+            RpcError::ProviderError {
+                code: -32002,
+                message: "Transaction simulation failed".to_owned(),
+                data: Some("{\"err\":\"AlreadyProcessed\"}".to_owned()),
+            },
+            Answer::Unanswered,
+        ),
+        (provider(-32005), Answer::Unanswered),
         (
             RpcError::Timeout {
                 provider_id: "p".to_owned(),
                 after: Duration::from_secs(1),
             },
-            false,
+            Answer::Unanswered,
         ),
         (
             RpcError::CircuitOpen {
                 provider_id: "p".to_owned(),
                 retry_after: Duration::from_secs(1),
             },
-            false,
+            Answer::Unanswered,
         ),
-        (RpcError::NoProvidersAvailable { last_error: None }, false),
+        (
+            RpcError::NoProvidersAvailable { last_error: None },
+            Answer::Unanswered,
+        ),
         (
             RpcError::AccountNotFound {
                 pubkey: "k".to_owned(),
             },
-            false,
+            Answer::Unanswered,
         ),
         (
             RpcError::InvalidResponse {
                 message: "garbled".to_owned(),
             },
-            false,
+            Answer::Unanswered,
         ),
         (
             RpcError::Configuration {
                 message: "bad".to_owned(),
             },
-            false,
+            Answer::Unanswered,
         ),
-        (RpcError::Other("other".to_owned()), false),
+        (RpcError::Other("other".to_owned()), Answer::Unanswered),
         // A refusal after an attempt that may have delivered the transaction
         // answers only for its own node.
         (
@@ -233,7 +268,7 @@ fn only_a_node_that_answered_refuses_a_transaction() {
                 earlier_attempts: 1,
                 refusal: Box::new(provider(-32602)),
             },
-            false,
+            Answer::Unanswered,
         ),
     ];
     let mut covered: Vec<&str> = rows.iter().map(|(error, _)| rpc_variant(error)).collect();
@@ -241,18 +276,25 @@ fn only_a_node_that_answered_refuses_a_transaction() {
     covered.dedup();
     assert_eq!(covered.len(), 11, "every RpcError variant needs a row");
 
-    for (error, refused) in rows {
+    for (error, answer) in rows {
         let label = error.to_string();
         let verdict = simulation_verdict(Err(crate::Error::Rpc(error.clone())));
-        match (&verdict, refused) {
-            (Verdict::Refused(NotSubmittedReason::RequestRejected { .. }), true)
-            | (Verdict::NodeUnavailable { .. }, false) => {}
+        match (&verdict, answer) {
+            (Verdict::Refused(NotSubmittedReason::RequestRejected { .. }), Answer::Rejected)
+            | (Verdict::NodeUnavailable { .. }, Answer::PreflightFailed | Answer::Unanswered) => {}
             _ => panic!("{label}: unexpected verdict {verdict:?}"),
         }
         let send = send_failure(crate::Error::Rpc(error));
-        match (&send, refused) {
-            (SendFailure::NotSent(NotSubmittedReason::RequestRejected { .. }), true)
-            | (SendFailure::Unproven(_), false) => {}
+        match (&send, answer) {
+            (
+                SendFailure::NotSent(NotSubmittedReason::RequestRejected { .. }),
+                Answer::Rejected,
+            )
+            | (
+                SendFailure::NotSent(NotSubmittedReason::SimulationFailed { .. }),
+                Answer::PreflightFailed,
+            )
+            | (SendFailure::Unproven(_), Answer::Unanswered) => {}
             _ => panic!("{label}: unexpected send failure {send:?}"),
         }
     }
@@ -712,6 +754,63 @@ async fn a_processed_failure_on_an_abandoned_fork_is_not_terminal() {
             .expect("sent");
     assert_eq!(signature, transaction.signatures[0]);
     assert_eq!(settled, Settled::Landed);
+}
+
+/// A first send whose preflight the node ran and saw fail was never
+/// forwarded: the swap is resendable after exactly one send, so an exit can
+/// climb its slippage ladder and an entry holds no pending slot. The same
+/// refusal after an attempt that may have delivered the transaction proves
+/// nothing, and the swap is reconciled by its signature.
+#[tokio::test(start_paused = true)]
+async fn a_failed_send_preflight_is_never_sent_only_from_the_first_node() {
+    let slippage = || RpcError::ProviderError {
+        code: -32002,
+        message: "Transaction simulation failed: Error processing Instruction 2: custom \
+                  program error: 0x1771"
+            .to_owned(),
+        data: None,
+    };
+    let signer = Keypair::new();
+    let build = aggregator_build(&signer, &Pubkey::new_unique());
+
+    let refused = ScriptedNode::new(
+        150_000,
+        vec![SendAnswer::Fails(crate::Error::Rpc(slippage()))],
+        vec![Ok(None)],
+        0,
+    );
+    let error = submit(&refused, &build, &signer, Some(1_000))
+        .await
+        .expect_err("a refused send is not a swap");
+    assert!(matches!(
+        crate::swaps::failed_swap(&error),
+        crate::swaps::FailedSwap::Resendable
+    ));
+    assert_eq!(
+        refused.sent().len(),
+        1,
+        "nothing is re-broadcast after a refusal"
+    );
+
+    let after_delivery = ScriptedNode::new(
+        150_000,
+        vec![SendAnswer::Fails(crate::Error::Rpc(
+            RpcError::RefusedAfterDelivery {
+                earlier_attempts: 1,
+                refusal: Box::new(slippage()),
+            },
+        ))],
+        vec![Ok(None)],
+        0,
+    );
+    let error = submit(&after_delivery, &build, &signer, Some(1_000))
+        .await
+        .expect_err("an unseen signature is not a confirmed swap");
+    assert!(matches!(
+        crate::swaps::failed_swap(&error),
+        crate::swaps::FailedSwap::Reconcile { signature }
+            if signature == after_delivery.sent()[0].signatures[0].to_string()
+    ));
 }
 
 /// Settles `node`'s answers for a transaction whose blockhash was valid to

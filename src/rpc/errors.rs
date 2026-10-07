@@ -123,6 +123,37 @@ impl RpcError {
         )
     }
 
+    /// Whether a node ran a transaction send's preflight simulation, saw it
+    /// fail, and therefore never forwarded the transaction (-32002).
+    ///
+    /// A preflight that reports the transaction as already processed is the
+    /// opposite answer: the same bytes are on chain, so it is never a refusal.
+    pub fn is_preflight_refusal(&self) -> bool {
+        match self {
+            Self::ProviderError {
+                code: -32002,
+                message,
+                data,
+            } => {
+                let landed = |text: &str| {
+                    text.contains("AlreadyProcessed")
+                        || text.to_ascii_lowercase().contains("already been processed")
+                };
+                !landed(message) && !data.as_deref().is_some_and(landed)
+            }
+            _ => false,
+        }
+    }
+
+    /// Whether the node a transaction send reached refused it without
+    /// forwarding it: a refused request or a failed preflight. Proves the
+    /// transaction unsent only when that node was the first one handed it
+    /// (the RPC manager wraps a later refusal as
+    /// [`Self::RefusedAfterDelivery`]).
+    pub fn is_send_refusal(&self) -> bool {
+        self.is_request_rejection() || self.is_preflight_refusal()
+    }
+
     /// Whether this is a rate limit error
     pub fn is_rate_limited(&self) -> bool {
         matches!(self, Self::RateLimited { .. })

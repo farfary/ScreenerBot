@@ -24,7 +24,8 @@
 //!    [`Verdict::NodeUnavailable`], the one verdict a caller may proceed
 //!    through.
 //! 3. **Was it sent, and what became of it?** A send the one node it reached
-//!    refused as a malformed request provably never reached the chain. Any
+//!    refused as a malformed request, or whose preflight that node ran and saw
+//!    fail, provably never reached the chain. Any
 //!    other send outcome cannot prove that — the RPC manager may already have
 //!    delivered the same bytes through the relay or another provider — so the
 //!    transaction's own signature is settled from chain state, and only that
@@ -238,6 +239,13 @@ fn send_failure(error: crate::Error) -> SendFailure {
                 detail: rejection.to_string(),
             })
         }
+        // The node simulated the send itself, saw it fail and never forwarded
+        // it: the same answer a pre-send simulation gives.
+        crate::Error::Rpc(refusal) if refusal.is_preflight_refusal() => {
+            SendFailure::NotSent(NotSubmittedReason::SimulationFailed {
+                detail: refusal.to_string(),
+            })
+        }
         other => SendFailure::Unproven(other),
     }
 }
@@ -330,7 +338,7 @@ pub enum Settled {
 ///
 /// Returns a reason only when the transaction provably never reached a node:
 /// it does not measure, carries no signature, or the one node the request
-/// reached refused the request itself. Once the request may have reached a
+/// reached refused the request itself or failed its preflight. Once the request may have reached a
 /// node, the result is the transaction's own signature with a settle verdict,
 /// whatever the send answered: an unanswered, failed or unreadable send is
 /// settled from chain state exactly like an accepted one, so nothing that may
