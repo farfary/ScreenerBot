@@ -1203,19 +1203,18 @@ const SETTLEMENT_FAILURE_TRANSITIONS: &[&str] = &[
 ];
 
 /// Files whose production code builds or matches a settlement-failure transition: the
-/// variants' owner, the decision's owner, the applier, and the worker's mapping of an
-/// applied transition to the trade-action verdict. The list freezes the exact current set
-/// and only shrinks.
+/// variants' owner (which also maps each to its trade-action verdict), the decision's owner
+/// and the applier. The list freezes the exact current set and only shrinks.
 const FILES_NAMING_SETTLEMENT_FAILURE_TRANSITIONS: &[&str] = &[
     "positions/apply.rs",
     "positions/settle.rs",
     "positions/transitions.rs",
-    "positions/worker.rs",
 ];
 
 /// True when `line` builds or matches a settlement-failure transition: the variant name as a
-/// whole identifier followed by its field block. Prose naming the variant is not a hit.
-fn names_settlement_failure_transition(line: &str) -> bool {
+/// whole identifier followed by its field block, on the same line or, when the line ends at
+/// the name, on `next_line`, the next non-blank line. Prose naming the variant is not a hit.
+fn names_settlement_failure_transition(line: &str, next_line: Option<&str>) -> bool {
     let is_identifier_char = |c: char| c.is_alphanumeric() || c == '_';
     SETTLEMENT_FAILURE_TRANSITIONS.iter().any(|variant| {
         let mut search_from = 0;
@@ -1227,7 +1226,11 @@ fn names_settlement_failure_transition(line: &str) -> bool {
                 .chars()
                 .next_back()
                 .is_some_and(is_identifier_char);
-            if starts_word && line[end..].trim_start().starts_with('{') {
+            let rest = line[end..].trim_start();
+            let opens_block = rest.starts_with('{')
+                || (rest.is_empty()
+                    && next_line.is_some_and(|next| next.trim_start().starts_with('{')));
+            if starts_word && opens_block {
                 return true;
             }
         }
@@ -1238,22 +1241,47 @@ fn names_settlement_failure_transition(line: &str) -> bool {
 #[test]
 fn names_settlement_failure_transition_matches_values_and_patterns_only() {
     let cases = [
-        ("Disposition::Apply(PositionTransition::DcaFailed {", true),
-        ("T::ExitFailedClearForRetry { .. } => {", true),
-        ("    RemoveOrphanEntry {", true),
         (
-            "PositionTransition::PartialExitFailed{ position_id, reason }",
+            "Disposition::Apply(PositionTransition::DcaFailed {",
+            None,
             true,
         ),
-        ("// a bare ExitFailedClearForRetry recorded nothing", false),
-        ("PositionTransition::ExitFailedClearForRetryLater {", false),
-        ("NotDcaFailed {", false),
+        ("T::ExitFailedClearForRetry { .. } => {", None, true),
+        ("    RemoveOrphanEntry {", None, true),
+        (
+            "PositionTransition::PartialExitFailed{ position_id, reason }",
+            None,
+            true,
+        ),
+        (
+            "let transition = PositionTransition::ExitFailedClearForRetry",
+            Some("    {"),
+            true,
+        ),
+        ("    Self::DcaFailed", Some("{ reason, .. } => {"), true),
+        (
+            "// a bare ExitFailedClearForRetry recorded nothing",
+            None,
+            false,
+        ),
+        (
+            "PositionTransition::ExitFailedClearForRetryLater {",
+            None,
+            false,
+        ),
+        ("NotDcaFailed {", None, false),
+        (
+            "matches!(transition, T::DcaFailed",
+            Some("    | T::Other"),
+            false,
+        ),
+        ("label(PositionTransition::DcaFailed)", Some("{"), false),
     ];
-    for (line, expected) in cases {
+    for (line, next_line, expected) in cases {
         assert_eq!(
-            names_settlement_failure_transition(line),
+            names_settlement_failure_transition(line, next_line),
             expected,
-            "{line}"
+            "{line} / {next_line:?}"
         );
     }
 }
@@ -1270,11 +1298,16 @@ fn settlement_failure_transitions_are_decided_only_by_the_disposition() {
         }
         let path = relative.to_string_lossy().into_owned();
         let production = strip_comment_text(&production_text(&contents));
-        for (idx, line) in production.lines().enumerate() {
+        let lines: Vec<&str> = production.lines().collect();
+        for (idx, line) in lines.iter().enumerate() {
             if line.trim_start().starts_with("//") {
                 continue;
             }
-            if names_settlement_failure_transition(line) {
+            let next_line = lines[idx + 1..]
+                .iter()
+                .copied()
+                .find(|next| !next.trim().is_empty());
+            if names_settlement_failure_transition(line, next_line) {
                 hits.push(path.clone());
                 if !FILES_NAMING_SETTLEMENT_FAILURE_TRANSITIONS.contains(&path.as_str()) {
                     new_violations.push(format!("src/{path}:{}: {}", idx + 1, line.trim()));

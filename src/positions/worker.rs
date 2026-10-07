@@ -697,7 +697,7 @@ async fn apply_settlement(
         SignatureVerdict::NotLanded => Err(crate::actions::ActionFailure::new(
             crate::i18n::ids::ACTIONS_FAILURE_VERIFICATION_EXPIRED,
         )),
-        _ => verification_verdict(&transition).unwrap_or_else(|| {
+        _ => transition.action_verdict().unwrap_or_else(|| {
             Err(crate::actions::ActionFailure::new(
                 crate::i18n::ids::ACTIONS_FAILURE_TRANSACTION_FAILED,
             ))
@@ -745,7 +745,7 @@ pub(super) async fn process_verification_item(
     let duration_ms = || (chrono::Utc::now() - started_at).num_milliseconds().max(0) as u64;
     match outcome {
         VerificationOutcome::Transition(transition) => {
-            let verdict = verification_verdict(&transition);
+            let verdict = transition.action_verdict();
             match apply_transition(transition).await {
                 Ok(effects) => {
                     remove_verification(&item.signature).await;
@@ -978,81 +978,6 @@ async fn abandon_after_apply_failure(item: &VerificationItem, reason: GiveUpReas
         )),
     )
     .await;
-}
-
-/// What a verified transition means for a trade action waiting on its
-/// signature. `None` for transitions that settle nothing a user is waiting on.
-fn verification_verdict(
-    transition: &super::transitions::PositionTransition,
-) -> Option<crate::actions::VerificationVerdict> {
-    use super::transitions::PositionTransition as T;
-    match transition {
-        T::EntryVerified { .. }
-        | T::ExitVerified { .. }
-        | T::PartialExitVerified { .. }
-        | T::DcaVerified { .. }
-        // The sell landed and was verified; only a residual is left to retry.
-        | T::ExitResidualClearForRetry { .. } => Some(Ok(())),
-        T::DcaFailed { reason, .. } => Some(Err(crate::actions::ActionFailure::with_details(
-            crate::i18n::ids::ACTIONS_FAILURE_DCA_VERIFICATION_FAILED,
-            reason.as_str(),
-        ))),
-        T::ExitFailedClearForRetry { .. } => {
-            Some(Err(crate::actions::ActionFailure::new(
-                crate::i18n::ids::ACTIONS_FAILURE_SELL_TRANSACTION_FAILED,
-            )))
-        }
-        _ => None,
-    }
-}
-
-#[cfg(test)]
-mod verdict_tests {
-    use super::*;
-    use crate::positions::transitions::PositionTransition as T;
-
-    fn text(verdict: Option<crate::actions::VerificationVerdict>) -> String {
-        verdict
-            .expect("a verdict")
-            .expect_err("a failure")
-            .log_text()
-    }
-
-    #[test]
-    fn verified_transitions_settle_ok_and_failed_ones_settle_err() {
-        assert!(matches!(
-            verification_verdict(&T::ExitVerified {
-                position_id: 1,
-                effective_exit_price: 0.0,
-                native_received: 0.0,
-                fee_raw: 0,
-                exit_time: chrono::Utc::now(),
-                exit_signature: "sig".to_owned(),
-            }),
-            Some(Ok(()))
-        ));
-        assert_eq!(
-            text(verification_verdict(&T::ExitFailedClearForRetry {
-                position_id: 1,
-                exit_signature: "sig".to_owned(),
-            })),
-            "The sell transaction failed on chain"
-        );
-        assert_eq!(
-            text(verification_verdict(&T::DcaFailed {
-                position_id: 1,
-                dca_signature: "s".to_owned(),
-                reason: "Verification expired".to_owned(),
-            })),
-            "DCA verification failed: Verification expired"
-        );
-        assert!(verification_verdict(&T::RemoveOrphanEntry {
-            position_id: 1,
-            signature: "sig".to_owned(),
-            evidence: crate::positions::transitions::NotLandedEvidence::Expired,
-        })
-        .is_none());
-    }
 }
 
 #[cfg(test)]

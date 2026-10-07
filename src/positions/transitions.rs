@@ -159,4 +159,83 @@ impl PositionTransition {
                 | Self::DcaVerified { .. }
         )
     }
+
+    /// What applying this transition means for a trade action waiting on its signature.
+    /// `None` for transitions that settle nothing a user is waiting on.
+    pub fn action_verdict(&self) -> Option<crate::actions::VerificationVerdict> {
+        match self {
+            Self::EntryVerified { .. }
+            | Self::ExitVerified { .. }
+            | Self::PartialExitVerified { .. }
+            | Self::DcaVerified { .. }
+            // The sell landed and was verified; only a residual is left to retry.
+            | Self::ExitResidualClearForRetry { .. } => Some(Ok(())),
+            Self::DcaFailed { reason, .. } => {
+                Some(Err(crate::actions::ActionFailure::with_details(
+                    crate::i18n::ids::ACTIONS_FAILURE_DCA_VERIFICATION_FAILED,
+                    reason.as_str(),
+                )))
+            }
+            Self::ExitFailedClearForRetry { .. } => Some(Err(crate::actions::ActionFailure::new(
+                crate::i18n::ids::ACTIONS_FAILURE_SELL_TRANSACTION_FAILED,
+            ))),
+            _ => None,
+        }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    fn text(verdict: Option<crate::actions::VerificationVerdict>) -> String {
+        verdict
+            .expect("a verdict")
+            .expect_err("a failure")
+            .log_text()
+    }
+
+    #[test]
+    fn verified_transitions_settle_ok_and_failed_ones_settle_err() {
+        assert!(matches!(
+            PositionTransition::ExitVerified {
+                position_id: 1,
+                effective_exit_price: 0.0,
+                native_received: 0.0,
+                fee_raw: 0,
+                exit_time: Utc::now(),
+                exit_signature: "sig".to_owned(),
+            }
+            .action_verdict(),
+            Some(Ok(()))
+        ));
+        assert_eq!(
+            text(
+                PositionTransition::ExitFailedClearForRetry {
+                    position_id: 1,
+                    exit_signature: "sig".to_owned(),
+                }
+                .action_verdict()
+            ),
+            "The sell transaction failed on chain"
+        );
+        assert_eq!(
+            text(
+                PositionTransition::DcaFailed {
+                    position_id: 1,
+                    dca_signature: "s".to_owned(),
+                    reason: "Verification expired".to_owned(),
+                }
+                .action_verdict()
+            ),
+            "DCA verification failed: Verification expired"
+        );
+        assert!(PositionTransition::RemoveOrphanEntry {
+            position_id: 1,
+            signature: "sig".to_owned(),
+            evidence: NotLandedEvidence::Expired,
+        }
+        .action_verdict()
+        .is_none());
+    }
 }
