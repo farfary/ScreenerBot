@@ -3609,3 +3609,32 @@ fn every_position_swap_marks_its_mint_before_it_is_sent() {
         "the guard must see every swapping operation ({swapping} seen)"
     );
 }
+
+/// Once a position operation's swap is sent and its signature known, the operation reads
+/// the expiry bound and queues the signature's verification. Nothing from that read to the
+/// end of the operation may return early, or the sent swap is never verified or booked.
+#[test]
+fn a_sent_position_swap_is_always_queued_for_verification() {
+    for operation in ["open.rs", "close.rs", "dca.rs", "partial_close.rs"] {
+        let path = Path::new(env!("CARGO_MANIFEST_DIR"))
+            .join("src/positions/operations")
+            .join(operation);
+        let contents = fs::read_to_string(&path).expect("read operation source");
+        let code = blank_literals(&strip_comment_text(&production_text(&contents)));
+        let sent = code
+            .find("submission_expiry_bound()")
+            .unwrap_or_else(|| panic!("{operation}: the sent swap reads its expiry bound"));
+        let end = code[sent..]
+            .find("\n}\n")
+            .map_or(code.len(), |offset| sent + offset);
+        let tail = &code[sent..end];
+        assert!(
+            tail.contains("enqueue_verification("),
+            "{operation}: the sent swap is not queued for verification"
+        );
+        assert!(
+            !tail.contains('?') && !tail.contains("return Err"),
+            "{operation}: an error after the swap was sent drops its signature"
+        );
+    }
+}

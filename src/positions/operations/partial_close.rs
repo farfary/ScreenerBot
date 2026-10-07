@@ -9,8 +9,7 @@ use crate::chains::RawAmount;
 use crate::logger::{self, LogTag};
 use crate::positions::queue::{enqueue_verification, VerificationItem};
 use crate::positions::state::{
-    acquire_position_lock, add_signature_to_index, clear_pending_partial_exit,
-    register_pending_partial_exit,
+    acquire_position_lock, add_signature_to_index, register_pending_partial_exit,
 };
 use crate::positions::types::PendingPartialExit;
 use crate::positions::{Error, Result};
@@ -239,16 +238,16 @@ pub async fn partial_close_position(
         created_at: Utc::now(),
     };
 
-    if let Err(e) = register_pending_partial_exit(pending_partial.clone()).await {
-        crate::positions::state::clear_partial_exit_pending(token_mint).await;
+    // The swap was sent, so from here nothing may drop its signature: every bookkeeping
+    // failure below is logged and the verification is queued regardless. The pending
+    // details make the partial exit durable across a restart.
+    if let Err(e) = register_pending_partial_exit(pending_partial).await {
         logger::error(
             LogTag::Positions,
             &format!(
-                "Failed to persist pending partial exit metadata for position {} (mint {}): {}",
-                position_id, token_mint, e
+                "Pending partial exit {transaction_signature} for position {position_id} (mint {token_mint}) is held in memory only, not persisted: {e}"
             ),
         );
-        return Err(e);
     }
 
     // A partial exit must NOT be written to `position.exit_transaction_signature`.
@@ -287,21 +286,12 @@ pub async fn partial_close_position(
 
     // Apply transition
     if let Err(e) = crate::positions::apply::apply_transition(transition).await {
-        if let Err(err) = clear_pending_partial_exit(&pending_partial.signature).await {
-            logger::error(
-                LogTag::Positions,
-                &format!(
-                    "Failed to rollback pending partial exit {} after transition error: {}",
-                    pending_partial.signature, err
-                ),
-            );
-        }
-        crate::positions::state::clear_partial_exit_pending(token_mint).await;
-        return Err(Error::TransitionFailed {
-            transition: "partial_exit",
-            mint: token_mint.to_owned(),
-            detail: e.to_string(),
-        });
+        logger::error(
+            LogTag::Positions,
+            &format!(
+                "Partial exit {transaction_signature} for position {position_id} was not recorded as submitted: {e}"
+            ),
+        );
     }
 
     // Enqueue for verification with partial exit flag

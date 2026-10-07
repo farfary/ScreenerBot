@@ -10,7 +10,7 @@ use crate::logger::{self, LogTag};
 use crate::positions::price_resolution::get_price_with_api_fallback;
 use crate::positions::queue::{enqueue_verification, VerificationItem};
 use crate::positions::state::{
-    acquire_position_lock, clear_pending_dca_swap, mark_swap_in_flight, register_pending_dca_swap,
+    acquire_position_lock, mark_swap_in_flight, register_pending_dca_swap,
 };
 use crate::positions::types::{PendingDcaSwap, TradeOrigin};
 use crate::positions::{Error, Result};
@@ -200,7 +200,9 @@ pub async fn add_to_position(
     // Pre-compute expiry height for verification + persistence
     let expiry_height = crate::positions::settle::submission_expiry_bound().await;
 
-    // Persist pending DCA metadata before queuing verification to survive restarts
+    // The swap was sent, so from here nothing may drop its signature: every bookkeeping
+    // failure below is logged and the verification is queued regardless. The pending
+    // marker makes the DCA durable across a restart and visible to the wallet-history sync.
     let pending_dca = PendingDcaSwap {
         signature: transaction_signature.clone(),
         mint: token_mint.to_string(),
@@ -209,56 +211,39 @@ pub async fn add_to_position(
         created_at: Utc::now(),
         size_sol: dca_amount_native,
     };
+    if let Err(e) = register_pending_dca_swap(pending_dca).await {
+        logger::error(
+            LogTag::Positions,
+            &format!(
+                "Pending DCA {transaction_signature} for position {position_id} (mint {token_mint}) is held in memory only, not persisted: {e}"
+            ),
+        );
+    }
 
-    register_pending_dca_swap(pending_dca.clone())
-        .await
-        .map_err(|e| {
-            logger::error(
-                LogTag::Positions,
-                &format!(
-                    "Failed to persist pending DCA metadata for position {} (mint {}): {}",
-                    position_id, token_mint, e
-                ),
-            );
-            e
-        })?;
-
-    // Get price with fallback to API for DCA transition
-    let (price_info, _price_source) =
-        get_price_with_api_fallback(token_mint)
-            .await
-            .ok_or_else(|| Error::InvalidPrice {
-                mint: token_mint.to_owned(),
-                price: 0.0,
-            })?;
-
-    let transition = crate::positions::transitions::PositionTransition::DcaSubmitted {
-        position_id,
-        dca_signature: transaction_signature.clone(),
-        dca_amount_native,
-        market_price: price_info.price_native,
-    };
-
-    // Apply transition
-    if let Err(e) = crate::positions::apply::apply_transition(transition).await {
-        clear_pending_dca_swap(&pending_dca.signature)
-            .await
-            .map_err(|err| {
+    // The submitted event needs the market price; without one the DCA is still verified.
+    match get_price_with_api_fallback(token_mint).await {
+        Some((price_info, _price_source)) => {
+            let transition = crate::positions::transitions::PositionTransition::DcaSubmitted {
+                position_id,
+                dca_signature: transaction_signature.clone(),
+                dca_amount_native,
+                market_price: price_info.price_native,
+            };
+            if let Err(e) = crate::positions::apply::apply_transition(transition).await {
                 logger::error(
                     LogTag::Positions,
                     &format!(
-                        "Failed to rollback pending DCA {} after transition error: {}",
-                        pending_dca.signature, err
+                        "DCA {transaction_signature} for position {position_id} was not recorded as submitted: {e}"
                     ),
                 );
-                err
-            })
-            .ok();
-        return Err(Error::TransitionFailed {
-            transition: "dca",
-            mint: token_mint.to_owned(),
-            detail: e.to_string(),
-        });
+            }
+        }
+        None => logger::warning(
+            LogTag::Positions,
+            &format!(
+                "No price for {token_mint}: DCA {transaction_signature} is verified without a submitted event"
+            ),
+        ),
     }
 
     // Enqueue for verification

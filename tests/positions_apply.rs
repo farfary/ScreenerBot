@@ -367,6 +367,53 @@ fn a_failed_pending_clear_keeps_the_mint_counter_until_the_detail_is_cleared() {
 }
 
 #[test]
+fn a_sent_swap_whose_pending_record_cannot_be_stored_stays_pending_in_memory() {
+    common::run_isolated(
+        "a_sent_swap_whose_pending_record_cannot_be_stored_stays_pending_in_memory",
+        || async {
+            let _dir = common::isolated_env();
+            let _cfg = common::config_guard();
+            let id = open_position(|_| {}).await;
+            injector()
+                .execute_batch(INJECT_METADATA)
+                .expect("inject a metadata failure");
+
+            let error = state::register_pending_dca_swap(PendingDcaSwap {
+                signature: DCA_SIGNATURE.to_owned(),
+                mint: common::TEST_MINT.to_owned(),
+                position_id: id,
+                expiry_height: None,
+                created_at: Utc::now(),
+                size_sol: 0.5,
+            })
+            .await
+            .expect_err("the pending DCA is not stored");
+            assert_query_failure(&error);
+            assert!(dca_pending().await, "the sent DCA was forgotten");
+
+            let error = state::register_pending_partial_exit(PendingPartialExit {
+                signature: PARTIAL_SIGNATURE.to_owned(),
+                mint: common::TEST_MINT.to_owned(),
+                position_id: id,
+                expected_exit_amount: RawAmount::new(400_000),
+                requested_exit_percentage: 40.0,
+                expiry_height: None,
+                created_at: Utc::now(),
+            })
+            .await
+            .expect_err("the pending partial exit is not stored");
+            assert_query_failure(&error);
+            assert!(
+                state::get_pending_partial_exit(PARTIAL_SIGNATURE)
+                    .await
+                    .is_some(),
+                "the sent partial exit was forgotten"
+            );
+        },
+    );
+}
+
+#[test]
 fn a_failed_dca_write_changes_nothing_and_a_retry_books_once() {
     common::run_isolated(
         "a_failed_dca_write_changes_nothing_and_a_retry_books_once",

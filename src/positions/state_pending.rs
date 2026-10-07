@@ -145,21 +145,16 @@ async fn persist_pending_dca_swaps() -> Result<()> {
     db::set_metadata(PENDING_DCA_METADATA_KEY, &serialized).await
 }
 
-/// Register a pending DCA swap for durability
+/// Registers a sent DCA swap as pending and persists the pending set. The swap is already
+/// sent, so memory keeps the entry even when persisting fails: the DCA stays pending for
+/// this run, and the next persist of the set stores it. The error reports only that it is
+/// not durable yet.
 pub async fn register_pending_dca_swap(entry: PendingDcaSwap) -> Result<()> {
-    let signature = entry.signature.clone();
-    {
-        let mut map = PENDING_DCA_SWAPS.write().await;
-        map.insert(signature.clone(), entry);
-    }
-
-    if let Err(err) = persist_pending_dca_swaps().await {
-        let mut map = PENDING_DCA_SWAPS.write().await;
-        map.remove(&signature);
-        return Err(err);
-    }
-
-    Ok(())
+    PENDING_DCA_SWAPS
+        .write()
+        .await
+        .insert(entry.signature.clone(), entry);
+    persist_pending_dca_swaps().await
 }
 
 /// Clear a pending DCA swap once processed
@@ -244,21 +239,16 @@ async fn persist_pending_partial_exits() -> Result<()> {
     db::set_metadata(db::PENDING_PARTIAL_EXIT_METADATA_KEY, &serialized).await
 }
 
-/// Register a pending partial exit for durability
+/// Registers a sent partial exit as pending and persists the pending set. The swap is
+/// already sent, so memory keeps the entry even when persisting fails: the partial exit
+/// stays pending for this run, and the next persist of the set stores it. The error
+/// reports only that it is not durable yet.
 pub async fn register_pending_partial_exit(entry: PendingPartialExit) -> Result<()> {
-    let signature = entry.signature.clone();
-    {
-        let mut map = PENDING_PARTIAL_EXIT_DETAILS.write().await;
-        map.insert(signature.clone(), entry);
-    }
-
-    if let Err(err) = persist_pending_partial_exits().await {
-        let mut map = PENDING_PARTIAL_EXIT_DETAILS.write().await;
-        map.remove(&signature);
-        return Err(err);
-    }
-
-    Ok(())
+    PENDING_PARTIAL_EXIT_DETAILS
+        .write()
+        .await
+        .insert(entry.signature.clone(), entry);
+    persist_pending_partial_exits().await
 }
 
 /// Clear a pending partial exit once processed
