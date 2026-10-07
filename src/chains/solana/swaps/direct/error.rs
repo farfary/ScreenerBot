@@ -66,7 +66,9 @@ pub enum DirectSwapError {
     /// handed to a node for inclusion): nothing was submitted here, and nothing
     /// about the pool or the mint is implicated.
     SimulationUnavailable { detail: String },
-    /// Submission failed before the transaction was accepted by a node.
+    /// The one node the send request reached refused the request itself, so
+    /// the transaction provably never reached the chain. Every other send
+    /// outcome is settled by the transaction's signature instead.
     SubmitFailed { detail: String },
     /// The transaction was never seen by any node and its blockhash provably
     /// expired: the current block height passed `lastValidBlockHeight` while the

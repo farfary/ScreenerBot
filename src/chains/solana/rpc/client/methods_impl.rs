@@ -578,46 +578,24 @@ impl RpcClientMethods for RpcClient {
                 .await
             {
                 Ok(result) => {
-                    if let Some(values) = result.get("value").and_then(|v| v.as_array()) {
-                        if let Some(status) = values.first() {
-                            if !status.is_null() {
-                                // Check for error
-                                if let Some(err) = status.get("err") {
-                                    if !err.is_null() {
-                                        return Err(crate::Error::Solana(
-                                            crate::chains::solana::Error::Execution(
-                                                crate::chains::ExecutionFailure::Reverted {
-                                                    reference: signature.to_string(),
-                                                    detail: err.to_string(),
-                                                },
-                                            ),
-                                        ));
-                                    }
-                                }
-
-                                // Check confirmation status
-                                if let Some(conf_status) =
-                                    status.get("confirmationStatus").and_then(|v| v.as_str())
-                                {
-                                    let is_confirmed = match commitment_str {
-                                        "processed" => {
-                                            conf_status == "processed"
-                                                || conf_status == "confirmed"
-                                                || conf_status == "finalized"
-                                        }
-                                        "confirmed" => {
-                                            conf_status == "confirmed" || conf_status == "finalized"
-                                        }
-                                        "finalized" => conf_status == "finalized",
-                                        _ => false,
-                                    };
-
-                                    if is_confirmed {
-                                        return Ok(true);
-                                    }
-                                }
-                            }
-                        }
+                    let status = result
+                        .get("value")
+                        .and_then(|v| v.as_array())
+                        .and_then(|values| values.first());
+                    if let Some(verdict) =
+                        status.and_then(|status| status_at_commitment(status, commitment_str))
+                    {
+                        return match verdict {
+                            Reached::Succeeded => Ok(true),
+                            Reached::Failed { detail } => Err(crate::Error::Solana(
+                                crate::chains::solana::Error::Execution(
+                                    crate::chains::ExecutionFailure::Reverted {
+                                        reference: signature.to_string(),
+                                        detail,
+                                    },
+                                ),
+                            )),
+                        };
                     }
                 }
                 Err(_) => {
@@ -1393,6 +1371,37 @@ fn commitment_to_string(commitment: CommitmentLevel) -> &'static str {
     }
 }
 
+/// How a transaction stood once its status reached the requested commitment.
+#[derive(Debug, PartialEq, Eq)]
+enum Reached {
+    Succeeded,
+    Failed { detail: String },
+}
+
+/// Whether one `getSignatureStatuses` entry has reached `commitment`, and how.
+///
+/// `None` while the status is unknown or below the requested commitment. An
+/// error counts only once that commitment is reached: a failure seen at
+/// `processed` lives on one fork, and the same signed bytes can still land
+/// cleanly on the canonical one.
+fn status_at_commitment(status: &serde_json::Value, commitment: &str) -> Option<Reached> {
+    let reached = match status.get("confirmationStatus").and_then(|v| v.as_str())? {
+        "finalized" => true,
+        "confirmed" => commitment != "finalized",
+        "processed" => commitment == "processed",
+        _ => false,
+    };
+    if !reached {
+        return None;
+    }
+    match status.get("err") {
+        Some(err) if !err.is_null() => Some(Reached::Failed {
+            detail: err.to_string(),
+        }),
+        _ => Some(Reached::Succeeded),
+    }
+}
+
 fn block_height_params(commitment: CommitmentLevel) -> serde_json::Value {
     serde_json::json!([{ "commitment": commitment_to_string(commitment) }])
 }
@@ -1498,9 +1507,43 @@ fn parse_helius_transactions_page(
 mod tests {
     use super::{
         block_height_params, get_transaction_config, helius_successful_transactions_params,
-        parse_helius_transactions_page, token_accounts_from, CommitmentLevel,
-        EncodedConfirmedTransactionWithStatusMeta, Pubkey, RpcError, Signature,
+        parse_helius_transactions_page, status_at_commitment, token_accounts_from, CommitmentLevel,
+        EncodedConfirmedTransactionWithStatusMeta, Pubkey, Reached, RpcError, Signature,
     };
+
+    /// A failure seen at `processed` is not a verdict for a `confirmed` wait:
+    /// the poll keeps going, and the same signature confirming cleanly is a
+    /// confirmed transaction.
+    #[test]
+    fn an_error_below_the_requested_commitment_is_not_terminal() {
+        let status = |level: &str, err: serde_json::Value| serde_json::json!({ "slot": 1, "confirmationStatus": level, "err": err });
+        let failed = serde_json::json!({ "InstructionError": [0, { "Custom": 1 }] });
+        let sequence = [
+            status("processed", failed.clone()),
+            status("confirmed", serde_json::Value::Null),
+        ];
+        let verdict = sequence
+            .iter()
+            .find_map(|status| status_at_commitment(status, "confirmed"));
+        assert_eq!(verdict, Some(Reached::Succeeded));
+
+        assert!(matches!(
+            status_at_commitment(&status("confirmed", failed.clone()), "confirmed"),
+            Some(Reached::Failed { .. })
+        ));
+        assert_eq!(
+            status_at_commitment(&status("confirmed", serde_json::Value::Null), "finalized"),
+            None
+        );
+        assert!(matches!(
+            status_at_commitment(&status("processed", failed), "processed"),
+            Some(Reached::Failed { .. })
+        ));
+        assert_eq!(
+            status_at_commitment(&serde_json::json!({ "slot": 1, "err": null }), "confirmed"),
+            None
+        );
+    }
 
     fn token_account(pubkey: &str, mint: &str, amount: &str) -> serde_json::Value {
         serde_json::json!({

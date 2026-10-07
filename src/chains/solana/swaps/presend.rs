@@ -23,36 +23,62 @@
 //!    answer is a refusal. Only a node that could not answer at all is
 //!    [`Verdict::NodeUnavailable`], the one verdict a caller may proceed
 //!    through.
-//! 3. **Was it sent?** A send a node refused as a malformed request provably
-//!    never reached the chain. Any other send failure cannot prove that — the
-//!    RPC manager may already have delivered the same bytes through another
-//!    provider — and is handed back unchanged.
+//! 3. **Was it sent, and what became of it?** A send the one node it reached
+//!    refused as a malformed request provably never reached the chain. Any
+//!    other send outcome cannot prove that — the RPC manager may already have
+//!    delivered the same bytes through the relay or another provider — so the
+//!    transaction's own signature is settled from chain state, and only that
+//!    verdict ([`Settled`]) says whether it landed, reverted, provably expired
+//!    or is still unknown.
 //!
 //! Every refusal is a [`NotSubmittedReason`]: the typed "nothing was sent" the
-//! fallback chain decides from.
+//! fallback chain decides from. Once a send was attempted, every outcome
+//! carries the signature.
 
+use std::future::Future;
 use std::time::Duration;
 
 use base64::Engine;
+use tokio::time::Instant;
 
+use crate::chains::solana::rpc::client::RpcClient;
 use crate::chains::solana::rpc::types::SimulationOutcome;
 use crate::chains::solana::rpc::{get_rpc_client, RpcClientMethods};
 use crate::chains::solana::solana_packet::PACKET_DATA_SIZE;
 use crate::chains::solana::solana_sdk::{
-    commitment_config::CommitmentLevel,
     compute_budget::id as compute_budget_program,
     message::VersionedMessage,
     signature::{Keypair, Signature, Signer},
     transaction::VersionedTransaction,
+};
+use crate::chains::solana::solana_transaction_status::{
+    TransactionConfirmationStatus, TransactionStatus,
 };
 use crate::chains::solana::swaps::cost_guard;
 use crate::chains::solana::swaps::direct::compute::compute_unit_limit_from_measured;
 use crate::logger::{self, LogTag};
 use crate::swaps::{NotSubmittedReason, Quote, SwapExecutionError};
 
-/// How long a sent aggregator swap is polled for confirmation before it is
-/// reported as submitted but unconfirmed, and handed to verification.
+/// How long a sent aggregator swap is settled before it is reported as
+/// submitted but unconfirmed, and handed to verification.
 const CONFIRMATION_TIMEOUT: Duration = Duration::from_secs(60);
+
+/// How often the settle loop polls the signature's status.
+const STATUS_POLL_INTERVAL: Duration = Duration::from_millis(500);
+
+/// How often the settle loop re-sends the same signed transaction. The
+/// signature is identical every time, so a duplicate landing is impossible:
+/// this only fights the network having dropped the earlier copy.
+const REBROADCAST_INTERVAL: Duration = Duration::from_secs(2);
+
+/// How often the settle loop checks whether the blockhash has expired.
+const BLOCK_HEIGHT_CHECK_INTERVAL: Duration = Duration::from_secs(4);
+
+/// Extra status reads, spaced a second apart, once the blockhash is seen to
+/// have expired: a transaction can land in the very last valid block and take
+/// a moment to index.
+const POST_EXPIRY_STATUS_ATTEMPTS: usize = 2;
+const POST_EXPIRY_STATUS_DELAY: Duration = Duration::from_secs(1);
 
 /// The high bit of a message's first byte marks a versioned message; the low
 /// seven bits are the version.
@@ -192,12 +218,12 @@ pub async fn gate(transaction: &VersionedTransaction) -> Verdict {
     if let Err(reason) = measure_transaction(transaction) {
         return Verdict::Refused(reason);
     }
-    simulation_verdict(get_rpc_client().simulate_transaction(transaction).await)
+    simulation_verdict(get_rpc_client().simulate(transaction).await)
 }
 
-/// Why a send returned no signature.
+/// Why a send request returned no signature.
 #[derive(Debug, Clone)]
-pub enum SendFailure {
+enum SendFailure {
     /// Provably never sent: refused before or by the request itself.
     NotSent(NotSubmittedReason),
     /// The send failed in a way that cannot prove the transaction never
@@ -206,7 +232,7 @@ pub enum SendFailure {
 }
 
 /// Classify a failed send request.
-pub fn send_failure(error: crate::Error) -> SendFailure {
+fn send_failure(error: crate::Error) -> SendFailure {
     match error {
         crate::Error::Rpc(rejection) if rejection.is_request_rejection() => {
             SendFailure::NotSent(NotSubmittedReason::RequestRejected {
@@ -217,14 +243,270 @@ pub fn send_failure(error: crate::Error) -> SendFailure {
     }
 }
 
-/// Send a signed transaction, measuring it first so nothing unmeasured is ever
-/// handed to a node.
-pub async fn send(transaction: &VersionedTransaction) -> Result<Signature, SendFailure> {
-    measure_transaction(transaction).map_err(SendFailure::NotSent)?;
-    get_rpc_client()
-        .send_transaction(transaction)
-        .await
-        .map_err(send_failure)
+/// The node calls a swap's simulate, send and settle steps make. The shared
+/// RPC client is the production node; tests drive the same steps against a
+/// scripted one.
+pub trait SwapNode: Sync {
+    /// Simulate without signature verification.
+    fn simulate(
+        &self,
+        transaction: &VersionedTransaction,
+    ) -> impl Future<Output = crate::Result<SimulationOutcome>> + Send;
+    /// Hand signed bytes to the network.
+    fn send(
+        &self,
+        transaction: &VersionedTransaction,
+    ) -> impl Future<Output = crate::Result<Signature>> + Send;
+    /// One signature's status, `None` while the node does not know it.
+    fn status(
+        &self,
+        signature: &Signature,
+    ) -> impl Future<Output = crate::Result<Option<TransactionStatus>>> + Send;
+    /// The current block height.
+    fn block_height(&self) -> impl Future<Output = crate::Result<u64>> + Send;
+}
+
+impl SwapNode for RpcClient {
+    async fn simulate(
+        &self,
+        transaction: &VersionedTransaction,
+    ) -> crate::Result<SimulationOutcome> {
+        self.simulate_transaction(transaction).await
+    }
+
+    async fn send(&self, transaction: &VersionedTransaction) -> crate::Result<Signature> {
+        self.send_transaction(transaction).await
+    }
+
+    async fn status(&self, signature: &Signature) -> crate::Result<Option<TransactionStatus>> {
+        Ok(self
+            .get_signature_statuses(std::slice::from_ref(signature))
+            .await?
+            .into_iter()
+            .next()
+            .flatten())
+    }
+
+    async fn block_height(&self) -> crate::Result<u64> {
+        self.get_block_height().await
+    }
+}
+
+/// What became of a transaction that was handed to a node.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub enum Settled {
+    /// Confirmed without error.
+    Landed,
+    /// Confirmed, and the chain reports it failed: it moved nothing but its
+    /// fee, and it can never land again.
+    Reverted { detail: String },
+    /// Never seen, and its blockhash provably expired: a node that answered did
+    /// not know the signature after the block height passed the last block the
+    /// blockhash was valid for, so it can never land, by any node.
+    Expired {
+        last_valid_block_height: u64,
+        current_block_height: u64,
+    },
+    /// Neither confirmed nor provably dead within the wait. It may still land.
+    Unsettled { waited_ms: u64 },
+}
+
+/// Send a signed transaction and settle it.
+///
+/// Returns a reason only when the transaction provably never reached a node:
+/// it does not measure, carries no signature, or the one node the request
+/// reached refused the request itself. Once the request may have reached a
+/// node, the result is the transaction's own signature with a settle verdict,
+/// whatever the send answered: an unanswered, failed or unreadable send is
+/// settled from chain state exactly like an accepted one, so nothing that may
+/// land is ever reported as a failure with no signature.
+///
+/// `last_valid_block_height` is the last block the transaction's blockhash is
+/// valid for. Without it, a transaction that never lands ends
+/// [`Settled::Unsettled`] rather than provably [`Settled::Expired`].
+pub async fn send_and_settle<N: SwapNode>(
+    node: &N,
+    transaction: &VersionedTransaction,
+    last_valid_block_height: Option<u64>,
+    timeout: Duration,
+) -> Result<(Signature, Settled), NotSubmittedReason> {
+    measure_transaction(transaction)?;
+    let signature =
+        *transaction
+            .signatures
+            .first()
+            .ok_or_else(|| NotSubmittedReason::BuildUnusable {
+                detail: "the transaction carries no signature".to_owned(),
+            })?;
+    if let Err(error) = node.send(transaction).await {
+        match send_failure(error) {
+            SendFailure::NotSent(reason) => return Err(reason),
+            SendFailure::Unproven(error) => logger::warning(
+                LogTag::Swap,
+                &format!(
+                    "Send of {signature} returned no answer that proves it was not delivered \
+                     ({error}); settling it from chain state"
+                ),
+            ),
+        }
+    }
+    let settled = settle(
+        node,
+        transaction,
+        &signature,
+        last_valid_block_height,
+        timeout,
+    )
+    .await;
+    Ok((signature, settled))
+}
+
+/// The terminal verdict one signature status amounts to, if any.
+///
+/// An error is honoured only at `Confirmed` or above: a status at `Processed`
+/// lives on one fork, and if that fork is abandoned the same signed bytes can
+/// still land successfully on the canonical one.
+fn status_verdict(status: &TransactionStatus) -> Option<Settled> {
+    match status.confirmation_status() {
+        TransactionConfirmationStatus::Confirmed | TransactionConfirmationStatus::Finalized => {
+            Some(match &status.err {
+                Some(err) => Settled::Reverted {
+                    detail: err.to_string(),
+                },
+                None => Settled::Landed,
+            })
+        }
+        TransactionConfirmationStatus::Processed => None,
+    }
+}
+
+/// Whether a transaction whose signature has not been seen is now provably
+/// dead: the current block height has passed the last block its blockhash was
+/// valid for.
+fn blockhash_has_expired(current_block_height: u64, last_valid_block_height: u64) -> bool {
+    current_block_height > last_valid_block_height
+}
+
+/// What one signature-status read told the settle loop.
+enum Poll {
+    /// The transaction reached a terminal state.
+    Settled(Settled),
+    /// The node answered, and the signature is not yet in a terminal state.
+    /// Absence here is evidence: the expiry verdict rests on it.
+    Pending,
+    /// The node could not be asked. Not evidence of anything: the transaction
+    /// may be confirmed on a chain that simply cannot be read right now.
+    Unreadable,
+}
+
+async fn poll_status<N: SwapNode>(node: &N, signature: &Signature) -> Poll {
+    match node.status(signature).await {
+        Ok(status) => match status.as_ref().and_then(status_verdict) {
+            Some(settled) => Poll::Settled(settled),
+            None => Poll::Pending,
+        },
+        Err(e) => {
+            logger::debug(
+                LogTag::Swap,
+                &format!(
+                    "Could not read the status of {signature} this round; an unreadable node \
+                     is not evidence the swap failed: {e}"
+                ),
+            );
+            Poll::Unreadable
+        }
+    }
+}
+
+/// Poll for a landed signature, re-broadcasting the same signed transaction
+/// against network drops, until it lands, fails at `Confirmed`, its blockhash
+/// provably expires with the signature unseen, or `timeout` runs out.
+async fn settle<N: SwapNode>(
+    node: &N,
+    transaction: &VersionedTransaction,
+    signature: &Signature,
+    last_valid_block_height: Option<u64>,
+    timeout: Duration,
+) -> Settled {
+    let deadline = Instant::now() + timeout;
+    let mut last_rebroadcast = Instant::now();
+    let mut last_height_check = Instant::now();
+
+    loop {
+        if let Poll::Settled(settled) = poll_status(node, signature).await {
+            return settled;
+        }
+
+        if Instant::now() >= deadline {
+            return Settled::Unsettled {
+                waited_ms: timeout.as_millis() as u64,
+            };
+        }
+
+        if last_rebroadcast.elapsed() >= REBROADCAST_INTERVAL {
+            last_rebroadcast = Instant::now();
+            match node.send(transaction).await {
+                Ok(_) => logger::info(
+                    LogTag::Swap,
+                    &format!(
+                        "Re-broadcast {signature}: the network may have dropped the earlier copy"
+                    ),
+                ),
+                Err(e) => logger::debug(
+                    LogTag::Swap,
+                    &format!(
+                        "Re-broadcast of {signature} was not accepted this round (an 'already \
+                         processed' response is a good sign, not a failure): {e}"
+                    ),
+                ),
+            }
+        }
+
+        if let Some(last_valid_block_height) = last_valid_block_height {
+            if last_height_check.elapsed() >= BLOCK_HEIGHT_CHECK_INTERVAL {
+                last_height_check = Instant::now();
+                if let Ok(height) = node.block_height().await {
+                    if blockhash_has_expired(height, last_valid_block_height) {
+                        // A transaction can land in the very last valid block and
+                        // take a moment to index, so absence is read again before
+                        // death is declared, and only a node that ANSWERED counts.
+                        let mut confirmed_absent = false;
+                        for _ in 0..POST_EXPIRY_STATUS_ATTEMPTS {
+                            tokio::time::sleep(POST_EXPIRY_STATUS_DELAY).await;
+                            match poll_status(node, signature).await {
+                                Poll::Settled(settled) => return settled,
+                                Poll::Pending => confirmed_absent = true,
+                                Poll::Unreadable => {}
+                            }
+                        }
+                        if confirmed_absent {
+                            logger::info(
+                                LogTag::Swap,
+                                &format!(
+                                    "Transaction {signature} is dead: its blockhash expired at \
+                                     block {last_valid_block_height}, the current block is \
+                                     {height}, and the signature was never seen"
+                                ),
+                            );
+                            return Settled::Expired {
+                                last_valid_block_height,
+                                current_block_height: height,
+                            };
+                        }
+                        logger::warning(
+                            LogTag::Swap,
+                            &format!(
+                                "Blockhash for {signature} expired, but no node could be read to \
+                                 confirm the signature is absent; the outcome stays unknown"
+                            ),
+                        );
+                    }
+                }
+            }
+        }
+
+        tokio::time::sleep(STATUS_POLL_INTERVAL).await;
+    }
 }
 
 /// Lower the compute-unit limit a compiled transaction requests to what its
@@ -258,17 +540,44 @@ pub fn tighten_compute_unit_limit(
     Some((requested, measured))
 }
 
-/// Gate, sign, send and confirm a transaction an aggregator built for `quote`.
+/// Gate, sign, send and settle a transaction an aggregator built for `quote`.
 ///
-/// Every failure before the send is a [`SwapExecutionError::NotSubmitted`]. A
-/// sent transaction whose confirmation runs out carries its signature as
+/// Every failure before the send is a [`SwapExecutionError::NotSubmitted`].
+/// Once sent, the outcome follows the settle verdict: a confirmed swap returns
+/// its signature, a confirmed revert is
+/// [`crate::chains::ExecutionFailure::Reverted`], a provably expired one is
+/// [`crate::chains::ExecutionFailure::Expired`], and one that is neither
+/// carries its signature as
 /// [`crate::chains::ExecutionFailure::ConfirmationTimeout`], so it is
-/// reconciled, never sent again.
+/// reconciled, never sent again. `last_valid_block_height` is the build's own
+/// report of its blockhash's validity, when the aggregator gives one.
 pub async fn submit_built_swap(
     router: &'static str,
     transaction_base64: &str,
+    last_valid_block_height: Option<u64>,
     quote: &Quote,
     signer: &Keypair,
+) -> crate::Result<Signature> {
+    submit_on(
+        get_rpc_client(),
+        router,
+        transaction_base64,
+        last_valid_block_height,
+        quote,
+        signer,
+        CONFIRMATION_TIMEOUT,
+    )
+    .await
+}
+
+async fn submit_on<N: SwapNode>(
+    node: &N,
+    router: &'static str,
+    transaction_base64: &str,
+    last_valid_block_height: Option<u64>,
+    quote: &Quote,
+    signer: &Keypair,
+    timeout: Duration,
 ) -> crate::Result<Signature> {
     let not_submitted = |reason| {
         crate::Error::Swaps(SwapExecutionError::NotSubmitted {
@@ -295,6 +604,21 @@ pub async fn submit_built_swap(
             detail: "the transaction's fee payer is not the signing wallet".to_owned(),
         }));
     }
+    // Only the wallet signs, in slot 0, after the compute limit is tightened.
+    // A build that needs a second signature could never be accepted once its
+    // message changes, and simulation (`sigVerify: false`) would not notice.
+    if transaction.message.header().num_required_signatures != 1
+        || transaction.signatures.len() != 1
+    {
+        return Err(not_submitted(NotSubmittedReason::BuildUnusable {
+            detail: format!(
+                "the transaction needs {} signatures and carries {} slots; only the wallet's \
+                 own signature can be supplied",
+                transaction.message.header().num_required_signatures,
+                transaction.signatures.len()
+            ),
+        }));
+    }
     logger::debug(
         LogTag::Swap,
         &format!(
@@ -303,7 +627,7 @@ pub async fn submit_built_swap(
         ),
     );
 
-    match simulation_verdict(get_rpc_client().simulate_transaction(&transaction).await) {
+    match simulation_verdict(node.simulate(&transaction).await) {
         Verdict::Cleared(outcome) => {
             // Built on the aggregator's host, so nothing on our side has checked
             // what it does with the wallet's lamports.
@@ -334,33 +658,38 @@ pub async fn submit_built_swap(
         ),
     }
 
-    let signature = signer.sign_message(&transaction.message.serialize());
-    match transaction.signatures.first_mut() {
-        Some(slot) => *slot = signature,
-        None => transaction.signatures.push(signature),
-    }
+    transaction.signatures[0] = signer.sign_message(&transaction.message.serialize());
 
-    let sent = send(&transaction).await.map_err(|failure| match failure {
-        SendFailure::NotSent(reason) => not_submitted(reason),
-        SendFailure::Unproven(error) => error,
-    })?;
-
-    if get_rpc_client()
-        .confirm_transaction(&sent, CommitmentLevel::Confirmed, CONFIRMATION_TIMEOUT)
-        .await?
-    {
-        Ok(sent)
-    } else {
-        Err(crate::Error::Solana(
-            crate::chains::solana::Error::Execution(
-                crate::chains::ExecutionFailure::ConfirmationTimeout {
-                    reference: sent.to_string(),
-                    waited_ms: CONFIRMATION_TIMEOUT.as_millis() as u64,
-                },
-            ),
-        ))
-    }
+    let (signature, settled) =
+        send_and_settle(node, &transaction, last_valid_block_height, timeout)
+            .await
+            .map_err(not_submitted)?;
+    let reference = signature.to_string();
+    let failure = match settled {
+        Settled::Landed => return Ok(signature),
+        Settled::Reverted { detail } => {
+            crate::chains::ExecutionFailure::Reverted { reference, detail }
+        }
+        Settled::Expired {
+            last_valid_block_height,
+            current_block_height,
+        } => crate::chains::ExecutionFailure::Expired {
+            reference,
+            last_valid_block_height,
+            current_block_height,
+        },
+        Settled::Unsettled { waited_ms } => crate::chains::ExecutionFailure::ConfirmationTimeout {
+            reference,
+            waited_ms,
+        },
+    };
+    Err(crate::Error::Solana(
+        crate::chains::solana::Error::Execution(failure),
+    ))
 }
+
+#[cfg(test)]
+pub(crate) mod scripted_tests;
 
 #[cfg(test)]
 mod tests;

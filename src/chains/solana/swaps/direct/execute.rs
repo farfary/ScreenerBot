@@ -10,10 +10,12 @@
 //! 2. build and sign — nothing is on the network yet;
 //! 3. simulate — a mis-built instruction is rejected here for free, and the
 //!    MEASURED compute cost tightens the limit the transaction actually requests;
-//! 4. send — the point of no return;
+//! 4. send — the point of no return; from here the outcome carries the
+//!    signature, whatever the send itself answered;
 //! 5. settle — poll for a landed signature, re-broadcasting the same signed
 //!    transaction against network drops, until either it lands, it fails on
-//!    chain, or its blockhash provably expires unseen;
+//!    chain at `Confirmed`, or its blockhash provably expires unseen (steps 4
+//!    and 5 are the pre-send gate's `send_and_settle`);
 //! 6. verify — read back what actually arrived.
 //!
 //! Anything that fails at steps 1-3 returns an error whose
@@ -33,7 +35,6 @@
 use super::error::{DirectSwapError, DirectSwapResult};
 use super::plan::SwapPlan;
 use super::verify::{receipt_from_transaction, Receipt};
-use crate::chains::solana::rpc::client::RpcClient;
 use crate::chains::solana::rpc::{get_rpc_client, RpcClientMethods};
 use crate::chains::solana::solana_sdk::{
     commitment_config::CommitmentLevel,
@@ -41,9 +42,10 @@ use crate::chains::solana::solana_sdk::{
     signature::{Keypair, Signature, Signer},
     transaction::{Transaction, VersionedTransaction},
 };
-use crate::chains::solana::swaps::presend::{self, SendFailure, Verdict};
+use crate::chains::solana::swaps::presend::{self, Settled, SwapNode, Verdict};
 use crate::config::with_config;
 use crate::logger::{self, LogTag};
+use crate::swaps::NotSubmittedReason;
 use std::time::{Duration, Instant};
 
 /// A completed direct swap.
@@ -85,23 +87,6 @@ const RECEIPT_READ_ATTEMPTS: usize = 6;
 
 /// Delay between those attempts.
 const RECEIPT_READ_DELAY: Duration = Duration::from_millis(600);
-
-/// How often the settle loop polls `getSignatureStatuses`.
-const STATUS_POLL_INTERVAL: Duration = Duration::from_millis(500);
-
-/// How often the settle loop re-sends the same signed transaction. The signature
-/// is identical every time, so a duplicate landing is impossible: this only
-/// fights the network having dropped the earlier copy.
-const REBROADCAST_INTERVAL: Duration = Duration::from_secs(2);
-
-/// How often the settle loop checks whether the blockhash has expired.
-const BLOCK_HEIGHT_CHECK_INTERVAL: Duration = Duration::from_secs(4);
-
-/// Extra status reads, spaced a second apart, once the blockhash is seen to have
-/// expired -- a transaction can land in the very last valid block and take a
-/// moment to index.
-const POST_EXPIRY_STATUS_ATTEMPTS: usize = 2;
-const POST_EXPIRY_STATUS_DELAY: Duration = Duration::from_secs(1);
 
 /// Cached rent-exempt minimum for a 165-byte SPL token account. Fixed by the
 /// runtime, so it is read once rather than once per swap.
@@ -358,8 +343,8 @@ pub async fn execute_plan(
     // Asking at `Confirmed` rather than the bare `get_latest_blockhash` (which
     // asks at `Finalized`, ~32 slots / ~13s behind the tip) matters here: every
     // second of that gap is a second of the 151-block validity window this
-    // transaction will never get to spend, and the settle loop below depends on
-    // that window being as long as the runtime actually allows.
+    // transaction will never get to spend, and the settle loop depends on that
+    // window being as long as the runtime actually allows.
     let (blockhash, last_valid_block_height) = rpc
         .get_latest_blockhash_with_commitment(CommitmentLevel::Confirmed)
         .await
@@ -426,30 +411,10 @@ pub async fn execute_plan(
         }
     }
 
-    let signature =
-        presend::send(&transaction)
-            .await
-            .map_err(|failure| DirectSwapError::SubmitFailed {
-                detail: match failure {
-                    SendFailure::NotSent(reason) => reason.to_string(),
-                    SendFailure::Unproven(error) => error.to_string(),
-                },
-            })?;
-    let signature_str = signature.to_string();
-
     let timeout = Duration::from_secs(with_config(|cfg| {
         cfg.chains.solana.swaps.direct.confirmation_timeout_secs
     }));
-
-    settle(
-        rpc,
-        &transaction,
-        &signature,
-        &signature_str,
-        last_valid_block_height,
-        timeout,
-    )
-    .await?;
+    let signature_str = send_settled(rpc, &transaction, last_valid_block_height, timeout).await?;
 
     let receipt = read_receipt(&signature_str, &owner, plan).await?;
 
@@ -463,258 +428,176 @@ pub async fn execute_plan(
     })
 }
 
-/// Read the `SetComputeUnitLimit` value plan.rs guarantees is instruction index
-/// zero, so the measured-usage tightening in `execute_plan` knows what it would
-/// be replacing.
-
-/// Terminal outcomes the settle loop can reach from one signature-status read.
-/// Kept as a pure function of the SDK's own status/height types so the
-/// blockhash-expiry decision can be unit tested without a live node.
-fn status_outcome(
-    status: &crate::chains::solana::solana_transaction_status::TransactionStatus,
-    signature_str: &str,
-) -> Option<DirectSwapResult<()>> {
-    use crate::chains::solana::solana_transaction_status::TransactionConfirmationStatus;
-
-    if let Some(err) = &status.err {
-        return Some(Err(DirectSwapError::TransactionFailed {
-            signature: signature_str.to_owned(),
-            detail: err.to_string(),
-        }));
-    }
-    match status.confirmation_status() {
-        TransactionConfirmationStatus::Confirmed | TransactionConfirmationStatus::Finalized => {
-            Some(Ok(()))
-        }
-        TransactionConfirmationStatus::Processed => None,
-    }
-}
-
-/// Whether a transaction whose signature has not been seen is now provably dead:
-/// the current block height has passed the last block its blockhash was valid
-/// for. Extracted as a pure predicate so the settle loop's core decision is unit
-/// tested without a live node.
-fn blockhash_has_expired(current_block_height: u64, last_valid_block_height: u64) -> bool {
-    current_block_height > last_valid_block_height
-}
-
-/// Poll for a landed signature, re-broadcasting the same signed transaction
-/// against network drops, until it lands, fails on chain, or its blockhash
-/// provably expires with the signature still unseen.
-async fn settle(
-    rpc: &'static RpcClient,
+/// Send `transaction` and read the settle verdict in the engine's vocabulary.
+///
+/// Only a send the node refused as a request is [`DirectSwapError::SubmitFailed`];
+/// every other send outcome is settled by the transaction's own signature, so a
+/// send that may have been delivered is never mistaken for one that was not.
+async fn send_settled<N: SwapNode>(
+    node: &N,
     transaction: &VersionedTransaction,
-    signature: &Signature,
-    signature_str: &str,
     last_valid_block_height: u64,
     timeout: Duration,
-) -> DirectSwapResult<()> {
-    let deadline = Instant::now() + timeout;
-    let mut last_rebroadcast = Instant::now();
-    let mut last_height_check = Instant::now();
-
-    loop {
-        if let Poll::Settled(outcome) = poll_status_once(rpc, signature, signature_str).await {
-            return outcome;
-        }
-
-        if Instant::now() >= deadline {
-            return Err(DirectSwapError::ConfirmationTimeout {
-                signature: signature_str.to_owned(),
-                waited_ms: timeout.as_millis() as u64,
-            });
-        }
-
-        if last_rebroadcast.elapsed() >= REBROADCAST_INTERVAL {
-            last_rebroadcast = Instant::now();
-            match presend::send(transaction).await {
-                Ok(_) => logger::info(
-                    LogTag::Swap,
-                    &format!(
-                        "Re-broadcast {signature_str}: the network may have dropped the earlier copy"
-                    ),
-                ),
-                Err(e) => logger::debug(
-                    LogTag::Swap,
-                    &format!(
-                        "Re-broadcast of {signature_str} was not accepted this round \
-                         (an 'already processed' response is a good sign, not a failure): {e:?}"
-                    ),
-                ),
-            }
-        }
-
-        if last_height_check.elapsed() >= BLOCK_HEIGHT_CHECK_INTERVAL {
-            last_height_check = Instant::now();
-            if let Ok(height) = rpc.get_block_height().await {
-                if blockhash_has_expired(height, last_valid_block_height) {
-                    // A transaction can land in the very last valid block and
-                    // take a moment to index -- give it two more chances before
-                    // declaring it dead.
-                    //
-                    // Declaring death requires POSITIVE evidence of absence: a
-                    // node that answered and did not know the signature. If
-                    // every read in this window was unreadable, the expiry
-                    // proves nothing we can act on, and the loop keeps waiting
-                    // for the outer timeout rather than telling the caller a
-                    // possibly-landed swap is safe to retry.
-                    let mut confirmed_absent = false;
-                    for _ in 0..POST_EXPIRY_STATUS_ATTEMPTS {
-                        tokio::time::sleep(POST_EXPIRY_STATUS_DELAY).await;
-                        match poll_status_once(rpc, signature, signature_str).await {
-                            Poll::Settled(outcome) => return outcome,
-                            Poll::Pending => confirmed_absent = true,
-                            Poll::Unreadable => {}
-                        }
-                    }
-                    if !confirmed_absent {
-                        logger::warning(
-                            LogTag::Swap,
-                            &format!(
-                                "Blockhash for {signature_str} expired, but no node could be \
-                                 read to confirm the signature is absent; treating the outcome \
-                                 as unknown rather than retryable"
-                            ),
-                        );
-                        continue;
-                    }
-                    logger::info(
-                        LogTag::Swap,
-                        &format!(
-                            "Transaction {signature_str} is dead: blockhash expired at block \
-                             {last_valid_block_height}, current block is {height}, and the \
-                             signature was never seen. Safe to retry."
-                        ),
-                    );
-                    return Err(DirectSwapError::BlockhashExpired {
-                        signature: signature_str.to_owned(),
-                        last_valid_block_height,
-                        current_block_height: height,
-                    });
+) -> DirectSwapResult<String> {
+    let (signature, settled) =
+        presend::send_and_settle(node, transaction, Some(last_valid_block_height), timeout)
+            .await
+            .map_err(|reason| match reason {
+                NotSubmittedReason::RequestRejected { detail } => {
+                    DirectSwapError::SubmitFailed { detail }
                 }
-            }
+                other => DirectSwapError::from(other),
+            })?;
+    let signature = signature.to_string();
+    match settled {
+        Settled::Landed => Ok(signature),
+        Settled::Reverted { detail } => {
+            Err(DirectSwapError::TransactionFailed { signature, detail })
         }
-
-        tokio::time::sleep(STATUS_POLL_INTERVAL).await;
-    }
-}
-
-/// What one signature-status read told the settle loop.
-enum Poll {
-    /// The transaction reached a terminal state.
-    Settled(DirectSwapResult<()>),
-    /// The node answered, and the signature is not yet in a terminal state.
-    /// Absence here is EVIDENCE — it is what the blockhash-expiry verdict rests
-    /// on.
-    Pending,
-    /// The node could not be asked. This is not evidence of anything: the
-    /// transaction may be sitting confirmed on a chain we simply cannot read
-    /// right now.
-    Unreadable,
-}
-
-/// Read the signature's status once and translate it into a settle-loop
-/// decision.
-///
-/// A failed read is deliberately NOT an error. Once the transaction is on the
-/// network, returning [`DirectSwapError::SubmitFailed`] here would report
-/// `submitted() == false` for a swap that may well have landed, and the caller
-/// would retry it — buying the position twice. An RPC that cannot be reached
-/// says nothing about what the chain did.
-async fn poll_status_once(
-    rpc: &'static RpcClient,
-    signature: &Signature,
-    signature_str: &str,
-) -> Poll {
-    match rpc
-        .get_signature_statuses(std::slice::from_ref(signature))
-        .await
-    {
-        Ok(statuses) => match statuses
-            .into_iter()
-            .next()
-            .flatten()
-            .and_then(|status| status_outcome(&status, signature_str))
-        {
-            Some(outcome) => Poll::Settled(outcome),
-            None => Poll::Pending,
-        },
-        Err(e) => {
-            logger::debug(
-                LogTag::Swap,
-                &format!(
-                    "Could not read the status of {signature_str} this round; \
-                     an unreadable node is not evidence the swap failed: {e}"
-                ),
-            );
-            Poll::Unreadable
-        }
+        Settled::Expired {
+            last_valid_block_height,
+            current_block_height,
+        } => Err(DirectSwapError::BlockhashExpired {
+            signature,
+            last_valid_block_height,
+            current_block_height,
+        }),
+        Settled::Unsettled { waited_ms } => Err(DirectSwapError::ConfirmationTimeout {
+            signature,
+            waited_ms,
+        }),
     }
 }
 
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::chains::solana::solana_transaction_status::{
-        TransactionConfirmationStatus, TransactionStatus,
-    };
+    use crate::chains::solana::solana_sdk::{hash::Hash, instruction::Instruction};
+    use crate::chains::solana::solana_transaction_status::TransactionConfirmationStatus;
+    use crate::chains::solana::swaps::presend::scripted_tests::{status, ScriptedNode, SendAnswer};
+    use crate::rpc::RpcError;
 
-    fn status(confirmation: Option<TransactionConfirmationStatus>) -> TransactionStatus {
-        TransactionStatus {
-            slot: 1,
-            confirmations: None,
-            status: Ok(()),
-            err: None,
-            confirmation_status: confirmation,
-        }
+    const LAST_VALID: u64 = 1_000;
+
+    fn signed() -> VersionedTransaction {
+        let payer = Keypair::new();
+        VersionedTransaction::from(Transaction::new_signed_with_payer(
+            &[Instruction {
+                program_id: Pubkey::new_unique(),
+                accounts: vec![],
+                data: vec![1],
+            }],
+            Some(&payer.pubkey()),
+            &[&payer],
+            Hash::new_unique(),
+        ))
     }
 
-    #[test]
-    fn a_processed_only_status_is_not_yet_a_settle_outcome() {
-        assert!(status_outcome(
-            &status(Some(TransactionConfirmationStatus::Processed)),
-            "sig"
-        )
-        .is_none());
-    }
+    /// A send that timed out after the request left the machine may have
+    /// been delivered: the engine settles the transaction's own signature and
+    /// never reports it as a submission that safely failed.
+    #[tokio::test(start_paused = true)]
+    async fn an_unproven_send_is_settled_by_its_signature_and_never_falls_back() {
+        let transaction = signed();
+        let expected = transaction.signatures[0].to_string();
 
-    #[test]
-    fn a_confirmed_or_finalized_status_settles_successfully() {
-        assert!(matches!(
-            status_outcome(
-                &status(Some(TransactionConfirmationStatus::Confirmed)),
-                "sig"
-            ),
-            Some(Ok(()))
-        ));
-        assert!(matches!(
-            status_outcome(
-                &status(Some(TransactionConfirmationStatus::Finalized)),
-                "sig"
-            ),
-            Some(Ok(()))
-        ));
-    }
+        let pending = ScriptedNode::new(0, vec![SendAnswer::TimedOut], vec![Ok(None)], LAST_VALID);
+        let error = send_settled(&pending, &transaction, LAST_VALID, Duration::from_secs(5))
+            .await
+            .expect_err("a signature nobody can see has not landed");
+        assert!(matches!(error, DirectSwapError::ConfirmationTimeout { .. }));
+        assert_eq!(error.settled_signature(), Some(expected.as_str()));
+        assert!(error.submitted());
+        assert!(!error.safe_to_fallback());
 
-    #[test]
-    fn an_on_chain_error_settles_as_transaction_failed_not_a_timeout() {
-        let mut s = status(Some(TransactionConfirmationStatus::Confirmed));
-        s.err =
-            Some(crate::chains::solana::solana_sdk::transaction::TransactionError::AccountInUse);
-        assert!(matches!(
-            status_outcome(&s, "sig"),
-            Some(Err(DirectSwapError::TransactionFailed { .. }))
-        ));
-    }
-
-    #[test]
-    fn a_blockhash_is_expired_only_once_the_height_strictly_passes_the_last_valid_one() {
-        assert!(
-            !blockhash_has_expired(100, 100),
-            "the last valid block itself still counts"
+        let landed = ScriptedNode::new(
+            0,
+            vec![SendAnswer::TimedOut],
+            vec![
+                Ok(None),
+                Ok(Some(status(TransactionConfirmationStatus::Confirmed, None))),
+            ],
+            LAST_VALID,
         );
-        assert!(!blockhash_has_expired(99, 100));
-        assert!(blockhash_has_expired(101, 100));
+        assert_eq!(
+            send_settled(&landed, &transaction, LAST_VALID, Duration::from_secs(5))
+                .await
+                .expect("a delivered send that confirms is a swap"),
+            expected
+        );
+    }
+
+    /// Only chain evidence ends an unproven send as safe to send again: a
+    /// node that answered and did not know the signature once the blockhash
+    /// expired.
+    #[tokio::test(start_paused = true)]
+    async fn an_unproven_send_whose_blockhash_expired_unseen_is_the_one_safe_retry() {
+        let transaction = signed();
+        let node = ScriptedNode::new(
+            0,
+            vec![SendAnswer::TimedOut],
+            vec![Ok(None)],
+            LAST_VALID + 1,
+        );
+        let error = send_settled(&node, &transaction, LAST_VALID, Duration::from_secs(60))
+            .await
+            .expect_err("an expired transaction never landed");
+        assert!(matches!(error, DirectSwapError::BlockhashExpired { .. }));
+        assert_eq!(
+            error.signature(),
+            Some(transaction.signatures[0].to_string().as_str())
+        );
+        assert!(error.safe_to_fallback());
+
+        let unreadable = ScriptedNode::new(
+            0,
+            vec![SendAnswer::TimedOut],
+            vec![Err(crate::Error::Rpc(RpcError::Network {
+                message: "reset".to_owned(),
+                is_timeout: false,
+            }))],
+            LAST_VALID + 1,
+        );
+        let error = send_settled(
+            &unreadable,
+            &transaction,
+            LAST_VALID,
+            Duration::from_secs(30),
+        )
+        .await
+        .expect_err("an unreadable node proves nothing");
+        assert!(
+            matches!(error, DirectSwapError::ConfirmationTimeout { .. }),
+            "expiry without an answering node is not evidence: {error}"
+        );
+    }
+
+    /// The one send outcome that is safe to route elsewhere: the node the
+    /// request reached refused the request itself.
+    #[tokio::test(start_paused = true)]
+    async fn a_send_the_node_refused_as_a_request_is_a_safe_submit_failure() {
+        let node = ScriptedNode::new(
+            0,
+            vec![SendAnswer::Fails(crate::Error::Rpc(
+                RpcError::ProviderError {
+                    code: -32602,
+                    message: "invalid transaction".to_owned(),
+                    data: None,
+                },
+            ))],
+            vec![Ok(None)],
+            LAST_VALID,
+        );
+        let error = send_settled(&node, &signed(), LAST_VALID, Duration::from_secs(5))
+            .await
+            .expect_err("a refused send is a failure");
+        assert!(matches!(error, DirectSwapError::SubmitFailed { .. }));
+        assert!(error.safe_to_fallback());
+        assert_eq!(
+            node.sent().len(),
+            1,
+            "nothing is re-broadcast after a refusal"
+        );
     }
 
     #[test]

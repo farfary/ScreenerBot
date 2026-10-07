@@ -319,3 +319,425 @@ fn a_recorded_ceiling_limit_is_tightened_to_the_measured_units() {
         None
     );
 }
+
+/// Tightening rewrites only the four limit bytes of the one
+/// `SetComputeUnitLimit` instruction. Every account key, every lookup, the
+/// blockhash and every other instruction — the platform fee transfer and the
+/// route included — stay byte-for-byte the build the aggregator made.
+#[test]
+fn tightening_leaves_every_byte_outside_the_compute_limit_identical() {
+    let original = decoded(&recorded("multi_hop"));
+    let mut tightened = original.clone();
+    tighten_compute_unit_limit(&mut tightened, 150_000).expect("the ceiling is tightened");
+    let (VersionedMessage::V0(before), VersionedMessage::V0(after)) =
+        (&original.message, &tightened.message)
+    else {
+        panic!("the recorded build is a v0 message");
+    };
+    assert_eq!(before.header, after.header);
+    assert_eq!(before.account_keys, after.account_keys);
+    assert_eq!(before.recent_blockhash, after.recent_blockhash);
+    assert_eq!(before.address_table_lookups, after.address_table_lookups);
+    assert_eq!(before.instructions.len(), after.instructions.len());
+    let program = compute_budget_program();
+    let mut changed = 0;
+    for (old, new) in before.instructions.iter().zip(&after.instructions) {
+        assert_eq!(old.program_id_index, new.program_id_index);
+        assert_eq!(old.accounts, new.accounts);
+        if old.data == new.data {
+            continue;
+        }
+        changed += 1;
+        assert_eq!(
+            before.account_keys[usize::from(old.program_id_index)],
+            program
+        );
+        assert_eq!(old.data[0], 2, "only SetComputeUnitLimit changes");
+        assert_eq!(old.data.len(), new.data.len());
+        assert_eq!(old.data[0], new.data[0]);
+    }
+    assert_eq!(changed, 1);
+}
+
+// ----------------------------------------------------------------------------
+// Send and settle: once a send was attempted, the outcome carries the signature
+// ----------------------------------------------------------------------------
+
+use super::scripted_tests::{status, ScriptedNode, SendAnswer};
+use crate::chains::solana::solana_sdk::{
+    compute_budget::ComputeBudgetInstruction, transaction::TransactionError,
+};
+use crate::chains::solana::solana_transaction_status::TransactionConfirmationStatus as Level;
+
+const CEILING: u32 = 1_400_000;
+
+/// What an aggregator hands back for `signer`: a compute ceiling, a priority
+/// price, the platform fee transfer and the trade, unsigned.
+fn aggregator_build(signer: &Keypair, fee_wallet: &Pubkey) -> VersionedTransaction {
+    let message = Message::new_with_blockhash(
+        &[
+            ComputeBudgetInstruction::set_compute_unit_limit(CEILING),
+            ComputeBudgetInstruction::set_compute_unit_price(50_000),
+            // The platform fee: lamports from the wallet to the fee account.
+            Instruction {
+                program_id: Pubkey::new_unique(),
+                accounts: vec![
+                    crate::chains::solana::solana_sdk::instruction::AccountMeta::new(
+                        signer.pubkey(),
+                        true,
+                    ),
+                    crate::chains::solana::solana_sdk::instruction::AccountMeta::new(
+                        *fee_wallet,
+                        false,
+                    ),
+                ],
+                data: 25_000u64.to_le_bytes().to_vec(),
+            },
+            Instruction {
+                program_id: Pubkey::new_unique(),
+                accounts: vec![],
+                data: vec![1, 2, 3],
+            },
+        ],
+        Some(&signer.pubkey()),
+        &Hash::new_unique(),
+    );
+    VersionedTransaction {
+        signatures: vec![Signature::default()],
+        message: VersionedMessage::Legacy(message),
+    }
+}
+
+fn base64_of(transaction: &VersionedTransaction) -> String {
+    base64::engine::general_purpose::STANDARD.encode(bincode::serialize(transaction).unwrap())
+}
+
+fn quote_for(signer: &Keypair) -> Quote {
+    crate::config::utils::install_default_config();
+    Quote {
+        chain: crate::chains::ChainId::Solana,
+        router_id: "jupiter".to_owned(),
+        router_name: "Jupiter".to_owned(),
+        input_mint: "So11111111111111111111111111111111111111112".to_owned(),
+        output_mint: Pubkey::new_unique().to_string(),
+        input_amount: 50_000_000u64.into(),
+        output_amount: 1_000u64.into(),
+        minimum_output_amount: 950u64.into(),
+        price_impact_pct: 0.1,
+        platform_fee_lamports: Some(25_000),
+        estimated_network_fee_lamports: None,
+        slippage_bps: 100,
+        route_plan: "test".to_owned(),
+        swap_mode: crate::swaps::SwapMode::ExactIn,
+        wallet_address: signer.pubkey().to_string(),
+        exclude_dexes: None,
+        execution_data: Vec::new(),
+    }
+}
+
+async fn submit(
+    node: &ScriptedNode,
+    build: &VersionedTransaction,
+    signer: &Keypair,
+    last_valid_block_height: Option<u64>,
+) -> crate::Result<Signature> {
+    submit_on(
+        node,
+        "Jupiter",
+        &base64_of(build),
+        last_valid_block_height,
+        &quote_for(signer),
+        signer,
+        Duration::from_secs(5),
+    )
+    .await
+}
+
+/// The send times out after delivery and the transaction may well land: the
+/// signature signed into slot 0 comes back as a reconcilable outcome, so the
+/// swap is handed to verification instead of being written off, and nothing
+/// may be sent in its place.
+#[tokio::test(start_paused = true)]
+async fn an_unproven_aggregator_send_keeps_its_signature_for_reconciliation() {
+    let signer = Keypair::new();
+    let build = aggregator_build(&signer, &Pubkey::new_unique());
+    let node = ScriptedNode::new(150_000, vec![SendAnswer::TimedOut], vec![Ok(None)], 0);
+    let error = submit(&node, &build, &signer, None)
+        .await
+        .expect_err("an unseen signature is not a confirmed swap");
+
+    let sent = node.sent();
+    let signed = sent[0].signatures[0];
+    assert!(signed.verify(signer.pubkey().as_ref(), &sent[0].message.serialize()));
+    assert_eq!(
+        crate::swaps::unconfirmed_swap_signature(&error),
+        Some(signed.to_string())
+    );
+    assert!(!crate::swaps::is_fallback_safe(&error));
+    assert!(
+        sent.iter().all(|copy| copy == &sent[0]),
+        "only the same signed bytes are ever re-broadcast"
+    );
+
+    // A node that accepted the send but answered with something that is not a
+    // signature has still been handed the transaction.
+    let garbled = ScriptedNode::new(
+        150_000,
+        vec![SendAnswer::Fails(crate::Error::Data(
+            crate::errors::DataError::ParseError {
+                data_type: "signature".to_owned(),
+                error: "invalid response format".to_owned(),
+            },
+        ))],
+        vec![Ok(None)],
+        0,
+    );
+    let error = submit(&garbled, &build, &signer, None)
+        .await
+        .expect_err("unconfirmed");
+    assert_eq!(
+        crate::swaps::unconfirmed_swap_signature(&error),
+        Some(garbled.sent()[0].signatures[0].to_string())
+    );
+}
+
+/// The same unproven send settles to a swap when its signature confirms, and
+/// to the one safe retry when the build's blockhash provably expired unseen.
+#[tokio::test(start_paused = true)]
+async fn an_unproven_aggregator_send_settles_from_chain_state() {
+    let signer = Keypair::new();
+    let build = aggregator_build(&signer, &Pubkey::new_unique());
+
+    let landed = ScriptedNode::new(
+        150_000,
+        vec![SendAnswer::TimedOut],
+        vec![Ok(None), Ok(Some(status(Level::Confirmed, None)))],
+        0,
+    );
+    let signature = submit(&landed, &build, &signer, None)
+        .await
+        .expect("a delivered send that confirms is a swap");
+    assert_eq!(signature, landed.sent()[0].signatures[0]);
+
+    let expired = ScriptedNode::new(150_000, vec![SendAnswer::TimedOut], vec![Ok(None)], 501);
+    let error = submit(&expired, &build, &signer, Some(500))
+        .await
+        .expect_err("an expired transaction never landed");
+    assert!(matches!(
+        error,
+        crate::Error::Solana(crate::chains::solana::Error::Execution(
+            crate::chains::ExecutionFailure::Expired { .. }
+        ))
+    ));
+    assert_eq!(crate::swaps::unconfirmed_swap_signature(&error), None);
+    assert!(crate::swaps::is_fallback_safe(&error));
+}
+
+/// A swap the chain reverted at `Confirmed` moved nothing and can never land:
+/// it is the one sent outcome a caller may quote and send again.
+#[tokio::test(start_paused = true)]
+async fn a_swap_reverted_at_confirmed_may_be_sent_again() {
+    let signer = Keypair::new();
+    let node = ScriptedNode::new(
+        150_000,
+        vec![SendAnswer::Accepted],
+        vec![Ok(Some(status(
+            Level::Confirmed,
+            Some(TransactionError::AccountInUse),
+        )))],
+        0,
+    );
+    let error = submit(
+        &node,
+        &aggregator_build(&signer, &Pubkey::new_unique()),
+        &signer,
+        None,
+    )
+    .await
+    .expect_err("reverted");
+    assert!(matches!(
+        error,
+        crate::Error::Solana(crate::chains::solana::Error::Execution(
+            crate::chains::ExecutionFailure::Reverted { .. }
+        ))
+    ));
+    assert!(crate::swaps::is_fallback_safe(&error));
+}
+
+/// The send carries the build exactly: only the compute limit moves, so the
+/// platform fee transfer reaches the node byte-for-byte as the router built it.
+#[tokio::test(start_paused = true)]
+async fn the_sent_swap_differs_from_its_build_only_in_the_compute_limit() {
+    let signer = Keypair::new();
+    let fee_wallet = Pubkey::new_unique();
+    let build = aggregator_build(&signer, &fee_wallet);
+    let node = ScriptedNode::new(
+        150_000,
+        vec![SendAnswer::Accepted],
+        vec![Ok(Some(status(Level::Confirmed, None)))],
+        0,
+    );
+    submit(&node, &build, &signer, None)
+        .await
+        .expect("the swap lands");
+    let sent = node.sent();
+    assert_eq!(sent.len(), 1, "a confirmed swap is sent once");
+    let (VersionedMessage::Legacy(built), VersionedMessage::Legacy(sent)) =
+        (&build.message, &sent[0].message)
+    else {
+        panic!("legacy in, legacy out");
+    };
+    assert_eq!(built.header, sent.header);
+    assert_eq!(built.account_keys, sent.account_keys);
+    assert_eq!(built.recent_blockhash, sent.recent_blockhash);
+    assert_eq!(built.instructions[1..], sent.instructions[1..]);
+    assert_eq!(
+        built.instructions[0].accounts,
+        sent.instructions[0].accounts
+    );
+    assert_eq!(
+        sent.instructions[0].data[1..5],
+        compute_unit_limit_from_measured(150_000).to_le_bytes()
+    );
+    let fee = &sent.instructions[2];
+    assert_eq!(
+        sent.account_keys[usize::from(fee.accounts[1])],
+        fee_wallet,
+        "the fee still goes to the fee account"
+    );
+}
+
+/// The gate only ever supplies the wallet's own signature, after it has
+/// rewritten the message; a build that needs a second signer is refused before
+/// anything is simulated or sent.
+#[tokio::test]
+async fn a_build_that_needs_a_second_signer_is_refused_before_the_send() {
+    let signer = Keypair::new();
+    let co_signer = Pubkey::new_unique();
+    let message = Message::new_with_blockhash(
+        &[Instruction {
+            program_id: Pubkey::new_unique(),
+            accounts: vec![
+                crate::chains::solana::solana_sdk::instruction::AccountMeta::new(co_signer, true),
+            ],
+            data: vec![1],
+        }],
+        Some(&signer.pubkey()),
+        &Hash::new_unique(),
+    );
+    assert_eq!(message.header.num_required_signatures, 2);
+    let build = VersionedTransaction {
+        signatures: vec![Signature::default(); 2],
+        message: VersionedMessage::Legacy(message),
+    };
+    let node = ScriptedNode::new(1, vec![SendAnswer::Accepted], vec![Ok(None)], 0);
+    let error = submit(&node, &build, &signer, None)
+        .await
+        .expect_err("refused");
+    assert!(matches!(
+        error,
+        crate::Error::Swaps(SwapExecutionError::NotSubmitted {
+            reason: NotSubmittedReason::BuildUnusable { .. },
+            ..
+        })
+    ));
+    assert!(crate::swaps::is_fallback_safe(&error));
+    assert!(node.sent().is_empty());
+}
+
+/// A node that cannot simulate is not evidence about the transaction: the
+/// swap proceeds with exactly one send, untightened, because there is no
+/// measurement to tighten from.
+#[tokio::test(start_paused = true)]
+async fn an_unavailable_simulation_proceeds_with_one_untightened_send() {
+    let signer = Keypair::new();
+    let node = ScriptedNode::new(
+        150_000,
+        vec![SendAnswer::Accepted],
+        vec![Ok(Some(status(Level::Confirmed, None)))],
+        0,
+    )
+    .without_simulation(RpcError::Network {
+        message: "reset".to_owned(),
+        is_timeout: false,
+    });
+    submit(
+        &node,
+        &aggregator_build(&signer, &Pubkey::new_unique()),
+        &signer,
+        None,
+    )
+    .await
+    .expect("the swap proceeds and lands");
+    let sent = node.sent();
+    assert_eq!(sent.len(), 1);
+    let VersionedMessage::Legacy(message) = &sent[0].message else {
+        panic!("legacy");
+    };
+    assert_eq!(message.instructions[0].data[1..5], CEILING.to_le_bytes());
+}
+
+/// An error is final only at `Confirmed`: a status at `Processed` lives on one
+/// fork, and the same signed bytes can still land on the canonical one.
+#[test]
+fn an_error_is_a_verdict_only_once_confirmed() {
+    let failed = Some(TransactionError::AccountInUse);
+    assert_eq!(
+        status_verdict(&status(Level::Processed, failed.clone())),
+        None
+    );
+    assert_eq!(status_verdict(&status(Level::Processed, None)), None);
+    assert!(matches!(
+        status_verdict(&status(Level::Confirmed, failed.clone())),
+        Some(Settled::Reverted { .. })
+    ));
+    assert!(matches!(
+        status_verdict(&status(Level::Finalized, failed)),
+        Some(Settled::Reverted { .. })
+    ));
+    assert_eq!(
+        status_verdict(&status(Level::Confirmed, None)),
+        Some(Settled::Landed)
+    );
+    assert_eq!(
+        status_verdict(&status(Level::Finalized, None)),
+        Some(Settled::Landed)
+    );
+}
+
+/// A failure seen at `Processed` on an abandoned fork, then the same
+/// signature confirmed cleanly, is a landed swap.
+#[tokio::test(start_paused = true)]
+async fn a_processed_failure_on_an_abandoned_fork_is_not_terminal() {
+    let signer = Keypair::new();
+    let mut transaction = aggregator_build(&signer, &Pubkey::new_unique());
+    transaction.signatures[0] = signer.sign_message(&transaction.message.serialize());
+    let node = ScriptedNode::new(
+        0,
+        vec![SendAnswer::Accepted],
+        vec![
+            Ok(Some(status(
+                Level::Processed,
+                Some(TransactionError::AccountInUse),
+            ))),
+            Ok(Some(status(Level::Confirmed, None))),
+        ],
+        0,
+    );
+    let (signature, settled) =
+        send_and_settle(&node, &transaction, Some(1_000), Duration::from_secs(5))
+            .await
+            .expect("sent");
+    assert_eq!(signature, transaction.signatures[0]);
+    assert_eq!(settled, Settled::Landed);
+}
+
+#[test]
+fn a_blockhash_is_expired_only_once_the_height_strictly_passes_the_last_valid_one() {
+    assert!(
+        !blockhash_has_expired(100, 100),
+        "the last valid block itself still counts"
+    );
+    assert!(!blockhash_has_expired(99, 100));
+    assert!(blockhash_has_expired(101, 100));
+}

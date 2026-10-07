@@ -566,7 +566,8 @@ pub(crate) async fn execute_with_fallback_on(
     // NEVER fall back on a swap that was already SUBMITTED. The confirmation poll
     // timed out, but the transaction can still land — re-sending it through another
     // router is a second, real swap.
-    if let Some(signature) = unconfirmed_swap_signature(&primary_error) {
+    let primary_failure = failed_swap(&primary_error);
+    if let FailedSwap::Reconcile { signature } = &primary_failure {
         logger::warning(
             LogTag::Swap,
             &format!(
@@ -596,7 +597,7 @@ pub(crate) async fn execute_with_fallback_on(
         return outcome;
     }
 
-    if !is_fallback_safe(&primary_error) {
+    if primary_failure == FailedSwap::Unresolved {
         logger::error(
             LogTag::Swap,
             &format!(
@@ -697,31 +698,35 @@ pub(crate) async fn execute_with_fallback_on(
                 // Same rule as the primary: a submitted-but-unconfirmed swap must
                 // not be re-sent through yet another router, and neither may a
                 // failure that cannot prove it was never sent.
-                if let Some(signature) = unconfirmed_swap_signature(&e) {
-                    logger::warning(
-                        LogTag::Swap,
-                        &format!(
-                            "Fallback swap {signature} submitted via {} but not confirmed in time - stopping the chain (it may still land)",
-                            fallback_router.name()
-                        ),
-                    );
-                    return Err(e);
+                match failed_swap(&e) {
+                    FailedSwap::Reconcile { signature } => {
+                        logger::warning(
+                            LogTag::Swap,
+                            &format!(
+                                "Fallback swap {signature} submitted via {} but not confirmed in time - stopping the chain (it may still land)",
+                                fallback_router.name()
+                            ),
+                        );
+                        return Err(e);
+                    }
+                    FailedSwap::Unresolved => {
+                        logger::error(
+                            LogTag::Swap,
+                            &format!(
+                                "{} fallback failed, and nothing proves it was not sent - stopping the chain: {e}",
+                                fallback_router.name()
+                            ),
+                        );
+                        return Err(e);
+                    }
+                    FailedSwap::Resendable => {
+                        logger::warning(
+                            LogTag::Swap,
+                            &format!("{} execution failed: {}", fallback_router.name(), e),
+                        );
+                        continue;
+                    }
                 }
-                if !is_fallback_safe(&e) {
-                    logger::error(
-                        LogTag::Swap,
-                        &format!(
-                            "{} fallback failed, and nothing proves it was not sent - stopping the chain: {e}",
-                            fallback_router.name()
-                        ),
-                    );
-                    return Err(e);
-                }
-                logger::warning(
-                    LogTag::Swap,
-                    &format!("{} execution failed: {}", fallback_router.name(), e),
-                );
-                continue;
             }
         }
     }
@@ -878,7 +883,7 @@ async fn retry_excluding_venue(
     match execute_on(router, signer, &retry_quote).await {
         Ok(result) => Some(finish(signer, retry_quote, result, start, amount_limit)),
         Err(e) => {
-            if unconfirmed_swap_signature(&e).is_some() || !is_fallback_safe(&e) {
+            if failed_swap(&e) != FailedSwap::Resendable {
                 logger::warning(
                     LogTag::Swap,
                     &format!(
@@ -995,6 +1000,32 @@ mod submitted_timeout_tests {
     }
 }
 
+/// What a failed swap leaves behind, read from its type alone.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub enum FailedSwap {
+    /// It reached the chain or may still land: reconcile `signature`, never
+    /// send the trade again.
+    Reconcile { signature: String },
+    /// Provably nothing moved and nothing can still land: the trade may be
+    /// quoted and sent again.
+    Resendable,
+    /// Nothing proves it was not sent, and there is no signature to reconcile:
+    /// stop without sending again.
+    Unresolved,
+}
+
+/// The one reading every caller that may send a trade again decides from:
+/// the fallback chain, the venue-exclusion retry and the exit ladders. A
+/// recoverable signature always wins, and only [`is_fallback_safe`] licenses
+/// another send.
+pub fn failed_swap(error: &Error) -> FailedSwap {
+    match unconfirmed_swap_signature(error) {
+        Some(signature) => FailedSwap::Reconcile { signature },
+        None if is_fallback_safe(error) => FailedSwap::Resendable,
+        None => FailedSwap::Unresolved,
+    }
+}
+
 /// Whether a failed swap proves nothing moved and nothing can still land: the
 /// one licence to quote and execute the same trade through another router, and
 /// to forget the attempt was made.
@@ -1046,10 +1077,20 @@ fn solana_fallback_safe(error: &crate::chains::solana::Error) -> bool {
         // The direct engine answers from its own typed outcome: only a failure
         // that PROVES nothing moved (and nothing can still land) qualifies.
         Solana::DirectSwap(direct) => direct.safe_to_fallback(),
-        // A confirmation that ran out may still land, and a revert is read by
-        // the caller holding the position; neither is re-sent from here. The
-        // rest are failures of our own side that another router would repeat.
-        Solana::Execution(_)
+        // A transaction the chain reverted at `Confirmed` or that provably
+        // expired unseen can never land: nothing moved but a fee.
+        Solana::Execution(
+            crate::chains::ExecutionFailure::Reverted { .. }
+            | crate::chains::ExecutionFailure::Expired { .. },
+        ) => true,
+        // A confirmation that ran out may still land, and the rest are not
+        // outcomes of a send at all; nothing about them proves the trade
+        // did not happen.
+        Solana::Execution(
+            crate::chains::ExecutionFailure::ConfirmationTimeout { .. }
+            | crate::chains::ExecutionFailure::NotFound { .. }
+            | crate::chains::ExecutionFailure::IndexingDelay { .. },
+        )
         | Solana::InvalidAddress { .. }
         | Solana::InvalidKeypair { .. }
         | Solana::KeypairUnavailable { .. }
@@ -2087,7 +2128,15 @@ mod tests {
 
     fn solana_name(error: &Solana) -> &'static str {
         match error {
-            Solana::Execution(_) => "Execution",
+            Solana::Execution(failure) => match failure {
+                crate::chains::ExecutionFailure::NotFound { .. } => "Execution::NotFound",
+                crate::chains::ExecutionFailure::ConfirmationTimeout { .. } => {
+                    "Execution::ConfirmationTimeout"
+                }
+                crate::chains::ExecutionFailure::IndexingDelay { .. } => "Execution::IndexingDelay",
+                crate::chains::ExecutionFailure::Reverted { .. } => "Execution::Reverted",
+                crate::chains::ExecutionFailure::Expired { .. } => "Execution::Expired",
+            },
             Solana::InvalidAddress { .. } => "InvalidAddress",
             Solana::InvalidKeypair { .. } => "InvalidKeypair",
             Solana::KeypairUnavailable { .. } => "KeypairUnavailable",
@@ -2210,6 +2259,39 @@ mod tests {
                     },
                 )),
                 false,
+            ),
+            (
+                Error::Solana(Solana::Execution(
+                    crate::chains::ExecutionFailure::NotFound { reference: sig() },
+                )),
+                false,
+            ),
+            (
+                Error::Solana(Solana::Execution(
+                    crate::chains::ExecutionFailure::IndexingDelay { reference: sig() },
+                )),
+                false,
+            ),
+            // Settled at `Confirmed`: the chain ran it and it failed, so it
+            // moved nothing and can never land again.
+            (
+                Error::Solana(Solana::Execution(
+                    crate::chains::ExecutionFailure::Reverted {
+                        reference: sig(),
+                        detail: "custom program error: 0x1771".to_owned(),
+                    },
+                )),
+                true,
+            ),
+            (
+                Error::Solana(Solana::Execution(
+                    crate::chains::ExecutionFailure::Expired {
+                        reference: sig(),
+                        last_valid_block_height: 1,
+                        current_block_height: 2,
+                    },
+                )),
+                true,
             ),
             (
                 Error::Solana(Solana::InvalidAddress {
@@ -2368,6 +2450,8 @@ mod tests {
                 }),
                 true,
             ),
+            // Only a node's refusal of the send request itself: every other
+            // send outcome is settled by its signature instead.
             (
                 direct(DirectSwapError::SubmitFailed {
                     detail: String::new(),
@@ -2449,7 +2533,8 @@ mod tests {
         let covered: std::collections::BTreeSet<String> =
             rows.iter().map(|(error, _)| row_name(error)).collect();
         let reasons = 7;
-        let solana_outside_direct = 11;
+        let execution_variants = 5;
+        let solana_outside_direct = 10 + execution_variants;
         let direct_variants = 20;
         let swap_rows = covered
             .iter()
@@ -2463,6 +2548,12 @@ mod tests {
 
         for (error, safe) in rows {
             assert_eq!(is_fallback_safe(&error), safe, "{}", row_name(&error));
+            match failed_swap(&error) {
+                FailedSwap::Resendable => assert!(safe, "{}", row_name(&error)),
+                FailedSwap::Reconcile { .. } | FailedSwap::Unresolved => {
+                    assert!(!safe, "{}", row_name(&error))
+                }
+            }
         }
     }
 

@@ -362,10 +362,13 @@ impl RaptorRouter {
 
         // Propagate the send/confirm error UNCHANGED so a submitted-but-
         // unconfirmed signature stays recoverable by
-        // `swaps::unconfirmed_swap_signature`.
+        // `swaps::unconfirmed_swap_signature`. Raptor's build reports no
+        // blockhash validity, so a send that never lands ends unconfirmed and
+        // is reconciled rather than proven expired.
         let signature = crate::chains::solana::swaps::presend::submit_built_swap(
             self.name(),
             &transaction,
+            None,
             quote,
             signer,
         )

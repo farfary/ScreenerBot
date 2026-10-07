@@ -181,6 +181,11 @@ struct JupiterSwapRequest {
 struct JupiterSwapResponse {
     #[serde(rename = "swapTransaction")]
     swap_transaction: String,
+    /// The last block the transaction's blockhash is valid for. Lets the
+    /// settle step prove a transaction that never landed dead instead of only
+    /// timing out on it.
+    #[serde(rename = "lastValidBlockHeight", default)]
+    last_valid_block_height: Option<u64>,
     /// The compute-unit limit Jupiter wrote into the transaction. It falls back
     /// to the 1,400,000-unit ceiling when its own build simulation fails, which
     /// is why the pre-send gate tightens it from our own measurement.
@@ -691,6 +696,7 @@ impl JupiterRouter {
         let signature = crate::chains::solana::swaps::presend::submit_built_swap(
             self.name(),
             &swap_response.swap_transaction,
+            swap_response.last_valid_block_height,
             quote,
             signer,
         )
@@ -828,8 +834,8 @@ mod tests {
         assert!(parsed.price_impact_pct.parse::<f64>().is_err());
     }
 
-    /// `/swap` reports the limit and prioritization fee it built in; both are
-    /// read, and a response without them still decodes.
+    /// `/swap` reports the blockhash validity, limit and prioritization fee it
+    /// built in; all are read, and a response without them still decodes.
     #[test]
     fn a_swap_response_keeps_jupiters_own_build_report() {
         let parsed: JupiterSwapResponse = serde_json::from_str(
@@ -842,11 +848,13 @@ mod tests {
             }"#,
         )
         .expect("a full /swap response decodes");
+        assert_eq!(parsed.last_valid_block_height, Some(1));
         assert_eq!(parsed.compute_unit_limit, Some(1_400_000));
         assert_eq!(parsed.prioritization_fee_lamports, Some(70_000));
 
         let bare: JupiterSwapResponse =
             serde_json::from_str(r#"{"swapTransaction": "AQAB"}"#).expect("decodes");
+        assert_eq!(bare.last_valid_block_height, None);
         assert_eq!(bare.compute_unit_limit, None);
         assert_eq!(bare.prioritization_fee_lamports, None);
     }

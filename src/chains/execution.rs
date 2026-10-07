@@ -24,6 +24,14 @@ pub enum ExecutionFailure {
     /// nothing but its fee, and it can never land again.
     #[error("transaction {reference} failed on chain: {detail}")]
     Reverted { reference: String, detail: String },
+    /// The transaction was never seen and the validity window it was signed
+    /// for has provably closed: it can never land, on any node.
+    #[error("transaction {reference} was never seen and expired after block {last_valid_block_height} (current block {current_block_height})")]
+    Expired {
+        reference: String,
+        last_valid_block_height: u64,
+        current_block_height: u64,
+    },
 }
 
 impl ErrorClass for ExecutionFailure {
@@ -44,6 +52,7 @@ impl ErrorClass for ExecutionFailure {
             ExecutionFailure::ConfirmationTimeout { .. } => Severity::Warning,
             ExecutionFailure::IndexingDelay { .. } => Severity::Info,
             ExecutionFailure::Reverted { .. } => Severity::Warning,
+            ExecutionFailure::Expired { .. } => Severity::Warning,
         }
     }
 
@@ -53,6 +62,7 @@ impl ErrorClass for ExecutionFailure {
             ExecutionFailure::ConfirmationTimeout { .. } => 504,
             ExecutionFailure::IndexingDelay { .. } => 503,
             ExecutionFailure::Reverted { .. } => 422,
+            ExecutionFailure::Expired { .. } => 422,
         }
     }
 }
