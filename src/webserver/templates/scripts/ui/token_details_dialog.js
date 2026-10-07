@@ -305,7 +305,9 @@ export class TokenDetailsDialog {
   }
 
   async _fetchTokenData() {
-    if (this.isRefreshing) return;
+    // A poll tick can still fire after the dialog closed and cleared its token.
+    if (this.isRefreshing || !this.tokenData) return;
+    const mint = this.tokenData.mint;
     this.isRefreshing = true;
 
     // Update status to loading on first fetch
@@ -315,13 +317,16 @@ export class TokenDetailsDialog {
 
     try {
       // Use requestManager with high priority for token detail fetch
-      const newData = await requestManager.fetch(`/api/tokens/${this.tokenData.mint}`, {
+      const newData = await requestManager.fetch(`/api/tokens/${mint}`, {
         priority: "high",
         // Uncached tokens can spend >10s trying external sources before the
         // backend returns a normal NOT_FOUND payload. Do not misclassify that
         // slow-but-valid path as a reconnect.
         timeout: this._initialLoadComplete ? 10000 : 25000,
       });
+
+      // The dialog closed or switched to another token while the request ran.
+      if (this.tokenData?.mint !== mint) return;
 
       if (newData) {
         const isInitialLoad = !this._initialLoadComplete;
