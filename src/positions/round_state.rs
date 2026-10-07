@@ -51,13 +51,15 @@ pub fn expected_acquisition(
 }
 
 /// Whether the wallet's holding attributable to a round that expects to acquire `expected`
-/// is dust. `None` when the expected acquisition is unknown.
+/// is dust. `None` when the expected acquisition is unknown, or is itself within the dust
+/// floor: the attributable holding is capped at `expected`, so it would read as dust whatever
+/// the wallet holds.
 pub fn attributable_is_dust(
     wallet_held: RawAmount,
     held_by_other_open_rows: RawAmount,
     expected: Option<RawAmount>,
 ) -> Option<bool> {
-    let expected = expected?;
+    let expected = expected.filter(|expected| expected.raw() > DUST_FLOOR_RAW)?;
     Some(is_dust(
         attributable_held(wallet_held, held_by_other_open_rows, expected),
         expected,
@@ -168,6 +170,25 @@ mod tests {
         assert_eq!(
             attributable_is_dust(raw(0), raw(0), expected_acquisition(0.2, 0.004, None)),
             None
+        );
+    }
+
+    #[test]
+    fn an_expected_acquisition_within_the_dust_floor_decides_nothing() {
+        for expected in [0, 1, DUST_FLOOR_RAW] {
+            for held in [0, 1, DUST_FLOOR_RAW, 1_000_000] {
+                assert_eq!(
+                    attributable_is_dust(raw(held), raw(0), Some(raw(expected))),
+                    None,
+                    "held {held} against expected {expected}"
+                );
+            }
+        }
+        let just_above = Some(raw(DUST_FLOOR_RAW + 1));
+        assert_eq!(attributable_is_dust(raw(0), raw(0), just_above), Some(true));
+        assert_eq!(
+            attributable_is_dust(raw(DUST_FLOOR_RAW + 1), raw(0), just_above),
+            Some(false)
         );
     }
 }

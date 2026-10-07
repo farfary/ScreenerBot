@@ -76,10 +76,12 @@ pub(crate) enum Disposition {
 }
 
 /// The disposition of `item` under `verdict`, the single owner of what a settled signature
-/// means for a position. A swap that failed on chain or did not land moved nothing, so no
-/// branch writes a position off. A not-landed read is final only when the previous read of
-/// the item found the same, so one lagging provider cannot decide it. An entry that did not
-/// land is removed only when the wallet's holding attributable to it is known to be dust:
+/// means for a position. A swap the chain already confirmed is never settled as not landed,
+/// whatever a later read finds: a node that no longer serves the signature reads a landed
+/// swap as unseen. A swap that failed on chain or did not land moved nothing, so no branch
+/// writes a position off. A not-landed read is final only when the previous read of the item
+/// found the same, so one lagging provider cannot decide it. An entry that did not land is
+/// removed only when the wallet's holding attributable to it is known to be dust:
 /// `attributable_is_dust` is `None` when that holding could not be read.
 pub(crate) fn disposition(
     item: &VerificationItem,
@@ -88,9 +90,14 @@ pub(crate) fn disposition(
 ) -> Disposition {
     let Some(position_id) = item.position_id else {
         return Disposition::Requeue {
-            swap_confirmed: verdict == SignatureVerdict::Landed,
+            swap_confirmed: item.swap_confirmed || verdict == SignatureVerdict::Landed,
         };
     };
+    if item.swap_confirmed {
+        return Disposition::Requeue {
+            swap_confirmed: true,
+        };
+    }
     let evidence = match verdict {
         SignatureVerdict::Landed => {
             return Disposition::Requeue {
@@ -141,8 +148,9 @@ pub(crate) fn disposition(
 }
 
 /// Whether the wallet's holding of the item's mint, less what the other open positions of
-/// the mint hold, is dust against what the item's buy was quoted to acquire. `None` when the
-/// position, the token's decimals or the holding cannot be read.
+/// the mint hold, is dust against the acquisition the entry price implies. `None` when the
+/// position, the token's decimals or the holding cannot be read, or when that acquisition is
+/// too small to tell a holding from dust.
 pub(crate) async fn entry_attributable_is_dust(item: &VerificationItem) -> Option<bool> {
     let position = get_position_by_id(item.position_id?).await?;
     let chain = get_store_chain().await.ok()?;
@@ -370,6 +378,28 @@ mod tests {
                 PositionTransition::ExitFailedClearForRetry { position_id: 7, ref exit_signature }
                     if exit_signature == "exit-sig"
             ));
+        }
+    }
+
+    /// A swap the chain confirmed is never settled as not landed by any later read, of any
+    /// kind and at any count of earlier not-landed reads.
+    #[test]
+    fn a_confirmed_swap_is_requeued_as_confirmed_under_every_verdict() {
+        for mut item in items()
+            .into_iter()
+            .flat_map(|item| [item.clone(), seen(item)])
+        {
+            item.swap_confirmed = true;
+            for verdict in ALL_VERDICTS {
+                for dust in [None, Some(true), Some(false)] {
+                    assert!(
+                        requeued(disposition(&item, verdict, dust)),
+                        "{verdict:?} on confirmed {} (reads {})",
+                        item.signature,
+                        item.not_landed_reads
+                    );
+                }
+            }
         }
     }
 

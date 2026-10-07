@@ -265,6 +265,20 @@ pub async fn get_pending_partial_exits_for_mint(mint: &str) -> Vec<PendingPartia
         .collect()
 }
 
+/// True while a DCA add or a partial exit of position `position_id` of `mint` is in flight
+/// (submitted, not yet verified). Neither is on the position row until its verification
+/// books it, so these maps are the only proof a fill may still land on the row.
+pub async fn position_has_pending_swap(mint: &str, position_id: i64) -> bool {
+    get_pending_dca_swaps_for_mint(mint)
+        .await
+        .iter()
+        .any(|entry| entry.position_id == position_id)
+        || get_pending_partial_exits_for_mint(mint)
+            .await
+            .iter()
+            .any(|entry| entry.position_id == position_id)
+}
+
 /// Every mint with a swap in flight — a pending partial exit or a pending DCA add.
 ///
 /// The wallet-history ledger reads this before reconciling a bot-executed position

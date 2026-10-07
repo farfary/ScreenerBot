@@ -1812,6 +1812,48 @@ fn an_orphan_removal_refuses_a_position_with_a_booked_dca() {
     );
 }
 
+/// A DCA or partial exit in flight is on no row column or record until its verification
+/// books it, so only its pending entry proves a fill may still land on the row. The slot the
+/// row holds stays held while the removal is refused.
+#[test]
+fn an_orphan_removal_refuses_a_position_with_a_dca_or_partial_exit_in_flight() {
+    common::run_isolated(
+        "an_orphan_removal_refuses_a_position_with_a_dca_or_partial_exit_in_flight",
+        || async {
+            let _dir = common::isolated_env();
+            let _cfg = common::config_guard();
+            state::init_global_position_semaphore(2);
+            let with_dca = open_position(unverified_entry(ORPHAN_ENTRY)).await;
+            let with_partial = store_position(unverified_entry(ORPHAN_ENTRY)).await;
+            for id in [with_dca, with_partial] {
+                assert!(state::try_consume_global_position_permit());
+                state::register_position_slot(id).await;
+            }
+            register_dca(with_dca).await;
+            register_partial(with_partial).await;
+
+            for id in [with_dca, with_partial] {
+                let before = in_storage(id).await;
+                assert_removal_refused(id).await;
+                assert_eq!(in_storage(id).await, before, "the row is unchanged");
+            }
+            assert!(dca_pending().await, "the pending DCA is kept");
+            assert!(partial_pending().await, "the pending partial exit is kept");
+            assert!(
+                !state::try_consume_global_position_permit(),
+                "both slots stay held"
+            );
+
+            // The pending entries of another position of the mint refuse nothing.
+            let unrelated = store_position(unverified_entry(ORPHAN_ENTRY)).await;
+            apply_transition(orphan_removal(unrelated, ORPHAN_ENTRY))
+                .await
+                .expect("a row with no fill in flight is removed");
+            assert!(!stored(unrelated).await);
+        },
+    );
+}
+
 #[test]
 fn an_orphan_removal_refuses_a_position_with_an_exit_submitted() {
     common::run_isolated(

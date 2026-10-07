@@ -476,7 +476,9 @@ async fn a_reentered_token_resolves_to_its_live_round() {
 // ==================== APPLY-FAILURE DISPOSITION ====================
 
 use screenerbot::errors::DatabaseError;
-use screenerbot::positions::queue::{VerificationQueue, MAX_REQUEUE_ATTEMPTS};
+use screenerbot::positions::queue::{
+    VerificationQueue, MAX_REQUEUE_ATTEMPTS, NOT_LANDED_CONFIRM_MIN_SECS,
+};
 use screenerbot::positions::{
     ApplyFailureDisposition, Error as PositionError, GiveUpReason, VerificationItem,
     VerificationKind,
@@ -727,6 +729,56 @@ fn a_deferred_item_is_a_settlement_candidate_only_once_due() {
         ["sig-deferred"],
         "a due deferred item is read again"
     );
+}
+
+/// The read that confirms a not-landed read comes no earlier than the minimum after it, for
+/// any signature (each draws its own jitter) and at every count of earlier deferrals.
+#[test]
+fn every_deferral_waits_at_least_the_not_landed_minimum() {
+    for index in 0..200 {
+        let mut item = entry_item(&format!("sig-minimum-{index}"), Some(100));
+        for _ in 0..4 {
+            let floor = Utc::now() + chrono::Duration::seconds(NOT_LANDED_CONFIRM_MIN_SECS);
+            item = item.deferred();
+            assert!(
+                item.next_retry_at.is_some_and(|at| at >= floor),
+                "{} after {} reads is due before the minimum",
+                item.signature,
+                item.not_landed_reads
+            );
+        }
+    }
+}
+
+#[test]
+fn only_the_second_not_landed_read_of_an_entry_parks_it() {
+    let entry = entry_item("sig-park", Some(100));
+    let dca = VerificationItem::new_dca(
+        "sig-park-dca".to_owned(),
+        DISPOSITION_MINT.to_owned(),
+        Some(1),
+        Some(100),
+    );
+    let exit = VerificationItem::new(
+        "sig-park-exit".to_owned(),
+        DISPOSITION_MINT.to_owned(),
+        Some(1),
+        VerificationKind::Exit,
+        Some(100),
+    );
+    assert!(!entry.deferral_parks_entry(), "the first read only defers");
+    assert!(entry.deferred().deferral_parks_entry());
+    assert!(
+        !entry.deferred().deferred().deferral_parks_entry(),
+        "a parked entry is reported once"
+    );
+    for other in [dca, exit] {
+        assert!(
+            !other.deferred().deferral_parks_entry(),
+            "{}",
+            other.signature
+        );
+    }
 }
 
 #[test]

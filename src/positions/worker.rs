@@ -33,6 +33,11 @@ use tokio::{
 
 const VERIFICATION_BATCH_SIZE: usize = 10;
 
+/// How long a settlement waits for the mint's position lock. A DCA or partial exit holds the
+/// lock across its swap and its pending registration, so a settlement that cannot take it
+/// in time is deferred to a later read instead of stalling the worker.
+const SETTLEMENT_LOCK_WAIT: Duration = Duration::from_millis(500);
+
 /// Initialize positions system
 pub async fn initialize_positions_system() -> Result<()> {
     logger::info(LogTag::Positions, "Initializing positions system");
@@ -522,9 +527,16 @@ async fn settle_queued_signatures() {
                 }
             }
             Disposition::Defer => {
+                if item.deferral_parks_entry() {
+                    record_parked_entry(&item).await;
+                }
                 defer_settlement(&item.signature).await;
             }
             Disposition::Apply(transition) => {
+                let Some(_lock) = settlement_lock(&item).await else {
+                    defer_settlement(&item.signature).await;
+                    continue;
+                };
                 if remove_verification(&item.signature).await.is_some() {
                     apply_settlement(&item, verdict, transition).await;
                 }
@@ -577,11 +589,66 @@ async fn settle_unresolved(items: Vec<VerificationItem>) {
                         item.signature, item.mint
                     ),
                 );
+                if item.deferral_parks_entry() {
+                    record_parked_entry(&item).await;
+                }
                 enqueue_verification(item.renewed().deferred()).await;
             }
-            Disposition::Apply(transition) => apply_settlement(&item, verdict, transition).await,
+            Disposition::Apply(transition) => {
+                let Some(_lock) = settlement_lock(&item).await else {
+                    enqueue_verification(item.renewed().deferred()).await;
+                    continue;
+                };
+                apply_settlement(&item.renewed(), verdict, transition).await;
+            }
         }
     }
+}
+
+/// The mint's position lock for applying a settlement, or `None` when it is not free within
+/// [`SETTLEMENT_LOCK_WAIT`]. Held across the transition, it orders the settlement against a
+/// DCA or partial exit of the mint, which registers its pending swap under the same lock.
+async fn settlement_lock(item: &VerificationItem) -> Option<super::PositionLockGuard> {
+    let lock = tokio::time::timeout(
+        SETTLEMENT_LOCK_WAIT,
+        super::state::acquire_position_lock(&item.mint),
+    )
+    .await
+    .ok();
+    if lock.is_none() {
+        logger::debug(
+            LogTag::Positions,
+            &format!(
+                "Settlement of {} deferred: the position lock of {} is held",
+                item.signature, item.mint
+            ),
+        );
+    }
+    lock
+}
+
+/// Reports an entry its second not-landed read parks: the row and its slot stay held while
+/// the wallet holds more of the mint than dust attributable to it, or that holding is unknown.
+async fn record_parked_entry(item: &VerificationItem) {
+    logger::warning(
+        LogTag::Positions,
+        &format!(
+            "Entry {} (mint {}, position {:?}) did not land on two reads but its holding is not known dust - keeping the position until a later read decides",
+            item.signature, item.mint, item.position_id
+        ),
+    );
+    crate::events::record_position_event_flexible(
+        "entry_settlement_parked",
+        crate::events::Severity::Warn,
+        Some(&item.mint),
+        Some(&item.signature),
+        json!({
+            "position_id": item.position_id,
+            "not_landed_reads": item.not_landed_reads.saturating_add(1),
+            "expiry_height": item.expiry_height,
+        }),
+    )
+    .await;
 }
 
 /// The attributable-dust reading an entry needs when its signature did not land on a
@@ -598,9 +665,29 @@ async fn attributable_dust(item: &VerificationItem, verdict: SignatureVerdict) -
     }
 }
 
+/// What becomes of a settled item whose transition failed to apply.
+#[derive(Debug)]
+enum RefusedSettlement {
+    /// The refusal will not change on a retry: stop verifying the signature for the session.
+    Abandon(GiveUpReason),
+    /// The refusal may pass later: read the signature again after a deferral.
+    Retry(VerificationItem),
+}
+
+/// The follow-up to a settlement of `item` that `error` refused. A retry keeps the item's
+/// confirmation as it was: only a verified transaction confirms a swap, and a refused
+/// settlement verified nothing.
+fn refused_settlement(item: &VerificationItem, error: &Error) -> RefusedSettlement {
+    match item.apply_failure_disposition(error) {
+        ApplyFailureDisposition::Drop(reason) => RefusedSettlement::Abandon(reason),
+        ApplyFailureDisposition::Requeue => RefusedSettlement::Retry(item.deferred()),
+    }
+}
+
 /// Applies the transition a signature verdict decided and settles the trade action waiting
-/// on the signature. A refused transition is logged; a position still awaiting
-/// verification is re-enqueued by the next cycle.
+/// on the signature. A refusal that a retry cannot change abandons the signature for the
+/// session, so the next cycle does not re-enqueue and refuse it again; any other refusal
+/// reads the signature again after a deferral.
 async fn apply_settlement(
     item: &VerificationItem,
     verdict: SignatureVerdict,
@@ -635,6 +722,14 @@ async fn apply_settlement(
                     item.signature, item.mint, item.kind
                 ),
             );
+            match refused_settlement(item, &error) {
+                RefusedSettlement::Abandon(reason) => {
+                    abandon_after_apply_failure(item, reason, &error).await;
+                }
+                RefusedSettlement::Retry(item) => {
+                    enqueue_verification(item).await;
+                }
+            }
         }
     }
 }
@@ -755,16 +850,7 @@ pub(super) async fn process_verification_item(
                             requeue_verification(confirmed).await;
                         }
                         ApplyFailureDisposition::Drop(reason) => {
-                            let details = format!("{reason:?}");
                             abandon_after_apply_failure(&item, reason, &e).await;
-                            crate::actions::settle_verification(
-                                &item.signature,
-                                Err(crate::actions::ActionFailure::with_details(
-                                    crate::i18n::ids::ACTIONS_FAILURE_VERIFICATION_GAVE_UP,
-                                    details,
-                                )),
-                            )
-                            .await;
                         }
                     }
                 }
@@ -844,7 +930,8 @@ pub(super) async fn process_verification_item(
     None
 }
 
-/// Stops verifying an item whose transition failed to apply and will not be retried.
+/// Stops verifying an item whose transition failed to apply and will not be retried, and
+/// settles the trade action waiting on its signature as given up.
 ///
 /// The position is left exactly as stored: no kind-specific abandonment transition runs,
 /// because the swap may be confirmed and the row only lacks its booking. The signature is
@@ -883,6 +970,14 @@ async fn abandon_after_apply_failure(item: &VerificationItem, reason: GiveUpReas
     .await;
 
     abandon_verification(item.signature.clone()).await;
+    crate::actions::settle_verification(
+        &item.signature,
+        Err(crate::actions::ActionFailure::with_details(
+            crate::i18n::ids::ACTIONS_FAILURE_VERIFICATION_GAVE_UP,
+            format!("{reason:?}"),
+        )),
+    )
+    .await;
 }
 
 /// What a verified transition means for a trade action waiting on its
@@ -957,5 +1052,56 @@ mod verdict_tests {
             evidence: crate::positions::transitions::NotLandedEvidence::Expired,
         })
         .is_none());
+    }
+}
+
+#[cfg(test)]
+mod refused_settlement_tests {
+    use super::*;
+    use crate::errors::DatabaseError;
+
+    fn entry() -> VerificationItem {
+        VerificationItem::new(
+            "entry-sig".to_owned(),
+            "mint".to_owned(),
+            Some(7),
+            VerificationKind::Entry,
+            Some(100),
+        )
+    }
+
+    #[test]
+    fn a_refused_orphan_removal_is_abandoned() {
+        let refusal = Error::EntryLanded {
+            position_id: 7,
+            signature: "entry-sig".to_owned(),
+        };
+        for item in [entry(), entry().deferred()] {
+            assert!(matches!(
+                refused_settlement(&item, &refusal),
+                RefusedSettlement::Abandon(GiveUpReason::ApplyRejected { .. })
+            ));
+        }
+    }
+
+    #[test]
+    fn a_retryable_refusal_is_read_again_later_without_confirming_the_swap() {
+        let busy = Error::Database(DatabaseError::Busy {
+            operation: "commit_booking".to_owned(),
+            message: "database is locked".to_owned(),
+        });
+        let item = entry();
+        match refused_settlement(&item, &busy) {
+            RefusedSettlement::Retry(retry) => {
+                assert!(
+                    !retry.swap_confirmed,
+                    "a refused settlement verified nothing"
+                );
+                assert_eq!(retry.signature, item.signature);
+                assert_eq!(retry.attempts, item.attempts);
+                assert!(retry.next_retry_at.is_some_and(|at| at > Utc::now()));
+            }
+            other => panic!("expected a retry, got {other:?}"),
+        }
     }
 }

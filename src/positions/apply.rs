@@ -20,9 +20,9 @@ use super::types::{EntryRecord, ExitRecord, Position};
 use super::{
     loss_detection::process_position_loss_detection,
     state::{
-        clear_pending_dca_swap, get_position_by_id, get_position_by_mint, publish_committed,
-        release_position_slot, remove_position_by_id, remove_signature_from_index,
-        update_position_state, with_booking_lock,
+        clear_pending_dca_swap, get_position_by_id, get_position_by_mint,
+        position_has_pending_swap, publish_committed, release_position_slot, remove_position_by_id,
+        remove_signature_from_index, update_position_state, with_booking_lock,
     },
     transitions::PositionTransition,
 };
@@ -382,9 +382,28 @@ pub async fn apply_transition(transition: PositionTransition) -> Result<ApplyEff
             evidence,
         } => {
             // The row is deleted only while it still describes nothing but an entry that never
-            // landed: its entry is `signature` and unverified, no DCA, partial or full exit was
-            // submitted or booked on it, and it carries no entry or exit record. The delete
-            // cascades to the row's records, so any booked fill must refuse it.
+            // landed: its entry is `signature` and unverified, no full exit was submitted, no
+            // DCA or partial exit is booked on it or in flight in the pending DCA and
+            // partial-exit maps, and it carries no entry or exit record. The delete cascades to
+            // the row's records, so any booked or in-flight fill must refuse it. The settlement
+            // holds the mint's position lock, under which a DCA or partial exit registers its
+            // pending swap, so no new one can be submitted between this check and the delete.
+            let mint = match get_position_by_id(position_id).await {
+                Some(row) => Some(row.mint),
+                None => super::db::get_position_by_id(position_id)
+                    .await?
+                    .map(|row| row.mint),
+            };
+            let in_flight = match &mint {
+                Some(mint) => position_has_pending_swap(mint, position_id).await,
+                None => false,
+            };
+            if in_flight {
+                return Err(Error::EntryLanded {
+                    position_id,
+                    signature: signature.clone(),
+                });
+            }
             let store_chain = get_store_chain().await?;
             let committed = book_position(position_id, |row, reads| {
                 let unlanded = row.entry_transaction_signature.as_deref()

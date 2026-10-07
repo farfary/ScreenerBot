@@ -34,6 +34,16 @@ const BACKOFF_INTERVALS_SECS: [i64; 16] = [
     5, 10, 15, 30, 60, 120, 300, 600, 900, 1800, 3600, 7200, 14400, 28800, 43200, 86400,
 ];
 
+/// The least wait, in seconds, before a settlement read may confirm a not-landed read. The
+/// expiry bound comes from one block-height read of whichever provider answers, and a provider
+/// lagging the node that produced the swap's blockhash understates it; a minute of chain
+/// progress lets the true validity window pass before the confirming read.
+pub const NOT_LANDED_CONFIRM_MIN_SECS: i64 = 60;
+
+/// The steps of `BACKOFF_INTERVALS_SECS` a deferral skips: its first wait starts at the
+/// table's one-minute step, and later ones widen from there.
+const NOT_LANDED_STEP_OFFSET: u8 = 4;
+
 /// Maximum backoff interval in seconds (used when attempts exceed table size): 12h.
 const BACKOFF_MAX_SECS: i64 = 43200;
 
@@ -194,16 +204,28 @@ impl VerificationItem {
     }
 
     /// The same item after a settlement read found its swap did not land but could not act
-    /// on it yet: the next read waits a backoff that widens with each consecutive such read.
-    /// Verification attempts are unchanged, so a deferral never moves the item toward its
-    /// attempt cap.
+    /// on it yet: the next read waits at least [`NOT_LANDED_CONFIRM_MIN_SECS`], and a backoff
+    /// that widens with each consecutive such read. Verification attempts are unchanged, so a
+    /// deferral never moves the item toward its attempt cap.
     pub fn deferred(&self) -> Self {
         let reads = self.not_landed_reads.saturating_add(1);
+        let earliest = Utc::now() + ChronoDuration::seconds(NOT_LANDED_CONFIRM_MIN_SECS);
+        let backoff = retry_at(
+            &self.signature,
+            reads.saturating_add(NOT_LANDED_STEP_OFFSET),
+        );
         Self {
-            next_retry_at: Some(retry_at(&self.signature, reads)),
+            next_retry_at: Some(backoff.max(earliest)),
             not_landed_reads: reads,
             ..self.clone()
         }
+    }
+
+    /// True when deferring this item parks an entry: the read that defers it is the second
+    /// consecutive not-landed read, so the entry is held only because its attributable
+    /// holding is not known to be dust, and its row and slot stay until a later read decides.
+    pub fn deferral_parks_entry(&self) -> bool {
+        self.kind == VerificationKind::Entry && !self.is_dca && self.not_landed_reads == 1
     }
 
     /// True when the previous settlement read already found the swap did not land.
