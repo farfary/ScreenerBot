@@ -138,7 +138,7 @@ pub fn canonicalize(value: &Value) -> String {
     norm(value).to_string()
 }
 
-fn digest_of(canonical: &str) -> Vec<u8> {
+pub(crate) fn digest_of(canonical: &str) -> Vec<u8> {
     Sha256::digest(canonical.as_bytes()).to_vec()
 }
 

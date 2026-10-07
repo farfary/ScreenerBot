@@ -7,8 +7,8 @@
 //! The human sees a pending external-agent request — client label, tool, a
 //! redacted argument summary, expiry — and approves or denies it here, inside
 //! ScreenerBot. The external caller has no route to these handlers, so it can
-//! never approve its own request. Approval executes the stored canonical
-//! request exactly once in the live process.
+//! never approve its own request. Approval claims the stored canonical request
+//! exactly once and runs it on its own task in the live process.
 
 use axum::{
     extract::{Path, Query, State},
@@ -60,14 +60,29 @@ pub async fn decide(
     Json(body): Json<DecideBody>,
 ) -> Response {
     if body.approve {
-        // The approved tool may be a trade: it runs on its own task so a
-        // reloaded dashboard cannot leave the approval stuck in "executing".
+        // The approved tool may be a trade. The request is claimed and checked
+        // here; it then runs on its own task, so neither a dropped dashboard
+        // request nor a slow swap holds the decision. The MCP client reads the
+        // outcome from the approval row.
         let approval_id = id.clone();
-        match tokio::spawn(async move { bridge::execute_approved(&approval_id).await }).await {
-            Ok(Ok(())) => {
+        match tokio::task::spawn_blocking(move || bridge::start_approved(&approval_id)).await {
+            Ok(Ok(started)) => {
+                if let Some(approved) = started {
+                    let run_id = id.clone();
+                    tokio::spawn(async move {
+                        if let Err(e) = approved.run().await {
+                            logger::error(
+                                LogTag::Security,
+                                &format!(
+                                    "agent-control: approved request {run_id} ran but its outcome was not stored: {e}"
+                                ),
+                            );
+                        }
+                    });
+                }
                 logger::info(
                     LogTag::Security,
-                    &format!("agent-control: approved and executed request {id}"),
+                    &format!("agent-control: approved request {id}"),
                 );
                 success_response(serde_json::json!({ "resolved": "approved" }))
             }

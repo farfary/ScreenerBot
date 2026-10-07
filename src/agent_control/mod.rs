@@ -29,6 +29,7 @@ pub mod error;
 pub mod pairing;
 pub mod permissions;
 pub mod store;
+pub mod submissions;
 pub mod tools;
 
 pub use error::{Error, Result};
@@ -40,8 +41,8 @@ pub use tools::{
     create_tool_registry, Tool, ToolCategory, ToolDefinition, ToolRegistry, ToolResult,
 };
 
-/// Initialize the durable agent-control store (pairings, approval queue, audit
-/// log). Called from dashboard-persistence bootstrap in every boot state that
+/// Initialize the durable agent-control store (pairings, approval queue, agent
+/// trade submissions, audit log). Called from dashboard-persistence bootstrap in every boot state that
 /// serves the webserver; idempotent.
 pub fn init_store() -> Result<()> {
     store::init()

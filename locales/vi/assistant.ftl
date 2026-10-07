@@ -301,6 +301,7 @@ assistant-tool-buy-token = Mua token
 assistant-tool-add-to-position = Thêm vào vị thế
 assistant-tool-sell-token = Bán token
 assistant-tool-close-position = Đóng vị thế
+assistant-tool-get-trade-status = Lấy trạng thái giao dịch
 assistant-tool-get-config = Lấy cấu hình
 assistant-tool-describe-config = Mô tả cấu hình
 assistant-tool-update-config = Cập nhật cấu hình

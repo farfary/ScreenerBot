@@ -314,6 +314,7 @@ assistant-tool-buy-token = 토큰 매수
 assistant-tool-add-to-position = 포지션 추가 매수
 assistant-tool-sell-token = 토큰 매도
 assistant-tool-close-position = 포지션 종료
+assistant-tool-get-trade-status = 거래 상태 조회
 assistant-tool-get-config = 설정 조회
 assistant-tool-describe-config = 설정 설명
 assistant-tool-update-config = 설정 업데이트

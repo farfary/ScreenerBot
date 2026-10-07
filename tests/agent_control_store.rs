@@ -18,6 +18,7 @@
 
 use std::sync::{LazyLock, Mutex, MutexGuard, PoisonError};
 
+use screenerbot::agent_control::submissions::{self, SubmissionState};
 use screenerbot::agent_control::{
     approvals, audit, pairing, store, Error, PermissionLevel, ToolPermissions,
 };
@@ -317,6 +318,159 @@ fn interrupted_execution_recovers_to_failed_and_is_never_replayed() {
         Some(serde_json::json!(false))
     );
     assert_eq!(approval_row_count(client, "buy_token"), 1);
+}
+
+/// Open the temp store directly, for reads and for ageing rows.
+fn raw_store() -> rusqlite::Connection {
+    let path = std::env::var("SCREENERBOT_AGENT_CONTROL_DB").expect("db path set by setup()");
+    rusqlite::Connection::open(path).expect("open temp agent_control.db")
+}
+
+fn submission_row_count(client_id: &str) -> i64 {
+    raw_store()
+        .query_row(
+            "SELECT COUNT(*) FROM submissions WHERE client_id = ?1",
+            rusqlite::params![client_id],
+            |r| r.get(0),
+        )
+        .expect("count submissions")
+}
+
+/// A retried trade call (a dropped answer, an agent that repeats itself) must
+/// never trade twice: every identical call racing in lands on one submission,
+/// and exactly one caller is told to start the trade.
+#[test]
+fn identical_trade_calls_share_one_submission_and_start_it_once() {
+    let _guard = setup();
+    let client = "submit-race-client";
+    let args = serde_json::json!({ "mint_address": "RACE", "amount_native": 0.1 });
+
+    let handles: Vec<_> = std::thread::scope(|scope| {
+        let workers: Vec<_> = (0..8)
+            .map(|n| {
+                let args = args.clone();
+                scope.spawn(move || {
+                    submissions::submit_or_reuse(client, "add_to_position", &args, &format!("c{n}"))
+                        .unwrap()
+                })
+            })
+            .collect();
+        workers.into_iter().map(|h| h.join().unwrap()).collect()
+    });
+
+    let first = &handles[0].trade_id;
+    assert!(handles.iter().all(|h| &h.trade_id == first));
+    assert_eq!(handles.iter().filter(|h| h.created).count(), 1);
+    assert_eq!(submission_row_count(client), 1);
+
+    // Argument order on the wire does not change the identity.
+    let reordered = serde_json::json!({ "amount_native": 0.1, "mint_address": "RACE" });
+    let again = submissions::submit_or_reuse(client, "add_to_position", &reordered, "c9").unwrap();
+    assert_eq!(&again.trade_id, first);
+    assert!(!again.created);
+
+    // A different size or tool is a different trade.
+    let other_size = serde_json::json!({ "mint_address": "RACE", "amount_native": 0.2 });
+    let sized =
+        submissions::submit_or_reuse(client, "add_to_position", &other_size, "c10").unwrap();
+    assert!(sized.created);
+    let sold = submissions::submit_or_reuse(client, "sell_token", &args, "c11").unwrap();
+    assert!(sold.created);
+    // Another connection asking the same is its own trade.
+    let elsewhere =
+        submissions::submit_or_reuse("submit-race-other", "add_to_position", &args, "c12").unwrap();
+    assert!(elsewhere.created);
+}
+
+/// The outcome lands on the submission; a retry inside the window reads it
+/// back instead of trading, and only a call past the window trades again.
+#[test]
+fn a_finished_trade_is_returned_inside_the_window_and_traded_again_only_after_it() {
+    let _guard = setup();
+    let client = "submit-window-client";
+    let args = serde_json::json!({ "mint_address": "WIN", "percentage": 50.0 });
+
+    let submitted = submissions::submit_or_reuse(client, "sell_token", &args, "c1").unwrap();
+    assert_eq!(submitted.state, SubmissionState::Submitted);
+    let result = serde_json::json!({ "success": true, "data": { "signature": "SIG" } });
+    assert!(submissions::finish(&submitted.trade_id, true, &result).unwrap());
+    assert!(
+        !submissions::finish(&submitted.trade_id, false, &result).unwrap(),
+        "an outcome is recorded once"
+    );
+
+    let viewed = submissions::view(&submitted.trade_id)
+        .unwrap()
+        .expect("retained");
+    assert_eq!(viewed.state, SubmissionState::Done);
+    assert_eq!(viewed.result, Some(result.clone()));
+
+    let retry = submissions::submit_or_reuse(client, "sell_token", &args, "c2").unwrap();
+    assert_eq!(retry.trade_id, submitted.trade_id);
+    assert!(!retry.created);
+    assert_eq!(retry.result, Some(result));
+
+    let window = submissions::REUSE_WINDOW.as_secs() as i64;
+    raw_store()
+        .execute(
+            "UPDATE submissions SET created_at = created_at - ?1 WHERE id = ?2",
+            rusqlite::params![window + 1, submitted.trade_id],
+        )
+        .unwrap();
+    let later = submissions::submit_or_reuse(client, "sell_token", &args, "c3").unwrap();
+    assert!(
+        later.created,
+        "past the window the same call is a new trade"
+    );
+    assert_ne!(later.trade_id, submitted.trade_id);
+}
+
+/// A trade still running is never traded again, however old it is.
+#[test]
+fn a_running_trade_is_reused_past_the_window() {
+    let _guard = setup();
+    let client = "submit-running-client";
+    let args = serde_json::json!({ "mint_address": "RUN" });
+    let running = submissions::submit_or_reuse(client, "buy_token", &args, "c1").unwrap();
+    raw_store()
+        .execute(
+            "UPDATE submissions SET created_at = created_at - 86400 WHERE id = ?1",
+            rusqlite::params![running.trade_id],
+        )
+        .unwrap();
+    store::sweep().unwrap();
+    let retry = submissions::submit_or_reuse(client, "buy_token", &args, "c2").unwrap();
+    assert_eq!(retry.trade_id, running.trade_id);
+    assert!(!retry.created);
+}
+
+/// A trade running when the process stopped may have sent its swap: it is
+/// reported interrupted, keeps its row, and a late finish cannot rewrite it.
+#[test]
+fn a_trade_running_at_shutdown_is_interrupted_and_never_replayed() {
+    let _guard = setup();
+    let client = "submit-crash-client";
+    let args = serde_json::json!({ "position_id": 7 });
+    let running = submissions::submit_or_reuse(client, "close_position", &args, "c1").unwrap();
+
+    assert!(store::recover_interrupted_submissions().unwrap() >= 1);
+    let viewed = submissions::view(&running.trade_id)
+        .unwrap()
+        .expect("retained");
+    assert_eq!(viewed.state, SubmissionState::Interrupted);
+    let error = viewed
+        .result
+        .as_ref()
+        .and_then(|r| r.get("error"))
+        .and_then(|e| e.as_str())
+        .expect("an interrupted trade explains itself");
+    assert!(error.contains("may have been sent"), "{error}");
+    assert!(!submissions::finish(&running.trade_id, true, &serde_json::json!({})).unwrap());
+
+    let retry = submissions::submit_or_reuse(client, "close_position", &args, "c2").unwrap();
+    assert_eq!(retry.trade_id, running.trade_id);
+    assert_eq!(retry.state, SubmissionState::Interrupted);
+    assert!(submissions::view("no-such-trade").unwrap().is_none());
 }
 
 #[test]

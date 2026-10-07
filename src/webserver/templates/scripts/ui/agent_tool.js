@@ -23,6 +23,7 @@ export const AGENT_TOOL_LABELS = Object.freeze({
   add_to_position: "assistant-tool-add-to-position",
   sell_token: "assistant-tool-sell-token",
   close_position: "assistant-tool-close-position",
+  get_trade_status: "assistant-tool-get-trade-status",
   get_config: "assistant-tool-get-config",
   describe_config: "assistant-tool-describe-config",
   update_config: "assistant-tool-update-config",

@@ -33,7 +33,9 @@ use trader::{
     ApplyTraderTemplateTool, GetTraderStatsTool, GetTraderStatusTool, ListTraderTemplatesTool,
     ManageLossLimitTool, SetTraderEnabledTool, SetTraderMonitorTool,
 };
-use trading::{AddToPositionTool, BuyTokenTool, ClosePositionTool, SellTokenTool};
+use trading::{
+    AddToPositionTool, BuyTokenTool, ClosePositionTool, GetTradeStatusTool, SellTokenTool,
+};
 
 /// Category of tool for organization and UI display
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq, Hash)]
@@ -107,6 +109,14 @@ pub trait Tool: Send + Sync {
 
     /// Execute the tool with the given parameters
     async fn execute(&self, params: serde_json::Value) -> ToolResult;
+
+    /// Whether the tool signs and sends an on-chain transaction. Such a tool
+    /// answers an agent connection at once with a trade id and runs on its own
+    /// task, because its swap can settle past the connection's deadline; the
+    /// outcome is read through `get_trade_status` (`agent_control::submissions`).
+    fn sends_transaction(&self) -> bool {
+        false
+    }
 }
 
 /// Registry of all available tools
@@ -204,6 +214,7 @@ pub fn create_tool_registry() -> ToolRegistry {
     registry.register(Arc::new(AddToPositionTool));
     registry.register(Arc::new(SellTokenTool));
     registry.register(Arc::new(ClosePositionTool));
+    registry.register(Arc::new(GetTradeStatusTool));
 
     // Config tools
     registry.register(Arc::new(GetConfigTool));
@@ -290,7 +301,7 @@ mod tests {
         let definitions = registry.list_definitions();
 
         // Should have all registered tools
-        assert_eq!(definitions.len(), 37);
+        assert_eq!(definitions.len(), 38);
 
         // Check that we have tools in each category
         let by_category = registry.get_tools_by_category();
@@ -332,6 +343,7 @@ mod tests {
             "get_trader_status",
             "get_trader_stats",
             "list_trader_templates",
+            "get_trade_status",
         ] {
             let def = registry
                 .get(name)
@@ -352,7 +364,7 @@ mod tests {
         // Should be an array
         assert!(schema.is_array());
         let tools = schema.as_array().unwrap();
-        assert_eq!(tools.len(), 37);
+        assert_eq!(tools.len(), 38);
 
         // Check format
         let first_tool = &tools[0];
@@ -397,6 +409,52 @@ mod tests {
                 "update_config",
                 "update_copy_task",
             ]
+        );
+    }
+
+    /// Exactly the tools that send a swap answer an agent connection with a
+    /// trade id; every other tool, money-moving paper books included, answers
+    /// with its result.
+    #[test]
+    fn only_the_swap_tools_send_a_transaction() {
+        let registry = create_tool_registry();
+        let mut sending: Vec<String> = registry
+            .list_definitions()
+            .into_iter()
+            .map(|def| def.name)
+            .filter(|name| {
+                registry
+                    .get(name)
+                    .is_some_and(|tool| tool.sends_transaction())
+            })
+            .collect();
+        sending.sort();
+        assert_eq!(
+            sending,
+            vec![
+                "add_to_position",
+                "buy_token",
+                "close_position",
+                "sell_token"
+            ]
+        );
+        for name in &sending {
+            let def = registry.get(name).expect("registered").definition();
+            assert!(def.mutating, "{name} sends a transaction, so it mutates");
+            assert_eq!(def.category, ToolCategory::Trading);
+        }
+
+        let status = registry
+            .get("get_trade_status")
+            .expect("get_trade_status is registered")
+            .definition();
+        let positions = registry
+            .get("get_positions")
+            .expect("get_positions is registered")
+            .definition();
+        assert_eq!(
+            status.category, positions.category,
+            "reading a trade's outcome needs the permission that reads positions"
         );
     }
 

@@ -304,6 +304,7 @@ assistant-tool-buy-token = Beli Token
 assistant-tool-add-to-position = Tambah ke Posisi
 assistant-tool-sell-token = Jual Token
 assistant-tool-close-position = Tutup Posisi
+assistant-tool-get-trade-status = Ambil Status Transaksi
 assistant-tool-get-config = Ambil Konfigurasi
 assistant-tool-describe-config = Jelaskan Konfigurasi
 assistant-tool-update-config = Perbarui Konfigurasi

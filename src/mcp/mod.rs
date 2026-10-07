@@ -81,8 +81,15 @@ enum BridgeError {
     NotPaired,
     /// No running app discoverable from `agent-runtime.json`.
     NotRunning,
-    /// The origin could not be reached at all (connect/timeout/transport).
+    /// The origin could not be reached at all: the connection was never made,
+    /// so nothing was delivered.
     Unreachable,
+    /// The request may have been delivered, but no answer arrived before the
+    /// deadline. Internal to `send_once`; `bridge_post` resolves it.
+    NoAnswer,
+    /// A state-changing request may have run, but no answer arrived. It is
+    /// never retried and never reported as unreachable.
+    OutcomeUnknown,
     /// The app answered with a non-success status. The message is server-authored
     /// and already non-secret, so it is safe to surface verbatim.
     Rejected(String),
@@ -97,9 +104,14 @@ impl BridgeError {
             BridgeError::NotRunning => {
                 "ScreenerBot is not running (no agent-runtime.json)".to_owned()
             }
-            BridgeError::Unreachable => {
+            BridgeError::Unreachable | BridgeError::NoAnswer => {
                 "ScreenerBot is not reachable at its known local address".to_owned()
             }
+            BridgeError::OutcomeUnknown => "ScreenerBot did not answer in time, so the \
+                 outcome of this call is unknown: it may have run. Read the current state \
+                 (get_trade_status for a trade, get_positions, or the setting it changed) \
+                 before retrying."
+                .to_owned(),
             BridgeError::Rejected(message) => message.clone(),
         }
     }
@@ -196,13 +208,16 @@ impl McpServer {
             .json(body)
             .send()
             .await
-            .map_err(|_| BridgeError::Unreachable)?;
+            .map_err(|e| {
+                if e.is_connect() {
+                    BridgeError::Unreachable
+                } else {
+                    BridgeError::NoAnswer
+                }
+            })?;
 
         let status = response.status();
-        let value: serde_json::Value = response
-            .json()
-            .await
-            .map_err(|_| BridgeError::Unreachable)?;
+        let value: serde_json::Value = response.json().await.map_err(|_| BridgeError::NoAnswer)?;
 
         if status.is_success() {
             return Ok(value);
@@ -219,7 +234,9 @@ impl McpServer {
     /// POST a JSON body to a bridge path against the current runtime origin, with
     /// a single rediscovery retry on a transport failure — only when the origin
     /// actually changed, and never for a state-changing request. A rejection
-    /// (the app answered) is returned as-is: it is not a discovery problem.
+    /// (the app answered) is returned as-is: it is not a discovery problem. A
+    /// state-changing request that may have been delivered but got no answer is
+    /// an unknown outcome: the app is reachable and the call may have run.
     async fn bridge_post(
         &self,
         path: &str,
@@ -234,7 +251,10 @@ impl McpServer {
             .await
         {
             Ok(value) => Ok(value),
-            Err(BridgeError::Unreachable) => {
+            Err(BridgeError::NoAnswer) if mutation == Mutation::StateChanging => {
+                Err(BridgeError::OutcomeUnknown)
+            }
+            Err(BridgeError::Unreachable | BridgeError::NoAnswer) => {
                 let found = read_runtime_info().map(|info| info.url);
                 match plan_rediscovery(&origin, found.as_deref(), mutation) {
                     Rediscovery::RetryWith(next) => {
@@ -374,6 +394,7 @@ impl ServerHandler for McpServer {
 
         match value.get("status").and_then(|s| s.as_str()).unwrap_or("") {
             "executed" => Ok(result_to_call(value.get("result"))),
+            "submitted" => Ok(submitted_to_call(&value)),
             "denied" => Ok(error_result(
                 value
                     .get("reason")
@@ -437,6 +458,29 @@ fn result_to_call(result: Option<&serde_json::Value>) -> CallToolResponse {
             serde_json::to_string(value).unwrap_or_else(|_| "{\"success\":false}".to_owned());
         CallToolResult::error(vec![ContentBlock::text(text)]).into()
     }
+}
+
+/// A transaction-sending tool answers with its trade id at once; the agent
+/// reads the outcome through `get_trade_status`.
+fn submitted_to_call(value: &serde_json::Value) -> CallToolResponse {
+    let Some(trade_id) = value.get("trade_id").and_then(|id| id.as_str()) else {
+        return error_result("The trade was submitted but its trade id is missing.");
+    };
+    let mut answer = serde_json::json!({
+        "trade_id": trade_id,
+        "status": value.get("state").cloned().unwrap_or(serde_json::Value::Null),
+        "reused": value.get("reused").cloned().unwrap_or(serde_json::Value::Bool(false)),
+        "next": format!(
+            "The trade runs in ScreenerBot. Call get_trade_status with this trade_id until \
+             its status is no longer submitted. Repeating this same call within {} minutes \
+             returns this trade instead of trading again.",
+            crate::agent_control::submissions::REUSE_WINDOW.as_secs() / 60
+        ),
+    });
+    if let Some(result) = value.get("result") {
+        answer["result"] = result.clone();
+    }
+    CallToolResult::structured(answer).into()
 }
 
 fn error_result(message: &str) -> CallToolResponse {
@@ -885,6 +929,72 @@ mod tests {
 
         let none = result_to_call(None);
         let is_err = matches!(none, CallToolResponse::Complete(r) if r.is_error == Some(true));
+        assert!(is_err);
+    }
+
+    /// A trade call past the transport deadline may still run in the app. Its
+    /// answer must say the outcome is unknown, never that the app is
+    /// unreachable, and the cached origin stays: the app answered the socket.
+    #[tokio::test]
+    async fn a_state_changing_call_without_an_answer_has_an_unknown_outcome() {
+        let listener = tokio::net::TcpListener::bind("127.0.0.1:0")
+            .await
+            .expect("bind a local listener");
+        let origin = format!("http://{}", listener.local_addr().expect("local address"));
+        let holder = tokio::spawn(async move {
+            let (socket, _) = listener.accept().await.expect("accept the call");
+            tokio::time::sleep(Duration::from_secs(5)).await;
+            drop(socket);
+        });
+        let http = reqwest::Client::builder()
+            .timeout(Duration::from_millis(200))
+            .build()
+            .expect("client");
+        let s = McpServer::new(
+            http,
+            Some(origin.clone()),
+            Some("cid".to_owned()),
+            Some("sec".to_owned()),
+        );
+
+        let outcome = s
+            .bridge_post(
+                BRIDGE_CALL,
+                serde_json::json!({ "name": "add_to_position" }),
+                Mutation::StateChanging,
+            )
+            .await;
+        let Err(error) = outcome else {
+            panic!("a call without an answer must not succeed");
+        };
+        assert!(matches!(error, BridgeError::OutcomeUnknown));
+        let message = error.user_message();
+        assert!(!message.contains("not reachable"), "{message}");
+        assert!(message.contains("unknown"), "{message}");
+        assert_eq!(s.current_origin().as_deref(), Some(origin.as_str()));
+        holder.abort();
+    }
+
+    #[test]
+    fn a_submitted_trade_answers_with_its_trade_id_and_how_to_read_it() {
+        let answer = submitted_to_call(&serde_json::json!({
+            "status": "submitted",
+            "trade_id": "t-1",
+            "state": "submitted",
+            "reused": false,
+        }));
+        let CallToolResponse::Complete(result) = answer else {
+            panic!("a submission answers at once");
+        };
+        assert_ne!(result.is_error, Some(true));
+        let text = serde_json::to_string(&result.structured_content).expect("serializes");
+        assert!(
+            text.contains("t-1") && text.contains("get_trade_status"),
+            "{text}"
+        );
+
+        let missing = submitted_to_call(&serde_json::json!({ "status": "submitted" }));
+        let is_err = matches!(missing, CallToolResponse::Complete(r) if r.is_error == Some(true));
         assert!(is_err);
     }
 

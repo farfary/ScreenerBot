@@ -1,15 +1,17 @@
 // Copyright (c) 2024-2026 ScreenerBot (screenerbot.io)
 // SPDX-License-Identifier: BUSL-1.1
 
-//! Agent-facing manual trading tools: buy, add to (DCA), partial sell and close.
-//! Every tool passes the same `trader::manual::guard` preflight as the dashboard
-//! trade dialog, then calls the canonical `trader::manual` API.
+//! Agent-facing manual trading tools: buy, add to (DCA), partial sell and close,
+//! plus the status read of a trade an agent connection submitted.
+//! Every trade tool passes the same `trader::manual::guard` preflight as the
+//! dashboard trade dialog, then calls the canonical `trader::manual` API.
 
 use async_trait::async_trait;
 use serde::{Deserialize, Serialize};
 use serde_json::json;
 
 use super::{Tool, ToolCategory, ToolDefinition, ToolResult};
+use crate::agent_control::submissions;
 use crate::config::with_config;
 use crate::positions::{self, PositionManagement};
 use crate::trader::manual::{self, guard};
@@ -170,6 +172,9 @@ impl Tool for BuyTokenTool {
             format!("Bought with {size} SOL"),
         )
     }
+    fn sends_transaction(&self) -> bool {
+        true
+    }
 }
 
 // ============================================================================
@@ -248,6 +253,9 @@ impl Tool for AddToPositionTool {
             params.mint_address,
             format!("Added {size} SOL to the position"),
         )
+    }
+    fn sends_transaction(&self) -> bool {
+        true
     }
 }
 
@@ -329,6 +337,9 @@ impl Tool for SellTokenTool {
             .unwrap_or_else(|| with_config(|cfg| cfg.positions.partial_exit_default_pct));
         sell(params.mint_address, Some(percentage), params.slippage_pct).await
     }
+    fn sends_transaction(&self) -> bool {
+        true
+    }
 }
 
 // ============================================================================
@@ -376,6 +387,73 @@ impl Tool for ClosePositionTool {
             return ToolResult::error(format!("Position {} is already closed", params.position_id));
         }
         sell(position.mint, None, params.slippage_pct).await
+    }
+    fn sends_transaction(&self) -> bool {
+        true
+    }
+}
+
+// ============================================================================
+// GetTradeStatusTool
+// ============================================================================
+
+pub struct GetTradeStatusTool;
+
+#[derive(Deserialize)]
+#[serde(deny_unknown_fields)]
+struct GetTradeStatusParams {
+    trade_id: String,
+}
+
+#[async_trait]
+impl Tool for GetTradeStatusTool {
+    fn definition(&self) -> ToolDefinition {
+        ToolDefinition {
+            name: "get_trade_status".to_owned(),
+            description: format!(
+                "Read the outcome of a trade an agent connection submitted. buy_token, \
+                 add_to_position, sell_token and close_position answer an agent connection \
+                 at once with a trade_id and run in ScreenerBot; poll this tool with that \
+                 trade_id until the state is no longer submitted. States: submitted (still \
+                 running), done (the result holds the signature and position), failed (the \
+                 result holds the error), interrupted (the app stopped while the trade ran; \
+                 its swap may have been sent, so read get_positions before trading again). \
+                 Repeating the same trade call within {} minutes returns the same trade_id \
+                 instead of trading again.",
+                submissions::REUSE_WINDOW.as_secs() / 60
+            ),
+            category: ToolCategory::Portfolio,
+            parameters: json!({
+                "type": "object",
+                "properties": {
+                    "trade_id": { "type": "string", "description": "The trade_id a trade call returned" }
+                },
+                "required": ["trade_id"]
+            }),
+            mutating: false,
+            requires_confirmation: false,
+        }
+    }
+
+    async fn execute(&self, params: serde_json::Value) -> ToolResult {
+        let params: GetTradeStatusParams = match serde_json::from_value(params) {
+            Ok(p) => p,
+            Err(e) => return ToolResult::error(format!("Invalid parameters: {e}")),
+        };
+        let trade_id = params.trade_id;
+        match tokio::task::spawn_blocking({
+            let trade_id = trade_id.clone();
+            move || submissions::view(&trade_id)
+        })
+        .await
+        {
+            Ok(Ok(Some(handle))) => ToolResult::success(json!(handle)),
+            Ok(Ok(None)) => ToolResult::error(format!(
+                "No trade {trade_id} is retained. Read get_positions for its outcome."
+            )),
+            Ok(Err(error)) => ToolResult::error(error.to_string()),
+            Err(_) => ToolResult::error("The trade status read did not complete."),
+        }
     }
 }
 

@@ -2,7 +2,7 @@
 // SPDX-License-Identifier: BUSL-1.1
 
 //! Durable storage for the agent-control boundary: client pairings, the
-//! external-agent approval queue and the audit log.
+//! external-agent approval queue, agent trade submissions and the audit log.
 //!
 //! One pooled SQLite database (`agent_control.db`) built through the canonical
 //! `database::configure_connection` init hook so the WAL PRAGMAs survive r2d2
@@ -20,14 +20,16 @@ use rusqlite::OptionalExtension;
 use crate::agent_control::audit::{self, AuditContext, AuditKind};
 use crate::agent_control::error::{Error, Result};
 use crate::agent_control::permissions::{PermissionLevel, ToolPermissions};
+use crate::agent_control::submissions;
 use crate::database;
 use crate::errors::DatabaseError;
 use crate::logger::{self, LogTag};
 
 /// v1 was the initial schema. v2 replaces a pairing's coarse `scope` with its
 /// own per-category permission policy (`permissions`), so an owner can grant a
-/// connection everything and then limit exactly the categories they want.
-const SCHEMA_VERSION: u32 = 2;
+/// connection everything and then limit exactly the categories they want. v3
+/// adds `submissions`, the trades an agent connection submitted.
+const SCHEMA_VERSION: u32 = 3;
 
 /// Audit rows older than this are pruned by the periodic sweep.
 const AUDIT_RETENTION_SECS: i64 = 30 * 24 * 60 * 60;
@@ -96,6 +98,21 @@ CREATE INDEX IF NOT EXISTS idx_approvals_state_expiry ON approvals(state, expire
 -- this: a concurrent identical call hits the conflict and reuses the winner.
 CREATE UNIQUE INDEX IF NOT EXISTS idx_approvals_binding
     ON approvals(client_id, tool, args_digest);
+
+CREATE TABLE IF NOT EXISTS submissions (
+    id             TEXT PRIMARY KEY,
+    client_id      TEXT NOT NULL,
+    tool           TEXT NOT NULL,
+    args_digest    BLOB NOT NULL,
+    args_summary   TEXT NOT NULL,
+    correlation_id TEXT NOT NULL,
+    state          TEXT NOT NULL,
+    created_at     INTEGER NOT NULL,
+    finished_at    INTEGER,
+    result_json    TEXT
+);
+CREATE INDEX IF NOT EXISTS idx_submissions_binding
+    ON submissions(client_id, tool, args_digest, created_at);
 
 CREATE TABLE IF NOT EXISTS audit (
     id             INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -172,6 +189,24 @@ pub fn init() -> Result<()> {
                 "agent-control: {recovered} approval(s) were mid-execution at shutdown; \
                  marked failed and NOT replayed"
             ),
+        );
+    }
+    let interrupted = submissions::recover_interrupted(&connection)?;
+    if interrupted > 0 {
+        logger::warning(
+            LogTag::Security,
+            &format!(
+                "agent-control: {interrupted} agent trade(s) were running at shutdown; \
+                 marked interrupted and NOT replayed"
+            ),
+        );
+        audit::record(
+            AuditKind::Execution,
+            &AuditContext::default(),
+            "interrupted_recovery",
+            Some(&format!(
+                "{interrupted} running agent trade(s) marked interrupted on boot"
+            )),
         );
     }
 
@@ -326,8 +361,17 @@ pub fn recover_interrupted_approvals() -> Result<usize> {
     recover_interrupted(&connection)
 }
 
-/// Periodic maintenance: expire overdue pending approvals and prune the audit
-/// log to the retention window and row cap.
+/// Run the interrupted-submission recovery on demand (it also runs once at
+/// `init`). A running agent trade becomes `interrupted` and is never replayed.
+/// Returns how many were marked.
+pub fn recover_interrupted_submissions() -> Result<usize> {
+    let connection = conn()?;
+    submissions::recover_interrupted(&connection)
+}
+
+/// Periodic maintenance: expire overdue pending approvals, prune finished
+/// agent trade submissions, and prune the audit log to the retention window and
+/// row cap.
 pub fn sweep() -> Result<()> {
     let connection = conn()?;
     let now = now_unix();
@@ -346,6 +390,7 @@ pub fn sweep() -> Result<()> {
         );
     }
 
+    submissions::prune(&connection)?;
     prune_audit(&connection)
 }
 

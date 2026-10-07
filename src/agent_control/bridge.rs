@@ -14,13 +14,17 @@
 use serde::Serialize;
 use serde_json::Value;
 
+use std::sync::Arc;
+
 use crate::agent_control::approvals;
 use crate::agent_control::audit::{self, AuditContext, AuditKind};
 use crate::agent_control::error::{Error, Result};
 use crate::agent_control::pairing::{self, AuthedClient};
+use crate::agent_control::submissions::{self, SubmissionState};
 use crate::agent_control::{
-    create_tool_registry, decide, Decision, InvocationSource, ToolDefinition, ToolResult,
+    create_tool_registry, decide, Decision, InvocationSource, Tool, ToolDefinition, ToolResult,
 };
+use crate::global::ActiveToolGuard;
 
 /// The outcome of a `call_tool` bridge request, translated verbatim by the web
 /// layer into the MCP adapter's response.
@@ -29,6 +33,16 @@ use crate::agent_control::{
 pub enum CallOutcome {
     /// The tool ran in the live process.
     Executed { result: ToolResult },
+    /// A transaction-sending tool was submitted and runs on its own task, or an
+    /// identical call already submitted it (`reused`). Its outcome is read with
+    /// `get_trade_status`; `result` is present once it finished.
+    Submitted {
+        trade_id: String,
+        state: SubmissionState,
+        reused: bool,
+        #[serde(skip_serializing_if = "Option::is_none")]
+        result: Option<serde_json::Value>,
+    },
     /// Policy denies this tool for this client.
     Denied { reason: String },
     /// A human must approve the call inside ScreenerBot before it can run.
@@ -164,13 +178,23 @@ pub async fn call_tool(
         }
         Decision::Execute => {
             audit::record(AuditKind::AuthzDecision, &ctx, "execute", None);
-            let Some(_active_tool) = crate::global::begin_tool() else {
+            let Some(active_tool) = crate::global::begin_tool() else {
                 let reason = "An application update is restarting the tool runtime.";
                 audit::record(AuditKind::Execution, &ctx, "failed", Some(reason));
                 return Ok(CallOutcome::Executed {
                     result: ToolResult::error(reason),
                 });
             };
+            if tool.sends_transaction() {
+                return submit(
+                    &client.client_id,
+                    tool,
+                    arguments,
+                    correlation_id,
+                    ctx,
+                    active_tool,
+                );
+            }
             let result = tool.execute(arguments).await;
             audit::record(
                 AuditKind::Execution,
@@ -208,6 +232,70 @@ pub async fn call_tool(
     }
 }
 
+/// Submit a transaction-sending tool and answer at once with its trade id.
+///
+/// A new submission runs on its own task, holding the active-tool guard, and
+/// stores its result for `get_trade_status`; nothing awaits it, so a dropped or
+/// timed-out agent request can neither cancel nor repeat it. An identical call
+/// inside the reuse window gets the existing trade id and starts nothing.
+fn submit(
+    client_id: &str,
+    tool: Arc<dyn Tool>,
+    arguments: Value,
+    correlation_id: &str,
+    ctx: AuditContext,
+    active_tool: ActiveToolGuard,
+) -> Result<CallOutcome> {
+    let name = tool.definition().name;
+    let handle = submissions::submit_or_reuse(client_id, &name, &arguments, correlation_id)?;
+    if !handle.created {
+        audit::record(AuditKind::Execution, &ctx, "reused", Some(&handle.trade_id));
+        return Ok(CallOutcome::Submitted {
+            trade_id: handle.trade_id,
+            state: handle.state,
+            reused: true,
+            result: handle.result,
+        });
+    }
+
+    audit::record(
+        AuditKind::Execution,
+        &ctx,
+        "submitted",
+        Some(&handle.trade_id),
+    );
+    let trade_id = handle.trade_id.clone();
+    tokio::spawn(async move {
+        let _active_tool = active_tool;
+        let result = tool.execute(arguments).await;
+        let value = serde_json::to_value(&result).unwrap_or(Value::Null);
+        match submissions::finish(&trade_id, result.success, &value) {
+            Ok(true) => {}
+            Ok(false) => crate::logger::warning(
+                crate::logger::LogTag::Security,
+                &format!("agent-control: trade {trade_id} finished after it was marked interrupted"),
+            ),
+            Err(error) => crate::logger::error(
+                crate::logger::LogTag::Security,
+                &format!("agent-control: trade {trade_id} finished but its outcome was not stored: {error}"),
+            ),
+        }
+        audit::record(
+            AuditKind::Execution,
+            &ctx,
+            if result.success { "done" } else { "failed" },
+            Some(&trade_id),
+        );
+    });
+
+    Ok(CallOutcome::Submitted {
+        trade_id: handle.trade_id,
+        state: handle.state,
+        reused: false,
+        result: None,
+    })
+}
+
 /// Poll one approval. Scoped to the owning client.
 pub fn approval_status(
     client_id: &str,
@@ -218,12 +306,22 @@ pub fn approval_status(
     approvals::view_for_client(approval_id, &client.client_id)
 }
 
-/// Run a human-approved request exactly once, in the live process. Invoked only
-/// by the dashboard `decide` route — never reachable from the bridge. Claims
-/// the row (exactly-once), re-checks policy against the pairing's *current*
-/// permissions, executes the stored canonical arguments, and records the sanitized
-/// result for the MCP client to poll.
-pub async fn execute_approved(approval_id: &str) -> Result<()> {
+/// A claimed approval that passed its re-checks and is `executing`, ready to
+/// run. Built by `start_approved`; consumed by `run`.
+pub struct ApprovedRun {
+    approval_id: String,
+    tool: Arc<dyn Tool>,
+    arguments: Value,
+    ctx: AuditContext,
+    _active_tool: ActiveToolGuard,
+}
+
+/// Claim a human-approved request exactly once and prepare it to run. Invoked
+/// only by the dashboard `decide` route — never reachable from the bridge.
+/// Claims the row (exactly-once) and re-checks policy against the pairing's
+/// *current* permissions. Returns `None` when a re-check failed the request
+/// closed; the stored result says why.
+pub fn start_approved(approval_id: &str) -> Result<Option<ApprovedRun>> {
     let claimed = approvals::claim(approval_id)?;
     let ctx = AuditContext {
         client_id: Some(claimed.client_id.clone()),
@@ -232,7 +330,7 @@ pub async fn execute_approved(approval_id: &str) -> Result<()> {
     };
     audit::record(AuditKind::ApprovalDecided, &ctx, "approved", None);
 
-    let fail = |detail: &str| -> Result<()> {
+    let fail = |detail: &str| -> Result<Option<ApprovedRun>> {
         let _ = approvals::mark_executing(approval_id);
         let _ = approvals::finish(
             approval_id,
@@ -240,7 +338,7 @@ pub async fn execute_approved(approval_id: &str) -> Result<()> {
             &serde_json::json!({ "success": false, "error": detail }),
         );
         audit::record(AuditKind::Execution, &ctx, "failed", Some(detail));
-        Ok(())
+        Ok(None)
     };
 
     if !enabled() {
@@ -260,19 +358,33 @@ pub async fn execute_approved(approval_id: &str) -> Result<()> {
     }
 
     approvals::mark_executing(approval_id)?;
-    let Some(_active_tool) = crate::global::begin_tool() else {
+    let Some(active_tool) = crate::global::begin_tool() else {
         return fail("an application update is restarting the tool runtime");
     };
-    let result = tool.execute(claimed.canonical_args.clone()).await;
-    let value = serde_json::to_value(&result).unwrap_or(Value::Null);
-    approvals::finish(approval_id, result.success, &value)?;
-    audit::record(
-        AuditKind::Execution,
-        &ctx,
-        if result.success { "done" } else { "failed" },
-        None,
-    );
-    Ok(())
+    Ok(Some(ApprovedRun {
+        approval_id: approval_id.to_owned(),
+        tool,
+        arguments: claimed.canonical_args,
+        ctx,
+        _active_tool: active_tool,
+    }))
+}
+
+impl ApprovedRun {
+    /// Execute the stored canonical arguments and record the sanitized result
+    /// for the MCP client to poll through `approval_status`.
+    pub async fn run(self) -> Result<()> {
+        let result = self.tool.execute(self.arguments).await;
+        let value = serde_json::to_value(&result).unwrap_or(Value::Null);
+        approvals::finish(&self.approval_id, result.success, &value)?;
+        audit::record(
+            AuditKind::Execution,
+            &self.ctx,
+            if result.success { "done" } else { "failed" },
+            None,
+        );
+        Ok(())
+    }
 }
 
 /// Deny a pending approval (dashboard `decide` route, `approve = false`).

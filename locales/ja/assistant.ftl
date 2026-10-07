@@ -304,6 +304,7 @@ assistant-tool-buy-token = トークンを購入
 assistant-tool-add-to-position = ポジションに追加購入
 assistant-tool-sell-token = トークンを売却
 assistant-tool-close-position = ポジションをクローズ
+assistant-tool-get-trade-status = 取引のステータスを取得
 assistant-tool-get-config = 設定を取得
 assistant-tool-describe-config = 設定を説明
 assistant-tool-update-config = 設定を更新
