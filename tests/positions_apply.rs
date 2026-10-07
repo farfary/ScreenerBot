@@ -2712,6 +2712,62 @@ fn a_restatement_that_raises_the_loss_past_the_limit_pauses_entries() {
     );
 }
 
+/// Issues `method` on `path` against the dashboard router and returns the status.
+async fn call_dashboard(method: &str, path: &str) -> axum::http::StatusCode {
+    use tower::ServiceExt as _;
+    let router = screenerbot::webserver::routes::create_router(std::sync::Arc::new(
+        screenerbot::webserver::state::AppState::new(),
+    ));
+    let request = axum::http::Request::builder()
+        .method(method)
+        .uri(path)
+        .body(axum::body::Body::empty())
+        .expect("build request");
+    router
+        .oneshot(request)
+        .await
+        .expect("router responded")
+        .status()
+}
+
+#[test]
+fn deleting_a_closed_position_removes_its_loss_from_the_limiter() {
+    common::run_isolated(
+        "deleting_a_closed_position_removes_its_loss_from_the_limiter",
+        || async {
+            let _dir = common::isolated_env();
+            let _cfg = common::config_guard();
+            enable_loss_limit();
+            let id = written_off(|_| {}).await;
+            assert_eq!(recorded_loss(), 1.0);
+
+            let status = call_dashboard("DELETE", &format!("/api/positions/{id}")).await;
+            assert!(status.is_success(), "delete answered {status}");
+            assert_eq!(recorded_loss(), 0.0, "the deleted loss still counts");
+        },
+    );
+}
+
+#[test]
+fn deleting_the_archived_positions_removes_their_losses_from_the_limiter() {
+    common::run_isolated(
+        "deleting_the_archived_positions_removes_their_losses_from_the_limiter",
+        || async {
+            let _dir = common::isolated_env();
+            let _cfg = common::config_guard();
+            enable_loss_limit();
+            let id = written_off(|_| {}).await;
+            assert_eq!(recorded_loss(), 1.0);
+            let status = call_dashboard("POST", &format!("/api/positions/{id}/archive")).await;
+            assert!(status.is_success(), "archive answered {status}");
+
+            let status = call_dashboard("DELETE", "/api/positions/archived").await;
+            assert!(status.is_success(), "bulk delete answered {status}");
+            assert_eq!(recorded_loss(), 0.0, "a deleted loss still counts");
+        },
+    );
+}
+
 #[test]
 fn a_synthetic_close_of_a_wallet_derived_row_records_no_loss() {
     common::run_isolated(

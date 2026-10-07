@@ -1316,6 +1316,85 @@ fn a_ledger_write_keeps_a_booking_committed_after_the_plan() {
 }
 
 #[test]
+fn a_ledger_close_of_a_bot_position_at_a_loss_past_the_limit_pauses_entries() {
+    common::run_isolated(
+        "a_ledger_close_of_a_bot_position_at_a_loss_past_the_limit_pauses_entries",
+        || async {
+            use screenerbot::trader::safety::loss_limit::{
+                get_loss_limit_status, is_entry_blocked_by_loss_limit, reset_loss_limit_state,
+            };
+            let _dir = common::isolated_env();
+            let _cfg = common::config_guard();
+            screenerbot::paths::ensure_all_directories().expect("create data directories");
+            common::configure_own_wallet();
+            common::seed_decimals(common::TEST_MINT, 6);
+            screenerbot::positions::initialize_positions_database()
+                .await
+                .expect("initialise positions database");
+            common::set_config(|cfg| {
+                cfg.trader.loss_limit_enabled = true;
+                cfg.trader.loss_limit_sol = 0.5;
+                cfg.trader.loss_limit_period_hours = 24;
+                cfg.trader.loss_limit_auto_resume = true;
+            });
+            reset_loss_limit_state();
+
+            let mut position = common::test_position(1.0, 1.0);
+            position.id = None;
+            position.token_amount = Some(RawAmount::new(1_000_000));
+            position.remaining_token_amount = Some(RawAmount::new(1_000_000));
+            let id = db::save_position(&position)
+                .await
+                .expect("persist test position");
+            position.id = Some(id);
+            state::add_position(position.clone()).await;
+
+            // The tokens were sold elsewhere for 0.2 SOL, just now.
+            let sold_elsewhere = LedgerRound {
+                entry_signature: position.entry_transaction_signature.clone(),
+                closed_at: Some(Utc::now().timestamp()),
+                invested_native: 1.0,
+                realized_proceeds_native: 0.2,
+                realized_cost_native: 1.0,
+                average_entry_price_native: Some(1.0),
+                average_exit_price_native: Some(0.2),
+                realized_pnl_native: Some(-0.8),
+                ..round(
+                    common::TEST_MINT,
+                    &format!("entry-sig:{}", common::TEST_MINT),
+                )
+            };
+            let existing = db::load_all_positions().await.expect("load positions");
+            let plan = plan_position_writes(
+                &[sold_elsewhere],
+                &existing,
+                &metadata(common::TEST_MINT, false),
+                &no_legs(),
+                &no_busy(),
+                Utc::now(),
+            );
+            assert_eq!(plan.updates.len(), 1, "the round claims the bot row");
+            assert!(!is_entry_blocked_by_loss_limit());
+
+            assert_eq!(apply_plan(plan).await.updated, 1);
+            let closed = db::get_position_by_id(id)
+                .await
+                .expect("read stored position")
+                .expect("position stored");
+            assert_eq!(closed.closed_reason.as_deref(), Some("closed_externally"));
+            assert!(
+                get_loss_limit_status().cumulative_loss_native > 0.5,
+                "the ledger's loss is not counted"
+            );
+            assert!(
+                is_entry_blocked_by_loss_limit(),
+                "a loss past the limit closed by the ledger does not pause entries"
+            );
+        },
+    );
+}
+
+#[test]
 fn a_planned_update_skipped_at_write_time_is_not_counted_as_written() {
     common::run_isolated(
         "a_planned_update_skipped_at_write_time_is_not_counted_as_written",

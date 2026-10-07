@@ -892,6 +892,7 @@ async fn resolve_metadata(
 /// import of the rest of the wallet's history. Returns the rows actually written.
 pub async fn apply_plan(plan: SyncPlan) -> AppliedPlan {
     let mut applied = AppliedPlan::default();
+    let mut wrote_a_bot_row = false;
     for mut position in plan.inserts {
         match crate::positions::db::save_position(&position).await {
             Ok(id) => {
@@ -970,6 +971,7 @@ pub async fn apply_plan(plan: SyncPlan) -> AppliedPlan {
             }
         };
         applied.updated += 1;
+        wrote_a_bot_row |= !position.is_wallet_derived();
 
         let closed_a_bot_position =
             !position.is_wallet_derived() && !crate::positions::state::is_position_open(&position);
@@ -1002,6 +1004,11 @@ pub async fn apply_plan(plan: SyncPlan) -> AppliedPlan {
             )
             .await;
         }
+    }
+    // A bot row the ledger closed, or whose P&L it rewrote, changes the realized losses
+    // the loss limiter counts from the books.
+    if wrote_a_bot_row {
+        crate::trader::safety::loss_limit::sync_from_books().await;
     }
     applied
 }
