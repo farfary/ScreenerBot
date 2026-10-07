@@ -650,6 +650,33 @@ fn a_confirmed_swap_never_awaits_settlement() {
 }
 
 #[test]
+fn a_confirmed_swap_that_cannot_be_booked_is_reported_once_across_renewals() {
+    let mut item = entry_item("sig-unbooked", Some(100));
+    item.swap_confirmed = true;
+    assert!(item.report_unbooked(), "the first give-up is reported");
+    assert!(
+        !item.report_unbooked(),
+        "the same give-up is reported again"
+    );
+
+    for mut later in [
+        item.renewed(),
+        item.with_retry(),
+        item.renewed().with_retry(),
+    ] {
+        assert!(later.swap_confirmed);
+        assert!(
+            !later.report_unbooked(),
+            "a renewed or retried item reports its give-up again"
+        );
+    }
+    assert!(
+        entry_item("sig-other", Some(100)).report_unbooked(),
+        "another swap is reported on its own"
+    );
+}
+
+#[test]
 fn only_unconfirmed_bounded_items_are_settlement_candidates() {
     let mut queue = VerificationQueue::new();
     queue.enqueue(entry_item("sig-bounded", Some(100)));

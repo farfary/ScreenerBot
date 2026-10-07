@@ -70,6 +70,10 @@ pub struct VerificationItem {
     /// Consecutive settlement reads that found the swap did not land. One read is never
     /// final, and each deferral widens the wait before the next read.
     pub not_landed_reads: u8,
+    /// The swap is confirmed but booking it kept failing past the verification limits, and
+    /// that was reported. A renewal keeps the mark, so the report is made once while the
+    /// item keeps being renewed.
+    pub unbooked_reported: bool,
 }
 
 impl VerificationItem {
@@ -96,6 +100,7 @@ impl VerificationItem {
             is_dca: false,
             swap_confirmed: false,
             not_landed_reads: 0,
+            unbooked_reported: false,
         }
     }
 
@@ -124,6 +129,7 @@ impl VerificationItem {
             is_dca: false,
             swap_confirmed: false,
             not_landed_reads: 0,
+            unbooked_reported: false,
         }
     }
 
@@ -228,6 +234,12 @@ impl VerificationItem {
     /// signature verdict.
     pub fn awaits_settlement(&self) -> bool {
         !self.swap_confirmed && self.expiry_height.is_some()
+    }
+
+    /// Marks a confirmed swap whose booking kept failing as reported. True only the first
+    /// time, when the report is due.
+    pub fn report_unbooked(&mut self) -> bool {
+        !std::mem::replace(&mut self.unbooked_reported, true)
     }
 
     /// The same verification started afresh: a new age and no attempts, with its kind,

@@ -623,6 +623,34 @@ async fn settlement_lock(item: &VerificationItem) -> Option<super::PositionLockG
     lock
 }
 
+/// Records a swap confirmed on chain that could not be booked within the verification
+/// limits. It keeps being verified and renewed until it books; this event is the lasting
+/// trace that the position does not show the swap yet.
+async fn record_unbooked_swap(item: &VerificationItem, reason: &GiveUpReason, error: &Error) {
+    logger::error(
+        LogTag::Positions,
+        &format!(
+            "Swap {} (mint {}, position {:?}) is confirmed but could not be booked: {error} - verifying it again",
+            item.signature, item.mint, item.position_id
+        ),
+    );
+    crate::events::record_position_event_flexible(
+        "confirmed_swap_unbooked",
+        crate::events::Severity::Error,
+        Some(&item.mint),
+        Some(&item.signature),
+        json!({
+            "kind": format!("{:?}", item.kind),
+            "is_dca": item.is_dca,
+            "is_partial_exit": item.is_partial_exit,
+            "give_up_reason": reason,
+            "last_error": error.to_string(),
+            "position_id": item.position_id
+        }),
+    )
+    .await;
+}
+
 /// Reports an entry its second not-landed read parks: the row and its slot stay held while
 /// the wallet holds more of the mint than dust attributable to it, or that holding is unknown.
 async fn record_parked_entry(item: &VerificationItem) {
@@ -858,6 +886,9 @@ pub(super) async fn process_verification_item(
                                     confirmed.signature, confirmed.mint
                                 ),
                             );
+                            if confirmed.report_unbooked() {
+                                record_unbooked_swap(&confirmed, &reason, &e).await;
+                            }
                             return Some(confirmed);
                         }
                         ApplyFailureDisposition::Drop(reason) => {
