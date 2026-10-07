@@ -244,21 +244,34 @@ async fn clear_pending_swaps_of_deleted(position_id: i64) {
     }
 }
 
+/// The position from memory, or from storage when it is not held in memory.
+async fn find_position(position_id: i64) -> Option<positions::Position> {
+    match positions::get_position_by_id(position_id).await {
+        Some(position) => Some(position),
+        None => positions::get_db_position_by_id(position_id)
+            .await
+            .ok()
+            .flatten(),
+    }
+}
+
 /// DELETE /positions/:id — permanently delete a position and its history.
+///
+/// The mint's position lock is held from the read to the marker clear: a DCA or partial
+/// exit registers its pending marker under that lock after its swap is sent, so a delete
+/// either clears that marker or runs before the swap starts.
 pub(super) async fn delete_position(Path(position_id): Path<i64>) -> Response {
-    let position = match positions::get_position_by_id(position_id).await {
-        Some(p) => p,
-        None => {
-            // Fall back to DB in case it's not in memory.
-            match positions::get_db_position_by_id(position_id).await {
-                Ok(Some(p)) => p,
-                _ => {
-                    return ApiError::new(ApiErrorCode::NotFound, ids::ERRORS_POSITIONS_NOT_FOUND)
-                        .details(position_id.to_string())
-                        .into_response();
-                }
-            }
-        }
+    let not_found = || {
+        ApiError::new(ApiErrorCode::NotFound, ids::ERRORS_POSITIONS_NOT_FOUND)
+            .details(position_id.to_string())
+            .into_response()
+    };
+    let Some(position) = find_position(position_id).await else {
+        return not_found();
+    };
+    let _lock = positions::acquire_position_lock(&position.mint).await;
+    let Some(position) = find_position(position_id).await else {
+        return not_found();
     };
 
     // Only release a slot for a position that is open AND not already archived
@@ -302,22 +315,13 @@ pub(super) async fn delete_position(Path(position_id): Path<i64>) -> Response {
     })
 }
 
-/// DELETE /positions/archived — permanently delete ALL archived positions.
+/// DELETE /positions/archived — permanently delete ALL archived positions. The ids the
+/// delete returns drive the memory removal and the marker clear, so a row archived after a
+/// memory read, or one not held in memory, is cleaned up like the rest.
 pub(super) async fn delete_all_archived() -> Response {
-    let archived = positions::get_archived_positions().await;
-    if archived.is_empty() {
-        return success_response(BulkDeleteResponse {
-            success: true,
-            deleted: 0,
-            freed_slots: 0,
-        });
-    }
-
     // Archived positions already released their slot on archive, so no slot frees here.
-    let ids: Vec<i64> = archived.iter().filter_map(|p| p.id).collect();
-
     let deleted = match positions::delete_archived_positions().await {
-        Ok(n) => n,
+        Ok(ids) => ids,
         Err(e) => {
             return ApiError::new(
                 ApiErrorCode::Internal,
@@ -328,20 +332,22 @@ pub(super) async fn delete_all_archived() -> Response {
         }
     };
 
-    for id in ids {
+    for &id in &deleted {
         positions::remove_position_by_id(id).await;
         clear_pending_swaps_of_deleted(id).await;
     }
-    crate::trader::safety::loss_limit::sync_from_books().await;
+    if !deleted.is_empty() {
+        crate::trader::safety::loss_limit::sync_from_books().await;
+    }
 
     logger::info(
         LogTag::Positions,
-        &format!("Permanently deleted {deleted} archived position(s)"),
+        &format!("Permanently deleted {} archived position(s)", deleted.len()),
     );
 
     success_response(BulkDeleteResponse {
         success: true,
-        deleted,
+        deleted: deleted.len(),
         freed_slots: 0,
     })
 }

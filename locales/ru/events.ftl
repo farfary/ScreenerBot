@@ -48,6 +48,7 @@ events-connectivity-endpoint-recovered = Эндпоинт восстановил
 events-position-entry-not-landed = Покупка { $symbol } не попала в блокчейн; позиция удалена
 events-position-fill-after-force-close = Сделка по { $symbol } попала в блокчейн после принудительного закрытия позиции; она учтена, позиция пересчитана
 events-position-swap-unbooked = Подтверждённый в блокчейне своп { $symbol } ещё не учтён в позиции; он проверяется повторно, пока не будет учтён
+events-position-exit-residual-unattributed = { $symbol } закрыта, но токены этого минта остались в кошельке. Они могут принадлежать позиции { $blocking }, вход которой не подтверждён, поэтому они не проданы и ни одна позиция ими не управляет
 
 events-category-swap = Своп
 events-category-transaction = Транзакция

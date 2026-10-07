@@ -56,6 +56,7 @@ events-connectivity-endpoint-recovered = エンドポイントが { $from } か�
 events-position-entry-not-landed = { $symbol } の購入はオンチェーンに反映されなかったため、ポジションを削除しました
 events-position-fill-after-force-close = { $symbol } の取引がポジションの強制クローズ後にオンチェーンに反映されたため、記帳してポジションを再計算しました
 events-position-swap-unbooked = オンチェーンで確定した { $symbol } のスワップがまだポジションに記帳されていません。記帳されるまで再検証します
+events-position-exit-residual-unattributed = { $symbol } はこのミントのトークンをウォレットに残したままクローズされました。エントリーが未検証のポジション { $blocking } のものである可能性があるため売却されず、どのポジションも管理していません
 
 ## Events page (pages/events.js, ui/event_labels.js)
 

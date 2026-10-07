@@ -15,6 +15,7 @@ use super::{
 use crate::{
     chains::adapter,
     chains::RawAmount,
+    i18n::{ids, UiArg, UiText},
     logger::{self, LogTag},
     tokens::get_decimals,
     transactions::{get_transaction, reprocess_transaction, TransactionStatus},
@@ -68,18 +69,33 @@ fn is_transient_verification_error(msg: &str) -> bool {
         || m.contains("blockchain transaction not found")
 }
 
-/// Whether `balance`, the wallet's holding of the mint after a full exit of the position,
-/// leaves a residual of the position's own that another close must sell. A balance that is
-/// dust on its own needs no attribution. While another open position of the mint has an
-/// unverified entry, the balance may be its tokens, and a retried close sells the wallet's
-/// holding: the residual is never taken for the position's own, so the close is booked
-/// instead of retried. Fails only while the other positions' holding cannot be read.
-pub async fn residual_balance_requires_retry(
+/// What the wallet's holding of the mint after a full exit of a position means for that
+/// close.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum ExitResidual {
+    /// The wallet holds none of the mint.
+    None,
+    /// The holding is dust, or the part of it that is the position's own is.
+    Dust,
+    /// The holding is more than dust while another open position of the mint, `position_id`,
+    /// has an unverified entry: it may be that position's tokens, and a retried close sells
+    /// the wallet's holding, so the close is booked rather than retried.
+    Unattributable { position_id: i64 },
+    /// More than dust of the holding is the position's own: another close must sell it.
+    Own,
+}
+
+/// Classifies `balance`, the wallet's holding of the mint after a full exit of the position.
+/// A balance that is dust on its own needs no attribution. Only the part of it the other open
+/// positions of the mint do not hold is the position's residual; while one of them has an
+/// unverified entry, that part cannot be told and the residual is never taken for the
+/// position's own. Fails only while the other positions' holding cannot be read.
+pub async fn classify_exit_residual(
     position_id: Option<i64>,
     balance: RawAmount,
-) -> super::Result<bool> {
+) -> super::Result<ExitResidual> {
     if balance == RawAmount::ZERO {
-        return Ok(false);
+        return Ok(ExitResidual::None);
     }
 
     if let Some(pid) = position_id {
@@ -98,18 +114,12 @@ pub async fn residual_balance_requires_retry(
                     .checked_add(position.total_exited_amount)
                     .unwrap_or(RawAmount::new(u128::MAX));
                 if is_dust(balance, acquired) {
-                    return Ok(false);
+                    return Ok(ExitResidual::Dust);
                 }
                 let others = match get_other_open_held(&position.mint, position.id).await? {
                     OtherOpenHeld::Booked(others) => others,
                     OtherOpenHeld::Unattributable { position_id } => {
-                        logger::warning(
-                            LogTag::Positions,
-                            &format!(
-                                "Residual balance {balance} for position {pid} is not retried: the entry of position {position_id} of the mint is not verified, so the balance may be its tokens"
-                            ),
-                        );
-                        return Ok(false);
+                        return Ok(ExitResidual::Unattributable { position_id });
                     }
                 };
                 let residual = attributable_held(balance, others, acquired);
@@ -120,13 +130,93 @@ pub async fn residual_balance_requires_retry(
                             "Ignoring residual balance {balance} for position {pid}: {residual} of it is its own (acquired {acquired})"
                         ),
                     );
-                    return Ok(false);
+                    return Ok(ExitResidual::Dust);
                 }
             }
         }
     }
 
-    Ok(true)
+    Ok(ExitResidual::Own)
+}
+
+/// Classifies the holding a full exit of `item`'s position left, `remaining_balance`, after
+/// a sale of `sold` (see [`classify_exit_residual`]), and reports a close that will be booked
+/// with it: a log line that says which residual it is, and for a residual that cannot be
+/// attributed, a warning event. A residual that is the position's own is the caller's to
+/// retry.
+pub async fn check_exit_residual(
+    item: &VerificationItem,
+    remaining_balance: RawAmount,
+    sold: RawAmount,
+) -> super::Result<ExitResidual> {
+    let residual = classify_exit_residual(item.position_id, remaining_balance).await?;
+    match residual {
+        ExitResidual::None => logger::info(
+            LogTag::Positions,
+            &format!("Exit verified with no residual for mint {}", item.mint),
+        ),
+        ExitResidual::Dust => logger::info(
+            LogTag::Positions,
+            &format!(
+                "Exit verified with a dust residual of {remaining_balance} for mint {}",
+                item.mint
+            ),
+        ),
+        ExitResidual::Unattributable { position_id } => {
+            record_unattributed_residual(item, remaining_balance, sold, position_id).await;
+        }
+        ExitResidual::Own => {}
+    }
+    Ok(residual)
+}
+
+/// Records a full close booked while the wallet still holds more than dust of the mint that
+/// cannot be told apart from the tokens of `blocking_position`, whose entry is not verified:
+/// a warning log and a warning event naming that position and the part of what the closing
+/// position held that its sale left unsold, which no position manages.
+async fn record_unattributed_residual(
+    item: &VerificationItem,
+    remaining_balance: RawAmount,
+    sold: RawAmount,
+    blocking_position: i64,
+) {
+    let position = match item.position_id {
+        Some(pid) => get_position_by_id(pid).await,
+        None => None,
+    };
+    let unsold = position
+        .as_ref()
+        .and_then(|position| position.remaining_token_amount.or(position.token_amount))
+        .and_then(|held| held.checked_sub(sold))
+        .unwrap_or(RawAmount::ZERO);
+    let symbol = position.map_or_else(|| item.mint.clone(), |position| position.symbol);
+    logger::warning(
+        LogTag::Positions,
+        &format!(
+            "Exit verified for mint {} (position {:?}) with residual {remaining_balance} left in the wallet: the entry of position {blocking_position} of the mint is not verified, so the residual may be its tokens and the close is booked without a retry; the sale left {unsold} of what this position held unsold",
+            item.mint, item.position_id
+        ),
+    );
+    crate::events::record_position_event_flexible(
+        "exit_residual_unattributed",
+        crate::events::Severity::Warn,
+        Some(&item.mint),
+        item.position_id.map(|id| id.to_string()).as_deref(),
+        crate::events::with_text(
+            serde_json::json!({
+                "position_id": item.position_id,
+                "remaining_balance": remaining_balance,
+                "sold": sold,
+                "unsold": unsold,
+                "blocking_position_id": blocking_position,
+                "exit_signature": item.signature
+            }),
+            &UiText::new(ids::EVENTS_POSITION_EXIT_RESIDUAL_UNATTRIBUTED)
+                .arg("symbol", UiArg::Text(symbol))
+                .arg("blocking", UiArg::Text(blocking_position.to_string())),
+        ),
+    )
+    .await;
 }
 
 /// Verify a transaction and produce the appropriate transition. A transaction that is not
@@ -466,13 +556,14 @@ pub async fn verify_transaction(item: &VerificationItem) -> VerificationOutcome 
             }
 
             // FULL EXIT: Ensure complete closure (check for residual)
-            let residual_requires_retry = match residual_balance_requires_retry(
-                item.position_id,
+            let residual = match check_exit_residual(
+                item,
                 remaining_balance,
+                RawAmount::from(exit_amount),
             )
             .await
             {
-                Ok(requires_retry) => requires_retry,
+                Ok(residual) => residual,
                 Err(error) => {
                     return VerificationOutcome::RetryTransient(format!(
                             "Exit residual {remaining_balance} for mint {} cannot be read against the other positions yet: {error}",
@@ -480,7 +571,7 @@ pub async fn verify_transaction(item: &VerificationItem) -> VerificationOutcome 
                         ));
                 }
             };
-            if residual_requires_retry {
+            if residual == ExitResidual::Own {
                 logger::warning(
                     LogTag::Positions,
                     &format!(
@@ -529,10 +620,6 @@ pub async fn verify_transaction(item: &VerificationItem) -> VerificationOutcome 
                     },
                 );
             }
-            logger::info(
-                LogTag::Positions,
-                &format!("Exit verified with zero residual for mint {}", item.mint),
-            );
 
             // FULL EXIT: Standard verification
             VerificationOutcome::Transition(PositionTransition::ExitVerified {

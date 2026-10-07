@@ -15,7 +15,7 @@ use screenerbot::positions::operations::{force_close_position, mark_exit_submitt
 use screenerbot::positions::price_updater::update_position_price_and_pnl;
 use screenerbot::positions::round_state::exit_awaiting_verification;
 use screenerbot::positions::transitions::NotLandedEvidence;
-use screenerbot::positions::verifier::residual_balance_requires_retry;
+use screenerbot::positions::verifier::{check_exit_residual, classify_exit_residual, ExitResidual};
 use screenerbot::positions::{
     db, state, ApplyFailureDisposition, Error, GiveUpReason, PendingDcaSwap, PendingPartialExit,
     Position, PositionManagement, PositionTransition, PriceSource, VerificationItem,
@@ -2285,16 +2285,18 @@ fn a_full_exit_residual_counts_only_the_positions_own_tokens() {
             let id = open_position(|_| {}).await;
             store_position(|_| {}).await;
 
-            assert!(
-                !residual_balance_requires_retry(Some(id), RawAmount::new(HELD))
+            assert_eq!(
+                classify_exit_residual(Some(id), RawAmount::new(HELD))
                     .await
                     .expect("the other holding is attributable"),
+                ExitResidual::Dust,
                 "the other position's tokens are taken for a residual of this one"
             );
-            assert!(
-                residual_balance_requires_retry(Some(id), RawAmount::new(HELD + HELD / 2))
+            assert_eq!(
+                classify_exit_residual(Some(id), RawAmount::new(HELD + HELD / 2))
                     .await
                     .expect("the other holding is attributable"),
+                ExitResidual::Own,
                 "a residual of the position's own is missed beside another position"
             );
         },
@@ -2314,7 +2316,7 @@ fn a_full_exit_residual_reads_the_other_positions_as_storage_has_them() {
             let _cfg = common::config_guard();
             let id = open_position(|_| {}).await;
             let residual =
-                || async { residual_balance_requires_retry(Some(id), RawAmount::new(HELD)).await };
+                || async { classify_exit_residual(Some(id), RawAmount::new(HELD)).await };
 
             store_position(|position| {
                 position.exit_time = Some(Utc::now());
@@ -2326,24 +2328,30 @@ fn a_full_exit_residual_reads_the_other_positions_as_storage_has_them() {
                 position.remaining_token_amount = None;
             })
             .await;
-            assert!(
+            assert_eq!(
                 residual()
                     .await
                     .expect("closed and empty rows are attributable"),
+                ExitResidual::Own,
                 "a closed row or a row without an amount is taken to hold the residual"
             );
 
             store_position(|position| position.archived = true).await;
-            assert!(
-                !residual().await.expect("an archived row is attributable"),
+            assert_eq!(
+                residual().await.expect("an archived row is attributable"),
+                ExitResidual::Dust,
                 "an archived open row's tokens are taken for a residual of this one"
             );
 
-            store_position(|position| position.transaction_entry_verified = false).await;
-            assert!(
-                !residual()
+            let unverified =
+                store_position(|position| position.transaction_entry_verified = false).await;
+            assert_eq!(
+                residual()
                     .await
                     .expect("an unverified entry does not hold the close up"),
+                ExitResidual::Unattributable {
+                    position_id: unverified
+                },
                 "a residual is taken for this position's while another entry is unverified"
             );
         },
@@ -2353,7 +2361,8 @@ fn a_full_exit_residual_reads_the_other_positions_as_storage_has_them() {
 /// An archived open row whose entry never verifies cannot hold another position's close
 /// forever: whatever the balance the close leaves, the close is booked rather than retried,
 /// because the balance may be the archived row's tokens and a retried close sells the
-/// wallet's holding.
+/// wallet's holding. A residual above dust is reported, never logged as none: one warning
+/// event names the blocking position and what the sale left unsold.
 #[test]
 fn an_unverified_entry_of_another_position_never_stalls_a_close() {
     common::run_isolated(
@@ -2361,8 +2370,9 @@ fn an_unverified_entry_of_another_position_never_stalls_a_close() {
         || async {
             let _dir = common::isolated_env();
             let _cfg = common::config_guard();
+            start_events().await;
             let id = open_position(|_| {}).await;
-            store_position(|position| {
+            let blocking = store_position(|position| {
                 position.archived = true;
                 position.transaction_entry_verified = false;
                 position.token_amount = None;
@@ -2371,13 +2381,57 @@ fn an_unverified_entry_of_another_position_never_stalls_a_close() {
             .await;
 
             for balance in [1, HELD / 2, HELD, HELD * 3, u128::MAX] {
-                assert!(
-                    !residual_balance_requires_retry(Some(id), RawAmount::new(balance))
+                let expected = if balance == 1 {
+                    ExitResidual::Dust
+                } else {
+                    ExitResidual::Unattributable {
+                        position_id: blocking,
+                    }
+                };
+                assert_eq!(
+                    classify_exit_residual(Some(id), RawAmount::new(balance))
                         .await
                         .expect("the residual is decided without the other entry"),
-                    "a balance of {balance} retried the close beside an unverified entry"
+                    expected,
+                    "a balance of {balance} is misclassified beside an unverified entry"
                 );
             }
+
+            // The sale sold 70% of what the position held; the rest stayed in another
+            // account of the wallet.
+            let sold = RawAmount::new(HELD * 7 / 10);
+            let left = RawAmount::new(HELD * 3 / 10);
+            let item = VerificationItem::new(
+                CLOSE_SIGNATURE.to_owned(),
+                common::TEST_MINT.to_owned(),
+                Some(id),
+                VerificationKind::Exit,
+                None,
+            );
+            assert_eq!(
+                check_exit_residual(&item, left, sold)
+                    .await
+                    .expect("the residual is decided"),
+                ExitResidual::Unattributable {
+                    position_id: blocking
+                },
+            );
+            apply_transition(PositionTransition::ExitVerified {
+                position_id: id,
+                effective_exit_price: 1.5,
+                native_received: 1.05,
+                fee_raw: SWAP_FEE_RAW,
+                exit_time: Utc::now(),
+                exit_signature: CLOSE_SIGNATURE.to_owned(),
+                exit_amount: sold,
+                held_after: Some(left),
+            })
+            .await
+            .expect("the close is booked");
+            let booked = in_storage(id).await;
+            assert!(booked.transaction_exit_verified && booked.exit_time.is_some());
+            assert_eq!(position_events("exit_residual_unattributed").await, 1);
+            assert_eq!(position_events("exit_residual_detected").await, 0);
         },
     );
 }
@@ -2983,6 +3037,192 @@ fn deleting_a_position_clears_its_pending_swaps_so_later_late_fills_book() {
                 .await
                 .expect("the late fill is not held by the deleted position's swaps");
             assert_eq!(exit_records(second).await, 1);
+        },
+    );
+}
+
+/// The pending swaps stored for `position_id` under `key`, as storage lists them.
+async fn stored_pending_of(key: &str, position_id: i64) -> usize {
+    let raw = db::get_metadata(key)
+        .await
+        .expect("read pending swaps")
+        .unwrap_or_default();
+    if raw.is_empty() {
+        return 0;
+    }
+    serde_json::from_str::<Vec<serde_json::Value>>(&raw)
+        .expect("stored pending swaps are a list")
+        .iter()
+        .filter(|entry| entry["position_id"] == position_id)
+        .count()
+}
+
+/// A pending marker left for a row that no longer exists, whatever path deleted the row, is
+/// dropped at startup from memory and storage, and a late fill on another closed row of the
+/// mint then books.
+#[test]
+fn startup_drops_the_pending_swaps_of_deleted_positions() {
+    common::run_isolated(
+        "startup_drops_the_pending_swaps_of_deleted_positions",
+        || async {
+            let _dir = common::isolated_env();
+            let _cfg = common::config_guard();
+            let deleted = written_off(|_| {}).await;
+            let second = store_position(|position| {
+                position.exit_time = Some(Utc::now());
+                position.transaction_exit_verified = true;
+                position.exit_transaction_signature = Some("second-close-sig".to_owned());
+                position.native_received = Some(1.0);
+                position.remaining_token_amount = Some(RawAmount::ZERO);
+                position.total_exited_amount = RawAmount::new(HELD);
+            })
+            .await;
+            register_dca(deleted).await;
+            for (signature, position_id) in [
+                ("deleted-partial-sig", deleted),
+                (PARTIAL_SIGNATURE, second),
+            ] {
+                state::register_pending_partial_exit(PendingPartialExit {
+                    signature: signature.to_owned(),
+                    mint: common::TEST_MINT.to_owned(),
+                    position_id,
+                    expected_exit_amount: RawAmount::new(400_000),
+                    requested_exit_percentage: 40.0,
+                    expiry_height: None,
+                    created_at: Utc::now(),
+                })
+                .await
+                .expect("register a partial exit");
+                state::mark_partial_exit_pending(common::TEST_MINT).await;
+            }
+            // The row goes and its markers stay, as a delete that raced a swap leaves them.
+            assert!(db::delete_position_by_id(deleted)
+                .await
+                .expect("delete the row"));
+            state::remove_position_by_id(deleted).await;
+
+            assert!(state::rehydrate_pending_dca_swaps()
+                .await
+                .expect("rehydrate DCAs")
+                .is_empty());
+            let partials = state::rehydrate_pending_partial_exits()
+                .await
+                .expect("rehydrate partial exits");
+            assert_eq!(
+                partials.iter().map(|p| p.position_id).collect::<Vec<_>>(),
+                vec![second],
+                "the deleted position's partial exit is pending again"
+            );
+            assert!(
+                !dca_pending().await,
+                "the deleted position's DCA is pending"
+            );
+            assert_eq!(stored_pending_of("pending_dca_swaps", deleted).await, 0);
+            assert_eq!(stored_pending_of("pending_partial_exits", deleted).await, 0);
+            assert_eq!(stored_pending_of("pending_partial_exits", second).await, 1);
+
+            apply_transition(late_partial(second, Some(RawAmount::new(500_000))))
+                .await
+                .expect("the late fill is not held by the deleted position's swaps");
+            assert_eq!(exit_records(second).await, 1);
+        },
+    );
+}
+
+/// Deleting every archived position clears the markers of exactly the rows the delete
+/// removed, including an archived row that is not held in memory.
+#[test]
+fn deleting_the_archived_positions_clears_the_markers_of_every_row_deleted() {
+    common::run_isolated(
+        "deleting_the_archived_positions_clears_the_markers_of_every_row_deleted",
+        || async {
+            let _dir = common::isolated_env();
+            let _cfg = common::config_guard();
+            let kept = open_position(|_| {}).await;
+            let archived = store_position(|_| {}).await;
+            assert!(db::set_position_archived_db(archived, true)
+                .await
+                .expect("archive the row"));
+            state::remove_position_by_id(archived).await;
+            register_dca(archived).await;
+
+            let status = call_dashboard("DELETE", "/api/positions/archived").await;
+            assert!(status.is_success(), "bulk delete answered {status}");
+
+            assert!(db::get_position_by_id(archived)
+                .await
+                .expect("read the row")
+                .is_none());
+            assert!(db::get_position_by_id(kept)
+                .await
+                .expect("read the row")
+                .is_some());
+            assert!(!dca_pending().await, "the deleted row's DCA is pending");
+            assert_eq!(stored_pending_of("pending_dca_swaps", archived).await, 0);
+        },
+    );
+}
+
+/// Clearing a position's pending swaps persists the partial-exit set even when persisting
+/// the DCA set fails, and reports that failure.
+#[test]
+fn a_failed_dca_persist_still_persists_the_cleared_partial_exits() {
+    common::run_isolated(
+        "a_failed_dca_persist_still_persists_the_cleared_partial_exits",
+        || async {
+            let _dir = common::isolated_env();
+            let _cfg = common::config_guard();
+            let id = open_position(|_| {}).await;
+            register_dca(id).await;
+            register_partial(id).await;
+            injector()
+                .execute_batch(
+                    "CREATE TRIGGER inject_dca_meta BEFORE INSERT ON position_metadata \
+                     WHEN NEW.key = 'pending_dca_swaps' BEGIN SELECT RAISE(ABORT,'injected'); END;",
+                )
+                .expect("inject a DCA persist failure");
+
+            state::clear_pending_swaps_of_position(id)
+                .await
+                .expect_err("the DCA persist failure is reported");
+
+            assert!(!dca_pending().await && partial_cleared().await);
+            assert_eq!(stored_pending_of("pending_dca_swaps", id).await, 1);
+            assert_eq!(
+                stored_pending_of("pending_partial_exits", id).await,
+                0,
+                "the partial-exit set was not persisted after the DCA persist failed"
+            );
+        },
+    );
+}
+
+/// A single delete waits for the mint's position lock, under which a DCA or partial exit
+/// registers its marker after its swap is sent, so the marker it then clears is never left
+/// behind for the deleted row.
+#[test]
+fn deleting_a_position_waits_for_a_swap_registering_its_marker() {
+    common::run_isolated(
+        "deleting_a_position_waits_for_a_swap_registering_its_marker",
+        || async {
+            let _dir = common::isolated_env();
+            let _cfg = common::config_guard();
+            let id = written_off(|_| {}).await;
+            let lock = state::acquire_position_lock(common::TEST_MINT).await;
+            let path = format!("/api/positions/{id}");
+            let delete = tokio::spawn(async move { call_dashboard("DELETE", &path).await });
+            tokio::time::sleep(std::time::Duration::from_millis(300)).await;
+            assert!(
+                !delete.is_finished(),
+                "the delete ran while a swap of the mint held the lock"
+            );
+
+            register_dca(id).await;
+            drop(lock);
+            let status = delete.await.expect("the delete task completes");
+            assert!(status.is_success(), "delete answered {status}");
+            assert!(!dca_pending().await, "the swap's marker outlived its row");
+            assert_eq!(stored_pending_of("pending_dca_swaps", id).await, 0);
         },
     );
 }

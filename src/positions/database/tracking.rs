@@ -101,31 +101,35 @@ impl PositionsDatabase {
         Ok(rows_affected > 0)
     }
 
-    /// Delete all archived positions (hard delete). Returns the number removed.
+    /// Delete all archived positions (hard delete). Returns the ids removed, read in the
+    /// same statement as the delete, so every follow-up acts on exactly the rows deleted.
     ///
     /// Cascades only to this position's own child rows (states, exits, entries,
     /// tracking, snapshots) via `ON DELETE CASCADE`. Transactions/tokens untouched.
-    pub async fn delete_archived_positions(&self) -> Result<usize> {
+    pub async fn delete_archived_positions(&self) -> Result<Vec<i64>> {
         let conn = self.get_connection()?;
+        let query_error = |e: rusqlite::Error| DatabaseError::Query {
+            operation: "delete archived positions".to_owned(),
+            message: e.to_string(),
+        };
 
-        let rows_affected = conn
-            .execute(
-                "DELETE FROM positions WHERE archived = 1 AND chain_id=?1",
-                params![self.chain.as_str()],
-            )
-            .map_err(|e| DatabaseError::Query {
-                operation: "delete archived positions".to_owned(),
-                message: e.to_string(),
-            })?;
+        let mut stmt = conn
+            .prepare("DELETE FROM positions WHERE archived = 1 AND chain_id=?1 RETURNING id")
+            .map_err(query_error)?;
+        let deleted = stmt
+            .query_map(params![self.chain.as_str()], |row| row.get::<_, i64>(0))
+            .map_err(query_error)?
+            .collect::<std::result::Result<Vec<_>, _>>()
+            .map_err(query_error)?;
 
-        if rows_affected > 0 {
+        if !deleted.is_empty() {
             logger::info(
                 LogTag::Positions,
-                &format!("Deleted {rows_affected} archived position(s)"),
+                &format!("Deleted {} archived position(s)", deleted.len()),
             );
         }
 
-        Ok(rows_affected)
+        Ok(deleted)
     }
 
     /// Delete position by entry signature

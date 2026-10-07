@@ -448,39 +448,6 @@ mod tests {
             .is_none());
     }
 
-    /// Every tool that answers an agent connection with a trade id says so, and
-    /// states the reuse window from its one owner, as the status read does.
-    #[test]
-    fn every_trade_tool_describes_its_trade_id_and_reuse_window() {
-        let window = format!(
-            "{} minutes",
-            crate::agent_control::submissions::REUSE_WINDOW.as_secs() / 60
-        );
-        let registry = create_tool_registry();
-        let status = crate::agent_control::bridge::trade_status_definition();
-        assert!(status.description.contains(&window));
-        for def in registry.list_definitions() {
-            if !registry
-                .get(&def.name)
-                .is_some_and(|tool| tool.sends_transaction())
-            {
-                continue;
-            }
-            assert!(
-                def.description.ends_with(&trading::submission_note()),
-                "{} does not describe its trade id",
-                def.name
-            );
-            for needle in ["trade_id", "get_trade_status", window.as_str()] {
-                assert!(
-                    def.description.contains(needle),
-                    "{} description lacks {needle}",
-                    def.name
-                );
-            }
-        }
-    }
-
     /// Reading configuration is a read: a paired client with `read` scope must
     /// be able to inspect settings without being able to change them.
     #[test]

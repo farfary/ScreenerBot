@@ -8,7 +8,8 @@
 //! redacted argument summary, expiry — and approves or denies it here, inside
 //! ScreenerBot. The external caller has no route to these handlers, so it can
 //! never approve its own request. Approval claims the stored canonical request
-//! exactly once and runs it on its own task in the live process.
+//! exactly once and runs it on its own task in the live process
+//! (`bridge::approve`).
 
 use axum::{
     extract::{Path, Query, State},
@@ -60,34 +61,19 @@ pub async fn decide(
     Json(body): Json<DecideBody>,
 ) -> Response {
     if body.approve {
-        // The approved tool may be a trade. The request is claimed and checked
-        // here; it then runs on its own task, so neither a dropped dashboard
-        // request nor a slow swap holds the decision. The MCP client reads the
-        // outcome from the approval row.
-        let approval_id = id.clone();
-        match tokio::task::spawn_blocking(move || bridge::start_approved(&approval_id)).await {
-            Ok(Ok(started)) => {
-                if let Some(approved) = started {
-                    let run_id = id.clone();
-                    tokio::spawn(async move {
-                        if let Err(e) = approved.run().await {
-                            logger::error(
-                                LogTag::Security,
-                                &format!(
-                                    "agent-control: approved request {run_id} ran but its outcome was not stored: {e}"
-                                ),
-                            );
-                        }
-                    });
-                }
+        // The approved tool may be a trade. `approve` claims, checks and starts
+        // it on a task of its own, so a dropped dashboard request neither
+        // leaves it claimed and unrun nor holds the decision on a slow swap.
+        // The MCP client reads the outcome from the approval row.
+        match bridge::approve(id.clone()).await {
+            Ok(()) => {
                 logger::info(
                     LogTag::Security,
                     &format!("agent-control: approved request {id}"),
                 );
                 success_response(serde_json::json!({ "resolved": "approved" }))
             }
-            Ok(Err(e)) => failure(&e),
-            Err(_) => task_failed(),
+            Err(e) => failure(&e),
         }
     } else {
         let id_for_log = id.clone();

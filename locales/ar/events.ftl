@@ -56,6 +56,7 @@ events-connectivity-endpoint-recovered = تعافت نقطة الاتصال من
 events-position-entry-not-landed = لم تصل عملية شراء { $symbol } إلى السلسلة؛ تمت إزالة مركزها
 events-position-fill-after-force-close = وصلت صفقة على { $symbol } إلى السلسلة بعد الإغلاق القسري لمركزها؛ تم تسجيلها وإعادة احتساب المركز
 events-position-swap-unbooked = صفقة على { $symbol } مؤكدة على السلسلة لم تُسجَّل في مركزها بعد؛ يُعاد التحقق منها حتى تُسجَّل
+events-position-exit-residual-unattributed = أُغلق { $symbol } مع بقاء رموز من العملة في المحفظة. قد تعود إلى المركز { $blocking } الذي لم يُتحقق من دخوله، لذلك لم تُبع ولا يديرها أي مركز
 
 ## Events page (pages/events.js, ui/event_labels.js)
 

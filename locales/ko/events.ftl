@@ -56,6 +56,7 @@ events-connectivity-endpoint-recovered = 엔드포인트가 { $from }에서 정�
 events-position-entry-not-landed = { $symbol } 매수가 온체인에 반영되지 않아 포지션을 삭제했습니다
 events-position-fill-after-force-close = { $symbol } 거래가 포지션 강제 종료 후 온체인에 반영되어 기록하고 포지션을 다시 계산했습니다
 events-position-swap-unbooked = 온체인에서 확정된 { $symbol } 스왑이 아직 포지션에 기록되지 않았습니다. 기록될 때까지 다시 검증합니다
+events-position-exit-residual-unattributed = { $symbol } 포지션이 이 민트의 토큰을 지갑에 남긴 채 종료되었습니다. 진입이 검증되지 않은 포지션 { $blocking }의 토큰일 수 있어 매도하지 않았으며, 이를 관리하는 포지션은 없습니다
 
 ## Events page (pages/events.js, ui/event_labels.js)
 

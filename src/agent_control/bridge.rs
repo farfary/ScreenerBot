@@ -30,9 +30,9 @@ use crate::agent_control::store::{OUTCOME_NOT_STORED, TASK_ENDED};
 use crate::agent_control::submissions::{self, SubmissionState};
 use crate::agent_control::{
     create_tool_registry, decide, Decision, InvocationSource, PermissionLevel, Tool, ToolCategory,
-    ToolDefinition, ToolResult,
+    ToolDefinition, ToolPermissions, ToolResult,
 };
-use crate::errors::{DatabaseError, ErrorClass};
+use crate::errors::ErrorClass;
 use crate::global::ActiveToolGuard;
 use crate::logger::{self, LogTag};
 
@@ -100,37 +100,41 @@ fn authed_context(
     }
 }
 
-/// Authenticate, honouring the master switch. A disabled surface and a bad
-/// credential are separate errors, but both deny access.
+/// Authenticate and audit the accepted credential, honouring the master
+/// switch. A disabled surface and a bad credential are separate errors, but
+/// both deny access.
 fn authenticate(client_id: &str, secret: &str) -> Result<AuthedClient> {
+    let client = verify(client_id, secret)?;
+    audit::record(
+        AuditKind::BridgeAuth,
+        &authed_context(&client, None, None),
+        "ok",
+        None,
+    );
+    Ok(client)
+}
+
+/// Authenticate, honouring the master switch, and audit only a rejection. Used
+/// by the status reads a client polls until a request settles: they change
+/// nothing and answer only for the caller's own requests, and a row per poll
+/// would evict the trade and approval records from the capped audit log.
+fn verify(client_id: &str, secret: &str) -> Result<AuthedClient> {
     if !enabled() {
         return Err(Error::Disabled);
     }
-    match pairing::authenticate(client_id, secret) {
-        Ok(client) => {
-            audit::record(
-                AuditKind::BridgeAuth,
-                &authed_context(&client, None, None),
-                "ok",
-                None,
-            );
-            Ok(client)
-        }
-        Err(e) => {
-            // Never persist the caller-supplied client id on a rejected auth: a
-            // client can put a pairing secret in the wrong header, so the value
-            // is potentially secret-bearing. Record the rejection with a fixed,
-            // identity-free context; the error returned to the caller is
-            // unchanged and uniform for every rejection cause.
-            audit::record(
-                AuditKind::BridgeAuth,
-                &AuditContext::default(),
-                "rejected",
-                None,
-            );
-            Err(e)
-        }
-    }
+    pairing::authenticate(client_id, secret).inspect_err(|_| {
+        // Never persist the caller-supplied client id on a rejected auth: a
+        // client can put a pairing secret in the wrong header, so the value
+        // is potentially secret-bearing. Record the rejection with a fixed,
+        // identity-free context; the error returned to the caller is
+        // unchanged and uniform for every rejection cause.
+        audit::record(
+            AuditKind::BridgeAuth,
+            &AuditContext::default(),
+            "rejected",
+            None,
+        );
+    })
 }
 
 /// Liveness + pairing probe for `mcp doctor`. Authenticates the credential and
@@ -140,7 +144,7 @@ fn authenticate(client_id: &str, secret: &str) -> Result<AuthedClient> {
 pub struct PingInfo {
     pub ok: bool,
     pub version: &'static str,
-    pub permissions: crate::agent_control::ToolPermissions,
+    pub permissions: ToolPermissions,
     pub client_label: String,
 }
 
@@ -154,30 +158,56 @@ pub fn ping(client_id: &str, secret: &str) -> Result<PingInfo> {
     })
 }
 
-/// The tools this paired client may see. Includes approval-gated tools (they
-/// are listed but cannot run without an in-app decision); excludes any category
-/// this connection's policy denies outright. `get_trade_status` is listed
-/// wherever the connection may trade; it answers for the connection's own
-/// trades whatever its policy.
+/// The tools this paired client may see; see [`connection_tools`].
 pub fn list_tools(client_id: &str, secret: &str) -> Result<Vec<ToolDefinition>> {
     let client = authenticate(client_id, secret)?;
-    let permissions = client.permissions;
+    Ok(connection_tools(client.permissions))
+}
 
-    let mut defs: Vec<ToolDefinition> = create_tool_registry()
-        .list_definitions()
-        .into_iter()
-        .filter(|def| {
-            !matches!(
-                decide(def, InvocationSource::Mcp { permissions }),
-                Decision::Deny
-            )
-        })
-        .collect();
+/// The tools a connection with `permissions` sees. Includes approval-gated
+/// tools (they are listed but cannot run without an in-app decision); excludes
+/// any category the policy denies outright. A transaction-sending tool the
+/// connection runs without approval answers with a trade id, so its
+/// description carries [`submission_note`]; under approval it answers with the
+/// trade's result and keeps the registry description, which the in-app
+/// assistant reads too. `get_trade_status` is listed wherever the connection
+/// may trade; it answers for the connection's own trades whatever its policy.
+fn connection_tools(permissions: ToolPermissions) -> Vec<ToolDefinition> {
+    let registry = create_tool_registry();
+    let mut defs = Vec::new();
+    for mut def in registry.list_definitions() {
+        match decide(&def, InvocationSource::Mcp { permissions }) {
+            Decision::Deny => continue,
+            Decision::Execute
+                if registry
+                    .get(&def.name)
+                    .is_some_and(|tool| tool.sends_transaction()) =>
+            {
+                def.description.push_str(&submission_note());
+            }
+            Decision::Execute | Decision::RequireApproval => {}
+        }
+        defs.push(def);
+    }
     if permissions.get_permission(&ToolCategory::Trading) != PermissionLevel::Deny {
         defs.push(trade_status_definition());
     }
     defs.sort_by(|a, b| a.name.cmp(&b.name));
-    Ok(defs)
+    defs
+}
+
+/// How a transaction-sending tool answers a connection that runs it without
+/// approval: at once with a trade id, its outcome read with
+/// `get_trade_status`, and an identical call inside the reuse window answered
+/// with the same trade id.
+fn submission_note() -> String {
+    format!(
+        " Through this connection the call answers at once with a trade_id; read the \
+         outcome with get_trade_status. An identical call within {} minutes returns the same \
+         trade_id instead of trading again, so a deliberate second identical trade needs a \
+         changed argument or a wait.",
+        submissions::REUSE_WINDOW.as_secs() / 60
+    )
 }
 
 /// The definition the bridge lists for `get_trade_status`.
@@ -248,21 +278,16 @@ pub async fn call_tool(
     arguments: Value,
     correlation_id: &str,
 ) -> Result<CallOutcome> {
+    if name == TRADE_STATUS_TOOL {
+        let client = verify(client_id, secret)?;
+        return Ok(CallOutcome::Executed {
+            result: trade_status(&client.client_id, arguments).await,
+        });
+    }
+
     let client = authenticate(client_id, secret)?;
     let permissions = client.permissions;
     let ctx = authed_context(&client, Some(name), Some(correlation_id));
-
-    if name == TRADE_STATUS_TOOL {
-        audit::record(AuditKind::ToolRequest, &ctx, "received", None);
-        let result = trade_status(&client.client_id, arguments).await;
-        audit::record(
-            AuditKind::Execution,
-            &ctx,
-            if result.success { "done" } else { "failed" },
-            None,
-        );
-        return Ok(CallOutcome::Executed { result });
-    }
 
     let Some(tool) = create_tool_registry().get(name) else {
         audit::record(AuditKind::ToolRequest, &ctx, "unknown_tool", None);
@@ -362,11 +387,9 @@ async fn submit(
         move || submissions::submit_or_reuse(&client_id, &name, &arguments, &correlation_id)
     })
     .await
-    .map_err(|error| {
-        Error::Database(DatabaseError::Query {
-            operation: "submit_trade".to_owned(),
-            message: error.to_string(),
-        })
+    .map_err(|error| Error::TaskEnded {
+        operation: "submit_trade",
+        detail: error.to_string(),
     })??;
     if !handle.created {
         audit::record(AuditKind::Execution, &ctx, "reused", Some(&handle.trade_id));
@@ -401,65 +424,83 @@ async fn submit(
 /// Run a submitted trade and store its outcome. The tool runs on a task of its
 /// own, so a panic in it ends that task, not this one: the submission is then
 /// recorded `interrupted` instead of staying `submitted` for the life of the
-/// process. A result that cannot be stored is recorded the same way.
-pub(crate) async fn run_submitted(
-    trade_id: String,
-    tool: Arc<dyn Tool>,
-    arguments: Value,
-    ctx: AuditContext,
-) {
+/// process. A result that cannot be stored is recorded the same way. The audit
+/// row records the state that was stored.
+async fn run_submitted(trade_id: String, tool: Arc<dyn Tool>, arguments: Value, ctx: AuditContext) {
     let outcome = match tokio::spawn(async move { tool.execute(arguments).await }).await {
         Ok(result) => {
             let ok = result.success;
             let value = serde_json::to_value(&result).unwrap_or(Value::Null);
             let id = trade_id.clone();
-            match write_outcome(move || submissions::finish(&id, ok, &value)).await {
-                Ok(true) => {}
-                Ok(false) => logger::warning(
-                    LogTag::Security,
-                    &format!(
-                        "agent-control: trade {trade_id} finished after it was marked interrupted"
-                    ),
-                ),
-                Err(error) => {
-                    logger::error(
-                        LogTag::Security,
-                        &format!(
-                            "agent-control: trade {trade_id} finished but its outcome was not stored: {error}"
-                        ),
-                    );
-                    interrupt_submission(&trade_id, OUTCOME_NOT_STORED).await;
-                }
-            }
-            if ok {
-                "done"
-            } else {
-                "failed"
-            }
+            let stored = write_outcome(move || submissions::finish(&id, ok, &value)).await;
+            settle_submission(&trade_id, ok, stored).await
         }
         Err(error) => {
             logger::error(
                 LogTag::Security,
                 &format!("agent-control: trade {trade_id} task ended without an answer: {error}"),
             );
-            interrupt_submission(&trade_id, TASK_ENDED).await;
-            "interrupted"
+            interrupt_submission(&trade_id, TASK_ENDED).await
         }
     };
     audit::record(AuditKind::Execution, &ctx, outcome, Some(&trade_id));
 }
 
-/// Record a submission that ended without a stored answer as interrupted.
-async fn interrupt_submission(trade_id: &str, cause: &'static str) {
+/// The state a finished submission was left in once its outcome write returned
+/// `stored`, as the audit log names it. An outcome that could not be stored is
+/// recorded interrupted instead.
+async fn settle_submission(trade_id: &str, ok: bool, stored: Result<bool>) -> &'static str {
+    match stored {
+        Ok(true) if ok => "done",
+        Ok(true) => "failed",
+        Ok(false) => {
+            logger::warning(
+                LogTag::Security,
+                &format!(
+                    "agent-control: trade {trade_id} finished after it was marked interrupted"
+                ),
+            );
+            "interrupted"
+        }
+        Err(error) => {
+            logger::error(
+                LogTag::Security,
+                &format!(
+                    "agent-control: trade {trade_id} finished but its outcome was not stored: {error}"
+                ),
+            );
+            interrupt_submission(trade_id, OUTCOME_NOT_STORED).await
+        }
+    }
+}
+
+/// Record a submission that ended without a stored answer as interrupted, and
+/// return the state stored, as the audit log names it: `interrupted`, or
+/// `outcome_unstored` when the interruption was not stored either.
+async fn interrupt_submission(trade_id: &str, cause: &'static str) -> &'static str {
     let id = trade_id.to_owned();
-    if let Err(error) = write_outcome(move || submissions::interrupt(&id, cause)).await {
-        logger::error(
-            LogTag::Security,
-            &format!(
-                "agent-control: trade {trade_id} could not be marked interrupted and reads \
-                 submitted until the next start: {error}"
-            ),
-        );
+    match write_outcome(move || submissions::interrupt(&id, cause)).await {
+        Ok(true) => "interrupted",
+        Ok(false) => {
+            logger::error(
+                LogTag::Security,
+                &format!(
+                    "agent-control: trade {trade_id} could not be marked interrupted: it was \
+                     no longer running"
+                ),
+            );
+            "outcome_unstored"
+        }
+        Err(error) => {
+            logger::error(
+                LogTag::Security,
+                &format!(
+                    "agent-control: trade {trade_id} could not be marked interrupted and reads \
+                     submitted until the next start: {error}"
+                ),
+            );
+            "outcome_unstored"
+        }
     }
 }
 
@@ -473,10 +514,10 @@ async fn write_outcome<T: Send + 'static>(
         let result = tokio::task::spawn_blocking(write.clone())
             .await
             .unwrap_or_else(|error| {
-                Err(Error::Database(DatabaseError::Query {
-                    operation: "store_outcome".to_owned(),
-                    message: error.to_string(),
-                }))
+                Err(Error::TaskEnded {
+                    operation: "store_outcome",
+                    detail: error.to_string(),
+                })
             });
         match result {
             Err(error) if error.is_retryable() && attempt < OUTCOME_WRITE_ATTEMPTS => {
@@ -494,13 +535,50 @@ pub fn approval_status(
     secret: &str,
     approval_id: &str,
 ) -> Result<approvals::ApprovalHandle> {
-    let client = authenticate(client_id, secret)?;
+    let client = verify(client_id, secret)?;
     approvals::view_for_client(approval_id, &client.client_id)
 }
 
-/// A claimed approval that passed its re-checks and is `executing`, ready to
-/// run. Built by `start_approved`; consumed by `run`.
-pub struct ApprovedRun {
+/// Approve a pending request from the dashboard `decide` route: claim it
+/// exactly once, re-check it and run it. The claim, the re-checks and the start
+/// of the run happen on a task of their own, so a decide request dropped
+/// mid-way can neither leave a claimed request unrun nor drop its run. Answers
+/// once the request is started or failed closed by a re-check; the run itself
+/// continues on its own task and stores its outcome for the MCP client.
+pub async fn approve(approval_id: String) -> Result<()> {
+    tokio::spawn(async move {
+        let id = approval_id.clone();
+        let started = tokio::task::spawn_blocking(move || start_approved(&id))
+            .await
+            .map_err(|error| Error::TaskEnded {
+                operation: "start_approved",
+                detail: error.to_string(),
+            })??;
+        if let Some(approved) = started {
+            tokio::spawn(async move {
+                if let Err(error) = approved.run().await {
+                    logger::error(
+                        LogTag::Security,
+                        &format!(
+                            "agent-control: approved request {approval_id} ended without a stored outcome: {error}"
+                        ),
+                    );
+                }
+            });
+        }
+        Ok(())
+    })
+    .await
+    .map_err(|error| Error::TaskEnded {
+        operation: "approve",
+        detail: error.to_string(),
+    })?
+}
+
+/// A claimed approval that passed its re-checks, ready to run. It turns
+/// `executing` only as `run` starts its tool, so a request that never ran
+/// recovers as not run. Built by `start_approved`; consumed by `run`.
+struct ApprovedRun {
     approval_id: String,
     tool: Arc<dyn Tool>,
     arguments: Value,
@@ -508,12 +586,12 @@ pub struct ApprovedRun {
     _active_tool: ActiveToolGuard,
 }
 
-/// Claim a human-approved request exactly once and prepare it to run. Invoked
-/// only by the dashboard `decide` route — never reachable from the bridge.
-/// Claims the row (exactly-once) and re-checks policy against the pairing's
-/// *current* permissions. Returns `None` when a re-check failed the request
-/// closed; the stored result says why.
-pub fn start_approved(approval_id: &str) -> Result<Option<ApprovedRun>> {
+/// Claim a human-approved request exactly once and prepare it to run. Reached
+/// only through [`approve`] — never from the bridge. Claims the row
+/// (exactly-once) and re-checks policy against the pairing's *current*
+/// permissions. Returns `None` when a re-check failed the request closed; the
+/// stored result says why.
+fn start_approved(approval_id: &str) -> Result<Option<ApprovedRun>> {
     let claimed = approvals::claim(approval_id)?;
     let ctx = AuditContext {
         client_id: Some(claimed.client_id.clone()),
@@ -549,7 +627,6 @@ pub fn start_approved(approval_id: &str) -> Result<Option<ApprovedRun>> {
         return fail("policy denies this tool for the paired client");
     }
 
-    approvals::mark_executing(approval_id)?;
     let Some(active_tool) = crate::global::begin_tool() else {
         return fail("an application update is restarting the tool runtime");
     };
@@ -563,12 +640,13 @@ pub fn start_approved(approval_id: &str) -> Result<Option<ApprovedRun>> {
 }
 
 impl ApprovedRun {
-    /// Execute the stored canonical arguments and record the sanitized result
-    /// for the MCP client to poll through `approval_status`. The tool runs on a
-    /// task of its own: when it ends without an answer, or its result cannot be
-    /// stored, the request is recorded `interrupted` rather than left
-    /// `executing`.
-    pub async fn run(self) -> Result<()> {
+    /// Mark the request `executing`, execute the stored canonical arguments and
+    /// record the sanitized result for the MCP client to poll through
+    /// `approval_status`. The tool runs on a task of its own: when it ends
+    /// without an answer, or its result cannot be stored, the request is
+    /// recorded `interrupted` rather than left `executing`. The audit row
+    /// records the state that was stored.
+    async fn run(self) -> Result<()> {
         let ApprovedRun {
             approval_id,
             tool,
@@ -576,51 +654,70 @@ impl ApprovedRun {
             ctx,
             _active_tool,
         } = self;
+        let id = approval_id.clone();
+        write_outcome(move || approvals::mark_executing(&id)).await?;
         let sends_transaction = tool.sends_transaction();
-        match tokio::spawn(async move { tool.execute(arguments).await }).await {
+        let (outcome, answer) = match tokio::spawn(async move { tool.execute(arguments).await })
+            .await
+        {
             Ok(result) => {
                 let ok = result.success;
                 let value = serde_json::to_value(&result).unwrap_or(Value::Null);
                 let id = approval_id.clone();
                 let stored = write_outcome(move || approvals::finish(&id, ok, &value)).await;
-                audit::record(
-                    AuditKind::Execution,
-                    &ctx,
-                    if ok { "done" } else { "failed" },
-                    None,
-                );
-                if let Err(error) = stored {
-                    if !matches!(error, Error::ApprovalNotPending) {
-                        interrupt_approval(&approval_id, OUTCOME_NOT_STORED, sends_transaction)
-                            .await?;
-                    }
-                    return Err(error);
-                }
-                Ok(())
+                settle_approval(&approval_id, ok, stored, sends_transaction).await
             }
             Err(error) => {
                 logger::error(
-                    LogTag::Security,
-                    &format!(
-                        "agent-control: approved request {approval_id} ended without an answer: {error}"
-                    ),
-                );
-                audit::record(AuditKind::Execution, &ctx, "interrupted", None);
+                        LogTag::Security,
+                        &format!(
+                            "agent-control: approved request {approval_id} ended without an answer: {error}"
+                        ),
+                    );
                 interrupt_approval(&approval_id, TASK_ENDED, sends_transaction).await
             }
+        };
+        audit::record(AuditKind::Execution, &ctx, outcome, None);
+        answer
+    }
+}
+
+/// The state an executed approval was left in once its outcome write returned
+/// `stored`, as the audit log names it, with the run's answer. An outcome that
+/// could not be stored is recorded interrupted instead; a row that is not
+/// `executing` any more is left as it is.
+async fn settle_approval(
+    approval_id: &str,
+    ok: bool,
+    stored: Result<()>,
+    sends_transaction: bool,
+) -> (&'static str, Result<()>) {
+    match stored {
+        Ok(()) if ok => ("done", Ok(())),
+        Ok(()) => ("failed", Ok(())),
+        Err(Error::ApprovalNotPending) => ("outcome_unstored", Err(Error::ApprovalNotPending)),
+        Err(error) => {
+            let (outcome, interrupted) =
+                interrupt_approval(approval_id, OUTCOME_NOT_STORED, sends_transaction).await;
+            (outcome, interrupted.and(Err(error)))
         }
     }
 }
 
 /// Record an executing approval that ended without a stored answer as
-/// interrupted.
+/// interrupted, and return the state stored, as the audit log names it:
+/// `interrupted`, or `outcome_unstored` when the interruption was not stored
+/// either.
 async fn interrupt_approval(
     approval_id: &str,
     cause: &'static str,
     sends_transaction: bool,
-) -> Result<()> {
+) -> (&'static str, Result<()>) {
     let id = approval_id.to_owned();
-    write_outcome(move || approvals::interrupt(&id, cause, sends_transaction)).await
+    match write_outcome(move || approvals::interrupt(&id, cause, sends_transaction)).await {
+        Ok(()) => ("interrupted", Ok(())),
+        Err(error) => ("outcome_unstored", Err(error)),
+    }
 }
 
 /// Deny a pending approval (dashboard `decide` route, `approve = false`).
@@ -641,11 +738,167 @@ pub fn deny_approval(approval_id: &str) -> Result<()> {
 
 #[cfg(test)]
 mod tests {
+    use std::sync::atomic::{AtomicU32, Ordering};
+
     use async_trait::async_trait;
     use serde_json::json;
 
     use super::*;
     use crate::agent_control::store::{interrupted_result, test_support::setup};
+    use crate::errors::DatabaseError;
+
+    fn busy() -> Error {
+        Error::Database(DatabaseError::Busy {
+            operation: "test_outcome".to_owned(),
+            message: "database is locked".to_owned(),
+        })
+    }
+
+    /// An outcome write that answers `failures` errors from `error` before it
+    /// succeeds, counting its attempts.
+    fn flaky_write(
+        failures: u32,
+        error: fn() -> Error,
+    ) -> (
+        Arc<AtomicU32>,
+        impl Fn() -> Result<u32> + Clone + Send + 'static,
+    ) {
+        let attempts = Arc::new(AtomicU32::new(0));
+        let counter = Arc::clone(&attempts);
+        let write = move || {
+            let attempt = counter.fetch_add(1, Ordering::SeqCst) + 1;
+            if attempt <= failures {
+                Err(error())
+            } else {
+                Ok(attempt)
+            }
+        };
+        (attempts, write)
+    }
+
+    /// A busy store is retried up to the attempt bound and no further; a
+    /// failure that retrying cannot fix returns at once.
+    #[tokio::test(start_paused = true)]
+    async fn an_outcome_write_retries_only_a_busy_store_and_only_so_often() {
+        let (attempts, write) = flaky_write(2, busy);
+        assert_eq!(write_outcome(write).await.unwrap(), 3);
+        assert_eq!(attempts.load(Ordering::SeqCst), 3);
+
+        let (attempts, write) = flaky_write(u32::MAX, busy);
+        let error = write_outcome(write)
+            .await
+            .expect_err("the store stays busy");
+        assert!(error.is_retryable());
+        assert_eq!(attempts.load(Ordering::SeqCst), OUTCOME_WRITE_ATTEMPTS);
+
+        let (attempts, write) = flaky_write(u32::MAX, || Error::ApprovalNotPending);
+        assert!(matches!(
+            write_outcome(write).await,
+            Err(Error::ApprovalNotPending)
+        ));
+        assert_eq!(attempts.load(Ordering::SeqCst), 1);
+    }
+
+    /// A finished trade whose outcome no write could store ends `interrupted`
+    /// with the not-stored answer on both paths, and the audit names that
+    /// state, never the tool's own success. An approval that is no longer
+    /// `executing` is left as it is.
+    #[tokio::test]
+    async fn an_outcome_that_cannot_be_stored_is_recorded_interrupted() {
+        let _guard = setup();
+        let client = "unstored-outcome-client";
+        let args = json!({ "mint_address": "U" });
+        let expected = interrupted_result(OUTCOME_NOT_STORED, true);
+
+        let submission = submissions::submit_or_reuse(client, "buy_token", &args, "c1").unwrap();
+        assert_eq!(
+            settle_submission(&submission.trade_id, true, Err(busy())).await,
+            "interrupted"
+        );
+        let viewed = submissions::view_for_client(&submission.trade_id, client)
+            .unwrap()
+            .expect("retained");
+        assert_eq!(viewed.state, SubmissionState::Interrupted);
+        assert_eq!(viewed.result, Some(expected.clone()));
+
+        let approval = approvals::create_or_reuse(client, "buy_token", &args, "c1").unwrap();
+        approvals::claim(&approval.id).unwrap();
+        approvals::mark_executing(&approval.id).unwrap();
+        let (outcome, answer) = settle_approval(&approval.id, true, Err(busy()), true).await;
+        assert_eq!(outcome, "interrupted");
+        assert!(answer
+            .expect_err("the outcome was not stored")
+            .is_retryable());
+        let viewed = approvals::view_for_client(&approval.id, client).unwrap();
+        assert_eq!(viewed.state, "interrupted");
+        assert_eq!(viewed.result, Some(expected));
+
+        let other = approvals::create_or_reuse(client, "sell_token", &args, "c1").unwrap();
+        approvals::claim(&other.id).unwrap();
+        let (outcome, answer) =
+            settle_approval(&other.id, true, Err(Error::ApprovalNotPending), true).await;
+        assert_eq!(outcome, "outcome_unstored");
+        assert!(matches!(answer, Err(Error::ApprovalNotPending)));
+        assert_eq!(
+            approvals::view_for_client(&other.id, client).unwrap().state,
+            "claimed"
+        );
+    }
+
+    /// A trade tool a connection runs without approval says it answers with a
+    /// trade id and the reuse window; under approval, and in the registry the
+    /// in-app assistant reads, no trade tool claims either.
+    #[test]
+    fn only_a_trade_tool_that_answers_with_a_trade_id_describes_one() {
+        let note = submission_note();
+        let window = format!("{} minutes", submissions::REUSE_WINDOW.as_secs() / 60);
+        assert!(note.contains("trade_id") && note.contains(TRADE_STATUS_TOOL));
+        assert!(note.contains(&window));
+        assert!(trade_status_definition().description.contains(&window));
+
+        let registry = create_tool_registry();
+        let sends = |name: &str| {
+            registry
+                .get(name)
+                .is_some_and(|tool| tool.sends_transaction())
+        };
+        let mut sending = 0;
+        for def in registry.list_definitions() {
+            assert!(
+                !def.description.contains("trade_id"),
+                "{} describes a trade id in the shared registry",
+                def.name
+            );
+            sending += usize::from(sends(&def.name));
+        }
+        assert!(sending > 0);
+
+        let allowed = connection_tools(ToolPermissions::full_access());
+        let described = allowed
+            .iter()
+            .filter(|def| sends(&def.name))
+            .inspect(|def| {
+                assert!(
+                    def.description.ends_with(&note),
+                    "{} lacks the trade id note",
+                    def.name
+                )
+            })
+            .count();
+        assert_eq!(described, sending);
+
+        let asked = connection_tools(ToolPermissions {
+            trading: PermissionLevel::AskUser,
+            ..ToolPermissions::full_access()
+        });
+        for def in asked.iter().filter(|def| sends(&def.name)) {
+            assert!(
+                !def.description.contains(&note),
+                "{} describes a trade id it does not answer with under approval",
+                def.name
+            );
+        }
+    }
 
     struct PanickingTrade;
 
@@ -697,7 +950,6 @@ mod tests {
 
         let approval = approvals::create_or_reuse(client, "buy_token", &args, "c1").unwrap();
         approvals::claim(&approval.id).unwrap();
-        approvals::mark_executing(&approval.id).unwrap();
         ApprovedRun {
             approval_id: approval.id.clone(),
             tool: Arc::new(PanickingTrade),

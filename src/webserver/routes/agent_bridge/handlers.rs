@@ -70,6 +70,7 @@ fn reject(error: &Error) -> Response {
             ids::ERRORS_AGENT_APPROVAL_NOT_PENDING,
         ),
         Error::ApprovalNotFound => (ApiErrorCode::NotFound, ids::ERRORS_AGENT_APPROVAL_NOT_FOUND),
+        Error::TaskEnded { .. } => (ApiErrorCode::Internal, ids::ERRORS_AGENT_BRIDGE_TASK_FAILED),
     };
     ApiError::new(code, id)
         .details(error.to_string())

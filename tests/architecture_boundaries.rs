@@ -3577,18 +3577,12 @@ fn every_manual_trade_runs_detached_from_its_caller() {
         "the guard must see every manual trade ({faces} seen)"
     );
 
-    // A tool call or approval may be a trade: the routes that run one keep
-    // their bookkeeping alive past a dropped request.
-    for (file, call) in [
-        (
-            "webserver/routes/agent_bridge/handlers.rs",
-            "bridge::call_tool(",
-        ),
-        (
-            "webserver/routes/agent_control/approvals.rs",
-            "approved.run(",
-        ),
-    ] {
+    // A tool call may be a trade: the route that runs one keeps its
+    // bookkeeping alive past a dropped request.
+    for (file, call) in [(
+        "webserver/routes/agent_bridge/handlers.rs",
+        "bridge::call_tool(",
+    )] {
         let contents =
             fs::read_to_string(Path::new(env!("CARGO_MANIFEST_DIR")).join("src").join(file))
                 .expect("the route source reads");
@@ -3604,7 +3598,10 @@ fn every_manual_trade_runs_detached_from_its_caller() {
     // A transaction-sending tool submitted by an agent connection answers with
     // a trade id: `submit` hands it to `run_submitted` on a spawned task, and
     // `run_submitted` runs the tool on a task of its own so a panic in the
-    // tool is recorded instead of ending the bookkeeping.
+    // tool is recorded instead of ending the bookkeeping. An approval is
+    // claimed and started on a task of `approve`'s own, so a dropped decide
+    // request cannot leave it claimed and unrun, and its run executes the tool
+    // the same way.
     let contents = fs::read_to_string(
         Path::new(env!("CARGO_MANIFEST_DIR")).join("src/agent_control/bridge.rs"),
     )
@@ -3613,6 +3610,9 @@ fn every_manual_trade_runs_detached_from_its_caller() {
     for (function, call) in [
         ("fn submit(", "run_submitted("),
         ("fn run_submitted(", ".execute("),
+        ("fn approve(", "start_approved("),
+        ("fn approve(", "approved.run("),
+        ("fn run(", ".execute("),
     ] {
         let at = code
             .find(function)

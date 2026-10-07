@@ -56,6 +56,7 @@ events-connectivity-endpoint-recovered = 端点已从 { $from } 恢复为健康
 events-position-entry-not-landed = { $symbol } 的买入未在链上确认，已移除其仓位
 events-position-fill-after-force-close = { $symbol } 的一笔交易在其仓位被强制平仓后于链上确认；已记账并重新计算该仓位
 events-position-swap-unbooked = { $symbol } 的一笔兑换已在链上确认，但尚未记入其仓位；将持续重新验证直至记账
+events-position-exit-residual-unattributed = { $symbol } 已平仓，但该代币仍有余额留在钱包中。这些代币可能属于入场尚未验证的仓位 { $blocking }，因此未被卖出，也没有仓位管理它们
 
 ## Events page (pages/events.js, ui/event_labels.js)
 

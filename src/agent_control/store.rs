@@ -339,7 +339,7 @@ fn permissions_for_legacy_scope(scope: &str) -> ToolPermissions {
 /// not run. Overdue `pending` rows become `expired`. Only valid at startup
 /// (`init`): called later, it would discard the result of a request still
 /// running. Returns how many claimed or executing rows were closed.
-pub(crate) fn recover_interrupted(connection: &rusqlite::Connection) -> Result<usize> {
+fn recover_interrupted(connection: &rusqlite::Connection) -> Result<usize> {
     let now = now_unix();
     let executing: Vec<(String, String)> = connection
         .prepare("SELECT id, tool FROM approvals WHERE state = 'executing'")?

@@ -48,6 +48,7 @@ events-connectivity-endpoint-recovered = Endpoint rétabli de l'état { $from } 
 events-position-entry-not-landed = L'achat de { $symbol } n'a pas abouti on-chain ; sa position a été supprimée
 events-position-fill-after-force-close = Une transaction de { $symbol } a abouti on-chain après la clôture forcée de sa position ; elle a été comptabilisée et la position recalculée
 events-position-swap-unbooked = Un swap de { $symbol } confirmé on-chain n'est pas encore dans sa position ; il est revérifié jusqu'à sa comptabilisation
+events-position-exit-residual-unattributed = { $symbol } a été clôturée avec des jetons du mint restés dans le portefeuille. Ils peuvent appartenir à la position { $blocking }, dont l'entrée n'est pas vérifiée ; ils n'ont donc pas été vendus et aucune position ne les gère
 
 events-category-swap = Swap
 events-category-transaction = Transaction

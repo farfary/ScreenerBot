@@ -48,6 +48,7 @@ events-connectivity-endpoint-recovered = Endpoint đã phục hồi từ { $from
 events-position-entry-not-landed = Lệnh mua { $symbol } không được ghi nhận trên chuỗi; vị thế đã bị xóa
 events-position-fill-after-force-close = Một giao dịch { $symbol } được ghi nhận trên chuỗi sau khi vị thế bị đóng cưỡng bức; giao dịch đã được ghi sổ và vị thế được tính lại
 events-position-swap-unbooked = Một swap { $symbol } đã xác nhận trên chuỗi chưa được ghi vào vị thế; swap được xác minh lại cho đến khi được ghi sổ
+events-position-exit-residual-unattributed = { $symbol } đã đóng nhưng token của mint này vẫn còn trong ví. Chúng có thể thuộc vị thế { $blocking } có lệnh vào chưa được xác minh, nên không được bán và không vị thế nào quản lý chúng
 
 events-category-swap = Swap
 events-category-transaction = Giao dịch

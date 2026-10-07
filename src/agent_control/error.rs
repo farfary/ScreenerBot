@@ -51,6 +51,13 @@ pub enum Error {
     /// The referenced approval id does not exist for this client.
     #[error("approval not found")]
     ApprovalNotFound,
+    /// A task running agent-control work ended before it answered: it
+    /// panicked or the runtime cancelled it.
+    #[error("agent-control task for {operation} ended without an answer: {detail}")]
+    TaskEnded {
+        operation: &'static str,
+        detail: String,
+    },
 }
 
 /// A raw SQLite failure in the pairing/approval/audit store surfaces as a
@@ -75,7 +82,8 @@ impl ErrorClass for Error {
             | Error::PairingRejected
             | Error::Disabled
             | Error::ApprovalNotPending
-            | Error::ApprovalNotFound => false,
+            | Error::ApprovalNotFound
+            | Error::TaskEnded { .. } => false,
         }
     }
 
@@ -92,6 +100,7 @@ impl ErrorClass for Error {
             Error::Config(e) => e.severity(),
             Error::Database(e) => e.severity(),
             Error::PairingRejected | Error::SecretPath { .. } => Severity::Warning,
+            Error::TaskEnded { .. } => Severity::Error,
             Error::InvalidParameters { .. }
             | Error::InvalidPairingRequest { .. }
             | Error::Disabled
@@ -115,6 +124,7 @@ impl ErrorClass for Error {
             Error::Disabled => 403,
             Error::ApprovalNotPending => 409,
             Error::ApprovalNotFound => 404,
+            Error::TaskEnded { .. } => 500,
         }
     }
 }

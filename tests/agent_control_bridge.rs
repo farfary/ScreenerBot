@@ -2,7 +2,8 @@
 // SPDX-License-Identifier: BUSL-1.1
 
 //! The live-app bridge as a paired connection reaches it: reading a submitted
-//! trade's outcome through `get_trade_status`.
+//! trade's outcome through `get_trade_status`, polling an approval, and an
+//! approved request running to its outcome.
 //!
 //! Its own file (own test binary, own process) because it loads the global
 //! configuration, which the bridge reads for `agent_control.enabled`, and points
@@ -163,4 +164,90 @@ fn the_status_read_is_listed_only_for_a_connection_that_may_trade() {
     .expect("pair");
     let listed = bridge::list_tools(&created.client_id, &created.pairing_secret).expect("list");
     assert!(!listed.iter().any(|def| def.name == TRADE_STATUS_TOOL));
+}
+
+fn audit_rows() -> i64 {
+    let path = std::env::var("SCREENERBOT_AGENT_CONTROL_DB").expect("db path set by setup()");
+    rusqlite::Connection::open(path)
+        .expect("open temp agent_control.db")
+        .query_row("SELECT COUNT(*) FROM audit", [], |row| row.get(0))
+        .expect("count audit rows")
+}
+
+/// Parks a `get_positions` call of the connection on approval and returns its id.
+async fn parked_approval(client_id: &str, secret: &str) -> String {
+    match bridge::call_tool(client_id, secret, "get_positions", json!({}), "c1")
+        .await
+        .expect("bridge answers")
+    {
+        CallOutcome::ApprovalRequired { approval_id, .. } => approval_id,
+        other => panic!("an ask-policy call answered {other:?} instead of parking"),
+    }
+}
+
+/// A client polls a trade's or an approval's status until it settles. The
+/// polls write no audit row, so they cannot evict the trade and approval
+/// records from the capped log; a rejected credential is still audited.
+#[tokio::test]
+async fn status_polls_write_no_audit_rows() {
+    let _guard = setup();
+    let (client_id, secret) = trading_connection("status-poller", PermissionLevel::AskUser);
+    let trade = submissions::submit_or_reuse(
+        &client_id,
+        "buy_token",
+        &json!({ "mint_address": "POLLED" }),
+        "c1",
+    )
+    .expect("submit");
+    let approval_id = parked_approval(&client_id, &secret).await;
+
+    let before = audit_rows();
+    for _ in 0..20 {
+        assert!(
+            read_status(&client_id, &secret, &trade.trade_id)
+                .await
+                .success
+        );
+        let polled = bridge::approval_status(&client_id, &secret, &approval_id).expect("poll");
+        assert_eq!(polled.state, "pending");
+    }
+    assert_eq!(audit_rows(), before, "status polls wrote audit rows");
+
+    assert!(bridge::approval_status(&client_id, "wrong-secret", &approval_id).is_err());
+    assert_eq!(audit_rows(), before + 1, "a rejected poll was not audited");
+}
+
+/// An approval whose dashboard decide request drops right after it is sent
+/// still runs to a stored outcome instead of staying claimed or executing.
+#[tokio::test]
+async fn an_approval_runs_to_its_outcome_when_the_decide_request_drops() {
+    let _guard = setup();
+    let (client_id, secret) = trading_connection("approval-dropped", PermissionLevel::AskUser);
+    let approval_id = parked_approval(&client_id, &secret).await;
+
+    // A zero timeout polls the decide future once and then drops it.
+    let dropped = tokio::time::timeout(
+        std::time::Duration::ZERO,
+        bridge::approve(approval_id.clone()),
+    )
+    .await;
+    assert!(
+        dropped.is_err(),
+        "the decide future answered before it was dropped"
+    );
+
+    let deadline = std::time::Instant::now() + std::time::Duration::from_secs(10);
+    loop {
+        let state = bridge::approval_status(&client_id, &secret, &approval_id)
+            .expect("poll")
+            .state;
+        if state == "done" || state == "failed" {
+            break;
+        }
+        assert!(
+            std::time::Instant::now() < deadline,
+            "the approval stayed {state} after its decide request dropped"
+        );
+        tokio::time::sleep(std::time::Duration::from_millis(50)).await;
+    }
 }

@@ -48,6 +48,7 @@ events-connectivity-endpoint-recovered = एंडपॉइंट { $from } स�
 events-position-entry-not-landed = { $symbol } की खरीद ऑन-चेन दर्ज नहीं हुई; उसकी पोज़िशन हटा दी गई
 events-position-fill-after-force-close = { $symbol } का एक ट्रेड उसकी पोज़िशन को ज़बरदस्ती बंद करने के बाद ऑन-चेन दर्ज हुआ; उसे दर्ज कर पोज़िशन फिर से गिनी गई
 events-position-swap-unbooked = { $symbol } का एक स्वैप ऑन-चेन पुष्ट है पर अभी उसकी पोज़िशन में दर्ज नहीं है; दर्ज होने तक उसे फिर से जाँचा जाता है
+events-position-exit-residual-unattributed = { $symbol } बंद हुआ पर इस मिंट के टोकन वॉलेट में बचे रहे। वे पोज़िशन { $blocking } के हो सकते हैं, जिसकी एंट्री सत्यापित नहीं है, इसलिए वे बेचे नहीं गए और कोई पोज़िशन उन्हें प्रबंधित नहीं करती
 
 events-category-swap = स्वैप
 events-category-transaction = ट्रांज़ैक्शन

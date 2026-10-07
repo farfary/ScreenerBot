@@ -68,16 +68,16 @@ pub fn attributable_is_dust(
     expected: Option<RawAmount>,
 ) -> Option<bool> {
     let expected = expected.filter(|expected| expected.raw() > DUST_FLOOR_RAW)?;
-    let dust_alone = is_dust(
-        attributable_held(wallet_held, RawAmount::ZERO, expected),
-        expected,
-    );
     match held_by_other_open_rows {
         Some(others) => Some(is_dust(
             attributable_held(wallet_held, others, expected),
             expected,
         )),
-        None => dust_alone.then_some(true),
+        None => is_dust(
+            attributable_held(wallet_held, RawAmount::ZERO, expected),
+            expected,
+        )
+        .then_some(true),
     }
 }
 

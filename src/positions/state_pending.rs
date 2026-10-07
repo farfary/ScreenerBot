@@ -201,11 +201,12 @@ pub async fn get_pending_dca_swaps_for_mint(mint: &str) -> Vec<PendingDcaSwap> {
         .collect()
 }
 
-/// Load pending DCA swaps from metadata into memory (used at startup)
+/// Load pending DCA swaps from metadata into memory (used at startup). A swap whose
+/// position row no longer exists is dropped from memory and storage.
 pub async fn rehydrate_pending_dca_swaps() -> Result<Vec<PendingDcaSwap>> {
     let raw = db::get_metadata(PENDING_DCA_METADATA_KEY).await?;
 
-    let entries: Vec<PendingDcaSwap> = match raw {
+    let mut entries: Vec<PendingDcaSwap> = match raw {
         Some(payload) if !payload.is_empty() => {
             serde_json::from_str(&payload).map_err(|e| Error::RowDecode {
                 column: "pending_dca_metadata",
@@ -214,12 +215,21 @@ pub async fn rehydrate_pending_dca_swaps() -> Result<Vec<PendingDcaSwap>> {
         }
         _ => Vec::new(),
     };
+    let dropped = drop_swaps_of_deleted_positions(&mut entries, |e| e.position_id, "DCA").await;
 
     {
         let mut map = PENDING_DCA_SWAPS.write().await;
         map.clear();
         for entry in &entries {
             map.insert(entry.signature.clone(), entry.clone());
+        }
+    }
+    if dropped > 0 {
+        if let Err(error) = persist_pending_dca_swaps().await {
+            logger::warning(
+                LogTag::Positions,
+                &format!("Pending DCA swaps of deleted positions are still stored: {error}"),
+            );
         }
     }
 
@@ -282,8 +292,9 @@ pub async fn clear_pending_partial_exit(signature: &str) -> Result<Option<Pendin
 /// from storage, decrementing the mint's partial-exit count once per partial exit removed.
 /// For a position whose row is deleted: its swaps can no longer be booked on it, and a
 /// marker left behind would hold every later late fill of the mint as unattributable. Memory
-/// is cleared even when persisting fails; the error reports that storage still lists them
-/// until the next persist of the set.
+/// is cleared even when persisting fails, and both sets are persisted even when the first
+/// fails; the first error reports that storage still lists them until the next persist of
+/// that set, and the startup sweep drops them then (`rehydrate_pending_*`).
 pub async fn clear_pending_swaps_of_position(position_id: i64) -> Result<()> {
     let dca_removed = {
         let mut map = PENDING_DCA_SWAPS.write().await;
@@ -308,13 +319,53 @@ pub async fn clear_pending_swaps_of_position(position_id: i64) -> Result<()> {
         clear_partial_exit_pending(mint).await;
     }
 
-    if dca_removed {
-        persist_pending_dca_swaps().await?;
+    let dca_persisted = if dca_removed {
+        persist_pending_dca_swaps().await
+    } else {
+        Ok(())
+    };
+    let partials_persisted = if partial_mints.is_empty() {
+        Ok(())
+    } else {
+        persist_pending_partial_exits().await
+    };
+    dca_persisted.and(partials_persisted)
+}
+
+/// Removes from `entries` the pending swaps whose position row no longer exists and returns
+/// how many were removed. Such a swap can never be booked, and its marker would hold every
+/// later late fill of the mint as unattributable. An entry whose row cannot be read is kept.
+async fn drop_swaps_of_deleted_positions<T>(
+    entries: &mut Vec<T>,
+    position_id: impl Fn(&T) -> i64,
+    kind: &str,
+) -> usize {
+    let mut kept = Vec::with_capacity(entries.len());
+    let mut dropped = 0;
+    for entry in entries.drain(..) {
+        let id = position_id(&entry);
+        match db::get_position_by_id(id).await {
+            Ok(None) => {
+                dropped += 1;
+                logger::warning(
+                    LogTag::Positions,
+                    &format!("Dropped the pending {kind} of deleted position {id}"),
+                );
+            }
+            Ok(Some(_)) => kept.push(entry),
+            Err(error) => {
+                logger::warning(
+                    LogTag::Positions,
+                    &format!(
+                        "Kept the pending {kind} of position {id}: the row could not be read: {error}"
+                    ),
+                );
+                kept.push(entry);
+            }
+        }
     }
-    if !partial_mints.is_empty() {
-        persist_pending_partial_exits().await?;
-    }
-    Ok(())
+    *entries = kept;
+    dropped
 }
 
 /// Fetch a pending partial exit by signature
@@ -455,11 +506,12 @@ pub async fn mints_with_pending_swaps() -> std::collections::HashSet<String> {
     mints
 }
 
-/// Load pending partial exits from metadata into memory (used at startup)
+/// Load pending partial exits from metadata into memory (used at startup). A partial exit
+/// whose position row no longer exists is dropped from memory and storage.
 pub async fn rehydrate_pending_partial_exits() -> Result<Vec<PendingPartialExit>> {
     let raw = db::get_metadata(db::PENDING_PARTIAL_EXIT_METADATA_KEY).await?;
 
-    let entries: Vec<PendingPartialExit> = match raw {
+    let mut entries: Vec<PendingPartialExit> = match raw {
         Some(payload) if !payload.is_empty() => {
             serde_json::from_str(&payload).map_err(|e| Error::RowDecode {
                 column: "pending_partial_exit_metadata",
@@ -468,6 +520,8 @@ pub async fn rehydrate_pending_partial_exits() -> Result<Vec<PendingPartialExit>
         }
         _ => Vec::new(),
     };
+    let dropped =
+        drop_swaps_of_deleted_positions(&mut entries, |e| e.position_id, "partial exit").await;
 
     {
         let mut map = PENDING_PARTIAL_EXIT_DETAILS.write().await;
@@ -483,6 +537,14 @@ pub async fn rehydrate_pending_partial_exits() -> Result<Vec<PendingPartialExit>
         for entry in &entries {
             let counter = counters.entry(entry.mint.clone()).or_default();
             *counter = counter.saturating_add(1);
+        }
+    }
+    if dropped > 0 {
+        if let Err(error) = persist_pending_partial_exits().await {
+            logger::warning(
+                LogTag::Positions,
+                &format!("Pending partial exits of deleted positions are still stored: {error}"),
+            );
         }
     }
 

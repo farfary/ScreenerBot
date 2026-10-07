@@ -103,8 +103,9 @@ pub async fn set_position_management_db(id: i64, management: PositionManagement)
     }
 }
 
-/// Hard-delete all archived positions (cascades only to this position's child rows)
-pub async fn delete_archived_positions() -> Result<usize> {
+/// Hard-delete all archived positions (cascades only to this position's child rows).
+/// Returns the ids deleted.
+pub async fn delete_archived_positions() -> Result<Vec<i64>> {
     let db_guard = GLOBAL_POSITIONS_DB.lock().await;
     match db_guard.as_ref() {
         Some(db) => db.delete_archived_positions().await,

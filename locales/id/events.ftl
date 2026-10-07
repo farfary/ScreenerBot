@@ -51,6 +51,7 @@ events-connectivity-endpoint-recovered = Endpoint pulih dari { $from } ke sehat
 events-position-entry-not-landed = Pembelian { $symbol } tidak tercatat on-chain; posisinya dihapus
 events-position-fill-after-force-close = Transaksi { $symbol } tercatat on-chain setelah posisinya ditutup paksa; transaksi dibukukan dan posisinya dihitung ulang
 events-position-swap-unbooked = Swap { $symbol } yang terkonfirmasi on-chain belum masuk ke posisinya; swap diverifikasi ulang sampai dibukukan
+events-position-exit-residual-unattributed = { $symbol } ditutup dengan token mint ini masih tersisa di dompet. Token itu mungkin milik posisi { $blocking } yang entrinya belum terverifikasi, jadi tidak dijual dan tidak dikelola posisi mana pun
 
 events-category-swap = Swap
 events-category-transaction = Transaksi

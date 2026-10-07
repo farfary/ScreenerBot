@@ -56,6 +56,7 @@ events-connectivity-endpoint-recovered = Ендпоінт відновився �
 events-position-entry-not-landed = Купівля { $symbol } не потрапила в мережу; позицію видалено
 events-position-fill-after-force-close = Угода з { $symbol } потрапила в мережу після примусового закриття позиції; її враховано, позицію перераховано
 events-position-swap-unbooked = Підтверджений у мережі своп { $symbol } ще не враховано в позиції; його перевіряють повторно, доки не буде враховано
+events-position-exit-residual-unattributed = { $symbol } закрито, але токени цього мінта залишилися в гаманці. Вони можуть належати позиції { $blocking }, вхід якої не підтверджено, тому їх не продано і жодна позиція ними не керує
 
 ## Events page (pages/events.js, ui/event_labels.js)
 

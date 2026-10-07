@@ -49,6 +49,7 @@ events-connectivity-endpoint-recovered = Endpunkt von { $from } auf fehlerfrei z
 events-position-entry-not-landed = Der Kauf von { $symbol } ist nicht on-chain angekommen; die Position wurde entfernt
 events-position-fill-after-force-close = Ein Trade von { $symbol } ist on-chain angekommen, nachdem die Position zwangsgeschlossen wurde; er wurde gebucht und die Position neu berechnet
 events-position-swap-unbooked = Ein on-chain bestätigter Swap von { $symbol } ist noch nicht in seiner Position gebucht; er wird erneut geprüft, bis er gebucht ist
+events-position-exit-residual-unattributed = { $symbol } wurde geschlossen, während Token des Mints in der Wallet verblieben. Sie können zu Position { $blocking } gehören, deren Einstieg nicht verifiziert ist; daher wurden sie nicht verkauft und keine Position verwaltet sie
 
 ## Events page (pages/events.js, ui/event_labels.js)
 
