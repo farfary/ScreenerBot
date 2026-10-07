@@ -459,22 +459,43 @@ fn validate_quote_with_net(
 // SWAP EXECUTION WITH FALLBACK
 // ============================================================================
 
-/// Execute swap with automatic fallback on failure
-/// Tries primary router, falls back to others by priority on retryable errors
+/// Who signs a swap.
+#[derive(Clone, Copy)]
+pub(crate) enum SwapSigner<'a> {
+    /// The main trading wallet, trading this token.
+    MainWallet(&'a Token),
+    /// One wallet of the wallet tools, by id.
+    Wallet(i64),
+}
+
+/// Which routers a swap that failed before submission may be re-quoted on.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub(crate) enum Fallback {
+    /// Every other enabled router of the chain, by priority.
+    AnyRouter,
+    /// Only the router that produced the quote: a caller who named a router
+    /// wants that router or an error.
+    SameRouter,
+}
+
+/// Execute `quote` on its own router, signing as `signer`.
+async fn execute_on(
+    router: &dyn SwapRouter,
+    signer: SwapSigner<'_>,
+    quote: &Quote,
+) -> Result<SwapResult> {
+    match signer {
+        SwapSigner::MainWallet(token) => router.execute_swap(token, quote).await,
+        SwapSigner::Wallet(wallet_id) => router.execute_swap_for_wallet(quote, wallet_id).await,
+    }
+}
+
+/// Execute a main-wallet swap, falling back to the other enabled routers when
+/// the primary provably sent nothing.
 pub async fn execute_swap_with_fallback(
     token: &Token,
     quote: Quote,
     amount_limit: SwapAmountLimit,
-) -> Result<SwapResult> {
-    let registry = get_registry()?;
-    execute_swap_with_fallback_on(token, quote, amount_limit, registry).await
-}
-
-async fn execute_swap_with_fallback_on(
-    token: &Token,
-    quote: Quote,
-    amount_limit: SwapAmountLimit,
-    registry: &RouterRegistry,
 ) -> Result<SwapResult> {
     // Block swap execution during force stop
     if crate::global::is_force_stopped() {
@@ -482,7 +503,30 @@ async fn execute_swap_with_fallback_on(
             "Trading halted - Force stop is active",
         ));
     }
+    let registry = get_registry()?;
+    execute_with_fallback_on(
+        registry,
+        SwapSigner::MainWallet(token),
+        quote,
+        amount_limit,
+        Fallback::AnyRouter,
+    )
+    .await
+    .map(|(_, result)| result)
+}
 
+/// The one execution chain for every signer: the quote's own router first, a
+/// re-quote on that router without a venue that cost too much, then — when
+/// `fallback` allows and the failure provably sent nothing — every other
+/// enabled router by priority. Returns the quote that actually executed with
+/// its result.
+pub(crate) async fn execute_with_fallback_on(
+    registry: &RouterRegistry,
+    signer: SwapSigner<'_>,
+    quote: Quote,
+    amount_limit: SwapAmountLimit,
+    fallback: Fallback,
+) -> Result<(Quote, SwapResult)> {
     // Get primary router
     let primary = registry
         .get_router(&quote.router_id)
@@ -510,202 +554,219 @@ async fn execute_swap_with_fallback_on(
 
     let start = Instant::now();
 
-    // Try primary router
     super::progress::report_swap_stage(super::progress::SwapStage::Submitting {
         router: primary.name().to_owned(),
     })
     .await;
-    match primary.execute_swap(token, &quote).await {
-        Ok(mut result) => {
-            schedule_post_swap_cleanup(&quote);
-            result.execution_time_ms = start.elapsed().as_millis() as u64;
-            logger::info(
-                LogTag::Swap,
-                &format!(
-                    "Swap succeeded via {} in {:.2}s - sig: {}",
-                    result.router_name,
-                    result.execution_time_ms as f64 / 1000.0,
-                    result.transaction_signature
-                ),
-            );
-            return amount_limit.check_result(result);
-        }
-        Err(primary_error) => {
-            // NEVER fall back on a swap that was already SUBMITTED. The confirmation poll
-            // timed out, but the transaction can still land — re-sending it through another
-            // router is a second, real swap.
-            if let Some(signature) = unconfirmed_swap_signature(&primary_error) {
+    let primary_error = match execute_on(primary.as_ref(), signer, &quote).await {
+        Ok(result) => return finish(signer, quote, result, start, amount_limit),
+        Err(error) => error,
+    };
+
+    // NEVER fall back on a swap that was already SUBMITTED. The confirmation poll
+    // timed out, but the transaction can still land — re-sending it through another
+    // router is a second, real swap.
+    if let Some(signature) = unconfirmed_swap_signature(&primary_error) {
+        logger::warning(
+            LogTag::Swap,
+            &format!(
+                "Swap {signature} submitted via {} but not confirmed in time - NOT retrying (it may still land); verification will reconcile it",
+                primary.name()
+            ),
+        );
+        return Err(primary_error);
+    }
+
+    // A refusal that NAMES a venue is answerable without giving up on this
+    // router: the same aggregator can usually price the same trade through a
+    // different venue, and that is a better trade than the next router's quote.
+    // Bounded to one attempt by the exclusion itself — the retry carries the
+    // venue in `exclude_dexes`, so a second refusal for the same venue cannot
+    // recur.
+    if let Some(outcome) = retry_excluding_venue(
+        signer,
+        &quote,
+        &primary_error,
+        primary.as_ref(),
+        start,
+        amount_limit,
+    )
+    .await
+    {
+        return outcome;
+    }
+
+    if !is_fallback_safe(&primary_error) {
+        logger::error(
+            LogTag::Swap,
+            &format!(
+                "{} swap failed, and nothing proves it was not sent - not falling back: {}",
+                primary.name(),
+                primary_error
+            ),
+        );
+        return Err(primary_error);
+    }
+    if fallback == Fallback::SameRouter {
+        logger::warning(
+            LogTag::Swap,
+            &format!(
+                "{} swap was not sent and only that router was asked for: {primary_error}",
+                primary.name()
+            ),
+        );
+        return Err(primary_error);
+    }
+
+    logger::warning(
+        LogTag::Swap,
+        &format!(
+            "{} swap was not sent: {} - trying fallback...",
+            primary.name(),
+            primary_error
+        ),
+    );
+
+    let fallbacks = registry.get_fallback_chain_for(quote.chain, &quote.router_id);
+    if fallbacks.is_empty() {
+        logger::error(
+            LogTag::Swap,
+            &format!(
+                "No fallback routers available (only {} was enabled)",
+                primary.name()
+            ),
+        );
+        return Err(primary_error);
+    }
+
+    logger::info(
+        LogTag::Swap,
+        &format!(
+            "Attempting {} fallback routers: {}",
+            fallbacks.len(),
+            fallbacks
+                .iter()
+                .map(|r| r.name())
+                .collect::<Vec<_>>()
+                .join(", ")
+        ),
+    );
+
+    for fallback_router in fallbacks {
+        logger::info(
+            LogTag::Swap,
+            &format!("Attempting fallback to {}", fallback_router.name()),
+        );
+
+        let fallback_request = requote_request(&quote, quote.exclude_dexes.clone());
+
+        // The fallback's answer is untrusted input exactly like the one that
+        // won the original comparison: a quote that prices another pair or
+        // guarantees nothing must not reach the builder just because it
+        // arrived on the retry path.
+        let fallback_quote = match fallback_router
+            .get_quote(&fallback_request)
+            .await
+            .and_then(|quote| validate_quote(fallback_router.as_ref(), &fallback_request, quote))
+        {
+            Ok(q) => q,
+            Err(e) => {
                 logger::warning(
                     LogTag::Swap,
-                    &format!(
-                        "Swap {signature} submitted via {} but not confirmed in time - NOT retrying (it may still land); verification will reconcile it",
-                        primary.name()
-                    ),
+                    &format!("{} quote failed: {}", fallback_router.name(), e),
                 );
-                return Err(primary_error);
+                continue;
             }
+        };
 
-            // A refusal that NAMES a venue is answerable without giving up on
-            // this router: the same aggregator can usually price the same trade
-            // through a different venue, and that is a better trade than the
-            // next router's quote. Bounded to one attempt by the exclusion
-            // itself — the retry carries the venue in `exclude_dexes`, so a
-            // second refusal for the same venue cannot recur.
-            if let Some(outcome) = retry_excluding_venue(
-                token,
-                &quote,
-                &primary_error,
-                primary.as_ref(),
-                start,
-                amount_limit,
-            )
-            .await
-            {
-                return outcome;
-            }
-
-            // Check if error is retryable
-            if !is_retryable_error(&primary_error) {
-                logger::error(
-                    LogTag::Swap,
-                    &format!(
-                        "{} swap failed (non-retryable): {}",
-                        primary.name(),
-                        primary_error
-                    ),
-                );
-                return Err(primary_error);
-            }
-
+        if let Err(e) = amount_limit.check_quote(&fallback_quote) {
             logger::warning(
                 LogTag::Swap,
-                &format!(
-                    "{} swap failed (retryable): {} - trying fallback...",
-                    primary.name(),
-                    primary_error
-                ),
+                &format!("{} quote rejected: {e}", fallback_router.name()),
             );
+            continue;
+        }
 
-            // Try fallback chain
-            let fallbacks = registry.get_fallback_chain_for(quote.chain, &quote.router_id);
-
-            if fallbacks.is_empty() {
-                logger::error(
-                    LogTag::Swap,
-                    &format!(
-                        "No fallback routers available (only {} was enabled)",
-                        primary.name()
-                    ),
-                );
-                return Err(primary_error);
-            }
-
-            logger::info(
-                LogTag::Swap,
-                &format!(
-                    "Attempting {} fallback routers: {}",
-                    fallbacks.len(),
-                    fallbacks
-                        .iter()
-                        .map(|r| r.name())
-                        .collect::<Vec<_>>()
-                        .join(", ")
-                ),
-            );
-
-            for fallback_router in fallbacks {
-                logger::info(
-                    LogTag::Swap,
-                    &format!("Attempting fallback to {}", fallback_router.name()),
-                );
-
-                // Get fresh quote from fallback router
-                let fallback_request = QuoteRequest {
-                    chain: quote.chain,
-                    input_mint: quote.input_mint.clone(),
-                    output_mint: quote.output_mint.clone(),
-                    input_amount: quote.input_amount,
-                    wallet_address: quote.wallet_address.clone(),
-                    slippage_pct: (quote.slippage_bps as f64) / 100.0,
-                    swap_mode: quote.swap_mode,
-                    exclude_dexes: quote.exclude_dexes.clone(),
-                };
-
-                // The fallback's answer is untrusted input exactly like the
-                // one that won the original comparison: a quote that prices
-                // another pair or guarantees nothing must not reach the
-                // builder just because it arrived on the retry path.
-                let fallback_quote = match fallback_router
-                    .get_quote(&fallback_request)
-                    .await
-                    .and_then(|quote| {
-                        validate_quote(fallback_router.as_ref(), &fallback_request, quote)
-                    }) {
-                    Ok(q) => q,
-                    Err(e) => {
-                        logger::warning(
-                            LogTag::Swap,
-                            &format!("{} quote failed: {}", fallback_router.name(), e),
-                        );
-                        continue;
-                    }
-                };
-
-                if let Err(e) = amount_limit.check_quote(&fallback_quote) {
+        super::progress::report_swap_stage(super::progress::SwapStage::Submitting {
+            router: fallback_router.name().to_owned(),
+        })
+        .await;
+        match execute_on(fallback_router.as_ref(), signer, &fallback_quote).await {
+            Ok(result) => return finish(signer, fallback_quote, result, start, amount_limit),
+            Err(e) => {
+                // Same rule as the primary: a submitted-but-unconfirmed swap must
+                // not be re-sent through yet another router, and neither may a
+                // failure that cannot prove it was never sent.
+                if let Some(signature) = unconfirmed_swap_signature(&e) {
                     logger::warning(
                         LogTag::Swap,
-                        &format!("{} quote rejected: {e}", fallback_router.name()),
+                        &format!(
+                            "Fallback swap {signature} submitted via {} but not confirmed in time - stopping the chain (it may still land)",
+                            fallback_router.name()
+                        ),
                     );
-                    continue;
+                    return Err(e);
                 }
-
-                // Execute fallback swap
-                super::progress::report_swap_stage(super::progress::SwapStage::Submitting {
-                    router: fallback_router.name().to_owned(),
-                })
-                .await;
-                match fallback_router.execute_swap(token, &fallback_quote).await {
-                    Ok(mut result) => {
-                        schedule_post_swap_cleanup(&fallback_quote);
-                        result.execution_time_ms = start.elapsed().as_millis() as u64;
-                        logger::info(
-                            LogTag::Swap,
-                            &format!(
-                                "Fallback succeeded via {} in {:.2}s - sig: {}",
-                                result.router_name,
-                                result.execution_time_ms as f64 / 1000.0,
-                                result.transaction_signature
-                            ),
-                        );
-                        return amount_limit.check_result(result);
-                    }
-                    Err(e) => {
-                        // Same rule as the primary: a submitted-but-unconfirmed swap must not
-                        // be re-sent through yet another router.
-                        if let Some(signature) = unconfirmed_swap_signature(&e) {
-                            logger::warning(
-                                LogTag::Swap,
-                                &format!(
-                                    "Fallback swap {signature} submitted via {} but not confirmed in time - stopping the chain (it may still land)",
-                                    fallback_router.name()
-                                ),
-                            );
-                            return Err(e);
-                        }
-
-                        logger::warning(
-                            LogTag::Swap,
-                            &format!("{} execution failed: {}", fallback_router.name(), e),
-                        );
-                        continue;
-                    }
+                if !is_fallback_safe(&e) {
+                    logger::error(
+                        LogTag::Swap,
+                        &format!(
+                            "{} fallback failed, and nothing proves it was not sent - stopping the chain: {e}",
+                            fallback_router.name()
+                        ),
+                    );
+                    return Err(e);
                 }
+                logger::warning(
+                    LogTag::Swap,
+                    &format!("{} execution failed: {}", fallback_router.name(), e),
+                );
+                continue;
             }
-
-            // All fallbacks failed - return original error
-            logger::error(LogTag::Swap, "All routers failed (primary + all fallbacks)");
-            Err(primary_error)
         }
+    }
+
+    // All fallbacks failed - return original error
+    logger::error(LogTag::Swap, "All routers failed (primary + all fallbacks)");
+    Err(primary_error)
+}
+
+/// Record a completed swap: post-swap cleanup for the main wallet, the total
+/// execution time, and the caller's amount range.
+fn finish(
+    signer: SwapSigner<'_>,
+    quote: Quote,
+    mut result: SwapResult,
+    start: Instant,
+    amount_limit: SwapAmountLimit,
+) -> Result<(Quote, SwapResult)> {
+    if matches!(signer, SwapSigner::MainWallet(_)) {
+        schedule_post_swap_cleanup(&quote);
+    }
+    result.execution_time_ms = start.elapsed().as_millis() as u64;
+    logger::info(
+        LogTag::Swap,
+        &format!(
+            "Swap succeeded via {} in {:.2}s - sig: {}",
+            result.router_name,
+            result.execution_time_ms as f64 / 1000.0,
+            result.transaction_signature
+        ),
+    );
+    Ok((quote, amount_limit.check_result(result)?))
+}
+
+/// The request that re-prices `quote` on another router or without a venue.
+fn requote_request(quote: &Quote, exclude_dexes: Option<Vec<String>>) -> QuoteRequest {
+    QuoteRequest {
+        chain: quote.chain,
+        input_mint: quote.input_mint.clone(),
+        output_mint: quote.output_mint.clone(),
+        input_amount: quote.input_amount,
+        wallet_address: quote.wallet_address.clone(),
+        slippage_pct: (quote.slippage_bps as f64) / 100.0,
+        swap_mode: quote.swap_mode,
+        exclude_dexes,
     }
 }
 
@@ -713,22 +774,32 @@ async fn execute_swap_with_fallback_on(
 // HELPER FUNCTIONS
 // ============================================================================
 
+/// Whether a fresh quote still pays at least the floor the caller accepted.
+///
+/// A re-quote derives a fresh minimum from the new price, so taking it as-is
+/// would apply slippage a second time and execute below what the comparison
+/// chose. The fresh EXPECTED output must reach the accepted guaranteed minimum.
+fn holds_accepted_floor(accepted: &Quote, fresh: &Quote) -> bool {
+    fresh.output_amount >= accepted.minimum_output_amount
+}
+
 /// Re-quote and re-execute through `router` with the venue that just refused
 /// the trade excluded.
 ///
 /// Returns `None` when there is nothing to retry — the failure named no venue,
 /// the caller turned the retry off, the aggregator has no label for that
-/// program, or the venue was already excluded — leaving the normal fallback
-/// chain to run. It returns `Some(Err)` only for a retry whose transaction
-/// reached the network, which must never be re-sent by anyone else.
+/// program, the venue was already excluded, or the fresh quote falls under the
+/// accepted floor — leaving the normal fallback chain to run. It returns
+/// `Some(Err)` only for a retry whose transaction may have reached the
+/// network, which must never be re-sent by anyone else.
 async fn retry_excluding_venue(
-    token: &Token,
+    signer: SwapSigner<'_>,
     quote: &Quote,
     error: &Error,
     router: &dyn crate::swaps::router::SwapRouter,
     start: Instant,
     amount_limit: SwapAmountLimit,
-) -> Option<Result<SwapResult>> {
+) -> Option<Result<(Quote, SwapResult)>> {
     let Error::Swaps(crate::swaps::SwapExecutionError::NotSubmitted {
         reason: crate::swaps::NotSubmittedReason::CostExceeded { venue_address, .. },
         ..
@@ -754,16 +825,7 @@ async fn retry_excluding_venue(
 
     let mut exclude_dexes = quote.exclude_dexes.clone().unwrap_or_default();
     exclude_dexes.push(label.clone());
-    let request = QuoteRequest {
-        chain: quote.chain,
-        input_mint: quote.input_mint.clone(),
-        output_mint: quote.output_mint.clone(),
-        input_amount: quote.input_amount,
-        wallet_address: quote.wallet_address.clone(),
-        slippage_pct: (quote.slippage_bps as f64) / 100.0,
-        swap_mode: quote.swap_mode,
-        exclude_dexes: Some(exclude_dexes),
-    };
+    let request = requote_request(quote, Some(exclude_dexes));
 
     logger::info(
         LogTag::Swap,
@@ -788,6 +850,19 @@ async fn retry_excluding_venue(
         }
     };
 
+    if !holds_accepted_floor(quote, &retry_quote) {
+        logger::warning(
+            LogTag::Swap,
+            &format!(
+                "{} without {label} expects {}, below the {} floor the trade was accepted at",
+                router.name(),
+                retry_quote.output_amount,
+                quote.minimum_output_amount
+            ),
+        );
+        return None;
+    }
+
     if let Err(e) = amount_limit.check_quote(&retry_quote) {
         logger::warning(
             LogTag::Swap,
@@ -800,27 +875,14 @@ async fn retry_excluding_venue(
         router: router.name().to_owned(),
     })
     .await;
-    match router.execute_swap(token, &retry_quote).await {
-        Ok(mut result) => {
-            schedule_post_swap_cleanup(&retry_quote);
-            result.execution_time_ms = start.elapsed().as_millis() as u64;
-            logger::info(
-                LogTag::Swap,
-                &format!(
-                    "Swap succeeded via {} without {label} in {:.2}s - sig: {}",
-                    result.router_name,
-                    result.execution_time_ms as f64 / 1000.0,
-                    result.transaction_signature
-                ),
-            );
-            Some(amount_limit.check_result(result))
-        }
+    match execute_on(router, signer, &retry_quote).await {
+        Ok(result) => Some(finish(signer, retry_quote, result, start, amount_limit)),
         Err(e) => {
-            if let Some(signature) = unconfirmed_swap_signature(&e) {
+            if unconfirmed_swap_signature(&e).is_some() || !is_fallback_safe(&e) {
                 logger::warning(
                     LogTag::Swap,
                     &format!(
-                        "Retry {signature} submitted via {} but not confirmed in time - NOT retrying further",
+                        "Retry via {} without {label} may have reached the network - NOT retrying further: {e}",
                         router.name()
                     ),
                 );
@@ -933,20 +995,50 @@ mod submitted_timeout_tests {
     }
 }
 
-/// Check if error is retryable (network/transient issues)
-fn is_retryable_error(error: &Error) -> bool {
+/// Whether a failed swap proves nothing moved and nothing can still land: the
+/// one licence to quote and execute the same trade through another router, and
+/// to forget the attempt was made.
+///
+/// Decided from the outcome's TYPE only, never from an RPC code or the error's
+/// text. Every match below is exhaustive, so a new variant cannot compile
+/// without a decision; anything outside the swap vocabularies proves nothing.
+pub fn is_fallback_safe(error: &Error) -> bool {
     match error {
-        Error::Rpc(e) => e.is_retryable(),
-        Error::Network(_) | Error::RpcProvider(_) => true,
-        // The direct engine answers this from its own typed outcome rather than
-        // from prose: only a failure that PROVES nothing moved (and nothing can
-        // still land) may be re-sent through another router.
-        Error::Solana(crate::chains::solana::Error::DirectSwap(direct)) => {
-            direct.safe_to_fallback()
-        }
-        // A refusal before the send proves nothing was submitted.
-        Error::Swaps(crate::swaps::SwapExecutionError::NotSubmitted { .. }) => true,
+        Error::Swaps(error) => swap_execution_fallback_safe(error),
+        Error::Solana(error) => solana_fallback_safe(error),
         _ => false,
+    }
+}
+
+fn swap_execution_fallback_safe(error: &crate::swaps::SwapExecutionError) -> bool {
+    use crate::swaps::SwapExecutionError;
+    match error {
+        SwapExecutionError::NotSubmitted { .. } => true,
+        // The trade happened; it is reconciled, never sent again.
+        SwapExecutionError::CompletedAmountOutOfRange { .. } => false,
+    }
+}
+
+fn solana_fallback_safe(error: &crate::chains::solana::Error) -> bool {
+    use crate::chains::solana::Error as Solana;
+    match error {
+        // The direct engine answers from its own typed outcome: only a failure
+        // that PROVES nothing moved (and nothing can still land) qualifies.
+        Solana::DirectSwap(direct) => direct.safe_to_fallback(),
+        // A confirmation that ran out may still land, and a revert is read by
+        // the caller holding the position; neither is re-sent from here. The
+        // rest are failures of our own side that another router would repeat.
+        Solana::Execution(_)
+        | Solana::InvalidAddress { .. }
+        | Solana::InvalidKeypair { .. }
+        | Solana::KeypairUnavailable { .. }
+        | Solana::SecureStorage(_)
+        | Solana::Rpc { .. }
+        | Solana::RpcFailure { .. }
+        | Solana::AccountNotFound { .. }
+        | Solana::Decode { .. }
+        | Solana::InvalidPool { .. }
+        | Solana::InstructionBuild { .. } => false,
     }
 }
 
@@ -1936,5 +2028,583 @@ mod tests {
         NO_ROUTE_STRIKES.invalidate(&mint);
         assert!(opening_quote_on(&faulting, shielded, "FALT").await.is_err());
         assert_eq!(NO_ROUTE_STRIKES.get(&mint), None);
+    }
+
+    // ------------------------------------------------------------------------
+    // Fallback decided from the typed never-sent outcome
+    // ------------------------------------------------------------------------
+
+    use crate::chains::solana::swaps::direct::DirectSwapError;
+    use crate::chains::solana::Error as Solana;
+    use crate::swaps::{NotSubmittedReason, SwapExecutionError};
+
+    fn not_submitted(reason: NotSubmittedReason) -> Error {
+        Error::Swaps(SwapExecutionError::NotSubmitted {
+            router: "Jupiter".to_owned(),
+            reason,
+        })
+    }
+
+    fn too_large() -> Error {
+        not_submitted(NotSubmittedReason::TransactionTooLarge {
+            bytes: 1329,
+            limit: 1232,
+        })
+    }
+
+    fn reason_name(reason: &NotSubmittedReason) -> &'static str {
+        match reason {
+            NotSubmittedReason::BuildUnavailable(_) => "BuildUnavailable",
+            NotSubmittedReason::BuildUnusable { .. } => "BuildUnusable",
+            NotSubmittedReason::TransactionTooLarge { .. } => "TransactionTooLarge",
+            NotSubmittedReason::UnsupportedFormat { .. } => "UnsupportedFormat",
+            NotSubmittedReason::RequestRejected { .. } => "RequestRejected",
+            NotSubmittedReason::SimulationFailed { .. } => "SimulationFailed",
+            NotSubmittedReason::CostExceeded { .. } => "CostExceeded",
+        }
+    }
+
+    fn solana_name(error: &Solana) -> &'static str {
+        match error {
+            Solana::Execution(_) => "Execution",
+            Solana::InvalidAddress { .. } => "InvalidAddress",
+            Solana::InvalidKeypair { .. } => "InvalidKeypair",
+            Solana::KeypairUnavailable { .. } => "KeypairUnavailable",
+            Solana::SecureStorage(_) => "SecureStorage",
+            Solana::Rpc { .. } => "Rpc",
+            Solana::RpcFailure { .. } => "RpcFailure",
+            Solana::AccountNotFound { .. } => "AccountNotFound",
+            Solana::Decode { .. } => "Decode",
+            Solana::InvalidPool { .. } => "InvalidPool",
+            Solana::InstructionBuild { .. } => "InstructionBuild",
+            Solana::DirectSwap(_) => "DirectSwap",
+        }
+    }
+
+    fn direct_name(error: &DirectSwapError) -> &'static str {
+        match error {
+            DirectSwapError::UnsupportedVenue { .. } => "UnsupportedVenue",
+            DirectSwapError::PoolUndecodable { .. } => "PoolUndecodable",
+            DirectSwapError::PairNotInPool { .. } => "PairNotInPool",
+            DirectSwapError::PoolNotTradable { .. } => "PoolNotTradable",
+            DirectSwapError::InsufficientLiquidity { .. } => "InsufficientLiquidity",
+            DirectSwapError::InvalidRequest { .. } => "InvalidRequest",
+            DirectSwapError::AccountUnavailable { .. } => "AccountUnavailable",
+            DirectSwapError::NodeUnavailable { .. } => "NodeUnavailable",
+            DirectSwapError::QuoteMath { .. } => "QuoteMath",
+            DirectSwapError::Build { .. } => "Build",
+            DirectSwapError::SimulationRejected { .. } => "SimulationRejected",
+            DirectSwapError::TransactionTooLarge { .. } => "TransactionTooLarge",
+            DirectSwapError::SimulationUnavailable { .. } => "SimulationUnavailable",
+            DirectSwapError::SubmitFailed { .. } => "SubmitFailed",
+            DirectSwapError::BlockhashExpired { .. } => "BlockhashExpired",
+            DirectSwapError::ConfirmationTimeout { .. } => "ConfirmationTimeout",
+            DirectSwapError::TransactionFailed { .. } => "TransactionFailed",
+            DirectSwapError::OutputNotReceived { .. } => "OutputNotReceived",
+            DirectSwapError::InsufficientBalance { .. } => "InsufficientBalance",
+            DirectSwapError::MarketMoved { .. } => "MarketMoved",
+        }
+    }
+
+    /// The name a table row stands for, so coverage of every variant of every
+    /// swap vocabulary can be asserted.
+    fn row_name(error: &Error) -> String {
+        match error {
+            Error::Swaps(SwapExecutionError::NotSubmitted { reason, .. }) => {
+                format!("NotSubmitted::{}", reason_name(reason))
+            }
+            Error::Swaps(SwapExecutionError::CompletedAmountOutOfRange { .. }) => {
+                "CompletedAmountOutOfRange".to_owned()
+            }
+            Error::Solana(Solana::DirectSwap(direct)) => {
+                format!("DirectSwap::{}", direct_name(direct))
+            }
+            Error::Solana(solana) => format!("Solana::{}", solana_name(solana)),
+            other => format!("Other::{other}"),
+        }
+    }
+
+    /// Every variant of every swap failure vocabulary, against the one question
+    /// the fallback chain asks. A new variant does not compile without a name
+    /// above, and the coverage assertion fails until it has a row here.
+    #[test]
+    fn every_swap_failure_is_classified_for_fallback_by_type() {
+        let pool = crate::chains::solana::solana_sdk::pubkey::Pubkey::new_unique();
+        let direct = |error: DirectSwapError| Error::Solana(Solana::DirectSwap(error));
+        let sig = || "sig".to_owned();
+        let rows: Vec<(Error, bool)> = vec![
+            (
+                not_submitted(NotSubmittedReason::BuildUnavailable(
+                    crate::errors::NetworkError::RateLimited {
+                        endpoint: "jupiter/swap".to_owned(),
+                        retry_after_ms: None,
+                    },
+                )),
+                true,
+            ),
+            (
+                not_submitted(NotSubmittedReason::BuildUnusable {
+                    detail: "undecodable".to_owned(),
+                }),
+                true,
+            ),
+            (too_large(), true),
+            (
+                not_submitted(NotSubmittedReason::UnsupportedFormat { version: 1 }),
+                true,
+            ),
+            (
+                not_submitted(NotSubmittedReason::RequestRejected {
+                    detail: "-32602".to_owned(),
+                }),
+                true,
+            ),
+            (
+                not_submitted(NotSubmittedReason::SimulationFailed {
+                    detail: "custom 6001".to_owned(),
+                }),
+                true,
+            ),
+            (
+                not_submitted(NotSubmittedReason::CostExceeded {
+                    extra_raw: 13_045_440,
+                    venue: "HumidiFi".to_owned(),
+                    venue_address: "9H6tua7jkLhdm3w8BvgpTn5LZNU7g4ZynDmCiNN3q6Rp".to_owned(),
+                }),
+                true,
+            ),
+            (
+                Error::Swaps(SwapExecutionError::CompletedAmountOutOfRange {
+                    signature: sig(),
+                    input_amount: 1u64.into(),
+                    output_amount: 1u64.into(),
+                }),
+                false,
+            ),
+            (
+                Error::Solana(Solana::Execution(
+                    crate::chains::ExecutionFailure::ConfirmationTimeout {
+                        reference: sig(),
+                        waited_ms: 60_000,
+                    },
+                )),
+                false,
+            ),
+            (
+                Error::Solana(Solana::InvalidAddress {
+                    kind: "mint",
+                    value: "x".to_owned(),
+                }),
+                false,
+            ),
+            (
+                Error::Solana(Solana::InvalidKeypair {
+                    detail: "short".to_owned(),
+                }),
+                false,
+            ),
+            (
+                Error::Solana(Solana::KeypairUnavailable {
+                    detail: "locked".to_owned(),
+                }),
+                false,
+            ),
+            (
+                Error::Solana(Solana::SecureStorage(
+                    crate::secure_storage::Error::MachineIdentity {
+                        detail: "none".to_owned(),
+                    },
+                )),
+                false,
+            ),
+            (
+                Error::Solana(Solana::Rpc {
+                    operation: "sendTransaction",
+                    detail: "reset".to_owned(),
+                }),
+                false,
+            ),
+            (
+                Error::Solana(Solana::RpcFailure {
+                    operation: "sendTransaction",
+                    source: crate::rpc::RpcError::ProviderError {
+                        code: -32602,
+                        message: "too large".to_owned(),
+                        data: None,
+                    },
+                }),
+                false,
+            ),
+            (
+                Error::Solana(Solana::AccountNotFound {
+                    address: "x".to_owned(),
+                }),
+                false,
+            ),
+            (
+                Error::Solana(Solana::Decode {
+                    payload: "quote",
+                    detail: "bad".to_owned(),
+                }),
+                false,
+            ),
+            (
+                Error::Solana(Solana::InvalidPool {
+                    reason: "no SOL leg".to_owned(),
+                }),
+                false,
+            ),
+            (
+                Error::Solana(Solana::InstructionBuild {
+                    instruction: "swap",
+                    detail: "bad".to_owned(),
+                }),
+                false,
+            ),
+            (
+                direct(DirectSwapError::UnsupportedVenue { program: pool }),
+                false,
+            ),
+            (
+                direct(DirectSwapError::PoolUndecodable {
+                    pool,
+                    detail: String::new(),
+                }),
+                false,
+            ),
+            (
+                direct(DirectSwapError::PairNotInPool {
+                    pool,
+                    input_mint: pool,
+                    output_mint: pool,
+                }),
+                false,
+            ),
+            (
+                direct(DirectSwapError::PoolNotTradable {
+                    pool,
+                    detail: String::new(),
+                }),
+                false,
+            ),
+            (
+                direct(DirectSwapError::InsufficientLiquidity {
+                    pool,
+                    amount_in: 1,
+                    detail: String::new(),
+                }),
+                false,
+            ),
+            (
+                direct(DirectSwapError::InvalidRequest {
+                    detail: String::new(),
+                }),
+                false,
+            ),
+            (
+                direct(DirectSwapError::AccountUnavailable {
+                    address: pool,
+                    detail: String::new(),
+                }),
+                false,
+            ),
+            (
+                direct(DirectSwapError::NodeUnavailable {
+                    operation: "getLatestBlockhash",
+                    detail: String::new(),
+                }),
+                false,
+            ),
+            (
+                direct(DirectSwapError::QuoteMath {
+                    detail: String::new(),
+                }),
+                false,
+            ),
+            (
+                direct(DirectSwapError::Build {
+                    detail: String::new(),
+                }),
+                true,
+            ),
+            (
+                direct(DirectSwapError::SimulationRejected {
+                    detail: String::new(),
+                    logs: vec![],
+                }),
+                true,
+            ),
+            (
+                direct(DirectSwapError::TransactionTooLarge {
+                    bytes: 1240,
+                    limit: 1232,
+                }),
+                true,
+            ),
+            (
+                direct(DirectSwapError::SimulationUnavailable {
+                    detail: String::new(),
+                }),
+                true,
+            ),
+            (
+                direct(DirectSwapError::SubmitFailed {
+                    detail: String::new(),
+                }),
+                true,
+            ),
+            (
+                direct(DirectSwapError::BlockhashExpired {
+                    signature: sig(),
+                    last_valid_block_height: 1,
+                    current_block_height: 2,
+                }),
+                true,
+            ),
+            (
+                direct(DirectSwapError::ConfirmationTimeout {
+                    signature: sig(),
+                    waited_ms: 1,
+                }),
+                false,
+            ),
+            (
+                direct(DirectSwapError::TransactionFailed {
+                    signature: sig(),
+                    detail: String::new(),
+                }),
+                true,
+            ),
+            (
+                direct(DirectSwapError::OutputNotReceived {
+                    signature: sig(),
+                    expected_minimum: 2,
+                    received: 1,
+                }),
+                false,
+            ),
+            (
+                direct(DirectSwapError::InsufficientBalance {
+                    mint: pool,
+                    required: 2,
+                    available: 1,
+                }),
+                false,
+            ),
+            (
+                direct(DirectSwapError::MarketMoved {
+                    pool,
+                    accepted_min_net_out: 2,
+                    fresh_expected_net_out: 1,
+                }),
+                true,
+            ),
+            // Outside the swap vocabularies nothing is proven, whatever the
+            // RPC code says.
+            (
+                Error::Rpc(crate::rpc::RpcError::ProviderError {
+                    code: -32602,
+                    message: "base64 encoded VersionedTransaction too large".to_owned(),
+                    data: None,
+                }),
+                false,
+            ),
+            (
+                Error::Rpc(crate::rpc::RpcError::Network {
+                    message: "reset".to_owned(),
+                    is_timeout: true,
+                }),
+                false,
+            ),
+            (
+                Error::Network(crate::errors::NetworkError::RequestFailed {
+                    endpoint: "jupiter/swap".to_owned(),
+                    detail: "reset".to_owned(),
+                }),
+                false,
+            ),
+        ];
+
+        let covered: std::collections::BTreeSet<String> =
+            rows.iter().map(|(error, _)| row_name(error)).collect();
+        let reasons = 7;
+        let solana_outside_direct = 11;
+        let direct_variants = 20;
+        let swap_rows = covered
+            .iter()
+            .filter(|name| !name.starts_with("Other::"))
+            .count();
+        assert_eq!(
+            swap_rows,
+            reasons + 1 + solana_outside_direct + direct_variants,
+            "every swap failure variant needs a row: {covered:?}"
+        );
+
+        for (error, safe) in rows {
+            assert_eq!(is_fallback_safe(&error), safe, "{}", row_name(&error));
+        }
+    }
+
+    #[test]
+    fn a_requote_must_reach_the_floor_the_trade_was_accepted_at() {
+        let request = request();
+        let accepted = quote_for(&request); // expects 1_000, guarantees 950
+        let mut fresh = quote_for(&request);
+        for (expected, holds) in [(1_200u64, true), (950, true), (949, false)] {
+            fresh.output_amount = expected.into();
+            assert_eq!(holds_accepted_floor(&accepted, &fresh), holds, "{expected}");
+        }
+    }
+
+    /// How a [`ChainRouter`] fails or succeeds when asked to execute.
+    #[derive(Clone, Copy)]
+    enum Execution {
+        Lands,
+        TooLarge,
+        Unproven,
+    }
+
+    /// A router that quotes 1_000 and executes as told, recording each call.
+    struct ChainRouter {
+        id: &'static str,
+        priority: u8,
+        execution: Execution,
+        executed: Arc<std::sync::Mutex<Vec<&'static str>>>,
+    }
+
+    #[async_trait]
+    impl SwapRouter for ChainRouter {
+        fn id(&self) -> &'static str {
+            self.id
+        }
+        fn name(&self) -> &'static str {
+            self.id
+        }
+        fn is_enabled(&self) -> bool {
+            true
+        }
+        fn priority(&self) -> u8 {
+            self.priority
+        }
+        fn chain(&self) -> ChainId {
+            ChainId::Solana
+        }
+        async fn get_quote(&self, request: &QuoteRequest) -> QuoteResult<Quote> {
+            let mut quote = quote_for(request);
+            quote.router_id = self.id.to_owned();
+            quote.router_name = self.id.to_owned();
+            Ok(quote)
+        }
+        async fn execute_swap(&self, _token: &Token, _quote: &Quote) -> crate::Result<SwapResult> {
+            Err(crate::Error::internal_error("the wallet signer is used"))
+        }
+        async fn execute_swap_for_wallet(
+            &self,
+            quote: &Quote,
+            _wallet_id: i64,
+        ) -> crate::Result<SwapResult> {
+            self.executed.lock().unwrap().push(self.id);
+            match self.execution {
+                Execution::Lands => Ok(SwapResult {
+                    success: true,
+                    router_id: self.id.to_owned(),
+                    router_name: self.id.to_owned(),
+                    transaction_signature: format!("sig-{}", self.id),
+                    input_amount: quote.input_amount,
+                    output_amount: quote.output_amount,
+                    price_impact_pct: quote.price_impact_pct,
+                    fee_lamports: 0,
+                    execution_time_ms: 1,
+                    effective_price_sol: None,
+                }),
+                Execution::TooLarge => Err(too_large()),
+                Execution::Unproven => Err(Error::Rpc(crate::rpc::RpcError::Network {
+                    message: "connection reset during sendTransaction".to_owned(),
+                    is_timeout: true,
+                })),
+            }
+        }
+    }
+
+    fn chain(primary: Execution) -> (RouterRegistry, Arc<std::sync::Mutex<Vec<&'static str>>>) {
+        crate::config::utils::install_default_config();
+        let executed = Arc::new(std::sync::Mutex::new(Vec::new()));
+        let router = |id, priority, execution| {
+            Arc::new(ChainRouter {
+                id,
+                priority,
+                execution,
+                executed: executed.clone(),
+            }) as Arc<dyn SwapRouter>
+        };
+        let registry = RouterRegistry::new(vec![
+            router("jupiter", 0, primary),
+            router("direct", 1, Execution::Lands),
+        ]);
+        (registry, executed)
+    }
+
+    fn primary_quote() -> Quote {
+        let mut quote = quote_for(&request());
+        quote.input_mint = "TokenMintIn11111111111111111111111111111111".to_owned();
+        quote.router_id = "jupiter".to_owned();
+        quote.router_name = "jupiter".to_owned();
+        quote
+    }
+
+    /// The defect this chain exists for: the primary route's transaction is too
+    /// large, which provably sent nothing, so the next router executes the
+    /// trade and the result names the route that actually ran.
+    #[tokio::test]
+    async fn a_too_large_refusal_falls_through_to_the_next_router() {
+        let (registry, executed) = chain(Execution::TooLarge);
+        let (quote, result) = execute_with_fallback_on(
+            &registry,
+            SwapSigner::Wallet(7),
+            primary_quote(),
+            SwapAmountLimit::Unrestricted,
+            Fallback::AnyRouter,
+        )
+        .await
+        .expect("the fallback router executes");
+        assert_eq!(*executed.lock().unwrap(), vec!["jupiter", "direct"]);
+        assert_eq!(quote.router_id, "direct");
+        assert_eq!(result.router_id, "direct");
+        assert_eq!(result.transaction_signature, "sig-direct");
+    }
+
+    /// A failure that cannot prove it was never sent stops the chain: a second
+    /// router could execute the same trade again.
+    #[tokio::test]
+    async fn an_unproven_send_failure_never_falls_back() {
+        let (registry, executed) = chain(Execution::Unproven);
+        let error = execute_with_fallback_on(
+            &registry,
+            SwapSigner::Wallet(7),
+            primary_quote(),
+            SwapAmountLimit::Unrestricted,
+            Fallback::AnyRouter,
+        )
+        .await
+        .expect_err("nothing else may execute");
+        assert!(matches!(error, Error::Rpc(_)));
+        assert_eq!(*executed.lock().unwrap(), vec!["jupiter"]);
+    }
+
+    /// A caller who named a router gets that router or its refusal.
+    #[tokio::test]
+    async fn a_named_router_is_never_re_routed() {
+        let (registry, executed) = chain(Execution::TooLarge);
+        let error = execute_with_fallback_on(
+            &registry,
+            SwapSigner::Wallet(7),
+            primary_quote(),
+            SwapAmountLimit::Unrestricted,
+            Fallback::SameRouter,
+        )
+        .await
+        .expect_err("only the named router was asked");
+        assert!(is_fallback_safe(&error));
+        assert_eq!(*executed.lock().unwrap(), vec!["jupiter"]);
     }
 }

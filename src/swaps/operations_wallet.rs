@@ -10,9 +10,12 @@
 //! comparison the trading engine uses — there is one definition of "best route"
 //! in the app — while an explicit choice deliberately asks one router and never
 //! silently probes another, because a caller who named a router wants that
-//! router or an error.
+//! router or an error. Execution is the main wallet's chain
+//! (`operations::execute_with_fallback_on`) with this wallet as the signer.
 
-use crate::swaps::operations::{best_quote_on, validate_quote};
+use crate::swaps::operations::{
+    best_quote_on, execute_with_fallback_on, validate_quote, Fallback, SwapSigner,
+};
 use crate::swaps::registry::{get_registry, RouterRegistry};
 use crate::swaps::types::{Quote, QuoteRequest, RouterChoice, SwapAmountLimit, SwapResult};
 use crate::{Error, Result};
@@ -63,25 +66,21 @@ pub(crate) async fn quote_and_execute_for_wallet_on(
         }
     };
 
-    // The quote names its own router, and the registry answers live: one that
-    // was disabled while we were quoting must not still execute.
-    let router = registry.get_router(&quote.router_id).ok_or_else(|| {
-        Error::internal_error(format!(
-            "Router {} produced a quote but is no longer registered",
-            quote.router_id
-        ))
-    })?;
-    if !router.is_enabled() {
-        return Err(Error::configuration_error(format!(
-            "Router {} was disabled before its quote could be executed",
-            quote.router_name
-        )));
-    }
-
-    amount_limit.check_quote(&quote).map_err(Error::from)?;
-    let result =
-        amount_limit.check_result(router.execute_swap_for_wallet(&quote, wallet_id).await?)?;
-    Ok((quote, result))
+    // The same execution chain as the main wallet: the quote's own router,
+    // then — for Auto only, and only when the failure provably sent nothing —
+    // every other enabled router. An explicit choice is never re-routed.
+    let fallback = match choice {
+        RouterChoice::Auto => Fallback::AnyRouter,
+        RouterChoice::Specific(_) => Fallback::SameRouter,
+    };
+    execute_with_fallback_on(
+        registry,
+        SwapSigner::Wallet(wallet_id),
+        quote,
+        amount_limit,
+        fallback,
+    )
+    .await
 }
 
 #[cfg(test)]
