@@ -113,32 +113,57 @@ pub async fn sync_from_books() {
     if !config::is_loss_limit_enabled() {
         return;
     }
+    follow_books(|counted_since| async move {
+        crate::positions::get_period_trading_stats(counted_since, None)
+            .await
+            .map(|stats| stats.loss_native)
+    })
+    .await;
+}
+
+/// How many more times the books are read when the period rolled over while they were
+/// being read. The figure read for the old window does not belong to the new period, and
+/// the new period's losses must not wait for the next sync to be counted.
+const PERIOD_ROLLOVER_REREADS: usize = 1;
+
+/// [`sync_from_books`] over `read_loss`, which returns the loss the books realized since
+/// the instant it is given.
+async fn follow_books<R, Fut, E>(read_loss: R)
+where
+    R: Fn(DateTime<Utc>) -> Fut,
+    Fut: std::future::Future<Output = Result<f64, E>>,
+    E: std::fmt::Display,
+{
     let _serial = BOOKS_SYNC.lock().await;
-    check_and_reset_period_if_needed();
+    for _ in 0..=PERIOD_ROLLOVER_REREADS {
+        check_and_reset_period_if_needed();
 
-    let Some(counted_since) = LOSS_LIMIT_STATE
-        .read()
-        .ok()
-        .map(|state| state.counted_since)
-    else {
-        return;
-    };
-    let loss = match crate::positions::get_period_trading_stats(counted_since, None).await {
-        Ok(stats) => stats.loss_native,
-        Err(e) => {
-            logger::warning(
-                LogTag::Trader,
-                &format!("Loss limit kept its figure: the books could not be read: {e}"),
-            );
+        let Some(counted_since) = LOSS_LIMIT_STATE
+            .read()
+            .ok()
+            .map(|state| state.counted_since)
+        else {
             return;
-        }
-    };
-    let limit = config::get_loss_limit_native();
+        };
+        let loss = match read_loss(counted_since).await {
+            Ok(loss) => loss,
+            Err(e) => {
+                logger::warning(
+                    LogTag::Trader,
+                    &format!("Loss limit kept its figure: the books could not be read: {e}"),
+                );
+                return;
+            }
+        };
+        let limit = config::get_loss_limit_native();
 
-    if let Ok(mut state) = LOSS_LIMIT_STATE.write() {
-        // A period that rolled over while the books were read starts from its own figure.
+        let Ok(mut state) = LOSS_LIMIT_STATE.write() else {
+            return;
+        };
+        // A period that rolled over while the books were read counts from its own start:
+        // read them again for it.
         if state.counted_since != counted_since {
-            return;
+            continue;
         }
         let rose = loss > state.cumulative_loss_native;
         state.cumulative_loss_native = loss;
@@ -158,7 +183,12 @@ pub async fn sync_from_books() {
                 &format!("LOSS LIMIT REACHED: {loss:.4}/{limit:.4} SOL - Entry monitor paused"),
             );
         }
+        return;
     }
+    logger::warning(
+        LogTag::Trader,
+        "Loss limit kept its figure: the period rolled over during every read of the books",
+    );
 }
 
 /// Manually resume trading after loss limit (for dashboard control)
@@ -262,6 +292,42 @@ pub async fn initialize_from_history() {
                 "Loss limit initialized: {:.4}/{:.4} SOL in current period",
                 status.cumulative_loss_native, limit
             ),
+        );
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    /// A period that rolls over while the books are read is read again for the new
+    /// period, and the figure written is the new period's, never the old window's.
+    #[tokio::test]
+    async fn a_period_that_rolls_over_mid_read_is_read_again() {
+        crate::config::utils::install_default_config();
+        reset_loss_limit_state();
+        let old_window = LOSS_LIMIT_STATE.read().unwrap().counted_since;
+        let new_window = old_window + Duration::seconds(1);
+        let reads = std::sync::Mutex::new(Vec::new());
+
+        follow_books(|counted_since| {
+            reads.lock().unwrap().push(counted_since);
+            let first = reads.lock().unwrap().len() == 1;
+            if first {
+                // The period rolls over while the old window's books are being read.
+                let mut state = LOSS_LIMIT_STATE.write().unwrap();
+                state.period_start = new_window;
+                state.counted_since = new_window;
+            }
+            async move { Ok::<_, String>(if first { 5.0 } else { 0.25 }) }
+        })
+        .await;
+
+        assert_eq!(*reads.lock().unwrap(), vec![old_window, new_window]);
+        assert_eq!(
+            LOSS_LIMIT_STATE.read().unwrap().cumulative_loss_native,
+            0.25,
+            "the new period's figure is written"
         );
     }
 }
