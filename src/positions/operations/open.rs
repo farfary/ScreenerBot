@@ -235,12 +235,13 @@ async fn open_position_impl(
         detail: e.to_string(),
     })?;
 
-    // Mark mint as pending-open BEFORE submitting the swap to avoid duplicate attempts
-    crate::positions::state::set_pending_open(
+    // Mark mint as pending-open BEFORE submitting the swap to avoid duplicate attempts.
+    // The guard clears the mark on every return that proves no swap can land; it is
+    // kept only once the swap may be in flight.
+    let mut pending_open = crate::positions::state::hold_pending_open(
         &api_token.mint,
         crate::positions::state::PENDING_OPEN_TTL_SECS,
-    )
-    .await;
+    );
     crate::events::record_position_event_flexible(
         "pending_open_set",
         crate::events::Severity::Debug,
@@ -274,6 +275,10 @@ async fn open_position_impl(
         })?;
 
     let expected_output_amount = quote.output_amount;
+    // From here the swap may reach the chain, and a buy that may land must not be
+    // opened twice: the mark outlives a cancelled call and is released only on a
+    // failure that proves nothing was sent.
+    pending_open.keep();
     let (transaction_signature, output_amount, confirmation_pending, effective_entry_price) =
         match execute_swap_with_fallback(
             &api_token,
@@ -313,10 +318,13 @@ async fn open_position_impl(
                     (signature, expected_output_amount, true, effective_price)
                 }
                 None => {
+                    if crate::swaps::is_fallback_safe(&error) {
+                        pending_open.release();
+                    }
                     return Err(Error::SwapFailed {
                         mint: api_token.mint.clone(),
                         detail: error.to_string(),
-                    })
+                    });
                 }
             },
         };
@@ -453,7 +461,7 @@ async fn open_position_impl(
     }
 
     // We successfully created the position; clear pending-open now
-    crate::positions::state::clear_pending_open(&api_token.mint).await;
+    crate::positions::state::clear_pending_open(&api_token.mint);
     crate::events::record_position_event_flexible(
         "pending_open_cleared",
         crate::events::Severity::Debug,

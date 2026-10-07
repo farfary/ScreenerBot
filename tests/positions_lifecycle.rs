@@ -809,3 +809,75 @@ fn each_consecutive_deferral_waits_longer_and_a_pending_read_restarts_the_count(
     let cleared = queue.remove("sig-widening").expect("queued");
     assert!(!cleared.not_landed_seen());
 }
+
+// ==================== PENDING-OPEN MARKER ====================
+//
+// The open path marks a mint pending before it quotes, so no second open can start
+// while the first swap may land. A buy that never reached the chain used to leave
+// that mark for its whole 120 s TTL: the retry was refused as "position already
+// open" while "add to position" found no position, and the auto-trader skipped the
+// mint.
+
+#[tokio::test]
+async fn a_buy_that_never_reached_the_chain_leaves_no_pending_open_mark() {
+    use screenerbot::positions::state::{hold_pending_open, is_open_position};
+    let _cfg = config_guard();
+    set_positions(Vec::new()).await;
+
+    // A quote failure, or any early return, drops the guard.
+    let mint = "PendingQuoteFail111111111111111111111111111";
+    {
+        let _pending = hold_pending_open(mint, 120);
+        assert!(
+            is_open_position(mint).await,
+            "the mark blocks a second open"
+        );
+    }
+    assert!(!is_open_position(mint).await);
+
+    // A swap failure that proves nothing was sent releases a kept mark.
+    let mint = "PendingSwapNotSent11111111111111111111111111";
+    let mut pending = hold_pending_open(mint, 120);
+    pending.keep();
+    pending.release();
+    assert!(!is_open_position(mint).await);
+
+    // A stale guard never clears a newer open's mark for the same mint.
+    let mint = "PendingReopened1111111111111111111111111111";
+    let first = hold_pending_open(mint, 120);
+    tokio::time::sleep(std::time::Duration::from_millis(5)).await;
+    let second = hold_pending_open(mint, 120);
+    drop(first);
+    assert!(is_open_position(mint).await, "the newer mark survives");
+    drop(second);
+    assert!(!is_open_position(mint).await);
+}
+
+#[tokio::test]
+async fn a_swap_that_may_have_landed_keeps_the_mark_until_the_position_exists() {
+    use screenerbot::positions::state::{add_position, hold_pending_open, is_open_position};
+    let _cfg = config_guard();
+    set_positions(Vec::new()).await;
+
+    let mint = "PendingSubmitted11111111111111111111111111";
+    {
+        let mut pending = hold_pending_open(mint, 120);
+        // Submitted, confirmation pending: the guard must not clear on drop.
+        pending.keep();
+    }
+    assert!(
+        is_open_position(mint).await,
+        "a buy that may still land is not opened twice"
+    );
+
+    let mut position = position_for(mint);
+    position.exit_time = Some(Utc::now());
+    position.exit_price = Some(0.01);
+    position.transaction_exit_verified = true;
+    add_position(position).await;
+    assert!(
+        !is_open_position(mint).await,
+        "adding the position clears the mark; a closed position is not open"
+    );
+    set_positions(Vec::new()).await;
+}

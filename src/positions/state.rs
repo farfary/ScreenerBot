@@ -36,8 +36,17 @@ static BOOKING_LOCKS: LazyLock<RwLock<HashMap<i64, Arc<Mutex<()>>>>> =
 
 // Pending open-swap registry: guards against duplicate opens when the first swap lands on-chain
 // but local flow fails before persisting a position. Keys are token mints; values are expiry times.
-static PENDING_OPEN_SWAPS: LazyLock<RwLock<HashMap<String, DateTime<Utc>>>> =
-    LazyLock::new(|| RwLock::new(HashMap::new()));
+// A plain mutex, never held across an await, so a dropped [`PendingOpenGuard`] can clear its entry.
+static PENDING_OPEN_SWAPS: LazyLock<std::sync::Mutex<HashMap<String, DateTime<Utc>>>> =
+    LazyLock::new(|| std::sync::Mutex::new(HashMap::new()));
+
+/// The pending-open registry. A panic while holding the lock leaves a plain map
+/// behind, which is still consistent, so a poisoned lock is recovered.
+fn pending_open_swaps() -> std::sync::MutexGuard<'static, HashMap<String, DateTime<Utc>>> {
+    PENDING_OPEN_SWAPS
+        .lock()
+        .unwrap_or_else(std::sync::PoisonError::into_inner)
+}
 
 // Global position creation semaphore to enforce max_open_positions atomically
 // NOTE: Uses OnceLock because initialization requires config which isn't available at static init time
@@ -289,7 +298,7 @@ pub async fn add_position(position: Position) -> usize {
 
     // Clear any pending-open flag for this mint now that the position exists
     {
-        let mut pending = PENDING_OPEN_SWAPS.write().await;
+        let mut pending = pending_open_swaps();
         if pending.remove(&position.mint).is_some() {
             logger::debug(
                 LogTag::Positions,
@@ -431,10 +440,7 @@ pub async fn remove_position_by_id(position_id: i64) -> Option<Position> {
         }
     }
 
-    {
-        let mut pending = PENDING_OPEN_SWAPS.write().await;
-        pending.remove(&removed.mint);
-    }
+    pending_open_swaps().remove(&removed.mint);
 
     rebuild_position_indexes(&positions).await;
 
@@ -540,27 +546,21 @@ pub async fn is_open_position(mint: &str) -> bool {
     // Then check pending-open window (lazily expire any stale entries)
     {
         let now = Utc::now();
-        let mut to_remove: Vec<String> = Vec::new();
-        let pending_read = PENDING_OPEN_SWAPS.read().await;
-        let is_pending = pending_read.get(mint).is_some_and(|exp| *exp > now);
-        drop(pending_read);
-
-        // Cleanup any expired entries opportunistically
-        {
-            let mut pending_write = PENDING_OPEN_SWAPS.write().await;
-            for (m, exp) in pending_write.iter() {
-                if *exp <= now {
-                    to_remove.push(m.clone());
+        let is_pending = {
+            let mut pending = pending_open_swaps();
+            let is_pending = pending.get(mint).is_some_and(|exp| *exp > now);
+            pending.retain(|m, exp| {
+                let live = *exp > now;
+                if !live {
+                    logger::debug(
+                        LogTag::Positions,
+                        &format!("Pending-open expired for mint: {m}"),
+                    );
                 }
-            }
-            for m in to_remove.drain(..) {
-                pending_write.remove(&m);
-                logger::debug(
-                    LogTag::Positions,
-                    &format!("Pending-open expired for mint: {m}"),
-                );
-            }
-        }
+                live
+            });
+            is_pending
+        };
 
         if is_pending {
             logger::debug(
@@ -611,11 +611,18 @@ pub async fn remove_signature_from_index(signature: &str) {
     SIG_TO_MINT_INDEX.write().await.remove(signature);
 }
 
-/// Mark a mint as having a pending open swap for ttl_secs seconds
-pub async fn set_pending_open(mint: &str, ttl_secs: i64) {
+/// Mark `mint` as having an open swap pending for `ttl_secs` seconds, so no
+/// second open can start for it, and return the guard that owns the mark.
+///
+/// The guard clears the mark when it is dropped, which covers every early
+/// return of the open path: a quote that failed, a swap that provably never
+/// reached the chain. Once the swap may be in flight the caller calls
+/// [`PendingOpenGuard::keep`], and the mark then lives until the position is
+/// added (which clears it), [`PendingOpenGuard::release`] is called on a
+/// proven never-sent failure, or the TTL expires.
+pub fn hold_pending_open(mint: &str, ttl_secs: i64) -> PendingOpenGuard {
     let expires_at = Utc::now() + chrono::Duration::seconds(ttl_secs);
-    let mut pending = PENDING_OPEN_SWAPS.write().await;
-    pending.insert(mint.to_string(), expires_at);
+    pending_open_swaps().insert(mint.to_string(), expires_at);
     logger::debug(
         LogTag::Positions,
         &format!(
@@ -623,12 +630,58 @@ pub async fn set_pending_open(mint: &str, ttl_secs: i64) {
             mint, ttl_secs, expires_at
         ),
     );
+    PendingOpenGuard {
+        mint: mint.to_string(),
+        expires_at,
+        clear_on_drop: true,
+    }
+}
+
+/// Owner of one pending-open mark; see [`hold_pending_open`].
+#[derive(Debug)]
+pub struct PendingOpenGuard {
+    mint: String,
+    expires_at: DateTime<Utc>,
+    clear_on_drop: bool,
+}
+
+impl PendingOpenGuard {
+    /// Keep the mark past this guard: the swap may be in flight, and a buy
+    /// that may land must not be opened twice.
+    pub fn keep(&mut self) {
+        self.clear_on_drop = false;
+    }
+
+    /// Clear the mark now: the swap provably never reached the chain.
+    pub fn release(mut self) {
+        self.clear_on_drop = true;
+    }
+
+    /// Remove this guard's own mark. A mark set again since — by a later open
+    /// of the same mint — carries a different expiry and is left alone.
+    fn clear(&self) {
+        let mut pending = pending_open_swaps();
+        if pending.get(&self.mint) == Some(&self.expires_at) {
+            pending.remove(&self.mint);
+            logger::debug(
+                LogTag::Positions,
+                &format!("Cleared pending-open for mint: {}", self.mint),
+            );
+        }
+    }
+}
+
+impl Drop for PendingOpenGuard {
+    fn drop(&mut self) {
+        if self.clear_on_drop {
+            self.clear();
+        }
+    }
 }
 
 /// Clear a mint's pending open swap state, if present
-pub async fn clear_pending_open(mint: &str) {
-    let mut pending = PENDING_OPEN_SWAPS.write().await;
-    if pending.remove(mint).is_some() {
+pub fn clear_pending_open(mint: &str) {
+    if pending_open_swaps().remove(mint).is_some() {
         logger::debug(
             LogTag::Positions,
             &format!("Cleared pending-open for mint: {mint}"),
