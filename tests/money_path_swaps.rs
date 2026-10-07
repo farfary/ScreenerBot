@@ -14,6 +14,8 @@
 //! Item 4 (instruction structure) is covered co-located in
 //! `src/chains/solana/swaps/programs/raydium_clmm.rs` (CPMM already had its own).
 
+mod common;
+
 use async_trait::async_trait;
 use screenerbot::chains::ChainId;
 use screenerbot::swaps::operations::get_best_quote;
@@ -113,7 +115,10 @@ static SCENARIO: AtomicU8 = AtomicU8::new(0);
 /// process-wide state read by the stub routers' `get_quote`.
 static SCENARIO_MUTEX: OnceLock<Mutex<()>> = OnceLock::new();
 
+/// Also seeds the global config: the route comparison reads its quote deadline through
+/// `with_config`, and nextest gives every test a fresh process with no config installed.
 fn scenario_guard() -> std::sync::MutexGuard<'static, ()> {
+    common::ensure_config();
     SCENARIO_MUTEX
         .get_or_init(|| Mutex::new(()))
         .lock()
