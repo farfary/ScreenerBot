@@ -1022,3 +1022,40 @@ async fn a_wallet_transaction_the_node_refused_is_reported_never_sent() {
     );
     assert_eq!(node.sent().len(), 1);
 }
+
+/// A re-broadcast that never comes back does not hold up the status polls: the
+/// swap that lands meanwhile is read as landed on the poll cadence, long before
+/// the settle deadline.
+#[tokio::test(start_paused = true)]
+async fn a_hanging_rebroadcast_does_not_hold_up_the_status_polls() {
+    let signer = Keypair::new();
+    let mut transaction = aggregator_build(&signer, &Pubkey::new_unique());
+    transaction.signatures[0] = signer.sign_message(&transaction.message.serialize());
+    let mut statuses: Vec<_> = (0..12).map(|_| Ok(None)).collect();
+    statuses.push(Ok(Some(status(Level::Confirmed, None))));
+    let node = ScriptedNode::new(
+        0,
+        vec![SendAnswer::Accepted, SendAnswer::Hangs],
+        statuses,
+        0,
+    );
+
+    let started = Instant::now();
+    let (_, settled) = tokio::time::timeout(
+        Duration::from_secs(60),
+        send_and_settle(&node, &transaction, Some(1_000), Duration::from_secs(60)),
+    )
+    .await
+    .expect("the settle loop is never stuck behind a send")
+    .expect("sent");
+    assert_eq!(settled, Settled::Landed);
+    assert!(
+        node.sent().len() > 2,
+        "re-broadcasts went on after one hung"
+    );
+    assert!(
+        started.elapsed() < Duration::from_secs(15),
+        "the landed swap was read on the poll cadence, after {:?}",
+        started.elapsed()
+    );
+}

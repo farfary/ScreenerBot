@@ -70,6 +70,10 @@ use crate::swaps::{NotSubmittedReason, Quote, SwapExecutionError};
 /// submitted but unconfirmed, and handed to verification.
 const CONFIRMATION_TIMEOUT: Duration = Duration::from_secs(60);
 
+/// How long a plain wallet transaction is settled before its outcome is
+/// reported as unknown.
+const SIGNED_TRANSACTION_TIMEOUT: Duration = Duration::from_secs(60);
+
 /// How often the settle loop polls the signature's status.
 const STATUS_POLL_INTERVAL: Duration = Duration::from_millis(500);
 
@@ -77,6 +81,12 @@ const STATUS_POLL_INTERVAL: Duration = Duration::from_millis(500);
 /// signature is identical every time, so a duplicate landing is impossible:
 /// this only fights the network having dropped the earlier copy.
 const REBROADCAST_INTERVAL: Duration = Duration::from_secs(2);
+
+/// How long one re-broadcast may take. A copy that is not handed over by then
+/// is abandoned for that round: the status polls that decide the swap must not
+/// wait behind a slow or hanging send, and a dropped copy of the same signed
+/// bytes changes nothing.
+const REBROADCAST_TIMEOUT: Duration = Duration::from_secs(1);
 
 /// How often the settle loop reads the finalized tip its expiry is judged
 /// against.
@@ -489,14 +499,22 @@ async fn settle<N: SwapNode>(
 
         if last_rebroadcast.elapsed() >= REBROADCAST_INTERVAL {
             last_rebroadcast = Instant::now();
-            match node.send(transaction).await {
-                Ok(_) => logger::info(
+            match tokio::time::timeout(REBROADCAST_TIMEOUT, node.send(transaction)).await {
+                Err(_) => logger::debug(
+                    LogTag::Swap,
+                    &format!(
+                        "Re-broadcast of {signature} took longer than {}ms and was abandoned \
+                         for this round",
+                        REBROADCAST_TIMEOUT.as_millis()
+                    ),
+                ),
+                Ok(Ok(_)) => logger::info(
                     LogTag::Swap,
                     &format!(
                         "Re-broadcast {signature}: the network may have dropped the earlier copy"
                     ),
                 ),
-                Err(e) => logger::debug(
+                Ok(Err(e)) => logger::debug(
                     LogTag::Swap,
                     &format!(
                         "Re-broadcast of {signature} was not accepted this round (an 'already \
@@ -702,10 +720,6 @@ fn landed(
         },
     })
 }
-
-/// How long a plain wallet transaction is settled before its outcome is
-/// reported as unknown.
-const SIGNED_TRANSACTION_TIMEOUT: Duration = Duration::from_secs(60);
 
 /// Send a signed wallet transaction that is not a swap — a transfer, an
 /// account close, a burn — and settle it by its own signature.

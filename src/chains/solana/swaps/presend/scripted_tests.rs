@@ -147,6 +147,8 @@ pub(crate) enum SendAnswer {
     TimedOut,
     /// The send failed with this error.
     Fails(crate::Error),
+    /// The request never comes back.
+    Hangs,
 }
 
 impl SwapNode for ScriptedNode {
@@ -166,6 +168,7 @@ impl SwapNode for ScriptedNode {
                 is_timeout: true,
             })),
             SendAnswer::Fails(error) => Err(error),
+            SendAnswer::Hangs => std::future::pending().await,
         }
     }
 
