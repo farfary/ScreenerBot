@@ -18,7 +18,7 @@ pub mod types;
 pub use error::{NotOfferedReason, QuoteError, QuoteResult, SwapExecutionError};
 pub use operations::{
     execute_swap_with_fallback, get_best_quote, get_best_quote_for_opening, try_get_best_quote,
-    unconfirmed_swap_signature, unconfirmed_swap_signature_from_message,
+    unconfirmed_swap_signature,
 };
 pub use operations_wallet::quote_and_execute_for_wallet;
 pub use progress::{with_swap_stage_listener, SwapStage, SwapStageListener};

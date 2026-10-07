@@ -91,6 +91,25 @@ impl RpcError {
         }
     }
 
+    /// Whether a node decoded this request and refused the request itself.
+    ///
+    /// Only the JSON-RPC request-shape codes qualify: a parse error (-32700), an
+    /// invalid request (-32600) and invalid params (-32602, which is how a node
+    /// refuses an oversized or undecodable transaction). They are deterministic
+    /// in the request bytes, so no node and no retry would accept them either,
+    /// and they prove the request was never acted on. Transport failures, rate
+    /// limits, timeouts, open circuits, an empty provider pool and the
+    /// retryable server band are not an answer about the request.
+    pub fn is_request_rejection(&self) -> bool {
+        matches!(
+            self,
+            Self::ProviderError {
+                code: -32700 | -32600 | -32602,
+                ..
+            }
+        )
+    }
+
     /// Whether this is a rate limit error
     pub fn is_rate_limited(&self) -> bool {
         matches!(self, Self::RateLimited { .. })
@@ -357,6 +376,155 @@ mod tests {
         };
         assert!(!simulation_failed.is_retryable());
         assert!(!simulation_failed.is_provider_health_failure());
+    }
+
+    /// The variant name a table row stands for. Exhaustive, so a new variant
+    /// cannot compile without being given a row below.
+    fn variant(error: &RpcError) -> &'static str {
+        match error {
+            RpcError::RateLimited { .. } => "RateLimited",
+            RpcError::Network { .. } => "Network",
+            RpcError::ProviderError { .. } => "ProviderError",
+            RpcError::Timeout { .. } => "Timeout",
+            RpcError::CircuitOpen { .. } => "CircuitOpen",
+            RpcError::NoProvidersAvailable { .. } => "NoProvidersAvailable",
+            RpcError::AccountNotFound { .. } => "AccountNotFound",
+            RpcError::InvalidResponse { .. } => "InvalidResponse",
+            RpcError::Configuration { .. } => "Configuration",
+            RpcError::Other(_) => "Other",
+        }
+    }
+
+    /// Every variant, and every provider-code class, against the three
+    /// questions callers ask: retry it, blame the provider, or read it as the
+    /// node's answer about the request. Columns: retryable, provider health
+    /// failure, request rejection.
+    #[test]
+    fn every_rpc_error_is_classified_on_all_three_questions() {
+        let provider = |code: i64| RpcError::ProviderError {
+            code,
+            message: "stub".to_owned(),
+            data: None,
+        };
+        let rows: Vec<(RpcError, bool, bool, bool)> = vec![
+            (
+                RpcError::RateLimited {
+                    provider_id: "p".to_owned(),
+                    retry_after: None,
+                },
+                true,
+                true,
+                false,
+            ),
+            (
+                RpcError::Network {
+                    message: "reset".to_owned(),
+                    is_timeout: false,
+                },
+                true,
+                true,
+                false,
+            ),
+            (
+                RpcError::Network {
+                    message: "timed out".to_owned(),
+                    is_timeout: true,
+                },
+                true,
+                true,
+                false,
+            ),
+            (provider(-32700), false, false, true),
+            (provider(-32600), false, false, true),
+            (provider(-32601), false, false, false),
+            (provider(-32602), false, false, true),
+            (provider(-32002), false, false, false),
+            (provider(-32005), true, true, false),
+            (provider(-32015), false, false, false),
+            (
+                RpcError::Timeout {
+                    provider_id: "p".to_owned(),
+                    after: Duration::from_secs(1),
+                },
+                true,
+                true,
+                false,
+            ),
+            (
+                RpcError::CircuitOpen {
+                    provider_id: "p".to_owned(),
+                    retry_after: Duration::from_secs(1),
+                },
+                false,
+                false,
+                false,
+            ),
+            (
+                RpcError::NoProvidersAvailable { last_error: None },
+                false,
+                false,
+                false,
+            ),
+            (
+                RpcError::AccountNotFound {
+                    pubkey: "k".to_owned(),
+                },
+                false,
+                false,
+                false,
+            ),
+            (
+                RpcError::InvalidResponse {
+                    message: "garbled".to_owned(),
+                },
+                false,
+                true,
+                false,
+            ),
+            (
+                RpcError::Configuration {
+                    message: "bad".to_owned(),
+                },
+                false,
+                false,
+                false,
+            ),
+            (RpcError::Other("other".to_owned()), false, false, false),
+        ];
+
+        let mut covered: Vec<&str> = rows.iter().map(|(error, ..)| variant(error)).collect();
+        covered.sort_unstable();
+        covered.dedup();
+        assert_eq!(
+            covered,
+            vec![
+                "AccountNotFound",
+                "CircuitOpen",
+                "Configuration",
+                "InvalidResponse",
+                "Network",
+                "NoProvidersAvailable",
+                "Other",
+                "ProviderError",
+                "RateLimited",
+                "Timeout",
+            ],
+            "every RpcError variant needs a row"
+        );
+
+        for (error, retryable, health, rejection) in rows {
+            assert_eq!(error.is_retryable(), retryable, "retryable: {error}");
+            assert_eq!(
+                error.is_provider_health_failure(),
+                health,
+                "provider health: {error}"
+            );
+            assert_eq!(
+                error.is_request_rejection(),
+                rejection,
+                "rejection: {error}"
+            );
+        }
     }
 
     /// A transport failure against a credential-bearing endpoint, produced

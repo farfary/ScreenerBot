@@ -846,9 +846,9 @@ fn schedule_post_swap_cleanup(quote: &Quote) {
 
 /// The signature of a swap that reached the chain: submitted but unconfirmed, or completed outside its caller's amount range.
 ///
-/// `sign_send_and_confirm_transaction` sends the transaction and then polls for it; on
-/// timeout it returns an error even though the transaction may still land — a Solana
-/// transaction stays valid until its blockhash expires, well beyond our poll window.
+/// A confirmation poll that runs out returns an error even though the transaction may still
+/// land — a Solana transaction stays valid until its blockhash expires, well beyond our poll
+/// window.
 ///
 /// Retrying such a swap is a DOUBLE SPEND: the fallback chain would submit the same sell
 /// through another router, and the exit's slippage ladder would submit it again at the next
@@ -857,15 +857,8 @@ fn schedule_post_swap_cleanup(quote: &Quote) {
 /// once actually sells 25% twice, and the position records only one of them.
 ///
 /// The signature is recovered so a caller can stop retrying and hand it to verification,
-/// which reconciles what really happened on chain.
-///
-/// Three paths, and the typed ones are tried first. A completed swap refused by a caller's
-/// amount range carries its signature in SwapExecutionError::CompletedAmountOutOfRange.
-/// The direct pool-swap engine reports every
-/// outcome that reached the chain as a VARIANT that already carries the signature as data
-/// (see `DirectSwapError::settled_signature`); only the aggregator path, whose timeout is
-/// produced deep inside the RPC client as free text, still needs the marker-sentence scan
-/// below.
+/// which reconciles what really happened on chain. Every path answers from a typed
+/// outcome that carries the signature as data, never from the error's text.
 pub fn unconfirmed_swap_signature(error: &Error) -> Option<String> {
     match error {
         // A completed swap whose amounts exceed the caller's range is a trade that
@@ -874,102 +867,66 @@ pub fn unconfirmed_swap_signature(error: &Error) -> Option<String> {
             signature,
             ..
         }) => Some(signature.clone()),
-        // The direct engine already knows the answer as DATA, so ask it rather than
-        // pattern-matching prose. `settled_signature` covers both a confirmation that
-        // timed out (it may still land) and a swap that CONFIRMED WITHOUT ERROR whose
-        // receipt could not be measured -- the latter is a trade that provably
-        // happened, and treating it as one that never did leaves the wallet holding
-        // tokens no position was ever created for.
+        // An aggregator transaction that was sent and whose confirmation poll ran out.
+        Error::Solana(crate::chains::solana::Error::Execution(
+            crate::chains::ExecutionFailure::ConfirmationTimeout { reference, .. },
+        )) => Some(reference.clone()),
+        // The direct engine already knows the answer as DATA. `settled_signature` covers
+        // both a confirmation that timed out (it may still land) and a swap that
+        // CONFIRMED WITHOUT ERROR whose receipt could not be measured -- the latter is a
+        // trade that provably happened, and treating it as one that never did leaves the
+        // wallet holding tokens no position was ever created for.
         Error::Solana(crate::chains::solana::Error::DirectSwap(direct)) => {
             direct.settled_signature().map(str::to_owned)
         }
-        _ => unconfirmed_swap_signature_from_message(&error.to_string()),
+        _ => None,
     }
-}
-
-pub fn unconfirmed_swap_signature_from_message(message: &str) -> Option<String> {
-    // The marker sentence is the anchor, not the word "Transaction": callers wrap swap
-    // errors in their own prose, and any earlier "Transaction " in that prose used to win
-    // the match and hand back everything in between as the "signature". What came out was
-    // a sentence fragment, and `close_position_direct` wrote it straight into
-    // `exit_transaction_signature` — an exit that verification could never settle because
-    // the chain has no such signature.
-    let (before_marker, _) = message.split_once(" not confirmed within timeout")?;
-
-    // The signature is the last whitespace-separated token before the marker.
-    let candidate = before_marker.split_whitespace().next_back()?;
-
-    // A recovered "signature" is written to the position and handed to verification, so a
-    // value that cannot exist on chain is worse than none at all: it produces an exit that
-    // stays pending forever. Reject anything that is not shaped like a real hash.
-    crate::chains::adapter()
-        .looks_like_transaction_hash(candidate)
-        .then(|| candidate.to_owned())
 }
 
 #[cfg(test)]
 mod submitted_timeout_tests {
-    use super::unconfirmed_swap_signature_from_message;
+    use super::unconfirmed_swap_signature;
+    use crate::chains::ExecutionFailure;
+    use crate::Error;
 
     /// A real (well-formed) mainnet signature: 88 base58 characters.
     const SIGNATURE: &str =
         "5VERv8NMvzbJMEkV8xnrLkEaWRtSz9CosKDYjCJjBRnbJLgp8uirBgmQpjKhoR4tjF3ZpRzrFmBV6UjKdiSZkQUW";
 
+    fn execution(failure: ExecutionFailure) -> Error {
+        Error::Solana(crate::chains::solana::Error::Execution(failure))
+    }
+
     #[test]
-    fn submitted_timeout_recovers_the_signature_for_verification() {
+    fn a_submitted_timeout_recovers_the_signature_for_verification() {
         assert_eq!(
-            unconfirmed_swap_signature_from_message(&format!(
-                "RPC error: Transaction {SIGNATURE} not confirmed within timeout"
-            )),
+            unconfirmed_swap_signature(&execution(ExecutionFailure::ConfirmationTimeout {
+                reference: SIGNATURE.to_owned(),
+                waited_ms: 60_000,
+            })),
             Some(SIGNATURE.to_owned())
         );
     }
 
+    /// A transaction the chain reverted moved nothing and can never land again, and
+    /// a failure before submission has no signature at all: neither is handed to
+    /// verification as a trade that may have happened.
     #[test]
-    fn a_pre_submission_failure_is_not_treated_as_submitted() {
+    fn a_reverted_or_never_sent_swap_is_not_treated_as_submitted() {
         assert_eq!(
-            unconfirmed_swap_signature_from_message("quote rejected before submission"),
+            unconfirmed_swap_signature(&execution(ExecutionFailure::Reverted {
+                reference: SIGNATURE.to_owned(),
+                detail: "custom program error".to_owned(),
+            })),
             None
         );
-    }
-
-    /// The regression that made a stuck sell unrecoverable: a router wrapped the
-    /// send/confirm error in prose that itself contained "Transaction ", and the old
-    /// first-match parser returned the prose as the signature.
-    #[test]
-    fn a_wrapped_error_still_yields_the_real_signature_only() {
-        let recovered = unconfirmed_swap_signature_from_message(&format!(
-            "Transaction send failed: RPC error: Transaction {SIGNATURE} not confirmed within timeout"
-        ));
-        assert_eq!(recovered, Some(SIGNATURE.to_owned()));
-    }
-
-    /// Nothing that cannot exist on chain may ever be returned: it would be written to
-    /// `exit_transaction_signature` and leave the position pending verification forever.
-    #[test]
-    fn prose_is_never_returned_as_a_signature() {
-        for message in [
-            "Transaction  not confirmed within timeout",
-            "Transaction send failed: not confirmed within timeout",
-            "Transaction 5abcXYZ not confirmed within timeout",
-            "Transaction 0OIl0OIl0OIl0OIl0OIl0OIl0OIl0OIl0OIl0OIl0OIl0OIl0OIl0OIl0OIl0OIl0OIl0OIl0OIl0OIl0OIl0O not confirmed within timeout",
-        ] {
-            assert_eq!(
-                unconfirmed_swap_signature_from_message(message),
-                None,
-                "message must not yield a signature: {message}"
-            );
-        }
-    }
-
-    #[test]
-    fn signature_shape_is_checked_against_base58_and_length() {
-        let adapter = crate::chains::adapter();
-        assert!(adapter.looks_like_transaction_hash(SIGNATURE));
-        assert!(!adapter.looks_like_transaction_hash(""));
-        assert!(!adapter.looks_like_transaction_hash("short"));
-        // Right length, but '0' is not in the base58 alphabet.
-        assert!(!adapter.looks_like_transaction_hash(&SIGNATURE.replacen('5', "0", 1)));
+        assert_eq!(
+            unconfirmed_swap_signature(&Error::api_error(format!(
+                "Transaction {SIGNATURE} not confirmed within timeout"
+            ))),
+            None,
+            "prose that merely reads like a timeout is never a signature"
+        );
     }
 }
 

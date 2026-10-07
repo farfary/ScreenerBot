@@ -584,10 +584,14 @@ impl RpcClientMethods for RpcClient {
         if confirmed {
             Ok(signature)
         } else {
-            Err(crate::Error::Data(crate::errors::DataError::ParseError {
-                data_type: "transaction".to_string(),
-                error: format!("Transaction {signature} not confirmed within timeout"),
-            }))
+            Err(crate::Error::Solana(
+                crate::chains::solana::Error::Execution(
+                    crate::chains::ExecutionFailure::ConfirmationTimeout {
+                        reference: signature.to_string(),
+                        waited_ms: timeout.as_millis() as u64,
+                    },
+                ),
+            ))
         }
     }
 
@@ -652,14 +656,13 @@ impl RpcClientMethods for RpcClient {
                                 // Check for error
                                 if let Some(err) = status.get("err") {
                                     if !err.is_null() {
-                                        return Err(crate::Error::Data(
-                                            crate::errors::DataError::ParseError {
-                                                data_type: "transaction".to_string(),
-                                                error: format!(
-                                                    "Transaction failed: {}",
-                                                    serde_json::to_string(err).unwrap_or_default()
-                                                ),
-                                            },
+                                        return Err(crate::Error::Solana(
+                                            crate::chains::solana::Error::Execution(
+                                                crate::chains::ExecutionFailure::Reverted {
+                                                    reference: signature.to_string(),
+                                                    detail: err.to_string(),
+                                                },
+                                            ),
                                         ));
                                     }
                                 }
@@ -935,10 +938,14 @@ impl RpcClientMethods for RpcClient {
         if confirmed {
             Ok(signature)
         } else {
-            Err(crate::Error::Data(crate::errors::DataError::ParseError {
-                data_type: "transaction".to_string(),
-                error: format!("Transaction {signature} not confirmed within timeout"),
-            }))
+            Err(crate::Error::Solana(
+                crate::chains::solana::Error::Execution(
+                    crate::chains::ExecutionFailure::ConfirmationTimeout {
+                        reference: signature.to_string(),
+                        waited_ms: timeout.as_millis() as u64,
+                    },
+                ),
+            ))
         }
     }
 

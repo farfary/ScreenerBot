@@ -20,6 +20,10 @@ pub enum ExecutionFailure {
     ConfirmationTimeout { reference: String, waited_ms: u64 },
     #[error("the node has not yet indexed {reference}")]
     IndexingDelay { reference: String },
+    /// The transaction landed and the chain reports it failed: it moved
+    /// nothing but its fee, and it can never land again.
+    #[error("transaction {reference} failed on chain: {detail}")]
+    Reverted { reference: String, detail: String },
 }
 
 impl ErrorClass for ExecutionFailure {
@@ -39,6 +43,7 @@ impl ErrorClass for ExecutionFailure {
             ExecutionFailure::NotFound { .. } => Severity::Warning,
             ExecutionFailure::ConfirmationTimeout { .. } => Severity::Warning,
             ExecutionFailure::IndexingDelay { .. } => Severity::Info,
+            ExecutionFailure::Reverted { .. } => Severity::Warning,
         }
     }
 
@@ -47,6 +52,7 @@ impl ErrorClass for ExecutionFailure {
             ExecutionFailure::NotFound { .. } => 404,
             ExecutionFailure::ConfirmationTimeout { .. } => 504,
             ExecutionFailure::IndexingDelay { .. } => 503,
+            ExecutionFailure::Reverted { .. } => 422,
         }
     }
 }

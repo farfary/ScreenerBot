@@ -97,44 +97,45 @@ async fn a_per_request_timeout_overrides_the_client_default() {
     );
 }
 
-/// A submitted-but-unconfirmed swap is recognised even when a router wraps the RPC
-/// error in its own prose.
+/// A submitted-but-unconfirmed swap is recognised from its typed outcome, and
+/// nothing else is.
 ///
 /// This decision is the difference between "hand the signature to verification" and
 /// "send the sell again through the next router" — the second is a real double sell.
-/// The old parser matched the FIRST "Transaction " in the message, so a wrapper that
-/// began "Transaction send failed: ..." made it return a sentence fragment. That
-/// fragment was truthy, so the no-retry guard held by luck, but it was then written
-/// to `exit_transaction_signature` and enqueued for verification — an exit pinned to
-/// a signature that does not exist on chain can never settle.
+/// The aggregator path used to report the timeout as prose that a parser searched for a
+/// marker sentence; a wrapper that began "Transaction send failed: ..." once made it
+/// return a sentence fragment, which was written to `exit_transaction_signature` and
+/// could never settle. The timeout now carries its signature as data.
 #[test]
-fn a_wrapped_unconfirmed_swap_error_yields_the_real_signature_only() {
-    use screenerbot::swaps::unconfirmed_swap_signature_from_message;
+fn an_unconfirmed_swap_is_recognised_from_its_type_never_its_text() {
+    use screenerbot::chains::ExecutionFailure;
+    use screenerbot::swaps::unconfirmed_swap_signature;
 
     const SIGNATURE: &str =
         "5VERv8NMvzbJMEkV8xnrLkEaWRtSz9CosKDYjCJjBRnbJLgp8uirBgmQpjKhoR4tjF3ZpRzrFmBV6UjKdiSZkQUW";
 
+    let timed_out = screenerbot::Error::Solana(screenerbot::chains::solana::Error::Execution(
+        ExecutionFailure::ConfirmationTimeout {
+            reference: SIGNATURE.to_owned(),
+            waited_ms: 60_000,
+        },
+    ));
     assert_eq!(
-        unconfirmed_swap_signature_from_message(&format!(
-            "Transaction send failed: RPC error: Transaction {SIGNATURE} not confirmed within timeout"
-        )),
-        Some(SIGNATURE.to_owned()),
+        unconfirmed_swap_signature(&timed_out),
+        Some(SIGNATURE.to_owned())
     );
 
-    // A pre-submission failure must NOT look submitted, or a recoverable trade is
-    // abandoned with a phantom exit signature.
-    assert_eq!(
-        unconfirmed_swap_signature_from_message("No swap route available for this token"),
-        None,
-    );
-
-    // Prose can never masquerade as a signature.
-    assert_eq!(
-        unconfirmed_swap_signature_from_message(
-            "Transaction send failed: not confirmed within timeout"
-        ),
-        None,
-    );
+    // A pre-submission failure, and prose that merely reads like a timeout, must NOT
+    // look submitted, or a recoverable trade is abandoned with a phantom signature.
+    for message in [
+        "No swap route available for this token".to_owned(),
+        format!("Transaction send failed: RPC error: Transaction {SIGNATURE} not confirmed within timeout"),
+    ] {
+        assert_eq!(
+            unconfirmed_swap_signature(&screenerbot::Error::api_error(message)),
+            None
+        );
+    }
 }
 
 /// Completed actions must actually be deletable.
