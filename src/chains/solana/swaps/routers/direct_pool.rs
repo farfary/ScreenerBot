@@ -29,7 +29,7 @@ use crate::chains::solana::swaps::direct::{self, DirectSwapIntent, DirectSwapOut
 use crate::config::with_config;
 use crate::errors::DataError;
 use crate::logger::{self, LogTag};
-use crate::swaps::error::{QuoteError, QuoteResult};
+use crate::swaps::error::{NotOfferedReason, QuoteError, QuoteResult};
 use crate::swaps::router::SwapRouter;
 use crate::swaps::types::{Quote, QuoteRequest, SwapResult};
 use crate::tokens::Token;
@@ -372,27 +372,22 @@ impl SwapRouter for DirectPoolRouter {
     }
 
     async fn get_quote(&self, request: &QuoteRequest) -> QuoteResult<Quote> {
-        let input_amount =
-            u64::try_from(request.input_amount).map_err(|_| QuoteError::RouterRejected {
-                router: self.name().to_owned(),
-                detail: "input amount exceeds the Solana u64 limit".to_owned(),
-            })?;
+        u64::try_from(request.input_amount).map_err(|_| QuoteError::RouterRejected {
+            router: self.name().to_owned(),
+            detail: "input amount exceeds the Solana u64 limit".to_owned(),
+        })?;
         self.accept_own_chain(request)
             .map_err(|e| QuoteError::RouterRejected {
                 router: self.name().to_owned(),
                 detail: e.to_string(),
             })?;
         // A pool swap is priced forward from the input, and the engine has no
-        // ExactOut path. This is a refusal by THIS router, never a verdict on
-        // the pair: `RouterRejected` keeps it out of the no-route strikes that
-        // retire a token.
+        // ExactOut path. This router abstains, which is never a verdict on the
+        // pair and never suppresses the other routers' verdict.
         if request.swap_mode != crate::swaps::types::SwapMode::ExactIn {
-            return Err(QuoteError::RouterRejected {
+            return Err(QuoteError::NotOffered {
                 router: self.name().to_owned(),
-                detail: format!(
-                    "{:?} is not supported; the direct engine prices ExactIn only",
-                    request.swap_mode
-                ),
+                reason: NotOfferedReason::ExactOut,
             });
         }
 
@@ -643,9 +638,6 @@ mod tests {
             DirectSwapError::Build {
                 detail: String::new(),
             },
-            DirectSwapError::UnsupportedVenue {
-                program: Pubkey::new_unique(),
-            },
             DirectSwapError::SubmitFailed {
                 detail: String::new(),
             },
@@ -658,6 +650,46 @@ mod tests {
                 "our own faults must stay router-level"
             );
         }
+    }
+
+    /// A pool on a programme the engine cannot trade is a shape this router
+    /// does not offer: it abstains rather than answering for the token or
+    /// masking the other routers' answers.
+    #[test]
+    fn a_shape_the_engine_lacks_is_an_abstention() {
+        assert!(matches!(
+            DirectSwapError::UnsupportedVenue {
+                program: Pubkey::new_unique(),
+            }
+            .into_quote_error("Direct Pool"),
+            QuoteError::NotOffered {
+                reason: NotOfferedReason::UnsupportedVenue,
+                ..
+            }
+        ));
+    }
+
+    /// The engine prices forward from the input only, and says so before any
+    /// pool is read.
+    #[tokio::test]
+    async fn an_exact_out_request_is_not_offered() {
+        let request = QuoteRequest {
+            chain: crate::chains::ChainId::Solana,
+            input_mint: crate::chains::solana::constants::SOL_MINT.to_owned(),
+            output_mint: crate::chains::solana::constants::USDC_MINT.to_owned(),
+            input_amount: 1_000_000u64.into(),
+            wallet_address: String::new(),
+            slippage_pct: 1.0,
+            swap_mode: crate::swaps::types::SwapMode::ExactOut,
+            exclude_dexes: None,
+        };
+        assert!(matches!(
+            DirectPoolRouter::new().get_quote(&request).await,
+            Err(QuoteError::NotOffered {
+                reason: NotOfferedReason::ExactOut,
+                ..
+            })
+        ));
     }
 
     #[test]

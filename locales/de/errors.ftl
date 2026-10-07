@@ -359,6 +359,10 @@ errors-trade-quote-timeout = Zeitüberschreitung bei der Kursanfrage
     .hint = Die Swap-Anbieter haben nicht rechtzeitig geantwortet. Prüfen Sie Ihre Verbindung und versuchen Sie es erneut.
 errors-trade-quote-router-rejected = Die Kursanfrage wurde abgelehnt
     .hint = Ein Anbieter hat einen Kurs geliefert, der unsere Sicherheitsprüfungen nicht bestanden hat und verworfen wurde. Versuchen Sie es erneut, um einen neuen abzurufen.
+errors-trade-quote-not-offered-exact-out = Kein aktivierter Swap-Router liefert Kurse für eine exakte Ausgabemenge
+    .hint = Die aktivierten Swap-Router berechnen einen Trade nur ausgehend vom eingesetzten Betrag. Geben Sie den einzusetzenden Betrag ein oder aktivieren Sie einen weiteren Swap-Router.
+errors-trade-quote-not-offered-unsupported-venue = Kein aktivierter Swap-Router handelt im Pool dieses Tokens
+    .hint = Der Token wird an einer Börse gehandelt, die die aktivierten Swap-Router noch nicht unterstützen. Aktivieren Sie einen weiteren Swap-Router und versuchen Sie es erneut.
 errors-trade-quote-unavailable = Kurs konnte nicht abgerufen werden
     .hint = Die Swap-Anbieter konnten für diesen Trade keinen Kurs liefern. Versuchen Sie es gleich noch einmal.
 

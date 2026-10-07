@@ -388,6 +388,10 @@ errors-trade-quote-timeout = La requête de cotation a expiré
     .hint = Les fournisseurs de swap n'ont pas répondu à temps. Vérifiez votre connexion et réessayez.
 errors-trade-quote-router-rejected = La cotation a été refusée
     .hint = Un fournisseur a renvoyé une cotation qui a échoué à nos contrôles de sécurité et a été écartée. Réessayez pour en obtenir une nouvelle.
+errors-trade-quote-not-offered-exact-out = Aucun routeur de swap activé ne cote un montant de sortie exact
+    .hint = Les routeurs de swap activés ne calculent une transaction qu'à partir du montant dépensé. Saisissez le montant à dépenser ou activez un autre routeur de swap.
+errors-trade-quote-not-offered-unsupported-venue = Aucun routeur de swap activé ne négocie dans le pool de ce token
+    .hint = Ce token s'échange sur une plateforme que les routeurs de swap activés ne prennent pas encore en charge. Activez un autre routeur de swap, puis réessayez.
 errors-trade-quote-unavailable = Impossible d'obtenir une cotation
     .hint = Les fournisseurs de swap n'ont pas pu coter ce trade. Réessayez dans un instant.
 

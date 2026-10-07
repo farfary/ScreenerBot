@@ -395,12 +395,51 @@ pub async fn quote_preview_handler(Query(req): Query<QuotePreviewRequest>) -> Re
                 }
                 _ => None,
             };
-            let error = ApiError::with_text(ApiErrorCode::for_status(e.http_status()), text);
+            let error = ApiError::with_text(quote_failure_code(&e), text);
             match details {
                 Some(details) => error.details(details),
                 None => error,
             }
             .into_response()
         }
+    }
+}
+
+/// The envelope code for a quote failure: the one its status implies, except a
+/// trade no enabled route offers, which has its own code because its status
+/// alone would read as an integrity failure.
+fn quote_failure_code(e: &QuoteError) -> ApiErrorCode {
+    match e {
+        QuoteError::NotOffered { .. } => ApiErrorCode::RouteNotOffered,
+        _ => ApiErrorCode::for_status(e.http_status()),
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::swaps::NotOfferedReason;
+
+    /// A trade no enabled route offers keeps the quote error's status but
+    /// carries its own code; every other failure keeps the code its status
+    /// implies.
+    #[test]
+    fn a_trade_no_route_offers_has_its_own_code() {
+        let not_offered = QuoteError::NotOffered {
+            router: "Direct Pool".to_owned(),
+            reason: NotOfferedReason::ExactOut,
+        };
+        let code = quote_failure_code(&not_offered);
+        assert_eq!(code, ApiErrorCode::RouteNotOffered);
+        assert_eq!(code.status().as_u16(), not_offered.http_status());
+
+        let no_route = QuoteError::NoRoute {
+            router: "Jupiter".to_owned(),
+            detail: "COULD_NOT_FIND_ANY_ROUTE".to_owned(),
+        };
+        assert_eq!(
+            quote_failure_code(&no_route),
+            ApiErrorCode::for_status(no_route.http_status())
+        );
     }
 }

@@ -391,6 +391,10 @@ errors-trade-quote-timeout = 견적 요청 시간이 초과되었습니다
     .hint = 스왑 제공자가 제시간에 응답하지 않았습니다. 연결을 확인하고 다시 시도하세요.
 errors-trade-quote-router-rejected = 견적이 거부되었습니다
     .hint = 제공자가 반환한 견적이 안전 검사를 통과하지 못해 폐기되었습니다. 다시 시도하여 새 견적을 가져오세요.
+errors-trade-quote-not-offered-exact-out = 정확한 출력 수량으로 견적을 내는 활성 스왑 라우터가 없습니다
+    .hint = 활성화된 스왑 라우터는 지불 금액을 기준으로만 거래 견적을 냅니다. 지불할 금액을 입력하거나 다른 스왑 라우터를 활성화하세요.
+errors-trade-quote-not-offered-unsupported-venue = 이 토큰의 풀에서 거래하는 활성 스왑 라우터가 없습니다
+    .hint = 이 토큰은 활성화된 스왑 라우터가 아직 지원하지 않는 거래소에서 거래됩니다. 다른 스왑 라우터를 활성화한 뒤 다시 시도하세요.
 errors-trade-quote-unavailable = 견적을 가져올 수 없습니다
     .hint = 스왑 제공자가 이 거래의 견적을 제시하지 못했습니다. 잠시 후 다시 시도하세요.
 

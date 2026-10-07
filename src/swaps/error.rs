@@ -67,12 +67,41 @@ pub enum QuoteError {
     #[error("{router} returned an unusable quote: {detail}")]
     RouterRejected { router: String, detail: String },
 
+    /// The router does not offer this shape of trade at all — a capability
+    /// it lacks, not an answer about the token. An abstention: it is left
+    /// out when the other routers' answers are reduced to a verdict, and a
+    /// set made only of abstentions is never a verdict either.
+    #[error("{router} does not offer this trade: {reason}")]
+    NotOffered {
+        router: String,
+        reason: NotOfferedReason,
+    },
+
     /// The provider failed for a reason that is none of the above — a 5xx, a
     /// transport error, an undecodable body. Carries the detail for logs and
     /// for the dialog's fallback message, and nothing reads that text to make
     /// a decision.
     #[error("{router} could not provide a quote: {detail}")]
     Unavailable { router: String, detail: String },
+}
+
+/// Why a router abstains from a trade it does not offer.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum NotOfferedReason {
+    /// The request fixes the output amount, and the router prices forward
+    /// from the input only.
+    ExactOut,
+    /// The pool the router would trade sits on a programme it has no venue for.
+    UnsupportedVenue,
+}
+
+impl std::fmt::Display for NotOfferedReason {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.write_str(match self {
+            NotOfferedReason::ExactOut => "it prices ExactIn only",
+            NotOfferedReason::UnsupportedVenue => "the pool's programme has no venue",
+        })
+    }
 }
 
 impl QuoteError {
@@ -89,6 +118,12 @@ impl QuoteError {
             QuoteError::RateLimited { .. } => ids::ERRORS_TRADE_QUOTE_RATE_LIMITED,
             QuoteError::Timeout { .. } => ids::ERRORS_TRADE_QUOTE_TIMEOUT,
             QuoteError::RouterRejected { .. } => ids::ERRORS_TRADE_QUOTE_ROUTER_REJECTED,
+            QuoteError::NotOffered { reason, .. } => match reason {
+                NotOfferedReason::ExactOut => ids::ERRORS_TRADE_QUOTE_NOT_OFFERED_EXACT_OUT,
+                NotOfferedReason::UnsupportedVenue => {
+                    ids::ERRORS_TRADE_QUOTE_NOT_OFFERED_UNSUPPORTED_VENUE
+                }
+            },
             QuoteError::Unavailable { .. } => ids::ERRORS_TRADE_QUOTE_UNAVAILABLE,
         })
     }
@@ -123,8 +158,9 @@ impl ErrorClass for QuoteError {
     fn is_retryable(&self) -> bool {
         match self {
             // Throttling, deadlines and one-off provider faults clear on their
-            // own. A missing market, a disabled registry and a refused quote do
-            // not change by asking the same question again.
+            // own. A missing market, a disabled registry, a refused quote and a
+            // shape the router does not offer do not change by asking the same
+            // question again.
             QuoteError::RateLimited { .. }
             | QuoteError::Timeout { .. }
             | QuoteError::Unavailable { .. } => true,
@@ -132,7 +168,8 @@ impl ErrorClass for QuoteError {
             | QuoteError::NoRoutersEnabled { .. }
             | QuoteError::NotTradable { .. }
             | QuoteError::NoRoute { .. }
-            | QuoteError::RouterRejected { .. } => false,
+            | QuoteError::RouterRejected { .. }
+            | QuoteError::NotOffered { .. } => false,
         }
     }
 
@@ -150,8 +187,11 @@ impl ErrorClass for QuoteError {
 
     fn severity(&self) -> Severity {
         match self {
-            // A token with no market is the ordinary case on a discovery feed.
-            QuoteError::NotTradable { .. } | QuoteError::NoRoute { .. } => Severity::Info,
+            // A token with no market is the ordinary case on a discovery feed,
+            // and a router abstaining from a shape it lacks is routine.
+            QuoteError::NotTradable { .. }
+            | QuoteError::NoRoute { .. }
+            | QuoteError::NotOffered { .. } => Severity::Info,
             // Ours to fix, and it stops trading entirely until it is.
             QuoteError::RegistryUnavailable(_) | QuoteError::NoRoutersEnabled { .. } => {
                 Severity::Error
@@ -166,7 +206,9 @@ impl ErrorClass for QuoteError {
     fn http_status(&self) -> u16 {
         match self {
             QuoteError::RegistryUnavailable(_) | QuoteError::NoRoutersEnabled { .. } => 503,
-            QuoteError::NotTradable { .. } | QuoteError::NoRoute { .. } => 422,
+            QuoteError::NotTradable { .. }
+            | QuoteError::NoRoute { .. }
+            | QuoteError::NotOffered { .. } => 422,
             QuoteError::RateLimited { .. } => 429,
             QuoteError::Timeout { .. } => 504,
             QuoteError::RouterRejected { .. } | QuoteError::Unavailable { .. } => 502,

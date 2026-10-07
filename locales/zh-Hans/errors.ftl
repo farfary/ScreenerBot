@@ -391,6 +391,10 @@ errors-trade-quote-timeout = 报价请求超时
     .hint = 兑换提供商未在规定时间内响应。请检查您的网络连接后重试。
 errors-trade-quote-router-rejected = 报价被拒绝
     .hint = 提供商返回的报价未通过我们的安全检查，已被丢弃。请重试以获取新的报价。
+errors-trade-quote-not-offered-exact-out = 没有已启用的兑换路由支持按精确输出数量报价
+    .hint = 已启用的兑换路由只按支付金额计算交易。请输入要支付的金额，或启用其他兑换路由。
+errors-trade-quote-not-offered-unsupported-venue = 没有已启用的兑换路由可在此代币的池中交易
+    .hint = 该代币所在的交易所尚未被已启用的兑换路由支持。请启用其他兑换路由后重试。
 errors-trade-quote-unavailable = 无法获取报价
     .hint = 兑换提供商无法为此交易报价。请稍后重试。
 

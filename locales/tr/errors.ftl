@@ -388,6 +388,10 @@ errors-trade-quote-timeout = Fiyat teklifi isteği zaman aşımına uğradı
     .hint = Takas sağlayıcıları zamanında yanıt vermedi. Bağlantınızı kontrol edip tekrar deneyin.
 errors-trade-quote-router-rejected = Fiyat teklifi reddedildi
     .hint = Bir sağlayıcı güvenlik denetimlerimizden geçemeyen bir fiyat teklifi döndürdü ve atıldı. Yeni bir teklif almak için tekrar deneyin.
+errors-trade-quote-not-offered-exact-out = Etkin hiçbir takas yönlendiricisi kesin çıktı miktarı için fiyat teklifi vermiyor
+    .hint = Etkin takas yönlendiricileri bir işlemi yalnızca harcanan tutardan fiyatlar. Harcanacak tutarı girin veya başka bir takas yönlendiricisini etkinleştirin.
+errors-trade-quote-not-offered-unsupported-venue = Etkin hiçbir takas yönlendiricisi bu tokenin havuzunda işlem yapmıyor
+    .hint = Bu token, etkin takas yönlendiricilerinin henüz desteklemediği bir borsada işlem görüyor. Başka bir takas yönlendiricisini etkinleştirip tekrar deneyin.
 errors-trade-quote-unavailable = Fiyat teklifi alınamadı
     .hint = Takas sağlayıcıları bu işlem için fiyat teklifi veremedi. Biraz sonra tekrar deneyin.
 

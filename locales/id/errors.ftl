@@ -362,6 +362,10 @@ errors-trade-quote-timeout = Permintaan kuotasi habis waktu
     .hint = Penyedia swap tidak merespons tepat waktu. Periksa koneksi Anda lalu coba lagi.
 errors-trade-quote-router-rejected = Kuotasi ditolak
     .hint = Penyedia mengembalikan kuotasi yang gagal pemeriksaan keamanan kami dan dibuang. Coba lagi untuk mengambil kuotasi baru.
+errors-trade-quote-not-offered-exact-out = Tidak ada router swap aktif yang mengkuotasi jumlah output yang pasti
+    .hint = Router swap yang aktif hanya menghitung transaksi dari jumlah yang dibelanjakan. Masukkan jumlah yang akan dibelanjakan, atau aktifkan router swap lain.
+errors-trade-quote-not-offered-unsupported-venue = Tidak ada router swap aktif yang bertransaksi di pool token ini
+    .hint = Token ini diperdagangkan di bursa yang belum didukung oleh router swap yang aktif. Aktifkan router swap lain, lalu coba lagi.
 errors-trade-quote-unavailable = Tidak dapat mengambil kuotasi
     .hint = Penyedia swap tidak dapat memberikan kuotasi untuk trade ini. Coba lagi sebentar lagi.
 

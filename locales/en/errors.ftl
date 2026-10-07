@@ -397,6 +397,10 @@ errors-trade-quote-timeout = Quote request timed out
     .hint = The swap providers didn't respond in time. Check your connection and retry.
 errors-trade-quote-router-rejected = The quote was refused
     .hint = A provider returned a quote that failed our safety checks and was discarded. Retry to fetch a fresh one.
+errors-trade-quote-not-offered-exact-out = No enabled swap route quotes an exact output amount
+    .hint = The enabled swap routes price a trade only from the amount spent. Enter the amount to spend, or enable another swap router.
+errors-trade-quote-not-offered-unsupported-venue = No enabled swap route trades this token's pool
+    .hint = The token trades on an exchange the enabled swap routes do not support yet. Enable another swap router, then try again.
 errors-trade-quote-unavailable = Couldn't fetch a quote
     .hint = The swap providers couldn't quote this trade. Try again in a moment.
 

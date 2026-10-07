@@ -40,7 +40,7 @@ use crate::chains::solana::swaps::revenue::{
 use crate::config::with_config;
 use crate::errors::NetworkError;
 use crate::logger::{self, LogTag};
-use crate::swaps::error::{QuoteError, QuoteResult};
+use crate::swaps::error::{NotOfferedReason, QuoteError, QuoteResult};
 use crate::swaps::router::SwapRouter;
 use crate::swaps::types::{Quote, QuoteRequest, SwapMode, SwapResult};
 use crate::tokens::Token;
@@ -385,16 +385,13 @@ impl SwapRouter for RaptorRouter {
                 detail: e.to_string(),
             })?;
 
-        // Raptor prices forward from the input only. This is a refusal by THIS
-        // router, never a verdict on the pair, so it must not count towards the
-        // no-route strikes that retire a token.
+        // Raptor prices forward from the input only. This router abstains,
+        // which is never a verdict on the pair and never suppresses the other
+        // routers' verdict.
         if request.swap_mode != SwapMode::ExactIn {
-            return Err(QuoteError::RouterRejected {
+            return Err(QuoteError::NotOffered {
                 router: self.name().to_owned(),
-                detail: format!(
-                    "{:?} is not supported; Raptor prices ExactIn only",
-                    request.swap_mode
-                ),
+                reason: NotOfferedReason::ExactOut,
             });
         }
 
@@ -665,6 +662,29 @@ mod tests {
         let error = RaptorRouter::new().get_quote(&request).await.unwrap_err();
         assert!(matches!(error, QuoteError::RouterRejected { .. }));
         assert!(error.to_string().contains("Solana u64 limit"));
+    }
+
+    /// Raptor prices forward from the input only, so an exact-output request is
+    /// a shape it abstains from, never a verdict about the pair.
+    #[tokio::test]
+    async fn an_exact_out_request_is_not_offered() {
+        let request = QuoteRequest {
+            chain: crate::chains::ChainId::Solana,
+            input_mint: crate::chains::solana::constants::SOL_MINT.to_owned(),
+            output_mint: crate::chains::solana::constants::USDC_MINT.to_owned(),
+            input_amount: 1_000_000u64.into(),
+            wallet_address: String::new(),
+            slippage_pct: 1.0,
+            swap_mode: SwapMode::ExactOut,
+            exclude_dexes: None,
+        };
+        assert!(matches!(
+            RaptorRouter::new().get_quote(&request).await,
+            Err(QuoteError::NotOffered {
+                reason: NotOfferedReason::ExactOut,
+                ..
+            })
+        ));
     }
 
     use crate::chains::solana::constants::USDC_MINT;

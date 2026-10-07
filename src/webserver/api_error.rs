@@ -67,6 +67,8 @@ pub enum ApiErrorCode {
     CopyError,
     /// An uploaded body exceeds the size the endpoint accepts.
     PayloadTooLarge,
+    /// No enabled swap route offers this shape of trade.
+    RouteNotOffered,
 }
 
 impl ApiErrorCode {
@@ -113,6 +115,7 @@ impl ApiErrorCode {
             Self::OpenPositions => "OPEN_POSITIONS",
             Self::CopyError => "COPY_ERROR",
             Self::PayloadTooLarge => "PAYLOAD_TOO_LARGE",
+            Self::RouteNotOffered => "ROUTE_NOT_OFFERED",
         }
     }
 
@@ -164,7 +167,7 @@ impl ApiErrorCode {
             Self::Conflict | Self::LiveUnavailable | Self::TaskLive | Self::OpenPositions => {
                 StatusCode::CONFLICT
             }
-            Self::IntegrityFailed => StatusCode::UNPROCESSABLE_ENTITY,
+            Self::IntegrityFailed | Self::RouteNotOffered => StatusCode::UNPROCESSABLE_ENTITY,
             Self::ConfigError
             | Self::DatabaseError
             | Self::Internal

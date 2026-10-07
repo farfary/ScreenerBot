@@ -359,6 +359,10 @@ errors-trade-quote-timeout = La solicitud de cotización agotó el tiempo
     .hint = Los proveedores de swap no respondieron a tiempo. Revisa tu conexión y vuelve a intentarlo.
 errors-trade-quote-router-rejected = La cotización fue rechazada
     .hint = Un proveedor devolvió una cotización que no pasó nuestras comprobaciones de seguridad y se descartó. Vuelve a intentarlo para obtener una nueva.
+errors-trade-quote-not-offered-exact-out = Ningún enrutador de swap activado cotiza una cantidad de salida exacta
+    .hint = Los enrutadores de swap activados solo calculan una operación a partir del importe gastado. Introduce el importe a gastar o activa otro enrutador de swap.
+errors-trade-quote-not-offered-unsupported-venue = Ningún enrutador de swap activado opera en el pool de este token
+    .hint = El token se negocia en un exchange que los enrutadores de swap activados aún no admiten. Activa otro enrutador de swap y vuelve a intentarlo.
 errors-trade-quote-unavailable = No se pudo obtener una cotización
     .hint = Los proveedores de swap no pudieron cotizar esta operación. Inténtalo de nuevo en un momento.
 

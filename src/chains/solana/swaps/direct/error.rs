@@ -280,7 +280,9 @@ pub type DirectSwapResult<T> = Result<T, DirectSwapError>;
 /// retiring a mint. An RPC read, a build fault or a submission failure says
 /// nothing about the token, so it stays `Unavailable`, which the blacklisting
 /// rules ignore. Getting this backwards retires perfectly good tokens whenever
-/// our own node has a bad minute.
+/// our own node has a bad minute. A pool on a programme the engine has no venue
+/// for is the engine's own capability gap, so the router abstains (`NotOffered`)
+/// and the other routers' answers decide alone.
 impl DirectSwapError {
     /// Classify this failure for `crate::swaps`.
     pub fn into_quote_error(self, router: &str) -> crate::swaps::error::QuoteError {
@@ -296,6 +298,10 @@ impl DirectSwapError {
             DirectSwapError::InvalidRequest { .. } => QuoteError::RouterRejected {
                 router: router.to_owned(),
                 detail,
+            },
+            DirectSwapError::UnsupportedVenue { .. } => QuoteError::NotOffered {
+                router: router.to_owned(),
+                reason: crate::swaps::error::NotOfferedReason::UnsupportedVenue,
             },
             _ => QuoteError::Unavailable {
                 router: router.to_owned(),

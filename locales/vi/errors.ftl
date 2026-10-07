@@ -359,6 +359,10 @@ errors-trade-quote-timeout = Yêu cầu báo giá đã hết thời gian
     .hint = Các nhà cung cấp swap không phản hồi kịp. Hãy kiểm tra kết nối và thử lại.
 errors-trade-quote-router-rejected = Báo giá bị từ chối
     .hint = Một nhà cung cấp trả về báo giá không đạt kiểm tra an toàn nên đã bị loại bỏ. Hãy thử lại để lấy báo giá mới.
+errors-trade-quote-not-offered-exact-out = Không có router swap nào đang bật báo giá cho số lượng đầu ra chính xác
+    .hint = Các router swap đang bật chỉ tính giá giao dịch dựa trên số tiền chi ra. Hãy nhập số tiền muốn chi, hoặc bật một router swap khác.
+errors-trade-quote-not-offered-unsupported-venue = Không có router swap nào đang bật giao dịch trong pool của token này
+    .hint = Token này được giao dịch trên một sàn mà các router swap đang bật chưa hỗ trợ. Hãy bật một router swap khác rồi thử lại.
 errors-trade-quote-unavailable = Không lấy được báo giá
     .hint = Các nhà cung cấp swap không báo giá được giao dịch này. Hãy thử lại sau giây lát.
 

@@ -32,16 +32,20 @@ pub async fn get_best_quote(request: QuoteRequest) -> Result<Quote> {
 /// Fetches quotes from all enabled routers simultaneously
 /// Returns the quote with highest output amount
 pub async fn try_get_best_quote(request: QuoteRequest) -> QuoteResult<Quote> {
-    // The registry failure stays a ServiceError all the way through: a swap
-    // service that never started is not a fact about the token, and callers on
-    // the crate channel must still see WHICH service failed.
-    let registry = try_get_registry().ok_or_else(|| {
+    best_quote_on(quote_registry()?, request).await
+}
+
+/// The registry every quote is compared on. Its absence stays a ServiceError
+/// all the way through: a swap service that never started is not a fact about
+/// the token, and callers on the crate channel must still see WHICH service
+/// failed.
+fn quote_registry() -> QuoteResult<&'static RouterRegistry> {
+    try_get_registry().ok_or_else(|| {
         QuoteError::RegistryUnavailable(crate::errors::ServiceError::Initialize {
             service: "swaps.registry".to_owned(),
             message: "router factory has not been registered".to_owned(),
         })
-    })?;
-    best_quote_on(registry, request).await
+    })
 }
 
 /// The same comparison against an explicit registry.
@@ -279,11 +283,25 @@ fn output_after_network_fee(quote: &Quote, router: &dyn SwapRouter) -> QuoteResu
 /// most specific one, so a rate limit or a build fault can never be mistaken for
 /// a dead market.
 ///
+/// A router that does not offer the trade at all ([`QuoteError::NotOffered`])
+/// abstains: it is left out before the unanimity test, so its capability never
+/// suppresses the other routers' verdict, and a set made only of abstentions is
+/// reported as one, never as a verdict.
+///
 /// This replaced a function that re-read its own output: it rendered a friendly
 /// message for the "no route" case, and the opening path then searched that
 /// message for the word "no route" — which the friendly wording no longer
 /// contained, so no token was ever blacklisted for having no market.
-fn select_quote_failure(mut errors: Vec<QuoteError>) -> QuoteError {
+fn select_quote_failure(errors: Vec<QuoteError>) -> QuoteError {
+    let (abstentions, mut errors): (Vec<_>, Vec<_>) = errors
+        .into_iter()
+        .partition(|error| matches!(error, QuoteError::NotOffered { .. }));
+    if errors.is_empty() {
+        if let Some(abstention) = abstentions.into_iter().next() {
+            return abstention;
+        }
+    }
+
     // A verdict ABOUT THE TOKEN may only be returned when every router that
     // answered agreed on it. One router saying "not tradable" while another
     // merely timed out is not evidence about the mint -- and the opening path
@@ -333,6 +351,8 @@ fn select_quote_failure(mut errors: Vec<QuoteError>) -> QuoteError {
             // Unreachable from the per-router loop (the registry is resolved
             // before any router is asked), and least specific if it ever is.
             QuoteError::RegistryUnavailable(_) => 7,
+            // Abstentions were set aside above and never reach this ranking.
+            QuoteError::NotOffered { .. } => 8,
         }
     }
 
@@ -1011,6 +1031,16 @@ pub async fn get_best_quote_for_opening(
     request: QuoteRequest,
     token_symbol: &str,
 ) -> Result<Quote> {
+    opening_quote_on(quote_registry()?, request, token_symbol).await
+}
+
+/// The opening comparison against an explicit registry. Tests drive it with
+/// stub routers.
+async fn opening_quote_on(
+    registry: &RouterRegistry,
+    request: QuoteRequest,
+    token_symbol: &str,
+) -> Result<Quote> {
     // The token being assessed is whichever side of the pair is not the chain's
     // native asset — a buy spends SOL for it, a sell spends it for SOL.
     let subject_mint = if crate::chains::adapter().is_native_asset(&request.input_mint) {
@@ -1019,7 +1049,7 @@ pub async fn get_best_quote_for_opening(
         request.input_mint.clone()
     };
 
-    match try_get_best_quote(request).await {
+    match best_quote_on(registry, request).await {
         Ok(quote) => {
             NO_ROUTE_STRIKES.invalidate(&subject_mint);
             Ok(quote)
@@ -1088,6 +1118,7 @@ mod tests {
     use super::*;
     use crate::chains::ChainId;
     use crate::errors::ErrorClass;
+    use crate::swaps::error::NotOfferedReason;
     use crate::swaps::types::SwapMode;
     use async_trait::async_trait;
 
@@ -1109,6 +1140,141 @@ mod tests {
         QuoteError::Timeout {
             router: router.to_owned(),
         }
+    }
+
+    fn not_offered(router: &str, reason: NotOfferedReason) -> QuoteError {
+        QuoteError::NotOffered {
+            router: router.to_owned(),
+            reason,
+        }
+    }
+
+    /// One failure of every variant, named by the letter the table below uses.
+    fn one_of_each() -> Vec<(char, QuoteError)> {
+        vec![
+            (
+                'G',
+                QuoteError::RegistryUnavailable(crate::errors::ServiceError::Initialize {
+                    service: "swaps.registry".to_owned(),
+                    message: "stub".to_owned(),
+                }),
+            ),
+            (
+                'E',
+                QuoteError::NoRoutersEnabled {
+                    chain: ChainId::Solana,
+                },
+            ),
+            ('T', not_tradable("T")),
+            ('N', no_route("N")),
+            (
+                'L',
+                QuoteError::RateLimited {
+                    router: "L".to_owned(),
+                    retry_after: None,
+                },
+            ),
+            ('O', timeout("O")),
+            (
+                'J',
+                QuoteError::RouterRejected {
+                    router: "J".to_owned(),
+                    detail: "stub".to_owned(),
+                },
+            ),
+            ('A', not_offered("A", NotOfferedReason::UnsupportedVenue)),
+            (
+                'U',
+                QuoteError::Unavailable {
+                    router: "U".to_owned(),
+                    detail: "stub".to_owned(),
+                },
+            ),
+        ]
+    }
+
+    fn letter(error: &QuoteError) -> char {
+        match error {
+            QuoteError::RegistryUnavailable(_) => 'G',
+            QuoteError::NoRoutersEnabled { .. } => 'E',
+            QuoteError::NotTradable { .. } => 'T',
+            QuoteError::NoRoute { .. } => 'N',
+            QuoteError::RateLimited { .. } => 'L',
+            QuoteError::Timeout { .. } => 'O',
+            QuoteError::RouterRejected { .. } => 'J',
+            QuoteError::NotOffered { .. } => 'A',
+            QuoteError::Unavailable { .. } => 'U',
+        }
+    }
+
+    /// Every ordered pair of failure variants, reduced. Rows and columns follow
+    /// `one_of_each`: G registry unavailable, E no routers enabled, T not
+    /// tradable, N no route, L rate limited, O timeout, J router rejected,
+    /// A not offered (an abstention), U unavailable.
+    ///
+    /// What the table pins: an abstention never changes the other router's
+    /// answer (row and column A repeat the diagonal), two abstentions stay an
+    /// abstention, a token verdict needs every voter (T with N is N, T or N
+    /// beside an operational failure is that failure), and any mix reports
+    /// the most specific operational failure.
+    #[test]
+    fn select_quote_failure_reduces_every_pair_of_variants() {
+        const COLUMNS: &str = "GETNLOJAU";
+        const TABLE: [(char, &str); 9] = [
+            ('G', "GETNLOJGU"),
+            ('E', "EETNLOJEU"),
+            ('T', "TTTNLOJTU"),
+            ('N', "NNNNLOJNU"),
+            ('L', "LLLLLLJLL"),
+            ('O', "OOOOLOJOO"),
+            ('J', "JJJJJJJJJ"),
+            ('A', "GETNLOJAU"),
+            ('U', "UUUULOJUU"),
+        ];
+        let failures = one_of_each();
+        assert_eq!(
+            failures.iter().map(|(name, _)| *name).collect::<String>(),
+            COLUMNS
+        );
+        for ((row, first), (expected_row, expected)) in failures.iter().zip(TABLE) {
+            assert_eq!(*row, expected_row);
+            for ((column, second), want) in failures.iter().zip(expected.chars()) {
+                let got = letter(&select_quote_failure(vec![first.clone(), second.clone()]));
+                assert_eq!(got, want, "{row} with {column}");
+            }
+        }
+    }
+
+    /// The set an always-on direct router produces most often: the aggregator
+    /// finds no route and the direct engine does not offer the pool. The
+    /// abstention must not hide the aggregator's verdict, and an RPC fault in
+    /// its place still must.
+    #[test]
+    fn an_abstention_is_not_a_vote() {
+        let reduced = select_quote_failure(vec![
+            no_route("Jupiter"),
+            not_offered("Direct Pool", NotOfferedReason::UnsupportedVenue),
+        ]);
+        assert!(matches!(&reduced, QuoteError::NoRoute { router, .. } if router == "Jupiter"));
+        assert!(reduced.is_route_failure());
+
+        let only_abstentions = select_quote_failure(vec![
+            not_offered("Direct Pool", NotOfferedReason::ExactOut),
+            not_offered("Raptor", NotOfferedReason::ExactOut),
+        ]);
+        assert!(matches!(only_abstentions, QuoteError::NotOffered { .. }));
+        assert!(!only_abstentions.is_route_failure());
+        assert!(only_abstentions.permanent_token_verdict().is_none());
+        assert!(!only_abstentions.is_retryable());
+
+        let rpc_fault = select_quote_failure(vec![
+            no_route("Jupiter"),
+            QuoteError::Unavailable {
+                router: "Direct Pool".to_owned(),
+                detail: "account read failed".to_owned(),
+            },
+        ]);
+        assert!(!rpc_fault.is_route_failure());
     }
 
     /// The regression this file's rewrite exists for. The old classifier
@@ -1241,6 +1407,16 @@ mod tests {
                 },
                 502,
                 "errors-trade-quote-router-rejected",
+            ),
+            (
+                not_offered("Direct Pool", NotOfferedReason::ExactOut),
+                422,
+                "errors-trade-quote-not-offered-exact-out",
+            ),
+            (
+                not_offered("Direct Pool", NotOfferedReason::UnsupportedVenue),
+                422,
+                "errors-trade-quote-not-offered-unsupported-venue",
             ),
         ];
         let source: crate::i18n::LanguageIdentifier = crate::i18n::source_locale().parse().unwrap();
@@ -1593,6 +1769,8 @@ mod tests {
         Quote(u64),
         NoRoute,
         NotTradable,
+        NotOffered(NotOfferedReason),
+        Unavailable,
         TransportTimeout,
     }
 
@@ -1646,6 +1824,11 @@ mod tests {
                 }
                 Answer::NoRoute => Err(no_route(&router)),
                 Answer::NotTradable => Err(not_tradable(&router)),
+                Answer::NotOffered(reason) => Err(not_offered(&router, reason)),
+                Answer::Unavailable => Err(QuoteError::Unavailable {
+                    router,
+                    detail: "account read failed".to_owned(),
+                }),
                 Answer::TransportTimeout => Err(timeout(&router)),
             }
         }
@@ -1751,5 +1934,50 @@ mod tests {
             .unwrap_err();
         assert!(!failure.is_route_failure(), "got {failure}");
         assert!(failure.permanent_token_verdict().is_none());
+    }
+
+    /// A token the aggregator cannot route collects its no-route strikes while
+    /// the direct router abstains from the token's pool, up to retirement; the
+    /// same refusal beside a direct RPC fault collects none, because a node
+    /// failure is not evidence about the token.
+    #[tokio::test]
+    async fn an_abstaining_direct_router_does_not_shield_a_token_from_its_strikes() {
+        crate::config::utils::install_default_config();
+        let abstaining = registry_of(vec![
+            TimedRouter::new("jupiter", 0, Duration::ZERO, Answer::NoRoute),
+            TimedRouter::new(
+                "direct",
+                1,
+                Duration::ZERO,
+                Answer::NotOffered(NotOfferedReason::UnsupportedVenue),
+            ),
+        ]);
+        let mut opening = request();
+        opening.output_mint = "AbstainStrikeMint11111111111111111111111111".to_owned();
+        let mint = opening.output_mint.clone();
+        NO_ROUTE_STRIKES.invalidate(&mint);
+
+        for strike in 1..NO_ROUTE_STRIKES_BEFORE_BLACKLIST {
+            assert!(opening_quote_on(&abstaining, opening.clone(), "ABST")
+                .await
+                .is_err());
+            assert_eq!(NO_ROUTE_STRIKES.get(&mint), Some(strike));
+        }
+        // The last strike retires the token and clears its record.
+        assert!(opening_quote_on(&abstaining, opening.clone(), "ABST")
+            .await
+            .is_err());
+        assert_eq!(NO_ROUTE_STRIKES.get(&mint), None);
+
+        let faulting = registry_of(vec![
+            TimedRouter::new("jupiter", 0, Duration::ZERO, Answer::NoRoute),
+            TimedRouter::new("direct", 1, Duration::ZERO, Answer::Unavailable),
+        ]);
+        let mut shielded = request();
+        shielded.output_mint = "FaultNoStrikeMint11111111111111111111111111".to_owned();
+        let mint = shielded.output_mint.clone();
+        NO_ROUTE_STRIKES.invalidate(&mint);
+        assert!(opening_quote_on(&faulting, shielded, "FALT").await.is_err());
+        assert_eq!(NO_ROUTE_STRIKES.get(&mint), None);
     }
 }
