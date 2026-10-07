@@ -140,6 +140,13 @@ fn refusal_code(body: &serde_json::Value) -> (String, Option<String>) {
     (code, minimum)
 }
 
+/// Stamps a request to the data service with the app's version. Every call to
+/// the service goes through here: a request without it is refused before any
+/// handler runs.
+pub(crate) fn with_app_version(request: reqwest::RequestBuilder) -> reqwest::RequestBuilder {
+    request.header(VERSION_HEADER, crate::version::VERSION)
+}
+
 /// GET a JSON payload from the data service.
 ///
 /// `None` means "use your own provider", for every reason: switched off,
@@ -167,10 +174,8 @@ pub async fn get_json<T: DeserializeOwned>(
     };
 
     let url = format!("{endpoint}{path}");
-    let response = crate::net::client()
-        .get(&url)
+    let response = with_app_version(crate::net::client().get(&url))
         .bearer_auth(token)
-        .header(VERSION_HEADER, crate::version::VERSION)
         .query(query)
         .timeout(timeout)
         .send()
@@ -249,6 +254,20 @@ pub fn is_usable(surface: Surface) -> bool {
 mod tests {
     use super::*;
     use serde_json::json;
+
+    #[test]
+    fn every_service_request_carries_the_app_version() {
+        let request = with_app_version(reqwest::Client::new().get("https://example.invalid/v1"))
+            .build()
+            .expect("request builds");
+        assert_eq!(
+            request
+                .headers()
+                .get(VERSION_HEADER)
+                .map(|v| v.to_str().unwrap()),
+            Some(crate::version::VERSION)
+        );
+    }
 
     #[test]
     fn refusal_codes_map_to_the_state_the_user_can_act_on() {

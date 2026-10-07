@@ -33,9 +33,8 @@ use std::time::Duration;
 
 use serde_json::Value;
 
-/// The only methods the gateway is ever asked for. Kept in step with the
-/// server's own allowlist in `DataServer/src/api/app.rs`; anything else is
-/// refused there anyway, and asking would waste a round trip to be told so.
+/// The only methods the gateway is ever asked for. The relay refuses any other
+/// method, so asking would waste a round trip to be told so.
 ///
 /// Submission and its immediate follow-up, and nothing that reads chain state
 /// for pricing.
@@ -81,6 +80,20 @@ pub fn should_relay(method: &str) -> bool {
     crate::account::is_signed_in() && crate::account::has_scope("rpc:submit")
 }
 
+/// The relay call as sent: the account credential, the app version the service
+/// requires before it answers, and the JSON-RPC method with its params.
+fn relay_request(
+    client: &reqwest::Client,
+    token: &str,
+    method: &str,
+    params: &Value,
+) -> reqwest::RequestBuilder {
+    crate::data_server::with_app_version(client.post(GATEWAY_URL))
+        .bearer_auth(token)
+        .timeout(TIMEOUT)
+        .json(&serde_json::json!({ "method": method, "params": params }))
+}
+
 /// Try the gateway. `None` means "fall through to the user's own RPC", and is
 /// the answer for every failure — including a successful HTTP response carrying
 /// a JSON-RPC error, because a `sendTransaction` the relay could not complete
@@ -92,11 +105,7 @@ pub async fn relay(client: &reqwest::Client, method: &str, params: &Value) -> Op
 
     let token = crate::account::access_token().await?;
 
-    let response = client
-        .post(GATEWAY_URL)
-        .bearer_auth(token)
-        .timeout(TIMEOUT)
-        .json(&serde_json::json!({ "method": method, "params": params }))
+    let response = relay_request(client, &token, method, params)
         .send()
         .await
         .ok()?;
@@ -114,4 +123,34 @@ pub async fn relay(client: &reqwest::Client, method: &str, params: &Value) -> Op
 
     let body = response.json::<Value>().await.ok()?;
     body.get("result").cloned()
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn the_relay_request_carries_the_credential_and_the_app_version() {
+        let request = relay_request(
+            &reqwest::Client::new(),
+            "token",
+            "sendTransaction",
+            &serde_json::json!(["tx"]),
+        )
+        .build()
+        .expect("request builds");
+        let headers = request.headers();
+        assert_eq!(
+            headers
+                .get("x-screenerbot-version")
+                .map(|v| v.to_str().unwrap()),
+            Some(crate::version::VERSION)
+        );
+        assert_eq!(
+            headers
+                .get(reqwest::header::AUTHORIZATION)
+                .map(|v| v.to_str().unwrap()),
+            Some("Bearer token")
+        );
+    }
 }
