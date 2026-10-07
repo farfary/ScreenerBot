@@ -60,15 +60,19 @@ pub async fn decide(
     Json(body): Json<DecideBody>,
 ) -> Response {
     if body.approve {
-        match bridge::execute_approved(&id).await {
-            Ok(()) => {
+        // The approved tool may be a trade: it runs on its own task so a
+        // reloaded dashboard cannot leave the approval stuck in "executing".
+        let approval_id = id.clone();
+        match tokio::spawn(async move { bridge::execute_approved(&approval_id).await }).await {
+            Ok(Ok(())) => {
                 logger::info(
                     LogTag::Security,
                     &format!("agent-control: approved and executed request {id}"),
                 );
                 success_response(serde_json::json!({ "resolved": "approved" }))
             }
-            Err(e) => failure(&e),
+            Ok(Err(e)) => failure(&e),
+            Err(_) => task_failed(),
         }
     } else {
         let id_for_log = id.clone();

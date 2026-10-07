@@ -18,6 +18,8 @@ use crate::trader::actions::{ManualBuyAction, ManualSellAction};
 use crate::trader::error::Error;
 use crate::trader::executors;
 use crate::trader::types::{TradeAction, TradeDecision, TradePriority, TradeReason, TradeResult};
+
+use super::detach::detached;
 use chrono::Utc;
 
 /// Execute a force buy (bypass safety checks)
@@ -25,7 +27,19 @@ use chrono::Utc;
 /// Creates a high-priority buy decision with ForceBuy reason.
 /// **WARNING:** Bypasses all safety checks including position limits and blacklist.
 /// Action progress is broadcast to dashboard via SSE.
+///
+/// Runs detached from the caller: dropping the returned future never
+/// cancels a trade whose swap may already be sent.
 pub async fn force_buy(
+    mint: &str,
+    size_native: f64,
+    slippage_pct: Option<f64>,
+) -> Result<TradeResult, Error> {
+    let mint = mint.to_owned();
+    detached(async move { buy_forced(&mint, size_native, slippage_pct).await }).await
+}
+
+async fn buy_forced(
     mint: &str,
     size_native: f64,
     slippage_pct: Option<f64>,
@@ -173,7 +187,19 @@ pub async fn force_buy(
 ///
 /// # Returns
 /// TradeResult with transaction details
+///
+/// Runs detached from the caller: dropping the returned future never
+/// cancels a trade whose swap may already be sent.
 pub async fn force_sell(
+    mint: &str,
+    percentage: Option<f64>,
+    slippage_pct: Option<f64>,
+) -> Result<TradeResult, Error> {
+    let mint = mint.to_owned();
+    detached(async move { sell_forced(&mint, percentage, slippage_pct).await }).await
+}
+
+async fn sell_forced(
     mint: &str,
     percentage: Option<f64>,
     slippage_pct: Option<f64>,

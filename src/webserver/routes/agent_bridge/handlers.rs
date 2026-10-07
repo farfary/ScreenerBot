@@ -132,9 +132,16 @@ pub async fn call_tool(
         arguments,
         correlation_id,
     } = body;
-    match bridge::call_tool(&client, &secret, &name, arguments, &correlation_id).await {
-        Ok(outcome) => success_response(outcome),
-        Err(e) => reject(&e),
+    // The tool may be a trade, and the MCP proxy drops its request on its
+    // own deadline: the call runs on its own task so its audit trail and
+    // approval state are always written.
+    let call = tokio::spawn(async move {
+        bridge::call_tool(&client, &secret, &name, arguments, &correlation_id).await
+    });
+    match call.await {
+        Ok(Ok(outcome)) => success_response(outcome),
+        Ok(Err(e)) => reject(&e),
+        Err(_) => task_failed(),
     }
 }
 

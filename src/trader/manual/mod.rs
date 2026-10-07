@@ -4,6 +4,7 @@
 //! Manual trading operations.
 
 mod api;
+mod detach;
 mod force;
 pub mod guard;
 mod tracking;

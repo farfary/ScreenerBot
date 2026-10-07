@@ -3413,51 +3413,167 @@ fn every_loop_that_may_send_a_trade_again_decides_from_failed_swap() {
     }
 }
 
-/// Trades a webserver handler may start. Each runs in a detached task: hyper
-/// drops a handler's future when its client disconnects, and a trade awaited
-/// inline would be cancelled after its send and before its outcome is
-/// recorded.
-const HANDLER_TRADES: &[&str] = &[
-    "manual::manual_buy(",
-    "manual::manual_add(",
-    "manual::manual_sell(",
-    "manual::force_buy(",
-    "manual::force_sell(",
-    "open_position_direct(",
-    "open_position_with_size(",
-    "close_position_direct(",
-    "partial_close_position(",
-    "add_to_position(",
+/// Functions that send a trade and record its outcome in the caller's own
+/// future, matched by bare name so every path and import spelling is found.
+/// Awaited inline from something that can be dropped — an HTTP handler, an
+/// MCP or assistant call, a Telegram callback, a timeout — a trade is
+/// cancelled after its send and before its signature is recorded.
+const TRADE_RUNNERS: &[&str] = &[
+    "execute_trade",
+    "execute_buy",
+    "execute_buy_managed",
+    "execute_sell",
+    "open_position_with_size",
+    "open_position_direct",
+    "close_position_direct",
+    "partial_close_position",
+    "add_to_position",
+    "submit_entry",
+    "submit_entry_with_context",
+    "quote_and_execute_for_wallet",
+    "execute_tool_swap",
+    "tool_buy",
+    "tool_sell",
+    "execute_multi_buy",
+    "execute_multi_sell",
 ];
 
+/// Where a trade runner may be awaited inline, each because nothing that can
+/// be dropped awaits it there. Only shrinks.
+const INLINE_TRADE_OWNERS: &[(&str, &str)] = &[
+    (
+        "positions/",
+        "the position operations own the swap they send",
+    ),
+    ("trader/executors/", "the executors are the trade runners"),
+    ("trader/manual/", "every public face runs detached"),
+    (
+        "trader/entry.rs",
+        "the entry monitor and copy service own it",
+    ),
+    ("trader/monitors/", "service loops a request never drops"),
+    (
+        "trader/copy/service.rs",
+        "the copy service loop, never a request",
+    ),
+    ("tools/", "multi-wallet sessions, started on their own task"),
+];
+
+/// Every trade is awaited only where no caller can cancel it: inside its
+/// owners, or inside a spawned task. Every other caller reaches a trade
+/// through `trader::manual`, whose public faces run detached.
 #[test]
-fn a_webserver_handler_never_awaits_a_trade_inline() {
-    let mut trades = 0;
+fn every_trade_runs_where_no_caller_can_cancel_it() {
+    let runner = regex::Regex::new(&format!(
+        r"(?:\bfn\s+)?(?:::)?\b({})\s*\(",
+        TRADE_RUNNERS.join("|")
+    ))
+    .expect("the runner pattern is valid");
+    let sources: Vec<(PathBuf, String)> = walk_src()
+        .into_iter()
+        .filter(|(relative, _)| !is_test_support_file(relative))
+        .map(|(relative, contents)| {
+            let code = blank_literals(&strip_comment_text(&production_text(&contents)));
+            (relative, code)
+        })
+        .collect();
+    let mut calls = 0;
     let mut violations = Vec::new();
-    for (relative, contents) in walk_src() {
-        if !relative.starts_with("webserver") || is_test_support_file(&relative) {
+    for (relative, code) in &sources {
+        if INLINE_TRADE_OWNERS
+            .iter()
+            .any(|(owner, _)| relative.to_string_lossy().starts_with(owner))
+        {
             continue;
         }
-        let code = blank_literals(&strip_comment_text(&production_text(&contents)));
-        let detached: Vec<(usize, usize)> = code
-            .match_indices("run_detached(")
-            .filter_map(|(at, call)| matching_span(&code, at + call.len() - 1))
+        let spawned: Vec<(usize, usize)> = code
+            .match_indices("tokio::spawn(")
+            .filter_map(|(at, call)| matching_span(code, at + call.len() - 1))
             .collect();
-        for trade in HANDLER_TRADES {
-            for (at, _) in code.match_indices(trade) {
-                trades += 1;
-                if !detached.iter().any(|(start, end)| *start < at && at < *end) {
-                    let line = code[..at].lines().count();
-                    violations.push(format!("src/{}:{line}: {trade}", relative.display()));
-                }
+        for found in runner.captures_iter(code) {
+            let whole = found.get(0).expect("the match exists");
+            if whole.as_str().starts_with("fn") {
+                continue;
+            }
+            let name = &found[1];
+            // A same-named helper of the caller's own module is not a runner.
+            let local_helper = !whole.as_str().starts_with("::")
+                && sources.iter().any(|(sibling, text)| {
+                    sibling.parent() == relative.parent() && text.contains(&format!("fn {name}("))
+                });
+            if local_helper {
+                continue;
+            }
+            calls += 1;
+            let at = whole.start();
+            if !spawned.iter().any(|(start, end)| *start < at && at < *end) {
+                let line = code[..at].lines().count();
+                violations.push(format!("src/{}:{line}: {name}", relative.display()));
             }
         }
     }
-    assert!(trades > 0, "the guard must see the manual trade handlers");
+    assert!(
+        calls > 0,
+        "the guard must see the spawned multi-wallet sessions"
+    );
     assert!(
         violations.is_empty(),
-        "a webserver handler runs a trade through run_detached so a dropped request \
-         cannot cancel it:\n{}",
+        "a trade runner is awaited outside its owners and outside a spawned task; \
+         call trader::manual, which runs detached:\n{}",
         violations.join("\n")
     );
+}
+
+/// The public faces of `trader::manual` are what every handler, MCP call,
+/// approval, assistant tool and Telegram callback awaits. Each runs its trade
+/// detached, so dropping the caller never cancels a sent swap.
+#[test]
+fn every_manual_trade_runs_detached_from_its_caller() {
+    let public_trade = regex::Regex::new(r"pub async fn (\w+)\(").expect("valid pattern");
+    let mut faces = 0;
+    for file in ["trader/manual/api.rs", "trader/manual/force.rs"] {
+        let contents =
+            fs::read_to_string(Path::new(env!("CARGO_MANIFEST_DIR")).join("src").join(file))
+                .expect("the manual trade source reads");
+        let code = blank_literals(&strip_comment_text(&production_text(&contents)));
+        for found in public_trade.captures_iter(&code) {
+            faces += 1;
+            let open = found.get(0).expect("the match exists").end();
+            let body_open = open + code[open..].find('{').expect("the function has a body");
+            let (start, end) = matching_span(&code, body_open).expect("the body closes");
+            assert!(
+                code[start..=end].contains("detached("),
+                "src/{file}: {} must run its trade through detached",
+                &found[1]
+            );
+        }
+    }
+    assert!(
+        faces >= 5,
+        "the guard must see every manual trade ({faces} seen)"
+    );
+
+    // A tool call or approval may be a trade: the routes that run one keep
+    // their bookkeeping alive past a dropped request.
+    for (file, call) in [
+        (
+            "webserver/routes/agent_bridge/handlers.rs",
+            "bridge::call_tool(",
+        ),
+        (
+            "webserver/routes/agent_control/approvals.rs",
+            "bridge::execute_approved(",
+        ),
+    ] {
+        let contents =
+            fs::read_to_string(Path::new(env!("CARGO_MANIFEST_DIR")).join("src").join(file))
+                .expect("the route source reads");
+        let code = blank_literals(&strip_comment_text(&production_text(&contents)));
+        let at = code.find(call).expect("the route runs the tool");
+        let spawned = code
+            .match_indices("tokio::spawn(")
+            .filter_map(|(open, spawn)| matching_span(&code, open + spawn.len() - 1))
+            .any(|(start, end)| start < at && at < end);
+        assert!(spawned, "src/{file}: {call} runs on its own task");
+    }
 }

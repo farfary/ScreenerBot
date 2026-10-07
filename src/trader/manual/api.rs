@@ -15,6 +15,8 @@ use crate::trader::constants::MAX_TRADE_SIZE_MULTIPLIER;
 use crate::trader::error::Error;
 use crate::trader::executors;
 use crate::trader::types::{TradeAction, TradeDecision, TradePriority, TradeReason, TradeResult};
+
+use super::detach::detached;
 use chrono::Utc;
 
 /// Execute a manual buy order
@@ -24,7 +26,20 @@ use chrono::Utc;
 /// Action progress is broadcast to dashboard via SSE.
 ///
 /// `management` selects the automation policy; provenance remains manual.
+///
+/// Runs detached from the caller: dropping the returned future never
+/// cancels a trade whose swap may already be sent.
 pub async fn manual_buy(
+    mint: &str,
+    size_native: f64,
+    management: positions::PositionManagement,
+    slippage_pct: Option<f64>,
+) -> Result<TradeResult, Error> {
+    let mint = mint.to_owned();
+    detached(async move { buy(&mint, size_native, management, slippage_pct).await }).await
+}
+
+async fn buy(
     mint: &str,
     size_native: f64,
     management: positions::PositionManagement,
@@ -190,7 +205,19 @@ pub async fn manual_buy(
 ///
 /// # Returns
 /// TradeResult with transaction details
+///
+/// Runs detached from the caller: dropping the returned future never
+/// cancels a trade whose swap may already be sent.
 pub async fn manual_sell(
+    mint: &str,
+    percentage: Option<f64>,
+    slippage_pct: Option<f64>,
+) -> Result<TradeResult, Error> {
+    let mint = mint.to_owned();
+    detached(async move { sell(&mint, percentage, slippage_pct).await }).await
+}
+
+async fn sell(
     mint: &str,
     percentage: Option<f64>,
     slippage_pct: Option<f64>,
@@ -328,7 +355,19 @@ pub async fn manual_sell(
 ///
 /// # Returns
 /// TradeResult with transaction details
+///
+/// Runs detached from the caller: dropping the returned future never
+/// cancels a trade whose swap may already be sent.
 pub async fn manual_add(
+    mint: &str,
+    size_native: f64,
+    slippage_pct: Option<f64>,
+) -> Result<TradeResult, Error> {
+    let mint = mint.to_owned();
+    detached(async move { add(&mint, size_native, slippage_pct).await }).await
+}
+
+async fn add(
     mint: &str,
     size_native: f64,
     slippage_pct: Option<f64>,

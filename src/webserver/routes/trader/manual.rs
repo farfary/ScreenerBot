@@ -63,23 +63,6 @@ fn trade_response(
     }
 }
 
-/// Run a trade to completion whatever happens to the request that started it.
-///
-/// hyper drops a handler's future when its client disconnects: a closed tab, a
-/// reload, a sleeping laptop. A trade awaited inline would then be cancelled
-/// after its swap was sent and before its signature, position or exit was
-/// recorded. Spawned, the trade always finishes and records; the handler only
-/// waits for its answer. The task is never aborted, so a join error is the
-/// trade's own panic, raised again where an inline await would have raised it.
-async fn run_detached<T: Send + 'static>(
-    trade: impl std::future::Future<Output = T> + Send + 'static,
-) -> T {
-    match tokio::spawn(trade).await {
-        Ok(result) => result,
-        Err(error) => std::panic::resume_unwind(error.into_panic()),
-    }
-}
-
 pub async fn manual_buy_handler(Json(req): Json<ManualBuyRequest>) -> Response {
     let blacklist = if req.force.unwrap_or_default() {
         BlacklistPolicy::Override
@@ -109,11 +92,7 @@ pub async fn manual_buy_handler(Json(req): Json<ManualBuyRequest>) -> Response {
     let management = req
         .management
         .unwrap_or(crate::positions::PositionManagement::UserOnly);
-    let mint = req.mint.clone();
-    let result = run_detached(async move {
-        crate::trader::manual::manual_buy(&mint, size, management, slippage_pct).await
-    })
-    .await;
+    let result = crate::trader::manual::manual_buy(&req.mint, size, management, slippage_pct).await;
     trade_response(result, req.mint)
 }
 
@@ -139,12 +118,7 @@ pub async fn manual_add_handler(Json(req): Json<ManualAddRequest>) -> Response {
         LogTag::Webserver,
         &format!("mint={} size_sol={}", req.mint, size),
     );
-    let mint = req.mint.clone();
-    let result =
-        run_detached(
-            async move { crate::trader::manual::manual_add(&mint, size, slippage_pct).await },
-        )
-        .await;
+    let result = crate::trader::manual::manual_add(&req.mint, size, slippage_pct).await;
     trade_response(result, req.mint)
 }
 
@@ -178,16 +152,11 @@ pub async fn manual_sell_handler(Json(req): Json<ManualSellRequest>) -> Response
             req.force.unwrap_or_default()
         ),
     );
-    let mint = req.mint.clone();
-    let force = req.force.unwrap_or_default();
-    let result = run_detached(async move {
-        if force {
-            crate::trader::manual::force_sell(&mint, pct, slippage_pct).await
-        } else {
-            crate::trader::manual::manual_sell(&mint, pct, slippage_pct).await
-        }
-    })
-    .await;
+    let result = if req.force.unwrap_or_default() {
+        crate::trader::manual::force_sell(&req.mint, pct, slippage_pct).await
+    } else {
+        crate::trader::manual::manual_sell(&req.mint, pct, slippage_pct).await
+    };
     trade_response(result, req.mint)
 }
 
@@ -462,29 +431,6 @@ fn quote_failure_code(e: &QuoteError) -> ApiErrorCode {
 mod tests {
     use super::*;
     use crate::swaps::NotOfferedReason;
-
-    /// A client that disconnects mid-trade drops the handler's future, and
-    /// with it everything awaited inline. The trade itself keeps running to
-    /// its end and records its outcome.
-    #[tokio::test]
-    async fn a_dropped_request_does_not_cancel_its_trade() {
-        let (sent, confirm) = tokio::sync::oneshot::channel::<()>();
-        let (recorded, outcome) = tokio::sync::oneshot::channel::<&'static str>();
-        let handler = run_detached(async move {
-            // The swap was sent; the trade now waits for its confirmation.
-            confirm.await.expect("the confirmation arrives");
-            recorded.send("recorded").expect("the outcome is read");
-        });
-        assert!(
-            tokio::time::timeout(std::time::Duration::from_millis(20), handler)
-                .await
-                .is_err(),
-            "the handler is still waiting when its client goes away"
-        );
-
-        sent.send(()).expect("the trade is still alive to confirm");
-        assert_eq!(outcome.await, Ok("recorded"));
-    }
 
     fn failed_buy(not_submitted: Option<NotSubmittedReason>) -> crate::trader::TradeResult {
         let decision = crate::trader::TradeDecision {

@@ -11,7 +11,7 @@ use super::engine::ChatEngine;
 use super::types::{
     ChatContext, PendingConfirmation, ToolCall, ToolCallInfo, ToolCallStatus, ToolMode,
 };
-use crate::agent_control::tools::{ToolDefinition, ToolResult};
+use crate::agent_control::tools::{ToolCategory, ToolDefinition, ToolResult};
 use crate::apis::llm::{
     get_llm_manager, ChatMessage as LlmChatMessage, ChatRequest as LlmChatRequest, MessageRole,
     Provider,
@@ -543,8 +543,6 @@ impl ChatEngine {
             }
         };
 
-        // Execute the tool with timeout (30 seconds)
-        let execution_timeout = Duration::from_secs(30);
         let Some(_active_tool) = crate::global::begin_tool() else {
             return ToolCallInfo {
                 tool_name: tool_call.name.clone(),
@@ -555,20 +553,26 @@ impl ChatEngine {
                 status: ToolCallStatus::Failed,
             };
         };
-        let result = match tokio::time::timeout(
-            execution_timeout,
-            tool.execute(tool_call.arguments.clone()),
-        )
-        .await
-        {
-            Ok(r) => r,
-            Err(_) => {
-                logger::error(
-                    LogTag::Api,
-                    &format!("Tool {} execution timed out after 30s", tool_call.name),
-                );
-                ToolResult::error("Tool execution timed out after 30 seconds")
-            }
+        let execution = tool.execute(tool_call.arguments.clone());
+        let result = match execution_deadline(&tool.definition()) {
+            None => execution.await,
+            Some(deadline) => match tokio::time::timeout(deadline, execution).await {
+                Ok(r) => r,
+                Err(_) => {
+                    logger::error(
+                        LogTag::Api,
+                        &format!(
+                            "Tool {} execution timed out after {}s",
+                            tool_call.name,
+                            deadline.as_secs()
+                        ),
+                    );
+                    ToolResult::error(format!(
+                        "Tool execution timed out after {} seconds",
+                        deadline.as_secs()
+                    ))
+                }
+            },
         };
 
         // Record execution in database
@@ -651,6 +655,18 @@ impl ChatEngine {
     }
 }
 
+/// How long the chat waits for a tool before reporting it failed.
+///
+/// A trading tool has no deadline: a trade runs detached from its caller and
+/// can still land after any deadline, so a timeout would report a failure for
+/// a swap that may succeed and invite the model to send it again. Its own
+/// settle bound ends it.
+fn execution_deadline(definition: &ToolDefinition) -> Option<Duration> {
+    (definition.category != ToolCategory::Trading).then_some(TOOL_EXECUTION_TIMEOUT)
+}
+
+const TOOL_EXECUTION_TIMEOUT: Duration = Duration::from_secs(30);
+
 // =============================================================================
 // TESTS
 // =============================================================================
@@ -658,6 +674,26 @@ impl ChatEngine {
 #[cfg(test)]
 mod tests {
     use super::super::engine::{ChatContext, ChatEngine, ToolCallInfo, ToolCallStatus};
+
+    #[test]
+    fn a_trading_tool_is_never_cut_off_by_the_chat_deadline() {
+        let registry = crate::agent_control::create_tool_registry();
+        let mut trading = 0;
+        for definition in registry.list_definitions() {
+            let deadline = super::execution_deadline(&definition);
+            if definition.category == super::ToolCategory::Trading {
+                trading += 1;
+                assert_eq!(
+                    deadline, None,
+                    "{} must run to its verdict",
+                    definition.name
+                );
+            } else {
+                assert_eq!(deadline, Some(super::TOOL_EXECUTION_TIMEOUT));
+            }
+        }
+        assert!(trading > 0, "the registry carries trading tools");
+    }
 
     #[test]
     fn test_parse_tool_calls() {
