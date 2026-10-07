@@ -159,6 +159,7 @@ fn rpc_variant(error: &RpcError) -> &'static str {
         RpcError::InvalidResponse { .. } => "InvalidResponse",
         RpcError::Configuration { .. } => "Configuration",
         RpcError::Other(_) => "Other",
+        RpcError::RefusedAfterDelivery { .. } => "RefusedAfterDelivery",
     }
 }
 
@@ -225,11 +226,20 @@ fn only_a_node_that_answered_refuses_a_transaction() {
             false,
         ),
         (RpcError::Other("other".to_owned()), false),
+        // A refusal after an attempt that may have delivered the transaction
+        // answers only for its own node.
+        (
+            RpcError::RefusedAfterDelivery {
+                earlier_attempts: 1,
+                refusal: Box::new(provider(-32602)),
+            },
+            false,
+        ),
     ];
     let mut covered: Vec<&str> = rows.iter().map(|(error, _)| rpc_variant(error)).collect();
     covered.sort_unstable();
     covered.dedup();
-    assert_eq!(covered.len(), 10, "every RpcError variant needs a row");
+    assert_eq!(covered.len(), 11, "every RpcError variant needs a row");
 
     for (error, refused) in rows {
         let label = error.to_string();

@@ -51,6 +51,15 @@ pub enum RpcError {
 
     /// Generic error
     Other(String),
+
+    /// A node refused a transaction send after an earlier attempt of the same
+    /// call — the relay or another provider — may already have delivered the
+    /// transaction. The refusal speaks only for the node that gave it, so it
+    /// is not evidence the transaction never reached the chain.
+    RefusedAfterDelivery {
+        earlier_attempts: u32,
+        refusal: Box<RpcError>,
+    },
 }
 
 impl RpcError {
@@ -70,6 +79,7 @@ impl RpcError {
                 (*code >= -32099 && *code <= -32000) && !matches!(*code, -32002 | -32015)
             }
             Self::Other(_) => false,
+            Self::RefusedAfterDelivery { .. } => false,
         }
     }
 
@@ -87,7 +97,8 @@ impl RpcError {
             | Self::NoProvidersAvailable { .. }
             | Self::AccountNotFound { .. }
             | Self::Configuration { .. }
-            | Self::Other(_) => false,
+            | Self::Other(_)
+            | Self::RefusedAfterDelivery { .. } => false,
         }
     }
 
@@ -99,7 +110,9 @@ impl RpcError {
     /// in the request bytes, so no node and no retry would accept them either,
     /// and they prove the request was never acted on. Transport failures, rate
     /// limits, timeouts, open circuits, an empty provider pool and the
-    /// retryable server band are not an answer about the request.
+    /// retryable server band are not an answer about the request, and neither
+    /// is a refusal that followed an attempt which may have delivered it
+    /// ([`Self::RefusedAfterDelivery`]).
     pub fn is_request_rejection(&self) -> bool {
         matches!(
             self,
@@ -235,6 +248,14 @@ impl fmt::Display for RpcError {
                 write!(f, "Configuration error: {message}")
             }
             Self::Other(msg) => write!(f, "{msg}"),
+            Self::RefusedAfterDelivery {
+                earlier_attempts,
+                refusal,
+            } => write!(
+                f,
+                "{refusal}, after {earlier_attempts} earlier attempt(s) that may have delivered \
+                 the transaction"
+            ),
         }
     }
 }
@@ -392,6 +413,7 @@ mod tests {
             RpcError::InvalidResponse { .. } => "InvalidResponse",
             RpcError::Configuration { .. } => "Configuration",
             RpcError::Other(_) => "Other",
+            RpcError::RefusedAfterDelivery { .. } => "RefusedAfterDelivery",
         }
     }
 
@@ -490,6 +512,15 @@ mod tests {
                 false,
             ),
             (RpcError::Other("other".to_owned()), false, false, false),
+            (
+                RpcError::RefusedAfterDelivery {
+                    earlier_attempts: 1,
+                    refusal: Box::new(provider(-32602)),
+                },
+                false,
+                false,
+                false,
+            ),
         ];
 
         let mut covered: Vec<&str> = rows.iter().map(|(error, ..)| variant(error)).collect();
@@ -507,6 +538,7 @@ mod tests {
                 "Other",
                 "ProviderError",
                 "RateLimited",
+                "RefusedAfterDelivery",
                 "Timeout",
             ],
             "every RpcError variant needs a row"

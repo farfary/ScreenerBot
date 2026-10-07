@@ -24,7 +24,7 @@
 //! ============================================================================
 //! IT NEVER BLOCKS A TRADE
 //! ============================================================================
-//! Every failure returns `None`, and the caller carries on down the normal
+//! Every failure falls through, and the caller carries on down the normal
 //! provider path with the user's own RPC. A free service must not be able to
 //! stop somebody trading — not when it is down, not when the quota is spent, not
 //! when the session has expired.
@@ -94,21 +94,35 @@ fn relay_request(
         .json(&serde_json::json!({ "method": method, "params": params }))
 }
 
-/// Try the gateway. `None` means "fall through to the user's own RPC", and is
-/// the answer for every failure — including a successful HTTP response carrying
-/// a JSON-RPC error, because a `sendTransaction` the relay could not complete
-/// deserves one more attempt through a different route before it is called lost.
-pub async fn relay(client: &reqwest::Client, method: &str, params: &Value) -> Option<Value> {
+/// What a relay attempt came to.
+#[derive(Debug, Clone, PartialEq)]
+pub enum Relayed {
+    /// The gateway answered with a result.
+    Answered(Value),
+    /// Nothing was dispatched: offline, or no session to authorise it.
+    NotAsked,
+    /// A request left the machine and no usable result came back. For a send,
+    /// the gateway may already have forwarded the transaction.
+    Unanswered,
+}
+
+/// Try the gateway. Every outcome but [`Relayed::Answered`] means "fall
+/// through to the user's own RPC", including a successful HTTP response
+/// carrying a JSON-RPC error, because a `sendTransaction` the relay could not
+/// complete deserves one more attempt through a different route before it is
+/// called lost.
+pub async fn relay(client: &reqwest::Client, method: &str, params: &Value) -> Relayed {
     if crate::connectivity::is_network_offline() {
-        return None;
+        return Relayed::NotAsked;
     }
 
-    let token = crate::account::access_token().await?;
+    let Some(token) = crate::account::access_token().await else {
+        return Relayed::NotAsked;
+    };
 
-    let response = relay_request(client, &token, method, params)
-        .send()
-        .await
-        .ok()?;
+    let Ok(response) = relay_request(client, &token, method, params).send().await else {
+        return Relayed::Unanswered;
+    };
 
     if !response.status().is_success() {
         // Debug only. A spent quota or an expired grant is not something to put
@@ -118,11 +132,18 @@ pub async fn relay(client: &reqwest::Client, method: &str, params: &Value) -> Op
             "RPC gateway declined {method} (HTTP {}); using your own RPC",
             response.status()
         );
-        return None;
+        return Relayed::Unanswered;
     }
 
-    let body = response.json::<Value>().await.ok()?;
-    body.get("result").cloned()
+    match response
+        .json::<Value>()
+        .await
+        .ok()
+        .and_then(|body| body.get("result").cloned())
+    {
+        Some(result) => Relayed::Answered(result),
+        None => Relayed::Unanswered,
+    }
 }
 
 #[cfg(test)]

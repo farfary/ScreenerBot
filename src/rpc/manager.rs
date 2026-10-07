@@ -32,6 +32,18 @@ use crate::rpc::{
 // RpcManager
 // ============================================================
 
+/// Whether a node's refusal answers for the whole call.
+///
+/// A node's refusal of a `sendTransaction` request proves the transaction was
+/// never sent only when that node was the first to be handed it. After an
+/// attempt that may have delivered the bytes — a relay or provider that timed
+/// out, failed or answered 5xx after forwarding — the refusal speaks for its
+/// own node alone: a node whose bank lags an address lookup table answers
+/// invalid params for bytes another node accepted.
+fn refusal_answers_for_call(method: &RpcMethod, dispatched: u32, error: &RpcError) -> bool {
+    *method != RpcMethod::SendTransaction || dispatched == 0 || !error.is_request_rejection()
+}
+
 /// Main RPC manager orchestrating multi-provider operations
 pub struct RpcManager {
     /// Provider configurations
@@ -350,15 +362,17 @@ impl RpcManager {
         // Deliberately not a provider in the pool — see `rpc/gateway.rs` for
         // why a method-restricted endpoint must not be selectable by a
         // component that selects on health rather than on method.
+        let mut dispatched = 0;
         if crate::rpc::gateway::should_relay(method) {
-            if let Some(result) =
-                crate::rpc::gateway::relay(&self.http_client, method, &params).await
-            {
-                return Ok(result);
+            match crate::rpc::gateway::relay(&self.http_client, method, &params).await {
+                crate::rpc::gateway::Relayed::Answered(result) => return Ok(result),
+                crate::rpc::gateway::Relayed::Unanswered => dispatched = 1,
+                crate::rpc::gateway::Relayed::NotAsked => {}
             }
         }
 
-        self.execute_raw_restricted(method, params, None).await
+        self.execute_raw_restricted(method, params, None, dispatched)
+            .await
     }
 
     /// Execute a provider-specific JSON-RPC request without routing to another provider kind.
@@ -371,7 +385,7 @@ impl RpcManager {
         method: &str,
         params: serde_json::Value,
     ) -> Result<serde_json::Value, RpcError> {
-        self.execute_raw_restricted(method, params, Some(provider_kind))
+        self.execute_raw_restricted(method, params, Some(provider_kind), 0)
             .await
     }
 
@@ -384,11 +398,14 @@ impl RpcManager {
             .any(|provider| provider.enabled && provider.kind == provider_kind)
     }
 
+    /// `dispatched` counts the attempts of this same call that already left the
+    /// machine without an answer, such as an unanswered relay.
     async fn execute_raw_restricted(
         &self,
         method: &str,
         params: serde_json::Value,
         required_kind: Option<ProviderKind>,
+        mut dispatched: u32,
     ) -> Result<serde_json::Value, RpcError> {
         let rpc_method = RpcMethod::from_str(method);
         let mut last_error: Option<RpcError> = None;
@@ -497,8 +514,15 @@ impl RpcManager {
 
                     // Don't retry non-retryable errors
                     if !e.is_retryable() {
+                        if !refusal_answers_for_call(&rpc_method, dispatched, &e) {
+                            return Err(RpcError::RefusedAfterDelivery {
+                                earlier_attempts: dispatched,
+                                refusal: Box::new(e),
+                            });
+                        }
                         return Err(e);
                     }
+                    dispatched += 1;
 
                     // Exponential backoff
                     if retry < self.max_retries {
@@ -720,8 +744,61 @@ fn provider_matches_required_kind(
 
 #[cfg(test)]
 mod tests {
-    use super::provider_matches_required_kind;
-    use crate::rpc::{ProviderConfig, ProviderKind};
+    use super::{provider_matches_required_kind, refusal_answers_for_call};
+    use crate::rpc::types::RpcMethod;
+    use crate::rpc::{ProviderConfig, ProviderKind, RpcError};
+
+    fn invalid_params() -> RpcError {
+        RpcError::ProviderError {
+            code: -32602,
+            message: "invalid transaction: Transaction loads an address table account that \
+                      doesn't exist"
+                .to_owned(),
+            data: None,
+        }
+    }
+
+    /// Provider A times out after it may have forwarded the transaction, and
+    /// provider B, a slot behind on the lookup table, refuses the same bytes
+    /// as invalid params. The call never proved the transaction unsent.
+    #[test]
+    fn a_send_refused_after_an_ambiguous_attempt_is_not_never_sent() {
+        let send = RpcMethod::from_str("sendTransaction");
+        let timed_out = RpcError::Timeout {
+            provider_id: "a".to_owned(),
+            after: std::time::Duration::from_secs(30),
+        };
+        assert!(
+            timed_out.is_retryable(),
+            "the manager moves on to provider B"
+        );
+        assert!(!refusal_answers_for_call(&send, 1, &invalid_params()));
+
+        // The first and only node handed the request refused it: that node
+        // answered for the request, and nothing else could have sent it.
+        assert!(refusal_answers_for_call(&send, 0, &invalid_params()));
+        // A simulation delivers nothing, so its refusal keeps its meaning.
+        assert!(refusal_answers_for_call(
+            &RpcMethod::from_str("simulateTransaction"),
+            1,
+            &invalid_params()
+        ));
+        // A failure that is not a refusal claims nothing either way.
+        let preflight = RpcError::ProviderError {
+            code: -32002,
+            message: "preflight".to_owned(),
+            data: None,
+        };
+        assert!(refusal_answers_for_call(&send, 1, &preflight));
+
+        // What the manager returns in its place is never read as a refusal.
+        let returned = RpcError::RefusedAfterDelivery {
+            earlier_attempts: 1,
+            refusal: Box::new(invalid_params()),
+        };
+        assert!(!returned.is_request_rejection());
+        assert!(!returned.is_retryable());
+    }
 
     #[test]
     fn helius_restricted_requests_exclude_non_helius_failover() {
