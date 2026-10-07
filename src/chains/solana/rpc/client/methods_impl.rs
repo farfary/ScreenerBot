@@ -242,9 +242,18 @@ impl RpcClientMethods for RpcClient {
     }
 
     async fn get_block_height(&self) -> crate::Result<u64> {
-        let params = serde_json::json!([]);
+        self.get_block_height_with_commitment(CommitmentLevel::Finalized)
+            .await
+    }
 
-        let result = self.manager.execute_raw("getBlockHeight", params).await?;
+    async fn get_block_height_with_commitment(
+        &self,
+        commitment: CommitmentLevel,
+    ) -> crate::Result<u64> {
+        let result = self
+            .manager
+            .execute_raw("getBlockHeight", block_height_params(commitment))
+            .await?;
 
         result.as_u64().ok_or_else(|| {
             crate::Error::Data(crate::errors::DataError::ParseError {
@@ -1541,6 +1550,10 @@ fn commitment_to_string(commitment: CommitmentLevel) -> &'static str {
     }
 }
 
+fn block_height_params(commitment: CommitmentLevel) -> serde_json::Value {
+    serde_json::json!([{ "commitment": commitment_to_string(commitment) }])
+}
+
 fn get_transaction_config(commitment: Option<CommitmentLevel>) -> serde_json::Value {
     let mut config = serde_json::json!({
         "encoding": "jsonParsed",
@@ -1641,7 +1654,7 @@ fn parse_helius_transactions_page(
 #[cfg(test)]
 mod tests {
     use super::{
-        get_transaction_config, helius_successful_transactions_params,
+        block_height_params, get_transaction_config, helius_successful_transactions_params,
         parse_helius_transactions_page, CommitmentLevel, EncodedConfirmedTransactionWithStatusMeta,
         Pubkey, Signature,
     };
@@ -1657,6 +1670,20 @@ mod tests {
         let confirmed = get_transaction_config(Some(CommitmentLevel::Confirmed));
         assert_eq!(confirmed["commitment"], "confirmed");
         assert_eq!(confirmed["maxSupportedTransactionVersion"], 1);
+    }
+
+    #[test]
+    fn block_height_requests_name_their_commitment() {
+        for (commitment, name) in [
+            (CommitmentLevel::Finalized, "finalized"),
+            (CommitmentLevel::Confirmed, "confirmed"),
+            (CommitmentLevel::Processed, "processed"),
+        ] {
+            assert_eq!(
+                block_height_params(commitment),
+                serde_json::json!([{ "commitment": name }])
+            );
+        }
     }
 
     #[test]

@@ -6,16 +6,27 @@
 use std::str::FromStr;
 
 use crate::chains::settlement::{Holding, SettlementReader, SignatureCheck, SignatureVerdict};
-use crate::chains::solana::assets::ata::get_all_token_accounts;
-use crate::chains::solana::rpc::{get_rpc_client, RpcClientMethods, TokenAccountInfo};
+use crate::chains::solana::assets::ata::token_holding;
+use crate::chains::solana::rpc::{get_rpc_client, RpcClientMethods};
+use crate::chains::solana::solana_sdk::commitment_config::CommitmentLevel;
 use crate::chains::solana::solana_sdk::signature::Signature;
 use crate::chains::solana::solana_transaction_status::{
     EncodedConfirmedTransactionWithStatusMeta, TransactionConfirmationStatus, TransactionStatus,
 };
-use crate::chains::{ChainId, Error, RawAmount, Result};
+use crate::chains::{ChainId, Error, Result};
 
 /// Blocks after its blockhash was fetched during which a transaction can still land.
 pub(crate) const SOLANA_BLOCKHASH_VALIDITY_SLOTS: u64 = 150;
+
+/// The commitment of the height an expiry bound is read from. A blockhash fetched before
+/// submission is at most as recent as the confirmed tip, so the confirmed height plus the
+/// validity window is never below its last valid height.
+const EXPIRY_BOUND_COMMITMENT: CommitmentLevel = CommitmentLevel::Confirmed;
+
+/// The commitment of the height compared against an expiry bound. Once the finalized height
+/// has passed the bound, every block that could hold the transaction is finalized and
+/// visible to `getTransaction`.
+const EXPIRED_HEIGHT_COMMITMENT: CommitmentLevel = CommitmentLevel::Finalized;
 
 /// The most signatures one `getSignatureStatuses` request accepts.
 const MAX_SIGNATURES_PER_STATUS_READ: usize = 256;
@@ -65,7 +76,9 @@ impl SettlementReader for SolanaSettlement {
             .zip(&statuses)
             .any(|(check, status)| status.is_none() && check.expiry_bound.is_some());
         let block_height = if needs_height {
-            rpc.get_block_height().await.ok()
+            rpc.get_block_height_with_commitment(EXPIRED_HEIGHT_COMMITMENT)
+                .await
+                .ok()
         } else {
             None
         };
@@ -84,25 +97,22 @@ impl SettlementReader for SolanaSettlement {
     }
 
     async fn holding(&self, owner: &str, asset: &str) -> Result<Holding> {
-        let accounts =
-            get_all_token_accounts(owner)
-                .await
-                .map_err(|error| Error::SettlementRead {
-                    chain: ChainId::Solana,
-                    detail: error.to_string(),
-                })?;
-        Ok(holding_of(&accounts, asset))
+        token_holding(owner, asset)
+            .await
+            .map_err(|error| Error::SettlementRead {
+                chain: ChainId::Solana,
+                detail: error.to_string(),
+            })
     }
 
     async fn expiry_bound(&self) -> Result<u64> {
-        let height =
-            get_rpc_client()
-                .get_block_height()
-                .await
-                .map_err(|error| Error::SettlementRead {
-                    chain: ChainId::Solana,
-                    detail: error.to_string(),
-                })?;
+        let height = get_rpc_client()
+            .get_block_height_with_commitment(EXPIRY_BOUND_COMMITMENT)
+            .await
+            .map_err(|error| Error::SettlementRead {
+                chain: ChainId::Solana,
+                detail: error.to_string(),
+            })?;
         Ok(height.saturating_add(SOLANA_BLOCKHASH_VALIDITY_SLOTS))
     }
 }
@@ -169,18 +179,6 @@ fn lookup_verdict(lookup: TransactionLookup) -> SignatureVerdict {
         TransactionLookup::Executed { failed: true } => SignatureVerdict::FailedOnChain,
         TransactionLookup::Executed { failed: false } => SignatureVerdict::Landed,
         TransactionLookup::Unreadable => SignatureVerdict::Pending,
-    }
-}
-
-fn holding_of(accounts: &[TokenAccountInfo], asset: &str) -> Holding {
-    let held = accounts.iter().filter(|account| account.mint == asset);
-    Holding {
-        amount: RawAmount::new(
-            held.clone()
-                .map(|account| u128::from(account.balance))
-                .sum(),
-        ),
-        frozen: held.clone().any(|account| account.is_frozen),
     }
 }
 
@@ -295,18 +293,6 @@ mod tests {
     }
 
     #[test]
-    fn an_expired_signature_whose_transaction_is_found_is_decided_by_its_meta() {
-        assert_eq!(
-            lookup_verdict(TransactionLookup::Executed { failed: false }),
-            SignatureVerdict::Landed
-        );
-        assert_eq!(
-            lookup_verdict(TransactionLookup::Executed { failed: true }),
-            SignatureVerdict::FailedOnChain
-        );
-    }
-
-    #[test]
     fn an_unreadable_transaction_lookup_is_pending() {
         let error = crate::Error::Data(crate::errors::DataError::ParseError {
             data_type: "transaction".to_owned(),
@@ -322,45 +308,57 @@ mod tests {
         );
     }
 
-    fn account(mint: &str, balance: u64, is_frozen: bool) -> TokenAccountInfo {
-        TokenAccountInfo {
-            account: format!("{mint}-{balance}"),
-            mint: mint.to_owned(),
-            balance,
-            decimals: 6,
-            is_token_2022: false,
-            is_nft: false,
-            is_frozen,
-        }
+    fn transaction(meta: serde_json::Value) -> EncodedConfirmedTransactionWithStatusMeta {
+        serde_json::from_value(serde_json::json!({
+            "slot": 1,
+            "transaction": {
+                "signatures": ["signature"],
+                "message": {
+                    "accountKeys": [],
+                    "recentBlockhash": "11111111111111111111111111111111",
+                    "instructions": []
+                }
+            },
+            "meta": meta,
+            "blockTime": null
+        }))
+        .expect("a transaction response decodes")
+    }
+
+    fn meta(err: serde_json::Value) -> serde_json::Value {
+        serde_json::json!({
+            "err": err,
+            "status": { "Ok": null },
+            "fee": 5000,
+            "preBalances": [],
+            "postBalances": []
+        })
     }
 
     #[test]
-    fn a_holding_sums_every_account_of_the_asset_and_flags_any_frozen_one() {
-        let accounts = [
-            account("asset", 700, false),
-            account("other", 5_000, true),
-            account("asset", 300, true),
-        ];
+    fn a_found_transaction_is_decided_by_its_meta() {
+        let failed = meta(serde_json::json!({ "InstructionError": [0, { "Custom": 1 }] }));
         assert_eq!(
-            holding_of(&accounts, "asset"),
-            Holding {
-                amount: RawAmount::new(1_000),
-                frozen: true,
-            }
+            lookup_verdict(transaction_lookup(Ok(Some(transaction(failed))))),
+            SignatureVerdict::FailedOnChain
         );
         assert_eq!(
-            holding_of(&accounts[..1], "asset"),
-            Holding {
-                amount: RawAmount::new(700),
-                frozen: false,
-            }
+            lookup_verdict(transaction_lookup(Ok(Some(transaction(meta(
+                serde_json::Value::Null
+            )))))),
+            SignatureVerdict::Landed
         );
         assert_eq!(
-            holding_of(&accounts, "absent"),
-            Holding {
-                amount: RawAmount::ZERO,
-                frozen: false,
-            }
+            lookup_verdict(transaction_lookup(Ok(Some(transaction(
+                serde_json::Value::Null
+            ))))),
+            SignatureVerdict::Pending
         );
+    }
+
+    #[test]
+    fn the_bound_is_read_at_the_confirmed_tip_and_compared_at_finality() {
+        assert_eq!(EXPIRY_BOUND_COMMITMENT, CommitmentLevel::Confirmed);
+        assert_eq!(EXPIRED_HEIGHT_COMMITMENT, CommitmentLevel::Finalized);
     }
 }

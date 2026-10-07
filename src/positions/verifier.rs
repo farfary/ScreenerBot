@@ -6,15 +6,14 @@
 use super::{
     queue::VerificationItem,
     round_state::is_dust,
-    settle::signature_verdicts,
+    settle,
     state::get_position_by_id,
-    transitions::{NotLandedEvidence, PositionTransition},
+    transitions::PositionTransition,
     types::{VerificationKind, VerificationOutcome},
 };
 use crate::{
     chains::adapter,
-    chains::solana::assets::ata::get_total_token_balance,
-    chains::{RawAmount, SignatureVerdict},
+    chains::RawAmount,
     logger::{self, LogTag},
     tokens::get_decimals,
     transactions::{get_transaction, reprocess_transaction, TransactionStatus},
@@ -46,7 +45,6 @@ async fn should_throttle_token_accounts(mint: &str) -> bool {
     LAST_TOKEN_ACCOUNTS_CHECK.insert(mint.to_string(), now);
     false
 }
-use serde_json::Value;
 
 /// Classify transient (retryable) verification errors
 fn is_transient_verification_error(msg: &str) -> bool {
@@ -69,8 +67,8 @@ fn is_transient_verification_error(msg: &str) -> bool {
         || m.contains("blockchain transaction not found")
 }
 
-async fn residual_balance_requires_retry(position_id: Option<i64>, balance: u64) -> bool {
-    if balance == 0 {
+async fn residual_balance_requires_retry(position_id: Option<i64>, balance: RawAmount) -> bool {
+    if balance == RawAmount::ZERO {
         return false;
     }
 
@@ -87,7 +85,7 @@ async fn residual_balance_requires_retry(position_id: Option<i64>, balance: u64)
                 let acquired = held
                     .checked_add(position.total_exited_amount)
                     .unwrap_or(RawAmount::new(u128::MAX));
-                if is_dust(RawAmount::from(balance), acquired) {
+                if is_dust(balance, acquired) {
                     logger::debug(
                         LogTag::Positions,
                         &format!(
@@ -103,75 +101,10 @@ async fn residual_balance_requires_retry(position_id: Option<i64>, balance: u64)
     true
 }
 
-/// Outcome for an exit verification that FAILED on-chain.
-///
-/// A failed PARTIAL exit is not a failed close: the position is still open and still holds
-/// its tokens; only that one partial swap failed, so `PartialExitFailed` clears it. A failed
-/// FULL exit moved nothing either, so its exit is cleared for a retry. Neither writes the
-/// position off: tokens that left the wallet by other means are closed by the ledger.
-fn failed_exit_outcome(item: &VerificationItem, reason: String) -> VerificationOutcome {
-    let position_id = item.position_id.unwrap_or_default();
-    if item.is_partial_exit {
-        return VerificationOutcome::PermanentFailure(PositionTransition::PartialExitFailed {
-            position_id,
-            reason,
-        });
-    }
-    VerificationOutcome::Transition(PositionTransition::ExitFailedClearForRetry {
-        position_id,
-        exit_signature: item.signature.clone(),
-    })
-}
-
-/// Outcome for an entry verification that FAILED on-chain: a failed DCA marks only that
-/// add failed, and a failed opening buy removes its position, which never held anything.
-fn failed_entry_outcome(item: &VerificationItem, reason: String) -> VerificationOutcome {
-    let position_id = item.position_id.unwrap_or_default();
-    if item.is_dca {
-        return VerificationOutcome::PermanentFailure(PositionTransition::DcaFailed {
-            position_id,
-            dca_signature: item.signature.clone(),
-            reason,
-        });
-    }
-    VerificationOutcome::PermanentFailure(PositionTransition::RemoveOrphanEntry {
-        position_id,
-        signature: item.signature.clone(),
-        evidence: NotLandedEvidence::FailedOnChain,
-    })
-}
-
-/// Outcome for an exit whose transaction is still not found after the timeout: only a
-/// signature verdict that the swap failed on chain or did not land fails it; anything else
-/// is retried.
-async fn exit_timeout_outcome(item: &VerificationItem) -> VerificationOutcome {
-    let verdict = match signature_verdicts(std::slice::from_ref(item)).await {
-        Ok(verdicts) => verdicts.into_iter().next(),
-        Err(error) => {
-            logger::debug(
-                LogTag::Positions,
-                &format!(
-                    "Exit timeout verdict for {} unavailable: {error}",
-                    item.signature
-                ),
-            );
-            None
-        }
-    };
-    match verdict {
-        Some(SignatureVerdict::FailedOnChain) => {
-            failed_exit_outcome(item, "Exit transaction failed on chain".to_owned())
-        }
-        Some(SignatureVerdict::NotLanded) => {
-            failed_exit_outcome(item, "Exit transaction expired without landing".to_owned())
-        }
-        _ => VerificationOutcome::RetryTransient(
-            "Exit transaction not found (timeout) - will retry".to_owned(),
-        ),
-    }
-}
-
-/// Verify a transaction and produce the appropriate transition
+/// Verify a transaction and produce the appropriate transition. A transaction that is not
+/// found, failed or is unreadable is retried: whether its swap failed on chain or never
+/// landed is decided only by the settlement sweep's signature verdict
+/// (`settle::disposition`).
 pub async fn verify_transaction(item: &VerificationItem) -> VerificationOutcome {
     logger::debug(
         LogTag::Positions,
@@ -182,30 +115,10 @@ pub async fn verify_transaction(item: &VerificationItem) -> VerificationOutcome 
     let transaction = match get_transaction(&item.signature).await {
         Ok(Some(tx)) => {
             if !tx.success {
-                let error_msg = tx.error_message.unwrap_or("Unknown error".to_owned());
-                if error_msg.contains("[PERMANENT]") {
-                    return match item.kind {
-                        VerificationKind::Entry => failed_entry_outcome(
-                            item,
-                            format!("Entry transaction failed permanently: {error_msg}"),
-                        ),
-                        VerificationKind::Exit => failed_exit_outcome(
-                            item,
-                            format!("Exit transaction failed permanently: {error_msg}"),
-                        ),
-                    };
-                } else {
-                    // Without the `[PERMANENT]` marker we cannot tell a doomed
-                    // transaction from a transient one, and giving up on a
-                    // position whose exit may yet land is the costlier mistake
-                    // — so retry either way. (This deliberately does NOT consult
-                    // `is_transient_verification_error`: both branches of the
-                    // check it replaced returned the same outcome, so the call
-                    // only made the code read as if the answer mattered.)
-                    return VerificationOutcome::RetryTransient(format!(
-                        "Transaction failed: {error_msg}"
-                    ));
-                }
+                return VerificationOutcome::RetryTransient(format!(
+                    "Transaction failed: {}",
+                    tx.error_message.unwrap_or("Unknown error".to_owned())
+                ));
             }
 
             match tx.status {
@@ -224,125 +137,10 @@ pub async fn verify_transaction(item: &VerificationItem) -> VerificationOutcome 
             }
         }
         Ok(None) => {
-            // Event-aware shortcut: if our events DB shows a confirmed/failed outcome, act accordingly
-            if let Ok(events) = crate::events::search_events(
-                Some("transaction"),
-                None,
-                Some(&item.signature),
-                Some(24),
-                5,
-            )
-            .await
-            {
-                // Prefer the latest decisive outcome among returned events
-                let mut decided: Option<(String, bool, Option<Value>)> = None; // (status, success, payload)
-                for ev in events {
-                    if let Some(cs) = ev
-                        .payload
-                        .get("confirmation_status")
-                        .and_then(|v| v.as_str())
-                    {
-                        match cs {
-                            "confirmed" => {
-                                decided = Some((cs.to_string(), true, Some(ev.payload)));
-                                break;
-                            }
-                            "failed" => {
-                                decided = Some((cs.to_string(), false, Some(ev.payload)));
-                                break;
-                            }
-                            _ => {}
-                        }
-                    }
-                }
-
-                if let Some((status, success, _payload)) = decided {
-                    if success && status == "confirmed" {
-                        // Confirmed by events but transaction object not yet available → retry shortly
-                        return VerificationOutcome::RetryTransient(
-                            "Transaction confirmed by events; awaiting RPC indexing".to_owned(),
-                        );
-                    } else if !success && status == "failed" {
-                        // Failed by events → map to existing failure handling per kind
-                        return match item.kind {
-                            VerificationKind::Entry => failed_entry_outcome(
-                                item,
-                                "Entry transaction reported failed by events".to_owned(),
-                            ),
-                            VerificationKind::Exit => failed_exit_outcome(
-                                item,
-                                "Exit transaction reported failed by events".to_owned(),
-                            ),
-                        };
-                    }
-                }
-            }
-
-            // Progressive timeout logic - different timeouts for entry vs exit
-            let timeout_threshold = match item.kind {
-                VerificationKind::Exit => 60,  // 1 minute for exit transactions
-                VerificationKind::Entry => 90, // 1.5 minutes for entry transactions
-            };
-
-            if item.age_seconds() > timeout_threshold {
-                // Handle timeout based on transaction type
-                match item.kind {
-                    VerificationKind::Exit => return exit_timeout_outcome(item).await,
-                    VerificationKind::Entry => {
-                        return VerificationOutcome::RetryTransient(
-                            "Entry transaction not found (timeout)".to_owned(),
-                        );
-                    }
-                }
-            } else {
-                return VerificationOutcome::RetryTransient(
-                    "Transaction not found (propagation)".to_owned(),
-                );
-            }
+            return VerificationOutcome::RetryTransient("Transaction not found".to_owned());
         }
         Err(e) => {
             let error_msg = format!("Error getting transaction: {e}");
-
-            // Event-aware fallback: if events show a decisive outcome, act accordingly
-            if let Ok(events) = crate::events::search_events(
-                Some("transaction"),
-                None,
-                Some(&item.signature),
-                Some(24),
-                5,
-            )
-            .await
-            {
-                for ev in events {
-                    if let Some(cs) = ev
-                        .payload
-                        .get("confirmation_status")
-                        .and_then(|v| v.as_str())
-                    {
-                        match cs {
-                            "confirmed" => {
-                                return VerificationOutcome::RetryTransient(
-                                    "Transaction confirmed by events; awaiting RPC indexing"
-                                        .to_string(),
-                                );
-                            }
-                            "failed" => {
-                                return match item.kind {
-                                    VerificationKind::Entry => failed_entry_outcome(
-                                        item,
-                                        "Entry transaction reported failed by events".to_owned(),
-                                    ),
-                                    VerificationKind::Exit => failed_exit_outcome(
-                                        item,
-                                        "Exit transaction reported failed by events".to_owned(),
-                                    ),
-                                };
-                            }
-                            _ => {}
-                        }
-                    }
-                }
-            }
 
             // Enhanced error classification for immediate verification optimization
             if error_msg.to_lowercase().contains("not found")
@@ -406,18 +204,13 @@ pub async fn verify_transaction(item: &VerificationItem) -> VerificationOutcome 
         return VerificationOutcome::RetryTransient("Token mint mismatch".to_owned());
     }
 
-    let position_id = item.position_id.unwrap_or_default();
+    let Some(position_id) = item.position_id else {
+        return VerificationOutcome::RetryTransient("Verification carries no position".to_owned());
+    };
 
     match item.kind {
         VerificationKind::Entry => {
             if swap_info.swap_type != "Buy" {
-                if item.is_dca {
-                    return VerificationOutcome::Transition(PositionTransition::DcaFailed {
-                        position_id: item.position_id.unwrap_or_default(),
-                        dca_signature: item.signature.clone(),
-                        reason: "Swap analysis reported non-buy for DCA".to_owned(),
-                    });
-                }
                 return VerificationOutcome::RetryTransient("Expected Buy transaction".to_owned());
             }
 
@@ -442,15 +235,6 @@ pub async fn verify_transaction(item: &VerificationItem) -> VerificationOutcome 
             }
 
             if item.is_dca {
-                let position_id = match item.position_id {
-                    Some(id) => id,
-                    None => {
-                        return VerificationOutcome::RetryTransient(
-                            "DCA verification missing position context".to_owned(),
-                        );
-                    }
-                };
-
                 let native_spent = swap_info.effective_sol_spent.abs();
                 if native_spent <= 0.0 || !native_spent.is_finite() {
                     return VerificationOutcome::RetryTransient(
@@ -502,7 +286,9 @@ pub async fn verify_transaction(item: &VerificationItem) -> VerificationOutcome 
                         "Token accounts check throttled".to_owned(),
                     );
                 }
-                if let Ok(actual_units) = get_total_token_balance(&wallet_address, &item.mint).await
+                if let Ok(Ok(actual_units)) = settle::holding(&wallet_address, &item.mint)
+                    .await
+                    .map(|holding| u64::try_from(holding.amount))
                 {
                     if actual_units > 0 && actual_units < token_amount_units {
                         logger::debug(
@@ -579,7 +365,10 @@ pub async fn verify_transaction(item: &VerificationItem) -> VerificationOutcome 
                         "Token accounts check throttled".to_owned(),
                     );
                 }
-                match get_total_token_balance(&wallet_address, &item.mint).await {
+                match settle::holding(&wallet_address, &item.mint)
+                    .await
+                    .map(|holding| holding.amount)
+                {
                     Ok(remaining_balance) => {
                         // PARTIAL EXIT: Verify expected amount was sold, balance check is informational
                         if item.is_partial_exit {
@@ -685,9 +474,9 @@ pub async fn verify_transaction(item: &VerificationItem) -> VerificationOutcome 
                             // held, so realized P&L silently lost this fill. Record it as a
                             // partial exit, then clear for a retry of the residual.
                             let sold_pct = {
-                                let total = exit_amount.saturating_add(remaining_balance);
-                                if total > 0 {
-                                    ((exit_amount as f64 / total as f64) * 100.0).clamp(0.0, 100.0)
+                                let total = remaining_balance.raw() as f64 + exit_amount as f64;
+                                if total > 0.0 {
+                                    ((exit_amount as f64 / total) * 100.0).clamp(0.0, 100.0)
                                 } else {
                                     0.0
                                 }

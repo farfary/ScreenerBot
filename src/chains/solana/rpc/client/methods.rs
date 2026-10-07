@@ -180,6 +180,11 @@ pub trait RpcClientMethods {
     // Block height
     fn get_block_height(&self) -> impl std::future::Future<Output = crate::Result<u64>> + Send;
 
+    fn get_block_height_with_commitment(
+        &self,
+        commitment: CommitmentLevel,
+    ) -> impl std::future::Future<Output = crate::Result<u64>> + Send;
+
     // Transaction methods
     fn send_transaction(
         &self,

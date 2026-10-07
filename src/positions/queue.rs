@@ -61,6 +61,9 @@ pub struct VerificationItem {
     /// the position failed. A confirmed swap is never an orphan, so such an item is never
     /// settled as not landed.
     pub swap_confirmed: bool,
+    /// Consecutive settlement reads that found the swap did not land. One read is never
+    /// final, and each deferral widens the wait before the next read.
+    pub not_landed_reads: u8,
 }
 
 impl VerificationItem {
@@ -86,6 +89,7 @@ impl VerificationItem {
             requested_exit_percentage: None,
             is_dca: false,
             swap_confirmed: false,
+            not_landed_reads: 0,
         }
     }
 
@@ -113,6 +117,7 @@ impl VerificationItem {
             requested_exit_percentage: Some(exit_percentage),
             is_dca: false,
             swap_confirmed: false,
+            not_landed_reads: 0,
         }
     }
 
@@ -179,50 +184,31 @@ impl VerificationItem {
     }
 
     pub fn with_retry(&self) -> Self {
-        // Compute exponential backoff (bounded) based on attempts (after increment)
         let next_attempts = self.attempts.saturating_add(1);
-
-        // Use tiered backoff from constants table, fallback to max for high attempt counts
-        let backoff_secs = if next_attempts == 0 {
-            0
-        } else {
-            let idx = (next_attempts as usize).saturating_sub(1);
-            BACKOFF_INTERVALS_SECS
-                .get(idx)
-                .copied()
-                .unwrap_or(BACKOFF_MAX_SECS)
-        };
-
-        // Add small jitter to avoid thundering herd
-        let jitter = {
-            // Simple deterministic jitter based on signature hash and attempt number
-            use std::hash::{Hash, Hasher};
-            let mut hasher = std::collections::hash_map::DefaultHasher::new();
-            self.signature.hash(&mut hasher);
-            next_attempts.hash(&mut hasher);
-            let h = hasher.finish();
-            let sign = if (h & 1) == 0 { 1.0 } else { -1.0 };
-            let frac = (((h >> 1) as f64) / ((u64::MAX >> 1) as f64)) * BACKOFF_JITTER_FRACTION;
-            ((backoff_secs as f64) * frac * sign) as i64
-        };
-        let backoff_with_jitter = 1_i64.max(backoff_secs + jitter);
-
         Self {
-            signature: self.signature.clone(),
-            mint: self.mint.clone(),
-            position_id: self.position_id,
-            kind: self.kind.clone(),
-            created_at: self.created_at,
             last_attempt_at: Some(Utc::now()),
-            next_retry_at: Some(Utc::now() + ChronoDuration::seconds(backoff_with_jitter)),
+            next_retry_at: Some(retry_at(&self.signature, next_attempts)),
             attempts: next_attempts,
-            expiry_height: self.expiry_height,
-            is_partial_exit: self.is_partial_exit,
-            expected_exit_amount: self.expected_exit_amount,
-            requested_exit_percentage: self.requested_exit_percentage,
-            is_dca: self.is_dca,
-            swap_confirmed: self.swap_confirmed,
+            ..self.clone()
         }
+    }
+
+    /// The same item after a settlement read found its swap did not land but could not act
+    /// on it yet: the next read waits a backoff that widens with each consecutive such read.
+    /// Verification attempts are unchanged, so a deferral never moves the item toward its
+    /// attempt cap.
+    pub fn deferred(&self) -> Self {
+        let reads = self.not_landed_reads.saturating_add(1);
+        Self {
+            next_retry_at: Some(retry_at(&self.signature, reads)),
+            not_landed_reads: reads,
+            ..self.clone()
+        }
+    }
+
+    /// True when the previous settlement read already found the swap did not land.
+    pub fn not_landed_seen(&self) -> bool {
+        self.not_landed_reads > 0
     }
 
     /// True while the chain has not confirmed the swap landed and the item carries the bound
@@ -256,6 +242,26 @@ impl VerificationItem {
             Some(when) => Utc::now() >= when,
         }
     }
+}
+
+/// When retry `step` (1-based) of `signature` is due: the widening backoff table with a
+/// deterministic jitter of up to ±10%, so retries of many items do not align.
+fn retry_at(signature: &str, step: u8) -> DateTime<Utc> {
+    let backoff_secs = BACKOFF_INTERVALS_SECS
+        .get(usize::from(step).saturating_sub(1))
+        .copied()
+        .unwrap_or(BACKOFF_MAX_SECS);
+    let jitter = {
+        use std::hash::{Hash, Hasher};
+        let mut hasher = std::collections::hash_map::DefaultHasher::new();
+        signature.hash(&mut hasher);
+        step.hash(&mut hasher);
+        let h = hasher.finish();
+        let sign = if (h & 1) == 0 { 1.0 } else { -1.0 };
+        let frac = (((h >> 1) as f64) / ((u64::MAX >> 1) as f64)) * BACKOFF_JITTER_FRACTION;
+        ((backoff_secs as f64) * frac * sign) as i64
+    };
+    Utc::now() + ChronoDuration::seconds(1_i64.max(backoff_secs + jitter))
 }
 
 /// Verification queue
@@ -344,35 +350,71 @@ impl VerificationQueue {
         }
     }
 
-    /// Copies of the queued items that await settlement by a signature verdict.
+    /// Copies of the queued items that await settlement by a signature verdict and are due.
     pub fn settlement_candidates(&self) -> Vec<VerificationItem> {
         self.items
             .iter()
-            .filter(|item| item.awaits_settlement())
+            .filter(|item| item.awaits_settlement() && item.is_due())
             .cloned()
             .collect()
     }
 
-    /// True when an unconfirmed item lacks the bound after which its swap can no longer land.
-    pub fn awaits_expiry_bound(&self) -> bool {
+    /// The signatures of the unconfirmed items that lack the bound after which their swap can
+    /// no longer land.
+    pub fn unbounded_signatures(&self) -> Vec<String> {
         self.items
             .iter()
-            .any(|item| !item.swap_confirmed && item.expiry_height.is_none())
+            .filter(|item| !item.swap_confirmed && item.expiry_height.is_none())
+            .map(|item| item.signature.clone())
+            .collect()
     }
 
-    /// Gives every unconfirmed item without an expiry bound `bound`, read after each of them
-    /// was submitted. Returns how many items got it.
-    pub fn assign_expiry_bound(&mut self, bound: u64) -> usize {
+    /// Gives `bound` to the items of `signatures` that are still unconfirmed and unbounded.
+    /// `signatures` must be taken before `bound` was read, so the bound is read after each of
+    /// them was submitted. Returns how many items got it.
+    pub fn assign_expiry_bound(&mut self, bound: u64, signatures: &[String]) -> usize {
         let mut assigned = 0;
-        for item in self
-            .items
-            .iter_mut()
-            .filter(|item| !item.swap_confirmed && item.expiry_height.is_none())
-        {
+        for item in self.items.iter_mut().filter(|item| {
+            !item.swap_confirmed
+                && item.expiry_height.is_none()
+                && signatures.contains(&item.signature)
+        }) {
             item.expiry_height = Some(bound);
             assigned += 1;
         }
         assigned
+    }
+
+    /// Defers the next settlement read of the queued item of `signature` (see
+    /// [`VerificationItem::deferred`]). Returns whether the signature is queued.
+    pub fn defer_settlement(&mut self, signature: &str) -> bool {
+        match self
+            .items
+            .iter_mut()
+            .find(|item| item.signature == signature)
+        {
+            Some(item) => {
+                *item = item.deferred();
+                true
+            }
+            None => false,
+        }
+    }
+
+    /// Records that a settlement read of `signature` found its swap still pending, so a later
+    /// not-landed read starts a new count. Returns whether the signature is queued.
+    pub fn clear_not_landed(&mut self, signature: &str) -> bool {
+        match self
+            .items
+            .iter_mut()
+            .find(|item| item.signature == signature)
+        {
+            Some(item) => {
+                item.not_landed_reads = 0;
+                true
+            }
+            None => false,
+        }
     }
 
     /// Marks the queued item of `signature` as a swap the chain confirmed. Returns whether
@@ -462,22 +504,34 @@ pub async fn remove_verification(signature: &str) -> Option<VerificationItem> {
     queue.remove(signature)
 }
 
-/// Copies of the queued items that await settlement by a signature verdict.
+/// Copies of the queued items that await settlement by a signature verdict and are due.
 pub async fn settlement_candidates() -> Vec<VerificationItem> {
     let queue = VERIFICATION_QUEUE.read().await;
     queue.settlement_candidates()
 }
 
-/// True when an unconfirmed queued item lacks an expiry bound.
-pub async fn queue_awaits_expiry_bound() -> bool {
+/// The signatures of the unconfirmed queued items without an expiry bound.
+pub async fn unbounded_signatures() -> Vec<String> {
     let queue = VERIFICATION_QUEUE.read().await;
-    queue.awaits_expiry_bound()
+    queue.unbounded_signatures()
 }
 
-/// Gives every unconfirmed queued item without an expiry bound `bound`.
-pub async fn assign_expiry_bound(bound: u64) -> usize {
+/// Gives `bound` to the queued items of `signatures` that are still unconfirmed and unbounded.
+pub async fn assign_expiry_bound(bound: u64, signatures: &[String]) -> usize {
     let mut queue = VERIFICATION_QUEUE.write().await;
-    queue.assign_expiry_bound(bound)
+    queue.assign_expiry_bound(bound, signatures)
+}
+
+/// Defers the next settlement read of the queued item of `signature`.
+pub async fn defer_settlement(signature: &str) -> bool {
+    let mut queue = VERIFICATION_QUEUE.write().await;
+    queue.defer_settlement(signature)
+}
+
+/// Restarts the not-landed count of the queued item of `signature`.
+pub async fn clear_not_landed(signature: &str) -> bool {
+    let mut queue = VERIFICATION_QUEUE.write().await;
+    queue.clear_not_landed(signature)
 }
 
 /// Marks the queued item of `signature` as a swap the chain confirmed.

@@ -3,7 +3,10 @@
 
 //! Balance query functions for SOL and token accounts.
 
-use crate::chains::solana::rpc::{get_rpc_client, RpcClientMethods};
+use crate::chains::settlement::Holding;
+use crate::chains::solana::rpc::{get_rpc_client, RpcClientMethods, TokenAccountInfo};
+use crate::chains::RawAmount;
+use crate::errors::DataError;
 use crate::logger::{self, LogTag};
 use crate::utils::{format_mint_for_log, get_wallet_address};
 use crate::{Error, Result};
@@ -87,72 +90,113 @@ pub async fn get_token_balance(wallet_address: &str, mint: &str) -> Result<u64> 
     }
 }
 
-/// Get TOTAL token balance across ALL token accounts for a mint (USE FOR EXITS TO SELL ALL)
-pub async fn get_total_token_balance(wallet_address: &str, mint: &str) -> Result<u64> {
+/// The wallet's holding of `mint`, summed over its accounts of both token programs, and
+/// frozen when any of those accounts is frozen.
+pub async fn token_holding(wallet_address: &str, mint: &str) -> Result<Holding> {
+    let holding = holding_of(&get_all_token_accounts(wallet_address).await?, mint);
     logger::debug(
         LogTag::Wallet,
         &format!(
-            "TOTAL_TOKEN_BALANCE_START: wallet={}, mint={}",
-            wallet_address, mint
+            "Holding of mint {}: {} raw units (frozen: {})",
+            format_mint_for_log(mint),
+            holding.amount,
+            holding.frozen
         ),
     );
+    Ok(holding)
+}
 
-    // Get all token accounts for this wallet
-    let all_accounts = get_all_token_accounts(wallet_address).await?;
+/// The wallet's total balance of `mint` across all its token accounts, for selling all of
+/// it; an error when the total does not fit a single transfer amount.
+pub async fn get_total_token_balance(wallet_address: &str, mint: &str) -> Result<u64> {
+    let total = token_holding(wallet_address, mint).await?.amount;
+    u64::try_from(total).map_err(|_| {
+        Error::Data(DataError::InvalidAmount {
+            amount: total.to_string(),
+            reason: "token balance exceeds a u64 transfer amount".to_owned(),
+        })
+    })
+}
 
-    // Filter accounts for the specific mint and sum balances
-    let mut total_balance = 0u64;
-    let mut account_count = 0usize;
-
-    for account in all_accounts {
-        if account.mint == mint {
-            total_balance = total_balance.saturating_add(account.balance);
-            account_count += 1;
-
-            logger::debug(
-                LogTag::Wallet,
-                &format!(
-                    "Found account {} with {} tokens ({})",
-                    &account.account,
-                    account.balance,
-                    if account.is_token_2022 {
-                        "Token-2022"
-                    } else {
-                        "SPL Token"
-                    }
-                ),
-            );
-        }
-    }
-
-    logger::info(
-        LogTag::Wallet,
-        &format!(
-            "Total balance for mint {}: {} tokens across {} accounts",
-            mint, total_balance, account_count
+/// Sums the balances of `mint`'s accounts in full width and flags the holding frozen when
+/// any of them is frozen.
+fn holding_of(accounts: &[TokenAccountInfo], mint: &str) -> Holding {
+    let held = accounts.iter().filter(|account| account.mint == mint);
+    Holding {
+        amount: RawAmount::new(
+            held.clone()
+                .map(|account| u128::from(account.balance))
+                .sum(),
         ),
-    );
-
-    if account_count > 1 {
-        logger::info(
-            LogTag::Wallet,
-            &format!(
-                "MULTIPLE ACCOUNTS DETECTED for mint {}: {} accounts with total {} tokens",
-                mint, account_count, total_balance
-            ),
-        );
+        frozen: held.clone().any(|account| account.is_frozen),
     }
-
-    Ok(total_balance)
 }
 
 /// Gets all token accounts for a wallet
-pub async fn get_all_token_accounts(
-    wallet_address: &str,
-) -> Result<Vec<crate::chains::solana::rpc::TokenAccountInfo>> {
+pub async fn get_all_token_accounts(wallet_address: &str) -> Result<Vec<TokenAccountInfo>> {
     let rpc_client = get_rpc_client();
     rpc_client
         .get_all_token_accounts_str(wallet_address)
         .await
         .map_err(Error::from)
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    fn account(mint: &str, balance: u64, is_frozen: bool) -> TokenAccountInfo {
+        TokenAccountInfo {
+            account: format!("{mint}-{balance}-{is_frozen}"),
+            mint: mint.to_owned(),
+            balance,
+            decimals: 6,
+            is_token_2022: false,
+            is_nft: false,
+            is_frozen,
+        }
+    }
+
+    #[test]
+    fn a_holding_sums_every_account_of_the_mint_and_flags_any_frozen_one() {
+        let accounts = [
+            account("mint", 700, false),
+            account("other", 5_000, true),
+            account("mint", 300, true),
+        ];
+        assert_eq!(
+            holding_of(&accounts, "mint"),
+            Holding {
+                amount: RawAmount::new(1_000),
+                frozen: true,
+            }
+        );
+        assert_eq!(
+            holding_of(&accounts[..1], "mint"),
+            Holding {
+                amount: RawAmount::new(700),
+                frozen: false,
+            }
+        );
+        assert_eq!(
+            holding_of(&accounts, "absent"),
+            Holding {
+                amount: RawAmount::ZERO,
+                frozen: false,
+            }
+        );
+    }
+
+    #[test]
+    fn a_holding_above_the_u64_range_keeps_every_unit() {
+        let accounts = [
+            account("mint", u64::MAX, false),
+            account("mint", u64::MAX, false),
+            account("mint", 2, false),
+        ];
+        assert_eq!(
+            holding_of(&accounts, "mint").amount,
+            RawAmount::new(u128::from(u64::MAX) * 2 + 2)
+        );
+    }
 }

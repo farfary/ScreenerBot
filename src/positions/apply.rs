@@ -12,8 +12,8 @@
 
 use super::booking::{CloseFill, DcaAverage, DcaFill, EntryFill, PartialExitFill};
 use super::db::{
-    commit_booking, force_database_sync, update_position_price_fields, Booking, BookingReads,
-    BookingRecord, Committed,
+    commit_booking, force_database_sync, get_store_chain, update_position_price_fields, Booking,
+    BookingReads, BookingRecord, Committed,
 };
 use super::pnl::position_pnl;
 use super::types::{EntryRecord, ExitRecord, Position};
@@ -373,96 +373,6 @@ pub async fn apply_transition(transition: PositionTransition) -> Result<ApplyEff
             .await;
         }
 
-        PositionTransition::ExitPermanentFailureSynthetic {
-            position_id,
-            exit_time,
-        } => {
-            // A synthetic exit writes the position off: the tokens are gone (or the exit can
-            // no longer be verified), and no SOL comes back for whatever was still held. The
-            // realized P&L makes it visible to the period trading stats and the loss limiter.
-            // Realized proceeds from earlier partial exits still stand; only the remainder is
-            // written off. The stored `transaction_exit_verified` flag guards against booking
-            // (and counting the loss) twice.
-            if get_position_by_id(position_id).await.is_none() {
-                log_missing_position(position_id, "synthetic exit");
-                return Ok(effects);
-            }
-            let committed = book_position(position_id, |row, _| {
-                if row.transaction_exit_verified {
-                    return Ok(Booking::Skip(0.0));
-                }
-                let realized_pnl = row.book_synthetic_close(exit_time).inspect_err(|error| {
-                    logger::error(
-                        LogTag::Positions,
-                        &format!("Synthetic exit for position {position_id} not applied: {error}"),
-                    );
-                })?;
-                Ok(Booking::Write {
-                    record: None,
-                    outcome: realized_pnl,
-                })
-            })
-            .await?;
-            let (candidate, realized_pnl) = match committed {
-                Committed::Skipped(_) => {
-                    logger::debug(
-                        LogTag::Positions,
-                        &format!(
-                            "Exit for position {position_id} already verified - synthetic exit skipped"
-                        ),
-                    );
-                    release_position_slot(position_id).await;
-                    return Ok(effects);
-                }
-                Committed::Written { row, outcome } => (row, outcome),
-                Committed::Deleted { .. } => return Err(Error::NotFoundById { position_id }),
-            };
-            effects.db_updated = true;
-            effects.position_closed = true;
-
-            if realized_pnl < 0.0 {
-                crate::trader::safety::loss_limit::record_realized_loss(realized_pnl.abs());
-            }
-
-            crate::events::record_position_event(
-                &position_id.to_string(),
-                &candidate.mint,
-                "exit_synthetic",
-                candidate.entry_transaction_signature.as_deref(),
-                candidate.exit_transaction_signature.as_deref(),
-                candidate.total_size_native,
-                candidate.remaining_token_amount.unwrap_or_default(),
-                None,
-                None,
-            )
-            .await;
-
-            // Release global slot for synthetic exits as well
-            release_position_slot(position_id).await;
-            logger::debug(
-                LogTag::Positions,
-                &format!(
-                    "Released position slot for synthetic exit (ID: {})",
-                    position_id
-                ),
-            );
-
-            // Reset token priority after synthetic exit
-            if let Some(db) = crate::tokens::database::database(crate::chains::active_chain()) {
-                let _ = db.update_priority(
-                    &candidate.mint,
-                    crate::tokens::priorities::Priority::Standard.to_value(),
-                );
-                logger::debug(
-                    LogTag::Positions,
-                    &format!(
-                        "Reset token {} to Standard priority after synthetic exit",
-                        candidate.symbol
-                    ),
-                );
-            }
-        }
-
         // =================================================================
         // ORPHAN CLEANUP
         // =================================================================
@@ -471,14 +381,20 @@ pub async fn apply_transition(transition: PositionTransition) -> Result<ApplyEff
             signature,
             evidence,
         } => {
-            // The row is deleted only while it still describes an entry that never landed:
-            // its entry is `signature`, unverified and unrecorded, and no exit was booked.
+            // The row is deleted only while it still describes nothing but an entry that never
+            // landed: its entry is `signature` and unverified, no DCA, partial or full exit was
+            // submitted or booked on it, and it carries no entry or exit record. The delete
+            // cascades to the row's records, so any booked fill must refuse it.
+            let store_chain = get_store_chain().await?;
             let committed = book_position(position_id, |row, reads| {
                 let unlanded = row.entry_transaction_signature.as_deref()
                     == Some(signature.as_str())
                     && !row.transaction_entry_verified
                     && !row.transaction_exit_verified
-                    && !reads.entry_record_exists(&signature)?;
+                    && row.exit_transaction_signature.is_none()
+                    && row.dca_count == 0
+                    && row.partial_exit_count == 0
+                    && !reads.has_any_record()?;
                 if !unlanded {
                     return Err(Error::EntryLanded {
                         position_id,
@@ -496,7 +412,7 @@ pub async fn apply_transition(transition: PositionTransition) -> Result<ApplyEff
 
             release_position_slot(position_id).await;
 
-            if let Some(db) = crate::tokens::database::database(crate::chains::active_chain()) {
+            if let Some(db) = crate::tokens::database::database(store_chain) {
                 let _ = db.update_priority(
                     &removed.mint,
                     crate::tokens::priorities::Priority::Standard.to_value(),

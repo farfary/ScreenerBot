@@ -7,9 +7,9 @@ use super::db::initialize_positions_database;
 use super::{
     apply::apply_transition,
     queue::{
-        abandon_verification, assign_expiry_bound, enqueue_verification, mark_swap_confirmed,
-        poll_verification_batch, queue_awaits_expiry_bound, remove_verification,
-        requeue_verification, settlement_candidates, VerificationItem,
+        abandon_verification, assign_expiry_bound, clear_not_landed, defer_settlement,
+        enqueue_verification, mark_swap_confirmed, poll_verification_batch, remove_verification,
+        requeue_verification, settlement_candidates, unbounded_signatures, VerificationItem,
     },
     settle::{self, Disposition},
     state::{
@@ -475,15 +475,17 @@ async fn reenqueue_missing_verifications() -> (usize, usize) {
     (queue_size_before, requeued_count)
 }
 
-/// Settles the queued signatures the chain has not confirmed yet, from one batched verdict
-/// read. Unconfirmed items without an expiry bound get the current one first: a transaction
-/// submitted before it was read can no longer land after it. A landed swap stays queued as
-/// confirmed; a swap that failed on chain or did not land leaves the queue with its
-/// transition applied.
+/// Settles the due queued signatures the chain has not confirmed yet, from one batched
+/// verdict read. Unconfirmed items without an expiry bound get the current one first, but
+/// only the items queued before it was read: a transaction submitted before the read can no
+/// longer land after the bound. A landed swap stays queued as confirmed; a swap that failed
+/// on chain or did not land leaves the queue with its transition applied; a not-landed read
+/// that cannot be acted on yet defers the item's next read.
 async fn settle_queued_signatures() {
-    if queue_awaits_expiry_bound().await {
+    let unbounded = unbounded_signatures().await;
+    if !unbounded.is_empty() {
         if let Some(bound) = settle::submission_expiry_bound().await {
-            assign_expiry_bound(bound).await;
+            assign_expiry_bound(bound, &unbounded).await;
         }
     }
 
@@ -514,7 +516,14 @@ async fn settle_queued_signatures() {
             }
             Disposition::Requeue {
                 swap_confirmed: false,
-            } => {}
+            } => {
+                if item.not_landed_seen() {
+                    clear_not_landed(&item.signature).await;
+                }
+            }
+            Disposition::Defer => {
+                defer_settlement(&item.signature).await;
+            }
             Disposition::Apply(transition) => {
                 if remove_verification(&item.signature).await.is_some() {
                     apply_settlement(&item, verdict, transition).await;
@@ -526,7 +535,8 @@ async fn settle_queued_signatures() {
 
 /// Settles items the verifier gave up on, from one batched verdict read. An item the
 /// verdict leaves undecided is renewed rather than dropped: its swap may still land, and
-/// dropping it would strand the position.
+/// dropping it would strand the position. A not-landed read that cannot be acted on yet
+/// renews the item deferred.
 async fn settle_unresolved(items: Vec<VerificationItem>) {
     if items.is_empty() {
         return;
@@ -556,19 +566,31 @@ async fn settle_unresolved(items: Vec<VerificationItem>) {
                 );
                 let mut renewed = item.renewed();
                 renewed.swap_confirmed |= swap_confirmed;
+                renewed.not_landed_reads = 0;
                 enqueue_verification(renewed).await;
+            }
+            Disposition::Defer => {
+                logger::warning(
+                    LogTag::Positions,
+                    &format!(
+                        "Verification of {} (mint {}) did not land but cannot be settled yet - renewing it deferred",
+                        item.signature, item.mint
+                    ),
+                );
+                enqueue_verification(item.renewed().deferred()).await;
             }
             Disposition::Apply(transition) => apply_settlement(&item, verdict, transition).await,
         }
     }
 }
 
-/// The attributable-dust reading an entry needs when its signature did not land; `None` for
-/// every other item and verdict.
+/// The attributable-dust reading an entry needs when its signature did not land on a
+/// second consecutive read; `None` for every other item and verdict.
 async fn attributable_dust(item: &VerificationItem, verdict: SignatureVerdict) -> Option<bool> {
     if item.kind == VerificationKind::Entry
         && !item.is_dca
         && verdict == SignatureVerdict::NotLanded
+        && item.not_landed_seen()
     {
         settle::entry_attributable_is_dust(item).await
     } else {
@@ -817,68 +839,6 @@ pub(super) async fn process_verification_item(
             )
             .await;
             requeue_verification(item).await;
-        }
-        VerificationOutcome::PermanentFailure(transition) => {
-            {
-                use crate::positions::metrics::VERIFICATION_METRICS;
-                use std::sync::atomic::Ordering;
-
-                VERIFICATION_METRICS
-                    .permanent_failures
-                    .fetch_add(1, Ordering::Relaxed);
-                VERIFICATION_METRICS.errors.fetch_add(1, Ordering::Relaxed);
-            }
-
-            logger::warning(
-                LogTag::Positions,
-                &format!(
-                    "Permanent failure for {} (mint {} kind {:?}), applying cleanup",
-                    item.signature, item.mint, item.kind
-                ),
-            );
-
-            let applied = apply_transition(transition).await;
-            remove_verification(&item.signature).await;
-            if let Err(e) = applied {
-                logger::error(
-                    LogTag::Positions,
-                    &format!(
-                        "Failed to apply permanent-failure cleanup for {} (mint {} kind {:?}): {}",
-                        item.signature, item.mint, item.kind, e
-                    ),
-                );
-                match item.apply_failure_disposition(&e) {
-                    ApplyFailureDisposition::Requeue => {
-                        requeue_verification(item.clone()).await;
-                    }
-                    ApplyFailureDisposition::Drop(reason) => {
-                        abandon_after_apply_failure(&item, reason, &e).await;
-                    }
-                }
-            }
-            crate::actions::settle_verification(
-                &item.signature,
-                Err(crate::actions::ActionFailure::new(
-                    crate::i18n::ids::ACTIONS_FAILURE_TRANSACTION_FAILED,
-                )),
-            )
-            .await;
-
-            crate::events::record_position_event_flexible(
-                "verification_finished",
-                crate::events::Severity::Warn,
-                Some(&item.mint),
-                Some(&item.signature),
-                json!({
-                    "kind": format!("{:?}", item.kind),
-                    "attempts": item.attempts,
-                    "duration_ms": duration_ms(),
-                    "started_at": started_at.to_rfc3339(),
-                    "result": "permanent_failure",
-                    "position_id": item.position_id
-                }),
-            )
-            .await;
         }
     }
     None

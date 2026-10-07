@@ -69,6 +69,23 @@ impl BookingReads<'_> {
         )
     }
 
+    /// True when this position has any entry or exit record, of whatever signature.
+    pub(crate) fn has_any_record(&self) -> Result<bool> {
+        Ok(self
+            .conn
+            .query_row(
+                "SELECT 1 FROM position_entries WHERE position_id = ?1
+                 UNION ALL
+                 SELECT 1 FROM position_exits WHERE position_id = ?1
+                 LIMIT 1",
+                params![self.position_id],
+                |_| Ok(()),
+            )
+            .optional()
+            .map_err(|e| DatabaseError::classify_sqlite_failure("commit_booking", e))?
+            .is_some())
+    }
+
     /// The swap legs the trader booked for this position.
     pub(crate) fn trader_swap_legs(&self) -> Result<Vec<TraderSwapLeg>> {
         let wallet_address = self.wallet_address.clone()?;

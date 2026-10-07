@@ -148,10 +148,6 @@ fn all_transitions() -> Vec<PositionTransition> {
             position_id: 1,
             exit_signature: "exit-sig".to_owned(),
         },
-        PositionTransition::ExitPermanentFailureSynthetic {
-            position_id: 1,
-            exit_time: now,
-        },
         PositionTransition::RemoveOrphanEntry {
             position_id: 1,
             signature: "entry-sig".to_owned(),
@@ -248,9 +244,7 @@ fn only_a_real_ending_is_terminal() {
     for transition in all_transitions() {
         let expected = matches!(
             transition,
-            PositionTransition::ExitVerified { .. }
-                | PositionTransition::ExitPermanentFailureSynthetic { .. }
-                | PositionTransition::RemoveOrphanEntry { .. }
+            PositionTransition::ExitVerified { .. } | PositionTransition::RemoveOrphanEntry { .. }
         );
         assert_eq!(
             transition.is_terminal(),
@@ -648,9 +642,10 @@ fn only_unconfirmed_bounded_items_are_settlement_candidates() {
         .collect();
     assert_eq!(candidates, ["sig-bounded"]);
 
-    assert!(queue.awaits_expiry_bound());
-    assert_eq!(queue.assign_expiry_bound(250), 1);
-    assert!(!queue.awaits_expiry_bound());
+    let unbounded = queue.unbounded_signatures();
+    assert_eq!(unbounded, ["sig-unbounded"]);
+    assert_eq!(queue.assign_expiry_bound(250, &unbounded), 1);
+    assert!(queue.unbounded_signatures().is_empty());
     let candidates: Vec<(String, Option<u64>)> = queue
         .settlement_candidates()
         .into_iter()
@@ -673,4 +668,92 @@ fn only_unconfirmed_bounded_items_are_settlement_candidates() {
         .map(|item| item.signature)
         .collect();
     assert_eq!(candidates, ["sig-unbounded"]);
+}
+
+#[test]
+fn a_bound_is_assigned_only_to_the_items_queued_before_it_was_read() {
+    let mut queue = VerificationQueue::new();
+    queue.enqueue(entry_item("sig-before", None));
+    let unbounded = queue.unbounded_signatures();
+
+    queue.enqueue(entry_item("sig-after", None));
+    assert_eq!(queue.assign_expiry_bound(250, &unbounded), 1);
+
+    let bounds: Vec<(String, Option<u64>)> = ["sig-before", "sig-after"]
+        .into_iter()
+        .map(|signature| {
+            let item = queue.remove(signature).expect("queued");
+            (item.signature, item.expiry_height)
+        })
+        .collect();
+    assert_eq!(
+        bounds,
+        [
+            ("sig-before".to_owned(), Some(250)),
+            ("sig-after".to_owned(), None),
+        ],
+        "an item enqueued after the snapshot keeps no bound"
+    );
+}
+
+#[test]
+fn a_deferred_item_is_a_settlement_candidate_only_once_due() {
+    let mut queue = VerificationQueue::new();
+    let mut item = entry_item("sig-deferred", Some(100));
+    item.attempts = 3;
+    queue.enqueue(item);
+
+    assert!(queue.defer_settlement("sig-deferred"));
+    assert!(!queue.defer_settlement("sig-absent"));
+    assert!(
+        queue.settlement_candidates().is_empty(),
+        "a deferred item is not read again before its retry time"
+    );
+
+    let mut deferred = queue.remove("sig-deferred").expect("queued");
+    assert_eq!(deferred.attempts, 3, "a deferral spends no attempt");
+    assert_eq!(deferred.not_landed_reads, 1);
+    assert!(deferred.next_retry_at.is_some_and(|at| at > Utc::now()));
+
+    deferred.next_retry_at = Some(Utc::now() - chrono::Duration::seconds(1));
+    queue.enqueue(deferred);
+    let candidates: Vec<String> = queue
+        .settlement_candidates()
+        .into_iter()
+        .map(|item| item.signature)
+        .collect();
+    assert_eq!(
+        candidates,
+        ["sig-deferred"],
+        "a due deferred item is read again"
+    );
+}
+
+#[test]
+fn each_consecutive_deferral_waits_longer_and_a_pending_read_restarts_the_count() {
+    let item = entry_item("sig-widening", Some(100));
+    let first = item.deferred();
+    let second = first.deferred();
+    let third = second.deferred();
+    assert_eq!(
+        (
+            first.not_landed_reads,
+            second.not_landed_reads,
+            third.not_landed_reads
+        ),
+        (1, 2, 3)
+    );
+    assert!(second.next_retry_at > first.next_retry_at);
+    assert!(third.next_retry_at > second.next_retry_at);
+    assert_eq!(third.attempts, item.attempts);
+    assert!(
+        third.renewed().not_landed_seen(),
+        "a renewal keeps the count"
+    );
+
+    let mut queue = VerificationQueue::new();
+    queue.enqueue(third);
+    assert!(queue.clear_not_landed("sig-widening"));
+    let cleared = queue.remove("sig-widening").expect("queued");
+    assert!(!cleared.not_landed_seen());
 }

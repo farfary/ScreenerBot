@@ -1585,6 +1585,39 @@ async fn stored(id: i64) -> bool {
         .is_some()
 }
 
+/// The rows of `table` that belong to position `id`.
+fn child_rows(table: &str, id: i64) -> i64 {
+    injector()
+        .query_row(
+            &format!("SELECT COUNT(*) FROM {table} WHERE position_id = ?1"),
+            [id],
+            |row| row.get(0),
+        )
+        .expect("count child rows")
+}
+
+/// The removal of `id` as a not-landed entry is refused, and the row and its records stay.
+async fn assert_removal_refused(id: i64) {
+    let entries = entry_records(id).await;
+    let exits = exit_records(id).await;
+    let error = apply_transition(orphan_removal(id, ORPHAN_ENTRY))
+        .await
+        .expect_err("the removal is refused");
+    assert!(
+        matches!(
+            &error,
+            Error::EntryLanded { position_id, signature }
+                if *position_id == id && signature == ORPHAN_ENTRY
+        ),
+        "expected entry landed, got {error:?}"
+    );
+    assert!(!error.is_retryable());
+    assert!(state::get_position_by_id(id).await.is_some());
+    assert!(stored(id).await);
+    assert_eq!(entry_records(id).await, entries, "entry records changed");
+    assert_eq!(exit_records(id).await, exits, "exit records changed");
+}
+
 #[test]
 fn an_orphan_removal_targets_its_own_id_not_the_first_position_of_the_mint() {
     common::run_isolated(
@@ -1630,6 +1663,19 @@ fn an_orphan_removal_deletes_the_row_and_releases_the_slot_once() {
             assert!(state::try_consume_global_position_permit());
             state::register_position_slot(id).await;
             assert!(!state::try_consume_global_position_permit());
+            let injector = injector();
+            injector
+                .execute(
+                    "INSERT INTO position_states (position_id, state) VALUES (?1, 'Open')",
+                    [id],
+                )
+                .expect("record a state");
+            injector
+                .execute(
+                    "INSERT INTO position_tracking (position_id, price, price_source) VALUES (?1, 1.0, 'pool')",
+                    [id],
+                )
+                .expect("record a price");
 
             apply_transition(orphan_removal(id, ORPHAN_ENTRY))
                 .await
@@ -1665,6 +1711,9 @@ fn an_orphan_removal_deletes_the_row_and_releases_the_slot_once() {
                     .all(|position| position.id != Some(id)),
                 "a reload finds no row to verify again"
             );
+            for table in ["position_states", "position_tracking"] {
+                assert_eq!(child_rows(table, id), 0, "the delete cascades to {table}");
+            }
             assert_eq!(recorded_loss(), 0.0, "a removal records no loss");
         },
     );
@@ -1734,6 +1783,73 @@ fn an_orphan_removal_refuses_a_position_whose_entry_landed() {
             assert!(state::get_position_by_id(id).await.is_some());
             assert!(stored(id).await);
             assert_eq!(entry_records(id).await, 1);
+        },
+    );
+}
+
+#[test]
+fn an_orphan_removal_refuses_a_position_with_a_booked_dca() {
+    common::run_isolated(
+        "an_orphan_removal_refuses_a_position_with_a_booked_dca",
+        || async {
+            let _dir = common::isolated_env();
+            let _cfg = common::config_guard();
+            let id = open_position(unverified_entry(ORPHAN_ENTRY)).await;
+            register_dca(id).await;
+            apply_transition(dca(id)).await.expect("the DCA is booked");
+            assert_eq!(entry_records(id).await, 1);
+
+            assert_removal_refused(id).await;
+            assert_eq!(in_storage(id).await.dca_count, 1, "the DCA stays booked");
+
+            // The DCA's record alone refuses the removal.
+            injector()
+                .execute("UPDATE positions SET dca_count = 0 WHERE id = ?1", [id])
+                .expect("clear the DCA count");
+            assert_removal_refused(id).await;
+            assert_eq!(entry_records(id).await, 1, "the DCA record survives");
+        },
+    );
+}
+
+#[test]
+fn an_orphan_removal_refuses_a_position_with_an_exit_submitted() {
+    common::run_isolated(
+        "an_orphan_removal_refuses_a_position_with_an_exit_submitted",
+        || async {
+            let _dir = common::isolated_env();
+            let _cfg = common::config_guard();
+            let full_exit = open_position(|position| {
+                unverified_entry(ORPHAN_ENTRY)(position);
+                position.exit_transaction_signature = Some(CLOSE_SIGNATURE.to_owned());
+            })
+            .await;
+            let partial_exit = store_position(|position| {
+                unverified_entry(ORPHAN_ENTRY)(position);
+                position.partial_exit_count = 1;
+            })
+            .await;
+
+            assert_removal_refused(full_exit).await;
+            assert_removal_refused(partial_exit).await;
+        },
+    );
+}
+
+#[test]
+fn an_orphan_removal_refuses_a_position_whose_exit_is_verified() {
+    common::run_isolated(
+        "an_orphan_removal_refuses_a_position_whose_exit_is_verified",
+        || async {
+            let _dir = common::isolated_env();
+            let _cfg = common::config_guard();
+            let id = open_position(|position| {
+                unverified_entry(ORPHAN_ENTRY)(position);
+                position.transaction_exit_verified = true;
+            })
+            .await;
+
+            assert_removal_refused(id).await;
         },
     );
 }

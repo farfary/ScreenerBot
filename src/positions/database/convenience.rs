@@ -207,6 +207,15 @@ pub async fn get_metadata(key: &str) -> Result<Option<String>> {
     }
 }
 
+/// The chain whose positions the store holds
+pub async fn get_store_chain() -> Result<crate::chains::ChainId> {
+    let db_guard = GLOBAL_POSITIONS_DB.lock().await;
+    match db_guard.as_ref() {
+        Some(db) => Ok(db.chain()),
+        None => Err(Error::NotInitialised),
+    }
+}
+
 /// Get open positions from database
 pub async fn get_open_positions() -> Result<Vec<Position>> {
     let db_guard = GLOBAL_POSITIONS_DB.lock().await;

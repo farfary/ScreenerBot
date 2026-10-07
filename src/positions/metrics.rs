@@ -140,7 +140,6 @@ pub struct VerificationMetricsInternal {
     pub partial_exit_verified: AtomicU64,
     pub retries: AtomicU64,
     pub abandoned: AtomicU64,
-    pub permanent_failures: AtomicU64,
 }
 
 impl VerificationMetricsInternal {
@@ -154,7 +153,6 @@ impl VerificationMetricsInternal {
             partial_exit_verified: AtomicU64::new(0),
             retries: AtomicU64::new(0),
             abandoned: AtomicU64::new(0),
-            permanent_failures: AtomicU64::new(0),
         }
     }
 
@@ -167,7 +165,6 @@ impl VerificationMetricsInternal {
         let partials = self.partial_exit_verified.load(Ordering::Relaxed);
         let retry_count = self.retries.load(Ordering::Relaxed);
         let abandoned_count = self.abandoned.load(Ordering::Relaxed);
-        let permanent_count = self.permanent_failures.load(Ordering::Relaxed);
 
         let mut custom = HashMap::new();
         custom.insert("queue_size".to_owned(), queue_size as f64);
@@ -177,7 +174,6 @@ impl VerificationMetricsInternal {
         custom.insert("partial_exit_verified".to_owned(), partials as f64);
         custom.insert("verification_retries".to_owned(), retry_count as f64);
         custom.insert("verifications_abandoned".to_owned(), abandoned_count as f64);
-        custom.insert("permanent_failures".to_owned(), permanent_count as f64);
 
         crate::services::ServiceMetrics {
             operations_total: ops,

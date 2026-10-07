@@ -212,7 +212,6 @@ pub enum ApplyFailureDisposition {
 pub enum VerificationOutcome {
     Transition(PositionTransition),
     RetryTransient(String),
-    PermanentFailure(PositionTransition),
 }
 
 // ==================== PENDING SWAP TYPES ====================

@@ -5,12 +5,14 @@
 
 use std::sync::Arc;
 
-use crate::chains::{runtime_for, RawAmount, SettlementReader, SignatureCheck, SignatureVerdict};
+use crate::chains::{
+    runtime_for, Holding, RawAmount, SettlementReader, SignatureCheck, SignatureVerdict,
+};
 use crate::logger::{self, LogTag};
 
-use super::db::with_positions_database;
+use super::db::get_store_chain;
 use super::queue::VerificationItem;
-use super::round_state::is_dust;
+use super::round_state::{attributable_is_dust, expected_acquisition};
 use super::state::{get_position_by_id, is_position_open, POSITIONS};
 use super::transitions::{NotLandedEvidence, PositionTransition};
 use super::types::VerificationKind;
@@ -18,7 +20,7 @@ use super::{Error, Result};
 
 /// The settlement reader of the chain whose positions the store holds.
 pub(crate) async fn reader() -> Result<Arc<dyn SettlementReader>> {
-    let chain = with_positions_database(|db| Ok(db.chain())).await?;
+    let chain = get_store_chain().await?;
     let runtime = runtime_for(chain).ok_or(crate::chains::Error::ChainNotEnabled { chain })?;
     Ok(runtime.settlement())
 }
@@ -38,6 +40,11 @@ pub(crate) async fn submission_expiry_bound() -> Option<u64> {
             );
         })
         .ok()
+}
+
+/// The holding of `owner` in `mint` on the chain whose positions the store holds.
+pub(crate) async fn holding(owner: &str, mint: &str) -> Result<Holding> {
+    Ok(reader().await?.holding(owner, mint).await?)
 }
 
 /// One verdict per item, in order, from one batched read.
@@ -60,13 +67,19 @@ pub(crate) enum Disposition {
     /// Keep verifying. `swap_confirmed` is true when the chain confirmed the swap landed, so
     /// the item is never settled as not landed again.
     Requeue { swap_confirmed: bool },
+    /// The swap did not land, but that cannot be acted on yet: the read is the first of its
+    /// kind, or an entry's attributable holding is not known to be dust. Read again after a
+    /// widening backoff.
+    Defer,
     /// Stop verifying and apply the transition.
     Apply(PositionTransition),
 }
 
-/// The disposition of `item` under `verdict`. A swap that failed on chain or did not land
-/// moved nothing, so no branch writes a position off. An entry that did not land is
-/// removed only when the wallet's holding attributable to it is known to be dust:
+/// The disposition of `item` under `verdict`, the single owner of what a settled signature
+/// means for a position. A swap that failed on chain or did not land moved nothing, so no
+/// branch writes a position off. A not-landed read is final only when the previous read of
+/// the item found the same, so one lagging provider cannot decide it. An entry that did not
+/// land is removed only when the wallet's holding attributable to it is known to be dust:
 /// `attributable_is_dust` is `None` when that holding could not be read.
 pub(crate) fn disposition(
     item: &VerificationItem,
@@ -90,6 +103,7 @@ pub(crate) fn disposition(
             }
         }
         SignatureVerdict::FailedOnChain => NotLandedEvidence::FailedOnChain,
+        SignatureVerdict::NotLanded if !item.not_landed_seen() => return Disposition::Defer,
         SignatureVerdict::NotLanded => NotLandedEvidence::Expired,
     };
     let reason = match evidence {
@@ -106,9 +120,7 @@ pub(crate) fn disposition(
         },
         VerificationKind::Entry => {
             if evidence == NotLandedEvidence::Expired && attributable_is_dust != Some(true) {
-                return Disposition::Requeue {
-                    swap_confirmed: false,
-                };
+                return Disposition::Defer;
             }
             PositionTransition::RemoveOrphanEntry {
                 position_id,
@@ -129,44 +141,37 @@ pub(crate) fn disposition(
 }
 
 /// Whether the wallet's holding of the item's mint, less what the other open positions of
-/// the mint hold, is dust against what the item's position bought. `None` when the holding
-/// or the position cannot be read.
+/// the mint hold, is dust against what the item's buy was quoted to acquire. `None` when the
+/// position, the token's decimals or the holding cannot be read.
 pub(crate) async fn entry_attributable_is_dust(item: &VerificationItem) -> Option<bool> {
-    let position_id = item.position_id?;
-    let position = get_position_by_id(position_id).await?;
+    let position = get_position_by_id(item.position_id?).await?;
+    let chain = get_store_chain().await.ok()?;
+    let expected = expected_acquisition(
+        position.entry_size_native,
+        position.entry_price,
+        crate::tokens::get_decimals(chain, &item.mint).await,
+    )?;
     let wallet = crate::utils::get_wallet_address().ok()?;
-    let holding = match reader().await {
-        Ok(reader) => reader
-            .holding(&wallet, &item.mint)
-            .await
-            .map_err(Error::from),
-        Err(error) => Err(error),
-    }
-    .inspect_err(|error| {
-        logger::warning(
-            LogTag::Positions,
-            &format!("Holding of {} unavailable: {error}", item.mint),
-        );
-    })
-    .ok()?;
+    let holding = holding(&wallet, &item.mint)
+        .await
+        .inspect_err(|error| {
+            logger::warning(
+                LogTag::Positions,
+                &format!("Holding of {} unavailable: {error}", item.mint),
+            );
+        })
+        .ok()?;
 
     let held_by_others = POSITIONS
         .read()
         .await
         .iter()
-        .filter(|p| p.mint == item.mint && p.id != Some(position_id) && is_position_open(p))
+        .filter(|p| p.mint == item.mint && p.id != position.id && is_position_open(p))
         .filter_map(|p| p.remaining_token_amount.or(p.token_amount))
         .fold(RawAmount::ZERO, |sum, held| {
             sum.checked_add(held).unwrap_or(RawAmount::new(u128::MAX))
         });
-    let attributable = holding
-        .amount
-        .checked_sub(held_by_others)
-        .unwrap_or(RawAmount::ZERO);
-    Some(is_dust(
-        attributable,
-        position.token_amount.unwrap_or(RawAmount::ZERO),
-    ))
+    attributable_is_dust(holding.amount, held_by_others, Some(expected))
 }
 
 #[cfg(test)]
@@ -215,23 +220,41 @@ mod tests {
         )
     }
 
+    /// The item after a previous settlement read found its swap did not land.
+    fn seen(item: VerificationItem) -> VerificationItem {
+        let deferred = item.deferred();
+        assert!(deferred.not_landed_seen());
+        deferred
+    }
+
+    fn items() -> [VerificationItem; 4] {
+        [entry(), dca(), partial_exit(), full_exit()]
+    }
+
     fn requeued(disposition: Disposition) -> bool {
         match disposition {
             Disposition::Requeue { swap_confirmed } => swap_confirmed,
-            Disposition::Apply(transition) => panic!("expected a requeue, got {transition:?}"),
+            other => panic!("expected a requeue, got {other:?}"),
         }
     }
 
     fn applied(disposition: Disposition) -> PositionTransition {
         match disposition {
             Disposition::Apply(transition) => transition,
-            Disposition::Requeue { .. } => panic!("expected a transition"),
+            other => panic!("expected a transition, got {other:?}"),
         }
+    }
+
+    fn is_deferred(disposition: Disposition) -> bool {
+        matches!(disposition, Disposition::Defer)
     }
 
     #[test]
     fn a_landed_swap_of_any_kind_is_requeued_as_confirmed() {
-        for item in [entry(), dca(), partial_exit(), full_exit()] {
+        for item in items()
+            .into_iter()
+            .flat_map(|item| [item.clone(), seen(item)])
+        {
             for dust in [None, Some(true), Some(false)] {
                 assert!(requeued(disposition(&item, SignatureVerdict::Landed, dust)));
             }
@@ -240,7 +263,10 @@ mod tests {
 
     #[test]
     fn a_pending_swap_of_any_kind_is_requeued_unconfirmed() {
-        for item in [entry(), dca(), partial_exit(), full_exit()] {
+        for item in items()
+            .into_iter()
+            .flat_map(|item| [item.clone(), seen(item)])
+        {
             for dust in [None, Some(true), Some(false)] {
                 assert!(!requeued(disposition(
                     &item,
@@ -252,24 +278,39 @@ mod tests {
     }
 
     #[test]
-    fn an_entry_that_failed_on_chain_is_removed_with_that_evidence() {
-        for dust in [None, Some(true), Some(false)] {
-            assert!(matches!(
-                applied(disposition(&entry(), SignatureVerdict::FailedOnChain, dust)),
-                PositionTransition::RemoveOrphanEntry {
-                    position_id: 7,
-                    ref signature,
-                    evidence: NotLandedEvidence::FailedOnChain,
-                } if signature == "entry-sig"
-            ));
+    fn a_first_not_landed_read_of_any_kind_is_deferred() {
+        for item in items() {
+            for dust in [None, Some(true), Some(false)] {
+                assert!(
+                    is_deferred(disposition(&item, SignatureVerdict::NotLanded, dust)),
+                    "{} acted on one not-landed read",
+                    item.signature
+                );
+            }
         }
     }
 
     #[test]
-    fn an_entry_that_did_not_land_is_removed_only_when_its_holding_is_known_dust() {
+    fn an_entry_that_failed_on_chain_is_removed_with_that_evidence() {
+        for item in [entry(), seen(entry())] {
+            for dust in [None, Some(true), Some(false)] {
+                assert!(matches!(
+                    applied(disposition(&item, SignatureVerdict::FailedOnChain, dust)),
+                    PositionTransition::RemoveOrphanEntry {
+                        position_id: 7,
+                        ref signature,
+                        evidence: NotLandedEvidence::FailedOnChain,
+                    } if signature == "entry-sig"
+                ));
+            }
+        }
+    }
+
+    #[test]
+    fn an_entry_that_did_not_land_twice_is_removed_only_when_its_holding_is_known_dust() {
         assert!(matches!(
             applied(disposition(
-                &entry(),
+                &seen(entry()),
                 SignatureVerdict::NotLanded,
                 Some(true)
             )),
@@ -280,8 +321,8 @@ mod tests {
             }
         ));
         for dust in [None, Some(false)] {
-            assert!(!requeued(disposition(
-                &entry(),
+            assert!(is_deferred(disposition(
+                &seen(entry()),
                 SignatureVerdict::NotLanded,
                 dust
             )));
@@ -289,11 +330,15 @@ mod tests {
     }
 
     #[test]
-    fn a_dca_that_failed_or_did_not_land_is_marked_failed() {
-        for verdict in [SignatureVerdict::FailedOnChain, SignatureVerdict::NotLanded] {
+    fn a_dca_that_failed_or_did_not_land_twice_is_marked_failed() {
+        for (item, verdict) in [
+            (dca(), SignatureVerdict::FailedOnChain),
+            (seen(dca()), SignatureVerdict::FailedOnChain),
+            (seen(dca()), SignatureVerdict::NotLanded),
+        ] {
             for dust in [None, Some(true), Some(false)] {
                 assert!(matches!(
-                    applied(disposition(&dca(), verdict, dust)),
+                    applied(disposition(&item, verdict, dust)),
                     PositionTransition::DcaFailed { position_id: 7, ref dca_signature, .. }
                         if dca_signature == "dca-sig"
                 ));
@@ -302,20 +347,26 @@ mod tests {
     }
 
     #[test]
-    fn a_partial_exit_that_failed_or_did_not_land_is_marked_failed() {
-        for verdict in [SignatureVerdict::FailedOnChain, SignatureVerdict::NotLanded] {
+    fn a_partial_exit_that_failed_or_did_not_land_twice_is_marked_failed() {
+        for (item, verdict) in [
+            (partial_exit(), SignatureVerdict::FailedOnChain),
+            (seen(partial_exit()), SignatureVerdict::NotLanded),
+        ] {
             assert!(matches!(
-                applied(disposition(&partial_exit(), verdict, None)),
+                applied(disposition(&item, verdict, None)),
                 PositionTransition::PartialExitFailed { position_id: 7, .. }
             ));
         }
     }
 
     #[test]
-    fn a_full_exit_that_failed_or_did_not_land_is_cleared_for_retry() {
-        for verdict in [SignatureVerdict::FailedOnChain, SignatureVerdict::NotLanded] {
+    fn a_full_exit_that_failed_or_did_not_land_twice_is_cleared_for_retry() {
+        for (item, verdict) in [
+            (full_exit(), SignatureVerdict::FailedOnChain),
+            (seen(full_exit()), SignatureVerdict::NotLanded),
+        ] {
             assert!(matches!(
-                applied(disposition(&full_exit(), verdict, None)),
+                applied(disposition(&item, verdict, None)),
                 PositionTransition::ExitFailedClearForRetry { position_id: 7, ref exit_signature }
                     if exit_signature == "exit-sig"
             ));
@@ -323,28 +374,60 @@ mod tests {
     }
 
     #[test]
-    fn a_dca_never_removes_its_position() {
-        for verdict in ALL_VERDICTS {
-            for dust in [None, Some(true), Some(false)] {
-                assert!(!matches!(
-                    disposition(&dca(), verdict, dust),
-                    Disposition::Apply(PositionTransition::RemoveOrphanEntry { .. })
-                ));
+    fn an_item_without_a_position_is_never_applied() {
+        for mut item in items()
+            .into_iter()
+            .flat_map(|item| [item.clone(), seen(item)])
+        {
+            item.position_id = None;
+            for verdict in ALL_VERDICTS {
+                for dust in [None, Some(true), Some(false)] {
+                    assert!(!matches!(
+                        disposition(&item, verdict, dust),
+                        Disposition::Apply(_)
+                    ));
+                }
             }
         }
     }
 
     #[test]
-    fn no_verdict_writes_a_position_off() {
-        for item in [entry(), dca(), partial_exit(), full_exit()] {
+    fn a_dca_never_removes_its_position() {
+        for item in [dca(), seen(dca())] {
             for verdict in ALL_VERDICTS {
                 for dust in [None, Some(true), Some(false)] {
                     assert!(!matches!(
                         disposition(&item, verdict, dust),
-                        Disposition::Apply(
-                            PositionTransition::ExitPermanentFailureSynthetic { .. }
-                        )
+                        Disposition::Apply(PositionTransition::RemoveOrphanEntry { .. })
                     ));
+                }
+            }
+        }
+    }
+
+    /// No verdict writes a position off or books anything: every transition a settlement
+    /// applies only removes an entry that never landed or clears a swap that did not land.
+    #[test]
+    fn every_applied_transition_only_undoes_a_swap_that_did_not_land() {
+        for item in items()
+            .into_iter()
+            .flat_map(|item| [item.clone(), seen(item)])
+        {
+            for verdict in ALL_VERDICTS {
+                for dust in [None, Some(true), Some(false)] {
+                    if let Disposition::Apply(transition) = disposition(&item, verdict, dust) {
+                        assert!(
+                            matches!(
+                                transition,
+                                PositionTransition::RemoveOrphanEntry { .. }
+                                    | PositionTransition::DcaFailed { .. }
+                                    | PositionTransition::PartialExitFailed { .. }
+                                    | PositionTransition::ExitFailedClearForRetry { .. }
+                            ),
+                            "{verdict:?} on {} applied {transition:?}",
+                            item.signature
+                        );
+                    }
                 }
             }
         }

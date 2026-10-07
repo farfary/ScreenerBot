@@ -15,7 +15,7 @@ pub use wsol_sweep::schedule_wsol_sweep;
 
 pub use balance::{
     cleanup_all_empty_atas, get_all_token_accounts, get_sol_balance, get_token_balance,
-    get_total_token_balance,
+    get_total_token_balance, token_holding,
 };
 pub use close::{
     close_all_empty_atas, close_single_ata, close_token_account, close_token_account_with_context,

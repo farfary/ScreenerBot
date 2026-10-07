@@ -41,10 +41,6 @@ pub enum PositionTransition {
         position_id: i64,
         exit_signature: String,
     },
-    ExitPermanentFailureSynthetic {
-        position_id: i64,
-        exit_time: DateTime<Utc>,
-    },
     /// An entry whose `signature` provably never moved assets: the row, still carrying that
     /// unverified entry, is deleted and its slot released.
     RemoveOrphanEntry {
@@ -127,7 +123,6 @@ impl PositionTransition {
             Self::EntryVerified { position_id, .. }
             | Self::ExitVerified { position_id, .. }
             | Self::ExitFailedClearForRetry { position_id, .. }
-            | Self::ExitPermanentFailureSynthetic { position_id, .. }
             | Self::RemoveOrphanEntry { position_id, .. }
             | Self::PartialExitSubmitted { position_id, .. }
             | Self::PartialExitVerified { position_id, .. }
@@ -143,9 +138,7 @@ impl PositionTransition {
     pub fn is_terminal(&self) -> bool {
         matches!(
             self,
-            Self::ExitVerified { .. }
-                | Self::ExitPermanentFailureSynthetic { .. }
-                | Self::RemoveOrphanEntry { .. }
+            Self::ExitVerified { .. } | Self::RemoveOrphanEntry { .. }
         )
     }
 

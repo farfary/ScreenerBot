@@ -1114,7 +1114,6 @@ const NEUTRAL_FILES_NAMING_CHAINS_SOLANA: &[&str] = &[
     "positions/ledger/sync.rs",
     "positions/operations/close.rs",
     "positions/operations/partial_close.rs",
-    "positions/verifier.rs",
     "services/implementations/referral_service.rs",
     "swaps/operations.rs",
     "telegram/commands/status.rs",
@@ -1188,6 +1187,112 @@ fn neutral_code_reaches_chains_only_through_runtime() {
         "neutral code must reach chains only through the chain runtime — route this through \
          the chain runtime (new files naming chains::solana outside src/chains):\n{}\n\
          remove it from the allowlist (entries that no longer name chains::solana):\n{}",
+        new_violations.join("\n"),
+        stale.join("\n")
+    );
+}
+
+/// The transitions that undo a swap the chain proved did not land. Only the settlement
+/// disposition (`positions/settle.rs`) decides them, so no second decision table can act on
+/// weaker evidence than a signature verdict.
+const SETTLEMENT_FAILURE_TRANSITIONS: &[&str] = &[
+    "RemoveOrphanEntry",
+    "DcaFailed",
+    "PartialExitFailed",
+    "ExitFailedClearForRetry",
+];
+
+/// Files whose production code builds or matches a settlement-failure transition: the
+/// variants' owner, the decision's owner, the applier, and the worker's mapping of an
+/// applied transition to the trade-action verdict. The list freezes the exact current set
+/// and only shrinks.
+const FILES_NAMING_SETTLEMENT_FAILURE_TRANSITIONS: &[&str] = &[
+    "positions/apply.rs",
+    "positions/settle.rs",
+    "positions/transitions.rs",
+    "positions/worker.rs",
+];
+
+/// True when `line` builds or matches a settlement-failure transition: the variant name as a
+/// whole identifier followed by its field block. Prose naming the variant is not a hit.
+fn names_settlement_failure_transition(line: &str) -> bool {
+    let is_identifier_char = |c: char| c.is_alphanumeric() || c == '_';
+    SETTLEMENT_FAILURE_TRANSITIONS.iter().any(|variant| {
+        let mut search_from = 0;
+        while let Some(found) = line[search_from..].find(variant) {
+            let at = search_from + found;
+            let end = at + variant.len();
+            search_from = end;
+            let starts_word = !line[..at]
+                .chars()
+                .next_back()
+                .is_some_and(is_identifier_char);
+            if starts_word && line[end..].trim_start().starts_with('{') {
+                return true;
+            }
+        }
+        false
+    })
+}
+
+#[test]
+fn names_settlement_failure_transition_matches_values_and_patterns_only() {
+    let cases = [
+        ("Disposition::Apply(PositionTransition::DcaFailed {", true),
+        ("T::ExitFailedClearForRetry { .. } => {", true),
+        ("    RemoveOrphanEntry {", true),
+        (
+            "PositionTransition::PartialExitFailed{ position_id, reason }",
+            true,
+        ),
+        ("// a bare ExitFailedClearForRetry recorded nothing", false),
+        ("PositionTransition::ExitFailedClearForRetryLater {", false),
+        ("NotDcaFailed {", false),
+    ];
+    for (line, expected) in cases {
+        assert_eq!(
+            names_settlement_failure_transition(line),
+            expected,
+            "{line}"
+        );
+    }
+}
+
+/// What a signature that failed or did not land means for a position is decided in one
+/// place, the settlement disposition; the verifier and every other path only retry.
+#[test]
+fn settlement_failure_transitions_are_decided_only_by_the_disposition() {
+    let mut hits: Vec<String> = Vec::new();
+    let mut new_violations = Vec::new();
+    for (relative, contents) in walk_src() {
+        if is_test_support_file(&relative) {
+            continue;
+        }
+        let path = relative.to_string_lossy().into_owned();
+        let production = strip_comment_text(&production_text(&contents));
+        for (idx, line) in production.lines().enumerate() {
+            if line.trim_start().starts_with("//") {
+                continue;
+            }
+            if names_settlement_failure_transition(line) {
+                hits.push(path.clone());
+                if !FILES_NAMING_SETTLEMENT_FAILURE_TRANSITIONS.contains(&path.as_str()) {
+                    new_violations.push(format!("src/{path}:{}: {}", idx + 1, line.trim()));
+                }
+            }
+        }
+    }
+    let stale: Vec<&str> = FILES_NAMING_SETTLEMENT_FAILURE_TRANSITIONS
+        .iter()
+        .copied()
+        .filter(|entry| !hits.iter().any(|hit| hit.as_str() == *entry))
+        .collect();
+    assert!(
+        new_violations.is_empty() && stale.is_empty(),
+        "a failed or not-landed signature is settled only through `settle::disposition` - \
+         return a retry instead (new files building or matching a settlement-failure \
+         transition):\n{}\nremove it from the allowlist (entries that no longer name \
+         one):\n{}",
         new_violations.join("\n"),
         stale.join("\n")
     );
