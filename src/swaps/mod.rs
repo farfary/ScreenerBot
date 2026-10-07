@@ -15,7 +15,9 @@ pub mod router;
 pub mod types;
 
 // Re-export router system
-pub use error::{NotOfferedReason, QuoteError, QuoteResult, SwapExecutionError};
+pub use error::{
+    NotOfferedReason, NotSubmittedReason, QuoteError, QuoteResult, SwapExecutionError,
+};
 pub use operations::{
     execute_swap_with_fallback, get_best_quote, get_best_quote_for_opening, try_get_best_quote,
     unconfirmed_swap_signature,

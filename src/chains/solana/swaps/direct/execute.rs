@@ -41,6 +41,7 @@ use crate::chains::solana::solana_sdk::{
     signature::{Keypair, Signature, Signer},
     transaction::{Transaction, VersionedTransaction},
 };
+use crate::chains::solana::swaps::presend::{self, SendFailure, Verdict};
 use crate::config::with_config;
 use crate::logger::{self, LogTag};
 use std::time::{Duration, Instant};
@@ -334,11 +335,13 @@ pub async fn simulate_plan(
     transaction.signatures =
         vec![Signature::default(); transaction.message.header.num_required_signatures as usize];
 
-    rpc.simulate_transaction(&VersionedTransaction::from(transaction))
-        .await
-        .map_err(|e| DirectSwapError::SimulationUnavailable {
-            detail: format!("simulation could not be run: {e}"),
-        })
+    match presend::gate(&VersionedTransaction::from(transaction)).await {
+        Verdict::Cleared(outcome) | Verdict::Failed(outcome) => Ok(outcome),
+        Verdict::Refused(reason) => Err(reason.into()),
+        Verdict::NodeUnavailable { detail } => Err(DirectSwapError::SimulationUnavailable {
+            detail: format!("simulation could not be run: {detail}"),
+        }),
+    }
 }
 
 /// Build, sign, simulate, send, settle and verify `plan`.
@@ -373,20 +376,26 @@ pub async fn execute_plan(
         blockhash,
     ));
 
-    // Simulation is not optional. It is the last point at which a mis-built
-    // instruction, a wrong account or an unaffordable swap costs nothing, and
-    // its measured compute is what keeps the prioritization fee honest.
-    let outcome = rpc.simulate_transaction(&transaction).await.map_err(|e| {
-        DirectSwapError::SimulationUnavailable {
-            detail: format!("simulation could not be run: {e}"),
+    // The gate measures the transaction against the packet limit, then
+    // simulates it. Simulation is not optional here: it is the last point at
+    // which a mis-built instruction, a wrong account or an unaffordable swap
+    // costs nothing, and its measured compute is what keeps the prioritization
+    // fee honest, so a node that cannot simulate stops the swap.
+    let outcome = match presend::gate(&transaction).await {
+        Verdict::Cleared(outcome) => outcome,
+        Verdict::Failed(outcome) => {
+            return Err(DirectSwapError::SimulationRejected {
+                detail: outcome.failure_detail(),
+                logs: outcome.logs,
+            });
         }
-    })?;
-    if !outcome.succeeded() {
-        return Err(DirectSwapError::SimulationRejected {
-            detail: outcome.failure_detail(),
-            logs: outcome.logs,
-        });
-    }
+        Verdict::Refused(reason) => return Err(reason.into()),
+        Verdict::NodeUnavailable { detail } => {
+            return Err(DirectSwapError::SimulationUnavailable {
+                detail: format!("simulation could not be run: {detail}"),
+            });
+        }
+    };
     if let Some(units) = outcome.units_consumed {
         logger::debug(
             LogTag::System,
@@ -418,10 +427,13 @@ pub async fn execute_plan(
     }
 
     let signature =
-        rpc.send_transaction(&transaction)
+        presend::send(&transaction)
             .await
-            .map_err(|e| DirectSwapError::SubmitFailed {
-                detail: e.to_string(),
+            .map_err(|failure| DirectSwapError::SubmitFailed {
+                detail: match failure {
+                    SendFailure::NotSent(reason) => reason.to_string(),
+                    SendFailure::Unproven(error) => error.to_string(),
+                },
             })?;
     let signature_str = signature.to_string();
 
@@ -515,7 +527,7 @@ async fn settle(
 
         if last_rebroadcast.elapsed() >= REBROADCAST_INTERVAL {
             last_rebroadcast = Instant::now();
-            match rpc.send_transaction(transaction).await {
+            match presend::send(transaction).await {
                 Ok(_) => logger::info(
                     LogTag::Swap,
                     &format!(
@@ -526,7 +538,7 @@ async fn settle(
                     LogTag::Swap,
                     &format!(
                         "Re-broadcast of {signature_str} was not accepted this round \
-                         (an 'already processed' response is a good sign, not a failure): {e}"
+                         (an 'already processed' response is a good sign, not a failure): {e:?}"
                     ),
                 ),
             }

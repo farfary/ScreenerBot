@@ -2243,3 +2243,116 @@ fn a_node_that_omits_the_balance_owner_does_not_turn_a_delivered_buy_into_a_fail
         receipt.err()
     );
 }
+
+/// Every venue's signed transaction fits the 1,232-byte packet on both legs.
+///
+/// The direct engine builds LEGACY transactions: no lookup tables, so every
+/// account costs 32 bytes. The plan already carries the worst case of its own
+/// shape — both token accounts created (the creations are idempotent and always
+/// present), the WSOL wrap on a buy, the platform fee transfer and the WSOL
+/// close — and each venue's optional accounts are those its captured pool
+/// state calls for. A transaction over the limit is refused by the pre-send
+/// gate before any node sees it, so a venue that cannot fit could never trade;
+/// the margin printed per leg is how close each one runs.
+#[test]
+fn every_venue_plan_fits_the_packet_on_both_legs() {
+    use screenerbot::chains::solana::solana_sdk::{
+        signature::Signature,
+        transaction::{Transaction, VersionedTransaction},
+    };
+    use screenerbot::chains::solana::swaps::presend;
+
+    let _guard = common::config_guard();
+    let mut over: Vec<String> = Vec::new();
+
+    for (name, market) in every_fixture_market() {
+        let (a, b) = market.mints();
+        let sol = if a.to_string() == WSOL {
+            a
+        } else if b.to_string() == WSOL {
+            b
+        } else {
+            continue;
+        };
+        let token = if sol == a { b } else { a };
+        let owner = Pubkey::new_unique();
+
+        let buy = DirectSwapIntent {
+            pool: market.pool(),
+            owner,
+            input_mint: sol,
+            output_mint: token,
+            amount_in: 5_000_000,
+            slippage_bps: 300,
+        };
+        let buy_quote = direct::quote_with_market(&buy, market.as_ref())
+            .unwrap_or_else(|e| panic!("{name}: the buy leg would not quote: {e}"));
+
+        // Both legs are quoted against one unchanged snapshot, and a bonding
+        // curve sitting at its starting price cannot fill a sell at all. The
+        // account list, and so the size, does not depend on the amounts, so
+        // such a sell is priced by hand with the fee the real sell would carry.
+        let sell_intent = DirectSwapIntent {
+            pool: market.pool(),
+            owner,
+            input_mint: token,
+            output_mint: sol,
+            amount_in: buy_quote.expected_out,
+            slippage_bps: 300,
+        };
+        let sell_quote =
+            direct::quote_with_market(&sell_intent, market.as_ref()).unwrap_or_else(|_| {
+                let fee_side = FeeSide::for_pair(&token, &sol);
+                let fee = direct::PlatformFee::resolve(fee_side, &token, &sol, 990_000)
+                    .expect("the fee resolves for a SOL leg");
+                eprintln!("{name:<24} sell priced by hand: the snapshot cannot fill a sell");
+                direct::DirectQuote {
+                    pool: market.pool(),
+                    program: buy_quote.program,
+                    input_mint: token,
+                    output_mint: sol,
+                    amount_in: buy_quote.expected_out,
+                    swap_amount_in: buy_quote.expected_out,
+                    expected_out: 1_000_000,
+                    min_out: 990_000,
+                    expected_net_out: 1_000_000 - fee.amount,
+                    min_net_out: 990_000 - fee.amount,
+                    fee,
+                    lp_fee: 0,
+                    price_impact_pct: 0.0,
+                    slippage_bps: 300,
+                }
+            });
+        let sell = (sell_intent, sell_quote);
+
+        for (leg, intent, quote) in [("buy", &buy, &buy_quote), ("sell", &sell.0, &sell.1)] {
+            let plan = direct::build_plan(intent, market.as_ref(), quote)
+                .unwrap_or_else(|e| panic!("{name} {leg}: the plan would not build: {e}"));
+            let mut transaction = Transaction::new_with_payer(&plan.instructions, Some(&owner));
+            transaction.signatures =
+                vec![
+                    Signature::default();
+                    usize::from(transaction.message.header.num_required_signatures)
+                ];
+            let transaction = VersionedTransaction::from(transaction);
+            let size = bincode::serialize(&transaction).expect("serializes").len();
+            let limit = presend::WireFormat::Legacy.size_limit();
+            eprintln!(
+                "{name:<24} {leg:<4} {size:>5} of {limit} bytes, {:>5} to spare, {} instructions, {} accounts",
+                limit as i64 - size as i64,
+                plan.instructions.len(),
+                transaction.message.static_account_keys().len()
+            );
+            if presend::measure_transaction(&transaction).is_err() {
+                over.push(format!("{name} {leg}: {size} bytes"));
+            }
+        }
+    }
+
+    assert!(
+        over.is_empty(),
+        "a direct swap transaction must fit the {}-byte packet:\n  {}",
+        presend::WireFormat::Legacy.size_limit(),
+        over.join("\n  ")
+    );
+}

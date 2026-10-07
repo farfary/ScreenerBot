@@ -56,6 +56,9 @@ pub enum DirectSwapError {
     Build { detail: String },
     /// Preflight simulation rejected the transaction — nothing was submitted.
     SimulationRejected { detail: String, logs: Vec<String> },
+    /// The serialized transaction exceeds the packet limit. Measured before the
+    /// node is asked, so nothing was simulated or submitted.
+    TransactionTooLarge { bytes: usize, limit: usize },
     /// Simulation itself could not be run -- a transport failure talking to the
     /// node, not a verdict on the transaction. Distinct from
     /// [`DirectSwapError::SimulationRejected`] (the node ran it and refused it)
@@ -171,6 +174,7 @@ impl DirectSwapError {
             DirectSwapError::MarketMoved { .. }
                 | DirectSwapError::Build { .. }
                 | DirectSwapError::SimulationRejected { .. }
+                | DirectSwapError::TransactionTooLarge { .. }
                 | DirectSwapError::SimulationUnavailable { .. }
                 | DirectSwapError::SubmitFailed { .. }
                 | DirectSwapError::BlockhashExpired { .. }
@@ -216,6 +220,10 @@ impl fmt::Display for DirectSwapError {
             DirectSwapError::SimulationRejected { detail, .. } => {
                 write!(f, "simulation rejected the swap: {detail}")
             }
+            DirectSwapError::TransactionTooLarge { bytes, limit } => write!(
+                f,
+                "the swap transaction is {bytes} bytes, over the {limit}-byte packet limit"
+            ),
             DirectSwapError::SimulationUnavailable { detail } => {
                 write!(f, "simulation could not be run: {detail}")
             }
@@ -311,6 +319,33 @@ impl DirectSwapError {
     }
 }
 
+/// The engine's reading of a pre-send gate refusal. A node that refused the
+/// request or ran the transaction and saw it fail rejected the simulation; a
+/// transaction the gate could not measure or encode is a build fault.
+impl From<crate::swaps::NotSubmittedReason> for DirectSwapError {
+    fn from(reason: crate::swaps::NotSubmittedReason) -> Self {
+        use crate::swaps::NotSubmittedReason;
+        match reason {
+            NotSubmittedReason::TransactionTooLarge { bytes, limit } => {
+                DirectSwapError::TransactionTooLarge { bytes, limit }
+            }
+            NotSubmittedReason::RequestRejected { detail }
+            | NotSubmittedReason::SimulationFailed { detail } => {
+                DirectSwapError::SimulationRejected {
+                    detail,
+                    logs: Vec::new(),
+                }
+            }
+            other @ (NotSubmittedReason::BuildUnavailable(_)
+            | NotSubmittedReason::BuildUnusable { .. }
+            | NotSubmittedReason::UnsupportedFormat { .. }
+            | NotSubmittedReason::CostExceeded { .. }) => DirectSwapError::Build {
+                detail: other.to_string(),
+            },
+        }
+    }
+}
+
 /// Carry the engine's typed cause up into the Solana domain error UNCHANGED.
 ///
 /// Wrapping transparently rather than flattening to a message is what lets
@@ -359,6 +394,35 @@ mod tests {
             detail: String::new(),
         }
         .submitted());
+    }
+
+    /// An oversized transaction is refused before any node sees it: never
+    /// submitted, never the token's fault, and safe to route elsewhere.
+    #[test]
+    fn an_oversized_transaction_is_a_safe_pre_send_refusal() {
+        let err = DirectSwapError::from(crate::swaps::NotSubmittedReason::TransactionTooLarge {
+            bytes: 1240,
+            limit: 1232,
+        });
+        assert!(matches!(
+            err,
+            DirectSwapError::TransactionTooLarge {
+                bytes: 1240,
+                limit: 1232
+            }
+        ));
+        assert!(!err.submitted());
+        assert!(!err.is_token_fault());
+        assert!(err.safe_to_fallback());
+        assert!(err.settled_signature().is_none());
+
+        // A node's refusal of the request is the node answering, not an outage.
+        assert!(matches!(
+            DirectSwapError::from(crate::swaps::NotSubmittedReason::RequestRejected {
+                detail: "invalid params".to_owned(),
+            }),
+            DirectSwapError::SimulationRejected { .. }
+        ));
     }
 
     #[test]

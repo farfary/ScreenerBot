@@ -15,11 +15,11 @@
 
 use super::http::RouterHttpFailure;
 use crate::chains::solana::constants::{SOL_MINT, USDC_MINT};
-use crate::chains::solana::rpc::RpcClientMethods;
+use crate::chains::solana::solana_sdk::signature::{Keypair, Signer};
 use crate::config::with_config;
 use crate::errors::NetworkError;
 use crate::logger::{self, LogTag};
-use crate::swaps::error::{QuoteError, QuoteResult};
+use crate::swaps::error::{NotSubmittedReason, QuoteError, QuoteResult, SwapExecutionError};
 use crate::swaps::router::SwapRouter;
 use crate::swaps::types::{Quote, QuoteRequest, SwapResult};
 use crate::tokens::Token;
@@ -41,25 +41,14 @@ use std::time::{Duration, Instant};
 const JUPITER_API_BASE: &str = "https://api.jup.ag";
 const JUPITER_API_BASE_FREE: &str = "https://lite-api.jup.ag";
 
-/// Get the Jupiter API key from config, if set.
-/// Returns None if empty/unset.
-fn get_api_key() -> Option<String> {
+/// The Jupiter host and API key for one request, read from config once: the
+/// keyed host when an API key is set, the free host otherwise.
+fn api_endpoint() -> (&'static str, Option<String>) {
     let key = with_config(|cfg| cfg.chains.solana.swaps.jupiter.api_key.clone());
     if key.is_empty() {
-        None
+        (JUPITER_API_BASE_FREE, None)
     } else {
-        Some(key)
-    }
-}
-
-/// Get the correct Jupiter API base URL.
-/// Uses api.jup.ag when API key is configured, lite-api.jup.ag as free fallback.
-fn get_api_base() -> &'static str {
-    let key = with_config(|cfg| cfg.chains.solana.swaps.jupiter.api_key.clone());
-    if key.is_empty() {
-        JUPITER_API_BASE_FREE
-    } else {
-        JUPITER_API_BASE
+        (JUPITER_API_BASE, Some(key))
     }
 }
 
@@ -192,6 +181,14 @@ struct JupiterSwapRequest {
 struct JupiterSwapResponse {
     #[serde(rename = "swapTransaction")]
     swap_transaction: String,
+    /// The compute-unit limit Jupiter wrote into the transaction. It falls back
+    /// to the 1,400,000-unit ceiling when its own build simulation fails, which
+    /// is why the pre-send gate tightens it from our own measurement.
+    #[serde(rename = "computeUnitLimit", default)]
+    compute_unit_limit: Option<u32>,
+    /// The prioritization fee that limit costs at the requested unit price.
+    #[serde(rename = "prioritizationFeeLamports", default)]
+    prioritization_fee_lamports: Option<u64>,
 }
 
 // ============================================================================
@@ -223,10 +220,13 @@ where
     super::http::send_with_retry("Jupiter", label, JUPITER_MAX_ATTEMPTS, build).await
 }
 
-/// Get the referral token account for a swap based on input or output mint
-/// Since we always trade against SOL or USDC, one side will always match
-/// Fee is taken from the output side, but Jupiter handles routing internally
-fn get_referral_token_account_for_swap(input_mint: &str, output_mint: &str) -> Option<String> {
+/// The referral fee account (WSOL/USDC) for a swap pair. We always trade
+/// against SOL or USDC, so one side always matches; the output side is
+/// preferred because the fee is taken from the output. The fee rides that
+/// standard SPL side, which works for Token2022 tokens too when the quote uses
+/// `instructionVersion=V2`.
+/// Docs: developers.jup.ag/docs/swap/add-fees-to-swap
+fn referral_fee_account(input_mint: &str, output_mint: &str) -> Option<String> {
     // Check output mint first (preferred - fee taken from output)
     if output_mint == SOL_MINT {
         return Some(REFERRAL_TOKEN_ACCOUNT_WSOL.to_string());
@@ -245,15 +245,6 @@ fn get_referral_token_account_for_swap(input_mint: &str, output_mint: &str) -> O
 
     // Neither side is SOL/USDC (shouldn't happen in our trading flow)
     None
-}
-
-/// Resolve the referral fee account (WSOL/USDC) for a swap pair. We always trade
-/// against SOL/USDC, so the fee is taken on that (standard SPL) side — works for
-/// Token2022 tokens too when the quote uses `instructionVersion=V2`. Shared by the
-/// main router AND the multi-wallet tool executor so BOTH collect referral revenue.
-/// Docs: developers.jup.ag/docs/swap/add-fees-to-swap
-pub(crate) fn referral_fee_account(input_mint: &str, output_mint: &str) -> Option<String> {
-    get_referral_token_account_for_swap(input_mint, output_mint)
 }
 
 /// How long a fetched program-id-to-label map is trusted. Venues are added to
@@ -281,9 +272,10 @@ pub(crate) async fn venue_label_for_program(program_id: &str) -> Option<String> 
         }
     }
 
-    let url = format!("{}/swap/v1/program-id-to-label", get_api_base());
+    let (api_base, api_key) = api_endpoint();
+    let url = format!("{api_base}/swap/v1/program-id-to-label");
     let mut request = crate::net::client().get(&url).timeout(JUPITER_HTTP_TIMEOUT);
-    if let Some(key) = get_api_key() {
+    if let Some(key) = api_key {
         request = request.header("x-api-key", key);
     }
     let labels: std::collections::HashMap<String, String> = match request.send().await {
@@ -309,91 +301,6 @@ pub(crate) async fn venue_label_for_program(program_id: &str) -> Option<String> 
     let label = labels.get(program_id).cloned();
     *VENUE_LABELS.write().await = Some((Instant::now(), labels));
     label
-}
-
-/// Build, sign and submit a Jupiter swap transaction with a caller-supplied
-/// keypair (rather than the main wallet). Used by
-/// [`JupiterRouter::execute_swap_for_wallet`] so a Jupiter quote is executed
-/// by Jupiter, collecting the same referral fee via `referral_fee_account`.
-pub(crate) async fn execute_with_keypair(
-    quote: &Quote,
-    keypair: &crate::chains::solana::solana_sdk::signature::Keypair,
-) -> Result<String> {
-    use crate::chains::solana::solana_sdk::signer::Signer;
-
-    super::checked_quote_amounts(quote)?;
-    let quote_response: serde_json::Value = serde_json::from_slice(&quote.execution_data)
-        .map_err(|e| Error::parse_error(format!("Quote deserialization failed: {e}")))?;
-
-    let fee_account = referral_fee_account(&quote.input_mint, &quote.output_mint);
-
-    let swap_req = JupiterSwapRequest {
-        user_public_key: keypair.pubkey().to_string(),
-        quote_response,
-        dynamic_compute_unit_limit: Some(with_config(|cfg| {
-            cfg.chains.solana.swaps.jupiter.dynamic_compute_unit_limit
-        })),
-        compute_unit_price_micro_lamports: Some(with_config(|cfg| {
-            cfg.chains.solana.swaps.jupiter.priority_fee_micro_lamports
-        })),
-        platform_fee_bps: None, // Already set in quote request
-        fee_account,
-    };
-
-    // Mark a swap in flight so background Jupiter pollers defer to it.
-    let _swap_guard = crate::chains::solana::apis::jupiter::throttle::swap_guard();
-
-    let api_base = get_api_base();
-    let url = format!("{api_base}/swap/v1/swap");
-    let api_key = get_api_key();
-    let client = crate::net::client();
-    let response_text = jupiter_send_with_retry("swap", || {
-        let mut req = client.post(&url);
-        if let Some(ref key) = api_key {
-            req = req.header("x-api-key", key.clone());
-        }
-        req.header("Content-Type", "application/json")
-            .json(&swap_req)
-            .timeout(JUPITER_HTTP_TIMEOUT)
-    })
-    .await
-    .map_err(|failure| match failure.status {
-        Some(429) => Error::Network(NetworkError::RateLimited {
-            endpoint: format!("jupiter/{}", failure.label),
-            retry_after_ms: failure.retry_after.map(|d| d.as_millis() as u64),
-        }),
-        Some(status) => Error::Network(NetworkError::HttpStatus {
-            endpoint: format!("jupiter/{}", failure.label),
-            status,
-            body: Some(failure.body),
-        }),
-        None => Error::Network(NetworkError::RequestFailed {
-            endpoint: format!("jupiter/{}", failure.label),
-            detail: failure.body,
-        }),
-    })?;
-
-    let swap_response: JupiterSwapResponse = serde_json::from_str(&response_text)
-        .map_err(|e| Error::parse_error(format!("Jupiter swap response parse failed: {e}")))?;
-
-    // Jupiter builds this transaction on its own host and can route through a
-    // venue that funds an account out of this wallet mid-swap; neither the quote
-    // nor the slippage floor says anything about that. Price it before signing.
-    crate::chains::solana::swaps::cost_guard::preflight(
-        "Jupiter",
-        &swap_response.swap_transaction,
-        quote,
-    )
-    .await?;
-
-    let rpc_client = crate::chains::solana::rpc::get_rpc_client();
-    // Propagate the send/confirm error unchanged so an unconfirmed signature
-    // remains recoverable (see `swaps::unconfirmed_swap_signature`).
-    let signature = rpc_client
-        .sign_send_and_confirm_with_keypair(&swap_response.swap_transaction, keypair)
-        .await?;
-
-    Ok(signature.to_string())
 }
 
 // ============================================================================
@@ -521,9 +428,8 @@ impl SwapRouter for JupiterRouter {
         // Send quote request (with API key header if configured), retrying on
         // transient rate-limit / network failures. Raw response text is kept so
         // ALL fields are preserved for the later swap request.
-        let api_base = get_api_base();
+        let (api_base, api_key) = api_endpoint();
         let url = format!("{api_base}/swap/v1/quote");
-        let api_key = get_api_key();
         let response_text = jupiter_send_with_retry("quote", || {
             let mut req = self.client.get(&url);
             if let Some(ref key) = api_key {
@@ -673,22 +579,41 @@ impl SwapRouter for JupiterRouter {
     async fn execute_swap(&self, _token: &Token, quote: &Quote) -> Result<SwapResult> {
         self.accept_own_quote(quote)?;
         super::checked_quote_amounts(quote)?;
-        // Keep background Jupiter pollers deferred while the swap transaction is
-        // being built (see throttle module).
-        let _swap_guard = crate::chains::solana::apis::jupiter::throttle::swap_guard();
+        let keypair = crate::chains::solana::accounts::configured_keypair()?;
+        self.build_and_submit(quote, &keypair).await
+    }
 
+    async fn execute_swap_for_wallet(&self, quote: &Quote, wallet_id: i64) -> Result<SwapResult> {
+        self.accept_own_quote(quote)?;
+        super::checked_quote_amounts(quote)?;
+        let keypair = crate::chains::solana::accounts::keypair_for_wallet(wallet_id).await?;
+        self.build_and_submit(quote, &keypair).await
+    }
+}
+
+impl JupiterRouter {
+    /// Ask Jupiter to build the transaction for `quote`, addressed to `signer`,
+    /// and hand it to the pre-send gate, which measures, simulates, signs,
+    /// sends and confirms it. One path for the main wallet and the wallet
+    /// tools, both collecting the referral fee.
+    async fn build_and_submit(&self, quote: &Quote, signer: &Keypair) -> Result<SwapResult> {
         let start = Instant::now();
+        let not_submitted = |reason| {
+            Error::Swaps(SwapExecutionError::NotSubmitted {
+                router: self.name().to_owned(),
+                reason,
+            })
+        };
 
-        // Deserialize quote response
         let quote_response: serde_json::Value = serde_json::from_slice(&quote.execution_data)
-            .map_err(|e| Error::internal_error(format!("Quote deserialization failed: {e}")))?;
-
-        // Resolve the referral fee account (WSOL/USDC side; works for Token2022 too
-        // because the quote uses instructionVersion=V2).
+            .map_err(|e| {
+                not_submitted(NotSubmittedReason::BuildUnusable {
+                    detail: format!("the stored quote does not decode: {e}"),
+                })
+            })?;
         let fee_account = referral_fee_account(&quote.input_mint, &quote.output_mint);
-
         let swap_req = JupiterSwapRequest {
-            user_public_key: quote.wallet_address.clone(),
+            user_public_key: signer.pubkey().to_string(),
             quote_response,
             dynamic_compute_unit_limit: Some(with_config(|cfg| {
                 cfg.chains.solana.swaps.jupiter.dynamic_compute_unit_limit
@@ -697,7 +622,7 @@ impl SwapRouter for JupiterRouter {
                 cfg.chains.solana.swaps.jupiter.priority_fee_micro_lamports
             })),
             platform_fee_bps: None, // Already set in quote request
-            fee_account: fee_account.clone(),
+            fee_account,
         };
 
         logger::debug(
@@ -705,16 +630,18 @@ impl SwapRouter for JupiterRouter {
             &format!(
                 "Jupiter swap request: user={}, feeAccount={}",
                 swap_req.user_public_key,
-                fee_account.as_deref().unwrap_or("none")
+                swap_req.fee_account.as_deref().unwrap_or("none")
             ),
         );
 
-        // Get swap transaction (with API key header if configured), retrying on
-        // transient failures. This only BUILDS an unsigned transaction, so retry
-        // is safe — on-chain submission happens afterwards via RPC.
-        let api_base = get_api_base();
+        // Keep background Jupiter pollers deferred while the swap transaction is
+        // being built (see throttle module).
+        let _swap_guard = crate::chains::solana::apis::jupiter::throttle::swap_guard();
+
+        // This only BUILDS an unsigned transaction, so retrying transient
+        // failures is safe; submission happens afterwards through the gate.
+        let (api_base, api_key) = api_endpoint();
         let url = format!("{api_base}/swap/v1/swap");
-        let api_key = get_api_key();
         let response_text = jupiter_send_with_retry("swap", || {
             let mut req = self.client.post(&url);
             if let Some(ref key) = api_key {
@@ -725,48 +652,51 @@ impl SwapRouter for JupiterRouter {
                 .timeout(JUPITER_HTTP_TIMEOUT)
         })
         .await
-        .map_err(|failure| match failure.status {
-            Some(429) => Error::Network(NetworkError::RateLimited {
-                endpoint: format!("jupiter/{}", failure.label),
-                retry_after_ms: failure.retry_after.map(|d| d.as_millis() as u64),
-            }),
-            Some(status) => Error::Network(NetworkError::HttpStatus {
-                endpoint: format!("jupiter/{}", failure.label),
-                status,
-                body: Some(failure.body),
-            }),
-            None => Error::Network(NetworkError::RequestFailed {
-                endpoint: format!("jupiter/{}", failure.label),
-                detail: failure.body,
-            }),
+        .map_err(|failure| {
+            let endpoint = format!("jupiter/{}", failure.label);
+            not_submitted(NotSubmittedReason::BuildUnavailable(match failure.status {
+                Some(429) => NetworkError::RateLimited {
+                    endpoint,
+                    retry_after_ms: failure.retry_after.map(|d| d.as_millis() as u64),
+                },
+                Some(status) => NetworkError::HttpStatus {
+                    endpoint,
+                    status,
+                    body: Some(failure.body),
+                },
+                None => NetworkError::RequestFailed {
+                    endpoint,
+                    detail: failure.body,
+                },
+            }))
         })?;
 
-        let swap_response: JupiterSwapResponse = serde_json::from_str(&response_text)
-            .map_err(|e| Error::parse_error(format!("Jupiter swap response parse failed: {e}")))?;
+        let swap_response: JupiterSwapResponse =
+            serde_json::from_str(&response_text).map_err(|e| {
+                not_submitted(NotSubmittedReason::BuildUnusable {
+                    detail: format!("the swap response does not decode: {e}"),
+                })
+            })?;
+        logger::debug(
+            LogTag::Swap,
+            &format!(
+                "Jupiter build: compute limit {:?} units, prioritization fee {:?} lamports",
+                swap_response.compute_unit_limit, swap_response.prioritization_fee_lamports
+            ),
+        );
 
-        // Same preflight as the wallet path: a route that would park the
-        // wallet's SOL in somebody else's account is refused here, for free,
-        // and the fallback chain is free to try another router.
-        crate::chains::solana::swaps::cost_guard::preflight(
-            "Jupiter",
+        // The send/confirm error is propagated UNCHANGED: a submitted but
+        // unconfirmed swap carries its signature as a typed outcome, and
+        // wrapping it would hide that from `swaps::unconfirmed_swap_signature`.
+        let signature = crate::chains::solana::swaps::presend::submit_built_swap(
+            self.name(),
             &swap_response.swap_transaction,
             quote,
+            signer,
         )
         .await?;
 
-        // Transaction is already base64 encoded, send it directly
-        let rpc_client = crate::chains::solana::rpc::get_rpc_client();
-        // Propagate the send/confirm error UNCHANGED. Wrapping it used to prepend
-        // "Transaction send failed: ", which corrupted the submitted-but-unconfirmed
-        // marker that `swaps::unconfirmed_swap_signature` reads out of the message —
-        // the caller then stored a garbage string as the exit signature and
-        // verification could never reconcile the sell that actually landed.
-        let signature = rpc_client
-            .sign_send_and_confirm_transaction_simple(&swap_response.swap_transaction)
-            .await?;
-
         let elapsed = start.elapsed();
-
         logger::info(
             LogTag::Swap,
             &format!(
@@ -788,28 +718,6 @@ impl SwapRouter for JupiterRouter {
             // collected in SOL but reported by Jupiter in the bought token.
             fee_lamports: quote.platform_fee_lamports.unwrap_or(0),
             execution_time_ms: elapsed.as_millis() as u64,
-            effective_price_sol: None,
-        })
-    }
-
-    async fn execute_swap_for_wallet(&self, quote: &Quote, wallet_id: i64) -> Result<SwapResult> {
-        self.accept_own_quote(quote)?;
-        super::checked_quote_amounts(quote)?;
-        let start = Instant::now();
-        let keypair = crate::chains::solana::accounts::keypair_for_wallet(wallet_id).await?;
-        let signature = execute_with_keypair(quote, &keypair).await?;
-        Ok(SwapResult {
-            success: true,
-            router_id: self.id().to_string(),
-            router_name: self.name().to_string(),
-            transaction_signature: signature,
-            input_amount: quote.input_amount,
-            output_amount: quote.output_amount,
-            price_impact_pct: quote.price_impact_pct,
-            // Only when the quote could establish it in lamports; a buy's fee is
-            // collected in SOL but reported by Jupiter in the bought token.
-            fee_lamports: quote.platform_fee_lamports.unwrap_or(0),
-            execution_time_ms: start.elapsed().as_millis() as u64,
             effective_price_sol: None,
         })
     }
@@ -842,25 +750,25 @@ mod tests {
 
         // Output is SOL/USDC: fee taken from output.
         assert_eq!(
-            get_referral_token_account_for_swap(other_mint, SOL_MINT),
+            referral_fee_account(other_mint, SOL_MINT),
             Some(REFERRAL_TOKEN_ACCOUNT_WSOL.to_owned())
         );
         assert_eq!(
-            get_referral_token_account_for_swap(other_mint, USDC_MINT),
+            referral_fee_account(other_mint, USDC_MINT),
             Some(REFERRAL_TOKEN_ACCOUNT_USDC.to_owned())
         );
         // Output is a token, but input is SOL/USDC: fee taken from input side.
         assert_eq!(
-            get_referral_token_account_for_swap(SOL_MINT, other_mint),
+            referral_fee_account(SOL_MINT, other_mint),
             Some(REFERRAL_TOKEN_ACCOUNT_WSOL.to_owned())
         );
         assert_eq!(
-            get_referral_token_account_for_swap(USDC_MINT, other_mint),
+            referral_fee_account(USDC_MINT, other_mint),
             Some(REFERRAL_TOKEN_ACCOUNT_USDC.to_owned())
         );
         // Neither leg is SOL/USDC: no fee account, matches "shouldn't happen" path.
         assert_eq!(
-            get_referral_token_account_for_swap(other_mint, "AnotherTokenMint111111111111"),
+            referral_fee_account(other_mint, "AnotherTokenMint111111111111"),
             None
         );
     }
@@ -918,6 +826,29 @@ mod tests {
         let bad_impact = json.replace("\"0.42\"", "\"not-a-number\"");
         let parsed: JupiterQuoteResponse = serde_json::from_str(&bad_impact).unwrap();
         assert!(parsed.price_impact_pct.parse::<f64>().is_err());
+    }
+
+    /// `/swap` reports the limit and prioritization fee it built in; both are
+    /// read, and a response without them still decodes.
+    #[test]
+    fn a_swap_response_keeps_jupiters_own_build_report() {
+        let parsed: JupiterSwapResponse = serde_json::from_str(
+            r#"{
+                "swapTransaction": "AQAB",
+                "lastValidBlockHeight": 1,
+                "computeUnitLimit": 1400000,
+                "prioritizationFeeLamports": 70000,
+                "simulationError": {"errorCode": "FAILED_TO_SIMULATE_SWAP"}
+            }"#,
+        )
+        .expect("a full /swap response decodes");
+        assert_eq!(parsed.compute_unit_limit, Some(1_400_000));
+        assert_eq!(parsed.prioritization_fee_lamports, Some(70_000));
+
+        let bare: JupiterSwapResponse =
+            serde_json::from_str(r#"{"swapTransaction": "AQAB"}"#).expect("decodes");
+        assert_eq!(bare.compute_unit_limit, None);
+        assert_eq!(bare.prioritization_fee_lamports, None);
     }
 
     #[test]

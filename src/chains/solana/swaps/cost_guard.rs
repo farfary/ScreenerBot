@@ -14,8 +14,9 @@
 //! several times the trade itself.
 //!
 //! This module is the systematic answer, and it deliberately knows nothing
-//! about any particular venue: it simulates the transaction a router built,
-//! reads the lamport movements the run would actually perform, and classifies
+//! about any particular venue: it reads the simulation the pre-send gate
+//! (`swaps::presend`) ran on the transaction a router built, takes the lamport
+//! movements the run would actually perform, and classifies
 //! every lamport that leaves the wallet as either
 //!
 //! * **recoverable** — rent for one of the wallet's OWN token accounts, which
@@ -31,10 +32,11 @@
 //! starts charging a deposit tomorrow, or an aggregator added next year, is
 //! covered the day it appears.
 //!
-//! **Stability rule: only a node that ANSWERED may block a trade.** A transport
-//! failure, a node that cannot simulate, or a response we cannot parse leaves
-//! the swap to proceed exactly as it did before this module existed. An
-//! unreadable node is not evidence of a cost.
+//! **Stability rule: only a node that ANSWERED may block a trade.** A node that
+//! cannot simulate never reaches this module (the gate proceeds without it), and
+//! an owner lookup that fails or a label the aggregator cannot name leaves the
+//! swap to proceed exactly as it did before this module existed. An unreadable
+//! node is not evidence of a cost.
 
 use std::collections::HashMap;
 use std::str::FromStr;
@@ -44,12 +46,13 @@ use serde_json::Value;
 use crate::chains::solana::constants::{
     SPL_TOKEN_PROGRAM_ID, SYSTEM_PROGRAM_ID, TOKEN_2022_PROGRAM_ID,
 };
+use crate::chains::solana::rpc::types::SimulationOutcome;
 use crate::chains::solana::rpc::RpcClientMethods;
 use crate::chains::solana::solana_sdk::pubkey::Pubkey;
 use crate::chains::solana::{Error, Result};
 use crate::config::with_config;
 use crate::logger::{self, LogTag};
-use crate::swaps::Quote;
+use crate::swaps::{NotSubmittedReason, Quote, SwapExecutionError};
 
 /// What a simulated swap would move out of the wallet that the trade itself
 /// does not explain.
@@ -319,65 +322,16 @@ pub fn trade_value_lamports(quote: &Quote) -> Result<u64> {
     }
 }
 
-/// Simulate `transaction_base64` and refuse it if it would fail, or if it would
-/// spend more of the wallet's lamports outside the trade than
-/// `chains.solana.swaps.cost_guard` allows.
+/// Refuse a simulated swap that would spend more of the wallet's lamports
+/// outside the trade than `chains.solana.swaps.cost_guard` allows.
 ///
-/// Both refusals happen before anything is signed, so neither costs a fee and
-/// both are safe for the caller to answer by trying a different route.
-pub async fn preflight(
+/// The refusal happens before anything is signed, so it costs no fee and the
+/// caller is free to answer it by trying a different route.
+pub async fn check(
     router: &'static str,
-    transaction_base64: &str,
+    outcome: &SimulationOutcome,
     quote: &Quote,
-) -> Result<()> {
-    use base64::Engine;
-
-    use crate::chains::solana::solana_sdk::transaction::VersionedTransaction;
-
-    let bytes = base64::engine::general_purpose::STANDARD
-        .decode(transaction_base64)
-        .map_err(|e| Error::Decode {
-            payload: "swap transaction base64",
-            detail: format!("{router}: {e}"),
-        })?;
-    let transaction: VersionedTransaction =
-        bincode::deserialize(&bytes).map_err(|e| Error::Decode {
-            payload: "swap transaction",
-            detail: format!("{router}: {e}"),
-        })?;
-
-    // A node that cannot answer says nothing about this transaction. Keep the
-    // trade moving rather than inventing a verdict from a transport failure.
-    let outcome = match crate::chains::solana::rpc::get_rpc_client()
-        .simulate_transaction(&transaction)
-        .await
-    {
-        Ok(outcome) => outcome,
-        Err(e) => {
-            logger::warning(
-                LogTag::Swap,
-                &format!("{router} preflight simulation unavailable, proceeding: {e}"),
-            );
-            return Ok(());
-        }
-    };
-
-    if let Some(err) = &outcome.err {
-        let last_logs = outcome
-            .logs
-            .iter()
-            .rev()
-            .take(3)
-            .rev()
-            .cloned()
-            .collect::<Vec<_>>()
-            .join(" | ");
-        return Err(Error::SimulationRejected {
-            router,
-            detail: format!("{err} {last_logs}").trim().to_owned(),
-        });
-    }
-
+) -> crate::Result<()> {
     let settings = CostGuardSettings::current();
     if !settings.enabled {
         return Ok(());
@@ -415,12 +369,14 @@ pub async fn preflight(
                 crate::chains::solana::constants::lamports_to_sol(allowance),
             ),
         );
-        return Err(Error::SwapCostRejected {
-            router,
-            extra_lamports: assessment.unrecoverable_lamports,
-            venue,
-            venue_program,
-        });
+        return Err(crate::Error::Swaps(SwapExecutionError::NotSubmitted {
+            router: router.to_owned(),
+            reason: NotSubmittedReason::CostExceeded {
+                extra_raw: assessment.unrecoverable_lamports,
+                venue,
+                venue_address: venue_program,
+            },
+        }));
     }
 
     if assessment.unrecoverable_lamports > 0 {

@@ -240,9 +240,17 @@ impl From<QuoteError> for Error {
 /// Result of a quote attempt.
 pub type QuoteResult<T> = std::result::Result<T, QuoteError>;
 
-/// Execution completed, but its exact amounts exceed the caller's range.
+/// A swap execution failure the caller decides from by type.
 #[derive(Debug, Clone, thiserror::Error)]
 pub enum SwapExecutionError {
+    /// The swap stopped before its transaction was sent. Nothing reached the
+    /// chain and nothing can still land, so the same trade may be quoted and
+    /// executed through another router.
+    #[error("{router} did not submit the swap: {reason}")]
+    NotSubmitted {
+        router: String,
+        reason: NotSubmittedReason,
+    },
     /// The swap reached the chain, but its exact input or output does not fit the caller's amount range.
     #[error("swap {signature} completed with amounts outside the caller range (input {input_amount}, output {output_amount})")]
     CompletedAmountOutOfRange {
@@ -252,16 +260,91 @@ pub enum SwapExecutionError {
     },
 }
 
+/// Why a swap stopped before its transaction was sent.
+///
+/// Every reason is decided before the send, or from a node's deterministic
+/// refusal of the send request itself, so each one proves nothing reached the
+/// chain.
+#[derive(Debug, Clone, thiserror::Error)]
+pub enum NotSubmittedReason {
+    /// The router's build service could not be reached or refused the build.
+    #[error("the transaction could not be built: {0}")]
+    BuildUnavailable(NetworkError),
+    /// The router answered the build request with something that is not a
+    /// transaction this wallet can sign.
+    #[error("the built transaction is unusable: {detail}")]
+    BuildUnusable { detail: String },
+    /// The serialized transaction exceeds what its format may carry on the wire.
+    #[error("the transaction is {bytes} bytes, over the {limit}-byte limit")]
+    TransactionTooLarge { bytes: usize, limit: usize },
+    /// The transaction uses a message version this build can neither measure
+    /// nor send.
+    #[error("the transaction uses message version {version}, which this build cannot send")]
+    UnsupportedFormat { version: u8 },
+    /// A node decoded the request and refused it.
+    #[error("a node refused the request: {detail}")]
+    RequestRejected { detail: String },
+    /// A node ran the transaction and it failed.
+    #[error("the transaction failed simulation: {detail}")]
+    SimulationFailed { detail: String },
+    /// The transaction would spend the wallet's native balance outside the
+    /// trade beyond the allowance, typically rent for an account a venue keeps
+    /// for itself. `venue` is for people to read; `venue_address` is what a
+    /// re-quote asks the router to route around.
+    #[error("it would spend {extra_raw} raw native units beyond the trade, on an account owned by {venue}")]
+    CostExceeded {
+        extra_raw: u64,
+        venue: String,
+        venue_address: String,
+    },
+}
+
 impl ErrorClass for SwapExecutionError {
-    // The trade already happened; re-sending it would be a second swap.
     fn is_retryable(&self) -> bool {
-        false
+        match self {
+            // A build service that throttled or dropped the request may answer
+            // the same request later.
+            SwapExecutionError::NotSubmitted {
+                reason: NotSubmittedReason::BuildUnavailable(network),
+                ..
+            } => network.is_retryable(),
+            SwapExecutionError::NotSubmitted { .. } => false,
+            // The trade already happened; re-sending it would be a second swap.
+            SwapExecutionError::CompletedAmountOutOfRange { .. } => false,
+        }
     }
-    // A landed trade its caller cannot record needs an operator's eyes.
+
+    fn retry_after(&self) -> Option<Duration> {
+        match self {
+            SwapExecutionError::NotSubmitted {
+                reason: NotSubmittedReason::BuildUnavailable(network),
+                ..
+            } => network.retry_after(),
+            _ => None,
+        }
+    }
+
     fn severity(&self) -> Severity {
-        Severity::Critical
+        match self {
+            // Nothing was sent, so no money moved.
+            SwapExecutionError::NotSubmitted { .. } => Severity::Warning,
+            // A landed trade its caller cannot record needs an operator's eyes.
+            SwapExecutionError::CompletedAmountOutOfRange { .. } => Severity::Critical,
+        }
     }
+
     fn http_status(&self) -> u16 {
-        500
+        match self {
+            SwapExecutionError::NotSubmitted { reason, .. } => match reason {
+                NotSubmittedReason::BuildUnavailable(network) => network.http_status(),
+                NotSubmittedReason::BuildUnusable { .. } => 502,
+                NotSubmittedReason::TransactionTooLarge { .. }
+                | NotSubmittedReason::UnsupportedFormat { .. }
+                | NotSubmittedReason::RequestRejected { .. }
+                | NotSubmittedReason::SimulationFailed { .. }
+                | NotSubmittedReason::CostExceeded { .. } => 422,
+            },
+            SwapExecutionError::CompletedAmountOutOfRange { .. } => 500,
+        }
     }
 }

@@ -33,14 +33,16 @@
 
 use super::http::{send_with_retry, RouterHttpFailure};
 use crate::chains::solana::constants::{SOL_MINT, USDC_MINT};
-use crate::chains::solana::rpc::RpcClientMethods;
+use crate::chains::solana::solana_sdk::signature::{Keypair, Signer};
 use crate::chains::solana::swaps::revenue::{
     fee_reference_for_mint, fee_reference_for_pair, platform_fee_amount, PLATFORM_FEE_BPS,
 };
 use crate::config::with_config;
 use crate::errors::NetworkError;
 use crate::logger::{self, LogTag};
-use crate::swaps::error::{NotOfferedReason, QuoteError, QuoteResult};
+use crate::swaps::error::{
+    NotOfferedReason, NotSubmittedReason, QuoteError, QuoteResult, SwapExecutionError,
+};
 use crate::swaps::router::SwapRouter;
 use crate::swaps::types::{Quote, QuoteRequest, SwapMode, SwapResult};
 use crate::tokens::Token;
@@ -282,10 +284,20 @@ impl RaptorRouter {
     ///
     /// The fee placement is recomputed from the quote's own mints rather than
     /// carried across, so the built instruction can never disagree with what the
-    /// quote was priced on.
+    /// quote was priced on. Every failure here is before submission.
     async fn build_transaction(&self, quote: &Quote, user_public_key: &str) -> Result<String> {
+        let not_submitted = |reason| {
+            Error::Swaps(SwapExecutionError::NotSubmitted {
+                router: self.name().to_owned(),
+                reason,
+            })
+        };
         let quote_response: serde_json::Value = serde_json::from_slice(&quote.execution_data)
-            .map_err(|e| Error::parse_error(format!("Quote deserialization failed: {e}")))?;
+            .map_err(|e| {
+                not_submitted(NotSubmittedReason::BuildUnusable {
+                    detail: format!("the stored quote does not decode: {e}"),
+                })
+            })?;
         let placement = FeePlacement::resolve(&quote.input_mint, &quote.output_mint);
 
         let swap_req = RaptorSwapRequest {
@@ -310,38 +322,77 @@ impl RaptorRouter {
                 .timeout(RAPTOR_HTTP_TIMEOUT)
         })
         .await
-        .map_err(|failure| match failure.status {
-            Some(429) => Error::Network(NetworkError::RateLimited {
-                endpoint: format!("raptor/{}", failure.label),
-                retry_after_ms: failure.retry_after.map(|d| d.as_millis() as u64),
-            }),
-            Some(status) => Error::Network(NetworkError::HttpStatus {
-                endpoint: format!("raptor/{}", failure.label),
-                status,
-                body: Some(failure.body),
-            }),
-            None => Error::Network(NetworkError::RequestFailed {
-                endpoint: format!("raptor/{}", failure.label),
-                detail: failure.body,
-            }),
+        .map_err(|failure| {
+            let endpoint = format!("raptor/{}", failure.label);
+            not_submitted(NotSubmittedReason::BuildUnavailable(match failure.status {
+                Some(429) => NetworkError::RateLimited {
+                    endpoint,
+                    retry_after_ms: failure.retry_after.map(|d| d.as_millis() as u64),
+                },
+                Some(status) => NetworkError::HttpStatus {
+                    endpoint,
+                    status,
+                    body: Some(failure.body),
+                },
+                None => NetworkError::RequestFailed {
+                    endpoint,
+                    detail: failure.body,
+                },
+            }))
         })?;
 
-        let swap_response: RaptorSwapResponse = serde_json::from_str(&response_text)
-            .map_err(|e| Error::parse_error(format!("Raptor swap response parse failed: {e}")))?;
+        let swap_response: RaptorSwapResponse =
+            serde_json::from_str(&response_text).map_err(|e| {
+                not_submitted(NotSubmittedReason::BuildUnusable {
+                    detail: format!("the swap response does not decode: {e}"),
+                })
+            })?;
         Ok(swap_response.swap_transaction)
     }
 
-    /// Check a built transaction before it is signed and sent.
-    ///
-    /// Raptor builds the transaction on its own host, so nothing on our side has
-    /// checked its instructions or what they do with the wallet's lamports. The
-    /// shared preflight in [`crate::chains::solana::swaps::cost_guard`] rejects
-    /// both a transaction that would fail on chain and one that would spend SOL
-    /// outside the trade — for free, before anything is signed.
-    async fn preflight(transaction_base64: &str, quote: &Quote) -> Result<()> {
-        crate::chains::solana::swaps::cost_guard::preflight("Raptor", transaction_base64, quote)
-            .await
-            .map_err(Into::into)
+    /// Build the transaction for `quote`, addressed to `signer`, and hand it to
+    /// the pre-send gate, which measures, simulates (including the shared cost
+    /// guard), signs, sends and confirms it. One path for the main wallet and
+    /// the wallet tools.
+    async fn build_and_submit(&self, quote: &Quote, signer: &Keypair) -> Result<SwapResult> {
+        let start = Instant::now();
+        let transaction = self
+            .build_transaction(quote, &signer.pubkey().to_string())
+            .await?;
+
+        // Propagate the send/confirm error UNCHANGED so a submitted-but-
+        // unconfirmed signature stays recoverable by
+        // `swaps::unconfirmed_swap_signature`.
+        let signature = crate::chains::solana::swaps::presend::submit_built_swap(
+            self.name(),
+            &transaction,
+            quote,
+            signer,
+        )
+        .await?;
+
+        let elapsed = start.elapsed();
+        logger::info(
+            LogTag::Swap,
+            &format!(
+                "Raptor swap executed: sig={}, time={:.2}s",
+                signature,
+                elapsed.as_secs_f64()
+            ),
+        );
+
+        Ok(SwapResult {
+            success: true,
+            router_id: self.id().to_string(),
+            router_name: self.name().to_string(),
+            transaction_signature: signature.to_string(),
+            input_amount: quote.input_amount,
+            output_amount: quote.output_amount,
+            price_impact_pct: quote.price_impact_pct,
+            fee_lamports: quote.platform_fee_lamports.unwrap_or(0),
+            execution_time_ms: elapsed.as_millis() as u64,
+            effective_price_sol: None,
+        })
     }
 }
 
@@ -528,70 +579,15 @@ impl SwapRouter for RaptorRouter {
     async fn execute_swap(&self, _token: &Token, quote: &Quote) -> Result<SwapResult> {
         self.accept_own_quote(quote)?;
         super::checked_quote_amounts(quote)?;
-        let start = Instant::now();
-
-        let transaction = self.build_transaction(quote, &quote.wallet_address).await?;
-        Self::preflight(&transaction, quote).await?;
-
-        // Propagate the send/confirm error UNCHANGED so a submitted-but-
-        // unconfirmed signature stays recoverable by
-        // `swaps::unconfirmed_swap_signature`.
-        let signature = crate::chains::solana::rpc::get_rpc_client()
-            .sign_send_and_confirm_transaction_simple(&transaction)
-            .await?;
-
-        let elapsed = start.elapsed();
-        logger::info(
-            LogTag::Swap,
-            &format!(
-                "Raptor swap executed: sig={}, time={:.2}s",
-                signature,
-                elapsed.as_secs_f64()
-            ),
-        );
-
-        Ok(SwapResult {
-            success: true,
-            router_id: self.id().to_string(),
-            router_name: self.name().to_string(),
-            transaction_signature: signature.to_string(),
-            input_amount: quote.input_amount,
-            output_amount: quote.output_amount,
-            price_impact_pct: quote.price_impact_pct,
-            fee_lamports: quote.platform_fee_lamports.unwrap_or(0),
-            execution_time_ms: elapsed.as_millis() as u64,
-            effective_price_sol: None,
-        })
+        let keypair = crate::chains::solana::accounts::configured_keypair()?;
+        self.build_and_submit(quote, &keypair).await
     }
 
     async fn execute_swap_for_wallet(&self, quote: &Quote, wallet_id: i64) -> Result<SwapResult> {
-        use crate::chains::solana::solana_sdk::signer::Signer;
-
         self.accept_own_quote(quote)?;
         super::checked_quote_amounts(quote)?;
-        let start = Instant::now();
-
         let keypair = crate::chains::solana::accounts::keypair_for_wallet(wallet_id).await?;
-        let transaction = self
-            .build_transaction(quote, &keypair.pubkey().to_string())
-            .await?;
-        Self::preflight(&transaction, quote).await?;
-        let signature = crate::chains::solana::rpc::get_rpc_client()
-            .sign_send_and_confirm_with_keypair(&transaction, &keypair)
-            .await?;
-
-        Ok(SwapResult {
-            success: true,
-            router_id: self.id().to_string(),
-            router_name: self.name().to_string(),
-            transaction_signature: signature.to_string(),
-            input_amount: quote.input_amount,
-            output_amount: quote.output_amount,
-            price_impact_pct: quote.price_impact_pct,
-            fee_lamports: quote.platform_fee_lamports.unwrap_or(0),
-            execution_time_ms: start.elapsed().as_millis() as u64,
-            effective_price_sol: None,
-        })
+        self.build_and_submit(quote, &keypair).await
     }
 }
 

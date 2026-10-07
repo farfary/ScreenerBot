@@ -63,6 +63,7 @@ fn code_lines(contents: &str) -> String {
 const VENDOR_CRATES: &[&str] = &[
     "solana_sdk",
     "solana_client",
+    "solana_packet",
     "solana_program",
     "solana_transaction_status",
     "solana_account_decoder",
@@ -3175,5 +3176,65 @@ fn approval_binding_is_unique_and_race_safe() {
     assert!(
         !approvals.contains("Only `expired` and `failed` let a retry open a fresh request"),
         "stale doc: failed/expired approvals are terminal and reused, never replayed"
+    );
+}
+
+/// Directories whose code builds, executes or retries a swap.
+const SWAP_PATHS: &[&str] = &[
+    "swaps",
+    "chains/solana/swaps",
+    "positions",
+    "trader",
+    "tools",
+];
+
+/// Files on a swap path allowed to ask a node to simulate or send a
+/// transaction. The pre-send gate measures every transaction against the
+/// packet limit first and types every refusal; a second caller would send a
+/// transaction nobody measured. Only shrinks.
+const SWAP_FILES_THAT_SIMULATE_OR_SEND: &[&str] = &["chains/solana/swaps/presend.rs"];
+
+/// RPC client calls that simulate a transaction or hand one to a node.
+const SIMULATE_OR_SEND_CALLS: &[&str] = &[
+    ".simulate_transaction(",
+    ".send_transaction(",
+    ".send_raw_transaction(",
+    ".send_and_confirm_signed_transaction(",
+];
+
+#[test]
+fn only_the_pre_send_gate_simulates_or_sends_on_a_swap_path() {
+    let mut hits: Vec<String> = Vec::new();
+    let mut violations = Vec::new();
+    for (relative, contents) in walk_src() {
+        if !SWAP_PATHS.iter().any(|dir| relative.starts_with(dir)) {
+            continue;
+        }
+        let path = relative.to_string_lossy().into_owned();
+        let production = strip_comment_text(&production_text(&contents));
+        for (idx, line) in production.lines().enumerate() {
+            if SIMULATE_OR_SEND_CALLS
+                .iter()
+                .any(|call| line.contains(call))
+            {
+                hits.push(path.clone());
+                if !SWAP_FILES_THAT_SIMULATE_OR_SEND.contains(&path.as_str()) {
+                    violations.push(format!("src/{path}:{}: {}", idx + 1, line.trim()));
+                }
+            }
+        }
+    }
+    let stale: Vec<&str> = SWAP_FILES_THAT_SIMULATE_OR_SEND
+        .iter()
+        .copied()
+        .filter(|entry| !hits.iter().any(|hit| hit.as_str() == *entry))
+        .collect();
+    assert!(
+        violations.is_empty() && stale.is_empty(),
+        "a swap transaction is simulated and sent only through \
+         chains::solana::swaps::presend (gate / send / submit_built_swap):\n{}\n\
+         remove it from the allowlist (entries that no longer simulate or send):\n{}",
+        violations.join("\n"),
+        stale.join("\n")
     );
 }

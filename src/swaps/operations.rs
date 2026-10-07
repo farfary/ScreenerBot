@@ -729,7 +729,10 @@ async fn retry_excluding_venue(
     start: Instant,
     amount_limit: SwapAmountLimit,
 ) -> Option<Result<SwapResult>> {
-    let Error::Solana(crate::chains::solana::Error::SwapCostRejected { venue_program, .. }) = error
+    let Error::Swaps(crate::swaps::SwapExecutionError::NotSubmitted {
+        reason: crate::swaps::NotSubmittedReason::CostExceeded { venue_address, .. },
+        ..
+    }) = error
     else {
         return None;
     };
@@ -739,7 +742,7 @@ async fn retry_excluding_venue(
     }
 
     let label =
-        crate::chains::solana::swaps::routers::venue_label_for_program(venue_program).await?;
+        crate::chains::solana::swaps::routers::venue_label_for_program(venue_address).await?;
     let already_excluded = quote
         .exclude_dexes
         .iter()
@@ -941,11 +944,8 @@ fn is_retryable_error(error: &Error) -> bool {
         Error::Solana(crate::chains::solana::Error::DirectSwap(direct)) => {
             direct.safe_to_fallback()
         }
-        // A pre-send simulation failure proves nothing was submitted.
-        Error::Solana(crate::chains::solana::Error::SimulationRejected { .. }) => true,
-        // Likewise a transaction refused for what it would spend outside the
-        // trade: it was never signed, so another router may quote the same swap.
-        Error::Solana(crate::chains::solana::Error::SwapCostRejected { .. }) => true,
+        // A refusal before the send proves nothing was submitted.
+        Error::Swaps(crate::swaps::SwapExecutionError::NotSubmitted { .. }) => true,
         _ => false,
     }
 }

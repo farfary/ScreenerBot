@@ -13,6 +13,9 @@
 //! * `direct` — we decode the pool, compute the curve, build the instruction and
 //!   attach our own fee. No third party in the money path.
 //!
+//! Both hand the built transaction to `presend`, the one gate that measures it
+//! against the packet limit, simulates it and sends it.
+//!
 //! `revenue` holds the fee rate and destinations BOTH use, so there is exactly
 //! one definition of what a ScreenerBot swap charges.
 //!
@@ -22,6 +25,7 @@
 
 pub mod cost_guard;
 pub mod direct;
+pub mod presend;
 pub mod revenue;
 pub mod routers;
 

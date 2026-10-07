@@ -8,12 +8,8 @@
 
 use crate::chains::solana::rpc::types::{SimulationOutcome, TokenAccountInfo, TransactionDetails};
 use crate::chains::solana::solana_sdk::{
-    account::Account,
-    commitment_config::CommitmentLevel,
-    hash::Hash,
-    pubkey::Pubkey,
-    signature::{Keypair, Signature},
-    transaction::VersionedTransaction,
+    account::Account, commitment_config::CommitmentLevel, hash::Hash, pubkey::Pubkey,
+    signature::Signature, transaction::VersionedTransaction,
 };
 use crate::chains::solana::solana_transaction_status::{
     EncodedConfirmedTransactionWithStatusMeta, TransactionStatus,
@@ -228,28 +224,6 @@ pub trait RpcClientMethods {
     // Advanced Transaction Methods
     // =========================================================================
 
-    /// Sign a base64-encoded transaction and send it
-    ///
-    /// Decodes the base64 transaction, signs it with the provided keypair,
-    /// and sends it to the network.
-    fn sign_and_send_transaction(
-        &self,
-        transaction_base64: &str,
-        keypair: &Keypair,
-    ) -> impl std::future::Future<Output = crate::Result<Signature>> + Send;
-
-    /// Sign, send, and confirm a transaction
-    ///
-    /// Signs the transaction with the keypair, sends it, then polls for confirmation
-    /// with the specified timeout and commitment level.
-    fn sign_send_and_confirm_transaction(
-        &self,
-        transaction_base64: &str,
-        keypair: &Keypair,
-        commitment: CommitmentLevel,
-        timeout: Duration,
-    ) -> impl std::future::Future<Output = crate::Result<Signature>> + Send;
-
     /// Send an already-serialized transaction (raw bytes as base64)
     fn send_raw_transaction(
         &self,
@@ -454,30 +428,6 @@ pub trait RpcClientMethods {
     ) -> impl std::future::Future<Output = Vec<ProviderHealthInfo>> + Send;
 
     // =========================================================================
-    // Convenience Methods
-    // =========================================================================
-
-    /// Sign a base64-encoded transaction with the main wallet and send it
-    ///
-    /// This is a convenience method that loads the main wallet keypair from
-    /// config and calls sign_and_send_transaction. Useful when the caller
-    /// doesn't need to manage keypairs directly.
-    fn sign_and_send_with_main_wallet(
-        &self,
-        transaction_base64: &str,
-    ) -> impl std::future::Future<Output = crate::Result<Signature>> + Send;
-
-    /// Sign, send, and confirm a transaction with the main wallet
-    ///
-    /// Convenience method combining sign_and_send_with_main_wallet with confirmation polling.
-    fn sign_send_and_confirm_with_main_wallet(
-        &self,
-        transaction_base64: &str,
-        commitment: CommitmentLevel,
-        timeout: Duration,
-    ) -> impl std::future::Future<Output = crate::Result<Signature>> + Send;
-
-    // =========================================================================
     // Convenience Aliases
     // =========================================================================
 
@@ -513,20 +463,4 @@ pub trait RpcClientMethods {
         signature: &str,
         commitment: CommitmentLevel,
     ) -> impl std::future::Future<Output = crate::Result<TransactionDetails>> + Send;
-
-    /// Sign, send and confirm transaction with main wallet (simple API)
-    ///
-    /// Convenience method that uses default commitment and timeout.
-    /// For more control, use sign_send_and_confirm_with_main_wallet.
-    fn sign_send_and_confirm_transaction_simple(
-        &self,
-        transaction_base64: &str,
-    ) -> impl std::future::Future<Output = crate::Result<Signature>> + Send;
-
-    /// Sign, send and confirm with explicit keypair
-    fn sign_send_and_confirm_with_keypair(
-        &self,
-        transaction_base64: &str,
-        keypair: &Keypair,
-    ) -> impl std::future::Future<Output = crate::Result<Signature>> + Send;
 }

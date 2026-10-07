@@ -9,6 +9,7 @@
 
 pub use solana_account_decoder;
 pub use solana_client;
+pub use solana_packet;
 pub use solana_program;
 pub use solana_sdk;
 pub use solana_transaction_status;

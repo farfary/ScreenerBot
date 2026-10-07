@@ -14,13 +14,8 @@ use super::RpcClient;
 use crate::chains::solana::constants::{SPL_TOKEN_PROGRAM_ID, TOKEN_2022_PROGRAM_ID};
 use crate::chains::solana::rpc::types::{SimulationOutcome, TokenAccountInfo, TransactionDetails};
 use crate::chains::solana::solana_sdk::{
-    account::Account,
-    commitment_config::CommitmentLevel,
-    hash::Hash,
-    pubkey::Pubkey,
-    signature::{Keypair, Signature},
-    signer::Signer,
-    transaction::VersionedTransaction,
+    account::Account, commitment_config::CommitmentLevel, hash::Hash, pubkey::Pubkey,
+    signature::Signature, transaction::VersionedTransaction,
 };
 use crate::chains::solana::solana_transaction_status::{
     EncodedConfirmedTransactionWithStatusMeta, TransactionStatus,
@@ -527,73 +522,6 @@ impl RpcClientMethods for RpcClient {
     // =========================================================================
     // Advanced Transaction Methods Implementation
     // =========================================================================
-
-    async fn sign_and_send_transaction(
-        &self,
-        transaction_base64: &str,
-        keypair: &Keypair,
-    ) -> crate::Result<Signature> {
-        // Decode the base64 transaction
-        let tx_bytes = base64::engine::general_purpose::STANDARD
-            .decode(transaction_base64)
-            .map_err(|e| {
-                crate::Error::Data(crate::errors::DataError::ParseError {
-                    data_type: "base64 transaction".to_owned(),
-                    error: e.to_string(),
-                })
-            })?;
-
-        // Deserialize the VersionedTransaction
-        let mut transaction: VersionedTransaction =
-            bincode::deserialize(&tx_bytes).map_err(|e| {
-                crate::Error::Data(crate::errors::DataError::ParseError {
-                    data_type: "VersionedTransaction".to_owned(),
-                    error: e.to_string(),
-                })
-            })?;
-
-        // Sign the transaction (first signature index is the fee payer)
-        let sig = keypair.sign_message(&transaction.message.serialize());
-        if transaction.signatures.is_empty() {
-            transaction.signatures.push(sig);
-        } else {
-            transaction.signatures[0] = sig;
-        }
-
-        // Serialize and send
-        self.send_transaction(&transaction).await
-    }
-
-    async fn sign_send_and_confirm_transaction(
-        &self,
-        transaction_base64: &str,
-        keypair: &Keypair,
-        commitment: CommitmentLevel,
-        timeout: Duration,
-    ) -> crate::Result<Signature> {
-        // Sign and send the transaction
-        let signature = self
-            .sign_and_send_transaction(transaction_base64, keypair)
-            .await?;
-
-        // Confirm the transaction
-        let confirmed = self
-            .confirm_transaction(&signature, commitment, timeout)
-            .await?;
-
-        if confirmed {
-            Ok(signature)
-        } else {
-            Err(crate::Error::Solana(
-                crate::chains::solana::Error::Execution(
-                    crate::chains::ExecutionFailure::ConfirmationTimeout {
-                        reference: signature.to_string(),
-                        waited_ms: timeout.as_millis() as u64,
-                    },
-                ),
-            ))
-        }
-    }
 
     async fn send_raw_transaction(&self, transaction_base64: &str) -> crate::Result<Signature> {
         let params = serde_json::json!([
@@ -1380,44 +1308,6 @@ impl RpcClientMethods for RpcClient {
     }
 
     // =========================================================================
-    // Convenience Methods Implementation
-    // =========================================================================
-
-    async fn sign_and_send_with_main_wallet(
-        &self,
-        transaction_base64: &str,
-    ) -> crate::Result<Signature> {
-        // Load main wallet keypair from config
-        let keypair = crate::chains::solana::accounts::configured_keypair().map_err(|e| {
-            crate::Error::Configuration(crate::errors::ConfigurationError::Generic {
-                message: format!("Failed to load wallet keypair: {e}"),
-            })
-        })?;
-
-        // Delegate to sign_and_send_transaction
-        self.sign_and_send_transaction(transaction_base64, &keypair)
-            .await
-    }
-
-    async fn sign_send_and_confirm_with_main_wallet(
-        &self,
-        transaction_base64: &str,
-        commitment: CommitmentLevel,
-        timeout: Duration,
-    ) -> crate::Result<Signature> {
-        // Load main wallet keypair from config
-        let keypair = crate::chains::solana::accounts::configured_keypair().map_err(|e| {
-            crate::Error::Configuration(crate::errors::ConfigurationError::Generic {
-                message: format!("Failed to load wallet keypair: {e}"),
-            })
-        })?;
-
-        // Delegate to sign_send_and_confirm_transaction
-        self.sign_send_and_confirm_transaction(transaction_base64, &keypair, commitment, timeout)
-            .await
-    }
-
-    // =========================================================================
     // Convenience Implementations
     // =========================================================================
 
@@ -1490,34 +1380,6 @@ impl RpcClientMethods for RpcClient {
                 error: e.to_string().to_string(),
             })
         })
-    }
-
-    async fn sign_send_and_confirm_transaction_simple(
-        &self,
-        transaction_base64: &str,
-    ) -> crate::Result<Signature> {
-        // Use default commitment and timeout
-        self.sign_send_and_confirm_with_main_wallet(
-            transaction_base64,
-            CommitmentLevel::Confirmed,
-            Duration::from_secs(60),
-        )
-        .await
-    }
-
-    async fn sign_send_and_confirm_with_keypair(
-        &self,
-        transaction_base64: &str,
-        keypair: &Keypair,
-    ) -> crate::Result<Signature> {
-        // Use default commitment and timeout
-        self.sign_send_and_confirm_transaction(
-            transaction_base64,
-            keypair,
-            CommitmentLevel::Confirmed,
-            Duration::from_secs(60),
-        )
-        .await
     }
 }
 

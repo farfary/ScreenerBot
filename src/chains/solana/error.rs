@@ -59,28 +59,6 @@ pub enum Error {
         instruction: &'static str,
         detail: String,
     },
-    /// A built transaction failed its pre-send simulation. Nothing was
-    /// submitted, so another router may safely try the same trade.
-    #[error("{router} transaction failed simulation: {detail}")]
-    SimulationRejected {
-        router: &'static str,
-        detail: String,
-    },
-    /// A built transaction would spend the wallet's lamports on something other
-    /// than the trade, beyond what the caller allows -- typically rent for an
-    /// account a venue keeps for itself, which only that venue can ever close.
-    /// Nothing was submitted, so another router may safely try the same trade.
-    ///
-    /// `venue` is for people to read; `venue_program` is the address the retry
-    /// path needs to ask the aggregator to route around. They differ whenever
-    /// the aggregator knows a name for the program, which is most of the time.
-    #[error("{router} would spend {extra_lamports} lamports beyond the trade, on an account owned by {venue}")]
-    SwapCostRejected {
-        router: &'static str,
-        extra_lamports: u64,
-        venue: String,
-        venue_program: String,
-    },
     /// A direct pool swap failed. Wrapped transparently so the engine's own
     /// typed cause survives the trip up to the caller: whether anything was
     /// submitted, and whether the failure says anything about the token, are
@@ -118,9 +96,7 @@ impl ErrorClass for Error {
             | Error::AccountNotFound { .. }
             | Error::Decode { .. }
             | Error::InvalidPool { .. }
-            | Error::InstructionBuild { .. }
-            | Error::SimulationRejected { .. }
-            | Error::SwapCostRejected { .. } => false,
+            | Error::InstructionBuild { .. } => false,
             // A direct swap is never retried from here. The engine already
             // distinguishes "nothing was submitted" from "something may have
             // landed", and only the caller holding the position knows which of
@@ -147,10 +123,7 @@ impl ErrorClass for Error {
             | Error::KeypairUnavailable { .. }
             | Error::SecureStorage(_) => Severity::Critical,
             Error::Rpc { .. } | Error::RpcFailure { .. } => Severity::Warning,
-            Error::Decode { .. }
-            | Error::InstructionBuild { .. }
-            | Error::SimulationRejected { .. }
-            | Error::SwapCostRejected { .. } => Severity::Error,
+            Error::Decode { .. } | Error::InstructionBuild { .. } => Severity::Error,
             // A swap that may have landed needs an operator's eyes on it.
             Error::DirectSwap(e) if e.submitted() => Severity::Critical,
             Error::DirectSwap(_) => Severity::Error,
@@ -167,9 +140,7 @@ impl ErrorClass for Error {
             Error::AccountNotFound { .. } => 404,
             Error::Rpc { .. } | Error::RpcFailure { .. } => 503,
             Error::Decode { .. } | Error::InstructionBuild { .. } => 500,
-            Error::InvalidPool { .. }
-            | Error::SimulationRejected { .. }
-            | Error::SwapCostRejected { .. } => 422,
+            Error::InvalidPool { .. } => 422,
             Error::DirectSwap(_) => 502,
         }
     }
