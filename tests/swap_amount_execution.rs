@@ -9,8 +9,9 @@ use async_trait::async_trait;
 use screenerbot::chains::{ChainId, RawAmount};
 use screenerbot::errors::{ErrorClass, Severity};
 use screenerbot::swaps::{
-    execute_swap_with_fallback, unconfirmed_swap_signature, Quote, QuoteRequest, RouterRegistry,
-    SwapAmountLimit, SwapMode, SwapResult, SwapRouter,
+    execute_swap_with_fallback, unconfirmed_swap_signature, NotSubmittedReason, Quote,
+    QuoteRequest, RouterRegistry, SwapAmountLimit, SwapExecutionError, SwapMode, SwapResult,
+    SwapRouter,
 };
 use screenerbot::{Error, Result};
 use std::sync::atomic::{AtomicU8, AtomicUsize, Ordering};
@@ -104,7 +105,13 @@ impl SwapRouter for Router {
             "primary" => {
                 PRIMARY_EXECS.fetch_add(1, Ordering::SeqCst);
                 match MODE.load(Ordering::SeqCst) {
-                    1 => Err(Error::network_error("stub transport failure")),
+                    1 => Err(Error::Swaps(SwapExecutionError::NotSubmitted {
+                        router: self.id.to_owned(),
+                        reason: NotSubmittedReason::RequestRejected {
+                            detail: "stub request rejection".to_owned(),
+                        },
+                    })),
+                    4 => Err(Error::network_error("stub transport failure")),
                     2 => Ok(result(self.id, WIDE)),
                     3 => Ok(result(self.id, WIDE)),
                     _ => Ok(result(self.id, 25u64.into())),
@@ -158,7 +165,7 @@ async fn amount_policy_covers_primary_fallback_completion_and_unrestricted_execu
     let filled =
         execute_swap_with_fallback(&token, quote("primary", 25u64.into()), SwapAmountLimit::U64)
             .await
-            .expect("valid fallback remains eligible");
+            .expect("a provably unsent primary falls back to the valid router");
     assert_eq!(filled.router_id, "valid");
     assert_eq!(WIDE_FALLBACK_EXECS.load(Ordering::SeqCst), 0);
     assert_eq!(VALID_FALLBACK_EXECS.load(Ordering::SeqCst), 1);
@@ -169,7 +176,7 @@ async fn amount_policy_covers_primary_fallback_completion_and_unrestricted_execu
             .await
             .expect_err("completed wide result must retain completion");
     match &error {
-        Error::Swaps(screenerbot::swaps::SwapExecutionError::CompletedAmountOutOfRange {
+        Error::Swaps(SwapExecutionError::CompletedAmountOutOfRange {
             signature,
             input_amount,
             output_amount,
@@ -200,4 +207,13 @@ async fn amount_policy_covers_primary_fallback_completion_and_unrestricted_execu
     .await
     .expect("unrestricted wide result must survive");
     assert_eq!(filled.output_amount, WIDE);
+
+    // A failure that cannot prove nothing was sent may still land, so no
+    // fallback router is asked to buy the same trade a second time.
+    MODE.store(4, Ordering::SeqCst);
+    execute_swap_with_fallback(&token, quote("primary", 25u64.into()), SwapAmountLimit::U64)
+        .await
+        .expect_err("an unproven send failure must not fall back");
+    assert_eq!(WIDE_FALLBACK_EXECS.load(Ordering::SeqCst), 0);
+    assert_eq!(VALID_FALLBACK_EXECS.load(Ordering::SeqCst), 1);
 }
