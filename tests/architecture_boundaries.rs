@@ -1298,6 +1298,88 @@ fn settlement_failure_transitions_are_decided_only_by_the_disposition() {
     );
 }
 
+/// Files under `chains/solana/rpc/client/` whose production code binds only the success of
+/// an `execute_raw` call, so a failed read falls through as if it returned nothing. The list
+/// freezes the exact current set and only shrinks.
+const RPC_CLIENT_FILES_SKIPPING_FAILED_READS: &[&str] = &[];
+
+/// The 1-based lines of `source` that open an `if let Ok(..)` or `while let Ok(..)` whose
+/// scrutinee, up to the opening brace of its block, is an `execute_raw` call.
+fn execute_raw_success_bindings(source: &str) -> Vec<usize> {
+    let mut lines = Vec::new();
+    for pattern in ["if let Ok(", "while let Ok("] {
+        let mut search_from = 0;
+        while let Some(found) = source[search_from..].find(pattern) {
+            let at = search_from + found;
+            search_from = at + pattern.len();
+            let block = source[search_from..]
+                .find('{')
+                .map_or(source.len(), |brace| search_from + brace);
+            if source[at..block].contains("execute_raw") {
+                lines.push(source[..at].matches('\n').count() + 1);
+            }
+        }
+    }
+    lines.sort_unstable();
+    lines
+}
+
+#[test]
+fn execute_raw_success_bindings_find_split_scrutinees_only() {
+    let source = "\
+fn read() {
+    if let Ok(result) = self
+        .manager
+        .execute_raw(\"getTokenAccountsByOwner\", params)
+        .await
+    {
+        use_it(result);
+    }
+    let result = self.manager.execute_raw(\"getBalance\", params).await?;
+    if let Ok(Some(_)) = self.get_account(&ata).await {
+        return;
+    }
+    while let Ok(page) = self.manager.execute_raw(\"getProgramAccounts\", p).await {}
+}
+";
+    assert_eq!(execute_raw_success_bindings(source), [2, 13]);
+}
+
+/// A failed RPC read in the Solana client is an error to its caller, never an empty
+/// success: a caller summing a holding or deciding on an account list reads an empty
+/// result as a known zero.
+#[test]
+fn rpc_client_never_reports_a_failed_read_as_success() {
+    let mut hits: Vec<String> = Vec::new();
+    let mut new_violations = Vec::new();
+    for (relative, contents) in walk_src() {
+        if !relative.starts_with("chains/solana/rpc/client") || is_test_support_file(&relative) {
+            continue;
+        }
+        let path = relative.to_string_lossy().into_owned();
+        let production = strip_comment_text(&production_text(&contents));
+        for line in execute_raw_success_bindings(&production) {
+            hits.push(path.clone());
+            if !RPC_CLIENT_FILES_SKIPPING_FAILED_READS.contains(&path.as_str()) {
+                new_violations.push(format!("src/{path}:{line}"));
+            }
+        }
+    }
+    let stale: Vec<&str> = RPC_CLIENT_FILES_SKIPPING_FAILED_READS
+        .iter()
+        .copied()
+        .filter(|entry| !hits.iter().any(|hit| hit.as_str() == *entry))
+        .collect();
+    assert!(
+        new_violations.is_empty() && stale.is_empty(),
+        "propagate the `execute_raw` error with `?` instead of binding only its success \
+         (new sites):\n{}\nremove it from the allowlist (entries that no longer skip a \
+         failed read):\n{}",
+        new_violations.join("\n"),
+        stale.join("\n")
+    );
+}
+
 /// Neutral code reads chain settings through `ChainsConfig` methods that take
 /// a `ChainId`; a direct `.chains.solana` field read binds the file to one chain.
 /// The list freezes the current exceptions and only shrinks.

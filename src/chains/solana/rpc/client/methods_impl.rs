@@ -704,51 +704,25 @@ impl RpcClientMethods for RpcClient {
     // =========================================================================
 
     async fn get_all_token_accounts(&self, owner: &Pubkey) -> crate::Result<Vec<TokenAccountInfo>> {
-        let mut all_accounts = Vec::new();
-
-        // Fetch SPL Token accounts
-        let spl_params = serde_json::json!([
-            owner.to_string(),
-            { "programId": SPL_TOKEN_PROGRAM_ID },
-            { "encoding": "jsonParsed" }
-        ]);
-
-        if let Ok(result) = self
+        let accounts_of = |program_id: &str| {
+            serde_json::json!([
+                owner.to_string(),
+                { "programId": program_id },
+                { "encoding": "jsonParsed" }
+            ])
+        };
+        let spl = self
             .manager
-            .execute_raw("getTokenAccountsByOwner", spl_params)
-            .await
-        {
-            if let Some(values) = result.get("value").and_then(|v| v.as_array()) {
-                for item in values {
-                    if let Some(info) = parse_token_account_info(item, false) {
-                        all_accounts.push(info);
-                    }
-                }
-            }
-        }
-
-        // Fetch Token-2022 accounts
-        let token2022_params = serde_json::json!([
-            owner.to_string(),
-            { "programId": TOKEN_2022_PROGRAM_ID },
-            { "encoding": "jsonParsed" }
-        ]);
-
-        if let Ok(result) = self
+            .execute_raw("getTokenAccountsByOwner", accounts_of(SPL_TOKEN_PROGRAM_ID))
+            .await;
+        let token_2022 = self
             .manager
-            .execute_raw("getTokenAccountsByOwner", token2022_params)
-            .await
-        {
-            if let Some(values) = result.get("value").and_then(|v| v.as_array()) {
-                for item in values {
-                    if let Some(info) = parse_token_account_info(item, true) {
-                        all_accounts.push(info);
-                    }
-                }
-            }
-        }
-
-        Ok(all_accounts)
+            .execute_raw(
+                "getTokenAccountsByOwner",
+                accounts_of(TOKEN_2022_PROGRAM_ID),
+            )
+            .await;
+        token_accounts_from(spl, token_2022)
     }
 
     async fn is_token_2022_mint(&self, mint: &Pubkey) -> crate::Result<bool> {
@@ -1655,9 +1629,80 @@ fn parse_helius_transactions_page(
 mod tests {
     use super::{
         block_height_params, get_transaction_config, helius_successful_transactions_params,
-        parse_helius_transactions_page, CommitmentLevel, EncodedConfirmedTransactionWithStatusMeta,
-        Pubkey, Signature,
+        parse_helius_transactions_page, token_accounts_from, CommitmentLevel,
+        EncodedConfirmedTransactionWithStatusMeta, Pubkey, RpcError, Signature,
     };
+
+    fn token_account(pubkey: &str, mint: &str, amount: &str) -> serde_json::Value {
+        serde_json::json!({
+            "pubkey": pubkey,
+            "account": { "data": { "parsed": { "info": {
+                "mint": mint,
+                "state": "initialized",
+                "tokenAmount": { "amount": amount, "decimals": 6 }
+            } } } }
+        })
+    }
+
+    fn accounts(values: Vec<serde_json::Value>) -> Result<serde_json::Value, RpcError> {
+        Ok(serde_json::json!({ "context": { "slot": 1 }, "value": values }))
+    }
+
+    fn rate_limited() -> Result<serde_json::Value, RpcError> {
+        Err(RpcError::RateLimited {
+            provider_id: "provider".to_owned(),
+            retry_after: None,
+        })
+    }
+
+    #[test]
+    fn token_accounts_merge_both_programs() {
+        let merged = token_accounts_from(
+            accounts(vec![token_account("spl-account", "mint-a", "5")]),
+            accounts(vec![token_account("token-2022-account", "mint-b", "7")]),
+        )
+        .expect("both reads succeeded");
+        let read: Vec<_> = merged
+            .iter()
+            .map(|info| (info.account.as_str(), info.balance, info.is_token_2022))
+            .collect();
+        assert_eq!(
+            read,
+            [("spl-account", 5, false), ("token-2022-account", 7, true)]
+        );
+    }
+
+    #[test]
+    fn a_failed_read_of_either_program_fails_the_token_accounts() {
+        let good = || accounts(vec![token_account("account", "mint", "5")]);
+        assert!(token_accounts_from(rate_limited(), good()).is_err());
+        assert!(token_accounts_from(good(), rate_limited()).is_err());
+        assert!(token_accounts_from(rate_limited(), rate_limited()).is_err());
+    }
+
+    #[test]
+    fn a_response_without_a_value_array_fails_the_token_accounts() {
+        let good = || accounts(Vec::new());
+        for malformed in [
+            serde_json::json!({ "context": { "slot": 1 } }),
+            serde_json::json!({ "value": null }),
+            serde_json::json!({ "value": {} }),
+        ] {
+            assert!(token_accounts_from(Ok(malformed.clone()), good()).is_err());
+            assert!(token_accounts_from(good(), Ok(malformed)).is_err());
+        }
+    }
+
+    #[test]
+    fn an_unreadable_account_fails_the_token_accounts() {
+        let unreadable = serde_json::json!({ "pubkey": "broken", "account": {} });
+        let error = token_accounts_from(
+            accounts(vec![token_account("account", "mint", "5"), unreadable]),
+            accounts(Vec::new()),
+        )
+        .expect_err("an account was unreadable");
+        assert!(error.to_string().contains("broken"), "{error}");
+    }
 
     #[test]
     fn transaction_requests_use_json_parsed_and_integer_version_one() {
@@ -1896,6 +1941,44 @@ fn parse_account_from_json(value: &serde_json::Value) -> crate::Result<Option<Ac
         executable,
         rent_epoch,
     }))
+}
+
+/// The token accounts of both token programs from their `getTokenAccountsByOwner` responses.
+/// A failed read, a response without a `value` array or an account that cannot be parsed
+/// fails the whole read: a holding summed from a partial list would understate what the
+/// wallet holds and read as a known amount.
+fn token_accounts_from(
+    spl: Result<serde_json::Value, RpcError>,
+    token_2022: Result<serde_json::Value, RpcError>,
+) -> crate::Result<Vec<TokenAccountInfo>> {
+    let mut accounts = Vec::new();
+    for (response, is_token_2022) in [(spl, false), (token_2022, true)] {
+        let response = response?;
+        let values = response
+            .get("value")
+            .and_then(serde_json::Value::as_array)
+            .ok_or_else(|| {
+                crate::Error::Data(crate::errors::DataError::ParseError {
+                    data_type: "token accounts".to_owned(),
+                    error: "missing value array".to_owned(),
+                })
+            })?;
+        for item in values {
+            let info = parse_token_account_info(item, is_token_2022).ok_or_else(|| {
+                crate::Error::Data(crate::errors::DataError::ParseError {
+                    data_type: "token account".to_owned(),
+                    error: format!(
+                        "unreadable account {}",
+                        item.get("pubkey")
+                            .and_then(serde_json::Value::as_str)
+                            .unwrap_or("without a pubkey")
+                    ),
+                })
+            })?;
+            accounts.push(info);
+        }
+    }
+    Ok(accounts)
 }
 
 /// Parse token account info from jsonParsed response
