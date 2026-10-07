@@ -66,6 +66,10 @@ pub enum Error {
     /// message here.
     #[error(transparent)]
     DirectSwap(crate::chains::solana::swaps::direct::DirectSwapError),
+    /// A signed wallet transaction provably never reached the chain: it was
+    /// refused before or at its send, so nothing it carries can land.
+    #[error("the transaction was not sent: {0}")]
+    NotSent(crate::swaps::NotSubmittedReason),
 }
 
 /// Result alias for the Solana chain adapter.
@@ -102,6 +106,9 @@ impl ErrorClass for Error {
             // landed", and only the caller holding the position knows which of
             // those it is safe to act on.
             Error::DirectSwap(_) => false,
+            // The caller rebuilds and re-signs a refused transaction; it is
+            // never sent again from here.
+            Error::NotSent(_) => false,
         }
     }
 
@@ -127,6 +134,8 @@ impl ErrorClass for Error {
             // A swap that may have landed needs an operator's eyes on it.
             Error::DirectSwap(e) if e.submitted() => Severity::Critical,
             Error::DirectSwap(_) => Severity::Error,
+            // Nothing was sent, so nothing moved.
+            Error::NotSent(_) => Severity::Warning,
         }
     }
 
@@ -142,6 +151,7 @@ impl ErrorClass for Error {
             Error::Decode { .. } | Error::InstructionBuild { .. } => 500,
             Error::InvalidPool { .. } => 422,
             Error::DirectSwap(_) => 502,
+            Error::NotSent(reason) => reason.http_status(),
         }
     }
 }

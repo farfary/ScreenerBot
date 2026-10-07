@@ -299,6 +299,22 @@ pub enum NotSubmittedReason {
     },
 }
 
+impl NotSubmittedReason {
+    /// The HTTP status a refusal is reported with, wherever the refused
+    /// transaction came from.
+    pub fn http_status(&self) -> u16 {
+        match self {
+            NotSubmittedReason::BuildUnavailable(network) => network.http_status(),
+            NotSubmittedReason::BuildUnusable { .. } => 502,
+            NotSubmittedReason::TransactionTooLarge { .. }
+            | NotSubmittedReason::UnsupportedFormat { .. }
+            | NotSubmittedReason::RequestRejected { .. }
+            | NotSubmittedReason::SimulationFailed { .. }
+            | NotSubmittedReason::CostExceeded { .. } => 422,
+        }
+    }
+}
+
 impl ErrorClass for SwapExecutionError {
     fn is_retryable(&self) -> bool {
         match self {
@@ -335,15 +351,7 @@ impl ErrorClass for SwapExecutionError {
 
     fn http_status(&self) -> u16 {
         match self {
-            SwapExecutionError::NotSubmitted { reason, .. } => match reason {
-                NotSubmittedReason::BuildUnavailable(network) => network.http_status(),
-                NotSubmittedReason::BuildUnusable { .. } => 502,
-                NotSubmittedReason::TransactionTooLarge { .. }
-                | NotSubmittedReason::UnsupportedFormat { .. }
-                | NotSubmittedReason::RequestRejected { .. }
-                | NotSubmittedReason::SimulationFailed { .. }
-                | NotSubmittedReason::CostExceeded { .. } => 422,
-            },
+            SwapExecutionError::NotSubmitted { reason, .. } => reason.http_status(),
             SwapExecutionError::CompletedAmountOutOfRange { .. } => 500,
         }
     }

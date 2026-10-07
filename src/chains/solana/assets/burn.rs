@@ -7,8 +7,11 @@
 use std::str::FromStr;
 
 use crate::chains::solana::rpc::{get_rpc_client, RpcClientMethods};
-use crate::chains::solana::solana_sdk::{pubkey::Pubkey, transaction::Transaction};
+use crate::chains::solana::solana_sdk::{
+    commitment_config::CommitmentLevel, pubkey::Pubkey, transaction::Transaction,
+};
 use crate::chains::solana::spl_token::instruction as spl_instruction;
+use crate::chains::solana::swaps::presend::send_and_settle_signed;
 use crate::chains::solana::{Error, Result};
 
 /// Burn `amount` of `mint` from the configured wallet's associated token
@@ -54,8 +57,8 @@ pub async fn burn_configured_wallet_token(
     })?;
 
     let rpc_client = get_rpc_client();
-    let recent_blockhash = rpc_client
-        .get_latest_blockhash()
+    let (recent_blockhash, last_valid_block_height) = rpc_client
+        .get_latest_blockhash_with_commitment(CommitmentLevel::Confirmed)
         .await
         .map_err(|e| Error::Rpc {
             operation: "get_latest_blockhash",
@@ -71,13 +74,7 @@ pub async fn burn_configured_wallet_token(
         recent_blockhash,
     );
 
-    let signature = rpc_client
-        .send_and_confirm_signed_transaction(&transaction)
-        .await
-        .map_err(|e| Error::Rpc {
-            operation: "send_and_confirm_signed_transaction",
-            detail: e.to_string(),
-        })?;
+    let signature = send_and_settle_signed(&transaction, last_valid_block_height).await?;
 
     Ok(signature.to_string())
 }

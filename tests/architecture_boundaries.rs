@@ -3187,34 +3187,19 @@ fn is_rpc_owner(relative: &Path) -> bool {
 /// Files allowed to ask a node to simulate or send a transaction, with the
 /// calls each may make. The pre-send gate measures every swap against the
 /// packet limit first, types every refusal and settles every send by its
-/// signature; a second caller would send a swap nobody measured or settled.
-/// The asset owners send plain transfers and burns, never a swap. Only
-/// shrinks.
-const SIMULATE_OR_SEND_OWNERS: &[(&str, &[&str])] = &[
-    (
-        "chains/solana/swaps/presend.rs",
-        &["simulate_transaction", "send_transaction"],
-    ),
-    (
-        "chains/solana/assets/burn.rs",
-        &["send_and_confirm_signed_transaction"],
-    ),
-    (
-        "chains/solana/assets/ata/helpers.rs",
-        &["send_and_confirm_signed_transaction"],
-    ),
-    (
-        "chains/solana/assets/transfer.rs",
-        &["send_and_confirm_signed_transaction"],
-    ),
-];
+/// signature; a second caller would send a transaction nobody measured or
+/// settled. The wallet's plain transfers, closes and burns go through the same
+/// gate. Only shrinks.
+const SIMULATE_OR_SEND_OWNERS: &[(&str, &[&str])] = &[(
+    "chains/solana/swaps/presend.rs",
+    &["simulate_transaction", "send_transaction"],
+)];
 
 /// RPC client calls that simulate a transaction or hand one to a node.
 const SIMULATE_OR_SEND_CALLS: &[&str] = &[
     "simulate_transaction",
     "send_transaction",
     "send_raw_transaction",
-    "send_and_confirm_signed_transaction",
 ];
 
 /// Spellings that reach a node's simulate or send without the client's typed

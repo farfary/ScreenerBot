@@ -1083,6 +1083,8 @@ fn solana_fallback_safe(error: &crate::chains::solana::Error) -> bool {
             crate::chains::ExecutionFailure::Reverted { .. }
             | crate::chains::ExecutionFailure::Expired { .. },
         ) => true,
+        // Refused before or at its send: it never reached the chain.
+        Solana::NotSent(_) => true,
         // A confirmation that ran out may still land, and the rest are not
         // outcomes of a send at all; nothing about them proves the trade
         // did not happen.
@@ -2148,6 +2150,7 @@ mod tests {
             Solana::InvalidPool { .. } => "InvalidPool",
             Solana::InstructionBuild { .. } => "InstructionBuild",
             Solana::DirectSwap(_) => "DirectSwap",
+            Solana::NotSent(_) => "NotSent",
         }
     }
 
@@ -2364,6 +2367,14 @@ mod tests {
                 }),
                 false,
             ),
+            // A wallet transaction refused before or at its send never
+            // reached the chain.
+            (
+                Error::Solana(Solana::NotSent(NotSubmittedReason::RequestRejected {
+                    detail: "malformed".to_owned(),
+                })),
+                true,
+            ),
             (
                 direct(DirectSwapError::UnsupportedVenue { program: pool }),
                 false,
@@ -2534,7 +2545,7 @@ mod tests {
             rows.iter().map(|(error, _)| row_name(error)).collect();
         let reasons = 7;
         let execution_variants = 5;
-        let solana_outside_direct = 10 + execution_variants;
+        let solana_outside_direct = 11 + execution_variants;
         let direct_variants = 20;
         let swap_rows = covered
             .iter()

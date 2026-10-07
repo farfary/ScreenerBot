@@ -18,7 +18,6 @@ use crate::rpc::stats::RpcStatsResponse;
 use crate::rpc::types::{CircuitState, ProviderKind};
 use chrono::{DateTime, Utc};
 use serde::{Deserialize, Serialize};
-use std::time::Duration;
 
 /// Health information for a single RPC provider
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -239,16 +238,6 @@ pub trait RpcClientMethods {
         transaction_base64: &str,
     ) -> impl std::future::Future<Output = crate::Result<Signature>> + Send;
 
-    /// Confirm a transaction with timeout
-    ///
-    /// Polls for transaction confirmation status until confirmed or timeout.
-    fn confirm_transaction(
-        &self,
-        signature: &Signature,
-        commitment: CommitmentLevel,
-        timeout: Duration,
-    ) -> impl std::future::Future<Output = crate::Result<bool>> + Send;
-
     /// Simulate a signed transaction without submitting it.
     ///
     /// Returns the node's verdict rather than an error: a transaction that WOULD
@@ -326,14 +315,6 @@ pub trait RpcClientMethods {
         wallet_address: &str,
         mint: &str,
     ) -> impl std::future::Future<Output = crate::Result<String>> + Send;
-
-    /// Send and confirm a signed Transaction (not VersionedTransaction)
-    ///
-    /// Serializes the transaction and sends it with confirmation polling.
-    fn send_and_confirm_signed_transaction(
-        &self,
-        transaction: &crate::chains::solana::solana_sdk::transaction::Transaction,
-    ) -> impl std::future::Future<Output = crate::Result<Signature>> + Send;
 
     // =========================================================================
     // Transaction History Methods

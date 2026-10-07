@@ -6,7 +6,9 @@
 //! Jupiter, Raptor and the direct pool engine, on the main wallet and on the
 //! wallet tools alike, hand their built transaction here, and only this module
 //! asks a node to simulate or send a swap (guarded by
-//! `tests/architecture_boundaries.rs`). The gate answers three questions in a
+//! `tests/architecture_boundaries.rs`). The wallet's plain transactions —
+//! transfers, account closes, burns — are sent and settled here too
+//! ([`send_and_settle_signed`]), under the same outcome rule. The gate answers three questions in a
 //! fixed order:
 //!
 //! 1. **Does it fit?** The serialized transaction is measured against what its
@@ -53,7 +55,7 @@ use crate::chains::solana::solana_sdk::{
     compute_budget::id as compute_budget_program,
     message::VersionedMessage,
     signature::{Keypair, Signature, Signer},
-    transaction::VersionedTransaction,
+    transaction::{Transaction, VersionedTransaction},
 };
 use crate::chains::solana::solana_transaction_status::{
     EncodedConfirmedTransactionWithStatusMeta, TransactionStatus,
@@ -670,8 +672,18 @@ async fn submit_on<N: SwapNode>(
         send_and_settle(node, &transaction, last_valid_block_height, timeout)
             .await
             .map_err(not_submitted)?;
+    landed(signature, settled)
+        .map_err(|failure| crate::Error::Solana(crate::chains::solana::Error::Execution(failure)))
+}
+
+/// The signature of a landed transaction, or the settle verdict as an
+/// execution failure that names the signature.
+fn landed(
+    signature: Signature,
+    settled: Settled,
+) -> Result<Signature, crate::chains::ExecutionFailure> {
     let reference = signature.to_string();
-    let failure = match settled {
+    Err(match settled {
         Settled::Landed => return Ok(signature),
         Settled::Reverted { detail } => {
             crate::chains::ExecutionFailure::Reverted { reference, detail }
@@ -688,10 +700,47 @@ async fn submit_on<N: SwapNode>(
             reference,
             waited_ms,
         },
-    };
-    Err(crate::Error::Solana(
-        crate::chains::solana::Error::Execution(failure),
-    ))
+    })
+}
+
+/// How long a plain wallet transaction is settled before its outcome is
+/// reported as unknown.
+const SIGNED_TRANSACTION_TIMEOUT: Duration = Duration::from_secs(60);
+
+/// Send a signed wallet transaction that is not a swap — a transfer, an
+/// account close, a burn — and settle it by its own signature.
+///
+/// The swap outcome rule holds: only a send that provably never reached the
+/// chain is [`crate::chains::solana::Error::NotSent`]. Every other outcome
+/// names the signature, as the landed signature or as an
+/// [`crate::chains::ExecutionFailure`], so a failed or unanswered send is never
+/// reported as a transaction that did nothing. `last_valid_block_height` is
+/// the last block the transaction's blockhash is valid for.
+pub async fn send_and_settle_signed(
+    transaction: &Transaction,
+    last_valid_block_height: u64,
+) -> crate::chains::solana::Result<Signature> {
+    send_and_settle_signed_on(
+        get_rpc_client(),
+        transaction,
+        last_valid_block_height,
+        SIGNED_TRANSACTION_TIMEOUT,
+    )
+    .await
+}
+
+async fn send_and_settle_signed_on<N: SwapNode>(
+    node: &N,
+    transaction: &Transaction,
+    last_valid_block_height: u64,
+    timeout: Duration,
+) -> crate::chains::solana::Result<Signature> {
+    let transaction = VersionedTransaction::from(transaction.clone());
+    let (signature, settled) =
+        send_and_settle(node, &transaction, Some(last_valid_block_height), timeout)
+            .await
+            .map_err(crate::chains::solana::Error::NotSent)?;
+    Ok(landed(signature, settled)?)
 }
 
 #[cfg(test)]

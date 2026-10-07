@@ -877,3 +877,148 @@ async fn an_unseen_signature_the_chain_executed_is_decided_by_its_transaction() 
         }
     ));
 }
+
+/// A signed wallet transaction of the shape the asset tools build: legacy,
+/// one signer, one instruction.
+fn signed_wallet_transaction() -> Transaction {
+    let payer = Keypair::new();
+    let instruction = Instruction::new_with_bytes(
+        Pubkey::new_unique(),
+        &[1],
+        vec![
+            crate::chains::solana::solana_sdk::instruction::AccountMeta::new(payer.pubkey(), true),
+        ],
+    );
+    Transaction::new_signed_with_payer(
+        &[instruction],
+        Some(&payer.pubkey()),
+        &[&payer],
+        Hash::new_unique(),
+    )
+}
+
+/// Every send outcome of a plain wallet transaction that is not a provable
+/// refusal is settled by the transaction's own signature: it lands, or its
+/// failure names the signature. A dropped or failed send is never reported as
+/// a transaction that did nothing, and the same bytes are the only ones sent.
+#[tokio::test(start_paused = true)]
+async fn a_wallet_transaction_whose_send_went_unanswered_keeps_its_signature() {
+    let unanswered = || {
+        vec![
+            SendAnswer::TimedOut,
+            SendAnswer::Fails(crate::Error::Rpc(RpcError::Network {
+                message: "connection reset".to_owned(),
+                is_timeout: false,
+            })),
+        ]
+    };
+    for send in unanswered() {
+        let transaction = signed_wallet_transaction();
+        let signature = transaction.signatures[0];
+        let reference = signature.to_string();
+
+        let landed = ScriptedNode::new(
+            0,
+            vec![send.clone()],
+            vec![Ok(None), Ok(Some(status(Level::Confirmed, None)))],
+            0,
+        );
+        assert_eq!(
+            send_and_settle_signed_on(&landed, &transaction, 1_000, Duration::from_secs(30))
+                .await
+                .expect("a transaction that landed is a success"),
+            signature
+        );
+
+        let unknown = ScriptedNode::new(0, vec![send.clone()], vec![Ok(None)], 0);
+        let error =
+            send_and_settle_signed_on(&unknown, &transaction, 1_000, Duration::from_secs(30))
+                .await
+                .expect_err("an unseen signature is not a landed transaction");
+        assert!(
+            matches!(
+                &error,
+                crate::chains::solana::Error::Execution(
+                    crate::chains::ExecutionFailure::ConfirmationTimeout { reference: named, .. }
+                ) if *named == reference
+            ),
+            "{send:?}: {error:?}"
+        );
+
+        let expired = ScriptedNode::new(0, vec![send.clone()], vec![Ok(None)], 1_001);
+        let error =
+            send_and_settle_signed_on(&expired, &transaction, 1_000, Duration::from_secs(30))
+                .await
+                .expect_err("an expired signature is not a landed transaction");
+        assert!(
+            matches!(
+                &error,
+                crate::chains::solana::Error::Execution(
+                    crate::chains::ExecutionFailure::Expired { reference: named, .. }
+                ) if *named == reference
+            ),
+            "{send:?}: {error:?}"
+        );
+
+        let reverted = ScriptedNode::new(
+            0,
+            vec![send.clone()],
+            vec![Ok(Some(status(
+                Level::Confirmed,
+                Some(TransactionError::AccountInUse),
+            )))],
+            0,
+        );
+        let error =
+            send_and_settle_signed_on(&reverted, &transaction, 1_000, Duration::from_secs(30))
+                .await
+                .expect_err("a reverted transaction is a failure");
+        assert!(
+            matches!(
+                &error,
+                crate::chains::solana::Error::Execution(
+                    crate::chains::ExecutionFailure::Reverted { reference: named, .. }
+                ) if *named == reference
+            ),
+            "{send:?}: {error:?}"
+        );
+
+        for node in [&landed, &unknown, &expired, &reverted] {
+            let sent = node.sent();
+            assert!(
+                sent.iter().all(|copy| copy.signatures[0] == signature),
+                "only the signed bytes are ever re-broadcast"
+            );
+        }
+    }
+}
+
+/// A send the one node it reached refused as a request provably never reached
+/// the chain: it is the one outcome without a signature, and it is sent once.
+#[tokio::test(start_paused = true)]
+async fn a_wallet_transaction_the_node_refused_is_reported_never_sent() {
+    let transaction = signed_wallet_transaction();
+    let node = ScriptedNode::new(
+        0,
+        vec![SendAnswer::Fails(crate::Error::Rpc(
+            RpcError::ProviderError {
+                code: -32602,
+                message: "invalid transaction: failed to deserialize".to_owned(),
+                data: None,
+            },
+        ))],
+        vec![Ok(None)],
+        0,
+    );
+    let error = send_and_settle_signed_on(&node, &transaction, 1_000, Duration::from_secs(30))
+        .await
+        .expect_err("a refused send is not a transaction that landed");
+    assert!(
+        matches!(
+            error,
+            crate::chains::solana::Error::NotSent(NotSubmittedReason::RequestRejected { .. })
+        ),
+        "{error:?}"
+    );
+    assert_eq!(node.sent().len(), 1);
+}

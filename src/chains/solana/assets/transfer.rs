@@ -13,6 +13,7 @@ use std::str::FromStr;
 use crate::chains::solana::constants::TOKEN_2022_PROGRAM_ID;
 use crate::chains::solana::rpc::{get_rpc_client, RpcClientMethods};
 use crate::chains::solana::solana_sdk::{
+    commitment_config::CommitmentLevel,
     instruction::{AccountMeta, Instruction},
     pubkey::Pubkey,
     signature::Keypair,
@@ -20,6 +21,7 @@ use crate::chains::solana::solana_sdk::{
     system_instruction,
     transaction::Transaction,
 };
+use crate::chains::solana::swaps::presend::send_and_settle_signed;
 use crate::chains::solana::{Error, Result};
 use crate::logger::{self, LogTag};
 
@@ -41,8 +43,8 @@ pub async fn transfer_sol(
 
     let instruction = system_instruction::transfer(&from_pubkey, &to_pubkey, lamports);
 
-    let recent_blockhash = rpc_client
-        .get_latest_blockhash()
+    let (recent_blockhash, last_valid_block_height) = rpc_client
+        .get_latest_blockhash_with_commitment(CommitmentLevel::Confirmed)
         .await
         .map_err(|e| Error::Rpc {
             operation: "get_latest_blockhash",
@@ -56,13 +58,7 @@ pub async fn transfer_sol(
         recent_blockhash,
     );
 
-    let signature = rpc_client
-        .send_and_confirm_signed_transaction(&transaction)
-        .await
-        .map_err(|e| Error::Rpc {
-            operation: "send_and_confirm_signed_transaction",
-            detail: e.to_string(),
-        })?;
+    let signature = send_and_settle_signed(&transaction, last_valid_block_height).await?;
 
     logger::debug(
         LogTag::Tools,
@@ -171,8 +167,8 @@ pub async fn transfer_token(
 
     instructions.push(transfer_ix);
 
-    let recent_blockhash = rpc_client
-        .get_latest_blockhash()
+    let (recent_blockhash, last_valid_block_height) = rpc_client
+        .get_latest_blockhash_with_commitment(CommitmentLevel::Confirmed)
         .await
         .map_err(|e| Error::Rpc {
             operation: "get_latest_blockhash",
@@ -186,13 +182,7 @@ pub async fn transfer_token(
         recent_blockhash,
     );
 
-    let signature = rpc_client
-        .send_and_confirm_signed_transaction(&transaction)
-        .await
-        .map_err(|e| Error::Rpc {
-            operation: "send_and_confirm_signed_transaction",
-            detail: e.to_string(),
-        })?;
+    let signature = send_and_settle_signed(&transaction, last_valid_block_height).await?;
 
     let ui_amount = amount as f64 / 10f64.powi(decimals as i32);
     logger::debug(
@@ -251,8 +241,8 @@ pub async fn close_ata(owner_keypair: &Keypair, mint: &str, is_token_2022: bool)
         })?
     };
 
-    let recent_blockhash = rpc_client
-        .get_latest_blockhash()
+    let (recent_blockhash, last_valid_block_height) = rpc_client
+        .get_latest_blockhash_with_commitment(CommitmentLevel::Confirmed)
         .await
         .map_err(|e| Error::Rpc {
             operation: "get_latest_blockhash",
@@ -266,13 +256,7 @@ pub async fn close_ata(owner_keypair: &Keypair, mint: &str, is_token_2022: bool)
         recent_blockhash,
     );
 
-    let signature = rpc_client
-        .send_and_confirm_signed_transaction(&transaction)
-        .await
-        .map_err(|e| Error::Rpc {
-            operation: "send_and_confirm_signed_transaction",
-            detail: e.to_string(),
-        })?;
+    let signature = send_and_settle_signed(&transaction, last_valid_block_height).await?;
 
     logger::debug(
         LogTag::Tools,

@@ -7,10 +7,12 @@ use crate::chains::solana::constants::TOKEN_2022_PROGRAM_ID;
 use crate::chains::solana::rpc::{get_rpc_client, RpcClientMethods};
 use crate::chains::solana::solana_sdk::pubkey::Pubkey;
 use crate::chains::solana::solana_sdk::{
+    commitment_config::CommitmentLevel,
     instruction::{AccountMeta, Instruction},
     transaction::Transaction,
 };
 use crate::chains::solana::spl_token::instruction::close_account;
+use crate::chains::solana::swaps::presend::send_and_settle_signed;
 use crate::logger::{self, LogTag};
 use crate::{Error, Result};
 use std::str::FromStr;
@@ -210,8 +212,8 @@ async fn build_and_send_close_instruction(
     );
 
     let rpc_client = get_rpc_client();
-    let recent_blockhash = rpc_client
-        .get_latest_blockhash()
+    let (recent_blockhash, last_valid_block_height) = rpc_client
+        .get_latest_blockhash_with_commitment(CommitmentLevel::Confirmed)
         .await
         .map_err(Error::from)?;
 
@@ -249,8 +251,7 @@ async fn build_and_send_close_instruction(
         "ATA_TRANSACTION_SEND: submitting transaction to network with confirmation",
     );
 
-    let result = rpc_client
-        .send_and_confirm_signed_transaction(&transaction)
+    let result = send_and_settle_signed(&transaction, last_valid_block_height)
         .await
         .map(|sig| sig.to_string())
         .map_err(Error::from);
