@@ -184,6 +184,7 @@ pub async fn add_to_position(
                 return Err(Error::SwapFailed {
                     mint: token_mint.to_owned(),
                     detail: format!("DCA swap failed: {error}"),
+                    not_submitted: crate::swaps::not_submitted_reason(&error),
                 })
             }
         },

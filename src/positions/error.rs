@@ -91,8 +91,14 @@ pub enum Error {
     /// variant rather than by reading the message.
     #[error("could not quote a swap for token {mint}: {detail}")]
     QuoteFailed { mint: String, detail: String },
+    /// The swap failed. `not_submitted` says why, when the last attempt stopped
+    /// before its transaction was sent.
     #[error("swap for token {mint} failed: {detail}")]
-    SwapFailed { mint: String, detail: String },
+    SwapFailed {
+        mint: String,
+        detail: String,
+        not_submitted: Option<crate::swaps::NotSubmittedReason>,
+    },
     #[error("wallet-history sync failed: {detail}")]
     WalletHistorySync { detail: String },
 
@@ -106,6 +112,16 @@ pub enum Error {
     /// above: this is neither a per-mint conflict nor a validation failure).
     #[error("no free position slot ({remaining} remaining)")]
     SlotUnavailable { remaining: usize },
+}
+
+impl Error {
+    /// Why the swap stopped before it was sent, when this is such a failure.
+    pub fn not_submitted_reason(&self) -> Option<&crate::swaps::NotSubmittedReason> {
+        match self {
+            Error::SwapFailed { not_submitted, .. } => not_submitted.as_ref(),
+            _ => None,
+        }
+    }
 }
 
 /// Result alias for the positions module.

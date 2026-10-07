@@ -375,6 +375,8 @@ errors-trade-storage-failed = درخواست معامله تکمیل نشد
 errors-trade-manual-failed = معامله دستی ناموفق بود
 # The reason is the trader's own wording for a refused trade, shown exactly as produced.
 errors-trade-manual-refused = { $reason }
+errors-trade-swap-too-large = هیچ مسیر سواپی نتوانست تراکنشی به‌اندازهٔ کافی کوچک برای ارسال بسازد
+    .hint = بهترین مسیر به حساب‌های بیشتری از ظرفیت یک تراکنش نیاز داشت، بنابراین چیزی ارسال نشد و هزینه‌ای هم نشد. چند لحظه دیگر دوباره تلاش کنید تا مسیر دیگری پیدا شود، یا روتر سواپ دیگری را فعال کنید.
 errors-trade-wallet-not-configured = کیف پول پیکربندی نشده است
 errors-trade-amount-sol-invalid = amount_sol برای خرید الزامی و باید مثبت باشد
 errors-trade-no-tokens-in-wallet = توکنی برای این پوزیشن در کیف پول پیدا نشد. موجودی توکن 0 است؛ پوزیشن را نمی‌توان با سواپ بست.

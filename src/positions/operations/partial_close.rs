@@ -161,6 +161,8 @@ pub async fn partial_close_position(
     // which means the first sell may well be on chain: retrying it sells the same tokens
     // TWICE while the position records only one partial.
     let mut last_err: Option<String> = None;
+    // Why the last swap attempt stopped before it was sent, when it did.
+    let mut last_refusal: Option<crate::swaps::NotSubmittedReason> = None;
     let mut swap_result = None;
     let mut submitted_signature: Option<String> = None;
 
@@ -179,6 +181,7 @@ pub async fn partial_close_position(
         let quote = match get_best_quote(quote_request.clone()).await {
             Ok(quote) => quote,
             Err(e) => {
+                last_refusal = None;
                 last_err = Some(format!(
                     "Quote failed at step {} ({}%): {}",
                     i + 1,
@@ -266,6 +269,7 @@ pub async fn partial_close_position(
                                         last_err = None;
                                         break;
                                     }
+                                    last_refusal = crate::swaps::not_submitted_reason(&e2);
                                     last_err = Some(format!(
                                         "Retry swap without Pump.fun failed: {e2} (step {} slippage {}%)",
                                         i + 1,
@@ -276,6 +280,7 @@ pub async fn partial_close_position(
                             }
                         }
                         Err(e2) => {
+                            last_refusal = None;
                             last_err = Some(format!(
                                 "Retry without Pump.fun also failed (quote): {e2} (step {} slippage {}%)",
                                 i + 1,
@@ -286,6 +291,7 @@ pub async fn partial_close_position(
                     }
                 }
 
+                last_refusal = crate::swaps::not_submitted_reason(&e);
                 last_err = Some(format!(
                     "Partial exit swap failed at step {} ({}%): {}",
                     i + 1,
@@ -321,6 +327,7 @@ pub async fn partial_close_position(
             return Err(Error::SwapFailed {
                 mint: token_mint.to_owned(),
                 detail: last_err.unwrap_or_else(|| "no route".to_owned()),
+                not_submitted: last_refusal,
             });
         }
     };

@@ -6,7 +6,7 @@
 use crate::logger::{self, LogTag};
 use crate::positions::{self, PositionManagement, PositionOrigin, TradeOrigin};
 use crate::trader::config;
-use crate::trader::types::{FailedTradeStep, TradeDecision, TradeReason, TradeResult, TradeStep};
+use crate::trader::types::{TradeDecision, TradeReason, TradeResult, TradeStep};
 
 /// Execute a buy trade (auto/strategy path).
 ///
@@ -129,10 +129,9 @@ pub async fn execute_buy_managed(
             Ok(result)
         }
         Err(e) => {
-            let step = e.trade_step();
             let error = format!("Buy execution failed: {e}");
             logger::error(LogTag::Trader, &error);
-            Ok(TradeResult::failure_at(decision.clone(), step, error, 0))
+            Ok(TradeResult::failure_from(decision.clone(), &e, error))
         }
     }
 }
@@ -217,10 +216,9 @@ pub async fn execute_dca(decision: &TradeDecision) -> crate::trader::Result<Trad
             ))
         }
         Err(e) => {
-            let step = e.trade_step();
             let error = format!("DCA execution failed: {e}");
             logger::error(LogTag::Trader, &error);
-            Ok(TradeResult::failure_at(decision.clone(), step, error, 0))
+            Ok(TradeResult::failure_from(decision.clone(), &e, error))
         }
     }
 }

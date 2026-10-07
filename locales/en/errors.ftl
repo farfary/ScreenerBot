@@ -375,6 +375,8 @@ errors-trade-storage-failed = The trade request could not be completed
 errors-trade-manual-failed = Manual trade failed
 # The reason is the trader's own wording for a refused trade, shown exactly as produced.
 errors-trade-manual-refused = { $reason }
+errors-trade-swap-too-large = No swap route could build a transaction small enough to send
+    .hint = The best route needed more accounts than one transaction can carry, so nothing was sent and nothing was spent. Try again in a moment for a different route, or enable another swap router.
 errors-trade-wallet-not-configured = Wallet not configured
 errors-trade-amount-sol-invalid = amount_sol is required for buy and must be positive
 errors-trade-no-tokens-in-wallet = No tokens found in wallet for this position. Token balance is 0; the position cannot be closed via swap.

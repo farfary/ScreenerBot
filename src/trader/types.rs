@@ -182,6 +182,9 @@ pub struct TradeResult {
     /// Which step of the trade actually failed, set by the executor that was
     /// running it. `None` on success.
     pub failed_step: Option<TradeStep>,
+    /// Why the swap stopped before its transaction was sent, when it did, so
+    /// a caller can explain the failure from its type rather than its text.
+    pub not_submitted: Option<crate::swaps::NotSubmittedReason>,
 }
 
 /// The stages a trade passes through, in order.
@@ -267,6 +270,7 @@ impl TradeResult {
             confirmation_pending: false,
             capacity_guard_remaining: None,
             failed_step: None,
+            not_submitted: None,
         }
     }
 
@@ -290,7 +294,20 @@ impl TradeResult {
             confirmation_pending: false,
             capacity_guard_remaining: None,
             failed_step: Some(step),
+            not_submitted: None,
         }
+    }
+
+    /// A failed result for a positions error, carrying the step it ended and,
+    /// for a swap that was never sent, why.
+    pub fn failure_from(
+        decision: TradeDecision,
+        error: &crate::positions::Error,
+        message: String,
+    ) -> Self {
+        let mut result = Self::failure_at(decision, error.trade_step(), message, 0);
+        result.not_submitted = error.not_submitted_reason().cloned();
+        result
     }
 }
 
@@ -322,6 +339,7 @@ mod tests {
         let swap_failed = || crate::positions::Error::SwapFailed {
             mint: mint.clone(),
             detail: "submitted and reverted".to_owned(),
+            not_submitted: None,
         };
         assert_eq!(swap_failed().trade_step(), TradeStep::Swap);
         assert_eq!(

@@ -375,6 +375,8 @@ errors-trade-storage-failed = تعذّر إكمال طلب الصفقة
 errors-trade-manual-failed = فشلت الصفقة اليدوية
 # The reason is the trader's own wording for a refused trade, shown exactly as produced.
 errors-trade-manual-refused = { $reason }
+errors-trade-swap-too-large = لم يتمكن أي مسار مبادلة من إنشاء معاملة صغيرة بما يكفي لإرسالها
+    .hint = احتاج أفضل مسار إلى حسابات أكثر مما تتسع له معاملة واحدة، لذلك لم يُرسل شيء ولم يُنفق شيء. أعد المحاولة بعد لحظات للحصول على مسار مختلف، أو فعّل موجّه مبادلة آخر.
 errors-trade-wallet-not-configured = المحفظة غير مهيأة
 errors-trade-amount-sol-invalid = amount_sol مطلوب للشراء ويجب أن يكون موجبًا
 errors-trade-no-tokens-in-wallet = لم يتم العثور على رموز في المحفظة لهذا المركز. رصيد الرمز 0؛ لا يمكن إغلاق المركز عبر المبادلة.

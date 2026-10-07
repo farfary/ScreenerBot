@@ -324,6 +324,7 @@ async fn open_position_impl(
                     return Err(Error::SwapFailed {
                         mint: api_token.mint.clone(),
                         detail: error.to_string(),
+                        not_submitted: crate::swaps::not_submitted_reason(&error),
                     });
                 }
             },

@@ -1010,6 +1010,27 @@ pub fn is_fallback_safe(error: &Error) -> bool {
     }
 }
 
+/// Why a swap stopped before it was sent, when its outcome says so: the
+/// shared [`NotSubmittedReason`], or the direct engine's own oversized refusal
+/// read in the same vocabulary.
+pub fn not_submitted_reason(error: &Error) -> Option<crate::swaps::NotSubmittedReason> {
+    match error {
+        Error::Swaps(crate::swaps::SwapExecutionError::NotSubmitted { reason, .. }) => {
+            Some(reason.clone())
+        }
+        Error::Solana(crate::chains::solana::Error::DirectSwap(
+            crate::chains::solana::swaps::direct::DirectSwapError::TransactionTooLarge {
+                bytes,
+                limit,
+            },
+        )) => Some(crate::swaps::NotSubmittedReason::TransactionTooLarge {
+            bytes: *bytes,
+            limit: *limit,
+        }),
+        _ => None,
+    }
+}
+
 fn swap_execution_fallback_safe(error: &crate::swaps::SwapExecutionError) -> bool {
     use crate::swaps::SwapExecutionError;
     match error {

@@ -6,7 +6,7 @@
 use crate::config::with_config;
 use crate::logger::{self, LogTag};
 use crate::positions;
-use crate::trader::types::{FailedTradeStep, TradeDecision, TradeReason, TradeResult, TradeStep};
+use crate::trader::types::{TradeDecision, TradeReason, TradeResult, TradeStep};
 
 /// How much of a position a sell decision actually liquidates.
 #[derive(Debug, Clone, Copy, PartialEq)]
@@ -141,10 +141,9 @@ pub async fn execute_sell(decision: &TradeDecision) -> crate::trader::Result<Tra
                 ))
             }
             Err(e) => {
-                let step = e.trade_step();
                 let error = format!("Partial sell execution failed: {e}");
                 logger::error(LogTag::Trader, &error);
-                Ok(TradeResult::failure_at(decision.clone(), step, error, 0))
+                Ok(TradeResult::failure_from(decision.clone(), &e, error))
             }
         }
     } else {
@@ -174,10 +173,9 @@ pub async fn execute_sell(decision: &TradeDecision) -> crate::trader::Result<Tra
                 ))
             }
             Err(e) => {
-                let step = e.trade_step();
                 let error = format!("Full sell execution failed: {e}");
                 logger::error(LogTag::Trader, &error);
-                Ok(TradeResult::failure_at(decision.clone(), step, error, 0))
+                Ok(TradeResult::failure_from(decision.clone(), &e, error))
             }
         }
     }

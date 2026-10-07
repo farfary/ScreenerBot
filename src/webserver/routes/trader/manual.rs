@@ -13,7 +13,7 @@ use crate::config::with_config;
 use crate::errors::ErrorClass;
 use crate::i18n::ids;
 use crate::logger::{self, LogTag};
-use crate::swaps::{try_get_best_quote, QuoteError};
+use crate::swaps::{try_get_best_quote, NotSubmittedReason, QuoteError};
 use crate::trader::manual::guard::{self, BlacklistPolicy, ManualTradeKind};
 use crate::webserver::api_error::{ApiError, ApiErrorCode};
 use crate::webserver::utils::success_response;
@@ -30,6 +30,18 @@ fn trade_response(
     mint: String,
 ) -> Response {
     match result {
+        // A trade no route could fit in one transaction is explained from its
+        // type: nothing was sent, and the node's wording never reaches the user.
+        Ok(tr)
+            if !tr.success
+                && matches!(
+                    tr.not_submitted,
+                    Some(NotSubmittedReason::TransactionTooLarge { .. })
+                ) =>
+        {
+            ApiError::new(ApiErrorCode::InvalidInput, ids::ERRORS_TRADE_SWAP_TOO_LARGE)
+                .into_response()
+        }
         Ok(tr) if !tr.success => match tr.error {
             Some(reason) => {
                 ApiError::new(ApiErrorCode::InvalidInput, ids::ERRORS_TRADE_MANUAL_REFUSED)
@@ -419,6 +431,77 @@ fn quote_failure_code(e: &QuoteError) -> ApiErrorCode {
 mod tests {
     use super::*;
     use crate::swaps::NotOfferedReason;
+
+    fn failed_buy(not_submitted: Option<NotSubmittedReason>) -> crate::trader::TradeResult {
+        let decision = crate::trader::TradeDecision {
+            position_id: None,
+            mint: "TokenMint111111111111111111111111111111111".to_owned(),
+            action: crate::trader::TradeAction::Buy,
+            reason: crate::trader::TradeReason::ManualEntry,
+            strategy_id: None,
+            timestamp: chrono::Utc::now(),
+            priority: crate::trader::TradePriority::High,
+            price_native: None,
+            size_native: Some(0.005),
+            exit_percentage: None,
+            slippage_pct: None,
+        };
+        let mut result = crate::trader::TradeResult::failure_at(
+            decision,
+            crate::trader::TradeStep::Swap,
+            "Provider error -32602: base64 encoded VersionedTransaction too large".to_owned(),
+            0,
+        );
+        result.not_submitted = not_submitted;
+        result
+    }
+
+    /// The JSON envelope a failed trade answers with.
+    async fn envelope(result: crate::trader::TradeResult) -> serde_json::Value {
+        let response = trade_response(Ok(result), "TokenMint".to_owned());
+        let body = axum::body::to_bytes(response.into_body(), usize::MAX)
+            .await
+            .expect("body");
+        serde_json::from_slice(&body).expect("JSON envelope")
+    }
+
+    /// A buy no route could fit in one transaction says so from the catalog, with
+    /// a hint, and never shows the node's text; any other failure keeps the
+    /// trader's own reason.
+    #[tokio::test]
+    async fn a_trade_no_route_could_fit_is_explained_without_the_nodes_text() {
+        let too_large = envelope(failed_buy(Some(NotSubmittedReason::TransactionTooLarge {
+            bytes: 1329,
+            limit: 1232,
+        })))
+        .await;
+        assert_eq!(
+            too_large["error"]["text"]["id"],
+            "errors-trade-swap-too-large"
+        );
+        assert!(too_large["error"]["details"].is_null());
+        assert!(!too_large.to_string().contains("-32602"), "{too_large}");
+
+        let source: crate::i18n::LanguageIdentifier = crate::i18n::source_locale().parse().unwrap();
+        let message = crate::i18n::format_message(&source, "errors-trade-swap-too-large", None)
+            .expect("catalog message");
+        assert!(message.value.is_some_and(|title| !title.is_empty()));
+        assert!(message
+            .attributes
+            .iter()
+            .any(|(name, hint)| name == "hint" && !hint.is_empty()));
+
+        let other = envelope(failed_buy(Some(NotSubmittedReason::SimulationFailed {
+            detail: "custom 6001".to_owned(),
+        })))
+        .await;
+        assert_eq!(other["error"]["text"]["id"], "errors-trade-manual-refused");
+        let unrecorded = envelope(failed_buy(None)).await;
+        assert_eq!(
+            unrecorded["error"]["text"]["id"],
+            "errors-trade-manual-refused"
+        );
+    }
 
     /// A trade no enabled route offers keeps the quote error's status but
     /// carries its own code; every other failure keeps the code its status

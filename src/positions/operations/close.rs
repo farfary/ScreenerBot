@@ -205,6 +205,8 @@ pub async fn close_position_direct(
     let slippage_exit_retry_steps = super::slippage::exit_slippage_ladder(slippage_pct);
     // Slippage retry loop for exit
     let mut last_err: Option<String> = None;
+    // Why the last swap attempt stopped before it was sent, when it did.
+    let mut last_refusal: Option<crate::swaps::NotSubmittedReason> = None;
     let mut swap_result = None;
     // A swap that was SUBMITTED but whose confirmation timed out: the sell may still land,
     // so retrying the ladder would sell twice. We stop and let verification reconcile it.
@@ -224,6 +226,7 @@ pub async fn close_position_direct(
         let quote = match get_best_quote(quote_request.clone()).await {
             Ok(q) => q,
             Err(e) => {
+                last_refusal = None;
                 last_err = Some(format!(
                     "Quote failed at step {} ({}%): {}",
                     i + 1,
@@ -281,6 +284,7 @@ pub async fn close_position_direct(
                     let retry_quote = match get_best_quote(retry_request).await {
                         Ok(q) => q,
                         Err(e2) => {
+                            last_refusal = None;
                             last_err = Some(format!(
                                 "Retry without Pump.fun also failed (quote): {e2} (step {} slippage {}%)",
                                 i + 1, slippage
@@ -306,6 +310,7 @@ pub async fn close_position_direct(
                                 last_err = None;
                                 break;
                             }
+                            last_refusal = crate::swaps::not_submitted_reason(&e2);
                             last_err = Some(format!(
                                 "Retry swap without Pump.fun failed: {e2} (step {} slippage {}%)",
                                 i + 1,
@@ -326,6 +331,7 @@ pub async fn close_position_direct(
                 } else {
                     format!("Swap failed: {msg}")
                 };
+                last_refusal = crate::swaps::not_submitted_reason(&e);
                 last_err = Some(format!(
                     "{} (step {} slippage {}%)",
                     enriched,
@@ -376,6 +382,7 @@ pub async fn close_position_direct(
             return Err(Error::SwapFailed {
                 mint: api_token.mint.clone(),
                 detail: last_err.unwrap_or_else(|| "exit swap failed".to_owned()),
+                not_submitted: last_refusal,
             });
         }
     };
