@@ -258,6 +258,25 @@ impl RpcClientMethods for RpcClient {
         })
     }
 
+    async fn get_slot_and_block_height(
+        &self,
+        commitment: CommitmentLevel,
+    ) -> crate::Result<(u64, u64)> {
+        let result = self
+            .manager
+            .execute_raw("getEpochInfo", block_height_params(commitment))
+            .await?;
+        let field = |name: &str| {
+            result.get(name).and_then(|v| v.as_u64()).ok_or_else(|| {
+                crate::Error::Data(crate::errors::DataError::ParseError {
+                    data_type: "epoch info".to_owned(),
+                    error: format!("missing {name}"),
+                })
+            })
+        };
+        Ok((field("absoluteSlot")?, field("blockHeight")?))
+    }
+
     async fn send_transaction(
         &self,
         transaction: &VersionedTransaction,
@@ -390,7 +409,7 @@ impl RpcClientMethods for RpcClient {
     async fn get_signature_statuses(
         &self,
         signatures: &[Signature],
-    ) -> crate::Result<Vec<Option<TransactionStatus>>> {
+    ) -> crate::Result<(u64, Vec<Option<TransactionStatus>>)> {
         let sig_strings: Vec<String> = signatures.iter().map(|s| s.to_string()).collect();
         let params = serde_json::json!([sig_strings, { "searchTransactionHistory": true }]);
 
@@ -399,15 +418,21 @@ impl RpcClientMethods for RpcClient {
             .execute_raw("getSignatureStatuses", params)
             .await?;
 
+        let invalid = || {
+            crate::Error::Data(crate::errors::DataError::ParseError {
+                data_type: "response".to_string(),
+                error: "invalid format".to_string(),
+            })
+        };
+        let slot = result
+            .get("context")
+            .and_then(|context| context.get("slot"))
+            .and_then(|slot| slot.as_u64())
+            .ok_or_else(invalid)?;
         let values = result
             .get("value")
             .and_then(|v| v.as_array())
-            .ok_or_else(|| {
-                crate::Error::Data(crate::errors::DataError::ParseError {
-                    data_type: "response".to_string(),
-                    error: "invalid format".to_string(),
-                })
-            })?;
+            .ok_or_else(invalid)?;
 
         let mut statuses = Vec::with_capacity(values.len());
         for value in values {
@@ -425,7 +450,7 @@ impl RpcClientMethods for RpcClient {
             }
         }
 
-        Ok(statuses)
+        Ok((slot, statuses))
     }
 
     async fn get_token_accounts_by_owner(

@@ -51,14 +51,17 @@ impl SettlementReader for SolanaSettlement {
             .collect::<Result<Vec<_>>>()?;
 
         let rpc = get_rpc_client();
+        // Each status is kept with the slot its node answered at.
         let mut statuses = Vec::with_capacity(signatures.len());
         for chunk in signatures.chunks(MAX_SIGNATURES_PER_STATUS_READ) {
-            statuses.extend(rpc.get_signature_statuses(chunk).await.map_err(|error| {
-                Error::SettlementRead {
-                    chain: ChainId::Solana,
-                    detail: error.to_string(),
-                }
-            })?);
+            let (read_slot, chunk_statuses) =
+                rpc.get_signature_statuses(chunk)
+                    .await
+                    .map_err(|error| Error::SettlementRead {
+                        chain: ChainId::Solana,
+                        detail: error.to_string(),
+                    })?;
+            statuses.extend(chunk_statuses.into_iter().map(|status| (read_slot, status)));
         }
         if statuses.len() != checks.len() {
             return Err(Error::SettlementRead {
@@ -71,26 +74,27 @@ impl SettlementReader for SolanaSettlement {
             });
         }
 
-        let needs_height = checks
+        let needs_tip = checks
             .iter()
             .zip(&statuses)
-            .any(|(check, status)| status.is_none() && check.expiry_bound.is_some());
-        let block_height = if needs_height {
-            rpc.get_block_height_with_commitment(EXPIRED_HEIGHT_COMMITMENT)
-                .await
-                .ok()
+            .any(|(check, (_, status))| status.is_none() && check.expiry_bound.is_some());
+        let tip = if needs_tip {
+            finalized_tip(rpc).await.ok()
         } else {
             None
         };
 
         let mut verdicts = Vec::with_capacity(checks.len());
-        for ((check, signature), status) in checks.iter().zip(&signatures).zip(&statuses) {
-            let verdict = match classify_status(status.as_ref(), check.expiry_bound, block_height) {
-                StatusRead::Decided(verdict) => verdict,
-                StatusRead::LookUpTransaction => {
-                    lookup_verdict(transaction_lookup(rpc.get_transaction(signature).await))
-                }
-            };
+        for ((check, signature), (read_slot, status)) in
+            checks.iter().zip(&signatures).zip(&statuses)
+        {
+            let verdict =
+                match classify_status(status.as_ref(), *read_slot, check.expiry_bound, tip) {
+                    StatusRead::Decided(verdict) => verdict,
+                    StatusRead::LookUpTransaction => {
+                        transaction_lookup(rpc.get_transaction(signature).await).verdict()
+                    }
+                };
             verdicts.push(verdict);
         }
         Ok(verdicts)
@@ -117,20 +121,45 @@ impl SettlementReader for SolanaSettlement {
     }
 }
 
+/// The finalized tip an expiry is judged against: a block height and the slot
+/// it was read at, from one node.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub struct FinalizedTip {
+    pub slot: u64,
+    pub block_height: u64,
+}
+
+/// Read the finalized tip.
+pub(crate) async fn finalized_tip(rpc: &impl RpcClientMethods) -> crate::Result<FinalizedTip> {
+    let (slot, block_height) = rpc
+        .get_slot_and_block_height(EXPIRED_HEIGHT_COMMITMENT)
+        .await?;
+    Ok(FinalizedTip { slot, block_height })
+}
+
 /// What a signature status alone decides.
 #[derive(Debug, PartialEq, Eq)]
-enum StatusRead {
+pub(crate) enum StatusRead {
     Decided(SignatureVerdict),
-    /// The status is null after the expiry bound: only the transaction lookup decides.
+    /// The status is null after the expiry: only the transaction lookup decides.
     LookUpTransaction,
 }
 
-/// A failed status counts only at `confirmed` or above; a `processed` status may still be
-/// rolled back. A null status is undecided until the block height has passed the expiry bound.
-fn classify_status(
+/// The one rule for what a signature status proves, shared by settlement and
+/// by the swap settle loop.
+///
+/// A status present at any level means a node saw the signature, so it is
+/// never absence: a failed status counts only at `confirmed` or above, since a
+/// `processed` one may still be rolled back. A null status is evidence of
+/// absence only once the finalized height has passed `expiry_bound` and the
+/// node that answered with it had reached the slot that height was read at
+/// (`read_slot`): a node behind that slot may simply not have the block that
+/// holds the transaction yet. Even then the transaction lookup decides.
+pub(crate) fn classify_status(
     status: Option<&TransactionStatus>,
+    read_slot: u64,
     expiry_bound: Option<u64>,
-    block_height: Option<u64>,
+    tip: Option<FinalizedTip>,
 ) -> StatusRead {
     match status {
         Some(status) => StatusRead::Decided(match status.confirmation_status() {
@@ -143,8 +172,10 @@ fn classify_status(
                 }
             }
         }),
-        None => match (expiry_bound, block_height) {
-            (Some(bound), Some(height)) if height > bound => StatusRead::LookUpTransaction,
+        None => match (expiry_bound, tip) {
+            (Some(bound), Some(tip)) if tip.block_height > bound && read_slot >= tip.slot => {
+                StatusRead::LookUpTransaction
+            }
             _ => StatusRead::Decided(SignatureVerdict::Pending),
         },
     }
@@ -152,33 +183,38 @@ fn classify_status(
 
 /// The outcome of a `getTransaction` lookup for an expired, unseen signature.
 #[derive(Debug, PartialEq, Eq)]
-enum TransactionLookup {
+pub(crate) enum TransactionLookup {
+    /// The chain holds no transaction for the signature.
     Missing,
-    Executed { failed: bool },
+    /// It executed; `error` is the chain's failure, when it failed.
+    Executed { error: Option<String> },
+    /// The lookup could not be read. Not evidence of anything.
     Unreadable,
 }
 
-fn transaction_lookup(
+impl TransactionLookup {
+    pub(crate) fn verdict(&self) -> SignatureVerdict {
+        match self {
+            TransactionLookup::Missing => SignatureVerdict::NotLanded,
+            TransactionLookup::Executed { error: Some(_) } => SignatureVerdict::FailedOnChain,
+            TransactionLookup::Executed { error: None } => SignatureVerdict::Landed,
+            TransactionLookup::Unreadable => SignatureVerdict::Pending,
+        }
+    }
+}
+
+pub(crate) fn transaction_lookup(
     result: crate::Result<Option<EncodedConfirmedTransactionWithStatusMeta>>,
 ) -> TransactionLookup {
     match result {
         Ok(None) => TransactionLookup::Missing,
         Ok(Some(transaction)) => match transaction.transaction.meta {
             Some(meta) => TransactionLookup::Executed {
-                failed: meta.err.is_some(),
+                error: meta.err.map(|err| err.to_string()),
             },
             None => TransactionLookup::Unreadable,
         },
         Err(_) => TransactionLookup::Unreadable,
-    }
-}
-
-fn lookup_verdict(lookup: TransactionLookup) -> SignatureVerdict {
-    match lookup {
-        TransactionLookup::Missing => SignatureVerdict::NotLanded,
-        TransactionLookup::Executed { failed: true } => SignatureVerdict::FailedOnChain,
-        TransactionLookup::Executed { failed: false } => SignatureVerdict::Landed,
-        TransactionLookup::Unreadable => SignatureVerdict::Pending,
     }
 }
 
@@ -218,13 +254,17 @@ mod tests {
         }
     }
 
+    fn tip(slot: u64, block_height: u64) -> Option<FinalizedTip> {
+        Some(FinalizedTip { slot, block_height })
+    }
+
     #[test]
     fn a_failed_status_at_confirmed_or_above_failed_on_chain() {
         for confirmation in [
             TransactionConfirmationStatus::Confirmed,
             TransactionConfirmationStatus::Finalized,
         ] {
-            let read = classify_status(Some(&status(confirmation, failure())), None, None);
+            let read = classify_status(Some(&status(confirmation, failure())), 0, None, None);
             assert_eq!(decided(read), SignatureVerdict::FailedOnChain);
         }
     }
@@ -235,18 +275,21 @@ mod tests {
             TransactionConfirmationStatus::Confirmed,
             TransactionConfirmationStatus::Finalized,
         ] {
-            let read = classify_status(Some(&status(confirmation, None)), None, None);
+            let read = classify_status(Some(&status(confirmation, None)), 0, None, None);
             assert_eq!(decided(read), SignatureVerdict::Landed);
         }
     }
 
+    /// A node that returned any status saw the signature: past the expiry
+    /// and failed or not, a `processed` status is never evidence of absence.
     #[test]
-    fn a_processed_status_is_pending_even_when_it_failed() {
+    fn a_processed_status_is_pending_even_past_the_expiry() {
         for err in [None, failure()] {
             let read = classify_status(
                 Some(&status(TransactionConfirmationStatus::Processed, err)),
+                900,
                 Some(10),
-                Some(500),
+                tip(800, 500),
             );
             assert_eq!(decided(read), SignatureVerdict::Pending);
         }
@@ -255,39 +298,53 @@ mod tests {
     #[test]
     fn a_null_status_before_the_expiry_bound_is_pending() {
         assert_eq!(
-            decided(classify_status(None, Some(100), Some(100))),
-            SignatureVerdict::Pending
+            decided(classify_status(None, 900, Some(100), tip(800, 100))),
+            SignatureVerdict::Pending,
+            "the last valid block itself still counts"
         );
         assert_eq!(
-            decided(classify_status(None, Some(100), Some(42))),
+            decided(classify_status(None, 900, Some(100), tip(800, 42))),
             SignatureVerdict::Pending
         );
     }
 
     #[test]
-    fn a_null_status_without_a_bound_or_a_height_is_pending() {
+    fn a_null_status_without_a_bound_or_a_tip_is_pending() {
         assert_eq!(
-            decided(classify_status(None, None, Some(1_000))),
+            decided(classify_status(None, 900, None, tip(800, 1_000))),
             SignatureVerdict::Pending
         );
         assert_eq!(
-            decided(classify_status(None, Some(100), None)),
+            decided(classify_status(None, 900, Some(100), None)),
+            SignatureVerdict::Pending
+        );
+    }
+
+    /// A null status from a node that had not reached the slot the expiry was
+    /// read at says nothing: that node may not hold the block with the
+    /// transaction yet.
+    #[test]
+    fn a_null_status_from_a_node_behind_the_expiry_slot_is_pending() {
+        assert_eq!(
+            decided(classify_status(None, 799, Some(100), tip(800, 101))),
             SignatureVerdict::Pending
         );
     }
 
     #[test]
     fn a_null_status_past_the_expiry_bound_is_decided_by_the_transaction_lookup() {
-        assert_eq!(
-            classify_status(None, Some(100), Some(101)),
-            StatusRead::LookUpTransaction
-        );
+        for read_slot in [800, 801] {
+            assert_eq!(
+                classify_status(None, read_slot, Some(100), tip(800, 101)),
+                StatusRead::LookUpTransaction
+            );
+        }
     }
 
     #[test]
     fn an_expired_signature_with_no_transaction_did_not_land() {
         assert_eq!(
-            lookup_verdict(transaction_lookup(Ok(None))),
+            transaction_lookup(Ok(None)).verdict(),
             SignatureVerdict::NotLanded
         );
     }
@@ -303,7 +360,7 @@ mod tests {
             TransactionLookup::Unreadable
         );
         assert_eq!(
-            lookup_verdict(TransactionLookup::Unreadable),
+            TransactionLookup::Unreadable.verdict(),
             SignatureVerdict::Pending
         );
     }
@@ -338,20 +395,18 @@ mod tests {
     #[test]
     fn a_found_transaction_is_decided_by_its_meta() {
         let failed = meta(serde_json::json!({ "InstructionError": [0, { "Custom": 1 }] }));
+        let lookup = transaction_lookup(Ok(Some(transaction(failed))));
+        assert!(matches!(
+            lookup,
+            TransactionLookup::Executed { error: Some(_) }
+        ));
+        assert_eq!(lookup.verdict(), SignatureVerdict::FailedOnChain);
         assert_eq!(
-            lookup_verdict(transaction_lookup(Ok(Some(transaction(failed))))),
-            SignatureVerdict::FailedOnChain
-        );
-        assert_eq!(
-            lookup_verdict(transaction_lookup(Ok(Some(transaction(meta(
-                serde_json::Value::Null
-            )))))),
+            transaction_lookup(Ok(Some(transaction(meta(serde_json::Value::Null))))).verdict(),
             SignatureVerdict::Landed
         );
         assert_eq!(
-            lookup_verdict(transaction_lookup(Ok(Some(transaction(
-                serde_json::Value::Null
-            ))))),
+            transaction_lookup(Ok(Some(transaction(serde_json::Value::Null)))).verdict(),
             SignatureVerdict::Pending
         );
     }

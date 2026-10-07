@@ -44,6 +44,9 @@ use tokio::time::Instant;
 use crate::chains::solana::rpc::client::RpcClient;
 use crate::chains::solana::rpc::types::SimulationOutcome;
 use crate::chains::solana::rpc::{get_rpc_client, RpcClientMethods};
+use crate::chains::solana::settlement::{
+    classify_status, finalized_tip, transaction_lookup, FinalizedTip, StatusRead, TransactionLookup,
+};
 use crate::chains::solana::solana_packet::PACKET_DATA_SIZE;
 use crate::chains::solana::solana_sdk::{
     compute_budget::id as compute_budget_program,
@@ -52,10 +55,11 @@ use crate::chains::solana::solana_sdk::{
     transaction::VersionedTransaction,
 };
 use crate::chains::solana::solana_transaction_status::{
-    TransactionConfirmationStatus, TransactionStatus,
+    EncodedConfirmedTransactionWithStatusMeta, TransactionStatus,
 };
 use crate::chains::solana::swaps::cost_guard;
 use crate::chains::solana::swaps::direct::compute::compute_unit_limit_from_measured;
+use crate::chains::SignatureVerdict;
 use crate::logger::{self, LogTag};
 use crate::swaps::{NotSubmittedReason, Quote, SwapExecutionError};
 
@@ -71,14 +75,9 @@ const STATUS_POLL_INTERVAL: Duration = Duration::from_millis(500);
 /// this only fights the network having dropped the earlier copy.
 const REBROADCAST_INTERVAL: Duration = Duration::from_secs(2);
 
-/// How often the settle loop checks whether the blockhash has expired.
-const BLOCK_HEIGHT_CHECK_INTERVAL: Duration = Duration::from_secs(4);
-
-/// Extra status reads, spaced a second apart, once the blockhash is seen to
-/// have expired: a transaction can land in the very last valid block and take
-/// a moment to index.
-const POST_EXPIRY_STATUS_ATTEMPTS: usize = 2;
-const POST_EXPIRY_STATUS_DELAY: Duration = Duration::from_secs(1);
+/// How often the settle loop reads the finalized tip its expiry is judged
+/// against.
+const TIP_CHECK_INTERVAL: Duration = Duration::from_secs(4);
 
 /// The high bit of a message's first byte marks a versioned message; the low
 /// seven bits are the version.
@@ -257,13 +256,19 @@ pub trait SwapNode: Sync {
         &self,
         transaction: &VersionedTransaction,
     ) -> impl Future<Output = crate::Result<Signature>> + Send;
-    /// One signature's status, `None` while the node does not know it.
+    /// One signature's status, `None` while the node does not know it, with
+    /// the slot the node answered at.
     fn status(
         &self,
         signature: &Signature,
-    ) -> impl Future<Output = crate::Result<Option<TransactionStatus>>> + Send;
-    /// The current block height.
-    fn block_height(&self) -> impl Future<Output = crate::Result<u64>> + Send;
+    ) -> impl Future<Output = crate::Result<(u64, Option<TransactionStatus>)>> + Send;
+    /// The finalized tip an expiry is judged against.
+    fn finalized_tip(&self) -> impl Future<Output = crate::Result<FinalizedTip>> + Send;
+    /// The executed transaction for a signature, `None` when the chain holds none.
+    fn transaction(
+        &self,
+        signature: &Signature,
+    ) -> impl Future<Output = crate::Result<Option<EncodedConfirmedTransactionWithStatusMeta>>> + Send;
 }
 
 impl SwapNode for RpcClient {
@@ -278,17 +283,25 @@ impl SwapNode for RpcClient {
         self.send_transaction(transaction).await
     }
 
-    async fn status(&self, signature: &Signature) -> crate::Result<Option<TransactionStatus>> {
-        Ok(self
+    async fn status(
+        &self,
+        signature: &Signature,
+    ) -> crate::Result<(u64, Option<TransactionStatus>)> {
+        let (slot, statuses) = self
             .get_signature_statuses(std::slice::from_ref(signature))
-            .await?
-            .into_iter()
-            .next()
-            .flatten())
+            .await?;
+        Ok((slot, statuses.into_iter().next().flatten()))
     }
 
-    async fn block_height(&self) -> crate::Result<u64> {
-        self.get_block_height().await
+    async fn finalized_tip(&self) -> crate::Result<FinalizedTip> {
+        finalized_tip(self).await
+    }
+
+    async fn transaction(
+        &self,
+        signature: &Signature,
+    ) -> crate::Result<Option<EncodedConfirmedTransactionWithStatusMeta>> {
+        self.get_transaction(signature).await
     }
 }
 
@@ -300,9 +313,11 @@ pub enum Settled {
     /// Confirmed, and the chain reports it failed: it moved nothing but its
     /// fee, and it can never land again.
     Reverted { detail: String },
-    /// Never seen, and its blockhash provably expired: a node that answered did
-    /// not know the signature after the block height passed the last block the
-    /// blockhash was valid for, so it can never land, by any node.
+    /// Never seen, and its blockhash provably expired: past the last block the
+    /// blockhash was valid for, a node that had reached the expiry did not know
+    /// the signature and the chain holds no transaction for it
+    /// ([`crate::chains::solana::settlement::classify_status`]), so it can never
+    /// land, by any node.
     Expired {
         last_valid_block_height: u64,
         current_block_height: u64,
@@ -361,50 +376,24 @@ pub async fn send_and_settle<N: SwapNode>(
     Ok((signature, settled))
 }
 
-/// The terminal verdict one signature status amounts to, if any.
-///
-/// An error is honoured only at `Confirmed` or above: a status at `Processed`
-/// lives on one fork, and if that fork is abandoned the same signed bytes can
-/// still land successfully on the canonical one.
-fn status_verdict(status: &TransactionStatus) -> Option<Settled> {
-    match status.confirmation_status() {
-        TransactionConfirmationStatus::Confirmed | TransactionConfirmationStatus::Finalized => {
-            Some(match &status.err {
-                Some(err) => Settled::Reverted {
-                    detail: err.to_string(),
-                },
-                None => Settled::Landed,
-            })
-        }
-        TransactionConfirmationStatus::Processed => None,
-    }
-}
-
-/// Whether a transaction whose signature has not been seen is now provably
-/// dead: the current block height has passed the last block its blockhash was
-/// valid for.
-fn blockhash_has_expired(current_block_height: u64, last_valid_block_height: u64) -> bool {
-    current_block_height > last_valid_block_height
-}
-
-/// What one signature-status read told the settle loop.
+/// What one read of the chain told the settle loop.
 enum Poll {
     /// The transaction reached a terminal state.
     Settled(Settled),
-    /// The node answered, and the signature is not yet in a terminal state.
-    /// Absence here is evidence: the expiry verdict rests on it.
+    /// Not decided: unconfirmed, inside its validity window, or unreadable.
+    /// An unreadable node is not evidence of anything.
     Pending,
-    /// The node could not be asked. Not evidence of anything: the transaction
-    /// may be confirmed on a chain that simply cannot be read right now.
-    Unreadable,
 }
 
-async fn poll_status<N: SwapNode>(node: &N, signature: &Signature) -> Poll {
-    match node.status(signature).await {
-        Ok(status) => match status.as_ref().and_then(status_verdict) {
-            Some(settled) => Poll::Settled(settled),
-            None => Poll::Pending,
-        },
+/// Read the signature once and decide it by the settlement rule.
+async fn poll<N: SwapNode>(
+    node: &N,
+    signature: &Signature,
+    last_valid_block_height: Option<u64>,
+    tip: Option<FinalizedTip>,
+) -> Poll {
+    let (read_slot, status) = match node.status(signature).await {
+        Ok(read) => read,
         Err(e) => {
             logger::debug(
                 LogTag::Swap,
@@ -413,7 +402,47 @@ async fn poll_status<N: SwapNode>(node: &N, signature: &Signature) -> Poll {
                      is not evidence the swap failed: {e}"
                 ),
             );
-            Poll::Unreadable
+            return Poll::Pending;
+        }
+    };
+    let failure = |err: Option<String>| Settled::Reverted {
+        detail: err.unwrap_or_default(),
+    };
+    match classify_status(status.as_ref(), read_slot, last_valid_block_height, tip) {
+        StatusRead::Decided(SignatureVerdict::Landed) => Poll::Settled(Settled::Landed),
+        StatusRead::Decided(SignatureVerdict::FailedOnChain) => Poll::Settled(failure(
+            status
+                .and_then(|status| status.err)
+                .map(|err| err.to_string()),
+        )),
+        StatusRead::Decided(SignatureVerdict::Pending | SignatureVerdict::NotLanded) => {
+            Poll::Pending
+        }
+        StatusRead::LookUpTransaction => {
+            match transaction_lookup(node.transaction(signature).await) {
+                TransactionLookup::Executed { error: None } => Poll::Settled(Settled::Landed),
+                TransactionLookup::Executed { error } => Poll::Settled(failure(error)),
+                TransactionLookup::Unreadable => Poll::Pending,
+                TransactionLookup::Missing => {
+                    let (Some(last_valid_block_height), Some(tip)) = (last_valid_block_height, tip)
+                    else {
+                        return Poll::Pending;
+                    };
+                    logger::info(
+                        LogTag::Swap,
+                        &format!(
+                            "Transaction {signature} is dead: its blockhash expired at block \
+                             {last_valid_block_height}, the finalized block is {}, and no \
+                             node holds the signature",
+                            tip.block_height
+                        ),
+                    );
+                    Poll::Settled(Settled::Expired {
+                        last_valid_block_height,
+                        current_block_height: tip.block_height,
+                    })
+                }
+            }
         }
     }
 }
@@ -421,6 +450,10 @@ async fn poll_status<N: SwapNode>(node: &N, signature: &Signature) -> Poll {
 /// Poll for a landed signature, re-broadcasting the same signed transaction
 /// against network drops, until it lands, fails at `Confirmed`, its blockhash
 /// provably expires with the signature unseen, or `timeout` runs out.
+///
+/// Whether the transaction is dead is decided by the settlement rule
+/// ([`classify_status`]) against the last finalized tip read, which is always
+/// read before the status it judges.
 async fn settle<N: SwapNode>(
     node: &N,
     transaction: &VersionedTransaction,
@@ -430,10 +463,11 @@ async fn settle<N: SwapNode>(
 ) -> Settled {
     let deadline = Instant::now() + timeout;
     let mut last_rebroadcast = Instant::now();
-    let mut last_height_check = Instant::now();
+    let mut last_tip_check = Instant::now();
+    let mut tip: Option<FinalizedTip> = None;
 
     loop {
-        if let Poll::Settled(settled) = poll_status(node, signature).await {
+        if let Poll::Settled(settled) = poll(node, signature, last_valid_block_height, tip).await {
             return settled;
         }
 
@@ -462,46 +496,10 @@ async fn settle<N: SwapNode>(
             }
         }
 
-        if let Some(last_valid_block_height) = last_valid_block_height {
-            if last_height_check.elapsed() >= BLOCK_HEIGHT_CHECK_INTERVAL {
-                last_height_check = Instant::now();
-                if let Ok(height) = node.block_height().await {
-                    if blockhash_has_expired(height, last_valid_block_height) {
-                        // A transaction can land in the very last valid block and
-                        // take a moment to index, so absence is read again before
-                        // death is declared, and only a node that ANSWERED counts.
-                        let mut confirmed_absent = false;
-                        for _ in 0..POST_EXPIRY_STATUS_ATTEMPTS {
-                            tokio::time::sleep(POST_EXPIRY_STATUS_DELAY).await;
-                            match poll_status(node, signature).await {
-                                Poll::Settled(settled) => return settled,
-                                Poll::Pending => confirmed_absent = true,
-                                Poll::Unreadable => {}
-                            }
-                        }
-                        if confirmed_absent {
-                            logger::info(
-                                LogTag::Swap,
-                                &format!(
-                                    "Transaction {signature} is dead: its blockhash expired at \
-                                     block {last_valid_block_height}, the current block is \
-                                     {height}, and the signature was never seen"
-                                ),
-                            );
-                            return Settled::Expired {
-                                last_valid_block_height,
-                                current_block_height: height,
-                            };
-                        }
-                        logger::warning(
-                            LogTag::Swap,
-                            &format!(
-                                "Blockhash for {signature} expired, but no node could be read to \
-                                 confirm the signature is absent; the outcome stays unknown"
-                            ),
-                        );
-                    }
-                }
+        if last_valid_block_height.is_some() && last_tip_check.elapsed() >= TIP_CHECK_INTERVAL {
+            last_tip_check = Instant::now();
+            if let Ok(read) = node.finalized_tip().await {
+                tip = Some(read);
             }
         }
 

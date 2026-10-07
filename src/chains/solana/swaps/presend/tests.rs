@@ -687,34 +687,6 @@ async fn an_unavailable_simulation_proceeds_with_one_untightened_send() {
     assert_eq!(message.instructions[0].data[1..5], CEILING.to_le_bytes());
 }
 
-/// An error is final only at `Confirmed`: a status at `Processed` lives on one
-/// fork, and the same signed bytes can still land on the canonical one.
-#[test]
-fn an_error_is_a_verdict_only_once_confirmed() {
-    let failed = Some(TransactionError::AccountInUse);
-    assert_eq!(
-        status_verdict(&status(Level::Processed, failed.clone())),
-        None
-    );
-    assert_eq!(status_verdict(&status(Level::Processed, None)), None);
-    assert!(matches!(
-        status_verdict(&status(Level::Confirmed, failed.clone())),
-        Some(Settled::Reverted { .. })
-    ));
-    assert!(matches!(
-        status_verdict(&status(Level::Finalized, failed)),
-        Some(Settled::Reverted { .. })
-    ));
-    assert_eq!(
-        status_verdict(&status(Level::Confirmed, None)),
-        Some(Settled::Landed)
-    );
-    assert_eq!(
-        status_verdict(&status(Level::Finalized, None)),
-        Some(Settled::Landed)
-    );
-}
-
 /// A failure seen at `Processed` on an abandoned fork, then the same
 /// signature confirmed cleanly, is a landed swap.
 #[tokio::test(start_paused = true)]
@@ -742,12 +714,67 @@ async fn a_processed_failure_on_an_abandoned_fork_is_not_terminal() {
     assert_eq!(settled, Settled::Landed);
 }
 
-#[test]
-fn a_blockhash_is_expired_only_once_the_height_strictly_passes_the_last_valid_one() {
-    assert!(
-        !blockhash_has_expired(100, 100),
-        "the last valid block itself still counts"
+/// Settles `node`'s answers for a transaction whose blockhash was valid to
+/// block 500, on a node whose finalized tip is past it.
+async fn settled_past_expiry(node: &ScriptedNode) -> Settled {
+    let signer = Keypair::new();
+    let mut transaction = aggregator_build(&signer, &Pubkey::new_unique());
+    transaction.signatures[0] = signer.sign_message(&transaction.message.serialize());
+    let (_, settled) = send_and_settle(node, &transaction, Some(500), Duration::from_secs(30))
+        .await
+        .expect("sent");
+    settled
+}
+
+/// A node that returned a status for the signature saw it, at whatever
+/// level: past the expiry, a `processed` status keeps the swap unknown.
+#[tokio::test(start_paused = true)]
+async fn a_signature_seen_at_processed_is_never_declared_expired() {
+    let node = ScriptedNode::new(
+        0,
+        vec![SendAnswer::Accepted],
+        vec![Ok(Some(status(Level::Processed, None)))],
+        501,
     );
-    assert!(!blockhash_has_expired(99, 100));
-    assert!(blockhash_has_expired(101, 100));
+    assert!(matches!(
+        settled_past_expiry(&node).await,
+        Settled::Unsettled { .. }
+    ));
+}
+
+/// A status reader that had not reached the slot the expiry was read at may
+/// not hold the block with the transaction yet: its null proves nothing.
+#[tokio::test(start_paused = true)]
+async fn a_status_reader_behind_the_expiry_never_proves_a_swap_dead() {
+    let node =
+        ScriptedNode::new(0, vec![SendAnswer::Accepted], vec![Ok(None)], 501).reading_at(90, 100);
+    assert!(matches!(
+        settled_past_expiry(&node).await,
+        Settled::Unsettled { .. }
+    ));
+}
+
+/// A null status past the expiry is checked against the chain's own record
+/// of the transaction before the swap is declared dead.
+#[tokio::test(start_paused = true)]
+async fn an_unseen_signature_the_chain_executed_is_decided_by_its_transaction() {
+    let landed = ScriptedNode::new(0, vec![SendAnswer::Accepted], vec![Ok(None)], 501)
+        .holding(serde_json::Value::Null);
+    assert_eq!(settled_past_expiry(&landed).await, Settled::Landed);
+
+    let reverted = ScriptedNode::new(0, vec![SendAnswer::Accepted], vec![Ok(None)], 501)
+        .holding(serde_json::json!({ "InstructionError": [0, { "Custom": 1 }] }));
+    assert!(matches!(
+        settled_past_expiry(&reverted).await,
+        Settled::Reverted { .. }
+    ));
+
+    let missing = ScriptedNode::new(0, vec![SendAnswer::Accepted], vec![Ok(None)], 501);
+    assert!(matches!(
+        settled_past_expiry(&missing).await,
+        Settled::Expired {
+            last_valid_block_height: 500,
+            current_block_height: 501
+        }
+    ));
 }

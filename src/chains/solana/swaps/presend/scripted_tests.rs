@@ -9,9 +9,10 @@ use std::sync::Mutex;
 
 use super::SwapNode;
 use crate::chains::solana::rpc::types::SimulationOutcome;
+use crate::chains::solana::settlement::FinalizedTip;
 use crate::chains::solana::solana_sdk::{signature::Signature, transaction::VersionedTransaction};
 use crate::chains::solana::solana_transaction_status::{
-    TransactionConfirmationStatus, TransactionStatus,
+    EncodedConfirmedTransactionWithStatusMeta, TransactionConfirmationStatus, TransactionStatus,
 };
 use crate::rpc::RpcError;
 
@@ -22,13 +23,21 @@ pub(crate) struct ScriptedNode {
     sends: Mutex<VecDeque<SendAnswer>>,
     statuses: Mutex<VecDeque<Result<Option<TransactionStatus>, crate::Error>>>,
     block_height: u64,
+    /// The slot the finalized tip is read at.
+    tip_slot: u64,
+    /// The slot every status read answers at.
+    read_slot: u64,
+    /// The execution error of the transaction the chain holds, null when it
+    /// succeeded; `None` when the chain holds none.
+    executed: Option<serde_json::Value>,
     sent: Mutex<Vec<VersionedTransaction>>,
 }
 
 impl ScriptedNode {
     /// A node that simulates cleanly at `units`, answers each send with the
-    /// next of `sends`, each status read with the next of `statuses`, and
-    /// reports `block_height`.
+    /// next of `sends`, each status read with the next of `statuses`, reports
+    /// `block_height` as its finalized tip, answers status reads from that same
+    /// slot, and holds no transaction for any signature.
     pub(crate) fn new(
         units: u64,
         sends: Vec<SendAnswer>,
@@ -45,8 +54,26 @@ impl ScriptedNode {
             sends: Mutex::new(sends.into()),
             statuses: Mutex::new(statuses.into()),
             block_height,
+            tip_slot: 0,
+            read_slot: 0,
+            executed: None,
             sent: Mutex::new(Vec::new()),
         }
+    }
+
+    /// The same node, answering status reads from `read_slot` while its
+    /// finalized tip was read at `tip_slot`.
+    pub(crate) fn reading_at(mut self, read_slot: u64, tip_slot: u64) -> Self {
+        self.read_slot = read_slot;
+        self.tip_slot = tip_slot;
+        self
+    }
+
+    /// The same node, holding an executed transaction for every signature
+    /// looked up, failed with `err` unless it is null.
+    pub(crate) fn holding(mut self, err: serde_json::Value) -> Self {
+        self.executed = Some(err);
+        self
     }
 
     /// The same node, unable to answer a simulation.
@@ -87,6 +114,30 @@ pub(crate) fn status(
     }
 }
 
+/// A transaction the chain executed, failed with `err` unless it is null.
+fn executed(err: serde_json::Value) -> EncodedConfirmedTransactionWithStatusMeta {
+    serde_json::from_value(serde_json::json!({
+        "slot": 1,
+        "transaction": {
+            "signatures": ["signature"],
+            "message": {
+                "accountKeys": [],
+                "recentBlockhash": "11111111111111111111111111111111",
+                "instructions": []
+            }
+        },
+        "meta": {
+            "err": err,
+            "status": { "Ok": null },
+            "fee": 5000,
+            "preBalances": [],
+            "postBalances": []
+        },
+        "blockTime": null
+    }))
+    .expect("a transaction response decodes")
+}
+
 /// How the scripted node answers one send.
 #[derive(Debug, Clone)]
 pub(crate) enum SendAnswer {
@@ -118,11 +169,24 @@ impl SwapNode for ScriptedNode {
         }
     }
 
-    async fn status(&self, _signature: &Signature) -> crate::Result<Option<TransactionStatus>> {
-        Self::next(&self.statuses)
+    async fn status(
+        &self,
+        _signature: &Signature,
+    ) -> crate::Result<(u64, Option<TransactionStatus>)> {
+        Self::next(&self.statuses).map(|status| (self.read_slot, status))
     }
 
-    async fn block_height(&self) -> crate::Result<u64> {
-        Ok(self.block_height)
+    async fn finalized_tip(&self) -> crate::Result<FinalizedTip> {
+        Ok(FinalizedTip {
+            slot: self.tip_slot,
+            block_height: self.block_height,
+        })
+    }
+
+    async fn transaction(
+        &self,
+        _signature: &Signature,
+    ) -> crate::Result<Option<EncodedConfirmedTransactionWithStatusMeta>> {
+        Ok(self.executed.clone().map(executed))
     }
 }

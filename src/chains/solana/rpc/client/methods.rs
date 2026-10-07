@@ -181,6 +181,13 @@ pub trait RpcClientMethods {
         commitment: CommitmentLevel,
     ) -> impl std::future::Future<Output = crate::Result<u64>> + Send;
 
+    /// The slot and the block height of the tip at `commitment`, read together
+    /// from one node so the pair describes one point of the chain.
+    fn get_slot_and_block_height(
+        &self,
+        commitment: CommitmentLevel,
+    ) -> impl std::future::Future<Output = crate::Result<(u64, u64)>> + Send;
+
     // Transaction methods
     fn send_transaction(
         &self,
@@ -194,10 +201,12 @@ pub trait RpcClientMethods {
         Output = crate::Result<Option<EncodedConfirmedTransactionWithStatusMeta>>,
     > + Send;
 
+    /// The slot the node answered at, and one status per signature in order,
+    /// `None` where the node does not know the signature.
     fn get_signature_statuses(
         &self,
         signatures: &[Signature],
-    ) -> impl std::future::Future<Output = crate::Result<Vec<Option<TransactionStatus>>>> + Send;
+    ) -> impl std::future::Future<Output = crate::Result<(u64, Vec<Option<TransactionStatus>>)>> + Send;
 
     // Token account methods
     fn get_token_accounts_by_owner(
