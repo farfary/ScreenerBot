@@ -3577,3 +3577,35 @@ fn every_manual_trade_runs_detached_from_its_caller() {
         assert!(spawned, "src/{file}: {call} runs on its own task");
     }
 }
+
+/// Every position operation that submits a swap marks its mint as busy before the swap and
+/// holds the mark until the swap's row or pending state is recorded: a confirmed swap moves
+/// the wallet first, and the wallet-history sync and late-fill attribution read that
+/// movement as an outside trade otherwise.
+#[test]
+fn every_position_swap_marks_its_mint_before_it_is_sent() {
+    let operations = Path::new(env!("CARGO_MANIFEST_DIR")).join("src/positions/operations");
+    let mut swapping = 0;
+    for entry in fs::read_dir(&operations).expect("read the operations directory") {
+        let path = entry.expect("dir entry").path();
+        let contents = fs::read_to_string(&path).expect("read operation source");
+        let code = blank_literals(&strip_comment_text(&production_text(&contents)));
+        let Some(swap) = code.find("execute_swap_with_fallback(") else {
+            continue;
+        };
+        swapping += 1;
+        let marked = ["mark_swap_in_flight(", "mark_partial_exit_pending("]
+            .iter()
+            .filter_map(|mark| code.find(mark))
+            .any(|mark| mark < swap);
+        assert!(
+            marked,
+            "{}: the swap is sent before its mint is marked busy",
+            path.display()
+        );
+    }
+    assert!(
+        swapping >= 4,
+        "the guard must see every swapping operation ({swapping} seen)"
+    );
+}

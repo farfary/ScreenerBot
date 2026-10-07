@@ -323,17 +323,25 @@ pub async fn position_has_pending_swap(mint: &str, position_id: i64) -> bool {
 
 /// Whether a bot swap of `mint` that is not one of `position_id`'s may still move the
 /// wallet's holding of the mint: a pending DCA or partial exit of another position, or a
-/// swap submitted whose pending state is not recorded yet. Its tokens may or may not be in a
-/// holding read now, so such a reading cannot be attributed to one position.
+/// swap submitted whose pending state is not recorded yet (a partial exit counted on the
+/// mint before its details are registered, or a marked swap). Its tokens may or may not be
+/// in a holding read now, so such a reading cannot be attributed to one position.
 pub async fn other_swap_in_flight(mint: &str, position_id: i64) -> bool {
+    let partials = get_pending_partial_exits_for_mint(mint).await;
+    let partials_counted = PENDING_PARTIAL_EXITS
+        .read()
+        .await
+        .get(mint)
+        .copied()
+        .unwrap_or(0);
     get_pending_dca_swaps_for_mint(mint)
         .await
         .iter()
         .any(|entry| entry.position_id != position_id)
-        || get_pending_partial_exits_for_mint(mint)
-            .await
+        || partials
             .iter()
             .any(|entry| entry.position_id != position_id)
+        || partials_counted as usize > partials.len()
         || SWAPS_IN_FLIGHT
             .lock()
             .unwrap_or_else(|poisoned| poisoned.into_inner())

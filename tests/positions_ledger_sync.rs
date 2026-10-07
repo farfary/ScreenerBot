@@ -891,6 +891,83 @@ fn a_mint_with_a_swap_in_flight_is_left_entirely_alone() {
 }
 
 #[test]
+fn a_buy_in_flight_before_its_row_is_saved_is_not_imported() {
+    // The bot's entry swap confirmed, its row is not saved yet: no row matches the round.
+    let open = open_round(MINT, "open-sig:MINT");
+    let busy = HashSet::from([MINT.to_owned()]);
+
+    let plan = plan_position_writes(
+        std::slice::from_ref(&open),
+        &[],
+        &metadata(MINT, false),
+        &no_legs(),
+        &busy,
+        now(),
+    );
+    assert!(
+        plan.inserts.is_empty(),
+        "the bot's own buy is imported as a second row"
+    );
+
+    let settled = plan_position_writes(
+        &[open],
+        &[],
+        &metadata(MINT, false),
+        &no_legs(),
+        &no_busy(),
+        now(),
+    );
+    assert_eq!(settled.inserts.len(), 1, "an outside buy is still imported");
+}
+
+#[test]
+fn an_insert_planned_before_a_bot_swap_started_is_skipped_at_write_time() {
+    common::run_isolated(
+        "an_insert_planned_before_a_bot_swap_started_is_skipped_at_write_time",
+        || async {
+            let _dir = common::isolated_env();
+            let _cfg = common::config_guard();
+            screenerbot::paths::ensure_all_directories().expect("create data directories");
+            common::configure_own_wallet();
+            screenerbot::positions::initialize_positions_database()
+                .await
+                .expect("initialise positions database");
+
+            let open = open_round(
+                common::TEST_MINT,
+                &format!("open-sig:{}", common::TEST_MINT),
+            );
+            let plan = plan_position_writes(
+                &[open],
+                &[],
+                &metadata(common::TEST_MINT, false),
+                &no_legs(),
+                &no_busy(),
+                now(),
+            );
+            assert_eq!(plan.inserts.len(), 1);
+
+            let _submitting = state::mark_swap_in_flight(ChainId::Solana, common::TEST_MINT);
+            assert_eq!(
+                apply_plan(plan).await,
+                AppliedPlan {
+                    inserted: 0,
+                    updated: 0,
+                    skipped: 1,
+                }
+            );
+            assert!(
+                db::load_all_positions()
+                    .await
+                    .expect("load positions")
+                    .is_empty(),
+                "a row was imported while a bot swap of the mint was in flight"
+            );
+        },
+    );
+}
+
+#[test]
 fn an_unverified_entry_is_left_alone_and_not_duplicated() {
     let open = open_round(MINT, "open-sig:MINT");
     let mut bot_row = bot_position(&open);

@@ -152,8 +152,9 @@ pub struct SyncSummary {
     pub unchanged: usize,
 }
 
-/// The rows [`apply_plan`] wrote. A planned update found busy or already current at write
-/// time is `skipped`; a row that failed to write is logged and counted in neither.
+/// The rows [`apply_plan`] wrote. A planned insert or update found busy, or an update
+/// already current, at write time is `skipped`; a row that failed to write is logged and
+/// counted in neither.
 #[derive(Debug, Default, Clone, Copy, PartialEq, Eq)]
 pub struct AppliedPlan {
     pub inserted: usize,
@@ -171,9 +172,10 @@ pub struct AppliedPlan {
 /// time), and the close time of a holding that vanished from the wallet without any
 /// disposal we could observe.
 ///
-/// `busy_mints` are mints with bot work in flight (a pending DCA or partial exit). A
-/// matched row for one of them is neither reconciled nor duplicated — the trader's own
-/// bookkeeping lands first and the next sync sees a settled position.
+/// `busy_mints` are mints with bot work in flight (a pending DCA or partial exit, or a bot
+/// swap whose row or pending state is not recorded yet). A matched row for one of them is
+/// neither reconciled nor duplicated, and an unmatched round of one creates no row — the
+/// trader's own bookkeeping lands first and the next sync sees a settled position.
 pub fn plan_position_writes(
     rounds: &[LedgerRound],
     existing: &[Position],
@@ -236,6 +238,9 @@ pub fn plan_position_writes(
                     });
                 }
             }
+            // A bot swap of the mint in flight may be this round's own buy, whose row is
+            // saved once the swap returns; a row imported now would be its twin.
+            None if busy_mints.contains(&round.mint) => {}
             None => plan.inserts.push(build_position(round, &meta, None, now)),
         }
     }
@@ -893,7 +898,12 @@ async fn resolve_metadata(
 pub async fn apply_plan(plan: SyncPlan) -> AppliedPlan {
     let mut applied = AppliedPlan::default();
     let mut wrote_a_bot_row = false;
+    let busy_mints = crate::positions::state::mints_with_pending_swaps().await;
     for mut position in plan.inserts {
+        if busy_mints.contains(&position.mint) {
+            applied.skipped += 1;
+            continue;
+        }
         match crate::positions::db::save_position(&position).await {
             Ok(id) => {
                 applied.inserted += 1;

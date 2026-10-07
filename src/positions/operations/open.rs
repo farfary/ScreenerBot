@@ -12,7 +12,7 @@ use crate::positions::price_resolution::get_price_with_api_fallback;
 use crate::positions::queue::{enqueue_verification, VerificationItem};
 use crate::positions::state::{
     acquire_global_position_permit, acquire_position_lock, add_position, add_signature_to_index,
-    LAST_OPEN_TIME,
+    mark_swap_in_flight, LAST_OPEN_TIME,
 };
 use crate::positions::types::{
     EntrySubmission, Position, PositionManagement, PositionOrigin, VerificationKind,
@@ -279,6 +279,10 @@ async fn open_position_impl(
     // opened twice: the mark outlives a cancelled call and is released only on a
     // failure that proves nothing was sent.
     pending_open.keep();
+    // From before the submission until the row is in memory, the wallet-history sync
+    // leaves the mint to the trader: a confirmed buy shows in the wallet before then, and
+    // the sync would otherwise import it as a second, wallet-derived row of the round.
+    let _in_flight = mark_swap_in_flight(positions_db::get_store_chain().await?, &api_token.mint);
     let (transaction_signature, output_amount, confirmation_pending, effective_entry_price) =
         match execute_swap_with_fallback(
             &api_token,
@@ -396,6 +400,7 @@ async fn open_position_impl(
 
     // Add to state
     add_position(position_with_id).await;
+    drop(_in_flight);
 
     // Bug #25 fix: Set token priority to OpenPosition (100) for fastest updates (5s interval)
     // This ensures price tracking is responsive during active trading

@@ -2592,6 +2592,12 @@ fn a_late_fill_waits_while_another_swap_of_the_mint_is_in_flight() {
                 assert_late_fills_wait(id, RawAmount::new(HELD)).await;
             }
 
+            // A partial exit is counted on the mint before its swap; its details are
+            // registered only once the swap returns.
+            state::mark_partial_exit_pending(common::TEST_MINT).await;
+            assert_late_fills_wait(id, RawAmount::new(HELD)).await;
+            state::clear_partial_exit_pending(common::TEST_MINT).await;
+
             apply_transition(late_sell(id, Some(RawAmount::new(HELD))))
                 .await
                 .expect("the late sell is booked once no other swap is in flight");
