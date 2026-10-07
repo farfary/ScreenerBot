@@ -1,0 +1,11 @@
+{
+  "snapshot_state": "ready",
+  "total_tokens": 18452,
+  "with_pool_price": 6130,
+  "open_positions": 3,
+  "blacklisted": 412,
+  "with_ohlcv": 2875,
+  "passed_filtering": 1236,
+  "updated_at": "2026-10-07T09:59:40.000000+00:00",
+  "timestamp": "2026-10-07T10:00:00.000000+00:00"
+}

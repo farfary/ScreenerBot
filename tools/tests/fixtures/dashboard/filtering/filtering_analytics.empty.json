@@ -1,0 +1,16 @@
+{
+  "snapshot_state": "ready",
+  "total_tokens": 0,
+  "total_rejected": 0,
+  "total_passed": 0,
+  "pass_rate": 0,
+  "rejection_rate": 100,
+  "by_category": [],
+  "by_source": [],
+  "data_quality": [],
+  "top_reasons": [],
+  "recent_rejections": [],
+  "time_range": null,
+  "last_updated": null,
+  "timestamp": "2026-10-07T10:00:00.000000+00:00"
+}

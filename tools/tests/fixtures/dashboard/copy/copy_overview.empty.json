@@ -1,0 +1,117 @@
+{
+  "status": {
+    "enabled": true,
+    "live_available": true,
+    "blocked_reason": null,
+    "default_mode": "paper",
+    "default_slippage_pct": 2,
+    "force_stop_blocks": true,
+    "total_tasks": 1,
+    "active_tasks": 1,
+    "paper_tasks": 1,
+    "live_tasks": 0
+  },
+  "totals": {
+    "realized_pnl_native": 0,
+    "unrealized_pnl_native": 0,
+    "open_holdings": 0,
+    "unpriced_holdings": 0,
+    "wins": 0,
+    "losses": 0,
+    "win_rate_pct": null,
+    "active_budget_native": 5,
+    "active_spent_native": 0,
+    "active_arrival": {
+      "samples": 0,
+      "minimum_ms": null,
+      "median_ms": null,
+      "p95_ms": null,
+      "maximum_ms": null,
+      "average_ms": null
+    }
+  },
+  "tasks": [
+    {
+      "id": 1,
+      "chain": "solana",
+      "target_address": "CopyTargetAAA1111111111111111111111111111111",
+      "label": "Momentum desk",
+      "enabled": true,
+      "mode": "paper",
+      "sizing": {
+        "kind": "fixed",
+        "sol": 0.1
+      },
+      "exit_mode": "hybrid",
+      "exit_policy_overrides": {
+        "stop_loss": {
+          "enabled": null,
+          "threshold_pct": null,
+          "min_hold_seconds": null,
+          "allow_partial": null,
+          "partial_exit_default_pct": null
+        },
+        "trailing": {
+          "enabled": null,
+          "activation_pct": null,
+          "distance_pct": null
+        },
+        "roi": {
+          "enabled": null,
+          "target_profit_pct": null
+        },
+        "time": {
+          "enabled": null,
+          "loss_threshold_pct": null,
+          "duration_seconds": null
+        }
+      },
+      "max_native_per_trade": 0.2,
+      "max_native_per_token": 0.5,
+      "total_budget_native": 5,
+      "min_target_trade_native": null,
+      "max_target_trade_native": null,
+      "buy_once_per_token": true,
+      "slippage_pct": 2,
+      "created_at": "2026-10-06T21:00:00Z",
+      "updated_at": "2026-10-06T21:00:00Z",
+      "require_filter_pass": null,
+      "pause_reason": null,
+      "paused_at": null,
+      "stats": {
+        "task_id": 1,
+        "decisions": 0,
+        "filled_buys": 0,
+        "target_sells": 0,
+        "policy_exits": 0,
+        "manual_closes": 0,
+        "wins": 0,
+        "losses": 0,
+        "skipped": 0,
+        "submitted": 0,
+        "failed": 0,
+        "open_positions": 0,
+        "closed_positions": 0,
+        "realized_pnl_native": 0,
+        "unrealized_pnl_native": 0,
+        "book": "paper",
+        "unpriced_positions": 0,
+        "arrival_distance": {
+          "samples": 0,
+          "minimum_ms": null,
+          "median_ms": null,
+          "p95_ms": null,
+          "maximum_ms": null,
+          "average_ms": null
+        }
+      },
+      "spent_native": 0,
+      "remaining_budget_native": 5,
+      "effective_state": "paper",
+      "effective_require_filter_pass": true,
+      "pnl_trend": [],
+      "pause_text": null
+    }
+  ],
+  "activity": []
+}

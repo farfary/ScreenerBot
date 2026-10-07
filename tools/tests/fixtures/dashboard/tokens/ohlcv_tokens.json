@@ -1,0 +1,178 @@
+{
+  "tokens": [
+    {
+      "mint": "DezXAZ8z7PnrnRJjz3wXBoRgixCa6xjnB7YaB1pPB263",
+      "priority": "critical",
+      "status": "active",
+      "is_active": true,
+      "fetch_interval_seconds": 15,
+      "last_fetch": "2026-10-06T23:59:40.000Z",
+      "last_activity": "2026-10-06T23:59:00.000Z",
+      "consecutive_empty_fetches": 0,
+      "consecutive_pool_failures": 0,
+      "backfill_progress": {
+        "completed": 7,
+        "total": 7,
+        "percent": 100,
+        "timeframes": {
+          "1m": true,
+          "5m": true,
+          "15m": true,
+          "1h": true,
+          "4h": true,
+          "12h": true,
+          "1d": true
+        }
+      },
+      "candle_count": 21000,
+      "earliest_timestamp": 1788739200,
+      "latest_timestamp": 1791331140,
+      "data_span_hours": 719.9833333333333,
+      "open_gaps": 0,
+      "pool_count": 3,
+      "created_at": "2026-09-06T00:00:00.000Z",
+      "updated_at": "2026-10-06T23:59:00.000Z"
+    },
+    {
+      "mint": "EKpQGSJtjMFqKZ9KQanSqYXRcF8fBopzLHYxdM65zcjm",
+      "priority": "critical",
+      "status": "active",
+      "is_active": true,
+      "fetch_interval_seconds": 15,
+      "last_fetch": "2026-10-06T23:59:00.000Z",
+      "last_activity": "2026-10-06T23:58:20.000Z",
+      "consecutive_empty_fetches": 0,
+      "consecutive_pool_failures": 0,
+      "backfill_progress": {
+        "completed": 7,
+        "total": 7,
+        "percent": 100,
+        "timeframes": {
+          "1m": true,
+          "5m": true,
+          "15m": true,
+          "1h": true,
+          "4h": true,
+          "12h": true,
+          "1d": true
+        }
+      },
+      "candle_count": 18500,
+      "earliest_timestamp": 1788739200,
+      "latest_timestamp": 1791331140,
+      "data_span_hours": 719.9833333333333,
+      "open_gaps": 0,
+      "pool_count": 3,
+      "created_at": "2026-09-06T00:00:00.000Z",
+      "updated_at": "2026-10-06T23:59:00.000Z"
+    },
+    {
+      "mint": "7GCihgDB8fe6KNjn2MYtkzZcRjQy3t9GHdC8uHYmW2hr",
+      "priority": "high",
+      "status": "active",
+      "is_active": true,
+      "fetch_interval_seconds": 60,
+      "last_fetch": "2026-10-06T23:58:20.000Z",
+      "last_activity": "2026-10-06T23:57:40.000Z",
+      "consecutive_empty_fetches": 0,
+      "consecutive_pool_failures": 0,
+      "backfill_progress": {
+        "completed": 7,
+        "total": 7,
+        "percent": 100,
+        "timeframes": {
+          "1m": true,
+          "5m": true,
+          "15m": true,
+          "1h": true,
+          "4h": true,
+          "12h": true,
+          "1d": true
+        }
+      },
+      "candle_count": 16000,
+      "earliest_timestamp": 1788739200,
+      "latest_timestamp": 1791331140,
+      "data_span_hours": 719.9833333333333,
+      "open_gaps": 0,
+      "pool_count": 3,
+      "created_at": "2026-09-06T00:00:00.000Z",
+      "updated_at": "2026-10-06T23:59:00.000Z"
+    },
+    {
+      "mint": "JUPyiwrYJFskUPiHa7hkeR8VUtAeFoSYbKedZNsDvCN",
+      "priority": "medium",
+      "status": "active",
+      "is_active": true,
+      "fetch_interval_seconds": 300,
+      "last_fetch": "2026-10-06T23:57:40.000Z",
+      "last_activity": "2026-10-06T23:57:00.000Z",
+      "consecutive_empty_fetches": 0,
+      "consecutive_pool_failures": 0,
+      "backfill_progress": {
+        "completed": 7,
+        "total": 7,
+        "percent": 100,
+        "timeframes": {
+          "1m": true,
+          "5m": true,
+          "15m": true,
+          "1h": true,
+          "4h": true,
+          "12h": true,
+          "1d": true
+        }
+      },
+      "candle_count": 13500,
+      "earliest_timestamp": 1788739200,
+      "latest_timestamp": 1791331140,
+      "data_span_hours": 719.9833333333333,
+      "open_gaps": 0,
+      "pool_count": 3,
+      "created_at": "2026-09-06T00:00:00.000Z",
+      "updated_at": "2026-10-06T23:59:00.000Z"
+    },
+    {
+      "mint": "HZ1JovNiVvGrGNiiYvEozEVgZ58xaU3RKwX8eACQBCt3",
+      "priority": "low",
+      "status": "inactive",
+      "is_active": false,
+      "fetch_interval_seconds": 900,
+      "last_fetch": "2026-10-06T23:57:00.000Z",
+      "last_activity": "2026-10-06T23:56:20.000Z",
+      "consecutive_empty_fetches": 0,
+      "consecutive_pool_failures": 0,
+      "backfill_progress": {
+        "completed": 4,
+        "total": 7,
+        "percent": 57.14285714285714,
+        "timeframes": {
+          "1m": true,
+          "5m": true,
+          "15m": true,
+          "1h": true,
+          "4h": false,
+          "12h": false,
+          "1d": false
+        }
+      },
+      "candle_count": 11000,
+      "earliest_timestamp": 1788739200,
+      "latest_timestamp": 1791331140,
+      "data_span_hours": 719.9833333333333,
+      "open_gaps": 2,
+      "pool_count": 3,
+      "created_at": "2026-09-06T00:00:00.000Z",
+      "updated_at": "2026-10-06T23:59:00.000Z"
+    }
+  ],
+  "total_count": 5,
+  "stats": {
+    "total_tokens": 5,
+    "active_tokens": 4,
+    "total_candles": 80000,
+    "total_gaps": 2,
+    "total_pools": 15,
+    "database_size_mb": 48.6
+  }
+}

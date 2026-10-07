@@ -1,0 +1,1052 @@
+{
+  "data": {
+    "filtering": {
+      "age_enabled": {
+        "type": "boolean",
+        "key": "config-filtering-age-enabled",
+        "impact": "critical",
+        "category": "age",
+        "visibility": "primary",
+        "default": true
+      },
+      "check_cooldown": {
+        "type": "boolean",
+        "key": "config-filtering-check-cooldown",
+        "impact": "high",
+        "category": "meta-requirements",
+        "visibility": "secondary",
+        "default": true
+      },
+      "cooldown_enabled": {
+        "type": "boolean",
+        "key": "config-filtering-cooldown-enabled",
+        "impact": "high",
+        "category": "meta-requirements",
+        "visibility": "secondary",
+        "default": true
+      },
+      "dexscreener": {
+        "type": "object",
+        "key": "config-filtering-dexscreener",
+        "impact": "critical",
+        "category": "data-sources",
+        "visibility": "secondary",
+        "default": {
+          "enabled": true,
+          "token_info_enabled": true,
+          "require_name_and_symbol": true,
+          "require_logo_url": false,
+          "require_website_url": false,
+          "liquidity_enabled": true,
+          "min_liquidity_usd": 1,
+          "max_liquidity_usd": 100000000,
+          "market_cap_enabled": true,
+          "min_market_cap_usd": 1000,
+          "max_market_cap_usd": 100000000,
+          "fdv_enabled": false,
+          "min_fdv_usd": 0,
+          "max_fdv_usd": 100000000000,
+          "transactions_enabled": true,
+          "min_transactions_5min": 0,
+          "min_transactions_1h": 1,
+          "volume_enabled": false,
+          "min_volume_5m": 0,
+          "min_volume_1h": 0,
+          "min_volume_6h": 0,
+          "min_volume_24h": 0,
+          "price_change_enabled": false,
+          "min_price_change_m5": -100,
+          "max_price_change_m5": 10000,
+          "min_price_change_h1": -100,
+          "max_price_change_h1": 10000,
+          "min_price_change_h6": -100,
+          "max_price_change_h6": 10000,
+          "min_price_change_h24": -100,
+          "max_price_change_h24": 10000
+        },
+        "children": {
+          "enabled": {
+            "type": "boolean",
+            "key": "config-filtering-dexscreener-enabled",
+            "impact": "critical",
+            "category": "source-control",
+            "visibility": "primary",
+            "default": true
+          },
+          "fdv_enabled": {
+            "type": "boolean",
+            "key": "config-filtering-dexscreener-fdv-enabled",
+            "impact": "medium",
+            "category": "fdv",
+            "visibility": "secondary",
+            "default": false
+          },
+          "liquidity_enabled": {
+            "type": "boolean",
+            "key": "config-filtering-dexscreener-liquidity-enabled",
+            "impact": "critical",
+            "category": "liquidity",
+            "visibility": "primary",
+            "default": true
+          },
+          "market_cap_enabled": {
+            "type": "boolean",
+            "key": "config-filtering-dexscreener-market-cap-enabled",
+            "impact": "high",
+            "category": "market-cap",
+            "visibility": "primary",
+            "default": true
+          },
+          "max_fdv_usd": {
+            "type": "number",
+            "key": "config-filtering-dexscreener-max-fdv-usd",
+            "impact": "medium",
+            "category": "fdv",
+            "visibility": "secondary",
+            "min": 0,
+            "max": 1000000000000,
+            "step": 1000,
+            "default": 100000000000
+          },
+          "max_liquidity_usd": {
+            "type": "number",
+            "key": "config-filtering-dexscreener-max-liquidity-usd",
+            "impact": "medium",
+            "category": "liquidity",
+            "visibility": "primary",
+            "min": 100,
+            "max": 1000000000,
+            "step": 100000,
+            "default": 100000000
+          },
+          "max_market_cap_usd": {
+            "type": "number",
+            "key": "config-filtering-dexscreener-max-market-cap-usd",
+            "impact": "high",
+            "category": "market-cap",
+            "visibility": "primary",
+            "min": 1000,
+            "max": 1000000000,
+            "step": 100000,
+            "default": 100000000
+          },
+          "max_price_change_h1": {
+            "type": "number",
+            "key": "config-filtering-dexscreener-max-price-change-h1",
+            "impact": "low",
+            "category": "price-change",
+            "visibility": "secondary",
+            "min": 0,
+            "max": 100000,
+            "step": 50,
+            "default": 10000
+          },
+          "max_price_change_h24": {
+            "type": "number",
+            "key": "config-filtering-dexscreener-max-price-change-h24",
+            "impact": "low",
+            "category": "price-change",
+            "visibility": "secondary",
+            "min": 0,
+            "max": 100000,
+            "step": 50,
+            "default": 10000
+          },
+          "max_price_change_h6": {
+            "type": "number",
+            "key": "config-filtering-dexscreener-max-price-change-h6",
+            "impact": "low",
+            "category": "price-change",
+            "visibility": "secondary",
+            "min": 0,
+            "max": 100000,
+            "step": 50,
+            "default": 10000
+          },
+          "max_price_change_m5": {
+            "type": "number",
+            "key": "config-filtering-dexscreener-max-price-change-m5",
+            "impact": "low",
+            "category": "price-change",
+            "visibility": "secondary",
+            "min": 0,
+            "max": 100000,
+            "step": 50,
+            "default": 10000
+          },
+          "min_fdv_usd": {
+            "type": "number",
+            "key": "config-filtering-dexscreener-min-fdv-usd",
+            "impact": "medium",
+            "category": "fdv",
+            "visibility": "secondary",
+            "min": 0,
+            "max": 1000000000000,
+            "step": 1000,
+            "default": 0
+          },
+          "min_liquidity_usd": {
+            "type": "number",
+            "key": "config-filtering-dexscreener-min-liquidity-usd",
+            "impact": "critical",
+            "category": "liquidity",
+            "visibility": "primary",
+            "min": 0,
+            "max": 10000000,
+            "step": 10,
+            "default": 1
+          },
+          "min_market_cap_usd": {
+            "type": "number",
+            "key": "config-filtering-dexscreener-min-market-cap-usd",
+            "impact": "high",
+            "category": "market-cap",
+            "visibility": "primary",
+            "min": 0,
+            "max": 10000000,
+            "step": 100,
+            "default": 1000
+          },
+          "min_price_change_h1": {
+            "type": "number",
+            "key": "config-filtering-dexscreener-min-price-change-h1",
+            "impact": "low",
+            "category": "price-change",
+            "visibility": "secondary",
+            "min": -100,
+            "max": 10000,
+            "step": 5,
+            "default": -100
+          },
+          "min_price_change_h24": {
+            "type": "number",
+            "key": "config-filtering-dexscreener-min-price-change-h24",
+            "impact": "low",
+            "category": "price-change",
+            "visibility": "secondary",
+            "min": -100,
+            "max": 10000,
+            "step": 5,
+            "default": -100
+          },
+          "min_price_change_h6": {
+            "type": "number",
+            "key": "config-filtering-dexscreener-min-price-change-h6",
+            "impact": "low",
+            "category": "price-change",
+            "visibility": "secondary",
+            "min": -100,
+            "max": 10000,
+            "step": 5,
+            "default": -100
+          },
+          "min_price_change_m5": {
+            "type": "number",
+            "key": "config-filtering-dexscreener-min-price-change-m5",
+            "impact": "low",
+            "category": "price-change",
+            "visibility": "secondary",
+            "min": -100,
+            "max": 10000,
+            "step": 5,
+            "default": -100
+          },
+          "min_transactions_1h": {
+            "type": "integer",
+            "key": "config-filtering-dexscreener-min-transactions-1h",
+            "impact": "medium",
+            "category": "activity",
+            "visibility": "secondary",
+            "min": 0,
+            "max": 10000,
+            "step": 5,
+            "default": 1
+          },
+          "min_transactions_5min": {
+            "type": "integer",
+            "key": "config-filtering-dexscreener-min-transactions-5min",
+            "impact": "medium",
+            "category": "activity",
+            "visibility": "secondary",
+            "min": 0,
+            "max": 1000,
+            "step": 1,
+            "default": 0
+          },
+          "min_volume_1h": {
+            "type": "number",
+            "key": "config-filtering-dexscreener-min-volume-1h",
+            "impact": "medium",
+            "category": "volume",
+            "visibility": "secondary",
+            "min": 0,
+            "max": 10000000,
+            "step": 10,
+            "default": 0
+          },
+          "min_volume_24h": {
+            "type": "number",
+            "key": "config-filtering-dexscreener-min-volume-24h",
+            "impact": "medium",
+            "category": "volume",
+            "visibility": "secondary",
+            "min": 0,
+            "max": 10000000,
+            "step": 100,
+            "default": 0
+          },
+          "min_volume_5m": {
+            "type": "number",
+            "key": "config-filtering-dexscreener-min-volume-5m",
+            "impact": "medium",
+            "category": "volume",
+            "visibility": "secondary",
+            "min": 0,
+            "max": 1000000,
+            "step": 10,
+            "default": 0
+          },
+          "min_volume_6h": {
+            "type": "number",
+            "key": "config-filtering-dexscreener-min-volume-6h",
+            "impact": "medium",
+            "category": "volume",
+            "visibility": "secondary",
+            "min": 0,
+            "max": 10000000,
+            "step": 10,
+            "default": 0
+          },
+          "price_change_enabled": {
+            "type": "boolean",
+            "key": "config-filtering-dexscreener-price-change-enabled",
+            "impact": "low",
+            "category": "price-change",
+            "visibility": "secondary",
+            "default": false
+          },
+          "require_logo_url": {
+            "type": "boolean",
+            "key": "config-filtering-dexscreener-require-logo-url",
+            "impact": "medium",
+            "category": "token-info",
+            "visibility": "secondary",
+            "default": false
+          },
+          "require_name_and_symbol": {
+            "type": "boolean",
+            "key": "config-filtering-dexscreener-require-name-and-symbol",
+            "impact": "high",
+            "category": "token-info",
+            "visibility": "secondary",
+            "default": true
+          },
+          "require_website_url": {
+            "type": "boolean",
+            "key": "config-filtering-dexscreener-require-website-url",
+            "impact": "medium",
+            "category": "token-info",
+            "visibility": "secondary",
+            "default": false
+          },
+          "token_info_enabled": {
+            "type": "boolean",
+            "key": "config-filtering-dexscreener-token-info-enabled",
+            "impact": "high",
+            "category": "token-info",
+            "visibility": "secondary",
+            "default": true
+          },
+          "transactions_enabled": {
+            "type": "boolean",
+            "key": "config-filtering-dexscreener-transactions-enabled",
+            "impact": "medium",
+            "category": "activity",
+            "visibility": "secondary",
+            "default": true
+          },
+          "volume_enabled": {
+            "type": "boolean",
+            "key": "config-filtering-dexscreener-volume-enabled",
+            "impact": "medium",
+            "category": "volume",
+            "visibility": "secondary",
+            "default": false
+          }
+        }
+      },
+      "geckoterminal": {
+        "type": "object",
+        "key": "config-filtering-geckoterminal",
+        "impact": "high",
+        "category": "data-sources",
+        "visibility": "secondary",
+        "default": {
+          "enabled": true,
+          "liquidity_enabled": true,
+          "min_liquidity_usd": 1,
+          "max_liquidity_usd": 100000000,
+          "market_cap_enabled": false,
+          "min_market_cap_usd": 0,
+          "max_market_cap_usd": 100000000,
+          "volume_enabled": false,
+          "min_volume_5m": 0,
+          "min_volume_1h": 0,
+          "min_volume_24h": 0,
+          "price_change_enabled": false,
+          "min_price_change_m5": -100,
+          "max_price_change_m5": 10000,
+          "min_price_change_h1": -100,
+          "max_price_change_h1": 10000,
+          "min_price_change_h24": -100,
+          "max_price_change_h24": 10000,
+          "pool_metrics_enabled": false,
+          "min_pool_count": 0,
+          "max_pool_count": 1000,
+          "min_reserve_usd": 0
+        },
+        "children": {
+          "enabled": {
+            "type": "boolean",
+            "key": "config-filtering-geckoterminal-enabled",
+            "impact": "critical",
+            "category": "source-control",
+            "visibility": "primary",
+            "default": true
+          },
+          "liquidity_enabled": {
+            "type": "boolean",
+            "key": "config-filtering-geckoterminal-liquidity-enabled",
+            "impact": "critical",
+            "category": "liquidity",
+            "visibility": "primary",
+            "default": true
+          },
+          "market_cap_enabled": {
+            "type": "boolean",
+            "key": "config-filtering-geckoterminal-market-cap-enabled",
+            "impact": "medium",
+            "category": "market-cap",
+            "visibility": "primary",
+            "default": false
+          },
+          "max_liquidity_usd": {
+            "type": "number",
+            "key": "config-filtering-geckoterminal-max-liquidity-usd",
+            "impact": "medium",
+            "category": "liquidity",
+            "visibility": "primary",
+            "min": 0,
+            "max": 1000000000,
+            "step": 10000,
+            "default": 100000000
+          },
+          "max_market_cap_usd": {
+            "type": "number",
+            "key": "config-filtering-geckoterminal-max-market-cap-usd",
+            "impact": "medium",
+            "category": "market-cap",
+            "visibility": "primary",
+            "min": 0,
+            "max": 1000000000,
+            "step": 1000,
+            "default": 100000000
+          },
+          "max_pool_count": {
+            "type": "integer",
+            "key": "config-filtering-geckoterminal-max-pool-count",
+            "impact": "low",
+            "category": "pool-metrics",
+            "visibility": "secondary",
+            "min": 0,
+            "max": 1000,
+            "step": 1,
+            "default": 1000
+          },
+          "max_price_change_h1": {
+            "type": "number",
+            "key": "config-filtering-geckoterminal-max-price-change-h1",
+            "impact": "low",
+            "category": "price-change",
+            "visibility": "secondary",
+            "min": 0,
+            "max": 100000,
+            "step": 50,
+            "default": 10000
+          },
+          "max_price_change_h24": {
+            "type": "number",
+            "key": "config-filtering-geckoterminal-max-price-change-h24",
+            "impact": "low",
+            "category": "price-change",
+            "visibility": "secondary",
+            "min": 0,
+            "max": 100000,
+            "step": 50,
+            "default": 10000
+          },
+          "max_price_change_m5": {
+            "type": "number",
+            "key": "config-filtering-geckoterminal-max-price-change-m5",
+            "impact": "low",
+            "category": "price-change",
+            "visibility": "secondary",
+            "min": 0,
+            "max": 100000,
+            "step": 50,
+            "default": 10000
+          },
+          "min_liquidity_usd": {
+            "type": "number",
+            "key": "config-filtering-geckoterminal-min-liquidity-usd",
+            "impact": "critical",
+            "category": "liquidity",
+            "visibility": "primary",
+            "min": 0,
+            "max": 10000000,
+            "step": 10,
+            "default": 1
+          },
+          "min_market_cap_usd": {
+            "type": "number",
+            "key": "config-filtering-geckoterminal-min-market-cap-usd",
+            "impact": "medium",
+            "category": "market-cap",
+            "visibility": "primary",
+            "min": 0,
+            "max": 1000000000,
+            "step": 1000,
+            "default": 0
+          },
+          "min_pool_count": {
+            "type": "integer",
+            "key": "config-filtering-geckoterminal-min-pool-count",
+            "impact": "low",
+            "category": "pool-metrics",
+            "visibility": "secondary",
+            "min": 0,
+            "max": 1000,
+            "step": 1,
+            "default": 0
+          },
+          "min_price_change_h1": {
+            "type": "number",
+            "key": "config-filtering-geckoterminal-min-price-change-h1",
+            "impact": "low",
+            "category": "price-change",
+            "visibility": "secondary",
+            "min": -100,
+            "max": 10000,
+            "step": 5,
+            "default": -100
+          },
+          "min_price_change_h24": {
+            "type": "number",
+            "key": "config-filtering-geckoterminal-min-price-change-h24",
+            "impact": "low",
+            "category": "price-change",
+            "visibility": "secondary",
+            "min": -100,
+            "max": 10000,
+            "step": 5,
+            "default": -100
+          },
+          "min_price_change_m5": {
+            "type": "number",
+            "key": "config-filtering-geckoterminal-min-price-change-m5",
+            "impact": "low",
+            "category": "price-change",
+            "visibility": "secondary",
+            "min": -100,
+            "max": 10000,
+            "step": 5,
+            "default": -100
+          },
+          "min_reserve_usd": {
+            "type": "number",
+            "key": "config-filtering-geckoterminal-min-reserve-usd",
+            "impact": "low",
+            "category": "pool-metrics",
+            "visibility": "secondary",
+            "min": 0,
+            "max": 100000000,
+            "step": 100,
+            "default": 0
+          },
+          "min_volume_1h": {
+            "type": "number",
+            "key": "config-filtering-geckoterminal-min-volume-1h",
+            "impact": "medium",
+            "category": "volume",
+            "visibility": "secondary",
+            "min": 0,
+            "max": 10000000,
+            "step": 10,
+            "default": 0
+          },
+          "min_volume_24h": {
+            "type": "number",
+            "key": "config-filtering-geckoterminal-min-volume-24h",
+            "impact": "medium",
+            "category": "volume",
+            "visibility": "secondary",
+            "min": 0,
+            "max": 10000000,
+            "step": 100,
+            "default": 0
+          },
+          "min_volume_5m": {
+            "type": "number",
+            "key": "config-filtering-geckoterminal-min-volume-5m",
+            "impact": "medium",
+            "category": "volume",
+            "visibility": "secondary",
+            "min": 0,
+            "max": 1000000,
+            "step": 10,
+            "default": 0
+          },
+          "pool_metrics_enabled": {
+            "type": "boolean",
+            "key": "config-filtering-geckoterminal-pool-metrics-enabled",
+            "impact": "low",
+            "category": "pool-metrics",
+            "visibility": "secondary",
+            "default": false
+          },
+          "price_change_enabled": {
+            "type": "boolean",
+            "key": "config-filtering-geckoterminal-price-change-enabled",
+            "impact": "low",
+            "category": "price-change",
+            "visibility": "secondary",
+            "default": false
+          },
+          "volume_enabled": {
+            "type": "boolean",
+            "key": "config-filtering-geckoterminal-volume-enabled",
+            "impact": "medium",
+            "category": "volume",
+            "visibility": "secondary",
+            "default": false
+          }
+        }
+      },
+      "min_token_age_minutes": {
+        "type": "integer",
+        "key": "config-filtering-min-token-age-minutes",
+        "impact": "critical",
+        "category": "age",
+        "visibility": "primary",
+        "min": 0,
+        "max": 10080,
+        "step": 10,
+        "default": 60
+      },
+      "onchain": {
+        "type": "object",
+        "key": "config-filtering-onchain",
+        "impact": "critical",
+        "category": "data-sources",
+        "visibility": "secondary",
+        "default": {
+          "enabled": true,
+          "reject_numeric_symbols": true,
+          "reject_empty_symbols": true,
+          "reject_single_char_symbols": false,
+          "reject_known_scam_authorities": true,
+          "reject_immutable_with_freeze": true,
+          "combined_risk_enabled": true,
+          "max_combined_risk_score": 60
+        },
+        "children": {
+          "combined_risk_enabled": {
+            "type": "boolean",
+            "key": "config-filtering-onchain-combined-risk-enabled",
+            "impact": "high",
+            "category": "risk-scoring",
+            "visibility": "secondary",
+            "default": true
+          },
+          "enabled": {
+            "type": "boolean",
+            "key": "config-filtering-onchain-enabled",
+            "impact": "critical",
+            "category": "source-control",
+            "visibility": "primary",
+            "default": true
+          },
+          "max_combined_risk_score": {
+            "type": "integer",
+            "key": "config-filtering-onchain-max-combined-risk-score",
+            "impact": "high",
+            "category": "risk-scoring",
+            "visibility": "secondary",
+            "min": 0,
+            "max": 100,
+            "step": 5,
+            "default": 60
+          },
+          "reject_empty_symbols": {
+            "type": "boolean",
+            "key": "config-filtering-onchain-reject-empty-symbols",
+            "impact": "high",
+            "category": "symbol-analysis",
+            "visibility": "secondary",
+            "default": true
+          },
+          "reject_immutable_with_freeze": {
+            "type": "boolean",
+            "key": "config-filtering-onchain-reject-immutable-with-freeze",
+            "impact": "high",
+            "category": "authority-analysis",
+            "visibility": "secondary",
+            "default": true
+          },
+          "reject_known_scam_authorities": {
+            "type": "boolean",
+            "key": "config-filtering-onchain-reject-known-scam-authorities",
+            "impact": "critical",
+            "category": "authority-analysis",
+            "visibility": "secondary",
+            "default": true
+          },
+          "reject_numeric_symbols": {
+            "type": "boolean",
+            "key": "config-filtering-onchain-reject-numeric-symbols",
+            "impact": "high",
+            "category": "symbol-analysis",
+            "visibility": "secondary",
+            "default": true
+          },
+          "reject_single_char_symbols": {
+            "type": "boolean",
+            "key": "config-filtering-onchain-reject-single-char-symbols",
+            "impact": "medium",
+            "category": "symbol-analysis",
+            "visibility": "secondary",
+            "default": false
+          }
+        }
+      },
+      "rugcheck": {
+        "type": "object",
+        "key": "config-filtering-rugcheck",
+        "impact": "critical",
+        "category": "data-sources",
+        "visibility": "secondary",
+        "default": {
+          "enabled": true,
+          "risk_score_enabled": true,
+          "max_risk_score": 10000,
+          "authority_checks_enabled": true,
+          "require_authorities_safe": true,
+          "allow_mint_authority": false,
+          "allow_freeze_authority": false,
+          "risk_level_enabled": true,
+          "block_danger_level": true,
+          "holder_distribution_enabled": true,
+          "max_top_holder_pct": 40,
+          "max_top_3_holders_pct": 60,
+          "min_unique_holders": 50,
+          "lp_lock_enabled": true,
+          "min_pumpfun_lp_lock_pct": 50,
+          "min_regular_lp_lock_pct": 50,
+          "rugged_check_enabled": true,
+          "block_rugged_tokens": true,
+          "graph_insiders_enabled": true,
+          "max_graph_insiders": 3,
+          "insider_holder_checks_enabled": true,
+          "max_insider_holders_in_top_10": 2,
+          "max_insider_total_pct": 20,
+          "creator_balance_enabled": true,
+          "max_creator_balance_pct": 10,
+          "lp_providers_enabled": true,
+          "min_lp_providers": 3,
+          "transfer_fee_enabled": true,
+          "max_transfer_fee_pct": 5,
+          "block_transfer_fee_tokens": false
+        },
+        "children": {
+          "allow_freeze_authority": {
+            "type": "boolean",
+            "key": "config-filtering-rugcheck-allow-freeze-authority",
+            "impact": "high",
+            "category": "authorities",
+            "visibility": "secondary",
+            "default": false
+          },
+          "allow_mint_authority": {
+            "type": "boolean",
+            "key": "config-filtering-rugcheck-allow-mint-authority",
+            "impact": "high",
+            "category": "authorities",
+            "visibility": "secondary",
+            "default": false
+          },
+          "authority_checks_enabled": {
+            "type": "boolean",
+            "key": "config-filtering-rugcheck-authority-checks-enabled",
+            "impact": "critical",
+            "category": "authorities",
+            "visibility": "secondary",
+            "default": true
+          },
+          "block_danger_level": {
+            "type": "boolean",
+            "key": "config-filtering-rugcheck-block-danger-level",
+            "impact": "high",
+            "category": "risk-level",
+            "visibility": "secondary",
+            "default": true
+          },
+          "block_rugged_tokens": {
+            "type": "boolean",
+            "key": "config-filtering-rugcheck-block-rugged-tokens",
+            "impact": "critical",
+            "category": "security-flags",
+            "visibility": "secondary",
+            "default": true
+          },
+          "block_transfer_fee_tokens": {
+            "type": "boolean",
+            "key": "config-filtering-rugcheck-block-transfer-fee-tokens",
+            "impact": "high",
+            "category": "transfer-fees",
+            "visibility": "secondary",
+            "default": false
+          },
+          "creator_balance_enabled": {
+            "type": "boolean",
+            "key": "config-filtering-rugcheck-creator-balance-enabled",
+            "impact": "medium",
+            "category": "creator-checks",
+            "visibility": "secondary",
+            "default": true
+          },
+          "enabled": {
+            "type": "boolean",
+            "key": "config-filtering-rugcheck-enabled",
+            "impact": "critical",
+            "category": "source-control",
+            "visibility": "primary",
+            "default": true
+          },
+          "graph_insiders_enabled": {
+            "type": "boolean",
+            "key": "config-filtering-rugcheck-graph-insiders-enabled",
+            "impact": "high",
+            "category": "insider-detection",
+            "visibility": "secondary",
+            "default": true
+          },
+          "holder_distribution_enabled": {
+            "type": "boolean",
+            "key": "config-filtering-rugcheck-holder-distribution-enabled",
+            "impact": "high",
+            "category": "holder-distribution",
+            "visibility": "secondary",
+            "default": true
+          },
+          "insider_holder_checks_enabled": {
+            "type": "boolean",
+            "key": "config-filtering-rugcheck-insider-holder-checks-enabled",
+            "impact": "high",
+            "category": "insider-detection",
+            "visibility": "secondary",
+            "default": true
+          },
+          "lp_lock_enabled": {
+            "type": "boolean",
+            "key": "config-filtering-rugcheck-lp-lock-enabled",
+            "impact": "high",
+            "category": "lp-lock",
+            "visibility": "secondary",
+            "default": true
+          },
+          "lp_providers_enabled": {
+            "type": "boolean",
+            "key": "config-filtering-rugcheck-lp-providers-enabled",
+            "impact": "medium",
+            "category": "lp-providers",
+            "visibility": "secondary",
+            "default": true
+          },
+          "max_creator_balance_pct": {
+            "type": "number",
+            "key": "config-filtering-rugcheck-max-creator-balance-pct",
+            "impact": "medium",
+            "category": "creator-checks",
+            "visibility": "secondary",
+            "min": 0,
+            "max": 100,
+            "step": 5,
+            "default": 10
+          },
+          "max_graph_insiders": {
+            "type": "integer",
+            "key": "config-filtering-rugcheck-max-graph-insiders",
+            "impact": "high",
+            "category": "insider-detection",
+            "visibility": "secondary",
+            "min": 0,
+            "max": 20,
+            "step": 1,
+            "default": 3
+          },
+          "max_insider_holders_in_top_10": {
+            "type": "integer",
+            "key": "config-filtering-rugcheck-max-insider-holders-in-top-10",
+            "impact": "high",
+            "category": "insider-detection",
+            "visibility": "secondary",
+            "min": 0,
+            "max": 10,
+            "step": 1,
+            "default": 2
+          },
+          "max_insider_total_pct": {
+            "type": "number",
+            "key": "config-filtering-rugcheck-max-insider-total-pct",
+            "impact": "high",
+            "category": "insider-detection",
+            "visibility": "secondary",
+            "min": 0,
+            "max": 100,
+            "step": 5,
+            "default": 20
+          },
+          "max_risk_score": {
+            "type": "integer",
+            "key": "config-filtering-rugcheck-max-risk-score",
+            "impact": "critical",
+            "category": "risk-score",
+            "visibility": "secondary",
+            "min": 0,
+            "max": 100000,
+            "step": 100,
+            "default": 10000
+          },
+          "max_top_3_holders_pct": {
+            "type": "number",
+            "key": "config-filtering-rugcheck-max-top-3-holders-pct",
+            "impact": "high",
+            "category": "holder-distribution",
+            "visibility": "secondary",
+            "min": 0,
+            "max": 100,
+            "step": 1,
+            "default": 60
+          },
+          "max_top_holder_pct": {
+            "type": "number",
+            "key": "config-filtering-rugcheck-max-top-holder-pct",
+            "impact": "critical",
+            "category": "holder-distribution",
+            "visibility": "secondary",
+            "min": 0,
+            "max": 100,
+            "step": 1,
+            "default": 40
+          },
+          "max_transfer_fee_pct": {
+            "type": "number",
+            "key": "config-filtering-rugcheck-max-transfer-fee-pct",
+            "impact": "critical",
+            "category": "transfer-fees",
+            "visibility": "secondary",
+            "min": 0,
+            "max": 100,
+            "step": 1,
+            "default": 5
+          },
+          "min_lp_providers": {
+            "type": "integer",
+            "key": "config-filtering-rugcheck-min-lp-providers",
+            "impact": "medium",
+            "category": "lp-providers",
+            "visibility": "secondary",
+            "min": 0,
+            "max": 100,
+            "step": 1,
+            "default": 3
+          },
+          "min_pumpfun_lp_lock_pct": {
+            "type": "number",
+            "key": "config-filtering-rugcheck-min-pumpfun-lp-lock-pct",
+            "impact": "high",
+            "category": "lp-lock",
+            "visibility": "secondary",
+            "min": 0,
+            "max": 100,
+            "step": 5,
+            "default": 50
+          },
+          "min_regular_lp_lock_pct": {
+            "type": "number",
+            "key": "config-filtering-rugcheck-min-regular-lp-lock-pct",
+            "impact": "high",
+            "category": "lp-lock",
+            "visibility": "secondary",
+            "min": 0,
+            "max": 100,
+            "step": 5,
+            "default": 50
+          },
+          "min_unique_holders": {
+            "type": "integer",
+            "key": "config-filtering-rugcheck-min-unique-holders",
+            "impact": "medium",
+            "category": "holder-distribution",
+            "visibility": "secondary",
+            "min": 0,
+            "max": 1000000,
+            "step": 50,
+            "default": 50
+          },
+          "require_authorities_safe": {
+            "type": "boolean",
+            "key": "config-filtering-rugcheck-require-authorities-safe",
+            "impact": "critical",
+            "category": "authorities",
+            "visibility": "secondary",
+            "default": true
+          },
+          "risk_level_enabled": {
+            "type": "boolean",
+            "key": "config-filtering-rugcheck-risk-level-enabled",
+            "impact": "high",
+            "category": "risk-level",
+            "visibility": "secondary",
+            "default": true
+          },
+          "risk_score_enabled": {
+            "type": "boolean",
+            "key": "config-filtering-rugcheck-risk-score-enabled",
+            "impact": "critical",
+            "category": "risk-score",
+            "visibility": "secondary",
+            "default": true
+          },
+          "rugged_check_enabled": {
+            "type": "boolean",
+            "key": "config-filtering-rugcheck-rugged-check-enabled",
+            "impact": "critical",
+            "category": "security-flags",
+            "visibility": "secondary",
+            "default": true
+          },
+          "transfer_fee_enabled": {
+            "type": "boolean",
+            "key": "config-filtering-rugcheck-transfer-fee-enabled",
+            "impact": "critical",
+            "category": "transfer-fees",
+            "visibility": "secondary",
+            "default": true
+          }
+        }
+      }
+    }
+  },
+  "timestamp": "2026-10-07T10:00:00.000000+00:00"
+}

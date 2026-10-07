@@ -1,0 +1,54 @@
+{
+  "data": {
+    "zoom_level": 1.0,
+    "dashboard": {
+      "interface": {
+        "theme": "dark",
+        "language": "system",
+        "token_logo_shape": "circle",
+        "polling_interval_ms": 5000,
+        "show_ticker_bar": true,
+        "enable_animations": true,
+        "compact_mode": false,
+        "auto_expand_categories": false,
+        "table_page_size": 25,
+        "show_hints": true,
+        "show_featured_row": true,
+        "sounds_enabled": true
+      },
+      "startup": {
+        "auto_start_trader": false,
+        "default_page": "dashboard",
+        "show_background_notifications": true,
+        "onboarding_complete": true,
+        "explore_mode_enabled": false
+      },
+      "navigation": {
+        "tabs": [
+          { "id": "home", "icon": "icon-house", "order": 0, "enabled": true },
+          { "id": "assistant", "icon": "icon-bot-message-square", "order": 1, "enabled": true },
+          { "id": "positions", "icon": "icon-chart-candlestick", "order": 2, "enabled": true },
+          { "id": "tokens", "icon": "icon-coins", "order": 3, "enabled": true },
+          { "id": "filtering", "icon": "icon-list-filter", "order": 4, "enabled": true },
+          { "id": "trader", "icon": "icon-bot", "order": 5, "enabled": true },
+          { "id": "copy", "icon": "icon-copy", "order": 6, "enabled": true },
+          { "id": "wallets", "icon": "icon-wallet", "order": 7, "enabled": true },
+          { "id": "transactions", "icon": "icon-activity", "order": 8, "enabled": true },
+          { "id": "tools", "icon": "icon-wrench", "order": 9, "enabled": true },
+          { "id": "services", "icon": "icon-server", "order": 10, "enabled": true },
+          { "id": "events", "icon": "icon-radio-tower", "order": 11, "enabled": true },
+          { "id": "config", "icon": "icon-settings", "order": 12, "enabled": true }
+        ]
+      },
+      "lockscreen": {
+        "enabled": false,
+        "password_type": "pin6",
+        "password_hash": "",
+        "password_salt": "",
+        "auto_lock_timeout_secs": 300,
+        "lock_on_blur": false
+      }
+    }
+  },
+  "timestamp": "2026-10-07T09:30:00+00:00"
+}

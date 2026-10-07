@@ -1,0 +1,27 @@
+{
+  "state": {
+    "phase": "up_to_date",
+    "available_update": null,
+    "last_check": "2026-10-07T09:00:00Z",
+    "last_check_attempt": "2026-10-07T09:00:00Z",
+    "check_error": null,
+    "download_progress": {
+      "version": null,
+      "checksum": null,
+      "downloading": false,
+      "bytes_downloaded": 0,
+      "total_bytes": 0,
+      "progress_percent": 0.0,
+      "error": null,
+      "completed": false,
+      "downloaded_path": null
+    },
+    "deferred": null,
+    "applied_version": null,
+    "applied_acknowledged": false,
+    "last_release": null
+  },
+  "requires_user_action": false,
+  "self_install": true,
+  "current_version": "0.2.13"
+}

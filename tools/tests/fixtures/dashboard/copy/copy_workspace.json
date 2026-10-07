@@ -1,0 +1,526 @@
+{
+  "id": 1,
+  "chain": "solana",
+  "target_address": "CopyTargetAAA1111111111111111111111111111111",
+  "label": "Momentum desk",
+  "enabled": true,
+  "mode": "paper",
+  "sizing": {
+    "kind": "fixed",
+    "sol": 0.1
+  },
+  "exit_mode": "hybrid",
+  "exit_policy_overrides": {
+    "stop_loss": {
+      "enabled": null,
+      "threshold_pct": 25,
+      "min_hold_seconds": null,
+      "allow_partial": null,
+      "partial_exit_default_pct": null
+    },
+    "trailing": {
+      "enabled": null,
+      "activation_pct": null,
+      "distance_pct": null
+    },
+    "roi": {
+      "enabled": true,
+      "target_profit_pct": 80
+    },
+    "time": {
+      "enabled": null,
+      "loss_threshold_pct": null,
+      "duration_seconds": null
+    }
+  },
+  "max_native_per_trade": 0.2,
+  "max_native_per_token": 0.5,
+  "total_budget_native": 5,
+  "min_target_trade_native": 0.5,
+  "max_target_trade_native": null,
+  "buy_once_per_token": true,
+  "slippage_pct": 2,
+  "created_at": "2026-09-28T09:15:00Z",
+  "updated_at": "2026-10-04T18:02:11Z",
+  "require_filter_pass": null,
+  "pause_reason": null,
+  "paused_at": null,
+  "stats": {
+    "task_id": 1,
+    "decisions": 46,
+    "filled_buys": 14,
+    "target_sells": 6,
+    "policy_exits": 4,
+    "manual_closes": 1,
+    "wins": 7,
+    "losses": 4,
+    "skipped": 21,
+    "submitted": 0,
+    "failed": 0,
+    "open_positions": 3,
+    "closed_positions": 11,
+    "realized_pnl_native": 0.4825,
+    "unrealized_pnl_native": 0.0612,
+    "book": "paper",
+    "unpriced_positions": 0,
+    "arrival_distance": {
+      "samples": 38,
+      "minimum_ms": 420,
+      "median_ms": 1180,
+      "p95_ms": 2950,
+      "maximum_ms": 3870,
+      "average_ms": 1390
+    }
+  },
+  "spent_native": 1.42,
+  "remaining_budget_native": 3.58,
+  "effective_state": "paper",
+  "effective_require_filter_pass": true,
+  "pnl_trend": [0.031, 0.087, 0.052, 0.121, 0.198, 0.176, 0.262, 0.311, 0.287, 0.402, 0.4825],
+  "pause_text": null,
+  "trader_defaults": {
+    "stop_loss": {
+      "enabled": true,
+      "threshold_pct": 40,
+      "min_hold_seconds": 120,
+      "allow_partial": false,
+      "partial_exit_default_pct": 50
+    },
+    "trailing": {
+      "enabled": true,
+      "activation_pct": 30,
+      "distance_pct": 15
+    },
+    "roi": {
+      "enabled": false,
+      "target_profit_pct": 100
+    },
+    "time": {
+      "enabled": false,
+      "loss_threshold_pct": -10,
+      "duration_seconds": 86400
+    }
+  },
+  "effective_policy": {
+    "stop_loss": {
+      "enabled": true,
+      "threshold_pct": 25,
+      "min_hold_seconds": 120,
+      "allow_partial": false,
+      "partial_exit_default_pct": 50
+    },
+    "trailing": {
+      "enabled": true,
+      "activation_pct": 30,
+      "distance_pct": 15
+    },
+    "roi": {
+      "enabled": true,
+      "target_profit_pct": 80
+    },
+    "time": {
+      "enabled": false,
+      "loss_threshold_pct": -10,
+      "duration_seconds": 86400
+    }
+  },
+  "live_remaining_budget_native": 5,
+  "policy_manages_exits": true,
+  "global_require_filter_pass": true,
+  "paper_holdings": [
+    {
+      "mint": "EKpQGSJtjMFqKZ9KQanSqYXRcF8fBopzLHYxdM65zcjm",
+      "open": true,
+      "token_amount": 12.638,
+      "cost_basis_native": 0.100105,
+      "invested_native": 0.100105,
+      "realized_proceeds_native": 0,
+      "realized_pnl_native": 0,
+      "entry_price_native": 0.007920952682386453,
+      "mark_price_native": 0.00821,
+      "market_value_native": 0.103758,
+      "unrealized_pnl_native": 0.003653,
+      "unrealized_pnl_pct": 3.65,
+      "buys": 1,
+      "sells": 0,
+      "opened_at": "2026-10-06T21:44:12.420Z",
+      "closed_at": null,
+      "held_seconds": 41520,
+      "peak_price_native": 0.00836,
+      "exit_watch": {
+        "stop_loss_price_native": 0.005940714511789839,
+        "stop_loss_armed_at": "2026-10-06T21:46:12.420Z",
+        "take_profit_price_native": 0.014257714828295616,
+        "trailing_activation_price_native": 0.01029723848710239,
+        "trailing_armed": false,
+        "trailing_stop_price_native": null,
+        "time_rule_from": null,
+        "time_rule_price_native": null
+      }
+    },
+    {
+      "mint": "DezXAZ8z7PnrnRJjz3wXBoRgixCa6xjnB7YaB1pPB263",
+      "open": true,
+      "token_amount": 1041000,
+      "cost_basis_native": 0.100605,
+      "invested_native": 0.100605,
+      "realized_proceeds_native": 0,
+      "realized_pnl_native": 0,
+      "entry_price_native": 9.664265129682997e-8,
+      "mark_price_native": 1.022e-7,
+      "market_value_native": 0.10639,
+      "unrealized_pnl_native": 0.005785,
+      "unrealized_pnl_pct": 5.75,
+      "buys": 1,
+      "sells": 0,
+      "opened_at": "2026-10-06T14:22:18.810Z",
+      "closed_at": null,
+      "held_seconds": 67940,
+      "peak_price_native": 1.318e-7,
+      "exit_watch": {
+        "stop_loss_price_native": 7.248198847262248e-8,
+        "stop_loss_armed_at": "2026-10-06T14:24:18.810Z",
+        "take_profit_price_native": 1.7395677233429396e-7,
+        "trailing_activation_price_native": 1.2563544668587898e-7,
+        "trailing_armed": true,
+        "trailing_stop_price_native": 1.1203e-7,
+        "time_rule_from": null,
+        "time_rule_price_native": null
+      }
+    },
+    {
+      "mint": "7GCihgDB8fe6KNjn2MYtkzZcRjQy3t9GHdC8uHYmW2hr",
+      "open": true,
+      "token_amount": 241.7,
+      "cost_basis_native": 0.100605,
+      "invested_native": 0.100605,
+      "realized_proceeds_native": 0,
+      "realized_pnl_native": 0,
+      "entry_price_native": 0.0004162391394290443,
+      "mark_price_native": 0.000398,
+      "market_value_native": 0.096197,
+      "unrealized_pnl_native": -0.004408,
+      "unrealized_pnl_pct": -4.38,
+      "buys": 1,
+      "sells": 0,
+      "opened_at": "2026-10-05T09:10:00.000Z",
+      "closed_at": null,
+      "held_seconds": 175680,
+      "peak_price_native": 0.000421,
+      "exit_watch": {
+        "stop_loss_price_native": 0.0003121793545717832,
+        "stop_loss_armed_at": "2026-10-05T09:12:00.000Z",
+        "take_profit_price_native": 0.0007492304509722797,
+        "trailing_activation_price_native": 0.0005411108812577577,
+        "trailing_armed": false,
+        "trailing_stop_price_native": null,
+        "time_rule_from": null,
+        "time_rule_price_native": null
+      }
+    }
+  ],
+  "readiness": {
+    "ready": false,
+    "checks": [
+      {
+        "id": "history",
+        "text": {
+          "id": "copy-readiness-history"
+        },
+        "passed": true,
+        "detail": {
+          "id": "copy-readiness-history-met",
+          "args": {
+            "count": {
+              "type": "count",
+              "value": 11
+            },
+            "needed": {
+              "type": "count",
+              "value": 10
+            }
+          }
+        }
+      },
+      {
+        "id": "profit",
+        "text": {
+          "id": "copy-readiness-profit"
+        },
+        "passed": true,
+        "detail": {
+          "id": "copy-readiness-profit-detail",
+          "args": {
+            "count": {
+              "type": "count",
+              "value": 11
+            },
+            "realized": {
+              "type": "text",
+              "value": "+0.4825"
+            },
+            "wins": {
+              "type": "count",
+              "value": 7
+            }
+          }
+        }
+      },
+      {
+        "id": "latency",
+        "text": {
+          "id": "copy-readiness-latency"
+        },
+        "passed": true,
+        "detail": {
+          "id": "copy-readiness-latency-detail",
+          "args": {
+            "limit": {
+              "type": "text",
+              "value": "4.0"
+            },
+            "p95": {
+              "type": "text",
+              "value": "3.0"
+            }
+          }
+        }
+      },
+      {
+        "id": "priced",
+        "text": {
+          "id": "copy-readiness-priced"
+        },
+        "passed": true,
+        "detail": {
+          "id": "copy-readiness-priced-ok"
+        }
+      },
+      {
+        "id": "runtime",
+        "text": {
+          "id": "copy-readiness-runtime"
+        },
+        "passed": true,
+        "detail": {
+          "id": "copy-readiness-runtime-ok"
+        }
+      }
+    ]
+  },
+  "activity": [
+    {
+      "id": 312,
+      "task_id": 1,
+      "kind": "paper_filled",
+      "outcome": {
+        "outcome": "paper_filled",
+        "task_id": 1,
+        "target_address": "CopyTargetAAA1111111111111111111111111111111",
+        "signature": "CopySig312x22222222222222222222222222222222222222222222222222222222222222222222222222222",
+        "mint": "EKpQGSJtjMFqKZ9KQanSqYXRcF8fBopzLHYxdM65zcjm",
+        "target_size_sol": 1.8,
+        "target_token_amount": 2295.4,
+        "sized_sol": 0.1,
+        "fill": {
+          "input_sol": 0.1,
+          "market_price_sol": 0.00782,
+          "priced_from_pool": true,
+          "fill_price_sol": 0.00791384,
+          "token_amount": 12.638,
+          "referral_fee_sol": 0.0005,
+          "network_fee_sol": 0.000005,
+          "priority_fee_sol": 0.0001,
+          "total_cost_sol": 0.100605
+        },
+        "telemetry": {
+          "target_block_time": 1791323051,
+          "detected_at": "2026-10-06T21:44:12.300Z",
+          "decoded_at": "2026-10-06T21:44:12.340Z",
+          "decided_at": "2026-10-06T21:44:12.395Z",
+          "submitted_at": null,
+          "confirmed_at": null,
+          "target_price_sol": 0.00784,
+          "fill_price_sol": 0.007914,
+          "backfill": false
+        }
+      },
+      "created_at": "2026-10-06T21:44:12.420Z"
+    },
+    {
+      "id": 311,
+      "task_id": 1,
+      "kind": "paper_sell_observed",
+      "outcome": {
+        "outcome": "paper_sell_observed",
+        "task_id": 1,
+        "target_address": "CopyTargetAAA1111111111111111111111111111111",
+        "target_signature": "CopySig311x22222222222222222222222222222222222222222222222222222222222222222222222222222",
+        "mint": "DezXAZ8z7PnrnRJjz3wXBoRgixCa6xjnB7YaB1pPB263",
+        "target_token_amount": 41250000,
+        "target_sol_amount": 2.94,
+        "exit_percentage": null,
+        "transaction_signature": null,
+        "error": null,
+        "telemetry": {
+          "target_block_time": 1791317402,
+          "detected_at": "2026-10-06T20:10:03.900Z",
+          "decoded_at": "2026-10-06T20:10:03.940Z",
+          "decided_at": "2026-10-06T20:10:03.995Z",
+          "submitted_at": null,
+          "confirmed_at": null,
+          "target_price_sol": null,
+          "fill_price_sol": null,
+          "backfill": false
+        },
+        "paper_fill": {
+          "token_amount": 1402000,
+          "market_price_sol": 9.81e-8,
+          "priced_from_pool": true,
+          "fill_price_sol": 9.69e-8,
+          "gross_sol": 0.13585,
+          "referral_fee_sol": 0.000679,
+          "network_fee_sol": 0.000005,
+          "priority_fee_sol": 0.0001,
+          "net_proceeds_sol": 0.135066
+        },
+        "exit_rule": null
+      },
+      "created_at": "2026-10-06T20:10:04.010Z"
+    },
+    {
+      "id": 310,
+      "task_id": 1,
+      "kind": "skipped",
+      "outcome": {
+        "outcome": "skipped",
+        "task_id": 1,
+        "signature": "CopySig310x22222222222222222222222222222222222222222222222222222222222222222222222222222",
+        "mint": "7GCihgDB8fe6KNjn2MYtkzZcRjQy3t9GHdC8uHYmW2hr",
+        "reason": {
+          "kind": "target_below_minimum",
+          "minimum_sol": 0.5
+        },
+        "decided_at": "2026-10-06T19:52:40.500Z",
+        "telemetry": {
+          "target_block_time": 1791316359,
+          "detected_at": "2026-10-06T19:52:40.400Z",
+          "decoded_at": "2026-10-06T19:52:40.440Z",
+          "decided_at": "2026-10-06T19:52:40.495Z",
+          "submitted_at": null,
+          "confirmed_at": null,
+          "target_price_sol": null,
+          "fill_price_sol": null,
+          "backfill": false
+        }
+      },
+      "created_at": "2026-10-06T19:52:40.520Z"
+    },
+    {
+      "id": 309,
+      "task_id": 1,
+      "kind": "skipped",
+      "outcome": {
+        "outcome": "skipped",
+        "task_id": 1,
+        "signature": "CopySig309x22222222222222222222222222222222222222222222222222222222222222222222222222222",
+        "mint": "JUPyiwrYJFskUPiHa7hkeR8VUtAeFoSYbKedZNsDvCN",
+        "reason": {
+          "kind": "already_bought"
+        },
+        "decided_at": "2026-10-06T18:31:02.100Z",
+        "telemetry": {
+          "target_block_time": 1791311460,
+          "detected_at": "2026-10-06T18:31:02.000Z",
+          "decoded_at": "2026-10-06T18:31:02.040Z",
+          "decided_at": "2026-10-06T18:31:02.095Z",
+          "submitted_at": null,
+          "confirmed_at": null,
+          "target_price_sol": null,
+          "fill_price_sol": null,
+          "backfill": false
+        }
+      },
+      "created_at": "2026-10-06T18:31:02.130Z"
+    },
+    {
+      "id": 308,
+      "task_id": 1,
+      "kind": "paper_sell_observed",
+      "outcome": {
+        "outcome": "paper_sell_observed",
+        "task_id": 1,
+        "target_address": "CopyTargetAAA1111111111111111111111111111111",
+        "target_signature": "paper-exit-308",
+        "mint": "JUPyiwrYJFskUPiHa7hkeR8VUtAeFoSYbKedZNsDvCN",
+        "target_token_amount": 0,
+        "target_sol_amount": 0,
+        "exit_percentage": null,
+        "transaction_signature": null,
+        "error": null,
+        "telemetry": {
+          "target_block_time": 1791302730,
+          "detected_at": "2026-10-06T16:05:30.000Z",
+          "decoded_at": "2026-10-06T16:05:30.040Z",
+          "decided_at": "2026-10-06T16:05:30.095Z",
+          "submitted_at": null,
+          "confirmed_at": null,
+          "target_price_sol": null,
+          "fill_price_sol": null,
+          "backfill": false
+        },
+        "paper_fill": {
+          "token_amount": 41.2,
+          "market_price_sol": 0.003391,
+          "priced_from_pool": true,
+          "fill_price_sol": 0.00335,
+          "gross_sol": 0.13802,
+          "referral_fee_sol": 0.00069,
+          "network_fee_sol": 0.000005,
+          "priority_fee_sol": 0.0001,
+          "net_proceeds_sol": 0.137225
+        },
+        "exit_rule": "take_profit"
+      },
+      "created_at": "2026-10-06T16:05:30.090Z"
+    },
+    {
+      "id": 307,
+      "task_id": 1,
+      "kind": "paper_filled",
+      "outcome": {
+        "outcome": "paper_filled",
+        "task_id": 1,
+        "target_address": "CopyTargetAAA1111111111111111111111111111111",
+        "signature": "CopySig307x22222222222222222222222222222222222222222222222222222222222222222222222222222",
+        "mint": "DezXAZ8z7PnrnRJjz3wXBoRgixCa6xjnB7YaB1pPB263",
+        "target_size_sol": 2.1,
+        "target_token_amount": 22100000,
+        "sized_sol": 0.1,
+        "fill": {
+          "input_sol": 0.1,
+          "market_price_sol": 9.5e-8,
+          "priced_from_pool": true,
+          "fill_price_sol": 9.614e-8,
+          "token_amount": 1041000,
+          "referral_fee_sol": 0.0005,
+          "network_fee_sol": 0.000005,
+          "priority_fee_sol": 0.0001,
+          "total_cost_sol": 0.100605
+        },
+        "telemetry": {
+          "target_block_time": 1791296537,
+          "detected_at": "2026-10-06T14:22:18.700Z",
+          "decoded_at": "2026-10-06T14:22:18.740Z",
+          "decided_at": "2026-10-06T14:22:18.795Z",
+          "submitted_at": null,
+          "confirmed_at": null,
+          "target_price_sol": 9.5e-8,
+          "fill_price_sol": 9.61e-8,
+          "backfill": false
+        }
+      },
+      "created_at": "2026-10-06T14:22:18.810Z"
+    }
+  ]
+}

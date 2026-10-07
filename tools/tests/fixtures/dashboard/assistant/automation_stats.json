@@ -1,0 +1,12 @@
+{
+  "stats": {
+    "total_tasks": 3,
+    "active_tasks": 2,
+    "total_runs": 192,
+    "successful_runs": 188,
+    "failed_runs": 4,
+    "success_rate": 97.92,
+    "avg_duration_ms": 7310,
+    "runs_today": 6
+  }
+}

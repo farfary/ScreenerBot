@@ -1,0 +1,76 @@
+{
+  "templates": [
+    {
+      "id": "liquidity_guard",
+      "name": {
+        "id": "assistant-template-liquidity-guard-name"
+      },
+      "description": {
+        "id": "assistant-template-liquidity-guard-description"
+      },
+      "category": "filtering",
+      "content": "Reject any token with total liquidity below $10,000 USD. Low liquidity increases slippage risk and makes exit difficult. For tokens under $50K liquidity, flag as HIGH RISK even if other metrics are acceptable.",
+      "tags": ["safety", "liquidity", "risk-management"]
+    },
+    {
+      "id": "holder_distribution",
+      "name": {
+        "id": "assistant-template-holder-distribution-name"
+      },
+      "description": {
+        "id": "assistant-template-holder-distribution-description"
+      },
+      "category": "filtering",
+      "content": "Flag tokens where the top 10 holders control more than 50% of the supply as MEDIUM RISK. If top 5 holders control >40%, consider it HIGH RISK. Concentrated ownership increases pump-and-dump risk and manipulation potential.",
+      "tags": ["holders", "distribution", "rug-risk"]
+    },
+    {
+      "id": "honeypot_detection",
+      "name": {
+        "id": "assistant-template-honeypot-detection-name"
+      },
+      "description": {
+        "id": "assistant-template-honeypot-detection-description"
+      },
+      "category": "filtering",
+      "content": "Analyze token authority settings and contract permissions. REJECT if: freeze authority is enabled, mint authority is still active after initial distribution, or there are unusual transfer restrictions. Check for contract upgrade authority that could enable malicious changes.",
+      "tags": ["security", "honeypot", "authority"]
+    },
+    {
+      "id": "momentum_filter",
+      "name": {
+        "id": "assistant-template-momentum-filter-name"
+      },
+      "description": {
+        "id": "assistant-template-momentum-filter-description"
+      },
+      "category": "trading",
+      "content": "Prefer tokens showing positive price momentum over 1h, 6h, and 24h timeframes. Look for increasing volume trend alongside price action. Be cautious of sudden spikes without volume confirmation - these are often pump schemes.",
+      "tags": ["momentum", "price-action", "volume"]
+    },
+    {
+      "id": "new_token_caution",
+      "name": {
+        "id": "assistant-template-new-token-caution-name"
+      },
+      "description": {
+        "id": "assistant-template-new-token-caution-description"
+      },
+      "category": "analysis",
+      "content": "Exercise extra caution with tokens less than 24 hours old. Require higher confidence thresholds and stronger fundamentals. New tokens lack price history and holder stability - what looks promising in hour 1 often dumps by hour 12.",
+      "tags": ["age", "new-tokens", "caution"]
+    },
+    {
+      "id": "whale_activity",
+      "name": {
+        "id": "assistant-template-whale-activity-name"
+      },
+      "description": {
+        "id": "assistant-template-whale-activity-description"
+      },
+      "category": "analysis",
+      "content": "Monitor for large holder changes (>5% of supply moving). Whale accumulation can signal upcoming price action, but whale distribution often precedes dumps. Flag unusual wallet activity, especially from deployer/early wallets.",
+      "tags": ["whales", "large-holders", "activity"]
+    }
+  ]
+}

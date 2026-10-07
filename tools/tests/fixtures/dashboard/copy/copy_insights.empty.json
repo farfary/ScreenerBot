@@ -1,0 +1,41 @@
+{
+  "task_id": 1,
+  "book": "paper",
+  "rounds": 0,
+  "wins": 0,
+  "losses": 0,
+  "win_rate_pct": null,
+  "realized_pnl_native": 0,
+  "average_win_native": null,
+  "average_loss_native": null,
+  "best_round_native": null,
+  "worst_round_native": null,
+  "profit_factor": null,
+  "average_hold_seconds": null,
+  "decisions": {
+    "fills": 0,
+    "exits": 0,
+    "skips": 0,
+    "errors": 0
+  },
+  "pnl_curve": [],
+  "exit_breakdown": [],
+  "skip_breakdown": [],
+  "arrival": {
+    "samples": 0,
+    "minimum_ms": null,
+    "median_ms": null,
+    "p95_ms": null,
+    "maximum_ms": null,
+    "average_ms": null
+  },
+  "arrival_histogram": [],
+  "slippage": {
+    "samples": 0,
+    "average_pct": null,
+    "median_pct": null,
+    "p95_pct": null,
+    "worst_pct": null
+  },
+  "recent_rounds": []
+}

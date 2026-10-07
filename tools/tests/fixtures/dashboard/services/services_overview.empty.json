@@ -1,0 +1,15 @@
+{
+  "services": [],
+  "dependency_graph": [],
+  "summary": {
+    "total_services": 0,
+    "enabled_services": 0,
+    "healthy_services": 0,
+    "degraded_services": 0,
+    "unhealthy_services": 0,
+    "starting_services": 0,
+    "disabled_services": 0,
+    "all_healthy": true
+  },
+  "timestamp": "2026-10-07T09:30:00.000000Z"
+}

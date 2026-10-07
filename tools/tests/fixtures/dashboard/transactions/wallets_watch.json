@@ -1,0 +1,22 @@
+{
+  "targets": [
+    {
+      "id": 3,
+      "address": "Wa11etTVuKfFZ53oB1qHV9y1B7KoDTMyTZMmBTH7BF3u",
+      "label": "Copy source",
+      "sources": [
+        {
+          "kind": "copy",
+          "task_id": 7
+        }
+      ],
+      "enabled": true,
+      "page_budget": 4,
+      "high_activity_approved": false,
+      "disable_reason": null,
+      "created_at": "2026-10-02T00:00:00.000Z",
+      "updated_at": "2026-10-06T23:00:00.000Z"
+    }
+  ],
+  "total": 1
+}

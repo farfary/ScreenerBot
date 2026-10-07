@@ -1,0 +1,16 @@
+{
+  "wallets": [
+    {
+      "id": 1,
+      "name": "Trading",
+      "address": "MainWa11etAAA1111111111111111111111111111111",
+      "role": "main",
+      "wallet_type": "generated",
+      "created_at": "2026-08-14T10:20:00Z",
+      "last_used_at": "2026-10-06T21:44:12Z",
+      "notes": "Automated trading",
+      "is_active": true
+    }
+  ],
+  "total": 1
+}

@@ -1,0 +1,45 @@
+{
+  "instructions": [
+    {
+      "id": 1,
+      "name": "Liquidity floor",
+      "content": "Reject any token with less than 150 SOL of pool liquidity.",
+      "category": "filtering",
+      "priority": 0,
+      "enabled": true,
+      "created_at": "2026-09-12T10:00:00Z",
+      "updated_at": "2026-09-12T10:00:00Z"
+    },
+    {
+      "id": 2,
+      "name": "Holder concentration",
+      "content": "Treat a top-10 holder share above 45% as high risk.",
+      "category": "filtering",
+      "priority": 1,
+      "enabled": true,
+      "created_at": "2026-09-12T10:05:00Z",
+      "updated_at": "2026-09-12T10:05:00Z"
+    },
+    {
+      "id": 3,
+      "name": "Momentum confirmation",
+      "content": "Prefer entries where volume rises with price over the last hour.",
+      "category": "trading",
+      "priority": 2,
+      "enabled": false,
+      "created_at": "2026-09-20T15:30:00Z",
+      "updated_at": "2026-09-20T15:30:00Z"
+    },
+    {
+      "id": 4,
+      "name": "Young token caution",
+      "content": "Require higher confidence for tokens younger than six hours.",
+      "category": "analysis",
+      "priority": 3,
+      "enabled": true,
+      "created_at": "2026-10-02T08:45:00Z",
+      "updated_at": "2026-10-02T08:45:00Z"
+    }
+  ],
+  "total": 4
+}

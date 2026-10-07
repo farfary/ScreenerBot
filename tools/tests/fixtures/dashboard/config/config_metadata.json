@@ -1,0 +1,4487 @@
+{
+  "data": {
+    "account": {
+      "auto_wallet_signin": {
+        "type": "boolean",
+        "key": "config-account-auto-wallet-signin",
+        "category": "general",
+        "visibility": "primary",
+        "default": false
+      },
+      "refresh_margin_secs": {
+        "type": "integer",
+        "key": "config-account-refresh-margin-secs",
+        "category": "debug",
+        "visibility": "technical",
+        "default": 120
+      },
+      "use_gateway_rpc": {
+        "type": "boolean",
+        "key": "config-account-use-gateway-rpc",
+        "category": "general",
+        "visibility": "primary",
+        "default": true
+      }
+    },
+    "agent_control": {
+      "analysis": {
+        "type": "string",
+        "key": "config-agent-control-analysis",
+        "category": "tool-permissions",
+        "visibility": "secondary",
+        "default": "allow"
+      },
+      "config": {
+        "type": "string",
+        "key": "config-agent-control-config",
+        "category": "tool-permissions",
+        "visibility": "secondary",
+        "default": "allow"
+      },
+      "enabled": {
+        "type": "boolean",
+        "key": "config-agent-control-enabled",
+        "impact": "critical",
+        "category": "master-control",
+        "visibility": "secondary",
+        "default": true
+      },
+      "portfolio": {
+        "type": "string",
+        "key": "config-agent-control-portfolio",
+        "category": "tool-permissions",
+        "visibility": "secondary",
+        "default": "allow"
+      },
+      "system": {
+        "type": "string",
+        "key": "config-agent-control-system",
+        "category": "tool-permissions",
+        "visibility": "secondary",
+        "default": "allow"
+      },
+      "trading": {
+        "type": "string",
+        "key": "config-agent-control-trading",
+        "category": "tool-permissions",
+        "visibility": "secondary",
+        "default": "allow"
+      }
+    },
+    "assistant": {
+      "auto_summarize": {
+        "type": "boolean",
+        "key": "config-assistant-auto-summarize",
+        "category": "chat",
+        "visibility": "secondary",
+        "default": true
+      },
+      "check_interval_seconds": {
+        "type": "integer",
+        "key": "config-assistant-check-interval-seconds",
+        "category": "automation",
+        "visibility": "secondary",
+        "min": 10,
+        "max": 300,
+        "step": 5,
+        "default": 30
+      },
+      "default_timeout_seconds": {
+        "type": "integer",
+        "key": "config-assistant-default-timeout-seconds",
+        "category": "automation",
+        "visibility": "secondary",
+        "min": 30,
+        "max": 600,
+        "step": 30,
+        "default": 120
+      },
+      "enabled": {
+        "type": "boolean",
+        "key": "config-assistant-enabled",
+        "category": "chat",
+        "visibility": "secondary",
+        "default": false
+      },
+      "event_triggers_enabled": {
+        "type": "boolean",
+        "key": "config-assistant-event-triggers-enabled",
+        "category": "automation",
+        "visibility": "secondary",
+        "default": false
+      },
+      "max_concurrent": {
+        "type": "integer",
+        "key": "config-assistant-max-concurrent",
+        "category": "automation",
+        "visibility": "secondary",
+        "min": 1,
+        "max": 5,
+        "step": 1,
+        "default": 1
+      },
+      "max_session_messages": {
+        "type": "integer",
+        "key": "config-assistant-max-session-messages",
+        "category": "chat",
+        "visibility": "secondary",
+        "min": 10,
+        "max": 500,
+        "step": 10,
+        "default": 100
+      },
+      "scheduled_tasks_enabled": {
+        "type": "boolean",
+        "key": "config-assistant-scheduled-tasks-enabled",
+        "impact": "medium",
+        "category": "automation",
+        "visibility": "secondary",
+        "default": false
+      }
+    },
+    "chains": {
+      "show_preview": {
+        "type": "boolean",
+        "key": "config-chains-show-preview",
+        "category": "debug",
+        "visibility": "technical",
+        "default": false,
+        "restart_required": true
+      },
+      "solana": {
+        "type": "object",
+        "key": "config-chains-solana",
+        "category": "general",
+        "visibility": "primary",
+        "default": {
+          "enabled": true,
+          "rpc": {
+            "urls": ["https://api.mainnet-beta.solana.com"],
+            "selection_strategy": "adaptive",
+            "default_rate_limit": 10,
+            "helius_rate_limit": 50,
+            "quicknode_rate_limit": 25,
+            "triton_rate_limit": 100,
+            "public_rate_limit": 4,
+            "circuit_breaker_enabled": true,
+            "circuit_breaker_failure_threshold": 5,
+            "circuit_breaker_success_threshold": 3,
+            "circuit_breaker_open_duration_secs": 30,
+            "circuit_breaker_half_open_requests": 3,
+            "request_timeout_secs": 30,
+            "connection_timeout_secs": 10,
+            "max_retries": 3,
+            "retry_base_delay_ms": 100,
+            "retry_max_delay_ms": 5000,
+            "pool_connections_per_host": 10,
+            "pool_idle_timeout_secs": 90,
+            "stats_enabled": true
+          },
+          "swaps": {
+            "quote_deadline_ms": 1500,
+            "jupiter": {
+              "enabled": true,
+              "dynamic_compute_unit_limit": true,
+              "priority_fee_micro_lamports": 50000,
+              "api_key": ""
+            },
+            "direct": {
+              "enabled": false,
+              "priority_fee_micro_lamports": 50000,
+              "confirmation_timeout_secs": 60,
+              "max_price_impact_pct": 10
+            },
+            "raptor": { "enabled": false, "priority_fee_micro_lamports": 50000, "max_hops": 4 },
+            "cost_guard": {
+              "enabled": true,
+              "max_extra_cost_pct": 1,
+              "always_allow_below_lamports": 100000,
+              "retry_excluding_venue": true
+            }
+          },
+          "connectivity": {
+            "jupiter": { "enabled": true, "timeout_secs": 5 },
+            "raptor": { "enabled": true, "timeout_secs": 5 }
+          }
+        },
+        "children": {
+          "enabled": {
+            "type": "boolean",
+            "key": "config-chain-enabled",
+            "category": "general",
+            "default": true,
+            "restart_required": true
+          },
+          "rpc": {
+            "type": "object",
+            "key": "config-chain-rpc",
+            "impact": "critical",
+            "category": "endpoints",
+            "default": {
+              "urls": ["https://api.mainnet-beta.solana.com"],
+              "selection_strategy": "adaptive",
+              "default_rate_limit": 10,
+              "helius_rate_limit": 50,
+              "quicknode_rate_limit": 25,
+              "triton_rate_limit": 100,
+              "public_rate_limit": 4,
+              "circuit_breaker_enabled": true,
+              "circuit_breaker_failure_threshold": 5,
+              "circuit_breaker_success_threshold": 3,
+              "circuit_breaker_open_duration_secs": 30,
+              "circuit_breaker_half_open_requests": 3,
+              "request_timeout_secs": 30,
+              "connection_timeout_secs": 10,
+              "max_retries": 3,
+              "retry_base_delay_ms": 100,
+              "retry_max_delay_ms": 5000,
+              "pool_connections_per_host": 10,
+              "pool_idle_timeout_secs": 90,
+              "stats_enabled": true
+            },
+            "children": {
+              "circuit_breaker_enabled": {
+                "type": "boolean",
+                "key": "config-chain-rpc-circuit-breaker-enabled",
+                "impact": "high",
+                "category": "circuit-breaker",
+                "default": true
+              },
+              "circuit_breaker_failure_threshold": {
+                "type": "integer",
+                "key": "config-chain-rpc-circuit-breaker-failure-threshold",
+                "impact": "medium",
+                "category": "circuit-breaker",
+                "min": 1,
+                "max": 20,
+                "step": 1,
+                "default": 5
+              },
+              "circuit_breaker_half_open_requests": {
+                "type": "integer",
+                "key": "config-chain-rpc-circuit-breaker-half-open-requests",
+                "impact": "low",
+                "category": "circuit-breaker",
+                "min": 1,
+                "max": 10,
+                "step": 1,
+                "default": 3
+              },
+              "circuit_breaker_open_duration_secs": {
+                "type": "integer",
+                "key": "config-chain-rpc-circuit-breaker-open-duration-secs",
+                "impact": "medium",
+                "category": "circuit-breaker",
+                "min": 5,
+                "max": 120,
+                "step": 5,
+                "default": 30
+              },
+              "circuit_breaker_success_threshold": {
+                "type": "integer",
+                "key": "config-chain-rpc-circuit-breaker-success-threshold",
+                "impact": "medium",
+                "category": "circuit-breaker",
+                "min": 1,
+                "max": 10,
+                "step": 1,
+                "default": 3
+              },
+              "connection_timeout_secs": {
+                "type": "integer",
+                "key": "config-chain-rpc-connection-timeout-secs",
+                "impact": "medium",
+                "category": "timeouts",
+                "min": 1,
+                "max": 30,
+                "step": 1,
+                "default": 10
+              },
+              "default_rate_limit": {
+                "type": "integer",
+                "key": "config-chain-rpc-default-rate-limit",
+                "impact": "high",
+                "category": "rate-limiting",
+                "min": 1,
+                "max": 100,
+                "step": 1,
+                "default": 10
+              },
+              "helius_rate_limit": {
+                "type": "integer",
+                "key": "config-chain-rpc-helius-rate-limit",
+                "impact": "medium",
+                "category": "rate-limiting",
+                "min": 1,
+                "max": 200,
+                "step": 5,
+                "default": 50
+              },
+              "max_retries": {
+                "type": "integer",
+                "key": "config-chain-rpc-max-retries",
+                "impact": "medium",
+                "category": "retries",
+                "min": 0,
+                "max": 10,
+                "step": 1,
+                "default": 3
+              },
+              "pool_connections_per_host": {
+                "type": "integer",
+                "key": "config-chain-rpc-pool-connections-per-host",
+                "impact": "medium",
+                "category": "connection-pooling",
+                "min": 1,
+                "max": 50,
+                "step": 5,
+                "default": 10
+              },
+              "pool_idle_timeout_secs": {
+                "type": "integer",
+                "key": "config-chain-rpc-pool-idle-timeout-secs",
+                "impact": "low",
+                "category": "connection-pooling",
+                "min": 30,
+                "max": 300,
+                "step": 30,
+                "default": 90
+              },
+              "public_rate_limit": {
+                "type": "integer",
+                "key": "config-chain-rpc-public-rate-limit",
+                "impact": "high",
+                "category": "rate-limiting",
+                "min": 1,
+                "max": 20,
+                "step": 1,
+                "default": 4
+              },
+              "quicknode_rate_limit": {
+                "type": "integer",
+                "key": "config-chain-rpc-quicknode-rate-limit",
+                "impact": "medium",
+                "category": "rate-limiting",
+                "min": 1,
+                "max": 100,
+                "step": 5,
+                "default": 25
+              },
+              "request_timeout_secs": {
+                "type": "integer",
+                "key": "config-chain-rpc-request-timeout-secs",
+                "impact": "high",
+                "category": "timeouts",
+                "min": 5,
+                "max": 120,
+                "step": 5,
+                "default": 30
+              },
+              "retry_base_delay_ms": {
+                "type": "integer",
+                "key": "config-chain-rpc-retry-base-delay-ms",
+                "impact": "low",
+                "category": "retries",
+                "min": 50,
+                "max": 1000,
+                "step": 50,
+                "default": 100
+              },
+              "retry_max_delay_ms": {
+                "type": "integer",
+                "key": "config-chain-rpc-retry-max-delay-ms",
+                "impact": "low",
+                "category": "retries",
+                "min": 1000,
+                "max": 30000,
+                "step": 1000,
+                "default": 5000
+              },
+              "selection_strategy": {
+                "type": "string",
+                "key": "config-chain-rpc-selection-strategy",
+                "impact": "medium",
+                "category": "provider-selection",
+                "default": "adaptive"
+              },
+              "stats_enabled": {
+                "type": "boolean",
+                "key": "config-chain-rpc-stats-enabled",
+                "impact": "low",
+                "category": "statistics",
+                "default": true
+              },
+              "triton_rate_limit": {
+                "type": "integer",
+                "key": "config-chain-rpc-triton-rate-limit",
+                "impact": "medium",
+                "category": "rate-limiting",
+                "min": 1,
+                "max": 200,
+                "step": 10,
+                "default": 100
+              },
+              "urls": {
+                "type": "array",
+                "key": "config-chain-rpc-urls",
+                "item_type": "string",
+                "impact": "critical",
+                "category": "endpoints",
+                "default": ["https://api.mainnet-beta.solana.com"]
+              }
+            },
+            "restart_required": true
+          },
+          "swaps": {
+            "type": "object",
+            "key": "config-chain-swaps",
+            "impact": "high",
+            "category": "routers",
+            "default": {
+              "quote_deadline_ms": 1500,
+              "jupiter": {
+                "enabled": true,
+                "dynamic_compute_unit_limit": true,
+                "priority_fee_micro_lamports": 50000,
+                "api_key": ""
+              },
+              "direct": {
+                "enabled": false,
+                "priority_fee_micro_lamports": 50000,
+                "confirmation_timeout_secs": 60,
+                "max_price_impact_pct": 10
+              },
+              "raptor": { "enabled": false, "priority_fee_micro_lamports": 50000, "max_hops": 4 },
+              "cost_guard": {
+                "enabled": true,
+                "max_extra_cost_pct": 1,
+                "always_allow_below_lamports": 100000,
+                "retry_excluding_venue": true
+              }
+            },
+            "children": {
+              "cost_guard": {
+                "type": "object",
+                "key": "config-chain-swaps-cost-guard",
+                "impact": "high",
+                "category": "safety",
+                "default": {
+                  "enabled": true,
+                  "max_extra_cost_pct": 1,
+                  "always_allow_below_lamports": 100000,
+                  "retry_excluding_venue": true
+                },
+                "children": {
+                  "always_allow_below_lamports": {
+                    "type": "integer",
+                    "key": "config-chain-swaps-cost-guard-always-allow-below-lamports",
+                    "impact": "medium",
+                    "category": "safety",
+                    "min": 0,
+                    "max": 100000000,
+                    "step": 10000,
+                    "default": 100000
+                  },
+                  "enabled": {
+                    "type": "boolean",
+                    "key": "config-chain-swaps-cost-guard-enabled",
+                    "impact": "high",
+                    "category": "safety",
+                    "default": true
+                  },
+                  "max_extra_cost_pct": {
+                    "type": "number",
+                    "key": "config-chain-swaps-cost-guard-max-extra-cost-pct",
+                    "impact": "high",
+                    "category": "safety",
+                    "min": 0,
+                    "max": 100,
+                    "step": 0.1,
+                    "default": 1
+                  },
+                  "retry_excluding_venue": {
+                    "type": "boolean",
+                    "key": "config-chain-swaps-cost-guard-retry-excluding-venue",
+                    "impact": "medium",
+                    "category": "safety",
+                    "default": true
+                  }
+                }
+              },
+              "direct": {
+                "type": "object",
+                "key": "config-chain-swaps-direct",
+                "impact": "high",
+                "category": "routers",
+                "default": {
+                  "enabled": false,
+                  "priority_fee_micro_lamports": 50000,
+                  "confirmation_timeout_secs": 60,
+                  "max_price_impact_pct": 10
+                },
+                "children": {
+                  "confirmation_timeout_secs": {
+                    "type": "integer",
+                    "key": "config-chain-swaps-direct-confirmation-timeout-secs",
+                    "impact": "medium",
+                    "category": "safety",
+                    "min": 10,
+                    "max": 180,
+                    "step": 5,
+                    "default": 60
+                  },
+                  "enabled": {
+                    "type": "boolean",
+                    "key": "config-chain-swaps-direct-enabled",
+                    "impact": "high",
+                    "category": "router",
+                    "default": false
+                  },
+                  "max_price_impact_pct": {
+                    "type": "number",
+                    "key": "config-chain-swaps-direct-max-price-impact-pct",
+                    "impact": "high",
+                    "category": "risk",
+                    "min": 0.1,
+                    "max": 50,
+                    "step": 0.1,
+                    "default": 10
+                  },
+                  "priority_fee_micro_lamports": {
+                    "type": "integer",
+                    "key": "config-chain-swaps-direct-priority-fee-micro-lamports",
+                    "impact": "medium",
+                    "category": "fees",
+                    "min": 0,
+                    "max": 10000000,
+                    "step": 1000,
+                    "default": 50000
+                  }
+                }
+              },
+              "jupiter": {
+                "type": "object",
+                "key": "config-chain-swaps-jupiter",
+                "impact": "high",
+                "category": "routers",
+                "default": {
+                  "enabled": true,
+                  "dynamic_compute_unit_limit": true,
+                  "priority_fee_micro_lamports": 50000,
+                  "api_key": ""
+                },
+                "children": {
+                  "api_key": {
+                    "type": "string",
+                    "key": "config-chain-swaps-jupiter-api-key",
+                    "impact": "low",
+                    "category": "api",
+                    "default": ""
+                  },
+                  "dynamic_compute_unit_limit": {
+                    "type": "boolean",
+                    "key": "config-chain-swaps-jupiter-dynamic-compute-unit-limit",
+                    "impact": "medium",
+                    "category": "performance",
+                    "default": true
+                  },
+                  "enabled": {
+                    "type": "boolean",
+                    "key": "config-chain-swaps-jupiter-enabled",
+                    "impact": "high",
+                    "category": "router",
+                    "default": true
+                  },
+                  "priority_fee_micro_lamports": {
+                    "type": "integer",
+                    "key": "config-chain-swaps-jupiter-priority-fee-micro-lamports",
+                    "impact": "medium",
+                    "category": "fees",
+                    "min": 0,
+                    "max": 10000000,
+                    "step": 1000,
+                    "default": 50000
+                  }
+                }
+              },
+              "quote_deadline_ms": {
+                "type": "integer",
+                "key": "config-chain-swaps-quote-deadline-ms",
+                "impact": "medium",
+                "category": "timeouts",
+                "min": 100,
+                "max": 10000,
+                "step": 100,
+                "default": 1500
+              },
+              "raptor": {
+                "type": "object",
+                "key": "config-chain-swaps-raptor",
+                "impact": "high",
+                "category": "routers",
+                "default": {
+                  "enabled": false,
+                  "priority_fee_micro_lamports": 50000,
+                  "max_hops": 4
+                },
+                "children": {
+                  "enabled": {
+                    "type": "boolean",
+                    "key": "config-chain-swaps-raptor-enabled",
+                    "impact": "high",
+                    "category": "router",
+                    "default": false
+                  },
+                  "max_hops": {
+                    "type": "integer",
+                    "key": "config-chain-swaps-raptor-max-hops",
+                    "impact": "low",
+                    "category": "routing",
+                    "min": 1,
+                    "max": 4,
+                    "step": 1,
+                    "default": 4
+                  },
+                  "priority_fee_micro_lamports": {
+                    "type": "integer",
+                    "key": "config-chain-swaps-raptor-priority-fee-micro-lamports",
+                    "impact": "medium",
+                    "category": "fees",
+                    "min": 0,
+                    "max": 10000000,
+                    "step": 1000,
+                    "default": 50000
+                  }
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "copy_trading": {
+      "default_slippage_pct": {
+        "type": "number",
+        "key": "config-copy-trading-default-slippage-pct",
+        "impact": "high",
+        "category": "copy-trading",
+        "visibility": "secondary",
+        "min": 0.1,
+        "max": 50,
+        "step": 0.1,
+        "default": 2
+      },
+      "enabled": {
+        "type": "boolean",
+        "key": "config-copy-trading-enabled",
+        "impact": "high",
+        "category": "copy-trading",
+        "visibility": "secondary",
+        "default": false
+      },
+      "latency_kill_switch_enabled": {
+        "type": "boolean",
+        "key": "config-copy-trading-latency-kill-switch-enabled",
+        "impact": "high",
+        "category": "copy-trading",
+        "visibility": "secondary",
+        "default": true
+      },
+      "latency_window_size": {
+        "type": "integer",
+        "key": "config-copy-trading-latency-window-size",
+        "impact": "medium",
+        "category": "copy-trading",
+        "visibility": "secondary",
+        "min": 3,
+        "max": 100,
+        "step": 1,
+        "default": 10
+      },
+      "max_active_tasks": {
+        "type": "integer",
+        "key": "config-copy-trading-max-active-tasks",
+        "impact": "high",
+        "category": "copy-trading",
+        "visibility": "secondary",
+        "min": 1,
+        "max": 50,
+        "step": 1,
+        "default": 10
+      },
+      "max_arrival_distance_ms": {
+        "type": "integer",
+        "key": "config-copy-trading-max-arrival-distance-ms",
+        "impact": "high",
+        "category": "copy-trading",
+        "visibility": "secondary",
+        "min": 250,
+        "max": 30000,
+        "step": 250,
+        "default": 4000
+      },
+      "readiness_min_closed_rounds": {
+        "type": "integer",
+        "key": "config-copy-trading-readiness-min-closed-rounds",
+        "impact": "low",
+        "category": "copy-trading",
+        "visibility": "secondary",
+        "min": 1,
+        "max": 500,
+        "step": 1,
+        "default": 10
+      },
+      "require_filter_pass": {
+        "type": "boolean",
+        "key": "config-copy-trading-require-filter-pass",
+        "impact": "high",
+        "category": "copy-trading",
+        "visibility": "secondary",
+        "default": true
+      }
+    },
+    "events": {
+      "enabled": {
+        "type": "boolean",
+        "key": "config-events-enabled",
+        "impact": "critical",
+        "category": "global-control",
+        "visibility": "primary",
+        "default": false
+      },
+      "record_api": {
+        "type": "boolean",
+        "key": "config-events-record-api",
+        "impact": "medium",
+        "category": "category-recording",
+        "visibility": "secondary",
+        "default": true
+      },
+      "record_connectivity": {
+        "type": "boolean",
+        "key": "config-events-record-connectivity",
+        "impact": "medium",
+        "category": "category-recording",
+        "visibility": "secondary",
+        "default": true
+      },
+      "record_filtering": {
+        "type": "boolean",
+        "key": "config-events-record-filtering",
+        "impact": "medium",
+        "category": "category-recording",
+        "visibility": "secondary",
+        "default": true
+      },
+      "record_ohlcv": {
+        "type": "boolean",
+        "key": "config-events-record-ohlcv",
+        "impact": "medium",
+        "category": "category-recording",
+        "visibility": "secondary",
+        "default": true
+      },
+      "record_pool": {
+        "type": "boolean",
+        "key": "config-events-record-pool",
+        "impact": "medium",
+        "category": "category-recording",
+        "visibility": "secondary",
+        "default": true
+      },
+      "record_position": {
+        "type": "boolean",
+        "key": "config-events-record-position",
+        "impact": "medium",
+        "category": "category-recording",
+        "visibility": "secondary",
+        "default": true
+      },
+      "record_rpc": {
+        "type": "boolean",
+        "key": "config-events-record-rpc",
+        "impact": "medium",
+        "category": "category-recording",
+        "visibility": "secondary",
+        "default": true
+      },
+      "record_security": {
+        "type": "boolean",
+        "key": "config-events-record-security",
+        "impact": "medium",
+        "category": "category-recording",
+        "visibility": "secondary",
+        "default": true
+      },
+      "record_swap": {
+        "type": "boolean",
+        "key": "config-events-record-swap",
+        "impact": "medium",
+        "category": "category-recording",
+        "visibility": "secondary",
+        "default": true
+      },
+      "record_system": {
+        "type": "boolean",
+        "key": "config-events-record-system",
+        "impact": "medium",
+        "category": "category-recording",
+        "visibility": "secondary",
+        "default": true
+      },
+      "record_token": {
+        "type": "boolean",
+        "key": "config-events-record-token",
+        "impact": "medium",
+        "category": "category-recording",
+        "visibility": "secondary",
+        "default": true
+      },
+      "record_trader": {
+        "type": "boolean",
+        "key": "config-events-record-trader",
+        "impact": "medium",
+        "category": "category-recording",
+        "visibility": "secondary",
+        "default": true
+      },
+      "record_transaction": {
+        "type": "boolean",
+        "key": "config-events-record-transaction",
+        "impact": "medium",
+        "category": "category-recording",
+        "visibility": "secondary",
+        "default": true
+      },
+      "record_wallet": {
+        "type": "boolean",
+        "key": "config-events-record-wallet",
+        "impact": "medium",
+        "category": "category-recording",
+        "visibility": "secondary",
+        "default": true
+      }
+    },
+    "filtering": {
+      "age_enabled": {
+        "type": "boolean",
+        "key": "config-filtering-age-enabled",
+        "impact": "critical",
+        "category": "age",
+        "visibility": "primary",
+        "default": true
+      },
+      "check_cooldown": {
+        "type": "boolean",
+        "key": "config-filtering-check-cooldown",
+        "impact": "high",
+        "category": "meta-requirements",
+        "visibility": "secondary",
+        "default": true
+      },
+      "cooldown_enabled": {
+        "type": "boolean",
+        "key": "config-filtering-cooldown-enabled",
+        "impact": "high",
+        "category": "meta-requirements",
+        "visibility": "secondary",
+        "default": true
+      },
+      "dexscreener": {
+        "type": "object",
+        "key": "config-filtering-dexscreener",
+        "impact": "critical",
+        "category": "data-sources",
+        "visibility": "secondary",
+        "default": {
+          "enabled": true,
+          "token_info_enabled": true,
+          "require_name_and_symbol": true,
+          "require_logo_url": false,
+          "require_website_url": false,
+          "liquidity_enabled": true,
+          "min_liquidity_usd": 1,
+          "max_liquidity_usd": 100000000,
+          "market_cap_enabled": true,
+          "min_market_cap_usd": 1000,
+          "max_market_cap_usd": 100000000,
+          "fdv_enabled": false,
+          "min_fdv_usd": 0,
+          "max_fdv_usd": 100000000000,
+          "transactions_enabled": true,
+          "min_transactions_5min": 0,
+          "min_transactions_1h": 1,
+          "volume_enabled": false,
+          "min_volume_5m": 0,
+          "min_volume_1h": 0,
+          "min_volume_6h": 0,
+          "min_volume_24h": 0,
+          "price_change_enabled": false,
+          "min_price_change_m5": -100,
+          "max_price_change_m5": 10000,
+          "min_price_change_h1": -100,
+          "max_price_change_h1": 10000,
+          "min_price_change_h6": -100,
+          "max_price_change_h6": 10000,
+          "min_price_change_h24": -100,
+          "max_price_change_h24": 10000
+        },
+        "children": {
+          "enabled": {
+            "type": "boolean",
+            "key": "config-filtering-dexscreener-enabled",
+            "impact": "critical",
+            "category": "source-control",
+            "default": true
+          },
+          "fdv_enabled": {
+            "type": "boolean",
+            "key": "config-filtering-dexscreener-fdv-enabled",
+            "impact": "medium",
+            "category": "fdv",
+            "default": false
+          },
+          "liquidity_enabled": {
+            "type": "boolean",
+            "key": "config-filtering-dexscreener-liquidity-enabled",
+            "impact": "critical",
+            "category": "liquidity",
+            "default": true
+          },
+          "market_cap_enabled": {
+            "type": "boolean",
+            "key": "config-filtering-dexscreener-market-cap-enabled",
+            "impact": "high",
+            "category": "market-cap",
+            "default": true
+          },
+          "max_fdv_usd": {
+            "type": "number",
+            "key": "config-filtering-dexscreener-max-fdv-usd",
+            "impact": "medium",
+            "category": "fdv",
+            "min": 0,
+            "max": 1000000000000,
+            "step": 1000,
+            "default": 100000000000
+          },
+          "max_liquidity_usd": {
+            "type": "number",
+            "key": "config-filtering-dexscreener-max-liquidity-usd",
+            "impact": "medium",
+            "category": "liquidity",
+            "min": 100,
+            "max": 1000000000,
+            "step": 100000,
+            "default": 100000000
+          },
+          "max_market_cap_usd": {
+            "type": "number",
+            "key": "config-filtering-dexscreener-max-market-cap-usd",
+            "impact": "high",
+            "category": "market-cap",
+            "min": 1000,
+            "max": 1000000000,
+            "step": 100000,
+            "default": 100000000
+          },
+          "max_price_change_h1": {
+            "type": "number",
+            "key": "config-filtering-dexscreener-max-price-change-h1",
+            "impact": "low",
+            "category": "price-change",
+            "min": 0,
+            "max": 100000,
+            "step": 50,
+            "default": 10000
+          },
+          "max_price_change_h24": {
+            "type": "number",
+            "key": "config-filtering-dexscreener-max-price-change-h24",
+            "impact": "low",
+            "category": "price-change",
+            "min": 0,
+            "max": 100000,
+            "step": 50,
+            "default": 10000
+          },
+          "max_price_change_h6": {
+            "type": "number",
+            "key": "config-filtering-dexscreener-max-price-change-h6",
+            "impact": "low",
+            "category": "price-change",
+            "min": 0,
+            "max": 100000,
+            "step": 50,
+            "default": 10000
+          },
+          "max_price_change_m5": {
+            "type": "number",
+            "key": "config-filtering-dexscreener-max-price-change-m5",
+            "impact": "low",
+            "category": "price-change",
+            "min": 0,
+            "max": 100000,
+            "step": 50,
+            "default": 10000
+          },
+          "min_fdv_usd": {
+            "type": "number",
+            "key": "config-filtering-dexscreener-min-fdv-usd",
+            "impact": "medium",
+            "category": "fdv",
+            "min": 0,
+            "max": 1000000000000,
+            "step": 1000,
+            "default": 0
+          },
+          "min_liquidity_usd": {
+            "type": "number",
+            "key": "config-filtering-dexscreener-min-liquidity-usd",
+            "impact": "critical",
+            "category": "liquidity",
+            "min": 0,
+            "max": 10000000,
+            "step": 10,
+            "default": 1
+          },
+          "min_market_cap_usd": {
+            "type": "number",
+            "key": "config-filtering-dexscreener-min-market-cap-usd",
+            "impact": "high",
+            "category": "market-cap",
+            "min": 0,
+            "max": 10000000,
+            "step": 100,
+            "default": 1000
+          },
+          "min_price_change_h1": {
+            "type": "number",
+            "key": "config-filtering-dexscreener-min-price-change-h1",
+            "impact": "low",
+            "category": "price-change",
+            "min": -100,
+            "max": 10000,
+            "step": 5,
+            "default": -100
+          },
+          "min_price_change_h24": {
+            "type": "number",
+            "key": "config-filtering-dexscreener-min-price-change-h24",
+            "impact": "low",
+            "category": "price-change",
+            "min": -100,
+            "max": 10000,
+            "step": 5,
+            "default": -100
+          },
+          "min_price_change_h6": {
+            "type": "number",
+            "key": "config-filtering-dexscreener-min-price-change-h6",
+            "impact": "low",
+            "category": "price-change",
+            "min": -100,
+            "max": 10000,
+            "step": 5,
+            "default": -100
+          },
+          "min_price_change_m5": {
+            "type": "number",
+            "key": "config-filtering-dexscreener-min-price-change-m5",
+            "impact": "low",
+            "category": "price-change",
+            "min": -100,
+            "max": 10000,
+            "step": 5,
+            "default": -100
+          },
+          "min_transactions_1h": {
+            "type": "integer",
+            "key": "config-filtering-dexscreener-min-transactions-1h",
+            "impact": "medium",
+            "category": "activity",
+            "min": 0,
+            "max": 10000,
+            "step": 5,
+            "default": 1
+          },
+          "min_transactions_5min": {
+            "type": "integer",
+            "key": "config-filtering-dexscreener-min-transactions-5min",
+            "impact": "medium",
+            "category": "activity",
+            "min": 0,
+            "max": 1000,
+            "step": 1,
+            "default": 0
+          },
+          "min_volume_1h": {
+            "type": "number",
+            "key": "config-filtering-dexscreener-min-volume-1h",
+            "impact": "medium",
+            "category": "volume",
+            "min": 0,
+            "max": 10000000,
+            "step": 10,
+            "default": 0
+          },
+          "min_volume_24h": {
+            "type": "number",
+            "key": "config-filtering-dexscreener-min-volume-24h",
+            "impact": "medium",
+            "category": "volume",
+            "min": 0,
+            "max": 10000000,
+            "step": 100,
+            "default": 0
+          },
+          "min_volume_5m": {
+            "type": "number",
+            "key": "config-filtering-dexscreener-min-volume-5m",
+            "impact": "medium",
+            "category": "volume",
+            "min": 0,
+            "max": 1000000,
+            "step": 10,
+            "default": 0
+          },
+          "min_volume_6h": {
+            "type": "number",
+            "key": "config-filtering-dexscreener-min-volume-6h",
+            "impact": "medium",
+            "category": "volume",
+            "min": 0,
+            "max": 10000000,
+            "step": 10,
+            "default": 0
+          },
+          "price_change_enabled": {
+            "type": "boolean",
+            "key": "config-filtering-dexscreener-price-change-enabled",
+            "impact": "low",
+            "category": "price-change",
+            "default": false
+          },
+          "require_logo_url": {
+            "type": "boolean",
+            "key": "config-filtering-dexscreener-require-logo-url",
+            "impact": "medium",
+            "category": "token-info",
+            "default": false
+          },
+          "require_name_and_symbol": {
+            "type": "boolean",
+            "key": "config-filtering-dexscreener-require-name-and-symbol",
+            "impact": "high",
+            "category": "token-info",
+            "default": true
+          },
+          "require_website_url": {
+            "type": "boolean",
+            "key": "config-filtering-dexscreener-require-website-url",
+            "impact": "medium",
+            "category": "token-info",
+            "default": false
+          },
+          "token_info_enabled": {
+            "type": "boolean",
+            "key": "config-filtering-dexscreener-token-info-enabled",
+            "impact": "high",
+            "category": "token-info",
+            "default": true
+          },
+          "transactions_enabled": {
+            "type": "boolean",
+            "key": "config-filtering-dexscreener-transactions-enabled",
+            "impact": "medium",
+            "category": "activity",
+            "default": true
+          },
+          "volume_enabled": {
+            "type": "boolean",
+            "key": "config-filtering-dexscreener-volume-enabled",
+            "impact": "medium",
+            "category": "volume",
+            "default": false
+          }
+        }
+      },
+      "geckoterminal": {
+        "type": "object",
+        "key": "config-filtering-geckoterminal",
+        "impact": "high",
+        "category": "data-sources",
+        "visibility": "secondary",
+        "default": {
+          "enabled": true,
+          "liquidity_enabled": true,
+          "min_liquidity_usd": 1,
+          "max_liquidity_usd": 100000000,
+          "market_cap_enabled": false,
+          "min_market_cap_usd": 0,
+          "max_market_cap_usd": 100000000,
+          "volume_enabled": false,
+          "min_volume_5m": 0,
+          "min_volume_1h": 0,
+          "min_volume_24h": 0,
+          "price_change_enabled": false,
+          "min_price_change_m5": -100,
+          "max_price_change_m5": 10000,
+          "min_price_change_h1": -100,
+          "max_price_change_h1": 10000,
+          "min_price_change_h24": -100,
+          "max_price_change_h24": 10000,
+          "pool_metrics_enabled": false,
+          "min_pool_count": 0,
+          "max_pool_count": 1000,
+          "min_reserve_usd": 0
+        },
+        "children": {
+          "enabled": {
+            "type": "boolean",
+            "key": "config-filtering-geckoterminal-enabled",
+            "impact": "critical",
+            "category": "source-control",
+            "default": true
+          },
+          "liquidity_enabled": {
+            "type": "boolean",
+            "key": "config-filtering-geckoterminal-liquidity-enabled",
+            "impact": "critical",
+            "category": "liquidity",
+            "default": true
+          },
+          "market_cap_enabled": {
+            "type": "boolean",
+            "key": "config-filtering-geckoterminal-market-cap-enabled",
+            "impact": "medium",
+            "category": "market-cap",
+            "default": false
+          },
+          "max_liquidity_usd": {
+            "type": "number",
+            "key": "config-filtering-geckoterminal-max-liquidity-usd",
+            "impact": "medium",
+            "category": "liquidity",
+            "min": 0,
+            "max": 1000000000,
+            "step": 10000,
+            "default": 100000000
+          },
+          "max_market_cap_usd": {
+            "type": "number",
+            "key": "config-filtering-geckoterminal-max-market-cap-usd",
+            "impact": "medium",
+            "category": "market-cap",
+            "min": 0,
+            "max": 1000000000,
+            "step": 1000,
+            "default": 100000000
+          },
+          "max_pool_count": {
+            "type": "integer",
+            "key": "config-filtering-geckoterminal-max-pool-count",
+            "impact": "low",
+            "category": "pool-metrics",
+            "min": 0,
+            "max": 1000,
+            "step": 1,
+            "default": 1000
+          },
+          "max_price_change_h1": {
+            "type": "number",
+            "key": "config-filtering-geckoterminal-max-price-change-h1",
+            "impact": "low",
+            "category": "price-change",
+            "min": 0,
+            "max": 100000,
+            "step": 50,
+            "default": 10000
+          },
+          "max_price_change_h24": {
+            "type": "number",
+            "key": "config-filtering-geckoterminal-max-price-change-h24",
+            "impact": "low",
+            "category": "price-change",
+            "min": 0,
+            "max": 100000,
+            "step": 50,
+            "default": 10000
+          },
+          "max_price_change_m5": {
+            "type": "number",
+            "key": "config-filtering-geckoterminal-max-price-change-m5",
+            "impact": "low",
+            "category": "price-change",
+            "min": 0,
+            "max": 100000,
+            "step": 50,
+            "default": 10000
+          },
+          "min_liquidity_usd": {
+            "type": "number",
+            "key": "config-filtering-geckoterminal-min-liquidity-usd",
+            "impact": "critical",
+            "category": "liquidity",
+            "min": 0,
+            "max": 10000000,
+            "step": 10,
+            "default": 1
+          },
+          "min_market_cap_usd": {
+            "type": "number",
+            "key": "config-filtering-geckoterminal-min-market-cap-usd",
+            "impact": "medium",
+            "category": "market-cap",
+            "min": 0,
+            "max": 1000000000,
+            "step": 1000,
+            "default": 0
+          },
+          "min_pool_count": {
+            "type": "integer",
+            "key": "config-filtering-geckoterminal-min-pool-count",
+            "impact": "low",
+            "category": "pool-metrics",
+            "min": 0,
+            "max": 1000,
+            "step": 1,
+            "default": 0
+          },
+          "min_price_change_h1": {
+            "type": "number",
+            "key": "config-filtering-geckoterminal-min-price-change-h1",
+            "impact": "low",
+            "category": "price-change",
+            "min": -100,
+            "max": 10000,
+            "step": 5,
+            "default": -100
+          },
+          "min_price_change_h24": {
+            "type": "number",
+            "key": "config-filtering-geckoterminal-min-price-change-h24",
+            "impact": "low",
+            "category": "price-change",
+            "min": -100,
+            "max": 10000,
+            "step": 5,
+            "default": -100
+          },
+          "min_price_change_m5": {
+            "type": "number",
+            "key": "config-filtering-geckoterminal-min-price-change-m5",
+            "impact": "low",
+            "category": "price-change",
+            "min": -100,
+            "max": 10000,
+            "step": 5,
+            "default": -100
+          },
+          "min_reserve_usd": {
+            "type": "number",
+            "key": "config-filtering-geckoterminal-min-reserve-usd",
+            "impact": "low",
+            "category": "pool-metrics",
+            "min": 0,
+            "max": 100000000,
+            "step": 100,
+            "default": 0
+          },
+          "min_volume_1h": {
+            "type": "number",
+            "key": "config-filtering-geckoterminal-min-volume-1h",
+            "impact": "medium",
+            "category": "volume",
+            "min": 0,
+            "max": 10000000,
+            "step": 10,
+            "default": 0
+          },
+          "min_volume_24h": {
+            "type": "number",
+            "key": "config-filtering-geckoterminal-min-volume-24h",
+            "impact": "medium",
+            "category": "volume",
+            "min": 0,
+            "max": 10000000,
+            "step": 100,
+            "default": 0
+          },
+          "min_volume_5m": {
+            "type": "number",
+            "key": "config-filtering-geckoterminal-min-volume-5m",
+            "impact": "medium",
+            "category": "volume",
+            "min": 0,
+            "max": 1000000,
+            "step": 10,
+            "default": 0
+          },
+          "pool_metrics_enabled": {
+            "type": "boolean",
+            "key": "config-filtering-geckoterminal-pool-metrics-enabled",
+            "impact": "low",
+            "category": "pool-metrics",
+            "default": false
+          },
+          "price_change_enabled": {
+            "type": "boolean",
+            "key": "config-filtering-geckoterminal-price-change-enabled",
+            "impact": "low",
+            "category": "price-change",
+            "default": false
+          },
+          "volume_enabled": {
+            "type": "boolean",
+            "key": "config-filtering-geckoterminal-volume-enabled",
+            "impact": "medium",
+            "category": "volume",
+            "default": false
+          }
+        }
+      },
+      "min_token_age_minutes": {
+        "type": "integer",
+        "key": "config-filtering-min-token-age-minutes",
+        "impact": "critical",
+        "category": "age",
+        "visibility": "primary",
+        "min": 0,
+        "max": 10080,
+        "step": 10,
+        "default": 60
+      },
+      "onchain": {
+        "type": "object",
+        "key": "config-filtering-onchain",
+        "impact": "critical",
+        "category": "data-sources",
+        "visibility": "secondary",
+        "default": {
+          "enabled": true,
+          "reject_numeric_symbols": true,
+          "reject_empty_symbols": true,
+          "reject_single_char_symbols": false,
+          "reject_known_scam_authorities": true,
+          "reject_immutable_with_freeze": true,
+          "combined_risk_enabled": true,
+          "max_combined_risk_score": 60
+        },
+        "children": {
+          "combined_risk_enabled": {
+            "type": "boolean",
+            "key": "config-filtering-onchain-combined-risk-enabled",
+            "impact": "high",
+            "category": "risk-scoring",
+            "default": true
+          },
+          "enabled": {
+            "type": "boolean",
+            "key": "config-filtering-onchain-enabled",
+            "impact": "critical",
+            "category": "source-control",
+            "default": true
+          },
+          "max_combined_risk_score": {
+            "type": "integer",
+            "key": "config-filtering-onchain-max-combined-risk-score",
+            "impact": "high",
+            "category": "risk-scoring",
+            "min": 0,
+            "max": 100,
+            "step": 5,
+            "default": 60
+          },
+          "reject_empty_symbols": {
+            "type": "boolean",
+            "key": "config-filtering-onchain-reject-empty-symbols",
+            "impact": "high",
+            "category": "symbol-analysis",
+            "default": true
+          },
+          "reject_immutable_with_freeze": {
+            "type": "boolean",
+            "key": "config-filtering-onchain-reject-immutable-with-freeze",
+            "impact": "high",
+            "category": "authority-analysis",
+            "default": true
+          },
+          "reject_known_scam_authorities": {
+            "type": "boolean",
+            "key": "config-filtering-onchain-reject-known-scam-authorities",
+            "impact": "critical",
+            "category": "authority-analysis",
+            "default": true
+          },
+          "reject_numeric_symbols": {
+            "type": "boolean",
+            "key": "config-filtering-onchain-reject-numeric-symbols",
+            "impact": "high",
+            "category": "symbol-analysis",
+            "default": true
+          },
+          "reject_single_char_symbols": {
+            "type": "boolean",
+            "key": "config-filtering-onchain-reject-single-char-symbols",
+            "impact": "medium",
+            "category": "symbol-analysis",
+            "default": false
+          }
+        }
+      },
+      "rugcheck": {
+        "type": "object",
+        "key": "config-filtering-rugcheck",
+        "impact": "critical",
+        "category": "data-sources",
+        "visibility": "secondary",
+        "default": {
+          "enabled": true,
+          "risk_score_enabled": true,
+          "max_risk_score": 10000,
+          "authority_checks_enabled": true,
+          "require_authorities_safe": true,
+          "allow_mint_authority": false,
+          "allow_freeze_authority": false,
+          "risk_level_enabled": true,
+          "block_danger_level": true,
+          "holder_distribution_enabled": true,
+          "max_top_holder_pct": 40,
+          "max_top_3_holders_pct": 60,
+          "min_unique_holders": 50,
+          "lp_lock_enabled": true,
+          "min_pumpfun_lp_lock_pct": 50,
+          "min_regular_lp_lock_pct": 50,
+          "rugged_check_enabled": true,
+          "block_rugged_tokens": true,
+          "graph_insiders_enabled": true,
+          "max_graph_insiders": 3,
+          "insider_holder_checks_enabled": true,
+          "max_insider_holders_in_top_10": 2,
+          "max_insider_total_pct": 20,
+          "creator_balance_enabled": true,
+          "max_creator_balance_pct": 10,
+          "lp_providers_enabled": true,
+          "min_lp_providers": 3,
+          "transfer_fee_enabled": true,
+          "max_transfer_fee_pct": 5,
+          "block_transfer_fee_tokens": false
+        },
+        "children": {
+          "allow_freeze_authority": {
+            "type": "boolean",
+            "key": "config-filtering-rugcheck-allow-freeze-authority",
+            "impact": "high",
+            "category": "authorities",
+            "default": false
+          },
+          "allow_mint_authority": {
+            "type": "boolean",
+            "key": "config-filtering-rugcheck-allow-mint-authority",
+            "impact": "high",
+            "category": "authorities",
+            "default": false
+          },
+          "authority_checks_enabled": {
+            "type": "boolean",
+            "key": "config-filtering-rugcheck-authority-checks-enabled",
+            "impact": "critical",
+            "category": "authorities",
+            "default": true
+          },
+          "block_danger_level": {
+            "type": "boolean",
+            "key": "config-filtering-rugcheck-block-danger-level",
+            "impact": "high",
+            "category": "risk-level",
+            "default": true
+          },
+          "block_rugged_tokens": {
+            "type": "boolean",
+            "key": "config-filtering-rugcheck-block-rugged-tokens",
+            "impact": "critical",
+            "category": "security-flags",
+            "default": true
+          },
+          "block_transfer_fee_tokens": {
+            "type": "boolean",
+            "key": "config-filtering-rugcheck-block-transfer-fee-tokens",
+            "impact": "high",
+            "category": "transfer-fees",
+            "default": false
+          },
+          "creator_balance_enabled": {
+            "type": "boolean",
+            "key": "config-filtering-rugcheck-creator-balance-enabled",
+            "impact": "medium",
+            "category": "creator-checks",
+            "default": true
+          },
+          "enabled": {
+            "type": "boolean",
+            "key": "config-filtering-rugcheck-enabled",
+            "impact": "critical",
+            "category": "source-control",
+            "default": true
+          },
+          "graph_insiders_enabled": {
+            "type": "boolean",
+            "key": "config-filtering-rugcheck-graph-insiders-enabled",
+            "impact": "high",
+            "category": "insider-detection",
+            "default": true
+          },
+          "holder_distribution_enabled": {
+            "type": "boolean",
+            "key": "config-filtering-rugcheck-holder-distribution-enabled",
+            "impact": "high",
+            "category": "holder-distribution",
+            "default": true
+          },
+          "insider_holder_checks_enabled": {
+            "type": "boolean",
+            "key": "config-filtering-rugcheck-insider-holder-checks-enabled",
+            "impact": "high",
+            "category": "insider-detection",
+            "default": true
+          },
+          "lp_lock_enabled": {
+            "type": "boolean",
+            "key": "config-filtering-rugcheck-lp-lock-enabled",
+            "impact": "high",
+            "category": "lp-lock",
+            "default": true
+          },
+          "lp_providers_enabled": {
+            "type": "boolean",
+            "key": "config-filtering-rugcheck-lp-providers-enabled",
+            "impact": "medium",
+            "category": "lp-providers",
+            "default": true
+          },
+          "max_creator_balance_pct": {
+            "type": "number",
+            "key": "config-filtering-rugcheck-max-creator-balance-pct",
+            "impact": "medium",
+            "category": "creator-checks",
+            "min": 0,
+            "max": 100,
+            "step": 5,
+            "default": 10
+          },
+          "max_graph_insiders": {
+            "type": "integer",
+            "key": "config-filtering-rugcheck-max-graph-insiders",
+            "impact": "high",
+            "category": "insider-detection",
+            "min": 0,
+            "max": 20,
+            "step": 1,
+            "default": 3
+          },
+          "max_insider_holders_in_top_10": {
+            "type": "integer",
+            "key": "config-filtering-rugcheck-max-insider-holders-in-top-10",
+            "impact": "high",
+            "category": "insider-detection",
+            "min": 0,
+            "max": 10,
+            "step": 1,
+            "default": 2
+          },
+          "max_insider_total_pct": {
+            "type": "number",
+            "key": "config-filtering-rugcheck-max-insider-total-pct",
+            "impact": "high",
+            "category": "insider-detection",
+            "min": 0,
+            "max": 100,
+            "step": 5,
+            "default": 20
+          },
+          "max_risk_score": {
+            "type": "integer",
+            "key": "config-filtering-rugcheck-max-risk-score",
+            "impact": "critical",
+            "category": "risk-score",
+            "min": 0,
+            "max": 100000,
+            "step": 100,
+            "default": 10000
+          },
+          "max_top_3_holders_pct": {
+            "type": "number",
+            "key": "config-filtering-rugcheck-max-top-3-holders-pct",
+            "impact": "high",
+            "category": "holder-distribution",
+            "min": 0,
+            "max": 100,
+            "step": 1,
+            "default": 60
+          },
+          "max_top_holder_pct": {
+            "type": "number",
+            "key": "config-filtering-rugcheck-max-top-holder-pct",
+            "impact": "critical",
+            "category": "holder-distribution",
+            "min": 0,
+            "max": 100,
+            "step": 1,
+            "default": 40
+          },
+          "max_transfer_fee_pct": {
+            "type": "number",
+            "key": "config-filtering-rugcheck-max-transfer-fee-pct",
+            "impact": "critical",
+            "category": "transfer-fees",
+            "min": 0,
+            "max": 100,
+            "step": 1,
+            "default": 5
+          },
+          "min_lp_providers": {
+            "type": "integer",
+            "key": "config-filtering-rugcheck-min-lp-providers",
+            "impact": "medium",
+            "category": "lp-providers",
+            "min": 0,
+            "max": 100,
+            "step": 1,
+            "default": 3
+          },
+          "min_pumpfun_lp_lock_pct": {
+            "type": "number",
+            "key": "config-filtering-rugcheck-min-pumpfun-lp-lock-pct",
+            "impact": "high",
+            "category": "lp-lock",
+            "min": 0,
+            "max": 100,
+            "step": 5,
+            "default": 50
+          },
+          "min_regular_lp_lock_pct": {
+            "type": "number",
+            "key": "config-filtering-rugcheck-min-regular-lp-lock-pct",
+            "impact": "high",
+            "category": "lp-lock",
+            "min": 0,
+            "max": 100,
+            "step": 5,
+            "default": 50
+          },
+          "min_unique_holders": {
+            "type": "integer",
+            "key": "config-filtering-rugcheck-min-unique-holders",
+            "impact": "medium",
+            "category": "holder-distribution",
+            "min": 0,
+            "max": 1000000,
+            "step": 50,
+            "default": 50
+          },
+          "require_authorities_safe": {
+            "type": "boolean",
+            "key": "config-filtering-rugcheck-require-authorities-safe",
+            "impact": "critical",
+            "category": "authorities",
+            "default": true
+          },
+          "risk_level_enabled": {
+            "type": "boolean",
+            "key": "config-filtering-rugcheck-risk-level-enabled",
+            "impact": "high",
+            "category": "risk-level",
+            "default": true
+          },
+          "risk_score_enabled": {
+            "type": "boolean",
+            "key": "config-filtering-rugcheck-risk-score-enabled",
+            "impact": "critical",
+            "category": "risk-score",
+            "default": true
+          },
+          "rugged_check_enabled": {
+            "type": "boolean",
+            "key": "config-filtering-rugcheck-rugged-check-enabled",
+            "impact": "critical",
+            "category": "security-flags",
+            "default": true
+          },
+          "transfer_fee_enabled": {
+            "type": "boolean",
+            "key": "config-filtering-rugcheck-transfer-fee-enabled",
+            "impact": "critical",
+            "category": "transfer-fees",
+            "default": true
+          }
+        }
+      }
+    },
+    "holder_watch": {
+      "check_interval_secs": {
+        "type": "integer",
+        "key": "config-holder-watch-check-interval-secs",
+        "category": "timing",
+        "visibility": "secondary",
+        "min": 10,
+        "max": 3600,
+        "step": 10,
+        "default": 60
+      },
+      "enabled": {
+        "type": "boolean",
+        "key": "config-holder-watch-enabled",
+        "category": "general",
+        "visibility": "primary",
+        "default": false
+      },
+      "holder_drop_percent": {
+        "type": "number",
+        "key": "config-holder-watch-holder-drop-percent",
+        "category": "thresholds",
+        "visibility": "secondary",
+        "min": 1,
+        "max": 100,
+        "step": 0.5,
+        "default": 10
+      },
+      "max_watched_tokens": {
+        "type": "integer",
+        "key": "config-holder-watch-max-watched-tokens",
+        "category": "limits",
+        "visibility": "secondary",
+        "min": 1,
+        "max": 100,
+        "step": 1,
+        "default": 20
+      },
+      "min_holder_change": {
+        "type": "integer",
+        "key": "config-holder-watch-min-holder-change",
+        "category": "thresholds",
+        "visibility": "secondary",
+        "min": 1,
+        "max": 1000,
+        "step": 1,
+        "default": 5
+      },
+      "notify_holder_drop": {
+        "type": "boolean",
+        "key": "config-holder-watch-notify-holder-drop",
+        "category": "notifications",
+        "visibility": "primary",
+        "default": true
+      },
+      "notify_new_holders": {
+        "type": "boolean",
+        "key": "config-holder-watch-notify-new-holders",
+        "category": "notifications",
+        "visibility": "primary",
+        "default": true
+      }
+    },
+    "llm": {
+      "default_provider": {
+        "type": "string",
+        "key": "config-llm-default-provider",
+        "category": "master-control",
+        "visibility": "secondary",
+        "default": "openai"
+      },
+      "enabled": {
+        "type": "boolean",
+        "key": "config-llm-enabled",
+        "impact": "critical",
+        "category": "master-control",
+        "visibility": "secondary",
+        "default": false
+      },
+      "providers": {
+        "type": "object",
+        "key": "config-llm-providers",
+        "category": "providers",
+        "visibility": "secondary",
+        "default": {
+          "openai": { "enabled": false, "api_key": "", "model": "", "rate_limit_per_minute": 60 },
+          "anthropic": {
+            "enabled": false,
+            "api_key": "",
+            "model": "",
+            "rate_limit_per_minute": 60
+          },
+          "groq": { "enabled": false, "api_key": "", "model": "", "rate_limit_per_minute": 60 },
+          "deepseek": { "enabled": false, "api_key": "", "model": "", "rate_limit_per_minute": 60 },
+          "gemini": { "enabled": false, "api_key": "", "model": "", "rate_limit_per_minute": 60 },
+          "ollama": {
+            "enabled": false,
+            "model": "llama3.2",
+            "base_url": "http://localhost:11434",
+            "rate_limit_per_minute": 120
+          },
+          "together": { "enabled": false, "api_key": "", "model": "", "rate_limit_per_minute": 60 },
+          "openrouter": {
+            "enabled": false,
+            "api_key": "",
+            "model": "",
+            "rate_limit_per_minute": 60
+          },
+          "mistral": { "enabled": false, "api_key": "", "model": "", "rate_limit_per_minute": 60 }
+        },
+        "children": {
+          "anthropic": {
+            "type": "object",
+            "key": "config-llm-providers-anthropic",
+            "category": "providers",
+            "default": {
+              "enabled": false,
+              "api_key": "",
+              "model": "",
+              "rate_limit_per_minute": 60
+            },
+            "children": {
+              "api_key": {
+                "type": "string",
+                "key": "config-llm-providers-anthropic-api-key",
+                "category": "provider-settings",
+                "default": ""
+              },
+              "enabled": {
+                "type": "boolean",
+                "key": "config-llm-providers-anthropic-enabled",
+                "category": "provider-settings",
+                "default": false
+              },
+              "model": {
+                "type": "string",
+                "key": "config-llm-providers-anthropic-model",
+                "category": "provider-settings",
+                "default": ""
+              },
+              "rate_limit_per_minute": {
+                "type": "integer",
+                "key": "config-llm-providers-anthropic-rate-limit-per-minute",
+                "category": "provider-settings",
+                "min": 1,
+                "max": 1000,
+                "step": 10,
+                "default": 60
+              }
+            }
+          },
+          "deepseek": {
+            "type": "object",
+            "key": "config-llm-providers-deepseek",
+            "category": "providers",
+            "default": {
+              "enabled": false,
+              "api_key": "",
+              "model": "",
+              "rate_limit_per_minute": 60
+            },
+            "children": {
+              "api_key": {
+                "type": "string",
+                "key": "config-llm-providers-deepseek-api-key",
+                "category": "provider-settings",
+                "default": ""
+              },
+              "enabled": {
+                "type": "boolean",
+                "key": "config-llm-providers-deepseek-enabled",
+                "category": "provider-settings",
+                "default": false
+              },
+              "model": {
+                "type": "string",
+                "key": "config-llm-providers-deepseek-model",
+                "category": "provider-settings",
+                "default": ""
+              },
+              "rate_limit_per_minute": {
+                "type": "integer",
+                "key": "config-llm-providers-deepseek-rate-limit-per-minute",
+                "category": "provider-settings",
+                "min": 1,
+                "max": 1000,
+                "step": 10,
+                "default": 60
+              }
+            }
+          },
+          "gemini": {
+            "type": "object",
+            "key": "config-llm-providers-gemini",
+            "category": "providers",
+            "default": {
+              "enabled": false,
+              "api_key": "",
+              "model": "",
+              "rate_limit_per_minute": 60
+            },
+            "children": {
+              "api_key": {
+                "type": "string",
+                "key": "config-llm-providers-gemini-api-key",
+                "category": "provider-settings",
+                "default": ""
+              },
+              "enabled": {
+                "type": "boolean",
+                "key": "config-llm-providers-gemini-enabled",
+                "category": "provider-settings",
+                "default": false
+              },
+              "model": {
+                "type": "string",
+                "key": "config-llm-providers-gemini-model",
+                "category": "provider-settings",
+                "default": ""
+              },
+              "rate_limit_per_minute": {
+                "type": "integer",
+                "key": "config-llm-providers-gemini-rate-limit-per-minute",
+                "category": "provider-settings",
+                "min": 1,
+                "max": 1000,
+                "step": 10,
+                "default": 60
+              }
+            }
+          },
+          "groq": {
+            "type": "object",
+            "key": "config-llm-providers-groq",
+            "category": "providers",
+            "default": {
+              "enabled": false,
+              "api_key": "",
+              "model": "",
+              "rate_limit_per_minute": 60
+            },
+            "children": {
+              "api_key": {
+                "type": "string",
+                "key": "config-llm-providers-groq-api-key",
+                "category": "provider-settings",
+                "default": ""
+              },
+              "enabled": {
+                "type": "boolean",
+                "key": "config-llm-providers-groq-enabled",
+                "category": "provider-settings",
+                "default": false
+              },
+              "model": {
+                "type": "string",
+                "key": "config-llm-providers-groq-model",
+                "category": "provider-settings",
+                "default": ""
+              },
+              "rate_limit_per_minute": {
+                "type": "integer",
+                "key": "config-llm-providers-groq-rate-limit-per-minute",
+                "category": "provider-settings",
+                "min": 1,
+                "max": 1000,
+                "step": 10,
+                "default": 60
+              }
+            }
+          },
+          "mistral": {
+            "type": "object",
+            "key": "config-llm-providers-mistral",
+            "category": "providers",
+            "default": {
+              "enabled": false,
+              "api_key": "",
+              "model": "",
+              "rate_limit_per_minute": 60
+            },
+            "children": {
+              "api_key": {
+                "type": "string",
+                "key": "config-llm-providers-mistral-api-key",
+                "category": "provider-settings",
+                "default": ""
+              },
+              "enabled": {
+                "type": "boolean",
+                "key": "config-llm-providers-mistral-enabled",
+                "category": "provider-settings",
+                "default": false
+              },
+              "model": {
+                "type": "string",
+                "key": "config-llm-providers-mistral-model",
+                "category": "provider-settings",
+                "default": ""
+              },
+              "rate_limit_per_minute": {
+                "type": "integer",
+                "key": "config-llm-providers-mistral-rate-limit-per-minute",
+                "category": "provider-settings",
+                "min": 1,
+                "max": 1000,
+                "step": 10,
+                "default": 60
+              }
+            }
+          },
+          "ollama": {
+            "type": "object",
+            "key": "config-llm-providers-ollama",
+            "category": "providers",
+            "default": {
+              "enabled": false,
+              "model": "llama3.2",
+              "base_url": "http://localhost:11434",
+              "rate_limit_per_minute": 120
+            },
+            "children": {
+              "base_url": {
+                "type": "string",
+                "key": "config-llm-providers-ollama-base-url",
+                "category": "ollama-settings",
+                "default": "http://localhost:11434"
+              },
+              "enabled": {
+                "type": "boolean",
+                "key": "config-llm-providers-ollama-enabled",
+                "category": "ollama-settings",
+                "default": false
+              },
+              "model": {
+                "type": "string",
+                "key": "config-llm-providers-ollama-model",
+                "category": "ollama-settings",
+                "default": "llama3.2"
+              },
+              "rate_limit_per_minute": {
+                "type": "integer",
+                "key": "config-llm-providers-ollama-rate-limit-per-minute",
+                "category": "ollama-settings",
+                "min": 1,
+                "max": 1000,
+                "step": 10,
+                "default": 120
+              }
+            }
+          },
+          "openai": {
+            "type": "object",
+            "key": "config-llm-providers-openai",
+            "category": "providers",
+            "default": {
+              "enabled": false,
+              "api_key": "",
+              "model": "",
+              "rate_limit_per_minute": 60
+            },
+            "children": {
+              "api_key": {
+                "type": "string",
+                "key": "config-llm-providers-openai-api-key",
+                "category": "provider-settings",
+                "default": ""
+              },
+              "enabled": {
+                "type": "boolean",
+                "key": "config-llm-providers-openai-enabled",
+                "category": "provider-settings",
+                "default": false
+              },
+              "model": {
+                "type": "string",
+                "key": "config-llm-providers-openai-model",
+                "category": "provider-settings",
+                "default": ""
+              },
+              "rate_limit_per_minute": {
+                "type": "integer",
+                "key": "config-llm-providers-openai-rate-limit-per-minute",
+                "category": "provider-settings",
+                "min": 1,
+                "max": 1000,
+                "step": 10,
+                "default": 60
+              }
+            }
+          },
+          "openrouter": {
+            "type": "object",
+            "key": "config-llm-providers-openrouter",
+            "category": "providers",
+            "default": {
+              "enabled": false,
+              "api_key": "",
+              "model": "",
+              "rate_limit_per_minute": 60
+            },
+            "children": {
+              "api_key": {
+                "type": "string",
+                "key": "config-llm-providers-openrouter-api-key",
+                "category": "provider-settings",
+                "default": ""
+              },
+              "enabled": {
+                "type": "boolean",
+                "key": "config-llm-providers-openrouter-enabled",
+                "category": "provider-settings",
+                "default": false
+              },
+              "model": {
+                "type": "string",
+                "key": "config-llm-providers-openrouter-model",
+                "category": "provider-settings",
+                "default": ""
+              },
+              "rate_limit_per_minute": {
+                "type": "integer",
+                "key": "config-llm-providers-openrouter-rate-limit-per-minute",
+                "category": "provider-settings",
+                "min": 1,
+                "max": 1000,
+                "step": 10,
+                "default": 60
+              }
+            }
+          },
+          "together": {
+            "type": "object",
+            "key": "config-llm-providers-together",
+            "category": "providers",
+            "default": {
+              "enabled": false,
+              "api_key": "",
+              "model": "",
+              "rate_limit_per_minute": 60
+            },
+            "children": {
+              "api_key": {
+                "type": "string",
+                "key": "config-llm-providers-together-api-key",
+                "category": "provider-settings",
+                "default": ""
+              },
+              "enabled": {
+                "type": "boolean",
+                "key": "config-llm-providers-together-enabled",
+                "category": "provider-settings",
+                "default": false
+              },
+              "model": {
+                "type": "string",
+                "key": "config-llm-providers-together-model",
+                "category": "provider-settings",
+                "default": ""
+              },
+              "rate_limit_per_minute": {
+                "type": "integer",
+                "key": "config-llm-providers-together-rate-limit-per-minute",
+                "category": "provider-settings",
+                "min": 1,
+                "max": 1000,
+                "step": 10,
+                "default": 60
+              }
+            }
+          }
+        }
+      }
+    },
+    "llm_analysis": {
+      "auto_blacklist_enabled": {
+        "type": "boolean",
+        "key": "config-llm-analysis-auto-blacklist-enabled",
+        "category": "auto-blacklist",
+        "visibility": "secondary",
+        "default": false
+      },
+      "auto_blacklist_min_confidence": {
+        "type": "integer",
+        "key": "config-llm-analysis-auto-blacklist-min-confidence",
+        "category": "auto-blacklist",
+        "visibility": "secondary",
+        "min": 0,
+        "max": 100,
+        "step": 5,
+        "default": 90
+      },
+      "background_batch_size": {
+        "type": "integer",
+        "key": "config-llm-analysis-background-batch-size",
+        "category": "background-check",
+        "visibility": "secondary",
+        "min": 1,
+        "max": 20,
+        "step": 1,
+        "default": 5
+      },
+      "background_check_enabled": {
+        "type": "boolean",
+        "key": "config-llm-analysis-background-check-enabled",
+        "category": "background-check",
+        "visibility": "secondary",
+        "default": false
+      },
+      "background_check_interval_seconds": {
+        "type": "integer",
+        "key": "config-llm-analysis-background-check-interval-seconds",
+        "category": "background-check",
+        "visibility": "secondary",
+        "min": 60,
+        "max": 3600,
+        "step": 60,
+        "default": 300
+      },
+      "cache_ttl_seconds": {
+        "type": "integer",
+        "key": "config-llm-analysis-cache-ttl-seconds",
+        "category": "performance",
+        "visibility": "secondary",
+        "min": 60,
+        "max": 3600,
+        "step": 60,
+        "default": 300
+      },
+      "entry_analysis_enabled": {
+        "type": "boolean",
+        "key": "config-llm-analysis-entry-analysis-enabled",
+        "category": "trading",
+        "visibility": "secondary",
+        "default": false
+      },
+      "exit_analysis_enabled": {
+        "type": "boolean",
+        "key": "config-llm-analysis-exit-analysis-enabled",
+        "category": "trading",
+        "visibility": "secondary",
+        "default": false
+      },
+      "fallback_pass": {
+        "type": "boolean",
+        "key": "config-llm-analysis-fallback-pass",
+        "category": "filtering",
+        "visibility": "secondary",
+        "default": false
+      },
+      "filtering_enabled": {
+        "type": "boolean",
+        "key": "config-llm-analysis-filtering-enabled",
+        "category": "filtering",
+        "visibility": "secondary",
+        "default": false
+      },
+      "max_evaluations_per_minute": {
+        "type": "integer",
+        "key": "config-llm-analysis-max-evaluations-per-minute",
+        "category": "rate-limits",
+        "visibility": "secondary",
+        "min": 1,
+        "max": 100,
+        "step": 5,
+        "default": 10
+      },
+      "min_confidence": {
+        "type": "integer",
+        "key": "config-llm-analysis-min-confidence",
+        "category": "filtering",
+        "visibility": "secondary",
+        "min": 0,
+        "max": 100,
+        "step": 5,
+        "default": 70
+      },
+      "trading_bypass_cache": {
+        "type": "boolean",
+        "key": "config-llm-analysis-trading-bypass-cache",
+        "category": "trading",
+        "visibility": "secondary",
+        "default": true
+      },
+      "trailing_stop_enabled": {
+        "type": "boolean",
+        "key": "config-llm-analysis-trailing-stop-enabled",
+        "category": "trading",
+        "visibility": "secondary",
+        "default": false
+      },
+      "use_cache": {
+        "type": "boolean",
+        "key": "config-llm-analysis-use-cache",
+        "category": "filtering",
+        "visibility": "secondary",
+        "default": true
+      }
+    },
+    "maintenance": {
+      "actions_retention_days": {
+        "type": "integer",
+        "key": "config-maintenance-actions-retention-days",
+        "impact": "medium",
+        "category": "retention",
+        "visibility": "technical",
+        "min": 0,
+        "step": 1,
+        "default": 30
+      },
+      "events_retention_days": {
+        "type": "integer",
+        "key": "config-maintenance-events-retention-days",
+        "impact": "medium",
+        "category": "retention",
+        "visibility": "technical",
+        "min": 0,
+        "step": 1,
+        "default": 30
+      },
+      "maintenance_window_start": {
+        "type": "string",
+        "key": "config-maintenance-maintenance-window-start",
+        "impact": "low",
+        "category": "scheduling",
+        "visibility": "secondary",
+        "default": ""
+      },
+      "ohlcv_retention_days": {
+        "type": "integer",
+        "key": "config-maintenance-ohlcv-retention-days",
+        "impact": "medium",
+        "category": "retention",
+        "visibility": "technical",
+        "min": 0,
+        "step": 1,
+        "default": 90
+      },
+      "rpc_stats_retention_hours": {
+        "type": "integer",
+        "key": "config-maintenance-rpc-stats-retention-hours",
+        "impact": "low",
+        "category": "retention",
+        "visibility": "technical",
+        "min": 0,
+        "step": 1,
+        "default": 72
+      },
+      "skip_during_active_trades": {
+        "type": "boolean",
+        "key": "config-maintenance-skip-during-active-trades",
+        "impact": "medium",
+        "category": "scheduling",
+        "visibility": "secondary",
+        "default": true
+      },
+      "stale_token_days": {
+        "type": "integer",
+        "key": "config-maintenance-stale-token-days",
+        "impact": "high",
+        "category": "optimization",
+        "visibility": "secondary",
+        "min": 0,
+        "step": 1,
+        "default": 7
+      },
+      "vacuum_interval_secs": {
+        "type": "integer",
+        "key": "config-maintenance-vacuum-interval-secs",
+        "impact": "low",
+        "category": "database",
+        "visibility": "secondary",
+        "min": 3600,
+        "step": 3600,
+        "default": 86400
+      },
+      "wal_checkpoint_interval_secs": {
+        "type": "integer",
+        "key": "config-maintenance-wal-checkpoint-interval-secs",
+        "impact": "low",
+        "category": "database",
+        "visibility": "secondary",
+        "min": 300,
+        "step": 300,
+        "default": 3600
+      }
+    },
+    "monitoring": {},
+    "network": {
+      "proxy": {
+        "type": "string",
+        "key": "config-network-proxy",
+        "category": "general",
+        "visibility": "primary",
+        "default": ""
+      }
+    },
+    "ohlcv": {
+      "auto_fill_gaps": {
+        "type": "boolean",
+        "key": "config-ohlcv-auto-fill-gaps",
+        "impact": "medium",
+        "category": "general",
+        "visibility": "primary",
+        "default": true
+      },
+      "cache_retention_hours": {
+        "type": "integer",
+        "key": "config-ohlcv-cache-retention-hours",
+        "impact": "critical",
+        "category": "cache",
+        "visibility": "technical",
+        "min": 1,
+        "max": 168,
+        "step": 1,
+        "default": 24
+      },
+      "cache_size": {
+        "type": "integer",
+        "key": "config-ohlcv-cache-size",
+        "impact": "medium",
+        "category": "cache",
+        "visibility": "technical",
+        "min": 10,
+        "max": 500,
+        "step": 10,
+        "default": 100
+      },
+      "enabled": {
+        "type": "boolean",
+        "key": "config-ohlcv-enabled",
+        "impact": "high",
+        "category": "general",
+        "visibility": "primary",
+        "default": true
+      },
+      "max_empty_fetches": {
+        "type": "integer",
+        "key": "config-ohlcv-max-empty-fetches",
+        "impact": "low",
+        "category": "general",
+        "visibility": "primary",
+        "min": 1,
+        "max": 50,
+        "step": 1,
+        "default": 10
+      },
+      "max_monitored_tokens": {
+        "type": "integer",
+        "key": "config-ohlcv-max-monitored-tokens",
+        "impact": "medium",
+        "category": "general",
+        "visibility": "primary",
+        "min": 10,
+        "max": 2000,
+        "step": 10,
+        "default": 300
+      },
+      "max_pool_failures": {
+        "type": "integer",
+        "key": "config-ohlcv-max-pool-failures",
+        "impact": "low",
+        "category": "fallback",
+        "visibility": "secondary",
+        "min": 1,
+        "max": 20,
+        "step": 1,
+        "default": 5
+      },
+      "pool_failover_enabled": {
+        "type": "boolean",
+        "key": "config-ohlcv-pool-failover-enabled",
+        "impact": "medium",
+        "category": "fallback",
+        "visibility": "secondary",
+        "default": true
+      },
+      "retention_days": {
+        "type": "integer",
+        "key": "config-ohlcv-retention-days",
+        "impact": "critical",
+        "category": "retention",
+        "visibility": "technical",
+        "min": 1,
+        "max": 30,
+        "step": 1,
+        "default": 7
+      },
+      "sources": {
+        "type": "object",
+        "key": "config-ohlcv-sources",
+        "impact": "high",
+        "category": "sources",
+        "visibility": "secondary",
+        "default": {
+          "geckoterminal": {
+            "enabled": true,
+            "endpoint": "https://api.geckoterminal.com/api/v2",
+            "rate_limit_per_minute": 30,
+            "timeout_seconds": 10
+          },
+          "solana_tracker": {
+            "enabled": false,
+            "endpoint": "https://data.solanatracker.io",
+            "api_key": "",
+            "rate_limit_per_minute": 30,
+            "timeout_seconds": 15
+          },
+          "screenerbot_server": {
+            "enabled": true,
+            "endpoint": "https://screenerbot.io/data",
+            "timeout_seconds": 4
+          }
+        },
+        "children": {
+          "geckoterminal": {
+            "type": "object",
+            "key": "config-ohlcv-sources-geckoterminal",
+            "impact": "high",
+            "category": "sources",
+            "default": {
+              "enabled": true,
+              "endpoint": "https://api.geckoterminal.com/api/v2",
+              "rate_limit_per_minute": 30,
+              "timeout_seconds": 10
+            },
+            "children": {
+              "enabled": {
+                "type": "boolean",
+                "key": "config-ohlcv-sources-geckoterminal-enabled",
+                "impact": "high",
+                "category": "sources",
+                "default": true
+              },
+              "endpoint": {
+                "type": "string",
+                "key": "config-ohlcv-sources-geckoterminal-endpoint",
+                "impact": "critical",
+                "category": "sources",
+                "default": "https://api.geckoterminal.com/api/v2"
+              },
+              "rate_limit_per_minute": {
+                "type": "integer",
+                "key": "config-ohlcv-sources-geckoterminal-rate-limit-per-minute",
+                "impact": "medium",
+                "category": "sources",
+                "min": 1,
+                "max": 300,
+                "step": 1,
+                "default": 30
+              },
+              "timeout_seconds": {
+                "type": "integer",
+                "key": "config-ohlcv-sources-geckoterminal-timeout-seconds",
+                "impact": "low",
+                "category": "sources",
+                "min": 1,
+                "max": 60,
+                "step": 1,
+                "default": 10
+              }
+            }
+          },
+          "screenerbot_server": {
+            "type": "object",
+            "key": "config-ohlcv-sources-screenerbot-server",
+            "impact": "high",
+            "category": "sources",
+            "default": {
+              "enabled": true,
+              "endpoint": "https://screenerbot.io/data",
+              "timeout_seconds": 4
+            },
+            "children": {
+              "enabled": {
+                "type": "boolean",
+                "key": "config-ohlcv-sources-screenerbot-server-enabled",
+                "impact": "high",
+                "category": "sources",
+                "default": true
+              },
+              "endpoint": {
+                "type": "string",
+                "key": "config-ohlcv-sources-screenerbot-server-endpoint",
+                "impact": "critical",
+                "category": "sources",
+                "default": "https://screenerbot.io/data"
+              },
+              "timeout_seconds": {
+                "type": "integer",
+                "key": "config-ohlcv-sources-screenerbot-server-timeout-seconds",
+                "impact": "low",
+                "category": "sources",
+                "min": 1,
+                "max": 30,
+                "step": 1,
+                "default": 4
+              }
+            }
+          },
+          "solana_tracker": {
+            "type": "object",
+            "key": "config-ohlcv-sources-solana-tracker",
+            "impact": "medium",
+            "category": "sources",
+            "default": {
+              "enabled": false,
+              "endpoint": "https://data.solanatracker.io",
+              "api_key": "",
+              "rate_limit_per_minute": 30,
+              "timeout_seconds": 15
+            },
+            "children": {
+              "api_key": {
+                "type": "string",
+                "key": "config-ohlcv-sources-solana-tracker-api-key",
+                "impact": "critical",
+                "category": "sources",
+                "default": ""
+              },
+              "enabled": {
+                "type": "boolean",
+                "key": "config-ohlcv-sources-solana-tracker-enabled",
+                "impact": "high",
+                "category": "sources",
+                "default": false
+              },
+              "endpoint": {
+                "type": "string",
+                "key": "config-ohlcv-sources-solana-tracker-endpoint",
+                "impact": "critical",
+                "category": "sources",
+                "default": "https://data.solanatracker.io"
+              },
+              "rate_limit_per_minute": {
+                "type": "integer",
+                "key": "config-ohlcv-sources-solana-tracker-rate-limit-per-minute",
+                "impact": "medium",
+                "category": "sources",
+                "min": 1,
+                "max": 120,
+                "step": 1,
+                "default": 30
+              },
+              "timeout_seconds": {
+                "type": "integer",
+                "key": "config-ohlcv-sources-solana-tracker-timeout-seconds",
+                "impact": "low",
+                "category": "sources",
+                "min": 1,
+                "max": 60,
+                "step": 1,
+                "default": 15
+              }
+            }
+          }
+        }
+      }
+    },
+    "performance": {
+      "dashboard_poll_secs": {
+        "type": "integer",
+        "key": "config-performance-dashboard-poll-secs",
+        "impact": "low",
+        "category": "performance",
+        "visibility": "secondary",
+        "min": 0,
+        "step": 1,
+        "default": 0
+      },
+      "filtering_refresh_secs": {
+        "type": "integer",
+        "key": "config-performance-filtering-refresh-secs",
+        "impact": "medium",
+        "category": "performance",
+        "visibility": "secondary",
+        "min": 0,
+        "step": 10,
+        "default": 0
+      },
+      "max_filter_tokens": {
+        "type": "integer",
+        "key": "config-performance-max-filter-tokens",
+        "impact": "high",
+        "category": "performance",
+        "visibility": "secondary",
+        "min": 0,
+        "step": 1000,
+        "default": 0
+      },
+      "memory_profile": {
+        "type": "string",
+        "key": "config-performance-memory-profile",
+        "impact": "high",
+        "category": "performance",
+        "visibility": "secondary",
+        "default": "auto"
+      },
+      "sqlite_cache_multiplier": {
+        "type": "number",
+        "key": "config-performance-sqlite-cache-multiplier",
+        "impact": "medium",
+        "category": "performance",
+        "visibility": "secondary",
+        "min": 0,
+        "step": 0.1,
+        "default": 0
+      }
+    },
+    "pools": {
+      "account_blacklist_threshold": {
+        "type": "integer",
+        "key": "config-pools-account-blacklist-threshold",
+        "impact": "medium",
+        "category": "fetcher",
+        "visibility": "secondary",
+        "min": 1,
+        "max": 10,
+        "step": 1,
+        "default": 3
+      },
+      "failure_window_secs": {
+        "type": "integer",
+        "key": "config-pools-failure-window-secs",
+        "impact": "low",
+        "category": "fetcher",
+        "visibility": "secondary",
+        "min": 60,
+        "max": 600,
+        "step": 30,
+        "default": 300
+      },
+      "max_watched_tokens": {
+        "type": "integer",
+        "key": "config-pools-max-watched-tokens",
+        "impact": "critical",
+        "category": "monitoring",
+        "visibility": "secondary",
+        "min": 100,
+        "max": 5000,
+        "step": 50,
+        "default": 2000
+      },
+      "pool_blacklist_threshold": {
+        "type": "integer",
+        "key": "config-pools-pool-blacklist-threshold",
+        "impact": "medium",
+        "category": "fetcher",
+        "visibility": "secondary",
+        "min": 1,
+        "max": 10,
+        "step": 1,
+        "default": 2
+      },
+      "pool_blacklist_ttl_secs": {
+        "type": "integer",
+        "key": "config-pools-pool-blacklist-ttl-secs",
+        "impact": "medium",
+        "category": "fetcher",
+        "visibility": "secondary",
+        "min": 3600,
+        "max": 2592000,
+        "step": 3600,
+        "default": 86400
+      },
+      "price_cache_ttl_secs": {
+        "type": "integer",
+        "key": "config-pools-price-cache-ttl-secs",
+        "impact": "medium",
+        "category": "cache",
+        "visibility": "technical",
+        "min": 10,
+        "max": 120,
+        "step": 5,
+        "default": 30
+      }
+    },
+    "positions": {
+      "loss_blacklist_copy_origins": {
+        "type": "boolean",
+        "key": "config-positions-loss-blacklist-copy-origins",
+        "impact": "high",
+        "category": "loss-detection",
+        "visibility": "primary",
+        "default": false
+      },
+      "loss_blacklist_enabled": {
+        "type": "boolean",
+        "key": "config-positions-loss-blacklist-enabled",
+        "impact": "high",
+        "category": "loss-detection",
+        "visibility": "primary",
+        "default": true
+      },
+      "loss_blacklist_threshold_pct": {
+        "type": "number",
+        "key": "config-positions-loss-blacklist-threshold-pct",
+        "impact": "high",
+        "category": "loss-detection",
+        "visibility": "primary",
+        "min": -100,
+        "max": 0,
+        "step": 1,
+        "default": -15
+      },
+      "partial_exit_default_pct": {
+        "type": "number",
+        "key": "config-positions-partial-exit-default-pct",
+        "impact": "medium",
+        "category": "partial-exit",
+        "visibility": "primary",
+        "min": 10,
+        "max": 90,
+        "step": 5,
+        "default": 50
+      },
+      "partial_exit_enabled": {
+        "type": "boolean",
+        "key": "config-positions-partial-exit-enabled",
+        "impact": "high",
+        "category": "partial-exit",
+        "visibility": "primary",
+        "default": false
+      },
+      "partial_exit_max_pct": {
+        "type": "number",
+        "key": "config-positions-partial-exit-max-pct",
+        "impact": "low",
+        "category": "partial-exit",
+        "visibility": "primary",
+        "min": 50,
+        "max": 99,
+        "step": 1,
+        "default": 90
+      },
+      "partial_exit_min_pct": {
+        "type": "number",
+        "key": "config-positions-partial-exit-min-pct",
+        "impact": "low",
+        "category": "partial-exit",
+        "visibility": "primary",
+        "min": 1,
+        "max": 50,
+        "step": 1,
+        "default": 10
+      },
+      "position_open_cooldown_secs": {
+        "type": "integer",
+        "key": "config-positions-position-open-cooldown-secs",
+        "impact": "medium",
+        "category": "timing",
+        "visibility": "secondary",
+        "min": 1,
+        "max": 30,
+        "step": 1,
+        "default": 5
+      },
+      "profit_extra_needed_sol": {
+        "type": "number",
+        "key": "config-positions-profit-extra-needed-sol",
+        "impact": "high",
+        "category": "profit",
+        "visibility": "primary",
+        "min": 0,
+        "max": 0.01,
+        "step": 0.0001,
+        "default": 0.0002
+      },
+      "trailing_stop_activation_pct": {
+        "type": "number",
+        "key": "config-positions-trailing-stop-activation-pct",
+        "impact": "high",
+        "category": "trailing-stop",
+        "visibility": "primary",
+        "min": 0,
+        "max": 100,
+        "step": 1,
+        "default": 10
+      },
+      "trailing_stop_distance_pct": {
+        "type": "number",
+        "key": "config-positions-trailing-stop-distance-pct",
+        "impact": "critical",
+        "category": "trailing-stop",
+        "visibility": "primary",
+        "min": 1,
+        "max": 50,
+        "step": 1,
+        "default": 5
+      },
+      "trailing_stop_enabled": {
+        "type": "boolean",
+        "key": "config-positions-trailing-stop-enabled",
+        "impact": "high",
+        "category": "trailing-stop",
+        "visibility": "primary",
+        "default": false
+      }
+    },
+    "referral": {
+      "code": {
+        "type": "string",
+        "key": "config-referral-code",
+        "category": "general",
+        "visibility": "primary",
+        "default": ""
+      },
+      "endpoint": {
+        "type": "string",
+        "key": "config-referral-endpoint",
+        "category": "debug",
+        "visibility": "technical",
+        "default": "https://screenerbot.io/api/referral/activate"
+      },
+      "reannounce_hours": {
+        "type": "integer",
+        "key": "config-referral-reannounce-hours",
+        "category": "debug",
+        "visibility": "technical",
+        "default": 24
+      }
+    },
+    "services": {},
+    "strategies": {
+      "cache_ttl_seconds": {
+        "type": "integer",
+        "key": "config-strategies-cache-ttl-seconds",
+        "impact": "low",
+        "category": "performance",
+        "visibility": "secondary",
+        "min": 1,
+        "max": 60,
+        "step": 1,
+        "default": 5
+      },
+      "enabled": {
+        "type": "boolean",
+        "key": "config-strategies-enabled",
+        "impact": "high",
+        "category": "general",
+        "visibility": "primary",
+        "default": true
+      },
+      "evaluation_timeout_ms": {
+        "type": "integer",
+        "key": "config-strategies-evaluation-timeout-ms",
+        "impact": "medium",
+        "category": "performance",
+        "visibility": "secondary",
+        "min": 10,
+        "max": 1000,
+        "step": 10,
+        "default": 50
+      },
+      "max_concurrent_evaluations": {
+        "type": "integer",
+        "key": "config-strategies-max-concurrent-evaluations",
+        "impact": "medium",
+        "category": "performance",
+        "visibility": "secondary",
+        "min": 1,
+        "max": 50,
+        "step": 1,
+        "default": 10
+      }
+    },
+    "telegram": {
+      "bot_token": {
+        "type": "string",
+        "key": "config-telegram-bot-token",
+        "category": "connection",
+        "visibility": "primary",
+        "default": ""
+      },
+      "chat_id": {
+        "type": "string",
+        "key": "config-telegram-chat-id",
+        "category": "connection",
+        "visibility": "primary",
+        "default": ""
+      },
+      "commands_enabled": {
+        "type": "boolean",
+        "key": "config-telegram-commands-enabled",
+        "category": "features",
+        "visibility": "primary",
+        "default": true
+      },
+      "commands_require_2fa": {
+        "type": "boolean",
+        "key": "config-telegram-commands-require-2fa",
+        "category": "authentication",
+        "visibility": "secondary",
+        "default": true
+      },
+      "enabled": {
+        "type": "boolean",
+        "key": "config-telegram-enabled",
+        "category": "connection",
+        "visibility": "primary",
+        "default": false
+      },
+      "include_ai_reasoning": {
+        "type": "boolean",
+        "key": "config-telegram-include-ai-reasoning",
+        "category": "notifications",
+        "visibility": "primary",
+        "default": false
+      },
+      "inline_actions_enabled": {
+        "type": "boolean",
+        "key": "config-telegram-inline-actions-enabled",
+        "category": "features",
+        "visibility": "primary",
+        "default": true
+      },
+      "language": {
+        "type": "string",
+        "key": "config-telegram-language",
+        "category": "connection",
+        "visibility": "primary",
+        "default": "app"
+      },
+      "lockout_minutes": {
+        "type": "integer",
+        "key": "config-telegram-lockout-minutes",
+        "category": "authentication",
+        "visibility": "secondary",
+        "min": 1,
+        "max": 60,
+        "step": 1,
+        "default": 5
+      },
+      "max_failed_attempts": {
+        "type": "integer",
+        "key": "config-telegram-max-failed-attempts",
+        "category": "authentication",
+        "visibility": "secondary",
+        "min": 1,
+        "max": 10,
+        "step": 1,
+        "default": 3
+      },
+      "notify_copy_paper": {
+        "type": "boolean",
+        "key": "config-telegram-notify-copy-paper",
+        "category": "notifications",
+        "visibility": "primary",
+        "default": false
+      },
+      "notify_copy_trading": {
+        "type": "boolean",
+        "key": "config-telegram-notify-copy-trading",
+        "category": "notifications",
+        "visibility": "primary",
+        "default": true
+      },
+      "notify_daily_summary": {
+        "type": "boolean",
+        "key": "config-telegram-notify-daily-summary",
+        "category": "notifications",
+        "visibility": "primary",
+        "default": false
+      },
+      "notify_dca_executed": {
+        "type": "boolean",
+        "key": "config-telegram-notify-dca-executed",
+        "category": "notifications",
+        "visibility": "primary",
+        "default": true
+      },
+      "notify_filtering_alerts": {
+        "type": "boolean",
+        "key": "config-telegram-notify-filtering-alerts",
+        "category": "notifications",
+        "visibility": "primary",
+        "default": true
+      },
+      "notify_on_shutdown": {
+        "type": "boolean",
+        "key": "config-telegram-notify-on-shutdown",
+        "category": "notifications",
+        "visibility": "primary",
+        "default": true
+      },
+      "notify_on_startup": {
+        "type": "boolean",
+        "key": "config-telegram-notify-on-startup",
+        "category": "notifications",
+        "visibility": "primary",
+        "default": true
+      },
+      "notify_partial_exit": {
+        "type": "boolean",
+        "key": "config-telegram-notify-partial-exit",
+        "category": "notifications",
+        "visibility": "primary",
+        "default": true
+      },
+      "notify_position_closed": {
+        "type": "boolean",
+        "key": "config-telegram-notify-position-closed",
+        "category": "notifications",
+        "visibility": "primary",
+        "default": true
+      },
+      "notify_position_opened": {
+        "type": "boolean",
+        "key": "config-telegram-notify-position-opened",
+        "category": "notifications",
+        "visibility": "primary",
+        "default": true
+      },
+      "notify_system_errors": {
+        "type": "boolean",
+        "key": "config-telegram-notify-system-errors",
+        "category": "notifications",
+        "visibility": "primary",
+        "default": true
+      },
+      "notify_trade_alerts": {
+        "type": "boolean",
+        "key": "config-telegram-notify-trade-alerts",
+        "category": "notifications",
+        "visibility": "primary",
+        "default": true
+      },
+      "session_timeout_minutes": {
+        "type": "integer",
+        "key": "config-telegram-session-timeout-minutes",
+        "category": "authentication",
+        "visibility": "secondary",
+        "min": 5,
+        "max": 1440,
+        "step": 5,
+        "default": 30
+      },
+      "significant_pnl_threshold": {
+        "type": "number",
+        "key": "config-telegram-significant-pnl-threshold",
+        "category": "thresholds",
+        "visibility": "secondary",
+        "min": 0.01,
+        "step": 0.1,
+        "default": 0.5
+      },
+      "trade_alert_min_sol": {
+        "type": "number",
+        "key": "config-telegram-trade-alert-min-sol",
+        "category": "thresholds",
+        "visibility": "secondary",
+        "min": 0.001,
+        "step": 0.01,
+        "default": 0.1
+      }
+    },
+    "tokens": {
+      "discovery": {
+        "type": "object",
+        "key": "config-tokens-discovery",
+        "impact": "high",
+        "category": "discovery",
+        "visibility": "secondary",
+        "default": {
+          "enabled": true,
+          "dexscreener": {
+            "enabled": true,
+            "latest_profiles_enabled": true,
+            "latest_boosts_enabled": true,
+            "top_boosts_enabled": true
+          },
+          "geckoterminal": {
+            "enabled": true,
+            "new_pools_enabled": true,
+            "recently_updated_enabled": true,
+            "trending_enabled": true
+          },
+          "rugcheck": {
+            "enabled": true,
+            "new_tokens_enabled": true,
+            "recent_enabled": true,
+            "trending_enabled": true,
+            "verified_enabled": true
+          },
+          "jupiter": {
+            "enabled": true,
+            "recent_enabled": true,
+            "top_organic_enabled": true,
+            "top_traded_enabled": true,
+            "top_trending_enabled": true
+          },
+          "coingecko": { "enabled": false, "markets_enabled": false, "api_key": null },
+          "defillama": { "enabled": false, "protocols_enabled": false }
+        },
+        "children": {
+          "coingecko": {
+            "type": "object",
+            "key": "config-tokens-discovery-coingecko",
+            "impact": "low",
+            "category": "discovery",
+            "default": { "enabled": false, "markets_enabled": false, "api_key": null },
+            "children": {
+              "api_key": {
+                "type": "string",
+                "key": "config-tokens-discovery-coingecko-api-key",
+                "impact": "low",
+                "category": "discovery",
+                "default": null
+              },
+              "enabled": {
+                "type": "boolean",
+                "key": "config-tokens-discovery-coingecko-enabled",
+                "impact": "medium",
+                "category": "discovery",
+                "default": false
+              },
+              "markets_enabled": {
+                "type": "boolean",
+                "key": "config-tokens-discovery-coingecko-markets-enabled",
+                "impact": "medium",
+                "category": "discovery",
+                "default": false
+              }
+            }
+          },
+          "defillama": {
+            "type": "object",
+            "key": "config-tokens-discovery-defillama",
+            "impact": "low",
+            "category": "discovery",
+            "default": { "enabled": false, "protocols_enabled": false },
+            "children": {
+              "enabled": {
+                "type": "boolean",
+                "key": "config-tokens-discovery-defillama-enabled",
+                "impact": "low",
+                "category": "discovery",
+                "default": false
+              },
+              "protocols_enabled": {
+                "type": "boolean",
+                "key": "config-tokens-discovery-defillama-protocols-enabled",
+                "impact": "low",
+                "category": "discovery",
+                "default": false
+              }
+            }
+          },
+          "dexscreener": {
+            "type": "object",
+            "key": "config-tokens-discovery-dexscreener",
+            "impact": "high",
+            "category": "discovery",
+            "default": {
+              "enabled": true,
+              "latest_profiles_enabled": true,
+              "latest_boosts_enabled": true,
+              "top_boosts_enabled": true
+            },
+            "children": {
+              "enabled": {
+                "type": "boolean",
+                "key": "config-tokens-discovery-dexscreener-enabled",
+                "impact": "high",
+                "category": "discovery",
+                "default": true
+              },
+              "latest_boosts_enabled": {
+                "type": "boolean",
+                "key": "config-tokens-discovery-dexscreener-latest-boosts-enabled",
+                "impact": "medium",
+                "category": "discovery",
+                "default": true
+              },
+              "latest_profiles_enabled": {
+                "type": "boolean",
+                "key": "config-tokens-discovery-dexscreener-latest-profiles-enabled",
+                "impact": "medium",
+                "category": "discovery",
+                "default": true
+              },
+              "top_boosts_enabled": {
+                "type": "boolean",
+                "key": "config-tokens-discovery-dexscreener-top-boosts-enabled",
+                "impact": "medium",
+                "category": "discovery",
+                "default": true
+              }
+            }
+          },
+          "enabled": {
+            "type": "boolean",
+            "key": "config-tokens-discovery-enabled",
+            "impact": "critical",
+            "category": "discovery",
+            "default": true
+          },
+          "geckoterminal": {
+            "type": "object",
+            "key": "config-tokens-discovery-geckoterminal",
+            "impact": "high",
+            "category": "discovery",
+            "default": {
+              "enabled": true,
+              "new_pools_enabled": true,
+              "recently_updated_enabled": true,
+              "trending_enabled": true
+            },
+            "children": {
+              "enabled": {
+                "type": "boolean",
+                "key": "config-tokens-discovery-geckoterminal-enabled",
+                "impact": "high",
+                "category": "discovery",
+                "default": true
+              },
+              "new_pools_enabled": {
+                "type": "boolean",
+                "key": "config-tokens-discovery-geckoterminal-new-pools-enabled",
+                "impact": "medium",
+                "category": "discovery",
+                "default": true
+              },
+              "recently_updated_enabled": {
+                "type": "boolean",
+                "key": "config-tokens-discovery-geckoterminal-recently-updated-enabled",
+                "impact": "medium",
+                "category": "discovery",
+                "default": true
+              },
+              "trending_enabled": {
+                "type": "boolean",
+                "key": "config-tokens-discovery-geckoterminal-trending-enabled",
+                "impact": "medium",
+                "category": "discovery",
+                "default": true
+              }
+            }
+          },
+          "jupiter": {
+            "type": "object",
+            "key": "config-tokens-discovery-jupiter",
+            "impact": "medium",
+            "category": "discovery",
+            "default": {
+              "enabled": true,
+              "recent_enabled": true,
+              "top_organic_enabled": true,
+              "top_traded_enabled": true,
+              "top_trending_enabled": true
+            },
+            "children": {
+              "enabled": {
+                "type": "boolean",
+                "key": "config-tokens-discovery-jupiter-enabled",
+                "impact": "high",
+                "category": "discovery",
+                "default": true
+              },
+              "recent_enabled": {
+                "type": "boolean",
+                "key": "config-tokens-discovery-jupiter-recent-enabled",
+                "impact": "medium",
+                "category": "discovery",
+                "default": true
+              },
+              "top_organic_enabled": {
+                "type": "boolean",
+                "key": "config-tokens-discovery-jupiter-top-organic-enabled",
+                "impact": "medium",
+                "category": "discovery",
+                "default": true
+              },
+              "top_traded_enabled": {
+                "type": "boolean",
+                "key": "config-tokens-discovery-jupiter-top-traded-enabled",
+                "impact": "medium",
+                "category": "discovery",
+                "default": true
+              },
+              "top_trending_enabled": {
+                "type": "boolean",
+                "key": "config-tokens-discovery-jupiter-top-trending-enabled",
+                "impact": "medium",
+                "category": "discovery",
+                "default": true
+              }
+            }
+          },
+          "rugcheck": {
+            "type": "object",
+            "key": "config-tokens-discovery-rugcheck",
+            "impact": "high",
+            "category": "discovery",
+            "default": {
+              "enabled": true,
+              "new_tokens_enabled": true,
+              "recent_enabled": true,
+              "trending_enabled": true,
+              "verified_enabled": true
+            },
+            "children": {
+              "enabled": {
+                "type": "boolean",
+                "key": "config-tokens-discovery-rugcheck-enabled",
+                "impact": "high",
+                "category": "discovery",
+                "default": true
+              },
+              "new_tokens_enabled": {
+                "type": "boolean",
+                "key": "config-tokens-discovery-rugcheck-new-tokens-enabled",
+                "impact": "medium",
+                "category": "discovery",
+                "default": true
+              },
+              "recent_enabled": {
+                "type": "boolean",
+                "key": "config-tokens-discovery-rugcheck-recent-enabled",
+                "impact": "medium",
+                "category": "discovery",
+                "default": true
+              },
+              "trending_enabled": {
+                "type": "boolean",
+                "key": "config-tokens-discovery-rugcheck-trending-enabled",
+                "impact": "medium",
+                "category": "discovery",
+                "default": true
+              },
+              "verified_enabled": {
+                "type": "boolean",
+                "key": "config-tokens-discovery-rugcheck-verified-enabled",
+                "impact": "medium",
+                "category": "discovery",
+                "default": true
+              }
+            }
+          }
+        }
+      },
+      "preferred_market_data_source": {
+        "type": "string",
+        "key": "config-tokens-preferred-market-data-source",
+        "impact": "high",
+        "category": "data-sources",
+        "visibility": "secondary",
+        "default": "dexscreener"
+      },
+      "sources": {
+        "type": "object",
+        "key": "config-tokens-sources",
+        "impact": "high",
+        "category": "sources",
+        "visibility": "secondary",
+        "default": {
+          "dexscreener": { "enabled": true, "timeout_seconds": 10 },
+          "geckoterminal": {
+            "enabled": true,
+            "endpoint": "",
+            "rate_limit_per_minute": 30,
+            "timeout_seconds": 10
+          },
+          "rugcheck": {
+            "enabled": true,
+            "endpoint": "",
+            "rate_limit_per_minute": 30,
+            "timeout_seconds": 15
+          },
+          "screenerbot_server": {
+            "enabled": true,
+            "endpoint": "https://screenerbot.io/data",
+            "timeout_seconds": 4,
+            "media_sync_seconds": 120,
+            "media_refresh_hours": 24
+          }
+        },
+        "children": {
+          "dexscreener": {
+            "type": "object",
+            "key": "config-tokens-sources-dexscreener",
+            "impact": "high",
+            "category": "sources",
+            "default": { "enabled": true, "timeout_seconds": 10 },
+            "children": {
+              "enabled": {
+                "type": "boolean",
+                "key": "config-tokens-sources-dexscreener-enabled",
+                "impact": "high",
+                "category": "sources",
+                "default": true
+              },
+              "timeout_seconds": {
+                "type": "integer",
+                "key": "config-tokens-sources-dexscreener-timeout-seconds",
+                "impact": "low",
+                "category": "sources",
+                "min": 1,
+                "max": 60,
+                "step": 1,
+                "default": 10
+              }
+            }
+          },
+          "geckoterminal": {
+            "type": "object",
+            "key": "config-tokens-sources-geckoterminal",
+            "impact": "medium",
+            "category": "sources",
+            "default": {
+              "enabled": true,
+              "endpoint": "",
+              "rate_limit_per_minute": 30,
+              "timeout_seconds": 10
+            },
+            "children": {
+              "enabled": {
+                "type": "boolean",
+                "key": "config-tokens-sources-geckoterminal-enabled",
+                "impact": "high",
+                "category": "sources",
+                "default": true
+              },
+              "endpoint": {
+                "type": "string",
+                "key": "config-tokens-sources-geckoterminal-endpoint",
+                "impact": "critical",
+                "category": "sources",
+                "default": ""
+              },
+              "rate_limit_per_minute": {
+                "type": "integer",
+                "key": "config-tokens-sources-geckoterminal-rate-limit-per-minute",
+                "impact": "medium",
+                "category": "sources",
+                "min": 1,
+                "max": 300,
+                "step": 1,
+                "default": 60
+              },
+              "timeout_seconds": {
+                "type": "integer",
+                "key": "config-tokens-sources-geckoterminal-timeout-seconds",
+                "impact": "low",
+                "category": "sources",
+                "min": 1,
+                "max": 60,
+                "step": 1,
+                "default": 10
+              }
+            }
+          },
+          "rugcheck": {
+            "type": "object",
+            "key": "config-tokens-sources-rugcheck",
+            "impact": "medium",
+            "category": "sources",
+            "default": {
+              "enabled": true,
+              "endpoint": "",
+              "rate_limit_per_minute": 30,
+              "timeout_seconds": 15
+            },
+            "children": {
+              "enabled": {
+                "type": "boolean",
+                "key": "config-tokens-sources-rugcheck-enabled",
+                "impact": "high",
+                "category": "sources",
+                "default": true
+              },
+              "endpoint": {
+                "type": "string",
+                "key": "config-tokens-sources-rugcheck-endpoint",
+                "impact": "critical",
+                "category": "sources",
+                "default": ""
+              },
+              "rate_limit_per_minute": {
+                "type": "integer",
+                "key": "config-tokens-sources-rugcheck-rate-limit-per-minute",
+                "impact": "medium",
+                "category": "sources",
+                "min": 1,
+                "max": 300,
+                "step": 1,
+                "default": 60
+              },
+              "timeout_seconds": {
+                "type": "integer",
+                "key": "config-tokens-sources-rugcheck-timeout-seconds",
+                "impact": "low",
+                "category": "sources",
+                "min": 1,
+                "max": 60,
+                "step": 1,
+                "default": 10
+              }
+            }
+          },
+          "screenerbot_server": {
+            "type": "object",
+            "key": "config-tokens-sources-screenerbot-server",
+            "impact": "high",
+            "category": "sources",
+            "default": {
+              "enabled": true,
+              "endpoint": "https://screenerbot.io/data",
+              "timeout_seconds": 4,
+              "media_sync_seconds": 120,
+              "media_refresh_hours": 24
+            },
+            "children": {
+              "enabled": {
+                "type": "boolean",
+                "key": "config-tokens-sources-screenerbot-server-enabled",
+                "impact": "high",
+                "category": "sources",
+                "default": true
+              },
+              "endpoint": {
+                "type": "string",
+                "key": "config-tokens-sources-screenerbot-server-endpoint",
+                "impact": "critical",
+                "category": "sources",
+                "default": "https://screenerbot.io/data"
+              },
+              "media_refresh_hours": {
+                "type": "integer",
+                "key": "config-tokens-sources-screenerbot-server-media-refresh-hours",
+                "impact": "low",
+                "category": "sources",
+                "min": 1,
+                "max": 168,
+                "step": 1,
+                "default": 24
+              },
+              "media_sync_seconds": {
+                "type": "integer",
+                "key": "config-tokens-sources-screenerbot-server-media-sync-seconds",
+                "impact": "low",
+                "category": "sources",
+                "min": 30,
+                "max": 3600,
+                "step": 30,
+                "default": 120
+              },
+              "timeout_seconds": {
+                "type": "integer",
+                "key": "config-tokens-sources-screenerbot-server-timeout-seconds",
+                "impact": "low",
+                "category": "sources",
+                "min": 1,
+                "max": 30,
+                "step": 1,
+                "default": 4
+              }
+            }
+          }
+        }
+      },
+      "update_intervals": {
+        "type": "object",
+        "key": "config-tokens-update-intervals",
+        "impact": "medium",
+        "category": "updates",
+        "visibility": "secondary",
+        "default": {
+          "open_position_seconds": 5,
+          "pool_tracked_seconds": 7,
+          "filter_passed_seconds": 8,
+          "background_seconds": 30,
+          "security_seconds": 60
+        },
+        "children": {
+          "background_seconds": {
+            "type": "integer",
+            "key": "config-tokens-update-intervals-background-seconds",
+            "impact": "low",
+            "category": "updates",
+            "min": 5,
+            "step": 5,
+            "default": 30
+          },
+          "filter_passed_seconds": {
+            "type": "integer",
+            "key": "config-tokens-update-intervals-filter-passed-seconds",
+            "impact": "high",
+            "category": "updates",
+            "min": 1,
+            "step": 1,
+            "default": 8
+          },
+          "open_position_seconds": {
+            "type": "integer",
+            "key": "config-tokens-update-intervals-open-position-seconds",
+            "impact": "high",
+            "category": "updates",
+            "min": 1,
+            "step": 1,
+            "default": 5
+          },
+          "pool_tracked_seconds": {
+            "type": "integer",
+            "key": "config-tokens-update-intervals-pool-tracked-seconds",
+            "impact": "high",
+            "category": "updates",
+            "min": 1,
+            "step": 1,
+            "default": 7
+          },
+          "security_seconds": {
+            "type": "integer",
+            "key": "config-tokens-update-intervals-security-seconds",
+            "impact": "low",
+            "category": "updates",
+            "min": 0,
+            "step": 1,
+            "default": 60
+          }
+        }
+      }
+    },
+    "trader": {
+      "dca_cooldown_minutes": {
+        "type": "integer",
+        "key": "config-trader-dca-cooldown-minutes",
+        "impact": "medium",
+        "category": "dca",
+        "visibility": "primary",
+        "min": 1,
+        "max": 1440,
+        "step": 5,
+        "default": 30
+      },
+      "dca_enabled": {
+        "type": "boolean",
+        "key": "config-trader-dca-enabled",
+        "impact": "high",
+        "category": "dca",
+        "visibility": "primary",
+        "default": false
+      },
+      "dca_max_count": {
+        "type": "integer",
+        "key": "config-trader-dca-max-count",
+        "impact": "critical",
+        "category": "dca",
+        "visibility": "primary",
+        "min": 1,
+        "max": 5,
+        "step": 1,
+        "default": 2
+      },
+      "dca_size_percentage": {
+        "type": "number",
+        "key": "config-trader-dca-size-percentage",
+        "impact": "high",
+        "category": "dca",
+        "visibility": "primary",
+        "min": 10,
+        "max": 200,
+        "step": 10,
+        "default": 50
+      },
+      "dca_threshold_pct": {
+        "type": "number",
+        "key": "config-trader-dca-threshold-pct",
+        "impact": "high",
+        "category": "dca",
+        "visibility": "primary",
+        "min": -100,
+        "max": 0,
+        "step": 1,
+        "default": -10
+      },
+      "enabled": {
+        "type": "boolean",
+        "key": "config-trader-enabled",
+        "impact": "critical",
+        "category": "core-trading",
+        "visibility": "primary",
+        "default": false
+      },
+      "entry_check_concurrency": {
+        "type": "integer",
+        "key": "config-trader-entry-check-concurrency",
+        "impact": "medium",
+        "category": "performance",
+        "visibility": "secondary",
+        "min": 1,
+        "max": 50,
+        "step": 1,
+        "default": 10
+      },
+      "entry_monitor_enabled": {
+        "type": "boolean",
+        "key": "config-trader-entry-monitor-enabled",
+        "impact": "critical",
+        "category": "monitor-control",
+        "visibility": "secondary",
+        "default": true
+      },
+      "entry_sizes": {
+        "type": "array",
+        "key": "config-trader-entry-sizes",
+        "item_type": "number",
+        "impact": "medium",
+        "category": "core-trading",
+        "visibility": "primary",
+        "default": [0.005, 0.01, 0.02, 0.05]
+      },
+      "exit_monitor_enabled": {
+        "type": "boolean",
+        "key": "config-trader-exit-monitor-enabled",
+        "impact": "critical",
+        "category": "monitor-control",
+        "visibility": "secondary",
+        "default": true
+      },
+      "loss_limit_auto_resume": {
+        "type": "boolean",
+        "key": "config-trader-loss-limit-auto-resume",
+        "impact": "medium",
+        "category": "loss-limit",
+        "visibility": "secondary",
+        "default": true
+      },
+      "loss_limit_enabled": {
+        "type": "boolean",
+        "key": "config-trader-loss-limit-enabled",
+        "impact": "high",
+        "category": "loss-limit",
+        "visibility": "secondary",
+        "default": false
+      },
+      "loss_limit_period_hours": {
+        "type": "integer",
+        "key": "config-trader-loss-limit-period-hours",
+        "impact": "high",
+        "category": "loss-limit",
+        "visibility": "secondary",
+        "min": 1,
+        "max": 168,
+        "step": 1,
+        "default": 24
+      },
+      "loss_limit_sol": {
+        "type": "number",
+        "key": "config-trader-loss-limit-sol",
+        "impact": "critical",
+        "category": "loss-limit",
+        "visibility": "secondary",
+        "min": 0.001,
+        "max": 100,
+        "step": 0.01,
+        "default": 0.1
+      },
+      "max_open_positions": {
+        "type": "integer",
+        "key": "config-trader-max-open-positions",
+        "impact": "critical",
+        "category": "core-trading",
+        "visibility": "primary",
+        "min": 1,
+        "max": 100,
+        "default": 2
+      },
+      "position_close_cooldown_minutes": {
+        "type": "integer",
+        "key": "config-trader-position-close-cooldown-minutes",
+        "impact": "critical",
+        "category": "timing",
+        "visibility": "secondary",
+        "min": 0,
+        "max": 1440,
+        "step": 5,
+        "default": 15
+      },
+      "roi_exit_enabled": {
+        "type": "boolean",
+        "key": "config-trader-roi-exit-enabled",
+        "impact": "high",
+        "category": "roi-exit",
+        "visibility": "primary",
+        "default": true
+      },
+      "roi_target_percent": {
+        "type": "number",
+        "key": "config-trader-roi-target-percent",
+        "impact": "high",
+        "category": "roi-exit",
+        "visibility": "primary",
+        "min": 1,
+        "max": 1000,
+        "step": 1,
+        "default": 20
+      },
+      "sell_concurrency": {
+        "type": "integer",
+        "key": "config-trader-sell-concurrency",
+        "impact": "medium",
+        "category": "performance",
+        "visibility": "secondary",
+        "min": 1,
+        "max": 20,
+        "step": 1,
+        "default": 5
+      },
+      "slippage": {
+        "type": "object",
+        "key": "config-trader-slippage",
+        "impact": "critical",
+        "category": "slippage",
+        "visibility": "primary",
+        "default": {
+          "quote_default_pct": 1,
+          "exit_profit_shortfall_pct": 3,
+          "exit_loss_shortfall_pct": 5,
+          "exit_retry_steps_pct": [3, 10, 25]
+        },
+        "children": {
+          "exit_loss_shortfall_pct": {
+            "type": "number",
+            "key": "config-trader-slippage-exit-loss-shortfall-pct",
+            "impact": "high",
+            "category": "exit",
+            "min": 0,
+            "max": 50,
+            "step": 1,
+            "default": 5
+          },
+          "exit_profit_shortfall_pct": {
+            "type": "number",
+            "key": "config-trader-slippage-exit-profit-shortfall-pct",
+            "impact": "high",
+            "category": "exit",
+            "min": 0,
+            "max": 50,
+            "step": 1,
+            "default": 3
+          },
+          "exit_retry_steps_pct": {
+            "type": "array",
+            "key": "config-trader-slippage-exit-retry-steps-pct",
+            "item_type": "number",
+            "impact": "medium",
+            "category": "exit",
+            "default": [3, 10, 25]
+          },
+          "quote_default_pct": {
+            "type": "number",
+            "key": "config-trader-slippage-quote-default-pct",
+            "impact": "high",
+            "category": "quote",
+            "min": 0.1,
+            "max": 25,
+            "step": 0.1,
+            "default": 1
+          }
+        }
+      },
+      "stop_loss_allow_partial": {
+        "type": "boolean",
+        "key": "config-trader-stop-loss-allow-partial",
+        "impact": "medium",
+        "category": "stop-loss",
+        "visibility": "secondary",
+        "default": false
+      },
+      "stop_loss_enabled": {
+        "type": "boolean",
+        "key": "config-trader-stop-loss-enabled",
+        "impact": "high",
+        "category": "stop-loss",
+        "visibility": "secondary",
+        "default": false
+      },
+      "stop_loss_min_hold_seconds": {
+        "type": "integer",
+        "key": "config-trader-stop-loss-min-hold-seconds",
+        "impact": "medium",
+        "category": "stop-loss",
+        "visibility": "secondary",
+        "min": 0,
+        "max": 86400,
+        "step": 1,
+        "default": 0
+      },
+      "stop_loss_threshold_pct": {
+        "type": "number",
+        "key": "config-trader-stop-loss-threshold-pct",
+        "impact": "critical",
+        "category": "stop-loss",
+        "visibility": "secondary",
+        "min": 1,
+        "max": 100,
+        "step": 1,
+        "default": 50
+      },
+      "time_override_duration": {
+        "type": "number",
+        "key": "config-trader-time-override-duration",
+        "impact": "critical",
+        "category": "time-override",
+        "visibility": "secondary",
+        "min": 1,
+        "max": 43200,
+        "step": 1,
+        "default": 168
+      },
+      "time_override_enabled": {
+        "type": "boolean",
+        "key": "config-trader-time-override-enabled",
+        "impact": "high",
+        "category": "time-override",
+        "visibility": "secondary",
+        "default": true
+      },
+      "time_override_loss_threshold_percent": {
+        "type": "number",
+        "key": "config-trader-time-override-loss-threshold-percent",
+        "impact": "medium",
+        "category": "time-override",
+        "visibility": "secondary",
+        "min": -100,
+        "max": 0,
+        "step": 1,
+        "default": -40
+      },
+      "time_override_unit": {
+        "type": "string",
+        "key": "config-trader-time-override-unit",
+        "impact": "critical",
+        "category": "time-override",
+        "visibility": "secondary",
+        "default": "hours"
+      },
+      "trade_size_sol": {
+        "type": "number",
+        "key": "config-trader-trade-size-sol",
+        "impact": "critical",
+        "category": "core-trading",
+        "visibility": "primary",
+        "min": 0.001,
+        "max": 10,
+        "step": 0.001,
+        "default": 0.005
+      }
+    },
+    "updates": {
+      "auto_check": {
+        "type": "boolean",
+        "key": "config-updates-auto-check",
+        "impact": "medium",
+        "category": "checking",
+        "visibility": "secondary",
+        "default": true
+      },
+      "auto_download": {
+        "type": "boolean",
+        "key": "config-updates-auto-download",
+        "impact": "medium",
+        "category": "installing",
+        "visibility": "secondary",
+        "default": true
+      },
+      "auto_install": {
+        "type": "boolean",
+        "key": "config-updates-auto-install",
+        "impact": "high",
+        "category": "installing",
+        "visibility": "secondary",
+        "default": true
+      },
+      "check_interval_hours": {
+        "type": "integer",
+        "key": "config-updates-check-interval-hours",
+        "impact": "low",
+        "category": "checking",
+        "visibility": "secondary",
+        "min": 1,
+        "max": 168,
+        "step": 1,
+        "default": 6
+      },
+      "defer_while_trading": {
+        "type": "boolean",
+        "key": "config-updates-defer-while-trading",
+        "impact": "high",
+        "category": "installing",
+        "visibility": "secondary",
+        "default": true
+      },
+      "notify_telegram": {
+        "type": "boolean",
+        "key": "config-updates-notify-telegram",
+        "impact": "low",
+        "category": "notifications",
+        "visibility": "primary",
+        "default": true
+      }
+    },
+    "wallet": {
+      "api_response_cache_ttl_secs": {
+        "type": "integer",
+        "key": "config-wallet-api-response-cache-ttl-secs",
+        "impact": "low",
+        "category": "wallet",
+        "visibility": "secondary",
+        "min": 10,
+        "max": 300,
+        "step": 10,
+        "default": 30
+      },
+      "daily_flow_decimate_threshold_days": {
+        "type": "integer",
+        "key": "config-wallet-daily-flow-decimate-threshold-days",
+        "impact": "low",
+        "category": "wallet",
+        "visibility": "secondary",
+        "min": 30,
+        "max": 730,
+        "step": 30,
+        "default": 365
+      },
+      "dashboard_metrics_24h_interval_secs": {
+        "type": "integer",
+        "key": "config-wallet-dashboard-metrics-24h-interval-secs",
+        "impact": "high",
+        "category": "wallet",
+        "visibility": "secondary",
+        "min": 30,
+        "max": 300,
+        "step": 10,
+        "default": 60
+      },
+      "dashboard_metrics_30d_interval_secs": {
+        "type": "integer",
+        "key": "config-wallet-dashboard-metrics-30d-interval-secs",
+        "impact": "medium",
+        "category": "wallet",
+        "visibility": "secondary",
+        "min": 300,
+        "max": 1800,
+        "step": 60,
+        "default": 900
+      },
+      "dashboard_metrics_7d_interval_secs": {
+        "type": "integer",
+        "key": "config-wallet-dashboard-metrics-7d-interval-secs",
+        "impact": "medium",
+        "category": "wallet",
+        "visibility": "secondary",
+        "min": 60,
+        "max": 600,
+        "step": 30,
+        "default": 300
+      },
+      "dashboard_metrics_alltime_interval_secs": {
+        "type": "integer",
+        "key": "config-wallet-dashboard-metrics-alltime-interval-secs",
+        "impact": "low",
+        "category": "wallet",
+        "visibility": "secondary",
+        "min": 600,
+        "max": 3600,
+        "step": 60,
+        "default": 1800
+      },
+      "flow_cache_backfill_batch": {
+        "type": "integer",
+        "key": "config-wallet-flow-cache-backfill-batch",
+        "impact": "medium",
+        "category": "wallet",
+        "visibility": "secondary",
+        "min": 100,
+        "max": 20000,
+        "step": 100,
+        "default": 2000
+      },
+      "flow_cache_lookback_secs": {
+        "type": "integer",
+        "key": "config-wallet-flow-cache-lookback-secs",
+        "impact": "medium",
+        "category": "wallet",
+        "visibility": "secondary",
+        "min": 0,
+        "max": 86400,
+        "step": 60,
+        "default": 3600
+      },
+      "flow_cache_update_secs": {
+        "type": "integer",
+        "key": "config-wallet-flow-cache-update-secs",
+        "impact": "high",
+        "category": "wallet",
+        "visibility": "secondary",
+        "min": 1,
+        "max": 60,
+        "step": 1,
+        "default": 5
+      },
+      "max_daily_flow_days": {
+        "type": "integer",
+        "key": "config-wallet-max-daily-flow-days",
+        "impact": "medium",
+        "category": "wallet",
+        "visibility": "secondary",
+        "min": 30,
+        "max": 1825,
+        "step": 30,
+        "default": 730
+      },
+      "min_balance_sol": {
+        "type": "number",
+        "key": "config-wallet-min-balance-sol",
+        "impact": "high",
+        "category": "safety",
+        "visibility": "secondary",
+        "min": 0.001,
+        "max": 1,
+        "step": 0.001,
+        "default": 0.01
+      },
+      "snapshot_interval_secs": {
+        "type": "integer",
+        "key": "config-wallet-snapshot-interval-secs",
+        "impact": "medium",
+        "category": "wallet",
+        "visibility": "secondary",
+        "min": 10,
+        "max": 600,
+        "step": 5,
+        "default": 15
+      },
+      "watch_enabled": {
+        "type": "boolean",
+        "key": "config-wallet-watch-enabled",
+        "impact": "high",
+        "category": "watch",
+        "visibility": "secondary",
+        "default": true
+      },
+      "watch_high_activity_interval_secs": {
+        "type": "integer",
+        "key": "config-wallet-watch-high-activity-interval-secs",
+        "impact": "medium",
+        "category": "watch",
+        "visibility": "secondary",
+        "min": 1,
+        "max": 60,
+        "step": 1,
+        "default": 5
+      },
+      "watch_max_targets": {
+        "type": "integer",
+        "key": "config-wallet-watch-max-targets",
+        "impact": "medium",
+        "category": "watch",
+        "visibility": "secondary",
+        "min": 1,
+        "max": 50,
+        "step": 1,
+        "default": 10
+      },
+      "watch_poll_fallback_secs": {
+        "type": "integer",
+        "key": "config-wallet-watch-poll-fallback-secs",
+        "impact": "medium",
+        "category": "watch",
+        "visibility": "secondary",
+        "min": 1,
+        "max": 60,
+        "step": 1,
+        "default": 3
+      },
+      "watch_poll_interval_secs": {
+        "type": "integer",
+        "key": "config-wallet-watch-poll-interval-secs",
+        "impact": "medium",
+        "category": "watch",
+        "visibility": "secondary",
+        "min": 5,
+        "max": 300,
+        "step": 5,
+        "default": 30
+      },
+      "watch_retention_days": {
+        "type": "integer",
+        "key": "config-wallet-watch-retention-days",
+        "impact": "low",
+        "category": "watch",
+        "visibility": "secondary",
+        "min": 1,
+        "max": 365,
+        "step": 1,
+        "default": 30
+      }
+    },
+    "webserver": {
+      "auth_custom_title": {
+        "type": "string",
+        "key": "config-webserver-auth-custom-title",
+        "category": "authentication",
+        "visibility": "secondary",
+        "default": ""
+      },
+      "auth_enabled": {
+        "type": "boolean",
+        "key": "config-webserver-auth-enabled",
+        "category": "authentication",
+        "visibility": "secondary",
+        "default": false
+      },
+      "auth_session_timeout_secs": {
+        "type": "integer",
+        "key": "config-webserver-auth-session-timeout-secs",
+        "category": "authentication",
+        "visibility": "secondary",
+        "min": 0,
+        "max": 604800,
+        "step": 3600,
+        "default": 86400
+      },
+      "auth_show_logo": {
+        "type": "boolean",
+        "key": "config-webserver-auth-show-logo",
+        "category": "authentication",
+        "visibility": "secondary",
+        "default": true
+      },
+      "auth_show_name": {
+        "type": "boolean",
+        "key": "config-webserver-auth-show-name",
+        "category": "authentication",
+        "visibility": "secondary",
+        "default": true
+      },
+      "auth_totp_enabled": {
+        "type": "boolean",
+        "key": "config-webserver-auth-totp-enabled",
+        "category": "authentication",
+        "visibility": "secondary",
+        "default": false
+      },
+      "host": {
+        "type": "string",
+        "key": "config-webserver-host",
+        "category": "general",
+        "visibility": "primary",
+        "default": "127.0.0.1"
+      },
+      "port": {
+        "type": "integer",
+        "key": "config-webserver-port",
+        "category": "general",
+        "visibility": "primary",
+        "min": 1024,
+        "max": 65535,
+        "step": 1,
+        "default": 8080
+      }
+    }
+  },
+  "timestamp": "2026-10-07T09:30:00.000000+00:00"
+}

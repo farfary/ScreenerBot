@@ -1,0 +1,68 @@
+{
+  "mint": "DezXAZ8z7PnrnRJjz3wXBoRgixCa6xjnB7YaB1pPB263",
+  "monitored": true,
+  "has_data": true,
+  "total_candles": 4200,
+  "best_timeframe": "1m",
+  "backfill_complete": true,
+  "last_checked_at": 1791331200,
+  "last_new_data_at": 1791331200,
+  "timeframes": [
+    {
+      "timeframe": "1m",
+      "candles": 600,
+      "backfill_complete": true,
+      "earliest_timestamp": 1791072000,
+      "latest_timestamp": 1791331200,
+      "last_new_data_at": 1791331200
+    },
+    {
+      "timeframe": "5m",
+      "candles": 600,
+      "backfill_complete": true,
+      "earliest_timestamp": 1791072000,
+      "latest_timestamp": 1791331200,
+      "last_new_data_at": 1791331200
+    },
+    {
+      "timeframe": "15m",
+      "candles": 600,
+      "backfill_complete": true,
+      "earliest_timestamp": 1791072000,
+      "latest_timestamp": 1791331200,
+      "last_new_data_at": 1791331200
+    },
+    {
+      "timeframe": "1h",
+      "candles": 600,
+      "backfill_complete": true,
+      "earliest_timestamp": 1791072000,
+      "latest_timestamp": 1791331200,
+      "last_new_data_at": 1791331200
+    },
+    {
+      "timeframe": "4h",
+      "candles": 600,
+      "backfill_complete": true,
+      "earliest_timestamp": 1791072000,
+      "latest_timestamp": 1791331200,
+      "last_new_data_at": 1791331200
+    },
+    {
+      "timeframe": "12h",
+      "candles": 600,
+      "backfill_complete": true,
+      "earliest_timestamp": 1791072000,
+      "latest_timestamp": 1791331200,
+      "last_new_data_at": 1791331200
+    },
+    {
+      "timeframe": "1d",
+      "candles": 600,
+      "backfill_complete": true,
+      "earliest_timestamp": 1791072000,
+      "latest_timestamp": 1791331200,
+      "last_new_data_at": 1791331200
+    }
+  ]
+}

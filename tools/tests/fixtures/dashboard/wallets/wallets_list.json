@@ -1,0 +1,60 @@
+{
+  "wallets": [
+    {
+      "id": 1,
+      "name": "Trading",
+      "address": "MainWa11etAAA1111111111111111111111111111111",
+      "role": "main",
+      "wallet_type": "generated",
+      "created_at": "2026-08-14T10:20:00Z",
+      "last_used_at": "2026-10-06T21:44:12Z",
+      "notes": "Automated trading",
+      "is_active": true
+    },
+    {
+      "id": 2,
+      "name": "Tools",
+      "address": "SecondWa11etBBB11111111111111111111111111111",
+      "role": "secondary",
+      "wallet_type": "generated",
+      "created_at": "2026-09-02T08:00:00Z",
+      "last_used_at": "2026-10-03T14:10:00Z",
+      "notes": null,
+      "is_active": true
+    },
+    {
+      "id": 3,
+      "name": "Manual buys",
+      "address": "SecondWa11etCCC11111111111111111111111111111",
+      "role": "secondary",
+      "wallet_type": "imported",
+      "created_at": "2026-09-11T19:45:00Z",
+      "last_used_at": null,
+      "notes": "Manual entries",
+      "is_active": true
+    },
+    {
+      "id": 4,
+      "name": "Old desk",
+      "address": "ArchiveWa11etDDD1111111111111111111111111111",
+      "role": "archive",
+      "wallet_type": "migrated",
+      "created_at": "2026-06-01T12:00:00Z",
+      "last_used_at": "2026-07-20T09:30:00Z",
+      "notes": null,
+      "is_active": false
+    },
+    {
+      "id": 5,
+      "name": "Airdrop test",
+      "address": "ArchiveWa11etEEE1111111111111111111111111111",
+      "role": "archive",
+      "wallet_type": "generated",
+      "created_at": "2026-07-05T16:00:00Z",
+      "last_used_at": null,
+      "notes": null,
+      "is_active": false
+    }
+  ],
+  "total": 5
+}

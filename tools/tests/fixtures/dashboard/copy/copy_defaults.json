@@ -1,0 +1,37 @@
+{
+  "trader_defaults": {
+    "stop_loss": {
+      "enabled": true,
+      "threshold_pct": 40,
+      "min_hold_seconds": 120,
+      "allow_partial": false,
+      "partial_exit_default_pct": 50
+    },
+    "trailing": {
+      "enabled": true,
+      "activation_pct": 30,
+      "distance_pct": 15
+    },
+    "roi": {
+      "enabled": false,
+      "target_profit_pct": 100
+    },
+    "time": {
+      "enabled": false,
+      "loss_threshold_pct": -10,
+      "duration_seconds": 86400
+    }
+  },
+  "require_filter_pass": true,
+  "default_slippage_pct": 2,
+  "min_slippage_pct": 0.1,
+  "max_slippage_pct": 50,
+  "min_trade_size_native": 0.001,
+  "swap_fee_pct": 0.5,
+  "max_active_tasks": 10,
+  "latency_kill_switch_enabled": true,
+  "max_arrival_distance_ms": 4000,
+  "latency_window_size": 10,
+  "readiness_min_closed_rounds": 10,
+  "live_confirmation": "ARM LIVE COPY TRADING"
+}

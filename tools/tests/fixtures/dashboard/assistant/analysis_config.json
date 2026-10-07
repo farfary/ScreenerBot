@@ -1,0 +1,17 @@
+{
+  "filtering_enabled": true,
+  "filtering_min_confidence": 70,
+  "filtering_fallback_pass": false,
+  "filtering_use_cache": true,
+  "entry_analysis_enabled": true,
+  "exit_analysis_enabled": false,
+  "ai_trailing_stop_enabled": false,
+  "trading_bypass_cache": false,
+  "auto_blacklist_enabled": true,
+  "auto_blacklist_min_confidence": 30,
+  "background_check_enabled": false,
+  "background_check_interval_seconds": 300,
+  "background_batch_size": 10,
+  "max_evaluations_per_minute": 5,
+  "cache_ttl_seconds": 300
+}

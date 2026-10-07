@@ -1,0 +1,139 @@
+{
+  "stats": [
+    {
+      "reason": "dex_liq_low",
+      "reason_text": { "id": "filtering-reject-dex-liq-low" },
+      "source": "dexscreener",
+      "count": 1840,
+      "category": "liquidity",
+      "category_text": { "id": "filtering-reject-category-liquidity" },
+      "percentage": 0
+    },
+    {
+      "reason": "rug_top_holder",
+      "reason_text": { "id": "filtering-reject-rug-top-holder" },
+      "source": "rugcheck",
+      "count": 1215,
+      "category": "distribution",
+      "category_text": { "id": "filtering-reject-category-distribution" },
+      "percentage": 0
+    },
+    {
+      "reason": "token_too_new",
+      "reason_text": { "id": "filtering-reject-token-too-new" },
+      "source": "core",
+      "count": 960,
+      "category": "timing",
+      "category_text": { "id": "filtering-reject-category-timing" },
+      "percentage": 0
+    },
+    {
+      "reason": "rug_score",
+      "reason_text": { "id": "filtering-reject-rug-score" },
+      "source": "rugcheck",
+      "count": 742,
+      "category": "security",
+      "category_text": { "id": "filtering-reject-category-security" },
+      "percentage": 0
+    },
+    {
+      "reason": "dex_mcap_low",
+      "reason_text": { "id": "filtering-reject-dex-mcap-low" },
+      "source": "dexscreener",
+      "count": 615,
+      "category": "market_cap",
+      "category_text": { "id": "filtering-reject-category-market-cap" },
+      "percentage": 0
+    },
+    {
+      "reason": "gecko_vol24h_low",
+      "reason_text": { "id": "filtering-reject-gecko-vol24h-low" },
+      "source": "geckoterminal",
+      "count": 488,
+      "category": "volume",
+      "category_text": { "id": "filtering-reject-category-volume" },
+      "percentage": 0
+    },
+    {
+      "reason": "rug_mint_authority",
+      "reason_text": { "id": "filtering-reject-rug-mint-authority" },
+      "source": "rugcheck",
+      "count": 356,
+      "category": "security",
+      "category_text": { "id": "filtering-reject-category-security" },
+      "percentage": 0
+    },
+    {
+      "reason": "dex_txn_1h",
+      "reason_text": { "id": "filtering-reject-dex-txn-1h" },
+      "source": "dexscreener",
+      "count": 301,
+      "category": "activity",
+      "category_text": { "id": "filtering-reject-category-activity" },
+      "percentage": 0
+    },
+    {
+      "reason": "onchain_numeric_symbol",
+      "reason_text": { "id": "filtering-reject-onchain-numeric-symbol" },
+      "source": "onchain",
+      "count": 214,
+      "category": "other",
+      "category_text": { "id": "filtering-reject-category-other" },
+      "percentage": 0
+    },
+    {
+      "reason": "rug_insider_count",
+      "reason_text": { "id": "filtering-reject-rug-insider-count" },
+      "source": "rugcheck",
+      "count": 187,
+      "category": "distribution",
+      "category_text": { "id": "filtering-reject-category-distribution" },
+      "percentage": 0
+    },
+    {
+      "reason": "dex_data_missing",
+      "reason_text": { "id": "filtering-reject-dex-data-missing" },
+      "source": "dexscreener",
+      "count": 142,
+      "category": "data_quality",
+      "category_text": { "id": "filtering-reject-category-data-quality" },
+      "percentage": 0
+    },
+    {
+      "reason": "rug_freeze_authority",
+      "reason_text": { "id": "filtering-reject-rug-freeze-authority" },
+      "source": "rugcheck",
+      "count": 96,
+      "category": "security",
+      "category_text": { "id": "filtering-reject-category-security" },
+      "percentage": 0
+    },
+    {
+      "reason": "cooldown_filtered",
+      "reason_text": { "id": "filtering-reject-cooldown-filtered" },
+      "source": "core",
+      "count": 73,
+      "category": "timing",
+      "category_text": { "id": "filtering-reject-category-timing" },
+      "percentage": 0
+    },
+    {
+      "reason": "no_decimals",
+      "reason_text": { "id": "filtering-reject-no-decimals" },
+      "source": "core",
+      "count": 18,
+      "category": "data_quality",
+      "category_text": { "id": "filtering-reject-category-data-quality" },
+      "percentage": 0
+    }
+  ],
+  "by_source": {
+    "dexscreener": 2898,
+    "rugcheck": 2596,
+    "core": 1051,
+    "geckoterminal": 488,
+    "onchain": 214
+  },
+  "total_rejected": 7247,
+  "timestamp": "2026-10-07T10:00:00.000000+00:00"
+}

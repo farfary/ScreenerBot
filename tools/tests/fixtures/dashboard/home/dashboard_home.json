@@ -1,0 +1,100 @@
+{
+  "trader": {
+    "today": {
+      "buys": 4,
+      "sells": 3,
+      "profit_native": 0.39,
+      "loss_native": 0.127,
+      "net_pnl_native": 0.263,
+      "drawdown_percent": 4.8,
+      "win_rate": 66.7
+    },
+    "yesterday": {
+      "buys": 5,
+      "sells": 4,
+      "profit_native": 0.12,
+      "loss_native": 0.478,
+      "net_pnl_native": -0.358,
+      "drawdown_percent": 9.2,
+      "win_rate": 25.0
+    },
+    "this_week": {
+      "buys": 27,
+      "sells": 24,
+      "profit_native": 2.72,
+      "loss_native": 1.258,
+      "net_pnl_native": 1.462,
+      "drawdown_percent": 11.4,
+      "win_rate": 62.5
+    },
+    "this_month": {
+      "buys": 96,
+      "sells": 91,
+      "profit_native": 9.84,
+      "loss_native": 5.912,
+      "net_pnl_native": 3.928,
+      "drawdown_percent": 14.1,
+      "win_rate": 58.2
+    },
+    "all_time": {
+      "buys": 412,
+      "sells": 398,
+      "profit_native": 41.37,
+      "loss_native": 27.65,
+      "net_pnl_native": 13.72,
+      "drawdown_percent": 18.6,
+      "win_rate": 56.8
+    }
+  },
+  "wallet": {
+    "wallet_address": "SynthHomeWa11et7xQ9vR2mK4pT8nB3cF6hJ1dEgYz",
+    "current_balance_native": 36.4821,
+    "token_count": 7,
+    "tokens_worth_native": 5.8276,
+    "total_equity_native": 42.3097,
+    "unpriced_token_count": 1,
+    "start_of_day_balance_native": 42.0214,
+    "change_native": 0.2883,
+    "change_percent": 0.686,
+    "native_price_usd": 152.34,
+    "balance_history": [40.12, 40.48, 40.31, 40.86, 41.2, 41.05, 41.14, 41.62, 42.38, 42.02, 42.31]
+  },
+  "positions": {
+    "open_count": 5,
+    "total_invested_native": 5.5,
+    "unrealized_pnl_native": 0.3276,
+    "unrealized_pnl_percent": 5.96,
+    "avg_position_size_native": 1.1,
+    "avg_hold_duration_mins": 137,
+    "best_performer": { "symbol": "BONK", "pnl_percent": 24.6 },
+    "worst_performer": { "symbol": "WIF", "pnl_percent": -8.3 },
+    "dca_count": 2
+  },
+  "system": {
+    "uptime_seconds": 18342,
+    "uptime_formatted": "5h 5m 42s",
+    "memory_mb": 612.4,
+    "memory_percent": 3.74,
+    "cpu_percent": 6.2,
+    "rpc_calls_per_min": 184.0,
+    "rpc_success_rate": 99.6,
+    "websocket_connected": true,
+    "services_healthy": 4,
+    "services_total": 4
+  },
+  "tokens": {
+    "snapshot_state": "ready",
+    "total_in_database": 18452,
+    "with_prices": 6213,
+    "passed_filters": 142,
+    "rejected_filters": 17938,
+    "blacklisted": 372,
+    "with_ohlcv": 2481,
+    "found_today": 0,
+    "found_this_week": 0,
+    "found_this_month": 0,
+    "found_all_time": 18452
+  },
+  "trader_status": { "running": true },
+  "timestamp": "2026-10-07T09:30:00+00:00"
+}

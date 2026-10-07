@@ -1,0 +1,144 @@
+{
+  "signature": "5Synth5uqdh3DhVVh35Hu7q51Xs91jqmDH1dXfXTfFh9s5TMmouhoKh5sMqFM53TP3Hh3mTd7qKs11M9o1oTjHFb",
+  "slot": 318420000,
+  "block_time": 1791330300,
+  "timestamp": "2026-10-06T23:45:00.000Z",
+  "status": "Finalized",
+  "transaction_type": {
+    "SwapSolToToken": {
+      "token_mint": "DezXAZ8z7PnrnRJjz3wXBoRgixCa6xjnB7YaB1pPB263",
+      "sol_amount": 0.5,
+      "token_amount": 4166666.66,
+      "router": "jupiter"
+    }
+  },
+  "direction": "Outgoing",
+  "success": true,
+  "error_message": null,
+  "fee_sol": 0.000105,
+  "fee_raw": 105000,
+  "compute_units_consumed": 182340,
+  "instructions_count": 6,
+  "accounts_count": 24,
+  "sol_balance_change": -0.5021,
+  "token_transfers": [
+    {
+      "mint": "DezXAZ8z7PnrnRJjz3wXBoRgixCa6xjnB7YaB1pPB263",
+      "amount": 4166666.66,
+      "from": "Wa11et1mHwm5Hq1Mh5o1yFuy5VsH9TmPBVZPRmqwZ7m7",
+      "to": "Wa11etyFo9Ku59FjyDHmR5Hj3BjqfF7qTjZBsD9Bm7Rs",
+      "program_id": "TokenkegQfeZyiNwAJbNbGKPFXCWuBvf9Ss623VQ5DA"
+    }
+  ],
+  "raw_transaction_data": null,
+  "log_messages": [
+    "Program JUP6LkbZbjS1jKKwapdHNy74zcZ3tLUZoi5QNyVTaV4 invoke [1]",
+    "Program TokenkegQfeZyiNwAJbNbGKPFXCWuBvf9Ss623VQ5DA invoke [2]",
+    "Program log: Instruction: Transfer",
+    "Program TokenkegQfeZyiNwAJbNbGKPFXCWuBvf9Ss623VQ5DA success",
+    "Program JUP6LkbZbjS1jKKwapdHNy74zcZ3tLUZoi5QNyVTaV4 success"
+  ],
+  "instructions": [
+    {
+      "program_id": "ComputeBudget111111111111111111111111111111",
+      "instruction_type": "SetComputeUnitLimit",
+      "accounts": [],
+      "data": null
+    },
+    {
+      "program_id": "JUP6LkbZbjS1jKKwapdHNy74zcZ3tLUZoi5QNyVTaV4",
+      "instruction_type": "Route",
+      "accounts": [
+        "Wa11etyFo9Ku59FjyDHmR5Hj3BjqfF7qTjZBsD9Bm7Rs",
+        "Wa11et1mHwm5Hq1Mh5o1yFuy5VsH9TmPBVZPRmqwZ7m7"
+      ],
+      "data": null
+    }
+  ],
+  "instruction_info": [
+    {
+      "program_id": "JUP6LkbZbjS1jKKwapdHNy74zcZ3tLUZoi5QNyVTaV4",
+      "instruction_type": "Route",
+      "accounts": [
+        "Wa11etyFo9Ku59FjyDHmR5Hj3BjqfF7qTjZBsD9Bm7Rs",
+        "Wa11et1mHwm5Hq1Mh5o1yFuy5VsH9TmPBVZPRmqwZ7m7"
+      ],
+      "data": null
+    }
+  ],
+  "sol_balance_changes": [
+    {
+      "account": "Wa11etyFo9Ku59FjyDHmR5Hj3BjqfF7qTjZBsD9Bm7Rs",
+      "pre_balance": 4.82,
+      "post_balance": 4.3179,
+      "change": -0.5021
+    }
+  ],
+  "token_balance_changes": [
+    {
+      "mint": "DezXAZ8z7PnrnRJjz3wXBoRgixCa6xjnB7YaB1pPB263",
+      "decimals": 5,
+      "pre_balance": 0,
+      "post_balance": 4166666.66,
+      "change": 4166666.66,
+      "usd_value": 76.2
+    }
+  ],
+  "ata_operations": [
+    {
+      "operation_type": "Creation",
+      "account_address": "Wa11etTVoVoPFFoVu1qymhyTfoBM5wrK5mmjdqb99oRm",
+      "token_mint": "DezXAZ8z7PnrnRJjz3wXBoRgixCa6xjnB7YaB1pPB263",
+      "rent_amount": 0.00203928,
+      "is_wsol": false,
+      "mint": "DezXAZ8z7PnrnRJjz3wXBoRgixCa6xjnB7YaB1pPB263",
+      "rent_cost_sol": 0.00203928
+    }
+  ],
+  "token_swap_info": {
+    "mint": "DezXAZ8z7PnrnRJjz3wXBoRgixCa6xjnB7YaB1pPB263",
+    "symbol": "BONK",
+    "decimals": 5,
+    "current_price_sol": 1.3e-7,
+    "is_verified": true,
+    "router": "jupiter",
+    "swap_type": "sol_to_token",
+    "input_mint": "So11111111111111111111111111111111111111112",
+    "output_mint": "DezXAZ8z7PnrnRJjz3wXBoRgixCa6xjnB7YaB1pPB263",
+    "input_amount": 500000000,
+    "output_amount": 416666666000,
+    "input_ui_amount": 0.5,
+    "output_ui_amount": 4166666.66,
+    "pool_address": "Poo1AdmK7Rw3bdq3o1uPHD5dTPKTDV7sbDdD779uP1T1",
+    "program_id": "JUP6LkbZbjS1jKKwapdHNy74zcZ3tLUZoi5QNyVTaV4"
+  },
+  "swap_pnl_info": {
+    "token_mint": "DezXAZ8z7PnrnRJjz3wXBoRgixCa6xjnB7YaB1pPB263",
+    "token_symbol": "BONK",
+    "swap_type": "Buy",
+    "sol_amount": 0.5,
+    "token_amount": 4166666.66,
+    "calculated_price_sol": 1.20000000192e-7,
+    "timestamp": "2026-10-06T23:45:00.000Z",
+    "signature": "5Synth5uqdh3DhVVh35Hu7q51Xs91jqmDH1dXfXTfFh9s5TMmouhoKh5sMqFM53TP3Hh3mTd7qKs11M9o1oTjHFb",
+    "router": "jupiter",
+    "fee_sol": 0.000105,
+    "ata_rents": 0.00203928,
+    "effective_sol_spent": 0.500105,
+    "effective_sol_received": 0,
+    "ata_created_count": 1,
+    "ata_closed_count": 0,
+    "slot": 318420000,
+    "status": "Success",
+    "sol_spent": 0.5,
+    "sol_received": 0,
+    "tokens_bought": 4166666.66,
+    "tokens_sold": 0,
+    "net_sol_change": -0.5021,
+    "estimated_token_value_sol": null,
+    "estimated_pnl_sol": null,
+    "fees_paid_sol": 0.000105
+  },
+  "analysis_duration_ms": 42,
+  "last_updated": "2026-10-06T23:45:00.000Z"
+}

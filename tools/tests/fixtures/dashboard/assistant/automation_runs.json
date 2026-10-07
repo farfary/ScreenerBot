@@ -1,0 +1,49 @@
+{
+  "runs": [
+    {
+      "id": 412,
+      "task_id": 2,
+      "status": "success",
+      "started_at": "2026-10-07T05:00:02Z",
+      "completed_at": "2026-10-07T05:00:08.240Z",
+      "duration_ms": 6240,
+      "ai_response": "One position (WIF) is within 10% of its stop loss.",
+      "tool_calls": "[{\"tool_name\":\"get_open_positions\",\"status\":\"executed\"}]",
+      "tokens_used": 1840,
+      "provider": "openai",
+      "model": "gpt-4o-mini",
+      "error_message": null,
+      "session_id": null
+    },
+    {
+      "id": 411,
+      "task_id": 2,
+      "status": "failed",
+      "started_at": "2026-10-07T04:00:01Z",
+      "completed_at": "2026-10-07T04:00:31.000Z",
+      "duration_ms": 30000,
+      "ai_response": null,
+      "tool_calls": null,
+      "tokens_used": null,
+      "provider": "openai",
+      "model": "gpt-4o-mini",
+      "error_message": "The provider did not answer within the timeout.",
+      "session_id": null
+    },
+    {
+      "id": 410,
+      "task_id": 1,
+      "status": "success",
+      "started_at": "2026-10-06T08:00:04Z",
+      "completed_at": "2026-10-06T08:00:15.820Z",
+      "duration_ms": 11820,
+      "ai_response": "Three open positions, overnight realized P&L +0.21 SOL.",
+      "tool_calls": null,
+      "tokens_used": 2610,
+      "provider": "groq",
+      "model": "llama-3.3-70b-versatile",
+      "error_message": null,
+      "session_id": null
+    }
+  ]
+}

@@ -1,0 +1,12 @@
+{
+  "tokens": [],
+  "total_count": 0,
+  "stats": {
+    "total_tokens": 0,
+    "active_tokens": 0,
+    "total_candles": 0,
+    "total_gaps": 0,
+    "total_pools": 0,
+    "database_size_mb": 0
+  }
+}

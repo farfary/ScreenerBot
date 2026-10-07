@@ -1,0 +1,189 @@
+{
+  "actions": [
+    {
+      "id": "3f1c2a9e-7b4d-4e21-9a0c-5d8e1f2a3b01",
+      "action_type": "position_close",
+      "entity_id": "EKpQGSJtjMFqKZ9KQanSqYXRcF8fBopzLHYxdM65zcjm",
+      "state": { "status": "completed" },
+      "steps": [
+        {
+          "step_id": "3f1c2a9e-7b4d-4e21-9a0c-5d8e1f2a3b01-step-0",
+          "name": "evaluate",
+          "status": "completed",
+          "started_at": "2026-10-07T09:12:00.100Z",
+          "completed_at": "2026-10-07T09:12:00.900Z",
+          "error": null,
+          "metadata": {}
+        },
+        {
+          "step_id": "3f1c2a9e-7b4d-4e21-9a0c-5d8e1f2a3b01-step-1",
+          "name": "quote",
+          "status": "completed",
+          "started_at": "2026-10-07T09:12:01.100Z",
+          "completed_at": "2026-10-07T09:12:01.900Z",
+          "error": null,
+          "metadata": {}
+        },
+        {
+          "step_id": "3f1c2a9e-7b4d-4e21-9a0c-5d8e1f2a3b01-step-2",
+          "name": "swap",
+          "status": "completed",
+          "started_at": "2026-10-07T09:12:02.100Z",
+          "completed_at": "2026-10-07T09:12:02.900Z",
+          "error": null,
+          "metadata": {
+            "signature": "5ynthet1cSignatureAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA"
+          }
+        },
+        {
+          "step_id": "3f1c2a9e-7b4d-4e21-9a0c-5d8e1f2a3b01-step-3",
+          "name": "verify",
+          "status": "completed",
+          "started_at": "2026-10-07T09:12:03.100Z",
+          "completed_at": "2026-10-07T09:12:03.900Z",
+          "error": null,
+          "metadata": {
+            "signature": "5ynthet1cSignatureAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA",
+            "verification": "async"
+          }
+        }
+      ],
+      "current_step_index": 3,
+      "started_at": "2026-10-07T09:12:00.100Z",
+      "completed_at": "2026-10-07T09:12:03.900Z",
+      "read": false,
+      "dismissed": false,
+      "metadata": {
+        "mint": "EKpQGSJtjMFqKZ9KQanSqYXRcF8fBopzLHYxdM65zcjm",
+        "symbol": "WIF",
+        "position_id": 42,
+        "reason": "TakeProfit",
+        "operation": "auto_close"
+      }
+    },
+    {
+      "id": "3f1c2a9e-7b4d-4e21-9a0c-5d8e1f2a3b02",
+      "action_type": "position_open",
+      "entity_id": "DezXAZ8z7PnrnRJjz3wXBoRgixCa6xjnB7YaB1pPB263",
+      "state": { "status": "completed" },
+      "steps": [
+        {
+          "step_id": "3f1c2a9e-7b4d-4e21-9a0c-5d8e1f2a3b02-step-0",
+          "name": "evaluate",
+          "status": "completed",
+          "started_at": "2026-10-07T08:47:00.100Z",
+          "completed_at": "2026-10-07T08:47:00.900Z",
+          "error": null,
+          "metadata": {}
+        },
+        {
+          "step_id": "3f1c2a9e-7b4d-4e21-9a0c-5d8e1f2a3b02-step-1",
+          "name": "quote",
+          "status": "completed",
+          "started_at": "2026-10-07T08:47:01.100Z",
+          "completed_at": "2026-10-07T08:47:01.900Z",
+          "error": null,
+          "metadata": {}
+        },
+        {
+          "step_id": "3f1c2a9e-7b4d-4e21-9a0c-5d8e1f2a3b02-step-2",
+          "name": "swap",
+          "status": "completed",
+          "started_at": "2026-10-07T08:47:02.100Z",
+          "completed_at": "2026-10-07T08:47:02.900Z",
+          "error": null,
+          "metadata": {
+            "signature": "5ynthet1cSignatureBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBB"
+          }
+        },
+        {
+          "step_id": "3f1c2a9e-7b4d-4e21-9a0c-5d8e1f2a3b02-step-3",
+          "name": "verify",
+          "status": "completed",
+          "started_at": "2026-10-07T08:47:03.100Z",
+          "completed_at": "2026-10-07T08:47:03.900Z",
+          "error": null,
+          "metadata": {
+            "signature": "5ynthet1cSignatureBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBB",
+            "verification": "async"
+          }
+        }
+      ],
+      "current_step_index": 3,
+      "started_at": "2026-10-07T08:47:00.100Z",
+      "completed_at": "2026-10-07T08:47:03.900Z",
+      "read": false,
+      "dismissed": false,
+      "metadata": {
+        "mint": "DezXAZ8z7PnrnRJjz3wXBoRgixCa6xjnB7YaB1pPB263",
+        "symbol": "BONK",
+        "strategy_id": null,
+        "reason": "StrategySignal",
+        "operation": "auto_open"
+      }
+    },
+    {
+      "id": "3f1c2a9e-7b4d-4e21-9a0c-5d8e1f2a3b03",
+      "action_type": "swap_buy",
+      "entity_id": "EKpQGSJtjMFqKZ9KQanSqYXRcF8fBopzLHYxdM65zcjm",
+      "state": { "status": "completed" },
+      "steps": [
+        {
+          "step_id": "3f1c2a9e-7b4d-4e21-9a0c-5d8e1f2a3b03-step-0",
+          "name": "validate",
+          "status": "completed",
+          "started_at": "2026-10-07T07:30:00.100Z",
+          "completed_at": "2026-10-07T07:30:00.900Z",
+          "error": null,
+          "metadata": {}
+        },
+        {
+          "step_id": "3f1c2a9e-7b4d-4e21-9a0c-5d8e1f2a3b03-step-1",
+          "name": "quote",
+          "status": "completed",
+          "started_at": "2026-10-07T07:30:01.100Z",
+          "completed_at": "2026-10-07T07:30:01.900Z",
+          "error": null,
+          "metadata": {}
+        },
+        {
+          "step_id": "3f1c2a9e-7b4d-4e21-9a0c-5d8e1f2a3b03-step-2",
+          "name": "swap",
+          "status": "completed",
+          "started_at": "2026-10-07T07:30:02.100Z",
+          "completed_at": "2026-10-07T07:30:02.900Z",
+          "error": null,
+          "metadata": {
+            "signature": "5ynthet1cSignatureCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCC"
+          }
+        },
+        {
+          "step_id": "3f1c2a9e-7b4d-4e21-9a0c-5d8e1f2a3b03-step-3",
+          "name": "verify",
+          "status": "completed",
+          "started_at": "2026-10-07T07:30:03.100Z",
+          "completed_at": "2026-10-07T07:30:03.900Z",
+          "error": null,
+          "metadata": {
+            "signature": "5ynthet1cSignatureCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCC",
+            "verification": "async"
+          }
+        }
+      ],
+      "current_step_index": 3,
+      "started_at": "2026-10-07T07:30:00.100Z",
+      "completed_at": "2026-10-07T07:30:03.900Z",
+      "read": true,
+      "dismissed": false,
+      "metadata": {
+        "mint": "EKpQGSJtjMFqKZ9KQanSqYXRcF8fBopzLHYxdM65zcjm",
+        "symbol": "WIF",
+        "size_sol": 0.25,
+        "operation": "manual_buy"
+      }
+    }
+  ],
+  "total": 3,
+  "limit": 30,
+  "offset": 0
+}

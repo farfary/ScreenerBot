@@ -1,0 +1,22 @@
+{
+  "tasks": [
+    {
+      "task_id": 1,
+      "name": "Momentum desk",
+      "target_address": "CopyTargetAAA1111111111111111111111111111111",
+      "mode": "paper",
+      "enabled": true,
+      "rounds": 0,
+      "wins": 0,
+      "win_rate_pct": null,
+      "realized_pnl_native": 0,
+      "profit_factor": null,
+      "average_hold_seconds": null,
+      "arrival_median_ms": null,
+      "slippage_median_pct": null,
+      "fills": 0,
+      "skips": 0,
+      "pnl_curve": []
+    }
+  ]
+}

@@ -1,0 +1,60 @@
+{
+  "targets": [
+    {
+      "id": 1,
+      "address": "CopyTargetAAA1111111111111111111111111111111",
+      "label": "Momentum desk",
+      "sources": [
+        {
+          "kind": "copy",
+          "task_id": 1
+        }
+      ],
+      "enabled": true,
+      "page_budget": 5,
+      "high_activity_approved": false,
+      "disable_reason": null,
+      "created_at": "2026-09-28T09:15:00Z",
+      "updated_at": "2026-09-28T09:15:00Z"
+    },
+    {
+      "id": 2,
+      "address": "WatchTargetGGG111111111111111111111111111111",
+      "label": "Market maker",
+      "sources": [
+        {
+          "kind": "alert",
+          "rule_id": 2
+        }
+      ],
+      "enabled": true,
+      "page_budget": 5,
+      "high_activity_approved": false,
+      "disable_reason": null,
+      "created_at": "2026-09-25T13:00:00Z",
+      "updated_at": "2026-09-25T13:00:00Z"
+    },
+    {
+      "id": 3,
+      "address": "WatchTargetHHH111111111111111111111111111111",
+      "label": null,
+      "sources": [
+        {
+          "kind": "alert",
+          "rule_id": 3
+        }
+      ],
+      "enabled": false,
+      "page_budget": 5,
+      "high_activity_approved": false,
+      "disable_reason": {
+        "kind": "signature_budget",
+        "page_budget": 5,
+        "signatures_checked": 500
+      },
+      "created_at": "2026-09-21T07:40:00Z",
+      "updated_at": "2026-10-05T03:12:00Z"
+    }
+  ],
+  "total": 3
+}

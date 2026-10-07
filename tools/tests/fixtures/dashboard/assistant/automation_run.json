@@ -1,0 +1,17 @@
+{
+  "run": {
+    "id": 412,
+    "task_id": 2,
+    "status": "success",
+    "started_at": "2026-10-07T05:00:02Z",
+    "completed_at": "2026-10-07T05:00:08.240Z",
+    "duration_ms": 6240,
+    "ai_response": "One position (WIF) is within 10% of its stop loss.",
+    "tool_calls": "[{\"tool_name\":\"get_open_positions\",\"status\":\"executed\"}]",
+    "tokens_used": 1840,
+    "provider": "openai",
+    "model": "gpt-4o-mini",
+    "error_message": null,
+    "session_id": null
+  }
+}

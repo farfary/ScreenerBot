@@ -1,0 +1,18 @@
+{
+  "total": 7,
+  "success_count": 6,
+  "failed_count": 1,
+  "pending_global": 0,
+  "pending_local": 0,
+  "deferred_count": 0,
+  "success_rate": 85.71428571428571,
+  "failure_rate": 14.285714285714285,
+  "newest_known_signature": "5Synth5uqdh3DhVVh35Hu7q51Xs91jqmDH1dXfXTfFh9s5TMmouhoKh5sMqFM53TP3Hh3mTd7qKs11M9o1oTjHFb",
+  "oldest_known_signature": "5Synth5VyZZ5bmobM9PmsZhM7qhMRmyRZboWjqZyos9fjKFmMqfB39fjPhdq1hThBVToFmBhoFKBuR9ZRBo1dh3s",
+  "db_size_mb": 3.2,
+  "db_schema_version": 9,
+  "bootstrap_state": {
+    "backfill_cursor": null,
+    "full_history_completed": true
+  }
+}

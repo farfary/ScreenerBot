@@ -1,0 +1,211 @@
+{
+  "id": 1,
+  "chain": "solana",
+  "target_address": "CopyTargetAAA1111111111111111111111111111111",
+  "label": "Momentum desk",
+  "enabled": true,
+  "mode": "paper",
+  "sizing": {
+    "kind": "fixed",
+    "sol": 0.1
+  },
+  "exit_mode": "hybrid",
+  "exit_policy_overrides": {
+    "stop_loss": {
+      "enabled": null,
+      "threshold_pct": null,
+      "min_hold_seconds": null,
+      "allow_partial": null,
+      "partial_exit_default_pct": null
+    },
+    "trailing": {
+      "enabled": null,
+      "activation_pct": null,
+      "distance_pct": null
+    },
+    "roi": {
+      "enabled": null,
+      "target_profit_pct": null
+    },
+    "time": {
+      "enabled": null,
+      "loss_threshold_pct": null,
+      "duration_seconds": null
+    }
+  },
+  "max_native_per_trade": 0.2,
+  "max_native_per_token": 0.5,
+  "total_budget_native": 5,
+  "min_target_trade_native": null,
+  "max_target_trade_native": null,
+  "buy_once_per_token": true,
+  "slippage_pct": 2,
+  "created_at": "2026-10-06T21:00:00Z",
+  "updated_at": "2026-10-06T21:00:00Z",
+  "require_filter_pass": null,
+  "pause_reason": null,
+  "paused_at": null,
+  "stats": {
+    "task_id": 1,
+    "decisions": 0,
+    "filled_buys": 0,
+    "target_sells": 0,
+    "policy_exits": 0,
+    "manual_closes": 0,
+    "wins": 0,
+    "losses": 0,
+    "skipped": 0,
+    "submitted": 0,
+    "failed": 0,
+    "open_positions": 0,
+    "closed_positions": 0,
+    "realized_pnl_native": 0,
+    "unrealized_pnl_native": 0,
+    "book": "paper",
+    "unpriced_positions": 0,
+    "arrival_distance": {
+      "samples": 0,
+      "minimum_ms": null,
+      "median_ms": null,
+      "p95_ms": null,
+      "maximum_ms": null,
+      "average_ms": null
+    }
+  },
+  "spent_native": 0,
+  "remaining_budget_native": 5,
+  "effective_state": "paper",
+  "effective_require_filter_pass": true,
+  "pnl_trend": [],
+  "pause_text": null,
+  "trader_defaults": {
+    "stop_loss": {
+      "enabled": true,
+      "threshold_pct": 40,
+      "min_hold_seconds": 120,
+      "allow_partial": false,
+      "partial_exit_default_pct": 50
+    },
+    "trailing": {
+      "enabled": true,
+      "activation_pct": 30,
+      "distance_pct": 15
+    },
+    "roi": {
+      "enabled": false,
+      "target_profit_pct": 100
+    },
+    "time": {
+      "enabled": false,
+      "loss_threshold_pct": -10,
+      "duration_seconds": 86400
+    }
+  },
+  "effective_policy": {
+    "stop_loss": {
+      "enabled": true,
+      "threshold_pct": 40,
+      "min_hold_seconds": 120,
+      "allow_partial": false,
+      "partial_exit_default_pct": 50
+    },
+    "trailing": {
+      "enabled": true,
+      "activation_pct": 30,
+      "distance_pct": 15
+    },
+    "roi": {
+      "enabled": false,
+      "target_profit_pct": 100
+    },
+    "time": {
+      "enabled": false,
+      "loss_threshold_pct": -10,
+      "duration_seconds": 86400
+    }
+  },
+  "live_remaining_budget_native": 5,
+  "policy_manages_exits": true,
+  "global_require_filter_pass": true,
+  "paper_holdings": [],
+  "readiness": {
+    "ready": false,
+    "checks": [
+      {
+        "id": "history",
+        "text": {
+          "id": "copy-readiness-history"
+        },
+        "passed": false,
+        "detail": {
+          "id": "copy-readiness-history-short",
+          "args": {
+            "count": {
+              "type": "count",
+              "value": 0
+            },
+            "needed": {
+              "type": "count",
+              "value": 10
+            }
+          }
+        }
+      },
+      {
+        "id": "profit",
+        "text": {
+          "id": "copy-readiness-profit"
+        },
+        "passed": false,
+        "detail": {
+          "id": "copy-readiness-profit-detail",
+          "args": {
+            "count": {
+              "type": "count",
+              "value": 0
+            },
+            "realized": {
+              "type": "text",
+              "value": "0.0000"
+            },
+            "wins": {
+              "type": "count",
+              "value": 0
+            }
+          }
+        }
+      },
+      {
+        "id": "latency",
+        "text": {
+          "id": "copy-readiness-latency"
+        },
+        "passed": false,
+        "detail": {
+          "id": "copy-readiness-latency-none"
+        }
+      },
+      {
+        "id": "priced",
+        "text": {
+          "id": "copy-readiness-priced"
+        },
+        "passed": true,
+        "detail": {
+          "id": "copy-readiness-priced-ok"
+        }
+      },
+      {
+        "id": "runtime",
+        "text": {
+          "id": "copy-readiness-runtime"
+        },
+        "passed": true,
+        "detail": {
+          "id": "copy-readiness-runtime-ok"
+        }
+      }
+    ]
+  },
+  "activity": []
+}

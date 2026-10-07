@@ -26,6 +26,8 @@
     "lint:i18n": "node tools/i18n/audit.mjs",
     "lint:headers": "node tools/header_check.mjs",
     "test:js": "node --test tools/tests/*.test.mjs",
+    "test:dashboard": "node --test tools/tests/dashboard_stability.test.mjs",
+    "record:dashboard": "node tools/record_dashboard_fixtures.mjs",
     "lint": "npm run lint:js && npm run lint:css && npm run lint:html && npm run lint:ui-contract && npm run lint:i18n && npm run lint:headers",
     "format:js": "prettier --write 'src/webserver/templates/**/*.js'",
     "format:css": "prettier --write 'src/webserver/templates/**/*.css'",

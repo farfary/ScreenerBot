@@ -1,0 +1,458 @@
+{
+  "data": {
+    "trader": {
+      "dca_cooldown_minutes": {
+        "type": "integer",
+        "key": "config-trader-dca-cooldown-minutes",
+        "impact": "medium",
+        "category": "dca",
+        "visibility": "primary",
+        "min": 1,
+        "max": 1440,
+        "step": 5,
+        "default": 30
+      },
+      "dca_enabled": {
+        "type": "boolean",
+        "key": "config-trader-dca-enabled",
+        "impact": "high",
+        "category": "dca",
+        "visibility": "primary",
+        "default": false
+      },
+      "dca_max_count": {
+        "type": "integer",
+        "key": "config-trader-dca-max-count",
+        "impact": "critical",
+        "category": "dca",
+        "visibility": "primary",
+        "min": 1,
+        "max": 5,
+        "step": 1,
+        "default": 2
+      },
+      "dca_size_percentage": {
+        "type": "number",
+        "key": "config-trader-dca-size-percentage",
+        "impact": "high",
+        "category": "dca",
+        "visibility": "primary",
+        "min": 10,
+        "max": 200,
+        "step": 10,
+        "default": 50
+      },
+      "dca_threshold_pct": {
+        "type": "number",
+        "key": "config-trader-dca-threshold-pct",
+        "impact": "high",
+        "category": "dca",
+        "visibility": "primary",
+        "min": -100,
+        "max": 0,
+        "step": 1,
+        "default": -10
+      },
+      "enabled": {
+        "type": "boolean",
+        "key": "config-trader-enabled",
+        "impact": "critical",
+        "category": "core-trading",
+        "visibility": "primary",
+        "default": false
+      },
+      "entry_check_concurrency": {
+        "type": "integer",
+        "key": "config-trader-entry-check-concurrency",
+        "impact": "medium",
+        "category": "performance",
+        "visibility": "secondary",
+        "min": 1,
+        "max": 50,
+        "step": 1,
+        "default": 10
+      },
+      "entry_monitor_enabled": {
+        "type": "boolean",
+        "key": "config-trader-entry-monitor-enabled",
+        "impact": "critical",
+        "category": "monitor-control",
+        "visibility": "secondary",
+        "default": true
+      },
+      "entry_sizes": {
+        "type": "array",
+        "key": "config-trader-entry-sizes",
+        "item_type": "number",
+        "impact": "medium",
+        "category": "core-trading",
+        "visibility": "primary",
+        "default": [0.005, 0.01, 0.02, 0.05]
+      },
+      "exit_monitor_enabled": {
+        "type": "boolean",
+        "key": "config-trader-exit-monitor-enabled",
+        "impact": "critical",
+        "category": "monitor-control",
+        "visibility": "secondary",
+        "default": true
+      },
+      "loss_limit_auto_resume": {
+        "type": "boolean",
+        "key": "config-trader-loss-limit-auto-resume",
+        "impact": "medium",
+        "category": "loss-limit",
+        "visibility": "secondary",
+        "default": true
+      },
+      "loss_limit_enabled": {
+        "type": "boolean",
+        "key": "config-trader-loss-limit-enabled",
+        "impact": "high",
+        "category": "loss-limit",
+        "visibility": "secondary",
+        "default": false
+      },
+      "loss_limit_period_hours": {
+        "type": "integer",
+        "key": "config-trader-loss-limit-period-hours",
+        "impact": "high",
+        "category": "loss-limit",
+        "visibility": "secondary",
+        "min": 1,
+        "max": 168,
+        "step": 1,
+        "default": 24
+      },
+      "loss_limit_sol": {
+        "type": "number",
+        "key": "config-trader-loss-limit-sol",
+        "impact": "critical",
+        "category": "loss-limit",
+        "visibility": "secondary",
+        "min": 0.001,
+        "max": 100,
+        "step": 0.01,
+        "default": 0.1
+      },
+      "max_open_positions": {
+        "type": "integer",
+        "key": "config-trader-max-open-positions",
+        "impact": "critical",
+        "category": "core-trading",
+        "visibility": "primary",
+        "min": 1,
+        "max": 100,
+        "default": 2
+      },
+      "position_close_cooldown_minutes": {
+        "type": "integer",
+        "key": "config-trader-position-close-cooldown-minutes",
+        "impact": "critical",
+        "category": "timing",
+        "visibility": "secondary",
+        "min": 0,
+        "max": 1440,
+        "step": 5,
+        "default": 15
+      },
+      "roi_exit_enabled": {
+        "type": "boolean",
+        "key": "config-trader-roi-exit-enabled",
+        "impact": "high",
+        "category": "roi-exit",
+        "visibility": "primary",
+        "default": true
+      },
+      "roi_target_percent": {
+        "type": "number",
+        "key": "config-trader-roi-target-percent",
+        "impact": "high",
+        "category": "roi-exit",
+        "visibility": "primary",
+        "min": 1,
+        "max": 1000,
+        "step": 1,
+        "default": 20
+      },
+      "sell_concurrency": {
+        "type": "integer",
+        "key": "config-trader-sell-concurrency",
+        "impact": "medium",
+        "category": "performance",
+        "visibility": "secondary",
+        "min": 1,
+        "max": 20,
+        "step": 1,
+        "default": 5
+      },
+      "slippage": {
+        "type": "object",
+        "key": "config-trader-slippage",
+        "impact": "critical",
+        "category": "slippage",
+        "visibility": "primary",
+        "default": {
+          "quote_default_pct": 1,
+          "exit_profit_shortfall_pct": 3,
+          "exit_loss_shortfall_pct": 5,
+          "exit_retry_steps_pct": [3, 10, 25]
+        },
+        "children": {
+          "exit_loss_shortfall_pct": {
+            "type": "number",
+            "key": "config-trader-slippage-exit-loss-shortfall-pct",
+            "impact": "high",
+            "category": "exit",
+            "visibility": "secondary",
+            "min": 0,
+            "max": 50,
+            "step": 1,
+            "default": 5
+          },
+          "exit_profit_shortfall_pct": {
+            "type": "number",
+            "key": "config-trader-slippage-exit-profit-shortfall-pct",
+            "impact": "high",
+            "category": "exit",
+            "visibility": "secondary",
+            "min": 0,
+            "max": 50,
+            "step": 1,
+            "default": 3
+          },
+          "exit_retry_steps_pct": {
+            "type": "array",
+            "key": "config-trader-slippage-exit-retry-steps-pct",
+            "item_type": "number",
+            "impact": "medium",
+            "category": "exit",
+            "visibility": "secondary",
+            "default": [3, 10, 25]
+          },
+          "quote_default_pct": {
+            "type": "number",
+            "key": "config-trader-slippage-quote-default-pct",
+            "impact": "high",
+            "category": "quote",
+            "visibility": "secondary",
+            "min": 0.1,
+            "max": 25,
+            "step": 0.1,
+            "default": 1
+          }
+        }
+      },
+      "stop_loss_allow_partial": {
+        "type": "boolean",
+        "key": "config-trader-stop-loss-allow-partial",
+        "impact": "medium",
+        "category": "stop-loss",
+        "visibility": "secondary",
+        "default": false
+      },
+      "stop_loss_enabled": {
+        "type": "boolean",
+        "key": "config-trader-stop-loss-enabled",
+        "impact": "high",
+        "category": "stop-loss",
+        "visibility": "secondary",
+        "default": false
+      },
+      "stop_loss_min_hold_seconds": {
+        "type": "integer",
+        "key": "config-trader-stop-loss-min-hold-seconds",
+        "impact": "medium",
+        "category": "stop-loss",
+        "visibility": "secondary",
+        "min": 0,
+        "max": 86400,
+        "step": 1,
+        "default": 0
+      },
+      "stop_loss_threshold_pct": {
+        "type": "number",
+        "key": "config-trader-stop-loss-threshold-pct",
+        "impact": "critical",
+        "category": "stop-loss",
+        "visibility": "secondary",
+        "min": 1,
+        "max": 100,
+        "step": 1,
+        "default": 50
+      },
+      "time_override_duration": {
+        "type": "number",
+        "key": "config-trader-time-override-duration",
+        "impact": "critical",
+        "category": "time-override",
+        "visibility": "secondary",
+        "min": 1,
+        "max": 43200,
+        "step": 1,
+        "default": 168
+      },
+      "time_override_enabled": {
+        "type": "boolean",
+        "key": "config-trader-time-override-enabled",
+        "impact": "high",
+        "category": "time-override",
+        "visibility": "secondary",
+        "default": true
+      },
+      "time_override_loss_threshold_percent": {
+        "type": "number",
+        "key": "config-trader-time-override-loss-threshold-percent",
+        "impact": "medium",
+        "category": "time-override",
+        "visibility": "secondary",
+        "min": -100,
+        "max": 0,
+        "step": 1,
+        "default": -40
+      },
+      "time_override_unit": {
+        "type": "string",
+        "key": "config-trader-time-override-unit",
+        "impact": "critical",
+        "category": "time-override",
+        "visibility": "secondary",
+        "default": "hours"
+      },
+      "trade_size_sol": {
+        "type": "number",
+        "key": "config-trader-trade-size-sol",
+        "impact": "critical",
+        "category": "core-trading",
+        "visibility": "primary",
+        "min": 0.001,
+        "max": 10,
+        "step": 0.001,
+        "default": 0.005
+      }
+    },
+    "positions": {
+      "loss_blacklist_copy_origins": {
+        "type": "boolean",
+        "key": "config-positions-loss-blacklist-copy-origins",
+        "impact": "high",
+        "category": "loss-detection",
+        "visibility": "primary",
+        "default": false
+      },
+      "loss_blacklist_enabled": {
+        "type": "boolean",
+        "key": "config-positions-loss-blacklist-enabled",
+        "impact": "high",
+        "category": "loss-detection",
+        "visibility": "primary",
+        "default": true
+      },
+      "loss_blacklist_threshold_pct": {
+        "type": "number",
+        "key": "config-positions-loss-blacklist-threshold-pct",
+        "impact": "high",
+        "category": "loss-detection",
+        "visibility": "primary",
+        "min": -100,
+        "max": 0,
+        "step": 1,
+        "default": -15
+      },
+      "partial_exit_default_pct": {
+        "type": "number",
+        "key": "config-positions-partial-exit-default-pct",
+        "impact": "medium",
+        "category": "partial-exit",
+        "visibility": "primary",
+        "min": 10,
+        "max": 90,
+        "step": 5,
+        "default": 50
+      },
+      "partial_exit_enabled": {
+        "type": "boolean",
+        "key": "config-positions-partial-exit-enabled",
+        "impact": "high",
+        "category": "partial-exit",
+        "visibility": "primary",
+        "default": false
+      },
+      "partial_exit_max_pct": {
+        "type": "number",
+        "key": "config-positions-partial-exit-max-pct",
+        "impact": "low",
+        "category": "partial-exit",
+        "visibility": "primary",
+        "min": 50,
+        "max": 99,
+        "step": 1,
+        "default": 90
+      },
+      "partial_exit_min_pct": {
+        "type": "number",
+        "key": "config-positions-partial-exit-min-pct",
+        "impact": "low",
+        "category": "partial-exit",
+        "visibility": "primary",
+        "min": 1,
+        "max": 50,
+        "step": 1,
+        "default": 10
+      },
+      "position_open_cooldown_secs": {
+        "type": "integer",
+        "key": "config-positions-position-open-cooldown-secs",
+        "impact": "medium",
+        "category": "timing",
+        "visibility": "secondary",
+        "min": 1,
+        "max": 30,
+        "step": 1,
+        "default": 5
+      },
+      "profit_extra_needed_sol": {
+        "type": "number",
+        "key": "config-positions-profit-extra-needed-sol",
+        "impact": "high",
+        "category": "profit",
+        "visibility": "primary",
+        "min": 0,
+        "max": 0.01,
+        "step": 0.0001,
+        "default": 0.0002
+      },
+      "trailing_stop_activation_pct": {
+        "type": "number",
+        "key": "config-positions-trailing-stop-activation-pct",
+        "impact": "high",
+        "category": "trailing-stop",
+        "visibility": "primary",
+        "min": 0,
+        "max": 100,
+        "step": 1,
+        "default": 10
+      },
+      "trailing_stop_distance_pct": {
+        "type": "number",
+        "key": "config-positions-trailing-stop-distance-pct",
+        "impact": "critical",
+        "category": "trailing-stop",
+        "visibility": "primary",
+        "min": 1,
+        "max": 50,
+        "step": 1,
+        "default": 5
+      },
+      "trailing_stop_enabled": {
+        "type": "boolean",
+        "key": "config-positions-trailing-stop-enabled",
+        "impact": "high",
+        "category": "trailing-stop",
+        "visibility": "primary",
+        "default": false
+      }
+    }
+  },
+  "timestamp": "2026-10-07T10:00:00.000000+00:00"
+}

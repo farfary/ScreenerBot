@@ -1,0 +1,77 @@
+{
+  "providers": [
+    {
+      "id": "openai",
+      "name": "OpenAI",
+      "enabled": true,
+      "has_api_key": true,
+      "model": "gpt-4o-mini",
+      "rate_limit_per_minute": 60
+    },
+    {
+      "id": "anthropic",
+      "name": "Anthropic",
+      "enabled": false,
+      "has_api_key": false,
+      "model": "",
+      "rate_limit_per_minute": 50
+    },
+    {
+      "id": "groq",
+      "name": "Groq",
+      "enabled": true,
+      "has_api_key": true,
+      "model": "llama-3.3-70b-versatile",
+      "rate_limit_per_minute": 30
+    },
+    {
+      "id": "deepseek",
+      "name": "DeepSeek",
+      "enabled": false,
+      "has_api_key": false,
+      "model": "",
+      "rate_limit_per_minute": 60
+    },
+    {
+      "id": "gemini",
+      "name": "Gemini",
+      "enabled": false,
+      "has_api_key": false,
+      "model": "",
+      "rate_limit_per_minute": 60
+    },
+    {
+      "id": "ollama",
+      "name": "Ollama",
+      "enabled": false,
+      "has_api_key": false,
+      "model": "",
+      "rate_limit_per_minute": 60
+    },
+    {
+      "id": "together",
+      "name": "Together",
+      "enabled": false,
+      "has_api_key": false,
+      "model": "",
+      "rate_limit_per_minute": 60
+    },
+    {
+      "id": "openrouter",
+      "name": "OpenRouter",
+      "enabled": false,
+      "has_api_key": false,
+      "model": "",
+      "rate_limit_per_minute": 60
+    },
+    {
+      "id": "mistral",
+      "name": "Mistral",
+      "enabled": false,
+      "has_api_key": false,
+      "model": "",
+      "rate_limit_per_minute": 60
+    }
+  ],
+  "default_provider": "openai"
+}

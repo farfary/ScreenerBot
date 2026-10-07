@@ -1,0 +1,9 @@
+{
+  "enabled": false,
+  "connected": false,
+  "bot_configured": false,
+  "totp_configured": false,
+  "active_sessions": 0,
+  "commands_enabled": true,
+  "inline_actions_enabled": true
+}

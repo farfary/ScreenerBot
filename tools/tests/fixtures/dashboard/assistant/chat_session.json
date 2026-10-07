@@ -1,0 +1,44 @@
+{
+  "session": {
+    "id": 3,
+    "title": "Open positions review",
+    "summary": "Exit levels for the three open positions",
+    "message_count": 4,
+    "created_at": "2026-10-07T05:40:00Z",
+    "updated_at": "2026-10-07T05:44:30Z"
+  },
+  "messages": [
+    {
+      "id": 31,
+      "session_id": 3,
+      "role": "user",
+      "content": "Which open positions are closest to their stop loss?",
+      "tool_calls": null,
+      "created_at": "2026-10-07T05:40:05Z"
+    },
+    {
+      "id": 32,
+      "session_id": 3,
+      "role": "assistant",
+      "content": "Three positions are open. **WIF** sits 6.2% above its stop, **Bonk** 14.8% and **JUP** 21.5%. WIF is the only one inside the 10% band.",
+      "tool_calls": "[{\"tool_name\":\"get_open_positions\",\"status\":\"executed\"}]",
+      "created_at": "2026-10-07T05:40:11Z"
+    },
+    {
+      "id": 33,
+      "session_id": 3,
+      "role": "user",
+      "content": "Keep the stop on WIF where it is.",
+      "tool_calls": null,
+      "created_at": "2026-10-07T05:44:20Z"
+    },
+    {
+      "id": 34,
+      "session_id": 3,
+      "role": "assistant",
+      "content": "Understood. The WIF stop stays at its current level; no order was changed.",
+      "tool_calls": null,
+      "created_at": "2026-10-07T05:44:30Z"
+    }
+  ]
+}

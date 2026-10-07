@@ -1,0 +1,107 @@
+{
+  "address": "CopyTargetAAA1111111111111111111111111111111",
+  "own_wallet": false,
+  "watch": {
+    "label": "Momentum desk",
+    "enabled": true,
+    "sources": 1,
+    "subscribed": true,
+    "last_activity_at": "2026-10-06T21:44:12.300Z",
+    "last_error": null
+  },
+  "observations": {
+    "swaps": 184,
+    "buys": 101,
+    "sells": 83,
+    "tokens": 37,
+    "first_seen": "2026-09-28T09:16:40Z",
+    "last_seen": "2026-10-06T21:44:12Z"
+  },
+  "tasks": [
+    {
+      "task_id": 1,
+      "name": "Momentum desk",
+      "target_address": "CopyTargetAAA1111111111111111111111111111111",
+      "mode": "paper",
+      "enabled": true,
+      "rounds": 11,
+      "wins": 7,
+      "win_rate_pct": 63.64,
+      "realized_pnl_native": 0.4825,
+      "profit_factor": 6.97,
+      "average_hold_seconds": 15420,
+      "arrival_median_ms": 1180,
+      "slippage_median_pct": 1.02,
+      "fills": 14,
+      "skips": 21,
+      "pnl_curve": [
+        {
+          "at": "2026-09-29T10:00:00Z",
+          "cumulative_pnl_native": 0.031,
+          "round_pnl_native": 0.031,
+          "mint": "DezXAZ8z7PnrnRJjz3wXBoRgixCa6xjnB7YaB1pPB263"
+        },
+        {
+          "at": "2026-09-30T13:20:00Z",
+          "cumulative_pnl_native": 0.087,
+          "round_pnl_native": 0.056,
+          "mint": "EKpQGSJtjMFqKZ9KQanSqYXRcF8fBopzLHYxdM65zcjm"
+        },
+        {
+          "at": "2026-10-01T08:45:00Z",
+          "cumulative_pnl_native": 0.052,
+          "round_pnl_native": -0.035,
+          "mint": "JUPyiwrYJFskUPiHa7hkeR8VUtAeFoSYbKedZNsDvCN"
+        },
+        {
+          "at": "2026-10-02T17:10:00Z",
+          "cumulative_pnl_native": 0.121,
+          "round_pnl_native": 0.069,
+          "mint": "7GCihgDB8fe6KNjn2MYtkzZcRjQy3t9GHdC8uHYmW2hr"
+        },
+        {
+          "at": "2026-10-03T11:30:00Z",
+          "cumulative_pnl_native": 0.198,
+          "round_pnl_native": 0.077,
+          "mint": "DezXAZ8z7PnrnRJjz3wXBoRgixCa6xjnB7YaB1pPB263"
+        },
+        {
+          "at": "2026-10-03T22:05:00Z",
+          "cumulative_pnl_native": 0.176,
+          "round_pnl_native": -0.022,
+          "mint": "EKpQGSJtjMFqKZ9KQanSqYXRcF8fBopzLHYxdM65zcjm"
+        },
+        {
+          "at": "2026-10-04T15:40:00Z",
+          "cumulative_pnl_native": 0.262,
+          "round_pnl_native": 0.086,
+          "mint": "JUPyiwrYJFskUPiHa7hkeR8VUtAeFoSYbKedZNsDvCN"
+        },
+        {
+          "at": "2026-10-05T09:00:00Z",
+          "cumulative_pnl_native": 0.311,
+          "round_pnl_native": 0.049,
+          "mint": "7GCihgDB8fe6KNjn2MYtkzZcRjQy3t9GHdC8uHYmW2hr"
+        },
+        {
+          "at": "2026-10-05T19:15:00Z",
+          "cumulative_pnl_native": 0.287,
+          "round_pnl_native": -0.024,
+          "mint": "DezXAZ8z7PnrnRJjz3wXBoRgixCa6xjnB7YaB1pPB263"
+        },
+        {
+          "at": "2026-10-06T16:05:30Z",
+          "cumulative_pnl_native": 0.402,
+          "round_pnl_native": 0.115,
+          "mint": "JUPyiwrYJFskUPiHa7hkeR8VUtAeFoSYbKedZNsDvCN"
+        },
+        {
+          "at": "2026-10-06T20:10:04Z",
+          "cumulative_pnl_native": 0.4825,
+          "round_pnl_native": 0.0805,
+          "mint": "DezXAZ8z7PnrnRJjz3wXBoRgixCa6xjnB7YaB1pPB263"
+        }
+      ]
+    }
+  ]
+}

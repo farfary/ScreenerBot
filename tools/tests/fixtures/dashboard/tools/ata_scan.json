@@ -1,0 +1,29 @@
+{
+  "total_atas": 17,
+  "empty_count": 4,
+  "non_empty_count": 12,
+  "failed_count": 1,
+  "reclaimable_native": 0.00815712,
+  "empty_atas": [
+    {
+      "mint": "Es9vSynthMintAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA1",
+      "ata_address": "9xAtaSynthAccountEEEEEEEEEEEEEEEEEEEEEEEEEE1",
+      "rent_raw": 2039280
+    },
+    {
+      "mint": "Es9vSynthMintBBBBBBBBBBBBBBBBBBBBBBBBBBBBBB2",
+      "ata_address": "9xAtaSynthAccountFFFFFFFFFFFFFFFFFFFFFFFFFF2",
+      "rent_raw": 2039280
+    },
+    {
+      "mint": "Es9vSynthMintCCCCCCCCCCCCCCCCCCCCCCCCCCCCCC3",
+      "ata_address": "9xAtaSynthAccountGGGGGGGGGGGGGGGGGGGGGGGGGG3",
+      "rent_raw": 2039280
+    },
+    {
+      "mint": "Es9vSynthMintDDDDDDDDDDDDDDDDDDDDDDDDDDDDDD4",
+      "ata_address": "9xAtaSynthAccountHHHHHHHHHHHHHHHHHHHHHHHHHH4",
+      "rent_raw": 2039280
+    }
+  ]
+}

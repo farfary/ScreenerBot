@@ -1,0 +1,441 @@
+{
+  "schemas": {
+    "CandleSize": {
+      "type": "CandleSize",
+      "category": "Candle Patterns",
+      "icon": "icon-expand",
+      "origin": "strategy",
+      "parameters": {
+        "timeframe": {
+          "type": "enum",
+          "default": null,
+          "optional": true,
+          "options": [
+            { "value": "1m", "key": "strategies-condition-timeframe-option-1m" },
+            { "value": "5m", "key": "strategies-condition-timeframe-option-5m" },
+            { "value": "15m", "key": "strategies-condition-timeframe-option-15m" },
+            { "value": "1h", "key": "strategies-condition-timeframe-option-1h" },
+            { "value": "4h", "key": "strategies-condition-timeframe-option-4h" },
+            { "value": "12h", "key": "strategies-condition-timeframe-option-12h" },
+            { "value": "1d", "key": "strategies-condition-timeframe-option-1d" }
+          ],
+          "key": "strategies-condition-param-timeframe"
+        },
+        "pattern": {
+          "type": "enum",
+          "default": "LARGE_BODY",
+          "options": [
+            {
+              "value": "LARGE_BODY",
+              "key": "strategies-condition-candle-size-param-pattern-option-large-body"
+            },
+            {
+              "value": "SMALL_BODY",
+              "key": "strategies-condition-candle-size-param-pattern-option-small-body"
+            },
+            {
+              "value": "LONG_UPPER_WICK",
+              "key": "strategies-condition-candle-size-param-pattern-option-long-upper-wick"
+            },
+            {
+              "value": "LONG_LOWER_WICK",
+              "key": "strategies-condition-candle-size-param-pattern-option-long-lower-wick"
+            }
+          ],
+          "key": "strategies-condition-candle-size-param-pattern"
+        },
+        "threshold": {
+          "type": "percent",
+          "default": 50,
+          "min": 10,
+          "max": 100,
+          "step": 5,
+          "key": "strategies-condition-candle-size-param-threshold"
+        }
+      },
+      "key": "strategies-condition-candle-size",
+      "category_key": "strategies-condition-category-candle-patterns"
+    },
+    "ConsecutiveCandles": {
+      "type": "ConsecutiveCandles",
+      "category": "Candle Patterns",
+      "icon": "icon-chart-candlestick",
+      "origin": "strategy",
+      "parameters": {
+        "timeframe": {
+          "type": "enum",
+          "default": null,
+          "optional": true,
+          "options": [
+            { "value": "1m", "key": "strategies-condition-timeframe-option-1m" },
+            { "value": "5m", "key": "strategies-condition-timeframe-option-5m" },
+            { "value": "15m", "key": "strategies-condition-timeframe-option-15m" },
+            { "value": "1h", "key": "strategies-condition-timeframe-option-1h" },
+            { "value": "4h", "key": "strategies-condition-timeframe-option-4h" },
+            { "value": "12h", "key": "strategies-condition-timeframe-option-12h" },
+            { "value": "1d", "key": "strategies-condition-timeframe-option-1d" }
+          ],
+          "key": "strategies-condition-param-timeframe"
+        },
+        "count": {
+          "type": "number",
+          "unit": "candles",
+          "default": 3,
+          "min": 2,
+          "max": 20,
+          "step": 1,
+          "key": "strategies-condition-consecutive-candles-param-count"
+        },
+        "direction": {
+          "type": "enum",
+          "default": "GREEN",
+          "options": [
+            {
+              "value": "GREEN",
+              "key": "strategies-condition-consecutive-candles-param-direction-option-green"
+            },
+            {
+              "value": "RED",
+              "key": "strategies-condition-consecutive-candles-param-direction-option-red"
+            }
+          ],
+          "key": "strategies-condition-consecutive-candles-param-direction"
+        },
+        "minimum_change": {
+          "type": "percent",
+          "default": 0.5,
+          "min": 0.1,
+          "max": 50,
+          "step": 0.1,
+          "key": "strategies-condition-consecutive-candles-param-minimum-change"
+        }
+      },
+      "key": "strategies-condition-consecutive-candles",
+      "category_key": "strategies-condition-category-candle-patterns"
+    },
+    "LiquidityLevel": {
+      "type": "LiquidityLevel",
+      "category": "Market Context",
+      "icon": "icon-droplet",
+      "origin": "strategy",
+      "parameters": {
+        "threshold": {
+          "type": "number",
+          "default": 50,
+          "min": 0,
+          "max": 100000,
+          "step": 10,
+          "key": "strategies-condition-liquidity-level-param-threshold"
+        },
+        "comparison": {
+          "type": "enum",
+          "default": "GREATER_THAN",
+          "options": [
+            {
+              "value": "GREATER_THAN",
+              "key": "strategies-condition-liquidity-level-param-comparison-option-greater-than"
+            },
+            {
+              "value": "GREATER_EQUAL",
+              "key": "strategies-condition-liquidity-level-param-comparison-option-greater-equal"
+            },
+            {
+              "value": "LESS_THAN",
+              "key": "strategies-condition-liquidity-level-param-comparison-option-less-than"
+            },
+            {
+              "value": "LESS_EQUAL",
+              "key": "strategies-condition-liquidity-level-param-comparison-option-less-equal"
+            }
+          ],
+          "key": "strategies-condition-liquidity-level-param-comparison"
+        }
+      },
+      "key": "strategies-condition-liquidity-level",
+      "category_key": "strategies-condition-category-market-context"
+    },
+    "PositionHoldingTime": {
+      "type": "PositionHoldingTime",
+      "category": "Position & Performance",
+      "icon": "icon-hourglass",
+      "origin": "strategy",
+      "parameters": {
+        "hours": {
+          "type": "number",
+          "unit": "hours",
+          "default": 1,
+          "min": 0,
+          "max": 720,
+          "step": 0.25,
+          "key": "strategies-condition-position-holding-time-param-hours"
+        },
+        "comparison": {
+          "type": "enum",
+          "default": "GREATER_THAN",
+          "options": [
+            {
+              "value": "GREATER_THAN",
+              "key": "strategies-condition-position-holding-time-param-comparison-option-greater-than"
+            },
+            {
+              "value": "GREATER_EQUAL",
+              "key": "strategies-condition-position-holding-time-param-comparison-option-greater-equal"
+            },
+            {
+              "value": "LESS_THAN",
+              "key": "strategies-condition-position-holding-time-param-comparison-option-less-than"
+            },
+            {
+              "value": "LESS_EQUAL",
+              "key": "strategies-condition-position-holding-time-param-comparison-option-less-equal"
+            }
+          ],
+          "key": "strategies-condition-position-holding-time-param-comparison"
+        }
+      },
+      "key": "strategies-condition-position-holding-time",
+      "category_key": "strategies-condition-category-position-performance"
+    },
+    "PriceBreakout": {
+      "type": "PriceBreakout",
+      "category": "Price Analysis",
+      "icon": "icon-rocket",
+      "origin": "strategy",
+      "parameters": {
+        "timeframe": {
+          "type": "enum",
+          "default": null,
+          "optional": true,
+          "options": [
+            { "value": "1m", "key": "strategies-condition-timeframe-option-1m" },
+            { "value": "5m", "key": "strategies-condition-timeframe-option-5m" },
+            { "value": "15m", "key": "strategies-condition-timeframe-option-15m" },
+            { "value": "1h", "key": "strategies-condition-timeframe-option-1h" },
+            { "value": "4h", "key": "strategies-condition-timeframe-option-4h" },
+            { "value": "12h", "key": "strategies-condition-timeframe-option-12h" },
+            { "value": "1d", "key": "strategies-condition-timeframe-option-1d" }
+          ],
+          "key": "strategies-condition-param-timeframe"
+        },
+        "lookback": {
+          "type": "number",
+          "unit": "candles",
+          "default": 20,
+          "min": 2,
+          "max": 100,
+          "step": 1,
+          "key": "strategies-condition-price-breakout-param-lookback"
+        },
+        "direction": {
+          "type": "enum",
+          "default": "UPWARD",
+          "options": [
+            {
+              "value": "UPWARD",
+              "key": "strategies-condition-price-breakout-param-direction-option-upward"
+            },
+            {
+              "value": "DOWNWARD",
+              "key": "strategies-condition-price-breakout-param-direction-option-downward"
+            }
+          ],
+          "key": "strategies-condition-price-breakout-param-direction"
+        },
+        "confirmation": {
+          "type": "percent",
+          "default": 1,
+          "min": 0,
+          "max": 20,
+          "step": 0.5,
+          "key": "strategies-condition-price-breakout-param-confirmation"
+        }
+      },
+      "key": "strategies-condition-price-breakout",
+      "category_key": "strategies-condition-category-price-analysis"
+    },
+    "PriceChangePercent": {
+      "type": "PriceChangePercent",
+      "category": "Price Analysis",
+      "icon": "icon-percent",
+      "origin": "strategy",
+      "parameters": {
+        "timeframe": {
+          "type": "enum",
+          "default": null,
+          "optional": true,
+          "options": [
+            { "value": "1m", "key": "strategies-condition-timeframe-option-1m" },
+            { "value": "5m", "key": "strategies-condition-timeframe-option-5m" },
+            { "value": "15m", "key": "strategies-condition-timeframe-option-15m" },
+            { "value": "1h", "key": "strategies-condition-timeframe-option-1h" },
+            { "value": "4h", "key": "strategies-condition-timeframe-option-4h" },
+            { "value": "12h", "key": "strategies-condition-timeframe-option-12h" },
+            { "value": "1d", "key": "strategies-condition-timeframe-option-1d" }
+          ],
+          "key": "strategies-condition-param-timeframe"
+        },
+        "percentage": {
+          "type": "percent",
+          "default": 10,
+          "min": 0.1,
+          "max": 1000,
+          "step": 0.5,
+          "key": "strategies-condition-price-change-percent-param-percentage"
+        },
+        "direction": {
+          "type": "enum",
+          "default": "ABOVE",
+          "options": [
+            {
+              "value": "ABOVE",
+              "key": "strategies-condition-price-change-percent-param-direction-option-above"
+            },
+            {
+              "value": "BELOW",
+              "key": "strategies-condition-price-change-percent-param-direction-option-below"
+            },
+            {
+              "value": "WITHIN",
+              "key": "strategies-condition-price-change-percent-param-direction-option-within"
+            }
+          ],
+          "key": "strategies-condition-price-change-percent-param-direction"
+        },
+        "time_value": {
+          "type": "number",
+          "default": 5,
+          "min": 1,
+          "max": 3600,
+          "step": 1,
+          "key": "strategies-condition-price-change-percent-param-time-value"
+        },
+        "time_unit": {
+          "type": "enum",
+          "default": "MINUTES",
+          "options": [
+            {
+              "value": "SECONDS",
+              "key": "strategies-condition-price-change-percent-param-time-unit-option-seconds"
+            },
+            {
+              "value": "MINUTES",
+              "key": "strategies-condition-price-change-percent-param-time-unit-option-minutes"
+            },
+            {
+              "value": "HOURS",
+              "key": "strategies-condition-price-change-percent-param-time-unit-option-hours"
+            }
+          ],
+          "key": "strategies-condition-price-change-percent-param-time-unit"
+        }
+      },
+      "key": "strategies-condition-price-change-percent",
+      "category_key": "strategies-condition-category-price-analysis"
+    },
+    "PriceToMA": {
+      "type": "PriceToMA",
+      "category": "Technical Indicators",
+      "icon": "icon-chart-line",
+      "origin": "strategy",
+      "parameters": {
+        "timeframe": {
+          "type": "enum",
+          "default": null,
+          "optional": true,
+          "options": [
+            { "value": "1m", "key": "strategies-condition-timeframe-option-1m" },
+            { "value": "5m", "key": "strategies-condition-timeframe-option-5m" },
+            { "value": "15m", "key": "strategies-condition-timeframe-option-15m" },
+            { "value": "1h", "key": "strategies-condition-timeframe-option-1h" },
+            { "value": "4h", "key": "strategies-condition-timeframe-option-4h" },
+            { "value": "12h", "key": "strategies-condition-timeframe-option-12h" },
+            { "value": "1d", "key": "strategies-condition-timeframe-option-1d" }
+          ],
+          "key": "strategies-condition-param-timeframe"
+        },
+        "period": {
+          "type": "number",
+          "unit": "candles",
+          "default": 20,
+          "min": 2,
+          "max": 200,
+          "step": 1,
+          "key": "strategies-condition-price-to-ma-param-period"
+        },
+        "position": {
+          "type": "enum",
+          "default": "ABOVE",
+          "options": [
+            {
+              "value": "ABOVE",
+              "key": "strategies-condition-price-to-ma-param-position-option-above"
+            },
+            {
+              "value": "BELOW",
+              "key": "strategies-condition-price-to-ma-param-position-option-below"
+            },
+            {
+              "value": "WITHIN",
+              "key": "strategies-condition-price-to-ma-param-position-option-within"
+            }
+          ],
+          "key": "strategies-condition-price-to-ma-param-position"
+        },
+        "distance": {
+          "type": "percent",
+          "default": 2,
+          "min": 0.1,
+          "max": 100,
+          "step": 0.5,
+          "key": "strategies-condition-price-to-ma-param-distance"
+        }
+      },
+      "key": "strategies-condition-price-to-ma",
+      "category_key": "strategies-condition-category-technical-indicators"
+    },
+    "VolumeSpike": {
+      "type": "VolumeSpike",
+      "category": "Volume Analysis",
+      "icon": "icon-chart-bar",
+      "origin": "strategy",
+      "parameters": {
+        "timeframe": {
+          "type": "enum",
+          "default": null,
+          "optional": true,
+          "options": [
+            { "value": "1m", "key": "strategies-condition-timeframe-option-1m" },
+            { "value": "5m", "key": "strategies-condition-timeframe-option-5m" },
+            { "value": "15m", "key": "strategies-condition-timeframe-option-15m" },
+            { "value": "1h", "key": "strategies-condition-timeframe-option-1h" },
+            { "value": "4h", "key": "strategies-condition-timeframe-option-4h" },
+            { "value": "12h", "key": "strategies-condition-timeframe-option-12h" },
+            { "value": "1d", "key": "strategies-condition-timeframe-option-1d" }
+          ],
+          "key": "strategies-condition-param-timeframe"
+        },
+        "lookback": {
+          "type": "number",
+          "unit": "candles",
+          "default": 20,
+          "min": 2,
+          "max": 100,
+          "step": 1,
+          "key": "strategies-condition-volume-spike-param-lookback"
+        },
+        "multiplier": {
+          "type": "number",
+          "unit": "multiplier",
+          "default": 2,
+          "min": 1,
+          "max": 50,
+          "step": 0.5,
+          "key": "strategies-condition-volume-spike-param-multiplier"
+        }
+      },
+      "key": "strategies-condition-volume-spike",
+      "category_key": "strategies-condition-category-volume-analysis"
+    }
+  },
+  "timestamp": "2026-10-07T10:00:00.000000+00:00"
+}

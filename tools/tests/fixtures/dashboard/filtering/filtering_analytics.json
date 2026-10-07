@@ -1,0 +1,547 @@
+{
+  "snapshot_state": "ready",
+  "total_tokens": 18452,
+  "total_rejected": 7247,
+  "total_passed": 1236,
+  "pass_rate": 6.7,
+  "rejection_rate": 93.3,
+  "by_category": [
+    {
+      "category": "liquidity",
+      "category_text": { "id": "filtering-reject-category-liquidity" },
+      "icon": "droplet",
+      "count": 1840,
+      "percentage": 25.4,
+      "reasons": [
+        {
+          "reason": "dex_liq_low",
+          "reason_text": { "id": "filtering-reject-dex-liq-low" },
+          "count": 1840,
+          "percentage": 100
+        }
+      ]
+    },
+    {
+      "category": "distribution",
+      "category_text": { "id": "filtering-reject-category-distribution" },
+      "icon": "users",
+      "count": 1402,
+      "percentage": 19.3,
+      "reasons": [
+        {
+          "reason": "rug_top_holder",
+          "reason_text": { "id": "filtering-reject-rug-top-holder" },
+          "count": 1215,
+          "percentage": 86.7
+        },
+        {
+          "reason": "rug_insider_count",
+          "reason_text": { "id": "filtering-reject-rug-insider-count" },
+          "count": 187,
+          "percentage": 13.3
+        }
+      ]
+    },
+    {
+      "category": "security",
+      "category_text": { "id": "filtering-reject-category-security" },
+      "icon": "shield",
+      "count": 1194,
+      "percentage": 16.5,
+      "reasons": [
+        {
+          "reason": "rug_score",
+          "reason_text": { "id": "filtering-reject-rug-score" },
+          "count": 742,
+          "percentage": 62.1
+        },
+        {
+          "reason": "rug_mint_authority",
+          "reason_text": { "id": "filtering-reject-rug-mint-authority" },
+          "count": 356,
+          "percentage": 29.8
+        },
+        {
+          "reason": "rug_freeze_authority",
+          "reason_text": { "id": "filtering-reject-rug-freeze-authority" },
+          "count": 96,
+          "percentage": 8
+        }
+      ]
+    },
+    {
+      "category": "timing",
+      "category_text": { "id": "filtering-reject-category-timing" },
+      "icon": "clock",
+      "count": 1033,
+      "percentage": 14.3,
+      "reasons": [
+        {
+          "reason": "token_too_new",
+          "reason_text": { "id": "filtering-reject-token-too-new" },
+          "count": 960,
+          "percentage": 92.9
+        },
+        {
+          "reason": "cooldown_filtered",
+          "reason_text": { "id": "filtering-reject-cooldown-filtered" },
+          "count": 73,
+          "percentage": 7.1
+        }
+      ]
+    },
+    {
+      "category": "market_cap",
+      "category_text": { "id": "filtering-reject-category-market-cap" },
+      "icon": "dollar-sign",
+      "count": 615,
+      "percentage": 8.5,
+      "reasons": [
+        {
+          "reason": "dex_mcap_low",
+          "reason_text": { "id": "filtering-reject-dex-mcap-low" },
+          "count": 615,
+          "percentage": 100
+        }
+      ]
+    },
+    {
+      "category": "volume",
+      "category_text": { "id": "filtering-reject-category-volume" },
+      "icon": "chart-bar",
+      "count": 488,
+      "percentage": 6.7,
+      "reasons": [
+        {
+          "reason": "gecko_vol24h_low",
+          "reason_text": { "id": "filtering-reject-gecko-vol24h-low" },
+          "count": 488,
+          "percentage": 100
+        }
+      ]
+    },
+    {
+      "category": "activity",
+      "category_text": { "id": "filtering-reject-category-activity" },
+      "icon": "activity",
+      "count": 301,
+      "percentage": 4.2,
+      "reasons": [
+        {
+          "reason": "dex_txn_1h",
+          "reason_text": { "id": "filtering-reject-dex-txn-1h" },
+          "count": 301,
+          "percentage": 100
+        }
+      ]
+    },
+    {
+      "category": "other",
+      "category_text": { "id": "filtering-reject-category-other" },
+      "icon": "info",
+      "count": 214,
+      "percentage": 3,
+      "reasons": [
+        {
+          "reason": "onchain_numeric_symbol",
+          "reason_text": { "id": "filtering-reject-onchain-numeric-symbol" },
+          "count": 214,
+          "percentage": 100
+        }
+      ]
+    },
+    {
+      "category": "data_quality",
+      "category_text": { "id": "filtering-reject-category-data-quality" },
+      "icon": "circle-alert",
+      "count": 160,
+      "percentage": 2.2,
+      "reasons": [
+        {
+          "reason": "dex_data_missing",
+          "reason_text": { "id": "filtering-reject-dex-data-missing" },
+          "count": 142,
+          "percentage": 88.8
+        },
+        {
+          "reason": "no_decimals",
+          "reason_text": { "id": "filtering-reject-no-decimals" },
+          "count": 18,
+          "percentage": 11.3
+        }
+      ]
+    }
+  ],
+  "by_source": [
+    {
+      "source": "dexscreener",
+      "count": 2898,
+      "percentage": 40,
+      "top_reasons": [
+        {
+          "reason": "dex_liq_low",
+          "reason_text": { "id": "filtering-reject-dex-liq-low" },
+          "source": "dexscreener",
+          "count": 1840,
+          "category": "liquidity",
+          "category_text": { "id": "filtering-reject-category-liquidity" },
+          "percentage": 63.5
+        },
+        {
+          "reason": "dex_mcap_low",
+          "reason_text": { "id": "filtering-reject-dex-mcap-low" },
+          "source": "dexscreener",
+          "count": 615,
+          "category": "market_cap",
+          "category_text": { "id": "filtering-reject-category-market-cap" },
+          "percentage": 21.2
+        },
+        {
+          "reason": "dex_txn_1h",
+          "reason_text": { "id": "filtering-reject-dex-txn-1h" },
+          "source": "dexscreener",
+          "count": 301,
+          "category": "activity",
+          "category_text": { "id": "filtering-reject-category-activity" },
+          "percentage": 10.4
+        },
+        {
+          "reason": "dex_data_missing",
+          "reason_text": { "id": "filtering-reject-dex-data-missing" },
+          "source": "dexscreener",
+          "count": 142,
+          "category": "data_quality",
+          "category_text": { "id": "filtering-reject-category-data-quality" },
+          "percentage": 4.9
+        }
+      ]
+    },
+    {
+      "source": "rugcheck",
+      "count": 2596,
+      "percentage": 35.8,
+      "top_reasons": [
+        {
+          "reason": "rug_top_holder",
+          "reason_text": { "id": "filtering-reject-rug-top-holder" },
+          "source": "rugcheck",
+          "count": 1215,
+          "category": "distribution",
+          "category_text": { "id": "filtering-reject-category-distribution" },
+          "percentage": 46.8
+        },
+        {
+          "reason": "rug_score",
+          "reason_text": { "id": "filtering-reject-rug-score" },
+          "source": "rugcheck",
+          "count": 742,
+          "category": "security",
+          "category_text": { "id": "filtering-reject-category-security" },
+          "percentage": 28.6
+        },
+        {
+          "reason": "rug_mint_authority",
+          "reason_text": { "id": "filtering-reject-rug-mint-authority" },
+          "source": "rugcheck",
+          "count": 356,
+          "category": "security",
+          "category_text": { "id": "filtering-reject-category-security" },
+          "percentage": 13.7
+        },
+        {
+          "reason": "rug_insider_count",
+          "reason_text": { "id": "filtering-reject-rug-insider-count" },
+          "source": "rugcheck",
+          "count": 187,
+          "category": "distribution",
+          "category_text": { "id": "filtering-reject-category-distribution" },
+          "percentage": 7.2
+        },
+        {
+          "reason": "rug_freeze_authority",
+          "reason_text": { "id": "filtering-reject-rug-freeze-authority" },
+          "source": "rugcheck",
+          "count": 96,
+          "category": "security",
+          "category_text": { "id": "filtering-reject-category-security" },
+          "percentage": 3.7
+        }
+      ]
+    },
+    {
+      "source": "core",
+      "count": 1051,
+      "percentage": 14.5,
+      "top_reasons": [
+        {
+          "reason": "token_too_new",
+          "reason_text": { "id": "filtering-reject-token-too-new" },
+          "source": "core",
+          "count": 960,
+          "category": "timing",
+          "category_text": { "id": "filtering-reject-category-timing" },
+          "percentage": 91.3
+        },
+        {
+          "reason": "cooldown_filtered",
+          "reason_text": { "id": "filtering-reject-cooldown-filtered" },
+          "source": "core",
+          "count": 73,
+          "category": "timing",
+          "category_text": { "id": "filtering-reject-category-timing" },
+          "percentage": 6.9
+        },
+        {
+          "reason": "no_decimals",
+          "reason_text": { "id": "filtering-reject-no-decimals" },
+          "source": "core",
+          "count": 18,
+          "category": "data_quality",
+          "category_text": { "id": "filtering-reject-category-data-quality" },
+          "percentage": 1.7
+        }
+      ]
+    },
+    {
+      "source": "geckoterminal",
+      "count": 488,
+      "percentage": 6.7,
+      "top_reasons": [
+        {
+          "reason": "gecko_vol24h_low",
+          "reason_text": { "id": "filtering-reject-gecko-vol24h-low" },
+          "source": "geckoterminal",
+          "count": 488,
+          "category": "volume",
+          "category_text": { "id": "filtering-reject-category-volume" },
+          "percentage": 100
+        }
+      ]
+    },
+    {
+      "source": "onchain",
+      "count": 214,
+      "percentage": 3,
+      "top_reasons": [
+        {
+          "reason": "onchain_numeric_symbol",
+          "reason_text": { "id": "filtering-reject-onchain-numeric-symbol" },
+          "source": "onchain",
+          "count": 214,
+          "category": "other",
+          "category_text": { "id": "filtering-reject-category-other" },
+          "percentage": 100
+        }
+      ]
+    }
+  ],
+  "data_quality": [
+    {
+      "metric": "dex_data_missing",
+      "reason_text": { "id": "filtering-reject-dex-data-missing" },
+      "count": 142,
+      "percentage": 2,
+      "severity": "info"
+    },
+    {
+      "metric": "no_decimals",
+      "reason_text": { "id": "filtering-reject-no-decimals" },
+      "count": 18,
+      "percentage": 0.2,
+      "severity": "info"
+    }
+  ],
+  "top_reasons": [
+    {
+      "reason": "dex_liq_low",
+      "reason_text": { "id": "filtering-reject-dex-liq-low" },
+      "source": "dexscreener",
+      "count": 1840,
+      "category": "liquidity",
+      "category_text": { "id": "filtering-reject-category-liquidity" },
+      "percentage": 25.4
+    },
+    {
+      "reason": "rug_top_holder",
+      "reason_text": { "id": "filtering-reject-rug-top-holder" },
+      "source": "rugcheck",
+      "count": 1215,
+      "category": "distribution",
+      "category_text": { "id": "filtering-reject-category-distribution" },
+      "percentage": 16.8
+    },
+    {
+      "reason": "token_too_new",
+      "reason_text": { "id": "filtering-reject-token-too-new" },
+      "source": "core",
+      "count": 960,
+      "category": "timing",
+      "category_text": { "id": "filtering-reject-category-timing" },
+      "percentage": 13.2
+    },
+    {
+      "reason": "rug_score",
+      "reason_text": { "id": "filtering-reject-rug-score" },
+      "source": "rugcheck",
+      "count": 742,
+      "category": "security",
+      "category_text": { "id": "filtering-reject-category-security" },
+      "percentage": 10.2
+    },
+    {
+      "reason": "dex_mcap_low",
+      "reason_text": { "id": "filtering-reject-dex-mcap-low" },
+      "source": "dexscreener",
+      "count": 615,
+      "category": "market_cap",
+      "category_text": { "id": "filtering-reject-category-market-cap" },
+      "percentage": 8.5
+    },
+    {
+      "reason": "gecko_vol24h_low",
+      "reason_text": { "id": "filtering-reject-gecko-vol24h-low" },
+      "source": "geckoterminal",
+      "count": 488,
+      "category": "volume",
+      "category_text": { "id": "filtering-reject-category-volume" },
+      "percentage": 6.7
+    },
+    {
+      "reason": "rug_mint_authority",
+      "reason_text": { "id": "filtering-reject-rug-mint-authority" },
+      "source": "rugcheck",
+      "count": 356,
+      "category": "security",
+      "category_text": { "id": "filtering-reject-category-security" },
+      "percentage": 4.9
+    },
+    {
+      "reason": "dex_txn_1h",
+      "reason_text": { "id": "filtering-reject-dex-txn-1h" },
+      "source": "dexscreener",
+      "count": 301,
+      "category": "activity",
+      "category_text": { "id": "filtering-reject-category-activity" },
+      "percentage": 4.2
+    },
+    {
+      "reason": "onchain_numeric_symbol",
+      "reason_text": { "id": "filtering-reject-onchain-numeric-symbol" },
+      "source": "onchain",
+      "count": 214,
+      "category": "other",
+      "category_text": { "id": "filtering-reject-category-other" },
+      "percentage": 3
+    },
+    {
+      "reason": "rug_insider_count",
+      "reason_text": { "id": "filtering-reject-rug-insider-count" },
+      "source": "rugcheck",
+      "count": 187,
+      "category": "distribution",
+      "category_text": { "id": "filtering-reject-category-distribution" },
+      "percentage": 2.6
+    },
+    {
+      "reason": "dex_data_missing",
+      "reason_text": { "id": "filtering-reject-dex-data-missing" },
+      "source": "dexscreener",
+      "count": 142,
+      "category": "data_quality",
+      "category_text": { "id": "filtering-reject-category-data-quality" },
+      "percentage": 2
+    },
+    {
+      "reason": "rug_freeze_authority",
+      "reason_text": { "id": "filtering-reject-rug-freeze-authority" },
+      "source": "rugcheck",
+      "count": 96,
+      "category": "security",
+      "category_text": { "id": "filtering-reject-category-security" },
+      "percentage": 1.3
+    },
+    {
+      "reason": "cooldown_filtered",
+      "reason_text": { "id": "filtering-reject-cooldown-filtered" },
+      "source": "core",
+      "count": 73,
+      "category": "timing",
+      "category_text": { "id": "filtering-reject-category-timing" },
+      "percentage": 1
+    },
+    {
+      "reason": "no_decimals",
+      "reason_text": { "id": "filtering-reject-no-decimals" },
+      "source": "core",
+      "count": 18,
+      "category": "data_quality",
+      "category_text": { "id": "filtering-reject-category-data-quality" },
+      "percentage": 0.2
+    }
+  ],
+  "recent_rejections": [
+    {
+      "mint": "7Qm3sYnthTokenAAAAAAAAAAAAAAAAAAAAAAAAAAAAA1",
+      "symbol": "MOONCAT",
+      "name": "Moon Cat",
+      "image_url": null,
+      "reason": "dex_liq_low",
+      "reason_text": { "id": "filtering-reject-dex-liq-low" },
+      "source": "dexscreener",
+      "rejected_at": "2026-10-07T09:58:12+00:00"
+    },
+    {
+      "mint": "7Qm3sYnthTokenBBBBBBBBBBBBBBBBBBBBBBBBBBBBB2",
+      "symbol": "PEPE2",
+      "name": "Pepe Two",
+      "image_url": null,
+      "reason": "rug_top_holder",
+      "reason_text": { "id": "filtering-reject-rug-top-holder" },
+      "source": "rugcheck",
+      "rejected_at": "2026-10-07T09:55:40+00:00"
+    },
+    {
+      "mint": "7Qm3sYnthTokenCCCCCCCCCCCCCCCCCCCCCCCCCCCCC3",
+      "symbol": "1234",
+      "name": null,
+      "image_url": null,
+      "reason": "onchain_numeric_symbol",
+      "reason_text": { "id": "filtering-reject-onchain-numeric-symbol" },
+      "source": "onchain",
+      "rejected_at": "2026-10-07T09:51:03+00:00"
+    },
+    {
+      "mint": "7Qm3sYnthTokenDDDDDDDDDDDDDDDDDDDDDDDDDDDDD4",
+      "symbol": "FROGX",
+      "name": "Frog Index",
+      "image_url": null,
+      "reason": "token_too_new",
+      "reason_text": { "id": "filtering-reject-token-too-new" },
+      "source": "core",
+      "rejected_at": "2026-10-07T09:47:29+00:00"
+    },
+    {
+      "mint": "7Qm3sYnthTokenEEEEEEEEEEEEEEEEEEEEEEEEEEEEE5",
+      "symbol": "SOLDOG",
+      "name": "Sol Dog",
+      "image_url": null,
+      "reason": "rug_mint_authority",
+      "reason_text": { "id": "filtering-reject-rug-mint-authority" },
+      "source": "rugcheck",
+      "rejected_at": "2026-10-07T09:40:55+00:00"
+    },
+    {
+      "mint": "7Qm3sYnthTokenFFFFFFFFFFFFFFFFFFFFFFFFFFFFF6",
+      "symbol": "GLOW",
+      "name": "Glow Protocol",
+      "image_url": null,
+      "reason": "gecko_vol24h_low",
+      "reason_text": { "id": "filtering-reject-gecko-vol24h-low" },
+      "source": "geckoterminal",
+      "rejected_at": "2026-10-07T09:32:18+00:00"
+    }
+  ],
+  "time_range": null,
+  "last_updated": "2026-10-07T09:59:40.000000+00:00",
+  "timestamp": "2026-10-07T10:00:00.000000+00:00"
+}

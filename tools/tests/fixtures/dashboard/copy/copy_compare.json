@@ -1,0 +1,187 @@
+{
+  "tasks": [
+    {
+      "task_id": 1,
+      "name": "Momentum desk",
+      "target_address": "CopyTargetAAA1111111111111111111111111111111",
+      "mode": "paper",
+      "enabled": true,
+      "rounds": 11,
+      "wins": 7,
+      "win_rate_pct": 63.64,
+      "realized_pnl_native": 0.4825,
+      "profit_factor": 6.97,
+      "average_hold_seconds": 15420,
+      "arrival_median_ms": 1180,
+      "slippage_median_pct": 1.02,
+      "fills": 14,
+      "skips": 21,
+      "pnl_curve": [
+        {
+          "at": "2026-09-29T10:00:00Z",
+          "cumulative_pnl_native": 0.031,
+          "round_pnl_native": 0.031,
+          "mint": "DezXAZ8z7PnrnRJjz3wXBoRgixCa6xjnB7YaB1pPB263"
+        },
+        {
+          "at": "2026-09-30T13:20:00Z",
+          "cumulative_pnl_native": 0.087,
+          "round_pnl_native": 0.056,
+          "mint": "EKpQGSJtjMFqKZ9KQanSqYXRcF8fBopzLHYxdM65zcjm"
+        },
+        {
+          "at": "2026-10-01T08:45:00Z",
+          "cumulative_pnl_native": 0.052,
+          "round_pnl_native": -0.035,
+          "mint": "JUPyiwrYJFskUPiHa7hkeR8VUtAeFoSYbKedZNsDvCN"
+        },
+        {
+          "at": "2026-10-02T17:10:00Z",
+          "cumulative_pnl_native": 0.121,
+          "round_pnl_native": 0.069,
+          "mint": "7GCihgDB8fe6KNjn2MYtkzZcRjQy3t9GHdC8uHYmW2hr"
+        },
+        {
+          "at": "2026-10-03T11:30:00Z",
+          "cumulative_pnl_native": 0.198,
+          "round_pnl_native": 0.077,
+          "mint": "DezXAZ8z7PnrnRJjz3wXBoRgixCa6xjnB7YaB1pPB263"
+        },
+        {
+          "at": "2026-10-03T22:05:00Z",
+          "cumulative_pnl_native": 0.176,
+          "round_pnl_native": -0.022,
+          "mint": "EKpQGSJtjMFqKZ9KQanSqYXRcF8fBopzLHYxdM65zcjm"
+        },
+        {
+          "at": "2026-10-04T15:40:00Z",
+          "cumulative_pnl_native": 0.262,
+          "round_pnl_native": 0.086,
+          "mint": "JUPyiwrYJFskUPiHa7hkeR8VUtAeFoSYbKedZNsDvCN"
+        },
+        {
+          "at": "2026-10-05T09:00:00Z",
+          "cumulative_pnl_native": 0.311,
+          "round_pnl_native": 0.049,
+          "mint": "7GCihgDB8fe6KNjn2MYtkzZcRjQy3t9GHdC8uHYmW2hr"
+        },
+        {
+          "at": "2026-10-05T19:15:00Z",
+          "cumulative_pnl_native": 0.287,
+          "round_pnl_native": -0.024,
+          "mint": "DezXAZ8z7PnrnRJjz3wXBoRgixCa6xjnB7YaB1pPB263"
+        },
+        {
+          "at": "2026-10-06T16:05:30Z",
+          "cumulative_pnl_native": 0.402,
+          "round_pnl_native": 0.115,
+          "mint": "JUPyiwrYJFskUPiHa7hkeR8VUtAeFoSYbKedZNsDvCN"
+        },
+        {
+          "at": "2026-10-06T20:10:04Z",
+          "cumulative_pnl_native": 0.4825,
+          "round_pnl_native": 0.0805,
+          "mint": "DezXAZ8z7PnrnRJjz3wXBoRgixCa6xjnB7YaB1pPB263"
+        }
+      ]
+    },
+    {
+      "task_id": 2,
+      "name": "Early entries",
+      "target_address": "CopyTargetBBB1111111111111111111111111111111",
+      "mode": "live",
+      "enabled": true,
+      "rounds": 7,
+      "wins": 4,
+      "win_rate_pct": 57.14,
+      "realized_pnl_native": 0.1934,
+      "profit_factor": 2.41,
+      "average_hold_seconds": 9310,
+      "arrival_median_ms": 1530,
+      "slippage_median_pct": 1.64,
+      "fills": 9,
+      "skips": 11,
+      "pnl_curve": [
+        {
+          "at": "2026-09-24T12:00:00Z",
+          "cumulative_pnl_native": -0.022,
+          "round_pnl_native": -0.022,
+          "mint": "DezXAZ8z7PnrnRJjz3wXBoRgixCa6xjnB7YaB1pPB263"
+        },
+        {
+          "at": "2026-09-26T09:00:00Z",
+          "cumulative_pnl_native": 0.041,
+          "round_pnl_native": 0.063,
+          "mint": "EKpQGSJtjMFqKZ9KQanSqYXRcF8fBopzLHYxdM65zcjm"
+        },
+        {
+          "at": "2026-09-28T15:00:00Z",
+          "cumulative_pnl_native": 0.09,
+          "round_pnl_native": 0.049,
+          "mint": "JUPyiwrYJFskUPiHa7hkeR8VUtAeFoSYbKedZNsDvCN"
+        },
+        {
+          "at": "2026-09-30T19:00:00Z",
+          "cumulative_pnl_native": 0.064,
+          "round_pnl_native": -0.026,
+          "mint": "7GCihgDB8fe6KNjn2MYtkzZcRjQy3t9GHdC8uHYmW2hr"
+        },
+        {
+          "at": "2026-10-02T10:00:00Z",
+          "cumulative_pnl_native": 0.133,
+          "round_pnl_native": 0.069,
+          "mint": "DezXAZ8z7PnrnRJjz3wXBoRgixCa6xjnB7YaB1pPB263"
+        },
+        {
+          "at": "2026-10-04T08:00:00Z",
+          "cumulative_pnl_native": 0.171,
+          "round_pnl_native": 0.038,
+          "mint": "EKpQGSJtjMFqKZ9KQanSqYXRcF8fBopzLHYxdM65zcjm"
+        },
+        {
+          "at": "2026-10-06T12:00:00Z",
+          "cumulative_pnl_native": 0.1934,
+          "round_pnl_native": 0.0224,
+          "mint": "JUPyiwrYJFskUPiHa7hkeR8VUtAeFoSYbKedZNsDvCN"
+        }
+      ]
+    },
+    {
+      "task_id": 3,
+      "name": "CopyT…1111",
+      "target_address": "CopyTargetCCC1111111111111111111111111111111",
+      "mode": "paper",
+      "enabled": false,
+      "rounds": 3,
+      "wins": 1,
+      "win_rate_pct": 33.33,
+      "realized_pnl_native": -0.0391,
+      "profit_factor": 0.36,
+      "average_hold_seconds": 27100,
+      "arrival_median_ms": 1340,
+      "slippage_median_pct": 0.88,
+      "fills": 4,
+      "skips": 5,
+      "pnl_curve": [
+        {
+          "at": "2026-10-01T12:00:00Z",
+          "cumulative_pnl_native": 0.012,
+          "round_pnl_native": 0.012,
+          "mint": "EKpQGSJtjMFqKZ9KQanSqYXRcF8fBopzLHYxdM65zcjm"
+        },
+        {
+          "at": "2026-10-03T12:00:00Z",
+          "cumulative_pnl_native": -0.018,
+          "round_pnl_native": -0.03,
+          "mint": "7GCihgDB8fe6KNjn2MYtkzZcRjQy3t9GHdC8uHYmW2hr"
+        },
+        {
+          "at": "2026-10-05T12:00:00Z",
+          "cumulative_pnl_native": -0.0391,
+          "round_pnl_native": -0.0211,
+          "mint": "JUPyiwrYJFskUPiHa7hkeR8VUtAeFoSYbKedZNsDvCN"
+        }
+      ]
+    }
+  ]
+}

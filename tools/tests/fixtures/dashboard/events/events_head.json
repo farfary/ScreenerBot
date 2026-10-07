@@ -1,0 +1,456 @@
+{
+  "events": [
+    {
+      "id": 48210,
+      "event_time": "2026-10-07T09:30:00.000+00:00",
+      "category": "trader",
+      "subtype": "service_started",
+      "severity": "info",
+      "mint": null,
+      "reference_id": null,
+      "text": { "id": "events-trader-service-started" },
+      "message": null,
+      "payload": { "text": { "id": "events-trader-service-started" } },
+      "created_at": "2026-10-07T09:30:00.000+00:00"
+    },
+    {
+      "id": 48209,
+      "event_time": "2026-10-07T09:28:21.700+00:00",
+      "category": "trader",
+      "subtype": "monitor_started",
+      "severity": "info",
+      "mint": null,
+      "reference_id": null,
+      "text": { "id": "events-entry-monitor-started" },
+      "message": null,
+      "payload": { "text": { "id": "events-entry-monitor-started" } },
+      "created_at": "2026-10-07T09:28:21.700+00:00"
+    },
+    {
+      "id": 48208,
+      "event_time": "2026-10-07T09:26:40.800+00:00",
+      "category": "trader",
+      "subtype": "monitor_started",
+      "severity": "info",
+      "mint": null,
+      "reference_id": null,
+      "text": { "id": "events-exit-monitor-started" },
+      "message": null,
+      "payload": { "text": { "id": "events-exit-monitor-started" } },
+      "created_at": "2026-10-07T09:26:40.800+00:00"
+    },
+    {
+      "id": 48207,
+      "event_time": "2026-10-07T09:24:57.300+00:00",
+      "category": "connectivity",
+      "subtype": "service_initialized",
+      "severity": "info",
+      "mint": null,
+      "reference_id": null,
+      "text": {
+        "id": "events-connectivity-service-initialized",
+        "args": { "count": { "type": "count", "value": 6 } }
+      },
+      "message": null,
+      "payload": {
+        "monitors": 6,
+        "text": {
+          "id": "events-connectivity-service-initialized",
+          "args": { "count": { "type": "count", "value": 6 } }
+        }
+      },
+      "created_at": "2026-10-07T09:24:57.300+00:00"
+    },
+    {
+      "id": 48206,
+      "event_time": "2026-10-07T09:23:11.200+00:00",
+      "category": "connectivity",
+      "subtype": "monitoring_started",
+      "severity": "info",
+      "mint": null,
+      "reference_id": null,
+      "text": {
+        "id": "events-connectivity-monitoring-started",
+        "args": { "seconds": { "type": "text", "value": "30" } }
+      },
+      "message": null,
+      "payload": {
+        "interval_secs": 30,
+        "text": {
+          "id": "events-connectivity-monitoring-started",
+          "args": { "seconds": { "type": "text", "value": "30" } }
+        }
+      },
+      "created_at": "2026-10-07T09:23:11.200+00:00"
+    },
+    {
+      "id": 48205,
+      "event_time": "2026-10-07T09:21:22.500+00:00",
+      "category": "ohlcv",
+      "subtype": "pool_discovery_success",
+      "severity": "info",
+      "mint": "SynthEventMintA4kP9qR2vT7wX3yZ8bC5dF6gH1jKm",
+      "reference_id": null,
+      "text": {
+        "id": "events-ohlcv-pool-discovery-success",
+        "args": {
+          "mint": { "type": "text", "value": "SynthEventMintA4kP9qR2vT7wX3yZ8bC5dF6gH1jKm" }
+        }
+      },
+      "message": null,
+      "payload": {
+        "pools": 3,
+        "text": {
+          "id": "events-ohlcv-pool-discovery-success",
+          "args": {
+            "mint": { "type": "text", "value": "SynthEventMintA4kP9qR2vT7wX3yZ8bC5dF6gH1jKm" }
+          }
+        }
+      },
+      "created_at": "2026-10-07T09:21:22.500+00:00"
+    },
+    {
+      "id": 48204,
+      "event_time": "2026-10-07T09:19:31.200+00:00",
+      "category": "ohlcv",
+      "subtype": "backfill_scheduled",
+      "severity": "info",
+      "mint": "SynthEventMintA4kP9qR2vT7wX3yZ8bC5dF6gH1jKm",
+      "reference_id": null,
+      "text": {
+        "id": "events-ohlcv-backfill-scheduled",
+        "args": {
+          "mint": { "type": "text", "value": "SynthEventMintA4kP9qR2vT7wX3yZ8bC5dF6gH1jKm" },
+          "pool": { "type": "text", "value": "Raydium CPMM" }
+        }
+      },
+      "message": null,
+      "payload": {
+        "timeframes": ["1m", "5m", "15m", "1h"],
+        "text": {
+          "id": "events-ohlcv-backfill-scheduled",
+          "args": {
+            "mint": { "type": "text", "value": "SynthEventMintA4kP9qR2vT7wX3yZ8bC5dF6gH1jKm" },
+            "pool": { "type": "text", "value": "Raydium CPMM" }
+          }
+        }
+      },
+      "created_at": "2026-10-07T09:19:31.200+00:00"
+    },
+    {
+      "id": 48203,
+      "event_time": "2026-10-07T09:17:37.300+00:00",
+      "category": "ohlcv",
+      "subtype": "fetch_success",
+      "severity": "debug",
+      "mint": "SynthEventMintA4kP9qR2vT7wX3yZ8bC5dF6gH1jKm",
+      "reference_id": null,
+      "text": {
+        "id": "events-ohlcv-fetch-success",
+        "args": {
+          "count": { "type": "count", "value": 480 },
+          "mint": { "type": "text", "value": "SynthEventMintA4kP9qR2vT7wX3yZ8bC5dF6gH1jKm" }
+        }
+      },
+      "message": null,
+      "payload": {
+        "timeframe": "1m",
+        "points": 480,
+        "text": {
+          "id": "events-ohlcv-fetch-success",
+          "args": {
+            "count": { "type": "count", "value": 480 },
+            "mint": { "type": "text", "value": "SynthEventMintA4kP9qR2vT7wX3yZ8bC5dF6gH1jKm" }
+          }
+        }
+      },
+      "created_at": "2026-10-07T09:17:37.300+00:00"
+    },
+    {
+      "id": 48202,
+      "event_time": "2026-10-07T09:15:40.800+00:00",
+      "category": "ohlcv",
+      "subtype": "rate_limit_hit",
+      "severity": "warn",
+      "mint": "SynthEventMintB7nQ2sU5xW8zA3cE6fG9hJ4kL2mN",
+      "reference_id": null,
+      "text": {
+        "id": "events-ohlcv-rate-limit-hit",
+        "args": {
+          "mint": { "type": "text", "value": "SynthEventMintB7nQ2sU5xW8zA3cE6fG9hJ4kL2mN" }
+        }
+      },
+      "message": null,
+      "payload": {
+        "retry_after_ms": 2000,
+        "text": {
+          "id": "events-ohlcv-rate-limit-hit",
+          "args": {
+            "mint": { "type": "text", "value": "SynthEventMintB7nQ2sU5xW8zA3cE6fG9hJ4kL2mN" }
+          }
+        }
+      },
+      "created_at": "2026-10-07T09:15:40.800+00:00"
+    },
+    {
+      "id": 48201,
+      "event_time": "2026-10-07T09:13:41.700+00:00",
+      "category": "ohlcv",
+      "subtype": "fetch_failed",
+      "severity": "error",
+      "mint": "SynthEventMintB7nQ2sU5xW8zA3cE6fG9hJ4kL2mN",
+      "reference_id": null,
+      "text": {
+        "id": "events-ohlcv-fetch-failed",
+        "args": {
+          "mint": { "type": "text", "value": "SynthEventMintB7nQ2sU5xW8zA3cE6fG9hJ4kL2mN" },
+          "pool": { "type": "text", "value": "Meteora DLMM" },
+          "error": { "type": "text", "value": "request timed out after 10s" }
+        }
+      },
+      "message": null,
+      "payload": {
+        "attempt": 3,
+        "text": {
+          "id": "events-ohlcv-fetch-failed",
+          "args": {
+            "mint": { "type": "text", "value": "SynthEventMintB7nQ2sU5xW8zA3cE6fG9hJ4kL2mN" },
+            "pool": { "type": "text", "value": "Meteora DLMM" },
+            "error": { "type": "text", "value": "request timed out after 10s" }
+          }
+        }
+      },
+      "created_at": "2026-10-07T09:13:41.700+00:00"
+    },
+    {
+      "id": 48200,
+      "event_time": "2026-10-07T09:11:40.000+00:00",
+      "category": "connectivity",
+      "subtype": "endpoint_recovered",
+      "severity": "info",
+      "mint": null,
+      "reference_id": null,
+      "text": {
+        "id": "events-connectivity-endpoint-recovered",
+        "args": { "from": { "type": "text", "value": "degraded" } }
+      },
+      "message": null,
+      "payload": {
+        "endpoint": "rpc",
+        "text": {
+          "id": "events-connectivity-endpoint-recovered",
+          "args": { "from": { "type": "text", "value": "degraded" } }
+        }
+      },
+      "created_at": "2026-10-07T09:11:40.000+00:00"
+    },
+    {
+      "id": 48199,
+      "event_time": "2026-10-07T09:09:35.700+00:00",
+      "category": "position",
+      "subtype": "entry_not_landed",
+      "severity": "warn",
+      "mint": "SynthEventMintB7nQ2sU5xW8zA3cE6fG9hJ4kL2mN",
+      "reference_id": null,
+      "text": {
+        "id": "events-position-entry-not-landed",
+        "args": { "symbol": { "type": "text", "value": "KEST" } }
+      },
+      "message": null,
+      "payload": {
+        "signature": "5SynthSig9vR2mK4pT8nB3cF6hJ1dEgYzQ7xWaLs",
+        "text": {
+          "id": "events-position-entry-not-landed",
+          "args": { "symbol": { "type": "text", "value": "KEST" } }
+        }
+      },
+      "created_at": "2026-10-07T09:09:35.700+00:00"
+    },
+    {
+      "id": 48198,
+      "event_time": "2026-10-07T09:07:28.800+00:00",
+      "category": "scheduled_task",
+      "subtype": "task_completed",
+      "severity": "info",
+      "mint": null,
+      "reference_id": null,
+      "text": {
+        "id": "events-task-completed",
+        "args": { "name": { "type": "text", "value": "Morning market summary" } }
+      },
+      "message": null,
+      "payload": {
+        "duration_ms": 8421,
+        "text": {
+          "id": "events-task-completed",
+          "args": { "name": { "type": "text", "value": "Morning market summary" } }
+        }
+      },
+      "created_at": "2026-10-07T09:07:28.800+00:00"
+    },
+    {
+      "id": 48197,
+      "event_time": "2026-10-07T09:05:19.300+00:00",
+      "category": "scheduled_task",
+      "subtype": "task_failed",
+      "severity": "error",
+      "mint": null,
+      "reference_id": null,
+      "text": {
+        "id": "events-task-failed",
+        "args": { "name": { "type": "text", "value": "Watchlist digest" } }
+      },
+      "message": null,
+      "payload": {
+        "error": "provider returned 503",
+        "text": {
+          "id": "events-task-failed",
+          "args": { "name": { "type": "text", "value": "Watchlist digest" } }
+        }
+      },
+      "created_at": "2026-10-07T09:05:19.300+00:00"
+    },
+    {
+      "id": 48196,
+      "event_time": "2026-10-07T09:03:07.200+00:00",
+      "category": "swap",
+      "subtype": "buy_completed",
+      "severity": "info",
+      "mint": "SynthEventMintA4kP9qR2vT7wX3yZ8bC5dF6gH1jKm",
+      "reference_id": null,
+      "text": null,
+      "message": "Bought AURA for 0.5000 SOL",
+      "payload": {
+        "message": "Bought AURA for 0.5000 SOL",
+        "input_native": 0.5,
+        "slippage_bps": 150,
+        "router": "jupiter"
+      },
+      "created_at": "2026-10-07T09:03:07.200+00:00"
+    },
+    {
+      "id": 48195,
+      "event_time": "2026-10-07T09:00:52.500+00:00",
+      "category": "swap",
+      "subtype": "sell_completed",
+      "severity": "info",
+      "mint": "SynthEventMintA4kP9qR2vT7wX3yZ8bC5dF6gH1jKm",
+      "reference_id": null,
+      "text": null,
+      "message": "Sold AURA for 0.6230 SOL",
+      "payload": {
+        "message": "Sold AURA for 0.6230 SOL",
+        "output_native": 0.623,
+        "router": "jupiter"
+      },
+      "created_at": "2026-10-07T09:00:52.500+00:00"
+    },
+    {
+      "id": 48194,
+      "event_time": "2026-10-07T08:58:35.200+00:00",
+      "category": "wallet",
+      "subtype": "balance_snapshot",
+      "severity": "debug",
+      "mint": null,
+      "reference_id": null,
+      "text": null,
+      "message": "Wallet snapshot stored",
+      "payload": {
+        "message": "Wallet snapshot stored",
+        "native_balance": 36.4821,
+        "token_count": 7
+      },
+      "created_at": "2026-10-07T08:58:35.200+00:00"
+    },
+    {
+      "id": 48193,
+      "event_time": "2026-10-07T08:56:15.300+00:00",
+      "category": "filtering",
+      "subtype": "snapshot_refreshed",
+      "severity": "info",
+      "mint": null,
+      "reference_id": null,
+      "text": null,
+      "message": "Filtering snapshot refreshed",
+      "payload": {
+        "message": "Filtering snapshot refreshed",
+        "passed": 142,
+        "total": 18452,
+        "duration_ms": 1240
+      },
+      "created_at": "2026-10-07T08:56:15.300+00:00"
+    },
+    {
+      "id": 48192,
+      "event_time": "2026-10-07T08:53:52.800+00:00",
+      "category": "rpc",
+      "subtype": "rate_limited",
+      "severity": "warn",
+      "mint": null,
+      "reference_id": null,
+      "text": {
+        "id": "events-rpc-default",
+        "args": {
+          "method": { "type": "text", "value": "getMultipleAccounts" },
+          "action": { "type": "text", "value": "rate limited" }
+        }
+      },
+      "message": null,
+      "payload": {
+        "method": "getMultipleAccounts",
+        "status": 429,
+        "text": {
+          "id": "events-rpc-default",
+          "args": {
+            "method": { "type": "text", "value": "getMultipleAccounts" },
+            "action": { "type": "text", "value": "rate limited" }
+          }
+        }
+      },
+      "created_at": "2026-10-07T08:53:52.800+00:00"
+    },
+    {
+      "id": 48191,
+      "event_time": "2026-10-07T08:51:27.700+00:00",
+      "category": "system",
+      "subtype": "startup",
+      "severity": "info",
+      "mint": null,
+      "reference_id": null,
+      "text": null,
+      "message": "All services started",
+      "payload": { "message": "All services started", "services": 19 },
+      "created_at": "2026-10-07T08:51:27.700+00:00"
+    },
+    {
+      "id": 48190,
+      "event_time": "2026-10-07T08:49:00.000+00:00",
+      "category": "security",
+      "subtype": "authority_flagged",
+      "severity": "warn",
+      "mint": "SynthEventMintB7nQ2sU5xW8zA3cE6fG9hJ4kL2mN",
+      "reference_id": null,
+      "text": null,
+      "message": "Mint authority still enabled",
+      "payload": { "message": "Mint authority still enabled", "check": "mint_authority" },
+      "created_at": "2026-10-07T08:49:00.000+00:00"
+    },
+    {
+      "id": 48189,
+      "event_time": "2026-10-07T08:46:29.700+00:00",
+      "category": "trader",
+      "subtype": "trading_enabled",
+      "severity": "info",
+      "mint": null,
+      "reference_id": null,
+      "text": { "id": "events-trader-trading-enabled" },
+      "message": null,
+      "payload": { "text": { "id": "events-trader-trading-enabled" } },
+      "created_at": "2026-10-07T08:46:29.700+00:00"
+    }
+  ],
+  "count": 22,
+  "total_count": 22,
+  "max_id": 48210,
+  "timestamp": "2026-10-07T09:30:00.412+00:00"
+}

@@ -1,0 +1,67 @@
+{
+  "decisions": [
+    {
+      "id": 904,
+      "mint": "EKpQGSJtjMFqKZ9KQanSqYXRcF8fBopzLHYxdM65zcjm",
+      "symbol": "WIF",
+      "decision": "allow",
+      "confidence": 82,
+      "reasoning": "Deep liquidity and a broad holder base; no authority risks.",
+      "risk_level": "low",
+      "provider": "openai",
+      "model": "gpt-4o-mini",
+      "tokens_used": 920,
+      "latency_ms": 712,
+      "cached": false,
+      "created_at": "2026-10-07T05:58:10Z"
+    },
+    {
+      "id": 903,
+      "mint": "DezXAZ8z7PnrnRJjz3wXBoRgixCa6xjnB7YaB1pPB263",
+      "symbol": "Bonk",
+      "decision": "reject",
+      "confidence": 74,
+      "reasoning": "Top holders gained 9% of supply in the last hour.",
+      "risk_level": "high",
+      "provider": "openai",
+      "model": "gpt-4o-mini",
+      "tokens_used": 920,
+      "latency_ms": 905,
+      "cached": false,
+      "created_at": "2026-10-07T05:55:42Z"
+    },
+    {
+      "id": 902,
+      "mint": "JUPyiwrYJFskUPiHa7hkeR8VUtAeFoSYbKedZNsDvCN",
+      "symbol": "JUP",
+      "decision": "allow",
+      "confidence": 66,
+      "reasoning": "Volume rising with price over the last hour.",
+      "risk_level": "medium",
+      "provider": "groq",
+      "model": "llama-3.3-70b-versatile",
+      "tokens_used": 920,
+      "latency_ms": 1120,
+      "cached": true,
+      "created_at": "2026-10-07T05:51:03Z"
+    },
+    {
+      "id": 901,
+      "mint": "7GCihgDB8fe6KNjn2MYtkzZcRjQy3t9GHdC8uHYmW2hr",
+      "symbol": "POPCAT",
+      "decision": "reject",
+      "confidence": 71,
+      "reasoning": "Liquidity below the configured floor.",
+      "risk_level": "high",
+      "provider": "openai",
+      "model": "gpt-4o-mini",
+      "tokens_used": 920,
+      "latency_ms": 640,
+      "cached": false,
+      "created_at": "2026-10-07T05:47:28Z"
+    }
+  ],
+  "total": 4,
+  "page": 1,
+  "per_page": 20
+}

@@ -1,0 +1,69 @@
+{
+  "enabled": true,
+  "filtering_enabled": true,
+  "entry_analysis_enabled": true,
+  "exit_analysis_enabled": false,
+  "default_provider": "openai",
+  "configured_providers": [
+    {
+      "id": "openai",
+      "name": "OpenAI",
+      "enabled": true,
+      "has_api_key": true,
+      "model": "gpt-4o-mini",
+      "rate_limit_per_minute": 60
+    },
+    {
+      "id": "groq",
+      "name": "Groq",
+      "enabled": true,
+      "has_api_key": true,
+      "model": "llama-3.3-70b-versatile",
+      "rate_limit_per_minute": 30
+    }
+  ],
+  "total_evaluations": 1284,
+  "cache_entries": 212,
+  "cache_fresh_entries": 87,
+  "metrics": {
+    "total_evaluations": 1284,
+    "cache_hit_rate": 0.37,
+    "avg_response_time_ms": 842.5,
+    "active_providers": 2,
+    "total_providers": 9
+  },
+  "recent_decisions": [
+    {
+      "decision": "allow",
+      "context": "filtering",
+      "token": "WIF",
+      "timestamp": "2026-10-07T05:58:10Z",
+      "latency_ms": 712,
+      "confidence": 0.82
+    },
+    {
+      "decision": "reject",
+      "context": "filtering",
+      "token": "Bonk",
+      "timestamp": "2026-10-07T05:55:42Z",
+      "latency_ms": 905,
+      "confidence": 0.74
+    },
+    {
+      "decision": "buy",
+      "context": "entry",
+      "token": "JUP",
+      "timestamp": "2026-10-07T05:51:03Z",
+      "latency_ms": 1120,
+      "confidence": 0.66
+    },
+    {
+      "decision": "hold",
+      "context": "exit",
+      "token": "POPCAT",
+      "timestamp": "2026-10-07T05:47:28Z",
+      "latency_ms": 640,
+      "confidence": 0.71
+    }
+  ]
+}

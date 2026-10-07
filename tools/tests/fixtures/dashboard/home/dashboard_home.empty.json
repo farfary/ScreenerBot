@@ -1,0 +1,100 @@
+{
+  "trader": {
+    "today": {
+      "buys": 0,
+      "sells": 0,
+      "profit_native": 0.0,
+      "loss_native": 0.0,
+      "net_pnl_native": 0.0,
+      "drawdown_percent": 0.0,
+      "win_rate": 0.0
+    },
+    "yesterday": {
+      "buys": 0,
+      "sells": 0,
+      "profit_native": 0.0,
+      "loss_native": 0.0,
+      "net_pnl_native": 0.0,
+      "drawdown_percent": 0.0,
+      "win_rate": 0.0
+    },
+    "this_week": {
+      "buys": 0,
+      "sells": 0,
+      "profit_native": 0.0,
+      "loss_native": 0.0,
+      "net_pnl_native": 0.0,
+      "drawdown_percent": 0.0,
+      "win_rate": 0.0
+    },
+    "this_month": {
+      "buys": 0,
+      "sells": 0,
+      "profit_native": 0.0,
+      "loss_native": 0.0,
+      "net_pnl_native": 0.0,
+      "drawdown_percent": 0.0,
+      "win_rate": 0.0
+    },
+    "all_time": {
+      "buys": 0,
+      "sells": 0,
+      "profit_native": 0.0,
+      "loss_native": 0.0,
+      "net_pnl_native": 0.0,
+      "drawdown_percent": 0.0,
+      "win_rate": 0.0
+    }
+  },
+  "wallet": {
+    "wallet_address": "",
+    "current_balance_native": 0.0,
+    "token_count": 0,
+    "tokens_worth_native": 0.0,
+    "total_equity_native": 0.0,
+    "unpriced_token_count": 0,
+    "start_of_day_balance_native": null,
+    "change_native": null,
+    "change_percent": null,
+    "native_price_usd": 152.34,
+    "balance_history": []
+  },
+  "positions": {
+    "open_count": 0,
+    "total_invested_native": 0.0,
+    "unrealized_pnl_native": 0.0,
+    "unrealized_pnl_percent": 0.0,
+    "avg_position_size_native": 0.0,
+    "avg_hold_duration_mins": 0,
+    "best_performer": null,
+    "worst_performer": null,
+    "dca_count": 0
+  },
+  "system": {
+    "uptime_seconds": 42,
+    "uptime_formatted": "42s",
+    "memory_mb": 188.2,
+    "memory_percent": 1.15,
+    "cpu_percent": 2.1,
+    "rpc_calls_per_min": 0.0,
+    "rpc_success_rate": 100.0,
+    "websocket_connected": false,
+    "services_healthy": 2,
+    "services_total": 4
+  },
+  "tokens": {
+    "snapshot_state": "building",
+    "total_in_database": 0,
+    "with_prices": null,
+    "passed_filters": null,
+    "rejected_filters": null,
+    "blacklisted": null,
+    "with_ohlcv": null,
+    "found_today": 0,
+    "found_this_week": 0,
+    "found_this_month": 0,
+    "found_all_time": 0
+  },
+  "trader_status": { "running": false },
+  "timestamp": "2026-10-07T09:30:00+00:00"
+}

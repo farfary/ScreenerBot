@@ -1,0 +1,613 @@
+{
+  "services": [
+    {
+      "name": "connectivity",
+      "priority": 5,
+      "dependencies": [],
+      "enabled": true,
+      "health": { "status": "healthy" },
+      "metrics": {
+        "process_cpu_percent": 6.2,
+        "process_memory_bytes": 642146304,
+        "task_count": 2,
+        "total_polls": 1237,
+        "total_poll_duration_ns": 48000000,
+        "mean_poll_duration_ns": 38804,
+        "total_idle_duration_ns": 17856000000,
+        "mean_idle_duration_ns": 14434923,
+        "last_cycle_duration_ns": 1501000000,
+        "avg_cycle_duration_ns": 1480900000,
+        "cycles_per_second": 60,
+        "uptime_seconds": 18339,
+        "operations_total": 900,
+        "operations_per_second": 0.05,
+        "errors_total": 0,
+        "custom_metrics": {}
+      },
+      "uptime_seconds": 18339
+    },
+    {
+      "name": "events",
+      "priority": 10,
+      "dependencies": [],
+      "enabled": true,
+      "health": { "status": "healthy" },
+      "metrics": {
+        "process_cpu_percent": 6.2,
+        "process_memory_bytes": 642146304,
+        "task_count": 3,
+        "total_polls": 2437,
+        "total_poll_duration_ns": 96000000,
+        "mean_poll_duration_ns": 39393,
+        "total_idle_duration_ns": 17712000000,
+        "mean_idle_duration_ns": 7267952,
+        "last_cycle_duration_ns": 1502000000,
+        "avg_cycle_duration_ns": 1481800000,
+        "cycles_per_second": 55,
+        "uptime_seconds": 18336,
+        "operations_total": 1800,
+        "operations_per_second": 0.1,
+        "errors_total": 0,
+        "custom_metrics": {}
+      },
+      "uptime_seconds": 18336
+    },
+    {
+      "name": "update_check",
+      "priority": 10,
+      "dependencies": [],
+      "enabled": true,
+      "health": { "status": "healthy" },
+      "metrics": {
+        "process_cpu_percent": 6.2,
+        "process_memory_bytes": 642146304,
+        "task_count": 4,
+        "total_polls": 3637,
+        "total_poll_duration_ns": 144000000,
+        "mean_poll_duration_ns": 39593,
+        "total_idle_duration_ns": 17568000000,
+        "mean_idle_duration_ns": 4830355,
+        "last_cycle_duration_ns": 1503000000,
+        "avg_cycle_duration_ns": 1482700000,
+        "cycles_per_second": 50.8,
+        "uptime_seconds": 18333,
+        "operations_total": 2700,
+        "operations_per_second": 0.15,
+        "errors_total": 0,
+        "custom_metrics": {}
+      },
+      "uptime_seconds": 18333
+    },
+    {
+      "name": "account",
+      "priority": 20,
+      "dependencies": [],
+      "enabled": true,
+      "health": { "status": "healthy" },
+      "metrics": {
+        "process_cpu_percent": 6.2,
+        "process_memory_bytes": 642146304,
+        "task_count": 1,
+        "total_polls": 4837,
+        "total_poll_duration_ns": 192000000,
+        "mean_poll_duration_ns": 39694,
+        "total_idle_duration_ns": 17424000000,
+        "mean_idle_duration_ns": 3602233,
+        "last_cycle_duration_ns": 1504000000,
+        "avg_cycle_duration_ns": 1483600000,
+        "cycles_per_second": 47.1,
+        "uptime_seconds": 18330,
+        "operations_total": 3600,
+        "operations_per_second": 0.2,
+        "errors_total": 0,
+        "custom_metrics": {}
+      },
+      "uptime_seconds": 18330
+    },
+    {
+      "name": "webserver",
+      "priority": 30,
+      "dependencies": [],
+      "enabled": true,
+      "health": { "status": "healthy" },
+      "metrics": {
+        "process_cpu_percent": 6.2,
+        "process_memory_bytes": 642146304,
+        "task_count": 2,
+        "total_polls": 6037,
+        "total_poll_duration_ns": 240000000,
+        "mean_poll_duration_ns": 39755,
+        "total_idle_duration_ns": 17280000000,
+        "mean_idle_duration_ns": 2862349,
+        "last_cycle_duration_ns": 1505000000,
+        "avg_cycle_duration_ns": 1484500000,
+        "cycles_per_second": 44,
+        "uptime_seconds": 18327,
+        "operations_total": 4500,
+        "operations_per_second": 0.25,
+        "errors_total": 0,
+        "custom_metrics": {}
+      },
+      "uptime_seconds": 18327
+    },
+    {
+      "name": "pools",
+      "priority": 30,
+      "dependencies": ["positions"],
+      "enabled": true,
+      "health": { "status": "healthy" },
+      "metrics": {
+        "process_cpu_percent": 6.2,
+        "process_memory_bytes": 642146304,
+        "task_count": 3,
+        "total_polls": 7237,
+        "total_poll_duration_ns": 288000000,
+        "mean_poll_duration_ns": 39795,
+        "total_idle_duration_ns": 17136000000,
+        "mean_idle_duration_ns": 2367832,
+        "last_cycle_duration_ns": 1506000000,
+        "avg_cycle_duration_ns": 1485400000,
+        "cycles_per_second": 41.3,
+        "uptime_seconds": 18324,
+        "operations_total": 5400,
+        "operations_per_second": 0.29,
+        "errors_total": 0,
+        "custom_metrics": {}
+      },
+      "uptime_seconds": 18324
+    },
+    {
+      "name": "tokens",
+      "priority": 40,
+      "dependencies": ["events", "pools"],
+      "enabled": true,
+      "health": { "status": "healthy" },
+      "metrics": {
+        "process_cpu_percent": 6.2,
+        "process_memory_bytes": 642146304,
+        "task_count": 4,
+        "total_polls": 8437,
+        "total_poll_duration_ns": 336000000,
+        "mean_poll_duration_ns": 39825,
+        "total_idle_duration_ns": 16992000000,
+        "mean_idle_duration_ns": 2013986,
+        "last_cycle_duration_ns": 1507000000,
+        "avg_cycle_duration_ns": 1486300000,
+        "cycles_per_second": 38.8,
+        "uptime_seconds": 18321,
+        "operations_total": 6300,
+        "operations_per_second": 0.34,
+        "errors_total": 0,
+        "custom_metrics": {}
+      },
+      "uptime_seconds": 18321
+    },
+    {
+      "name": "ohlcv",
+      "priority": 45,
+      "dependencies": ["tokens", "positions"],
+      "enabled": true,
+      "health": { "status": "healthy" },
+      "metrics": {
+        "process_cpu_percent": 6.2,
+        "process_memory_bytes": 642146304,
+        "task_count": 1,
+        "total_polls": 9637,
+        "total_poll_duration_ns": 384000000,
+        "mean_poll_duration_ns": 39846,
+        "total_idle_duration_ns": 16848000000,
+        "mean_idle_duration_ns": 1748262,
+        "last_cycle_duration_ns": 1508000000,
+        "avg_cycle_duration_ns": 1487200000,
+        "cycles_per_second": 36.7,
+        "uptime_seconds": 18318,
+        "operations_total": 7200,
+        "operations_per_second": 0.39,
+        "errors_total": 0,
+        "custom_metrics": {}
+      },
+      "uptime_seconds": 18318
+    },
+    {
+      "name": "positions",
+      "priority": 50,
+      "dependencies": [],
+      "enabled": true,
+      "health": { "status": "healthy" },
+      "metrics": {
+        "process_cpu_percent": 6.2,
+        "process_memory_bytes": 642146304,
+        "task_count": 2,
+        "total_polls": 10837,
+        "total_poll_duration_ns": 432000000,
+        "mean_poll_duration_ns": 39863,
+        "total_idle_duration_ns": 16704000000,
+        "mean_idle_duration_ns": 1541386,
+        "last_cycle_duration_ns": 1509000000,
+        "avg_cycle_duration_ns": 1488100000,
+        "cycles_per_second": 34.7,
+        "uptime_seconds": 18315,
+        "operations_total": 8100,
+        "operations_per_second": 0.44,
+        "errors_total": 0,
+        "custom_metrics": {}
+      },
+      "uptime_seconds": 18315
+    },
+    {
+      "name": "telegram",
+      "priority": 50,
+      "dependencies": [],
+      "enabled": true,
+      "health": {
+        "status": "degraded",
+        "message": { "id": "services-health-telegram-disconnected" }
+      },
+      "metrics": {
+        "process_cpu_percent": 6.2,
+        "process_memory_bytes": 642146304,
+        "task_count": 3,
+        "total_polls": 12037,
+        "total_poll_duration_ns": 480000000,
+        "mean_poll_duration_ns": 39877,
+        "total_idle_duration_ns": 16560000000,
+        "mean_idle_duration_ns": 1375758,
+        "last_cycle_duration_ns": 1510000000,
+        "avg_cycle_duration_ns": 1489000000,
+        "cycles_per_second": 33,
+        "uptime_seconds": 18312,
+        "operations_total": 9000,
+        "operations_per_second": 0.49,
+        "errors_total": 3,
+        "custom_metrics": {}
+      },
+      "uptime_seconds": 18312
+    },
+    {
+      "name": "transactions",
+      "priority": 80,
+      "dependencies": ["connectivity"],
+      "enabled": true,
+      "health": { "status": "healthy" },
+      "metrics": {
+        "process_cpu_percent": 6.2,
+        "process_memory_bytes": 642146304,
+        "task_count": 4,
+        "total_polls": 13237,
+        "total_poll_duration_ns": 528000000,
+        "mean_poll_duration_ns": 39888,
+        "total_idle_duration_ns": 16416000000,
+        "mean_idle_duration_ns": 1240160,
+        "last_cycle_duration_ns": 1511000000,
+        "avg_cycle_duration_ns": 1489900000,
+        "cycles_per_second": 31.4,
+        "uptime_seconds": 18309,
+        "operations_total": 9900,
+        "operations_per_second": 0.54,
+        "errors_total": 0,
+        "custom_metrics": {}
+      },
+      "uptime_seconds": 18309
+    },
+    {
+      "name": "filtering",
+      "priority": 90,
+      "dependencies": ["tokens", "pools"],
+      "enabled": true,
+      "health": {
+        "status": "degraded",
+        "message": {
+          "id": "services-health-filtering-snapshot-stale",
+          "args": { "seconds": { "type": "text", "value": "94" } }
+        }
+      },
+      "metrics": {
+        "process_cpu_percent": 6.2,
+        "process_memory_bytes": 642146304,
+        "task_count": 1,
+        "total_polls": 14437,
+        "total_poll_duration_ns": 576000000,
+        "mean_poll_duration_ns": 39897,
+        "total_idle_duration_ns": 16272000000,
+        "mean_idle_duration_ns": 1127104,
+        "last_cycle_duration_ns": 1512000000,
+        "avg_cycle_duration_ns": 1490800000,
+        "cycles_per_second": 30,
+        "uptime_seconds": 18306,
+        "operations_total": 10800,
+        "operations_per_second": 0.59,
+        "errors_total": 0,
+        "custom_metrics": {}
+      },
+      "uptime_seconds": 18306
+    },
+    {
+      "name": "wallet",
+      "priority": 90,
+      "dependencies": [],
+      "enabled": true,
+      "health": { "status": "healthy" },
+      "metrics": {
+        "process_cpu_percent": 6.2,
+        "process_memory_bytes": 642146304,
+        "task_count": 2,
+        "total_polls": 15637,
+        "total_poll_duration_ns": 624000000,
+        "mean_poll_duration_ns": 39905,
+        "total_idle_duration_ns": 16128000000,
+        "mean_idle_duration_ns": 1031400,
+        "last_cycle_duration_ns": 1513000000,
+        "avg_cycle_duration_ns": 1491700000,
+        "cycles_per_second": 28.7,
+        "uptime_seconds": 18303,
+        "operations_total": 11700,
+        "operations_per_second": 0.64,
+        "errors_total": 0,
+        "custom_metrics": {}
+      },
+      "uptime_seconds": 18303
+    },
+    {
+      "name": "pool_pricing",
+      "priority": 100,
+      "dependencies": ["transactions", "pools", "filtering"],
+      "enabled": true,
+      "health": { "status": "healthy" },
+      "metrics": {
+        "process_cpu_percent": 6.2,
+        "process_memory_bytes": 642146304,
+        "task_count": 3,
+        "total_polls": 16837,
+        "total_poll_duration_ns": 672000000,
+        "mean_poll_duration_ns": 39912,
+        "total_idle_duration_ns": 15984000000,
+        "mean_idle_duration_ns": 949338,
+        "last_cycle_duration_ns": 1514000000,
+        "avg_cycle_duration_ns": 1492600000,
+        "cycles_per_second": 27.5,
+        "uptime_seconds": 18300,
+        "operations_total": 12600,
+        "operations_per_second": 0.69,
+        "errors_total": 0,
+        "custom_metrics": {}
+      },
+      "uptime_seconds": 18300
+    },
+    {
+      "name": "rpc_stats",
+      "priority": 100,
+      "dependencies": [],
+      "enabled": true,
+      "health": { "status": "healthy" },
+      "metrics": {
+        "process_cpu_percent": 6.2,
+        "process_memory_bytes": 642146304,
+        "task_count": 4,
+        "total_polls": 18037,
+        "total_poll_duration_ns": 720000000,
+        "mean_poll_duration_ns": 39918,
+        "total_idle_duration_ns": 15840000000,
+        "mean_idle_duration_ns": 878195,
+        "last_cycle_duration_ns": 1515000000,
+        "avg_cycle_duration_ns": 1493500000,
+        "cycles_per_second": 26.4,
+        "uptime_seconds": 18297,
+        "operations_total": 13500,
+        "operations_per_second": 0.74,
+        "errors_total": 0,
+        "custom_metrics": {}
+      },
+      "uptime_seconds": 18297
+    },
+    {
+      "name": "sol_price",
+      "priority": 120,
+      "dependencies": [],
+      "enabled": true,
+      "health": { "status": "starting" },
+      "metrics": {
+        "process_cpu_percent": 6.2,
+        "process_memory_bytes": 642146304,
+        "task_count": 1,
+        "total_polls": 19237,
+        "total_poll_duration_ns": 768000000,
+        "mean_poll_duration_ns": 39923,
+        "total_idle_duration_ns": 15696000000,
+        "mean_idle_duration_ns": 815928,
+        "last_cycle_duration_ns": 1516000000,
+        "avg_cycle_duration_ns": 1494400000,
+        "cycles_per_second": 25.4,
+        "uptime_seconds": 18294,
+        "operations_total": 14400,
+        "operations_per_second": 0.78,
+        "errors_total": 0,
+        "custom_metrics": {}
+      },
+      "uptime_seconds": 18294
+    },
+    {
+      "name": "trader",
+      "priority": 150,
+      "dependencies": ["positions", "pool_pricing", "pools", "tokens", "filtering"],
+      "enabled": true,
+      "health": { "status": "healthy" },
+      "metrics": {
+        "process_cpu_percent": 6.2,
+        "process_memory_bytes": 642146304,
+        "task_count": 2,
+        "total_polls": 20437,
+        "total_poll_duration_ns": 816000000,
+        "mean_poll_duration_ns": 39928,
+        "total_idle_duration_ns": 15552000000,
+        "mean_idle_duration_ns": 760973,
+        "last_cycle_duration_ns": 1517000000,
+        "avg_cycle_duration_ns": 1495300000,
+        "cycles_per_second": 24.4,
+        "uptime_seconds": 18291,
+        "operations_total": 15300,
+        "operations_per_second": 0.83,
+        "errors_total": 0,
+        "custom_metrics": {}
+      },
+      "uptime_seconds": 18291
+    },
+    {
+      "name": "copy_trading",
+      "priority": 151,
+      "dependencies": ["wallet_watch", "filtering", "positions", "wallet", "pools"],
+      "enabled": false,
+      "health": { "status": "disabled" },
+      "metrics": {
+        "process_cpu_percent": 6.2,
+        "process_memory_bytes": 642146304,
+        "task_count": 0,
+        "total_polls": 0,
+        "total_poll_duration_ns": 0,
+        "mean_poll_duration_ns": 0,
+        "total_idle_duration_ns": 0,
+        "mean_idle_duration_ns": 0,
+        "last_cycle_duration_ns": 0,
+        "avg_cycle_duration_ns": 0,
+        "cycles_per_second": 0,
+        "uptime_seconds": 0,
+        "operations_total": 0,
+        "operations_per_second": 0,
+        "errors_total": 0,
+        "custom_metrics": {}
+      },
+      "uptime_seconds": 0
+    },
+    {
+      "name": "referral",
+      "priority": 200,
+      "dependencies": [],
+      "enabled": true,
+      "health": { "status": "unhealthy", "message": { "id": "services-health-unavailable" } },
+      "metrics": {
+        "process_cpu_percent": 6.2,
+        "process_memory_bytes": 642146304,
+        "task_count": 4,
+        "total_polls": 22837,
+        "total_poll_duration_ns": 912000000,
+        "mean_poll_duration_ns": 39935,
+        "total_idle_duration_ns": 15264000000,
+        "mean_idle_duration_ns": 668389,
+        "last_cycle_duration_ns": 1519000000,
+        "avg_cycle_duration_ns": 1497100000,
+        "cycles_per_second": 22.8,
+        "uptime_seconds": 18285,
+        "operations_total": 17100,
+        "operations_per_second": 0.93,
+        "errors_total": 12,
+        "custom_metrics": {}
+      },
+      "uptime_seconds": 18285
+    }
+  ],
+  "dependency_graph": [
+    {
+      "name": "connectivity",
+      "priority": 5,
+      "dependencies": [],
+      "health": { "status": "healthy" }
+    },
+    { "name": "events", "priority": 10, "dependencies": [], "health": { "status": "healthy" } },
+    {
+      "name": "update_check",
+      "priority": 10,
+      "dependencies": [],
+      "health": { "status": "healthy" }
+    },
+    { "name": "account", "priority": 20, "dependencies": [], "health": { "status": "healthy" } },
+    { "name": "webserver", "priority": 30, "dependencies": [], "health": { "status": "healthy" } },
+    {
+      "name": "pools",
+      "priority": 30,
+      "dependencies": ["positions"],
+      "health": { "status": "healthy" }
+    },
+    {
+      "name": "tokens",
+      "priority": 40,
+      "dependencies": ["events", "pools"],
+      "health": { "status": "healthy" }
+    },
+    {
+      "name": "ohlcv",
+      "priority": 45,
+      "dependencies": ["tokens", "positions"],
+      "health": { "status": "healthy" }
+    },
+    { "name": "positions", "priority": 50, "dependencies": [], "health": { "status": "healthy" } },
+    {
+      "name": "telegram",
+      "priority": 50,
+      "dependencies": [],
+      "health": {
+        "status": "degraded",
+        "message": { "id": "services-health-telegram-disconnected" }
+      }
+    },
+    {
+      "name": "transactions",
+      "priority": 80,
+      "dependencies": ["connectivity"],
+      "health": { "status": "healthy" }
+    },
+    {
+      "name": "filtering",
+      "priority": 90,
+      "dependencies": ["tokens", "pools"],
+      "health": {
+        "status": "degraded",
+        "message": {
+          "id": "services-health-filtering-snapshot-stale",
+          "args": { "seconds": { "type": "text", "value": "94" } }
+        }
+      }
+    },
+    { "name": "wallet", "priority": 90, "dependencies": [], "health": { "status": "healthy" } },
+    {
+      "name": "pool_pricing",
+      "priority": 100,
+      "dependencies": ["transactions", "pools", "filtering"],
+      "health": { "status": "healthy" }
+    },
+    { "name": "rpc_stats", "priority": 100, "dependencies": [], "health": { "status": "healthy" } },
+    {
+      "name": "sol_price",
+      "priority": 120,
+      "dependencies": [],
+      "health": { "status": "starting" }
+    },
+    {
+      "name": "trader",
+      "priority": 150,
+      "dependencies": ["positions", "pool_pricing", "pools", "tokens", "filtering"],
+      "health": { "status": "healthy" }
+    },
+    {
+      "name": "copy_trading",
+      "priority": 151,
+      "dependencies": ["wallet_watch", "filtering", "positions", "wallet", "pools"],
+      "health": { "status": "disabled" }
+    },
+    {
+      "name": "referral",
+      "priority": 200,
+      "dependencies": [],
+      "health": { "status": "unhealthy", "message": { "id": "services-health-unavailable" } }
+    }
+  ],
+  "summary": {
+    "total_services": 19,
+    "enabled_services": 18,
+    "healthy_services": 14,
+    "degraded_services": 2,
+    "unhealthy_services": 1,
+    "starting_services": 1,
+    "disabled_services": 1,
+    "all_healthy": false
+  },
+  "timestamp": "2026-10-07T09:30:00.000000Z"
+}

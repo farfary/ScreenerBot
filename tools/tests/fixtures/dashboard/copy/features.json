@@ -1,0 +1,30 @@
+{
+  "tools": {
+    "wallet_cleanup": "available",
+    "burn_tokens": "coming_soon",
+    "token_analyzer": "coming_soon",
+    "create_token": "coming_soon",
+    "trade_watcher": "coming_soon",
+    "holder_watch": "coming_soon",
+    "multi_buy": "coming_soon",
+    "multi_sell": "coming_soon",
+    "wallet_consolidation": "coming_soon",
+    "airdrop_checker": "coming_soon",
+    "wallet_generator": "coming_soon"
+  },
+  "trading": {
+    "roi_exit": "available",
+    "trailing_stop": "available",
+    "stop_loss": "available",
+    "time_override": "available",
+    "dca": "available",
+    "partial_exit": "available",
+    "loss_blacklist": "available",
+    "strategies": "available",
+    "copy_wallet": "beta"
+  },
+  "integrations": {
+    "telegram": "available"
+  },
+  "version": "0.2.13"
+}

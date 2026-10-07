@@ -1,0 +1,104 @@
+{
+  "timestamp": "2026-10-07T09:30:00+00:00",
+  "initialization_required": false,
+  "initialization_complete": true,
+  "explore_mode": false,
+  "onboarding_complete": true,
+  "core_services_ready": true,
+  "ui_ready": true,
+  "ready_for_requests": true,
+  "pending_services": [],
+  "services_total": 23,
+  "services_running": 19,
+  "connectivity_ready": true,
+  "tokens_ready": true,
+  "positions_ready": true,
+  "pools_ready": true,
+  "transactions_ready": true,
+  "boot_progress": [
+    {
+      "name": "connectivity",
+      "ready": true,
+      "started_at": "2026-10-07T08:00:00.120+00:00",
+      "ready_at": "2026-10-07T08:00:10.480+00:00",
+      "duration_ms": 10360,
+      "message": null
+    },
+    {
+      "name": "events",
+      "ready": true,
+      "started_at": "2026-10-07T08:00:01.120+00:00",
+      "ready_at": "2026-10-07T08:00:11.480+00:00",
+      "duration_ms": 10360,
+      "message": null
+    },
+    {
+      "name": "pools",
+      "ready": true,
+      "started_at": "2026-10-07T08:00:02.120+00:00",
+      "ready_at": "2026-10-07T08:00:12.480+00:00",
+      "duration_ms": 10360,
+      "message": null
+    },
+    {
+      "name": "positions",
+      "ready": true,
+      "started_at": "2026-10-07T08:00:03.120+00:00",
+      "ready_at": "2026-10-07T08:00:13.480+00:00",
+      "duration_ms": 10360,
+      "message": null
+    },
+    {
+      "name": "sol_price",
+      "ready": true,
+      "started_at": "2026-10-07T08:00:04.120+00:00",
+      "ready_at": "2026-10-07T08:00:14.480+00:00",
+      "duration_ms": 10360,
+      "message": null
+    },
+    {
+      "name": "tokens",
+      "ready": true,
+      "started_at": "2026-10-07T08:00:05.120+00:00",
+      "ready_at": "2026-10-07T08:00:15.480+00:00",
+      "duration_ms": 10360,
+      "message": null
+    },
+    {
+      "name": "trader",
+      "ready": true,
+      "started_at": "2026-10-07T08:00:06.120+00:00",
+      "ready_at": "2026-10-07T08:00:16.480+00:00",
+      "duration_ms": 10360,
+      "message": null
+    },
+    {
+      "name": "transactions",
+      "ready": true,
+      "started_at": "2026-10-07T08:00:07.120+00:00",
+      "ready_at": "2026-10-07T08:00:17.480+00:00",
+      "duration_ms": 10360,
+      "message": null
+    },
+    {
+      "name": "wallet",
+      "ready": true,
+      "started_at": "2026-10-07T08:00:08.120+00:00",
+      "ready_at": "2026-10-07T08:00:18.480+00:00",
+      "duration_ms": 10360,
+      "message": null
+    },
+    {
+      "name": "webserver",
+      "ready": true,
+      "started_at": "2026-10-07T08:00:09.120+00:00",
+      "ready_at": "2026-10-07T08:00:19.480+00:00",
+      "duration_ms": 10360,
+      "message": null
+    }
+  ],
+  "wallet_snapshot_ready": true,
+  "wallet_last_updated": "2026-10-07T09:29:55+00:00",
+  "uptime_seconds": 5400,
+  "phase": "ready"
+}

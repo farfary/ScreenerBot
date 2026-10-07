@@ -1,0 +1,178 @@
+{
+  "mint": "orcaEKTdK7LKz57vaAYr9QeNsVEPfiu6QeMU1kektZE",
+  "symbol": "ORCA",
+  "name": "Orca",
+  "description": "Orca token on Solana.",
+  "profile": null,
+  "decimals": 6,
+  "logo_url": null,
+  "header_image_url": null,
+  "open_graph_image": null,
+  "website": "https://example.com",
+  "data_source": "dexscreener",
+  "verified": true,
+  "tags": [],
+  "pair_labels": [],
+  "blacklisted": false,
+  "has_ohlcv": true,
+  "has_pool_price": true,
+  "has_open_position": false,
+  "created_at": 1743811200,
+  "market_data_last_fetched_at": 1791331105,
+  "pool_price_last_calculated_at": 1791331192,
+  "pair_created_at": 1743811200,
+  "pair_url": "https://dexscreener.com/solana/Poo1Ad9jHDXDysTXX1bHDhjjowsfVKVtDBVTf1fZqoVq",
+  "boosts_active": null,
+  "price_sol": 0.0185,
+  "price_usd": 2.8194,
+  "price_confidence": "high",
+  "price_source": "pool",
+  "price_change_h1": 2.2,
+  "price_change_h24": 5.5,
+  "price_change_periods": {
+    "m5": 0.6,
+    "h1": 2.2,
+    "h6": 3.9,
+    "h24": 5.5
+  },
+  "liquidity_usd": 3400000,
+  "liquidity_base": 602965.1698943038,
+  "liquidity_quote": 11154.855643044619,
+  "volume_24h": 2040000,
+  "volume_periods": {
+    "m5": 6800,
+    "h1": 102000,
+    "h6": 612000,
+    "h24": 2040000
+  },
+  "fdv": 187000000,
+  "market_cap": 163200000,
+  "pool_address": "Poo1Ad9jHDXDysTXX1bHDhjjowsfVKVtDBVTf1fZqoVq",
+  "pool_program": "raydium-cpmm",
+  "pool_reserves_native": 11154.855643044619,
+  "pool_reserves_token": 602965.1698943038,
+  "txn_periods": {
+    "m5": {
+      "buys": 55,
+      "sells": 45
+    },
+    "h1": {
+      "buys": 620,
+      "sells": 570
+    },
+    "h6": {
+      "buys": 3550,
+      "sells": 3325
+    },
+    "h24": {
+      "buys": 13900,
+      "sells": 13200
+    }
+  },
+  "buys_24h": 13900,
+  "sells_24h": 13200,
+  "net_flow_24h": 700,
+  "buy_sell_ratio_24h": 1.053030303030303,
+  "risk_score": 13,
+  "safety_score": 87,
+  "rugged": false,
+  "mint_authority": null,
+  "freeze_authority": null,
+  "total_holders": 137000,
+  "top_10_concentration": 23.5,
+  "security_risks": [],
+  "security_summary": null,
+  "token_type": null,
+  "creator_balance_pct": 0,
+  "lp_provider_count": 125,
+  "graph_insiders_detected": 0,
+  "transfer_fee_pct": null,
+  "transfer_fee_max_amount": null,
+  "transfer_fee_authority": null,
+  "top_holders": [
+    {
+      "address": "Wa11etXbbHTy1yjTTf7FHKhKoZFHhPdK1FMyRfPZuhqs",
+      "percentage": 5,
+      "is_insider": false,
+      "owner_type": null
+    },
+    {
+      "address": "Wa11etsq1jydTFMH7Th9obMbZBTDj31bRmV9jjohh73u",
+      "percentage": 4,
+      "is_insider": false,
+      "owner_type": null
+    },
+    {
+      "address": "Wa11etM1oB37mXywTBqTw9DVd999TmyKfdKd9ZfuTVwd",
+      "percentage": 3,
+      "is_insider": false,
+      "owner_type": null
+    }
+  ],
+  "security_last_updated": 1791327600,
+  "websites": [
+    {
+      "label": "Website",
+      "url": "https://example.com"
+    }
+  ],
+  "socials": [
+    {
+      "platform": "twitter",
+      "url": "https://x.com/example"
+    }
+  ],
+  "pools": [
+    {
+      "pool_id": "Poo1Ad9jHDXDysTXX1bHDhjjowsfVKVtDBVTf1fZqoVq",
+      "program": "raydium-cpmm",
+      "base_mint": "orcaEKTdK7LKz57vaAYr9QeNsVEPfiu6QeMU1kektZE",
+      "quote_mint": "So11111111111111111111111111111111111111112",
+      "token_role": "base",
+      "paired_mint": "So11111111111111111111111111111111111111112",
+      "liquidity_usd": 3400000,
+      "volume_h24_usd": 2040000,
+      "reserve_accounts": [
+        "Wa11etsMowfRsFRTM7yXs333RDXRDd9BT5wdBo3VqKmh",
+        "Wa11etMVToBFFhsD3yB5umK1TDFmoH5qHsZqusw75dhu"
+      ],
+      "is_canonical": true,
+      "last_updated_unix": 1791331192
+    }
+  ],
+  "source_status": [
+    {
+      "source": "dexscreener",
+      "label": "DexScreener",
+      "state": "ok",
+      "text": {
+        "id": "tokens-result-source-live"
+      }
+    },
+    {
+      "source": "geckoterminal",
+      "label": "GeckoTerminal",
+      "state": "ok",
+      "text": {
+        "id": "tokens-result-source-live"
+      }
+    },
+    {
+      "source": "rugcheck",
+      "label": "Rugcheck",
+      "state": "ok",
+      "text": {
+        "id": "tokens-result-security-available"
+      }
+    },
+    {
+      "source": "ohlcv",
+      "label": "Chart",
+      "state": "ok",
+      "text": {
+        "id": "tokens-result-chart-available"
+      }
+    }
+  ],
+  "timestamp": "2026-10-07T00:00:00.000Z"
+}

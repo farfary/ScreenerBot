@@ -1,0 +1,155 @@
+{
+  "mint": "DezXAZ8z7PnrnRJjz3wXBoRgixCa6xjnB7YaB1pPB263",
+  "symbol": "BONK",
+  "token_decimals": 5,
+  "positions": [
+    {
+      "id": 100,
+      "index": 1,
+      "opened_at": 1791309600,
+      "closed_at": null,
+      "is_open": true,
+      "archived": false,
+      "swaps": 2,
+      "native_invested": 0.75,
+      "native_returned": 0,
+      "realized_pnl": 0
+    }
+  ],
+  "events": [
+    {
+      "available": true,
+      "status": "Finalized",
+      "success": true,
+      "fee_sol": 0.000105,
+      "router": "jupiter",
+      "instructions_count": 6,
+      "compute_units": 182000,
+      "accounts_count": 24,
+      "notes": null,
+      "token_transfers": [],
+      "position_id": 100,
+      "position_index": 1,
+      "recorded": true,
+      "exit_percentage": null,
+      "cost_basis": null,
+      "realized_pnl": null,
+      "realized_pnl_percent": null,
+      "kind": "entry",
+      "side": "entry",
+      "sequence": 1,
+      "state": "confirmed",
+      "signature": "5Synthjh51ydTm95jMDwH3V9hjsTPVTqHoKMdqMXZs7dusRVVZVBfBd5fP3oRZZ3D5q7jFHXMMuywq9boboMMmy3",
+      "timestamp": 1791309600,
+      "record_id": 1001,
+      "token_amount": 4166666.66667,
+      "price": 1.2e-7,
+      "sol_amount": 0.5,
+      "record_fee_native": 0.000105,
+      "slot": 318001001,
+      "block_time": 1791309600,
+      "direction": "Incoming",
+      "transaction_type": {
+        "id": "transactions-type-with-detail",
+        "args": {
+          "detail": {
+            "type": "nested",
+            "value": {
+              "id": "common-venue-jupiter"
+            }
+          },
+          "label": {
+            "type": "nested",
+            "value": {
+              "id": "transactions-type-buy"
+            }
+          }
+        }
+      },
+      "sol_change": -0.5,
+      "tokens_after": 4166666.66667,
+      "invested_after": 0.5
+    },
+    {
+      "available": true,
+      "status": "Finalized",
+      "success": true,
+      "fee_sol": 0.000105,
+      "router": "jupiter",
+      "instructions_count": 6,
+      "compute_units": 182000,
+      "accounts_count": 24,
+      "notes": null,
+      "token_transfers": [],
+      "position_id": 100,
+      "position_index": 1,
+      "recorded": true,
+      "exit_percentage": null,
+      "cost_basis": null,
+      "realized_pnl": null,
+      "realized_pnl_percent": null,
+      "kind": "dca",
+      "side": "entry",
+      "sequence": 2,
+      "state": "confirmed",
+      "signature": "5SynthwVVjqs3uDh1bqdFyPFfdhK9VbyRwj3MhF31BHjbRHfhXT15DZHhbbXbVwZd1wjBhKV7397bo5oHym7Bmbb",
+      "timestamp": 1791311400,
+      "record_id": 1002,
+      "token_amount": 2083333.33334,
+      "price": 1.2e-7,
+      "sol_amount": 0.25,
+      "record_fee_native": 0.000105,
+      "slot": 318001002,
+      "block_time": 1791311400,
+      "direction": "Incoming",
+      "transaction_type": {
+        "id": "transactions-type-with-detail",
+        "args": {
+          "detail": {
+            "type": "nested",
+            "value": {
+              "id": "common-venue-jupiter"
+            }
+          },
+          "label": {
+            "type": "nested",
+            "value": {
+              "id": "transactions-type-buy"
+            }
+          }
+        }
+      },
+      "sol_change": -0.25,
+      "tokens_after": 6250000.000010001,
+      "invested_after": 0.75
+    }
+  ],
+  "totals": {
+    "events": 2,
+    "positions": 1,
+    "entries": 2,
+    "dca_entries": 1,
+    "exits": 0,
+    "partial_exits": 0,
+    "wallet_events": 0,
+    "pending": 0,
+    "failed": 0,
+    "tokens_bought": 6250000.000010001,
+    "tokens_sold": 0,
+    "native_invested": 0.75,
+    "native_returned": 0,
+    "network_fees_native": 0.00021,
+    "realized_pnl": 0
+  },
+  "state_history": [
+    {
+      "position_id": 100,
+      "position_index": 1,
+      "state": "open",
+      "changed_at": 1791309600,
+      "reason": null
+    }
+  ],
+  "native_price_usd": 152.4,
+  "fetched_at": "2026-10-07T00:00:00.000Z"
+}

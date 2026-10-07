@@ -1,0 +1,10 @@
+{
+  "id": 1,
+  "name": "Liquidity floor",
+  "content": "Reject any token with less than 150 SOL of pool liquidity.",
+  "category": "filtering",
+  "priority": 0,
+  "enabled": true,
+  "created_at": "2026-09-12T10:00:00Z",
+  "updated_at": "2026-09-12T10:00:00Z"
+}

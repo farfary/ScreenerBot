@@ -1,0 +1,10 @@
+{
+  "enabled": true,
+  "limit_native": 2,
+  "current_loss_native": 0.35,
+  "is_limited": false,
+  "limited_at": null,
+  "period_start": "2026-10-07T00:00:00Z",
+  "period_remaining_secs": 50400,
+  "progress_percent": 17.5
+}

@@ -1,0 +1,218 @@
+{
+  "activity": [
+    {
+      "id": 312,
+      "task_id": 1,
+      "kind": "paper_filled",
+      "outcome": {
+        "outcome": "paper_filled",
+        "task_id": 1,
+        "target_address": "CopyTargetAAA1111111111111111111111111111111",
+        "signature": "CopySig312x22222222222222222222222222222222222222222222222222222222222222222222222222222",
+        "mint": "EKpQGSJtjMFqKZ9KQanSqYXRcF8fBopzLHYxdM65zcjm",
+        "target_size_sol": 1.8,
+        "target_token_amount": 2295.4,
+        "sized_sol": 0.1,
+        "fill": {
+          "input_sol": 0.1,
+          "market_price_sol": 0.00782,
+          "priced_from_pool": true,
+          "fill_price_sol": 0.00791384,
+          "token_amount": 12.638,
+          "referral_fee_sol": 0.0005,
+          "network_fee_sol": 0.000005,
+          "priority_fee_sol": 0.0001,
+          "total_cost_sol": 0.100605
+        },
+        "telemetry": {
+          "target_block_time": 1791323051,
+          "detected_at": "2026-10-06T21:44:12.300Z",
+          "decoded_at": "2026-10-06T21:44:12.340Z",
+          "decided_at": "2026-10-06T21:44:12.395Z",
+          "submitted_at": null,
+          "confirmed_at": null,
+          "target_price_sol": 0.00784,
+          "fill_price_sol": 0.007914,
+          "backfill": false
+        }
+      },
+      "created_at": "2026-10-06T21:44:12.420Z"
+    },
+    {
+      "id": 311,
+      "task_id": 1,
+      "kind": "paper_sell_observed",
+      "outcome": {
+        "outcome": "paper_sell_observed",
+        "task_id": 1,
+        "target_address": "CopyTargetAAA1111111111111111111111111111111",
+        "target_signature": "CopySig311x22222222222222222222222222222222222222222222222222222222222222222222222222222",
+        "mint": "DezXAZ8z7PnrnRJjz3wXBoRgixCa6xjnB7YaB1pPB263",
+        "target_token_amount": 41250000,
+        "target_sol_amount": 2.94,
+        "exit_percentage": null,
+        "transaction_signature": null,
+        "error": null,
+        "telemetry": {
+          "target_block_time": 1791317402,
+          "detected_at": "2026-10-06T20:10:03.900Z",
+          "decoded_at": "2026-10-06T20:10:03.940Z",
+          "decided_at": "2026-10-06T20:10:03.995Z",
+          "submitted_at": null,
+          "confirmed_at": null,
+          "target_price_sol": null,
+          "fill_price_sol": null,
+          "backfill": false
+        },
+        "paper_fill": {
+          "token_amount": 1402000,
+          "market_price_sol": 9.81e-8,
+          "priced_from_pool": true,
+          "fill_price_sol": 9.69e-8,
+          "gross_sol": 0.13585,
+          "referral_fee_sol": 0.000679,
+          "network_fee_sol": 0.000005,
+          "priority_fee_sol": 0.0001,
+          "net_proceeds_sol": 0.135066
+        },
+        "exit_rule": null
+      },
+      "created_at": "2026-10-06T20:10:04.010Z"
+    },
+    {
+      "id": 310,
+      "task_id": 1,
+      "kind": "skipped",
+      "outcome": {
+        "outcome": "skipped",
+        "task_id": 1,
+        "signature": "CopySig310x22222222222222222222222222222222222222222222222222222222222222222222222222222",
+        "mint": "7GCihgDB8fe6KNjn2MYtkzZcRjQy3t9GHdC8uHYmW2hr",
+        "reason": {
+          "kind": "target_below_minimum",
+          "minimum_sol": 0.5
+        },
+        "decided_at": "2026-10-06T19:52:40.500Z",
+        "telemetry": {
+          "target_block_time": 1791316359,
+          "detected_at": "2026-10-06T19:52:40.400Z",
+          "decoded_at": "2026-10-06T19:52:40.440Z",
+          "decided_at": "2026-10-06T19:52:40.495Z",
+          "submitted_at": null,
+          "confirmed_at": null,
+          "target_price_sol": null,
+          "fill_price_sol": null,
+          "backfill": false
+        }
+      },
+      "created_at": "2026-10-06T19:52:40.520Z"
+    },
+    {
+      "id": 309,
+      "task_id": 1,
+      "kind": "skipped",
+      "outcome": {
+        "outcome": "skipped",
+        "task_id": 1,
+        "signature": "CopySig309x22222222222222222222222222222222222222222222222222222222222222222222222222222",
+        "mint": "JUPyiwrYJFskUPiHa7hkeR8VUtAeFoSYbKedZNsDvCN",
+        "reason": {
+          "kind": "already_bought"
+        },
+        "decided_at": "2026-10-06T18:31:02.100Z",
+        "telemetry": {
+          "target_block_time": 1791311460,
+          "detected_at": "2026-10-06T18:31:02.000Z",
+          "decoded_at": "2026-10-06T18:31:02.040Z",
+          "decided_at": "2026-10-06T18:31:02.095Z",
+          "submitted_at": null,
+          "confirmed_at": null,
+          "target_price_sol": null,
+          "fill_price_sol": null,
+          "backfill": false
+        }
+      },
+      "created_at": "2026-10-06T18:31:02.130Z"
+    },
+    {
+      "id": 308,
+      "task_id": 1,
+      "kind": "paper_sell_observed",
+      "outcome": {
+        "outcome": "paper_sell_observed",
+        "task_id": 1,
+        "target_address": "CopyTargetAAA1111111111111111111111111111111",
+        "target_signature": "paper-exit-308",
+        "mint": "JUPyiwrYJFskUPiHa7hkeR8VUtAeFoSYbKedZNsDvCN",
+        "target_token_amount": 0,
+        "target_sol_amount": 0,
+        "exit_percentage": null,
+        "transaction_signature": null,
+        "error": null,
+        "telemetry": {
+          "target_block_time": 1791302730,
+          "detected_at": "2026-10-06T16:05:30.000Z",
+          "decoded_at": "2026-10-06T16:05:30.040Z",
+          "decided_at": "2026-10-06T16:05:30.095Z",
+          "submitted_at": null,
+          "confirmed_at": null,
+          "target_price_sol": null,
+          "fill_price_sol": null,
+          "backfill": false
+        },
+        "paper_fill": {
+          "token_amount": 41.2,
+          "market_price_sol": 0.003391,
+          "priced_from_pool": true,
+          "fill_price_sol": 0.00335,
+          "gross_sol": 0.13802,
+          "referral_fee_sol": 0.00069,
+          "network_fee_sol": 0.000005,
+          "priority_fee_sol": 0.0001,
+          "net_proceeds_sol": 0.137225
+        },
+        "exit_rule": "take_profit"
+      },
+      "created_at": "2026-10-06T16:05:30.090Z"
+    },
+    {
+      "id": 307,
+      "task_id": 1,
+      "kind": "paper_filled",
+      "outcome": {
+        "outcome": "paper_filled",
+        "task_id": 1,
+        "target_address": "CopyTargetAAA1111111111111111111111111111111",
+        "signature": "CopySig307x22222222222222222222222222222222222222222222222222222222222222222222222222222",
+        "mint": "DezXAZ8z7PnrnRJjz3wXBoRgixCa6xjnB7YaB1pPB263",
+        "target_size_sol": 2.1,
+        "target_token_amount": 22100000,
+        "sized_sol": 0.1,
+        "fill": {
+          "input_sol": 0.1,
+          "market_price_sol": 9.5e-8,
+          "priced_from_pool": true,
+          "fill_price_sol": 9.614e-8,
+          "token_amount": 1041000,
+          "referral_fee_sol": 0.0005,
+          "network_fee_sol": 0.000005,
+          "priority_fee_sol": 0.0001,
+          "total_cost_sol": 0.100605
+        },
+        "telemetry": {
+          "target_block_time": 1791296537,
+          "detected_at": "2026-10-06T14:22:18.700Z",
+          "decoded_at": "2026-10-06T14:22:18.740Z",
+          "decided_at": "2026-10-06T14:22:18.795Z",
+          "submitted_at": null,
+          "confirmed_at": null,
+          "target_price_sol": 9.5e-8,
+          "fill_price_sol": 9.61e-8,
+          "backfill": false
+        }
+      },
+      "created_at": "2026-10-06T14:22:18.810Z"
+    }
+  ],
+  "next_before": null
+}

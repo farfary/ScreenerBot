@@ -1,0 +1,127 @@
+{
+  "position": {
+    "id": 106,
+    "mint": "EKpQGSJtjMFqKZ9KQanSqYXRcF8fBopzLHYxdM65zcjm",
+    "symbol": "WIF",
+    "name": "dogwifhat",
+    "logo_url": null,
+    "entry_price": 0.0105,
+    "entry_time": 1791201600,
+    "exit_price": 0.008610000000000001,
+    "exit_time": 1791207000,
+    "position_type": "buy",
+    "status": "archived",
+    "entry_size_native": 0.25,
+    "total_size_native": 0.25,
+    "price_highest": 0.0147,
+    "price_lowest": 0.00903,
+    "entry_transaction_signature": "5SynthmbRuhDdbV3byso7o9FqBTmjMb71ujPwPsPD1FqqVMBbPjHfhjBRmjbooqshf9Tq3Xw7RH1oD3XZKT73bqM",
+    "exit_transaction_signature": "5Synthh7bh1Md5FX1XPDM5shd3ow3yysf1bo1ymobZdjyPB5D9sdyR3sMbHbh1qDswyTFXV7VRHKoshKVZ1BVq5y",
+    "token_amount": 23809524,
+    "effective_entry_price": 0.0105315,
+    "effective_exit_price": 0.008584170000000002,
+    "sol_received": 0.20290000000000002,
+    "profit_target_min": 20,
+    "profit_target_max": 80,
+    "liquidity_tier": "medium",
+    "transaction_entry_verified": true,
+    "transaction_exit_verified": true,
+    "entry_fee_raw": 5000,
+    "exit_fee_raw": 5000,
+    "current_price": null,
+    "current_price_updated": null,
+    "current_price_source": null,
+    "phantom_confirmations": 0,
+    "synthetic_exit": false,
+    "closed_reason": "trailing_stop",
+    "pnl": -0.04709999999999998,
+    "pnl_percent": -18.839999999999993,
+    "unrealized_pnl": null,
+    "unrealized_pnl_percent": null,
+    "dca_count": 0,
+    "average_entry_price": 0.0105,
+    "partial_exit_count": 0,
+    "average_exit_price": 0.008610000000000001,
+    "remaining_token_amount": 0,
+    "total_exited_amount": 23809524,
+    "token_decimals": 6,
+    "archived": true,
+    "archived_at": 1791288000,
+    "origin": {
+      "kind": "auto",
+      "strategy_id": null
+    },
+    "management": "auto_trader",
+    "round_key": null,
+    "basis_complete": true,
+    "history_complete": true,
+    "holding_state": null,
+    "phantom_remove": false,
+    "phantom_first_seen": null
+  },
+  "entries": [
+    {
+      "id": 1061,
+      "timestamp": 1791201600,
+      "amount": 23809524,
+      "price": 0.0105,
+      "sol_spent": 0.25,
+      "transaction_signature": "5SynthmbRuhDdbV3byso7o9FqBTmjMb71ujPwPsPD1FqqVMBbPjHfhjBRmjbooqshf9Tq3Xw7RH1oD3XZKT73bqM",
+      "is_dca": false,
+      "fees_native": 0.000105
+    }
+  ],
+  "exits": [
+    {
+      "id": 1066,
+      "timestamp": 1791207000,
+      "amount": 23809524,
+      "price": 0.008610000000000001,
+      "sol_received": 0.20290000000000002,
+      "transaction_signature": "5Synthh7bh1Md5FX1XPDM5shd3ow3yysf1bo1ymobZdjyPB5D9sdyR3sMbHbh1qDswyTFXV7VRHKoshKVZ1BVq5y",
+      "is_partial": false,
+      "percentage": 100,
+      "fees_native": 0.000105
+    }
+  ],
+  "token_info": {
+    "decimals": 6,
+    "description": "dogwifhat token on Solana.",
+    "image_url": null,
+    "website": null,
+    "twitter": null,
+    "telegram": null
+  },
+  "market_data": {
+    "market_cap": 412000000,
+    "fdv": 460000000,
+    "liquidity_usd": 8400000,
+    "volume_24h": 21500000,
+    "price_change_h1": 1.8,
+    "price_change_h24": -3.4,
+    "holder_count": 182340
+  },
+  "security": {
+    "score_normalized": 12,
+    "risk_level": "low",
+    "has_mint_authority": false,
+    "has_freeze_authority": false,
+    "top_risks": []
+  },
+  "pool_info": {
+    "pool_address": "Poo1AdDyoZ1y5F9VsXZTh5BBs9PTMsbfRBjTjwPdoyoX",
+    "pool_program": "raydium-cpmm",
+    "liquidity_native": 1820.5
+  },
+  "external_links": {
+    "solscan": "https://solscan.io/token/EKpQGSJtjMFqKZ9KQanSqYXRcF8fBopzLHYxdM65zcjm",
+    "dexscreener": "https://dexscreener.com/solana/EKpQGSJtjMFqKZ9KQanSqYXRcF8fBopzLHYxdM65zcjm",
+    "birdeye": "https://birdeye.so/token/EKpQGSJtjMFqKZ9KQanSqYXRcF8fBopzLHYxdM65zcjm?chain=solana",
+    "rugcheck": "https://rugcheck.xyz/tokens/EKpQGSJtjMFqKZ9KQanSqYXRcF8fBopzLHYxdM65zcjm",
+    "photon": "https://photon-sol.tinyastro.io/en/lp/EKpQGSJtjMFqKZ9KQanSqYXRcF8fBopzLHYxdM65zcjm"
+  },
+  "position_age_seconds": 129600,
+  "native_price_usd": 152.4,
+  "pending_swaps": [],
+  "fetched_at": "2026-10-07T00:00:00.000Z"
+}

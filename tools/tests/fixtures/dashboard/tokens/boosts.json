@@ -1,0 +1,16 @@
+{
+  "success": true,
+  "count": 2,
+  "tokens": [
+    {
+      "mint": "JUPyiwrYJFskUPiHa7hkeR8VUtAeFoSYbKedZNsDvCN",
+      "boosts": 500,
+      "golden": true
+    },
+    {
+      "mint": "EKpQGSJtjMFqKZ9KQanSqYXRcF8fBopzLHYxdM65zcjm",
+      "boosts": 120,
+      "golden": false
+    }
+  ]
+}

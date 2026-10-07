@@ -1,0 +1,36 @@
+{
+  "enabled": true,
+  "filtering_enabled": true,
+  "entry_analysis_enabled": true,
+  "exit_analysis_enabled": false,
+  "default_provider": "openai",
+  "configured_providers": [
+    {
+      "id": "openai",
+      "name": "OpenAI",
+      "enabled": true,
+      "has_api_key": true,
+      "model": "gpt-4o-mini",
+      "rate_limit_per_minute": 60
+    },
+    {
+      "id": "groq",
+      "name": "Groq",
+      "enabled": true,
+      "has_api_key": true,
+      "model": "llama-3.3-70b-versatile",
+      "rate_limit_per_minute": 30
+    }
+  ],
+  "total_evaluations": 0,
+  "cache_entries": 0,
+  "cache_fresh_entries": 0,
+  "metrics": {
+    "total_evaluations": 0,
+    "cache_hit_rate": 0,
+    "avg_response_time_ms": 0,
+    "active_providers": 2,
+    "total_providers": 9
+  },
+  "recent_decisions": []
+}

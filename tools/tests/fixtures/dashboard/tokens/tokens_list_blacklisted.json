@@ -1,0 +1,177 @@
+{
+  "items": [
+    {
+      "mint": "4k3Dyjzvzp8eMZWUXbBCjEvwSkkk59S5iCNLY3QrkX6R",
+      "symbol": "RAY",
+      "name": "Raydium",
+      "decimals": 6,
+      "description": "Raydium token on Solana.",
+      "image_url": null,
+      "header_image_url": null,
+      "supply": "1000000000000000",
+      "data_source": "DexScreener",
+      "first_discovered_at": "2026-08-22T00:00:00.000Z",
+      "blockchain_created_at": "2025-03-06T00:00:00.000Z",
+      "metadata_last_fetched_at": "2026-10-06T23:47:00.000Z",
+      "decimals_last_fetched_at": "2026-10-06T00:00:00.000Z",
+      "market_data_last_fetched_at": "2026-10-06T23:58:15.000Z",
+      "security_data_last_fetched_at": "2026-10-06T23:00:00.000Z",
+      "pool_price_last_calculated_at": "2026-10-06T23:59:51.000Z",
+      "pool_price_last_used_pool": "Poo1AdDyoZ1y5F9VsXZTh5BBs9PTMsbfRBjTjwPdoyoX",
+      "price_usd": 1.79832,
+      "price_sol": 0.0118,
+      "price_native": "0.011800000000",
+      "price_change_m5": -1.1,
+      "price_change_h1": -0.4,
+      "price_change_h6": 1.4,
+      "price_change_h24": -2.2,
+      "market_cap": 614400000,
+      "fdv": 704000000,
+      "liquidity_usd": 12800000,
+      "volume_5m": 25600,
+      "volume_1h": 384000,
+      "volume_6h": 2304000,
+      "volume_24h": 7680000,
+      "pool_count": 10,
+      "reserve_in_usd": 12800000,
+      "txns_5m_buys": 58,
+      "txns_5m_sells": 47,
+      "txns_1h_buys": 640,
+      "txns_1h_sells": 588,
+      "txns_6h_buys": 3640,
+      "txns_6h_sells": 3410,
+      "txns_24h_buys": 14200,
+      "txns_24h_sells": 13480,
+      "websites": [
+        {
+          "label": "Website",
+          "url": "https://example.com"
+        }
+      ],
+      "socials": [
+        {
+          "link_type": "twitter",
+          "url": "https://x.com/example"
+        }
+      ],
+      "mint_authority": null,
+      "freeze_authority": null,
+      "update_authority": null,
+      "is_mutable": false,
+      "security_score": 1,
+      "security_score_normalised": 14,
+      "is_rugged": false,
+      "token_type": null,
+      "graph_insiders_detected": 0,
+      "lp_provider_count": 126,
+      "security_risks": [],
+      "total_holders": 128000,
+      "top_holders": [],
+      "creator_balance_pct": 0,
+      "top_10_holders_pct": 24.5,
+      "transfer_fee_pct": null,
+      "transfer_fee_max_amount": null,
+      "transfer_fee_authority": null,
+      "is_blacklisted": true,
+      "priority": "Background"
+    },
+    {
+      "mint": "jtojtomepa8beP8AuQc6eXt5FriJwfFMwQx2v2f9mCL",
+      "symbol": "JTO",
+      "name": "Jito",
+      "decimals": 9,
+      "description": "Jito token on Solana.",
+      "image_url": null,
+      "header_image_url": null,
+      "supply": "1000000000000000000",
+      "data_source": "DexScreener",
+      "first_discovered_at": "2026-08-21T00:00:00.000Z",
+      "blockchain_created_at": "2025-02-04T00:00:00.000Z",
+      "metadata_last_fetched_at": "2026-10-06T23:46:30.000Z",
+      "decimals_last_fetched_at": "2026-10-06T00:00:00.000Z",
+      "market_data_last_fetched_at": "2026-10-06T23:58:05.000Z",
+      "security_data_last_fetched_at": "2026-10-06T23:00:00.000Z",
+      "pool_price_last_calculated_at": "2026-10-06T23:59:50.000Z",
+      "pool_price_last_used_pool": "Poo1AdZMBduhhH7dVD3hjsPMhy3yB5d7PwZq7PDjP9us",
+      "price_usd": 2.46888,
+      "price_sol": 0.0162,
+      "price_native": "0.016200000000",
+      "price_change_m5": 0.2,
+      "price_change_h1": 0.9,
+      "price_change_h6": -0.7,
+      "price_change_h24": 1.8,
+      "market_cap": 465600000,
+      "fdv": 533500000,
+      "liquidity_usd": 9700000,
+      "volume_5m": 19400,
+      "volume_1h": 291000,
+      "volume_6h": 1746000,
+      "volume_24h": 5820000,
+      "pool_count": 11,
+      "reserve_in_usd": 9700000,
+      "txns_5m_buys": 61,
+      "txns_5m_sells": 49,
+      "txns_1h_buys": 660,
+      "txns_1h_sells": 606,
+      "txns_6h_buys": 3730,
+      "txns_6h_sells": 3495,
+      "txns_24h_buys": 14500,
+      "txns_24h_sells": 13760,
+      "websites": [
+        {
+          "label": "Website",
+          "url": "https://example.com"
+        }
+      ],
+      "socials": [
+        {
+          "link_type": "twitter",
+          "url": "https://x.com/example"
+        }
+      ],
+      "mint_authority": null,
+      "freeze_authority": null,
+      "update_authority": null,
+      "is_mutable": false,
+      "security_score": 1,
+      "security_score_normalised": 15,
+      "is_rugged": false,
+      "token_type": null,
+      "graph_insiders_detected": 0,
+      "lp_provider_count": 127,
+      "security_risks": [],
+      "total_holders": 119000,
+      "top_holders": [],
+      "creator_balance_pct": 0,
+      "top_10_holders_pct": 25.5,
+      "transfer_fee_pct": null,
+      "transfer_fee_max_amount": null,
+      "transfer_fee_authority": null,
+      "is_blacklisted": true,
+      "priority": "Background"
+    }
+  ],
+  "page": 1,
+  "page_size": 100,
+  "total": 2,
+  "total_pages": 1,
+  "timestamp": "2026-10-07T00:00:00.000Z",
+  "cursor": 0,
+  "priced_total": 2,
+  "positions_total": 0,
+  "blacklisted_total": 2,
+  "blacklist_reasons": {
+    "4k3Dyjzvzp8eMZWUXbBCjEvwSkkk59S5iCNLY3QrkX6R": [
+      {
+        "category": "token",
+        "reason": "manual"
+      }
+    ],
+    "jtojtomepa8beP8AuQc6eXt5FriJwfFMwQx2v2f9mCL": [
+      {
+        "category": "token",
+        "reason": "loss_limit"
+      }
+    ]
+  }
+}

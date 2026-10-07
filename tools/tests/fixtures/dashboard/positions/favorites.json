@@ -1,0 +1,16 @@
+{
+  "favorites": [
+    {
+      "mint": "DezXAZ8z7PnrnRJjz3wXBoRgixCa6xjnB7YaB1pPB263",
+      "symbol": "BONK",
+      "name": "Bonk",
+      "logo_url": null,
+      "is_favorite": true,
+      "notes": null,
+      "favorite_created_at": "2026-09-30T12:00:00Z",
+      "has_open_position": true,
+      "blacklisted": false
+    }
+  ],
+  "total": 1
+}

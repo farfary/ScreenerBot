@@ -22,7 +22,6 @@ import vm from "node:vm";
 import { readL10nAttributes } from "../i18n/catalogs.mjs";
 
 const ROOT = new URL("../../", import.meta.url);
-const LOCALE_DIR = new URL("locales/en/", ROOT);
 // The dashboard build of @fluent/bundle is a browser UMD script; run it in a
 // sandbox exactly as the fixture in tools/tests/fixtures/i18n_en.mjs does.
 const sandbox = {};
@@ -39,21 +38,45 @@ const VOID_TAGS = new Set(["area", "base", "br", "col", "embed", "hr", "img", "i
 const RAW_TEXT_TAGS = new Set(["script", "style"]);
 const TAG = /<!--[\s\S]*?-->|<(\/?)([a-zA-Z][\w:-]*)((?:"[^"]*"|'[^']*'|[^'">])*)>/g;
 
-let bundle = null;
-function englishBundle() {
-  if (bundle) return bundle;
-  bundle = new FluentBundle("en", { useIsolating: false });
-  for (const name of readdirSync(LOCALE_DIR).filter((file) => file.endsWith(".ftl")).sort()) {
-    bundle.addResource(new FluentResource(readFileSync(new URL(name, LOCALE_DIR), "utf8") + "\n"));
+const SOURCE_LOCALE = "en";
+const bundles = new Map();
+
+/** Source-locale catalogs with the requested locale's messages layered over them, as the server resolves them. */
+function localeBundle(locale) {
+  if (bundles.has(locale)) return bundles.get(locale);
+  const bundle = new FluentBundle(locale, { useIsolating: false });
+  for (const code of new Set([SOURCE_LOCALE, locale])) {
+    const dir = new URL(`locales/${code}/`, ROOT);
+    for (const name of readdirSync(dir).filter((file) => file.endsWith(".ftl")).sort()) {
+      bundle.addResource(new FluentResource(readFileSync(new URL(name, dir), "utf8") + "\n"), {
+        allowOverrides: true,
+      });
+    }
   }
+  bundles.set(locale, bundle);
   return bundle;
 }
 
-function message(id) {
-  const found = englishBundle().getMessage(id);
+/** Text direction of a registered locale, from `locales/registry.toml`. */
+export function localeDirection(locale) {
+  const registry = readFileSync(new URL("locales/registry.toml", ROOT), "utf8");
+  const entry = registry.split("[[locale]]").find((block) => block.includes(`code = "${locale}"`));
+  return /dir\s*=\s*"(rtl|ltr)"/.exec(entry ?? "")?.[1] ?? "ltr";
+}
+
+/** Format one message value of `locale` with `args`; null when the id is unknown. */
+export function formatMessage(id, args, locale = SOURCE_LOCALE) {
+  const bundle = localeBundle(locale);
+  const found = bundle.getMessage(id);
+  return found?.value ? bundle.formatPattern(found.value, args, []) : null;
+}
+
+function message(id, locale) {
+  const bundle = localeBundle(locale);
+  const found = bundle.getMessage(id);
   if (!found) return null;
   const errors = [];
-  const format = (pattern) => (pattern ? englishBundle().formatPattern(pattern, undefined, errors) : null);
+  const format = (pattern) => (pattern ? bundle.formatPattern(pattern, undefined, errors) : null);
   const attributes = {};
   for (const [name, pattern] of Object.entries(found.attributes)) attributes[name] = format(pattern);
   return { value: format(found.value), attributes };
@@ -75,9 +98,9 @@ function withAttribute(attrs, name, value) {
 }
 
 /** Replace placeholders, then localize every `data-l10n-id` element. */
-export function localizeTemplate(html) {
+export function localizeTemplate(html, locale = SOURCE_LOCALE) {
   const source = html.replace(/\{\{([A-Z][A-Z0-9_]*)\}\}/g, (_, name) =>
-    name === "LANG" ? "en" : name === "DIR" ? "ltr" : "0"
+    name === "LANG" ? locale : name === "DIR" ? localeDirection(locale) : "0"
   );
   const tags = [...source.matchAll(TAG)].filter((m) => m[2]);
   // Replacements are collected as [start, end, text] over the source and applied last to first.
@@ -95,7 +118,7 @@ export function localizeTemplate(html) {
     }
     const id = attrValue(tag[3], "data-l10n-id");
     if (id === null) continue;
-    const found = message(id);
+    const found = message(id, locale);
     if (!found) continue;
     let attrs = tag[3];
     for (const [attr, value] of Object.entries(found.attributes)) {

@@ -1,0 +1,15 @@
+{
+  "data": {
+    "enabled": true,
+    "max_active_tasks": 10,
+    "default_slippage_pct": 2,
+    "default_mode": "paper",
+    "require_filter_pass": true,
+    "block_on_force_stop": true,
+    "latency_kill_switch_enabled": true,
+    "max_arrival_distance_ms": 4000,
+    "latency_window_size": 10,
+    "readiness_min_closed_rounds": 10
+  },
+  "timestamp": "2026-10-07T06:00:00+00:00"
+}

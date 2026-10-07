@@ -1,0 +1,418 @@
+{
+  "status": {
+    "enabled": true,
+    "live_available": true,
+    "blocked_reason": null,
+    "default_mode": "paper",
+    "default_slippage_pct": 2,
+    "force_stop_blocks": true,
+    "total_tasks": 3,
+    "active_tasks": 2,
+    "paper_tasks": 1,
+    "live_tasks": 1
+  },
+  "totals": {
+    "realized_pnl_native": 0.6368,
+    "unrealized_pnl_native": 0.0441,
+    "open_holdings": 6,
+    "unpriced_holdings": 0,
+    "wins": 12,
+    "losses": 9,
+    "win_rate_pct": 57.14,
+    "active_budget_native": 8,
+    "active_spent_native": 2.54,
+    "active_arrival": {
+      "samples": 63,
+      "minimum_ms": 420,
+      "median_ms": 1290,
+      "p95_ms": 3120,
+      "maximum_ms": 4410,
+      "average_ms": 1520
+    }
+  },
+  "tasks": [
+    {
+      "id": 1,
+      "chain": "solana",
+      "target_address": "CopyTargetAAA1111111111111111111111111111111",
+      "label": "Momentum desk",
+      "enabled": true,
+      "mode": "paper",
+      "sizing": {
+        "kind": "fixed",
+        "sol": 0.1
+      },
+      "exit_mode": "hybrid",
+      "exit_policy_overrides": {
+        "stop_loss": {
+          "enabled": null,
+          "threshold_pct": 25,
+          "min_hold_seconds": null,
+          "allow_partial": null,
+          "partial_exit_default_pct": null
+        },
+        "trailing": {
+          "enabled": null,
+          "activation_pct": null,
+          "distance_pct": null
+        },
+        "roi": {
+          "enabled": true,
+          "target_profit_pct": 80
+        },
+        "time": {
+          "enabled": null,
+          "loss_threshold_pct": null,
+          "duration_seconds": null
+        }
+      },
+      "max_native_per_trade": 0.2,
+      "max_native_per_token": 0.5,
+      "total_budget_native": 5,
+      "min_target_trade_native": 0.5,
+      "max_target_trade_native": null,
+      "buy_once_per_token": true,
+      "slippage_pct": 2,
+      "created_at": "2026-09-28T09:15:00Z",
+      "updated_at": "2026-10-04T18:02:11Z",
+      "require_filter_pass": null,
+      "pause_reason": null,
+      "paused_at": null,
+      "stats": {
+        "task_id": 1,
+        "decisions": 46,
+        "filled_buys": 14,
+        "target_sells": 6,
+        "policy_exits": 4,
+        "manual_closes": 1,
+        "wins": 7,
+        "losses": 4,
+        "skipped": 21,
+        "submitted": 0,
+        "failed": 0,
+        "open_positions": 3,
+        "closed_positions": 11,
+        "realized_pnl_native": 0.4825,
+        "unrealized_pnl_native": 0.0612,
+        "book": "paper",
+        "unpriced_positions": 0,
+        "arrival_distance": {
+          "samples": 38,
+          "minimum_ms": 420,
+          "median_ms": 1180,
+          "p95_ms": 2950,
+          "maximum_ms": 3870,
+          "average_ms": 1390
+        }
+      },
+      "spent_native": 1.42,
+      "remaining_budget_native": 3.58,
+      "effective_state": "paper",
+      "effective_require_filter_pass": true,
+      "pnl_trend": [0.031, 0.087, 0.052, 0.121, 0.198, 0.176, 0.262, 0.311, 0.287, 0.402, 0.4825],
+      "pause_text": null
+    },
+    {
+      "id": 2,
+      "chain": "solana",
+      "target_address": "CopyTargetBBB1111111111111111111111111111111",
+      "label": "Early entries",
+      "enabled": true,
+      "mode": "live",
+      "sizing": {
+        "kind": "ratio_of_target",
+        "pct": 10
+      },
+      "exit_mode": "mirror",
+      "exit_policy_overrides": {
+        "stop_loss": {
+          "enabled": null,
+          "threshold_pct": null,
+          "min_hold_seconds": null,
+          "allow_partial": null,
+          "partial_exit_default_pct": null
+        },
+        "trailing": {
+          "enabled": null,
+          "activation_pct": null,
+          "distance_pct": null
+        },
+        "roi": {
+          "enabled": null,
+          "target_profit_pct": null
+        },
+        "time": {
+          "enabled": null,
+          "loss_threshold_pct": null,
+          "duration_seconds": null
+        }
+      },
+      "max_native_per_trade": 0.15,
+      "max_native_per_token": 0.3,
+      "total_budget_native": 3,
+      "min_target_trade_native": null,
+      "max_target_trade_native": null,
+      "buy_once_per_token": false,
+      "slippage_pct": 3,
+      "created_at": "2026-09-20T14:40:00Z",
+      "updated_at": "2026-10-01T07:30:00Z",
+      "require_filter_pass": false,
+      "pause_reason": null,
+      "paused_at": null,
+      "stats": {
+        "task_id": 2,
+        "decisions": 29,
+        "filled_buys": 9,
+        "target_sells": 7,
+        "policy_exits": 0,
+        "manual_closes": 0,
+        "wins": 4,
+        "losses": 3,
+        "skipped": 11,
+        "submitted": 9,
+        "failed": 1,
+        "open_positions": 2,
+        "closed_positions": 7,
+        "realized_pnl_native": 0.1934,
+        "unrealized_pnl_native": -0.0218,
+        "book": "live",
+        "unpriced_positions": 0,
+        "arrival_distance": {
+          "samples": 25,
+          "minimum_ms": 610,
+          "median_ms": 1530,
+          "p95_ms": 3320,
+          "maximum_ms": 4410,
+          "average_ms": 1720
+        }
+      },
+      "spent_native": 1.12,
+      "remaining_budget_native": 1.88,
+      "effective_state": "live",
+      "effective_require_filter_pass": false,
+      "pnl_trend": [-0.022, 0.041, 0.09, 0.064, 0.133, 0.171, 0.1934],
+      "pause_text": null
+    },
+    {
+      "id": 3,
+      "chain": "solana",
+      "target_address": "CopyTargetCCC1111111111111111111111111111111",
+      "label": null,
+      "enabled": false,
+      "mode": "paper",
+      "sizing": {
+        "kind": "fixed",
+        "sol": 0.05
+      },
+      "exit_mode": "buy_only",
+      "exit_policy_overrides": {
+        "stop_loss": {
+          "enabled": null,
+          "threshold_pct": null,
+          "min_hold_seconds": null,
+          "allow_partial": null,
+          "partial_exit_default_pct": null
+        },
+        "trailing": {
+          "enabled": null,
+          "activation_pct": null,
+          "distance_pct": null
+        },
+        "roi": {
+          "enabled": null,
+          "target_profit_pct": null
+        },
+        "time": {
+          "enabled": null,
+          "loss_threshold_pct": null,
+          "duration_seconds": null
+        }
+      },
+      "max_native_per_trade": 0.05,
+      "max_native_per_token": 0.2,
+      "total_budget_native": 1,
+      "min_target_trade_native": null,
+      "max_target_trade_native": null,
+      "buy_once_per_token": true,
+      "slippage_pct": 2,
+      "created_at": "2026-09-30T11:00:00Z",
+      "updated_at": "2026-10-05T16:20:00Z",
+      "require_filter_pass": null,
+      "pause_reason": {
+        "kind": "user"
+      },
+      "paused_at": "2026-10-05T16:20:00Z",
+      "stats": {
+        "task_id": 3,
+        "decisions": 12,
+        "filled_buys": 4,
+        "target_sells": 0,
+        "policy_exits": 3,
+        "manual_closes": 0,
+        "wins": 1,
+        "losses": 2,
+        "skipped": 5,
+        "submitted": 0,
+        "failed": 0,
+        "open_positions": 1,
+        "closed_positions": 3,
+        "realized_pnl_native": -0.0391,
+        "unrealized_pnl_native": 0.0047,
+        "book": "paper",
+        "unpriced_positions": 0,
+        "arrival_distance": {
+          "samples": 9,
+          "minimum_ms": 510,
+          "median_ms": 1340,
+          "p95_ms": 2410,
+          "maximum_ms": 2600,
+          "average_ms": 1420
+        }
+      },
+      "spent_native": 0.2,
+      "remaining_budget_native": 0.8,
+      "effective_state": "paused",
+      "effective_require_filter_pass": true,
+      "pnl_trend": [0.012, -0.018, -0.0391],
+      "pause_text": {
+        "id": "copy-pause-user"
+      }
+    }
+  ],
+  "activity": [
+    {
+      "id": 312,
+      "task_id": 1,
+      "kind": "paper_filled",
+      "outcome": {
+        "outcome": "paper_filled",
+        "task_id": 1,
+        "target_address": "CopyTargetAAA1111111111111111111111111111111",
+        "signature": "CopySig312x22222222222222222222222222222222222222222222222222222222222222222222222222222",
+        "mint": "EKpQGSJtjMFqKZ9KQanSqYXRcF8fBopzLHYxdM65zcjm",
+        "target_size_sol": 1.8,
+        "target_token_amount": 2295.4,
+        "sized_sol": 0.1,
+        "fill": {
+          "input_sol": 0.1,
+          "market_price_sol": 0.00782,
+          "priced_from_pool": true,
+          "fill_price_sol": 0.00791384,
+          "token_amount": 12.638,
+          "referral_fee_sol": 0.0005,
+          "network_fee_sol": 0.000005,
+          "priority_fee_sol": 0.0001,
+          "total_cost_sol": 0.100605
+        },
+        "telemetry": {
+          "target_block_time": 1791323051,
+          "detected_at": "2026-10-06T21:44:12.300Z",
+          "decoded_at": "2026-10-06T21:44:12.340Z",
+          "decided_at": "2026-10-06T21:44:12.395Z",
+          "submitted_at": null,
+          "confirmed_at": null,
+          "target_price_sol": 0.00784,
+          "fill_price_sol": 0.007914,
+          "backfill": false
+        }
+      },
+      "created_at": "2026-10-06T21:44:12.420Z"
+    },
+    {
+      "id": 311,
+      "task_id": 1,
+      "kind": "paper_sell_observed",
+      "outcome": {
+        "outcome": "paper_sell_observed",
+        "task_id": 1,
+        "target_address": "CopyTargetAAA1111111111111111111111111111111",
+        "target_signature": "CopySig311x22222222222222222222222222222222222222222222222222222222222222222222222222222",
+        "mint": "DezXAZ8z7PnrnRJjz3wXBoRgixCa6xjnB7YaB1pPB263",
+        "target_token_amount": 41250000,
+        "target_sol_amount": 2.94,
+        "exit_percentage": null,
+        "transaction_signature": null,
+        "error": null,
+        "telemetry": {
+          "target_block_time": 1791317402,
+          "detected_at": "2026-10-06T20:10:03.900Z",
+          "decoded_at": "2026-10-06T20:10:03.940Z",
+          "decided_at": "2026-10-06T20:10:03.995Z",
+          "submitted_at": null,
+          "confirmed_at": null,
+          "target_price_sol": null,
+          "fill_price_sol": null,
+          "backfill": false
+        },
+        "paper_fill": {
+          "token_amount": 1402000,
+          "market_price_sol": 9.81e-8,
+          "priced_from_pool": true,
+          "fill_price_sol": 9.69e-8,
+          "gross_sol": 0.13585,
+          "referral_fee_sol": 0.000679,
+          "network_fee_sol": 0.000005,
+          "priority_fee_sol": 0.0001,
+          "net_proceeds_sol": 0.135066
+        },
+        "exit_rule": null
+      },
+      "created_at": "2026-10-06T20:10:04.010Z"
+    },
+    {
+      "id": 310,
+      "task_id": 1,
+      "kind": "skipped",
+      "outcome": {
+        "outcome": "skipped",
+        "task_id": 1,
+        "signature": "CopySig310x22222222222222222222222222222222222222222222222222222222222222222222222222222",
+        "mint": "7GCihgDB8fe6KNjn2MYtkzZcRjQy3t9GHdC8uHYmW2hr",
+        "reason": {
+          "kind": "target_below_minimum",
+          "minimum_sol": 0.5
+        },
+        "decided_at": "2026-10-06T19:52:40.500Z",
+        "telemetry": {
+          "target_block_time": 1791316359,
+          "detected_at": "2026-10-06T19:52:40.400Z",
+          "decoded_at": "2026-10-06T19:52:40.440Z",
+          "decided_at": "2026-10-06T19:52:40.495Z",
+          "submitted_at": null,
+          "confirmed_at": null,
+          "target_price_sol": null,
+          "fill_price_sol": null,
+          "backfill": false
+        }
+      },
+      "created_at": "2026-10-06T19:52:40.520Z"
+    },
+    {
+      "id": 309,
+      "task_id": 1,
+      "kind": "skipped",
+      "outcome": {
+        "outcome": "skipped",
+        "task_id": 1,
+        "signature": "CopySig309x22222222222222222222222222222222222222222222222222222222222222222222222222222",
+        "mint": "JUPyiwrYJFskUPiHa7hkeR8VUtAeFoSYbKedZNsDvCN",
+        "reason": {
+          "kind": "already_bought"
+        },
+        "decided_at": "2026-10-06T18:31:02.100Z",
+        "telemetry": {
+          "target_block_time": 1791311460,
+          "detected_at": "2026-10-06T18:31:02.000Z",
+          "decoded_at": "2026-10-06T18:31:02.040Z",
+          "decided_at": "2026-10-06T18:31:02.095Z",
+          "submitted_at": null,
+          "confirmed_at": null,
+          "target_price_sol": null,
+          "fill_price_sol": null,
+          "backfill": false
+        }
+      },
+      "created_at": "2026-10-06T18:31:02.130Z"
+    }
+  ]
+}

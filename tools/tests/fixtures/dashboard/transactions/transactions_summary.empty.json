@@ -1,0 +1,18 @@
+{
+  "total": 0,
+  "success_count": 0,
+  "failed_count": 0,
+  "pending_global": 0,
+  "pending_local": 0,
+  "deferred_count": 0,
+  "success_rate": 0,
+  "failure_rate": 0,
+  "newest_known_signature": null,
+  "oldest_known_signature": null,
+  "db_size_mb": 0.1,
+  "db_schema_version": 9,
+  "bootstrap_state": {
+    "backfill_cursor": null,
+    "full_history_completed": true
+  }
+}

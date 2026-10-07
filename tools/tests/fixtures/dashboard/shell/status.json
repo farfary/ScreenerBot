@@ -1,0 +1,104 @@
+{
+  "timestamp": "2026-10-07T09:30:00Z",
+  "version": "0.2.13",
+  "uptime_seconds": 5400,
+  "uptime_formatted": "1h 30m 0s",
+  "trading_enabled": true,
+  "trader_mode": "Normal",
+  "trader_running": true,
+  "open_positions": 3,
+  "closed_positions_today": 2,
+  "sol_balance": 3.42,
+  "usdc_balance": 0.0,
+  "services": {
+    "tokens_system": { "ready": true, "status": "healthy", "last_check": "2026-10-07T09:30:00Z" },
+    "positions_system": {
+      "ready": true,
+      "status": "healthy",
+      "last_check": "2026-10-07T09:30:00Z"
+    },
+    "pool_service": { "ready": true, "status": "healthy", "last_check": "2026-10-07T09:30:00Z" },
+    "transactions_system": {
+      "ready": true,
+      "status": "healthy",
+      "last_check": "2026-10-07T09:30:00Z"
+    },
+    "all_ready": true
+  },
+  "metrics": {
+    "memory_usage_mb": 412,
+    "cpu_usage_percent": 6.5,
+    "system_memory_used_mb": 11840,
+    "system_memory_total_mb": 16384,
+    "process_memory_mb": 412,
+    "cpu_system_percent": 18.2,
+    "cpu_process_percent": 6.5,
+    "active_threads": 48,
+    "rpc_calls_total": 7785,
+    "rpc_calls_failed": 47,
+    "rpc_success_rate": 99.4,
+    "rpc_calls_per_minute_recent": 86.5
+  },
+  "rpc_stats": {
+    "total_calls": 7785,
+    "total_errors": 47,
+    "success_rate": 99.4,
+    "calls_per_second": 1.44,
+    "average_response_time_ms": 142.0,
+    "calls_per_url": { "mainnet-rpc-1": 5210, "mainnet-rpc-2": 2575 },
+    "errors_per_url": { "mainnet-rpc-1": 31, "mainnet-rpc-2": 16 },
+    "calls_per_method": {
+      "getMultipleAccounts": 5120,
+      "getSignaturesForAddress": 1430,
+      "getTransaction": 1235
+    },
+    "errors_per_method": { "getMultipleAccounts": 29, "getTransaction": 18 },
+    "uptime_seconds": 5400,
+    "session_id": "0b7d5c1e-4a62-4f3b-9d8e-2c1a7f6e5d40",
+    "session_started_at": "2026-10-07T08:00:00Z",
+    "recent_calls_per_minute": 86.5,
+    "minute_buckets": []
+  },
+  "wallet": {
+    "sol_balance": 3.42,
+    "native_balance_raw": 3420000000,
+    "usdc_balance": 0.0,
+    "total_tokens_count": 4,
+    "snapshot_time": "2026-10-07T09:29:55Z",
+    "token_balances": [
+      {
+        "mint": "DezXAZ8z7PnrnRJjz3wXBoRgixCa6xjnB7YaB1pPB263",
+        "balance": 1850000000000,
+        "balance_ui": 18500000.0,
+        "decimals": 5,
+        "is_token_2022": false
+      },
+      {
+        "mint": "EKpQGSJtjMFqKZ9KQanSqYXRcF8fBopzLHYxdM65zcjm",
+        "balance": 142500000,
+        "balance_ui": 142.5,
+        "decimals": 6,
+        "is_token_2022": false
+      },
+      {
+        "mint": "JUPyiwrYJFskUPiHa7hkeR8VUtAeFoSYbKedZNsDvCN",
+        "balance": 96400000,
+        "balance_ui": 96.4,
+        "decimals": 6,
+        "is_token_2022": false
+      },
+      {
+        "mint": "7GCihgDB8fe6KNjn2MYtkzZcRjQy3t9GHdC8uHYmW2hr",
+        "balance": 61250000000,
+        "balance_ui": 61.25,
+        "decimals": 9,
+        "is_token_2022": false
+      }
+    ]
+  },
+  "ohlcv_stats": null,
+  "pools": null,
+  "discovery": null,
+  "events": null,
+  "transactions": null
+}

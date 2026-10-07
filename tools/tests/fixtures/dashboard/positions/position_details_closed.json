@@ -1,0 +1,127 @@
+{
+  "position": {
+    "id": 103,
+    "mint": "JUPyiwrYJFskUPiHa7hkeR8VUtAeFoSYbKedZNsDvCN",
+    "symbol": "JUP",
+    "name": "Jupiter",
+    "logo_url": null,
+    "entry_price": 0.0042,
+    "entry_time": 1791255600,
+    "exit_price": 0.004494,
+    "exit_time": 1791261000,
+    "position_type": "buy",
+    "status": "closed",
+    "entry_size_native": 0.3,
+    "total_size_native": 0.3,
+    "price_highest": 0.005879999999999999,
+    "price_lowest": 0.0036119999999999998,
+    "entry_transaction_signature": "5SynthF5HM5Xuw7T9mPm1qq3VdqFjDVfFwHD5DjMFDRF97d5yuFuqZPT1s1mVBzf7mhudjT1s71fuRummP3qmRs7",
+    "exit_transaction_signature": "5SynthBbb9Pwsw1dKMX5Xy7PwwqjRKmDdwX3ZKMFjsu9FmZ7hXmoo7uod7ZV73VoM1Tms5Ruhd17qdfqwdubBVRD",
+    "token_amount": 71428571,
+    "effective_entry_price": 0.0042125999999999995,
+    "effective_exit_price": 0.004480517999999999,
+    "sol_received": 0.3189,
+    "profit_target_min": 20,
+    "profit_target_max": 80,
+    "liquidity_tier": "medium",
+    "transaction_entry_verified": true,
+    "transaction_exit_verified": true,
+    "entry_fee_raw": 5000,
+    "exit_fee_raw": 5000,
+    "current_price": null,
+    "current_price_updated": null,
+    "current_price_source": null,
+    "phantom_confirmations": 0,
+    "synthetic_exit": false,
+    "closed_reason": "manual",
+    "pnl": 0.018900000000000017,
+    "pnl_percent": 6.300000000000006,
+    "unrealized_pnl": null,
+    "unrealized_pnl_percent": null,
+    "dca_count": 0,
+    "average_entry_price": 0.0042,
+    "partial_exit_count": 0,
+    "average_exit_price": 0.004494,
+    "remaining_token_amount": 0,
+    "total_exited_amount": 71428571,
+    "token_decimals": 6,
+    "archived": false,
+    "archived_at": null,
+    "origin": {
+      "kind": "auto",
+      "strategy_id": null
+    },
+    "management": "auto_trader",
+    "round_key": null,
+    "basis_complete": true,
+    "history_complete": true,
+    "holding_state": null,
+    "phantom_remove": false,
+    "phantom_first_seen": null
+  },
+  "entries": [
+    {
+      "id": 1031,
+      "timestamp": 1791255600,
+      "amount": 71428571,
+      "price": 0.0042,
+      "sol_spent": 0.3,
+      "transaction_signature": "5SynthF5HM5Xuw7T9mPm1qq3VdqFjDVfFwHD5DjMFDRF97d5yuFuqZPT1s1mVBzf7mhudjT1s71fuRummP3qmRs7",
+      "is_dca": false,
+      "fees_native": 0.000105
+    }
+  ],
+  "exits": [
+    {
+      "id": 1036,
+      "timestamp": 1791261000,
+      "amount": 71428571,
+      "price": 0.004494,
+      "sol_received": 0.3189,
+      "transaction_signature": "5SynthBbb9Pwsw1dKMX5Xy7PwwqjRKmDdwX3ZKMFjsu9FmZ7hXmoo7uod7ZV73VoM1Tms5Ruhd17qdfqwdubBVRD",
+      "is_partial": false,
+      "percentage": 100,
+      "fees_native": 0.000105
+    }
+  ],
+  "token_info": {
+    "decimals": 6,
+    "description": "Jupiter token on Solana.",
+    "image_url": null,
+    "website": null,
+    "twitter": null,
+    "telegram": null
+  },
+  "market_data": {
+    "market_cap": 412000000,
+    "fdv": 460000000,
+    "liquidity_usd": 8400000,
+    "volume_24h": 21500000,
+    "price_change_h1": 1.8,
+    "price_change_h24": -3.4,
+    "holder_count": 182340
+  },
+  "security": {
+    "score_normalized": 12,
+    "risk_level": "low",
+    "has_mint_authority": false,
+    "has_freeze_authority": false,
+    "top_risks": []
+  },
+  "pool_info": {
+    "pool_address": "Poo1AdKK7PsFmd7RPfB53RmFDjbHhP3fF5sjfuZDRwoK",
+    "pool_program": "raydium-cpmm",
+    "liquidity_native": 1820.5
+  },
+  "external_links": {
+    "solscan": "https://solscan.io/token/JUPyiwrYJFskUPiHa7hkeR8VUtAeFoSYbKedZNsDvCN",
+    "dexscreener": "https://dexscreener.com/solana/JUPyiwrYJFskUPiHa7hkeR8VUtAeFoSYbKedZNsDvCN",
+    "birdeye": "https://birdeye.so/token/JUPyiwrYJFskUPiHa7hkeR8VUtAeFoSYbKedZNsDvCN?chain=solana",
+    "rugcheck": "https://rugcheck.xyz/tokens/JUPyiwrYJFskUPiHa7hkeR8VUtAeFoSYbKedZNsDvCN",
+    "photon": "https://photon-sol.tinyastro.io/en/lp/JUPyiwrYJFskUPiHa7hkeR8VUtAeFoSYbKedZNsDvCN"
+  },
+  "position_age_seconds": 75600,
+  "native_price_usd": 152.4,
+  "pending_swaps": [],
+  "fetched_at": "2026-10-07T00:00:00.000Z"
+}

@@ -1,0 +1,10 @@
+{
+  "required": false,
+  "reason": "System fully initialized.",
+  "config_exists": true,
+  "initialization_complete": true,
+  "onboarding_complete": true,
+  "force_onboarding": false,
+  "explore_mode": false,
+  "explore_mode_enabled": false
+}

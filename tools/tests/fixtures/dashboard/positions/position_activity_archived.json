@@ -1,0 +1,162 @@
+{
+  "mint": "EKpQGSJtjMFqKZ9KQanSqYXRcF8fBopzLHYxdM65zcjm",
+  "symbol": "WIF",
+  "token_decimals": 6,
+  "positions": [
+    {
+      "id": 106,
+      "index": 1,
+      "opened_at": 1791201600,
+      "closed_at": 1791207000,
+      "is_open": false,
+      "archived": true,
+      "swaps": 2,
+      "native_invested": 0.25,
+      "native_returned": 0.20290000000000002,
+      "realized_pnl": -0.047099999999999975
+    }
+  ],
+  "events": [
+    {
+      "available": true,
+      "status": "Finalized",
+      "success": true,
+      "fee_sol": 0.000105,
+      "router": "jupiter",
+      "instructions_count": 6,
+      "compute_units": 182000,
+      "accounts_count": 24,
+      "notes": null,
+      "token_transfers": [],
+      "position_id": 106,
+      "position_index": 1,
+      "recorded": true,
+      "exit_percentage": null,
+      "cost_basis": null,
+      "realized_pnl": null,
+      "realized_pnl_percent": null,
+      "kind": "entry",
+      "side": "entry",
+      "sequence": 1,
+      "state": "confirmed",
+      "signature": "5SynthmbRuhDdbV3byso7o9FqBTmjMb71ujPwPsPD1FqqVMBbPjHfhjBRmjbooqshf9Tq3Xw7RH1oD3XZKT73bqM",
+      "timestamp": 1791201600,
+      "record_id": 1061,
+      "token_amount": 23.809524,
+      "price": 0.0105,
+      "sol_amount": 0.25,
+      "record_fee_native": 0.000105,
+      "slot": 318001061,
+      "block_time": 1791201600,
+      "direction": "Incoming",
+      "transaction_type": {
+        "id": "transactions-type-with-detail",
+        "args": {
+          "detail": {
+            "type": "nested",
+            "value": {
+              "id": "common-venue-jupiter"
+            }
+          },
+          "label": {
+            "type": "nested",
+            "value": {
+              "id": "transactions-type-buy"
+            }
+          }
+        }
+      },
+      "sol_change": -0.25,
+      "tokens_after": 23.809524,
+      "invested_after": 0.25
+    },
+    {
+      "available": true,
+      "status": "Finalized",
+      "success": true,
+      "fee_sol": 0.000105,
+      "router": "jupiter",
+      "instructions_count": 6,
+      "compute_units": 182000,
+      "accounts_count": 24,
+      "notes": null,
+      "token_transfers": [],
+      "position_id": 106,
+      "position_index": 1,
+      "recorded": true,
+      "exit_percentage": 100,
+      "cost_basis": 0.25,
+      "realized_pnl": -0.047099999999999975,
+      "realized_pnl_percent": -18.83999999999999,
+      "kind": "exit",
+      "side": "exit",
+      "sequence": 1,
+      "state": "confirmed",
+      "signature": "5Synthh7bh1Md5FX1XPDM5shd3ow3yysf1bo1ymobZdjyPB5D9sdyR3sMbHbh1qDswyTFXV7VRHKoshKVZ1BVq5y",
+      "timestamp": 1791207000,
+      "record_id": 1066,
+      "token_amount": 23.809524,
+      "price": 0.008610000000000001,
+      "sol_amount": 0.20290000000000002,
+      "record_fee_native": 0.000105,
+      "slot": 318001066,
+      "block_time": 1791207000,
+      "direction": "Outgoing",
+      "transaction_type": {
+        "id": "transactions-type-with-detail",
+        "args": {
+          "detail": {
+            "type": "nested",
+            "value": {
+              "id": "common-venue-jupiter"
+            }
+          },
+          "label": {
+            "type": "nested",
+            "value": {
+              "id": "transactions-type-sell"
+            }
+          }
+        }
+      },
+      "sol_change": 0.20290000000000002,
+      "tokens_after": 0,
+      "invested_after": 0
+    }
+  ],
+  "totals": {
+    "events": 2,
+    "positions": 1,
+    "entries": 1,
+    "dca_entries": 0,
+    "exits": 1,
+    "partial_exits": 0,
+    "wallet_events": 0,
+    "pending": 0,
+    "failed": 0,
+    "tokens_bought": 23.809524,
+    "tokens_sold": 23.809524,
+    "native_invested": 0.25,
+    "native_returned": 0.20290000000000002,
+    "network_fees_native": 0.00021,
+    "realized_pnl": -0.047099999999999975
+  },
+  "state_history": [
+    {
+      "position_id": 106,
+      "position_index": 1,
+      "state": "open",
+      "changed_at": 1791201600,
+      "reason": null
+    },
+    {
+      "position_id": 106,
+      "position_index": 1,
+      "state": "closed",
+      "changed_at": 1791207000,
+      "reason": "trailing_stop"
+    }
+  ],
+  "native_price_usd": 152.4,
+  "fetched_at": "2026-10-07T00:00:00.000Z"
+}

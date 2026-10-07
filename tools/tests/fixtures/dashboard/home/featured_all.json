@@ -1,0 +1,113 @@
+{
+  "success": true,
+  "boosted": [
+    {
+      "mint": "SynthBoostMintA1x9QrT4vKp7mN2bW8cZ3fH6jD5eGs",
+      "name": "Aurora Finance",
+      "symbol": "AURA",
+      "boosts": 500,
+      "golden": true,
+      "website": "https://example.com/aura",
+      "price_usd": 0.0421,
+      "price_sol": 0.000276,
+      "price_change_24h": 18.4,
+      "market_cap": 4210000,
+      "liquidity_usd": 386000,
+      "volume_24h": 1240000,
+      "holders": 8423,
+      "security_score": 82,
+      "txns_24h_buys": 3120,
+      "txns_24h_sells": 2874,
+      "is_in_database": true
+    },
+    {
+      "mint": "SynthBoostMintB2y8PsU5wLq6nM3cX9dA4gJ7kE6fHt",
+      "name": "Kestrel",
+      "symbol": "KEST",
+      "boosts": 50,
+      "golden": false,
+      "price_usd": 0.00187,
+      "price_sol": 0.0000123,
+      "price_change_24h": -6.2,
+      "market_cap": 187000,
+      "liquidity_usd": 41200,
+      "volume_24h": 96300,
+      "holders": 1204,
+      "security_score": 64,
+      "txns_24h_buys": 612,
+      "txns_24h_sells": 655,
+      "is_in_database": true
+    }
+  ],
+  "jupiter_organic": [
+    {
+      "mint": "SynthDiscoverMntC3z7NrV6xMr5pK4dY2eB8hL9mF7g",
+      "name": "Bonk",
+      "symbol": "BONK",
+      "boosts": 0,
+      "golden": false,
+      "price_usd": 0.0000214,
+      "price_sol": 0.00000014,
+      "price_change_24h": 4.7,
+      "market_cap": 1630000000,
+      "liquidity_usd": 21400000,
+      "volume_24h": 98200000,
+      "holders": 912000,
+      "is_in_database": true
+    },
+    {
+      "mint": "SynthDiscoverMntD4a6MqW7yNs4qJ5eZ3fC9iM2nG8h",
+      "name": "Jupiter",
+      "symbol": "JUP",
+      "boosts": 0,
+      "golden": false,
+      "price_usd": 0.512,
+      "price_sol": 0.00336,
+      "price_change_24h": -1.9,
+      "market_cap": 1530000000,
+      "liquidity_usd": 18700000,
+      "volume_24h": 61400000,
+      "holders": 784000,
+      "is_in_database": true
+    }
+  ],
+  "jupiter_traded": [
+    {
+      "mint": "SynthTradedMintE5b5LpX8zPt3rH6fA4gD2jN3oH9i",
+      "name": "dogwifhat",
+      "symbol": "WIF",
+      "boosts": 0,
+      "golden": false,
+      "price_usd": 0.843,
+      "liquidity_usd": 9120000,
+      "volume_24h": 142000000,
+      "is_in_database": false
+    }
+  ],
+  "dexscreener_trending": [
+    {
+      "mint": "SynthTrendMintF6c4KoY9aQu2sG7gB5hE3kP4qJ2jx",
+      "name": "Popcat",
+      "symbol": "POPCAT",
+      "boosts": 0,
+      "golden": false,
+      "price_usd": 0.318,
+      "price_change_24h": 12.3,
+      "liquidity_usd": 6240000,
+      "volume_24h": 38100000,
+      "is_in_database": false
+    },
+    {
+      "mint": "SynthTrendMintG7d3JnZ2bRv9tF8hC6iF4mQ5rK3ky",
+      "name": "Moo Deng",
+      "symbol": "MOODENG",
+      "boosts": 0,
+      "golden": false,
+      "price_usd": 0.0973,
+      "price_change_24h": -3.4,
+      "liquidity_usd": 2210000,
+      "volume_24h": 14600000,
+      "is_in_database": false
+    }
+  ]
+}
