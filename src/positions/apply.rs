@@ -77,10 +77,9 @@ pub async fn apply_transition(transition: PositionTransition) -> Result<ApplyEff
             native_size,
             held_after,
         } => {
-            let Some(snapshot) = get_position_by_id(position_id).await else {
-                log_missing_position(position_id, "entry verification");
-                return Ok(effects);
-            };
+            let snapshot = get_position_by_id(position_id)
+                .await
+                .ok_or(Error::NotFoundById { position_id })?;
             let reading = LateFillReading::of(&snapshot.mint, position_id, held_after).await;
             let store_chain = get_store_chain().await?;
             let fill = EntryFill {
@@ -155,8 +154,11 @@ pub async fn apply_transition(transition: PositionTransition) -> Result<ApplyEff
             )
             .await;
 
-            // Queue Telegram notification for position opened
-            if with_config(|c| c.telegram.enabled && c.telegram.notify_position_opened) {
+            // A late entry on a row that stays closed opened nothing; the late-fill event
+            // reports it.
+            if !is_closed(&position)
+                && with_config(|c| c.telegram.enabled && c.telegram.notify_position_opened)
+            {
                 queue_notification(Notification::position_opened(
                     position.symbol.clone(),
                     position.mint.clone(),
@@ -202,10 +204,9 @@ pub async fn apply_transition(transition: PositionTransition) -> Result<ApplyEff
             // queue dedupes by signature only while an item is IN it, so a re-enqueue can hand
             // the same exit back. The exit record of the swap, read inside the booking
             // transaction, decides whether it is already booked.
-            let Some(snapshot) = get_position_by_id(position_id).await else {
-                log_missing_position(position_id, "exit verification");
-                return Ok(effects);
-            };
+            let snapshot = get_position_by_id(position_id)
+                .await
+                .ok_or(Error::NotFoundById { position_id })?;
             let reading = LateFillReading::of(&snapshot.mint, position_id, held_after).await;
             let store_chain = get_store_chain().await?;
             let fill = CloseFill {
@@ -361,8 +362,10 @@ pub async fn apply_transition(transition: PositionTransition) -> Result<ApplyEff
             )
             .await;
 
-            // Queue Telegram notification for position closed
+            // A late sale on a row that was already closed announced its close then; the
+            // late-fill event reports the sale.
             if effects.position_closed
+                && late.is_none()
                 && with_config(|c| c.telegram.enabled && c.telegram.notify_position_closed)
             {
                 let duration_secs = candidate
@@ -638,10 +641,9 @@ pub async fn apply_transition(transition: PositionTransition) -> Result<ApplyEff
             // native_received +=, partial_exit_count += 1). Applying the same partial twice
             // would sell the same tokens twice on paper. The exit record is the token: one
             // swap = one record, checked and written in the same transaction as the row.
-            let Some(snapshot) = get_position_by_id(position_id).await else {
-                log_missing_position(position_id, "partial exit verification");
-                return Ok(effects);
-            };
+            let snapshot = get_position_by_id(position_id)
+                .await
+                .ok_or(Error::NotFoundById { position_id })?;
             // The live price is the price updater's, in memory; the token's decimals value
             // the tokens still held and the tokens sold.
             let live_price = snapshot.current_price;
@@ -999,7 +1001,6 @@ pub async fn apply_transition(transition: PositionTransition) -> Result<ApplyEff
                 tokens_bought,
                 native_spent,
                 dca_time,
-                decimals,
             };
             let reading = LateFillReading::of(&snapshot.mint, position_id, held_after).await;
             let store_chain = get_store_chain().await?;
@@ -1008,32 +1009,35 @@ pub async fn apply_transition(transition: PositionTransition) -> Result<ApplyEff
                     return Ok(Booking::Skip(None));
                 }
                 let after_write_off = is_closed(row).then_some(row.synthetic_exit);
-                let booking = row.book_dca(&fill)?;
-                match booking.average {
-                    DcaAverage::Recomputed => {}
-                    DcaAverage::InvalidNormalization => logger::error(
-                        LogTag::Positions,
-                        &format!(
-                            "DCA: Invalid token normalization for position {} (remaining={}, decimals={})",
-                            position_id, booking.remaining, decimals
-                        ),
-                    ),
-                    DcaAverage::InvalidState => logger::error(
-                        LogTag::Positions,
-                        &format!(
-                            "DCA: Invalid position state for average price calculation - position_id={}, remaining_tokens={}, total_size_native={}",
-                            position_id, booking.remaining, row.total_size_native
-                        ),
-                    ),
-                }
+                row.book_dca(&fill)?;
                 let late = after_write_off
                     .map(|after_write_off| {
                         late_fill(row, reads, reading, store_chain, after_write_off)
                     })
                     .transpose()?;
-                // A reopened position averages its cost over what it now holds.
-                if late.is_some_and(|late| late.follow == FollowOutcome::Reopened) {
-                    row.recompute_average_entry_price(decimals);
+                // An open or reopened position averages its cost over what it now holds; a
+                // row that stays closed keeps the average its round was priced at.
+                if late.is_none_or(|late| late.follow == FollowOutcome::Reopened) {
+                    let remaining = row.remaining_token_amount.unwrap_or_default();
+                    match row.recompute_average_entry_price(decimals) {
+                        DcaAverage::Recomputed => {}
+                        DcaAverage::InvalidNormalization => logger::error(
+                            LogTag::Positions,
+                            &format!(
+                                "DCA: Invalid token normalization for position {position_id} \
+                                 (remaining={remaining}, decimals={decimals})"
+                            ),
+                        ),
+                        DcaAverage::InvalidState => logger::error(
+                            LogTag::Positions,
+                            &format!(
+                                "DCA: Invalid position state for average price calculation - \
+                                 position_id={position_id}, remaining_tokens={remaining}, \
+                                 total_size_native={}",
+                                row.total_size_native
+                            ),
+                        ),
+                    }
                 }
                 Ok(Booking::Write {
                     record: Some(BookingRecord::Entry(EntryRecord {

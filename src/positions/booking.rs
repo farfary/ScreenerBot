@@ -44,15 +44,14 @@ pub(crate) struct PartialExitFill {
     pub unrealized_pnl: Option<(f64, f64)>,
 }
 
-/// A verified DCA swap, with the decimals of the token bought.
+/// A verified DCA swap.
 pub(crate) struct DcaFill {
     pub tokens_bought: RawAmount,
     pub native_spent: f64,
     pub dca_time: DateTime<Utc>,
-    pub decimals: u8,
 }
 
-/// How a DCA booking treated the average entry price.
+/// How a recompute of the average entry price went.
 #[derive(Debug, Clone, Copy, PartialEq)]
 pub(crate) enum DcaAverage {
     /// Recomputed from the new totals.
@@ -61,13 +60,6 @@ pub(crate) enum DcaAverage {
     InvalidNormalization,
     /// Left unchanged: nothing is held or the invested total is not a positive finite value.
     InvalidState,
-}
-
-/// Result of a DCA booking.
-#[derive(Debug, Clone, Copy, PartialEq)]
-pub(crate) struct DcaBooking {
-    pub remaining: RawAmount,
-    pub average: DcaAverage,
 }
 
 impl Position {
@@ -189,16 +181,16 @@ impl Position {
         Ok(total_exited)
     }
 
-    /// Books a verified DCA add: the tokens join the held amount, the SOL joins the
-    /// invested total and the average entry price is recomputed from both when they are
-    /// valid.
-    pub(crate) fn book_dca(&mut self, fill: &DcaFill) -> Result<DcaBooking> {
-        let remaining = self.book_acquisition(fill.tokens_bought)?;
+    /// Books a verified DCA add: the tokens join the held amount and the SOL joins the
+    /// invested total. The average entry price is the caller's to recompute, and only
+    /// for a position that holds the round once the add is booked: on a closed row the
+    /// held amount is not yet the round's.
+    pub(crate) fn book_dca(&mut self, fill: &DcaFill) -> Result<()> {
+        self.book_acquisition(fill.tokens_bought)?;
         self.total_size_native += fill.native_spent;
-        let average = self.recompute_average_entry_price(fill.decimals);
         self.dca_count += 1;
         self.last_dca_time = Some(fill.dca_time);
-        Ok(DcaBooking { remaining, average })
+        Ok(())
     }
 
     /// Recomputes the average entry price from the invested total and the held amount, in a
@@ -220,8 +212,6 @@ impl Position {
         }
     }
 
-    /// Clears a failed close so it can be retried: the exit signature, the verified flag
-    /// and the exit prices it stamped.
     /// Drops the sale that was in flight when the position was written off, once the chain
     /// proved that sale failed or never landed: the write-off stands as the close, and no
     /// signature is left that would be verified again.
@@ -229,6 +219,8 @@ impl Position {
         self.exit_transaction_signature = None;
     }
 
+    /// Clears a failed close so it can be retried: the exit signature, the verified flag
+    /// and the exit prices it stamped.
     pub(crate) fn clear_failed_exit(&mut self) {
         self.exit_transaction_signature = None;
         self.transaction_exit_verified = false;

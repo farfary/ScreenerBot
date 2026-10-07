@@ -2455,6 +2455,7 @@ fn a_dca_whose_tokens_the_close_sold_stays_closed_and_restates_the_loss() {
             let _cfg = common::config_guard();
             enable_loss_limit();
             let id = written_off(|_| {}).await;
+            let average_before = memory_position(id).await.average_entry_price;
 
             apply_transition(late_dca(id, Some(RawAmount::ZERO)))
                 .await
@@ -2463,6 +2464,10 @@ fn a_dca_whose_tokens_the_close_sold_stays_closed_and_restates_the_loss() {
             let booked = in_storage(id).await;
             assert_eq!(booked, in_memory(id).await, "memory and storage disagree");
             assert!(booked.exit_time.is_some(), "the position stays closed");
+            assert_eq!(
+                booked.average_entry_price, average_before,
+                "a row that stays closed keeps the average its round was priced at"
+            );
             assert_eq!(booked.total_size_native, 1.5);
             assert_eq!(booked.remaining_token_amount, Some(RawAmount::ZERO));
             assert_acquired_balances(id, HELD + 500_000).await;
@@ -2925,6 +2930,160 @@ fn an_exit_clear_with_a_stale_signature_leaves_the_newer_exit_untouched() {
                     Some("newer-exit-sig")
                 );
                 assert_eq!(position.exit_price, Some(1.25));
+            }
+        },
+    );
+}
+
+/// Collects the Telegram notices queued while the test runs, with the open and close
+/// notices switched on.
+fn capture_notices() -> tokio::sync::mpsc::Receiver<screenerbot::telegram::Notification> {
+    common::set_config(|cfg| {
+        cfg.telegram.enabled = true;
+        cfg.telegram.notify_position_opened = true;
+        cfg.telegram.notify_position_closed = true;
+    });
+    let (sender, receiver) = tokio::sync::mpsc::channel(64);
+    screenerbot::telegram::notifier::set_notification_queue(sender);
+    receiver
+}
+
+/// How many open and close notices were queued, in that order.
+fn open_and_close_notices(
+    receiver: &mut tokio::sync::mpsc::Receiver<screenerbot::telegram::Notification>,
+) -> (usize, usize) {
+    use screenerbot::telegram::NotificationType;
+    let (mut opened, mut closed) = (0, 0);
+    while let Ok(notice) = receiver.try_recv() {
+        match notice.notification_type {
+            NotificationType::PositionOpened { .. } => opened += 1,
+            NotificationType::PositionClosed { .. } => closed += 1,
+            _ => {}
+        }
+    }
+    (opened, closed)
+}
+
+#[test]
+fn a_late_entry_on_a_row_that_stays_closed_announces_no_open() {
+    common::run_isolated(
+        "a_late_entry_on_a_row_that_stays_closed_announces_no_open",
+        || async {
+            let _dir = common::isolated_env();
+            let _cfg = common::config_guard();
+            let id = written_off(|position| {
+                position.transaction_entry_verified = false;
+            })
+            .await;
+            let mut notices = capture_notices();
+
+            apply_transition(PositionTransition::EntryVerified {
+                position_id: id,
+                effective_entry_price: 1.0,
+                token_amount_units: RawAmount::new(HELD),
+                fee_raw: SWAP_FEE_RAW,
+                native_size: 1.0,
+                held_after: Some(RawAmount::ZERO),
+            })
+            .await
+            .expect("the late entry is booked");
+            assert!(
+                in_storage(id).await.exit_time.is_some(),
+                "the row stays closed"
+            );
+            assert_eq!(open_and_close_notices(&mut notices), (0, 0));
+
+            let opened = store_position(|position| {
+                position.transaction_entry_verified = false;
+            })
+            .await;
+            apply_transition(entry_verified(opened))
+                .await
+                .expect("the entry is booked");
+            assert_eq!(
+                open_and_close_notices(&mut notices),
+                (1, 0),
+                "an entry that opens a position is announced"
+            );
+        },
+    );
+}
+
+#[test]
+fn a_late_sale_on_a_written_off_row_announces_no_second_close() {
+    common::run_isolated(
+        "a_late_sale_on_a_written_off_row_announces_no_second_close",
+        || async {
+            let _dir = common::isolated_env();
+            let _cfg = common::config_guard();
+            let id = written_off(|position| {
+                position.exit_transaction_signature = Some(CLOSE_SIGNATURE.to_owned());
+            })
+            .await;
+            let mut notices = capture_notices();
+
+            apply_transition(late_sell(id, Some(RawAmount::ZERO)))
+                .await
+                .expect("the late sale is booked");
+            assert!(
+                in_storage(id).await.exit_time.is_some(),
+                "the row stays closed"
+            );
+            assert_eq!(open_and_close_notices(&mut notices), (0, 0));
+
+            const SALE: &str = "open-row-close-sig";
+            let open = store_position(|position| {
+                position.exit_transaction_signature = Some(SALE.to_owned());
+            })
+            .await;
+            apply_transition(PositionTransition::ExitVerified {
+                position_id: open,
+                effective_exit_price: 1.5,
+                native_received: 1.5,
+                fee_raw: SWAP_FEE_RAW,
+                exit_time: Utc::now(),
+                exit_signature: SALE.to_owned(),
+                exit_amount: RawAmount::new(HELD),
+                held_after: None,
+            })
+            .await
+            .expect("the sale is booked");
+            assert_eq!(
+                open_and_close_notices(&mut notices),
+                (0, 1),
+                "a sale that closes a position is announced"
+            );
+        },
+    );
+}
+
+#[test]
+fn every_fill_on_a_position_missing_from_memory_is_refused_as_not_found() {
+    common::run_isolated(
+        "every_fill_on_a_position_missing_from_memory_is_refused_as_not_found",
+        || async {
+            let _dir = common::isolated_env();
+            let _cfg = common::config_guard();
+            let id = open_position(|_| {}).await;
+            let missing = id + 1_000;
+            for fill in [
+                entry_verified(missing),
+                verified_close(missing),
+                partial_exit(missing),
+                dca(missing),
+            ] {
+                let label = format!("{fill:?}");
+                let error = apply_transition(fill)
+                    .await
+                    .expect_err("a landed swap with no row to book it on is not booked");
+                assert!(
+                    matches!(error, Error::NotFoundById { position_id } if position_id == missing),
+                    "{label}: {error:?}"
+                );
+                assert!(
+                    !error.is_retryable(),
+                    "{label}: the item is abandoned with its reason, not retried"
+                );
             }
         },
     );
