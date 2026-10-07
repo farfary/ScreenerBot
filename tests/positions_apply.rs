@@ -2286,12 +2286,66 @@ fn a_full_exit_residual_counts_only_the_positions_own_tokens() {
             store_position(|_| {}).await;
 
             assert!(
-                !residual_balance_requires_retry(Some(id), RawAmount::new(HELD)).await,
+                !residual_balance_requires_retry(Some(id), RawAmount::new(HELD))
+                    .await
+                    .expect("the other holding is attributable"),
                 "the other position's tokens are taken for a residual of this one"
             );
             assert!(
-                residual_balance_requires_retry(Some(id), RawAmount::new(HELD + HELD / 2)).await,
+                residual_balance_requires_retry(Some(id), RawAmount::new(HELD + HELD / 2))
+                    .await
+                    .expect("the other holding is attributable"),
                 "a residual of the position's own is missed beside another position"
+            );
+        },
+    );
+}
+
+/// The holding of the other positions of a mint is read from storage, the one owner of that
+/// reading: a closed row holds nothing, a row that recorded no amount holds nothing, an
+/// archived open row still holds its tokens, and an unverified entry makes the holding
+/// unattributable rather than guessed.
+#[test]
+fn a_full_exit_residual_reads_the_other_positions_as_storage_has_them() {
+    common::run_isolated(
+        "a_full_exit_residual_reads_the_other_positions_as_storage_has_them",
+        || async {
+            let _dir = common::isolated_env();
+            let _cfg = common::config_guard();
+            let id = open_position(|_| {}).await;
+            let residual =
+                || async { residual_balance_requires_retry(Some(id), RawAmount::new(HELD)).await };
+
+            store_position(|position| {
+                position.exit_time = Some(Utc::now());
+                position.transaction_exit_verified = true;
+            })
+            .await;
+            store_position(|position| {
+                position.token_amount = None;
+                position.remaining_token_amount = None;
+            })
+            .await;
+            assert!(
+                residual()
+                    .await
+                    .expect("closed and empty rows are attributable"),
+                "a closed row or a row without an amount is taken to hold the residual"
+            );
+
+            store_position(|position| position.archived = true).await;
+            assert!(
+                !residual().await.expect("an archived row is attributable"),
+                "an archived open row's tokens are taken for a residual of this one"
+            );
+
+            store_position(|position| position.transaction_entry_verified = false).await;
+            assert!(
+                matches!(
+                    residual().await,
+                    Err(screenerbot::positions::Error::HoldingUnattributable { .. })
+                ),
+                "a residual is decided while another entry of the mint is unverified"
             );
         },
     );
@@ -2311,6 +2365,19 @@ fn sale_at(id: i64, signature: &str, sold_at: DateTime<Utc>) -> PositionTransiti
     }
 }
 
+/// Every reason a wallet-history close leaves on its row: its own label, and each transient
+/// trader label it keeps.
+fn wallet_history_close_reasons() -> [String; 3] {
+    [
+        screenerbot::positions::ledger::CLOSED_EXTERNALLY.to_owned(),
+        screenerbot::positions::EXIT_RETRY_PENDING.to_owned(),
+        format!(
+            "TakeProfit{}",
+            screenerbot::positions::PENDING_VERIFICATION_SUFFIX
+        ),
+    ]
+}
+
 #[test]
 fn a_sale_the_wallet_history_close_already_counts_is_not_booked_again() {
     common::run_isolated(
@@ -2318,41 +2385,48 @@ fn a_sale_the_wallet_history_close_already_counts_is_not_booked_again() {
         || async {
             let _dir = common::isolated_env();
             let _cfg = common::config_guard();
-            let closed_at = Utc::now();
-            // The ledger closed the row from the chain: every disposal of the round up to
-            // its close is in the proceeds, and its exit is the round's last disposal.
-            let id = open_position(|position| {
-                position.exit_time = Some(closed_at);
-                position.transaction_exit_verified = true;
-                position.closed_reason =
-                    Some(screenerbot::positions::ledger::CLOSED_EXTERNALLY.to_owned());
-                position.exit_transaction_signature = Some("last-disposal-sig".to_owned());
-                position.native_received = Some(1.5);
-                position.remaining_token_amount = Some(RawAmount::ZERO);
-                position.total_exited_amount = RawAmount::new(HELD);
-            })
-            .await;
-            let before = in_storage(id).await;
+            open_position(|_| {}).await;
+            for reason in wallet_history_close_reasons() {
+                let closed_at = Utc::now();
+                // The ledger closed the row from the chain: every disposal of the round up
+                // to its close is in the proceeds, and its exit is the round's last
+                // disposal.
+                let id = store_position(|position| {
+                    position.exit_time = Some(closed_at);
+                    position.transaction_exit_verified = true;
+                    position.closed_reason = Some(reason.clone());
+                    position.exit_transaction_signature = Some("last-disposal-sig".to_owned());
+                    position.native_received = Some(1.5);
+                    position.remaining_token_amount = Some(RawAmount::ZERO);
+                    position.total_exited_amount = RawAmount::new(HELD);
+                })
+                .await;
+                let before = in_storage(id).await;
 
-            apply_transition(sale_at(
-                id,
-                CLOSE_SIGNATURE,
-                closed_at - chrono::Duration::minutes(5),
-            ))
-            .await
-            .expect("the sale is settled");
-            assert_unchanged(id, &before).await;
-            assert_eq!(exit_records(id).await, 0);
+                apply_transition(sale_at(
+                    id,
+                    &format!("{CLOSE_SIGNATURE}-{id}"),
+                    closed_at - chrono::Duration::minutes(5),
+                ))
+                .await
+                .expect("the sale is settled");
+                assert_unchanged(id, &before).await;
+                assert_eq!(
+                    exit_records(id).await,
+                    0,
+                    "a sale the close with reason {reason} counts is booked again"
+                );
 
-            apply_transition(sale_at(
-                id,
-                "later-sale-sig",
-                closed_at + chrono::Duration::minutes(5),
-            ))
-            .await
-            .expect("a sale after the close is booked");
-            assert_eq!(exit_records(id).await, 1);
-            assert_eq!(in_storage(id).await.native_received, Some(3.0));
+                apply_transition(sale_at(
+                    id,
+                    &format!("later-sale-sig-{id}"),
+                    closed_at + chrono::Duration::minutes(5),
+                ))
+                .await
+                .expect("a sale after the close is booked");
+                assert_eq!(exit_records(id).await, 1);
+                assert_eq!(in_storage(id).await.native_received, Some(3.0));
+            }
         },
     );
 }
@@ -2718,6 +2792,79 @@ fn a_late_fill_waits_while_another_swap_of_the_mint_is_in_flight() {
     );
 }
 
+/// Late fills on two closed positions of one mint are booked in send order: the one sent
+/// later waits for the earlier, and the earlier never waits for the later, so neither
+/// blocks the other for good.
+#[test]
+fn late_fills_on_two_closed_positions_of_a_mint_book_in_send_order() {
+    common::run_isolated(
+        "late_fills_on_two_closed_positions_of_a_mint_book_in_send_order",
+        || async {
+            let _dir = common::isolated_env();
+            let _cfg = common::config_guard();
+            let first = written_off(|_| {}).await;
+            let second = store_position(|position| {
+                position.exit_time = Some(Utc::now());
+                position.transaction_exit_verified = true;
+                position.exit_transaction_signature = Some("second-close-sig".to_owned());
+                position.native_received = Some(1.0);
+                position.remaining_token_amount = Some(RawAmount::ZERO);
+                position.total_exited_amount = RawAmount::new(HELD);
+            })
+            .await;
+            let sent = Utc::now();
+            state::register_pending_dca_swap(PendingDcaSwap {
+                signature: DCA_SIGNATURE.to_owned(),
+                mint: common::TEST_MINT.to_owned(),
+                position_id: first,
+                expiry_height: None,
+                created_at: sent - chrono::Duration::seconds(30),
+                size_sol: 0.5,
+            })
+            .await
+            .expect("register the first position's DCA");
+            state::register_pending_partial_exit(PendingPartialExit {
+                signature: PARTIAL_SIGNATURE.to_owned(),
+                mint: common::TEST_MINT.to_owned(),
+                position_id: second,
+                expected_exit_amount: RawAmount::new(400_000),
+                requested_exit_percentage: 40.0,
+                expiry_height: None,
+                created_at: sent,
+            })
+            .await
+            .expect("register the second position's partial exit");
+            state::mark_partial_exit_pending(common::TEST_MINT).await;
+
+            let before = in_storage(second).await;
+            let error = apply_transition(late_partial(second, Some(RawAmount::new(500_000))))
+                .await
+                .expect_err("the later fill waits for the earlier one");
+            assert!(
+                matches!(error, Error::HoldingUnattributable { .. }),
+                "expected an unattributable holding, got {error:?}"
+            );
+            assert_unchanged(second, &before).await;
+            assert_eq!(exit_records(second).await, 0);
+
+            apply_transition(late_dca(first, Some(RawAmount::new(500_000))))
+                .await
+                .expect("the earlier fill does not wait for the later one");
+            assert_eq!(entry_records(first).await, 1);
+            assert!(!dca_pending().await, "the booked DCA is still pending");
+
+            apply_transition(late_partial(second, Some(RawAmount::new(500_000))))
+                .await
+                .expect("the later fill is booked once the earlier one is");
+            assert_eq!(exit_records(second).await, 1);
+            assert!(
+                partial_cleared().await,
+                "the booked partial exit is still pending"
+            );
+        },
+    );
+}
+
 #[test]
 fn each_late_fill_is_booked_once() {
     common::run_isolated("each_late_fill_is_booked_once", || async {
@@ -2878,6 +3025,11 @@ fn deleting_the_archived_positions_removes_their_losses_from_the_limiter() {
             assert_eq!(recorded_loss(), 1.0);
             let status = call_dashboard("POST", &format!("/api/positions/{id}/archive")).await;
             assert!(status.is_success(), "archive answered {status}");
+            assert_eq!(
+                recorded_loss(),
+                1.0,
+                "an archived loss stops counting before it is deleted"
+            );
 
             let status = call_dashboard("DELETE", "/api/positions/archived").await;
             assert!(status.is_success(), "bulk delete answered {status}");

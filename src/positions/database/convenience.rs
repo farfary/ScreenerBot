@@ -11,7 +11,7 @@ use crate::logger::{self, LogTag};
 use crate::positions::types::{EntryRecord, ExitRecord, Position, PositionManagement};
 use crate::positions::{Error, Result};
 
-use super::booking::{Booking, BookingReads, Committed};
+use super::booking::{query_other_open_held, Booking, BookingReads, Committed};
 use super::global::GLOBAL_POSITIONS_DB;
 use super::queries::{query_trader_swap_legs, TraderSwapLeg};
 use super::types::{DailyTradingStats, PeriodTradingStats, TokenSnapshot};
@@ -19,6 +19,22 @@ use super::types::{DailyTradingStats, PeriodTradingStats, TokenSnapshot};
 // =============================================================================
 // HELPER FUNCTIONS FOR POSITIONS MANAGEMENT
 // =============================================================================
+
+/// What the open positions of `mint` other than `excluded` hold, as storage has them; see
+/// [`query_other_open_held`].
+pub(crate) async fn get_other_open_held(
+    mint: &str,
+    excluded: Option<i64>,
+) -> Result<crate::chains::RawAmount> {
+    let db_guard = GLOBAL_POSITIONS_DB.lock().await;
+    let db = db_guard.as_ref().ok_or(Error::NotInitialised)?;
+    let conn = db.get_connection()?;
+    let wallet_address =
+        crate::utils::get_wallet_address().map_err(|e| Error::WalletUnavailable {
+            detail: e.to_string(),
+        })?;
+    query_other_open_held(&conn, db.chain.as_str(), &wallet_address, mint, excluded)
+}
 
 /// Load all positions from database
 pub async fn load_all_positions() -> Result<Vec<Position>> {

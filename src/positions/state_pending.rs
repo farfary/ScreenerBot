@@ -8,6 +8,7 @@ use super::error::{Error, Result};
 pub use super::types::{PendingDcaSwap, PendingPartialExit};
 use crate::chains::ChainId;
 use crate::logger::{self, LogTag};
+use chrono::{DateTime, Utc};
 use std::{collections::HashMap, sync::LazyLock};
 use tokio::sync::RwLock;
 
@@ -316,7 +317,13 @@ pub async fn position_has_pending_swap(mint: &str, position_id: i64) -> bool {
 /// swap submitted whose pending state is not recorded yet (a partial exit counted on the
 /// mint before its details are registered, or a marked swap). Its tokens may or may not be
 /// in a holding read now, so such a reading cannot be attributed to one position.
-pub async fn other_swap_in_flight(mint: &str, position_id: i64) -> bool {
+///
+/// Late fills on closed positions are ordered by send: when `signature` is a pending DCA or
+/// partial exit of this position, a pending swap of another closed position sent after it does not
+/// count. That swap waits for this one instead, so two late fills of one mint never wait
+/// for each other. A pending swap of an open position, or of one whose state is unknown,
+/// always counts.
+pub async fn other_swap_in_flight(mint: &str, position_id: i64, signature: Option<&str>) -> bool {
     let partials = get_pending_partial_exits_for_mint(mint).await;
     let partials_counted = PENDING_PARTIAL_EXITS
         .read()
@@ -324,19 +331,55 @@ pub async fn other_swap_in_flight(mint: &str, position_id: i64) -> bool {
         .get(mint)
         .copied()
         .unwrap_or(0);
-    get_pending_dca_swaps_for_mint(mint)
-        .await
-        .iter()
-        .any(|entry| entry.position_id != position_id)
-        || partials
-            .iter()
-            .any(|entry| entry.position_id != position_id)
-        || partials_counted as usize > partials.len()
+    if partials_counted as usize > partials.len()
         || SWAPS_IN_FLIGHT
             .lock()
             .unwrap_or_else(|poisoned| poisoned.into_inner())
             .keys()
             .any(|(_, in_flight)| in_flight == mint)
+    {
+        return true;
+    }
+
+    let dcas = get_pending_dca_swaps_for_mint(mint).await;
+    let pending: Vec<(i64, &str, DateTime<Utc>)> = dcas
+        .iter()
+        .map(|entry| {
+            (
+                entry.position_id,
+                entry.signature.as_str(),
+                entry.created_at,
+            )
+        })
+        .chain(partials.iter().map(|entry| {
+            (
+                entry.position_id,
+                entry.signature.as_str(),
+                entry.created_at,
+            )
+        }))
+        .collect();
+    let own_sent = pending
+        .iter()
+        .find(|(id, sig, _)| *id == position_id && Some(*sig) == signature)
+        .map(|(_, sig, at)| (*at, *sig));
+    for (other_id, other_signature, other_sent) in &pending {
+        if *other_id == position_id {
+            continue;
+        }
+        let sent_after_own = own_sent.is_some_and(|own| (*other_sent, *other_signature) > own);
+        if !sent_after_own || !position_is_closed(*other_id).await {
+            return true;
+        }
+    }
+    false
+}
+
+/// True when the position is known and closed.
+async fn position_is_closed(position_id: i64) -> bool {
+    super::state::get_position_by_id(position_id)
+        .await
+        .is_some_and(|position| super::round_state::is_closed(&position))
 }
 
 /// Every mint with a swap in flight — a pending partial exit, a pending DCA add, or a bot

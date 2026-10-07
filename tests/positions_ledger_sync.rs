@@ -1641,6 +1641,106 @@ fn a_ledger_write_leaves_a_bot_row_whose_fill_was_booked_after_the_history_was_r
     );
 }
 
+/// A fill booked after the history was read holds back only the row it was booked on: the
+/// ledger still writes every other row.
+#[test]
+fn a_fill_booked_after_the_history_was_read_holds_back_only_its_own_row() {
+    common::run_isolated(
+        "a_fill_booked_after_the_history_was_read_holds_back_only_its_own_row",
+        || async {
+            const PARTIAL: &str = "other-partial-exit-sig";
+            const OTHER_MINT: &str = "OtherMint111111111111111111111111111111111";
+            let _dir = common::isolated_env();
+            let _cfg = common::config_guard();
+            screenerbot::paths::ensure_all_directories().expect("create data directories");
+            common::configure_own_wallet();
+            common::seed_decimals(common::TEST_MINT, 6);
+            common::seed_decimals(OTHER_MINT, 6);
+            screenerbot::positions::initialize_positions_database()
+                .await
+                .expect("initialise positions database");
+
+            let mut stored_ids = Vec::new();
+            for mint in [common::TEST_MINT, OTHER_MINT] {
+                let mut position = common::test_position(1.0, 1.0);
+                position.id = None;
+                position.mint = mint.to_owned();
+                position.entry_transaction_signature = Some(format!("entry-sig-{mint}"));
+                position.token_amount = Some(RawAmount::new(1_000_000));
+                position.remaining_token_amount = Some(RawAmount::new(1_000_000));
+                let id = db::save_position(&position)
+                    .await
+                    .expect("persist test position");
+                position.id = Some(id);
+                state::add_position(position).await;
+                stored_ids.push(id);
+            }
+            let (id, other_id) = (stored_ids[0], stored_ids[1]);
+            let position = state::get_position_by_id(id)
+                .await
+                .expect("position in memory");
+
+            let round_key = format!("entry-sig:{}", common::TEST_MINT);
+            let round = LedgerRound {
+                entry_signature: position.entry_transaction_signature.clone(),
+                ..open_round(common::TEST_MINT, &round_key)
+            };
+            let existing = db::load_all_positions().await.expect("load positions");
+            let plan = plan_position_writes(
+                &[round],
+                &existing,
+                &metadata(common::TEST_MINT, false),
+                &no_legs(),
+                &no_busy(),
+                now(),
+            )
+            .booked_before(HashSet::new());
+            assert_eq!(plan.updates.len(), 1, "the round claims the bot row");
+
+            state::register_pending_partial_exit(PendingPartialExit {
+                signature: PARTIAL.to_owned(),
+                mint: OTHER_MINT.to_owned(),
+                position_id: other_id,
+                expected_exit_amount: RawAmount::new(400_000),
+                requested_exit_percentage: 40.0,
+                expiry_height: None,
+                created_at: Utc::now(),
+            })
+            .await
+            .expect("register pending partial exit");
+            state::mark_partial_exit_pending(OTHER_MINT).await;
+            apply_transition(PositionTransition::PartialExitVerified {
+                position_id: other_id,
+                exit_amount: RawAmount::new(400_000),
+                native_received: 0.8,
+                effective_exit_price: 2.0,
+                fee_raw: 5_000,
+                exit_time: Utc::now(),
+                exit_signature: PARTIAL.to_owned(),
+                exit_percentage: 40.0,
+                held_after: None,
+            })
+            .await
+            .expect("the other row's partial exit commits");
+
+            assert_eq!(
+                apply_plan(plan).await,
+                AppliedPlan {
+                    inserted: 0,
+                    updated: 1,
+                    skipped: 0,
+                },
+                "another row's fresh fill held this row back"
+            );
+            let stored = db::get_position_by_id(id)
+                .await
+                .expect("read stored position")
+                .expect("position stored");
+            assert_eq!(stored.round_key.as_deref(), Some(round_key.as_str()));
+        },
+    );
+}
+
 #[test]
 fn a_bot_swap_in_flight_keeps_its_mint_busy_until_its_guard_drops() {
     const IN_FLIGHT_MINT: &str = "InFlightMint11111111111111111111111111111111";

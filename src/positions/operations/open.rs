@@ -402,8 +402,8 @@ async fn open_position_impl(
     add_position(position_with_id).await;
     drop(_in_flight);
 
-    // Bug #25 fix: Set token priority to OpenPosition (100) for fastest updates (5s interval)
-    // This ensures price tracking is responsive during active trading
+    // An open position's token takes the OpenPosition priority, the fastest update cadence,
+    // so its price tracking stays responsive while it is traded.
     if let Some(db) = crate::tokens::database::database(crate::chains::active_chain()) {
         let _ = db.update_priority(
             &api_token.mint,

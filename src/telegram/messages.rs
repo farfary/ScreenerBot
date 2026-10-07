@@ -209,6 +209,18 @@ pub fn msg_dca_executed(
     )
 }
 
+/// Format a confirmed swap its position does not hold yet
+pub fn msg_swap_unbooked(symbol: &str, signature: &str) -> String {
+    format!(
+        "{}\n\n{}\n\n{}\n{}",
+        with_icon("⚠️", &tg_id(ids::TELEGRAM_NOTIFY_UNBOOKED_TITLE)),
+        ticker(symbol),
+        tg_id(ids::TELEGRAM_NOTIFY_UNBOOKED_BODY),
+        tg(&UiText::new(ids::TELEGRAM_NOTIFY_UNBOOKED_SIGNATURE)
+            .arg("signature", text_arg(signature))),
+    )
+}
+
 /// Format system error notification
 pub fn msg_system_error(severity: &ErrorSeverity, message: &str) -> String {
     let (emoji, title) = match severity {
@@ -446,4 +458,22 @@ pub fn msg_confirm_close(
             .arg("amount", native_arg(est_receive))),
         with_icon("⏰", &tg_id(ids::TELEGRAM_POSITION_CONFIRM_CLOSE_HINT)),
     )
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn an_unbooked_swap_message_carries_its_text_symbol_and_signature() {
+        let message = msg_swap_unbooked("BONK", "unbooked-signature");
+        for id in [
+            ids::TELEGRAM_NOTIFY_UNBOOKED_TITLE,
+            ids::TELEGRAM_NOTIFY_UNBOOKED_BODY,
+        ] {
+            assert!(message.contains(&tg_id(id)), "{id:?} is missing");
+        }
+        assert!(message.contains(&ticker("BONK")));
+        assert!(message.contains("unbooked-signature"));
+    }
 }

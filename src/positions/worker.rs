@@ -22,8 +22,10 @@ use super::{
 };
 use crate::chains::SignatureVerdict;
 use crate::errors::ErrorClass;
+use crate::i18n::{ids, UiArg, UiText};
 use crate::logger::{self, LogTag};
 use crate::positions::{Error, Result};
+use crate::telegram::{queue_notification, Notification};
 use chrono::{DateTime, Utc};
 use serde_json::json;
 use std::sync::Arc;
@@ -623,9 +625,10 @@ async fn settlement_lock(item: &VerificationItem) -> Option<super::PositionLockG
     lock
 }
 
-/// Records a swap confirmed on chain that could not be booked within the verification
-/// limits. It keeps being verified and renewed until it books; this event is the lasting
-/// trace that the position does not show the swap yet.
+/// Reports a swap confirmed on chain that could not be booked within the verification
+/// limits. It keeps being verified and renewed until it books; the event is the lasting
+/// trace that the position does not show the swap yet, and the notification tells the
+/// operator so.
 async fn record_unbooked_swap(item: &VerificationItem, reason: &GiveUpReason, error: &Error) {
     logger::error(
         LogTag::Positions,
@@ -634,21 +637,37 @@ async fn record_unbooked_swap(item: &VerificationItem, reason: &GiveUpReason, er
             item.signature, item.mint, item.position_id
         ),
     );
+    let symbol = match item.position_id {
+        Some(position_id) => super::state::get_position_by_id(position_id)
+            .await
+            .map(|position| position.symbol),
+        None => None,
+    }
+    .unwrap_or_else(|| item.mint.clone());
     crate::events::record_position_event_flexible(
         "confirmed_swap_unbooked",
         crate::events::Severity::Error,
         Some(&item.mint),
         Some(&item.signature),
-        json!({
-            "kind": format!("{:?}", item.kind),
-            "is_dca": item.is_dca,
-            "is_partial_exit": item.is_partial_exit,
-            "give_up_reason": reason,
-            "last_error": error.to_string(),
-            "position_id": item.position_id
-        }),
+        crate::events::with_text(
+            json!({
+                "kind": format!("{:?}", item.kind),
+                "is_dca": item.is_dca,
+                "is_partial_exit": item.is_partial_exit,
+                "give_up_reason": reason,
+                "last_error": error.to_string(),
+                "position_id": item.position_id
+            }),
+            &UiText::new(ids::EVENTS_POSITION_SWAP_UNBOOKED)
+                .arg("symbol", UiArg::Text(symbol.clone())),
+        ),
     )
     .await;
+    queue_notification(Notification::swap_unbooked(
+        symbol,
+        item.mint.clone(),
+        item.signature.clone(),
+    ));
 }
 
 /// Reports an entry its second not-landed read parks: the row and its slot stay held while

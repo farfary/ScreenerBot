@@ -4,6 +4,7 @@
 //! Position verifier — confirms transaction success and updates position state accordingly.
 
 use super::{
+    db::get_other_open_held,
     queue::VerificationItem,
     round_state::{attributable_held, is_dust},
     settle,
@@ -68,10 +69,15 @@ fn is_transient_verification_error(msg: &str) -> bool {
 }
 
 /// Whether `balance`, the wallet's holding of the mint after a full exit of the position,
-/// leaves a residual of the position's own that another close must sell.
-pub async fn residual_balance_requires_retry(position_id: Option<i64>, balance: RawAmount) -> bool {
+/// leaves a residual of the position's own that another close must sell. Fails while the
+/// holding of the other open positions of the mint cannot be read or attributed: the
+/// residual cannot be told from their tokens until it can.
+pub async fn residual_balance_requires_retry(
+    position_id: Option<i64>,
+    balance: RawAmount,
+) -> super::Result<bool> {
     if balance == RawAmount::ZERO {
-        return false;
+        return Ok(false);
     }
 
     if let Some(pid) = position_id {
@@ -89,8 +95,7 @@ pub async fn residual_balance_requires_retry(position_id: Option<i64>, balance: 
                 let acquired = held
                     .checked_add(position.total_exited_amount)
                     .unwrap_or(RawAmount::new(u128::MAX));
-                let others =
-                    settle::held_by_other_open_positions(&position.mint, position.id).await;
+                let others = get_other_open_held(&position.mint, position.id).await?;
                 let residual = attributable_held(balance, others, acquired);
                 if is_dust(residual, acquired) {
                     logger::debug(
@@ -99,13 +104,13 @@ pub async fn residual_balance_requires_retry(position_id: Option<i64>, balance: 
                             "Ignoring residual balance {balance} for position {pid}: {residual} of it is its own (acquired {acquired})"
                         ),
                     );
-                    return false;
+                    return Ok(false);
                 }
             }
         }
     }
 
-    true
+    Ok(true)
 }
 
 /// Verify a transaction and produce the appropriate transition. A transaction that is not
@@ -445,7 +450,21 @@ pub async fn verify_transaction(item: &VerificationItem) -> VerificationOutcome 
             }
 
             // FULL EXIT: Ensure complete closure (check for residual)
-            if residual_balance_requires_retry(item.position_id, remaining_balance).await {
+            let residual_requires_retry = match residual_balance_requires_retry(
+                item.position_id,
+                remaining_balance,
+            )
+            .await
+            {
+                Ok(requires_retry) => requires_retry,
+                Err(error) => {
+                    return VerificationOutcome::RetryTransient(format!(
+                            "Exit residual {remaining_balance} for mint {} cannot be attributed yet: {error}",
+                            item.mint
+                        ));
+                }
+            };
+            if residual_requires_retry {
                 logger::warning(
                     LogTag::Positions,
                     &format!(

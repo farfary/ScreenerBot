@@ -289,6 +289,12 @@ impl TelegramNotifier {
                 0.0, // new_avg_price not provided
             ),
 
+            NotificationType::SwapUnbooked {
+                token_symbol,
+                signature,
+                ..
+            } => messages::msg_swap_unbooked(token_symbol, signature),
+
             NotificationType::SystemError { message, severity } => {
                 messages::msg_system_error(severity, message)
             }
@@ -521,6 +527,7 @@ fn should_send_notification(notification: &Notification) -> bool {
         NotificationType::PositionClosed { .. } => config.notify_position_closed,
         NotificationType::PartialExit { .. } => config.notify_partial_exit,
         NotificationType::DcaExecuted { .. } => config.notify_dca_executed,
+        NotificationType::SwapUnbooked { .. } => config.notify_system_errors,
         NotificationType::SystemError { severity, .. } => match severity {
             ErrorSeverity::Critical | ErrorSeverity::Error => config.notify_system_errors,
             ErrorSeverity::Warning => config.notify_system_errors,

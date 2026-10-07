@@ -47,6 +47,7 @@ events-connectivity-critical-unhealthy = { $count } endpoint quan trọng không
 events-connectivity-endpoint-recovered = Endpoint đã phục hồi từ { $from } sang ổn định
 events-position-entry-not-landed = Lệnh mua { $symbol } không được ghi nhận trên chuỗi; vị thế đã bị xóa
 events-position-fill-after-force-close = Một giao dịch { $symbol } được ghi nhận trên chuỗi sau khi vị thế bị đóng cưỡng bức; giao dịch đã được ghi sổ và vị thế được tính lại
+events-position-swap-unbooked = Một swap { $symbol } đã xác nhận trên chuỗi chưa được ghi vào vị thế; swap được xác minh lại cho đến khi được ghi sổ
 
 events-category-swap = Swap
 events-category-transaction = Giao dịch

@@ -55,6 +55,7 @@ events-connectivity-critical-unhealthy = { $count } endpoint(s) críticos no sal
 events-connectivity-endpoint-recovered = El endpoint pasó de { $from } a saludable
 events-position-entry-not-landed = La compra de { $symbol } no llegó a la cadena; su posición se eliminó
 events-position-fill-after-force-close = Una operación de { $symbol } llegó a la cadena después del cierre forzado de su posición; se registró y la posición se recalculó
+events-position-swap-unbooked = Un swap de { $symbol } confirmado en la cadena aún no está en su posición; se vuelve a verificar hasta que se registre
 
 ## Events page (pages/events.js, ui/event_labels.js)
 

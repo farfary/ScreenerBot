@@ -20,8 +20,8 @@ pub use error::{
 };
 pub use operations::{
     execute_swap_with_fallback, failed_swap, get_best_quote, get_best_quote_for_opening,
-    is_fallback_safe, not_submitted_reason, try_get_best_quote, unconfirmed_swap_signature,
-    FailedSwap,
+    is_fallback_safe, not_submitted_reason, program_error, try_get_best_quote,
+    unconfirmed_swap_signature, FailedSwap,
 };
 pub use operations_wallet::quote_and_execute_for_wallet;
 pub use progress::{with_swap_stage_listener, SwapStage, SwapStageListener};

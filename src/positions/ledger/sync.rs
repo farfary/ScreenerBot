@@ -59,10 +59,24 @@ use crate::chains::RawAmount;
 use crate::logger::{self, LogTag};
 use crate::positions::db::{Booking, Committed};
 use crate::positions::types::{Position, PositionManagement, PositionOrigin, HOLDING_STATE_FROZEN};
+use crate::positions::{EXIT_RETRY_PENDING, PENDING_VERIFICATION_SUFFIX};
 
 /// `closed_reason` for a bot-executed position whose token left the wallet through a
 /// sale or transfer the bot did not make.
 pub const CLOSED_EXTERNALLY: &str = "closed_externally";
+
+/// Whether `reason` is one a wallet-history close leaves on the row it closes: its own
+/// label on a row that had none, or a transient trader label it keeps
+/// ([`EXIT_RETRY_PENDING`], any [`PENDING_VERIFICATION_SUFFIX`] label). A close the trader
+/// books replaces each transient label, so on a closed, verified, non-synthetic row these
+/// mean the wallet history closed it.
+pub fn is_wallet_history_close_reason(reason: Option<&str>) -> bool {
+    reason.is_some_and(|reason| {
+        reason == CLOSED_EXTERNALLY
+            || reason == EXIT_RETRY_PENDING
+            || reason.ends_with(PENDING_VERIFICATION_SUFFIX)
+    })
+}
 
 /// The swap legs the TRADER itself executed for one position.
 ///

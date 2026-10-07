@@ -55,6 +55,7 @@ events-connectivity-critical-unhealthy = 重要なエンドポイント { $count
 events-connectivity-endpoint-recovered = エンドポイントが { $from } から正常な状態に復旧しました
 events-position-entry-not-landed = { $symbol } の購入はオンチェーンに反映されなかったため、ポジションを削除しました
 events-position-fill-after-force-close = { $symbol } の取引がポジションの強制クローズ後にオンチェーンに反映されたため、記帳してポジションを再計算しました
+events-position-swap-unbooked = オンチェーンで確定した { $symbol } のスワップがまだポジションに記帳されていません。記帳されるまで再検証します
 
 ## Events page (pages/events.js, ui/event_labels.js)
 

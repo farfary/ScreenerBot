@@ -70,6 +70,14 @@ pub enum NotificationType {
         dca_count: u32,
     },
 
+    /// A swap confirmed on chain that its position does not hold yet; it is
+    /// verified again until it is booked
+    SwapUnbooked {
+        token_symbol: String,
+        token_mint: String,
+        signature: String,
+    },
+
     /// System error or warning notification
     SystemError {
         message: String,
@@ -358,6 +366,15 @@ impl Notification {
             dca_amount_native,
             total_invested_native,
             dca_count,
+        })
+    }
+
+    /// Create a notification for a confirmed swap its position does not hold yet
+    pub fn swap_unbooked(token_symbol: String, token_mint: String, signature: String) -> Self {
+        Self::new(NotificationType::SwapUnbooked {
+            token_symbol,
+            token_mint,
+            signature,
         })
     }
 

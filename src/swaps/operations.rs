@@ -1062,6 +1062,59 @@ pub fn not_submitted_reason(error: &Error) -> Option<crate::swaps::NotSubmittedR
     }
 }
 
+/// The custom program error a swap's transaction failed with, when the failure
+/// is one where a program ran it and refused: a simulation, a node's preflight
+/// or the chain itself. Read only from those failure variants, from the error
+/// field each carries (`{"Custom":N}` or `custom program error: 0x..`); every
+/// other failure, and any text outside those fields, yields `None`.
+pub fn program_error(error: &Error) -> Option<u32> {
+    use crate::chains::solana::swaps::direct::DirectSwapError;
+    use crate::chains::solana::Error as Solana;
+    use crate::swaps::{NotSubmittedReason, SwapExecutionError};
+    let detail = match error {
+        Error::Swaps(SwapExecutionError::NotSubmitted { reason, .. })
+        | Error::Solana(Solana::NotSent(reason)) => match reason {
+            NotSubmittedReason::SimulationFailed { detail }
+            | NotSubmittedReason::RequestRejected { detail } => detail,
+            _ => return None,
+        },
+        Error::Solana(Solana::DirectSwap(
+            DirectSwapError::SimulationRejected { detail, .. }
+            | DirectSwapError::TransactionFailed { detail, .. },
+        ))
+        | Error::Solana(Solana::Execution(crate::chains::ExecutionFailure::Reverted {
+            detail,
+            ..
+        })) => detail,
+        _ => return None,
+    };
+    custom_program_error_in(detail)
+}
+
+/// The first custom program error code in a program failure's error field.
+fn custom_program_error_in(detail: &str) -> Option<u32> {
+    const HEX: &str = "custom program error: 0x";
+    const JSON: &str = "\"Custom\":";
+    let hex = detail
+        .find(HEX)
+        .map(|at| (at, &detail[at + HEX.len()..], 16));
+    let json = detail
+        .find(JSON)
+        .map(|at| (at, &detail[at + JSON.len()..], 10));
+    let (_, rest, radix) = match (hex, json) {
+        (Some(hex), Some(json)) => {
+            if hex.0 < json.0 {
+                hex
+            } else {
+                json
+            }
+        }
+        (found, None) | (None, found) => found?,
+    };
+    let digits: String = rest.chars().take_while(|c| c.is_digit(radix)).collect();
+    u32::from_str_radix(&digits, radix).ok()
+}
+
 fn swap_execution_fallback_safe(error: &crate::swaps::SwapExecutionError) -> bool {
     use crate::swaps::SwapExecutionError;
     match error {

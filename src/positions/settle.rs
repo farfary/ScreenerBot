@@ -5,15 +5,13 @@
 
 use std::sync::Arc;
 
-use crate::chains::{
-    runtime_for, Holding, RawAmount, SettlementReader, SignatureCheck, SignatureVerdict,
-};
+use crate::chains::{runtime_for, Holding, SettlementReader, SignatureCheck, SignatureVerdict};
 use crate::logger::{self, LogTag};
 
-use super::db::get_store_chain;
+use super::db::{get_other_open_held, get_store_chain};
 use super::queue::VerificationItem;
 use super::round_state::{attributable_is_dust, expected_acquisition};
-use super::state::{get_position_by_id, is_position_open, POSITIONS};
+use super::state::get_position_by_id;
 use super::transitions::{NotLandedEvidence, PositionTransition};
 use super::types::VerificationKind;
 use super::{Error, Result};
@@ -170,31 +168,25 @@ pub(crate) async fn entry_attributable_is_dust(item: &VerificationItem) -> Optio
         })
         .ok()?;
 
-    let held_by_others = held_by_other_open_positions(&item.mint, position.id).await;
-    attributable_is_dust(holding.amount, held_by_others, Some(expected))
-}
-
-/// What the open positions of `mint` other than `position_id` hold, as memory has them:
-/// the remaining amount once recorded, otherwise the entry fill. Saturates at the largest
-/// raw amount.
-pub(crate) async fn held_by_other_open_positions(
-    mint: &str,
-    position_id: Option<i64>,
-) -> RawAmount {
-    POSITIONS
-        .read()
+    let held_by_others = get_other_open_held(&item.mint, position.id)
         .await
-        .iter()
-        .filter(|p| p.mint == mint && p.id != position_id && is_position_open(p))
-        .filter_map(|p| p.remaining_token_amount.or(p.token_amount))
-        .fold(RawAmount::ZERO, |sum, held| {
-            sum.checked_add(held).unwrap_or(RawAmount::new(u128::MAX))
+        .inspect_err(|error| {
+            logger::warning(
+                LogTag::Positions,
+                &format!(
+                    "Holding of {} cannot be attributed to position {:?}: {error}",
+                    item.mint, position.id
+                ),
+            );
         })
+        .ok()?;
+    attributable_is_dust(holding.amount, held_by_others, Some(expected))
 }
 
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::chains::RawAmount;
 
     const ALL_VERDICTS: [SignatureVerdict; 4] = [
         SignatureVerdict::Landed,

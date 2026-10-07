@@ -9,7 +9,8 @@ use std::future::Future;
 
 use crate::logger::{self, LogTag};
 use crate::swaps::{
-    failed_swap, not_submitted_reason, FailedSwap, NotSubmittedReason, Quote, SwapResult,
+    failed_swap, not_submitted_reason, program_error, FailedSwap, NotSubmittedReason, Quote,
+    SwapResult,
 };
 
 /// The venue a graduated token's closed bonding curve is excluded as.
@@ -31,11 +32,14 @@ pub(super) enum ExitSwap {
     },
 }
 
+/// The Pump.fun program's error for a trade against a bonding curve that has
+/// completed and migrated.
+const BONDING_CURVE_COMPLETE: u32 = 0x1787;
+
 /// Whether a swap failed on a graduated token's closed bonding curve, which
 /// the same trade routed around that venue can still fill.
 fn closed_bonding_curve(error: &crate::Error) -> bool {
-    let message = error.to_string();
-    message.contains("0x1787") || message.contains("6023")
+    program_error(error) == Some(BONDING_CURVE_COMPLETE)
 }
 
 /// Run the exit ladder over `steps` (slippage percentages).
@@ -318,5 +322,70 @@ mod tests {
             1,
             "an unproven curve failure is not routed around"
         );
+    }
+
+    /// The closed curve is read from the program error a provable failure
+    /// carries, in either form a node reports it, and never from other numbers
+    /// in the failure's text.
+    #[tokio::test(start_paused = true)]
+    async fn a_closed_curve_is_read_from_the_program_error_alone() {
+        let closed: [fn() -> crate::Error; 3] = [
+            || {
+                crate::Error::Swaps(SwapExecutionError::NotSubmitted {
+                    router: "Jupiter".to_owned(),
+                    reason: NotSubmittedReason::SimulationFailed {
+                        detail: r#"{"InstructionError":[2,{"Custom":6023}]}"#.to_owned(),
+                    },
+                })
+            },
+            || {
+                crate::Error::Solana(crate::chains::solana::Error::DirectSwap(
+                    crate::chains::solana::swaps::direct::DirectSwapError::SimulationRejected {
+                        detail: "Error processing Instruction 2: custom program error: 0x1787"
+                            .to_owned(),
+                        logs: Vec::new(),
+                    },
+                ))
+            },
+            || {
+                crate::Error::Solana(crate::chains::solana::Error::Execution(
+                    ExecutionFailure::Reverted {
+                        reference: "sig".to_owned(),
+                        detail: "Error processing Instruction 2: custom program error: 0x1787"
+                            .to_owned(),
+                    },
+                ))
+            },
+        ];
+        for fail in closed {
+            let (_, sent) = ladder(fail).await;
+            assert_eq!(sent[1].1, Some(vec![CLOSED_CURVE_VENUE.to_owned()]));
+        }
+
+        let other: [fn() -> crate::Error; 2] = [
+            || {
+                crate::Error::Swaps(SwapExecutionError::NotSubmitted {
+                    router: "Jupiter".to_owned(),
+                    reason: NotSubmittedReason::SimulationFailed {
+                        detail: "insufficient lamports 60230, need 6023".to_owned(),
+                    },
+                })
+            },
+            || {
+                crate::Error::Swaps(SwapExecutionError::NotSubmitted {
+                    router: "Jupiter".to_owned(),
+                    reason: NotSubmittedReason::SimulationFailed {
+                        detail: "custom program error: 0x1771 at slot 6023".to_owned(),
+                    },
+                })
+            },
+        ];
+        for fail in other {
+            let (_, sent) = ladder(fail).await;
+            assert!(
+                sent.iter().all(|(_, excluded)| excluded.is_none()),
+                "another failure is taken for a closed curve"
+            );
+        }
     }
 }

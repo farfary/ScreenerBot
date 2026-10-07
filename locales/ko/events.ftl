@@ -55,6 +55,7 @@ events-connectivity-critical-unhealthy = 핵심 엔드포인트 { $count }개가
 events-connectivity-endpoint-recovered = 엔드포인트가 { $from }에서 정상으로 복구되었습니다
 events-position-entry-not-landed = { $symbol } 매수가 온체인에 반영되지 않아 포지션을 삭제했습니다
 events-position-fill-after-force-close = { $symbol } 거래가 포지션 강제 종료 후 온체인에 반영되어 기록하고 포지션을 다시 계산했습니다
+events-position-swap-unbooked = 온체인에서 확정된 { $symbol } 스왑이 아직 포지션에 기록되지 않았습니다. 기록될 때까지 다시 검증합니다
 
 ## Events page (pages/events.js, ui/event_labels.js)
 

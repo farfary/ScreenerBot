@@ -31,6 +31,7 @@ pub(crate) struct ScriptedNode {
     /// succeeded; `None` when the chain holds none.
     executed: Option<serde_json::Value>,
     sent: Mutex<Vec<VersionedTransaction>>,
+    accepted: Mutex<usize>,
 }
 
 impl ScriptedNode {
@@ -58,6 +59,7 @@ impl ScriptedNode {
             read_slot: 0,
             executed: None,
             sent: Mutex::new(Vec::new()),
+            accepted: Mutex::new(0),
         }
     }
 
@@ -85,6 +87,11 @@ impl ScriptedNode {
     /// Every transaction handed to `send`, first send and re-broadcasts alike.
     pub(crate) fn sent(&self) -> Vec<VersionedTransaction> {
         self.sent.lock().unwrap().clone()
+    }
+
+    /// How many sends the node answered with acceptance.
+    pub(crate) fn accepted(&self) -> usize {
+        *self.accepted.lock().unwrap()
     }
 
     fn next<T: Clone>(queue: &Mutex<VecDeque<T>>) -> T {
@@ -149,6 +156,8 @@ pub(crate) enum SendAnswer {
     Fails(crate::Error),
     /// The request never comes back.
     Hangs,
+    /// The node accepted the transaction after this long.
+    AcceptedAfter(std::time::Duration),
 }
 
 impl SwapNode for ScriptedNode {
@@ -161,8 +170,15 @@ impl SwapNode for ScriptedNode {
 
     async fn send(&self, transaction: &VersionedTransaction) -> crate::Result<Signature> {
         self.sent.lock().unwrap().push(transaction.clone());
-        match Self::next(&self.sends) {
-            SendAnswer::Accepted => Ok(transaction.signatures[0]),
+        let answer = Self::next(&self.sends);
+        if let SendAnswer::AcceptedAfter(delay) = answer {
+            tokio::time::sleep(delay).await;
+        }
+        match answer {
+            SendAnswer::Accepted | SendAnswer::AcceptedAfter(_) => {
+                *self.accepted.lock().unwrap() += 1;
+                Ok(transaction.signatures[0])
+            }
             SendAnswer::TimedOut => Err(crate::Error::Rpc(RpcError::Network {
                 message: "operation timed out".to_owned(),
                 is_timeout: true,

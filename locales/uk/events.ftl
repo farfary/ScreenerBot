@@ -55,6 +55,7 @@ events-connectivity-critical-unhealthy = Несправних критичних
 events-connectivity-endpoint-recovered = Ендпоінт відновився зі стану { $from } до справного
 events-position-entry-not-landed = Купівля { $symbol } не потрапила в мережу; позицію видалено
 events-position-fill-after-force-close = Угода з { $symbol } потрапила в мережу після примусового закриття позиції; її враховано, позицію перераховано
+events-position-swap-unbooked = Підтверджений у мережі своп { $symbol } ще не враховано в позиції; його перевіряють повторно, доки не буде враховано
 
 ## Events page (pages/events.js, ui/event_labels.js)
 

@@ -42,6 +42,7 @@ use std::future::Future;
 use std::time::Duration;
 
 use base64::Engine;
+use futures::stream::{FuturesUnordered, StreamExt};
 use tokio::time::Instant;
 
 use crate::chains::solana::rpc::client::RpcClient;
@@ -82,11 +83,17 @@ const STATUS_POLL_INTERVAL: Duration = Duration::from_millis(500);
 /// this only fights the network having dropped the earlier copy.
 const REBROADCAST_INTERVAL: Duration = Duration::from_secs(2);
 
-/// How long one re-broadcast may take. A copy that is not handed over by then
-/// is abandoned for that round: the status polls that decide the swap must not
-/// wait behind a slow or hanging send, and a dropped copy of the same signed
-/// bytes changes nothing.
-const REBROADCAST_TIMEOUT: Duration = Duration::from_secs(1);
+/// How long one re-broadcast may take. A send tries the relay and then each
+/// provider in turn, so the bound leaves room for that whole fallback; a copy
+/// still unanswered by then is dropped, which changes nothing for the same
+/// signed bytes. Re-broadcasts run beside the status polls, so a slow one never
+/// delays the polls that decide the swap.
+const REBROADCAST_TIMEOUT: Duration = Duration::from_secs(15);
+
+/// How many re-broadcasts may be unanswered at once. A new copy is sent only
+/// while fewer are outstanding, which bounds the relay and provider load a
+/// hanging send can build up.
+const MAX_REBROADCASTS_IN_FLIGHT: usize = 3;
 
 /// How often the settle loop reads the finalized tip its expiry is judged
 /// against.
@@ -485,6 +492,7 @@ async fn settle<N: SwapNode>(
     let mut last_rebroadcast = Instant::now();
     let mut last_tip_check = Instant::now();
     let mut tip: Option<FinalizedTip> = None;
+    let mut rebroadcasts = FuturesUnordered::new();
 
     loop {
         if let Poll::Settled(settled) = poll(node, signature, last_valid_block_height, tip).await {
@@ -497,31 +505,14 @@ async fn settle<N: SwapNode>(
             };
         }
 
-        if last_rebroadcast.elapsed() >= REBROADCAST_INTERVAL {
+        if last_rebroadcast.elapsed() >= REBROADCAST_INTERVAL
+            && rebroadcasts.len() < MAX_REBROADCASTS_IN_FLIGHT
+        {
             last_rebroadcast = Instant::now();
-            match tokio::time::timeout(REBROADCAST_TIMEOUT, node.send(transaction)).await {
-                Err(_) => logger::debug(
-                    LogTag::Swap,
-                    &format!(
-                        "Re-broadcast of {signature} took longer than {}ms and was abandoned \
-                         for this round",
-                        REBROADCAST_TIMEOUT.as_millis()
-                    ),
-                ),
-                Ok(Ok(_)) => logger::info(
-                    LogTag::Swap,
-                    &format!(
-                        "Re-broadcast {signature}: the network may have dropped the earlier copy"
-                    ),
-                ),
-                Ok(Err(e)) => logger::debug(
-                    LogTag::Swap,
-                    &format!(
-                        "Re-broadcast of {signature} was not accepted this round (an 'already \
-                         processed' response is a good sign, not a failure): {e}"
-                    ),
-                ),
-            }
+            rebroadcasts.push(tokio::time::timeout(
+                REBROADCAST_TIMEOUT,
+                node.send(transaction),
+            ));
         }
 
         if last_valid_block_height.is_some() && last_tip_check.elapsed() >= TIP_CHECK_INTERVAL {
@@ -531,7 +522,41 @@ async fn settle<N: SwapNode>(
             }
         }
 
-        tokio::time::sleep(STATUS_POLL_INTERVAL).await;
+        let pause = tokio::time::sleep(STATUS_POLL_INTERVAL);
+        tokio::pin!(pause);
+        loop {
+            tokio::select! {
+                _ = &mut pause => break,
+                Some(answer) = rebroadcasts.next() => log_rebroadcast(signature, answer),
+            }
+        }
+    }
+}
+
+/// Logs how one re-broadcast was answered.
+fn log_rebroadcast(
+    signature: &Signature,
+    answer: std::result::Result<crate::Result<Signature>, tokio::time::error::Elapsed>,
+) {
+    match answer {
+        Err(_) => logger::debug(
+            LogTag::Swap,
+            &format!(
+                "Re-broadcast of {signature} took longer than {}ms and was dropped",
+                REBROADCAST_TIMEOUT.as_millis()
+            ),
+        ),
+        Ok(Ok(_)) => logger::info(
+            LogTag::Swap,
+            &format!("Re-broadcast {signature}: the network may have dropped the earlier copy"),
+        ),
+        Ok(Err(e)) => logger::debug(
+            LogTag::Swap,
+            &format!(
+                "Re-broadcast of {signature} was not accepted (an 'already processed' response \
+                 is a good sign, not a failure): {e}"
+            ),
+        ),
     }
 }
 

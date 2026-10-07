@@ -55,6 +55,7 @@ events-connectivity-critical-unhealthy = { $count } اندپوینت حیاتی 
 events-connectivity-endpoint-recovered = اندپوینت از { $from } به حالت سالم بازگشت
 events-position-entry-not-landed = خرید { $symbol } روی زنجیره ثبت نشد؛ پوزیشن آن حذف شد
 events-position-fill-after-force-close = یک معامله { $symbol } پس از بستن اجباری پوزیشن آن روی زنجیره ثبت شد؛ این معامله ثبت و پوزیشن دوباره محاسبه شد
+events-position-swap-unbooked = یک سواپ { $symbol } که روی زنجیره تأیید شده هنوز در پوزیشن آن ثبت نشده است؛ تا ثبت شدن دوباره بررسی می‌شود
 
 ## Events page (pages/events.js, ui/event_labels.js)
 

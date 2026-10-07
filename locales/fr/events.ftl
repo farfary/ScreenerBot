@@ -47,6 +47,7 @@ events-connectivity-critical-unhealthy = { $count } endpoint(s) critique(s) déf
 events-connectivity-endpoint-recovered = Endpoint rétabli de l'état { $from } à sain
 events-position-entry-not-landed = L'achat de { $symbol } n'a pas abouti on-chain ; sa position a été supprimée
 events-position-fill-after-force-close = Une transaction de { $symbol } a abouti on-chain après la clôture forcée de sa position ; elle a été comptabilisée et la position recalculée
+events-position-swap-unbooked = Un swap de { $symbol } confirmé on-chain n'est pas encore dans sa position ; il est revérifié jusqu'à sa comptabilisation
 
 events-category-swap = Swap
 events-category-transaction = Transaction

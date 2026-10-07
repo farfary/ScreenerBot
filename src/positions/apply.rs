@@ -20,7 +20,7 @@ use super::db::{
     commit_booking, force_database_sync, get_store_chain, update_position_price_fields, Booking,
     BookingReads, BookingRecord, Committed,
 };
-use super::ledger::CLOSED_EXTERNALLY;
+use super::ledger::is_wallet_history_close_reason;
 use super::pnl::position_pnl;
 use super::round_state::{attributable_held, follow_round, is_closed, FollowOutcome};
 use super::types::{EntryRecord, ExitRecord, Position};
@@ -80,7 +80,13 @@ pub async fn apply_transition(transition: PositionTransition) -> Result<ApplyEff
             let snapshot = get_position_by_id(position_id)
                 .await
                 .ok_or(Error::NotFoundById { position_id })?;
-            let reading = LateFillReading::of(&snapshot.mint, position_id, held_after).await;
+            let reading = LateFillReading::of(
+                &snapshot.mint,
+                position_id,
+                snapshot.entry_transaction_signature.as_deref(),
+                held_after,
+            )
+            .await;
             let store_chain = get_store_chain().await?;
             let fill = EntryFill {
                 effective_entry_price,
@@ -207,7 +213,13 @@ pub async fn apply_transition(transition: PositionTransition) -> Result<ApplyEff
             let snapshot = get_position_by_id(position_id)
                 .await
                 .ok_or(Error::NotFoundById { position_id })?;
-            let reading = LateFillReading::of(&snapshot.mint, position_id, held_after).await;
+            let reading = LateFillReading::of(
+                &snapshot.mint,
+                position_id,
+                Some(&exit_signature),
+                held_after,
+            )
+            .await;
             let store_chain = get_store_chain().await?;
             let fill = CloseFill {
                 effective_exit_price,
@@ -408,98 +420,8 @@ pub async fn apply_transition(transition: PositionTransition) -> Result<ApplyEff
             position_id,
             exit_signature,
         } => {
-            if get_position_by_id(position_id).await.is_none() {
-                log_missing_position(position_id, "exit retry clear");
-                return Ok(effects);
-            }
-            // A failed sell must never reopen a close that is already verified (a force close
-            // or a synthetic exit committed while the sell was still being verified), and
-            // never clears an exit other than its own: a newer exit submitted after it stays.
-            // On a written-off row the failed sell is the one the write-off left in flight;
-            // it is dropped from the row, so it is not verified again, and the write-off
-            // stands. The stored row is read inside the clear's own transaction. Once the
-            // clear is stored, the failed swap's signature is purged from the index, so no
-            // stale sig->mint mapping remains. The failed swap comes from the transition: a
-            // submission whose row write failed never put it on the row.
-            let committed = book_position(position_id, |row, _| {
-                if row.transaction_exit_verified {
-                    if row.synthetic_exit
-                        && row.exit_transaction_signature.as_deref()
-                            == Some(exit_signature.as_str())
-                    {
-                        row.drop_failed_written_off_sale();
-                        return Ok(Booking::Write {
-                            record: None,
-                            outcome: ExitClear::WrittenOffSaleDropped,
-                        });
-                    }
-                    return Ok(Booking::Skip(ExitClear::ExitVerified));
-                }
-                if let Some(other) = row
-                    .exit_transaction_signature
-                    .as_deref()
-                    .filter(|signature| *signature != exit_signature)
-                {
-                    return Ok(Booking::Skip(ExitClear::OtherExit(other.to_owned())));
-                }
-                row.clear_failed_exit();
-                Ok(Booking::Write {
-                    record: None,
-                    outcome: ExitClear::Cleared,
-                })
-            })
-            .await?;
-            match committed {
-                Committed::Skipped(ExitClear::ExitVerified) => {
-                    logger::warning(
-                        LogTag::Positions,
-                        &format!(
-                            "Exit retry clear for position {position_id} refused - the exit is already verified"
-                        ),
-                    );
-                    return Err(Error::AlreadyClosed { position_id });
-                }
-                Committed::Skipped(ExitClear::OtherExit(other)) => {
-                    logger::warning(
-                        LogTag::Positions,
-                        &format!(
-                            "Exit retry clear of {exit_signature} for position {position_id} skipped - its exit is now {other}"
-                        ),
-                    );
-                    remove_signature_from_index(&exit_signature).await;
-                    return Ok(effects);
-                }
-                Committed::Written {
-                    outcome: ExitClear::WrittenOffSaleDropped,
-                    ..
-                } => {
-                    logger::warning(
-                        LogTag::Positions,
-                        &format!(
-                            "Sale {exit_signature} of written-off position {position_id} did not land - the write-off stands"
-                        ),
-                    );
-                    effects.db_updated = true;
-                    remove_signature_from_index(&exit_signature).await;
-                    return Ok(effects);
-                }
-                Committed::Skipped(ExitClear::Cleared | ExitClear::WrittenOffSaleDropped)
-                | Committed::Written { .. } => {}
-                Committed::Deleted { .. } => return Err(Error::NotFoundById { position_id }),
-            }
-            effects.db_updated = true;
-
-            remove_signature_from_index(&exit_signature).await;
-            crate::events::record_position_event_flexible(
-                "exit_retry_cleared",
-                crate::events::Severity::Warn,
-                None,
-                Some(&exit_signature),
-                serde_json::json!({
-                  "position_id": position_id
-                }),
-            )
-            .await;
+            return clear_exit_for_retry(position_id, exit_signature, ExitClearCause::SaleFailed)
+                .await;
         }
 
         // =================================================================
@@ -659,7 +581,13 @@ pub async fn apply_transition(transition: PositionTransition) -> Result<ApplyEff
                 );
             }
 
-            let reading = LateFillReading::of(&snapshot.mint, position_id, held_after).await;
+            let reading = LateFillReading::of(
+                &snapshot.mint,
+                position_id,
+                Some(&exit_signature),
+                held_after,
+            )
+            .await;
             let store_chain = get_store_chain().await?;
             let committed = book_position(position_id, |row, reads| {
                 if reads.exit_record_exists(&exit_signature)? {
@@ -879,13 +807,8 @@ pub async fn apply_transition(transition: PositionTransition) -> Result<ApplyEff
 
             // A sale that landed on a closed row leaves no exit to retry: its leg is booked,
             // and the residual is the round's, not this row's.
-            match Box::pin(apply_transition(
-                PositionTransition::ExitFailedClearForRetry {
-                    position_id,
-                    exit_signature,
-                },
-            ))
-            .await
+            match clear_exit_for_retry(position_id, exit_signature, ExitClearCause::ResidualBooked)
+                .await
             {
                 Ok(cleared) => effects.db_updated = cleared.db_updated,
                 Err(Error::AlreadyClosed { .. }) => effects.db_updated = true,
@@ -1002,7 +925,13 @@ pub async fn apply_transition(transition: PositionTransition) -> Result<ApplyEff
                 native_spent,
                 dca_time,
             };
-            let reading = LateFillReading::of(&snapshot.mint, position_id, held_after).await;
+            let reading = LateFillReading::of(
+                &snapshot.mint,
+                position_id,
+                Some(&dca_signature),
+                held_after,
+            )
+            .await;
             let store_chain = get_store_chain().await?;
             let committed = book_position(position_id, |row, reads| {
                 if reads.entry_record_exists(&dca_signature)? {
@@ -1229,6 +1158,123 @@ pub async fn apply_transition(transition: PositionTransition) -> Result<ApplyEff
     Ok(effects)
 }
 
+/// Why a close's exit is cleared for a retry.
+#[derive(Debug, Clone, Copy)]
+enum ExitClearCause {
+    /// The sale did not land.
+    SaleFailed,
+    /// The sale landed and is booked as a partial exit; a residual is left to close.
+    ResidualBooked,
+}
+
+/// Clears the exit `exit_signature` of position `position_id` so the close can be retried.
+async fn clear_exit_for_retry(
+    position_id: i64,
+    exit_signature: String,
+    cause: ExitClearCause,
+) -> Result<ApplyEffects> {
+    let mut effects = ApplyEffects {
+        db_updated: false,
+        position_removed: false,
+        position_closed: false,
+    };
+    if get_position_by_id(position_id).await.is_none() {
+        log_missing_position(position_id, "exit retry clear");
+        return Ok(effects);
+    }
+    // A failed sell must never reopen a close that is already verified (a force close
+    // or a synthetic exit committed while the sell was still being verified), and
+    // never clears an exit other than its own: a newer exit submitted after it stays.
+    // On a written-off row the failed sell is the one the write-off left in flight;
+    // it is dropped from the row, so it is not verified again, and the write-off
+    // stands. The stored row is read inside the clear's own transaction. Once the
+    // clear is stored, the failed swap's signature is purged from the index, so no
+    // stale sig->mint mapping remains. The failed swap comes from the transition: a
+    // submission whose row write failed never put it on the row.
+    let committed = book_position(position_id, |row, _| {
+        if row.transaction_exit_verified {
+            if row.synthetic_exit
+                && row.exit_transaction_signature.as_deref() == Some(exit_signature.as_str())
+            {
+                row.drop_failed_written_off_sale();
+                return Ok(Booking::Write {
+                    record: None,
+                    outcome: ExitClear::WrittenOffSaleDropped,
+                });
+            }
+            return Ok(Booking::Skip(ExitClear::ExitVerified));
+        }
+        if let Some(other) = row
+            .exit_transaction_signature
+            .as_deref()
+            .filter(|signature| *signature != exit_signature)
+        {
+            return Ok(Booking::Skip(ExitClear::OtherExit(other.to_owned())));
+        }
+        row.clear_failed_exit();
+        Ok(Booking::Write {
+            record: None,
+            outcome: ExitClear::Cleared,
+        })
+    })
+    .await?;
+    match committed {
+        Committed::Skipped(ExitClear::ExitVerified) => {
+            logger::warning(
+                LogTag::Positions,
+                &format!(
+                    "Exit retry clear for position {position_id} refused - the exit is already verified"
+                ),
+            );
+            return Err(Error::AlreadyClosed { position_id });
+        }
+        Committed::Skipped(ExitClear::OtherExit(other)) => {
+            logger::warning(
+                LogTag::Positions,
+                &format!(
+                    "Exit retry clear of {exit_signature} for position {position_id} skipped - its exit is now {other}"
+                ),
+            );
+            remove_signature_from_index(&exit_signature).await;
+            return Ok(effects);
+        }
+        Committed::Written {
+            outcome: ExitClear::WrittenOffSaleDropped,
+            ..
+        } => {
+            let message = match cause {
+                ExitClearCause::SaleFailed => format!(
+                    "Sale {exit_signature} of written-off position {position_id} did not land - the write-off stands"
+                ),
+                ExitClearCause::ResidualBooked => format!(
+                    "Sale {exit_signature} of written-off position {position_id} landed with a residual and is booked - the write-off stands"
+                ),
+            };
+            logger::warning(LogTag::Positions, &message);
+            effects.db_updated = true;
+            remove_signature_from_index(&exit_signature).await;
+            return Ok(effects);
+        }
+        Committed::Skipped(ExitClear::Cleared | ExitClear::WrittenOffSaleDropped)
+        | Committed::Written { .. } => {}
+        Committed::Deleted { .. } => return Err(Error::NotFoundById { position_id }),
+    }
+    effects.db_updated = true;
+
+    remove_signature_from_index(&exit_signature).await;
+    crate::events::record_position_event_flexible(
+        "exit_retry_cleared",
+        crate::events::Severity::Warn,
+        None,
+        Some(&exit_signature),
+        serde_json::json!({
+          "position_id": position_id
+        }),
+    )
+    .await;
+    Ok(effects)
+}
+
 /// Books onto the stored row of `position_id` (see [`commit_booking`]) and publishes the
 /// committed row to memory, or drops a deleted one from it, both under the position's
 /// booking lock, so memory adopts the rows of one position in commit order.
@@ -1275,7 +1321,8 @@ struct LateFill {
 fn ledger_close_counts(row: &Position, sale_time: DateTime<Utc>) -> bool {
     !row.synthetic_exit
         && row.history_complete
-        && row.closed_reason.as_deref() == Some(CLOSED_EXTERNALLY)
+        && row.transaction_exit_verified
+        && is_wallet_history_close_reason(row.closed_reason.as_deref())
         && row.exit_time.is_some_and(|closed| sale_time <= closed)
 }
 
@@ -1302,10 +1349,16 @@ struct LateFillReading {
 }
 
 impl LateFillReading {
-    async fn of(mint: &str, position_id: i64, held_after: Option<RawAmount>) -> Self {
+    /// The reading for the fill of `signature`, a swap of position `position_id`.
+    async fn of(
+        mint: &str,
+        position_id: i64,
+        signature: Option<&str>,
+        held_after: Option<RawAmount>,
+    ) -> Self {
         Self {
             held_after,
-            other_swap_in_flight: other_swap_in_flight(mint, position_id).await,
+            other_swap_in_flight: other_swap_in_flight(mint, position_id, signature).await,
         }
     }
 }

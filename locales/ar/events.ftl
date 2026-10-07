@@ -55,6 +55,7 @@ events-connectivity-critical-unhealthy = نقاط الاتصال الحرجة غ
 events-connectivity-endpoint-recovered = تعافت نقطة الاتصال من { $from } إلى سليمة
 events-position-entry-not-landed = لم تصل عملية شراء { $symbol } إلى السلسلة؛ تمت إزالة مركزها
 events-position-fill-after-force-close = وصلت صفقة على { $symbol } إلى السلسلة بعد الإغلاق القسري لمركزها؛ تم تسجيلها وإعادة احتساب المركز
+events-position-swap-unbooked = صفقة على { $symbol } مؤكدة على السلسلة لم تُسجَّل في مركزها بعد؛ يُعاد التحقق منها حتى تُسجَّل
 
 ## Events page (pages/events.js, ui/event_labels.js)
 

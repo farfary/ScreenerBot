@@ -31,6 +31,8 @@ pub mod worker;
 
 // Suffix appended to closed_reason while exit verification is pending
 pub const PENDING_VERIFICATION_SUFFIX: &str = "_pending_verification";
+// closed_reason of an open position whose failed close was cleared for a retry
+pub const EXIT_RETRY_PENDING: &str = "exit_retry_pending";
 // Prefix of closed_reason for a force-closed position, followed by the operator's note
 pub const FORCE_CLOSED_PREFIX: &str = "force_closed:";
 
@@ -102,6 +104,7 @@ pub use types::{
 #[cfg(test)]
 mod close_reason_label_tests {
     use super::ledger::CLOSED_EXTERNALLY;
+    use super::EXIT_RETRY_PENDING;
 
     /// closed_reason values written outside the trade-reason path. They have no
     /// enum, so this list mirrors `TRADE_REASON_LABELS` (ui/trade_reason.js); the literals are the ones in
@@ -109,7 +112,7 @@ mod close_reason_label_tests {
     const WRITTEN_REASONS: [&str; 4] = [
         CLOSED_EXTERNALLY,
         "wallet_history",
-        "exit_retry_pending",
+        EXIT_RETRY_PENDING,
         "synthetic_exit_permanent_failure",
     ];
 

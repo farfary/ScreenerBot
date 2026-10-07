@@ -39,8 +39,8 @@ pub mod sync;
 
 pub use reducer::{reconcile_with_wallet, reduce_rounds};
 pub use sync::{
-    schedule_resync, sync_wallet_history, RoundMetadata, SyncPlan, SyncSummary, TraderLegs,
-    CLOSED_EXTERNALLY,
+    is_wallet_history_close_reason, schedule_resync, sync_wallet_history, RoundMetadata, SyncPlan,
+    SyncSummary, TraderLegs, CLOSED_EXTERNALLY,
 };
 
 use crate::chains::RawAmount;

@@ -47,6 +47,7 @@ events-connectivity-critical-unhealthy = { $count } क्रिटिकल ए
 events-connectivity-endpoint-recovered = एंडपॉइंट { $from } से स्वस्थ स्थिति में लौटा
 events-position-entry-not-landed = { $symbol } की खरीद ऑन-चेन दर्ज नहीं हुई; उसकी पोज़िशन हटा दी गई
 events-position-fill-after-force-close = { $symbol } का एक ट्रेड उसकी पोज़िशन को ज़बरदस्ती बंद करने के बाद ऑन-चेन दर्ज हुआ; उसे दर्ज कर पोज़िशन फिर से गिनी गई
+events-position-swap-unbooked = { $symbol } का एक स्वैप ऑन-चेन पुष्ट है पर अभी उसकी पोज़िशन में दर्ज नहीं है; दर्ज होने तक उसे फिर से जाँचा जाता है
 
 events-category-swap = स्वैप
 events-category-transaction = ट्रांज़ैक्शन

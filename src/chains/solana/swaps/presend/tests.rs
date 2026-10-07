@@ -1059,3 +1059,32 @@ async fn a_hanging_rebroadcast_does_not_hold_up_the_status_polls() {
         started.elapsed()
     );
 }
+
+/// A re-broadcast that is answered only after the relay and the providers behind
+/// it took their time is still delivered: a slow answer is not cut off.
+#[tokio::test(start_paused = true)]
+async fn a_slow_rebroadcast_is_delivered_rather_than_cut_off() {
+    let signer = Keypair::new();
+    let mut transaction = aggregator_build(&signer, &Pubkey::new_unique());
+    transaction.signatures[0] = signer.sign_message(&transaction.message.serialize());
+    let mut statuses: Vec<_> = (0..30).map(|_| Ok(None)).collect();
+    statuses.push(Ok(Some(status(Level::Confirmed, None))));
+    let node = ScriptedNode::new(
+        0,
+        vec![
+            SendAnswer::Accepted,
+            SendAnswer::AcceptedAfter(Duration::from_secs(5)),
+        ],
+        statuses,
+        0,
+    );
+
+    let (_, settled) = send_and_settle(&node, &transaction, Some(1_000), Duration::from_secs(60))
+        .await
+        .expect("sent");
+    assert_eq!(settled, Settled::Landed);
+    assert!(
+        node.accepted() > 1,
+        "no re-broadcast slower than a status poll was delivered"
+    );
+}

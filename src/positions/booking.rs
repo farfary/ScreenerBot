@@ -224,7 +224,7 @@ impl Position {
     pub(crate) fn clear_failed_exit(&mut self) {
         self.exit_transaction_signature = None;
         self.transaction_exit_verified = false;
-        self.closed_reason = Some("exit_retry_pending".to_owned());
+        self.closed_reason = Some(super::EXIT_RETRY_PENDING.to_owned());
         // The close did not happen: a still-open position carrying exit prices reads as
         // closed to every check that looks at `exit_price`.
         self.exit_price = None;

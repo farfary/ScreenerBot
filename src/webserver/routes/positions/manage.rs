@@ -99,8 +99,6 @@ pub(super) async fn archive_position(Path(position_id): Path<i64>) -> Response {
     if was_open {
         positions::state::release_position_slot(position_id).await;
     }
-    // A deleted closed position's realized loss no longer counts toward the loss limit.
-    crate::trader::safety::loss_limit::sync_from_books().await;
 
     logger::info(
         LogTag::Positions,

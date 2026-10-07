@@ -50,6 +50,7 @@ events-connectivity-critical-unhealthy = { $count } endpoint kritis tidak sehat 
 events-connectivity-endpoint-recovered = Endpoint pulih dari { $from } ke sehat
 events-position-entry-not-landed = Pembelian { $symbol } tidak tercatat on-chain; posisinya dihapus
 events-position-fill-after-force-close = Transaksi { $symbol } tercatat on-chain setelah posisinya ditutup paksa; transaksi dibukukan dan posisinya dihitung ulang
+events-position-swap-unbooked = Swap { $symbol } yang terkonfirmasi on-chain belum masuk ke posisinya; swap diverifikasi ulang sampai dibukukan
 
 events-category-swap = Swap
 events-category-transaction = Transaksi

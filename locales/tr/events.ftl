@@ -47,6 +47,7 @@ events-connectivity-critical-unhealthy = Sağlıksız kritik uç nokta sayısı:
 events-connectivity-endpoint-recovered = Uç nokta { $from } durumundan sağlıklı duruma döndü
 events-position-entry-not-landed = { $symbol } alımı zincire ulaşmadı; pozisyonu kaldırıldı
 events-position-fill-after-force-close = { $symbol } için bir işlem, pozisyonu zorla kapatıldıktan sonra zincire ulaştı; işlem kaydedildi ve pozisyon yeniden hesaplandı
+events-position-swap-unbooked = { $symbol } için zincirde onaylanan bir takas henüz pozisyonuna kaydedilmedi; kaydedilene kadar yeniden doğrulanıyor
 
 events-category-swap = Takas
 events-category-transaction = İşlem
