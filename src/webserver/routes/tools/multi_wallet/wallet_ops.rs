@@ -103,9 +103,10 @@ pub async fn consolidate_wallets(Json(request): Json<ConsolidateRequest>) -> Res
         return invalid_config(&e).into_response();
     }
 
-    // Execute consolidation
-    match execute_consolidation(config).await {
-        Ok(result) => {
+    // The transfers run on their own task: a dropped request must not stop
+    // the loop between two sends, nor lose the session record of one sent.
+    match tokio::spawn(execute_consolidation(config)).await {
+        Ok(Ok(result)) => {
             logger::info(
                 LogTag::Tools,
                 &format!(
@@ -122,6 +123,9 @@ pub async fn consolidate_wallets(Json(request): Json<ConsolidateRequest>) -> Res
                 sol_recovered: result.total_sol_recovered,
             })
         }
+        Ok(Err(e)) => ApiError::new(ApiErrorCode::Internal, ids::ERRORS_TOOLS_CONSOLIDATE_FAILED)
+            .details(e.to_string())
+            .into_response(),
         Err(e) => ApiError::new(ApiErrorCode::Internal, ids::ERRORS_TOOLS_CONSOLIDATE_FAILED)
             .details(e.to_string())
             .into_response(),
@@ -148,8 +152,9 @@ pub async fn cleanup_subwallet_atas(Json(request): Json<SubWalletAtaCleanupReque
         leave_rent_exempt: true,
     };
 
-    match execute_consolidation(config).await {
-        Ok(result) => {
+    // Each account close is a sent transaction; the loop runs on its own task.
+    match tokio::spawn(execute_consolidation(config)).await {
+        Ok(Ok(result)) => {
             logger::info(
                 LogTag::Tools,
                 &format!(
@@ -166,6 +171,9 @@ pub async fn cleanup_subwallet_atas(Json(request): Json<SubWalletAtaCleanupReque
                 sol_recovered: result.total_sol_recovered,
             })
         }
+        Ok(Err(e)) => ApiError::new(ApiErrorCode::Internal, ids::ERRORS_TOOLS_ATA_CLEANUP_FAILED)
+            .details(e.to_string())
+            .into_response(),
         Err(e) => ApiError::new(ApiErrorCode::Internal, ids::ERRORS_TOOLS_ATA_CLEANUP_FAILED)
             .details(e.to_string())
             .into_response(),

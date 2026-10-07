@@ -252,139 +252,162 @@ pub async fn burn_selected_tokens(Json(request): Json<BurnTokensRequest>) -> Res
         }
     };
 
-    // Build account map for quick lookup
-    let account_map: HashMap<String, _> = all_accounts
-        .iter()
-        .map(|acc| (acc.mint.clone(), acc))
-        .collect();
+    // The burns run on their own task: a dropped request must not stop the
+    // loop between two sends, nor lose the signature of one already sent.
+    let mints = request.mints;
+    let burns = tokio::spawn(async move {
+        // Build account map for quick lookup
+        let account_map: HashMap<String, _> = all_accounts
+            .iter()
+            .map(|acc| (acc.mint.clone(), acc))
+            .collect();
 
-    let mut results: Vec<BurnResult> = Vec::new();
-    let mut successful = 0;
-    let mut failed = 0;
-    let mut native_reclaimed = 0.0f64;
+        let mut results: Vec<BurnResult> = Vec::new();
+        let mut successful = 0;
+        let mut failed = 0;
+        let mut native_reclaimed = 0.0f64;
 
-    for mint in &request.mints {
-        // Skip SOL
-        if crate::chains::adapter().is_native_asset(mint) {
-            results.push(BurnResult {
-                mint: mint.clone(),
-                success: false,
-                signature: None,
-                error: Some(ActionFailure::new(ids::TOOLS_BURN_FAILURE_NATIVE_ASSET)),
-            });
-            failed += 1;
-            continue;
-        }
-
-        // Prevent burning open position tokens
-        if open_position_mints.contains(mint) {
-            results.push(BurnResult {
-                mint: mint.clone(),
-                success: false,
-                signature: None,
-                error: Some(ActionFailure::new(ids::TOOLS_BURN_FAILURE_OPEN_POSITION)),
-            });
-            failed += 1;
-            continue;
-        }
-
-        // Find the account for this mint
-        let account = match account_map.get(mint) {
-            Some(acc) => acc,
-            None => {
+        for mint in &mints {
+            // Skip SOL
+            if crate::chains::adapter().is_native_asset(mint) {
                 results.push(BurnResult {
                     mint: mint.clone(),
                     success: false,
                     signature: None,
-                    error: Some(ActionFailure::new(
-                        ids::TOOLS_BURN_FAILURE_ACCOUNT_NOT_FOUND,
-                    )),
+                    error: Some(ActionFailure::new(ids::TOOLS_BURN_FAILURE_NATIVE_ASSET)),
                 });
                 failed += 1;
                 continue;
             }
-        };
 
-        // Skip if balance is 0
-        if account.balance == 0 {
-            results.push(BurnResult {
-                mint: mint.clone(),
-                success: false,
-                signature: None,
-                error: Some(ActionFailure::new(ids::TOOLS_BURN_FAILURE_ZERO_BALANCE)),
-            });
-            failed += 1;
-            continue;
-        }
-
-        // Build, sign and submit the burn — resolving and using the
-        // configured wallet's keypair happens inside crate::chains::solana;
-        // this handler never sees it.
-        match burn_configured_wallet_token(
-            &wallet_address,
-            &account.account,
-            mint,
-            account.balance,
-            account.is_token_2022,
-        )
-        .await
-        {
-            Ok(signature) => {
-                logger::info(
-                    LogTag::Tools,
-                    &format!(
-                        "Burned {} tokens of {}. TX: {}",
-                        account.balance, mint, signature
-                    ),
-                );
-                results.push(BurnResult {
-                    mint: mint.clone(),
-                    success: true,
-                    signature: Some(signature),
-                    error: None,
-                });
-                successful += 1;
-                native_reclaimed += ATA_RENT_COST_SOL; // Will be reclaimed when ATA is closed
-            }
-            Err(e) => {
-                logger::error(
-                    LogTag::Tools,
-                    &format!("Failed to burn tokens for {mint}: {e}"),
-                );
+            // Prevent burning open position tokens
+            if open_position_mints.contains(mint) {
                 results.push(BurnResult {
                     mint: mint.clone(),
                     success: false,
                     signature: None,
-                    error: Some(ActionFailure::with_details(
-                        ids::TOOLS_BURN_FAILURE_TRANSACTION,
-                        e.to_string(),
-                    )),
+                    error: Some(ActionFailure::new(ids::TOOLS_BURN_FAILURE_OPEN_POSITION)),
                 });
                 failed += 1;
+                continue;
             }
+
+            // Find the account for this mint
+            let account = match account_map.get(mint) {
+                Some(acc) => acc,
+                None => {
+                    results.push(BurnResult {
+                        mint: mint.clone(),
+                        success: false,
+                        signature: None,
+                        error: Some(ActionFailure::new(
+                            ids::TOOLS_BURN_FAILURE_ACCOUNT_NOT_FOUND,
+                        )),
+                    });
+                    failed += 1;
+                    continue;
+                }
+            };
+
+            // Skip if balance is 0
+            if account.balance == 0 {
+                results.push(BurnResult {
+                    mint: mint.clone(),
+                    success: false,
+                    signature: None,
+                    error: Some(ActionFailure::new(ids::TOOLS_BURN_FAILURE_ZERO_BALANCE)),
+                });
+                failed += 1;
+                continue;
+            }
+
+            // Build, sign and submit the burn — resolving and using the
+            // configured wallet's keypair happens inside crate::chains::solana;
+            // this handler never sees it.
+            match burn_configured_wallet_token(
+                &wallet_address,
+                &account.account,
+                mint,
+                account.balance,
+                account.is_token_2022,
+            )
+            .await
+            {
+                Ok(signature) => {
+                    logger::info(
+                        LogTag::Tools,
+                        &format!(
+                            "Burned {} tokens of {}. TX: {}",
+                            account.balance, mint, signature
+                        ),
+                    );
+                    results.push(BurnResult {
+                        mint: mint.clone(),
+                        success: true,
+                        signature: Some(signature),
+                        error: None,
+                    });
+                    successful += 1;
+                    native_reclaimed += ATA_RENT_COST_SOL; // Will be reclaimed when ATA is closed
+                }
+                Err(e) => {
+                    logger::error(
+                        LogTag::Tools,
+                        &format!("Failed to burn tokens for {mint}: {e}"),
+                    );
+                    results.push(failed_burn(mint, &e));
+                    failed += 1;
+                }
+            }
+
+            // Small delay between burns to avoid rate limiting
+            tokio::time::sleep(Duration::from_millis(200)).await;
         }
 
-        // Small delay between burns to avoid rate limiting
-        tokio::time::sleep(Duration::from_millis(200)).await;
-    }
+        logger::info(
+            LogTag::Tools,
+            &format!(
+                "Burn tokens complete: {}/{} successful, ~{:.6} SOL to reclaim via ATA cleanup",
+                successful,
+                mints.len(),
+                native_reclaimed
+            ),
+        );
 
-    logger::info(
-        LogTag::Tools,
-        &format!(
-            "Burn tokens complete: {}/{} successful, ~{:.6} SOL to reclaim via ATA cleanup",
+        BurnTokensResponse {
+            total: mints.len(),
             successful,
-            request.mints.len(),
-            native_reclaimed
-        ),
-    );
+            failed,
+            results,
+            native_reclaimed,
+        }
+    });
+    match burns.await {
+        Ok(response) => success_response(response),
+        Err(e) => {
+            logger::error(LogTag::Tools, &format!("Burn task failed: {e}"));
+            ApiError::new(ApiErrorCode::Internal, ids::ERRORS_TOOLS_BURN_FAILED)
+                .details(e.to_string())
+                .into_response()
+        }
+    }
+}
 
-    success_response(BurnTokensResponse {
-        total: request.mints.len(),
-        successful,
-        failed,
-        results,
-        native_reclaimed,
-    })
+/// A burn that failed after its transaction was sent keeps that transaction's
+/// signature: a burn whose confirmation timed out may still land, and a
+/// reverted or expired one is proven on chain by it.
+fn failed_burn(mint: &str, error: &crate::chains::solana::Error) -> BurnResult {
+    BurnResult {
+        mint: mint.to_owned(),
+        success: false,
+        signature: error
+            .classify()
+            .map(|failure| failure.reference().to_owned()),
+        error: Some(ActionFailure::with_details(
+            ids::TOOLS_BURN_FAILURE_TRANSACTION,
+            error.to_string(),
+        )),
+    }
 }
 
 #[cfg(test)]
@@ -429,6 +452,54 @@ mod tests {
             worth_warning(0.00123).render_source_plain(),
             "Worth ~0.001230 SOL"
         );
+    }
+
+    /// Every failure of a sent burn names its transaction; only a burn that
+    /// provably never reached the chain, or never got that far, has none.
+    #[test]
+    fn a_failed_burn_keeps_the_signature_of_its_sent_transaction() {
+        use crate::chains::solana::Error;
+        use crate::chains::ExecutionFailure;
+
+        let sent = [
+            ExecutionFailure::ConfirmationTimeout {
+                reference: "SIG".to_owned(),
+                waited_ms: 60_000,
+            },
+            ExecutionFailure::Reverted {
+                reference: "SIG".to_owned(),
+                detail: "custom program error".to_owned(),
+            },
+            ExecutionFailure::Expired {
+                reference: "SIG".to_owned(),
+                last_valid_block_height: 10,
+                current_block_height: 20,
+            },
+            ExecutionFailure::NotFound {
+                reference: "SIG".to_owned(),
+            },
+            ExecutionFailure::IndexingDelay {
+                reference: "SIG".to_owned(),
+            },
+        ];
+        for failure in sent {
+            let item = failed_burn("Mint1111", &Error::Execution(failure.clone()));
+            assert_eq!(item.signature.as_deref(), Some("SIG"), "{failure:?}");
+            assert!(!item.success);
+        }
+
+        let never_sent = [
+            Error::NotSent(crate::swaps::NotSubmittedReason::SimulationFailed {
+                detail: "insufficient funds".to_owned(),
+            }),
+            Error::Rpc {
+                operation: "get_latest_blockhash",
+                detail: "unreachable".to_owned(),
+            },
+        ];
+        for error in never_sent {
+            assert_eq!(failed_burn("Mint1111", &error).signature, None, "{error:?}");
+        }
     }
 
     #[test]

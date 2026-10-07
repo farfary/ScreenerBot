@@ -3398,11 +3398,11 @@ fn every_loop_that_may_send_a_trade_again_decides_from_failed_swap() {
     }
 }
 
-/// Functions that send a trade and record its outcome in the caller's own
-/// future, matched by bare name so every path and import spelling is found.
-/// Awaited inline from something that can be dropped — an HTTP handler, an
-/// MCP or assistant call, a Telegram callback, a timeout — a trade is
-/// cancelled after its send and before its signature is recorded.
+/// Functions that send a trade or a wallet transaction and record its outcome
+/// in the caller's own future, matched by bare name so every path and import
+/// spelling is found. Awaited inline from something that can be dropped — an
+/// HTTP handler, an MCP or assistant call, a Telegram callback, a timeout — a
+/// send is cancelled after it went out and before its signature is recorded.
 const TRADE_RUNNERS: &[&str] = &[
     "execute_trade",
     "execute_buy",
@@ -3421,6 +3421,26 @@ const TRADE_RUNNERS: &[&str] = &[
     "tool_sell",
     "execute_multi_buy",
     "execute_multi_sell",
+    "execute_consolidation",
+    "burn_configured_wallet_token",
+];
+
+/// Functions that share a runner's name but are a caller's own helper, as
+/// `(calling file, name, defining file)` under `src/`. An unqualified call of
+/// that name in the calling file is the helper when the defining file defines
+/// it; anywhere else it is the runner. Each entry must still match a call.
+/// Only shrinks.
+const SAME_NAME_HELPERS: &[(&str, &str, &str)] = &[
+    (
+        "telegram/commands/callback_positions.rs",
+        "execute_sell",
+        "telegram/commands/callback_positions.rs",
+    ),
+    (
+        "telegram/commands/callbacks.rs",
+        "execute_sell",
+        "telegram/commands/callback_positions.rs",
+    ),
 ];
 
 /// Where a trade runner may be awaited inline, each because nothing that can
@@ -3464,6 +3484,7 @@ fn every_trade_runs_where_no_caller_can_cancel_it() {
         .collect();
     let mut calls = 0;
     let mut violations = Vec::new();
+    let mut helpers_matched = vec![false; SAME_NAME_HELPERS.len()];
     for (relative, code) in &sources {
         if INLINE_TRADE_OWNERS
             .iter()
@@ -3481,12 +3502,19 @@ fn every_trade_runs_where_no_caller_can_cancel_it() {
                 continue;
             }
             let name = &found[1];
-            // A same-named helper of the caller's own module is not a runner.
-            let local_helper = !whole.as_str().starts_with("::")
-                && sources.iter().any(|(sibling, text)| {
-                    sibling.parent() == relative.parent() && text.contains(&format!("fn {name}("))
+            let local_helper = SAME_NAME_HELPERS
+                .iter()
+                .position(|(file, helper, defined)| {
+                    !whole.as_str().starts_with("::")
+                        && *helper == name
+                        && relative.to_string_lossy() == *file
+                        && sources.iter().any(|(path, source)| {
+                            path.to_string_lossy() == *defined
+                                && source.contains(&format!("fn {name}("))
+                        })
                 });
-            if local_helper {
+            if let Some(entry) = local_helper {
+                helpers_matched[entry] = true;
                 continue;
             }
             calls += 1;
@@ -3500,6 +3528,17 @@ fn every_trade_runs_where_no_caller_can_cancel_it() {
     assert!(
         calls > 0,
         "the guard must see the spawned multi-wallet sessions"
+    );
+    let stale: Vec<_> = SAME_NAME_HELPERS
+        .iter()
+        .zip(&helpers_matched)
+        .filter(|(_, matched)| !**matched)
+        .map(|(entry, _)| format!("{entry:?}"))
+        .collect();
+    assert!(
+        stale.is_empty(),
+        "same-name helper entries no longer match a call; remove them:\n{}",
+        stale.join("\n")
     );
     assert!(
         violations.is_empty(),
@@ -3547,7 +3586,7 @@ fn every_manual_trade_runs_detached_from_its_caller() {
         ),
         (
             "webserver/routes/agent_control/approvals.rs",
-            "bridge::execute_approved(",
+            "approved.run(",
         ),
     ] {
         let contents =
@@ -3561,6 +3600,27 @@ fn every_manual_trade_runs_detached_from_its_caller() {
             .any(|(start, end)| start < at && at < end);
         assert!(spawned, "src/{file}: {call} runs on its own task");
     }
+
+    // A transaction-sending tool submitted by an agent connection answers with
+    // a trade id: its execution runs on a spawned task inside `submit`.
+    let contents = fs::read_to_string(
+        Path::new(env!("CARGO_MANIFEST_DIR")).join("src/agent_control/bridge.rs"),
+    )
+    .expect("the bridge source reads");
+    let code = blank_literals(&strip_comment_text(&production_text(&contents)));
+    let submit = code.find("fn submit(").expect("the bridge submits trades");
+    let body_open = submit + code[submit..].find('{').expect("submit has a body");
+    let (start, end) = matching_span(&code, body_open).expect("submit closes");
+    let body = &code[start..=end];
+    let execute = body.find(".execute(").expect("submit runs the tool");
+    let spawned = body
+        .match_indices("tokio::spawn(")
+        .filter_map(|(open, spawn)| matching_span(body, open + spawn.len() - 1))
+        .any(|(start, end)| start < execute && execute < end);
+    assert!(
+        spawned,
+        "src/agent_control/bridge.rs: a submitted trade runs on its own task"
+    );
 }
 
 /// Every position operation that submits a swap marks its mint as busy before the swap and

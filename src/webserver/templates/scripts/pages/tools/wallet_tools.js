@@ -656,7 +656,8 @@ async function handleBurnSelectedTokens() {
 /**
  * List the tokens that failed to burn under the token list. Symbols come from the
  * scan being replaced by the refresh that follows, so they are read here; the
- * mint is an LTR address island and the reason is the localized failure text.
+ * mint is an LTR address island and the reason is the localized failure text. A
+ * burn that was sent keeps its transaction link: an unconfirmed one may still land.
  */
 function renderBurnFailures(failures) {
   const box = $("#burn-failures");
@@ -681,6 +682,7 @@ function renderBurnFailures(failures) {
           <span class="burn-failure-symbol">${Utils.escapeHtml(symbol)}</span>
           ${renderAddress(failure.mint)}
           <span class="burn-failure-reason"${details}>${Utils.escapeHtml(reason)}</span>
+          ${failure.signature ? renderAddress(failure.signature, { explorer: "tx" }) : ""}
         </li>`;
     })
     .join("");

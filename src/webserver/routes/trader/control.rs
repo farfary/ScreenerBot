@@ -74,6 +74,7 @@ pub(super) fn trader_failure(error: &trader::Error) -> Response {
         | Error::CopyTaskOwnsPositions { .. }
         | Error::CopyLiveUnavailable { .. } => ApiError::new(code, ids::ERRORS_COPY_REQUEST_FAILED),
         Error::ManualTradeRecord { .. } => ApiError::new(code, ids::ERRORS_TRADE_RECORD_FAILED),
+        Error::TradeTaskCancelled => ApiError::new(code, ids::ERRORS_TRADE_TASK_CANCELLED),
         Error::NoOpenPosition { mint } => {
             ApiError::new(code, ids::ERRORS_TRADE_NO_OPEN_POSITION).text_arg("mint", mint.clone())
         }

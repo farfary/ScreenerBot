@@ -87,6 +87,11 @@ pub enum Error {
         #[source]
         source: crate::actions::Error,
     },
+    /// A manual trade's own task was cancelled before it answered: the runtime
+    /// is shutting down. The trade may have sent its swap, so its position and
+    /// verification queue hold the outcome, not this answer.
+    #[error("the manual trade stopped before it answered because the app is shutting down")]
+    TradeTaskCancelled,
     #[error("no open position for token {mint}")]
     NoOpenPosition { mint: String },
     #[error("invalid trade size {amount_native} SOL: {reason}")]
@@ -148,6 +153,7 @@ impl ErrorClass for Error {
             Error::CopyLiveUnavailable { .. } => false,
             Error::CopyDatabaseUnavailable { .. } => true,
             Error::ManualTradeRecord { .. } => false,
+            Error::TradeTaskCancelled => false,
             Error::NoOpenPosition { .. } => false,
             Error::InvalidSolAmount { .. } => false,
             Error::InvalidManagement { .. } => false,
@@ -202,6 +208,7 @@ impl ErrorClass for Error {
             Error::CopyLiveUnavailable { .. } => Severity::Warning,
             Error::CopyDatabaseUnavailable { .. } => Severity::Error,
             Error::ManualTradeRecord { .. } => Severity::Critical,
+            Error::TradeTaskCancelled => Severity::Warning,
             Error::NoOpenPosition { .. } => Severity::Warning,
             Error::InvalidSolAmount { .. } => Severity::Warning,
             Error::InvalidManagement { .. } => Severity::Warning,
@@ -237,6 +244,7 @@ impl ErrorClass for Error {
             | Error::CopyReconciliation { .. }
             | Error::CopyDatabaseUnavailable { .. }
             | Error::ManualTradeRecord { .. } => 500,
+            Error::TradeTaskCancelled => 503,
             Error::CopyValidation { .. } => 400,
             Error::CopyLiveUnavailable { .. } => 409,
             Error::NoOpenPosition { .. } => 404,

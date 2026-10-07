@@ -34,6 +34,21 @@ pub enum ExecutionFailure {
     },
 }
 
+impl ExecutionFailure {
+    /// The transaction this failure is about: its signature on Solana. Every
+    /// variant names one, because each is an outcome of a transaction that was
+    /// sent.
+    pub fn reference(&self) -> &str {
+        match self {
+            ExecutionFailure::NotFound { reference }
+            | ExecutionFailure::ConfirmationTimeout { reference, .. }
+            | ExecutionFailure::IndexingDelay { reference }
+            | ExecutionFailure::Reverted { reference, .. }
+            | ExecutionFailure::Expired { reference, .. } => reference,
+        }
+    }
+}
+
 impl ErrorClass for ExecutionFailure {
     fn is_retryable(&self) -> bool {
         matches!(self, ExecutionFailure::IndexingDelay { .. })
