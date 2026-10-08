@@ -76,9 +76,11 @@ pub struct WalletHeaderInfo {
 
 #[derive(Debug, Serialize)]
 pub struct RpcHeaderInfo {
-    pub success_rate_percent: f32,
+    /// `None` until the first call: a rate of nothing is not a measurement.
+    pub success_rate_percent: Option<f32>,
     pub avg_latency_ms: u64,
-    pub calls_per_minute: f64,
+    /// `None` without an RPC manager (Explore Mode).
+    pub calls_per_minute: Option<f64>,
     pub healthy: bool,
 }
 

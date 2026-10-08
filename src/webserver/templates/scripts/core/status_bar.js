@@ -72,17 +72,19 @@ import { formatLatencyMs, formatMemoryMb, formatNumber, formatPercentValue, form
       if (elements.rpcSuccess && elements.rpcHealth) {
         // success_rate is a 0-100 percentage; scaling it again pinned the badge
         // at 100% and "good" however many calls were failing.
+        // Before the first call there is no rate to report: absent, not 100%.
         const successRate = Number(rpc.success_rate);
-        const displayRate = Number.isFinite(successRate)
-          ? Math.min(Math.max(successRate, 0), 100)
-          : 0;
+        const measured = Number(rpc.total_calls) > 0 && Number.isFinite(successRate);
+        const displayRate = measured ? Math.min(Math.max(successRate, 0), 100) : null;
         elements.rpcSuccess.textContent = formatPercentValue(displayRate, { decimals: 1, plus: "" });
 
-        // Set health indicator
+        // Health indicator; it stays "unknown" until there is a rate to judge.
         let health = "unknown";
-        if (displayRate >= 95) health = "good";
-        else if (displayRate >= 80) health = "warning";
-        else health = "error";
+        if (displayRate !== null) {
+          if (displayRate >= 95) health = "good";
+          else if (displayRate >= 80) health = "warning";
+          else health = "error";
+        }
         elements.rpcHealth.setAttribute("data-health", health);
       }
 

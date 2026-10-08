@@ -10,7 +10,7 @@ use crate::config::with_config;
 use crate::connectivity::state::are_critical_endpoints_healthy;
 use crate::filtering::{try_fetch_stats, SnapshotState};
 use crate::global::are_core_services_ready;
-use crate::rpc::get_global_rpc_stats;
+use crate::rpc::{get_global_rpc_stats, RpcStats};
 use crate::services::get_service_manager;
 use crate::wallet::{get_balance_at_time, get_wallet_worth};
 
@@ -104,33 +104,7 @@ pub(super) async fn get_header_metrics() -> Json<HeaderMetricsResponse> {
         last_updated: worth.updated_at.to_rfc3339(),
     };
 
-    // RPC info
-    let rpc = if let Some(stats) = get_global_rpc_stats() {
-        let recent_cpm = stats.calls_per_minute_recent(5);
-        let uptime_secs = chrono::Utc::now()
-            .signed_duration_since(stats.startup_time)
-            .num_seconds()
-            .max(0) as u64;
-        let fallback_cpm = (stats.total_calls() as f64 / uptime_secs.max(1) as f64) * 60.0;
-
-        RpcHeaderInfo {
-            success_rate_percent: stats.success_rate(),
-            avg_latency_ms: stats.average_response_time_ms_global() as u64,
-            calls_per_minute: if recent_cpm > 0.0 {
-                recent_cpm
-            } else {
-                fallback_cpm
-            },
-            healthy: stats.success_rate() > 90.0,
-        }
-    } else {
-        RpcHeaderInfo {
-            success_rate_percent: 0.0,
-            avg_latency_ms: 0,
-            calls_per_minute: 0.0,
-            healthy: false,
-        }
-    };
+    let rpc = rpc_header_info(get_global_rpc_stats().as_ref());
 
     // Absent, not zeroed, while the first snapshot builds: a top bar reading "0 monitored,
     // 0 passed, refreshed just now" is a wrong answer, where "—" is an honest one.
@@ -220,5 +194,77 @@ async fn calculate_system_health() -> SystemHeaderInfo {
         all_services_healthy,
         unhealthy_services,
         critical_degraded,
+    }
+}
+
+/// The header's RPC figures. Without an RPC manager (Explore Mode) there is no rate
+/// at all, and before the first call there is no success rate: both are absent,
+/// never a 0% or 100% that reads as a measurement.
+fn rpc_header_info(stats: Option<&RpcStats>) -> RpcHeaderInfo {
+    let Some(stats) = stats else {
+        return RpcHeaderInfo {
+            success_rate_percent: None,
+            avg_latency_ms: 0,
+            calls_per_minute: None,
+            healthy: false,
+        };
+    };
+    let recent_cpm = stats.calls_per_minute_recent(5);
+    let uptime_secs = chrono::Utc::now()
+        .signed_duration_since(stats.startup_time)
+        .num_seconds()
+        .max(0) as u64;
+    let fallback_cpm = (stats.total_calls() as f64 / uptime_secs.max(1) as f64) * 60.0;
+
+    RpcHeaderInfo {
+        success_rate_percent: (stats.total_calls() > 0).then(|| stats.success_rate()),
+        avg_latency_ms: stats.average_response_time_ms_global() as u64,
+        calls_per_minute: Some(if recent_cpm > 0.0 {
+            recent_cpm
+        } else {
+            fallback_cpm
+        }),
+        healthy: stats.success_rate() > 90.0,
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use std::collections::HashMap;
+
+    fn stats(total_calls: u64, total_errors: u64, success_rate: f32) -> RpcStats {
+        RpcStats {
+            session_id: String::new(),
+            startup_time: chrono::Utc::now(),
+            total_calls,
+            total_errors,
+            success_rate,
+            avg_latency_ms: 0.0,
+            uptime_secs: 0,
+            calls_last_minute: 0,
+            provider_count: 1,
+            healthy_provider_count: 1,
+            calls_per_url: HashMap::new(),
+            errors_per_url: HashMap::new(),
+            calls_per_method: HashMap::new(),
+            errors_per_method: HashMap::new(),
+            minute_buckets: Vec::new(),
+            last_session: None,
+        }
+    }
+
+    #[test]
+    fn rpc_figures_are_absent_until_they_are_measured() {
+        let none = rpc_header_info(None);
+        assert_eq!(none.success_rate_percent, None);
+        assert_eq!(none.calls_per_minute, None);
+
+        let idle = rpc_header_info(Some(&stats(0, 0, 100.0)));
+        assert_eq!(idle.success_rate_percent, None);
+        assert_eq!(idle.calls_per_minute, Some(0.0));
+
+        let measured = rpc_header_info(Some(&stats(200, 2, 99.0)));
+        assert_eq!(measured.success_rate_percent, Some(99.0));
     }
 }
