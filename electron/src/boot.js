@@ -134,7 +134,7 @@
 
     actions.appendChild(
       makeButton(text('desktop-boot-action-copy'), 'secondary', (btn) => {
-        const text = [
+        const details = [
           payload.title || '',
           '',
           payload.detail || '',
@@ -143,7 +143,7 @@
           payload.log_path ? '\n' + text('desktop-boot-log-file-label') + ' ' + payload.log_path : ''
         ].join('\n');
         navigator.clipboard
-          .writeText(text)
+          .writeText(details)
           .then(() => {
             btn.textContent = text('desktop-boot-action-copied');
             setTimeout(() => {
