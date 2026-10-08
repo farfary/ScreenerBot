@@ -7,66 +7,43 @@ use rusqlite::{params, Connection};
 
 use crate::positions::{Error, Result};
 
-fn has_column(conn: &Connection, name: &str) -> Result<bool> {
-    let mut statement =
-        conn.prepare("PRAGMA table_info(positions)")
-            .map_err(|e| Error::SchemaMigration {
-                detail: format!("failed to inspect positions schema: {e}"),
-            })?;
-    let names = statement
-        .query_map([], |row| row.get::<_, String>(1))
-        .map_err(|e| Error::SchemaMigration {
-            detail: format!("failed to read positions schema: {e}"),
-        })?;
-    for column in names {
-        if column.map_err(|e| Error::SchemaMigration {
-            detail: format!("failed to decode positions schema: {e}"),
-        })? == name
-        {
-            return Ok(true);
-        }
-    }
-    Ok(false)
-}
+use super::column_names::{add_missing_columns, has_column};
+
+/// Provenance columns, oldest first; added to tables created before provenance.
+const PROVENANCE_COLUMNS: &[(&str, &str)] = &[
+    (
+        "origin_kind",
+        "ALTER TABLE positions ADD COLUMN origin_kind TEXT NOT NULL DEFAULT 'auto'",
+    ),
+    (
+        "origin_ref",
+        "ALTER TABLE positions ADD COLUMN origin_ref TEXT",
+    ),
+    (
+        "management",
+        "ALTER TABLE positions ADD COLUMN management TEXT NOT NULL DEFAULT 'auto_trader'",
+    ),
+    (
+        "round_key",
+        "ALTER TABLE positions ADD COLUMN round_key TEXT",
+    ),
+    (
+        "basis_complete",
+        "ALTER TABLE positions ADD COLUMN basis_complete BOOLEAN NOT NULL DEFAULT 1",
+    ),
+    (
+        "history_complete",
+        "ALTER TABLE positions ADD COLUMN history_complete BOOLEAN NOT NULL DEFAULT 1",
+    ),
+    (
+        "holding_state",
+        "ALTER TABLE positions ADD COLUMN holding_state TEXT",
+    ),
+];
 
 pub(super) fn migrate_position_provenance(conn: &Connection) -> Result<()> {
-    let legacy_manual = has_column(conn, "manual_management")?;
-    for (column, sql) in [
-        (
-            "origin_kind",
-            "ALTER TABLE positions ADD COLUMN origin_kind TEXT NOT NULL DEFAULT 'auto'",
-        ),
-        (
-            "origin_ref",
-            "ALTER TABLE positions ADD COLUMN origin_ref TEXT",
-        ),
-        (
-            "management",
-            "ALTER TABLE positions ADD COLUMN management TEXT NOT NULL DEFAULT 'auto_trader'",
-        ),
-        (
-            "round_key",
-            "ALTER TABLE positions ADD COLUMN round_key TEXT",
-        ),
-        (
-            "basis_complete",
-            "ALTER TABLE positions ADD COLUMN basis_complete BOOLEAN NOT NULL DEFAULT 1",
-        ),
-        (
-            "history_complete",
-            "ALTER TABLE positions ADD COLUMN history_complete BOOLEAN NOT NULL DEFAULT 1",
-        ),
-        (
-            "holding_state",
-            "ALTER TABLE positions ADD COLUMN holding_state TEXT",
-        ),
-    ] {
-        if !has_column(conn, column)? {
-            conn.execute(sql, []).map_err(|e| Error::SchemaMigration {
-                detail: format!("failed to add positions.{column}: {e}"),
-            })?;
-        }
-    }
+    let legacy_manual = has_column(conn, "positions", "manual_management")?;
+    add_missing_columns(conn, "positions", PROVENANCE_COLUMNS)?;
 
     if legacy_manual {
         conn.execute(
@@ -106,7 +83,7 @@ const POSITION_CHILD_TABLES: &[&str] = &[
 ///
 /// Idempotent: once a row carries a round key it is no longer a candidate.
 pub(super) fn merge_ledger_duplicates(conn: &Connection) -> Result<u64> {
-    if !has_column(conn, "round_key")? {
+    if !has_column(conn, "positions", "round_key")? {
         return Ok(0);
     }
 

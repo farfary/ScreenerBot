@@ -56,6 +56,13 @@ impl DbConfig {
 ///
 /// Called via `SqliteConnectionManager::file(path).with_init(|c| configure_connection(c, cfg))`
 /// so that EVERY connection (including recycled ones) gets the correct settings.
+///
+/// Configuring a connection never writes to an existing database. A pool opens
+/// connections in the background while another connection may hold a deferred
+/// read; a header write here would turn that reader's next write into
+/// `SQLITE_BUSY_SNAPSHOT`. `auto_vacuum` is therefore set only on a brand-new file
+/// (no pages yet); converting an existing file belongs to
+/// `maintenance::ensure_auto_vacuum_mode`.
 pub fn configure_connection(conn: &Connection, cfg: DbConfig) -> rusqlite::Result<()> {
     let (default_cache, default_mmap) = match cfg.preset {
         DbPreset::Hot => (5000_i64, 268_435_456_i64), // 20 MB cache, 256 MB mmap
@@ -74,14 +81,18 @@ pub fn configure_connection(conn: &Connection, cfg: DbConfig) -> rusqlite::Resul
         default_mmap
     };
 
+    conn.pragma_update(None, "busy_timeout", 5000)?;
+    let page_count: i64 = conn.pragma_query_value(None, "page_count", |row| row.get(0))?;
+    if page_count == 0 {
+        // Must precede the first table and the WAL switch to take effect.
+        conn.pragma_update(None, "auto_vacuum", "INCREMENTAL")?;
+    }
     conn.pragma_update(None, "journal_mode", "WAL")?;
     conn.pragma_update(None, "synchronous", "NORMAL")?;
     conn.pragma_update(None, "cache_size", cache_size)?;
     conn.pragma_update(None, "temp_store", "MEMORY")?;
     conn.pragma_update(None, "mmap_size", mmap_size)?;
     conn.pragma_update(None, "foreign_keys", 1)?;
-    conn.pragma_update(None, "busy_timeout", 5000)?;
-    conn.pragma_update(None, "auto_vacuum", "INCREMENTAL")?;
 
     Ok(())
 }
@@ -144,3 +155,64 @@ pub const AI_DB: DbConfig = DbConfig::new(DbPreset::Cold);
 /// agent_control.db — Cold: client pairings, the external-agent approval queue
 /// and the agent-control audit log. Low write volume, small on disk.
 pub const AGENT_CONTROL_DB: DbConfig = DbConfig::new(DbPreset::Cold);
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    fn open(path: &std::path::Path) -> Connection {
+        let conn = Connection::open(path).unwrap();
+        configure_connection(&conn, POSITIONS_DB).unwrap();
+        conn
+    }
+
+    fn data_version(conn: &Connection) -> i64 {
+        conn.pragma_query_value(None, "data_version", |row| row.get(0))
+            .unwrap()
+    }
+
+    #[test]
+    fn a_new_file_is_created_with_incremental_auto_vacuum() {
+        let dir = tempfile::tempdir().unwrap();
+        let conn = open(&dir.path().join("new.db"));
+        conn.execute("CREATE TABLE t (id INTEGER PRIMARY KEY)", [])
+            .unwrap();
+        let mode: i64 = conn
+            .pragma_query_value(None, "auto_vacuum", |row| row.get(0))
+            .unwrap();
+        assert_eq!(mode, 2);
+    }
+
+    #[test]
+    fn configuring_a_connection_does_not_write_an_existing_file() {
+        let dir = tempfile::tempdir().unwrap();
+        let path = dir.path().join("existing.db");
+        let first = open(&path);
+        first
+            .execute("CREATE TABLE t (id INTEGER PRIMARY KEY)", [])
+            .unwrap();
+        let before = data_version(&first);
+        let _second = open(&path);
+        assert_eq!(data_version(&first), before);
+    }
+
+    #[test]
+    fn a_deferred_reader_can_write_after_another_connection_is_configured() {
+        let dir = tempfile::tempdir().unwrap();
+        let path = dir.path().join("race.db");
+        let mut reader = open(&path);
+        reader
+            .execute("CREATE TABLE t (id INTEGER PRIMARY KEY, v TEXT)", [])
+            .unwrap();
+        let tx = reader
+            .transaction_with_behavior(rusqlite::TransactionBehavior::Deferred)
+            .unwrap();
+        let rows: i64 = tx
+            .query_row("SELECT COUNT(*) FROM t", [], |row| row.get(0))
+            .unwrap();
+        assert_eq!(rows, 0);
+        let _pooled = open(&path);
+        tx.execute("INSERT INTO t (v) VALUES ('kept')", []).unwrap();
+        tx.commit().unwrap();
+    }
+}

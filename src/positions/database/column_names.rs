@@ -1,9 +1,12 @@
 // Copyright (c) 2024-2026 ScreenerBot (screenerbot.io)
 // SPDX-License-Identifier: BUSL-1.1
 
-//! Idempotent migration of position amount columns to unit-neutral names.
+//! Idempotent column-level migrations of positions storage: additive historical
+//! columns and the rename of amount columns to unit-neutral names.
 
 use rusqlite::Connection;
+
+use crate::database::schema::table_has_column;
 
 use crate::positions::{Error, Result};
 
@@ -19,26 +22,28 @@ const COLUMN_RENAMES: &[(&str, &str, &str)] = &[
     ("position_entries", "fees_lamports", "fees_raw"),
 ];
 
-fn has_column(conn: &Connection, table: &str, name: &str) -> Result<bool> {
-    let mut statement = conn
-        .prepare(&format!("PRAGMA table_info({table})"))
-        .map_err(|e| Error::SchemaMigration {
-            detail: format!("failed to inspect {table} schema: {e}"),
-        })?;
-    let columns = statement
-        .query_map([], |row| row.get::<_, String>(1))
-        .map_err(|e| Error::SchemaMigration {
-            detail: format!("failed to read {table} schema: {e}"),
-        })?;
-    for column in columns {
-        if column.map_err(|e| Error::SchemaMigration {
-            detail: format!("failed to decode {table} schema: {e}"),
-        })? == name
-        {
-            return Ok(true);
+/// Whether `table` has `column`, through the shared live-schema gate.
+pub(super) fn has_column(conn: &Connection, table: &str, column: &str) -> Result<bool> {
+    table_has_column(conn, table, column).map_err(|e| Error::SchemaMigration {
+        detail: format!("failed to inspect {table} schema: {e}"),
+    })
+}
+
+/// Add each `(column, ALTER TABLE ...)` the table does not have yet. A column
+/// already present is left as it is; an ALTER that fails refuses the open.
+pub(super) fn add_missing_columns(
+    conn: &Connection,
+    table: &str,
+    columns: &[(&str, &str)],
+) -> Result<()> {
+    for (column, sql) in columns {
+        if !has_column(conn, table, column)? {
+            conn.execute(sql, []).map_err(|e| Error::SchemaMigration {
+                detail: format!("failed to add {table}.{column}: {e}"),
+            })?;
         }
     }
-    Ok(false)
+    Ok(())
 }
 
 /// Rename every legacy unit column still present. Runs inside the caller's

@@ -240,19 +240,48 @@ CREATE TABLE IF NOT EXISTS token_snapshots (
 );
 "#;
 
-pub(super) const MIGRATION_ADD_PNL_FIELDS: &str = r#"
--- Add P&L fields to positions table (safe migration - columns are nullable)
-ALTER TABLE positions ADD COLUMN pnl REAL;
-ALTER TABLE positions ADD COLUMN pnl_percent REAL;
-ALTER TABLE positions ADD COLUMN unrealized_pnl REAL;
-ALTER TABLE positions ADD COLUMN unrealized_pnl_percent REAL;
-"#;
+/// P&L columns added to tables created before pre-calculated P&L, oldest first.
+pub(super) const POSITIONS_PNL_COLUMNS: &[(&str, &str)] = &[
+    ("pnl", "ALTER TABLE positions ADD COLUMN pnl REAL"),
+    (
+        "pnl_percent",
+        "ALTER TABLE positions ADD COLUMN pnl_percent REAL",
+    ),
+    (
+        "unrealized_pnl",
+        "ALTER TABLE positions ADD COLUMN unrealized_pnl REAL",
+    ),
+    (
+        "unrealized_pnl_percent",
+        "ALTER TABLE positions ADD COLUMN unrealized_pnl_percent REAL",
+    ),
+];
 
-pub(super) const MIGRATION_ADD_ARCHIVE_FIELDS: &str = r#"
--- Add archival fields to positions table (safe migration - columns are nullable/defaulted)
-ALTER TABLE positions ADD COLUMN archived BOOLEAN NOT NULL DEFAULT 0;
-ALTER TABLE positions ADD COLUMN archived_at TEXT;
-"#;
+/// Archival columns added to tables created before position archiving.
+pub(super) const POSITIONS_ARCHIVE_COLUMNS: &[(&str, &str)] = &[
+    (
+        "archived",
+        "ALTER TABLE positions ADD COLUMN archived BOOLEAN NOT NULL DEFAULT 0",
+    ),
+    (
+        "archived_at",
+        "ALTER TABLE positions ADD COLUMN archived_at TEXT",
+    ),
+];
+
+/// Positions columns of earlier releases that the canonical table no longer has.
+/// Their meaning lives on in the provenance columns; the rebuild drops them.
+pub(super) const LEGACY_POSITIONS_COLUMNS: &[&str] = &["manual_management"];
+
+/// Positions indexes of releases before chain identity, replaced by the
+/// chain-qualified indexes in [`POSITIONS_INDEXES`]. An older release reopening
+/// an upgraded file creates them again, so every open drops them.
+pub(super) const LEGACY_POSITIONS_INDEXES: &[&str] = &[
+    "idx_positions_wallet",
+    "idx_positions_mint",
+    "idx_positions_entry_signature",
+    "idx_positions_exit_signature",
+];
 
 // Performance indexes
 pub(super) const POSITIONS_INDEXES: &[&str] = &[

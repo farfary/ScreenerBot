@@ -15,6 +15,7 @@ use crate::logger::{self, LogTag};
 use crate::positions::types::{Position, PositionManagement, PositionOrigin};
 use crate::positions::{Error, Result};
 
+use super::column_names::add_missing_columns;
 use super::open_round::{install_open_round_index, query_open_round_id, OPEN_ROUND_INDEX_NAME};
 use super::provenance::{merge_ledger_duplicates, migrate_position_provenance};
 use super::raw_migration::migrate_position_amounts;
@@ -131,71 +132,8 @@ impl PositionsDatabase {
 
         migrate_position_amounts(&conn)?;
 
-        // Migrate existing database to add PnL fields if needed
-        // Check if migration is needed by attempting to add columns
-        match conn.execute_batch(MIGRATION_ADD_PNL_FIELDS) {
-            Ok(_) => {
-                if log_initialization {
-                    crate::logger::info(
-                        crate::logger::LogTag::Positions,
-                        "PnL columns migration completed successfully",
-                    );
-                }
-            }
-            Err(e) => {
-                let err_msg = e.to_string().to_lowercase();
-                // SQLite returns "duplicate column name"if columns already exist - this is OK
-                if err_msg.contains("duplicate column") {
-                    if log_initialization {
-                        crate::logger::debug(
-                            crate::logger::LogTag::Positions,
-                            "PnL columns already exist, skipping migration",
-                        );
-                    }
-                } else {
-                    // Real error - this is critical and should be logged
-                    crate::logger::error(
-                        crate::logger::LogTag::Positions,
-                        &format!("CRITICAL: Failed to migrate PnL columns: {e}"),
-                    );
-                    return Err(Error::SchemaMigration {
-                        detail: format!("PnL columns migration failed: {e}"),
-                    });
-                }
-            }
-        }
-
-        // Migrate existing database to add archival fields if needed
-        match conn.execute_batch(MIGRATION_ADD_ARCHIVE_FIELDS) {
-            Ok(_) => {
-                if log_initialization {
-                    crate::logger::info(
-                        crate::logger::LogTag::Positions,
-                        "Archival columns migration completed successfully",
-                    );
-                }
-            }
-            Err(e) => {
-                let err_msg = e.to_string().to_lowercase();
-                // SQLite returns "duplicate column name" if columns already exist - this is OK
-                if err_msg.contains("duplicate column") {
-                    if log_initialization {
-                        crate::logger::debug(
-                            crate::logger::LogTag::Positions,
-                            "Archival columns already exist, skipping migration",
-                        );
-                    }
-                } else {
-                    crate::logger::error(
-                        crate::logger::LogTag::Positions,
-                        &format!("CRITICAL: Failed to migrate archival columns: {e}"),
-                    );
-                    return Err(Error::SchemaMigration {
-                        detail: format!("archival columns migration failed: {e}"),
-                    });
-                }
-            }
-        }
+        add_missing_columns(&conn, "positions", POSITIONS_PNL_COLUMNS)?;
+        add_missing_columns(&conn, "positions", POSITIONS_ARCHIVE_COLUMNS)?;
 
         match merge_ledger_duplicates(&conn)? {
             0 => {}
@@ -297,12 +235,7 @@ impl PositionsDatabase {
             .map_err(|e| Error::SchemaMigration {
                 detail: format!("failed to replace legacy round index: {e}"),
             })?;
-        for index in [
-            "idx_positions_wallet",
-            "idx_positions_mint",
-            "idx_positions_entry_signature",
-            "idx_positions_exit_signature",
-        ] {
+        for index in LEGACY_POSITIONS_INDEXES {
             tx.execute(&format!("DROP INDEX IF EXISTS {index}"), [])
                 .map_err(|e| Error::SchemaMigration {
                     detail: format!("failed to replace legacy positions index: {e}"),
