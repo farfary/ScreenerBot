@@ -22,6 +22,15 @@ use super::provenance::{merge_ledger_duplicates, migrate_position_provenance};
 use super::raw_migration::{canonicalize_amount_tables, migrate_pending_partial_exit_amounts};
 use super::types::*;
 
+/// What a store recorded about its schema before an open.
+enum StoredSchema {
+    /// No positions table: the open creates the store.
+    NewFile,
+    /// Positions storage from a release that recorded no schema version.
+    Unrecorded,
+    Recorded(u32),
+}
+
 impl PositionsDatabase {
     /// Create new PositionsDatabase with connection pooling
     pub async fn new(chain: crate::chains::ChainId) -> Result<Self> {
@@ -129,12 +138,23 @@ impl PositionsDatabase {
         })?;
         let mut summary = Vec::new();
 
-        // Nothing has been written yet: the backup is the store as this upgrade found it.
-        if let Some(stored_version) = self.pending_upgrade(&tx)? {
-            let backup = back_up_before_upgrade(
-                std::path::Path::new(&self.database_path),
-                stored_version.as_deref(),
-            )?;
+        // Nothing has been written yet: a newer store is refused unchanged, and the
+        // backup is the store as this upgrade found it.
+        let upgrade_from = match self.stored_schema(&tx)? {
+            StoredSchema::NewFile => None,
+            StoredSchema::Unrecorded => Some(None),
+            StoredSchema::Recorded(stored) if stored > self.schema_version => {
+                return Err(Error::SchemaTooNew {
+                    stored,
+                    supported: self.schema_version,
+                });
+            }
+            StoredSchema::Recorded(stored) if stored == self.schema_version => None,
+            StoredSchema::Recorded(stored) => Some(Some(stored.to_string())),
+        };
+        if let Some(from) = upgrade_from {
+            let backup =
+                back_up_before_upgrade(std::path::Path::new(&self.database_path), from.as_deref())?;
             summary.push(format!("backed up to {}", backup.display()));
         }
 
@@ -238,10 +258,8 @@ impl PositionsDatabase {
         Ok(summary)
     }
 
-    /// The schema version an existing store recorded, when it differs from this build's
-    /// and the open is about to upgrade it: `Some(None)` for a store that recorded none.
-    /// A brand-new file has no positions table and needs no upgrade.
-    fn pending_upgrade(&self, conn: &Connection) -> Result<Option<Option<String>>> {
+    /// The schema version the store recorded before this open.
+    fn stored_schema(&self, conn: &Connection) -> Result<StoredSchema> {
         let inspect = |e: rusqlite::Error| Error::SchemaMigration {
             detail: format!("failed to inspect the stored positions schema version: {e}"),
         };
@@ -254,23 +272,30 @@ impl PositionsDatabase {
             .map_err(inspect)
         };
         if !table_exists("positions")? {
-            return Ok(None);
+            return Ok(StoredSchema::NewFile);
         }
-        let stored: Option<String> = if table_exists("position_metadata")? {
-            conn.query_row(
+        if !table_exists("position_metadata")? {
+            return Ok(StoredSchema::Unrecorded);
+        }
+        let stored: Option<String> = conn
+            .query_row(
                 "SELECT value FROM position_metadata WHERE key = 'schema_version'",
                 [],
                 |row| row.get(0),
             )
             .optional()
-            .map_err(inspect)?
-        } else {
-            None
-        };
-        if stored.as_deref() == Some(self.schema_version.to_string().as_str()) {
-            return Ok(None);
+            .map_err(inspect)?;
+        match stored {
+            None => Ok(StoredSchema::Unrecorded),
+            Some(value) => {
+                value
+                    .parse()
+                    .map(StoredSchema::Recorded)
+                    .map_err(|_| Error::SchemaMigration {
+                        detail: format!("unreadable stored positions schema version {value:?}"),
+                    })
+            }
         }
-        Ok(Some(stored))
     }
 
     /// Data migrations for rows written by earlier releases; a failure refuses the open
@@ -1511,6 +1536,75 @@ mod tests {
             "{error}"
         );
         assert_eq!(table_sql(&database.get_connection().unwrap()), before);
+    }
+
+    fn stored_version(connection: &Connection) -> String {
+        connection
+            .query_row(
+                "SELECT value FROM position_metadata WHERE key = 'schema_version'",
+                [],
+                |row| row.get(0),
+            )
+            .unwrap()
+    }
+
+    /// A store written by a newer build is refused before anything is written, and
+    /// its recorded version is never lowered.
+    #[tokio::test]
+    async fn a_newer_store_is_refused_unchanged() {
+        let (mut database, _directory) = test_database();
+        database.initialize_schema(false).await.unwrap();
+        let newer = POSITIONS_SCHEMA_VERSION + 1;
+        database
+            .get_connection()
+            .unwrap()
+            .execute(
+                "UPDATE position_metadata SET value = ?1 WHERE key = 'schema_version'",
+                [newer.to_string()],
+            )
+            .unwrap();
+        let before = table_sql(&database.get_connection().unwrap());
+
+        let error = database.initialize_schema(false).await.unwrap_err();
+
+        assert!(
+            matches!(error, crate::positions::Error::SchemaTooNew { stored, supported } if stored == newer && supported == POSITIONS_SCHEMA_VERSION),
+            "{error}"
+        );
+        let connection = database.get_connection().unwrap();
+        assert_eq!(table_sql(&connection), before);
+        assert_eq!(stored_version(&connection), newer.to_string());
+    }
+
+    /// A store at an older recorded version is backed up with that version and then
+    /// raised to this build's.
+    #[tokio::test]
+    async fn an_older_store_is_backed_up_and_raised_to_the_current_version() {
+        let (mut database, _directory) = test_database();
+        database.initialize_schema(false).await.unwrap();
+        let older = POSITIONS_SCHEMA_VERSION - 1;
+        database
+            .get_connection()
+            .unwrap()
+            .execute(
+                "UPDATE position_metadata SET value = ?1 WHERE key = 'schema_version'",
+                [older.to_string()],
+            )
+            .unwrap();
+
+        database.initialize_schema(false).await.unwrap();
+
+        assert_eq!(
+            stored_version(&database.get_connection().unwrap()),
+            POSITIONS_SCHEMA_VERSION.to_string()
+        );
+        let manifest_path = std::path::Path::new(&database.database_path)
+            .parent()
+            .unwrap()
+            .join("backups/upgrade-positions.json");
+        let manifest: crate::database::backup::UpgradeBackupManifest =
+            serde_json::from_slice(&std::fs::read(manifest_path).unwrap()).unwrap();
+        assert_eq!(manifest.from_schema_version, Some(older.to_string()));
     }
 
     #[tokio::test]

@@ -184,6 +184,13 @@ mod tests {
                 "positions.db",
             ),
             (
+                crate::Error::Positions(crate::positions::Error::SchemaTooNew {
+                    stored: 7,
+                    supported: 6,
+                }),
+                "positions.db",
+            ),
+            (
                 crate::Error::Positions(crate::positions::Error::Database(
                     crate::errors::DatabaseError::Backup {
                         store: "positions.db".to_owned(),

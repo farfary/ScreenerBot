@@ -228,9 +228,10 @@ impl Error {
             _ => None,
         };
         match self {
-            Error::Positions(crate::positions::Error::SchemaMigration { .. }) => {
-                Some("positions.db".to_owned())
-            }
+            Error::Positions(
+                crate::positions::Error::SchemaMigration { .. }
+                | crate::positions::Error::SchemaTooNew { .. },
+            ) => Some("positions.db".to_owned()),
             Error::Positions(crate::positions::Error::Database(error)) | Error::Database(error) => {
                 backup(error)
             }
