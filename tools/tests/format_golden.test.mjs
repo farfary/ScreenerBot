@@ -340,3 +340,37 @@ test("a Gregorian calendar grid names Gregorian months in fa, with Latin digits"
   const en = load("en-u-nu-latn").fmt;
   assert.equal(en.formatMonthYear(2026, 9, { calendar: "gregory" }), "September 2026");
 });
+
+test("a SOL price shows significant digits without trailing zeros", () => {
+  const { fmt } = load("en-u-nu-latn");
+  const shown = {
+    0.0000092: "0.0₅92",
+    22.6796: "22.68",
+    0.00000012: "0.0₆12",
+    0.004494: "0.004494",
+    1.5: "1.5",
+  };
+  for (const [price, text] of Object.entries(shown)) {
+    assert.equal(fmt.formatPriceSubscript(Number(price)), text, `price ${price}`);
+  }
+});
+
+test("dashboard pages show SOL prices through the significant-digit formatter", () => {
+  // `formatPriceSol` prints a fixed decimal count; it stays for plain-text reports in
+  // core/utils.js and never reaches a page, a table cell or a dialog.
+  const scripts = new URL("templates/scripts/", WEBSERVER);
+  const offenders = [];
+  const walk = (dir) => {
+    for (const entry of fs.readdirSync(dir, { withFileTypes: true })) {
+      const path = new URL(entry.name + (entry.isDirectory() ? "/" : ""), dir);
+      if (entry.isDirectory()) walk(path);
+      else if (entry.name.endsWith(".js")) {
+        const rel = path.pathname.slice(scripts.pathname.length);
+        if (rel === "core/format.js" || rel === "core/utils.js") continue;
+        if (fs.readFileSync(path, "utf8").includes("formatPriceSol")) offenders.push(rel);
+      }
+    }
+  };
+  walk(scripts);
+  assert.deepEqual(offenders, []);
+});

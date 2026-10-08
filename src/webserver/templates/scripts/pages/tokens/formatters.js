@@ -39,7 +39,8 @@ export function priceCell(value, row = null) {
   // price: it takes the same placeholder as any other unknown value.
   const price = value === null || value === undefined || value === "" ? Number.NaN : Number(value);
   const known = Number.isFinite(price) && price > 0;
-  const formatted = known ? Utils.formatPriceSol(price, { fallback: "—", decimals: 12 }) : "—";
+  const formatted = known ? Utils.formatPriceSubscript(price, { fallback: "—" }) : "—";
+  const exact = known ? Utils.formatFixed(price, { decimals: 12, trim: true }) : "";
   const baseValue = Utils.escapeHtml(formatted);
 
   let directionClass = "price-change--neutral";
@@ -65,7 +66,8 @@ export function priceCell(value, row = null) {
     }
   }
 
-  return `<span class="price-change ${directionClass}"><span class="${arrowClass}" aria-hidden="true">${arrowSymbol}</span><span class="price-change-value">${valueHtml}</span></span>`;
+  const titleAttr = exact ? ` title="${Utils.escapeHtml(exact)}"` : "";
+  return `<span class="price-change ${directionClass}"${titleAttr}><span class="${arrowClass}" aria-hidden="true">${arrowSymbol}</span><span class="price-change-value">${valueHtml}</span></span>`;
 }
 
 export function usdCell(value) {

@@ -4,7 +4,7 @@
 // Quick trade mixin for the TradeActionDialog - mint input with token search, token info preview and the transition to the trade step.
 
 import * as Utils from "../../core/utils.js";
-import { formatFixed, withSolUnit } from "../../core/format.js";
+import { formatPriceSubscript, withSolUnit } from "../../core/format.js";
 import { renderAddress } from "../token_identity.js";
 
 /**
@@ -320,11 +320,7 @@ export function applyQuickTradeMixin(TradeActionDialog) {
       this._quickTokenNameEl.textContent = token.name || "";
 
       if (token.price_sol != null && token.price_sol > 0) {
-        const priceFormatted =
-          token.price_sol < 0.000001
-            ? token.price_sol.toExponential(4)
-            : formatFixed(token.price_sol, { decimals: 9, trim: true });
-        this._quickTokenPriceEl.textContent = withSolUnit(priceFormatted);
+        this._quickTokenPriceEl.textContent = withSolUnit(formatPriceSubscript(token.price_sol));
         this._quickTokenPriceEl.style.display = "block";
       } else {
         this._quickTokenPriceEl.style.display = "none";

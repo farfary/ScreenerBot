@@ -236,7 +236,13 @@ function createLifecycle() {
     </div>`;
   };
 
-  const priceCell = (value) => Utils.formatPriceSol(value, { fallback: "—", decimals: 12 });
+  // Significant digits in the cell; the exact price on hover.
+  const priceCell = (value) =>
+    value == null
+      ? "—"
+      : `<span title="${esc(Utils.formatFixed(value, { decimals: 12, trim: true }))}">${esc(
+          Utils.formatPriceSubscript(value, { fallback: "—" })
+        )}</span>`;
   const solCell = (v) => Utils.formatSol(v, { decimals: 4 });
   const pnlCell = (v) => Utils.formatPnL(v, { decimals: 4 });
   const percentCell = (v) => Utils.formatPercent(v, { style: "pnl", decimals: 2, fallback: "—" });

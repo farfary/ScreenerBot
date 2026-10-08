@@ -7,7 +7,7 @@
 import {
   formatFixed,
   formatPercentValue,
-  formatPriceSol,
+  formatPriceSubscript,
   formatSignedSol,
   formatSol,
   formatTimeAgo,
@@ -199,13 +199,10 @@ export function toneClass(value) {
   return number > 0 ? "is-positive" : "is-negative";
 }
 
-/** A pool price in SOL, with enough significant digits for micro-priced tokens. */
+/** A pool price in SOL at significant digits, the price rule of every table and chart. */
 export function price(value) {
   const number = finite(value);
-  if (number === null) return "—";
-  if (number === 0) return "0";
-  const decimals = number >= 1 ? 4 : Math.min(12, Math.max(4, Math.ceil(-Math.log10(number)) + 3));
-  return formatPriceSol(number, { decimals });
+  return number === null ? "—" : formatPriceSubscript(number);
 }
 
 /** A pool price with its SOL unit, for tooltips and messages. */

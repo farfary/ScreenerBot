@@ -618,9 +618,9 @@ export class TransactionDetailsDialog {
     if (price !== null && price !== undefined) {
       add(
         I18n.t("transactions-dialog-metric-execution-price"),
-        withSolUnit(Utils.formatPriceSol(price, { decimals: 8 })),
+        withSolUnit(Utils.formatPriceSubscript(price)),
         "",
-        withSolUnit(Utils.formatPriceSol(price, { decimals: 12 }))
+        withSolUnit(Utils.formatFixed(price, { decimals: 12, trim: true }))
       );
     }
 

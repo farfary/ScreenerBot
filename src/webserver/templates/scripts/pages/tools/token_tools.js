@@ -595,7 +595,7 @@ function renderTaTokenHeader(overview) {
       </div>
     </div>
     <div class="ta-header-right">
-      ${priceSol ? `<div class="ta-price-sol">${Utils.formatSol(priceSol)}</div>` : ""}
+      ${priceSol ? `<div class="ta-price-sol">${withSolUnit(Utils.formatPriceSubscript(priceSol))}</div>` : ""}
       ${priceUsd ? `<div class="ta-price-usd">${Utils.formatCurrencyUSD(priceUsd)}</div>` : ""}
     </div>
   `;
@@ -1018,7 +1018,7 @@ function renderTaMarketTab() {
           <i class="icon-dollar-sign"></i> <span data-l10n-id="tools-analyzer-card-price"></span>
         </div>
         <div class="ta-price-display">
-          <div class="ta-price-main">${market.price_sol ? Utils.formatSol(market.price_sol) : "—"}</div>
+          <div class="ta-price-main">${market.price_sol ? withSolUnit(Utils.formatPriceSubscript(market.price_sol)) : "—"}</div>
           ${market.price_usd ? `<div class="ta-price-sub">${Utils.formatCurrencyUSD(market.price_usd)}</div>` : ""}
         </div>
       </div>
