@@ -374,6 +374,7 @@ errors-positions-not-found = पोज़िशन नहीं मिली
 errors-positions-already-closed = पोज़िशन पहले से बंद है
 errors-positions-force-close-failed = पोज़िशन को ज़बरन बंद करने में विफल
 errors-positions-already-archived = पोज़िशन पहले से आर्काइव है
+errors-positions-unverified-entry-archive = इस पोज़िशन की खरीद की अभी पुष्टि नहीं हुई है। पुष्टि होने के बाद इसे आर्काइव करें।
 errors-positions-not-archived = पोज़िशन आर्काइव नहीं है
 errors-positions-archive-failed = पोज़िशन आर्काइव करने में विफल
 errors-positions-unarchive-failed = पोज़िशन आर्काइव से निकालने में विफल

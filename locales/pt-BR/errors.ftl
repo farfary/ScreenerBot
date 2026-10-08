@@ -377,6 +377,7 @@ errors-positions-not-found = Posição não encontrada
 errors-positions-already-closed = A posição já está fechada
 errors-positions-force-close-failed = Falha no fechamento forçado da posição
 errors-positions-already-archived = A posição já está arquivada
+errors-positions-unverified-entry-archive = A compra desta posição ainda não foi confirmada. Arquive-a após a confirmação.
 errors-positions-not-archived = A posição não está arquivada
 errors-positions-archive-failed = Falha ao arquivar a posição
 errors-positions-unarchive-failed = Falha ao desarquivar a posição

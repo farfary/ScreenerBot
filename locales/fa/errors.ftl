@@ -413,6 +413,7 @@ errors-positions-not-found = پوزیشن پیدا نشد
 errors-positions-already-closed = پوزیشن از قبل بسته شده است
 errors-positions-force-close-failed = بستن اجباری پوزیشن ناموفق بود
 errors-positions-already-archived = پوزیشن از قبل بایگانی شده است
+errors-positions-unverified-entry-archive = خرید این پوزیشن هنوز تأیید نشده است. پس از تأیید آن را بایگانی کنید.
 errors-positions-not-archived = پوزیشن بایگانی نشده است
 errors-positions-archive-failed = بایگانی پوزیشن ناموفق بود
 errors-positions-unarchive-failed = خروج پوزیشن از بایگانی ناموفق بود

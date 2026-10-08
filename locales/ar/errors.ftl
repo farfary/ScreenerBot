@@ -413,6 +413,7 @@ errors-positions-not-found = لم يتم العثور على المركز
 errors-positions-already-closed = المركز مغلق بالفعل
 errors-positions-force-close-failed = تعذّر الإغلاق القسري للمركز
 errors-positions-already-archived = المركز مؤرشف بالفعل
+errors-positions-unverified-entry-archive = لم يتم تأكيد عملية شراء هذا المركز بعد. أرشفه بعد تأكيدها.
 errors-positions-not-archived = المركز غير مؤرشف
 errors-positions-archive-failed = تعذّرت أرشفة المركز
 errors-positions-unarchive-failed = تعذّر إلغاء أرشفة المركز

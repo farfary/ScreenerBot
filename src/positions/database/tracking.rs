@@ -46,19 +46,27 @@ impl PositionsDatabase {
             None
         };
 
-        let rows_affected = conn
-            .execute(
-                "UPDATE positions SET archived = ?2, archived_at = ?3, updated_at = datetime('now') WHERE id = ?1 AND chain_id=?4",
+        let unverified_open = conn
+            .query_row(
+                "UPDATE positions SET archived = CASE WHEN ?2 = 0 OR exit_time IS NOT NULL OR transaction_entry_verified = 1 THEN ?2 ELSE archived END, archived_at = CASE WHEN ?2 = 0 OR exit_time IS NOT NULL OR transaction_entry_verified = 1 THEN ?3 ELSE archived_at END, updated_at = CASE WHEN ?2 = 0 OR exit_time IS NOT NULL OR transaction_entry_verified = 1 THEN datetime('now') ELSE updated_at END WHERE id = ?1 AND chain_id = ?4 RETURNING exit_time IS NULL AND transaction_entry_verified = 0 AND ?2 = 1",
                 params![id, archived, archived_at, self.chain.as_str()],
+                |row| row.get::<_, bool>(0),
             )
-            .map_err(|e| DatabaseError::Query { operation: "set position archived flag".to_owned(), message: e.to_string() })?;
+            .optional()
+            .map_err(|e| DatabaseError::Query {
+                operation: "set position archived flag".to_owned(),
+                message: e.to_string(),
+            })?;
+        if unverified_open == Some(true) {
+            return Err(Error::UnverifiedEntryArchive { position_id: id });
+        }
 
         // Force WAL checkpoint so other pooled connections see the change immediately.
         if let Ok(mut stmt) = conn.prepare("PRAGMA wal_checkpoint(PASSIVE);") {
             let _ = stmt.query([]);
         }
 
-        if rows_affected > 0 {
+        if unverified_open.is_some() {
             logger::info(
                 LogTag::Positions,
                 &format!(
@@ -68,7 +76,7 @@ impl PositionsDatabase {
             );
         }
 
-        Ok(rows_affected > 0)
+        Ok(unverified_open.is_some())
     }
 
     /// Change action ownership for a position without changing its provenance.

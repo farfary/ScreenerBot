@@ -374,6 +374,7 @@ errors-positions-not-found = Không tìm thấy vị thế
 errors-positions-already-closed = Vị thế đã đóng
 errors-positions-force-close-failed = Không đóng cưỡng chế được vị thế
 errors-positions-already-archived = Vị thế đã được lưu trữ
+errors-positions-unverified-entry-archive = Giao dịch mua vị thế này chưa được xác nhận. Hãy lưu trữ sau khi giao dịch được xác nhận.
 errors-positions-not-archived = Vị thế chưa được lưu trữ
 errors-positions-archive-failed = Không lưu trữ được vị thế
 errors-positions-unarchive-failed = Không bỏ lưu trữ được vị thế

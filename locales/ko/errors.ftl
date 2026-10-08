@@ -407,6 +407,7 @@ errors-positions-not-found = 포지션을 찾을 수 없습니다
 errors-positions-already-closed = 이미 종료된 포지션입니다
 errors-positions-force-close-failed = 포지션을 강제 종료하지 못했습니다
 errors-positions-already-archived = 이미 보관된 포지션입니다
+errors-positions-unverified-entry-archive = 이 포지션의 매수가 아직 확인되지 않았습니다. 확인된 후 보관하세요.
 errors-positions-not-archived = 보관되지 않은 포지션입니다
 errors-positions-archive-failed = 포지션을 보관하지 못했습니다
 errors-positions-unarchive-failed = 포지션 보관을 해제하지 못했습니다

@@ -374,6 +374,7 @@ errors-positions-not-found = Позиция не найдена
 errors-positions-already-closed = Позиция уже закрыта
 errors-positions-force-close-failed = Не удалось принудительно закрыть позицию
 errors-positions-already-archived = Позиция уже в архиве
+errors-positions-unverified-entry-archive = Покупка этой позиции ещё не подтверждена. Архивируйте её после подтверждения.
 errors-positions-not-archived = Позиция не в архиве
 errors-positions-archive-failed = Не удалось архивировать позицию
 errors-positions-unarchive-failed = Не удалось вернуть позицию из архива

@@ -377,6 +377,7 @@ errors-positions-not-found = ポジションが見つかりません
 errors-positions-already-closed = ポジションはすでにクローズされています
 errors-positions-force-close-failed = ポジションを強制クローズできませんでした
 errors-positions-already-archived = ポジションはすでにアーカイブされています
+errors-positions-unverified-entry-archive = このポジションの購入はまだ確認されていません。確認後にアーカイブしてください。
 errors-positions-not-archived = ポジションはアーカイブされていません
 errors-positions-archive-failed = ポジションをアーカイブできませんでした
 errors-positions-unarchive-failed = ポジションのアーカイブを解除できませんでした

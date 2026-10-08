@@ -404,6 +404,7 @@ errors-positions-not-found = Pozisyon bulunamadı
 errors-positions-already-closed = Pozisyon zaten kapalı
 errors-positions-force-close-failed = Pozisyon zorla kapatılamadı
 errors-positions-already-archived = Pozisyon zaten arşivlenmiş
+errors-positions-unverified-entry-archive = Bu pozisyonun alımı henüz doğrulanmadı. Doğrulandıktan sonra arşivleyin.
 errors-positions-not-archived = Pozisyon arşivlenmemiş
 errors-positions-archive-failed = Pozisyon arşivlenemedi
 errors-positions-unarchive-failed = Pozisyon arşivden çıkarılamadı

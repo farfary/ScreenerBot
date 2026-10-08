@@ -407,6 +407,7 @@ errors-positions-not-found = 未找到仓位
 errors-positions-already-closed = 仓位已平仓
 errors-positions-force-close-failed = 强制平仓失败
 errors-positions-already-archived = 仓位已归档
+errors-positions-unverified-entry-archive = 此仓位的买入尚未确认。确认后再归档。
 errors-positions-not-archived = 仓位未归档
 errors-positions-archive-failed = 归档仓位失败
 errors-positions-unarchive-failed = 取消归档仓位失败

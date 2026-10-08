@@ -46,6 +46,8 @@ pub enum Error {
     AlreadyOpen { mint: String },
     #[error("position {position_id} is already closed")]
     AlreadyClosed { position_id: i64 },
+    #[error("the entry transaction for position {position_id} is not verified")]
+    UnverifiedEntryArchive { position_id: i64 },
     /// An insert was asked for a position that already has a row; an existing row changes
     /// only through a booking.
     #[error("position {position_id} is already stored")]
@@ -149,6 +151,7 @@ impl ErrorClass for Error {
             | Error::AlreadyClosed { .. }
             | Error::AlreadyStored { .. }
             | Error::EntryLanded { .. }
+            | Error::UnverifiedEntryArchive { .. }
             | Error::UnknownPersistedValue { .. } => false,
             // Validation failures are a property of the input, not the attempt.
             Error::InvalidPrice { .. }
@@ -197,6 +200,7 @@ impl ErrorClass for Error {
             Error::AlreadyOpen { .. }
             | Error::AlreadyClosed { .. }
             | Error::EntryLanded { .. }
+            | Error::UnverifiedEntryArchive { .. }
             | Error::HoldingUnattributable { .. }
             | Error::UnknownPersistedValue { .. } => Severity::Warning,
             Error::AlreadyStored { .. } => Severity::Error,
@@ -229,6 +233,7 @@ impl ErrorClass for Error {
             | Error::AlreadyClosed { .. }
             | Error::AlreadyStored { .. }
             | Error::EntryLanded { .. }
+            | Error::UnverifiedEntryArchive { .. }
             | Error::HoldingUnattributable { .. }
             | Error::ZeroExitAmount { .. } => 409,
             Error::UnknownPersistedValue { .. }

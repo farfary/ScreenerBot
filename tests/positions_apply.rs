@@ -3401,6 +3401,44 @@ fn deleting_the_archived_positions_removes_their_losses_from_the_limiter() {
 }
 
 #[test]
+fn archiving_requires_a_verified_entry_only_while_the_position_is_open() {
+    common::run_isolated(
+        "archiving_requires_a_verified_entry_only_while_the_position_is_open",
+        || async {
+            let _dir = common::isolated_env();
+            let _cfg = common::config_guard();
+
+            let unverified = open_position(|position| {
+                position.transaction_entry_verified = false;
+            })
+            .await;
+            assert!(matches!(
+                db::set_position_archived_db(unverified, true).await,
+                Err(Error::UnverifiedEntryArchive { position_id }) if position_id == unverified
+            ));
+            assert!(!stored_position(unverified).await.archived);
+
+            let verified = store_position(|_| {}).await;
+            assert!(db::set_position_archived_db(verified, true)
+                .await
+                .expect("archive an open position with a verified entry"));
+            assert!(stored_position(verified).await.archived);
+
+            let closed = store_position(|position| {
+                position.exit_time = Some(Utc::now());
+                position.transaction_exit_verified = true;
+                position.transaction_entry_verified = false;
+            })
+            .await;
+            assert!(db::set_position_archived_db(closed, true)
+                .await
+                .expect("archive a closed position"));
+            assert!(stored_position(closed).await.archived);
+        },
+    );
+}
+
+#[test]
 fn a_synthetic_close_of_a_wallet_derived_row_records_no_loss() {
     common::run_isolated(
         "a_synthetic_close_of_a_wallet_derived_row_records_no_loss",

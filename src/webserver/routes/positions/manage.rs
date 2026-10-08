@@ -89,6 +89,13 @@ pub(super) async fn archive_position(Path(position_id): Path<i64>) -> Response {
 
     // Persist first, then mirror into memory so a failed write doesn't desync state.
     if let Err(e) = positions::set_position_archived_db(position_id, true).await {
+        if matches!(e, positions::Error::UnverifiedEntryArchive { .. }) {
+            return ApiError::new(
+                ApiErrorCode::Conflict,
+                ids::ERRORS_POSITIONS_UNVERIFIED_ENTRY_ARCHIVE,
+            )
+            .into_response();
+        }
         return ApiError::new(ApiErrorCode::Internal, ids::ERRORS_POSITIONS_ARCHIVE_FAILED)
             .details(e.to_string())
             .into_response();
