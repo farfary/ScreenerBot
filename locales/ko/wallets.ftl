@@ -319,3 +319,4 @@ wallets-watched-paused = 지갑 감시가 일시 중지되었습니다
 wallets-watched-enabled = 지갑 감시가 활성화되었습니다
 wallets-watched-removed = 지갑 감시가 제거되었습니다
 wallets-watched-update-failed = 지갑 감시를 업데이트하지 못했습니다
+wallets-setup-gate-title = 지갑을 사용하려면 설정이 필요합니다

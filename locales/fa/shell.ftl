@@ -23,6 +23,7 @@ shell-explore-control =
 shell-explore-title = حالت کاوش
 shell-explore-detail = کیف پول و RPC متصل نیست
 shell-explore-action = تکمیل راه‌اندازی
+shell-setup-gate-detail = حالت کاوش بدون کیف پول و RPC اجرا می‌شود. برای اتصال آن‌ها راه‌اندازی را کامل کنید.
 shell-wallet-card =
     .aria-label = ارزش کیف پول؛ باز کردن پوزیشن‌ها
     .title = ارزش کیف پول ({ -sol } + توکن‌ها) · باز کردن پوزیشن‌ها

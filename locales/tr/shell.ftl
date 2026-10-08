@@ -16,6 +16,7 @@ shell-explore-control =
 shell-explore-title = Keşif Modu
 shell-explore-detail = Cüzdan ve RPC bağlı değil
 shell-explore-action = Kurulumu tamamla
+shell-setup-gate-detail = Keşif Modu cüzdan ve RPC olmadan çalışır. Bağlamak için kurulumu tamamlayın.
 shell-wallet-card =
     .aria-label = Cüzdan değeri; Pozisyonlar sayfasını aç
     .title = Cüzdan değeri ({ -sol } + tokenlar) · Pozisyonlar sayfasını aç

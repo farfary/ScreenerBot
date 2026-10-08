@@ -303,3 +303,4 @@ wallets-watched-paused = Cüzdan izleme duraklatıldı
 wallets-watched-enabled = Cüzdan izleme etkinleştirildi
 wallets-watched-removed = Cüzdan izleme kaldırıldı
 wallets-watched-update-failed = Cüzdan izleme güncellenemedi
+wallets-setup-gate-title = Cüzdanlar kurulum gerektirir

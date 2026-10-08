@@ -305,3 +305,4 @@ wallets-watched-paused = Wallet-Überwachung pausiert
 wallets-watched-enabled = Wallet-Überwachung aktiviert
 wallets-watched-removed = Wallet-Überwachung entfernt
 wallets-watched-update-failed = Wallet-Überwachung konnte nicht aktualisiert werden
+wallets-setup-gate-title = Wallets erfordern die Einrichtung

@@ -319,3 +319,4 @@ wallets-watched-paused = ウォレットウォッチを一時停止しました
 wallets-watched-enabled = ウォレットウォッチを有効にしました
 wallets-watched-removed = ウォレットウォッチを削除しました
 wallets-watched-update-failed = ウォレットウォッチを更新できませんでした
+wallets-setup-gate-title = ウォレットにはセットアップが必要です

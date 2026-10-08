@@ -23,6 +23,7 @@ shell-explore-control =
 shell-explore-title = Explore モード
 shell-explore-detail = ウォレットと RPC が未接続です
 shell-explore-action = セットアップを完了
+shell-setup-gate-detail = Explore モードはウォレットと RPC なしで動作します。接続するにはセットアップを完了してください。
 shell-wallet-card =
     .aria-label = ウォレット評価額。ポジションを開く
     .title = ウォレット評価額（{ -sol } + トークン）· ポジションを開く

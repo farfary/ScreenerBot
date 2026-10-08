@@ -23,6 +23,7 @@ shell-explore-control =
 shell-explore-title = 探索模式
 shell-explore-detail = 钱包和 RPC 未连接
 shell-explore-action = 完成设置
+shell-setup-gate-detail = 探索模式在没有钱包和 RPC 的情况下运行。请完成设置以连接它们。
 shell-wallet-card =
     .aria-label = 钱包总值；打开仓位
     .title = 钱包总值（{ -sol } + 代币）· 打开仓位

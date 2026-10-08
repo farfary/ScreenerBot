@@ -16,6 +16,7 @@ shell-explore-control =
 shell-explore-title = Chế độ khám phá
 shell-explore-detail = Chưa kết nối ví & RPC
 shell-explore-action = Hoàn tất thiết lập
+shell-setup-gate-detail = Chế độ khám phá chạy không có ví hay RPC. Hoàn tất thiết lập để kết nối chúng.
 shell-wallet-card =
     .aria-label = Giá trị ví; mở Vị thế
     .title = Giá trị ví ({ -sol } + token) · mở Vị thế

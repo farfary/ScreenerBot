@@ -344,3 +344,4 @@ wallets-watched-paused = تم إيقاف مراقبة المحفظة مؤقتً�
 wallets-watched-enabled = تم تفعيل مراقبة المحفظة
 wallets-watched-removed = تمت إزالة مراقبة المحفظة
 wallets-watched-update-failed = تعذّر تحديث مراقبة المحفظة
+wallets-setup-gate-title = المحافظ تتطلب الإعداد

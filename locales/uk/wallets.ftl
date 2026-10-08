@@ -334,3 +334,4 @@ wallets-watched-paused = Стеження за гаманцем призупин
 wallets-watched-enabled = Стеження за гаманцем увімкнено
 wallets-watched-removed = Стеження за гаманцем прибрано
 wallets-watched-update-failed = Не вдалося оновити стеження за гаманцем
+wallets-setup-gate-title = Для гаманців потрібне налаштування

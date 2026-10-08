@@ -8,7 +8,6 @@
  */
 
 import { registerPage } from "../core/lifecycle.js";
-import { getBootstrapState } from "../core/bootstrap.js";
 import { $, on } from "../core/dom.js";
 import { Poller } from "../core/poller.js";
 import { requestManager, apiErrorMessage } from "../core/request_manager.js";
@@ -20,6 +19,7 @@ import { createBulkOperations } from "./wallets/bulk_operations.js";
 import { createWalletRenderers } from "./wallets/renderers.js";
 import { createWatchedWallets } from "./wallets/watched.js";
 import { ConfirmationDialog } from "../ui/confirmation_dialog.js";
+import { renderSetupGate, setupRequired } from "../ui/setup_gate.js";
 
 // =============================================================================
 // Constants
@@ -79,6 +79,16 @@ function createLifecycle() {
       // Hints are optional enhancement data; they must never delay the page
       // shell, restored subtab, or the subtab bar.
       void Hints.init();
+
+      // Explore Mode has no wallet store: the page is the setup notice alone, with
+      // no sub-tabs, no wallet reads and no poller.
+      if (setupRequired()) {
+        $(".wallets-tab-panels")?.classList.add("hidden");
+        const gate = $("#wallets-setup-gate");
+        gate?.classList.remove("hidden");
+        renderSetupGate(gate, I18n.t("wallets-setup-gate-title"));
+        return;
+      }
 
       // Initialize sub-modules
       bulk = createBulkOperations({
@@ -151,6 +161,7 @@ function createLifecycle() {
 
     activate(ctx) {
       console.log("[Wallets] Activating...");
+      if (setupRequired()) return;
 
       // Re-register deactivate cleanup (cleared after each deactivate) and
       // force-show tab bar to handle race conditions with TabBarManager.
@@ -434,11 +445,7 @@ async function loadWallets() {
     // Fetch balance for main wallet
     await fetchMainWalletBalance();
   } catch (error) {
-    // Explore Mode runs without the wallet database, so the failed read is the
-    // expected empty state there rather than an error.
-    if (!getBootstrapState().status?.explore_mode) {
-      console.error("[Wallets] Failed to load wallets:", error);
-    }
+    console.error("[Wallets] Failed to load wallets:", error);
     walletsData = [];
   }
 }

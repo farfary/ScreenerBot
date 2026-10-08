@@ -324,3 +324,4 @@ wallets-watched-paused = پایش کیف پول متوقف شد
 wallets-watched-enabled = پایش کیف پول فعال شد
 wallets-watched-removed = پایش کیف پول حذف شد
 wallets-watched-update-failed = به‌روزرسانی پایش کیف پول ممکن نشد
+wallets-setup-gate-title = کیف پول‌ها به راه‌اندازی نیاز دارند

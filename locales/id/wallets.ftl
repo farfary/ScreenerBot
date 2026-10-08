@@ -300,3 +300,4 @@ wallets-watched-paused = Pantauan dompet dijeda
 wallets-watched-enabled = Pantauan dompet diaktifkan
 wallets-watched-removed = Pantauan dompet dihapus
 wallets-watched-update-failed = Pantauan dompet tidak dapat diperbarui
+wallets-setup-gate-title = Dompet memerlukan penyiapan

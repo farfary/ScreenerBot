@@ -313,3 +313,4 @@ wallets-watched-paused = Отслеживание кошелька приост�
 wallets-watched-enabled = Отслеживание кошелька включено
 wallets-watched-removed = Отслеживание кошелька удалено
 wallets-watched-update-failed = Не удалось обновить отслеживание кошелька
+wallets-setup-gate-title = Для кошельков нужна настройка

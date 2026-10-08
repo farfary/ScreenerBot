@@ -21,6 +21,7 @@ import { createEditor } from "./copy/editor.js";
 import { createArmGate } from "./copy/arm_gate.js";
 import { createSettings } from "./copy/settings.js";
 import { createProfile } from "./copy/profile.js";
+import { gateControl, renderSetupGate, setupRequired } from "../ui/setup_gate.js";
 
 const POLL_MS = 5000;
 
@@ -111,7 +112,14 @@ function createLifecycle() {
     const tasks = state.overview?.tasks || [];
     const onboarding = $("#copy-onboarding");
     const main = $("#copy-main");
-    if (onboarding) onboarding.hidden = !state.overview || tasks.length > 0;
+    const gate = $("#copy-setup-gate");
+    const gated = setupRequired();
+    // An empty page offers one way forward: the onboarding card's own action, or
+    // the setup notice in Explore Mode. The strip's Add wallet joins once a task exists.
+    const add = $("#copy-add");
+    if (add) add.hidden = tasks.length === 0;
+    if (gate) gate.hidden = !gated || tasks.length > 0;
+    if (onboarding) onboarding.hidden = gated || !state.overview || tasks.length > 0;
     if (main) main.hidden = tasks.length === 0;
     if (!tasks.length) return;
     renderFigures(page);
@@ -222,6 +230,8 @@ function createLifecycle() {
       on($("#copy-settings-open"), "click", () => page.settings.open());
       on($("#copy-global-action"), "click", toggleGlobal);
       on($("#copy-compare-open"), "click", openCompare);
+      gateControl($("#copy-add"));
+      if (setupRequired()) renderSetupGate($("#copy-setup-gate"), I18n.t("copy-setup-gate-title"));
       on(window, COPY_HANDOFF_EVENT, () => {
         if (ctxRef?.isActive()) applyHandoff();
       });

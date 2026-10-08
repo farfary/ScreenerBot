@@ -308,3 +308,4 @@ wallets-watched-paused = Suivi du portefeuille suspendu
 wallets-watched-enabled = Suivi du portefeuille activé
 wallets-watched-removed = Suivi du portefeuille retiré
 wallets-watched-update-failed = Impossible de mettre à jour le suivi du portefeuille
+wallets-setup-gate-title = Les portefeuilles nécessitent la configuration

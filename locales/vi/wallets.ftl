@@ -298,3 +298,4 @@ wallets-watched-paused = Đã tạm dừng theo dõi ví
 wallets-watched-enabled = Đã bật theo dõi ví
 wallets-watched-removed = Đã xóa theo dõi ví
 wallets-watched-update-failed = Không thể cập nhật theo dõi ví
+wallets-setup-gate-title = Ví cần được thiết lập

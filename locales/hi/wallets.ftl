@@ -303,3 +303,4 @@ wallets-watched-paused = वॉलेट वॉच रोका गया
 wallets-watched-enabled = वॉलेट वॉच चालू किया गया
 wallets-watched-removed = वॉलेट वॉच हटाया गया
 wallets-watched-update-failed = वॉलेट वॉच अपडेट नहीं हो सका
+wallets-setup-gate-title = वॉलेट के लिए सेटअप ज़रूरी है

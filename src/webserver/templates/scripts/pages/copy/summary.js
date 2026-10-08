@@ -3,6 +3,7 @@
 //
 // The status strip and the totals row above the wallet list.
 import { fixed, pct, seconds, signedSol, toneClass, unrealizedFigure } from "./format.js";
+import { gateControl, setupRequired } from "../../ui/setup_gate.js";
 
 export function renderStrip(page) {
   const { $, state } = page;
@@ -10,6 +11,12 @@ export function renderStrip(page) {
   const node = $("#copy-system-state");
   const button = $("#copy-global-action");
   if (!node || !button) return;
+  if (setupRequired()) {
+    node.textContent = I18n.t("copy-strip-setup-required");
+    node.dataset.state = "paused";
+    gateControl(button);
+    return;
+  }
   if (!status) {
     node.textContent = state.loadError
       ? I18n.t("copy-strip-unavailable")

@@ -23,6 +23,7 @@ shell-explore-control =
 shell-explore-title = Режим огляду
 shell-explore-detail = Гаманець і RPC не підключено
 shell-explore-action = Завершити налаштування
+shell-setup-gate-detail = Режим огляду працює без гаманця та RPC. Завершіть налаштування, щоб підключити їх.
 shell-wallet-card =
     .aria-label = Вартість гаманця; відкрити «Позиції»
     .title = Вартість гаманця ({ -sol } + токени) · відкрити «Позиції»

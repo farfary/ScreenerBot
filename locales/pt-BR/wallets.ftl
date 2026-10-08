@@ -329,3 +329,4 @@ wallets-watched-paused = Monitoramento da carteira pausado
 wallets-watched-enabled = Monitoramento da carteira ativado
 wallets-watched-removed = Monitoramento da carteira removido
 wallets-watched-update-failed = Não foi possível atualizar o monitoramento da carteira
+wallets-setup-gate-title = As carteiras exigem configuração

@@ -16,6 +16,7 @@ shell-explore-control =
 shell-explore-title = Режим обзора
 shell-explore-detail = Кошелёк и RPC не подключены
 shell-explore-action = Завершить настройку
+shell-setup-gate-detail = Режим обзора работает без кошелька и RPC. Завершите настройку, чтобы подключить их.
 shell-wallet-card =
     .aria-label = Стоимость кошелька; открыть позиции
     .title = Стоимость кошелька ({ -sol } + токены) · открыть позиции

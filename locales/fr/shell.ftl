@@ -16,6 +16,7 @@ shell-explore-control =
 shell-explore-title = Mode Explorer
 shell-explore-detail = Portefeuille et RPC non connectés
 shell-explore-action = Terminer la configuration
+shell-setup-gate-detail = Le Mode Explorer fonctionne sans portefeuille ni RPC. Terminez la configuration pour les connecter.
 shell-wallet-card =
     .aria-label = Valeur du portefeuille ; ouvrir les positions
     .title = Valeur du portefeuille ({ -sol } + tokens) · ouvrir les positions

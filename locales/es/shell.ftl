@@ -23,6 +23,7 @@ shell-explore-control =
 shell-explore-title = Modo Explorar
 shell-explore-detail = Billetera y RPC sin conectar
 shell-explore-action = Completar configuración
+shell-setup-gate-detail = El Modo Explorar funciona sin billetera ni RPC. Completa la configuración para conectarlos.
 shell-wallet-card =
     .aria-label = Valor de la billetera; abrir Posiciones
     .title = Valor de la billetera ({ -sol } + tokens) · abrir Posiciones

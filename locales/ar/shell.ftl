@@ -23,6 +23,7 @@ shell-explore-control =
 shell-explore-title = وضع الاستكشاف
 shell-explore-detail = المحفظة وRPC غير متصلين
 shell-explore-action = إكمال الإعداد
+shell-setup-gate-detail = يعمل وضع الاستكشاف دون محفظة أو RPC. أكمل الإعداد لربطهما.
 shell-wallet-card =
     .aria-label = قيمة المحفظة؛ فتح المراكز
     .title = قيمة المحفظة ({ -sol } + الرموز) · فتح المراكز

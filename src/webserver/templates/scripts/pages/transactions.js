@@ -19,6 +19,7 @@ import {
   TOKEN_CELL_MIN_WIDTH,
 } from "../ui/token_identity.js";
 import { venueLabel } from "../ui/venue.js";
+import { setupRequired } from "../ui/setup_gate.js";
 
 const PAGE_LIMIT = 100;
 const DEFAULT_FILTERS = {
@@ -725,7 +726,10 @@ function createLifecycle() {
     const options = [{ value: "", label: I18n.t("transactions-wallet-main") }];
     let targetsLoaded = false;
     try {
-      const data = await requestManager.fetch("/api/wallets/watch", { priority: "normal" });
+      // Explore Mode has no watch store, so the main wallet is the only subject.
+      const data = setupRequired()
+        ? { targets: [] }
+        : await requestManager.fetch("/api/wallets/watch", { priority: "normal" });
       for (const target of data.targets || []) {
         // A labelled wallet is named by its label; an unlabelled one by its full address.
         options.push({ value: target.address, label: target.label || target.address });

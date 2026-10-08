@@ -23,6 +23,7 @@ shell-explore-control =
 shell-explore-title = Explore Mode
 shell-explore-detail = Wallet & RPC not connected
 shell-explore-action = Complete setup
+shell-setup-gate-detail = Explore Mode runs without a wallet or RPC. Complete setup to connect them.
 shell-wallet-card =
     .aria-label = Wallet worth; open Positions
     .title = Wallet worth ({ -sol } + tokens) · open Positions

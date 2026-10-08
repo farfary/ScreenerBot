@@ -329,3 +329,4 @@ wallets-watched-paused = Seguimiento de billetera en pausa
 wallets-watched-enabled = Seguimiento de billetera activado
 wallets-watched-removed = Seguimiento de billetera eliminado
 wallets-watched-update-failed = No se pudo actualizar el seguimiento de la billetera
+wallets-setup-gate-title = Las billeteras requieren configuración

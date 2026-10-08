@@ -16,6 +16,7 @@ shell-explore-control =
 shell-explore-title = एक्सप्लोर मोड
 shell-explore-detail = वॉलेट और RPC कनेक्ट नहीं हैं
 shell-explore-action = सेटअप पूरा करें
+shell-setup-gate-detail = एक्सप्लोर मोड बिना वॉलेट या RPC के चलता है। उन्हें कनेक्ट करने के लिए सेटअप पूरा करें।
 shell-wallet-card =
     .aria-label = वॉलेट वैल्यू; पोज़िशन खोलें
     .title = वॉलेट वैल्यू ({ -sol } + टोकन) · पोज़िशन खोलें

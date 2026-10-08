@@ -23,6 +23,7 @@ shell-explore-control =
 shell-explore-title = Modo Explorar
 shell-explore-detail = Carteira e RPC não conectados
 shell-explore-action = Concluir configuração
+shell-setup-gate-detail = O Modo Explorar funciona sem carteira nem RPC. Conclua a configuração para conectá-los.
 shell-wallet-card =
     .aria-label = Valor da carteira; abrir Posições
     .title = Valor da carteira ({ -sol } + tokens) · abrir Posições

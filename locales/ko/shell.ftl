@@ -23,6 +23,7 @@ shell-explore-control =
 shell-explore-title = 탐색 모드
 shell-explore-detail = 지갑 및 RPC 연결 안 됨
 shell-explore-action = 설정 완료
+shell-setup-gate-detail = 탐색 모드는 지갑과 RPC 없이 실행됩니다. 연결하려면 설정을 완료하세요.
 shell-wallet-card =
     .aria-label = 지갑 가치, 포지션 열기
     .title = 지갑 가치 ({ -sol } + 토큰) · 포지션 열기

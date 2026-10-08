@@ -324,3 +324,4 @@ wallets-watched-paused = Wallet watch paused
 wallets-watched-enabled = Wallet watch enabled
 wallets-watched-removed = Wallet watch removed
 wallets-watched-update-failed = Wallet watch could not be updated
+wallets-setup-gate-title = Wallets need setup

@@ -15,6 +15,7 @@ import {
   toneClass,
 } from "./format.js";
 import { panelMessage } from "./overview.js";
+import { gateControl } from "../../ui/setup_gate.js";
 
 export function createProfile(page) {
   const { $, Utils, api, on, paint, dialogs } = page;
@@ -135,6 +136,7 @@ export function createProfile(page) {
         copy.textContent = profile.tasks?.length
           ? I18n.t("copy-profile-copy-other")
           : I18n.t("copy-profile-copy");
+        gateControl(copy);
       }
     } catch (failure) {
       if (current?.address !== address) return;

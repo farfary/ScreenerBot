@@ -319,3 +319,4 @@ wallets-watched-paused = 钱包监控已暂停
 wallets-watched-enabled = 钱包监控已启用
 wallets-watched-removed = 钱包监控已移除
 wallets-watched-update-failed = 无法更新钱包监控
+wallets-setup-gate-title = 钱包需要先完成设置

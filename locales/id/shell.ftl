@@ -18,6 +18,7 @@ shell-explore-control =
 shell-explore-title = Mode Jelajah
 shell-explore-detail = Dompet & RPC belum terhubung
 shell-explore-action = Selesaikan penyiapan
+shell-setup-gate-detail = Mode Jelajah berjalan tanpa dompet atau RPC. Selesaikan penyiapan untuk menghubungkannya.
 shell-wallet-card =
     .aria-label = Nilai dompet; buka Posisi
     .title = Nilai dompet ({ -sol } + token) · buka Posisi
