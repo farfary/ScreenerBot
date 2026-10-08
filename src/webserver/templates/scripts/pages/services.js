@@ -247,6 +247,7 @@ function createLifecycle() {
         {
           id: "priority",
           label: I18n.t("services-col-priority"),
+          type: "number",
           sortable: true,
           minWidth: 72,
           render: (v) => v ?? "-",
@@ -264,6 +265,7 @@ function createLifecycle() {
         {
           id: "uptime",
           label: I18n.t("services-col-uptime"),
+          type: "number",
           sortable: true,
           minWidth: 96,
           render: (v, row) => Utils.formatUptime(row.uptime_seconds, { style: "compact" }),
@@ -287,6 +289,7 @@ function createLifecycle() {
         {
           id: "lastCycle",
           label: I18n.t("services-col-last-cycle"),
+          type: "number",
           sortable: true,
           minWidth: 96,
           render: (v, row) => Utils.formatDuration(row.metrics?.last_cycle_duration_ns || 0),
@@ -296,6 +299,7 @@ function createLifecycle() {
         {
           id: "avgCycle",
           label: I18n.t("services-col-avg-cycle"),
+          type: "number",
           sortable: true,
           minWidth: 96,
           render: (v, row) => Utils.formatDuration(row.metrics?.avg_cycle_duration_ns || 0),
@@ -305,6 +309,7 @@ function createLifecycle() {
         {
           id: "avgPoll",
           label: I18n.t("services-col-avg-poll"),
+          type: "number",
           sortable: true,
           minWidth: 96,
           render: (v, row) => Utils.formatDuration(row.metrics?.mean_poll_duration_ns || 0),
@@ -314,6 +319,7 @@ function createLifecycle() {
         {
           id: "cycleRate",
           label: I18n.t("services-col-cycle-rate"),
+          type: "number",
           sortable: true,
           minWidth: 90,
           render: (v, row) => {
@@ -326,6 +332,7 @@ function createLifecycle() {
         {
           id: "tasks",
           label: I18n.t("services-col-tasks"),
+          type: "number",
           sortable: true,
           minWidth: 90,
           render: (v, row) => {
@@ -348,6 +355,7 @@ function createLifecycle() {
         {
           id: "ops",
           label: I18n.t("services-col-ops"),
+          type: "number",
           sortable: true,
           minWidth: 90,
           render: (v, row) => formatFixed(row.metrics?.operations_per_second || 0),
@@ -357,6 +365,7 @@ function createLifecycle() {
         {
           id: "errors",
           label: I18n.t("services-col-errors"),
+          type: "number",
           sortable: true,
           minWidth: 80,
           render: (v, row) => row.metrics?.errors_total || 0,

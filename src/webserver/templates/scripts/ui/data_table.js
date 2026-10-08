@@ -74,7 +74,11 @@
  * Column Configuration:
  * - id: Unique column identifier (required)
  * - label: Display name (required)
- * - type: Column type - 'text', 'image', 'badge', etc. (optional, default: 'text')
+ * - type: Column type (optional, default: 'text'). 'actions' and 'image' select a
+ *   built-in renderer. The value types 'number', 'price', 'percent', 'sol' and
+ *   'currency' are stamped as `data-type` on the header and every cell, which
+ *   end-aligns both and makes the cell a tabular-figure LTR island
+ *   (styles/ui/data_table/column_types.css). Every numeric column declares one.
  * - sortable: Enable sorting (optional, default: false)
  * - width: Column width in px or 'auto' (optional)
  * - maxWidth: Maximum width in px (optional, clamps auto + resize)
@@ -133,6 +137,9 @@ import { $ } from "../core/dom.js";
 import { escapeHtml } from "../core/utils.js";
 import { enhanceAllSelects } from "./custom_select.js";
 import { TableToolbarView } from "./table_toolbar.js";
+
+/** Column types whose header and cells are end-aligned numeric values. */
+export const NUMERIC_COLUMN_TYPES = new Set(["number", "price", "percent", "sol", "currency"]);
 import { TableSettingsDialog } from "./table_settings_dialog.js";
 import { applyColumnManagementMixin } from "./data_table/column_management.js";
 import { applyClientPaginationMixin } from "./data_table/client_pagination.js";
@@ -907,6 +914,15 @@ export class DataTable {
   }
 
   /**
+   * `data-type` attribute for a value-typed column, shared by its header and cells
+   * so both take the same alignment. Renderer types (`actions`, `image`) and text
+   * columns carry none.
+   */
+  _columnTypeAttr(col) {
+    return NUMERIC_COLUMN_TYPES.has(col.type) ? ` data-type="${col.type}"` : "";
+  }
+
+  /**
    * Render table header with sortable columns
    */
   _renderHeader() {
@@ -923,7 +939,7 @@ export class DataTable {
 
             return `
             <th
-              data-column-id="${col.id}"
+              data-column-id="${col.id}"${this._columnTypeAttr(col)}
               class="dt-header-column ${col.sortable ? "sortable" : ""} ${isSorted ? "sorted" : ""} ${sticky.classes}"${sticky.attr}
             >
               <div class="dt-header-content">
@@ -1354,7 +1370,7 @@ export class DataTable {
           : cellContent;
 
         return `
-        <td data-column-id="${col.id}"
+        <td data-column-id="${col.id}"${this._columnTypeAttr(col)}
             class="${cellClass} ${wrapClass} ${sticky.classes}"${sticky.attr}
             data-row-id="${rowId}">
           ${content}

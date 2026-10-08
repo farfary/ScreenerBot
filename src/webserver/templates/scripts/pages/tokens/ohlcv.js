@@ -92,15 +92,16 @@ export function createOhlcvModule(deps) {
       {
         id: "candle_count",
         label: I18n.t("chart-candles"),
+        type: "number",
         sortable: true,
         minWidth: 90,
         wrap: false,
-        align: "right",
         render: (value) => Utils.formatNumber(value, { fallback: "0" }),
       },
       {
         id: "backfill_progress",
         label: I18n.t("tokens-ohlcv-column-backfill"),
+        // column-type-ok: a progress bar with timeframe marks, laid out as a text column
         sortable: false,
         minWidth: 120,
         wrap: false,
@@ -137,10 +138,10 @@ export function createOhlcvModule(deps) {
       {
         id: "data_span_hours",
         label: I18n.t("tokens-ohlcv-column-data-span"),
+        type: "number",
         sortable: true,
         minWidth: 90,
         wrap: false,
-        align: "right",
         render: (value) => {
           if (!value || value <= 0) return "—";
           if (value < 24) return formatTimeSpan(value, { unit: "hour", decimals: 1 });
@@ -150,10 +151,10 @@ export function createOhlcvModule(deps) {
       {
         id: "open_gaps",
         label: I18n.t("tokens-ohlcv-column-gaps"),
+        type: "number",
         sortable: true,
         minWidth: 70,
         wrap: false,
-        align: "right",
         render: (value) => {
           if (!value || value === 0) return '<span class="value-positive">0</span>';
           return `<span class="value-warning">${Utils.formatNumber(value, 0)}</span>`;
@@ -162,10 +163,10 @@ export function createOhlcvModule(deps) {
       {
         id: "pool_count",
         label: I18n.t("tokens-ohlcv-column-pools"),
+        type: "number",
         sortable: true,
         minWidth: 70,
         wrap: false,
-        align: "right",
         render: (value) => Utils.formatNumber(value, { fallback: "0" }),
       },
       {

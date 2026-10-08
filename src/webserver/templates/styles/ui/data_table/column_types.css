@@ -559,15 +559,53 @@
    Trading Terminal Numeric Styles
    ============================================================================= */
 
-/* Numeric cells in tables - using JetBrains Mono for tabular figures. Each cell is an
-   LTR island, so digits keep their order in an RTL table and an ellipsis on a
-   truncated value cuts its least significant end. */
-.data-table td[data-type="number"],
-.data-table td[data-type="price"],
-.data-table td[data-type="percent"],
-.data-table td[data-type="sol"],
-.data-table td[data-type="currency"],
-.data-table .dt-cell-numeric {
+/* Value-typed columns. The DataTable stamps the column's `type` as `data-type` on the
+   header and on every cell (`NUMERIC_COLUMN_TYPES` in scripts/ui/data_table.js), so a
+   numeric column is end-aligned from one declaration and its header follows it. */
+.data-table th:is(
+    [data-type="number"],
+    [data-type="price"],
+    [data-type="percent"],
+    [data-type="sol"],
+    [data-type="currency"]
+  ) {
+  text-align: end;
+}
+
+.data-table th:is(
+    [data-type="number"],
+    [data-type="price"],
+    [data-type="percent"],
+    [data-type="sol"],
+    [data-type="currency"]
+  )
+  .dt-header-label {
+  justify-content: flex-end;
+}
+
+/* The sort indicator leads an end-aligned label so the label's last glyph lines up
+   with the values' last digit. */
+.data-table th:is(
+    [data-type="number"],
+    [data-type="price"],
+    [data-type="percent"],
+    [data-type="sol"],
+    [data-type="currency"]
+  )
+  .dt-sort-icon {
+  order: -1;
+}
+
+/* Numeric cells use tabular figures. Each cell is an LTR island, so digits keep
+   their order in an RTL table and an ellipsis on a truncated value cuts its least
+   significant end. */
+.data-table td:is(
+    [data-type="number"],
+    [data-type="price"],
+    [data-type="percent"],
+    [data-type="sol"],
+    [data-type="currency"]
+  ) {
   font-family: var(--font-data);
   font-feature-settings:
     "tnum" 1,
@@ -583,13 +621,12 @@
    its left, which is the island's `start`. */
 [dir="rtl"]
   .data-table
-  :is(
-    td[data-type="number"],
-    td[data-type="price"],
-    td[data-type="percent"],
-    td[data-type="sol"],
-    td[data-type="currency"],
-    .dt-cell-numeric
+  td:is(
+    [data-type="number"],
+    [data-type="price"],
+    [data-type="percent"],
+    [data-type="sol"],
+    [data-type="currency"]
   ) {
   text-align: start;
 }

@@ -351,6 +351,7 @@ function createLifecycle() {
     {
       id: "average_entry_price",
       label: I18n.t("positions-column-avg-entry"),
+      type: "price",
       sortable: true,
       minWidth: 140,
       render: (v, r) => basisCell(r, () => priceCell(v || r.entry_price)),
@@ -358,6 +359,7 @@ function createLifecycle() {
     {
       id: "total_size_native",
       label: I18n.t("positions-column-total-invested"),
+      type: "sol",
       sortable: true,
       minWidth: 120,
       render: (v, r) => basisCell(r, () => solCell(v)),
@@ -365,6 +367,7 @@ function createLifecycle() {
     {
       id: "sol_received",
       label: I18n.t("positions-column-proceeds"),
+      type: "sol",
       sortable: true,
       minWidth: 110,
       render: (v) => (v == null ? "—" : solCell(v)),
@@ -372,6 +375,7 @@ function createLifecycle() {
     {
       id: "pnl",
       label: I18n.t("positions-column-pnl"),
+      type: "sol",
       sortable: true,
       minWidth: 110,
       render: (v, r) => pnlGuardedCell(r, () => pnlCell(v)),
@@ -379,6 +383,7 @@ function createLifecycle() {
     {
       id: "pnl_percent",
       label: I18n.t("positions-column-pnl-percent"),
+      type: "percent",
       sortable: true,
       minWidth: 100,
       render: (v, r) => pnlGuardedCell(r, () => percentCell(v)),
@@ -411,6 +416,7 @@ function createLifecycle() {
         {
           id: "dca_count",
           label: I18n.t("positions-column-dca"),
+          type: "number",
           sortable: true,
           minWidth: 80,
           render: (v) => dcaCell(v),
@@ -418,6 +424,7 @@ function createLifecycle() {
         {
           id: "average_entry_price",
           label: I18n.t("positions-column-avg-entry"),
+          type: "price",
           sortable: true,
           minWidth: 140,
           render: (v, r) => basisCell(r, () => priceCell(v)),
@@ -425,6 +432,7 @@ function createLifecycle() {
         {
           id: "current_price",
           label: I18n.t("positions-column-current-price"),
+          type: "price",
           sortable: true,
           minWidth: 140,
           render: (v) => (v == null ? "—" : priceCell(v)),
@@ -432,6 +440,7 @@ function createLifecycle() {
         {
           id: "total_size_native",
           label: I18n.t("positions-column-total-invested"),
+          type: "sol",
           sortable: true,
           minWidth: 120,
           render: (v, r) => basisCell(r, () => solCell(v)),
@@ -439,6 +448,7 @@ function createLifecycle() {
         {
           id: "current_size",
           label: I18n.t("positions-column-size"),
+          type: "percent",
           sortable: true,
           minWidth: 80,
           render: (_v, r) => currentSizeCell(r.remaining_token_amount, r.total_exited_amount),
@@ -446,6 +456,7 @@ function createLifecycle() {
         {
           id: "partial_exit_count",
           label: I18n.t("positions-column-exits"),
+          type: "number",
           sortable: true,
           minWidth: 90,
           render: (v) => partialExitsCell(v),
@@ -453,6 +464,7 @@ function createLifecycle() {
         {
           id: "unrealized_pnl",
           label: I18n.t("positions-column-unrealized-pnl"),
+          type: "sol",
           sortable: true,
           minWidth: 130,
           render: (v, r) => pnlGuardedCell(r, () => pnlCell(v)),
@@ -460,6 +472,7 @@ function createLifecycle() {
         {
           id: "unrealized_pnl_percent",
           label: I18n.t("positions-column-unrealized-percent"),
+          type: "percent",
           sortable: true,
           minWidth: 110,
           render: (v, r) => pnlGuardedCell(r, () => percentCell(v)),
@@ -489,6 +502,7 @@ function createLifecycle() {
         {
           id: "dca_count",
           label: I18n.t("positions-column-dca"),
+          type: "number",
           sortable: true,
           minWidth: 80,
           render: (v) => dcaCell(v),
@@ -496,6 +510,7 @@ function createLifecycle() {
         {
           id: "average_entry_price",
           label: I18n.t("positions-column-avg-entry"),
+          type: "price",
           sortable: true,
           minWidth: 140,
           render: (v, r) => basisCell(r, () => priceCell(v || r.entry_price)),
@@ -503,6 +518,7 @@ function createLifecycle() {
         {
           id: "average_exit_price",
           label: I18n.t("positions-column-avg-exit"),
+          type: "price",
           sortable: true,
           minWidth: 140,
           render: (v, r) => (v == null ? priceCell(r.exit_price) : priceCell(v)),
@@ -510,6 +526,7 @@ function createLifecycle() {
         {
           id: "total_size_native",
           label: I18n.t("positions-column-total-invested"),
+          type: "sol",
           sortable: true,
           minWidth: 120,
           render: (v, r) => basisCell(r, () => solCell(v)),
@@ -517,6 +534,7 @@ function createLifecycle() {
         {
           id: "partial_exit_count",
           label: I18n.t("positions-column-exits"),
+          type: "number",
           sortable: true,
           minWidth: 90,
           render: (v) => partialExitsCell(v),
@@ -524,6 +542,7 @@ function createLifecycle() {
         {
           id: "sol_received",
           label: I18n.t("positions-column-proceeds"),
+          type: "sol",
           sortable: true,
           minWidth: 110,
           render: (v) => (v == null ? "—" : solCell(v)),
@@ -531,6 +550,7 @@ function createLifecycle() {
         {
           id: "pnl",
           label: I18n.t("positions-column-pnl"),
+          type: "sol",
           sortable: true,
           minWidth: 110,
           render: (v, r) => pnlGuardedCell(r, () => pnlCell(v)),
@@ -538,6 +558,7 @@ function createLifecycle() {
         {
           id: "pnl_percent",
           label: I18n.t("positions-column-pnl-percent"),
+          type: "percent",
           sortable: true,
           minWidth: 100,
           render: (v, r) => pnlGuardedCell(r, () => percentCell(v)),

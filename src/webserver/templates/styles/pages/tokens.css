@@ -213,27 +213,6 @@
     "zero" 1;
 }
 
-.tokens-page td[data-column-id="price_sol"],
-.tokens-page td[data-column-id="liquidity_usd"],
-.tokens-page td[data-column-id="volume_24h"],
-.tokens-page td[data-column-id="fdv"],
-.tokens-page td[data-column-id="market_cap"],
-.tokens-page td[data-column-id="price_change_h1"],
-.tokens-page td[data-column-id="price_change_h24"],
-.tokens-page td[data-column-id="txns_5m"],
-.tokens-page td[data-column-id="txns_1h"],
-.tokens-page td[data-column-id="txns_6h"],
-.tokens-page td[data-column-id="txns_24h"],
-.tokens-page td[data-column-id="risk_score"],
-.tokens-page td[data-column-id="updated_at"],
-.tokens-page td[data-column-id="token_birth_at"],
-.tokens-page td[data-column-id="first_seen_at"] {
-  font-family: var(--font-data);
-  font-feature-settings:
-    "tnum" 1,
-    "zero" 1;
-}
-
 /* Row actions buttons */
 .row-actions {
   display: flex;

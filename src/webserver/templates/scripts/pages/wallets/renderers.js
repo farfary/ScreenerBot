@@ -72,12 +72,14 @@ export function createWalletRenderers({
     {
       id: "ui_amount",
       label: I18n.t("wallets-holdings-col-balance"),
+      type: "number",
       sortable: true,
       render: (value) => (value != null ? Utils.formatNumber(value, { decimals: 4 }) : "—"),
     },
     {
       id: "value_sol",
       label: I18n.t("wallets-holdings-col-value"),
+      type: "sol",
       sortable: true,
       render: (value) => (value != null ? Utils.formatSol(value, { decimals: 4 }) : "—"),
     },
@@ -97,6 +99,7 @@ export function createWalletRenderers({
     {
       id: "decimals",
       label: I18n.t("wallets-holdings-col-decimals"),
+      type: "number",
       sortable: true,
       render: (value) => (value != null ? value : "—"),
     },
@@ -116,8 +119,8 @@ export function createWalletRenderers({
     {
       id: "balance",
       label: I18n.t("wallets-list-col-balance"),
+      type: "sol",
       sortable: true,
-      className: "wallet-balance-cell",
       render: (value) => (value != null ? Utils.formatSol(value, { decimals: 4 }) : "—"),
     },
     {

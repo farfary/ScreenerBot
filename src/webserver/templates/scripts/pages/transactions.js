@@ -416,12 +416,14 @@ function createLifecycle() {
         {
           id: "native_delta",
           label: I18n.t("transactions-col-native-delta"),
+          type: "sol",
           minWidth: 140,
           render: (value) => Utils.formatPnL(value, { decimals: 6, fallback: "—" }),
         },
         {
           id: "fee_sol",
           label: I18n.t("transactions-col-fees"),
+          type: "sol",
           minWidth: 130,
           render: (value) => Utils.formatSol(value, { decimals: 6, fallback: "—" }),
         },
@@ -442,6 +444,7 @@ function createLifecycle() {
         {
           id: "instructions_count",
           label: I18n.t("transactions-col-instructions"),
+          type: "number",
           minWidth: 90,
           // Every transaction has at least one instruction; 0 is a row stored before the
           // count was recorded, so it reads as unknown.

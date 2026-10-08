@@ -906,15 +906,16 @@ function createLifecycle() {
       {
         id: "price_sol",
         label: I18n.t("tokens-column-price-sol"),
+        type: "price",
         sortable: true,
         minWidth: 150,
         wrap: false,
-        className: "dt-cell-numeric",
         render: (v, row) => priceCell(v, row),
       },
       {
         id: "liquidity_usd",
         label: I18n.t("tokens-column-liquidity"),
+        type: "currency",
         sortable: true,
         minWidth: USD_COLUMN_MIN_WIDTH,
         wrap: false,
@@ -923,6 +924,7 @@ function createLifecycle() {
       {
         id: "volume_24h",
         label: I18n.t("tokens-column-volume-24h"),
+        type: "currency",
         sortable: true,
         minWidth: USD_COLUMN_MIN_WIDTH,
         wrap: false,
@@ -931,6 +933,7 @@ function createLifecycle() {
       {
         id: "fdv",
         label: I18n.t("tokens-column-fdv"),
+        type: "currency",
         sortable: true,
         minWidth: USD_COLUMN_MIN_WIDTH,
         wrap: false,
@@ -939,6 +942,7 @@ function createLifecycle() {
       {
         id: "market_cap",
         label: I18n.t("tokens-column-market-cap"),
+        type: "currency",
         sortable: true,
         minWidth: USD_COLUMN_MIN_WIDTH,
         wrap: false,
@@ -947,28 +951,28 @@ function createLifecycle() {
       {
         id: "price_change_h1",
         label: I18n.t("tokens-column-change-1h"),
+        type: "percent",
         sortable: true,
         minWidth: 90,
         wrap: false,
-        className: "dt-cell-numeric",
         render: (v) => percentCell(v),
       },
       {
         id: "price_change_h24",
         label: I18n.t("tokens-column-change-24h"),
+        type: "percent",
         sortable: true,
         minWidth: 90,
         wrap: false,
-        className: "dt-cell-numeric",
         render: (v) => percentCell(v),
       },
       {
         id: "txns_5m",
         label: I18n.t("tokens-column-txns-5m"),
+        type: "number",
         sortable: true,
         minWidth: 120,
         wrap: false,
-        className: "dt-cell-numeric",
         render: (_v, row) => {
           const buys = row.txns_5m_buys || 0;
           const sells = row.txns_5m_sells || 0;
@@ -979,10 +983,10 @@ function createLifecycle() {
       {
         id: "txns_1h",
         label: I18n.t("tokens-column-txns-1h"),
+        type: "number",
         sortable: true,
         minWidth: 120,
         wrap: false,
-        className: "dt-cell-numeric",
         render: (_v, row) => {
           const buys = row.txns_1h_buys || 0;
           const sells = row.txns_1h_sells || 0;
@@ -993,10 +997,10 @@ function createLifecycle() {
       {
         id: "txns_6h",
         label: I18n.t("tokens-column-txns-6h"),
+        type: "number",
         sortable: true,
         minWidth: 120,
         wrap: false,
-        className: "dt-cell-numeric",
         render: (_v, row) => {
           const buys = row.txns_6h_buys || 0;
           const sells = row.txns_6h_sells || 0;
@@ -1007,10 +1011,10 @@ function createLifecycle() {
       {
         id: "txns_24h",
         label: I18n.t("tokens-column-txns-24h"),
+        type: "number",
         sortable: true,
         minWidth: 120,
         wrap: false,
-        className: "dt-cell-numeric",
         render: (_v, row) => {
           const buys = row.txns_24h_buys || 0;
           const sells = row.txns_24h_sells || 0;
@@ -1021,6 +1025,7 @@ function createLifecycle() {
       {
         id: "risk_score",
         label: I18n.t("tokens-column-risk-score"),
+        type: "number",
         sortable: true,
         minWidth: 90,
         wrap: false,
