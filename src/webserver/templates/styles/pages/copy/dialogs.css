@@ -166,9 +166,11 @@
   min-width: 0;
 }
 
+/* The switch sits on the title line, not centred against the hint and warning
+   under it: the toggle is one title line tall. */
 .copy-switch-row {
   display: flex;
-  align-items: center;
+  align-items: flex-start;
   justify-content: space-between;
   gap: var(--spacing-md);
   cursor: pointer;
