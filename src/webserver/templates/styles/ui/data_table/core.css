@@ -458,6 +458,13 @@ body.dt-column-resizing * {
     "zero" 1;
 }
 
+/* The last column keeps a wider end gutter than the gaps between columns, so an
+   end-aligned value never reads as touching the table's edge or the scrollbar.
+   Auto-sizing measures the cell's scroll width, which includes this padding. */
+.data-table :is(th, td):last-child {
+  padding-inline-end: 20px;
+}
+
 /* Uniform row height mode */
 .data-table.uniform-rows tbody tr {
   /* Row height = line-height * lines + vertical padding (approx) */
