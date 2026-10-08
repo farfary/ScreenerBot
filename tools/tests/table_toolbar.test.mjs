@@ -11,7 +11,10 @@
 
 import test from "node:test";
 import assert from "node:assert/strict";
+import { readFileSync } from "node:fs";
 import "./fixtures/i18n_en.mjs";
+
+import { STYLES_ROOT, rulesIn } from "../lib/dashboard_ui.mjs";
 
 import { TableToolbarView } from "../../src/webserver/templates/scripts/ui/table_toolbar.js";
 
@@ -110,4 +113,16 @@ test("renders an explicit query row without changing control semantics", () => {
   assert.match(html, /data-layout="query-row"/);
   assert.match(html, /placeholder="Search signatures…"/);
   assert.doesNotMatch(html, /data-collapsible/);
+});
+
+test("a neutral toolbar button shares the surface of the toolbar's select triggers", () => {
+  const background = (path, subject) =>
+    rulesIn(readFileSync(`${STYLES_ROOT}/${path}`, "utf8"))
+      .filter(({ selector }) => selector === subject)
+      .map(({ body }) => /(?:^|;)\s*background(?:-color)?\s*:\s*([^;]+)/.exec(body)?.[1]?.trim())
+      .find(Boolean);
+
+  const trigger = background("ui/custom_select.css", ".cs-trigger");
+  assert.ok(trigger, "no .cs-trigger background in custom_select.css");
+  assert.equal(background("ui/table_toolbar.css", ".table-toolbar-btn"), trigger);
 });

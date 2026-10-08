@@ -804,7 +804,9 @@
   padding: 0 0.75rem;
   height: var(--table-toolbar-control-height);
   border-radius: var(--radius-md);
-  background: var(--bg-primary);
+  /* The same surface as the toolbar's select triggers and the shared `.btn`, so a
+     neutral action never reads as a darker, heavier control than its neighbours. */
+  background: var(--bg-secondary);
   color: var(--text-primary);
   font-weight: 500;
   font-size: 0.8125rem;
