@@ -3,6 +3,8 @@
 
 //! Regression coverage for the SQLite stores opened during desktop startup.
 
+mod common;
+
 use std::collections::BTreeSet;
 use std::process::Command;
 
@@ -84,20 +86,36 @@ fn startup_storage_matrix_survives_two_fresh_process_launches() {
     }
 
     let directory = tempfile::tempdir().expect("create isolated startup-storage directory");
+    assert_two_launches_keep_every_store(directory.path());
+}
+
+/// The owner's real stores, cloned through the backup API from read-only connections,
+/// open in two fresh processes with every row-level check clean. Whatever release created
+/// a store, the startup initializers must accept it.
+#[test]
+#[ignore = "requires a local ScreenerBot data directory; runs only against a throwaway clone"]
+fn real_stores_survive_two_fresh_process_launches_on_a_clone() {
+    let Some(clone) = common::clone_real_stores(DATABASE_FILES) else {
+        return;
+    };
+    assert_two_launches_keep_every_store(clone.path());
+}
+
+fn assert_two_launches_keep_every_store(directory: &std::path::Path) {
     for launch in 1..=2 {
         let status = Command::new(std::env::current_exe().expect("test executable"))
             .arg("--exact")
             .arg("startup_storage_matrix_survives_two_fresh_process_launches")
             .arg("--nocapture")
             .env(CHILD_ENV, "1")
-            .env("SCREENERBOT_DATA_DIR", directory.path())
+            .env("SCREENERBOT_DATA_DIR", directory)
             .status()
             .expect("run isolated startup-storage child");
         assert!(status.success(), "startup-storage launch {launch} failed");
     }
 
     for database in DATABASE_FILES {
-        let path = directory.path().join("data").join(database);
+        let path = directory.join("data").join(database);
         assert!(
             path.exists(),
             "production initializer did not create {database}"

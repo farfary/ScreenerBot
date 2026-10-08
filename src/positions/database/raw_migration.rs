@@ -736,4 +736,184 @@ mod tests {
             .unwrap();
         assert_eq!(rows, 0);
     }
+
+    /// The definition lines of a canonical DDL, comments removed: column definitions in
+    /// their canonical order, then the table constraints.
+    fn definition_lines(ddl: &str) -> (Vec<String>, Vec<String>) {
+        let body = &ddl[ddl.find('(').unwrap() + 1..ddl.rfind(')').unwrap()];
+        let lines: Vec<String> = body
+            .lines()
+            .map(|line| {
+                line.split("--")
+                    .next()
+                    .unwrap()
+                    .trim()
+                    .trim_end_matches(',')
+            })
+            .filter(|line| !line.is_empty())
+            .map(str::to_owned)
+            .collect();
+        assert_eq!(lines.len(), definition_items(ddl).unwrap().len());
+        lines
+            .into_iter()
+            .partition(|line| !line.starts_with("FOREIGN KEY"))
+    }
+
+    /// Fixed column orders a released file may hold: reversed, rotated, and every
+    /// other column first.
+    fn reorder(columns: &[String], order: usize) -> Vec<String> {
+        let mut columns = columns.to_vec();
+        match order {
+            0 => columns.reverse(),
+            1 => columns.rotate_left(7),
+            _ => {
+                let (even, odd): (Vec<_>, Vec<_>) = columns
+                    .into_iter()
+                    .enumerate()
+                    .partition(|(i, _)| i % 2 == 0);
+                columns = odd.into_iter().chain(even).map(|(_, c)| c).collect();
+            }
+        }
+        columns
+    }
+
+    fn shuffled_table(table: &AmountTable, order: usize, legacy_column: bool) -> String {
+        let (columns, constraints) = definition_lines(table.ddl);
+        let mut items = reorder(&columns, order);
+        if legacy_column {
+            for legacy in table.legacy_columns {
+                items.insert(
+                    items.len() / 2,
+                    format!("{legacy} BOOLEAN NOT NULL DEFAULT 0"),
+                );
+            }
+        }
+        items.extend(constraints);
+        format!(
+            "CREATE TABLE {} (\n  {}\n)",
+            table.name,
+            items.join(",\n  ")
+        )
+    }
+
+    fn table_shape(conn: &Connection, table: &str) -> (Vec<Column>, String) {
+        let sql: String = conn
+            .query_row(
+                "SELECT sql FROM sqlite_master WHERE type = 'table' AND name = ?1",
+                [table],
+                |row| row.get(0),
+            )
+            .unwrap();
+        let sql = sql.replacen(
+            &format!("CREATE TABLE \"{table}\""),
+            &format!("CREATE TABLE {table}"),
+            1,
+        );
+        (columns(conn, table).unwrap(), sql)
+    }
+
+    const ROWS: [&str; 3] = [
+        "INSERT INTO positions (id, chain_id, wallet_address, mint, symbol, name, entry_price, entry_time, position_type, entry_size_native, total_size_native, price_highest, price_lowest, token_amount, remaining_token_amount, total_exited_amount, origin_kind, management) VALUES (5, 'solana', 'wallet', 'mint', 'SYM', 'Token', 0.5, '2026-01-01T00:00:00Z', 'buy', 1.5, 2.5, 0.75, 0.25, '18446744073709551615', '9223372036854775808', '0', 'manual', 'user_only')",
+        "INSERT INTO position_entries (id, position_id, wallet_address, timestamp, amount, price, native_spent, transaction_signature, is_dca, fees_raw) VALUES (6, 5, 'wallet', '2026-01-01T00:00:00Z', '18446744073709551615', 0.5, 1.5, 'entry', 0, 11)",
+        "INSERT INTO position_exits (id, position_id, wallet_address, timestamp, amount, price, native_received, transaction_signature, is_partial, percentage, fees_raw) VALUES (7, 5, 'wallet', '2026-01-02T00:00:00Z', '9223372036854775807', 0.75, 2.0, 'exit', 1, 25.0, 13)",
+    ];
+
+    const ROW_VALUES: [&str; 3] = [
+        "SELECT id, chain_id, mint, entry_size_native, total_size_native, token_amount, remaining_token_amount, total_exited_amount, origin_kind, management FROM positions",
+        "SELECT id, position_id, amount, native_spent, transaction_signature, fees_raw FROM position_entries",
+        "SELECT id, position_id, amount, native_received, transaction_signature, fees_raw FROM position_exits",
+    ];
+
+    fn row_values(conn: &Connection) -> Vec<Vec<Value>> {
+        ROW_VALUES
+            .iter()
+            .map(|query| {
+                conn.query_row(query, [], |row| {
+                    (0..row.as_ref().column_count())
+                        .map(|i| row.get::<_, Value>(i))
+                        .collect::<rusqlite::Result<Vec<_>>>()
+                })
+                .unwrap()
+            })
+            .collect()
+    }
+
+    #[test]
+    fn any_released_column_order_is_rebuilt_into_the_canonical_shape() {
+        use crate::database::WriteTransaction;
+
+        let canonical = Connection::open_in_memory().unwrap();
+        for table in &TABLES {
+            canonical.execute_batch(table.ddl).unwrap();
+        }
+        for row in ROWS {
+            canonical.execute(row, []).unwrap();
+        }
+        let expected_rows = row_values(&canonical);
+
+        for order in 0..3 {
+            for legacy_column in [false, true] {
+                for legacy_indexes in [false, true] {
+                    let case = format!(
+                        "order {order}, legacy column {legacy_column}, legacy indexes {legacy_indexes}"
+                    );
+                    let mut conn = Connection::open_in_memory().unwrap();
+                    conn.execute_batch("PRAGMA foreign_keys = OFF").unwrap();
+                    for table in &TABLES {
+                        conn.execute_batch(&shuffled_table(table, order, legacy_column))
+                            .unwrap();
+                    }
+                    if legacy_indexes {
+                        conn.execute_batch(
+                            "CREATE INDEX idx_positions_wallet ON positions(wallet_address);
+                             CREATE INDEX idx_positions_mint ON positions(mint);
+                             CREATE INDEX idx_positions_entry_signature ON positions(entry_transaction_signature);
+                             CREATE INDEX idx_positions_exit_signature ON positions(exit_transaction_signature);",
+                        )
+                        .unwrap();
+                    }
+                    for row in ROWS {
+                        conn.execute(row, []).unwrap();
+                    }
+
+                    let tx = conn.write_tx().unwrap();
+                    let changed = canonicalize_amount_tables(&tx).unwrap();
+                    tx.commit().unwrap();
+
+                    assert_eq!(
+                        changed.rebuilt,
+                        ["position_entries", "position_exits", "positions"],
+                        "{case}"
+                    );
+                    let expected_indexes: Vec<String> = if legacy_indexes {
+                        LEGACY_POSITIONS_INDEXES
+                            .iter()
+                            .map(|name| (*name).to_owned())
+                            .collect()
+                    } else {
+                        Vec::new()
+                    };
+                    let mut dropped = changed.dropped_indexes.clone();
+                    dropped.sort();
+                    let mut expected_sorted = expected_indexes.clone();
+                    expected_sorted.sort();
+                    assert_eq!(dropped, expected_sorted, "{case}");
+                    for table in &TABLES {
+                        assert_eq!(
+                            table_shape(&conn, table.name),
+                            table_shape(&canonical, table.name),
+                            "{case}: {}",
+                            table.name
+                        );
+                    }
+                    assert_eq!(row_values(&conn), expected_rows, "{case}");
+                    assert_eq!(
+                        canonicalize_amount_tables(&conn).unwrap(),
+                        Canonicalized::default(),
+                        "{case}: a canonical store is left as it is"
+                    );
+                }
+            }
+        }
+    }
 }

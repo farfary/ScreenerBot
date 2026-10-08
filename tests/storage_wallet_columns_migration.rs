@@ -3,6 +3,8 @@
 
 //! Unit-neutral wallet-monitor column and table names through the production initializers.
 
+mod common;
+
 use rusqlite::Connection;
 use std::path::Path;
 use std::process::{Command, Output};
@@ -53,10 +55,11 @@ fn wallet_initializers_child() {
 }
 
 fn seed_main_wallet(dir: &Path) {
-    let wallets = open(dir, "wallets.db");
-    wallets
-        .execute_batch(include_str!("fixtures/v0.2.13-wallets.sql"))
-        .unwrap();
+    let wallets = common::seed_store(
+        &dir.join("data/wallets.db"),
+        screenerbot::database::WALLETS_DB,
+        include_str!("fixtures/v0.2.13-wallets.sql"),
+    );
     wallets
         .execute(
             "INSERT INTO wallets (id, name, address, encrypted_key, nonce, role) VALUES (17, 'main', 'address', 'ciphertext', 'nonce', 'main')",
@@ -66,10 +69,11 @@ fn seed_main_wallet(dir: &Path) {
 }
 
 fn seed_legacy_monitor(dir: &Path) {
-    let monitor = open(dir, "wallet.db");
-    monitor
-        .execute_batch(include_str!("fixtures/v0.2.13-wallet-monitor.sql"))
-        .unwrap();
+    let monitor = common::seed_store(
+        &dir.join("data/wallet.db"),
+        screenerbot::database::WALLET_MONITOR_DB,
+        include_str!("fixtures/v0.2.13-wallet-monitor.sql"),
+    );
     monitor
         .execute(
             "INSERT INTO wallet_snapshots (id, wallet_address, snapshot_time, sol_balance, sol_balance_lamports, total_equity_sol, total_tokens_count) VALUES (23, 'address', '2025-01-02T00:00:00+00:00', 1.5, 1500000000, 4.5, 2)",

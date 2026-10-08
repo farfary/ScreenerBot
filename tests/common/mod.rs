@@ -677,6 +677,30 @@ pub fn filters_default_dex_only() -> screenerbot::config::FilteringConfig {
     config
 }
 
+// ==================== STORAGE FIXTURES ====================
+
+/// Create a store fixture the way the app creates that store: configured through
+/// `database::configure_connection` with the store's production settings (WAL journal,
+/// incremental auto-vacuum, foreign keys), then seeded with `sql`. Returns the connection
+/// so the test can add its own rows.
+///
+/// A fixture made with a bare `Connection::open` keeps the rollback journal and no
+/// auto-vacuum, a shape no installed app has, and hides failures that only appear when a
+/// second pooled connection configures itself against a WAL store.
+pub fn seed_store(
+    path: &Path,
+    config: screenerbot::database::DbConfig,
+    sql: &str,
+) -> rusqlite::Connection {
+    if let Some(parent) = path.parent() {
+        std::fs::create_dir_all(parent).expect("create fixture directory");
+    }
+    let conn = rusqlite::Connection::open(path).expect("open fixture store");
+    screenerbot::database::configure_connection(&conn, config).expect("configure fixture store");
+    conn.execute_batch(sql).expect("seed fixture store");
+    conn
+}
+
 // ==================== REAL DATABASE (ignored tier) ====================
 
 /// Where the owner's live databases live when `SCREENERBOT_DATA_DIR` is unset.
@@ -717,43 +741,50 @@ fn real_data_dir() -> Option<PathBuf> {
 ///
 /// Filtering is not read-only — a snapshot writes rejection status, priorities and stats
 /// back — so pointing the process straight at the live files would mutate the owner's
-/// database and contend with a running bot. Copying is what makes the real-data tier
-/// safe. macOS/APFS turns `fs::copy` into a copy-on-write clone, so half a gigabyte costs
-/// milliseconds and no extra disk.
+/// database and contend with a running bot. Cloning through the backup API from a
+/// read-only connection is what makes the real-data tier safe.
 ///
 /// Returns `None` (with a printed SKIP line) when no real database is present, so the
 /// test self-skips on a fresh machine instead of failing. `tokens.db` is required;
 /// `pools.db`/`ohlcvs.db` are copied when present and merely enrich the derived flags.
 pub fn real_db_env() -> Option<TempDir> {
+    if !real_data_dir().is_some_and(|source| source.join("tokens.db").is_file()) {
+        eprintln!("SKIP real-db: no ScreenerBot data directory with a tokens.db found");
+        return None;
+    }
+    let dir = clone_real_stores(&["tokens.db", "pools.db", "ohlcvs.db", "transactions.db"])?;
+
+    // SAFETY: single-threaded test setup, before any path/config access.
+    std::env::set_var("SCREENERBOT_DATA_DIR", dir.path());
+    ensure_config();
+    install_chain_runtimes();
+    Some(dir)
+}
+
+/// Clone the named stores of the owner's REAL data directory into `<temp>/data`, without
+/// pointing the process at it, for tests that launch fresh processes on the clone. A store
+/// the directory does not hold is left for the initializers to create. Returns `None`
+/// (with a printed SKIP line) when no data directory is present.
+pub fn clone_real_stores(names: &[&str]) -> Option<TempDir> {
     let Some(source) = real_data_dir() else {
         eprintln!("SKIP real-db: no ScreenerBot data directory found");
         return None;
     };
-    if !source.join("tokens.db").is_file() {
-        eprintln!("SKIP real-db: {} has no tokens.db", source.display());
-        return None;
-    }
-
     let dir = tempfile::tempdir().expect("create temp data dir");
     let target = dir.path().join("data");
     std::fs::create_dir_all(&target).expect("create data subdir");
 
     let started = std::time::Instant::now();
-    let mut copied = 0u64;
-    for name in ["tokens.db", "pools.db", "ohlcvs.db", "transactions.db"] {
-        copied += copy_db(&source, &target, name);
-    }
+    let copied: u64 = names
+        .iter()
+        .map(|name| copy_db(&source, &target, name))
+        .sum();
     eprintln!(
         "real-db: cloned {:.1} MB from {} in {:?}",
         copied as f64 / (1024.0 * 1024.0),
         source.display(),
         started.elapsed()
     );
-
-    // SAFETY: single-threaded test setup, before any path/config access.
-    std::env::set_var("SCREENERBOT_DATA_DIR", dir.path());
-    ensure_config();
-    install_chain_runtimes();
     Some(dir)
 }
 
@@ -835,17 +866,43 @@ fn prune_unresolved_decimals(tokens_db: &Path) {
     );
 }
 
-/// Copy one database plus its WAL sidecars (a running bot keeps recent writes there;
-/// without them the clone reads back as of the last checkpoint). Returns bytes copied.
+/// Clone one database through the SQLite backup API, which reads a consistent snapshot
+/// including the committed pages still in the source's WAL. The source is opened
+/// read-only; a `-wal` without its `-shm` would make SQLite create the `-shm` beside the
+/// live store, so that store is skipped. Returns the bytes written.
 fn copy_db(source: &Path, target: &Path, name: &str) -> u64 {
-    let mut total = 0;
-    for suffix in ["", "-wal", "-shm"] {
-        let from = source.join(format!("{name}{suffix}"));
-        if from.is_file() {
-            total += std::fs::copy(&from, target.join(format!("{name}{suffix}"))).unwrap_or(0);
-        }
+    let from = source.join(name);
+    if !from.is_file() {
+        return 0;
     }
-    total
+    if source.join(format!("{name}-wal")).is_file() && !source.join(format!("{name}-shm")).is_file()
+    {
+        eprintln!("SKIP real-db: {name} has a -wal without its -shm");
+        return 0;
+    }
+    let to = target.join(name);
+    backup_store(&from, &to);
+    std::fs::metadata(&to).map(|meta| meta.len()).unwrap_or(0)
+}
+
+/// Copy `from` to `to` with the SQLite backup API from a read-only connection, leaving a
+/// single-file copy in rollback-journal mode that the test is free to reopen and migrate.
+pub fn backup_store(from: &Path, to: &Path) {
+    let source = rusqlite::Connection::open_with_flags(
+        from,
+        rusqlite::OpenFlags::SQLITE_OPEN_READ_ONLY | rusqlite::OpenFlags::SQLITE_OPEN_NO_MUTEX,
+    )
+    .unwrap_or_else(|e| panic!("open {} read-only: {e}", from.display()));
+    let mut destination = rusqlite::Connection::open(to)
+        .unwrap_or_else(|e| panic!("create clone {}: {e}", to.display()));
+    rusqlite::backup::Backup::new(&source, &mut destination)
+        .and_then(|backup| {
+            backup.run_to_completion(4096, std::time::Duration::from_millis(10), None)
+        })
+        .unwrap_or_else(|e| panic!("clone {}: {e}", from.display()));
+    destination
+        .query_row("PRAGMA journal_mode = DELETE", [], |_| Ok(()))
+        .expect("store the clone as a single file");
 }
 
 /// Open the cloned tokens database and install it as the Solana token database, then

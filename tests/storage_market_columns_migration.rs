@@ -3,7 +3,10 @@
 
 //! Unit-neutral token, pool and OHLCV column names through the production initializers.
 
+mod common;
+
 use rusqlite::Connection;
+use screenerbot::database;
 use screenerbot::tokens::schema::SCHEMA_VERSION as TOKENS_SCHEMA_VERSION;
 use std::path::Path;
 use std::process::{Command, Output};
@@ -84,10 +87,11 @@ fn current_ohlcv_data_version() -> i64 {
 }
 
 fn seed_legacy_tokens(dir: &Path) {
-    let tokens = open(dir, "tokens.db");
-    tokens
-        .execute_batch(include_str!("fixtures/v0.2.13-tokens.sql"))
-        .unwrap();
+    let tokens = common::seed_store(
+        &dir.join("data").join("tokens.db"),
+        database::TOKENS_DB,
+        include_str!("fixtures/v0.2.13-tokens.sql"),
+    );
     tokens
         .execute(
             "INSERT INTO tokens (chain_id, mint, symbol, name, decimals, first_discovered_at, metadata_last_fetched_at, decimals_last_fetched_at) VALUES ('solana', 'MINT', 'TOK', 'Token', 9, 1, 1, 1)",
@@ -106,10 +110,11 @@ fn seed_legacy_tokens(dir: &Path) {
 }
 
 fn seed_legacy_pools(dir: &Path) {
-    let pools = open(dir, "pools.db");
-    pools
-        .execute_batch(include_str!("fixtures/v0.2.13-pools.sql"))
-        .unwrap();
+    let pools = common::seed_store(
+        &dir.join("data").join("pools.db"),
+        database::POOLS_DB,
+        include_str!("fixtures/v0.2.13-pools.sql"),
+    );
     pools
         .execute(
             "INSERT INTO price_history (id, chain_id, mint, pool_address, price_usd, price_sol, confidence, slot, timestamp_unix, sol_reserves, token_reserves, created_at) VALUES (31, 'solana', 'MINT', 'POOL', 2.0, 0.01, 1.0, 7, 60, 3.25, 400.0, '2026-01-01T00:01:00Z')",
@@ -120,10 +125,11 @@ fn seed_legacy_pools(dir: &Path) {
 }
 
 fn seed_legacy_ohlcv(dir: &Path, data_version: i64) {
-    let ohlcv = open(dir, "ohlcvs.db");
-    ohlcv
-        .execute_batch(include_str!("fixtures/v0.2.13-ohlcv.sql"))
-        .unwrap();
+    let ohlcv = common::seed_store(
+        &dir.join("data").join("ohlcvs.db"),
+        database::OHLCVS_DB,
+        include_str!("fixtures/v0.2.13-ohlcv.sql"),
+    );
     ohlcv
         .execute(
             "INSERT INTO ohlcv_pools (id, chain_id, mint, pool_address, dex, liquidity, is_default, is_sol_pair) VALUES (41, 'solana', 'MINT', 'POOL', 'dex', 5.0, 1, 0)",

@@ -2292,6 +2292,82 @@ fn sqlite_writers_use_immediate_transactions() {
     );
 }
 
+/// Files that still open a transaction outside `WriteTransaction::write_tx`, through
+/// `unchecked_transaction()` (DEFERRED) or a raw `BEGIN` statement, with the number of
+/// such sites in production code. The list only shrinks: a converted file lowers or
+/// removes its entry in the same change, and no store's schema open may appear here.
+const UNMANAGED_TRANSACTION_SITES: &[(&str, usize)] = &[
+    ("assistant/chat/database_queries.rs", 2),
+    ("assistant/scheduled/database.rs", 2),
+    ("events/database/mod.rs", 1),
+    ("llm_analysis/database.rs", 1),
+    ("ohlcvs/database/candles.rs", 1),
+    ("pools/database/writer.rs", 1),
+    ("transactions/database/operations_queries.rs", 1),
+    ("wallets/database/wallet_queries.rs", 2),
+];
+
+/// Production sites that open a transaction by hand: `unchecked_transaction()` is as
+/// DEFERRED as `.transaction()`, and a raw `BEGIN` statement bypasses the owner of the
+/// write lock just the same.
+fn unmanaged_transaction_sites(contents: &str) -> usize {
+    code_lines(&production_text(contents))
+        .lines()
+        .filter(|line| {
+            let line = line.trim_start();
+            !line.starts_with("//")
+                && (line.contains(".unchecked_transaction()") || line.contains("\"BEGIN"))
+        })
+        .count()
+}
+
+/// The positions schema open refused healthy stores at random: its DEFERRED migration
+/// transaction read before its first write while the pool configured a second connection,
+/// and the `.transaction()` scan above does not see `unchecked_transaction()`. Every other way of opening a transaction by hand is held to the
+/// shrinking [`UNMANAGED_TRANSACTION_SITES`] list.
+#[test]
+fn sqlite_writers_do_not_open_unmanaged_transactions() {
+    let mut counts: Vec<(String, usize)> = Vec::new();
+    for (relative, contents) in walk_src() {
+        if relative == Path::new("database/transaction.rs") {
+            continue;
+        }
+        let count = unmanaged_transaction_sites(&contents);
+        if count > 0 {
+            counts.push((relative.to_string_lossy().into_owned(), count));
+        }
+    }
+    let mut problems = Vec::new();
+    for (path, count) in &counts {
+        match UNMANAGED_TRANSACTION_SITES
+            .iter()
+            .find(|(file, _)| file == path)
+        {
+            None => problems.push(format!(
+                "src/{path}: {count} unmanaged transactions, not on the allowlist"
+            )),
+            Some((_, listed)) if listed != count => problems.push(format!(
+                "src/{path}: {count} unmanaged transactions, the allowlist says {listed}"
+            )),
+            Some(_) => {}
+        }
+    }
+    for (file, listed) in UNMANAGED_TRANSACTION_SITES {
+        if !counts.iter().any(|(path, _)| path == file) {
+            problems.push(format!(
+                "src/{file}: allowlisted for {listed} unmanaged transactions but has none"
+            ));
+        }
+    }
+    assert!(
+        problems.is_empty(),
+        "open write transactions with `write_tx()` from `crate::database::WriteTransaction`, \
+         never `unchecked_transaction()` or a raw `BEGIN`; lower or remove the allowlist entry \
+         in the same change:\n{}",
+        problems.join("\n")
+    );
+}
+
 /// The vendor façade is not a loophole. `shared_modules_never_import_solana_vendor_crates_raw`
 /// only inspects lines beginning `use <crate>::`, so a fully-qualified
 /// `crate::chains::solana::solana_sdk::pubkey::Pubkey` in a type position slipped

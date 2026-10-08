@@ -140,7 +140,9 @@ impl PositionsDatabase {
 
         // Nothing has been written yet: a newer store is refused unchanged, and the
         // backup is the store as this upgrade found it.
-        let upgrade_from = match self.stored_schema(&tx)? {
+        let stored_schema = self.stored_schema(&tx)?;
+        let version_current = matches!(stored_schema, StoredSchema::Recorded(stored) if stored == self.schema_version);
+        let upgrade_from = match stored_schema {
             StoredSchema::NewFile => None,
             StoredSchema::Unrecorded => Some(None),
             StoredSchema::Recorded(stored) if stored > self.schema_version => {
@@ -242,13 +244,17 @@ impl PositionsDatabase {
             );
         }
 
-        tx.execute(
-            "INSERT OR REPLACE INTO position_metadata (key, value) VALUES ('schema_version', ?1)",
-            params![self.schema_version.to_string()],
-        )
-        .map_err(|e| Error::SchemaMigration {
-            detail: format!("failed to set positions schema version: {e}"),
-        })?;
+        // A store already at this version keeps its row untouched, so reopening it
+        // writes nothing.
+        if !version_current {
+            tx.execute(
+                "INSERT OR REPLACE INTO position_metadata (key, value) VALUES ('schema_version', ?1)",
+                params![self.schema_version.to_string()],
+            )
+            .map_err(|e| Error::SchemaMigration {
+                detail: format!("failed to set positions schema version: {e}"),
+            })?;
+        }
 
         self.run_data_migrations(&tx, log_initialization)?;
 

@@ -3,6 +3,8 @@
 
 //! Released copy-trading storage through the production opener: unit-neutral column names.
 
+mod common;
+
 use rusqlite::Connection;
 use screenerbot::chains::ChainId;
 use screenerbot::trader::copy::CopyDatabase;
@@ -70,9 +72,11 @@ fn schema(conn: &Connection) -> Vec<(String, String)> {
 }
 
 fn released(path: &Path) {
-    let conn = Connection::open(path).unwrap();
-    conn.execute_batch(include_str!("fixtures/v0.2.13-copy.sql"))
-        .unwrap();
+    let conn = common::seed_store(
+        path,
+        screenerbot::database::COPY_TRADING_DB,
+        include_str!("fixtures/v0.2.13-copy.sql"),
+    );
     conn.execute_batch(
         "INSERT INTO copy_tasks (id, chain_id, target_address, label, enabled, mode_json, \
              sizing_json, exit_mode_json, exit_policy_json, max_sol_per_trade, max_sol_per_token, \

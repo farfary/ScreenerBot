@@ -35,9 +35,7 @@ async fn released_subject_deltas_migrate_losslessly_and_reopen_idempotently() {
     let _guard = common::isolated_env();
     common::configure_own_wallet();
     let path = screenerbot::paths::get_transactions_db_path();
-    std::fs::create_dir_all(path.parent().unwrap()).unwrap();
-    let conn = Connection::open(&path).unwrap();
-    conn.execute_batch(LEGACY_SCHEMA).unwrap();
+    let conn = common::seed_store(&path, screenerbot::database::TRANSACTIONS_DB, LEGACY_SCHEMA);
     conn.execute(
         "INSERT INTO db_metadata (key, value) VALUES ('schema_version', '7')",
         [],

@@ -20,7 +20,10 @@
 //! = 1 — the state a real v0.2.13 database holds — which is exactly why the
 //! chain-column migration gates on the live schema and never on that stamp.
 
+mod common;
+
 use rusqlite::Connection;
+use screenerbot::database::{self, DbConfig};
 use std::process::Command;
 
 const CHILD_ENV: &str = "SCREENERBOT_CHAIN_COLUMNS_MIGRATION_CHILD";
@@ -74,11 +77,8 @@ const TABLES_WITHOUT_CHAIN_SCOPE: &[(&str, &[&str])] = &[
     ("ai.db", &["ai_instructions"]),
 ];
 
-fn seed_fixture(directory: &std::path::Path, database: &str, fixture: &str) {
-    let data = directory.join("data");
-    std::fs::create_dir_all(&data).expect("create fixture data directory");
-    let conn = Connection::open(data.join(database)).expect("open fixture database");
-    conn.execute_batch(fixture).expect("seed v0.2.13 fixture");
+fn seed_fixture(directory: &std::path::Path, database: &str, config: DbConfig, fixture: &str) {
+    common::seed_store(&directory.join("data").join(database), config, fixture);
 }
 
 fn run_child(directory: &std::path::Path) {
@@ -123,31 +123,37 @@ fn v0_2_13_fixtures_gain_chain_scope_and_survive_a_second_boot() {
     seed_fixture(
         fixture_dir.path(),
         "events.db",
+        database::EVENTS_WRITE_DB,
         include_str!("fixtures/v0.2.13-events.sql"),
     );
     seed_fixture(
         fixture_dir.path(),
         "rpc_stats.db",
+        database::RPC_STATS_DB,
         include_str!("fixtures/v0.2.13-rpc_stats.sql"),
     );
     seed_fixture(
         fixture_dir.path(),
         "strategies.db",
+        database::STRATEGIES_DB,
         include_str!("fixtures/v0.2.13-strategies.sql"),
     );
     seed_fixture(
         fixture_dir.path(),
         "tools.db",
+        database::TOOLS_DB,
         include_str!("fixtures/v0.2.13-tools.sql"),
     );
     seed_fixture(
         fixture_dir.path(),
         "actions.db",
+        database::ACTIONS_WRITE_DB,
         include_str!("fixtures/v0.2.13-actions.sql"),
     );
     seed_fixture(
         fixture_dir.path(),
         "ai.db",
+        database::AI_DB,
         include_str!("fixtures/v0.2.13-ai.sql"),
     );
 

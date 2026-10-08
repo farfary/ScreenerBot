@@ -123,8 +123,11 @@ fn data_dir() -> tempfile::TempDir {
 }
 
 fn seed_legacy(dir: &Path) {
-    let conn = open(dir);
-    conn.execute_batch(LEGACY_SUBJECT_DELTAS).unwrap();
+    let conn = common::seed_store(
+        &database_path(dir),
+        screenerbot::database::TRANSACTIONS_DB,
+        LEGACY_SUBJECT_DELTAS,
+    );
     conn.execute_batch(LEGACY_RAW_TRANSACTIONS).unwrap();
     conn.execute_batch(LEGACY_PROCESSED_TRANSACTIONS).unwrap();
     conn.execute_batch(

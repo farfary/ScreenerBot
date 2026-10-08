@@ -59,11 +59,7 @@ fn configure_own_wallet() -> String {
 /// one `raw_transactions` row with an EMPTY `wallet_address` to exercise the
 /// backfill rule.
 fn seed_v4_database(path: &std::path::Path, own_wallet: &str) {
-    if let Some(parent) = path.parent() {
-        std::fs::create_dir_all(parent).expect("create data directory for v4 fixture");
-    }
-    let conn = Connection::open(path).expect("open v4 fixture database");
-
+    let conn = common::seed_store(path, screenerbot::database::TRANSACTIONS_DB, "");
     conn.execute_batch(
         "
         CREATE TABLE db_metadata (

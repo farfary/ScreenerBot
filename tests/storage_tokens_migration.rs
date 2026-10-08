@@ -220,7 +220,7 @@ fn token_pools_dex_column_survives_migration_unrewritten() {
     let db_path_str = db_path.to_string_lossy().to_string();
 
     {
-        let conn = Connection::open(&db_path).expect("create legacy fixture");
+        let conn = common::seed_store(&db_path, screenerbot::database::TOKENS_DB, "");
         for statement in CREATE_TABLES.iter() {
             conn.execute(statement, [])
                 .expect("create chain-scoped table from current schema");
@@ -285,7 +285,7 @@ fn already_versioned_database_missing_an_additive_column_self_heals() {
     let db_path_str = db_path.to_string_lossy().to_string();
 
     {
-        let conn = Connection::open(&db_path).expect("create already-versioned fixture");
+        let conn = common::seed_store(&db_path, screenerbot::database::TOKENS_DB, "");
         for statement in schema_missing_favorites_notes_column() {
             conn.execute(&statement, [])
                 .expect("create chain-scoped table without the notes column");

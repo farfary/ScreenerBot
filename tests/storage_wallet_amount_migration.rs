@@ -3,6 +3,8 @@
 
 //! Complete v0.2.13 wallet schemas through the production initializers.
 
+mod common;
+
 use rusqlite::{params, Connection};
 use std::path::Path;
 use std::process::Command;
@@ -45,20 +47,22 @@ fn v0_2_13_wallet_amount_storage_survives_two_initializers() {
 
     let dir = tempfile::tempdir().unwrap();
     std::fs::create_dir_all(dir.path().join("data")).unwrap();
-    let wallets = open(dir.path(), "wallets.db");
-    wallets
-        .execute_batch(include_str!("fixtures/v0.2.13-wallets.sql"))
-        .unwrap();
+    let wallets = common::seed_store(
+        &dir.path().join("data/wallets.db"),
+        screenerbot::database::WALLETS_DB,
+        include_str!("fixtures/v0.2.13-wallets.sql"),
+    );
     wallets.execute("INSERT INTO wallets (id, name, address, encrypted_key, nonce, role, notes, created_at) VALUES (17, 'main', 'address', 'ciphertext', 'nonce', 'main', 'kept', '2025-01-01')", []).unwrap();
     for (i, amount) in CASES.iter().enumerate() {
         wallets.execute("INSERT INTO wallet_token_balances (wallet_id, mint, balance, ui_amount, decimals, symbol, name, is_token_2022, updated_at) VALUES (17, ?1, ?2, 12.5, 9, 'SYM', 'Named', 1, '2025-01-02')", params![format!("mint-{i}"), *amount as i64]).unwrap();
     }
     drop(wallets);
 
-    let monitor = open(dir.path(), "wallet.db");
-    monitor
-        .execute_batch(include_str!("fixtures/v0.2.13-wallet-monitor.sql"))
-        .unwrap();
+    let monitor = common::seed_store(
+        &dir.path().join("data/wallet.db"),
+        screenerbot::database::WALLET_MONITOR_DB,
+        include_str!("fixtures/v0.2.13-wallet-monitor.sql"),
+    );
     monitor.execute("INSERT INTO wallet_snapshots (id, wallet_address, snapshot_time, sol_balance, sol_balance_lamports, total_equity_sol, total_tokens_count, total_nfts_count, created_at) VALUES (23, 'address', '2025-01-02T00:00:00+00:00', 1.5, 1500000000, 4.5, 4, 1, '2025-01-02')", []).unwrap();
     monitor.execute("INSERT INTO nft_balances (id, snapshot_id, mint, account_address, name, symbol, image_url, is_token_2022, created_at) VALUES (31, 23, 'nft', 'account', 'NFT', 'N', 'image', 1, '2025-01-02')", []).unwrap();
     monitor.execute("INSERT INTO wallet_metadata (key, value, updated_at) VALUES ('sentinel', 'kept', '2025-01-02')", []).unwrap();
@@ -215,21 +219,19 @@ fn v0_2_13_wallet_amount_storage_survives_two_initializers() {
 
 #[test]
 fn unknown_wallet_amount_schema_leaves_original_data_and_ddl() {
-    for (file, fixture, table, row) in [
-        ("wallets.db", include_str!("fixtures/v0.2.13-wallets.sql"), "wallet_token_balances", "INSERT INTO wallets (id, name, address, encrypted_key, nonce, role) VALUES (17, 'main', 'address', 'ciphertext', 'nonce', 'main'); INSERT INTO wallet_token_balances (wallet_id, mint, balance, ui_amount, decimals, updated_at) VALUES (17, 'mint', -1, 1, 9, '2025-01-02');"),
-        ("wallet.db", include_str!("fixtures/v0.2.13-wallet-monitor.sql"), "token_balances", "INSERT INTO wallet_snapshots (id, wallet_address, snapshot_time, sol_balance, sol_balance_lamports) VALUES (23, 'address', '2025-01-02T00:00:00+00:00', 1, 1000000000); INSERT INTO token_balances (snapshot_id, mint, balance, balance_ui) VALUES (23, 'mint', -1, 1);"),
+    for (file, config, fixture, table, row) in [
+        ("wallets.db", screenerbot::database::WALLETS_DB, include_str!("fixtures/v0.2.13-wallets.sql"), "wallet_token_balances", "INSERT INTO wallets (id, name, address, encrypted_key, nonce, role) VALUES (17, 'main', 'address', 'ciphertext', 'nonce', 'main'); INSERT INTO wallet_token_balances (wallet_id, mint, balance, ui_amount, decimals, updated_at) VALUES (17, 'mint', -1, 1, 9, '2025-01-02');"),
+        ("wallet.db", screenerbot::database::WALLET_MONITOR_DB, include_str!("fixtures/v0.2.13-wallet-monitor.sql"), "token_balances", "INSERT INTO wallet_snapshots (id, wallet_address, snapshot_time, sol_balance, sol_balance_lamports) VALUES (23, 'address', '2025-01-02T00:00:00+00:00', 1, 1000000000); INSERT INTO token_balances (snapshot_id, mint, balance, balance_ui) VALUES (23, 'mint', -1, 1);"),
     ] {
         let dir = tempfile::tempdir().unwrap();
         std::fs::create_dir_all(dir.path().join("data")).unwrap();
-        let conn = open(dir.path(), file);
-        conn.execute_batch(fixture).unwrap();
+        let conn = common::seed_store(&dir.path().join("data").join(file), config, fixture);
         conn.execute_batch(row).unwrap();
         conn.execute(&format!("ALTER TABLE {table} ADD COLUMN unfamiliar TEXT"), []).unwrap();
         let before: (String, i64) = conn.query_row(&format!("SELECT sql, (SELECT balance FROM {table} WHERE mint = 'mint') FROM sqlite_master WHERE type = 'table' AND name = ?1"), [table], |r| Ok((r.get(0)?, r.get(1)?))).unwrap();
         drop(conn);
         if file == "wallet.db" {
-            let wallets = open(dir.path(), "wallets.db");
-            wallets.execute_batch(include_str!("fixtures/v0.2.13-wallets.sql")).unwrap();
+            let wallets = common::seed_store(&dir.path().join("data/wallets.db"), screenerbot::database::WALLETS_DB, include_str!("fixtures/v0.2.13-wallets.sql"));
             wallets.execute("INSERT INTO wallets (id, name, address, encrypted_key, nonce, role) VALUES (17, 'main', 'address', 'ciphertext', 'nonce', 'main')", []).unwrap();
         }
         let status = Command::new(std::env::current_exe().unwrap())
