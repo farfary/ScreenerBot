@@ -13,9 +13,10 @@
  *   .boosted-row              - any active boost, a faint wash
  *   .boosted-row.golden-row   - the Golden tier, the same gold, stronger
  *
- * The gold is applied as an OVERLAY gradient over the row's own background rather
- * than a flat colour, so the zebra stripe, the hover surface and both themes keep
- * showing through and every value stays legible. No left accent bar (house rule),
+ * The gold is the row's `--dt-row-wash` (DataTable core), a translucent layer over
+ * the row's own background rather than a flat colour, so the zebra stripe, the
+ * hover surface and both themes keep showing through, every value stays legible,
+ * and the pinned cells carry the same wash. No left accent bar (house rule),
  * no background behind the glyph (house rule) - the glyph is bare gold.
  */
 
@@ -50,30 +51,29 @@
    ============================================ */
 
 .data-table tbody tr.boosted-row {
-  background-image: linear-gradient(var(--boost-wash), var(--boost-wash));
+  --dt-row-wash: var(--boost-wash);
+
   border-bottom-color: var(--boost-edge);
 }
 
 .data-table tbody tr.boosted-row:hover {
-  background-image: linear-gradient(var(--boost-wash-strong), var(--boost-wash-strong));
+  --dt-row-wash: var(--boost-wash-strong);
 }
 
 .data-table tbody tr.boosted-row.golden-row {
-  background-image: linear-gradient(var(--boost-wash-golden), var(--boost-wash-golden));
+  --dt-row-wash: var(--boost-wash-golden);
+
   border-bottom-color: var(--boost-edge-golden);
 }
 
 .data-table tbody tr.boosted-row.golden-row:hover {
-  background-image: linear-gradient(
-    var(--boost-wash-golden-strong),
-    var(--boost-wash-golden-strong)
-  );
+  --dt-row-wash: var(--boost-wash-golden-strong);
 }
 
 /* A selected row must keep reading as selected - selection is the user's own
    action and outranks a purchased mark. */
 .data-table tbody tr.boosted-row.selected {
-  background-image: none;
+  --dt-row-wash: transparent;
 }
 
 /* ============================================

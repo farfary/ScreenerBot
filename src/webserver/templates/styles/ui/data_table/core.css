@@ -410,8 +410,14 @@ body.dt-column-resizing * {
   box-shadow: 0 0 6px rgb(59, 130, 246, 0.6);
 }
 
-/* Table body */
+/* Table body. A row state (a boost, a pending position) tints the row by setting
+   `--dt-row-wash`, a translucent colour layered over whatever surface the row has
+   (zebra, hover), never by painting its own background: the pinned cells read the
+   same variable, so the tint covers the whole row. */
 .data-table tbody tr {
+  --dt-row-wash: transparent;
+
+  background-image: linear-gradient(var(--dt-row-wash), var(--dt-row-wash));
   border-bottom: 1px solid var(--border-color);
   transition: all var(--transition-fast);
   min-height: 44px;
@@ -422,24 +428,27 @@ body.dt-column-resizing * {
 }
 
 .data-table tbody tr:hover {
-  background: var(--bg-hover);
+  background-color: var(--bg-hover);
   box-shadow: 0 2px 4px rgb(0, 0, 0, 0.05);
 }
 
+/* Selection is the user's own action and outranks any row state's tint. */
 .data-table tbody tr.selected {
-  background: rgb(59, 130, 246, 0.1);
+  --dt-row-wash: transparent;
+
+  background-color: rgb(59, 130, 246, 0.1);
 }
 
 .data-table tbody tr.selected:hover {
-  background: rgb(59, 130, 246, 0.15);
+  background-color: rgb(59, 130, 246, 0.15);
 }
 
 .data-table.zebra tbody tr:nth-child(even) {
-  background: rgb(0, 0, 0, 0.02);
+  background-color: rgb(0, 0, 0, 0.02);
 }
 
 .data-table.zebra tbody tr:nth-child(even):hover {
-  background: var(--bg-hover);
+  background-color: var(--bg-hover);
 }
 
 .data-table td {
@@ -802,14 +811,15 @@ body.dt-column-resizing * {
   background: var(--dt-sticky-surface);
 }
 
-/* Opaque body backgrounds. Every row state sets `--dt-sticky-surface`, an opaque
-   colour, and the pinned cell paints it; the edge fade below reads the same value,
-   so scrolled cells hide behind the pinned group in every state. Translucency here
-   would let the columns scrolling beneath show through. */
+/* Opaque body backgrounds. Every row surface (zebra, hover, selection) sets
+   `--dt-sticky-surface`, an opaque colour, and the pinned cell paints it with the
+   row's `--dt-row-wash` on top; the edge fade below reads the same two values, so
+   scrolled cells hide behind the pinned group and a row tint spans the whole row.
+   Translucency here would let the columns scrolling beneath show through. */
 .data-table td.dt-col-sticky {
   --dt-sticky-surface: var(--bg-primary);
 
-  background: var(--dt-sticky-surface);
+  background: linear-gradient(var(--dt-row-wash), var(--dt-row-wash)) var(--dt-sticky-surface);
 }
 
 /* Zebra even rows: the zebra overlay (matches `.data-table.zebra tbody
@@ -865,6 +875,7 @@ body.dt-column-resizing * {
   transform: translateX(calc(var(--dir-sign) * 100%));
   background:
     linear-gradient(var(--to-inline-end), var(--dt-pin-shadow), transparent),
+    linear-gradient(var(--to-inline-end), var(--dt-row-wash, transparent) 40%, transparent),
     linear-gradient(
       var(--to-inline-end),
       var(--dt-sticky-surface) 40%,

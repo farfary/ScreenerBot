@@ -61,9 +61,9 @@
 /* ===========================================================================
    Live row state — tint + caption
    An in-flight or failed row carries a faint tint and a caption under the token
-   symbol; a healthy open row carries neither. The tint is layered with
-   background-image so it survives zebra striping regardless of selector
-   specificity.
+   symbol; a healthy open row carries neither. The tint is the row's
+   `--dt-row-wash` (DataTable core), layered over zebra and hover surfaces and
+   painted by the pinned cells too.
    =========================================================================== */
 
 /* Compact state caption under the token symbol (active states only) */
@@ -116,19 +116,18 @@
 }
 
 /* In-flight buy */
-.pos-row-buying > td {
-  background-image: linear-gradient(0deg, rgb(245, 158, 11, 0.09), rgb(245, 158, 11, 0.09));
+.data-table tbody tr.pos-row-buying {
+  --dt-row-wash: rgb(245, 158, 11, 0.09);
 }
 
 /* In-flight sell or close */
-.pos-row-selling > td,
-.pos-row-closing > td {
-  background-image: linear-gradient(0deg, rgb(251, 146, 60, 0.09), rgb(251, 146, 60, 0.09));
+.data-table tbody tr:is(.pos-row-selling, .pos-row-closing) {
+  --dt-row-wash: rgb(251, 146, 60, 0.09);
 }
 
 /* Failed buy */
-.pos-row-failed > td {
-  background-image: linear-gradient(0deg, rgb(239, 68, 68, 0.1), rgb(239, 68, 68, 0.1));
+.data-table tbody tr.pos-row-failed {
+  --dt-row-wash: rgb(239, 68, 68, 0.1);
 }
 
 /* Pending (synthetic) rows are non-interactive placeholders */
@@ -164,24 +163,4 @@
   .pos-row-just-closed > td {
     animation: none;
   }
-}
-
-/* ===========================================================================
-   Pinned-column tint
-   A pinned cell paints the opaque `--dt-sticky-surface` (DataTable core), so the
-   row-state tint is mixed into that surface rather than layered as an image; the
-   pinned edge fade reads the same value.
-   =========================================================================== */
-
-.pos-row-buying > td.dt-col-sticky {
-  --dt-sticky-surface: color-mix(in srgb, rgb(245, 158, 11) 9%, var(--bg-primary));
-}
-
-.pos-row-selling > td.dt-col-sticky,
-.pos-row-closing > td.dt-col-sticky {
-  --dt-sticky-surface: color-mix(in srgb, rgb(251, 146, 60) 9%, var(--bg-primary));
-}
-
-.pos-row-failed > td.dt-col-sticky {
-  --dt-sticky-surface: color-mix(in srgb, rgb(239, 68, 68) 10%, var(--bg-primary));
 }
