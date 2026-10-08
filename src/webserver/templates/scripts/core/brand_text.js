@@ -10,6 +10,9 @@
   // Headings and wordmarks are display type that is already set deliberately:
   // restyling the product name inside them splits one line across two
   // typefaces ("ScreenerBot Data") or overrides the wordmark's own tracking.
+  // Machine values (left-to-right islands, code and mono text) are copied
+  // verbatim: a path such as ".../Application Support/ScreenerBot/data" keeps
+  // one typeface so it reads as the value it is.
   const SKIP_SELECTOR = [
     `.${BRAND_CLASS}`,
     "script",
@@ -28,6 +31,12 @@
     ".splash-brand",
     ".lockscreen-brand",
     ".onboarding-brand",
+    '[dir="ltr"]',
+    "code",
+    "pre",
+    "kbd",
+    "samp",
+    ".font-mono",
   ].join(", ");
 
   function shouldStyle(textNode) {
