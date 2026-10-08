@@ -355,9 +355,17 @@ test("a SOL price shows significant digits without trailing zeros", () => {
   }
 });
 
-test("dashboard pages show SOL prices through the significant-digit formatter", () => {
+test("dashboard pages show prices through the significant-digit formatter", () => {
   // `formatPriceSol` prints a fixed decimal count; it stays for plain-text reports in
-  // core/utils.js and never reaches a page, a table cell or a dialog.
+  // core/utils.js and never reaches a page, a table cell or a dialog. No other
+  // fixed-decimal formatter takes a price either: a fixed count prints a run of zeros
+  // for a small price, where `formatPriceSubscript` prints the zero count (0.0₅92).
+  // `formatCurrencyUSD` is the USD owner and uses the same zero count below a cent.
+  // The one exception is the exact value (`decimals: 12, trim: true`) kept for a
+  // title or a copied report.
+  const FIXED_PRICE =
+    /\b(?:formatSol|formatFixed|formatCompactFixed|formatNumber)\(\s*([^,)]*price[^,)]*)|\b\w*price\w*\.toFixed\(/gi;
+  const NOT_A_PRICE = /change|percent|pct|priced|count|summary|with_pool_price/i;
   const scripts = new URL("templates/scripts/", WEBSERVER);
   const offenders = [];
   const walk = (dir) => {
@@ -367,7 +375,15 @@ test("dashboard pages show SOL prices through the significant-digit formatter", 
       else if (entry.name.endsWith(".js")) {
         const rel = path.pathname.slice(scripts.pathname.length);
         if (rel === "core/format.js" || rel === "core/utils.js") continue;
-        if (fs.readFileSync(path, "utf8").includes("formatPriceSol")) offenders.push(rel);
+        const source = fs.readFileSync(path, "utf8");
+        if (source.includes("formatPriceSol")) offenders.push(rel);
+        source.split("\n").forEach((line, index) => {
+          for (const match of line.matchAll(FIXED_PRICE)) {
+            if (NOT_A_PRICE.test(match[1] ?? match[0])) continue;
+            if (/decimals: 12, trim: true/.test(line)) continue;
+            offenders.push(`${rel}:${index + 1}`);
+          }
+        });
       }
     }
   };

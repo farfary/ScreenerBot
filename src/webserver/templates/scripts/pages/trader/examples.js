@@ -3,7 +3,13 @@
 //
 // Trader example panels - live calculation previews for stop loss, trailing stop and ROI settings.
 
-import { formatFixed, formatPercentValue, formatSol, formatTimeSpan } from "../../core/format.js";
+import {
+  formatFixed,
+  formatPercentValue,
+  formatPriceSubscript,
+  formatTimeSpan,
+  withSolUnit,
+} from "../../core/format.js";
 
 /**
  * Trader Example Updaters Module
@@ -119,7 +125,7 @@ export function createExampleUpdaters({ $, Utils: _Utils }) {
       exampleProfit.textContent = I18n.t("trader-example-profit", { value: String(value) });
     }
     if (exampleTarget) {
-      exampleTarget.textContent = formatSol(0.01 * (1 + value / 100), { decimals: 4 });
+      exampleTarget.textContent = withSolUnit(formatPriceSubscript(0.01 * (1 + value / 100)));
     }
     if (exampleSummary) {
       exampleSummary.innerHTML = I18n.markup("trader-roi-summary", { target: String(value) });
@@ -180,10 +186,10 @@ export function createExampleUpdaters({ $, Utils: _Utils }) {
     const entryPrice = 0.01;
     const exitPrice = entryPrice * (1 - threshold / 100);
 
-    if (exampleEntry) exampleEntry.textContent = formatSol(entryPrice, { decimals: 6 });
+    if (exampleEntry) exampleEntry.textContent = withSolUnit(formatPriceSubscript(entryPrice));
     const lossPercent = I18n.t("trader-value-percent", { value: `-${threshold}` });
     if (exampleTrigger) exampleTrigger.textContent = lossPercent;
-    if (exampleExit) exampleExit.textContent = formatSol(exitPrice, { decimals: 6 });
+    if (exampleExit) exampleExit.textContent = withSolUnit(formatPriceSubscript(exitPrice));
     if (exampleLoss) {
       exampleLoss.innerHTML = I18n.markup("trader-stop-loss-summary", { loss: lossPercent });
     }
@@ -238,9 +244,9 @@ export function createExampleUpdaters({ $, Utils: _Utils }) {
     const stepPeak = $("#example-peak");
     const stepExit = $("#example-exit");
 
-    if (stepEntry) stepEntry.textContent = formatSol(entryPrice, { decimals: 4 });
+    if (stepEntry) stepEntry.textContent = withSolUnit(formatPriceSubscript(entryPrice));
     if (stepActivation) {
-      stepActivation.textContent = formatSol(activationPrice, { decimals: 4 });
+      stepActivation.textContent = withSolUnit(formatPriceSubscript(activationPrice));
       const activationDetail = $("#example-activation-pct");
       if (activationDetail) {
         activationDetail.textContent = I18n.t("trader-example-profit", {
@@ -249,7 +255,7 @@ export function createExampleUpdaters({ $, Utils: _Utils }) {
       }
     }
     if (stepPeak) {
-      stepPeak.textContent = formatSol(peakPrice, { decimals: 4 });
+      stepPeak.textContent = withSolUnit(formatPriceSubscript(peakPrice));
       const peakDetail = $("#example-peak-pct");
       if (peakDetail) {
         const gainFromEntry = ((peakPrice - entryPrice) / entryPrice) * 100;
@@ -259,7 +265,7 @@ export function createExampleUpdaters({ $, Utils: _Utils }) {
       }
     }
     if (stepExit) {
-      stepExit.textContent = formatSol(exitPrice, { decimals: 4 });
+      stepExit.textContent = withSolUnit(formatPriceSubscript(exitPrice));
       const exitDetail = $("#example-exit-pct");
       if (exitDetail) {
         exitDetail.textContent = I18n.t("trader-trailing-final", {
