@@ -95,7 +95,7 @@ rustls = { version = "0.23", default-features = false, features = ["aws_lc_rs", 
 openssl = { version = "0.10", features = ["vendored"], optional = true }
 
 # Database with bundled sqlite for faster builds
-rusqlite = { version = "0.37", features = ["bundled", "unlock_notify"] }
+rusqlite = { version = "0.37", features = ["backup", "bundled", "unlock_notify"] }
 r2d2 = "0.8"
 r2d2_sqlite = "0.31"
 
@@ -271,7 +271,7 @@ tempfile = "3"
 # exported key file, so the harness reads the encrypted row out of wallets.db and
 # decrypts it through the library's secure_storage. Integration test crates see
 # only dev-dependencies; these mirror the lib's versions and compile once.
-rusqlite = { version = "0.37", features = ["bundled", "unlock_notify"] }
+rusqlite = { version = "0.37", features = ["backup", "bundled", "unlock_notify"] }
 bs58 = "0.5"
 dirs = "7.0.0"
 # Route-level launch tests drive the real Axum router in-process (tower's oneshot)

@@ -9,6 +9,7 @@ use r2d2_sqlite::SqliteConnectionManager;
 use rusqlite::{params, Connection, OptionalExtension};
 use std::sync::atomic::Ordering;
 
+use crate::database::backup::back_up_before_upgrade;
 use crate::database::{self, WriteTransaction};
 use crate::errors::DatabaseError;
 use crate::logger::{self, LogTag};
@@ -128,6 +129,15 @@ impl PositionsDatabase {
         })?;
         let mut summary = Vec::new();
 
+        // Nothing has been written yet: the backup is the store as this upgrade found it.
+        if let Some(stored_version) = self.pending_upgrade(&tx)? {
+            let backup = back_up_before_upgrade(
+                std::path::Path::new(&self.database_path),
+                stored_version.as_deref(),
+            )?;
+            summary.push(format!("backed up to {}", backup.display()));
+        }
+
         for (table, ddl) in [
             ("positions", SCHEMA_POSITIONS),
             ("position_states", SCHEMA_POSITION_STATES),
@@ -226,6 +236,41 @@ impl PositionsDatabase {
             detail: format!("failed to commit positions schema: {e}"),
         })?;
         Ok(summary)
+    }
+
+    /// The schema version an existing store recorded, when it differs from this build's
+    /// and the open is about to upgrade it: `Some(None)` for a store that recorded none.
+    /// A brand-new file has no positions table and needs no upgrade.
+    fn pending_upgrade(&self, conn: &Connection) -> Result<Option<Option<String>>> {
+        let inspect = |e: rusqlite::Error| Error::SchemaMigration {
+            detail: format!("failed to inspect the stored positions schema version: {e}"),
+        };
+        let table_exists = |name: &str| -> Result<bool> {
+            conn.query_row(
+                "SELECT EXISTS (SELECT 1 FROM sqlite_master WHERE type = 'table' AND name = ?1)",
+                [name],
+                |row| row.get(0),
+            )
+            .map_err(inspect)
+        };
+        if !table_exists("positions")? {
+            return Ok(None);
+        }
+        let stored: Option<String> = if table_exists("position_metadata")? {
+            conn.query_row(
+                "SELECT value FROM position_metadata WHERE key = 'schema_version'",
+                [],
+                |row| row.get(0),
+            )
+            .optional()
+            .map_err(inspect)?
+        } else {
+            None
+        };
+        if stored.as_deref() == Some(self.schema_version.to_string().as_str()) {
+            return Ok(None);
+        }
+        Ok(Some(stored))
     }
 
     /// Data migrations for rows written by earlier releases; a failure refuses the open
@@ -1379,7 +1424,29 @@ mod tests {
 
         database.initialize_schema(false).await.unwrap();
         let upgraded = table_sql(&database.get_connection().unwrap());
+        let backups = std::path::Path::new(&database.database_path)
+            .parent()
+            .unwrap()
+            .join("backups");
+        let manifest = std::fs::read(backups.join("upgrade-positions.json")).unwrap();
         database.initialize_schema(false).await.unwrap();
+        assert_eq!(
+            std::fs::read(backups.join("upgrade-positions.json")).unwrap(),
+            manifest,
+            "a current store is not backed up again"
+        );
+        let backup = Connection::open(backups.join("upgrade-positions.db")).unwrap();
+        assert_eq!(
+            backup
+                .query_row(
+                    "SELECT manual_management, token_amount FROM positions WHERE id = 41",
+                    [],
+                    |row| Ok((row.get::<_, i64>(0)?, row.get::<_, i64>(1)?)),
+                )
+                .unwrap(),
+            (1, -1),
+            "the backup holds the store as the upgrade found it"
+        );
 
         let connection = database.get_connection().unwrap();
         assert_current_schema(&connection);

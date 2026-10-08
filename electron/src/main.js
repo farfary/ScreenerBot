@@ -15,6 +15,7 @@ const { APP_ID } = require('./app_identity');
 const coreResolver = require('./core_resolver');
 const { createLocalizer } = require('./l10n');
 const { createLineDecoder, shouldRollbackStagedCore } = require('./backend_launch');
+const upgradeBackups = require('./upgrade_backups');
 
 // ============================================================================
 // EPIPE PROTECTION - Prevent crashes when stdout/stderr pipes break
@@ -85,7 +86,7 @@ let backendRestartTarget = '/home';
 // core that never reports ready is quarantined and the bundled binary takes
 // over. Once adopted, it is the installed core; later unrelated startup
 // failures must not misdiagnose and roll back that proven version.
-let activeCore = { path: null, version: null, staged: false, reason: '' };
+let activeCore = { path: null, version: null, staged: false, reason: '', launchedAt: null };
 
 // Every backend spawn takes the next generation. A boot sequence that is still
 // awaiting an older generation has been superseded (by a restart, a recovery, or
@@ -167,6 +168,14 @@ function recoverFailedStagedCore(core, generation, detail, failedChild = backend
       if (generation !== launchGeneration) return;
       await terminateBackendChild(failedChild);
       if (backendProcess === failedChild) backendProcess = null;
+      if (generation !== launchGeneration) return;
+      // The bundled core cannot read storage the failed core upgraded.
+      const restored = await upgradeBackups.restoreUpgradeBackups(
+        appPaths.dataDirectory(SCREENERBOT_BASE_DIR), failedVersion, core.launchedAt
+      );
+      if (restored.length) {
+        console.log(`[Electron] Restored ${restored.join(', ')} from before the v${failedVersion} upgrade`);
+      }
       if (generation !== launchGeneration) return;
       await restartBackendFromDashboard(backendRestartTarget, {
         message: t('desktop-splash-restoring', { version: app.getVersion() }),
@@ -648,7 +657,10 @@ function startBackend(extraArgs = [], core = null) {
   // pending forever because its own timeout correctly refuses to resolve a
   // newer generation's waiter.
   if (backendReadyResolve) backendReadyResolve(false);
-  activeCore = core || { path: getBinaryPath(), version: app.getVersion(), staged: false, reason: '' };
+  activeCore = {
+    ...(core || { path: getBinaryPath(), version: app.getVersion(), staged: false, reason: '' }),
+    launchedAt: Date.now()
+  };
   const binaryPath = activeCore.path;
   backendReadySignal = false;
   launchGeneration += 1;

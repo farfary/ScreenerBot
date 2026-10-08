@@ -6,6 +6,7 @@
 // All SQLite connections must use `configure::configure_connection()` via
 // `with_init()` to ensure PRAGMAs survive connection pool recycling.
 
+pub mod backup;
 pub mod configure;
 pub mod maintenance;
 pub mod schema;

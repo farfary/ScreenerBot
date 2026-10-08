@@ -40,9 +40,7 @@ fn wallet_scoped_db_paths() -> Vec<PathBuf> {
 /// failure never destroys un-backed-up data.
 pub fn backup_and_clean_wallet_data() -> Result<PathBuf, Error> {
     let timestamp = chrono::Local::now().format("%Y%m%d-%H%M%S");
-    let backup_dir = paths::get_data_directory()
-        .join("backups")
-        .join(format!("wallet-reset-{timestamp}"));
+    let backup_dir = paths::get_backups_directory().join(format!("wallet-reset-{timestamp}"));
 
     fs::create_dir_all(&backup_dir).map_err(IoError::from)?;
 

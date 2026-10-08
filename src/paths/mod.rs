@@ -96,6 +96,17 @@ pub fn get_data_directory() -> PathBuf {
     BASE_DIRECTORY.join("data")
 }
 
+/// Name of the directory beside the stores that holds their backups.
+pub const BACKUPS_DIRECTORY_NAME: &str = "backups";
+
+/// Returns the backups directory path.
+///
+/// Contains the copy of each store taken before an upgrade rebuilt it and the
+/// backups of a wallet data reset.
+pub fn get_backups_directory() -> PathBuf {
+    get_data_directory().join(BACKUPS_DIRECTORY_NAME)
+}
+
 /// Returns the logs directory path.
 ///
 /// Contains daily log files with automatic rotation.

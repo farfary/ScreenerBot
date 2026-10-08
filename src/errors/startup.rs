@@ -172,7 +172,7 @@ impl StartupError {
             .arg("stored", UiArg::Text(stored.to_owned()))
             .arg("systems", systems);
 
-        let backups = crate::paths::get_data_directory().join("backups");
+        let backups = crate::paths::get_backups_directory();
         let remedy = UiText::new(ids::STARTUP_WALLET_MISMATCH_REMEDY)
             .arg("action", UiArg::Nested(Box::new(recovery.ui_text())))
             .arg("path", UiArg::Text(format!("{}/", backups.display())));

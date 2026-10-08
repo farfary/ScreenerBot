@@ -155,13 +155,16 @@ impl ErrorClass for DatabaseError {
             DatabaseError::Sqlite { .. } => Severity::Critical,
             DatabaseError::Query { .. } => Severity::Error,
             DatabaseError::Busy { .. } => Severity::Warning,
+            DatabaseError::Backup { .. } => Severity::Critical,
         }
     }
 
     fn http_status(&self) -> u16 {
         match self {
             DatabaseError::Connection { .. } | DatabaseError::Busy { .. } => 503,
-            DatabaseError::Sqlite { .. } | DatabaseError::Query { .. } => 500,
+            DatabaseError::Sqlite { .. }
+            | DatabaseError::Query { .. }
+            | DatabaseError::Backup { .. } => 500,
         }
     }
 }

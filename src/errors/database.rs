@@ -17,6 +17,10 @@ pub enum DatabaseError {
     /// `SQLITE_LOCKED`). Nothing was written, and the same statement can succeed later.
     #[error("database busy (op={operation}): {message}")]
     Busy { operation: String, message: String },
+    /// The copy of a store taken before an upgrade rebuilds it could not be written, so
+    /// the upgrade did not start.
+    #[error("could not back up {store} before its upgrade: {message}")]
+    Backup { store: String, message: String },
 }
 
 impl DatabaseError {
