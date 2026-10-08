@@ -526,6 +526,16 @@
     margin: 0 4px;
   }
 
+  .settings-nav-footer {
+    position: static;
+    flex-direction: row;
+    margin: 0;
+    padding: 0;
+    padding-inline-start: 4px;
+    border-block-start: none;
+    border-inline-start: 1px solid var(--border-color);
+  }
+
   .settings-content {
     padding: 16px;
   }

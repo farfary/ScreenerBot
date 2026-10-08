@@ -80,6 +80,7 @@ export class SettingsDialog {
     this._attachEventHandlers();
     await Promise.all([this._loadSettings(), this._loadVersionInfo(), this._loadPathsInfo()]);
     this._loadTabContent("interface");
+    this._updateSaveButton();
 
     // Sync update status with server (handles refreshes and background downloads)
     this._syncUpdateStatus();
@@ -492,7 +493,7 @@ export class SettingsDialog {
               <i class="icon-info"></i>
               <span data-l10n-id="settings-dialog-tab-about"></span>
             </button>
-            <div class="settings-nav-divider"></div>
+            <div class="settings-nav-footer">
             <button class="settings-nav-item settings-nav-link" data-external-url="https://screenerbot.io/privacy">
               <i class="icon-shield"></i>
               <span data-l10n-id="settings-dialog-link-privacy"></span>
@@ -503,6 +504,7 @@ export class SettingsDialog {
               <span data-l10n-id="settings-dialog-link-terms"></span>
               <i class="icon-external-link settings-nav-external"></i>
             </button>
+            </div>
           </nav>
 
           <div class="settings-content">
@@ -615,6 +617,10 @@ export class SettingsDialog {
     });
 
     this.currentTab = tab;
+    const content = this.dialogEl.querySelector(".settings-content");
+    if (content) {
+      content.scrollTop = 0;
+    }
     this._updateSaveButton();
     this._loadTabContent(tab);
   }
@@ -862,7 +868,11 @@ export class SettingsDialog {
     const saveBtn = this.dialogEl?.querySelector("#settingsSaveBtn");
     if (!saveBtn) return;
 
-    saveBtn.hidden = !this.hasChanges && !GUI_DRAFT_TABS.has(this.currentTab);
+    // A tab that saves on its own keeps the button's place in the header, so the
+    // header does not shift between sections.
+    const unused = !this.hasChanges && !GUI_DRAFT_TABS.has(this.currentTab);
+    saveBtn.classList.toggle("is-unused", unused);
+    saveBtn.setAttribute("aria-hidden", String(unused));
     saveBtn.disabled = !this.hasChanges || this.isSaving;
 
     const icon = saveBtn.querySelector("i");
