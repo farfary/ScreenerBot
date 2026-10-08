@@ -269,6 +269,14 @@ pub(super) const POSITIONS_ARCHIVE_COLUMNS: &[(&str, &str)] = &[
     ),
 ];
 
+/// Chain identity added to tables created before chains. The default fills the rows
+/// of the one chain those releases traded; the rebuild into the canonical table keeps
+/// the values and drops the default.
+pub(super) const POSITIONS_CHAIN_COLUMNS: &[(&str, &str)] = &[(
+    "chain_id",
+    "ALTER TABLE positions ADD COLUMN chain_id TEXT NOT NULL DEFAULT 'solana'",
+)];
+
 /// Positions columns of earlier releases that the canonical table no longer has.
 /// Their meaning lives on in the provenance columns; the rebuild drops them.
 pub(super) const LEGACY_POSITIONS_COLUMNS: &[&str] = &["manual_management"];

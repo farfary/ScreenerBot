@@ -29,27 +29,31 @@ pub(super) fn has_column(conn: &Connection, table: &str, column: &str) -> Result
     })
 }
 
-/// Add each `(column, ALTER TABLE ...)` the table does not have yet. A column
-/// already present is left as it is; an ALTER that fails refuses the open.
+/// Add each `(column, ALTER TABLE ...)` the table does not have yet and return the
+/// columns added. A column already present is left as it is; an ALTER that fails
+/// refuses the open.
 pub(super) fn add_missing_columns(
     conn: &Connection,
     table: &str,
-    columns: &[(&str, &str)],
-) -> Result<()> {
+    columns: &[(&'static str, &str)],
+) -> Result<Vec<&'static str>> {
+    let mut added = Vec::new();
     for (column, sql) in columns {
         if !has_column(conn, table, column)? {
             conn.execute(sql, []).map_err(|e| Error::SchemaMigration {
                 detail: format!("failed to add {table}.{column}: {e}"),
             })?;
+            added.push(*column);
         }
     }
-    Ok(())
+    Ok(added)
 }
 
-/// Rename every legacy unit column still present. Runs inside the caller's
-/// transaction, so a migration refused later in that transaction rolls the
-/// renames back with it.
-pub(super) fn rename_unit_neutral_columns(conn: &Connection) -> Result<()> {
+/// Rename every legacy unit column still present and return how many were renamed.
+/// Runs inside the caller's transaction, so a migration refused later in that
+/// transaction rolls the renames back with it.
+pub(super) fn rename_unit_neutral_columns(conn: &Connection) -> Result<usize> {
+    let mut renamed = 0;
     for (table, old, new) in COLUMN_RENAMES {
         let has_old = has_column(conn, table, old)?;
         let has_new = has_column(conn, table, new)?;
@@ -67,9 +71,10 @@ pub(super) fn rename_unit_neutral_columns(conn: &Connection) -> Result<()> {
                 .map_err(|e| Error::SchemaMigration {
                     detail: format!("failed to rename {table}.{old} to {new}: {e}"),
                 })?;
+                renamed += 1;
             }
             (false, _) => {}
         }
     }
-    Ok(())
+    Ok(renamed)
 }

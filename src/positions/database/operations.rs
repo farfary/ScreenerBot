@@ -15,10 +15,10 @@ use crate::logger::{self, LogTag};
 use crate::positions::types::{Position, PositionManagement, PositionOrigin};
 use crate::positions::{Error, Result};
 
-use super::column_names::add_missing_columns;
+use super::column_names::{add_missing_columns, rename_unit_neutral_columns};
 use super::open_round::{install_open_round_index, query_open_round_id, OPEN_ROUND_INDEX_NAME};
 use super::provenance::{merge_ledger_duplicates, migrate_position_provenance};
-use super::raw_migration::migrate_position_amounts;
+use super::raw_migration::{canonicalize_amount_tables, migrate_pending_partial_exit_amounts};
 use super::types::*;
 
 impl PositionsDatabase {
@@ -81,61 +81,109 @@ impl PositionsDatabase {
         Ok(db)
     }
 
-    /// Initialize database schema with all tables and indexes
+    /// Bring the store to the current schema in one IMMEDIATE transaction: tables,
+    /// historical columns, unit-neutral names, the canonical amount tables, ledger
+    /// merges, indexes, the schema version and the data migrations either all commit or
+    /// none do, so a refused open leaves the file as it was. Foreign keys are off for
+    /// the transaction because a rebuilt root table is dropped before its replacement
+    /// takes its name; the rebuild checks them before commit.
     async fn initialize_schema(&mut self, log_initialization: bool) -> Result<()> {
-        let conn = self.get_connection()?;
+        let mut conn = self.get_connection()?;
+        let pragma = |e: rusqlite::Error| Error::SchemaMigration {
+            detail: format!("failed to set positions foreign keys: {e}"),
+        };
+        let foreign_keys: bool = conn
+            .pragma_query_value(None, "foreign_keys", |row| row.get(0))
+            .map_err(pragma)?;
+        conn.pragma_update(None, "foreign_keys", false)
+            .map_err(pragma)?;
+        let result = self.initialize_schema_in_transaction(&mut conn, log_initialization);
+        let restored = conn
+            .pragma_update(None, "foreign_keys", foreign_keys)
+            .map_err(pragma);
+        let summary = result?;
+        restored?;
+        if log_initialization || !summary.is_empty() {
+            logger::info(
+                LogTag::Positions,
+                &if summary.is_empty() {
+                    "Positions database schema is current".to_owned()
+                } else {
+                    format!("Positions database upgraded: {}", summary.join("; "))
+                },
+            );
+        }
+        Ok(())
+    }
 
-        // Establish the base table before additive migrations. This is a no-op for
-        // legacy schemas, whose provenance migration must still precede the chain
-        // identity migration.
-        conn.execute(SCHEMA_POSITIONS, [])
-            .map_err(|e| Error::SchemaMigration {
-                detail: format!("failed to create positions table: {e}"),
+    /// The steps of [`Self::initialize_schema`], in dependency order, and what each
+    /// changed.
+    fn initialize_schema_in_transaction(
+        &self,
+        conn: &mut Connection,
+        log_initialization: bool,
+    ) -> Result<Vec<String>> {
+        let tx = conn.write_tx().map_err(|e| Error::SchemaMigration {
+            detail: format!("failed to begin positions schema transaction: {e}"),
+        })?;
+        let mut summary = Vec::new();
+
+        for (table, ddl) in [
+            ("positions", SCHEMA_POSITIONS),
+            ("position_states", SCHEMA_POSITION_STATES),
+            ("position_exits", SCHEMA_POSITION_EXITS),
+            ("position_entries", SCHEMA_POSITION_ENTRIES),
+            ("position_tracking", SCHEMA_POSITION_TRACKING),
+            ("position_metadata", SCHEMA_POSITION_METADATA),
+            ("token_snapshots", SCHEMA_TOKEN_SNAPSHOTS),
+        ] {
+            tx.execute(ddl, []).map_err(|e| Error::SchemaMigration {
+                detail: format!("failed to create {table} table: {e}"),
             })?;
+        }
 
-        // Provenance introduced `round_key`, which the chain migration needs when it
-        // replaces the legacy uniqueness index. Historical databases can predate both
-        // migrations, so add the provenance columns before rebuilding chain indexes.
-        migrate_position_provenance(&conn)?;
-        Self::migrate_chain_identity(&conn)?;
+        // Historical columns are appended in the order releases introduced them;
+        // provenance backfills from columns the earlier steps guarantee.
+        let mut added = add_missing_columns(&tx, "positions", POSITIONS_PNL_COLUMNS)?;
+        added.extend(add_missing_columns(
+            &tx,
+            "positions",
+            POSITIONS_ARCHIVE_COLUMNS,
+        )?);
+        added.extend(migrate_position_provenance(&tx)?);
+        added.extend(add_missing_columns(
+            &tx,
+            "positions",
+            POSITIONS_CHAIN_COLUMNS,
+        )?);
+        if !added.is_empty() {
+            summary.push(format!("added positions columns {}", added.join(", ")));
+        }
 
-        // Create all tables
-        conn.execute(SCHEMA_POSITION_STATES, [])
-            .map_err(|e| Error::SchemaMigration {
-                detail: format!("failed to create position_states table: {e}"),
-            })?;
+        match rename_unit_neutral_columns(&tx)? {
+            0 => {}
+            renamed => summary.push(format!("renamed {renamed} unit columns")),
+        }
 
-        conn.execute(SCHEMA_POSITION_EXITS, [])
-            .map_err(|e| Error::SchemaMigration {
-                detail: format!("failed to create position_exits table: {e}"),
-            })?;
+        let canonicalized = canonicalize_amount_tables(&tx)?;
+        if !canonicalized.dropped_indexes.is_empty() {
+            summary.push(format!(
+                "dropped indexes {}",
+                canonicalized.dropped_indexes.join(", ")
+            ));
+        }
+        if !canonicalized.rebuilt.is_empty() {
+            summary.push(format!(
+                "rebuilt {} in canonical form",
+                canonicalized.rebuilt.join(", ")
+            ));
+        }
 
-        conn.execute(SCHEMA_POSITION_ENTRIES, [])
-            .map_err(|e| Error::SchemaMigration {
-                detail: format!("failed to create position_entries table: {e}"),
-            })?;
+        if migrate_pending_partial_exit_amounts(&tx)? {
+            summary.push("converted pending partial-exit amounts".to_owned());
+        }
 
-        conn.execute(SCHEMA_POSITION_TRACKING, [])
-            .map_err(|e| Error::SchemaMigration {
-                detail: format!("failed to create position_tracking table: {e}"),
-            })?;
-
-        conn.execute(SCHEMA_POSITION_METADATA, [])
-            .map_err(|e| Error::SchemaMigration {
-                detail: format!("failed to create position_metadata table: {e}"),
-            })?;
-
-        conn.execute(SCHEMA_TOKEN_SNAPSHOTS, [])
-            .map_err(|e| Error::SchemaMigration {
-                detail: format!("failed to create token_snapshots table: {e}"),
-            })?;
-
-        migrate_position_amounts(&conn)?;
-
-        add_missing_columns(&conn, "positions", POSITIONS_PNL_COLUMNS)?;
-        add_missing_columns(&conn, "positions", POSITIONS_ARCHIVE_COLUMNS)?;
-
-        match merge_ledger_duplicates(&conn)? {
+        match merge_ledger_duplicates(&tx)? {
             0 => {}
             merged => logger::warning(
                 LogTag::Positions,
@@ -145,14 +193,13 @@ impl PositionsDatabase {
             ),
         }
 
-        // Create all indexes
         for index_sql in POSITIONS_INDEXES {
-            conn.execute(index_sql, [])
+            tx.execute(index_sql, [])
                 .map_err(|e| Error::SchemaMigration {
                     detail: format!("failed to create positions index: {e}"),
                 })?;
         }
-        for duplicate in install_open_round_index(&conn)? {
+        for duplicate in install_open_round_index(&tx)? {
             logger::error(
                 LogTag::Positions,
                 &format!(
@@ -165,8 +212,7 @@ impl PositionsDatabase {
             );
         }
 
-        // Set schema version
-        conn.execute(
+        tx.execute(
             "INSERT OR REPLACE INTO position_metadata (key, value) VALUES ('schema_version', ?1)",
             params![self.schema_version.to_string()],
         )
@@ -174,172 +220,63 @@ impl PositionsDatabase {
             detail: format!("failed to set positions schema version: {e}"),
         })?;
 
-        // Run migrations for existing positions (one-time data migration)
-        self.run_data_migrations(&conn, log_initialization)?;
+        self.run_data_migrations(&tx, log_initialization)?;
 
-        if log_initialization {
-            logger::info(
-                LogTag::Positions,
-                "Positions database schema initialized with all tables and indexes",
-            );
-        }
-
-        Ok(())
-    }
-
-    /// Upgrades legacy shared storage in one transaction. Position IDs remain stable so
-    /// every state, entry, exit, tracking and snapshot row continues to belong to its root.
-    fn migrate_chain_identity(conn: &Connection) -> Result<()> {
-        let has_positions: bool = conn
-            .query_row(
-                "SELECT 1 FROM sqlite_master WHERE type='table' AND name='positions'",
-                [],
-                |_| Ok(()),
-            )
-            .optional()
-            .map_err(|e| Error::SchemaMigration {
-                detail: format!("failed to inspect positions schema: {e}"),
-            })?
-            .is_some();
-        if !has_positions {
-            return Ok(());
-        }
-        let has_chain: bool = conn
-            .prepare("PRAGMA table_info(positions)")
-            .and_then(|mut statement| {
-                statement
-                    .query_map([], |row| row.get::<_, String>(1))?
-                    .collect::<std::result::Result<Vec<_>, _>>()
-            })
-            .map_err(|e| Error::SchemaMigration {
-                detail: format!("failed to inspect positions identity columns: {e}"),
-            })?
-            .iter()
-            .any(|column| column == "chain_id");
-        if has_chain {
-            return Ok(());
-        }
-        let tx = conn
-            .unchecked_transaction()
-            .map_err(|e| Error::SchemaMigration {
-                detail: format!("failed to begin positions chain migration: {e}"),
-            })?;
-        tx.execute(
-            "ALTER TABLE positions ADD COLUMN chain_id TEXT NOT NULL DEFAULT 'solana'",
-            [],
-        )
-        .map_err(|e| Error::SchemaMigration {
-            detail: format!("failed to add positions chain identity: {e}"),
-        })?;
-        tx.execute("DROP INDEX IF EXISTS idx_positions_round_key", [])
-            .map_err(|e| Error::SchemaMigration {
-                detail: format!("failed to replace legacy round index: {e}"),
-            })?;
-        for index in LEGACY_POSITIONS_INDEXES {
-            tx.execute(&format!("DROP INDEX IF EXISTS {index}"), [])
-                .map_err(|e| Error::SchemaMigration {
-                    detail: format!("failed to replace legacy positions index: {e}"),
-                })?;
-        }
-        tx.execute(
-            "CREATE UNIQUE INDEX idx_positions_round_key ON positions(chain_id, wallet_address, round_key) WHERE round_key IS NOT NULL",
-            [],
-        ).map_err(|e| Error::SchemaMigration {
-            detail: format!("failed to create chain-qualified round index: {e}"),
-        })?;
-        let violations: i64 = tx
-            .query_row("PRAGMA foreign_key_check", [], |_| Ok(1_i64))
-            .optional()
-            .map_err(|e| Error::SchemaMigration {
-                detail: format!("failed to validate positions foreign keys: {e}"),
-            })?
-            .unwrap_or(0);
-        if violations != 0 {
-            return Err(Error::SchemaMigration {
-                detail: "positions chain migration failed foreign-key validation".to_owned(),
-            });
-        }
         tx.commit().map_err(|e| Error::SchemaMigration {
-            detail: format!("failed to commit positions chain migration: {e}"),
-        })
+            detail: format!("failed to commit positions schema: {e}"),
+        })?;
+        Ok(summary)
     }
 
-    /// Run data migrations for existing positions
+    /// Data migrations for rows written by earlier releases; a failure refuses the open
+    /// with the schema transaction.
     fn run_data_migrations(&self, conn: &Connection, log: bool) -> Result<()> {
-        // Migration: Initialize remaining_token_amount and average_entry_price for existing open positions
-        // This is a one-time migration for positions created before partial sell/DCA support
-        let migration_result = conn.execute(
-            r#"
-      UPDATE positions 
-      SET 
+        // Open positions from before partial exits and DCA carry no remaining amount.
+        let updated_count = conn
+            .execute(
+                r#"
+      UPDATE positions
+      SET
         remaining_token_amount = token_amount,
         average_entry_price = COALESCE(effective_entry_price, entry_price)
-      WHERE remaining_token_amount IS NULL 
+      WHERE remaining_token_amount IS NULL
        AND token_amount IS NOT NULL
        AND exit_time IS NULL
        AND chain_id = ?1
        AND position_type = 'buy'
       "#,
-            params![self.chain.as_str()],
-        );
-
-        match migration_result {
-            Ok(updated_count) => {
-                if updated_count > 0 && log {
-                    crate::logger::warning(
-                        crate::logger::LogTag::Positions,
-                        &format!(
-                            "Migrated {} existing open positions with partial sell/DCA fields",
-                            updated_count
-                        ),
-                    );
-                }
-            }
-            Err(e) => {
-                // Non-fatal: columns might not exist yet (fresh install)
-                if log {
-                    crate::logger::debug(
-                        crate::logger::LogTag::Positions,
-                        &format!(
-                            "Position migration skipped (expected on fresh install): {}",
-                            e
-                        ),
-                    );
-                }
-            }
+                params![self.chain.as_str()],
+            )
+            .map_err(|e| Error::SchemaMigration {
+                detail: format!("failed to initialize remaining position amounts: {e}"),
+            })?;
+        if updated_count > 0 && log {
+            logger::warning(
+                LogTag::Positions,
+                &format!(
+                    "Migrated {updated_count} existing open positions with partial sell/DCA fields"
+                ),
+            );
         }
 
-        // Migration: Normalize position_states.changed_at to RFC3339 format for old rows
-        // Only touch legacy entries that still use the "YYYY-MM-DD HH:MM:SS"style emitted by sqlite's datetime('now')
-        match conn.execute(
-            r#"
+        // State timestamps written by SQLite's datetime('now') become RFC3339.
+        let rows = conn
+            .execute(
+                r#"
       UPDATE position_states
       SET changed_at = strftime('%Y-%m-%dT%H:%M:%SZ', datetime(changed_at))
       WHERE changed_at NOT LIKE '%T%'
       "#,
-            [],
-        ) {
-            Ok(rows) if rows > 0 && log => {
-                crate::logger::info(
-                    crate::logger::LogTag::Positions,
-                    &format!(
-                        "Normalized {} legacy position state timestamps to RFC3339",
-                        rows
-                    ),
-                );
-            }
-            Ok(_) => {}
-            Err(e) => {
-                if log {
-                    crate::logger::warning(
-                        crate::logger::LogTag::Positions,
-                        &format!(
-                            "Failed to normalize legacy position state timestamps: {}",
-                            e
-                        ),
-                    );
-                }
-            }
+                [],
+            )
+            .map_err(|e| Error::SchemaMigration {
+                detail: format!("failed to normalize position state timestamps: {e}"),
+            })?;
+        if rows > 0 && log {
+            logger::info(
+                LogTag::Positions,
+                &format!("Normalized {rows} legacy position state timestamps to RFC3339"),
+            );
         }
 
         Ok(())
@@ -1377,51 +1314,136 @@ mod tests {
         );
     }
 
-    #[test]
-    fn chain_migration_preserves_legacy_roots_and_children_and_is_idempotent() {
-        let connection = Connection::open_in_memory().unwrap();
-        connection.execute_batch(
-            "PRAGMA foreign_keys = ON;
-             CREATE TABLE positions (id INTEGER PRIMARY KEY, wallet_address TEXT NOT NULL, round_key TEXT);
-             CREATE TABLE position_states (id INTEGER PRIMARY KEY, position_id INTEGER NOT NULL REFERENCES positions(id));
-             INSERT INTO positions (id, wallet_address, round_key) VALUES (41, 'wallet', 'round');
-             INSERT INTO position_states (id, position_id) VALUES (7, 41);
-             CREATE UNIQUE INDEX idx_positions_round_key ON positions(wallet_address, round_key) WHERE round_key IS NOT NULL;",
-        ).unwrap();
+    /// Released v0.2.13 storage with the shape files created by earlier releases keep:
+    /// chain identity appended with its default, the dropped `manual_management` column,
+    /// and the legacy wallet index.
+    fn appended_column_storage() -> String {
+        include_str!("../../../tests/fixtures/v0.2.13-positions.sql")
+            .replacen("  chain_id TEXT NOT NULL,\n", "", 1)
+            .replacen(
+                "  updated_at TEXT NOT NULL DEFAULT (datetime('now'))\n);",
+                "  updated_at TEXT NOT NULL DEFAULT (datetime('now')),\n  manual_management BOOLEAN NOT NULL DEFAULT 0,\n  chain_id TEXT NOT NULL DEFAULT 'solana'\n);\nCREATE INDEX idx_positions_wallet ON positions(wallet_address);",
+                1,
+            )
+    }
 
-        PositionsDatabase::migrate_chain_identity(&connection).unwrap();
-        PositionsDatabase::migrate_chain_identity(&connection).unwrap();
+    fn sequences(connection: &Connection) -> Vec<(String, i64)> {
+        connection
+            .prepare("SELECT name, seq FROM sqlite_sequence ORDER BY name")
+            .unwrap()
+            .query_map([], |row| Ok((row.get(0)?, row.get(1)?)))
+            .unwrap()
+            .collect::<rusqlite::Result<_>>()
+            .unwrap()
+    }
 
+    /// Every stored table and index definition. `ALTER TABLE ... RENAME` stores the new
+    /// table name quoted; the quotes are removed so a rebuilt table compares equal to a
+    /// fresh one.
+    fn table_sql(connection: &Connection) -> Vec<(String, String)> {
+        connection
+            .prepare("SELECT name, sql FROM sqlite_master WHERE type IN ('table', 'index') AND sql IS NOT NULL ORDER BY name")
+            .unwrap()
+            .query_map([], |row| {
+                let name: String = row.get(0)?;
+                let sql: String = row.get(1)?;
+                let sql = sql.replacen(
+                    &format!("CREATE TABLE \"{name}\""),
+                    &format!("CREATE TABLE {name}"),
+                    1,
+                );
+                Ok((name, sql))
+            })
+            .unwrap()
+            .collect::<rusqlite::Result<_>>()
+            .unwrap()
+    }
+
+    #[tokio::test]
+    async fn appended_legacy_columns_are_rebuilt_by_name_keeping_rows_children_and_sequences() {
+        let (mut database, _directory) = test_database();
+        {
+            let legacy = database.get_connection().unwrap();
+            legacy.execute_batch(&appended_column_storage()).unwrap();
+            legacy.pragma_update(None, "foreign_keys", true).unwrap();
+            legacy.execute_batch(
+                "INSERT INTO positions (id, wallet_address, mint, symbol, name, entry_price, entry_time, position_type, entry_size_sol, total_size_sol, price_highest, price_lowest, token_amount, remaining_token_amount, total_exited_amount, origin_kind, management, manual_management) VALUES (41, 'wallet', 'mint', 'SYM', 'Token', 0.5, '2026-01-01T00:00:00Z', 'buy', 1.0, 1.0, 0.5, 0.5, -1, 7, 3, 'manual', 'user_only', 1);
+                 INSERT INTO positions (id, wallet_address, mint, symbol, name, entry_price, entry_time, position_type, entry_size_sol, total_size_sol, price_highest, price_lowest) VALUES (42, 'wallet', 'other', 'OTH', 'Other', 0.5, '2026-01-01T00:00:00Z', 'buy', 1.0, 1.0, 0.5, 0.5);
+                 DELETE FROM positions WHERE id = 42;
+                 INSERT INTO position_states (id, position_id, state) VALUES (7, 41, 'Open');
+                 INSERT INTO position_entries (id, position_id, wallet_address, timestamp, amount, price, sol_spent, transaction_signature, is_dca) VALUES (5, 41, 'wallet', '2026-01-01T00:00:00Z', 9, 0.5, 1.0, 'entry', 0);
+                 INSERT INTO position_exits (id, position_id, wallet_address, timestamp, amount, price, sol_received, transaction_signature, is_partial, percentage) VALUES (3, 41, 'wallet', '2026-01-02T00:00:00Z', 3, 0.6, 0.2, 'exit', 1, 30.0);",
+            ).unwrap();
+        }
+        let before = sequences(&database.get_connection().unwrap());
+
+        database.initialize_schema(false).await.unwrap();
+        let upgraded = table_sql(&database.get_connection().unwrap());
+        database.initialize_schema(false).await.unwrap();
+
+        let connection = database.get_connection().unwrap();
+        assert_current_schema(&connection);
         assert_eq!(
-            connection
-                .query_row("SELECT chain_id FROM positions WHERE id=41", [], |row| {
-                    row.get::<_, String>(0)
-                })
-                .unwrap(),
-            "solana"
+            table_sql(&connection),
+            upgraded,
+            "second open changed the schema"
         );
+        let (fresh, _fresh_directory) = test_database();
+        let mut fresh = fresh;
+        fresh.initialize_schema(false).await.unwrap();
+        assert_eq!(upgraded, table_sql(&fresh.get_connection().unwrap()));
+        assert_eq!(sequences(&connection), before);
         assert_eq!(
             connection
                 .query_row(
-                    "SELECT position_id FROM position_states WHERE id=7",
+                    "SELECT chain_id, management, token_amount, remaining_token_amount, total_exited_amount FROM positions WHERE id = 41",
                     [],
-                    |row| row.get::<_, i64>(0)
+                    |row| Ok((row.get::<_, String>(0)?, row.get::<_, String>(1)?, row.get::<_, String>(2)?, row.get::<_, String>(3)?, row.get::<_, String>(4)?)),
                 )
                 .unwrap(),
-            41
+            ("solana".to_owned(), "user_only".to_owned(), u64::MAX.to_string(), "7".to_owned(), "3".to_owned())
         );
-        connection.execute(
-            "INSERT INTO positions (id, wallet_address, round_key, chain_id) VALUES (?1, ?2, ?3, ?4)",
-            params![42, "wallet", "round", "future-chain"],
-        ).unwrap();
-        assert_eq!(
-            connection
-                .query_row("SELECT COUNT(*) FROM pragma_foreign_key_check", [], |row| {
-                    row.get::<_, i64>(0)
-                })
-                .unwrap(),
-            0
+        let children: (i64, String, String) = connection
+            .query_row(
+                "SELECT (SELECT position_id FROM position_states WHERE id = 7), (SELECT amount FROM position_entries WHERE id = 5), (SELECT amount FROM position_exits WHERE id = 3)",
+                [],
+                |row| Ok((row.get(0)?, row.get(1)?, row.get(2)?)),
+            )
+            .unwrap();
+        assert_eq!(children, (41, "9".to_owned(), "3".to_owned()));
+        let foreign_keys: bool = connection
+            .pragma_query_value(None, "foreign_keys", |row| row.get(0))
+            .unwrap();
+        assert!(
+            foreign_keys,
+            "the open restores the connection's own setting"
         );
+    }
+
+    #[tokio::test]
+    async fn a_refused_upgrade_leaves_every_earlier_step_uncommitted() {
+        let (mut database, _directory) = test_database();
+        let legacy = appended_column_storage().replacen(
+            "  manual_management BOOLEAN NOT NULL DEFAULT 0,\n",
+            "  manual_management BOOLEAN NOT NULL DEFAULT 0,\n  unrecognized_flag INTEGER,\n",
+            1,
+        );
+        database
+            .get_connection()
+            .unwrap()
+            .execute_batch(&legacy)
+            .unwrap();
+        let before = table_sql(&database.get_connection().unwrap());
+
+        let error = database.initialize_schema(false).await.unwrap_err();
+
+        assert!(
+            error
+                .to_string()
+                .contains("unrecognized column positions.unrecognized_flag"),
+            "{error}"
+        );
+        assert_eq!(table_sql(&database.get_connection().unwrap()), before);
     }
 
     #[tokio::test]

@@ -41,9 +41,12 @@ const PROVENANCE_COLUMNS: &[(&str, &str)] = &[
     ),
 ];
 
-pub(super) fn migrate_position_provenance(conn: &Connection) -> Result<()> {
+/// Add the provenance columns a table created before provenance lacks, and derive
+/// provenance from the legacy `manual_management` flag while that column exists.
+/// Returns the columns added. Runs inside the caller's transaction.
+pub(super) fn migrate_position_provenance(conn: &Connection) -> Result<Vec<&'static str>> {
     let legacy_manual = has_column(conn, "positions", "manual_management")?;
-    add_missing_columns(conn, "positions", PROVENANCE_COLUMNS)?;
+    let added = add_missing_columns(conn, "positions", PROVENANCE_COLUMNS)?;
 
     if legacy_manual {
         conn.execute(
@@ -54,7 +57,7 @@ pub(super) fn migrate_position_provenance(conn: &Connection) -> Result<()> {
             detail: format!("failed to backfill position provenance: {e}"),
         })?;
     }
-    Ok(())
+    Ok(added)
 }
 
 /// Child tables keyed by `position_id`, cleaned up with the row they belong to.
@@ -81,7 +84,9 @@ const POSITION_CHILD_TABLES: &[&str] = &[
 /// `round_key` moves onto the survivor, which is what lets the ledger reconcile that row
 /// from then on instead of importing it again.
 ///
-/// Idempotent: once a row carries a round key it is no longer a candidate.
+/// Idempotent: once a row carries a round key it is no longer a candidate. Runs inside
+/// the caller's transaction with foreign keys off, so it deletes the twin's child rows
+/// itself.
 pub(super) fn merge_ledger_duplicates(conn: &Connection) -> Result<u64> {
     if !has_column(conn, "positions", "round_key")? {
         return Ok(0);
@@ -140,12 +145,6 @@ pub(super) fn merge_ledger_duplicates(conn: &Connection) -> Result<u64> {
     let mut claimed_imported = std::collections::HashSet::new();
     let mut merged = 0u64;
 
-    let tx = conn
-        .unchecked_transaction()
-        .map_err(|e| Error::SchemaMigration {
-            detail: format!("failed to start duplicate position merge: {e}"),
-        })?;
-
     for (legacy_id, imported_id, round_key) in pairs {
         if !claimed_legacy.insert(legacy_id) || !claimed_imported.insert(imported_id) {
             continue;
@@ -154,7 +153,7 @@ pub(super) fn merge_ledger_duplicates(conn: &Connection) -> Result<u64> {
         // Delete the twin FIRST: the round key is unique per wallet, so the survivor
         // cannot take it while the twin still holds it.
         for table in POSITION_CHILD_TABLES {
-            tx.execute(
+            conn.execute(
                 &format!("DELETE FROM {table} WHERE position_id = ?1"),
                 params![imported_id],
             )
@@ -162,12 +161,12 @@ pub(super) fn merge_ledger_duplicates(conn: &Connection) -> Result<u64> {
                 detail: format!("failed to delete {table} rows for position {imported_id}: {e}"),
             })?;
         }
-        tx.execute("DELETE FROM positions WHERE id = ?1", params![imported_id])
+        conn.execute("DELETE FROM positions WHERE id = ?1", params![imported_id])
             .map_err(|e| Error::SchemaMigration {
                 detail: format!("failed to delete imported duplicate {imported_id}: {e}"),
             })?;
 
-        tx.execute(
+        conn.execute(
             "UPDATE positions SET round_key = ?1 WHERE id = ?2",
             params![round_key, legacy_id],
         )
@@ -177,10 +176,6 @@ pub(super) fn merge_ledger_duplicates(conn: &Connection) -> Result<u64> {
 
         merged += 1;
     }
-
-    tx.commit().map_err(|e| Error::SchemaMigration {
-        detail: format!("failed to commit duplicate position merge: {e}"),
-    })?;
 
     Ok(merged)
 }
