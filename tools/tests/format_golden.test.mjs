@@ -76,7 +76,7 @@ const RUNNER = `(function (cases, fmt) {
 })`;
 
 /** Fresh browser-like context with the runtime and `format.js` loaded for `intlLocale`. */
-function load(intlLocale) {
+function load(intlLocale, dir = "ltr") {
   const context = {
     console: { warn() {}, error() {}, debug() {}, log() {} },
     document: { addEventListener() {}, getElementById: () => null },
@@ -85,7 +85,7 @@ function load(intlLocale) {
   context.__SCREENERBOT_L10N__ = {
     locale: intlLocale.split("-")[0],
     intlLocale,
-    dir: "ltr",
+    dir,
     source: "en",
     catalogs: [{ locale: "en", ftl: enCatalog() }],
   };
@@ -389,4 +389,31 @@ test("dashboard pages show prices through the significant-digit formatter", () =
   };
   walk(scripts);
   assert.deepEqual(offenders, []);
+});
+
+/**
+ * In a right-to-left page a formatter's unit or word value is wrapped in a first-strong
+ * isolate, so "134 MB" cannot split into "MB 134" inside RTL text. Apart from the isolation
+ * marks the output is exactly the left-to-right output: no step, rounding or text changes.
+ */
+test("right-to-left formatter output differs from left-to-right only by isolation marks", () => {
+  const ltr = load("en-u-nu-latn");
+  const rtl = load("en-u-nu-latn", "rtl");
+  const expected = run(ltr.fmt, ltr.context, FIXTURE.cases);
+  const actual = run(rtl.fmt, rtl.context, FIXTURE.cases);
+  const failures = [];
+  FIXTURE.cases.forEach((testCase, index) => {
+    const before = expected[index].out;
+    const after = actual[index].out;
+    if (typeof before !== "string") return;
+    if (after.replace(/[\u2068\u2069]/g, "") !== before)
+      failures.push(`${testCase.fn}: ${JSON.stringify(before)} -> ${JSON.stringify(after)}`);
+  });
+  assert.deepEqual(failures, []);
+  for (const [fn, value] of [
+    ["formatMemoryMb", 134],
+    ["formatLatencyMs", 382],
+    ["formatSol", 0.5],
+  ])
+    assert.equal(rtl.fmt[fn](value), `\u2068${ltr.fmt[fn](value)}\u2069`, fn);
 });

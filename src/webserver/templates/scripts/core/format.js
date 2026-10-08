@@ -25,9 +25,12 @@ const DASH = "—";
 const HYPHEN = "-";
 const SUBSCRIPT_DIGITS = "₀₁₂₃₄₅₆₇₈₉";
 
-// Fluent wraps placeables in bidi isolates. Formatter output is a compact
-// display string compared, sliced and diffed by callers, so the marks are removed.
+// Fluent wraps placeables in bidi isolates. Formatter output is one display value, so
+// the inner marks are removed and, in a right-to-left locale, the value is wrapped in a
+// single first-strong isolate (see `displayed`).
 const ISOLATES = /[\u2066-\u2069]/g;
+const FIRST_STRONG_ISOLATE = "\u2068";
+const POP_DIRECTIONAL_ISOLATE = "\u2069";
 
 /**
  * Text without bidi isolation marks (U+2066-U+2069), for strings that are compared or
@@ -37,7 +40,17 @@ export function stripIsolates(text) {
   return String(text).replace(ISOLATES, "");
 }
 
-const plain = stripIsolates;
+/**
+ * A formatter's display value. In a right-to-left locale "134 MB" or "0.5 SOL" would
+ * otherwise split around the space ("MB 134"), because the digits and the Latin unit
+ * resolve as separate runs inside RTL text. One first-strong isolate keeps a value whose
+ * first strong character is Latin in left-to-right order as one unit, while a value in
+ * the script's own words ("5 دقیقه") stays right to left. Left-to-right output is unchanged.
+ */
+function displayed(text) {
+  const bare = stripIsolates(text);
+  return I18n.dir === "rtl" ? `${FIRST_STRONG_ISOLATE}${bare}${POP_DIRECTIONAL_ISOLATE}` : bare;
+}
 
 const instances = new Map();
 
@@ -97,40 +110,40 @@ function localizeDecimal(text) {
 
 const counted = (count, amount = String(count)) => ({ count, amount });
 
-const notAvailable = () => plain(I18n.t("format-not-available"));
+const notAvailable = () => displayed(I18n.t("format-not-available"));
 
 /** A caller-supplied value, or the catalog default built only when none was given. */
 const orElse = (value, make) => (value === undefined ? make() : value);
 
 const ago = {
-  second: (n) => plain(I18n.t("format-ago-second", counted(n))),
-  minute: (n) => plain(I18n.t("format-ago-minute", counted(n))),
-  hour: (n) => plain(I18n.t("format-ago-hour", counted(n))),
-  day: (n) => plain(I18n.t("format-ago-day", counted(n))),
+  second: (n) => displayed(I18n.t("format-ago-second", counted(n))),
+  minute: (n) => displayed(I18n.t("format-ago-minute", counted(n))),
+  hour: (n) => displayed(I18n.t("format-ago-hour", counted(n))),
+  day: (n) => displayed(I18n.t("format-ago-day", counted(n))),
 };
 
 const until = {
-  second: (n) => plain(I18n.t("format-in-second", counted(n))),
-  minute: (n) => plain(I18n.t("format-in-minute", counted(n))),
-  hour: (n) => plain(I18n.t("format-in-hour", counted(n))),
-  day: (n) => plain(I18n.t("format-in-day", counted(n))),
+  second: (n) => displayed(I18n.t("format-in-second", counted(n))),
+  minute: (n) => displayed(I18n.t("format-in-minute", counted(n))),
+  hour: (n) => displayed(I18n.t("format-in-hour", counted(n))),
+  day: (n) => displayed(I18n.t("format-in-day", counted(n))),
 };
 
 const unit = {
-  day: (n, amount) => plain(I18n.t("format-unit-day", counted(n, amount))),
-  hour: (n, amount) => plain(I18n.t("format-unit-hour", counted(n, amount))),
-  minute: (n, amount) => plain(I18n.t("format-unit-minute", counted(n, amount))),
-  second: (n, amount) => plain(I18n.t("format-unit-second", counted(n, amount))),
-  millisecond: (n, amount) => plain(I18n.t("format-unit-millisecond", counted(n, amount))),
-  microsecond: (n, amount) => plain(I18n.t("format-unit-microsecond", counted(n, amount))),
-  nanosecond: (n, amount) => plain(I18n.t("format-unit-nanosecond", counted(n, amount))),
+  day: (n, amount) => displayed(I18n.t("format-unit-day", counted(n, amount))),
+  hour: (n, amount) => displayed(I18n.t("format-unit-hour", counted(n, amount))),
+  minute: (n, amount) => displayed(I18n.t("format-unit-minute", counted(n, amount))),
+  second: (n, amount) => displayed(I18n.t("format-unit-second", counted(n, amount))),
+  millisecond: (n, amount) => displayed(I18n.t("format-unit-millisecond", counted(n, amount))),
+  microsecond: (n, amount) => displayed(I18n.t("format-unit-microsecond", counted(n, amount))),
+  nanosecond: (n, amount) => displayed(I18n.t("format-unit-nanosecond", counted(n, amount))),
 };
 
 const size = {
-  b: (n, amount) => plain(I18n.t("format-bytes-b", counted(n, amount))),
-  kb: (n, amount) => plain(I18n.t("format-bytes-kb", counted(n, amount))),
-  mb: (n, amount) => plain(I18n.t("format-bytes-mb", counted(n, amount))),
-  gb: (n, amount) => plain(I18n.t("format-bytes-gb", counted(n, amount))),
+  b: (n, amount) => displayed(I18n.t("format-bytes-b", counted(n, amount))),
+  kb: (n, amount) => displayed(I18n.t("format-bytes-kb", counted(n, amount))),
+  mb: (n, amount) => displayed(I18n.t("format-bytes-mb", counted(n, amount))),
+  gb: (n, amount) => displayed(I18n.t("format-bytes-gb", counted(n, amount))),
 };
 
 function coerceNumber(value) {
@@ -191,7 +204,7 @@ export function formatFixed(value, { decimals = 2, fallback = DASH, trim = false
  * agrees on one system.
  */
 function compactText(num, minimumFractionDigits, maximumFractionDigits = minimumFractionDigits) {
-  return plain(
+  return stripIsolates(
     intl(Intl.NumberFormat, { notation: "compact", minimumFractionDigits, maximumFractionDigits }).format(num)
   );
 }
@@ -265,24 +278,24 @@ export function formatCompactNumber(value, digitsOrOptions = 2, maybeFallback = 
 }
 
 export function formatBooleanFlag(value, unknownLabel) {
-  if (value === true) return plain(I18n.t("format-yes"));
-  if (value === false) return plain(I18n.t("format-no"));
-  return orElse(unknownLabel, () => plain(I18n.t("format-unknown")));
+  if (value === true) return displayed(I18n.t("format-yes"));
+  if (value === false) return displayed(I18n.t("format-no"));
+  return orElse(unknownLabel, () => displayed(I18n.t("format-unknown")));
 }
 
 /** An already formatted US dollar amount with the dollar symbol ("1.23K" -> "$1.23K"). */
 export function withUsdSymbol(amount) {
-  return plain(I18n.t("format-usd-amount", { amount: String(amount) }));
+  return displayed(I18n.t("format-usd-amount", { amount: String(amount) }));
 }
 
 /** An already formatted percentage number with the percent sign ("12.5" -> "12.5%"). */
 export function withPercentUnit(amount) {
-  return plain(I18n.t("format-percent-amount", { amount: String(amount) }));
+  return displayed(I18n.t("format-percent-amount", { amount: String(amount) }));
 }
 
 /** An already formatted amount marked approximate ("$1.23K" -> "≈ $1.23K"). */
 export function withApprox(text) {
-  return plain(I18n.t("format-approx", { value: String(text) }));
+  return displayed(I18n.t("format-approx", { value: String(text) }));
 }
 
 export function formatCurrencyUSD(value, { fallback = DASH, approx = false } = {}) {
@@ -418,7 +431,7 @@ function percentText(num, decimals, sign) {
   let signDisplay = "never";
   if (negative && sign !== "none") signDisplay = "always";
   else if (!negative && (sign === "always" || (sign === "auto" && num > 0))) signDisplay = "always";
-  return plain(
+  return displayed(
     intl(Intl.NumberFormat, {
       style: "percent",
       minimumFractionDigits: decimals,
@@ -477,19 +490,19 @@ export function formatSol(amount, { decimals = 4, fallback = HYPHEN, suffix } = 
   }
   const formatted = localizeDecimal(num.toFixed(decimals));
   if (suffix === undefined) {
-    return plain(I18n.t("format-native-amount", { amount: formatted }));
+    return displayed(I18n.t("format-native-amount", { amount: formatted }));
   }
   return `${formatted}${suffix}`;
 }
 
 /** An already formatted elapsed span with the "ago" wording ("3h 5m" -> "3h 5m ago"); `count` selects the plural form. */
 export function withAgo(span, count = 0) {
-  return plain(I18n.t("format-ago-span", counted(count, span)));
+  return displayed(I18n.t("format-ago-span", counted(count, span)));
 }
 
 /** An already formatted SOL amount with the SOL term ("0.1500" -> "0.1500 SOL"). */
 export function withSolUnit(amount) {
-  return plain(I18n.t("format-native-amount", { amount }));
+  return displayed(I18n.t("format-native-amount", { amount }));
 }
 
 /**
@@ -511,7 +524,7 @@ function groupedDecimal(digits) {
   if (!/^\d+(\.\d+)?$/.test(digits)) return localizeDecimal(digits);
   const fraction = digits.split(".")[1]?.length ?? 0;
   // A decimal string is formatted exactly, with no binary rounding in between.
-  return plain(
+  return displayed(
     intl(Intl.NumberFormat, {
       minimumFractionDigits: fraction,
       maximumFractionDigits: fraction,
@@ -771,9 +784,9 @@ export function formatTimeAgo(value, { fallback = HYPHEN, style = "compact" } = 
   const seconds = Math.floor((Date.now() - date.getTime()) / 1000);
   if (style === "detailed") {
     const elapsed = (Date.now() - date.getTime()) / 1000;
-    if (elapsed < 5) return plain(I18n.t("format-just-now"));
+    if (elapsed < 5) return displayed(I18n.t("format-just-now"));
     const span = formatUptime(Math.round(elapsed), { style: "trimmed" });
-    return plain(I18n.t("format-ago-span", counted(Math.round(elapsed), span)));
+    return displayed(I18n.t("format-ago-span", counted(Math.round(elapsed), span)));
   }
   if (seconds < 0) {
     return ago.second(0);
@@ -799,7 +812,7 @@ export function formatTimeUntil(value, { fallback = HYPHEN, past } = {}) {
     return fallback;
   }
   const seconds = Math.floor((date.getTime() - Date.now()) / 1000);
-  if (seconds <= 0) return orElse(past, () => plain(I18n.t("format-due")));
+  if (seconds <= 0) return orElse(past, () => displayed(I18n.t("format-due")));
   if (seconds < 60) return until.second(seconds);
   const minutes = Math.floor(seconds / 60);
   if (minutes < 60) return until.minute(minutes);
@@ -826,7 +839,7 @@ export function formatUptime(seconds, { fallback, style = "detailed" } = {}) {
     const wholeHours = Math.floor(total / 3600);
     if (wholeHours > 0) return `${unit.hour(wholeHours)} ${unit.minute(minutes)}`;
     if (minutes > 0) return unit.minute(minutes);
-    return plain(I18n.t("format-under-minute"));
+    return displayed(I18n.t("format-under-minute"));
   }
 
   // `trimmed` is `compact` without a trailing zero part ("3h", not "3h 0m").
@@ -891,9 +904,9 @@ export function formatMemoryMb(megabytes, { fallback = DASH } = {}) {
   }
   if (num >= 1024) {
     const gigabytes = num / 1024;
-    return plain(I18n.t("format-memory-gb", counted(gigabytes, localizeDecimal(gigabytes.toFixed(1)))));
+    return displayed(I18n.t("format-memory-gb", counted(gigabytes, localizeDecimal(gigabytes.toFixed(1)))));
   }
-  return plain(I18n.t("format-memory-mb", counted(Math.round(num))));
+  return displayed(I18n.t("format-memory-mb", counted(Math.round(num))));
 }
 
 /** Round-trip latency in milliseconds; two decimals in seconds from 1000 ms. */

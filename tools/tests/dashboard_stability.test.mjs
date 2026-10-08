@@ -272,11 +272,45 @@ async function assertPinnedEdgeClean(page, label) {
 }
 
 /** Render every view, then check the page does not scroll sideways. */
-async function assertViewsFit(page, views, label) {
+async function assertViewsFit(page, views, label, alsoAssert) {
   for (const view of views) {
     await assertPopulated(page, view);
     if (!view.fitDefect) await assertNoHorizontalOverflow(page, `${label} ${view.name}`);
+    await alsoAssert?.(page, `${label} ${view.name}`);
   }
+}
+
+/**
+ * In a right-to-left page a short value whose number is followed by a Latin unit
+ * ("134 MB", "0.5 SOL", "12%") reads number first, left to right. Split runs show the
+ * unit on the far side of the number ("MB 134").
+ */
+async function assertValuesInOrder(page, label) {
+  const split = await page.evaluate(() => {
+    const found = new Set();
+    const walker = document.createTreeWalker(document.body, NodeFilter.SHOW_TEXT);
+    while (walker.nextNode()) {
+      const node = walker.currentNode;
+      const text = node.textContent;
+      const value = /\d[\d.,]*\s?(?:[A-Za-z]+\b|%)/.exec(text);
+      const owner = node.parentElement;
+      if (!value || text.trim().length > 32 || !owner?.getClientRects().length) continue;
+      const unit = value.index + value[0].search(/[A-Za-z%]/);
+      const box = (index) => {
+        const range = document.createRange();
+        range.setStart(node, index);
+        range.setEnd(node, index + 1);
+        return range.getBoundingClientRect();
+      };
+      const digit = box(value.index);
+      const letter = box(unit);
+      if (!digit.width || !letter.width || Math.abs(digit.top - letter.top) > 4) continue;
+      if (digit.left > letter.left)
+        found.add(`${owner.className || owner.tagName}: ${text.trim()}`);
+    }
+    return [...found];
+  });
+  assert.deepEqual(split, [], `${label}: number and unit split apart`);
 }
 
 async function assertTheme(page, theme) {
@@ -404,7 +438,7 @@ describe("dashboard stability", { concurrency: 4 }, () => {
           document.documentElement.lang,
         ]);
         assert.deepEqual([dir, lang], ["rtl", RTL_LOCALE]);
-        await assertViewsFit(page, views, RTL_LOCALE);
+        await assertViewsFit(page, views, RTL_LOCALE, assertValuesInOrder);
         await finish(session);
       });
 

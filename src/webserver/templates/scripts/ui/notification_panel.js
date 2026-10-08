@@ -9,6 +9,7 @@ import {
   formatDate,
   formatFixed,
   formatPercentValue,
+  formatTimeAgo,
   formatTimeSpan,
   formatTimestamp,
   withSolUnit,
@@ -18,6 +19,9 @@ import { closeReasonText } from "./trade_reason.js";
 import { ConfirmationDialog } from "./confirmation_dialog.js";
 import { enhanceAllSelects } from "./custom_select.js";
 import { playTabSwitch } from "../core/sounds.js";
+
+/** Notifications younger than a week show a relative time; older ones their date. */
+const WEEK_MS = 7 * 24 * 60 * 60 * 1000;
 
 // Action type ids serialized by `ActionType` (src/actions/types.rs).
 const ACTION_TYPE_LABELS = Object.freeze({
@@ -899,10 +903,7 @@ function setupNotificationListDelegation() {
   list.addEventListener("click", handlers.notificationList);
 }
 
-/**
- * Modern relative time: "just now", "5 min ago", "2 hours ago", "3 days ago",
- * then an absolute "Jun 25" / "Jun 25, 2025" for anything older than a week.
- */
+/** Relative time ("5m ago") for the last week, then the absolute date ("Jun 25"). */
 function formatTime(timestamp) {
   if (!timestamp) return "";
 
@@ -911,19 +912,8 @@ function formatTime(timestamp) {
     return "";
   }
 
-  const now = new Date();
-  const diffSec = Math.max(0, Math.floor((now - date) / 1000));
-  const diffMin = Math.floor(diffSec / 60);
-  const diffHr = Math.floor(diffMin / 60);
-  const diffDay = Math.floor(diffHr / 24);
-
-  if (diffSec < 45) return "just now";
-  if (diffMin < 60) return `${diffMin} min ago`;
-  if (diffHr < 24) return `${diffHr} ${diffHr === 1 ? "hour" : "hours"} ago`;
-  if (diffDay < 7) return `${diffDay} ${diffDay === 1 ? "day" : "days"} ago`;
-
-  const sameYear = date.getFullYear() === now.getFullYear();
-  return formatDate(date, { includeYear: !sameYear });
+  if (Date.now() - date.getTime() < WEEK_MS) return formatTimeAgo(date);
+  return formatDate(date, { includeYear: date.getFullYear() !== new Date().getFullYear() });
 }
 
 /**
