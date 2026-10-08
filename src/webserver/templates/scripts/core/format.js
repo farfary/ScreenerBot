@@ -221,20 +221,21 @@ function usesKmbSteps() {
 
 /**
  * A compact figure (magnitude of at least one thousand) at exactly `decimals` fraction
- * digits. Under `K`/`M`/`B` steps a figure keeps its own step where Intl would change it:
- * a value whose rounding reaches 1000 of its step ("1000.00K"), a magnitude past the
- * billions ("1000.00B"), and past the millions when `billions` is off ("2500.0M").
+ * digits, or at most `decimals` with `trim` ("462M", "8.4M", "1.17B"). Under `K`/`M`/`B`
+ * steps a figure keeps its own step where Intl would change it: a value whose rounding
+ * reaches 1000 of its step ("1000.00K"), a magnitude past the billions ("1000.00B"), and
+ * past the millions when `billions` is off ("2500.0M").
  */
-function compactFixed(num, decimals, billions = true) {
+function compactFixed(num, decimals, billions = true, trim = false) {
   if (usesKmbSteps()) {
     const abs = Math.abs(num);
     const [divisor, suffix] = billions && abs >= 1e9 ? [1e9, "B"] : abs >= 1e6 ? [1e6, "M"] : [1e3, "K"];
     const digits = (num / divisor).toFixed(decimals);
     if (Math.abs(Number(digits)) >= 1000) {
-      return `${localizeDecimal(digits)}${suffix}`;
+      return `${localizeDecimal(trim ? trimZeros(digits) : digits)}${suffix}`;
     }
   }
-  return compactText(num, decimals);
+  return compactText(num, trim ? 0 : decimals, decimals);
 }
 
 /**
@@ -310,7 +311,9 @@ export function formatCurrencyUSD(value, { fallback = DASH, approx = false } = {
 function usdText(num) {
   const abs = Math.abs(num);
   if (abs >= 1_000) {
-    return withUsdSymbol(compactFixed(num, 2));
+    // Compact dollars drop trailing fraction zeros ("$462M", "$8.4M"); cents below a
+    // thousand keep both digits.
+    return withUsdSymbol(compactFixed(num, 2, true, true));
   }
   if (abs > 0 && abs < 0.01) {
     // Sub-cent prices round to $0.00 with toFixed(2); render the real value in
