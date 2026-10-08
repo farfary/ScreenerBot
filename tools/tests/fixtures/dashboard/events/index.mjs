@@ -49,7 +49,7 @@ export const views = [
       {
         trigger: "#events-root tbody tr[data-row-id]",
         dialog: ".events-dialog-overlay.is-visible",
-        close: ".events-dialog-overlay.is-visible .events-dialog-close",
+        close: ".events-dialog-overlay.is-visible .modal-close",
       },
     ],
   },

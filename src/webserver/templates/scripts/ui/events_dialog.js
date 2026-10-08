@@ -1,7 +1,7 @@
 // Copyright (c) 2024-2026 ScreenerBot (screenerbot.io)
 // SPDX-License-Identifier: BUSL-1.1
 //
-// Events dialog - modal EventDetailsDialog showing the message, field grid, JSON payload section and copy-to-clipboard export of one event.
+// Events dialog - modal EventDetailsDialog showing the message, key-value field list, JSON payload section and copy-to-clipboard export of one event.
 
 import { on, off } from "../core/dom.js";
 import * as Utils from "../core/utils.js";
@@ -16,6 +16,20 @@ export function eventMessageText(event) {
 
 // EventDetailsDialog renders a modal overlay for inspecting full event data.
 const notAvailable = () => I18n.t("events-dialog-not-available");
+
+/** Longest message the dialog title carries; a longer one is shown in the body instead. */
+const TITLE_MESSAGE_MAX_CHARS = 140;
+
+/** The event message when it fits the title, else an empty string. */
+function titleMessage(event) {
+  const message = coerceText(eventMessageText(event)).trim();
+  return message.length <= TITLE_MESSAGE_MAX_CHARS ? message : "";
+}
+
+/** Event time to the second, as the dialog and the copy export show it. */
+function formatEventTimestamp(value) {
+  return Utils.formatTimestamp(value, { includeSeconds: true, fallback: notAvailable() });
+}
 
 function formatMintDisplay(mint) {
   if (!mint) {
@@ -86,25 +100,23 @@ export class EventDetailsDialog {
             <h2 id="events-dialog-title" class="events-dialog-title" data-l10n-id="events-dialog-title"></h2>
             <div class="events-dialog-subtitle"></div>
           </div>
-          <button type="button" class="events-dialog-close" data-action="close" data-l10n-id="events-dialog-close">&times;</button>
-    </header>
+          <button type="button" class="modal-close" data-action="close" data-l10n-id="events-dialog-close">
+            <i class="icon-x" aria-hidden="true"></i>
+          </button>
+        </header>
         <div class="events-dialog-body">
           <div class="events-dialog-message" data-visible="false"></div>
-          <div class="events-dialog-fields"></div>
+          <dl class="events-dialog-fields"></dl>
           <section class="events-dialog-payload" data-visible="false">
             <h3 class="events-dialog-section-title" data-l10n-id="events-dialog-payload"></h3>
             <pre class="events-dialog-payload-code"><code></code></pre>
           </section>
         </div>
         <footer class="events-dialog-footer">
-          <button type="button" class="events-dialog-copy" data-action="copy" data-l10n-id="events-dialog-copy-title">
-            <svg width="16" height="16" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5">
-              <rect x="5" y="5" width="9" height="9" rx="1.5"></rect>
-              <path d="M3 10V3a1.5 1.5 0 0 1 1.5-1.5H10"></path>
-            </svg>
+          <button type="button" class="btn btn-secondary events-dialog-copy" data-action="copy" data-l10n-id="events-dialog-copy-title">
+            <i class="icon-copy" aria-hidden="true"></i>
             <span data-l10n-id="events-dialog-copy"></span>
           </button>
-          <button type="button" class="events-dialog-dismiss" data-action="close" data-l10n-id="common-action-close"></button>
         </footer>
       </div>
     `;
@@ -246,144 +258,96 @@ export class EventDetailsDialog {
       return;
     }
 
-    const message = coerceText(eventMessageText(event)).trim();
-    const fallback = event.category
-      ? I18n.t("events-dialog-category-event", { category: eventCategoryLabel(event.category) })
-      : I18n.t("events-dialog-title");
-    const heading = message
-      ? message.length > 140
-        ? `${message.slice(0, 140)}...`
-        : message
-      : fallback;
+    const message = titleMessage(event);
+    const heading =
+      message ||
+      (event.category
+        ? I18n.t("events-dialog-category-event", { category: eventCategoryLabel(event.category) })
+        : I18n.t("events-dialog-title"));
 
-    this.titleEl.textContent = heading || I18n.t("events-dialog-title");
-    this.titleEl.title = message || fallback;
-    this.dialog.setAttribute("aria-label", this.titleEl.textContent);
+    this.titleEl.textContent = heading;
+    this.titleEl.title = heading;
+    this.dialog.setAttribute("aria-label", heading);
 
+    const pieces = [];
     const badge = severityBadge(event.severity);
+    if (badge) {
+      pieces.push(badge);
+    }
     const metaParts = [];
-    if (event.category) {
+    if (event.category && message) {
       metaParts.push(Utils.escapeHtml(eventCategoryLabel(event.category)));
     }
     if (event.subtype) {
       metaParts.push(Utils.escapeHtml(eventSubtypeLabel(event.subtype)));
     }
-    if (event.event_time) {
-      const formatted = Utils.formatTimestamp(event.event_time, {
-        includeSeconds: true,
-        fallback: notAvailable(),
-      });
-      metaParts.push(Utils.escapeHtml(formatted));
-    }
-
-    const metaHtml =
-      metaParts.length > 0
-        ? `<span class="events-dialog-subtitle-meta">${metaParts.join(" &bull; ")}</span>`
-        : "";
-    const pieces = [];
-    if (badge) {
-      pieces.push(badge);
-    }
-    if (metaHtml) {
-      pieces.push(metaHtml);
+    if (metaParts.length > 0) {
+      pieces.push(`<span class="events-dialog-subtitle-meta">${metaParts.join(" &bull; ")}</span>`);
     }
     this.subtitleEl.innerHTML = pieces.join(" ");
   }
 
+  /** Shows the message in the body only when it is too long for the title. */
   _renderMessage(event) {
     if (!this.messageEl) {
       return;
     }
 
     const message = coerceText(eventMessageText(event)).trim();
-    if (message) {
-      this.messageEl.textContent = message;
-      this.messageEl.setAttribute("data-visible", "true");
-      this.messageEl.title = message;
-    } else {
-      this.messageEl.textContent = "";
-      this.messageEl.setAttribute("data-visible", "false");
-      this.messageEl.removeAttribute("title");
-    }
+    const inBody = Boolean(message) && !titleMessage(event);
+    this.messageEl.textContent = inBody ? message : "";
+    this.messageEl.setAttribute("data-visible", inBody ? "true" : "false");
   }
 
+  /**
+   * Key-value list of what the header does not already show: the id, token,
+   * reference and one time with its age. The creation time is listed only when it
+   * differs from the event time at the shown precision.
+   */
   _renderFields(event) {
     if (!this.fieldsEl) {
       return;
     }
 
-    const fields = [];
-
-    fields.push({ label: I18n.t("events-dialog-field-id"), value: event.id });
-    if (event.severity) {
-      fields.push({
-        label: I18n.t("events-dialog-field-severity"),
-        value: severityBadge(event.severity),
-        isHtml: true,
-      });
-    }
-    if (event.category) {
-      fields.push({
-        label: I18n.t("events-dialog-field-category"),
-        value: eventCategoryLabel(event.category),
-      });
-    }
-    if (event.subtype) {
-      fields.push({
-        label: I18n.t("events-dialog-field-subtype"),
-        value: eventSubtypeLabel(event.subtype),
-      });
-    }
+    const fields = [{ label: I18n.t("events-dialog-field-id"), value: safeText(event.id) }];
     if (event.mint) {
       fields.push({
         label: I18n.t("events-dialog-field-mint"),
         value: formatMintDisplay(event.mint),
-        isHtml: true,
-        wide: true,
       });
     }
     if (event.reference_id) {
-      fields.push({ label: I18n.t("events-dialog-field-reference"), value: event.reference_id });
+      fields.push({
+        label: I18n.t("events-dialog-field-reference"),
+        value: safeText(event.reference_id),
+      });
     }
-    if (event.event_time) {
+    const eventTime = event.event_time ? formatEventTimestamp(event.event_time) : "";
+    if (eventTime) {
+      const age = Utils.formatTimeAgo(event.event_time, { fallback: "" });
       fields.push({
         label: I18n.t("events-dialog-field-time"),
-        value: Utils.formatTimestamp(event.event_time, {
-          includeSeconds: true,
-          fallback: notAvailable(),
-        }),
-      });
-      fields.push({
-        label: I18n.t("events-dialog-field-age"),
-        value: Utils.formatTimeAgo(event.event_time, { fallback: "-" }),
+        value: age
+          ? `${safeText(eventTime)} <span class="events-dialog-field-aside">${safeText(age)}</span>`
+          : safeText(eventTime),
       });
     }
     if (event.created_at) {
-      fields.push({
-        label: I18n.t("events-dialog-field-created"),
-        value: Utils.formatTimestamp(event.created_at, {
-          includeSeconds: true,
-          fallback: notAvailable(),
-        }),
-      });
+      const created = formatEventTimestamp(event.created_at);
+      if (created !== eventTime) {
+        fields.push({ label: I18n.t("events-dialog-field-created"), value: safeText(created) });
+      }
     }
 
-    const html = fields.map((field) => this._renderField(field)).join("");
-
-    this.fieldsEl.innerHTML = html;
+    this.fieldsEl.innerHTML = fields.map((field) => this._renderField(field)).join("");
   }
 
+  /** One key-value row; `value` is already escaped markup. */
   _renderField(field) {
-    const classes = ["events-dialog-field"];
-    if (field.wide) {
-      classes.push("events-dialog-field--wide");
-    }
-    const label = Utils.escapeHtml(field.label || "");
-    const value = field.isHtml ? field.value : safeText(field.value);
     return `
-      <div class="${classes.join(" ")}">
-        <span class="events-dialog-field-label">${label}</span>
-        <span class="events-dialog-field-value">${value}</span>
+      <div class="events-dialog-field">
+        <dt class="events-dialog-field-label">${Utils.escapeHtml(field.label)}</dt>
+        <dd class="events-dialog-field-value">${field.value}</dd>
       </div>
     `;
   }
@@ -487,11 +451,7 @@ export class EventDetailsDialog {
     line(I18n.t("events-dialog-field-subtype"), event.subtype || notAvailable());
 
     if (event.event_time) {
-      const formatted = Utils.formatTimestamp(event.event_time, {
-        includeSeconds: true,
-        fallback: notAvailable(),
-      });
-      line(I18n.t("events-dialog-field-time"), formatted);
+      line(I18n.t("events-dialog-field-time"), formatEventTimestamp(event.event_time));
       line(
         I18n.t("events-dialog-field-age"),
         Utils.formatTimeAgo(event.event_time, { fallback: "-" })
@@ -499,11 +459,7 @@ export class EventDetailsDialog {
     }
 
     if (event.created_at) {
-      const formatted = Utils.formatTimestamp(event.created_at, {
-        includeSeconds: true,
-        fallback: notAvailable(),
-      });
-      line(I18n.t("events-dialog-field-created"), formatted);
+      line(I18n.t("events-dialog-field-created"), formatEventTimestamp(event.created_at));
     }
 
     if (event.mint) {
@@ -554,9 +510,7 @@ export class EventDetailsDialog {
     }
 
     const originalContent = this.copyButton.innerHTML;
-    const icon = success
-      ? '<svg width="16" height="16" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="2"><path d="M3 8l3 3 7-7"></path></svg>'
-      : '<svg width="16" height="16" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="2"><path d="M4 4l8 8M12 4l-8 8"></path></svg>';
+    const icon = `<i class="${success ? "icon-check" : "icon-x"}" aria-hidden="true"></i>`;
     const text = success ? I18n.t("events-dialog-copy-done") : I18n.t("events-dialog-copy-failed");
 
     this.copyButton.innerHTML = `${icon}<span>${Utils.escapeHtml(text)}</span>`;
