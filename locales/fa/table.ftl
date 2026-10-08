@@ -1,7 +1,5 @@
 ## States and column menu
 
-table-empty-title = داده‌ای وجود ندارد
-table-empty-message = داده‌ای برای نمایش وجود ندارد
 table-empty-filtered-title = نتیجه‌ای یافت نشد
 table-empty-filtered-message = جستجو یا فیلترها را تغییر دهید
 table-loading-message = در حال بارگذاری...

@@ -12,6 +12,13 @@ positions-state-reason-position-created = ポジションを作成しました
 positions-status-open = オープン
 positions-status-closed = クローズ済み
 positions-status-archived = アーカイブ済み
+# Empty positions table per status (POSITION_EMPTY_LABELS)
+positions-open-empty = オープンポジションはありません
+    .message = 自動トレーダーまたは手動購入でポジションが開かれると、ここに表示されます。
+positions-closed-empty = クローズしたポジションはありません
+    .message = 完全に売却されたポジションはここに移ります。
+positions-archived-empty = アーカイブしたポジションはありません
+    .message = アーカイブで取り除いたポジションはここに保管されます。
 positions-origin-copy = コピー
 positions-origin-manual = 手動
 positions-origin-wallet = ウォレット

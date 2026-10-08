@@ -311,6 +311,25 @@ tokens-view-blacklisted = Daftar Hitam
 tokens-view-positions = Posisi
 tokens-view-recent = Terbaru
 tokens-view-ohlcv = Data OHLCV
+# Empty token table per view (TOKEN_VIEW_EMPTY_LABELS)
+tokens-view-pool-empty = Belum ada token berharga
+    .message = Token muncul di sini setelah lolos penyaringan dan harga pool-nya dihitung.
+tokens-view-no-market-empty = Tidak ada token tanpa data pasar
+    .message = Token muncul di sini selama sumber data pasar belum mencantumkannya.
+tokens-view-all-empty = Belum ada token yang ditemukan
+    .message = Setiap token yang ditemukan muncul di sini, apa pun hasil penyaringannya.
+tokens-view-passed-empty = Tidak ada token yang lolos penyaringan
+    .message = Token yang lolos semua filter aktif muncul di sini. Tinjau halaman Penyaringan jika ini tetap kosong.
+tokens-view-rejected-empty = Tidak ada token yang ditolak
+    .message = Token yang gagal pada sebuah filter muncul di sini beserta alasannya.
+tokens-view-blacklisted-empty = Tidak ada token dalam daftar hitam
+    .message = Token yang dikecualikan dari trading, oleh Anda atau oleh pemeriksaan keamanan, muncul di sini.
+tokens-view-positions-empty = Tidak ada token dalam posisi
+    .message = Token yang dipegang dalam posisi terbuka muncul di sini.
+tokens-view-recent-empty = Tidak ada token terbaru
+    .message = Token yang baru ditemukan muncul di sini saat ditemukan.
+tokens-ohlcv-empty = Belum ada data grafik
+    .message = Token muncul di sini setelah candle-nya mulai dikumpulkan.
 
 tokens-cell-logo-enlarge = Klik untuk memperbesar
 tokens-boost-title = Di-boost { $boosts } kali di screenerbot.io
@@ -336,6 +355,7 @@ tokens-favorites-load-failed-title = Favorit tidak dapat dimuat
 tokens-favorites-load-failed-toast = Tidak dapat memuat favorit
 tokens-favorites-total = Total Favorit
 tokens-favorites-empty-title = Belum Ada Favorit
+    .message = Beri bintang pada token di daftar mana pun untuk menyimpannya di sini.
 tokens-favorites-empty-description = Gunakan pencarian ({ $shortcut }) untuk menemukan token dan menambahkannya ke favorit Anda.
 
 tokens-column-token = Token

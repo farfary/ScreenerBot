@@ -334,6 +334,25 @@ tokens-view-blacklisted = Kara listede
 tokens-view-positions = Pozisyonlar
 tokens-view-recent = Son
 tokens-view-ohlcv = OHLCV Verisi
+# Empty token table per view (TOKEN_VIEW_EMPTY_LABELS)
+tokens-view-pool-empty = Henüz fiyatlanmış token yok
+    .message = Tokenler filtrelemeyi geçip havuz fiyatları hesaplandığında burada görünür.
+tokens-view-no-market-empty = Piyasa verisi olmayan token yok
+    .message = Tokenler, piyasa verisi kaynakları onları henüz listelemediği sürece burada görünür.
+tokens-view-all-empty = Henüz keşfedilen token yok
+    .message = Keşfin bulduğu her token, filtreleme sonucu ne olursa olsun burada görünür.
+tokens-view-passed-empty = Filtrelemeyi geçen token yok
+    .message = Tüm etkin filtreleri geçen tokenler burada görünür. Bu liste boş kalırsa Filtreleme sayfasını gözden geçirin.
+tokens-view-rejected-empty = Reddedilen token yok
+    .message = Bir filtreden geçemeyen tokenler nedeniyle birlikte burada görünür.
+tokens-view-blacklisted-empty = Kara listede token yok
+    .message = Sizin veya güvenlik kontrollerinin işlemden hariç tuttuğu tokenler burada görünür.
+tokens-view-positions-empty = Pozisyonda token yok
+    .message = Açık pozisyonlarda tutulan tokenler burada görünür.
+tokens-view-recent-empty = Yeni token yok
+    .message = Yeni keşfedilen tokenler bulundukça burada görünür.
+tokens-ohlcv-empty = Henüz grafik verisi yok
+    .message = Tokenler mumları toplanmaya başladığında burada görünür.
 
 # Tokens page: token cell (scripts/pages/tokens/formatters.js)
 
@@ -365,6 +384,7 @@ tokens-favorites-load-failed-title = Favoriler yüklenemedi
 tokens-favorites-load-failed-toast = Favoriler yüklenemedi
 tokens-favorites-total = Toplam Favori
 tokens-favorites-empty-title = Henüz Favori Yok
+    .message = Burada tutmak için herhangi bir listede bir tokeni yıldızlayın.
 tokens-favorites-empty-description = Tokenları bulup favorilerinize eklemek için aramayı ({ $shortcut }) kullanın.
 
 # Tokens page: OHLCV data view (scripts/pages/tokens/ohlcv.js)

@@ -187,3 +187,7 @@ transactions-dialog-ata-net-rent = تأثیر خالص رنت
 transactions-dialog-ata-operations-title = عملیات ATA ({ $count })
 transactions-dialog-raw-copy = کپی JSON
 transactions-dialog-raw-empty = داده خامی موجود نیست
+
+# Empty table (scripts/pages/transactions.js)
+transactions-empty = هنوز تراکنشی نیست
+    .message = سواپ‌ها و انتقال‌های کیف پول معاملاتی پس از تأیید روی زنجیره در اینجا نمایش داده می‌شوند.

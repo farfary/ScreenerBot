@@ -177,7 +177,6 @@ export class DataTable {
       restoreServerState: options.restoreServerState !== false, // NEW: Auto-restore server state
       enableLogging: options.enableLogging || false,
       rowIdField: options.rowIdField || "id",
-      emptyMessage: options.emptyMessage || I18n.t("table-empty-message"),
       loadingMessage: options.loadingMessage || I18n.t("table-loading-message"),
       onRefresh: options.onRefresh || null,
       onRowClick: options.onRowClick || null,
@@ -977,25 +976,28 @@ export class DataTable {
   }
 
   /**
-   * Render empty state
+   * Render empty state. Every table names what is missing and why: `emptyTitle` and
+   * `emptyMessage` are strings, or functions read at render time for a table whose
+   * content follows a view. An active search or filter shows the shared no-results text.
    */
   _renderEmptyState() {
     const hasFilters = this._hasActiveFilters();
     const emptyIcon = hasFilters ? "icon-search" : "icon-inbox";
+    const resolve = (text) => (typeof text === "function" ? text() : text) ?? "";
     const emptyTitle = hasFilters
       ? I18n.t("table-empty-filtered-title")
-      : this.options.emptyTitle || I18n.t("table-empty-title");
+      : resolve(this.options.emptyTitle);
     const emptyMessage = hasFilters
       ? I18n.t("table-empty-filtered-message")
-      : this.options.emptyMessage || I18n.t("table-empty-message");
+      : resolve(this.options.emptyMessage);
 
     return `
         <tr>
           <td colspan="100" class="dt-state-cell">
             <div class="dt-empty-state">
               <i class="dt-empty-icon ${emptyIcon}"></i>
-              <div class="dt-empty-title">${emptyTitle}</div>
-              <div class="dt-empty-message">${emptyMessage}</div>
+              <div class="dt-empty-title">${escapeHtml(emptyTitle)}</div>
+              <div class="dt-empty-message">${escapeHtml(emptyMessage)}</div>
             </div>
           </td>
         </tr>`;

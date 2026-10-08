@@ -165,3 +165,7 @@ transactions-dialog-ata-net-rent = Tác động ròng của phí rent
 transactions-dialog-ata-operations-title = Thao tác ATA ({ $count })
 transactions-dialog-raw-copy = Sao chép JSON
 transactions-dialog-raw-empty = Không có dữ liệu thô
+
+# Empty table (scripts/pages/transactions.js)
+transactions-empty = Chưa có giao dịch
+    .message = Các swap và chuyển khoản của ví giao dịch xuất hiện tại đây sau khi được xác nhận on-chain.

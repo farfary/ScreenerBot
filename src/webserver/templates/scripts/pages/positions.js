@@ -12,7 +12,7 @@ import * as AppState from "../core/app_state.js";
 import { DataTable } from "../ui/data_table.js";
 import { TabBar, TabBarManager } from "../ui/tab_bar.js";
 import { stepShortLabel } from "../ui/action_step.js";
-import { POSITION_STATUS_LABELS } from "../ui/position_status.js";
+import { POSITION_EMPTY_LABELS, POSITION_STATUS_LABELS } from "../ui/position_status.js";
 import { manualTrade } from "../ui/manual_trade.js";
 import { PositionDetailsDialog } from "../ui/position_details_dialog.js";
 import { PositionRemoveDialog } from "../ui/position_remove_dialog.js";
@@ -947,6 +947,8 @@ function createLifecycle() {
         // so keying rows by mint caused duplicate rows and cross-sub-tab row mixing.
         rowIdField: "id",
         stateKey: getPositionsTableStateKey(state.view),
+        emptyTitle: () => I18n.label(POSITION_EMPTY_LABELS, state.view),
+        emptyMessage: () => I18n.labelAttr(POSITION_EMPTY_LABELS, state.view, "message"),
         enableLogging: false,
         sorting: {
           mode: "client",

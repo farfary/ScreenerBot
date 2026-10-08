@@ -313,6 +313,25 @@ tokens-view-blacklisted = В чёрном списке
 tokens-view-positions = Позиции
 tokens-view-recent = Недавние
 tokens-view-ohlcv = Данные OHLCV
+# Empty token table per view (TOKEN_VIEW_EMPTY_LABELS)
+tokens-view-pool-empty = Токенов с ценой пока нет
+    .message = Токены появляются здесь, когда проходят фильтрацию и цена их пула рассчитана.
+tokens-view-no-market-empty = Нет токенов без рыночных данных
+    .message = Токены находятся здесь, пока источники рыночных данных их не добавили.
+tokens-view-all-empty = Токены ещё не обнаружены
+    .message = Здесь появляется каждый найденный токен, независимо от результата фильтрации.
+tokens-view-passed-empty = Ни один токен не прошёл фильтрацию
+    .message = Здесь появляются токены, прошедшие все активные фильтры. Проверьте страницу «Фильтрация», если список остаётся пустым.
+tokens-view-rejected-empty = Нет отклонённых токенов
+    .message = Токены, не прошедшие фильтр, появляются здесь с указанием причины.
+tokens-view-blacklisted-empty = Нет токенов в чёрном списке
+    .message = Здесь появляются токены, исключённые из торговли вами или проверками безопасности.
+tokens-view-positions-empty = Нет токенов в позициях
+    .message = Здесь появляются токены из открытых позиций.
+tokens-view-recent-empty = Нет новых токенов
+    .message = Недавно обнаруженные токены появляются здесь по мере нахождения.
+tokens-ohlcv-empty = Данных графиков пока нет
+    .message = Токены появляются здесь, когда для них начинается сбор свечей.
 
 tokens-cell-logo-enlarge = Нажмите, чтобы увеличить
 tokens-boost-title = Буст на screenerbot.io: { $boosts }
@@ -338,6 +357,7 @@ tokens-favorites-load-failed-title = Не удалось загрузить из
 tokens-favorites-load-failed-toast = Не удалось загрузить избранное
 tokens-favorites-total = Всего в избранном
 tokens-favorites-empty-title = Избранного пока нет
+    .message = Отметьте токен звездой в любом списке, чтобы он оставался здесь.
 tokens-favorites-empty-description = Найдите токены через поиск ({ $shortcut }) и добавьте их в избранное.
 
 tokens-column-token = Токен

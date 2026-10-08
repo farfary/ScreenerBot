@@ -127,3 +127,7 @@ events-dialog-export-heading = 이벤트 상세
 events-dialog-export-message = 메시지
 events-dialog-export-payload = 페이로드
 events-dialog-export-line = { $label }: { $value }
+
+# Empty table (scripts/pages/events.js)
+events-empty = 아직 이벤트가 없습니다
+    .message = 서비스 시작, 거래, 경고가 발생하는 즉시 여기에 기록됩니다.

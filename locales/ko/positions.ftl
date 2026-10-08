@@ -12,6 +12,13 @@ positions-state-reason-position-created = 포지션 생성됨
 positions-status-open = 보유 중
 positions-status-closed = 종료됨
 positions-status-archived = 보관됨
+# Empty positions table per status (POSITION_EMPTY_LABELS)
+positions-open-empty = 열린 포지션이 없습니다
+    .message = 자동 트레이더나 수동 매수로 포지션이 열리면 여기에 표시됩니다.
+positions-closed-empty = 종료된 포지션이 없습니다
+    .message = 포지션은 전량 매도되면 여기로 이동합니다.
+positions-archived-empty = 보관된 포지션이 없습니다
+    .message = 보관으로 제거한 포지션이 여기에 보관됩니다.
 positions-origin-copy = 카피
 positions-origin-manual = 수동
 positions-origin-wallet = 지갑

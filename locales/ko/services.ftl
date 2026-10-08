@@ -91,3 +91,7 @@ services-tasks-tooltip =
     유휴: { $idle }
     전체 폴링: { $polls }
 services-tasks-none = 계측된 작업 없음
+
+# Empty table (scripts/pages/services.js)
+services-empty = 실행 중인 서비스가 없습니다
+    .message = 봇이 서비스를 시작하면 여기에 표시됩니다.

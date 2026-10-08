@@ -311,6 +311,25 @@ tokens-view-blacklisted = En lista negra
 tokens-view-positions = Posiciones
 tokens-view-recent = Recientes
 tokens-view-ohlcv = Datos OHLCV
+# Empty token table per view (TOKEN_VIEW_EMPTY_LABELS)
+tokens-view-pool-empty = Aún no hay tokens con precio
+    .message = Los tokens aparecen aquí cuando pasan el filtrado y se calcula el precio de su pool.
+tokens-view-no-market-empty = No hay tokens sin datos de mercado
+    .message = Los tokens aparecen aquí mientras las fuentes de datos de mercado aún no los han listado.
+tokens-view-all-empty = Aún no se han descubierto tokens
+    .message = Cada token que encuentra el descubrimiento aparece aquí, sea cual sea su resultado de filtrado.
+tokens-view-passed-empty = Ningún token pasó el filtrado
+    .message = Los tokens que pasan todos los filtros activos aparecen aquí. Revisa la página Filtrado si esto sigue vacío.
+tokens-view-rejected-empty = No hay tokens rechazados
+    .message = Los tokens que no pasan un filtro aparecen aquí con el motivo.
+tokens-view-blacklisted-empty = No hay tokens en la lista negra
+    .message = Los tokens excluidos del trading, por ti o por las comprobaciones de seguridad, aparecen aquí.
+tokens-view-positions-empty = No hay tokens en posiciones
+    .message = Los tokens en posiciones abiertas aparecen aquí.
+tokens-view-recent-empty = No hay tokens recientes
+    .message = Los tokens recién descubiertos aparecen aquí a medida que se encuentran.
+tokens-ohlcv-empty = Aún no hay datos de gráfico
+    .message = Los tokens aparecen aquí cuando se empiezan a recopilar sus velas.
 
 tokens-cell-logo-enlarge = Haz clic para ampliar
 tokens-boost-title = Impulsado { $boosts } en screenerbot.io
@@ -336,6 +355,7 @@ tokens-favorites-load-failed-title = No se pudieron cargar los favoritos
 tokens-favorites-load-failed-toast = No se pudieron cargar los favoritos
 tokens-favorites-total = Favoritos totales
 tokens-favorites-empty-title = Aún no hay favoritos
+    .message = Marca un token con una estrella en cualquier lista para guardarlo aquí.
 tokens-favorites-empty-description = Usa la búsqueda ({ $shortcut }) para encontrar tokens y añadirlos a tus favoritos.
 
 tokens-column-token = Token

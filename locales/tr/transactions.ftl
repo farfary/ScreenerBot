@@ -167,3 +167,7 @@ transactions-dialog-ata-net-rent = Net kira etkisi
 transactions-dialog-ata-operations-title = ATA operasyonları ({ $count })
 transactions-dialog-raw-copy = JSON'u kopyala
 transactions-dialog-raw-empty = Ham veri yok
+
+# Empty table (scripts/pages/transactions.js)
+transactions-empty = Henüz işlem yok
+    .message = İşlem cüzdanının swap ve transferleri zincirde onaylandığında burada görünür.

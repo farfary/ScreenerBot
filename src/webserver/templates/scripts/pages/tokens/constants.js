@@ -23,6 +23,18 @@ const TOKEN_VIEW_LABELS = Object.freeze({
   ohlcv: "tokens-view-ohlcv",
 });
 
+/** Empty state of the token table per view: the title, with the reason as `.message`. */
+export const TOKEN_VIEW_EMPTY_LABELS = Object.freeze({
+  pool: "tokens-view-pool-empty",
+  no_market: "tokens-view-no-market-empty",
+  all: "tokens-view-all-empty",
+  passed: "tokens-view-passed-empty",
+  rejected: "tokens-view-rejected-empty",
+  blacklisted: "tokens-view-blacklisted-empty",
+  positions: "tokens-view-positions-empty",
+  recent: "tokens-view-recent-empty",
+});
+
 const viewLabel = (id, icon) =>
   `<i class="${icon}"></i> ${escapeHtml(I18n.label(TOKEN_VIEW_LABELS, id))}`;
 

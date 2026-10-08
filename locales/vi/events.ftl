@@ -111,3 +111,7 @@ events-dialog-export-heading = CHI TIẾT SỰ KIỆN
 events-dialog-export-message = THÔNG ĐIỆP
 events-dialog-export-payload = PAYLOAD
 events-dialog-export-line = { $label }: { $value }
+
+# Empty table (scripts/pages/events.js)
+events-empty = Chưa có sự kiện
+    .message = Các lần khởi động dịch vụ, giao dịch và cảnh báo được ghi lại tại đây khi chúng xảy ra.

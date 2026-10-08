@@ -458,6 +458,8 @@ function createLifecycle() {
         columns,
         rowIdField: "signature",
         stateKey: "transactions-table",
+        emptyTitle: I18n.t("transactions-empty"),
+        emptyMessage: I18n.attr("transactions-empty", "message"),
         compact: true,
         stickyHeader: true,
         zebra: true,

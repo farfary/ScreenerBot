@@ -101,3 +101,7 @@ services-tasks-tooltip =
     Idle: { $idle }
     Total Polls: { $polls }
 services-tasks-none = No instrumented tasks
+
+# Empty table (scripts/pages/services.js)
+services-empty = No services running
+    .message = Services appear here once the bot has started them.

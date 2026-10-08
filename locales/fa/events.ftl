@@ -127,3 +127,7 @@ events-dialog-export-heading = جزئیات رویداد
 events-dialog-export-message = پیام
 events-dialog-export-payload = محتوا
 events-dialog-export-line = { $label }: { $value }
+
+# Empty table (scripts/pages/events.js)
+events-empty = هنوز رویدادی نیست
+    .message = شروع سرویس‌ها، معاملات و هشدارها همزمان با رخ دادن در اینجا ثبت می‌شوند.

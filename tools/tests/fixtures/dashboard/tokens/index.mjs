@@ -5,7 +5,7 @@
 
 const LIST_RUST = "src/webserver/routes/tokens/types.rs::TokenListResponse";
 const ROWS = "#tokens-root tr[data-row-id]";
-const EMPTY = { selector: "#tokens-root .dt-empty-state", text: "No data" };
+const emptyState = (text) => ({ selector: "#tokens-root .dt-empty-state", text });
 const tab = (id) => `#subTabsContainer [data-tab-id="${id}"]`;
 const DETAILS = {
   trigger: `${ROWS} .ti-row-cell__symbol`,
@@ -20,14 +20,19 @@ const FEATURED = {
 
 // Views served by `/api/tokens/list`, with the rows each fixture holds.
 const LIST_VIEWS = [
-  { view: "all", name: "all tokens", rows: 8 },
-  { view: "pool", name: "pool service tokens", rows: 6 },
-  { view: "no_market", name: "tokens without market data", rows: 3 },
-  { view: "passed", name: "passed tokens", rows: 5 },
-  { view: "rejected", name: "rejected tokens", rows: 3 },
-  { view: "blacklisted", name: "blacklisted tokens", rows: 2 },
-  { view: "positions", name: "tokens with positions", rows: 3 },
-  { view: "recent", name: "recent tokens", rows: 6 },
+  { view: "all", name: "all tokens", rows: 8, empty: "No tokens discovered yet" },
+  { view: "pool", name: "pool service tokens", rows: 6, empty: "No priced tokens yet" },
+  {
+    view: "no_market",
+    name: "tokens without market data",
+    rows: 3,
+    empty: "No tokens without market data",
+  },
+  { view: "passed", name: "passed tokens", rows: 5, empty: "No tokens passed filtering" },
+  { view: "rejected", name: "rejected tokens", rows: 3, empty: "No rejected tokens" },
+  { view: "blacklisted", name: "blacklisted tokens", rows: 2, empty: "No blacklisted tokens" },
+  { view: "positions", name: "tokens with positions", rows: 3, empty: "No tokens in positions" },
+  { view: "recent", name: "recent tokens", rows: 6, empty: "No recent tokens" },
 ];
 
 // Every token the lists hold; the details dialog opens on whichever row a view sorts first.
@@ -139,11 +144,11 @@ export const endpoints = [
 ];
 
 export const views = [
-  ...LIST_VIEWS.map(({ view, name, rows }) => ({
+  ...LIST_VIEWS.map(({ view, name, rows, empty }) => ({
     name,
     click: [tab(view)],
     populated: [{ selector: ROWS, min: rows }],
-    empty: [EMPTY],
+    empty: [emptyState(empty)],
     dialogs: view === "all" ? [DETAILS, FEATURED] : [DETAILS],
   })),
   {
@@ -161,7 +166,7 @@ export const views = [
     name: "tokens with candle data",
     click: [tab("ohlcv")],
     populated: [{ selector: "#ohlcv-table-container tr[data-row-id]", min: 5 }],
-    empty: [{ selector: "#ohlcv-table-container .dt-empty-state", text: "No data" }],
+    empty: [{ selector: "#ohlcv-table-container .dt-empty-state", text: "No chart data yet" }],
     dialogs: [
       { trigger: '#ohlcv-table-container [data-btn-id="cleanup"]', dialog: ".input-dialog" },
     ],

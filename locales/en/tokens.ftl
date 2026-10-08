@@ -355,6 +355,25 @@ tokens-view-blacklisted = Blacklisted
 tokens-view-positions = Positions
 tokens-view-recent = Recent
 tokens-view-ohlcv = OHLCV Data
+# Empty token table per view (TOKEN_VIEW_EMPTY_LABELS)
+tokens-view-pool-empty = No priced tokens yet
+    .message = Tokens appear here once they pass filtering and their pool price is computed.
+tokens-view-no-market-empty = No tokens without market data
+    .message = Tokens appear here while the market data sources have not listed them yet.
+tokens-view-all-empty = No tokens discovered yet
+    .message = Every token found by discovery appears here, whatever its filtering result.
+tokens-view-passed-empty = No tokens passed filtering
+    .message = Tokens that pass every active filter appear here. Review the Filtering page if this stays empty.
+tokens-view-rejected-empty = No rejected tokens
+    .message = Tokens that fail a filter appear here with the reason.
+tokens-view-blacklisted-empty = No blacklisted tokens
+    .message = Tokens excluded from trading, by you or by the safety checks, appear here.
+tokens-view-positions-empty = No tokens in positions
+    .message = Tokens held in open positions appear here.
+tokens-view-recent-empty = No recent tokens
+    .message = Newly discovered tokens appear here as they are found.
+tokens-ohlcv-empty = No chart data yet
+    .message = Tokens appear here once their candles are being collected.
 
 # Tokens page: token cell (scripts/pages/tokens/formatters.js)
 
@@ -387,6 +406,7 @@ tokens-favorites-load-failed-title = Favorites could not be loaded
 tokens-favorites-load-failed-toast = Could not load favorites
 tokens-favorites-total = Total Favorites
 tokens-favorites-empty-title = No Favorites Yet
+    .message = Star a token in any list to keep it here.
 # $shortcut is the key combination that opens the search dialog.
 tokens-favorites-empty-description = Use the search ({ $shortcut }) to find tokens and add them to your favorites.
 

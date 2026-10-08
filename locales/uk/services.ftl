@@ -92,3 +92,7 @@ services-tasks-tooltip =
     Простій: { $idle }
     Усього опитувань: { $polls }
 services-tasks-none = Немає інструментованих завдань
+
+# Empty table (scripts/pages/services.js)
+services-empty = Немає запущених сервісів
+    .message = Сервіси з’являються тут після того, як бот їх запустить.

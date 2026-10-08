@@ -1,7 +1,5 @@
 ## States and column menu
 
-table-empty-title = Veri yok
-table-empty-message = Gösterilecek veri yok
 table-empty-filtered-title = Sonuç bulunamadı
 table-empty-filtered-message = Aramanızı veya filtrelerinizi değiştirmeyi deneyin
 table-loading-message = Yükleniyor...

@@ -355,6 +355,25 @@ tokens-view-blacklisted = فهرست سیاه
 tokens-view-positions = پوزیشن‌ها
 tokens-view-recent = اخیر
 tokens-view-ohlcv = داده OHLCV
+# Empty token table per view (TOKEN_VIEW_EMPTY_LABELS)
+tokens-view-pool-empty = هنوز توکن قیمت‌گذاری‌شده‌ای نیست
+    .message = توکن‌ها پس از عبور از فیلترینگ و محاسبه قیمت استخرشان در اینجا نمایش داده می‌شوند.
+tokens-view-no-market-empty = توکنی بدون داده بازار نیست
+    .message = توکن‌ها تا زمانی که منابع داده بازار هنوز آن‌ها را فهرست نکرده‌اند در اینجا می‌مانند.
+tokens-view-all-empty = هنوز توکنی کشف نشده است
+    .message = هر توکنی که کشف پیدا کند، فارغ از نتیجه فیلترینگ، در اینجا نمایش داده می‌شود.
+tokens-view-passed-empty = هیچ توکنی از فیلترینگ عبور نکرد
+    .message = توکن‌هایی که از همه فیلترهای فعال عبور کنند در اینجا نمایش داده می‌شوند. اگر این فهرست خالی ماند، صفحه فیلترینگ را بررسی کنید.
+tokens-view-rejected-empty = توکن ردشده‌ای نیست
+    .message = توکن‌هایی که در یک فیلتر رد شوند همراه با دلیل در اینجا نمایش داده می‌شوند.
+tokens-view-blacklisted-empty = توکنی در فهرست سیاه نیست
+    .message = توکن‌هایی که توسط شما یا بررسی‌های امنیتی از معامله کنار گذاشته شده‌اند در اینجا نمایش داده می‌شوند.
+tokens-view-positions-empty = توکنی در موقعیت نیست
+    .message = توکن‌های نگهداری‌شده در موقعیت‌های باز در اینجا نمایش داده می‌شوند.
+tokens-view-recent-empty = توکن جدیدی نیست
+    .message = توکن‌های تازه کشف‌شده همزمان با پیدا شدن در اینجا نمایش داده می‌شوند.
+tokens-ohlcv-empty = هنوز داده نموداری نیست
+    .message = توکن‌ها وقتی جمع‌آوری کندل‌هایشان شروع شود در اینجا نمایش داده می‌شوند.
 
 # Tokens page: token cell (scripts/pages/tokens/formatters.js)
 
@@ -387,6 +406,7 @@ tokens-favorites-load-failed-title = بارگیری علاقه‌مندی‌ها
 tokens-favorites-load-failed-toast = بارگیری علاقه‌مندی‌ها ممکن نشد
 tokens-favorites-total = کل علاقه‌مندی‌ها
 tokens-favorites-empty-title = هنوز علاقه‌مندی‌ای نیست
+    .message = برای نگه داشتن یک توکن در اینجا، در هر فهرستی به آن ستاره بدهید.
 # $shortcut is the key combination that opens the search dialog.
 tokens-favorites-empty-description = با جست‌وجو ({ $shortcut }) توکن‌ها را پیدا کنید و به علاقه‌مندی‌ها اضافه کنید.
 

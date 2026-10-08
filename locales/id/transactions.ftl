@@ -168,3 +168,7 @@ transactions-dialog-ata-net-rent = Dampak Bersih Rent
 transactions-dialog-ata-operations-title = Operasi ATA ({ $count })
 transactions-dialog-raw-copy = Salin JSON
 transactions-dialog-raw-empty = Tidak ada data mentah
+
+# Empty table (scripts/pages/transactions.js)
+transactions-empty = Belum ada transaksi
+    .message = Swap dan transfer dompet trading muncul di sini setelah dikonfirmasi on-chain.

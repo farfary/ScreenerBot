@@ -1,7 +1,5 @@
 ## States and column menu
 
-table-empty-title = Tidak ada data
-table-empty-message = Tidak ada data untuk ditampilkan
 table-empty-filtered-title = Hasil tidak ditemukan
 table-empty-filtered-message = Coba ubah pencarian atau filter Anda
 table-loading-message = Memuat...

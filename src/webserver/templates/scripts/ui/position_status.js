@@ -14,3 +14,10 @@ export const POSITION_STATUS_LABELS = Object.freeze({
   closed: "positions-status-closed",
   archived: "positions-status-archived",
 });
+
+/** Empty state of the positions table per status: the title, with the reason as `.message`. */
+export const POSITION_EMPTY_LABELS = Object.freeze({
+  open: "positions-open-empty",
+  closed: "positions-closed-empty",
+  archived: "positions-archived-empty",
+});

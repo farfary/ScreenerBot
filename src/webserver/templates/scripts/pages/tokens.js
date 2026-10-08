@@ -21,6 +21,7 @@ import { InputDialog } from "../ui/input_dialog.js";
 // Import sub-modules
 import {
   TOKEN_VIEWS,
+  TOKEN_VIEW_EMPTY_LABELS,
   DEFAULT_VIEW,
   DEFAULT_SERVER_SORT,
   DEFAULT_FILTERS,
@@ -1683,6 +1684,8 @@ function createLifecycle() {
         columns,
         rowIdField: "mint",
         stateKey: tableStateKey,
+        emptyTitle: () => I18n.label(TOKEN_VIEW_EMPTY_LABELS, state.view),
+        emptyMessage: () => I18n.labelAttr(TOKEN_VIEW_EMPTY_LABELS, state.view, "message"),
         enableLogging: false,
         // Gold-mark the tokens whose owners paid to boost them. Purely a mark:
         // the row keeps the position the user's own sort gave it.

@@ -12,6 +12,13 @@ positions-state-reason-position-created = Позицію створено
 positions-status-open = Відкриті
 positions-status-closed = Закриті
 positions-status-archived = В архіві
+# Empty positions table per status (POSITION_EMPTY_LABELS)
+positions-open-empty = Немає відкритих позицій
+    .message = Позиція з’являється тут, коли її відкриває автотрейдер або ручна купівля.
+positions-closed-empty = Немає закритих позицій
+    .message = Позиція переходить сюди після повного продажу.
+positions-archived-empty = Немає архівних позицій
+    .message = Позиції, прибрані через «Архівувати», зберігаються тут.
 positions-origin-copy = Копіювання
 positions-origin-manual = Вручну
 positions-origin-wallet = Гаманець

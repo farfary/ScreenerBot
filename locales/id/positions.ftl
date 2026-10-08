@@ -5,6 +5,13 @@ positions-state-reason-position-created = Posisi dibuat
 positions-status-open = Terbuka
 positions-status-closed = Tertutup
 positions-status-archived = Diarsipkan
+# Empty positions table per status (POSITION_EMPTY_LABELS)
+positions-open-empty = Tidak ada posisi terbuka
+    .message = Posisi muncul di sini saat auto trader atau pembelian manual membukanya.
+positions-closed-empty = Tidak ada posisi tertutup
+    .message = Posisi pindah ke sini setelah terjual sepenuhnya.
+positions-archived-empty = Tidak ada posisi terarsip
+    .message = Posisi yang Anda hapus dengan Arsipkan disimpan di sini.
 positions-origin-copy = Salin
 positions-origin-manual = Manual
 positions-origin-wallet = Dompet

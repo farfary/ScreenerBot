@@ -1,7 +1,5 @@
 ## States and column menu
 
-table-empty-title = Sin datos
-table-empty-message = No hay datos que mostrar
 table-empty-filtered-title = No se encontraron resultados
 table-empty-filtered-message = Prueba a ajustar la búsqueda o los filtros
 table-loading-message = Cargando...

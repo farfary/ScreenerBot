@@ -91,3 +91,7 @@ services-tasks-tooltip =
     Idle: { $idle }
     Total Polling: { $polls }
 services-tasks-none = Tidak ada tugas terinstrumentasi
+
+# Empty table (scripts/pages/services.js)
+services-empty = Tidak ada layanan yang berjalan
+    .message = Layanan muncul di sini setelah bot memulainya.

@@ -307,6 +307,25 @@ tokens-view-blacklisted = Trong danh sách đen
 tokens-view-positions = Vị thế
 tokens-view-recent = Gần đây
 tokens-view-ohlcv = Dữ liệu OHLCV
+# Empty token table per view (TOKEN_VIEW_EMPTY_LABELS)
+tokens-view-pool-empty = Chưa có token được định giá
+    .message = Token xuất hiện tại đây khi vượt qua bộ lọc và giá pool của chúng đã được tính.
+tokens-view-no-market-empty = Không có token thiếu dữ liệu thị trường
+    .message = Token nằm tại đây khi các nguồn dữ liệu thị trường chưa niêm yết chúng.
+tokens-view-all-empty = Chưa phát hiện token nào
+    .message = Mọi token được phát hiện đều xuất hiện tại đây, bất kể kết quả lọc.
+tokens-view-passed-empty = Không có token nào vượt qua bộ lọc
+    .message = Token vượt qua mọi bộ lọc đang bật xuất hiện tại đây. Hãy xem lại trang Lọc nếu danh sách vẫn trống.
+tokens-view-rejected-empty = Không có token bị từ chối
+    .message = Token không vượt qua một bộ lọc xuất hiện tại đây kèm lý do.
+tokens-view-blacklisted-empty = Không có token trong danh sách đen
+    .message = Token bị loại khỏi giao dịch, do bạn hoặc do các kiểm tra an toàn, xuất hiện tại đây.
+tokens-view-positions-empty = Không có token trong vị thế
+    .message = Token đang nắm giữ trong các vị thế mở xuất hiện tại đây.
+tokens-view-recent-empty = Không có token mới
+    .message = Token mới được phát hiện xuất hiện tại đây khi được tìm thấy.
+tokens-ohlcv-empty = Chưa có dữ liệu biểu đồ
+    .message = Token xuất hiện tại đây khi nến của chúng bắt đầu được thu thập.
 
 tokens-cell-logo-enlarge = Nhấp để phóng to
 tokens-boost-title = Đã được boost { $boosts } trên screenerbot.io
@@ -332,6 +351,7 @@ tokens-favorites-load-failed-title = Không tải được danh sách yêu thíc
 tokens-favorites-load-failed-toast = Không tải được danh sách yêu thích
 tokens-favorites-total = Tổng số yêu thích
 tokens-favorites-empty-title = Chưa có mục yêu thích
+    .message = Gắn sao cho một token trong bất kỳ danh sách nào để giữ nó tại đây.
 tokens-favorites-empty-description = Dùng tìm kiếm ({ $shortcut }) để tìm token và thêm vào danh sách yêu thích.
 
 tokens-column-token = Token

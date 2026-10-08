@@ -102,3 +102,7 @@ services-tasks-tooltip =
     الخمول: { $idle }
     إجمالي الاستعلامات: { $polls }
 services-tasks-none = لا توجد مهام مرصودة
+
+# Empty table (scripts/pages/services.js)
+services-empty = لا توجد خدمات قيد التشغيل
+    .message = تظهر الخدمات هنا بعد أن يشغّلها البوت.

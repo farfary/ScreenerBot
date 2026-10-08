@@ -377,6 +377,8 @@ function createLifecycle() {
         columns,
         rowIdField: "id",
         stateKey: "events-table",
+        emptyTitle: I18n.t("events-empty"),
+        emptyMessage: I18n.attr("events-empty", "message"),
         compact: true,
         stickyHeader: true,
         zebra: true,

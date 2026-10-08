@@ -185,3 +185,7 @@ transactions-dialog-ata-net-rent = 租金净影响
 transactions-dialog-ata-operations-title = ATA 操作（{ $count }）
 transactions-dialog-raw-copy = 复制 JSON
 transactions-dialog-raw-empty = 暂无原始数据
+
+# Empty table (scripts/pages/transactions.js)
+transactions-empty = 暂无交易
+    .message = 交易钱包的兑换和转账在链上确认后显示在这里。

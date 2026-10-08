@@ -195,3 +195,7 @@ transactions-dialog-ata-net-rent = صافي أثر الإيجار
 transactions-dialog-ata-operations-title = عمليات ATA ({ $count })
 transactions-dialog-raw-copy = نسخ JSON
 transactions-dialog-raw-empty = لا توجد بيانات خام متاحة
+
+# Empty table (scripts/pages/transactions.js)
+transactions-empty = لا توجد معاملات بعد
+    .message = تظهر هنا عمليات المبادلة والتحويل لمحفظة التداول بعد تأكيدها على السلسلة.

@@ -12,6 +12,13 @@ positions-state-reason-position-created = Posição criada
 positions-status-open = Abertas
 positions-status-closed = Fechadas
 positions-status-archived = Arquivadas
+# Empty positions table per status (POSITION_EMPTY_LABELS)
+positions-open-empty = Nenhuma posição aberta
+    .message = Uma posição aparece aqui quando o trader automático ou uma compra manual a abre.
+positions-closed-empty = Nenhuma posição fechada
+    .message = Uma posição vem para cá assim que é totalmente vendida.
+positions-archived-empty = Nenhuma posição arquivada
+    .message = As posições removidas com Arquivar ficam guardadas aqui.
 positions-origin-copy = Cópia
 positions-origin-manual = Manual
 positions-origin-wallet = Carteira

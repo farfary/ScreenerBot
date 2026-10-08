@@ -1,5 +1,3 @@
-table-empty-title = Sem dados
-table-empty-message = Nenhum dado para exibir
 table-empty-filtered-title = Nenhum resultado encontrado
 table-empty-filtered-message = Tente ajustar a busca ou os filtros
 table-loading-message = Carregando...

@@ -12,6 +12,13 @@ positions-state-reason-position-created = Position created
 positions-status-open = Open
 positions-status-closed = Closed
 positions-status-archived = Archived
+# Empty positions table per status (POSITION_EMPTY_LABELS)
+positions-open-empty = No open positions
+    .message = A position appears here when the auto trader or a manual buy opens one.
+positions-closed-empty = No closed positions
+    .message = A position moves here once it is fully sold.
+positions-archived-empty = No archived positions
+    .message = Positions you remove with Archive are kept here.
 positions-origin-copy = Copy
 positions-origin-manual = Manual
 positions-origin-wallet = Wallet

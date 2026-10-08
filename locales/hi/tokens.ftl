@@ -309,6 +309,25 @@ tokens-view-blacklisted = ब्लैकलिस्टेड
 tokens-view-positions = पोज़िशन
 tokens-view-recent = हाल के
 tokens-view-ohlcv = OHLCV डेटा
+# Empty token table per view (TOKEN_VIEW_EMPTY_LABELS)
+tokens-view-pool-empty = अभी कोई मूल्यांकित टोकन नहीं
+    .message = टोकन फ़िल्टरिंग पास करने और उनके पूल की कीमत निकलने के बाद यहाँ दिखते हैं।
+tokens-view-no-market-empty = बिना मार्केट डेटा वाला कोई टोकन नहीं
+    .message = टोकन तब तक यहाँ रहते हैं जब तक मार्केट डेटा स्रोतों ने उन्हें सूचीबद्ध नहीं किया है।
+tokens-view-all-empty = अभी कोई टोकन नहीं मिला
+    .message = डिस्कवरी को मिलने वाला हर टोकन यहाँ दिखता है, फ़िल्टरिंग का नतीजा चाहे जो हो।
+tokens-view-passed-empty = किसी टोकन ने फ़िल्टरिंग पास नहीं की
+    .message = सभी सक्रिय फ़िल्टर पास करने वाले टोकन यहाँ दिखते हैं। यह खाली रहे तो फ़िल्टरिंग पेज देखें।
+tokens-view-rejected-empty = कोई अस्वीकृत टोकन नहीं
+    .message = किसी फ़िल्टर में विफल टोकन कारण के साथ यहाँ दिखते हैं।
+tokens-view-blacklisted-empty = ब्लैकलिस्ट में कोई टोकन नहीं
+    .message = आपके द्वारा या सुरक्षा जाँचों द्वारा ट्रेडिंग से बाहर किए गए टोकन यहाँ दिखते हैं।
+tokens-view-positions-empty = पोज़िशन में कोई टोकन नहीं
+    .message = खुली पोज़िशन में रखे टोकन यहाँ दिखते हैं।
+tokens-view-recent-empty = कोई नया टोकन नहीं
+    .message = नए खोजे गए टोकन मिलते ही यहाँ दिखते हैं।
+tokens-ohlcv-empty = अभी कोई चार्ट डेटा नहीं
+    .message = टोकन यहाँ तब दिखते हैं जब उनकी कैंडल्स इकट्ठा होने लगती हैं।
 
 tokens-cell-logo-enlarge = बड़ा करने के लिए क्लिक करें
 tokens-boost-title = screenerbot.io पर { $boosts } बार बूस्ट किया गया
@@ -334,6 +353,7 @@ tokens-favorites-load-failed-title = पसंदीदा लोड नही�
 tokens-favorites-load-failed-toast = पसंदीदा लोड नहीं हो सके
 tokens-favorites-total = कुल पसंदीदा
 tokens-favorites-empty-title = अभी कोई पसंदीदा नहीं
+    .message = किसी भी सूची में टोकन को स्टार करें ताकि वह यहाँ बना रहे।
 tokens-favorites-empty-description = टोकन खोजने और उन्हें अपने पसंदीदा में जोड़ने के लिए सर्च ({ $shortcut }) का उपयोग करें।
 
 tokens-column-token = टोकन

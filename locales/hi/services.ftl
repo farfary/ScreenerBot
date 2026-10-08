@@ -88,3 +88,7 @@ services-tasks-tooltip =
     निष्क्रिय: { $idle }
     कुल पोल: { $polls }
 services-tasks-none = कोई इंस्ट्रूमेंटेड टास्क नहीं
+
+# Empty table (scripts/pages/services.js)
+services-empty = कोई सर्विस नहीं चल रही
+    .message = बॉट द्वारा शुरू किए जाने के बाद सर्विसेज़ यहाँ दिखती हैं।

@@ -185,3 +185,7 @@ transactions-dialog-ata-net-rent = 렌트 순영향
 transactions-dialog-ata-operations-title = ATA 작업 ({ $count })
 transactions-dialog-raw-copy = JSON 복사
 transactions-dialog-raw-empty = 사용 가능한 원본 데이터가 없습니다
+
+# Empty table (scripts/pages/transactions.js)
+transactions-empty = 아직 거래 내역이 없습니다
+    .message = 트레이딩 지갑의 스왑과 전송은 온체인에서 확인되면 여기에 표시됩니다.

@@ -111,3 +111,7 @@ events-dialog-export-heading = इवेंट विवरण
 events-dialog-export-message = संदेश
 events-dialog-export-payload = पेलोड
 events-dialog-export-line = { $label }: { $value }
+
+# Empty table (scripts/pages/events.js)
+events-empty = अभी कोई इवेंट नहीं
+    .message = सर्विस शुरू होना, ट्रेड और चेतावनियाँ होते ही यहाँ दर्ज होती हैं।

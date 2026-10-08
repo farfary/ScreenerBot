@@ -4,8 +4,6 @@
 
 ## States and column menu
 
-table-empty-title = No data
-table-empty-message = No data to display
 table-empty-filtered-title = No results found
 table-empty-filtered-message = Try adjusting your search or filters
 table-loading-message = Loading...

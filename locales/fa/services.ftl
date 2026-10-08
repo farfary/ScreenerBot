@@ -101,3 +101,7 @@ services-tasks-tooltip =
     بیکار: { $idle }
     کل بررسی‌ها: { $polls }
 services-tasks-none = وظیفه ابزارگذاری‌شده‌ای نیست
+
+# Empty table (scripts/pages/services.js)
+services-empty = هیچ سرویسی در حال اجرا نیست
+    .message = سرویس‌ها پس از اینکه ربات آن‌ها را شروع کند در اینجا نمایش داده می‌شوند.

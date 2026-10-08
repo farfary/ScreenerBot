@@ -4,7 +4,7 @@
 // Recorded API responses and view assertions for the positions dashboard page.
 
 const ROWS = "#positions-root tr[data-row-id]";
-const EMPTY = { selector: "#positions-root .dt-empty-state", text: "No data" };
+const emptyState = (text) => ({ selector: "#positions-root .dt-empty-state", text });
 const DETAILS = {
   trigger: `${ROWS} .ti-row-cell__symbol`,
   dialog: ".position-details-dialog .dialog-container",
@@ -94,21 +94,21 @@ export const views = [
     name: "open positions",
     click: ['#subTabsContainer [data-tab-id="open"]'],
     populated: [{ selector: ROWS, min: 3 }],
-    empty: [EMPTY],
+    empty: [emptyState("No open positions")],
     dialogs: [DETAILS],
   },
   {
     name: "closed positions",
     click: ['#subTabsContainer [data-tab-id="closed"]'],
     populated: [{ selector: ROWS, min: 3 }],
-    empty: [EMPTY],
+    empty: [emptyState("No closed positions")],
     dialogs: [DETAILS],
   },
   {
     name: "archived positions",
     click: ['#subTabsContainer [data-tab-id="archived"]'],
     populated: [{ selector: ROWS, min: 2 }],
-    empty: [EMPTY],
+    empty: [emptyState("No archived positions")],
     dialogs: [
       DETAILS,
       {

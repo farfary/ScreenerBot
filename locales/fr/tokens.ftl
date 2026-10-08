@@ -311,6 +311,25 @@ tokens-view-blacklisted = Sur liste noire
 tokens-view-positions = Positions
 tokens-view-recent = Récents
 tokens-view-ohlcv = Données OHLCV
+# Empty token table per view (TOKEN_VIEW_EMPTY_LABELS)
+tokens-view-pool-empty = Aucun token valorisé pour l’instant
+    .message = Les tokens apparaissent ici une fois le filtrage passé et le prix de leur pool calculé.
+tokens-view-no-market-empty = Aucun token sans données de marché
+    .message = Les tokens apparaissent ici tant que les sources de données de marché ne les ont pas encore listés.
+tokens-view-all-empty = Aucun token découvert pour l’instant
+    .message = Chaque token trouvé par la découverte apparaît ici, quel que soit son résultat de filtrage.
+tokens-view-passed-empty = Aucun token n’a passé le filtrage
+    .message = Les tokens qui passent tous les filtres actifs apparaissent ici. Consultez la page Filtrage si cette liste reste vide.
+tokens-view-rejected-empty = Aucun token rejeté
+    .message = Les tokens qui échouent à un filtre apparaissent ici avec la raison.
+tokens-view-blacklisted-empty = Aucun token sur liste noire
+    .message = Les tokens exclus du trading, par vous ou par les contrôles de sécurité, apparaissent ici.
+tokens-view-positions-empty = Aucun token en position
+    .message = Les tokens détenus dans des positions ouvertes apparaissent ici.
+tokens-view-recent-empty = Aucun token récent
+    .message = Les tokens nouvellement découverts apparaissent ici au fur et à mesure.
+tokens-ohlcv-empty = Aucune donnée de graphique pour l’instant
+    .message = Les tokens apparaissent ici dès que leurs bougies sont collectées.
 
 tokens-cell-logo-enlarge = Cliquez pour agrandir
 tokens-boost-title = Boosté { $boosts } fois sur screenerbot.io
@@ -336,6 +355,7 @@ tokens-favorites-load-failed-title = Impossible de charger les favoris
 tokens-favorites-load-failed-toast = Impossible de charger les favoris
 tokens-favorites-total = Total des favoris
 tokens-favorites-empty-title = Aucun favori pour le moment
+    .message = Ajoutez une étoile à un token dans n’importe quelle liste pour le garder ici.
 tokens-favorites-empty-description = Utilisez la recherche ({ $shortcut }) pour trouver des tokens et les ajouter à vos favoris.
 
 tokens-column-token = Token

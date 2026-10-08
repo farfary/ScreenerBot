@@ -171,3 +171,7 @@ transactions-dialog-ata-net-rent = Итоговое влияние ренты
 transactions-dialog-ata-operations-title = Операции с ATA ({ $count })
 transactions-dialog-raw-copy = Скопировать JSON
 transactions-dialog-raw-empty = Исходные данные недоступны
+
+# Empty table (scripts/pages/transactions.js)
+transactions-empty = Транзакций пока нет
+    .message = Свопы и переводы торгового кошелька появляются здесь после подтверждения в блокчейне.

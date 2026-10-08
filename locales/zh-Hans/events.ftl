@@ -127,3 +127,7 @@ events-dialog-export-heading = 事件详情
 events-dialog-export-message = 消息
 events-dialog-export-payload = 载荷
 events-dialog-export-line = { $label }：{ $value }
+
+# Empty table (scripts/pages/events.js)
+events-empty = 暂无事件
+    .message = 服务启动、交易和警告会在发生时记录在这里。

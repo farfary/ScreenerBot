@@ -2,8 +2,6 @@
 
 ## States and column menu
 
-table-empty-title = Aucune donnée
-table-empty-message = Aucune donnée à afficher
 table-empty-filtered-title = Aucun résultat
 table-empty-filtered-message = Essayez de modifier votre recherche ou vos filtres
 table-loading-message = Chargement…

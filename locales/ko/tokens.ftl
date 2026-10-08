@@ -336,6 +336,25 @@ tokens-view-blacklisted = 블랙리스트
 tokens-view-positions = 포지션
 tokens-view-recent = 최근
 tokens-view-ohlcv = OHLCV 데이터
+# Empty token table per view (TOKEN_VIEW_EMPTY_LABELS)
+tokens-view-pool-empty = 아직 가격이 산정된 토큰이 없습니다
+    .message = 필터링을 통과하고 풀 가격이 계산된 토큰이 여기에 표시됩니다.
+tokens-view-no-market-empty = 시장 데이터가 없는 토큰이 없습니다
+    .message = 시장 데이터 소스에 아직 등록되지 않은 토큰이 여기에 표시됩니다.
+tokens-view-all-empty = 아직 발견된 토큰이 없습니다
+    .message = 발견된 모든 토큰이 필터링 결과와 관계없이 여기에 표시됩니다.
+tokens-view-passed-empty = 필터링을 통과한 토큰이 없습니다
+    .message = 활성화된 모든 필터를 통과한 토큰이 여기에 표시됩니다. 계속 비어 있으면 필터링 페이지를 확인하세요.
+tokens-view-rejected-empty = 거부된 토큰이 없습니다
+    .message = 필터를 통과하지 못한 토큰이 사유와 함께 여기에 표시됩니다.
+tokens-view-blacklisted-empty = 블랙리스트에 오른 토큰이 없습니다
+    .message = 사용자 또는 안전 검사에 의해 거래에서 제외된 토큰이 여기에 표시됩니다.
+tokens-view-positions-empty = 포지션에 있는 토큰이 없습니다
+    .message = 열린 포지션으로 보유 중인 토큰이 여기에 표시됩니다.
+tokens-view-recent-empty = 최근 토큰이 없습니다
+    .message = 새로 발견된 토큰이 발견되는 대로 여기에 표시됩니다.
+tokens-ohlcv-empty = 아직 차트 데이터가 없습니다
+    .message = 캔들 수집이 시작된 토큰이 여기에 표시됩니다.
 
 # Tokens page: token cell (scripts/pages/tokens/formatters.js)
 
@@ -367,6 +386,7 @@ tokens-favorites-load-failed-title = 즐겨찾기를 불러올 수 없습니다
 tokens-favorites-load-failed-toast = 즐겨찾기를 불러올 수 없습니다
 tokens-favorites-total = 전체 즐겨찾기
 tokens-favorites-empty-title = 즐겨찾기가 아직 없습니다
+    .message = 어느 목록에서든 토큰에 별표를 하면 여기에 보관됩니다.
 tokens-favorites-empty-description = 검색 단축키: { $shortcut }. 토큰을 찾아 즐겨찾기에 추가하세요.
 
 # Tokens page: OHLCV data view (scripts/pages/tokens/ohlcv.js)

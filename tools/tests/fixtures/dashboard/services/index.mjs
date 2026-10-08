@@ -21,6 +21,6 @@ export const views = [
       { selector: "#services-root tbody .badge.warning", min: 3 },
       { selector: "#services-root tbody .badge.error", min: 1 },
     ],
-    empty: [{ selector: "#services-root .dt-empty-state", text: "No data" }],
+    empty: [{ selector: "#services-root .dt-empty-state", text: "No services running" }],
   },
 ];

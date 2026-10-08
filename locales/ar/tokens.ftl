@@ -363,6 +363,25 @@ tokens-view-blacklisted = القائمة السوداء
 tokens-view-positions = المراكز
 tokens-view-recent = الأحدث
 tokens-view-ohlcv = بيانات OHLCV
+# Empty token table per view (TOKEN_VIEW_EMPTY_LABELS)
+tokens-view-pool-empty = لا توجد رموز مسعّرة بعد
+    .message = تظهر الرموز هنا بعد اجتيازها التصفية وحساب سعر مجمّعها.
+tokens-view-no-market-empty = لا توجد رموز بلا بيانات سوق
+    .message = تبقى الرموز هنا ما دامت مصادر بيانات السوق لم تُدرجها بعد.
+tokens-view-all-empty = لم تُكتشف رموز بعد
+    .message = يظهر هنا كل رمز يعثر عليه الاكتشاف، أيًّا كانت نتيجة تصفيته.
+tokens-view-passed-empty = لم يجتز أي رمز التصفية
+    .message = تظهر هنا الرموز التي تجتاز كل المرشحات المفعّلة. راجع صفحة التصفية إذا بقيت القائمة فارغة.
+tokens-view-rejected-empty = لا توجد رموز مرفوضة
+    .message = تظهر هنا الرموز التي تفشل في أحد المرشحات مع سبب الرفض.
+tokens-view-blacklisted-empty = لا توجد رموز في القائمة السوداء
+    .message = تظهر هنا الرموز المستبعدة من التداول، بواسطتك أو بواسطة فحوص الأمان.
+tokens-view-positions-empty = لا توجد رموز في مراكز
+    .message = تظهر هنا الرموز المحتفظ بها في مراكز مفتوحة.
+tokens-view-recent-empty = لا توجد رموز حديثة
+    .message = تظهر هنا الرموز المكتشفة حديثًا فور العثور عليها.
+tokens-ohlcv-empty = لا توجد بيانات رسم بياني بعد
+    .message = تظهر الرموز هنا عندما يبدأ جمع شموعها.
 
 # Tokens page: token cell (scripts/pages/tokens/formatters.js)
 
@@ -395,6 +414,7 @@ tokens-favorites-load-failed-title = تعذّر تحميل المفضلة
 tokens-favorites-load-failed-toast = تعذّر تحميل المفضلة
 tokens-favorites-total = إجمالي المفضلة
 tokens-favorites-empty-title = لا توجد مفضلة بعد
+    .message = ضع نجمة على رمز في أي قائمة لإبقائه هنا.
 # $shortcut is the key combination that opens the search dialog.
 tokens-favorites-empty-description = استخدم البحث ({ $shortcut }) للعثور على الرموز وإضافتها إلى المفضلة.
 

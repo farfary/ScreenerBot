@@ -1,7 +1,5 @@
 # DataTable: states, column menu and pagination.
 
-table-empty-title = कोई डेटा नहीं
-table-empty-message = दिखाने के लिए कोई डेटा नहीं
 table-empty-filtered-title = कोई परिणाम नहीं मिला
 table-empty-filtered-message = अपनी खोज या फ़िल्टर बदलकर देखें
 table-loading-message = लोड हो रहा है...

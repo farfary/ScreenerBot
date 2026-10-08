@@ -92,3 +92,7 @@ services-tasks-tooltip =
     空闲：{ $idle }
     轮询总数：{ $polls }
 services-tasks-none = 无已监测的任务
+
+# Empty table (scripts/pages/services.js)
+services-empty = 没有正在运行的服务
+    .message = 机器人启动服务后，服务会显示在这里。

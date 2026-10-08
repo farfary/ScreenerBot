@@ -3,6 +3,13 @@ positions-state-reason-position-created = Pozisyon oluşturuldu
 positions-status-open = Açık
 positions-status-closed = Kapalı
 positions-status-archived = Arşivlenmiş
+# Empty positions table per status (POSITION_EMPTY_LABELS)
+positions-open-empty = Açık pozisyon yok
+    .message = Otomatik işlemci veya manuel bir alım pozisyon açtığında burada görünür.
+positions-closed-empty = Kapalı pozisyon yok
+    .message = Bir pozisyon tamamen satıldığında buraya taşınır.
+positions-archived-empty = Arşivlenmiş pozisyon yok
+    .message = Arşivle ile kaldırdığınız pozisyonlar burada tutulur.
 positions-origin-copy = Kopya
 positions-origin-manual = Manuel
 positions-origin-wallet = Cüzdan

@@ -340,6 +340,25 @@ tokens-view-blacklisted = Na lista negra
 tokens-view-positions = Posições
 tokens-view-recent = Recentes
 tokens-view-ohlcv = Dados OHLCV
+# Empty token table per view (TOKEN_VIEW_EMPTY_LABELS)
+tokens-view-pool-empty = Nenhum token com preço ainda
+    .message = Os tokens aparecem aqui quando passam na filtragem e o preço do pool é calculado.
+tokens-view-no-market-empty = Nenhum token sem dados de mercado
+    .message = Os tokens aparecem aqui enquanto as fontes de dados de mercado ainda não os listaram.
+tokens-view-all-empty = Nenhum token descoberto ainda
+    .message = Todo token encontrado pela descoberta aparece aqui, seja qual for o resultado da filtragem.
+tokens-view-passed-empty = Nenhum token passou na filtragem
+    .message = Os tokens que passam em todos os filtros ativos aparecem aqui. Revise a página Filtragem se isto continuar vazio.
+tokens-view-rejected-empty = Nenhum token rejeitado
+    .message = Os tokens que falham em um filtro aparecem aqui com o motivo.
+tokens-view-blacklisted-empty = Nenhum token na lista negra
+    .message = Os tokens excluídos do trading, por você ou pelas verificações de segurança, aparecem aqui.
+tokens-view-positions-empty = Nenhum token em posições
+    .message = Os tokens mantidos em posições abertas aparecem aqui.
+tokens-view-recent-empty = Nenhum token recente
+    .message = Os tokens recém-descobertos aparecem aqui conforme são encontrados.
+tokens-ohlcv-empty = Nenhum dado de gráfico ainda
+    .message = Os tokens aparecem aqui assim que seus candles começam a ser coletados.
 
 # Tokens page: token cell (scripts/pages/tokens/formatters.js)
 
@@ -371,6 +390,7 @@ tokens-favorites-load-failed-title = Não foi possível carregar os favoritos
 tokens-favorites-load-failed-toast = Não foi possível carregar os favoritos
 tokens-favorites-total = Total de favoritos
 tokens-favorites-empty-title = Nenhum favorito ainda
+    .message = Marque um token com estrela em qualquer lista para mantê-lo aqui.
 tokens-favorites-empty-description = Use a busca ({ $shortcut }) para encontrar tokens e adicioná-los aos seus favoritos.
 
 # Tokens page: OHLCV data view (scripts/pages/tokens/ohlcv.js)

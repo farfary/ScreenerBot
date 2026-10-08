@@ -169,3 +169,7 @@ transactions-dialog-ata-net-rent = Impact net du rent
 transactions-dialog-ata-operations-title = Opérations ATA ({ $count })
 transactions-dialog-raw-copy = Copier le JSON
 transactions-dialog-raw-empty = Aucune donnée brute disponible
+
+# Empty table (scripts/pages/transactions.js)
+transactions-empty = Aucune transaction pour l’instant
+    .message = Les swaps et transferts du portefeuille de trading apparaissent ici une fois confirmés on-chain.

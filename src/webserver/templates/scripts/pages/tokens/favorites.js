@@ -138,6 +138,8 @@ export function createFavoritesModule(deps) {
       columns: deps.buildColumns(),
       rowIdField: "mint",
       stateKey: "favorites-table",
+      emptyTitle: I18n.t("tokens-favorites-empty-title"),
+      emptyMessage: I18n.attr("tokens-favorites-empty-title", "message"),
       enableLogging: false,
       // Same gold mark as the main token list -- a boosted token must not read
       // differently depending on which tab the user is standing on.

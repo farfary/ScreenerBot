@@ -90,3 +90,7 @@ services-tasks-tooltip =
     Inactivo: { $idle }
     Sondeos totales: { $polls }
 services-tasks-none = Sin tareas instrumentadas
+
+# Empty table (scripts/pages/services.js)
+services-empty = No hay servicios en ejecución
+    .message = Los servicios aparecen aquí cuando el bot los ha iniciado.

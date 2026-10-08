@@ -111,3 +111,7 @@ events-dialog-export-heading = СВЕДЕНИЯ О СОБЫТИИ
 events-dialog-export-message = СООБЩЕНИЕ
 events-dialog-export-payload = ПОЛЕЗНАЯ НАГРУЗКА
 events-dialog-export-line = { $label }: { $value }
+
+# Empty table (scripts/pages/events.js)
+events-empty = Событий пока нет
+    .message = Запуски сервисов, сделки и предупреждения записываются здесь по мере их появления.

@@ -177,3 +177,7 @@ transactions-dialog-ata-net-rent = Netto-Mietauswirkung
 transactions-dialog-ata-operations-title = ATA-Vorgänge ({ $count })
 transactions-dialog-raw-copy = JSON kopieren
 transactions-dialog-raw-empty = Keine Rohdaten verfügbar
+
+# Empty table (scripts/pages/transactions.js)
+transactions-empty = Noch keine Transaktionen
+    .message = Swaps und Überweisungen der Trading-Wallet erscheinen hier, sobald sie on-chain bestätigt sind.

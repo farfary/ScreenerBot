@@ -12,6 +12,13 @@ positions-state-reason-position-created = تم إنشاء المركز
 positions-status-open = مفتوح
 positions-status-closed = مغلق
 positions-status-archived = مؤرشف
+# Empty positions table per status (POSITION_EMPTY_LABELS)
+positions-open-empty = لا توجد مراكز مفتوحة
+    .message = يظهر المركز هنا عندما يفتحه المتداول الآلي أو شراء يدوي.
+positions-closed-empty = لا توجد مراكز مغلقة
+    .message = ينتقل المركز إلى هنا بعد بيعه بالكامل.
+positions-archived-empty = لا توجد مراكز مؤرشفة
+    .message = تُحفظ هنا المراكز التي تزيلها باستخدام الأرشفة.
 positions-origin-copy = نسخ
 positions-origin-manual = يدوي
 positions-origin-wallet = محفظة

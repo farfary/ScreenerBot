@@ -12,6 +12,13 @@ positions-state-reason-position-created = 仓位已创建
 positions-status-open = 持仓中
 positions-status-closed = 已平仓
 positions-status-archived = 已归档
+# Empty positions table per status (POSITION_EMPTY_LABELS)
+positions-open-empty = 没有未平仓持仓
+    .message = 自动交易器或手动买入开仓后，持仓会显示在这里。
+positions-closed-empty = 没有已平仓持仓
+    .message = 持仓全部卖出后会移到这里。
+positions-archived-empty = 没有已归档持仓
+    .message = 通过归档移除的持仓保存在这里。
 positions-origin-copy = 跟单
 positions-origin-manual = 手动
 positions-origin-wallet = 钱包

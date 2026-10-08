@@ -1,7 +1,5 @@
 ## States and column menu
 
-table-empty-title = データがありません
-table-empty-message = 表示するデータがありません
 table-empty-filtered-title = 結果が見つかりません
 table-empty-filtered-message = 検索条件やフィルターを調整してください
 table-loading-message = 読み込み中...

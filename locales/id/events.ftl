@@ -114,3 +114,7 @@ events-dialog-export-heading = DETAIL EVENT
 events-dialog-export-message = PESAN
 events-dialog-export-payload = PAYLOAD
 events-dialog-export-line = { $label }: { $value }
+
+# Empty table (scripts/pages/events.js)
+events-empty = Belum ada peristiwa
+    .message = Layanan yang dimulai, trade, dan peringatan dicatat di sini saat terjadi.

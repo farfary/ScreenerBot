@@ -127,3 +127,7 @@ events-dialog-export-heading = تفاصيل الحدث
 events-dialog-export-message = الرسالة
 events-dialog-export-payload = الحمولة
 events-dialog-export-line = { $label }: { $value }
+
+# Empty table (scripts/pages/events.js)
+events-empty = لا توجد أحداث بعد
+    .message = تُسجَّل هنا عمليات تشغيل الخدمات والصفقات والتحذيرات فور حدوثها.

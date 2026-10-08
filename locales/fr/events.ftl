@@ -111,3 +111,7 @@ events-dialog-export-heading = DÉTAILS DE L'ÉVÉNEMENT
 events-dialog-export-message = MESSAGE
 events-dialog-export-payload = CHARGE UTILE
 events-dialog-export-line = { $label } : { $value }
+
+# Empty table (scripts/pages/events.js)
+events-empty = Aucun événement pour l’instant
+    .message = Les démarrages de services, les trades et les avertissements sont enregistrés ici au fil de l’eau.

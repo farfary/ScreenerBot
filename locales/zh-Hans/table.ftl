@@ -1,7 +1,5 @@
 ## States and column menu
 
-table-empty-title = 暂无数据
-table-empty-message = 没有可显示的数据
 table-empty-filtered-title = 未找到结果
 table-empty-filtered-message = 请尝试调整搜索或过滤条件
 table-loading-message = 加载中…

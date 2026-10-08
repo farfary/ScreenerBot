@@ -1,7 +1,5 @@
 ## States and column menu
 
-table-empty-title = Нет данных
-table-empty-message = Нет данных для отображения
 table-empty-filtered-title = Ничего не найдено
 table-empty-filtered-message = Измените поисковый запрос или фильтры
 table-loading-message = Загрузка...

@@ -1,7 +1,5 @@
 ## States and column menu
 
-table-empty-title = 데이터 없음
-table-empty-message = 표시할 데이터가 없습니다
 table-empty-filtered-title = 검색 결과 없음
 table-empty-filtered-message = 검색어나 필터를 조정해 보세요
 table-loading-message = 불러오는 중...

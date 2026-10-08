@@ -396,6 +396,8 @@ function createLifecycle() {
         columns,
         rowIdField: "name",
         stateKey: "services-table",
+        emptyTitle: I18n.t("services-empty"),
+        emptyMessage: I18n.attr("services-empty", "message"),
         enableLogging: false,
         sorting: {
           column: "priority",

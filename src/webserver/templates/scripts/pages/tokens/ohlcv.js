@@ -364,6 +364,8 @@ export function createOhlcvModule(deps) {
       columns: buildOhlcvColumns(),
       rowIdField: "mint",
       stateKey: "ohlcv-table",
+      emptyTitle: I18n.t("tokens-ohlcv-empty"),
+      emptyMessage: I18n.attr("tokens-ohlcv-empty", "message"),
       enableLogging: false,
       sorting: {
         mode: "client",

@@ -127,3 +127,7 @@ events-dialog-export-heading = イベントの詳細
 events-dialog-export-message = メッセージ
 events-dialog-export-payload = ペイロード
 events-dialog-export-line = { $label }: { $value }
+
+# Empty table (scripts/pages/events.js)
+events-empty = イベントはまだありません
+    .message = サービスの起動、取引、警告は発生するたびにここに記録されます。

@@ -88,3 +88,7 @@ services-tasks-tooltip =
     Nhàn rỗi: { $idle }
     Tổng lần thăm dò: { $polls }
 services-tasks-none = Không có tác vụ được theo dõi
+
+# Empty table (scripts/pages/services.js)
+services-empty = Không có dịch vụ đang chạy
+    .message = Các dịch vụ xuất hiện tại đây sau khi bot khởi động chúng.

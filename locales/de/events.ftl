@@ -116,3 +116,7 @@ events-dialog-export-heading = EREIGNISDETAILS
 events-dialog-export-message = NACHRICHT
 events-dialog-export-payload = PAYLOAD
 events-dialog-export-line = { $label }: { $value }
+
+# Empty table (scripts/pages/events.js)
+events-empty = Noch keine Ereignisse
+    .message = Dienststarts, Trades und Warnungen werden hier erfasst, sobald sie auftreten.

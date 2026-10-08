@@ -111,3 +111,7 @@ events-dialog-export-heading = OLAY AYRINTILARI
 events-dialog-export-message = MESAJ
 events-dialog-export-payload = YÜK
 events-dialog-export-line = { $label }: { $value }
+
+# Empty table (scripts/pages/events.js)
+events-empty = Henüz olay yok
+    .message = Servis başlatmaları, işlemler ve uyarılar gerçekleştikçe burada kaydedilir.

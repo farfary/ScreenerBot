@@ -12,6 +12,13 @@ positions-state-reason-position-created = پوزیشن ایجاد شد
 positions-status-open = باز
 positions-status-closed = بسته
 positions-status-archived = بایگانی‌شده
+# Empty positions table per status (POSITION_EMPTY_LABELS)
+positions-open-empty = موقعیت بازی نیست
+    .message = وقتی معامله‌گر خودکار یا یک خرید دستی موقعیتی باز کند، در اینجا نمایش داده می‌شود.
+positions-closed-empty = موقعیت بسته‌ای نیست
+    .message = یک موقعیت پس از فروش کامل به اینجا منتقل می‌شود.
+positions-archived-empty = موقعیت بایگانی‌شده‌ای نیست
+    .message = موقعیت‌هایی که با بایگانی حذف می‌کنید در اینجا نگهداری می‌شوند.
 positions-origin-copy = کپی
 positions-origin-manual = دستی
 positions-origin-wallet = کیف پول

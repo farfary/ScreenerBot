@@ -167,3 +167,7 @@ transactions-dialog-ata-net-rent = शुद्ध रेंट प्रभा�
 transactions-dialog-ata-operations-title = ATA ऑपरेशन ({ $count })
 transactions-dialog-raw-copy = JSON कॉपी करें
 transactions-dialog-raw-empty = कोई रॉ डेटा उपलब्ध नहीं
+
+# Empty table (scripts/pages/transactions.js)
+transactions-empty = अभी कोई ट्रांज़ैक्शन नहीं
+    .message = ट्रेडिंग वॉलेट के स्वैप और ट्रांसफ़र ऑन-चेन पुष्टि होने के बाद यहाँ दिखते हैं।

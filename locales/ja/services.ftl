@@ -91,3 +91,7 @@ services-tasks-tooltip =
     アイドル: { $idle }
     ポーリング合計: { $polls }
 services-tasks-none = 計測対象のタスクはありません
+
+# Empty table (scripts/pages/services.js)
+services-empty = 実行中のサービスはありません
+    .message = ボットがサービスを起動すると、ここに表示されます。

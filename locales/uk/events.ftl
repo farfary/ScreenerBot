@@ -127,3 +127,7 @@ events-dialog-export-heading = ПОДРОБИЦІ ПОДІЇ
 events-dialog-export-message = ПОВІДОМЛЕННЯ
 events-dialog-export-payload = КОРИСНЕ НАВАНТАЖЕННЯ
 events-dialog-export-line = { $label }: { $value }
+
+# Empty table (scripts/pages/events.js)
+events-empty = Подій поки немає
+    .message = Запуски сервісів, угоди та попередження записуються тут, щойно вони відбуваються.

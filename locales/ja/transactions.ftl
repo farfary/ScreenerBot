@@ -185,3 +185,7 @@ transactions-dialog-ata-net-rent = レントの正味影響
 transactions-dialog-ata-operations-title = ATA 操作（{ $count }）
 transactions-dialog-raw-copy = JSON をコピー
 transactions-dialog-raw-empty = 利用できる Raw データはありません
+
+# Empty table (scripts/pages/transactions.js)
+transactions-empty = トランザクションはまだありません
+    .message = 取引用ウォレットのスワップと送金は、オンチェーンで確認されるとここに表示されます。

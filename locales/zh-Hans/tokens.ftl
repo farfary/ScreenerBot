@@ -336,6 +336,25 @@ tokens-view-blacklisted = 黑名单
 tokens-view-positions = 仓位
 tokens-view-recent = 最近
 tokens-view-ohlcv = OHLCV 数据
+# Empty token table per view (TOKEN_VIEW_EMPTY_LABELS)
+tokens-view-pool-empty = 暂无已定价的代币
+    .message = 通过筛选且已计算池价格的代币会显示在这里。
+tokens-view-no-market-empty = 没有缺少市场数据的代币
+    .message = 市场数据源尚未收录的代币会显示在这里。
+tokens-view-all-empty = 尚未发现代币
+    .message = 发现到的每个代币都会显示在这里，无论其筛选结果如何。
+tokens-view-passed-empty = 没有代币通过筛选
+    .message = 通过所有已启用筛选器的代币会显示在这里。如果一直为空，请检查筛选页面。
+tokens-view-rejected-empty = 没有被拒绝的代币
+    .message = 未通过某个筛选器的代币会连同原因显示在这里。
+tokens-view-blacklisted-empty = 黑名单中没有代币
+    .message = 被你或安全检查排除在交易之外的代币会显示在这里。
+tokens-view-positions-empty = 没有持仓中的代币
+    .message = 在未平仓持仓中持有的代币会显示在这里。
+tokens-view-recent-empty = 没有新代币
+    .message = 新发现的代币会在被发现时显示在这里。
+tokens-ohlcv-empty = 暂无图表数据
+    .message = 开始收集 K 线的代币会显示在这里。
 
 # Tokens page: token cell (scripts/pages/tokens/formatters.js)
 
@@ -367,6 +386,7 @@ tokens-favorites-load-failed-title = 无法加载收藏
 tokens-favorites-load-failed-toast = 无法加载收藏
 tokens-favorites-total = 收藏总数
 tokens-favorites-empty-title = 暂无收藏
+    .message = 在任意列表中为代币加星标，即可将其保留在这里。
 tokens-favorites-empty-description = 使用搜索（{ $shortcut }）查找代币并添加到收藏。
 
 # Tokens page: OHLCV data view (scripts/pages/tokens/ohlcv.js)

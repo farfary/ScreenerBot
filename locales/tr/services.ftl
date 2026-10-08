@@ -90,3 +90,7 @@ services-tasks-tooltip =
     Boşta: { $idle }
     Toplam Yoklama: { $polls }
 services-tasks-none = Ölçümlenen görev yok
+
+# Empty table (scripts/pages/services.js)
+services-empty = Çalışan servis yok
+    .message = Servisler bot tarafından başlatıldığında burada görünür.

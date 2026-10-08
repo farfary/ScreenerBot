@@ -313,6 +313,25 @@ tokens-view-blacklisted = Чорний список
 tokens-view-positions = Позиції
 tokens-view-recent = Нещодавні
 tokens-view-ohlcv = Дані OHLCV
+# Empty token table per view (TOKEN_VIEW_EMPTY_LABELS)
+tokens-view-pool-empty = Токенів із ціною поки немає
+    .message = Токени з’являються тут, коли проходять фільтрацію і ціну їхнього пулу розраховано.
+tokens-view-no-market-empty = Немає токенів без ринкових даних
+    .message = Токени перебувають тут, доки джерела ринкових даних їх не додали.
+tokens-view-all-empty = Токени ще не виявлено
+    .message = Тут з’являється кожен знайдений токен, незалежно від результату фільтрації.
+tokens-view-passed-empty = Жоден токен не пройшов фільтрацію
+    .message = Тут з’являються токени, що пройшли всі активні фільтри. Перегляньте сторінку «Фільтрація», якщо список залишається порожнім.
+tokens-view-rejected-empty = Немає відхилених токенів
+    .message = Токени, що не пройшли фільтр, з’являються тут із зазначенням причини.
+tokens-view-blacklisted-empty = Немає токенів у чорному списку
+    .message = Тут з’являються токени, виключені з торгівлі вами або перевірками безпеки.
+tokens-view-positions-empty = Немає токенів у позиціях
+    .message = Тут з’являються токени з відкритих позицій.
+tokens-view-recent-empty = Немає нових токенів
+    .message = Нещодавно виявлені токени з’являються тут у міру знаходження.
+tokens-ohlcv-empty = Даних графіків поки немає
+    .message = Токени з’являються тут, коли для них починається збір свічок.
 
 tokens-cell-logo-enlarge = Натисніть, щоб збільшити
 tokens-boost-title = Бустів на screenerbot.io: { $boosts }
@@ -338,6 +357,7 @@ tokens-favorites-load-failed-title = Не вдалося завантажити 
 tokens-favorites-load-failed-toast = Не вдалося завантажити обране
 tokens-favorites-total = Усього в обраному
 tokens-favorites-empty-title = В обраному ще нічого немає
+    .message = Позначте токен зірочкою в будь-якому списку, щоб він залишався тут.
 tokens-favorites-empty-description = Скористайтеся пошуком ({ $shortcut }), щоб знайти токени й додати їх до обраного.
 
 tokens-column-token = Токен

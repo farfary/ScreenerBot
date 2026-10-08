@@ -311,6 +311,25 @@ tokens-view-blacklisted = ブラックリスト
 tokens-view-positions = ポジション
 tokens-view-recent = 最近
 tokens-view-ohlcv = OHLCV データ
+# Empty token table per view (TOKEN_VIEW_EMPTY_LABELS)
+tokens-view-pool-empty = 価格の付いたトークンはまだありません
+    .message = フィルタリングを通過し、プール価格が算出されたトークンがここに表示されます。
+tokens-view-no-market-empty = 市場データのないトークンはありません
+    .message = 市場データソースにまだ掲載されていないトークンがここに表示されます。
+tokens-view-all-empty = 検出されたトークンはまだありません
+    .message = 検出されたすべてのトークンが、フィルタリング結果にかかわらずここに表示されます。
+tokens-view-passed-empty = フィルタリングを通過したトークンはありません
+    .message = 有効なすべてのフィルターを通過したトークンがここに表示されます。空のままならフィルタリングページを確認してください。
+tokens-view-rejected-empty = 除外されたトークンはありません
+    .message = フィルターで不合格になったトークンが理由とともにここに表示されます。
+tokens-view-blacklisted-empty = ブラックリストのトークンはありません
+    .message = あなた、または安全チェックによって取引から除外されたトークンがここに表示されます。
+tokens-view-positions-empty = ポジションのあるトークンはありません
+    .message = オープンポジションで保有しているトークンがここに表示されます。
+tokens-view-recent-empty = 新しいトークンはありません
+    .message = 新たに検出されたトークンが見つかり次第ここに表示されます。
+tokens-ohlcv-empty = チャートデータはまだありません
+    .message = ローソク足の収集が始まるとトークンがここに表示されます。
 
 tokens-cell-logo-enlarge = クリックして拡大
 tokens-boost-title = screenerbot.io で { $boosts } 回ブースト
@@ -336,6 +355,7 @@ tokens-favorites-load-failed-title = お気に入りを読み込めませんで�
 tokens-favorites-load-failed-toast = お気に入りを読み込めませんでした
 tokens-favorites-total = お気に入り合計
 tokens-favorites-empty-title = お気に入りはまだありません
+    .message = どのリストでもトークンにスターを付けると、ここに保持されます。
 tokens-favorites-empty-description = 検索（{ $shortcut }）でトークンを探して、お気に入りに追加しましょう。
 
 tokens-column-token = トークン

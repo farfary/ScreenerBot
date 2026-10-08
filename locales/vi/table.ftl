@@ -1,5 +1,3 @@
-table-empty-title = Không có dữ liệu
-table-empty-message = Không có dữ liệu để hiển thị
 table-empty-filtered-title = Không tìm thấy kết quả
 table-empty-filtered-message = Hãy thử điều chỉnh tìm kiếm hoặc bộ lọc
 table-loading-message = Đang tải...

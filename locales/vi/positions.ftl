@@ -3,6 +3,13 @@ positions-state-reason-position-created = Đã tạo vị thế
 positions-status-open = Đang mở
 positions-status-closed = Đã đóng
 positions-status-archived = Đã lưu trữ
+# Empty positions table per status (POSITION_EMPTY_LABELS)
+positions-open-empty = Không có vị thế mở
+    .message = Một vị thế xuất hiện tại đây khi auto trader hoặc lệnh mua thủ công mở nó.
+positions-closed-empty = Không có vị thế đã đóng
+    .message = Một vị thế chuyển sang đây khi đã bán hết.
+positions-archived-empty = Không có vị thế lưu trữ
+    .message = Các vị thế bạn gỡ bằng Lưu trữ được giữ tại đây.
 positions-origin-copy = Copy
 positions-origin-manual = Thủ công
 positions-origin-wallet = Ví

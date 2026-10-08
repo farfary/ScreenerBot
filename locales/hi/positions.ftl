@@ -3,6 +3,13 @@ positions-state-reason-position-created = पोज़िशन बनाई ग
 positions-status-open = खुली
 positions-status-closed = बंद
 positions-status-archived = आर्काइव
+# Empty positions table per status (POSITION_EMPTY_LABELS)
+positions-open-empty = कोई खुली पोज़िशन नहीं
+    .message = ऑटो ट्रेडर या मैन्युअल खरीद से पोज़िशन खुलने पर वह यहाँ दिखती है।
+positions-closed-empty = कोई बंद पोज़िशन नहीं
+    .message = पूरी तरह बिकने के बाद पोज़िशन यहाँ आ जाती है।
+positions-archived-empty = कोई आर्काइव पोज़िशन नहीं
+    .message = आर्काइव से हटाई गई पोज़िशन यहाँ रखी जाती हैं।
 positions-origin-copy = कॉपी
 positions-origin-manual = मैन्युअल
 positions-origin-wallet = वॉलेट
