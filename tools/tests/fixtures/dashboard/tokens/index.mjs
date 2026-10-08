@@ -8,7 +8,7 @@ const ROWS = "#tokens-root tr[data-row-id]";
 const EMPTY = { selector: "#tokens-root .dt-empty-state", text: "No data" };
 const tab = (id) => `#subTabsContainer [data-tab-id="${id}"]`;
 const DETAILS = {
-  trigger: `${ROWS} .token-symbol`,
+  trigger: `${ROWS} .ti-row-cell__symbol`,
   dialog: ".token-details-dialog",
   close: ".token-details-dialog .dialog-close",
 };

@@ -10,6 +10,7 @@
  */
 
 import { impactLabel } from "../config/field_text.js";
+import { renderTokenLogo } from "../../ui/token_identity.js";
 import {
   buildConfigGroups,
   formatTimestampForInput,
@@ -515,13 +516,9 @@ export function createFilteringRenderers({ state, $: _$, Utils, requestManager: 
             .slice(0, 30)
             .map((t) => {
               const sym = t.symbol || "?";
-              const initial = sym.charAt(0).toUpperCase();
-              const logoHtml = t.image_url
-                ? `<img src="${Utils.escapeHtml(t.image_url)}" alt="${Utils.escapeHtml(sym)}" class="overview-token-logo token-logo-artwork" onerror="this.parentElement.innerHTML='<span class=\\'overview-token-initial\\'>${initial}</span>'">`
-                : `<span class="overview-token-initial">${initial}</span>`;
               return `
               <div class="overview-list-item overview-list-item--token" data-reason="${Utils.escapeHtml(t.reason)}">
-                <div class="overview-token-avatar token-logo-frame">${logoHtml}</div>
+                ${renderTokenLogo({ mint: t.mint, symbol: t.symbol, name: t.name, logoUrl: t.image_url }, { size: "sm" })}
                 <div class="overview-item-info">
                   <span class="overview-item-symbol">${Utils.escapeHtml(sym)}${t.name ? ` <span class="overview-item-name">${Utils.escapeHtml(t.name)}</span>` : ""}</span>
                   <span class="overview-item-reason">${Utils.escapeHtml(reasonLabel(t))}</span>

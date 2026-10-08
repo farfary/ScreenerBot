@@ -164,26 +164,24 @@ async function fetchIdentities(mints) {
 }
 
 /**
- * Placeholder for an asset with no logo: the first grapheme of `seed` uppercased,
- * or a bare coin glyph when there is no text. The glyph variant carries
- * `token-logo-glyph`, which drops the avatar tile so the icon stays bare.
+ * Letter avatar for an asset with no logo: the first grapheme of its symbol (else
+ * its mint) uppercased, or a bare coin glyph when there is no text. The glyph
+ * variant carries `token-logo-glyph`, which drops the avatar surface so the icon
+ * stays bare.
  */
-export function tokenLogoPlaceholder(seed, className) {
-  const initial = Array.from(String(seed ?? "").trim())[0];
-  if (initial) {
-    return `<span class="${className}">${Utils.escapeHtml(initial.toUpperCase())}</span>`;
-  }
-  return `<span class="${className} token-logo-glyph"><i class="icon-coins" aria-hidden="true"></i></span>`;
-}
-
-/** Letter avatar for an asset with no logo — first character of symbol, else mint. */
 function logoPlaceholder(identity) {
-  return tokenLogoPlaceholder(identity.symbol || identity.mint, "ti-logo-fallback");
+  const initial = Array.from(String(identity.symbol || identity.mint || "").trim())[0];
+  if (initial) {
+    return `<span class="ti-logo-fallback">${Utils.escapeHtml(initial.toUpperCase())}</span>`;
+  }
+  return '<span class="ti-logo-fallback token-logo-glyph"><i class="icon-coins" aria-hidden="true"></i></span>';
 }
 
 /**
- * Asset logo. `size` is one of xs | sm | md | lg. A broken provider image falls
- * back to the letter avatar rather than a broken-image glyph.
+ * Asset logo. `size` is one of xs | sm | md | lg | table (the token column of a
+ * table). A broken provider image falls back to the letter avatar rather than a
+ * broken-image glyph. `enlarge` makes loaded artwork open the image lightbox
+ * (`.clickable-logo`, read by the page's delegated click handler).
  *
  * A brand asset (the Solana logomark) is NOT a square token avatar: it is a 101x88
  * glyph on a transparent canvas, so it gets `ti-logo-brand` and remains inset rather
@@ -195,10 +193,14 @@ export function renderTokenLogo(mintOrIdentity, options = {}) {
   const size = options.size || "sm";
   const alt = Utils.escapeHtml(identity.symbol || identity.mint || "");
   const brand = isBrandAsset(identity.logoUrl) ? " ti-logo-brand" : "";
+  const src = Utils.escapeHtml(identity.logoUrl || "");
+  const enlarge = options.enlarge
+    ? ` clickable-logo" data-logo-url="${src}" data-token-symbol="${Utils.escapeHtml(identity.symbol || "")}" data-token-name="${Utils.escapeHtml(identity.name || "")}" data-token-mint="${Utils.escapeHtml(identity.mint || "")}" title="${Utils.escapeHtml(I18n.t("tokens-cell-logo-enlarge"))}`
+    : "";
   const inner = identity.logoUrl
-    ? `<img class="token-logo-artwork" src="${Utils.escapeHtml(identity.logoUrl)}" alt="${alt}" loading="lazy" onerror="this.remove()" />${logoPlaceholder(identity)}`
+    ? `<img class="token-logo-artwork${enlarge}" src="${src}" alt="${alt}" loading="lazy" onerror="this.remove()" />${logoPlaceholder(identity)}`
     : logoPlaceholder(identity);
-  return `<span class="ti-logo ti-logo-${size}${brand} token-logo-frame">${inner}</span>`;
+  return `<span class="ti-logo ti-logo-${size}${brand} token-logo-frame" data-field="logo">${inner}</span>`;
 }
 
 /** True for the brand assets we ship ourselves (transparent, non-square glyphs). */
@@ -252,6 +254,48 @@ export function renderTokenCell(mint, { symbol = null, name = null, logoUrl = nu
     },
     { showName: Boolean(name), showMint: true }
   );
+}
+
+/**
+ * A table's token column with row controls: logo, the symbol line (plus `badges`
+ * markup beside the symbol), the name line (plus `tags` markup after the name), an
+ * optional `caption` line, and `actions` (icon buttons) revealed on row hover or
+ * focus over the end of the cell. `actionCount` sizes the space the identity yields
+ * to them. Fields the row carries win over the identity cache.
+ */
+export function renderTokenRowCell(
+  mint,
+  {
+    symbol = null,
+    name = null,
+    logoUrl = null,
+    badges = "",
+    tags = "",
+    caption = "",
+    actions = "",
+    actionCount = 0,
+    enlargeLogo = false,
+  } = {}
+) {
+  const cached = mint ? getIdentity(mint) : { mint: "", symbol: null, name: null, logoUrl: null };
+  const identity = {
+    ...cached,
+    symbol: symbol || cached.symbol,
+    name: name || cached.name,
+    logoUrl: logoUrl || cached.logoUrl,
+  };
+  const shownName = name || "";
+  return `<div class="ti-row-cell ti-row-cell--actions-${Number(actionCount) || 0}">
+    <div class="ti-row-cell__identity">
+      ${renderTokenLogo(identity, { size: "table", enlarge: enlargeLogo })}
+      <div class="ti-row-cell__meta">
+        <div class="ti-row-cell__line"><span class="ti-row-cell__symbol token-symbol-type" data-field="symbol">${Utils.escapeHtml(identity.symbol || "—")}</span>${badges}</div>
+        ${shownName || tags ? `<div class="ti-row-cell__line ti-row-cell__sub"><span class="ti-row-cell__name" data-field="name">${Utils.escapeHtml(shownName)}</span>${tags}</div>` : ""}
+        ${caption}
+      </div>
+    </div>
+    ${actions ? `<div class="row-actions ti-row-cell__actions">${actions}</div>` : ""}
+  </div>`;
 }
 
 const EXPLORER_PATHS = { token: "token", account: "account" };

@@ -177,8 +177,6 @@ function auditNativeChoiceContract(file, source) {
    shared marker anywhere a known token-logo class or a dynamic logo URL emits an
    <img>; token_identity.css then owns crop/contain behavior across every surface. */
 const tokenLogoImageClasses = new Set([
-  "token-logo",
-  "overview-token-logo",
   "favorite-logo",
   "feat-card-avatar-img",
   "featured-row-card-logo",

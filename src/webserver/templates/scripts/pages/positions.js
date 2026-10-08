@@ -19,6 +19,7 @@ import { PositionRemoveDialog } from "../ui/position_remove_dialog.js";
 import { ConfirmationDialog } from "../ui/confirmation_dialog.js";
 import { openCopyTask } from "../ui/copy_handoff.js";
 import { notificationManager } from "../core/notifications.js";
+import { renderTokenRowCell } from "../ui/token_identity.js";
 
 // Origin kinds that get a chip in the token cell. `external` is derived from this
 // wallet's own on-chain history rather than traded by the bot.
@@ -145,7 +146,7 @@ function createLifecycle() {
   };
 
   // Compact caption describing a row's live state (buying / selling / failed).
-  // Open rows stay clean — the left status bar + tint carry the state there.
+  // Open rows stay clean; an in-flight or failed row adds a tint beside this caption.
   const stateCaption = (row) => {
     const st = row?._state;
     if (!st || st === "open") return "";
@@ -203,38 +204,31 @@ function createLifecycle() {
       ? unknownCell(basisUnknown(row) ? basisUnknownTitle() : historyUnknownTitle())
       : render();
 
-  const tokenCell = (row, actionsHtml = "", actionCount = 0) => {
-    const logo = row.logo_url || row.image_url || "";
-    const symbol = row.symbol || "?";
-    const name = row.name || "";
+  // Origin and holding tags ride after the token name.
+  const positionTags = (row) => {
     const originChip = positionOriginChip(row);
-    const logoHtml = logo
-      ? `<img class="token-logo token-logo-artwork" src="${Utils.escapeHtml(logo)}" alt="${Utils.escapeHtml(
-          symbol
-        )}"/>`
-      : '<i class="token-logo icon-coins"></i>';
-    return `<div class="position-token position-token--actions-${actionCount}">
-      <div class="position-token__identity">
-        ${logoHtml}
-        <div class="position-token-meta">
-          <div class="token-symbol">${Utils.escapeHtml(symbol)}</div>
-          <div class="token-name"><span>${Utils.escapeHtml(name)}</span>${
-            originChip
-              ? row?.origin?.kind === "copy" && row.origin.task_id != null
-                ? `<button type="button" class="position-origin-label position-origin-copy position-origin-link" data-copy-task="${Utils.escapeHtml(String(row.origin.task_id))}" title="${esc(I18n.attr("positions-origin-copy-link", "title"))}">${esc(originChip.text)}</button>`
-                : `<span class="position-origin-label position-origin-${originChip.cls}">${esc(originChip.text)}</span>`
-              : ""
-          }${
-            row?.holding_state === "frozen"
-              ? `<span class="position-origin-label position-frozen" title="${esc(I18n.attr("positions-holding-frozen", "title"))}">${esc(I18n.t("positions-holding-frozen"))}</span>`
-              : ""
-          }</div>
-          ${stateCaption(row)}
-        </div>
-      </div>
-      ${actionsHtml}
-    </div>`;
+    const origin = originChip
+      ? row?.origin?.kind === "copy" && row.origin.task_id != null
+        ? `<button type="button" class="position-origin-label position-origin-copy position-origin-link" data-copy-task="${Utils.escapeHtml(String(row.origin.task_id))}" title="${esc(I18n.attr("positions-origin-copy-link", "title"))}">${esc(originChip.text)}</button>`
+        : `<span class="position-origin-label position-origin-${originChip.cls}">${esc(originChip.text)}</span>`
+      : "";
+    const frozen =
+      row?.holding_state === "frozen"
+        ? `<span class="position-origin-label position-frozen" title="${esc(I18n.attr("positions-holding-frozen", "title"))}">${esc(I18n.t("positions-holding-frozen"))}</span>`
+        : "";
+    return origin + frozen;
   };
+
+  const tokenCell = (row, actions = "", actionCount = 0) =>
+    renderTokenRowCell(row.mint, {
+      symbol: row.symbol,
+      name: row.name,
+      logoUrl: row.logo_url || row.image_url,
+      tags: positionTags(row),
+      caption: stateCaption(row),
+      actions,
+      actionCount,
+    });
 
   // Significant digits in the cell; the exact price on hover.
   const priceCell = (value) =>
@@ -277,13 +271,9 @@ function createLifecycle() {
   const removeActionCell = (row) => {
     const id = row?.id;
     if (id == null) return "";
-    return `<div class="row-actions position-token__actions">
-      <button class="btn row-action row-action--icon" data-action="remove" data-id="${Utils.escapeHtml(
-        String(id)
-      )}" data-mint="${Utils.escapeHtml(
-        row?.mint || ""
-      )}" ${removeAttrs()}><i class="icon-trash-2"></i></button>
-    </div>`;
+    return `<button class="btn row-action" data-action="remove" data-id="${Utils.escapeHtml(
+      String(id)
+    )}" data-mint="${Utils.escapeHtml(row?.mint || "")}" ${removeAttrs()}><i class="icon-trash-2"></i></button>`;
   };
 
   // Restore + permanent-delete buttons for archived rows.
@@ -292,10 +282,8 @@ function createLifecycle() {
     if (id == null) return "";
     const idAttr = Utils.escapeHtml(String(id));
     const mintAttr = Utils.escapeHtml(row?.mint || "");
-    return `<div class="row-actions position-token__actions">
-      <button class="btn row-action" data-action="restore" data-id="${idAttr}" data-mint="${mintAttr}" ${restoreAttrs()}><i class="icon-rotate-ccw"></i></button>
-      <button class="btn row-action row-action--icon row-action--danger" data-action="delete" data-id="${idAttr}" data-mint="${mintAttr}" ${deleteAttrs()}><i class="icon-trash-2"></i></button>
-    </div>`;
+    return `<button class="btn row-action" data-action="restore" data-id="${idAttr}" data-mint="${mintAttr}" ${restoreAttrs()}><i class="icon-rotate-ccw"></i></button>
+      <button class="btn row-action row-action--danger" data-action="delete" data-id="${idAttr}" data-mint="${mintAttr}" ${deleteAttrs()}><i class="icon-trash-2"></i></button>`;
   };
 
   const openActionCell = (row) => {
@@ -304,7 +292,7 @@ function createLifecycle() {
     if (!mint || !isOpen) return "";
 
     if (row?._pending) {
-      return `<div class="position-token__actions"><span class="row-actions-busy">${esc(I18n.t("positions-action-in-progress"))}</span></div>`;
+      return `<span class="row-actions-busy">${esc(I18n.t("positions-action-in-progress"))}</span>`;
     }
 
     const busy = row?._state === "selling" || row?._state === "closing";
@@ -320,13 +308,11 @@ function createLifecycle() {
     const mintAttr = Utils.escapeHtml(mint);
     const idAttr = Utils.escapeHtml(String(row?.id ?? ""));
     return `
-      <div class="row-actions position-token__actions">
-        <button class="btn row-action" data-action="add" data-mint="${mintAttr}" ${addAttrs()}${dis}><i class="icon-circle-plus"></i></button>
-        <button class="btn row-action" data-action="sell" data-mint="${mintAttr}" title="${Utils.escapeHtml(
-          sellTitle
-        )}" aria-label="${esc(I18n.attr("positions-action-sell", "aria-label"))}"${sellDis}><i class="icon-trending-down"></i></button>
-        <button class="btn row-action row-action--icon" data-action="remove" data-id="${idAttr}" data-mint="${mintAttr}" ${removeAttrs()}><i class="icon-trash-2"></i></button>
-      </div>
+      <button class="btn row-action" data-action="add" data-mint="${mintAttr}" ${addAttrs()}${dis}><i class="icon-circle-plus"></i></button>
+      <button class="btn row-action" data-action="sell" data-mint="${mintAttr}" title="${Utils.escapeHtml(
+        sellTitle
+      )}" aria-label="${esc(I18n.attr("positions-action-sell", "aria-label"))}"${sellDis}><i class="icon-trending-down"></i></button>
+      <button class="btn row-action" data-action="remove" data-id="${idAttr}" data-mint="${mintAttr}" ${removeAttrs()}><i class="icon-trash-2"></i></button>
     `;
   };
 
@@ -972,8 +958,8 @@ function createLifecycle() {
         zebra: true,
         fitToContainer: true,
         uniformRowHeight: 2,
-        // State-driven row styling: left status bar + tint for pending/selling/
-        // closing/failed rows, and a brief arrival glow for just-closed rows.
+        // State-driven row styling: a tint for pending/selling/closing/failed rows,
+        // and a brief arrival glow for just-closed rows.
         rowClass: (row) => {
           const classes = [];
           if (row?._state) classes.push(`pos-row-${row._state}`);

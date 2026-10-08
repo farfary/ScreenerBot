@@ -214,7 +214,6 @@
   --token-logo-radius: var(--radius-full);
   --token-logo-fit: cover;
   --token-table-logo-size: 30.8px;
-  --token-table-logo-size-compact: 24.2px;
 
   /* Transition Timing */
   --transition-fast: 150ms ease;

@@ -13,7 +13,7 @@ import { boostTierForMint, boostCountForMint, formatBoostCount } from "../../cor
 import * as AppState from "../../core/app_state.js";
 import * as Hints from "../../core/hints.js";
 import { HintTrigger } from "../../ui/hint_popover.js";
-import { tokenLogoPlaceholder } from "../../ui/token_identity.js";
+import { renderTokenRowCell } from "../../ui/token_identity.js";
 import { SORT_KEY_TO_COLUMN, TOKEN_VIEWS } from "./constants.js";
 
 export function findFirstDifferenceIndex(a, b) {
@@ -104,12 +104,6 @@ export function getRejectionDisplayLabel(reasonCode) {
 }
 
 export function tokenCell(row) {
-  const src = row.logo_url || row.image_url;
-  const logo = src
-    ? `<img class="token-logo token-logo-artwork clickable-logo" alt="" src="${Utils.escapeHtml(src)}" data-logo-url="${Utils.escapeHtml(src)}" data-token-symbol="${Utils.escapeHtml(row.symbol || "")}" data-token-name="${Utils.escapeHtml(row.name || "")}" data-token-mint="${Utils.escapeHtml(row.mint || "")}" title="${Utils.escapeHtml(I18n.t("tokens-cell-logo-enlarge"))}" />`
-    : tokenLogoPlaceholder(row.symbol, "token-logo");
-  const sym = Utils.escapeHtml(row.symbol || "—");
-  const name = row.name ? `<div class="token-name">${Utils.escapeHtml(row.name)}</div>` : "";
   // A boosted token's owner paid for visibility, so the mark rides beside the
   // ticker where the eye already is. Bare gold glyph plus the active count -- it
   // adds information (how strongly), never a second badge saying the same thing.
@@ -127,18 +121,17 @@ export function tokenCell(row) {
       <button class="btn row-action" data-action="add" data-mint="${mint}" ${actionAttrs(I18n.attr("tokens-cell-action-add", "title"), I18n.attr("tokens-cell-action-add", "aria-label"))}${disabledAttr}><i class="icon-circle-plus"></i></button>
       <button class="btn row-action" data-action="sell" data-mint="${mint}" ${actionAttrs(I18n.attr("tokens-cell-action-sell", "title"), I18n.attr("tokens-cell-action-sell", "aria-label"))}${disabledAttr}><i class="icon-trending-down"></i></button>`
     : `<button class="btn row-action" data-action="buy" data-mint="${mint}" ${actionAttrs(I18n.attr("tokens-cell-action-buy", "title"), I18n.attr("tokens-cell-action-buy", "aria-label"))}${disabledAttr}><i class="icon-shopping-cart"></i></button>`;
-  const actionCount = row.has_open_position ? 3 : 2;
 
-  return `<div class="token-cell token-cell--actions-${actionCount}">
-    <div class="token-cell__identity">
-      ${logo}
-      <div class="token-cell__meta"><div class="token-cell__symbol-line"><div class="token-symbol">${sym}</div>${boostMark}</div>${name}</div>
-    </div>
-    <div class="row-actions token-cell__actions">
-      ${tradeActions}
-      <button class="btn links-dropdown-trigger" data-mint="${mint}" ${actionAttrs(I18n.attr("tokens-cell-external-links", "title"), I18n.attr("tokens-cell-external-links", "aria-label"))} type="button"><i class="icon-external-link"></i></button>
-    </div>
-  </div>`;
+  return renderTokenRowCell(row.mint, {
+    symbol: row.symbol,
+    name: row.name,
+    logoUrl: row.logo_url || row.image_url,
+    badges: boostMark,
+    actions: `${tradeActions}
+      <button class="btn links-dropdown-trigger" data-mint="${mint}" ${actionAttrs(I18n.attr("tokens-cell-external-links", "title"), I18n.attr("tokens-cell-external-links", "aria-label"))} type="button"><i class="icon-external-link"></i></button>`,
+    actionCount: row.has_open_position ? 3 : 2,
+    enlargeLogo: true,
+  });
 }
 
 export function normalizeBlacklistReasons(mint, sourcesMap) {

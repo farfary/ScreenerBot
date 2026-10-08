@@ -184,9 +184,7 @@ class ContextMenuManager {
         const nameEl = rowEl.querySelector(
           ".token-name-group .token-name, .dt-name, [data-field='name'], .token-name"
         );
-        const logoEl = rowEl.querySelector(
-          ".token-logo img, .dt-token-logo img, [data-field='logo'] img, img.token-icon, img.token-logo"
-        );
+        const logoEl = rowEl.querySelector("[data-field='logo'] img");
 
         return {
           type: "token",
@@ -208,9 +206,7 @@ class ContextMenuManager {
       // explorer / favorites) target the right token instead of the position id.
       const id = tableRow.dataset.rowId;
       const mint = tableRow.querySelector("[data-mint]")?.dataset.mint || null;
-      const symbolEl = tableRow.querySelector(
-        ".token-symbol, .position-symbol, [data-field='symbol']"
-      );
+      const symbolEl = tableRow.querySelector("[data-field='symbol']");
 
       return {
         type: "position",

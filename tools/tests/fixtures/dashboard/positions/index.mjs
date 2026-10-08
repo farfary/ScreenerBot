@@ -6,7 +6,7 @@
 const ROWS = "#positions-root tr[data-row-id]";
 const EMPTY = { selector: "#positions-root .dt-empty-state", text: "No data" };
 const DETAILS = {
-  trigger: `${ROWS} .token-symbol`,
+  trigger: `${ROWS} .ti-row-cell__symbol`,
   dialog: ".position-details-dialog .dialog-container",
   close: ".position-details-dialog .dialog-close",
 };

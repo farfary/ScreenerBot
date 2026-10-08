@@ -23,15 +23,17 @@
 
 /* --- Logo ---------------------------------------------------------------- */
 
+/* The frame is the ONE token avatar: a loaded logo fills it (and drops the surface,
+   below); without one it shows the letter avatar on a quiet filled surface, the same
+   on every table, dialog and list. */
 .ti-logo {
   display: inline-flex;
   align-items: center;
   justify-content: center;
   overflow: hidden;
   flex-shrink: 0;
-  border: 1px solid var(--border-color);
   border-radius: var(--token-logo-radius, 3px);
-  background: var(--bg-primary);
+  background: var(--bg-tertiary);
 }
 
 .ti-logo img {
@@ -119,6 +121,12 @@
   width: 44px;
   height: 44px;
   font-size: 44px;
+}
+
+.ti-logo-table {
+  width: var(--token-table-logo-size);
+  height: var(--token-table-logo-size);
+  font-size: var(--token-table-logo-size);
 }
 
 /* --- Chip ---------------------------------------------------------------- */
@@ -312,4 +320,178 @@ a.ti-address-value:hover {
 :root .token-logo-glyph > i {
   font-size: 1rem;
   line-height: 1;
+}
+
+/* --- Table token column with row controls --------------------------------- */
+
+/* At rest the identity uses the whole column. On row hover or focus the icon-only
+   actions fade in over the cell's end and the identity yields their width, so the
+   ellipsis always reflects the space actually left. Coarse pointers keep them shown.
+   The actions only fade: an offset at rest would sit past the cell's end and widen
+   its scroll width beyond the column. */
+.ti-row-cell {
+  --ti-row-actions-width: 0px;
+
+  position: relative;
+  display: flex;
+  align-items: center;
+  width: 100%;
+  min-width: 0;
+  max-height: 100%;
+  overflow: hidden;
+}
+
+.ti-row-cell--actions-1 {
+  --ti-row-actions-width: 28px;
+}
+
+.ti-row-cell--actions-2 {
+  --ti-row-actions-width: 56px;
+}
+
+.ti-row-cell--actions-3 {
+  --ti-row-actions-width: 84px;
+}
+
+.ti-row-cell__identity {
+  display: flex;
+  flex: 1 1 auto;
+  align-items: center;
+  gap: 10px;
+  min-width: 0;
+  padding-inline-end: 0;
+  transition: padding-inline-end 180ms cubic-bezier(0.22, 1, 0.36, 1);
+}
+
+.ti-row-cell__meta {
+  display: flex;
+  flex-direction: column;
+  flex: 1 1 auto;
+  min-width: 0;
+  overflow: hidden;
+}
+
+/* Each line shrinks its own text and ellipses it; badges and tags beside the text
+   never shrink, so a long symbol or name cannot clip them away. */
+.ti-row-cell__line {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  min-width: 0;
+}
+
+.ti-row-cell__symbol,
+.ti-row-cell__name {
+  min-width: 0;
+  overflow: hidden;
+  white-space: nowrap;
+  text-overflow: ellipsis;
+}
+
+.ti-row-cell__symbol {
+  color: var(--text-primary);
+}
+
+.ti-row-cell__sub {
+  color: var(--text-secondary);
+  font-size: 0.85em;
+}
+
+.ti-row-cell__name {
+  font-family: var(--font-mono);
+  letter-spacing: -0.03em;
+}
+
+.ti-row-cell__line > :not(.ti-row-cell__symbol, .ti-row-cell__name) {
+  flex-shrink: 0;
+}
+
+.ti-row-cell__actions {
+  position: absolute;
+  top: 50%;
+  inset-inline-end: 0;
+  display: inline-flex;
+  align-items: center;
+  opacity: 0;
+  pointer-events: none;
+  transform: translateY(-50%);
+  transition: opacity 120ms ease;
+}
+
+.data-table tbody tr:hover .ti-row-cell__identity,
+.data-table tbody tr:focus-within .ti-row-cell__identity {
+  padding-inline-end: var(--ti-row-actions-width);
+}
+
+.data-table tbody tr:hover .ti-row-cell__actions,
+.data-table tbody tr:focus-within .ti-row-cell__actions,
+.ti-row-cell__actions:focus-within {
+  opacity: 1;
+  pointer-events: auto;
+}
+
+@media (hover: none), (pointer: coarse) {
+  .ti-row-cell__identity {
+    padding-inline-end: var(--ti-row-actions-width);
+  }
+
+  .ti-row-cell__actions {
+    opacity: 1;
+    pointer-events: auto;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .ti-row-cell__identity,
+  .ti-row-cell__actions {
+    transition: none;
+  }
+}
+
+/* Row controls are bare icon buttons: the glyph colour names the action, and no
+   state paints a tile, border or shadow behind it. */
+.ti-row-cell__actions .btn,
+.ti-row-cell__actions .btn:hover,
+.ti-row-cell__actions .btn:active,
+.ti-row-cell__actions .btn.active {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 28px;
+  height: 28px;
+  min-width: 28px;
+  padding: 0;
+  border: 0;
+  background: transparent;
+  box-shadow: none;
+  color: var(--text-secondary);
+  transform: none;
+  cursor: pointer;
+  transition: color var(--transition-fast);
+}
+
+.ti-row-cell__actions .btn i {
+  font-size: 0.95rem;
+}
+
+.ti-row-cell__actions .btn:hover {
+  color: var(--text-primary);
+}
+
+.ti-row-cell__actions .btn[data-action="buy"] {
+  color: var(--success-color);
+}
+
+.ti-row-cell__actions .btn[data-action="add"] {
+  color: var(--info-color);
+}
+
+.ti-row-cell__actions .btn:is([data-action="sell"], .row-action--danger) {
+  color: var(--error-color);
+}
+
+.ti-row-cell__actions .btn:disabled {
+  opacity: 0.4;
+  cursor: not-allowed;
+  pointer-events: none;
 }

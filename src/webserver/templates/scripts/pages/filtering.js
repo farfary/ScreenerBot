@@ -18,7 +18,7 @@ import { $ } from "../core/dom.js";
 import * as Utils from "../core/utils.js";
 import * as AppState from "../core/app_state.js";
 import { TabBar, TabBarManager } from "../ui/tab_bar.js";
-import { tokenLogoPlaceholder } from "../ui/token_identity.js";
+import { renderTokenLogo } from "../ui/token_identity.js";
 import {
   buildFilterTabs,
   REJECTION_SOURCE_LABELS,
@@ -1209,10 +1209,10 @@ window.filteringPage = {
 
       html += tokens
         .map((t) => {
-          const src = t.image_url;
-          const logo = src
-            ? `<img class="token-logo token-logo-artwork" alt="" src="${esc(src)}" loading="lazy" />`
-            : tokenLogoPlaceholder(t.symbol, "token-logo token-logo-placeholder");
+          const logo = renderTokenLogo(
+            { mint: t.mint, symbol: t.symbol, name: t.name, logoUrl: t.image_url },
+            { size: "table" }
+          );
           const sym = esc(t.symbol || "—");
           const name = esc(t.name || I18n.t("format-unknown"));
 
@@ -1220,9 +1220,7 @@ window.filteringPage = {
         <tr>
           <td>
             <div class="token-info-cell">
-              <div class="token-logo-wrapper">
-                ${logo}
-              </div>
+              ${logo}
               <div class="token-details">
                 <div class="token-symbol">${sym}</div>
                 <div class="token-name">${name}</div>
