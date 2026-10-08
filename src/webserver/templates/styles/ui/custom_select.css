@@ -37,7 +37,7 @@ select.cs-enhanced-source {
   width: 100%;
   min-width: 0;
   max-width: 100%;
-  font-family: var(--font-mono);
+  font-family: var(--font-sans);
   font-size: var(--font-size-sm);
   cursor: pointer;
   user-select: none;
@@ -197,7 +197,7 @@ select.cs-enhanced-source {
   border-radius: 0 0 var(--radius-md) var(--radius-md);
   box-shadow: var(--shadow-floating-sm);
   color: var(--text-primary);
-  font-family: var(--font-mono);
+  font-family: var(--font-sans);
   font-size: 0.8125rem;
   opacity: 0;
   visibility: hidden;
@@ -236,7 +236,7 @@ select.cs-enhanced-source {
   border: 1px solid var(--border-color);
   border-radius: var(--radius-md);
   color: var(--text-primary);
-  font-family: var(--font-mono);
+  font-family: var(--font-sans);
   font-size: 0.75rem;
   outline: none;
   transition: border-color var(--transition-base);

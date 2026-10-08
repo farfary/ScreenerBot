@@ -471,7 +471,7 @@
   padding: 8px 10px;
   border-radius: 0;
   font-size: 0.8125rem;
-  font-family: var(--font-mono);
+  font-family: var(--font-sans);
   font-weight: 500;
   color: var(--text-primary);
   cursor: pointer;

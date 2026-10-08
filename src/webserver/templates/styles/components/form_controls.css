@@ -96,6 +96,8 @@
    Base Input Styles
    =============================================================================
    Applies to: text, number, password, email, search, url, tel, date, time
+   Typed words are set in the UI face; numbers, dates and machine values (an input
+   marked as a left-to-right island: addresses, mints, keys) keep the tabular data face.
    ============================================================================= */
 
 input[type="text"],
@@ -110,11 +112,8 @@ input[type="time"],
 input[type="datetime-local"] {
   height: var(--input-height);
   padding: var(--input-padding-y) var(--input-padding-x);
-  font-family: var(--font-data);
+  font-family: var(--font-sans);
   font-size: var(--input-font-size);
-  font-feature-settings:
-    "tnum" 1,
-    "zero" 1;
   line-height: 1.5;
   color: var(--text-primary);
   background: var(--input-bg);
@@ -125,6 +124,18 @@ input[type="datetime-local"] {
     box-shadow 0.15s ease,
     background-color 0.15s ease;
   width: 100%;
+}
+
+input[type="number"],
+input[type="date"],
+input[type="time"],
+input[type="datetime-local"],
+input[dir="ltr"],
+textarea[dir="ltr"] {
+  font-family: var(--font-data);
+  font-feature-settings:
+    "tnum" 1,
+    "zero" 1;
 }
 
 /* Hover state */
@@ -249,11 +260,8 @@ input.input-lg {
 
 textarea {
   padding: var(--input-padding-y) var(--input-padding-x);
-  font-family: var(--font-data);
+  font-family: var(--font-sans);
   font-size: var(--input-font-size);
-  font-feature-settings:
-    "tnum" 1,
-    "zero" 1;
   line-height: 1.5;
   color: var(--text-primary);
   background: var(--input-bg);
@@ -319,7 +327,7 @@ select {
   height: var(--input-height);
   padding: var(--input-padding-y) var(--input-padding-x);
   padding-inline-end: 36px;
-  font-family: var(--font-data);
+  font-family: var(--font-sans);
   font-size: var(--input-font-size);
   line-height: 1.5;
   color: var(--text-primary);

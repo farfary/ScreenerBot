@@ -628,7 +628,9 @@ body.dt-column-resizing * {
 
 /* ==================== State Cells (Loading & Empty) ==================== */
 
+/* Loading, error and empty states are sentences, so they leave the cell's data face. */
 .data-table td.dt-state-cell {
+  font-family: var(--font-sans);
   text-align: center;
   padding: 64px 32px;
   background: transparent;
