@@ -70,7 +70,6 @@ services-col-tasks = Завдання
 services-col-ops = Операцій/с
 services-col-errors = Помилки
 services-col-dependencies = Залежності
-services-dependencies-none = Немає
 services-activity-busy = Зайнятість: { $percent }
 services-activity-polls =
     { $count ->

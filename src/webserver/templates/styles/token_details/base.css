@@ -271,31 +271,6 @@
   white-space: nowrap;
 }
 
-.token-details-dialog .badge-success {
-  background: var(--success-alpha-20);
-  color: var(--semantic-success-text);
-}
-
-.token-details-dialog .badge-info {
-  background: var(--primary-alpha-20);
-  color: var(--semantic-info-text);
-}
-
-.token-details-dialog .badge-danger {
-  background: var(--danger-alpha-20);
-  color: var(--semantic-error-text);
-}
-
-.token-details-dialog .badge-warning {
-  background: var(--warning-alpha-20);
-  color: var(--semantic-warning-text);
-}
-
-.token-details-dialog .badge-secondary {
-  background: var(--bg-card-hover);
-  color: var(--text-secondary);
-}
-
 /* Center section - quote first, then comparable market metrics. */
 .token-details-dialog .header-center {
   grid-area: market;

@@ -15,8 +15,9 @@
  *   use the UI face, and a data face only reaches number, date and time inputs and
  *   inputs marked as left-to-right islands (`dir="ltr"`: addresses, mints, keys).
  * - The shared prose surfaces (select trigger, menu and search, table search and
- *   menus, row action items, table loading/empty/error states, the strategy
- *   condition summary, the position header's sub-lines) declare the UI face.
+ *   menus, row action items, every table cell, the strategy condition summary, the
+ *   position header's sub-lines) declare the UI face. A table cell reaches a data
+ *   face only through its numeric column type or a machine-value class.
  *
  * Run with `npm run test:js`.
  */
@@ -57,7 +58,7 @@ test("shared prose surfaces declare the UI face", () => {
     "ui/custom_select.css": [".custom-select", ".cs-dropdown", ".cs-search-input"],
     "ui/table_toolbar.css": [".dt-search-input", ".table-toolbar-menu"],
     "ui/data_table/column_types.css": [".dt-actions-dropdown-item"],
-    "ui/data_table/core.css": [".data-table td.dt-state-cell"],
+    "ui/data_table/core.css": [".data-table td"],
     "pages/strategies/condition_cards.css": [".summary-content"],
     "ui/position_details/header.css": [".position-details-dialog .header-metric-sub"],
   };

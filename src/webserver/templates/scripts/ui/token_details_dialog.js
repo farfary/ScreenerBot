@@ -1097,7 +1097,7 @@ export class TokenDetailsDialog {
           ? I18n.t("tokens-dialog-badge-pool-price")
           : I18n.t("tokens-dialog-badge-api-price");
         badges.push(
-          `<span class="badge ${isPool ? "badge-success" : "badge-secondary"}" title="${esc(priceTitle)}">${esc(priceLabel)}</span>`
+          `<span class="badge ${isPool ? "success" : "secondary"}" title="${esc(priceTitle)}">${esc(priceLabel)}</span>`
         );
       }
 
@@ -1108,29 +1108,29 @@ export class TokenDetailsDialog {
       }
       if (token.verified) {
         badges.push(
-          `<span class="badge badge-success" title="${esc(I18n.t("tokens-dialog-badge-low-risk-hint"))}">${esc(I18n.t("positions-risk-low"))}</span>`
+          `<span class="badge success" title="${esc(I18n.t("tokens-dialog-badge-low-risk-hint"))}">${esc(I18n.t("positions-risk-low"))}</span>`
         );
       }
 
       // Mutable/Immutable badge
       if (token.is_mutable === false) {
         badges.push(
-          `<span class="badge badge-success">${esc(I18n.t("tokens-dialog-badge-immutable"))}</span>`
+          `<span class="badge success">${esc(I18n.t("tokens-dialog-badge-immutable"))}</span>`
         );
       } else if (token.is_mutable === true) {
         badges.push(
-          `<span class="badge badge-warning">${esc(I18n.t("tokens-dialog-badge-mutable"))}</span>`
+          `<span class="badge warning">${esc(I18n.t("tokens-dialog-badge-mutable"))}</span>`
         );
       }
 
       if (token.has_open_position) {
         badges.push(
-          `<span class="badge badge-info">${esc(I18n.t("tokens-dialog-badge-position"))}</span>`
+          `<span class="badge info">${esc(I18n.t("tokens-dialog-badge-position"))}</span>`
         );
       }
       if (token.blacklisted) {
         badges.push(
-          `<span class="badge badge-danger">${esc(I18n.t("tokens-dialog-badge-blacklisted"))}</span>`
+          `<span class="badge error">${esc(I18n.t("tokens-dialog-badge-blacklisted"))}</span>`
         );
       }
 

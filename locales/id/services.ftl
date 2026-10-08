@@ -75,7 +75,6 @@ services-col-tasks = Tugas
 services-col-ops = Op/dtk
 services-col-errors = Error
 services-col-dependencies = Dependensi
-services-dependencies-none = Tidak ada
 services-activity-busy = { $percent } sibuk
 services-activity-polls =
     { $count ->

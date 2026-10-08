@@ -382,28 +382,3 @@
   font-size: 12px;
 }
 
-.transaction-details-dialog .badge.success {
-  background: var(--success-alpha-20);
-  color: var(--success-color);
-}
-
-.transaction-details-dialog .badge.error {
-  background: var(--danger-alpha-20);
-  color: var(--danger);
-}
-
-.transaction-details-dialog .badge.warning {
-  background: var(--warning-alpha-20);
-  color: var(--warning-color);
-}
-
-.transaction-details-dialog .badge.info {
-  background: var(--primary-alpha-20);
-  color: var(--primary-color);
-}
-
-.transaction-details-dialog .badge.secondary {
-  background: var(--bg-secondary);
-  color: var(--text-secondary);
-  border: 1px solid var(--border-color);
-}

@@ -81,7 +81,6 @@ services-col-tasks = وظایف
 services-col-ops = عملیات/ثانیه
 services-col-errors = خطاها
 services-col-dependencies = وابستگی‌ها
-services-dependencies-none = ندارد
 # $percent is a formatted percentage.
 services-activity-busy = { $percent } مشغول
 services-activity-polls =

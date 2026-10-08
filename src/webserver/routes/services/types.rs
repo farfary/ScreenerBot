@@ -20,8 +20,10 @@ pub struct ServiceDetailResponse {
     pub dependencies: Vec<String>,
     pub enabled: bool,
     pub health: ServiceHealth,
-    pub metrics: ServiceMetrics,
-    pub uptime_seconds: u64,
+    /// None while the service is disabled or not yet sampled.
+    pub metrics: Option<ServiceMetrics>,
+    /// None while the service is disabled or not yet sampled.
+    pub uptime_seconds: Option<u64>,
 }
 
 /// List of all services with their status

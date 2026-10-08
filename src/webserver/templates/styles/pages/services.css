@@ -16,6 +16,14 @@
   overflow: hidden;
 }
 
+.services-enabled-icon.is-on {
+  color: var(--success-color);
+}
+
+.services-enabled-icon.is-off {
+  color: var(--error-color);
+}
+
 .activity-cell {
   min-width: 170px;
 }
@@ -25,13 +33,29 @@
   height: 6px;
   border-radius: var(--radius-full);
   overflow: hidden;
-  background: var(--bg-secondary);
-  margin-bottom: 4px;
+  background: var(--border-color);
+  margin-block-end: 4px;
 }
 
 .activity-fill {
   height: 100%;
   border-radius: var(--radius-full);
+}
+
+.activity-fill--busy {
+  background: var(--success-color);
+}
+
+.activity-fill--active {
+  background: var(--primary-color);
+}
+
+.activity-fill--moderate {
+  background: var(--warning-color);
+}
+
+.activity-fill--idle {
+  background: var(--text-secondary);
 }
 
 .activity-meta {
@@ -41,26 +65,17 @@
   color: var(--text-secondary);
 }
 
+/* Dependencies stay on one line so every row keeps the table's row height. */
+.dependency-list {
+  display: inline-flex;
+  flex-wrap: nowrap;
+  gap: 4px;
+  white-space: nowrap;
+}
+
 .dependency-badge {
   font-size: 0.75rem;
   background: var(--bg-secondary);
-  padding: 0.25rem 0.6rem;
+  padding: 2px 8px;
   border-radius: var(--radius-xl);
-  display: inline-block;
-  margin: 2px;
-}
-
-/* "None" reuses the dependency tag shape so it lines up with real badges
-   instead of looking like loose plain text, but reads as muted/empty. */
-.dependency-badge--none {
-  background: transparent;
-  border: 1px dashed var(--border-color);
-  color: var(--text-muted);
-}
-
-@media (width <= 900px) {
-  .services-summary {
-    flex-direction: column;
-    align-items: flex-start;
-  }
 }

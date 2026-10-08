@@ -72,7 +72,6 @@ services-col-tasks = Задачи
 services-col-ops = Оп./с
 services-col-errors = Ошибки
 services-col-dependencies = Зависимости
-services-dependencies-none = Нет
 services-activity-busy = занят на { $percent }
 services-activity-polls =
     { $count ->

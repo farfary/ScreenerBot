@@ -58,6 +58,18 @@ const HEALTH_STYLE_FALLBACK = { variant: "secondary", icon: "icon-pause" };
 
 const serviceName = (id) => I18n.label(SERVICE_NAME_LABELS, id);
 
+const ABSENT = "—";
+
+/**
+ * The API sends `metrics: null` for a disabled or not yet sampled service. Poll-derived
+ * readings (activity, cycle and poll durations, cycle rate) additionally need an
+ * instrumented task; without one they are absent, not zero.
+ */
+const pollMetrics = (row) => (row.metrics?.task_count > 0 ? row.metrics : null);
+
+/** Sort value for a reading that may be absent: absent sorts below every measured value. */
+const sortReading = (value) => (Number.isFinite(value) ? value : -1);
+
 // Helper functions
 function healthRank(status) {
   const ranks = { healthy: 4, disabled: 3, degraded: 2, starting: 1, unhealthy: 0 };
@@ -73,30 +85,37 @@ function getHealthBadge(health) {
   return `<span class="badge ${variant}"${title}><i class="${icon}"></i> ${Utils.escapeHtml(I18n.label(HEALTH_STATUS_LABELS, status))}</span>`;
 }
 
-function getActivityBar(metrics) {
-  const total = (metrics.total_poll_duration_ns || 0) + (metrics.total_idle_duration_ns || 0);
-  const activity = total > 0 ? ((metrics.total_poll_duration_ns || 0) / total) * 100 : 0;
-  const color =
-    activity > 80
-      ? "#10b981"
-      : activity > 50
-        ? "#3b82f6"
-        : activity > 20
-          ? "#f59e0b"
-          : activity > 5
-            ? "#6b7280"
-            : "#9ca3af";
+/**
+ * Share of a service's sampled time spent polling, as a percentage; null when the service
+ * reports no poll readings.
+ */
+function activityPercent(row) {
+  const metrics = pollMetrics(row);
+  if (!metrics) return null;
+  const total = metrics.total_poll_duration_ns + metrics.total_idle_duration_ns;
+  return total > 0 ? (metrics.total_poll_duration_ns / total) * 100 : null;
+}
 
+function activityTier(activity) {
+  if (activity > 80) return "busy";
+  if (activity > 50) return "active";
+  if (activity > 20) return "moderate";
+  return "idle";
+}
+
+function getActivityBar(row) {
+  const activity = activityPercent(row);
+  if (activity === null) return ABSENT;
+  const percent = Utils.formatPercentValue(activity, { decimals: 1, includeSign: false });
+  const fillWidth = activity.toFixed(2);
   return `
-    <div class="activity-cell" title="${Utils.escapeHtml(I18n.t("services-activity-busy", { percent: Utils.formatPercentValue(activity, { decimals: 1, includeSign: false }) }))}">
+    <div class="activity-cell" title="${Utils.escapeHtml(I18n.t("services-activity-busy", { percent }))}">
       <div class="activity-track">
-        <div class="activity-fill" style="width:${activity.toFixed(
-          1
-        )}%; background:${color};"></div>
+        <div class="activity-fill activity-fill--${activityTier(activity)}" style="inline-size:${fillWidth}%;"></div>
       </div>
       <div class="activity-meta">
-        <span>${Utils.formatPercentValue(activity, { decimals: 1, includeSign: false })}</span>
-        <span>${Utils.escapeHtml(I18n.t("services-activity-polls", { count: metrics.total_polls || 0 }))}</span>
+        <span>${percent}</span>
+        <span>${Utils.escapeHtml(I18n.t("services-activity-polls", { count: pollMetrics(row).total_polls }))}</span>
       </div>
     </div>
   `;
@@ -126,6 +145,8 @@ function createLifecycle() {
     const unhealthy =
       summary?.unhealthy_services ??
       rows.filter((row) => row.health?.status === "unhealthy").length;
+    const disabled =
+      summary?.disabled_services ?? rows.filter((row) => row.health?.status === "disabled").length;
     const total = summary?.total_services ?? rows.length;
     const alerts = degraded + unhealthy;
 
@@ -140,6 +161,11 @@ function createLifecycle() {
         label: I18n.label(HEALTH_STATUS_LABELS, "healthy"),
         value: Utils.formatNumber(healthy, 0),
         variant: "success",
+      },
+      {
+        id: "services-disabled",
+        label: I18n.label(HEALTH_STATUS_LABELS, "disabled"),
+        value: Utils.formatNumber(disabled, 0),
       },
       {
         id: "services-alerts",
@@ -234,7 +260,8 @@ function createLifecycle() {
           sortable: true,
           floating: true,
           minWidth: 140,
-          render: (v) => `<strong>${v ? Utils.escapeHtml(serviceName(v)) : "-"}</strong>`,
+          wrap: false,
+          render: (v) => `<strong>${v ? Utils.escapeHtml(serviceName(v)) : ABSENT}</strong>`,
         },
         {
           id: "health",
@@ -250,7 +277,7 @@ function createLifecycle() {
           type: "number",
           sortable: true,
           minWidth: 72,
-          render: (v) => v ?? "-",
+          render: (v) => v ?? ABSENT,
         },
         {
           id: "enabled",
@@ -259,8 +286,8 @@ function createLifecycle() {
           minWidth: 72,
           render: (v) =>
             v
-              ? '<i class="icon-circle-check" style="color: var(--success);"></i>'
-              : '<i class="icon-circle-x" style="color: var(--error);"></i>',
+              ? '<i class="icon-circle-check services-enabled-icon is-on"></i>'
+              : '<i class="icon-circle-x services-enabled-icon is-off"></i>',
         },
         {
           id: "uptime",
@@ -268,23 +295,17 @@ function createLifecycle() {
           type: "number",
           sortable: true,
           minWidth: 96,
-          render: (v, row) => Utils.formatUptime(row.uptime_seconds, { style: "compact" }),
-          sortFn: (a, b) => (a.uptime_seconds || 0) - (b.uptime_seconds || 0),
+          render: (v, row) =>
+            Utils.formatUptime(row.uptime_seconds, { style: "compact", fallback: ABSENT }),
+          sortFn: (a, b) => sortReading(a.uptime_seconds) - sortReading(b.uptime_seconds),
         },
         {
           id: "activity",
           label: I18n.t("services-col-activity"),
           sortable: true,
           minWidth: 200,
-          render: (v, row) => getActivityBar(row.metrics || {}),
-          sortFn: (a, b) => {
-            const calcActivity = (metrics) => {
-              const total =
-                (metrics.total_poll_duration_ns || 0) + (metrics.total_idle_duration_ns || 0);
-              return total > 0 ? (metrics.total_poll_duration_ns || 0) / total : 0;
-            };
-            return calcActivity(a.metrics || {}) - calcActivity(b.metrics || {});
-          },
+          render: (v, row) => getActivityBar(row),
+          sortFn: (a, b) => sortReading(activityPercent(a)) - sortReading(activityPercent(b)),
         },
         {
           id: "lastCycle",
@@ -292,9 +313,11 @@ function createLifecycle() {
           type: "number",
           sortable: true,
           minWidth: 96,
-          render: (v, row) => Utils.formatDuration(row.metrics?.last_cycle_duration_ns || 0),
+          render: (v, row) =>
+            Utils.formatDuration(pollMetrics(row)?.last_cycle_duration_ns, ABSENT),
           sortFn: (a, b) =>
-            (a.metrics?.last_cycle_duration_ns || 0) - (b.metrics?.last_cycle_duration_ns || 0),
+            sortReading(pollMetrics(a)?.last_cycle_duration_ns) -
+            sortReading(pollMetrics(b)?.last_cycle_duration_ns),
         },
         {
           id: "avgCycle",
@@ -302,9 +325,10 @@ function createLifecycle() {
           type: "number",
           sortable: true,
           minWidth: 96,
-          render: (v, row) => Utils.formatDuration(row.metrics?.avg_cycle_duration_ns || 0),
+          render: (v, row) => Utils.formatDuration(pollMetrics(row)?.avg_cycle_duration_ns, ABSENT),
           sortFn: (a, b) =>
-            (a.metrics?.avg_cycle_duration_ns || 0) - (b.metrics?.avg_cycle_duration_ns || 0),
+            sortReading(pollMetrics(a)?.avg_cycle_duration_ns) -
+            sortReading(pollMetrics(b)?.avg_cycle_duration_ns),
         },
         {
           id: "avgPoll",
@@ -312,9 +336,10 @@ function createLifecycle() {
           type: "number",
           sortable: true,
           minWidth: 96,
-          render: (v, row) => Utils.formatDuration(row.metrics?.mean_poll_duration_ns || 0),
+          render: (v, row) => Utils.formatDuration(pollMetrics(row)?.mean_poll_duration_ns, ABSENT),
           sortFn: (a, b) =>
-            (a.metrics?.mean_poll_duration_ns || 0) - (b.metrics?.mean_poll_duration_ns || 0),
+            sortReading(pollMetrics(a)?.mean_poll_duration_ns) -
+            sortReading(pollMetrics(b)?.mean_poll_duration_ns),
         },
         {
           id: "cycleRate",
@@ -322,12 +347,10 @@ function createLifecycle() {
           type: "number",
           sortable: true,
           minWidth: 90,
-          render: (v, row) => {
-            const rate = row.metrics?.cycles_per_second;
-            return formatFixed(Number.isFinite(rate) ? rate : 0);
-          },
+          render: (v, row) => formatFixed(pollMetrics(row)?.cycles_per_second),
           sortFn: (a, b) =>
-            (a.metrics?.cycles_per_second || 0) - (b.metrics?.cycles_per_second || 0),
+            sortReading(pollMetrics(a)?.cycles_per_second) -
+            sortReading(pollMetrics(b)?.cycles_per_second),
         },
         {
           id: "tasks",
@@ -336,7 +359,8 @@ function createLifecycle() {
           sortable: true,
           minWidth: 90,
           render: (v, row) => {
-            const m = row.metrics || {};
+            const m = row.metrics;
+            if (!m) return ABSENT;
             const taskInfo =
               m.task_count > 0
                 ? I18n.t("services-tasks-tooltip", {
@@ -345,12 +369,12 @@ function createLifecycle() {
                     avg: Utils.formatDuration(m.avg_cycle_duration_ns),
                     poll: Utils.formatDuration(m.mean_poll_duration_ns),
                     idle: Utils.formatDuration(m.mean_idle_duration_ns),
-                    polls: m.total_polls || 0,
+                    polls: m.total_polls,
                   })
                 : I18n.t("services-tasks-none");
-            return `<span title="${Utils.escapeHtml(taskInfo)}">${m.task_count || 0}</span>`;
+            return `<span title="${Utils.escapeHtml(taskInfo)}">${Utils.formatNumber(m.task_count, 0)}</span>`;
           },
-          sortFn: (a, b) => (a.metrics?.task_count || 0) - (b.metrics?.task_count || 0),
+          sortFn: (a, b) => sortReading(a.metrics?.task_count) - sortReading(b.metrics?.task_count),
         },
         {
           id: "ops",
@@ -358,9 +382,10 @@ function createLifecycle() {
           type: "number",
           sortable: true,
           minWidth: 90,
-          render: (v, row) => formatFixed(row.metrics?.operations_per_second || 0),
+          render: (v, row) => formatFixed(row.metrics?.operations_per_second),
           sortFn: (a, b) =>
-            (a.metrics?.operations_per_second || 0) - (b.metrics?.operations_per_second || 0),
+            sortReading(a.metrics?.operations_per_second) -
+            sortReading(b.metrics?.operations_per_second),
         },
         {
           id: "errors",
@@ -368,25 +393,27 @@ function createLifecycle() {
           type: "number",
           sortable: true,
           minWidth: 80,
-          render: (v, row) => row.metrics?.errors_total || 0,
-          sortFn: (a, b) => (a.metrics?.errors_total || 0) - (b.metrics?.errors_total || 0),
+          render: (v, row) => Utils.formatNumber(row.metrics?.errors_total, 0),
+          sortFn: (a, b) =>
+            sortReading(a.metrics?.errors_total) - sortReading(b.metrics?.errors_total),
         },
         {
           id: "dependencies",
           label: I18n.t("services-col-dependencies"),
           sortable: false,
           minWidth: 160,
+          wrap: false,
           render: (v, row) => {
             const deps = Array.isArray(row.dependencies) ? row.dependencies : [];
-            if (deps.length === 0) {
-              return `<span class="dependency-badge dependency-badge--none">${Utils.escapeHtml(I18n.t("services-dependencies-none"))}</span>`;
-            }
-            // Clamp the badge list to a couple of rows; full list on hover.
+            if (deps.length === 0) return ABSENT;
+            // One line per row: the column sizes to its widest list.
             const badges = deps
-              .map((dep) => `<span class="dependency-badge">${Utils.escapeHtml(serviceName(String(dep)))}</span>`)
-              .join(" ");
-            const full = deps.map((dep) => serviceName(String(dep))).join("\n");
-            return `<div class="dt-longtext" data-tooltip="${Utils.escapeHtml(full)}" data-tooltip-truncated>${badges}</div>`;
+              .map(
+                (dep) =>
+                  `<span class="dependency-badge">${Utils.escapeHtml(serviceName(String(dep)))}</span>`
+              )
+              .join("");
+            return `<span class="dependency-list">${badges}</span>`;
           },
         },
       ];
@@ -423,6 +450,11 @@ function createLifecycle() {
               label: I18n.label(HEALTH_STATUS_LABELS, "healthy"),
               value: "0",
               variant: "success",
+            },
+            {
+              id: "services-disabled",
+              label: I18n.label(HEALTH_STATUS_LABELS, "disabled"),
+              value: "0",
             },
             {
               id: "services-alerts",

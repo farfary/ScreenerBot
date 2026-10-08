@@ -463,10 +463,10 @@ body.dt-column-resizing * {
   box-sizing: border-box; /* Make width include padding and borders */
   min-height: inherit;
   vertical-align: middle; /* Center content vertically */
-  font-family: var(--font-data);
-  font-feature-settings:
-    "tnum" 1,
-    "zero" 1;
+  /* Words in the UI face; numeric column types and machine values (addresses,
+     signatures) declare the data faces themselves (column_types.css). */
+  font-family: var(--font-sans);
+  font-feature-settings: "tnum" 1;
 }
 
 /* The last column keeps a wider end gutter than the gaps between columns, so an
@@ -642,7 +642,6 @@ body.dt-column-resizing * {
 }
 
 .data-table td.dt-state-cell {
-  font-family: var(--font-sans);
   text-align: center;
   padding: 64px 32px;
   border-bottom: 0;

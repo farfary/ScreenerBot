@@ -898,12 +898,6 @@
    Utility Classes
    ============================================================================ */
 
-/* Badges — only the warning variant differs on the trader page */
-.trader-page .badge.warning {
-  background: rgb(245, 158, 11, 0.2);
-  color: #f59e0b;
-}
-
 /* Links */
 .link {
   color: var(--primary-color);

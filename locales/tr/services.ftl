@@ -72,7 +72,6 @@ services-col-tasks = Görevler
 services-col-ops = İşlem/sn
 services-col-errors = Hatalar
 services-col-dependencies = Bağımlılıklar
-services-dependencies-none = Yok
 services-activity-busy = { $percent } meşgul
 services-activity-polls =
     { $count ->

@@ -72,7 +72,6 @@ services-col-tasks = Aufgaben
 services-col-ops = Ops/s
 services-col-errors = Fehler
 services-col-dependencies = Abhängigkeiten
-services-dependencies-none = Keine
 services-activity-busy = { $percent } ausgelastet
 services-activity-polls =
     { $count ->

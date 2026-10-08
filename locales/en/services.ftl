@@ -81,7 +81,6 @@ services-col-tasks = Tasks
 services-col-ops = Ops/sec
 services-col-errors = Errors
 services-col-dependencies = Dependencies
-services-dependencies-none = None
 # $percent is a formatted percentage.
 services-activity-busy = { $percent } busy
 services-activity-polls =

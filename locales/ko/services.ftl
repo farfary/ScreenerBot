@@ -75,7 +75,6 @@ services-col-tasks = 작업
 services-col-ops = 작업/초
 services-col-errors = 오류
 services-col-dependencies = 의존성
-services-dependencies-none = 없음
 services-activity-busy = 사용률 { $percent }
 services-activity-polls =
     { $count ->

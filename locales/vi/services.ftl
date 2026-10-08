@@ -72,7 +72,6 @@ services-col-tasks = Tác vụ
 services-col-ops = Thao tác/giây
 services-col-errors = Lỗi
 services-col-dependencies = Phụ thuộc
-services-dependencies-none = Không có
 services-activity-busy = { $percent } bận
 services-activity-polls =
     { $count ->

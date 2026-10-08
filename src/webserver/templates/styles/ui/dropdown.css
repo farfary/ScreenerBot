@@ -166,16 +166,6 @@
   margin: 4px 0;
 }
 
-/* Enhanced badge styles */
-.badge-secondary {
-  background: var(--secondary-bg, #757575) !important;
-  color: white !important;
-  font-size: 0.75rem;
-  display: flex;
-  align-items: center;
-  gap: 4px;
-}
-
 [data-theme="dark"] .links-dropdown-menu,
 [data-theme="light"] .links-dropdown-menu {
   background: var(--bg-secondary);

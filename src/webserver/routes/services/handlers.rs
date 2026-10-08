@@ -12,7 +12,7 @@ use std::sync::Arc;
 use crate::{
     i18n::{ids, UiText},
     logger::{self, LogTag},
-    services::ServiceHealth,
+    services::{ServiceHealth, ServiceMetrics},
     webserver::{
         api_error::{ApiError, ApiErrorCode},
         state::AppState,
@@ -25,6 +25,16 @@ use super::types::*;
 // ================================================================================================
 // Snapshot Helpers
 // ================================================================================================
+
+/// The measurements a service row reports. A disabled service runs no tasks, and a service
+/// the metrics cache has not sampled yet has no readings, so both report none rather than
+/// default zeros that read as measured values.
+fn measured_metrics(enabled: bool, cached: Option<&ServiceMetrics>) -> Option<ServiceMetrics> {
+    if !enabled {
+        return None;
+    }
+    cached.cloned().map(ServiceMetrics::sanitized)
+}
 
 /// Build a complete services overview snapshot directly from the global ServiceManager
 pub async fn gather_services_overview_snapshot() -> ServicesOverviewResponse {
@@ -89,22 +99,18 @@ pub async fn gather_services_overview_snapshot() -> ServicesOverviewResponse {
                                     .unwrap_or(ServiceHealth::Unhealthy(UiText::new(
                                         ids::SERVICES_HEALTH_UNAVAILABLE,
                                     )));
-                            let metrics = metrics_map
-                                .get(name)
-                                .cloned()
-                                .unwrap_or_else(crate::services::ServiceMetrics::default)
-                                .sanitized();
-                            let uptime_seconds = metrics.uptime_seconds;
+                            let metrics = measured_metrics(enabled, metrics_map.get(name));
+                            let uptime_seconds = metrics.as_ref().map(|m| m.uptime_seconds);
 
                             logger::debug(
                             LogTag::Webserver,
                             &format!(
-                                "Service '{}': priority={}, enabled={}, health={:?}, metrics.task_count={}",
+                                "Service '{}': priority={}, enabled={}, health={:?}, metrics.task_count={:?}",
                                 name,
                                 priority,
                                 enabled,
                                 health,
-                                metrics.task_count
+                                metrics.as_ref().map(|m| m.task_count)
                             )
                         );
 
@@ -302,4 +308,37 @@ pub(super) async fn services_overview(State(_state): State<Arc<AppState>>) -> Re
     );
 
     response
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    fn sampled() -> ServiceMetrics {
+        ServiceMetrics {
+            task_count: 2,
+            uptime_seconds: 90,
+            cycles_per_second: f32::NAN,
+            ..ServiceMetrics::default()
+        }
+    }
+
+    #[test]
+    fn disabled_service_reports_no_measurements() {
+        assert!(measured_metrics(false, Some(&sampled())).is_none());
+        assert!(measured_metrics(false, None).is_none());
+    }
+
+    #[test]
+    fn unsampled_service_reports_no_measurements() {
+        assert!(measured_metrics(true, None).is_none());
+    }
+
+    #[test]
+    fn sampled_service_reports_sanitized_measurements() {
+        let metrics = measured_metrics(true, Some(&sampled())).expect("sampled metrics");
+        assert_eq!(metrics.task_count, 2);
+        assert_eq!(metrics.uptime_seconds, 90);
+        assert_eq!(metrics.cycles_per_second, 0.0);
+    }
 }

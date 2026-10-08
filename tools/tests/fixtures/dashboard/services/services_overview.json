@@ -457,25 +457,8 @@
       "dependencies": ["wallet_watch", "filtering", "positions", "wallet", "pools"],
       "enabled": false,
       "health": { "status": "disabled" },
-      "metrics": {
-        "process_cpu_percent": 6.2,
-        "process_memory_bytes": 642146304,
-        "task_count": 0,
-        "total_polls": 0,
-        "total_poll_duration_ns": 0,
-        "mean_poll_duration_ns": 0,
-        "total_idle_duration_ns": 0,
-        "mean_idle_duration_ns": 0,
-        "last_cycle_duration_ns": 0,
-        "avg_cycle_duration_ns": 0,
-        "cycles_per_second": 0,
-        "uptime_seconds": 0,
-        "operations_total": 0,
-        "operations_per_second": 0,
-        "errors_total": 0,
-        "custom_metrics": {}
-      },
-      "uptime_seconds": 0
+      "metrics": null,
+      "uptime_seconds": null
     },
     {
       "name": "referral",

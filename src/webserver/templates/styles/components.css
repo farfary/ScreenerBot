@@ -40,31 +40,38 @@
   border: 1px solid #fecaca;
 }
 
+/* Every state badge carries one weight: a faint tint of its state colour behind
+   text in that colour, so no state outweighs the row it sits in. */
 .badge.online,
 .badge.success {
-  background: var(--badge-online);
-  color: #fff;
+  background: var(--success-alpha-10);
+  color: var(--semantic-success-text);
 }
 
 .badge.loading {
-  background: var(--badge-loading);
-  color: #fff;
+  background: var(--warning-alpha-10);
+  color: var(--semantic-warning-text);
   animation: badgePulse 2s ease-in-out infinite;
 }
 
 .badge.error {
-  background: var(--badge-error);
-  color: #fff;
+  background: var(--danger-alpha-10);
+  color: var(--semantic-error-text);
 }
 
 .badge.warning {
-  background: var(--badge-loading);
-  color: #fff;
+  background: var(--warning-alpha-10);
+  color: var(--semantic-warning-text);
+}
+
+.badge.info {
+  background: var(--primary-alpha-10);
+  color: var(--semantic-info-text);
 }
 
 .badge.secondary {
   background: var(--bg-secondary);
-  color: var(--text-primary);
+  color: var(--text-secondary);
 }
 
 .security-score {
