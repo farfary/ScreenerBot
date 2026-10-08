@@ -284,12 +284,34 @@
   color: var(--primary-color);
 }
 
-/* Button states */
+/* Disabled: one state for every variant, never redeclared by a page. The label and
+   glyph turn muted and a filled variant drops to the neutral surface, so a disabled
+   action never wears the colour of the action it would be. It stays at full opacity
+   and keeps pointer events, so its title can explain why it is unavailable. */
 .btn:disabled,
-.btn-icon:disabled {
-  opacity: 0.5;
+.btn:disabled:hover,
+.btn-icon:disabled,
+.btn-icon:disabled:hover {
+  color: var(--text-muted);
   cursor: not-allowed;
-  pointer-events: none;
+  transform: none;
+}
+
+.btn:is(.btn-primary, .btn-success, .btn-warning, .btn-danger):disabled {
+  background: var(--bg-secondary);
+  box-shadow: none;
+}
+
+.btn:is(.btn-secondary, .btn-outline):disabled {
+  border-color: var(--border-color);
+}
+
+.btn-secondary:disabled {
+  background: var(--bg-secondary);
+}
+
+.btn:is(.btn-outline, .btn-ghost):disabled {
+  background: transparent;
 }
 
 .btn:focus-visible {

@@ -954,11 +954,11 @@ export function createFilteringRenderers({ state, $: _$, Utils, requestManager: 
             <span id="filtering-status-message">${Utils.escapeHtml(statusMsg)}</span>
           </div>
           <div class="footer-actions">
-            <button class="filtering-footer-btn ghost" id="reset-config-btn"><i class="icon-rotate-ccw"></i> ${Utils.escapeHtml(I18n.t("common-action-reset"))}</button>
-            <button class="filtering-footer-btn ghost" id="refresh-snapshot-btn"><i class="icon-refresh-cw"></i> ${Utils.escapeHtml(I18n.t("common-action-refresh"))}</button>
-            <button class="filtering-footer-btn ghost" id="export-config-btn"><i class="icon-download"></i> ${Utils.escapeHtml(I18n.t("common-action-export"))}</button>
-            <button class="filtering-footer-btn ghost" id="import-config-btn"><i class="icon-upload"></i> ${Utils.escapeHtml(I18n.t("common-action-import"))}</button>
-            <button class="filtering-footer-btn primary" id="save-config-btn"><i class="icon-save"></i> ${Utils.escapeHtml(I18n.t("common-action-save"))}</button>
+            <button class="btn btn-outline filtering-footer-btn" id="reset-config-btn"><i class="icon-rotate-ccw"></i> ${Utils.escapeHtml(I18n.t("common-action-reset"))}</button>
+            <button class="btn btn-outline filtering-footer-btn" id="refresh-snapshot-btn"><i class="icon-refresh-cw"></i> ${Utils.escapeHtml(I18n.t("common-action-refresh"))}</button>
+            <button class="btn btn-outline filtering-footer-btn" id="export-config-btn"><i class="icon-download"></i> ${Utils.escapeHtml(I18n.t("common-action-export"))}</button>
+            <button class="btn btn-outline filtering-footer-btn" id="import-config-btn"><i class="icon-upload"></i> ${Utils.escapeHtml(I18n.t("common-action-import"))}</button>
+            <button class="btn btn-primary filtering-footer-btn" id="save-config-btn"><i class="icon-save"></i> ${Utils.escapeHtml(I18n.t("common-action-save"))}</button>
           </div>
         </footer>
       </div>

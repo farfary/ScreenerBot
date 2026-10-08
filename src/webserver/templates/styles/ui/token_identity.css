@@ -474,24 +474,18 @@ a.ti-address-value:hover {
   font-size: 0.95rem;
 }
 
-.ti-row-cell__actions .btn:hover {
+.ti-row-cell__actions .btn:hover:not(:disabled) {
   color: var(--text-primary);
 }
 
-.ti-row-cell__actions .btn[data-action="buy"] {
+.ti-row-cell__actions .btn[data-action="buy"]:not(:disabled) {
   color: var(--success-color);
 }
 
-.ti-row-cell__actions .btn[data-action="add"] {
+.ti-row-cell__actions .btn[data-action="add"]:not(:disabled) {
   color: var(--info-color);
 }
 
-.ti-row-cell__actions .btn:is([data-action="sell"], .row-action--danger) {
+.ti-row-cell__actions .btn:is([data-action="sell"], .row-action--danger):not(:disabled) {
   color: var(--error-color);
-}
-
-.ti-row-cell__actions .btn:disabled {
-  opacity: 0.4;
-  cursor: not-allowed;
-  pointer-events: none;
 }
