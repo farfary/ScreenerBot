@@ -7,7 +7,7 @@ import { registerPage } from "../core/lifecycle.js";
 import { Poller } from "../core/poller.js";
 import { apiErrorMessage, requestManager } from "../core/request_manager.js";
 import * as Utils from "../core/utils.js";
-import { withPercentUnit } from "../core/format.js";
+import { formatFixed, withPercentUnit } from "../core/format.js";
 import * as AppState from "../core/app_state.js";
 import { DataTable } from "../ui/data_table.js";
 import { TabBar, TabBarManager } from "../ui/tab_bar.js";
@@ -240,7 +240,7 @@ function createLifecycle() {
   const priceCell = (value) =>
     value == null
       ? "—"
-      : `<span title="${esc(Utils.formatFixed(value, { decimals: 12, trim: true }))}">${esc(
+      : `<span title="${esc(formatFixed(value, { decimals: 12, trim: true }))}">${esc(
           Utils.formatPriceSubscript(value, { fallback: "—" })
         )}</span>`;
   const solCell = (v) => Utils.formatSol(v, { decimals: 4 });

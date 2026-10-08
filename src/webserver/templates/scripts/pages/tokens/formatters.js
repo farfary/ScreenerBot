@@ -8,6 +8,7 @@
  */
 
 import * as Utils from "../../core/utils.js";
+import { formatFixed } from "../../core/format.js";
 import { boostTierForMint, boostCountForMint, formatBoostCount } from "../../core/boosts.js";
 import * as AppState from "../../core/app_state.js";
 import * as Hints from "../../core/hints.js";
@@ -40,7 +41,7 @@ export function priceCell(value, row = null) {
   const price = value === null || value === undefined || value === "" ? Number.NaN : Number(value);
   const known = Number.isFinite(price) && price > 0;
   const formatted = known ? Utils.formatPriceSubscript(price, { fallback: "—" }) : "—";
-  const exact = known ? Utils.formatFixed(price, { decimals: 12, trim: true }) : "";
+  const exact = known ? formatFixed(price, { decimals: 12, trim: true }) : "";
   const baseValue = Utils.escapeHtml(formatted);
 
   let directionClass = "price-change--neutral";
