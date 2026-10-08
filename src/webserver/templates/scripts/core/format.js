@@ -418,11 +418,13 @@ function shiftPercent(digits) {
 /**
  * A percentage at fixed decimals through Intl percent style, so the symbol, its
  * spacing and the sign placement follow the locale. The digits are the `toFixed`
- * digits of |value|. `sign`: "auto" shows a minus for negatives and a plus for
+ * digits of |value|, and the sign follows them: a value that rounds to zero is
+ * shown as zero. `sign`: "auto" shows a minus for negatives and a plus for
  * positives, "negative" only the minus, "none" no sign, "always" plus for zero too.
  */
-function percentText(num, decimals, sign) {
-  const digits = Math.abs(num).toFixed(decimals);
+function percentText(value, decimals, sign) {
+  const digits = Math.abs(value).toFixed(decimals);
+  const num = Number(digits) === 0 ? 0 : value;
   const negative = num < 0;
   if (!/^\d+(\.\d+)?$/.test(digits)) {
     // Magnitudes from 1e21 stringify in exponent form, which has no decimal
@@ -471,15 +473,15 @@ export function formatPercent(value, { style = "plain", decimals = 2, fallback =
     return fallback;
   }
 
-  const text = percentText(num === 0 ? 0 : num, decimals, "auto");
+  const text = percentText(num, decimals, "auto");
+  const tone = signedTone(num, decimals);
 
   if (style === "token") {
-    const color = num > 0 ? "#16a34a" : num < 0 ? "#ef4444" : "inherit";
+    const color = tone === "positive" ? "#16a34a" : tone === "negative" ? "#ef4444" : "inherit";
     return `<span style="color:${color};">${text}</span>`;
   }
 
   if (style === "pnl") {
-    const tone = num > 0 ? "positive" : num < 0 ? "negative" : "neutral";
     return `<span class="pnl-${tone}">${text}</span>`;
   }
 

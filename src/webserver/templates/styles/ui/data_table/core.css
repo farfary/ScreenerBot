@@ -300,15 +300,17 @@
   border-bottom-color: var(--primary-color);
 }
 
+/* The sort indicator sits beside its label, on the label's side of the cell: after a
+   start-aligned label, before an end-aligned one (column_types.css). */
 .dt-header-content {
   display: flex;
   align-items: center;
-  justify-content: space-between;
+  justify-content: flex-start;
   gap: 8px;
 }
 
 .dt-header-label {
-  flex: 1;
+  flex: 0 1 auto;
   display: flex;
   align-items: center;
   gap: 6px;

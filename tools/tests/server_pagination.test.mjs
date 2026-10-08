@@ -1,7 +1,7 @@
 // Copyright (c) 2024-2026 ScreenerBot (screenerbot.io)
 // SPDX-License-Identifier: BUSL-1.1
 //
-// Tests for the data table's server pagination mixin - cursor and has-more preservation across metadata updates.
+// Tests for the data table's pagination mixins - cursor and has-more preservation across metadata updates, and the range text.
 
 import assert from "node:assert/strict";
 import test from "node:test";
@@ -11,9 +11,8 @@ globalThis.window = { addEventListener() {} };
 // core/utils.js registers document listeners when it is imported.
 globalThis.document = { addEventListener() {}, readyState: "complete" };
 
-const { applyServerPaginationMixin } = await import(
-  "../../src/webserver/templates/scripts/ui/data_table/server_pagination.js"
-);
+const { applyServerPaginationMixin } =
+  await import("../../src/webserver/templates/scripts/ui/data_table/server_pagination.js");
 
 class TestTable {}
 
@@ -56,4 +55,49 @@ test("explicit null pagination cursor still clears that direction", () => {
   assert.equal(table._pagination.cursorNext, null);
   assert.equal(table._pagination.hasMoreNext, false);
   assert.deepEqual(table._pagination.cursorPrev, { signature: "newer" });
+});
+
+const { applyClientPaginationMixin } =
+  await import("../../src/webserver/templates/scripts/ui/data_table/client_pagination.js");
+
+class ClientTable {}
+
+applyClientPaginationMixin(ClientTable);
+
+test("both pagers group the range and total like every other count", (t) => {
+  // escapeHtml goes through a detached element; text escaping is all the pager needs.
+  const createElement = document.createElement;
+  document.createElement = () => {
+    const node = { textContent: "" };
+    Object.defineProperty(node, "innerHTML", {
+      get: () =>
+        node.textContent.replaceAll("&", "&amp;").replaceAll("<", "&lt;").replaceAll(">", "&gt;"),
+    });
+    return node;
+  };
+  t.after(() => {
+    document.createElement = createElement;
+  });
+
+  const server = new TestTable();
+  server._pagination = { enabled: true, pageSizes: [50] };
+  server._serverPaginationMode = "pages";
+  server._generateServerPaginationButtons = () => "";
+  server.state = {
+    serverPaginationState: { currentPage: 21, pageSize: 50, totalPages: 64, totalItems: 3193 },
+  };
+
+  const client = new ClientTable();
+  client.options = { clientPagination: { enabled: true, pageSizes: [50] } };
+  client._clientPaginationActive = true;
+  client._generateClientPaginationButtons = () => "";
+  client.state = {
+    clientPaginationState: { currentPage: 21, pageSize: 50, totalPages: 64 },
+    filteredData: { length: 3193 },
+  };
+
+  for (const html of [server._renderServerPaginationBar(), client._renderClientPaginationBar()]) {
+    const range = html.match(/pagination-range">([\s\S]*?)<\/span>/)[1].replace(/<[^>]+>/g, "");
+    assert.equal(range.replace(/[⁨⁩]/g, "").trim(), "Showing 1,001–1,050 of 3,193");
+  }
 });

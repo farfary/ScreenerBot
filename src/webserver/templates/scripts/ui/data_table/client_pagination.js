@@ -9,6 +9,7 @@
 
 import * as AppState from "../../core/app_state.js";
 import { escapeHtml } from "../../core/utils.js";
+import { formatNumber } from "../../core/format.js";
 
 export function applyClientPaginationMixin(DataTable) {
   const proto = DataTable.prototype;
@@ -308,7 +309,7 @@ export function applyClientPaginationMixin(DataTable) {
       <div class="dt-client-pagination-bar">
         <div class="dt-client-pagination-info">
           <span class="dt-client-pagination-range">
-            ${I18n.markup("table-pagination-range", { start: String(startItem), end: String(endItem), total: String(totalItems) })}
+            ${I18n.markup("table-pagination-range", { start: formatNumber(startItem, 0), end: formatNumber(endItem, 0), total: formatNumber(totalItems, 0) })}
           </span>
         </div>
         

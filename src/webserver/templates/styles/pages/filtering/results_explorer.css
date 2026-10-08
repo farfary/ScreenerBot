@@ -134,7 +134,9 @@
   font-size: 0.6rem;
 }
 
+/* Counts keep every digit, grouped as in the overview list; the label ellipsizes. */
 .tree-count {
+  flex-shrink: 0;
   font-size: 0.65rem;
   color: var(--text-muted);
   background: var(--bg-primary);
@@ -189,6 +191,7 @@
 }
 
 .tree-reason-count {
+  flex-shrink: 0;
   margin-inline-start: auto;
   font-size: 0.65rem;
   color: var(--text-muted);

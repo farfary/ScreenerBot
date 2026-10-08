@@ -326,6 +326,25 @@ test("a price change signs both directions and leaves zero unsigned", () => {
   assert.equal(load("ar-u-nu-latn").fmt.formatPriceSubscript(12.5, { sign: "always" }), "‎+12.5");
 });
 
+test("a percentage that rounds to zero is shown unsigned and neutral", () => {
+  for (const locale of ["en-u-nu-latn", "ar-u-nu-latn", "de-u-nu-latn"]) {
+    const { fmt } = load(locale);
+    for (const decimals of [0, 1, 2]) {
+      const step = 10 ** -decimals;
+      for (const value of [step * 0.49, -step * 0.49, step * 0.01, -step * 0.01, 1e-9, -1e-9]) {
+        const zero = fmt.formatPercentValue(0, { decimals });
+        assert.equal(fmt.formatPercentValue(value, { decimals }), zero, `${locale} ${value}`);
+        assert.equal(fmt.signedTone(value, decimals), "neutral", `${locale} ${value}`);
+        assert.match(fmt.formatPercent(value, { style: "pnl", decimals }), /pnl-neutral/);
+      }
+    }
+    assert.notEqual(
+      fmt.formatPercentValue(-0.6, { decimals: 0 }),
+      fmt.formatPercentValue(0, { decimals: 0 })
+    );
+  }
+});
+
 test("a Gregorian calendar grid names Gregorian months in fa, with Latin digits", () => {
   const fa = load("fa-u-nu-latn").fmt;
   const day = Date.UTC(2026, 8, 19);

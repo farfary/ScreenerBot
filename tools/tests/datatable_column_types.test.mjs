@@ -21,7 +21,14 @@ import test from "node:test";
 import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
 
-import { SCRIPTS_ROOT, STYLES_ROOT, columnBlocks, repoPath, walk } from "../lib/dashboard_ui.mjs";
+import {
+  SCRIPTS_ROOT,
+  STYLES_ROOT,
+  columnBlocks,
+  repoPath,
+  rulesIn,
+  walk,
+} from "../lib/dashboard_ui.mjs";
 
 const NUMERIC_RENDER =
   /\b(?:formatSol|formatPriceSol|formatCurrencyUSD|formatPercent\w*|formatPnL|formatSignedSol|formatNumber|formatDuration|formatUptime|formatTimeSpan|formatFixed|priceCell|solCell|pnlCell|percentCell|usdCell)\b/;
@@ -86,4 +93,20 @@ test("the stylesheet aligns exactly the numeric types the table stamps", () => {
     const styled = [...block.matchAll(/data-type="(\w+)"/g)].map((match) => match[1]).sort();
     assert.deepEqual(styled, types, `${cell} alignment covers every numeric type`);
   }
+});
+
+test("the sort indicator sits beside its label on the label's side", () => {
+  const rules = rulesIn(readFileSync(`${STYLES_ROOT}/ui/data_table/core.css`, "utf8"));
+  const body = (selector) => rules.find((rule) => rule.selector === selector)?.body ?? "";
+  // The label takes its own width, so the indicator follows it instead of the cell edge.
+  assert.match(body(".dt-header-content"), /justify-content:\s*flex-start/);
+  assert.doesNotMatch(body(".dt-header-label"), /flex:\s*1\b/);
+
+  const numeric = rulesIn(readFileSync(`${STYLES_ROOT}/ui/data_table/column_types.css`, "utf8"));
+  const endAligned = (suffix) =>
+    numeric.find(
+      (rule) => rule.selector.startsWith(".data-table th:is(") && rule.selector.endsWith(suffix)
+    );
+  assert.match(endAligned(".dt-header-content")?.body ?? "", /justify-content:\s*flex-end/);
+  assert.match(endAligned(".dt-sort-icon")?.body ?? "", /order:\s*-1/);
 });

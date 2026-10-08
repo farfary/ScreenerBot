@@ -75,11 +75,16 @@ export function createFilteringRenderers({ state, $: _$, Utils, requestManager: 
       : I18n.t("filtering-refresh-never");
   }
 
+  // Every share on this page, strips, cards and bars alike, at one precision: "4.0%".
+  function shareText(rate) {
+    return Utils.formatPercentValue(rate, { includeSign: false, decimals: 1 });
+  }
+
   // A count followed by its share of the total, e.g. "120 (4.0%)".
   function countWithShare(count, share) {
     return I18n.t("filtering-count-share", {
       count: Utils.formatNumber(count, 0),
-      share: Utils.formatPercentValue(share, { includeSign: false, decimals: 1 }),
+      share: shareText(share),
     });
   }
 
@@ -161,7 +166,6 @@ export function createFilteringRenderers({ state, $: _$, Utils, requestManager: 
       : building
         ? I18n.t("filtering-status-refresh-building")
         : I18n.t("filtering-status-refresh-none");
-    const shareText = (rate) => Utils.formatPercentValue(rate, { includeSign: false, decimals: 1 });
 
     const metricsHtml = `
       <div class="status-view">
@@ -310,7 +314,7 @@ export function createFilteringRenderers({ state, $: _$, Utils, requestManager: 
           <span class="kpi-label">${Utils.escapeHtml(I18n.t("filtering-analytics-passed"))}</span>
           <span class="kpi-value text-success">${Utils.formatNumber(data.total_passed, 0)}</span>
           <span class="kpi-subtext">
-            <span class="kpi-rate kpi-rate--success">${I18n.markup("filtering-analytics-pass-rate", { share: Utils.formatPercentValue(data.pass_rate, { includeSign: false }) })}</span>
+            <span class="kpi-rate kpi-rate--success">${I18n.markup("filtering-analytics-pass-rate", { share: shareText(data.pass_rate) })}</span>
           </span>
         </div>
         <i class="icon-circle-check kpi-icon text-success" style="opacity: 0.2"></i>
@@ -325,7 +329,7 @@ export function createFilteringRenderers({ state, $: _$, Utils, requestManager: 
           <span class="kpi-label">${Utils.escapeHtml(I18n.t("filtering-analytics-rejected"))}</span>
           <span class="kpi-value text-error">${Utils.formatNumber(data.total_rejected, 0)}</span>
           <span class="kpi-subtext">
-            <span class="kpi-rate kpi-rate--error">${I18n.markup("filtering-analytics-rejection-rate", { share: Utils.formatPercentValue(data.rejection_rate, { includeSign: false }) })}</span>
+            <span class="kpi-rate kpi-rate--error">${I18n.markup("filtering-analytics-rejection-rate", { share: shareText(data.rejection_rate) })}</span>
           </span>
         </div>
         <i class="icon-circle-x kpi-icon text-error" style="opacity: 0.2"></i>
@@ -358,7 +362,7 @@ export function createFilteringRenderers({ state, $: _$, Utils, requestManager: 
                 </div>
                 <div class="bar-meta">
                   <span>${Utils.escapeHtml(tokensCount(cat.count))}</span>
-                  <span>${Utils.formatPercentValue(cat.percentage, { includeSign: false })}</span>
+                  <span>${shareText(cat.percentage)}</span>
                 </div>
               </div>
             </div>
@@ -391,7 +395,7 @@ export function createFilteringRenderers({ state, $: _$, Utils, requestManager: 
                 </div>
                 <div class="bar-meta">
                   <span>${Utils.escapeHtml(tokensCount(src.count))}</span>
-                  <span>${Utils.formatPercentValue(src.percentage, { includeSign: false })}</span>
+                  <span>${shareText(src.percentage)}</span>
                 </div>
               </div>
             </div>
@@ -444,7 +448,7 @@ export function createFilteringRenderers({ state, $: _$, Utils, requestManager: 
                       ${Utils.formatNumber(r.count, 0)}
                     </td>
                     <td class="text-end font-data text-secondary">
-                      ${Utils.formatPercentValue(r.percentage, { includeSign: false })}
+                      ${shareText(r.percentage)}
                     </td>
                     <td class="reason-bar-cell">
                       <div class="mini-bar">
@@ -543,9 +547,7 @@ export function createFilteringRenderers({ state, $: _$, Utils, requestManager: 
     const data = state.analytics;
 
     const totalRejected = data.total_rejected || 0;
-    const rejectionRate = data.rejection_rate
-      ? Utils.formatPercentValue(data.rejection_rate, { decimals: 1, includeSign: false })
-      : "";
+    const rejectionRate = data.rejection_rate ? shareText(data.rejection_rate) : "";
 
     // Compact Tree View
     const treeHtml = `
@@ -562,7 +564,7 @@ export function createFilteringRenderers({ state, $: _$, Utils, requestManager: 
           <i class="icon-chart-bar tree-icon"></i>
           <span class="tree-label">${Utils.escapeHtml(I18n.t("filtering-explorer-overview"))}</span>
           ${rejectionRate ? `<span class="explorer-nav-rate">${rejectionRate}</span>` : ""}
-          <span class="tree-count">${Utils.formatCompactNumber(totalRejected)}</span>
+          <span class="tree-count">${Utils.formatNumber(totalRejected, 0)}</span>
         </div>
 
         <div class="explorer-tree" id="explorer-tree">
@@ -573,7 +575,7 @@ export function createFilteringRenderers({ state, $: _$, Utils, requestManager: 
               <div class="tree-category-header" onclick="window.filteringPage.toggleCategory('${cat.category}')">
                 <i class="icon-${Utils.escapeHtml(cat.icon)} tree-icon"></i>
                 <span class="tree-label">${Utils.escapeHtml(I18n.text(cat.category_text))}</span>
-                <span class="tree-count">${Utils.formatCompactNumber(cat.count)}</span>
+                <span class="tree-count">${Utils.formatNumber(cat.count, 0)}</span>
                 <i class="icon-chevron-down tree-toggle" id="toggle-${cat.category}"></i>
               </div>
               <div class="tree-reasons" id="reasons-${cat.category}" style="display: none">
@@ -585,7 +587,7 @@ export function createFilteringRenderers({ state, $: _$, Utils, requestManager: 
                        id="reason-${r.reason}"
                        data-label="${Utils.escapeHtml(reasonLabel(r).toLowerCase())}">
                     <span class="tree-reason-label">${Utils.escapeHtml(reasonLabel(r))}</span>
-                    <span class="tree-reason-count">${Utils.formatCompactNumber(r.count)}</span>
+                    <span class="tree-reason-count">${Utils.formatNumber(r.count, 0)}</span>
                   </div>
                 `
                   )

@@ -579,7 +579,7 @@
     [data-type="sol"],
     [data-type="currency"]
   )
-  .dt-header-label {
+  .dt-header-content {
   justify-content: flex-end;
 }
 

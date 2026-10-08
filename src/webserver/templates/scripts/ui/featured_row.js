@@ -20,7 +20,12 @@
 
 import { $, dirSign, scrollStart } from "../core/dom.js";
 import { escapeHtml, resolveTokenLogoUrl } from "../core/utils.js";
-import { formatPercentValue, formatPriceSubscript, withUsdSymbol } from "../core/format.js";
+import {
+  formatPercentValue,
+  formatPriceSubscript,
+  signedTone,
+  withUsdSymbol,
+} from "../core/format.js";
 import { openFeaturedDialog } from "./featured_dialog.js";
 import { boostTier, formatBoostCount } from "../core/boosts.js";
 import * as Hints from "../core/hints.js";
@@ -428,8 +433,9 @@ class FeaturedRow {
     } else {
       const change = token.price_change_24h;
       if (change != null) {
-        const cls = change >= 0 ? "pos" : "neg";
-        metric = `<span class="row-metric ${cls}">${formatPercentValue(change, { decimals: 0 })}</span>`;
+        // The colour follows the change as shown: one that rounds to 0% is neutral.
+        const tone = { positive: " pos", negative: " neg" }[signedTone(change, 0)] ?? "";
+        metric = `<span class="row-metric${tone}">${formatPercentValue(change, { decimals: 0 })}</span>`;
       } else if (token.price_usd != null) {
         metric = `<span class="row-metric">${withUsdSymbol(formatPriceSubscript(token.price_usd))}</span>`;
       }
