@@ -216,6 +216,29 @@ async function assertNoHorizontalOverflow(page, label) {
   );
 }
 
+/**
+ * Every visible DataTable header label fits inside its cell's content box. A label
+ * that spills into the end padding does not grow the cell's scroll width, so only
+ * the text extent shows it; the column width owner must keep the header floor.
+ */
+async function assertHeadersFit(page, label) {
+  const spilled = await page.evaluate(() => {
+    const range = document.createRange();
+    return [...document.querySelectorAll(".data-table th[data-column-id]")]
+      .filter((th) => th.offsetParent && th.querySelector(".dt-header-label")?.textContent.trim())
+      .flatMap((th) => {
+        range.selectNodeContents(th.querySelector(".dt-header-label"));
+        const text = range.getBoundingClientRect();
+        const box = th.getBoundingClientRect();
+        const style = getComputedStyle(th);
+        const start = box.left + parseFloat(style.paddingLeft);
+        const end = box.right - parseFloat(style.paddingRight);
+        return text.left < start - 1 || text.right > end + 1 ? [th.dataset.columnId] : [];
+      });
+  });
+  assert.deepEqual(spilled, [], `${label}: header labels spill out of their columns`);
+}
+
 /** Render every view, then check the page does not scroll sideways. */
 async function assertViewsFit(page, views, label) {
   for (const view of views) {
@@ -252,7 +275,10 @@ describe("dashboard stability", { concurrency: 4 }, () => {
 
       scenario("renders populated in the dark theme, dialogs open and close", async () => {
         const session = await open(id);
-        for (const view of views) await assertPopulated(session.page, view);
+        for (const view of views) {
+          await assertPopulated(session.page, view);
+          await assertHeadersFit(session.page, `${id} ${view.name}`);
+        }
         if (id === "trader") {
           await session.page.locator('#subTabsContainer [data-tab-id="general-settings"]').click();
           assert.equal(await session.page.locator("#close-cooldown").inputValue(), "15");

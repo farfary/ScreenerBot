@@ -16,15 +16,57 @@ export function applyColumnManagementMixin(DataTable) {
     return this.options.columns.find((col) => col.id === columnId);
   };
 
+  /**
+   * A column's minimum width: its configured `minWidth` (80px by default), and never
+   * less than its header needs. A header's text may overflow into the cell's end
+   * padding without growing its scroll width, so neither content sizing nor the
+   * proportional fit would see it; the measured header floor keeps every column at
+   * least as wide as its label and sort mark.
+   */
   proto._getColumnMinWidth = function (columnId) {
     const column = this._getColumnConfig(columnId);
+    const floor = this._headerFloors?.[columnId] || 0;
     if (!column) {
-      return 80;
+      return Math.max(80, floor);
     }
     if (typeof column.minWidth === "number" && column.minWidth >= 0) {
-      return column.minWidth;
+      return Math.max(column.minWidth, floor);
     }
-    return 80;
+    return Math.max(80, floor);
+  };
+
+  /**
+   * Measure each header's natural width: its label and sort mark at the header
+   * font, plus the cell's own inline padding and borders. Read on every sizing
+   * pass, so a locale change, a sort mark or a density change is reflected.
+   */
+  proto._measureHeaderFloors = function () {
+    const floors = {};
+    this.elements.thead?.querySelectorAll("th[data-column-id]").forEach((th) => {
+      const content = th.querySelector(".dt-header-content");
+      if (!content) return;
+      // The header row and its label stretch to the cell, so their boxes report the
+      // column's width, not its need: measure each part's own text extent (a Range
+      // over its contents) and add the gaps between them.
+      const range = document.createRange();
+      const parts = [...content.children];
+      const natural = parts.reduce((sum, part) => {
+        if (!part.firstChild) return sum + part.getBoundingClientRect().width;
+        range.selectNodeContents(part);
+        return sum + range.getBoundingClientRect().width;
+      }, 0);
+      const gap =
+        (parseFloat(getComputedStyle(content).columnGap) || 0) * Math.max(0, parts.length - 1);
+      const style = getComputedStyle(th);
+      const frame = [
+        "paddingInlineStart",
+        "paddingInlineEnd",
+        "borderInlineStartWidth",
+        "borderInlineEndWidth",
+      ].reduce((sum, key) => sum + (parseFloat(style[key]) || 0), 0);
+      floors[th.dataset.columnId] = Math.ceil(natural + gap + frame);
+    });
+    this._headerFloors = floors;
   };
 
   proto._getColumnMaxWidth = function (columnId) {
@@ -133,6 +175,7 @@ export function applyColumnManagementMixin(DataTable) {
   proto._sizeColumns = function () {
     if (!this._isLaidOut()) return;
 
+    this._measureHeaderFloors();
     this._autoSizeColumnsFromContent();
     this._snapshotColumnWidths();
     this._applyStoredColumnWidths();
