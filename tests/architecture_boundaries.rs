@@ -3707,7 +3707,7 @@ fn every_manual_trade_runs_detached_from_its_caller() {
         }
     }
     assert!(
-        faces >= 5,
+        faces >= 4,
         "the guard must see every manual trade ({faces} seen)"
     );
 
@@ -3807,20 +3807,34 @@ fn rest_of_item(code: &str, from: usize) -> &str {
     &code[from..end]
 }
 
+/// Spellings that end a task by panicking.
+const PANICS: &[&str] = &[
+    "panic!(",
+    "unreachable!(",
+    "todo!(",
+    "unimplemented!(",
+    ".unwrap()",
+    ".expect(",
+];
+
 /// Once a position operation's swap is sent, its signature reaches verification whatever
 /// happens next: from the send to the end of the operation the only early error is the
 /// swap's own failure, which proves nothing landed, and every async helper of the same file
 /// the operation ends in after the send queues the swap for verification with no early
-/// error of its own. An error there would drop a signature that may have bought or sold
-/// tokens.
+/// error of its own. Nothing after the send panics, in the operation, in those helpers, or
+/// in the shared helpers of `operations/mod.rs` it calls. An error or a panic there would
+/// drop a signature that may have bought or sold tokens.
 #[test]
 fn a_sent_position_swap_is_always_queued_for_verification() {
     const SWAP_FAILED: &str = "return Err(Error::SwapFailed {";
+    let operations = Path::new(env!("CARGO_MANIFEST_DIR")).join("src/positions/operations");
+    let shared = blank_literals(&strip_comment_text(&production_text(
+        &fs::read_to_string(operations.join("mod.rs")).expect("read the operations module"),
+    )));
     let mut helpers_seen = 0;
+    let mut shared_helpers_seen = 0;
     for operation in ["open.rs", "close.rs", "dca.rs", "partial_close.rs"] {
-        let path = Path::new(env!("CARGO_MANIFEST_DIR"))
-            .join("src/positions/operations")
-            .join(operation);
+        let path = operations.join(operation);
         let contents = fs::read_to_string(&path).expect("read operation source");
         let code = blank_literals(&strip_comment_text(&production_text(&contents)));
         let sent = code
@@ -3842,6 +3856,40 @@ fn a_sent_position_swap_is_always_queued_for_verification() {
                 && after_send.contains("enqueue_verification("),
             "{operation}: the sent swap is not queued for verification"
         );
+        for panic in PANICS {
+            assert!(
+                !after_send.contains(panic),
+                "{operation}: `{panic}` after the swap was sent drops its signature"
+            );
+        }
+        for (at, _) in after_send.match_indices("super::") {
+            let path = &after_send[at + "super::".len()..];
+            let Some(name_end) = path.find('(') else {
+                continue;
+            };
+            let name = &path[..name_end];
+            if name.is_empty() || !name.chars().all(|c| c.is_alphanumeric() || c == '_') {
+                continue;
+            }
+            let Some(defined) = shared
+                .find(&format!("async fn {name}("))
+                .or_else(|| shared.find(&format!("fn {name}(")))
+            else {
+                continue;
+            };
+            shared_helpers_seen += 1;
+            let body = rest_of_item(&shared, defined);
+            assert!(
+                !body.contains('?') && !body.contains("return Err"),
+                "operations/mod.rs: {name} runs after the swap of {operation} was sent and can fail"
+            );
+            for panic in PANICS {
+                assert!(
+                    !body.contains(panic),
+                    "operations/mod.rs: {name} runs after the swap of {operation} was sent and can panic with `{panic}`"
+                );
+            }
+        }
         for (at, _) in code.match_indices("async fn ") {
             let name_end = code[at + "async fn ".len()..]
                 .find('(')
@@ -3867,18 +3915,27 @@ fn a_sent_position_swap_is_always_queued_for_verification() {
                 !body.contains('?') && !body.contains("return Err"),
                 "{operation}: {name} can fail after the swap was sent and drop its signature"
             );
+            for panic in PANICS {
+                assert!(
+                    !body.contains(panic),
+                    "{operation}: {name} can panic with `{panic}` after the swap was sent"
+                );
+            }
         }
     }
     assert!(
         helpers_seen >= 1,
         "the guard must see the helper an open hands a refused entry swap to"
     );
+    assert!(
+        shared_helpers_seen >= 1,
+        "the guard must see the shared helper an open persists its position with"
+    );
 }
 
 /// Callers of a manual trade that reach it without the preflight, per file. Each entry is a
-/// call to move behind `guard::preflight`; the counts only shrink.
-const MANUAL_TRADES_WITHOUT_PREFLIGHT: &[(&str, usize)] =
-    &[("telegram/commands/callback_positions.rs", 4)];
+/// call to move behind `guard::preflight`; the list only shrinks.
+const MANUAL_TRADES_WITHOUT_PREFLIGHT: &[(&str, usize)] = &[];
 
 /// Every manual trade entered from outside `trader/manual` passes the same gates first:
 /// `guard::preflight` runs in the calling function before `manual_buy`, `manual_add` or
@@ -4031,5 +4088,49 @@ fn new_position_rows_are_written_only_by_the_open_round_owner() {
             "positions/operations/mod.rs".to_owned(),
         ],
         "a new caller writes position rows; it must go through the open-round refusal"
+    );
+}
+
+/// The wallet-history sync checks the mints with bot work in flight right before each
+/// write that may race a bot swap: every planned update reads them in its own pass, and the
+/// inserts read them after the updates ran. A list read before the updates is stale by the
+/// time the inserts are written.
+#[test]
+fn the_ledger_writes_read_the_mints_in_flight_fresh() {
+    const READ: &str = "mints_with_pending_swaps()";
+    let path = Path::new(env!("CARGO_MANIFEST_DIR")).join("src/positions/ledger/sync.rs");
+    let code = blank_literals(&strip_comment_text(&production_text(
+        &fs::read_to_string(&path).expect("read the ledger sync"),
+    )));
+    let start = code
+        .find("pub async fn apply_plan(")
+        .expect("the sync applies its plan");
+    let body = rest_of_item(&code, start);
+    let updates = body
+        .find("for update in plan.updates")
+        .expect("apply_plan writes the planned updates");
+    let inserts = body
+        .find("for mut position in plan.inserts")
+        .expect("apply_plan writes the planned inserts");
+    assert!(updates < inserts, "the inserts follow the updates");
+    assert!(
+        !body[..updates].contains(READ),
+        "apply_plan reads the mints in flight before its writes"
+    );
+    let first_update = body[updates..inserts]
+        .find("book_position(")
+        .map(|offset| updates + offset)
+        .expect("an update books its row");
+    assert!(
+        body[updates..first_update].contains(READ),
+        "an update does not read the mints in flight in its own pass"
+    );
+    let after_updates = body[first_update..inserts]
+        .rfind(READ)
+        .map(|offset| first_update + offset)
+        .expect("the inserts do not read the mints in flight after the updates");
+    assert!(
+        !body[after_updates..inserts].contains("book_position("),
+        "the inserts read the mints in flight before the last update"
     );
 }

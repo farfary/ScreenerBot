@@ -87,9 +87,15 @@ enum Persisted {
     /// refusing transaction: the swap that bought it is that position's add, never a second
     /// row.
     Added(i64),
+    /// Not stored: every attempt failed. The swap was sent all the same, so its tokens are
+    /// in the wallet's history, and the wallet-history sync books them as the mint's round
+    /// once the swap no longer marks the mint busy.
+    Unsaved,
 }
 
-/// Persists a new open position, retrying transient failures.
+/// Persists a new open position, retrying transient failures. Runs after the entry swap
+/// was sent, so it never fails the open: storage that refuses every attempt is reported as
+/// [`Persisted::Unsaved`].
 async fn persist_position_with_retry(position: &Position) -> Persisted {
     let mut attempt = 1;
     loop {
@@ -134,13 +140,16 @@ async fn persist_position_with_retry(position: &Position) -> Persisted {
                     )
                     .await;
 
-                    let fatal = format!(
-            "Critical: failed to persist position for mint {} after {} attempts. Manual intervention required.",
-            position.mint, attempt
-          );
-                    logger::error(LogTag::Positions, &fatal);
-
-                    panic!("{fatal}");
+                    logger::error(
+                        LogTag::Positions,
+                        &format!(
+                            "Position for mint {} was not persisted after {} attempts; its entry swap {} is left to the wallet-history sync",
+                            position.mint,
+                            attempt,
+                            position.entry_transaction_signature.as_deref().unwrap_or("-")
+                        ),
+                    );
+                    return Persisted::Unsaved;
                 }
 
                 let backoff = position_save_backoff_ms(attempt);

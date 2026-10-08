@@ -1,178 +1,18 @@
 // Copyright (c) 2024-2026 ScreenerBot (screenerbot.io)
 // SPDX-License-Identifier: BUSL-1.1
 
-//! Force trading operations (bypass safety checks)
-//!
-//! Emergency operations that bypass normal safety checks.
-//! All force operations are tracked through the actions system for dashboard visibility.
-//! Use with caution - these operations ignore:
-//! - Position limits
-//! - Blacklist checks
-//! - Cooldown periods
-//! - Other safety constraints
+//! Force sell: an emergency exit of an open position that bypasses the normal sell
+//! safety checks, tracked through the actions system for dashboard visibility.
 
-use crate::config::with_config;
 use crate::logger::{self, LogTag};
 use crate::positions;
-use crate::trader::actions::{ManualBuyAction, ManualSellAction};
+use crate::trader::actions::ManualSellAction;
 use crate::trader::error::Error;
 use crate::trader::executors;
 use crate::trader::types::{TradeAction, TradeDecision, TradePriority, TradeReason, TradeResult};
 
 use super::detach::detached;
 use chrono::Utc;
-
-/// Execute a force buy (bypass safety checks)
-///
-/// Creates a high-priority buy decision with ForceBuy reason.
-/// **WARNING:** Bypasses all safety checks including position limits and blacklist.
-/// Action progress is broadcast to dashboard via SSE.
-///
-/// Runs detached from the caller: dropping the returned future never
-/// cancels a trade whose swap may already be sent.
-pub async fn force_buy(
-    mint: &str,
-    size_native: f64,
-    slippage_pct: Option<f64>,
-) -> Result<TradeResult, Error> {
-    let mint = mint.to_owned();
-    detached(async move { buy_forced(&mint, size_native, slippage_pct).await }).await
-}
-
-async fn buy_forced(
-    mint: &str,
-    size_native: f64,
-    slippage_pct: Option<f64>,
-) -> Result<TradeResult, Error> {
-    // Get token symbol for action display
-    let symbol = match crate::chains::chain_for_address(mint) {
-        Ok(chain) => crate::tokens::get_full_token_async(chain, mint)
-            .await
-            .ok()
-            .flatten(),
-        Err(_) => None,
-    }
-    .map(|t| t.symbol);
-
-    // Create action tracker
-    let action = ManualBuyAction::new(mint, symbol.as_deref(), size_native).await?;
-
-    // Step 1: Validation
-    action.start_validation().await;
-
-    // Validate SOL amount (even for force operations)
-    if !size_native.is_finite() {
-        let error = "Invalid SOL amount: must be finite";
-        action.fail_validation(error).await;
-        return Err(Error::InvalidSolAmount {
-            amount_native: size_native,
-            reason: "must be finite".to_owned(),
-        });
-    }
-    if size_native <= 0.0 {
-        let error = format!("Invalid SOL amount: {size_native}. Must be positive");
-        action.fail_validation(&error).await;
-        return Err(Error::InvalidSolAmount {
-            amount_native: size_native,
-            reason: "must be positive".to_owned(),
-        });
-    }
-
-    // Check against reasonable upper bound
-    use crate::trader::constants::MAX_TRADE_SIZE_MULTIPLIER;
-    let default_trade_size = with_config(|cfg| cfg.trader.trade_size_sol);
-    let max_trade_size = default_trade_size * MAX_TRADE_SIZE_MULTIPLIER;
-    if size_native > max_trade_size {
-        let error = format!(
-            "SOL amount {:.4} exceeds maximum trade size of {:.4} SOL ({}x default)",
-            size_native, max_trade_size, MAX_TRADE_SIZE_MULTIPLIER as u32
-        );
-        action.fail_validation(&error).await;
-        return Err(Error::InvalidSolAmount {
-            amount_native: size_native,
-            reason: format!(
-                "exceeds maximum trade size of {:.4} SOL ({}x default)",
-                max_trade_size, MAX_TRADE_SIZE_MULTIPLIER as u32
-            ),
-        });
-    }
-
-    action.complete_validation().await;
-
-    logger::warning(
-        LogTag::Trader,
-        &format!(
-            "Processing FORCE buy (safety checks bypassed): mint={}, size={} SOL",
-            mint, size_native
-        ),
-    );
-
-    // Step 2: Quote
-    action.start_quote().await;
-
-    let decision = TradeDecision {
-        position_id: None,
-        mint: mint.to_string(),
-        action: TradeAction::Buy,
-        reason: TradeReason::ForceBuy,
-        strategy_id: None,
-        timestamp: Utc::now(),
-        priority: TradePriority::High,
-        price_native: None,
-        size_native: Some(size_native),
-        exit_percentage: None,
-        // Manual trade: honour the user's slippage override (None = config).
-        slippage_pct,
-    };
-
-    // Execute trade (includes quote + swap). A force buy is always manually managed —
-    // the auto-trader must not auto-sell it out from under the user.
-    let result = match crate::swaps::with_swap_stage_listener(
-        action.swap_stage_listener(),
-        executors::execute_buy_managed(
-            &decision,
-            crate::positions::PositionOrigin::Manual,
-            crate::positions::PositionManagement::UserOnly,
-        ),
-    )
-    .await
-    {
-        Ok(result) => result,
-        Err(e) => {
-            crate::trader::actions::fail_from_error(&action, &e).await;
-            return Err(e);
-        }
-    };
-
-    // Check if trade succeeded
-    if !result.success {
-        let error = result.error.as_deref().unwrap_or("Trade failed");
-        crate::trader::actions::fail_at_step(&action, result.failed_step, error).await;
-        return Ok(result);
-    }
-
-    // Mark quote and swap as complete
-    action.complete_quote(None).await;
-    action.start_swap().await;
-
-    if let Some(ref sig) = result.tx_signature {
-        action.complete_swap(sig).await;
-        action.await_verification(Some(sig)).await;
-    } else {
-        action.complete_swap("unknown").await;
-        action.await_verification(None).await;
-    }
-
-    // Record manual trade
-    if let Err(e) = super::tracking::record_manual_trade(&result).await {
-        logger::warning(
-            LogTag::Trader,
-            &format!("Failed to record manual trade: {e}"),
-        );
-    }
-
-    Ok(result)
-}
 
 /// Execute a force sell (bypass safety checks)
 ///

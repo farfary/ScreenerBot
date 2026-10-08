@@ -1683,6 +1683,13 @@ struct HandoverRecord {
 /// recorded as a DCA entry under the late swap's signature. The open position already
 /// holding a record of that swap while `row` does not is an inconsistency the booking
 /// refuses, so nothing is moved twice.
+///
+/// An open position whose full exit is sent and not yet verified takes the holding all the
+/// same: it is still the mint's one position, so its exit's verification books whatever the
+/// sale did with those tokens. A sale that included them closes it with them booked; a sale
+/// sized before they landed leaves them as its own residual, booked as a partial exit and
+/// sold by the retried close. Waiting for the exit instead would leave the sold tokens'
+/// cost on the closed position and their proceeds on the open one.
 fn hand_over(
     row: &Position,
     reads: &BookingReads<'_>,

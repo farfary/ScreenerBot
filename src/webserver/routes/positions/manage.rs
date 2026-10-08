@@ -59,13 +59,6 @@ pub struct BulkDeleteResponse {
     pub freed_slots: usize,
 }
 
-/// A position counts toward the open-slot semaphore while it is a buy that has not
-/// been exit-verified and has no exit time. Used to decide whether removing it
-/// should free a trading slot.
-fn holds_open_slot(p: &positions::Position) -> bool {
-    p.position_type == "buy" && !p.transaction_exit_verified && p.exit_time.is_none()
-}
-
 /// POST /positions/:id/archive — hide a position into the Archived tab.
 pub(super) async fn archive_position(Path(position_id): Path<i64>) -> Response {
     let position = match positions::get_position_by_id(position_id).await {
@@ -85,8 +78,6 @@ pub(super) async fn archive_position(Path(position_id): Path<i64>) -> Response {
         .into_response();
     }
 
-    let was_open = holds_open_slot(&position);
-
     // Persist first, then mirror into memory so a failed write doesn't desync state.
     if let Err(e) = positions::set_position_archived_db(position_id, true).await {
         if matches!(e, positions::Error::UnverifiedEntryArchive { .. }) {
@@ -102,15 +93,14 @@ pub(super) async fn archive_position(Path(position_id): Path<i64>) -> Response {
     }
     positions::set_position_archived_in_memory(position_id, true).await;
 
-    // Archiving an open position removes it from active management — free its slot.
-    if was_open {
-        positions::state::release_position_slot(position_id).await;
-    }
+    // Archiving removes the position from active management: the slot it holds, if any,
+    // is freed.
+    let freed_slot = positions::state::release_position_slot(position_id).await;
 
     logger::info(
         LogTag::Positions,
         &format!(
-            "Archived position {position_id} ({}) — freed_slot={was_open}",
+            "Archived position {position_id} ({}) — freed_slot={freed_slot}",
             position.symbol
         ),
     );
@@ -119,7 +109,7 @@ pub(super) async fn archive_position(Path(position_id): Path<i64>) -> Response {
         success: true,
         position_id,
         archived: true,
-        freed_slot: was_open,
+        freed_slot,
     })
 }
 
@@ -166,8 +156,8 @@ pub(super) async fn unarchive_position(Path(position_id): Path<i64>) -> Response
     positions::set_position_archived_in_memory(position_id, false).await;
 
     // If this position is still open it re-enters active management — reclaim a slot.
-    let reclaimed =
-        holds_open_slot(&position) && positions::state::reclaim_position_slot(&position).await;
+    let reclaimed = positions::state::is_open_round(&position)
+        && positions::state::reclaim_position_slot(&position).await;
 
     logger::info(
         LogTag::Positions,
@@ -278,10 +268,6 @@ pub(super) async fn delete_position(Path(position_id): Path<i64>) -> Response {
         return not_found();
     };
 
-    // Only release a slot for a position that is open AND not already archived
-    // (archiving an open position already released its slot).
-    let was_open = holds_open_slot(&position) && !position.archived;
-
     match positions::delete_position_by_id(position_id).await {
         Ok(true) => {}
         Ok(false) => {
@@ -298,16 +284,15 @@ pub(super) async fn delete_position(Path(position_id): Path<i64>) -> Response {
     positions::remove_position_by_id(position_id).await;
     clear_pending_swaps_of_deleted(position_id).await;
 
-    if was_open {
-        positions::state::release_position_slot(position_id).await;
-    }
+    // The slot the position holds, if any, is freed; an archived or closed one holds none.
+    let freed_slot = positions::state::release_position_slot(position_id).await;
     // A deleted closed position's realized loss no longer counts toward the loss limit.
     crate::trader::safety::loss_limit::sync_from_books().await;
 
     logger::info(
         LogTag::Positions,
         &format!(
-            "Permanently deleted position {position_id} ({}) — freed_slot={was_open}",
+            "Permanently deleted position {position_id} ({}) — freed_slot={freed_slot}",
             position.symbol
         ),
     );
@@ -315,7 +300,7 @@ pub(super) async fn delete_position(Path(position_id): Path<i64>) -> Response {
     success_response(DeleteResponse {
         success: true,
         position_id,
-        freed_slot: was_open,
+        freed_slot,
     })
 }
 

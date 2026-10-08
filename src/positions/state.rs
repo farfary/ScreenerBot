@@ -232,7 +232,9 @@ pub async fn register_position_slot(position_id: i64) {
 }
 
 /// Free the slot held by a position — at most once, however many terminal paths run.
-pub async fn release_position_slot(position_id: i64) {
+/// Returns whether a slot was freed: false for a position that held none, such as a closed,
+/// archived or wallet-derived one, or one whose slot an earlier path already freed.
+pub async fn release_position_slot(position_id: i64) -> bool {
     let held = SLOT_HOLDERS.write().await.remove(&position_id);
 
     if !held {
@@ -240,10 +242,11 @@ pub async fn release_position_slot(position_id: i64) {
             LogTag::Positions,
             &format!("Position {position_id} holds no slot - nothing to release"),
         );
-        return;
+        return false;
     }
 
     release_global_position_permit();
+    true
 }
 
 /// Rebuild the slot registry from the positions that are actually open (startup).
@@ -520,17 +523,18 @@ pub(crate) fn is_open_round(position: &Position) -> bool {
 /// archived one, then the earliest by entry time and id.
 pub async fn get_open_round_by_mint(mint: &str) -> Option<Position> {
     let positions = POSITIONS.read().await;
-    positions
-        .iter()
-        .filter(|p| p.mint == mint && is_open_round(p))
-        .min_by_key(|p| open_round_order(p))
-        .cloned()
+    choose_open_round(positions.iter().filter(|p| p.mint == mint)).cloned()
 }
 
-/// The order in which the open rounds of one mint are chosen from: active first, then the
-/// earliest entry, then the lowest id.
-fn open_round_order(position: &Position) -> (bool, DateTime<Utc>, Option<i64>) {
-    (position.archived, position.entry_time, position.id)
+/// The open round among `positions` of one mint (see [`is_open_round`]): where a store still
+/// holds several, an active position before an archived one, then the earliest by entry time
+/// and id, the choice storage makes too (`positions::db` `query_open_round_id`).
+pub(crate) fn choose_open_round<'a>(
+    positions: impl Iterator<Item = &'a Position>,
+) -> Option<&'a Position> {
+    positions
+        .filter(|p| is_open_round(p))
+        .min_by_key(|p| (p.archived, p.entry_time, p.id))
 }
 
 /// What a buy of a mint is booked as.

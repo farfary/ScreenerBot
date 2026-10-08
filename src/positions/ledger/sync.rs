@@ -22,6 +22,13 @@
 //!    and holds the same mint — the trader's own row for the very swap this round was
 //!    reduced from. Claiming it is called ADOPTION, and it happens at most once per row.
 //!
+//! A mint has one open position, and every buy of its round is booked onto it. A round
+//! either step matched to a CLOSED row therefore belongs to the mint's open row instead
+//! when that row's own entry is one of the round's acquisitions: a position written off
+//! while its entry was in flight, whose late entry was handed to the open row, shares the
+//! open row's round and must not hold it. The closed row stays as it is settled, and gives
+//! up the round key so the open row can carry it.
+//!
 //! # Ownership boundary
 //!
 //! What the ledger may write depends on who owns the row.
@@ -124,6 +131,9 @@ pub struct RoundMetadata {
 pub struct SyncPlan {
     pub inserts: Vec<Position>,
     pub updates: Vec<PlannedUpdate>,
+    /// Closed rows that give up a round key to the open row of their mint, written before
+    /// the updates so the open row can take the key.
+    pub round_key_releases: Vec<RoundKeyRelease>,
     /// The planning clock, reused when an update is re-derived at write time.
     pub now: DateTime<Utc>,
     /// The signatures of every swap leg the trader had booked before the wallet history
@@ -144,9 +154,16 @@ pub struct PlannedUpdate {
     meta: RoundMetadata,
 }
 
+/// A closed row whose round key moves to the open row of its mint.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct RoundKeyRelease {
+    pub position_id: i64,
+    pub round_key: String,
+}
+
 impl SyncPlan {
     pub fn is_empty(&self) -> bool {
-        self.inserts.is_empty() && self.updates.is_empty()
+        self.inserts.is_empty() && self.updates.is_empty() && self.round_key_releases.is_empty()
     }
 
     /// The plan, told which swap legs the trader had booked before the wallet history it
@@ -236,30 +253,93 @@ pub fn plan_position_writes(
 
     for round in rounds {
         let meta = metadata.get(&round.mint).cloned().unwrap_or_default();
-        let current = by_round_key
+        let matched = by_round_key
             .get(round.round_key.as_str())
             .copied()
             .or_else(|| adopt_row(round, &adoptable, &mut claimed));
+        if let Some(id) = matched.and_then(|row| row.id) {
+            claimed.insert(id);
+        }
+        let open_row = matched
+            .filter(|row| row.exit_time.is_some())
+            .and_then(|_| open_row_of_round(round, existing, &claimed));
+        let current = match open_row {
+            Some(open_row) => {
+                if let Some(id) = open_row.id {
+                    claimed.insert(id);
+                }
+                open_row
+            }
+            None => match matched {
+                Some(row) => row,
+                // A bot swap of the mint in flight may be this round's own buy, whose row
+                // is saved once the swap returns; a row imported now would be its twin.
+                None if busy_mints.contains(&round.mint) => continue,
+                None => {
+                    plan.inserts.push(build_position(round, &meta, None, now));
+                    continue;
+                }
+            },
+        };
 
-        match current {
-            Some(current) => {
-                let legs = current.id.and_then(|id| trader_legs.get(&id));
-                if let Some(position) = rewrite_row(current, round, &meta, legs, busy_mints, now) {
-                    plan.updates.push(PlannedUpdate {
-                        position,
-                        round: round.clone(),
-                        meta,
+        let legs = current.id.and_then(|id| trader_legs.get(&id));
+        let Some(position) = rewrite_row(current, round, &meta, legs, busy_mints, now) else {
+            continue;
+        };
+        if open_row.is_some() {
+            if let Some(closed) =
+                matched.filter(|row| row.round_key.as_deref() == Some(round.round_key.as_str()))
+            {
+                if let Some(position_id) = closed.id {
+                    plan.round_key_releases.push(RoundKeyRelease {
+                        position_id,
+                        round_key: round.round_key.clone(),
                     });
                 }
             }
-            // A bot swap of the mint in flight may be this round's own buy, whose row is
-            // saved once the swap returns; a row imported now would be its twin.
-            None if busy_mints.contains(&round.mint) => {}
-            None => plan.inserts.push(build_position(round, &meta, None, now)),
         }
+        plan.updates.push(PlannedUpdate {
+            position,
+            round: round.clone(),
+            meta,
+        });
     }
 
     plan
+}
+
+/// The open row of `round`'s mint whose own entry is one of the round's acquisitions and
+/// that no other round claimed: the row the round belongs to when it matched a closed row.
+/// Where a store still holds several, the choice is the one every open-row lookup makes
+/// (`positions::state::get_open_round_by_mint`).
+fn open_row_of_round<'a>(
+    round: &LedgerRound,
+    existing: &'a [Position],
+    claimed: &HashSet<i64>,
+) -> Option<&'a Position> {
+    let acquisitions = acquisition_signatures(round);
+    crate::positions::state::choose_open_round(existing.iter().filter(|row| {
+        row.mint == round.mint
+            && row.id.is_some_and(|id| !claimed.contains(&id))
+            && row
+                .entry_transaction_signature
+                .as_deref()
+                .is_some_and(|signature| acquisitions.contains(&signature))
+    }))
+}
+
+/// The round's acquisition signatures, its entry first, each once.
+fn acquisition_signatures(round: &LedgerRound) -> Vec<&str> {
+    let mut signatures: Vec<&str> = Vec::new();
+    if let Some(signature) = round.entry_signature.as_deref() {
+        signatures.push(signature);
+    }
+    for event in &round.events {
+        if event.kind.is_acquisition() && !signatures.contains(&event.signature.as_str()) {
+            signatures.push(event.signature.as_str());
+        }
+    }
+    signatures
 }
 
 /// The rewrite a round implies for a row it claimed, or `None` when the row must be left
@@ -316,17 +396,7 @@ fn adopt_row<'a>(
     adoptable: &HashMap<(&str, &str), Vec<&'a Position>>,
     claimed: &mut HashSet<i64>,
 ) -> Option<&'a Position> {
-    let mut signatures: Vec<&str> = Vec::new();
-    if let Some(signature) = round.entry_signature.as_deref() {
-        signatures.push(signature);
-    }
-    for event in &round.events {
-        if event.kind.is_acquisition() && !signatures.contains(&event.signature.as_str()) {
-            signatures.push(event.signature.as_str());
-        }
-    }
-
-    for signature in signatures {
+    for signature in acquisition_signatures(round) {
         let Some(candidates) = adoptable.get(&(round.mint.as_str(), signature)) else {
             continue;
         };
@@ -912,7 +982,9 @@ async fn resolve_metadata(
 pub async fn apply_plan(plan: SyncPlan) -> AppliedPlan {
     let mut applied = AppliedPlan::default();
     let mut wrote_a_bot_row = false;
-    let busy_mints = crate::positions::state::mints_with_pending_swaps().await;
+    for release in &plan.round_key_releases {
+        release_round_key(release).await;
+    }
     for update in plan.updates {
         let Some(id) = update.position.id else {
             continue;
@@ -1006,7 +1078,9 @@ pub async fn apply_plan(plan: SyncPlan) -> AppliedPlan {
         }
     }
     // Inserts follow the updates: a mint has one open position, so a round the history
-    // closed must be closed before the next round of its mint can open a row.
+    // closed must be closed before the next round of its mint can open a row. The mints
+    // with bot work in flight are read after the updates, which may have run for a while.
+    let busy_mints = crate::positions::state::mints_with_pending_swaps().await;
     for mut position in plan.inserts {
         if busy_mints.contains(&position.mint) {
             applied.skipped += 1;
@@ -1037,6 +1111,43 @@ pub async fn apply_plan(plan: SyncPlan) -> AppliedPlan {
         crate::trader::safety::loss_limit::sync_from_books().await;
     }
     applied
+}
+
+/// Clears the round key of a closed row that gives it up to the open row of its mint (see
+/// [`plan_position_writes`]), in its own booking transaction. A row that reopened or took
+/// another key since the plan was made is left alone. A failure is logged: the open row's
+/// update then fails on the key and is planned again by the next sync.
+async fn release_round_key(release: &RoundKeyRelease) {
+    let RoundKeyRelease {
+        position_id,
+        round_key,
+    } = release;
+    let released = crate::positions::apply::book_position(*position_id, |row, _| {
+        if row.exit_time.is_none() || row.round_key.as_deref() != Some(round_key.as_str()) {
+            return Ok(Booking::Skip(()));
+        }
+        row.round_key = None;
+        Ok(Booking::Write {
+            record: None,
+            outcome: (),
+        })
+    })
+    .await;
+    match released {
+        Ok(Committed::Written { .. }) => logger::info(
+            LogTag::Positions,
+            &format!(
+                "Closed position {position_id} gave round {round_key} up to the open position of its mint"
+            ),
+        ),
+        Ok(Committed::Skipped(()) | Committed::Deleted { .. }) => {}
+        Err(e) => logger::warning(
+            LogTag::Positions,
+            &format!(
+                "Wallet-history sync failed to release round {round_key} from closed position {position_id}: {e}"
+            ),
+        ),
+    }
 }
 
 // =============================================================================

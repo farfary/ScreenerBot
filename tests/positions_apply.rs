@@ -4092,6 +4092,183 @@ fn a_late_dca_below_the_entry_price_moves_at_its_own_cost() {
     );
 }
 
+/// The full exit of the open position of the mint, sent and not yet verified.
+const OPEN_EXIT_SIGNATURE: &str = "open-exit-sig";
+
+/// A written-off position and the open position of its mint, whose full exit is sent and
+/// not verified, when the written-off position's late DCA lands: the open position takes the
+/// late tokens and their cost as the mint's one position, exit in flight or not. Returns
+/// (closed, open).
+async fn late_dca_beside_an_exiting_position() -> (i64, i64) {
+    let closed = written_off(|_| {}).await;
+    let open = store_position(|_| {}).await;
+    mark_exit_submitted(
+        open,
+        OPEN_EXIT_SIGNATURE,
+        1.2,
+        "stop_loss_pending_verification",
+    )
+    .await
+    .expect("record the submitted exit");
+
+    apply_transition(late_dca(closed, Some(RawAmount::new(HELD + 500_000))))
+        .await
+        .expect("the late DCA is booked");
+
+    for position in [stored_position(closed).await, memory_position(closed).await] {
+        assert!(position.exit_time.is_some(), "the closed position reopened");
+        assert_eq!(position.remaining_token_amount, Some(RawAmount::ZERO));
+    }
+    for position in [stored_position(open).await, memory_position(open).await] {
+        assert_eq!(
+            position.exit_transaction_signature.as_deref(),
+            Some(OPEN_EXIT_SIGNATURE),
+            "the handover touched the exit in flight"
+        );
+        assert_eq!(
+            position.remaining_token_amount,
+            Some(RawAmount::new(HELD + 500_000))
+        );
+        assert!((position.total_size_native - 1.5).abs() < 1e-9);
+    }
+    assert_eq!(open_rows_of_mint(), 1);
+    (closed, open)
+}
+
+/// A sale that took the late tokens too closes the open position with them booked: what it
+/// sold is what it held, and its P&L carries their cost.
+#[test]
+fn an_exit_in_flight_that_sold_a_late_fill_s_tokens_books_them_on_its_position() {
+    common::run_isolated(
+        "an_exit_in_flight_that_sold_a_late_fill_s_tokens_books_them_on_its_position",
+        || async {
+            let _dir = common::isolated_env();
+            let _cfg = common::config_guard();
+            let (_, open) = late_dca_beside_an_exiting_position().await;
+
+            assert_eq!(
+                classify_exit_residual(Some(open), RawAmount::ZERO)
+                    .await
+                    .expect("classify the residual"),
+                ExitResidual::None
+            );
+            apply_transition(PositionTransition::ExitVerified {
+                position_id: open,
+                effective_exit_price: 1.2,
+                native_received: 1.8,
+                fee_raw: 0,
+                exit_time: Utc::now(),
+                exit_signature: OPEN_EXIT_SIGNATURE.to_owned(),
+                exit_amount: RawAmount::new(HELD + 500_000),
+                held_after: Some(RawAmount::ZERO),
+            })
+            .await
+            .expect("the exit is booked");
+
+            for position in [stored_position(open).await, memory_position(open).await] {
+                assert!(
+                    position.exit_time.is_some(),
+                    "the open position did not close"
+                );
+                assert_eq!(position.remaining_token_amount, Some(RawAmount::ZERO));
+                let pnl = position.pnl.expect("a realized P&L");
+                assert!((pnl - 0.3).abs() < 1e-9, "realized {pnl}");
+            }
+            assert_acquired_balances(open, HELD + 500_000).await;
+        },
+    );
+}
+
+/// A sale sized before the late tokens landed leaves them as its residual: they are the
+/// position's own, so the sale is booked as a partial exit and the exit is cleared for a
+/// retry that sells them under the same position. Nothing is left unmanaged.
+#[test]
+fn an_exit_in_flight_sized_before_a_late_fill_retries_its_tokens_as_its_own_residual() {
+    common::run_isolated(
+        "an_exit_in_flight_sized_before_a_late_fill_retries_its_tokens_as_its_own_residual",
+        || async {
+            let _dir = common::isolated_env();
+            let _cfg = common::config_guard();
+            let (_, open) = late_dca_beside_an_exiting_position().await;
+
+            assert_eq!(
+                classify_exit_residual(Some(open), RawAmount::new(500_000))
+                    .await
+                    .expect("classify the residual"),
+                ExitResidual::Own,
+                "the late tokens are not the exiting position's own residual"
+            );
+            apply_transition(PositionTransition::ExitResidualClearForRetry {
+                position_id: open,
+                exit_amount: RawAmount::new(HELD),
+                native_received: 1.2,
+                effective_exit_price: 1.2,
+                fee_raw: 0,
+                exit_time: Utc::now(),
+                exit_signature: OPEN_EXIT_SIGNATURE.to_owned(),
+                exit_percentage: 100.0 * HELD as f64 / (HELD + 500_000) as f64,
+                held_after: Some(RawAmount::new(500_000)),
+            })
+            .await
+            .expect("the residual is booked for a retry");
+
+            for position in [stored_position(open).await, memory_position(open).await] {
+                assert!(position.exit_time.is_none(), "the open position closed");
+                assert_eq!(position.exit_transaction_signature, None);
+                assert_eq!(
+                    position.remaining_token_amount,
+                    Some(RawAmount::new(500_000))
+                );
+                assert_eq!(position.partial_exit_count, 1);
+            }
+            assert_acquired_balances(open, HELD + 500_000).await;
+        },
+    );
+}
+
+/// A trading slot is held by the positions registered for it, freed once by whichever path
+/// runs first, and never taken by a wallet-derived position: the routes that archive,
+/// unarchive or delete a position ask the slot registry instead of judging the row.
+#[test]
+fn a_slot_is_freed_only_by_its_holder_and_only_once() {
+    common::run_isolated(
+        "a_slot_is_freed_only_by_its_holder_and_only_once",
+        || async {
+            let _dir = common::isolated_env();
+            let _cfg = common::config_guard();
+            state::init_global_position_semaphore(1);
+            let id = open_position(|_| {}).await;
+
+            assert!(
+                !state::release_position_slot(id).await,
+                "a position that holds no slot freed one"
+            );
+            assert!(state::try_consume_global_position_permit());
+            state::register_position_slot(id).await;
+            assert!(state::release_position_slot(id).await);
+            assert!(
+                !state::release_position_slot(id).await,
+                "a slot was freed twice"
+            );
+            assert!(state::try_consume_global_position_permit());
+            assert!(
+                !state::try_consume_global_position_permit(),
+                "freeing one slot returned two"
+            );
+            state::release_global_position_permit();
+
+            let mut derived = common::test_position(1.0, 1.0);
+            derived.id = Some(id + 1);
+            derived.origin = PositionOrigin::External;
+            assert!(
+                !state::reclaim_position_slot(&derived).await,
+                "a wallet-derived position took a trading slot"
+            );
+            assert!(state::try_consume_global_position_permit());
+        },
+    );
+}
+
 /// A store that still holds two open rows of a mint names the same one as its open position
 /// in memory and in storage: an active row before an archived one, then the earliest.
 #[test]

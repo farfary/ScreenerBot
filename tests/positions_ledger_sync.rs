@@ -27,7 +27,7 @@ use screenerbot::chains::{ChainId, RawAmount};
 use screenerbot::positions::apply::apply_transition;
 use screenerbot::positions::ledger::reduce_rounds;
 use screenerbot::positions::ledger::sync::{
-    apply_plan, plan_position_writes, AppliedPlan, RoundMetadata, TraderLegs,
+    apply_plan, plan_position_writes, AppliedPlan, RoundKeyRelease, RoundMetadata, TraderLegs,
 };
 use screenerbot::positions::ledger::{
     LedgerEvent, LedgerEventKind, LedgerRound, QuoteAsset, QuoteLeg,
@@ -1767,4 +1767,250 @@ fn a_bot_swap_in_flight_keeps_its_mint_busy_until_its_guard_drops() {
             "the mint is free once every swap is recorded"
         );
     });
+}
+
+// =============================================================================
+// A ROUND SHARED BY A CLOSED ROW AND THE OPEN ROW
+// =============================================================================
+
+/// The round a write-off and the open position of its mint share: the written-off row's
+/// entry `a-entry` landed after the write-off and was handed to the open row, which bought
+/// `b-entry`. The wallet never emptied in between, so both buys are one round, keyed by
+/// the earlier one.
+fn shared_round(mint: &str) -> LedgerRound {
+    let mut shared = open_round(mint, &format!("a-entry:{mint}"));
+    shared.entry_signature = Some("a-entry".to_owned());
+    shared.balance_raw = 3_000_000;
+    shared.total_acquired_raw = 3_000_000;
+    shared.entry_count = 2;
+    shared.invested_native = 2.0;
+    shared.remaining_basis_native = 2.0;
+    shared.events = vec![
+        acquisition("a-entry", LedgerEventKind::Entry, 1.0, 1.0),
+        acquisition("b-entry", LedgerEventKind::Add, 2.0, 1.0),
+    ];
+    shared
+}
+
+/// The shared round after the open row's whole holding was sold in another wallet app.
+fn shared_round_sold_elsewhere(mint: &str) -> LedgerRound {
+    let mut sold = shared_round(mint);
+    sold.is_open = false;
+    sold.closed_at = Some(1_600_002_000);
+    sold.balance_raw = 0;
+    sold.total_disposed_raw = 3_000_000;
+    sold.exit_count = 1;
+    sold.remaining_basis_native = 0.0;
+    sold.realized_proceeds_native = 2.4;
+    sold.realized_cost_native = 2.0;
+    sold.average_exit_price_native = Some(0.8);
+    sold.realized_pnl_native = Some(0.4);
+    sold.exit_signature = Some("elsewhere-sell".to_owned());
+    sold
+}
+
+/// The written-off row: its entry `a-entry` was handed over, so it holds nothing and is
+/// closed and verified.
+fn written_off_row(round: &LedgerRound, round_key: Option<&str>) -> Position {
+    let mut row = bot_position(round);
+    row.id = Some(1);
+    row.entry_transaction_signature = Some("a-entry".to_owned());
+    row.token_amount = Some(raw(1_000_000));
+    row.remaining_token_amount = Some(raw(0));
+    row.total_exited_amount = raw(1_000_000);
+    row.total_size_native = 0.0;
+    row.exit_time = Some(Utc.timestamp_opt(1_600_000_600, 0).unwrap());
+    row.transaction_exit_verified = true;
+    row.synthetic_exit = true;
+    row.closed_reason = Some("force_closed".to_owned());
+    row.round_key = round_key.map(str::to_owned);
+    row
+}
+
+/// The open row of the mint, holding its own buy and the handed-over tokens.
+fn open_row(round: &LedgerRound) -> Position {
+    let mut row = bot_position(round);
+    row.id = Some(2);
+    row.entry_transaction_signature = Some("b-entry".to_owned());
+    row.entry_time = Utc.timestamp_opt(1_600_000_700, 0).unwrap();
+    row.token_amount = Some(raw(3_000_000));
+    row.remaining_token_amount = Some(raw(3_000_000));
+    row.total_size_native = 2.0;
+    row.dca_count = 1;
+    row
+}
+
+/// The open row's booked legs: its own buy, and the add the handover recorded under the
+/// written-off row's entry.
+fn open_row_legs() -> HashMap<i64, TraderLegs> {
+    HashMap::from([(
+        2i64,
+        TraderLegs {
+            entry_signatures: HashSet::from(["a-entry".to_owned(), "b-entry".to_owned()]),
+            booked_invested_native: 2.0,
+        },
+    )])
+}
+
+/// Whichever way the round finds the closed row, by the key an earlier sync stamped on it
+/// or by its entry signature, the round is reconciled on the open row: the open row takes
+/// the key, the closed row is left as it is settled and gives the key up.
+#[test]
+fn a_round_shared_with_the_open_row_belongs_to_the_open_row_not_the_closed_one() {
+    let round = shared_round(MINT);
+    let round_key = round.round_key.clone();
+    for keyed in [true, false] {
+        let closed = written_off_row(&round, keyed.then_some(round_key.as_str()));
+        let open = open_row(&round);
+
+        let plan = plan_position_writes(
+            std::slice::from_ref(&round),
+            &[closed, open],
+            &metadata(MINT, false),
+            &open_row_legs(),
+            &no_busy(),
+            now(),
+        );
+
+        assert!(plan.inserts.is_empty(), "keyed: {keyed}");
+        assert_eq!(plan.updates.len(), 1, "keyed: {keyed}");
+        let reconciled = &plan.updates[0].position;
+        assert_eq!(reconciled.id, Some(2), "the open row owns the round");
+        assert_eq!(reconciled.round_key.as_deref(), Some(round_key.as_str()));
+        assert!(reconciled.exit_time.is_none(), "the open row is still held");
+        assert_eq!(reconciled.remaining_token_amount, Some(raw(3_000_000)));
+        assert!((reconciled.total_size_native - 2.0).abs() < 1e-12);
+        let expected_releases = if keyed {
+            vec![RoundKeyRelease {
+                position_id: 1,
+                round_key: round_key.clone(),
+            }]
+        } else {
+            Vec::new()
+        };
+        assert_eq!(plan.round_key_releases, expected_releases, "keyed: {keyed}");
+    }
+}
+
+/// The open row's holding sold in another wallet app closes the open row, even when the
+/// closed row still carries the round's key: the rule that an outside sale closes its
+/// position holds for the open row too.
+#[test]
+fn an_outside_sale_of_a_shared_round_closes_the_open_row() {
+    let round = shared_round_sold_elsewhere(MINT);
+    let round_key = round.round_key.clone();
+    let closed = written_off_row(&round, Some(round_key.as_str()));
+
+    let plan = plan_position_writes(
+        std::slice::from_ref(&round),
+        &[closed, open_row(&round)],
+        &metadata(MINT, false),
+        &open_row_legs(),
+        &no_busy(),
+        now(),
+    );
+
+    assert_eq!(plan.updates.len(), 1);
+    let sold = &plan.updates[0].position;
+    assert_eq!(sold.id, Some(2));
+    assert!(sold.exit_time.is_some(), "the open row is closed");
+    assert_eq!(sold.closed_reason.as_deref(), Some("closed_externally"));
+    assert_eq!(sold.native_received, Some(2.4));
+    assert_eq!(
+        plan.round_key_releases,
+        vec![RoundKeyRelease {
+            position_id: 1,
+            round_key,
+        }]
+    );
+}
+
+/// A closed round never claims the open row of a later round: the open row's entry is not
+/// one of its acquisitions, so the closed row keeps its own settled round.
+#[test]
+fn a_closed_row_s_own_round_never_takes_the_open_row_of_a_later_round() {
+    let earlier = round(MINT, "open-sig:MINT");
+    let mut closed = bot_position(&earlier);
+    closed.round_key = Some("open-sig:MINT".to_owned());
+    closed.exit_time = Some(Utc.timestamp_opt(1_600_000_900, 0).unwrap());
+    closed.exit_transaction_signature = Some("our-own-close".to_owned());
+    closed.transaction_exit_verified = true;
+    closed.remaining_token_amount = Some(raw(0));
+    let mut later = open_row(&shared_round(MINT));
+    later.entry_transaction_signature = Some("later-entry".to_owned());
+
+    let plan = plan_position_writes(
+        &[earlier],
+        &[closed, later],
+        &metadata(MINT, false),
+        &no_legs(),
+        &no_busy(),
+        now(),
+    );
+
+    assert!(plan.updates.is_empty());
+    assert!(plan.inserts.is_empty());
+    assert!(plan.round_key_releases.is_empty());
+}
+
+/// Written to storage, the key moves in one sync: the closed row gives it up before the
+/// open row takes it, which the unique round-key index would refuse the other way round.
+#[test]
+fn a_sync_moves_a_shared_round_s_key_from_the_closed_row_to_the_open_row() {
+    common::run_isolated(
+        "a_sync_moves_a_shared_round_s_key_from_the_closed_row_to_the_open_row",
+        || async {
+            let _dir = common::isolated_env();
+            let _cfg = common::config_guard();
+            screenerbot::paths::ensure_all_directories().expect("create data directories");
+            common::configure_own_wallet();
+            common::seed_decimals(common::TEST_MINT, 6);
+            screenerbot::positions::initialize_positions_database()
+                .await
+                .expect("initialise positions database");
+
+            let round = shared_round(common::TEST_MINT);
+            let round_key = round.round_key.clone();
+            let mut closed = written_off_row(&round, Some(round_key.as_str()));
+            closed.id = None;
+            let closed_id = db::save_position(&closed)
+                .await
+                .expect("persist closed row");
+            let mut open = open_row(&round);
+            open.id = None;
+            let open_id = db::save_position(&open).await.expect("persist open row");
+
+            let existing = db::load_all_positions().await.expect("load positions");
+            let plan = plan_position_writes(
+                std::slice::from_ref(&round),
+                &existing,
+                &metadata(common::TEST_MINT, false),
+                &no_legs(),
+                &no_busy(),
+                now(),
+            );
+            assert_eq!(
+                apply_plan(plan).await,
+                AppliedPlan {
+                    inserted: 0,
+                    updated: 1,
+                    skipped: 0,
+                }
+            );
+
+            let stored_closed = db::get_position_by_id(closed_id)
+                .await
+                .expect("read closed row")
+                .expect("closed row stored");
+            let stored_open = db::get_position_by_id(open_id)
+                .await
+                .expect("read open row")
+                .expect("open row stored");
+            assert_eq!(stored_closed.round_key, None);
+            assert_eq!(stored_closed.exit_time, closed.exit_time);
+            assert_eq!(stored_closed.remaining_token_amount, Some(raw(0)));
+            assert_eq!(stored_open.round_key.as_deref(), Some(round_key.as_str()));
+            assert!(stored_open.exit_time.is_none());
+        },
+    );
 }

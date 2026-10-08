@@ -14,7 +14,7 @@ use crate::telegram::formatters::{self, row, text_arg};
 use crate::telegram::text::{tg, tg_id, with_icon};
 use crate::telegram::Result;
 use crate::telegram::{keyboards, messages};
-use crate::trader::manual::{manual_add, manual_sell};
+use crate::trader::manual::{guard, manual_add, manual_sell};
 use teloxide::prelude::*;
 use teloxide::types::{ChatId, ParseMode};
 
@@ -293,7 +293,19 @@ pub(super) async fn execute_sell(
                 .parse_mode(ParseMode::Html)
                 .await;
 
-            match manual_sell(&pos.mint, Some(percent as f64), None).await {
+            // A sell passes the gates every manual sell passes; a blacklisted token can
+            // always be left.
+            let sold = match guard::preflight(
+                guard::ManualTradeKind::Sell,
+                &pos.mint,
+                guard::BlacklistPolicy::Ignore,
+            )
+            .await
+            {
+                Ok(()) => manual_sell(&pos.mint, Some(percent as f64), None).await,
+                Err(e) => Err(e),
+            };
+            match sold {
                 Ok(result) => {
                     let msg = row(
                         "✅",
@@ -344,7 +356,17 @@ pub(super) async fn execute_dca(
                 .parse_mode(ParseMode::Html)
                 .await;
 
-            match manual_add(&pos.mint, amount, None).await {
+            let added = match guard::preflight(
+                guard::ManualTradeKind::Add,
+                &pos.mint,
+                guard::BlacklistPolicy::Enforce,
+            )
+            .await
+            {
+                Ok(()) => manual_add(&pos.mint, amount, None).await,
+                Err(e) => Err(e),
+            };
+            match added {
                 Ok(_) => {
                     let msg = row(
                         "✅",
@@ -388,7 +410,17 @@ pub(super) async fn execute_close_all(bot: &Bot, chat_id: ChatId) -> Result<()> 
     let mut failed = 0;
 
     for pos in &positions {
-        match manual_sell(&pos.mint, Some(100.0), None).await {
+        let sold = match guard::preflight(
+            guard::ManualTradeKind::Sell,
+            &pos.mint,
+            guard::BlacklistPolicy::Ignore,
+        )
+        .await
+        {
+            Ok(()) => manual_sell(&pos.mint, Some(100.0), None).await,
+            Err(e) => Err(e),
+        };
+        match sold {
             Ok(_) => success += 1,
             Err(_) => failed += 1,
         }
@@ -417,7 +449,16 @@ pub(super) async fn execute_blacklist(bot: &Bot, chat_id: ChatId, mint_short: &s
     match position {
         Some(pos) => {
             // First close the position
-            let _ = manual_sell(&pos.mint, Some(100.0), None).await;
+            if guard::preflight(
+                guard::ManualTradeKind::Sell,
+                &pos.mint,
+                guard::BlacklistPolicy::Ignore,
+            )
+            .await
+            .is_ok()
+            {
+                let _ = manual_sell(&pos.mint, Some(100.0), None).await;
+            }
 
             // Add to blacklist
             let mint_clone = pos.mint.clone();

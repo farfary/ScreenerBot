@@ -369,6 +369,16 @@ async fn open_position_impl(
             )
             .await);
         }
+        // The swap was sent, so the open reports it as submitted: an error would let the
+        // caller send the buy again. No row means no verification; the slot permit is
+        // returned when it drops, and the pending-open mark expires on its own.
+        super::Persisted::Unsaved => {
+            return Ok(EntrySubmission {
+                transaction_signature,
+                confirmation_pending,
+                entry_price_native: effective_entry_price,
+            });
+        }
     };
 
     let mut position_with_id = position;
