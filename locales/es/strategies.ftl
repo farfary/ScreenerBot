@@ -27,6 +27,9 @@ strategies-editor-name =
     .placeholder = Nombre de la estrategia
 strategies-editor-dirty =
     .title = Cambios sin guardar
+strategies-editor-enabled =
+    .aria-label = Estrategia activada
+    .title = Estrategia activada
 strategies-action-validate = Validar
 strategies-editor-empty = Selecciona una estrategia para editarla o crea una nueva
 strategies-conditions-empty-title = Aún no hay condiciones
@@ -92,9 +95,9 @@ strategies-catalog-no-description = Sin descripción disponible
 strategies-create-title = Crear nueva estrategia
 strategies-create-prompt = Elige el tipo de estrategia que quieres crear:
 strategies-create-entry-name = Estrategia de entrada
-strategies-create-entry-description = Define las condiciones para COMPRAR un token
+strategies-create-entry-description = Define las condiciones para comprar un token
 strategies-create-exit-name = Estrategia de salida
-strategies-create-exit-description = Define las condiciones para VENDER un token
+strategies-create-exit-description = Define las condiciones para vender un token
 
 ## Delete dialog
 

@@ -15,14 +15,19 @@
  *   and the stylesheet does not rotate it.
  * - The catalog modal has one bulk toggle, labelled through a Fluent id.
  *
+ * The strategies stylesheets also read only defined tokens: the exit kind once named
+ * `--danger-color`, which no theme defines, so the Exit icon rendered in the text
+ * colour while Entry was green. A condition icon is a bare glyph (size and colour),
+ * never a filled or gradient tile.
+ *
  * Run with `npm run test:js`.
  */
 
 import test from "node:test";
 import assert from "node:assert/strict";
-import { readFileSync } from "node:fs";
+import { readFileSync, readdirSync } from "node:fs";
 
-import { PAGES_ROOT, SCRIPTS_ROOT, STYLES_ROOT, rulesIn } from "../lib/dashboard_ui.mjs";
+import { PAGES_ROOT, SCRIPTS_ROOT, STYLES_ROOT, rulesIn, walk } from "../lib/dashboard_ui.mjs";
 
 const catalog = readFileSync(`${SCRIPTS_ROOT}/pages/strategies/condition_catalog.js`, "utf8");
 const page = readFileSync(`${SCRIPTS_ROOT}/pages/strategies.js`, "utf8");
@@ -45,4 +50,32 @@ test("the catalog has one bulk fold control", () => {
   const toggles = markup.match(/<button[^>]*class="catalog-toggle-btn"[^>]*>/g) ?? [];
   assert.equal(toggles.length, 1);
   assert.match(toggles[0], /id="toggle-all-categories"/);
+});
+
+test("strategies stylesheets read only defined tokens", async () => {
+  const defined = new Set();
+  for (const file of (await walk(STYLES_ROOT)).filter((path) => path.endsWith(".css"))) {
+    for (const match of readFileSync(file, "utf8").matchAll(/(--[\w-]+)\s*:/g))
+      defined.add(match[1]);
+  }
+  const dir = `${STYLES_ROOT}/pages/strategies`;
+  const found = [];
+  for (const name of readdirSync(dir).filter((file) => file.endsWith(".css"))) {
+    for (const match of readFileSync(`${dir}/${name}`, "utf8").matchAll(
+      /var\(\s*(--[\w-]+)\s*\)/g
+    )) {
+      if (!defined.has(match[1])) found.push(`${name}: ${match[1]}`);
+    }
+  }
+  assert.deepEqual(found, []);
+});
+
+test("a condition icon is a bare glyph", () => {
+  const rules = rulesIn(
+    readFileSync(`${STYLES_ROOT}/pages/strategies/condition_cards.css`, "utf8")
+  ).filter(({ selector }) => /\.condition-icon\b/.test(selector));
+  assert.ok(rules.length > 0);
+  for (const { selector, body } of rules) {
+    assert.doesNotMatch(body, /(?:^|;)\s*(?:background|border|box-shadow|filter)\b/, selector);
+  }
 });

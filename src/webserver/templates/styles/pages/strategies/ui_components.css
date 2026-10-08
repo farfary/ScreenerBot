@@ -71,7 +71,7 @@
 
 .strategy-type-badge.exit {
   background: rgb(239, 68, 68, 0.15);
-  color: var(--danger-color);
+  color: var(--error-color);
   border: 1px solid rgb(239, 68, 68, 0.3);
 }
 
@@ -147,7 +147,7 @@
 }
 
 .type-card[data-type="EXIT"] .type-icon {
-  color: var(--danger-color);
+  color: var(--error-color);
 }
 
 .type-card .type-name {
@@ -191,9 +191,5 @@
   .strategy-name-input {
     max-width: 160px;
     font-size: 0.9rem;
-  }
-
-  .enable-toggle .toggle-label {
-    display: none;
   }
 }

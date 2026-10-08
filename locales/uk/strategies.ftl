@@ -33,6 +33,9 @@ strategies-editor-name =
     .placeholder = Назва стратегії
 strategies-editor-dirty =
     .title = Незбережені зміни
+strategies-editor-enabled =
+    .aria-label = Стратегію ввімкнено
+    .title = Стратегію ввімкнено
 strategies-action-validate = Перевірити
 strategies-editor-empty = Виберіть стратегію для редагування або створіть нову
 strategies-conditions-empty-title = Умов ще немає
@@ -100,9 +103,9 @@ strategies-catalog-no-description = Опис недоступний
 strategies-create-title = Створити нову стратегію
 strategies-create-prompt = Виберіть тип стратегії, яку хочете створити:
 strategies-create-entry-name = Стратегія входу
-strategies-create-entry-description = Визначте умови, за яких КУПУВАТИ токен
+strategies-create-entry-description = Визначте умови, за яких купувати токен
 strategies-create-exit-name = Стратегія виходу
-strategies-create-exit-description = Визначте умови, за яких ПРОДАВАТИ токен
+strategies-create-exit-description = Визначте умови, за яких продавати токен
 
 ## Delete dialog
 
