@@ -50,6 +50,18 @@
   src: url("/assets/fonts/JetBrainsMono-Bold.woff2") format("woff2");
 }
 
+/* Inter's word space alone. A script locale's mono stacks start with it, so prose
+   set in a data font keeps the UI font's word spacing instead of a full-cell
+   monospace gap between words; digits and Latin still come from JetBrains Mono. */
+@font-face {
+  font-family: "ScreenerBot Word Space";
+  font-style: normal;
+  font-weight: 100 900;
+  font-display: swap;
+  src: url("/assets/fonts/Inter-Variable.woff2") format("woff2");
+  unicode-range: U+0020;
+}
+
 /* Orbitron - Futuristic display font for branding */
 @font-face {
   font-family: Orbitron;
@@ -293,15 +305,18 @@
 
 /* Composed on every element that declares a language, so its own --font-script order applies.
    Latin, Cyrillic, Vietnamese and digits always resolve to Inter or JetBrains Mono; a bundled
-   script face precedes every OS or generic monospace family. */
+   script face precedes every OS or generic monospace family. A script locale sets
+   --font-word-space, so the mono stacks take their word space from the UI font. */
 :root,
 [lang] {
+  --font-word-space: "JetBrains Mono";
   --font-sans:
     "Inter", var(--font-script), -apple-system, blinkmacsystemfont, "Segoe UI", roboto, sans-serif;
   --font-mono:
-    "JetBrains Mono", var(--font-script), "SF Mono", monaco, "Cascadia Code", "Roboto Mono",
-    monospace;
-  --font-data: "JetBrains Mono", var(--font-script), "SF Mono", monaco, monospace;
+    var(--font-word-space), "JetBrains Mono", var(--font-script), "SF Mono", monaco,
+    "Cascadia Code", "Roboto Mono", monospace;
+  --font-data:
+    var(--font-word-space), "JetBrains Mono", var(--font-script), "SF Mono", monaco, monospace;
 }
 
 [lang]:lang(ar),
@@ -348,13 +363,16 @@
 
 /* Tracking splits Arabic joins and the Devanagari headline; CJK tracking was tuned for Latin
    capitals. Synthesized bold/italic is wrong for all six scripts. `!important` is required because
-   component selectors outrank the reset; the wordmark classes keep their Latin tracking. */
+   component selectors outrank the reset; the wordmark classes keep their Latin tracking. The mono
+   stacks take the UI font's word space, so script prose in a data font has no monospace gaps. */
 [lang]:lang(ar),
 [lang]:lang(fa),
 [lang]:lang(hi),
 [lang]:lang(zh),
 [lang]:lang(ja),
 [lang]:lang(ko) {
+  --font-word-space: "ScreenerBot Word Space";
+
   font-synthesis: none;
   letter-spacing: 0 !important;
 }

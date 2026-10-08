@@ -324,12 +324,13 @@ def percent(value: float) -> str:
 
 
 def committed_families() -> dict[str, str]:
-    """File name -> font-family of the hand-written @font-face rules in foundation.css."""
+    """File name -> font-family of the hand-written @font-face rules in foundation.css. A file
+    reused by a narrower face (the word-space face over Inter) keeps its first, full family."""
     families = {}
     for block in re.findall(r"@font-face\s*\{([^}]*)\}", FOUNDATION_CSS.read_text(encoding="utf-8")):
         family = re.search(r"font-family:\s*\"?([^\";]+?)\"?\s*;", block).group(1)
         file = re.search(r"url\(\"?/assets/fonts/([^\")]+)\"?\)", block).group(1)
-        families[file] = family
+        families.setdefault(file, family)
     return families
 
 

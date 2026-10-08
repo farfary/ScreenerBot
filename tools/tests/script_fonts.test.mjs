@@ -32,6 +32,8 @@ const MANIFEST = JSON.parse(readFileSync(resolve(REPO_ROOT, "tools/fonts/fonts.j
 
 const SCRIPT_LOCALES = ["zh-Hans", "ja", "ko", "hi", "ar", "fa"];
 const TOKENS = ["--font-sans", "--font-mono", "--font-data"];
+/** Tokens the font stacks compose from; expanded in place when a stack is resolved. */
+const HELPER_TOKENS = ["--font-script", "--font-word-space"];
 /** Faces that may render text in every locale: Latin, Cyrillic, Vietnamese, digits, symbols. */
 const UNIVERSAL_FAMILIES = new Set(["Inter", "JetBrains Mono"]);
 const SKIPPED = /[\p{Default_Ignorable_Code_Point}\p{Extended_Pictographic}]/u;
@@ -109,17 +111,18 @@ function tokensFor(code) {
     );
     if (!isBase && !isOverride) return;
     rule.walkDecls((decl) => {
-      if (decl.prop !== "--font-script" && !TOKENS.includes(decl.prop)) return;
+      if (!HELPER_TOKENS.includes(decl.prop) && !TOKENS.includes(decl.prop)) return;
       (isOverride ? overrides : base)[decl.prop] = decl.value;
     });
   });
   const values = { ...base, ...overrides };
-  const script = values["--font-script"];
+  const expand = (value) =>
+    HELPER_TOKENS.reduce(
+      (text, helper) => text.replaceAll(`var(${helper})`, values[helper]),
+      value
+    );
   return Object.fromEntries(
-    TOKENS.map((token) => [
-      token,
-      splitList(values[token].replaceAll("var(--font-script)", script)).map(unquote),
-    ])
+    TOKENS.map((token) => [token, splitList(expand(values[token])).map(unquote)])
   );
 }
 
@@ -272,4 +275,25 @@ test("stylesheets set font-family only through the font tokens", () => {
     });
   }
   assert.deepEqual(violations, []);
+});
+
+/**
+ * A script locale's prose set in a mono stack (a cell, a placeholder, an empty state) takes
+ * the UI font's word space: a monospace space is a full cell wide, which reads as a gap of
+ * one glyph between script words. Digits and Latin still resolve to JetBrains Mono.
+ */
+test("script locales take the word space of the UI font in the mono stacks", () => {
+  const [space] = FACES.get("ScreenerBot Word Space") ?? [];
+  assert.ok(space, "no ScreenerBot Word Space @font-face");
+  assert.equal(space.file, "Inter-Variable.woff2");
+  assert.equal(space.unicodeRange, "U+0020");
+  for (const code of SCRIPT_LOCALES) {
+    const tokens = tokensFor(code);
+    for (const token of ["--font-mono", "--font-data"]) {
+      assert.equal(tokens[token][0], "ScreenerBot Word Space", `${code} ${token}`);
+      assert.equal(resolveFace(0x31, tokens[token], FACES)?.family, "JetBrains Mono");
+    }
+  }
+  for (const token of ["--font-mono", "--font-data"])
+    assert.equal(tokensFor("en")[token][0], "JetBrains Mono", `en ${token}`);
 });
