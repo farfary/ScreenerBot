@@ -18,6 +18,11 @@
   overflow: hidden;
 }
 
+/* Explore Mode: the setup notice replaces the table, inset from the page edge. */
+.transactions-setup-gate {
+  margin: var(--spacing-lg);
+}
+
 .value-positive {
   color: var(--badge-online);
   font-weight: 600;

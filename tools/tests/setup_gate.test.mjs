@@ -16,7 +16,8 @@
  * - Copy Trading names the reason in its strip, disables every wallet-backed
  *   control with that reason, and shows the setup notice in place of the
  *   onboarding card while no task exists.
- * - Transactions does not ask the watch store for subjects.
+ * - Transactions shows the setup notice in place of its table and requests no
+ *   transaction or wallet route, so no refresh failure is raised.
  *
  * Run with `npm run test:js`.
  */
@@ -123,12 +124,22 @@ test("Copy Trading gates its wallet-backed controls with one reason", async (t) 
   assert.equal(await add.getAttribute("title"), REASON);
 });
 
-test("Transactions asks no watch store for subjects", async (t) => {
+test("Transactions shows the setup notice and reads no transaction route", async (t) => {
   const { page, requests, close } = await openExplore("transactions");
   t.after(close);
+
+  const gate = page.locator("#transactions-setup-gate .setup-gate");
+  await gate.waitFor();
+  assert.equal(
+    await gate.locator(".empty-state-title").textContent(),
+    "Transactions need a wallet"
+  );
+  assert.equal(await gate.locator(".empty-state-description").textContent(), REASON);
+  assert.equal(await page.locator("#transactions-root").isVisible(), false);
   await page.waitForTimeout(1000);
   assert.deepEqual(
-    requests.filter((request) => request.includes("/api/wallets")),
+    requests.filter((request) => / \/api\/(?:transactions|wallets)\b/.test(request)),
     []
   );
+  assert.equal(await page.locator(".toast").count(), 0);
 });

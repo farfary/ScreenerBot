@@ -60,6 +60,7 @@ transactions-search =
     .placeholder = 서명 검색…
     .aria-label = 트랜잭션 서명 검색
 transactions-load-failed = 트랜잭션을 새로 고치지 못했습니다
+transactions-setup-gate-title = 거래 내역을 보려면 지갑이 필요합니다
 transactions-summary-total = 전체
 transactions-summary-estimate = 추정
 transactions-summary-success = 성공

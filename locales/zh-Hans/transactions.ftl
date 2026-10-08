@@ -60,6 +60,7 @@ transactions-search =
     .placeholder = 搜索签名…
     .aria-label = 搜索交易签名
 transactions-load-failed = 无法刷新交易
+transactions-setup-gate-title = 交易记录需要先连接钱包
 transactions-summary-total = 总计
 transactions-summary-estimate = 估算
 transactions-summary-success = 成功

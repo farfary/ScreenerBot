@@ -60,6 +60,7 @@ transactions-search =
     .placeholder = جستجوی امضاها…
     .aria-label = جستجوی امضای تراکنش‌ها
 transactions-load-failed = به‌روزرسانی تراکنش‌ها ممکن نشد
+transactions-setup-gate-title = تراکنش‌ها به کیف پول نیاز دارند
 transactions-summary-total = مجموع
 transactions-summary-estimate = برآورد
 transactions-summary-success = موفق

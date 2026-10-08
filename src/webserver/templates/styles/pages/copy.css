@@ -87,13 +87,6 @@
   font-size: var(--font-size-sm);
 }
 
-/* The Explore Mode notice takes the onboarding card's place and frame. */
-.copy-setup-gate {
-  border: 1px solid var(--border-color);
-  border-radius: var(--radius-lg);
-  background: var(--bg-card);
-}
-
 .copy-onboarding {
   display: grid;
   grid-template-columns: minmax(0, 1.2fr) minmax(0, 1fr);

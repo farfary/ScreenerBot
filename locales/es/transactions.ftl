@@ -60,6 +60,7 @@ transactions-search =
     .placeholder = Buscar firmas…
     .aria-label = Buscar firmas de transacciones
 transactions-load-failed = No se pudieron actualizar las transacciones
+transactions-setup-gate-title = Las transacciones requieren una billetera
 transactions-summary-total = Total
 transactions-summary-estimate = Estimado
 transactions-summary-success = Exitosas

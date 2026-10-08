@@ -5,6 +5,7 @@
 
 import { registerPage } from "../core/lifecycle.js";
 import { Poller } from "../core/poller.js";
+import { $ } from "../core/dom.js";
 import * as Utils from "../core/utils.js";
 import { DataTable } from "../ui/data_table.js";
 import { requestManager } from "../core/request_manager.js";
@@ -19,7 +20,7 @@ import {
   TOKEN_CELL_MIN_WIDTH,
 } from "../ui/token_identity.js";
 import { venueLabel } from "../ui/venue.js";
-import { setupRequired } from "../ui/setup_gate.js";
+import { renderSetupGate, setupRequired } from "../ui/setup_gate.js";
 
 const PAGE_LIMIT = 100;
 const DEFAULT_FILTERS = {
@@ -382,6 +383,16 @@ function createLifecycle() {
 
   return {
     init(_ctx) {
+      // Explore Mode has no main wallet: the page is the setup notice alone, with no
+      // table, no transaction reads and no poller.
+      if (setupRequired()) {
+        $("#transactions-root").hidden = true;
+        const gate = $("#transactions-setup-gate");
+        gate.hidden = false;
+        renderSetupGate(gate, I18n.t("transactions-setup-gate-title"));
+        return;
+      }
+
       const columns = [
         {
           id: "timestamp",
@@ -670,6 +681,7 @@ function createLifecycle() {
     },
 
     activate(ctx) {
+      if (setupRequired()) return;
       if (!poller) {
         poller = ctx.managePoller(
           new Poller(
@@ -726,10 +738,7 @@ function createLifecycle() {
     const options = [{ value: "", label: I18n.t("transactions-wallet-main") }];
     let targetsLoaded = false;
     try {
-      // Explore Mode has no watch store, so the main wallet is the only subject.
-      const data = setupRequired()
-        ? { targets: [] }
-        : await requestManager.fetch("/api/wallets/watch", { priority: "normal" });
+      const data = await requestManager.fetch("/api/wallets/watch", { priority: "normal" });
       for (const target of data.targets || []) {
         // A labelled wallet is named by its label; an unlabelled one by its full address.
         options.push({ value: target.address, label: target.label || target.address });

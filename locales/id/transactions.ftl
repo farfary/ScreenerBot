@@ -51,6 +51,7 @@ transactions-search =
     .placeholder = Cari signature…
     .aria-label = Cari signature transaksi
 transactions-load-failed = Tidak dapat menyegarkan transaksi
+transactions-setup-gate-title = Transaksi memerlukan dompet
 transactions-summary-total = Total
 transactions-summary-estimate = Perkiraan
 transactions-summary-success = Berhasil

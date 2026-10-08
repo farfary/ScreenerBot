@@ -48,6 +48,7 @@ transactions-search =
     .placeholder = सिग्नेचर खोजें…
     .aria-label = ट्रांज़ैक्शन सिग्नेचर खोजें
 transactions-load-failed = ट्रांज़ैक्शन रीफ़्रेश नहीं हो सके
+transactions-setup-gate-title = लेन-देन के लिए वॉलेट ज़रूरी है
 transactions-summary-total = कुल
 transactions-summary-estimate = अनुमान
 transactions-summary-success = सफल

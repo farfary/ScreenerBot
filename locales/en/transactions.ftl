@@ -60,6 +60,7 @@ transactions-search =
     .placeholder = Search signatures…
     .aria-label = Search transaction signatures
 transactions-load-failed = Could not refresh transactions
+transactions-setup-gate-title = Transactions need a wallet
 transactions-summary-total = Total
 transactions-summary-estimate = Estimate
 transactions-summary-success = Success

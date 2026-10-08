@@ -52,6 +52,7 @@ transactions-search =
     .placeholder = Signaturen suchen…
     .aria-label = Transaktionssignaturen suchen
 transactions-load-failed = Transaktionen konnten nicht aktualisiert werden
+transactions-setup-gate-title = Transaktionen erfordern eine Wallet
 transactions-summary-total = Gesamt
 transactions-summary-estimate = Schätzung
 transactions-summary-success = Erfolgreich

@@ -61,13 +61,9 @@
   display: none;
 }
 
-/* Explore Mode: the setup notice replaces the tab panels, framed and inset the
-   way the Copy Trading page frames the same notice. */
+/* Explore Mode: the setup notice replaces the tab panels, inset from the page edge. */
 .wallets-setup-gate {
   margin: var(--spacing-lg);
-  border: 1px solid var(--border-color);
-  border-radius: var(--radius-lg);
-  background: var(--bg-card);
 }
 
 /* The page-wide icon centering collapses line height; the notice icon keeps its

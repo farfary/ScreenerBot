@@ -48,6 +48,7 @@ transactions-search =
     .placeholder = Поиск по подписям…
     .aria-label = Поиск по подписям транзакций
 transactions-load-failed = Не удалось обновить транзакции
+transactions-setup-gate-title = Для транзакций нужен кошелёк
 transactions-summary-total = Всего
 transactions-summary-estimate = Оценка
 transactions-summary-success = Успешно

@@ -60,6 +60,7 @@ transactions-search =
     .placeholder = البحث في التواقيع…
     .aria-label = البحث في توقيعات المعاملات
 transactions-load-failed = تعذّر تحديث المعاملات
+transactions-setup-gate-title = المعاملات تتطلب محفظة
 transactions-summary-total = الإجمالي
 transactions-summary-estimate = تقدير
 transactions-summary-success = الناجحة

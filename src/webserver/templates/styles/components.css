@@ -113,7 +113,11 @@
 
 .progress-fill {
   height: 100%;
-  background: linear-gradient(var(--to-inline-end), var(--primary-color) 0%, var(--primary-color-dark) 100%);
+  background: linear-gradient(
+    var(--to-inline-end),
+    var(--primary-color) 0%,
+    var(--primary-color-dark) 100%
+  );
   transition: width 0.6s cubic-bezier(0.16, 1, 0.3, 1);
 }
 
@@ -434,6 +438,14 @@
   flex-direction: column;
   align-items: center;
   gap: var(--spacing-sm);
+}
+
+/* The Explore Mode setup notice (ui/setup_gate.js) is framed as a card on every page
+   that shows it; the page only places it. */
+.empty-state.setup-gate {
+  border: 1px solid var(--border-color);
+  border-radius: var(--radius-lg);
+  background: var(--bg-card);
 }
 
 .empty-state-icon {

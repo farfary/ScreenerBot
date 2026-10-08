@@ -48,6 +48,7 @@ transactions-search =
     .placeholder = İmzalarda ara…
     .aria-label = İşlem imzalarında ara
 transactions-load-failed = İşlemler yenilenemedi
+transactions-setup-gate-title = İşlemler bir cüzdan gerektirir
 transactions-summary-total = Toplam
 transactions-summary-estimate = Tahmin
 transactions-summary-success = Başarılı

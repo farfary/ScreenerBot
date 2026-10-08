@@ -290,15 +290,25 @@ function commonAttrs(item) {
   return attrs.join(" ");
 }
 
+const ABSENT_VALUE = "—";
+
+/** True when a summary value states nothing: an absent figure is never coloured. */
+function isAbsentValue(value) {
+  return value === null || value === undefined || value === "" || value === ABSENT_VALUE;
+}
+
 function renderStat(item) {
   const id = item.id ? ` data-summary-id="${escapeHtml(item.id)}"` : "";
-  const variant = item.variant ? ` data-variant="${escapeHtml(item.variant)}"` : "";
+  const variant =
+    item.variant && !isAbsentValue(item.value) ? ` data-variant="${escapeHtml(item.variant)}"` : "";
   const tooltip = item.tooltip ? ` title="${escapeHtml(item.tooltip)}"` : "";
   const icon = renderIconMarkup(item.icon, "table-toolbar-chip__icon");
   const label = item.label
     ? `<span class="table-toolbar-chip__label">${escapeHtml(item.label)}</span>`
     : "";
-  const value = `<span class="table-toolbar-chip__value">${escapeHtml(item.value ?? "-")}</span>`;
+  const value = `<span class="table-toolbar-chip__value">${escapeHtml(
+    isAbsentValue(item.value) ? ABSENT_VALUE : item.value
+  )}</span>`;
   return `<div class="table-toolbar-chip"${id}${variant}${tooltip}${item.hidden ? " hidden" : ""}>${icon}${label}${value}</div>`;
 }
 
@@ -808,7 +818,9 @@ export class TableToolbarView {
       if (!chip) {
         return;
       }
-      if (item.variant) {
+      if (isAbsentValue(item.value)) {
+        chip.removeAttribute("data-variant");
+      } else if (item.variant) {
         chip.setAttribute("data-variant", item.variant);
       }
       if (item.tooltip !== undefined) {
@@ -823,7 +835,7 @@ export class TableToolbarView {
       }
       const valueEl = chip.querySelector(".table-toolbar-chip__value");
       if (valueEl) {
-        valueEl.textContent = item.value ?? "-";
+        valueEl.textContent = isAbsentValue(item.value) ? ABSENT_VALUE : item.value;
       }
       if (item.label !== undefined) {
         const labelEl = chip.querySelector(".table-toolbar-chip__label");

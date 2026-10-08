@@ -60,6 +60,7 @@ transactions-search =
     .placeholder = シグネチャを検索…
     .aria-label = トランザクションのシグネチャを検索
 transactions-load-failed = トランザクションを更新できませんでした
+transactions-setup-gate-title = 取引にはウォレットが必要です
 transactions-summary-total = 合計
 transactions-summary-estimate = 推定
 transactions-summary-success = 成功

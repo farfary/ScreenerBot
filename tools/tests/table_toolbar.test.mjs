@@ -126,3 +126,40 @@ test("a neutral toolbar button shares the surface of the toolbar's select trigge
   assert.ok(trigger, "no .cs-trigger background in custom_select.css");
   assert.equal(background("ui/table_toolbar.css", ".table-toolbar-btn"), trigger);
 });
+
+test("an absent summary figure renders as a neutral dash", () => {
+  const html = new TableToolbarView({
+    settings: false,
+    summary: [
+      { id: "failed", label: "Failed", value: "—", variant: "success" },
+      { id: "missing", label: "Missing", value: null, variant: "warning" },
+      { id: "count", label: "Count", value: "3", variant: "warning" },
+    ],
+  }).render();
+
+  const chip = (id) =>
+    html.match(new RegExp(`<div class="table-toolbar-chip" data-summary-id="${id}"[^>]*>`))[0];
+  assert.doesNotMatch(chip("failed"), /data-variant/);
+  assert.doesNotMatch(chip("missing"), /data-variant/);
+  assert.match(chip("count"), /data-variant="warning"/);
+  assert.match(html, /data-summary-id="missing"[\s\S]*?table-toolbar-chip__value">—</);
+});
+
+test("an in-place summary update that loses its figure drops the colour", () => {
+  const attributes = { "data-variant": "success" };
+  const value = { textContent: "4" };
+  const chip = {
+    setAttribute: (name, next) => (attributes[name] = next),
+    removeAttribute: (name) => delete attributes[name],
+    querySelector: (selector) => (selector === ".table-toolbar-chip__value" ? value : null),
+  };
+  const root = { querySelector: () => chip };
+
+  TableToolbarView.updateSummary(root, [{ id: "failed", value: null, variant: "success" }]);
+  assert.equal(value.textContent, "—");
+  assert.equal(attributes["data-variant"], undefined);
+
+  TableToolbarView.updateSummary(root, [{ id: "failed", value: "2", variant: "warning" }]);
+  assert.equal(value.textContent, "2");
+  assert.equal(attributes["data-variant"], "warning");
+});
