@@ -159,28 +159,82 @@
   white-space: nowrap;
 }
 
+.ti-chip-head {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  min-width: 0;
+}
+
+/* With its mint the chip reads as two lines: symbol and name, then the address. */
+.ti-chip-addressed {
+  align-items: flex-start;
+}
+
+.ti-chip-addressed .ti-chip-text {
+  flex: 1;
+}
+
+.ti-chip-addressed .ti-chip-head {
+  flex-direction: row;
+  align-items: baseline;
+  gap: 6px;
+}
+
 /* --- Full address (mint, account, pool, program, signature) ---------------- */
 
-/* Addresses are never cropped: they wrap. Cropping is what makes two different
-   tokens — or two different accounts — look like the same one. */
+/* An address is never cropped and never wraps. Cropping makes two different
+   tokens or accounts look alike; a wrapped one cannot be compared at a glance.
+   It keeps ONE line and its font fits that line: the element is a size
+   container, so 100cqi is the width the layout gave it, and the value's size is
+   that width over the glyph count (JetBrains Mono advances 0.6em per glyph; 0.61
+   absorbs rounding). The size stays between a legible floor and the surface's
+   own size, `--ti-address-size`, which any ancestor may set. The element asks
+   for the width its full size needs and never accepts less than the floor
+   needs, so a flex row, a grid track or a table column sizes itself around it.
+   `addressFloorWidth()` in token_identity.js mirrors these numbers for DataTable
+   column minimums; tools/tests/address_fit.test.mjs keeps the two in step. */
 .ti-address {
-  display: inline-flex;
+  --ti-address-actions: 26px;
+  --ti-address-glyphs: calc(var(--ti-address-chars, 44) * 0.61);
+
+  display: flex;
   align-items: center;
   gap: 6px;
-  min-width: 0;
-  max-width: 100%;
+  container-type: inline-size;
+  inline-size: calc(
+    var(--ti-address-glyphs) * var(--ti-address-size, 0.75rem) + var(--ti-address-actions)
+  );
+  min-inline-size: calc(var(--ti-address-glyphs) * 9px + var(--ti-address-actions));
+  max-inline-size: 100%;
+}
+
+.ti-address-plain {
+  --ti-address-actions: 0px;
 }
 
 .ti-address-value {
-  min-width: 0;
+  flex-shrink: 0;
   color: var(--text-muted);
-  font: 500 0.7rem/1.35 var(--font-mono);
-  letter-spacing: -0.01em;
+  font-family: var(--font-mono);
+  font-size: clamp(
+    9px,
+    (100cqi - var(--ti-address-actions)) / var(--ti-address-glyphs),
+    var(--ti-address-size, 0.75rem)
+  );
+  font-weight: 500;
+  font-variant-numeric: tabular-nums;
+  line-height: 1.35;
+  /* Base58 is case-sensitive and the fit geometry assumes untracked glyphs, so the
+     value never inherits a label's casing or tracking. */
+  letter-spacing: 0;
   text-decoration: none;
-  word-break: break-all;
+  text-transform: none;
+  white-space: nowrap;
+  user-select: text;
 }
 
-.ti-address-value:hover {
+a.ti-address-value:hover {
   color: var(--primary-color);
   text-decoration: underline;
 }
@@ -193,21 +247,39 @@
   height: 20px;
   padding: 0;
   border: none;
-  border-radius: var(--radius-sm);
   background: transparent;
   color: var(--text-muted);
   cursor: pointer;
   flex-shrink: 0;
-  transition: all var(--transition-fast);
+  transition: color var(--transition-fast);
 }
 
+/* Bare glyph: hover changes only its colour, never a tile behind it. */
 .ti-address-copy:hover {
-  background: var(--bg-card-hover);
   color: var(--text-primary);
 }
 
 .ti-address-copy i {
   font-size: 11px;
+}
+
+/* --- Named address (a label above its full address) ----------------------- */
+
+/* A wallet or account row: its name, then the address on its own line. The name
+   may crop; the address never does. */
+.ti-named-address {
+  --ti-address-size: 0.7rem;
+
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  min-width: 0;
+}
+
+.ti-named-address-name {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 
 /* --- Inline (logo + symbol) ---------------------------------------------- */

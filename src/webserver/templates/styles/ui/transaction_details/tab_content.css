@@ -504,10 +504,11 @@
    ============================================================================= */
 
 /* Addresses render through the shared `.ti-address` component (ui/token_identity.js),
-   so the dialog only says how much room a cell gives it. There is deliberately no
+   so the dialog only says how large a cell sets it. A token's mint is the second
+   line of its chip, in the same cell. There is deliberately no
    dialog-local address/copy-button styling any more: three near-identical snippets
    (address-full, copy-btn-inline, link-btn-inline) had already drifted apart. */
 .transaction-details-dialog .tx-address-cell,
-.transaction-details-dialog .tx-mint-cell {
-  max-width: 320px;
+.transaction-details-dialog .tx-token-cell {
+  --ti-address-size: 0.7rem;
 }

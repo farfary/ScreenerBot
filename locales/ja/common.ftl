@@ -41,7 +41,6 @@ common-severity-debug = デバッグ
 
 common-error-with-message = エラー: { $message }
 
-common-copied-address = アドレス
 common-copied-signature = シグネチャ
 common-copied-json = JSON
 common-copied-value = 値

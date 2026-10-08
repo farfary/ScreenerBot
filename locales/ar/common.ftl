@@ -41,7 +41,6 @@ common-severity-debug = تصحيح
 
 common-error-with-message = خطأ: { $message }
 
-common-copied-address = العنوان
 common-copied-signature = التوقيع
 common-copied-json = JSON
 common-copied-value = القيمة

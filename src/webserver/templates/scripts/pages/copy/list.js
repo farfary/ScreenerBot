@@ -3,6 +3,7 @@
 //
 // The sortable wallet list: one row per task with its state (and why it is
 // paused), its execution mode, P&L with a trend, and its budget use.
+import { renderAddress } from "../../ui/token_identity.js";
 import { sparkline } from "./charts.js";
 import {
   fixed,
@@ -92,7 +93,13 @@ export function createTaskList(page) {
       <span class="copy-row-line">
         <span class="copy-row-name">${esc(taskName(task))}</span>
         <span class="copy-row-mode copy-mode-${esc(task.mode)}">${esc(modeLabel(task.mode))}</span>
-      </span>
+      </span>${
+        // An unnamed task is told apart by its wallet, in full on a line of its own;
+        // the row is the action, so the address is plain.
+        task.label
+          ? ""
+          : `<span class="copy-row-line copy-row-address">${renderAddress(task.target_address, { plain: true })}</span>`
+      }
       <span class="copy-row-line">
         <span class="copy-row-state ${stateClass}">${esc(stateText(task))}</span>
         <span class="copy-row-pnl ${toneClass(pnl)}">${esc(signedSol(pnl, 3))}</span>

@@ -114,6 +114,13 @@ export const endpoints = [
     empty: "analysis_reuse_stats.empty.json",
     rust: "src/webserver/routes/llm_analysis/types.rs::CacheStatsResponse",
   },
+  {
+    method: "GET",
+    path: "/api/tokens/identities",
+    fixture: "token_identities.json",
+    rust: "src/webserver/routes/tokens/identity.rs::IdentitiesResponse",
+    record: null,
+  },
 ];
 
 export const views = [

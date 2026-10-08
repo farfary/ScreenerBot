@@ -135,7 +135,9 @@ export function duplicateNote({ draft, mode, source, tasks }, esc) {
     : [];
   if (!others.length) return "";
   const tasksText = formatList(
-    others.map((task) => I18n.t("copy-task-ref", { name: taskName(task), mode: modeLabel(task.mode) }))
+    others.map((task) =>
+      I18n.t("copy-task-ref", { name: taskName(task), mode: modeLabel(task.mode) })
+    )
   );
   return `<p class="copy-warning" role="note"><i class="icon-triangle-alert" aria-hidden="true"></i>${esc(I18n.t("copy-editor-duplicate", { tasks: tasksText }))}</p>`;
 }
@@ -340,7 +342,7 @@ function reviewStep({ draft, defaults, mode, source }, esc) {
   };
   const head = `<div class="copy-review-head">${renderAddress(task.target_address, { explorer: "account" })}<p>${esc(
     I18n.t("copy-editor-review-head", {
-      name: draft.label || I18n.t("copy-editor-unnamed"),
+      name: draft.label || I18n.t("copy-task-unnamed"),
       mode: modeLabel(mode === "edit" && source.mode === "live" ? "live" : "paper"),
       status: draft.enabled
         ? I18n.t("copy-editor-review-processes")
@@ -418,9 +420,12 @@ export function validate(id, draft, { mode, defaults }) {
   } else if (id === "sizing") {
     const amount = draft.sizing.kind === "fixed" ? draft.sizing.sol : draft.sizing.pct;
     if (
-      ![amount, draft.max_native_per_trade, draft.max_native_per_token, draft.total_budget_native].every(
-        positive
-      )
+      ![
+        amount,
+        draft.max_native_per_trade,
+        draft.max_native_per_token,
+        draft.total_budget_native,
+      ].every(positive)
     ) {
       return I18n.t("copy-editor-error-sizing");
     }

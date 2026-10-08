@@ -41,7 +41,6 @@ common-severity-debug = Depuración
 
 common-error-with-message = Error: { $message }
 
-common-copied-address = Dirección
 common-copied-signature = Firma
 common-copied-json = JSON
 common-copied-value = Valor

@@ -12,14 +12,13 @@ import {
   price,
   priceSol,
   segmented,
-  shortAddress,
   signedPct,
   signedSol,
   sol,
   taskName,
   toneClass,
 } from "./format.js";
-import { ensureIdentities, openTokenDetails, sharedSymbols, tokenInline } from "./tokens.js";
+import { ensureIdentities, openTokenDetails, tokenWithMint } from "./tokens.js";
 import { panelMessage } from "./overview.js";
 
 const relative = (trigger, entry) =>
@@ -74,11 +73,11 @@ export function createHoldings(page, { rerender, showActivityFor }) {
   }
 
   function tokenName(mint) {
-    return getIdentity(mint).symbol || shortAddress(mint);
+    return getIdentity(mint).symbol || I18n.t("format-unknown");
   }
 
-  function tokenCell(mint, shared) {
-    return `<button class="copy-token-link" type="button" data-holding-action="details" data-mint="${esc(mint)}" title="${esc(`${I18n.t("copy-holdings-token-details")} · ${mint}`)}">${tokenInline(mint, shared)}</button>`;
+  function tokenCell(mint) {
+    return `<button class="copy-token-link" type="button" data-holding-action="details" data-mint="${esc(mint)}" title="${esc(`${I18n.t("copy-holdings-token-details")} · ${mint}`)}">${tokenWithMint(mint)}</button>`;
   }
 
   /** A price relative to the entry, with the price itself on hover. */
@@ -96,7 +95,10 @@ export function createHoldings(page, { rerender, showActivityFor }) {
     const items = [];
     if (watch.stop_loss_price_native != null) {
       items.push([
-        stopText(signedPct(relative(watch.stop_loss_price_native, entry)), watch.stop_loss_armed_at),
+        stopText(
+          signedPct(relative(watch.stop_loss_price_native, entry)),
+          watch.stop_loss_armed_at
+        ),
         watch.stop_loss_price_native,
       ]);
     }
@@ -145,7 +147,6 @@ export function createHoldings(page, { rerender, showActivityFor }) {
     if (!holdings.length) {
       return panelMessage(I18n.t("copy-holdings-empty"), esc);
     }
-    const shared = sharedSymbols(holdings.map((holding) => holding.mint));
     const rows = holdings
       .map((holding) => {
         const priced = holding.mark_price_native != null;
@@ -153,7 +154,7 @@ export function createHoldings(page, { rerender, showActivityFor }) {
           ? `<span class="${toneClass(holding.unrealized_pnl_native)}">${esc(signedSol(holding.unrealized_pnl_native))}</span><small>${esc(signedPct(holding.unrealized_pnl_pct))}</small>`
           : `<span class="copy-warning-text">${esc(I18n.t("copy-holdings-no-pool-price"))}</span>`;
         return `<tr>
-          <td>${tokenCell(holding.mint, shared)}</td>
+          <td>${tokenCell(holding.mint)}</td>
           <td class="num">${esc(sol(holding.cost_basis_native))}</td>
           <td class="num">${esc(price(holding.entry_price_native))}</td>
           <td class="num">${esc(price(holding.mark_price_native))}</td>
@@ -192,11 +193,10 @@ export function createHoldings(page, { rerender, showActivityFor }) {
     }
     const rounds = insights.recent_rounds || [];
     if (!rounds.length) return panelMessage(I18n.t("copy-holdings-closed-empty"), esc);
-    const shared = sharedSymbols(rounds.map((round) => round.mint));
     const rows = rounds
       .map(
         (round) => `<tr>
-          <td>${tokenCell(round.mint, shared)}</td>
+          <td>${tokenCell(round.mint)}</td>
           <td class="num">${esc(sol(round.invested_native))}</td>
           <td class="num">${esc(sol(round.proceeds_native))}</td>
           <td class="num copy-cell-stack"><span class="${toneClass(round.pnl_sol)}">${esc(signedSol(round.pnl_sol))}</span><small>${esc(signedPct(round.pnl_pct))}</small></td>

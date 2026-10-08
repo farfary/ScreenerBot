@@ -286,6 +286,13 @@
   overflow-wrap: anywhere;
 }
 
+/* An unnamed task's wallet, in full on its own line under the name and mode. */
+.copy-row-address {
+  justify-content: flex-start;
+
+  --ti-address-size: 0.75rem;
+}
+
 .copy-row-mode {
   flex-shrink: 0;
   font-size: var(--font-size-xs);

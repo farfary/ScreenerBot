@@ -208,7 +208,6 @@ tools-analyzer-active-pools =
     }
 tools-analyzer-card-pool-details = Chi tiết pool
 tools-analyzer-pools-column-dex = DEX
-tools-analyzer-pools-column-address = Địa chỉ pool
 tools-analyzer-pools-column-liquidity = Thanh khoản ({ -sol })
 tools-analyzer-pools-column-status = Trạng thái
 tools-analyzer-pool-primary = Chính
@@ -458,7 +457,6 @@ tools-consolidation-action-transfer-tokens = Chuyển tất cả token
 tools-consolidation-action-cleanup = Dọn dẹp ATA
 tools-consolidation-action-transferring = Đang chuyển...
 tools-consolidation-column-name = Tên
-tools-consolidation-column-address = Địa chỉ
 tools-consolidation-column-native = Số dư { -sol }
 tools-consolidation-column-tokens = Token
 tools-consolidation-column-atas = ATA trống

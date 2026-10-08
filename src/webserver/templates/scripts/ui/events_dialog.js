@@ -6,8 +6,8 @@
 import { on, off } from "../core/dom.js";
 import * as Utils from "../core/utils.js";
 import { createFocusTrap } from "../core/utils.js";
-import { formatAddressCompact } from "../core/format.js";
 import { eventCategoryLabel, eventSubtypeLabel, severityBadge } from "./event_labels.js";
+import { renderAddress } from "./token_identity.js";
 
 /** Display text of an event: catalog text when the row carries it, else the stored message. */
 export function eventMessageText(event) {
@@ -25,10 +25,7 @@ function formatMintDisplay(mint) {
   if (!trimmed) {
     return "—";
   }
-  const short = formatAddressCompact(trimmed, { ellipsis: "..." });
-  const safeFull = Utils.escapeHtml(trimmed);
-  const safeShort = Utils.escapeHtml(short);
-  return `<code class="mono-text" title="${safeFull}">${safeShort}</code>`;
+  return renderAddress(trimmed);
 }
 
 function coerceText(value) {
@@ -342,6 +339,7 @@ export class EventDetailsDialog {
         label: I18n.t("events-dialog-field-mint"),
         value: formatMintDisplay(event.mint),
         isHtml: true,
+        wide: true,
       });
     }
     if (event.reference_id) {
@@ -559,9 +557,7 @@ export class EventDetailsDialog {
     const icon = success
       ? '<svg width="16" height="16" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="2"><path d="M3 8l3 3 7-7"></path></svg>'
       : '<svg width="16" height="16" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="2"><path d="M4 4l8 8M12 4l-8 8"></path></svg>';
-    const text = success
-      ? I18n.t("events-dialog-copy-done")
-      : I18n.t("events-dialog-copy-failed");
+    const text = success ? I18n.t("events-dialog-copy-done") : I18n.t("events-dialog-copy-failed");
 
     this.copyButton.innerHTML = `${icon}<span>${Utils.escapeHtml(text)}</span>`;
     this.copyButton.classList.add(success ? "success" : "error");

@@ -22,17 +22,13 @@ wallets-watch-reason-signature-budget = इस वॉलेट की गति�
 wallets-watch-reason-helius-unavailable = { -helius } जांच विफल रही। सहेजी गई प्रगति सुरक्षित है।
 wallets-watch-reason-processing-failed = वॉलेट गतिविधि प्रोसेस नहीं हो सकी। सहेजी गई प्रगति सुरक्षित है।
 
-wallets-field-address = एड्रेस
 wallets-field-name = वॉलेट का नाम
 wallets-field-notes = नोट्स
 wallets-field-private-key = प्राइवेट की
-wallets-address-copy = एड्रेस कॉपी करें
 wallets-modal-close =
     .aria-label = मोडल बंद करें
 wallets-this-wallet = यह वॉलेट
 wallets-summary-native = { -sol }
-wallets-copied-address = एड्रेस
-wallets-copied-mint = मिंट एड्रेस
 wallets-copied-private-key = प्राइवेट की
 
 wallets-tab-main = मुख्य वॉलेट
@@ -231,7 +227,6 @@ wallets-holdings-col-balance = बैलेंस
 wallets-holdings-col-value = वैल्यू ({ -sol })
 wallets-holdings-col-type = प्रकार
 wallets-holdings-col-decimals = डेसिमल
-wallets-holdings-col-mint = मिंट
 wallets-holdings-empty-title = कोई टोकन होल्डिंग नहीं
 wallets-holdings-empty-message = इस वॉलेट में रखे टोकन यहां दिखेंगे।
 wallets-holdings-no-main = कोई मुख्य वॉलेट नहीं

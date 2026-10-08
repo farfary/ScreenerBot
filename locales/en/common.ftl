@@ -50,7 +50,6 @@ common-severity-debug = Debug
 common-error-with-message = Error: { $message }
 
 # Names of copied values, shown in the copy confirmation. A mint address is `links-mint-address`.
-common-copied-address = Address
 common-copied-signature = Signature
 common-copied-json = JSON
 common-copied-value = Value

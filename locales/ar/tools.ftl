@@ -228,7 +228,6 @@ tools-analyzer-active-pools =
     }
 tools-analyzer-card-pool-details = تفاصيل مجمع السيولة
 tools-analyzer-pools-column-dex = DEX
-tools-analyzer-pools-column-address = عنوان مجمع السيولة
 tools-analyzer-pools-column-liquidity = السيولة ({ -sol })
 tools-analyzer-pools-column-status = الحالة
 tools-analyzer-pool-primary = رئيسي
@@ -516,7 +515,6 @@ tools-consolidation-action-transfer-tokens = تحويل كل الرموز
 tools-consolidation-action-cleanup = تنظيف حسابات ATA
 tools-consolidation-action-transferring = جارٍ التحويل...
 tools-consolidation-column-name = الاسم
-tools-consolidation-column-address = العنوان
 tools-consolidation-column-native = رصيد { -sol }
 tools-consolidation-column-tokens = الرموز
 tools-consolidation-column-atas = حسابات ATA الفارغة

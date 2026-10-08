@@ -210,7 +210,6 @@ tools-analyzer-active-pools =
     }
 tools-analyzer-card-pool-details = 流动性池详情
 tools-analyzer-pools-column-dex = DEX
-tools-analyzer-pools-column-address = 流动性池地址
 tools-analyzer-pools-column-liquidity = 流动性（{ -sol }）
 tools-analyzer-pools-column-status = 状态
 tools-analyzer-pool-primary = 主池
@@ -459,7 +458,6 @@ tools-consolidation-action-transfer-tokens = 转移所有代币
 tools-consolidation-action-cleanup = 清理 ATA
 tools-consolidation-action-transferring = 转移中…
 tools-consolidation-column-name = 名称
-tools-consolidation-column-address = 地址
 tools-consolidation-column-native = { -sol } 余额
 tools-consolidation-column-tokens = 代币
 tools-consolidation-column-atas = 空 ATA

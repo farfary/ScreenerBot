@@ -22,17 +22,13 @@ wallets-watch-reason-signature-budget = Ví này có nhiều hoạt động hơn
 wallets-watch-reason-helius-unavailable = Kiểm tra qua { -helius } thất bại. Tiến độ đã lưu được giữ nguyên.
 wallets-watch-reason-processing-failed = Không thể xử lý hoạt động của ví. Tiến độ đã lưu được giữ nguyên.
 
-wallets-field-address = Địa chỉ
 wallets-field-name = Tên ví
 wallets-field-notes = Ghi chú
 wallets-field-private-key = Khóa riêng tư
-wallets-address-copy = Sao chép địa chỉ
 wallets-modal-close =
     .aria-label = Đóng hộp thoại
 wallets-this-wallet = ví này
 wallets-summary-native = { -sol }
-wallets-copied-address = Địa chỉ
-wallets-copied-mint = Địa chỉ mint
 wallets-copied-private-key = Khóa riêng tư
 
 wallets-tab-main = Ví chính
@@ -226,7 +222,6 @@ wallets-holdings-col-balance = Số dư
 wallets-holdings-col-value = Giá trị ({ -sol })
 wallets-holdings-col-type = Loại
 wallets-holdings-col-decimals = Số thập phân
-wallets-holdings-col-mint = Mint
 wallets-holdings-empty-title = Không có token nào
 wallets-holdings-empty-message = Các token ví này đang nắm giữ sẽ hiện ở đây.
 wallets-holdings-no-main = Chưa có ví chính

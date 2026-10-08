@@ -233,8 +233,6 @@ shell-toast-dismiss =
     .aria-label = Закрити
 shell-confirm-title = Підтвердьте дію
 shell-confirm-message = Ви впевнені?
-shell-address-open-solscan = — відкрити в { -solscan }
-shell-address-copy = Копіювати адресу
 
 # Source: scripts/core/global_chat.js
 shell-assistant-label = Асистент

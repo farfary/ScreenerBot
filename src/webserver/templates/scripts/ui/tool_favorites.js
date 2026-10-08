@@ -12,6 +12,7 @@ import * as Utils from "../core/utils.js";
 import { openMenu, closeMenu } from "../core/menu_manager.js";
 import { ConfirmationDialog } from "./confirmation_dialog.js";
 import { InputDialog } from "./input_dialog.js";
+import { renderAddress } from "./token_identity.js";
 
 export class ToolFavorites {
   constructor(options) {
@@ -200,7 +201,7 @@ export class ToolFavorites {
         <button class="favorite-info" data-action="select" type="button" role="menuitem">
           <div class="favorite-token">
             ${fav.logo_url ? `<img src="${Utils.escapeHtml(fav.logo_url)}" class="favorite-logo token-logo-artwork" alt="">` : '<i class="icon-circle"></i>'}
-            <span class="favorite-symbol token-symbol-type">${Utils.escapeHtml(fav.symbol || fav.mint.slice(0, 6))}</span>
+            ${fav.symbol ? `<span class="favorite-symbol token-symbol-type">${Utils.escapeHtml(fav.symbol)}</span>` : renderAddress(fav.mint, { plain: true })}
           </div>
           <div class="favorite-label">${fav.label ? Utils.escapeHtml(fav.label) : Utils.escapeHtml(I18n.t("tools-favorites-no-label"))}</div>
           ${fav.use_count > 0 ? `<span class="favorite-uses">${Utils.escapeHtml(I18n.t("tools-favorites-uses", { count: fav.use_count }))}</span>` : ""}

@@ -13,6 +13,7 @@ import { withPercentUnit } from "../../core/format.js";
 import * as Hints from "../../core/hints.js";
 import { HintTrigger } from "../../ui/hint_popover.js";
 import { enhanceAllSelects } from "../../ui/custom_select.js";
+import { renderAddress } from "../../ui/token_identity.js";
 import { apiErrorMessage } from "../../core/request_manager.js";
 
 // Ids are the states of a multi-wallet session.
@@ -475,9 +476,7 @@ function updateMultiBuyProgress(status) {
     resultsTable.innerHTML = renderOperationRows(status.operations, [
       {
         head: I18n.t("tools-multi-column-wallet"),
-        cell: (op) => Utils.formatAddressCompact(op.wallet_address),
-        mono: true,
-        ltr: true,
+        html: (op) => renderAddress(op.wallet_address, { explorer: "account" }),
       },
       {
         head: I18n.t("tools-multi-buy-column-spent"),
@@ -539,7 +538,7 @@ function renderOperationRows(operations, columns) {
       const cells = columns
         .map(
           (column) =>
-            `<td class="${column.mono ? "mono" : ""}"${column.ltr ? ' dir="ltr"' : ""}>${Utils.escapeHtml(String(column.cell(op)))}</td>`
+            `<td class="${column.mono ? "mono" : ""}">${column.html ? column.html(op) : Utils.escapeHtml(String(column.cell(op)))}</td>`
         )
         .join("");
       const route = [op.router, op.venue].filter(Boolean).join(" · ") || "—";
@@ -1058,9 +1057,7 @@ function updateMultiSellProgress(status) {
     resultsTable.innerHTML = renderOperationRows(status.operations, [
       {
         head: I18n.t("tools-multi-column-wallet"),
-        cell: (op) => Utils.formatAddressCompact(op.wallet_address),
-        mono: true,
-        ltr: true,
+        html: (op) => renderAddress(op.wallet_address, { explorer: "account" }),
       },
       {
         head: I18n.t("tools-multi-sell-column-sold"),

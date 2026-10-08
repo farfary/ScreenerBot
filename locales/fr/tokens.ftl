@@ -189,7 +189,6 @@ tokens-pools-role-quote = Cotation
 tokens-pools-role-unknown = Inconnu
 tokens-pools-reserves = Comptes de réserve
 tokens-pools-no-reserves = Aucun compte de réserve
-tokens-pools-address-copy = Copier l'adresse
 tokens-pools-address-pool = Pool
     .title = Copier le pool
 tokens-pools-address-base = Mint de base
@@ -299,8 +298,6 @@ tokens-dialog-badge-profile = Profil publié
 tokens-dialog-badge-low-risk-hint = Risque faible selon le score { -rugcheck } actuel ; ne constitue pas une vérification d'identité.
 tokens-dialog-badge-immutable = Immuable
 tokens-dialog-badge-mutable = Modifiable
-tokens-dialog-badge-auth = Autorité :
-tokens-dialog-badge-update-authority = Autorité de mise à jour :
 tokens-dialog-badge-position = Position
 tokens-dialog-badge-blacklisted = Sur liste noire
 
@@ -367,7 +364,7 @@ tokens-ohlcv-active = Actifs
 tokens-ohlcv-db-size = Taille de la base
 tokens-ohlcv-cleanup = Nettoyer les inactifs
 tokens-ohlcv-delete-title = Supprimer les données OHLCV
-tokens-ohlcv-delete-message = Supprimer toutes les données OHLCV de { $mint }... ?
+tokens-ohlcv-delete-token-message = Supprimer toutes les données OHLCV de { $token } ?
 tokens-ohlcv-delete-done =
     Supprimé : { $candles ->
         [one] { $candles } bougie

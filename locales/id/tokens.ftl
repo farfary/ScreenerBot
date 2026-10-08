@@ -189,7 +189,6 @@ tokens-pools-role-quote = Quote
 tokens-pools-role-unknown = Tidak Diketahui
 tokens-pools-reserves = Akun cadangan
 tokens-pools-no-reserves = Tidak ada akun cadangan
-tokens-pools-address-copy = Salin alamat
 tokens-pools-address-pool = Pool
     .title = Salin pool
 tokens-pools-address-base = Mint base
@@ -299,8 +298,6 @@ tokens-dialog-badge-profile = Profil yang dipublikasikan
 tokens-dialog-badge-low-risk-hint = Risiko rendah menurut skor { -rugcheck } saat ini; bukan verifikasi identitas.
 tokens-dialog-badge-immutable = Tidak Dapat Diubah
 tokens-dialog-badge-mutable = Dapat Diubah
-tokens-dialog-badge-auth = Otoritas:
-tokens-dialog-badge-update-authority = Otoritas Pembaruan:
 tokens-dialog-badge-position = Posisi
 tokens-dialog-badge-blacklisted = Daftar Hitam
 
@@ -367,7 +364,7 @@ tokens-ohlcv-active = Aktif
 tokens-ohlcv-db-size = Ukuran DB
 tokens-ohlcv-cleanup = Bersihkan yang Nonaktif
 tokens-ohlcv-delete-title = Hapus Data OHLCV
-tokens-ohlcv-delete-message = Hapus semua data OHLCV untuk { $mint }...?
+tokens-ohlcv-delete-token-message = Hapus semua data OHLCV untuk { $token }?
 tokens-ohlcv-delete-done =
     Dihapus: { $candles ->
        *[other] { $candles } candle

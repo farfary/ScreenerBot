@@ -79,7 +79,6 @@
   font-feature-settings: "tnum" 1;
 }
 
-
 .wc-wallet-table tr.empty-wallet {
   opacity: 0.5;
 }
@@ -212,6 +211,12 @@
   margin-bottom: var(--spacing-xs);
 }
 
+.generated-wallet-item .wallet-pubkey {
+  --ti-address-size: 0.75rem;
+
+  min-width: 0;
+}
+
 .generated-wallet-item .wallet-secret {
   margin-bottom: 0;
 }
@@ -226,7 +231,6 @@
   flex-shrink: 0;
 }
 
-.generated-wallet-item .pubkey-value,
 .generated-wallet-item .secret-value {
   font-family: var(--font-mono);
   font-size: 0.75rem;
@@ -483,7 +487,6 @@
   justify-content: center;
 }
 
-
 .burn-token-select > i {
   font-size: 0.875rem;
   color: var(--text-muted);
@@ -517,9 +520,10 @@
 }
 
 .burn-token-mint {
-  font-family: var(--font-mono);
-  font-size: 0.6875rem;
-  color: var(--text-muted);
+  --ti-address-size: 0.6875rem;
+
+  display: flex;
+  min-width: 0;
 }
 
 .burn-token-balance {

@@ -135,7 +135,6 @@ transactions-dialog-balances-net-native = { -sol } में शुद्ध ब
 transactions-dialog-balances-fee = ट्रांज़ैक्शन फ़ीस
 transactions-dialog-col-account = अकाउंट
 transactions-dialog-col-token = टोकन
-transactions-dialog-col-mint = मिंट एड्रेस
 transactions-dialog-col-pre-balance = पहले का बैलेंस
 transactions-dialog-col-post-balance = बाद का बैलेंस
 transactions-dialog-col-change = बदलाव

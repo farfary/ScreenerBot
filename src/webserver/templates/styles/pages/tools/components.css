@@ -610,9 +610,12 @@
 }
 
 .favorite-token {
+  --ti-address-size: 0.75rem;
+
   display: flex;
   align-items: center;
   gap: var(--spacing-xs);
+  min-width: 0;
 }
 
 .favorite-logo {

@@ -189,7 +189,6 @@ tokens-pools-role-quote = クォート
 tokens-pools-role-unknown = 不明
 tokens-pools-reserves = リザーブアカウント
 tokens-pools-no-reserves = リザーブアカウントなし
-tokens-pools-address-copy = アドレスをコピー
 tokens-pools-address-pool = プール
     .title = プールをコピー
 tokens-pools-address-base = ベースミント
@@ -299,8 +298,6 @@ tokens-dialog-badge-profile = 公開プロフィール
 tokens-dialog-badge-low-risk-hint = 現在の { -rugcheck } スコアでは低リスクです。本人確認ではありません。
 tokens-dialog-badge-immutable = 変更不可
 tokens-dialog-badge-mutable = 変更可能
-tokens-dialog-badge-auth = 権限:
-tokens-dialog-badge-update-authority = 更新権限:
 tokens-dialog-badge-position = ポジション
 tokens-dialog-badge-blacklisted = ブラックリスト登録済み
 
@@ -367,7 +364,7 @@ tokens-ohlcv-active = 有効
 tokens-ohlcv-db-size = DB サイズ
 tokens-ohlcv-cleanup = 非アクティブを削除
 tokens-ohlcv-delete-title = OHLCV データを削除
-tokens-ohlcv-delete-message = { $mint }... のすべての OHLCV データを削除しますか？
+tokens-ohlcv-delete-token-message = { $token } のすべての OHLCV データを削除しますか？
 tokens-ohlcv-delete-done =
     削除: ローソク足{ $candles ->
        *[other] { $candles }本

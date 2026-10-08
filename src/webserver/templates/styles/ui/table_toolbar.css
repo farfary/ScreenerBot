@@ -185,44 +185,11 @@
   text-overflow: ellipsis;
 }
 
-.table-toolbar-identity__address-group {
-  display: inline-flex;
-  align-items: center;
-  gap: 0.1875rem;
-  min-width: 0;
-}
-
 .table-toolbar-identity__address {
-  font-family: var(--font-data);
-  font-size: 0.7rem;
-  color: var(--text-secondary);
-  white-space: nowrap;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  max-width: 22ch;
-}
+  --ti-address-size: 0.7rem;
 
-/* Ghost icon affordance — transparent at rest so the glyph reads as a glyph. */
-.table-toolbar-identity__act {
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  width: 20px;
-  height: 20px;
-  padding: 0;
-  border: none;
-  border-radius: var(--radius-sm);
-  background: transparent;
-  color: var(--text-muted);
-  font-size: 0.75rem;
-  cursor: pointer;
-  text-decoration: none;
-  transition: color var(--transition-base);
-  flex-shrink: 0;
-}
-
-.table-toolbar-identity__act:hover {
-  color: var(--text-primary);
+  display: flex;
+  min-width: 0;
 }
 
 /* ===================== Stats ===================== */
@@ -1124,10 +1091,6 @@
     padding-inline-start: 0;
     border-inline-start: none;
     width: 100%;
-  }
-
-  .table-toolbar-identity__address {
-    max-width: 14ch;
   }
 
   .table-toolbar__controls {

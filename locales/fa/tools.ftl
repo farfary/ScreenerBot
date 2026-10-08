@@ -224,7 +224,6 @@ tools-analyzer-active-pools =
     }
 tools-analyzer-card-pool-details = جزئیات استخر
 tools-analyzer-pools-column-dex = DEX
-tools-analyzer-pools-column-address = آدرس استخر
 tools-analyzer-pools-column-liquidity = نقدینگی ({ -sol })
 tools-analyzer-pools-column-status = وضعیت
 tools-analyzer-pool-primary = اصلی
@@ -500,7 +499,6 @@ tools-consolidation-action-transfer-tokens = انتقال همه توکن‌ها
 tools-consolidation-action-cleanup = پاکسازی ATAها
 tools-consolidation-action-transferring = در حال انتقال...
 tools-consolidation-column-name = نام
-tools-consolidation-column-address = آدرس
 tools-consolidation-column-native = موجودی { -sol }
 tools-consolidation-column-tokens = توکن‌ها
 tools-consolidation-column-atas = ATAهای خالی

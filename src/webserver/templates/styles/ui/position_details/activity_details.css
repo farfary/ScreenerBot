@@ -91,10 +91,15 @@
   gap: 4px 14px;
 }
 
+/* The compact signature; clicking it, or the actions beside it, copies or opens it in full. */
 .position-details-dialog .pdd-act-sig {
-  color: var(--primary-color);
-  font: 500 0.7rem/1.3 var(--font-mono);
+  --ti-address-size: 0.7rem;
+
   cursor: pointer;
+}
+
+.position-details-dialog .pdd-act-sig .ti-address-value {
+  color: var(--primary-color);
 }
 
 .position-details-dialog .pdd-act-sig-copy,
@@ -122,28 +127,30 @@
 }
 
 .position-details-dialog .pdd-act-xfers {
-  overflow-x: auto;
+  --ti-address-size: 0.68rem;
 }
 
-.position-details-dialog .pdd-act-xfer-table {
-  width: 100%;
-  border-collapse: collapse;
+/* One transfer: label and value lines; every address keeps a single line. */
+.position-details-dialog .pdd-act-xfer {
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr);
+  align-items: center;
+  gap: 3px 12px;
+  margin: 0;
+  padding-block: 6px;
+  border-bottom: 1px solid var(--border-color);
   font: 500 0.68rem/1.3 var(--font-data);
 }
 
-.position-details-dialog .pdd-act-xfer-table th,
-.position-details-dialog .pdd-act-xfer-table td {
-  padding: 5px 8px;
-  border-bottom: 1px solid var(--border-color);
-  color: var(--text-secondary);
-  text-align: start;
-  white-space: nowrap;
-}
-
-.position-details-dialog .pdd-act-xfer-table th {
+.position-details-dialog .pdd-act-xfer dt {
   color: var(--text-muted);
   font-size: 0.58rem;
   text-transform: uppercase;
+}
+
+.position-details-dialog .pdd-act-xfer dd {
+  min-width: 0;
+  margin: 0;
 }
 
 .position-details-dialog .pdd-act-xfer-amount {

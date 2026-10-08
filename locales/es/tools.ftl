@@ -197,7 +197,6 @@ tools-analyzer-active-pools =
     }
 tools-analyzer-card-pool-details = Detalles del pool
 tools-analyzer-pools-column-dex = DEX
-tools-analyzer-pools-column-address = Dirección del pool
 tools-analyzer-pools-column-liquidity = Liquidez ({ -sol })
 tools-analyzer-pools-column-status = Estado
 tools-analyzer-pool-primary = Principal
@@ -448,7 +447,6 @@ tools-consolidation-action-transfer-tokens = Transferir todos los tokens
 tools-consolidation-action-cleanup = Limpiar ATA
 tools-consolidation-action-transferring = Transfiriendo...
 tools-consolidation-column-name = Nombre
-tools-consolidation-column-address = Dirección
 tools-consolidation-column-native = Saldo de { -sol }
 tools-consolidation-column-tokens = Tokens
 tools-consolidation-column-atas = ATA vacías

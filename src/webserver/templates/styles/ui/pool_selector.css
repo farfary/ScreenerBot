@@ -103,7 +103,10 @@
    CONTENT
    ============================================ */
 
+/* The token's mint and each pool's address show in full on one line. */
 .pool-selector-content {
+  --ti-address-size: 0.6875rem;
+
   flex: 1;
   overflow-y: auto;
   padding: var(--spacing-md, 16px);
@@ -165,12 +168,6 @@
 
 .pool-count {
   color: var(--text-secondary, #8b949e);
-}
-
-.pool-mint {
-  font-family: var(--font-mono, "JetBrains Mono", monospace);
-  color: var(--text-muted, #6e7681);
-  font-size: 0.6875rem;
 }
 
 .pool-list {
@@ -267,12 +264,6 @@
 .pool-volume {
   font-family: var(--font-mono, "JetBrains Mono", monospace);
   font-feature-settings: "tnum" 1;
-}
-
-.pool-address {
-  font-size: 0.6875rem;
-  font-family: var(--font-mono, "JetBrains Mono", monospace);
-  color: var(--text-muted, #6e7681);
 }
 
 /* ============================================

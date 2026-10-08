@@ -230,8 +230,6 @@ shell-toast-dismiss =
     .aria-label = 닫기
 shell-confirm-title = 작업 확인
 shell-confirm-message = 계속하시겠습니까?
-shell-address-open-solscan = - { -solscan }에서 열기
-shell-address-copy = 주소 복사
 
 # Source: scripts/core/global_chat.js
 shell-assistant-label = 어시스턴트

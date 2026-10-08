@@ -196,7 +196,6 @@ tools-analyzer-active-pools =
     }
 tools-analyzer-card-pool-details = पूल विवरण
 tools-analyzer-pools-column-dex = DEX
-tools-analyzer-pools-column-address = पूल एड्रेस
 tools-analyzer-pools-column-liquidity = लिक्विडिटी ({ -sol })
 tools-analyzer-pools-column-status = स्थिति
 tools-analyzer-pool-primary = प्राथमिक
@@ -438,7 +437,6 @@ tools-consolidation-action-transfer-tokens = सभी टोकन ट्रा
 tools-consolidation-action-cleanup = ATA साफ़ करें
 tools-consolidation-action-transferring = ट्रांसफ़र हो रहा है...
 tools-consolidation-column-name = नाम
-tools-consolidation-column-address = एड्रेस
 tools-consolidation-column-native = { -sol } बैलेंस
 tools-consolidation-column-tokens = टोकन
 tools-consolidation-column-atas = खाली ATA

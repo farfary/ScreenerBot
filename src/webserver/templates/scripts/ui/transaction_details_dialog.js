@@ -20,6 +20,7 @@ import {
   isSolMint,
   renderAssetInline,
   renderAddress,
+  renderSignature,
   renderTokenChip,
   renderTokenLogo,
   resolveIdentities,
@@ -229,7 +230,7 @@ export class TransactionDetailsDialog {
               </div>
               <div class="header-title">
                 <span class="title-main">${typeLabel}</span>
-                <span class="title-sub mono-text" id="headerSignature" title="${Utils.escapeHtml(tx.signature)}">${Utils.escapeHtml(tx.signature)}</span>
+                <span class="title-sub" id="headerSignature">${renderSignature(tx.signature, { plain: true })}</span>
                 <div class="header-assets" id="headerAssets"></div>
               </div>
             </div>
@@ -510,7 +511,8 @@ export class TransactionDetailsDialog {
     if (!tx) return;
 
     const failed = tx.success === false || Boolean(tx.status?.Failed);
-    const failureMessage = tx.error_message || (failed ? I18n.t("transactions-dialog-no-program-error") : "");
+    const failureMessage =
+      tx.error_message || (failed ? I18n.t("transactions-dialog-no-program-error") : "");
     const routeHtml = this._buildOverviewRoute(tx);
 
     content.innerHTML = `
@@ -533,7 +535,11 @@ export class TransactionDetailsDialog {
   _buildOverviewStory(tx) {
     const swap = tx.token_swap_info || tx.token_info;
     if (swap) {
-      const router = swap.router ? Utils.escapeHtml(I18n.t("transactions-dialog-router-via", { router: venueLabel(swap.router) })) : "";
+      const router = swap.router
+        ? Utils.escapeHtml(
+            I18n.t("transactions-dialog-router-via", { router: venueLabel(swap.router) })
+          )
+        : "";
       return `
         <section class="tx-story-card">
           <div class="tx-story-heading"><span>${Utils.escapeHtml(I18n.t("transactions-dialog-story-title"))}</span>${router ? `<small>${router}</small>` : ""}</div>
@@ -558,12 +564,12 @@ export class TransactionDetailsDialog {
           <div class="tx-flow">
             <div class="tx-flow-side">
               <span class="tx-flow-label">${Utils.escapeHtml(I18n.t("transactions-dialog-flow-from"))}</span>
-              <strong class="tx-flow-address" title="${Utils.escapeHtml(transfer.from || "")}">${this._shortenAddress(transfer.from)}</strong>
+              ${renderAddress(transfer.from, { explorer: "account" })}
             </div>
             <span class="tx-flow-arrow" aria-hidden="true"><i class="icon-arrow-right"></i></span>
             <div class="tx-flow-side tx-flow-received">
               <span class="tx-flow-label">${Utils.escapeHtml(I18n.t("transactions-dialog-flow-to"))}</span>
-              <strong class="tx-flow-address" title="${Utils.escapeHtml(transfer.to || "")}">${this._shortenAddress(transfer.to)}</strong>
+              ${renderAddress(transfer.to, { explorer: "account" })}
             </div>
           </div>
           <div class="tx-story-amount"><span>${Utils.escapeHtml(I18n.t("transactions-dialog-flow-amount"))}</span><strong>${this._formatOverviewAmount(transfer.amount)} ${renderAssetInline(mint, { size: "xs" })}</strong></div>
@@ -646,7 +652,11 @@ export class TransactionDetailsDialog {
     if (pnl?.estimated_pnl_sol !== null && pnl?.estimated_pnl_sol !== undefined) {
       const tone =
         pnl.estimated_pnl_sol > 0 ? "positive" : pnl.estimated_pnl_sol < 0 ? "negative" : "";
-      add(I18n.t("transactions-dialog-metric-estimated-pnl"), Utils.formatPnL(pnl.estimated_pnl_sol, { decimals: 6 }), tone);
+      add(
+        I18n.t("transactions-dialog-metric-estimated-pnl"),
+        Utils.formatPnL(pnl.estimated_pnl_sol, { decimals: 6 }),
+        tone
+      );
     }
 
     if (!swap && Number.isFinite(Number(tx.sol_balance_change))) {
@@ -668,20 +678,38 @@ export class TransactionDetailsDialog {
     if (!swap) return "";
     const rows = [];
     if (swap.router)
-      rows.push([I18n.t("transactions-dialog-route-router"), Utils.escapeHtml(venueLabel(swap.router))]);
-    rows.push([I18n.t("transactions-dialog-route-input-asset"), this._buildOverviewAsset(swap.input_mint)]);
-    rows.push([I18n.t("transactions-dialog-route-output-asset"), this._buildOverviewAsset(swap.output_mint)]);
+      rows.push([
+        I18n.t("transactions-dialog-route-router"),
+        Utils.escapeHtml(venueLabel(swap.router)),
+      ]);
+    rows.push([
+      I18n.t("transactions-dialog-route-input-asset"),
+      this._buildOverviewAsset(swap.input_mint),
+    ]);
+    rows.push([
+      I18n.t("transactions-dialog-route-output-asset"),
+      this._buildOverviewAsset(swap.output_mint),
+    ]);
     if (swap.pool_address)
-      rows.push([I18n.t("transactions-dialog-route-pool"), renderAddress(swap.pool_address, { explorer: "account" })]);
+      rows.push([
+        I18n.t("transactions-dialog-route-pool"),
+        renderAddress(swap.pool_address, { explorer: "account" }),
+      ]);
     if (swap.program_id)
-      rows.push([I18n.t("transactions-dialog-route-program"), renderAddress(swap.program_id, { explorer: "account" })]);
+      rows.push([
+        I18n.t("transactions-dialog-route-program"),
+        renderAddress(swap.program_id, { explorer: "account" }),
+      ]);
     return `<section class="tx-detail-card"><div class="tx-detail-heading">${Utils.escapeHtml(I18n.t("transactions-dialog-route-title"))}</div><div class="tx-detail-list">${rows.map(([label, value]) => this._buildOverviewDetailRow(label, value)).join("")}</div></section>`;
   }
 
   _buildOverviewTechnical(tx) {
     const rows = [
-      [I18n.t("transactions-dialog-tech-signature"), renderAddress(tx.signature, { explorer: "tx" })],
-      [I18n.t("transactions-dialog-tech-timestamp"), Utils.formatTimestamp(tx.timestamp || tx.block_time)],
+      [I18n.t("transactions-dialog-tech-signature"), renderSignature(tx.signature)],
+      [
+        I18n.t("transactions-dialog-tech-timestamp"),
+        Utils.formatTimestamp(tx.timestamp || tx.block_time),
+      ],
       [
         I18n.t("transactions-dialog-tech-slot"),
         tx.slot !== null && tx.slot !== undefined
@@ -694,11 +722,20 @@ export class TransactionDetailsDialog {
           ? Utils.formatSol(tx.fee_sol, { decimals: 9 })
           : "—",
       ],
-      [I18n.t("transactions-dialog-tech-accounts"), Utils.formatNumber(tx.accounts_count ?? 0, { decimals: 0 })],
-      [I18n.t("transactions-dialog-tech-instructions"), Utils.formatNumber(tx.instructions_count ?? 0, { decimals: 0 })],
+      [
+        I18n.t("transactions-dialog-tech-accounts"),
+        Utils.formatNumber(tx.accounts_count ?? 0, { decimals: 0 }),
+      ],
+      [
+        I18n.t("transactions-dialog-tech-instructions"),
+        Utils.formatNumber(tx.instructions_count ?? 0, { decimals: 0 }),
+      ],
     ];
     if (tx.compute_units_consumed !== null && tx.compute_units_consumed !== undefined) {
-      rows.push([I18n.t("transactions-dialog-tech-compute-units"), Utils.formatNumber(tx.compute_units_consumed, { decimals: 0 })]);
+      rows.push([
+        I18n.t("transactions-dialog-tech-compute-units"),
+        Utils.formatNumber(tx.compute_units_consumed, { decimals: 0 }),
+      ]);
     }
     if (tx.token_decimals !== null && tx.token_decimals !== undefined) {
       rows.push([I18n.t("transactions-dialog-tech-token-decimals"), String(tx.token_decimals)]);
@@ -726,7 +763,9 @@ export class TransactionDetailsDialog {
 
   _formatOverviewExact(value) {
     const number = Number(value);
-    return Number.isFinite(number) ? Utils.formatNumber(number, { decimals: 9 }) : I18n.t("transactions-dialog-unavailable");
+    return Number.isFinite(number)
+      ? Utils.formatNumber(number, { decimals: 9 })
+      : I18n.t("transactions-dialog-unavailable");
   }
 
   // =========================================================================
@@ -806,8 +845,7 @@ export class TransactionDetailsDialog {
       .map(
         (c) => `
       <tr>
-        <td>${renderTokenChip(c.mint, { size: "sm" })}</td>
-        <td class="tx-mint-cell">${renderAddress(c.mint)}</td>
+        <td class="tx-token-cell">${renderTokenChip(c.mint, { size: "sm", showMint: true })}</td>
         <td class="numeric">${c.pre_balance !== null ? Utils.formatNumber(c.pre_balance, { decimals: c.decimals || 9 }) : "—"}</td>
         <td class="numeric">${c.post_balance !== null ? Utils.formatNumber(c.post_balance, { decimals: c.decimals || 9 }) : "—"}</td>
         <td class="numeric ${Utils.signedTone(c.change, c.decimals || 9)}">${Utils.formatSignedNumber(c.change, { decimals: c.decimals || 9 })}</td>
@@ -821,7 +859,6 @@ export class TransactionDetailsDialog {
         <thead>
           <tr>
             <th>${Utils.escapeHtml(I18n.t("transactions-dialog-col-token"))}</th>
-            <th>${Utils.escapeHtml(I18n.t("transactions-dialog-col-mint"))}</th>
             <th>${Utils.escapeHtml(I18n.t("transactions-dialog-col-pre-balance"))}</th>
             <th>${Utils.escapeHtml(I18n.t("transactions-dialog-col-post-balance"))}</th>
             <th>${Utils.escapeHtml(I18n.t("transactions-dialog-col-change"))}</th>
@@ -872,7 +909,7 @@ export class TransactionDetailsDialog {
   }
 
   _buildInstructionCard(instr, idx) {
-    const programId = instr.program_id || I18n.t("transactions-dialog-unknown");
+    const programId = instr.program_id;
     const instrType = instr.instruction_type || I18n.t("transactions-dialog-unknown");
     const accounts = instr.accounts || [];
 
@@ -882,7 +919,7 @@ export class TransactionDetailsDialog {
           <div class="instruction-index">#${idx + 1}</div>
           <div class="instruction-info">
             <span class="instruction-type">${Utils.escapeHtml(instrType)}</span>
-            <span class="instruction-program mono-text">${this._shortenAddress(programId)}</span>
+            <span class="instruction-program">${programId ? renderAddress(programId, { plain: true }) : Utils.escapeHtml(I18n.t("transactions-dialog-unknown"))}</span>
           </div>
           <div class="instruction-expand">
             <i class="icon-chevron-down"></i>
@@ -1066,8 +1103,7 @@ export class TransactionDetailsDialog {
       <tr>
         <td><span class="badge ${op.operation_type === "Creation" ? "info" : "warning"}">${Utils.escapeHtml(I18n.label(ATA_OPERATION_LABELS, op.operation_type))}</span></td>
         <td class="tx-address-cell">${renderAddress(op.account_address, { explorer: "account" })}</td>
-        <td>${renderTokenChip(mint, { size: "sm", showName: false })}</td>
-        <td class="tx-mint-cell">${renderAddress(mint)}</td>
+        <td class="tx-token-cell">${renderTokenChip(mint, { size: "sm", showMint: true })}</td>
         <td class="numeric">${Utils.formatSol(op.rent_amount || op.rent_cost_sol || 0, { decimals: 9 })}</td>
         <td>${op.is_wsol ? '<span class="badge secondary">WSOL</span>' : "—"}</td>
       </tr>
@@ -1084,7 +1120,6 @@ export class TransactionDetailsDialog {
               <th>${Utils.escapeHtml(I18n.t("transactions-dialog-col-type"))}</th>
               <th>${Utils.escapeHtml(I18n.t("transactions-dialog-col-account"))}</th>
               <th>${Utils.escapeHtml(I18n.t("transactions-dialog-col-token"))}</th>
-              <th>${Utils.escapeHtml(I18n.t("transactions-dialog-col-mint"))}</th>
               <th>${Utils.escapeHtml(I18n.t("transactions-dialog-col-rent"))}</th>
               <th>WSOL</th>
             </tr>
@@ -1143,11 +1178,5 @@ export class TransactionDetailsDialog {
 
   _getTypeIcon(type) {
     return typeIcon(type);
-  }
-
-  _shortenAddress(address) {
-    if (!address) return "—";
-    if (address.length <= 12) return Utils.escapeHtml(address);
-    return `${address.slice(0, 4)}...${address.slice(-4)}`;
   }
 }

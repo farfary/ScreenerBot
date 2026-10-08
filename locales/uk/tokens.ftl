@@ -191,7 +191,6 @@ tokens-pools-role-quote = Котирувальний
 tokens-pools-role-unknown = Невідомо
 tokens-pools-reserves = Резервні акаунти
 tokens-pools-no-reserves = Немає резервних акаунтів
-tokens-pools-address-copy = Копіювати адресу
 tokens-pools-address-pool = Пул
     .title = Копіювати пул
 tokens-pools-address-base = Базовий мінт
@@ -301,8 +300,6 @@ tokens-dialog-badge-profile = Опублікований профіль
 tokens-dialog-badge-low-risk-hint = Низький ризик за поточною оцінкою { -rugcheck }; це не підтвердження особи.
 tokens-dialog-badge-immutable = Незмінний
 tokens-dialog-badge-mutable = Змінюваний
-tokens-dialog-badge-auth = Повноваження:
-tokens-dialog-badge-update-authority = Повноваження оновлення:
 tokens-dialog-badge-position = Позиція
 tokens-dialog-badge-blacklisted = У чорному списку
 
@@ -369,7 +366,7 @@ tokens-ohlcv-active = Активні
 tokens-ohlcv-db-size = Розмір БД
 tokens-ohlcv-cleanup = Очистити неактивні
 tokens-ohlcv-delete-title = Видалення даних OHLCV
-tokens-ohlcv-delete-message = Видалити всі дані OHLCV для { $mint }...?
+tokens-ohlcv-delete-token-message = Видалити всі дані OHLCV для { $token }?
 tokens-ohlcv-delete-done =
     Видалено: { $candles ->
         [one] { $candles } свічку

@@ -8,11 +8,7 @@
  * Helper functions for formatting and display
  */
 import * as Hints from "../../core/hints.js";
-import {
-  formatAddressCompact,
-  formatPercentValue,
-  formatSignedSol,
-} from "../../core/format.js";
+import { formatPercentValue, formatSignedSol } from "../../core/format.js";
 import { HintTrigger } from "../hint_popover.js";
 
 /**
@@ -21,17 +17,6 @@ import { HintTrigger } from "../hint_popover.js";
  */
 export function applyUtilitiesMixin(DialogClass) {
   const proto = DialogClass.prototype;
-
-  /**
-   * Format address to short form (first 6 + last 6 chars)
-   * @private
-   * @param {string} address - Address to format
-   * @returns {string} Formatted address
-   */
-  proto._formatShortAddress = function (address) {
-    if (!address || address.length < 16) return address || "—";
-    return formatAddressCompact(address, { start: 6, end: 6, ellipsis: "..." });
-  };
 
   /**
    * Format PnL with both SOL value and percentage

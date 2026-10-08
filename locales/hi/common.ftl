@@ -43,7 +43,6 @@ common-severity-debug = डीबग
 
 common-error-with-message = त्रुटि: { $message }
 
-common-copied-address = एड्रेस
 common-copied-signature = सिग्नेचर
 common-copied-json = JSON
 common-copied-value = मान

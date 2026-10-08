@@ -3,9 +3,7 @@
 //
 // Token identities for the Copy Trading panels: each mint is looked up once, and
 // the panel repaints when names and logos arrive.
-import { escapeHtml } from "../../core/utils.js";
-import { getIdentity, renderAssetInline, resolveIdentities } from "../../ui/token_identity.js";
-import { shortAddress } from "./format.js";
+import { getIdentity, renderTokenChip, resolveIdentities } from "../../ui/token_identity.js";
 
 const requested = new Set();
 
@@ -20,28 +18,13 @@ export function ensureIdentities(mints, onResolved) {
     .catch(() => missing.forEach((mint) => requested.delete(mint)));
 }
 
-/** The symbols more than one of these mints resolves to. */
-export function sharedSymbols(mints) {
-  const counts = new Map();
-  new Set((mints || []).filter(Boolean)).forEach((mint) => {
-    const symbol = getIdentity(mint).symbol;
-    if (symbol) counts.set(symbol, (counts.get(symbol) || 0) + 1);
-  });
-  return new Set([...counts].filter(([, count]) => count > 1).map(([symbol]) => symbol));
-}
-
 /**
- * A mint's inline identity; without metadata it reads as its short mint, not
- * "Unknown". A symbol in `shared` names several tokens, so the mint follows it.
+ * A mint's identity for a table or event row: logo and symbol, then the FULL
+ * mint on its own line, so two tokens sharing a symbol are told apart without
+ * cropping either address. The mint is plain: the row's button is the action.
  */
-export function tokenInline(mint, shared = null) {
-  const identity = getIdentity(mint);
-  const inline = renderAssetInline(
-    identity.symbol ? identity : { ...identity, symbol: shortAddress(mint) }
-  );
-  return identity.symbol && shared?.has(identity.symbol)
-    ? `${inline}<small class="copy-token-mint">${escapeHtml(shortAddress(mint))}</small>`
-    : inline;
+export function tokenWithMint(mint) {
+  return renderTokenChip(getIdentity(mint), { showName: false, showMint: true, plainMint: true });
 }
 
 export function openTokenDetails(mint) {

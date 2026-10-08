@@ -135,7 +135,6 @@ transactions-dialog-balances-net-native = Variation nette de { -sol }
 transactions-dialog-balances-fee = Frais de transaction
 transactions-dialog-col-account = Compte
 transactions-dialog-col-token = Token
-transactions-dialog-col-mint = Adresse de mint
 transactions-dialog-col-pre-balance = Solde avant
 transactions-dialog-col-post-balance = Solde après
 transactions-dialog-col-change = Variation

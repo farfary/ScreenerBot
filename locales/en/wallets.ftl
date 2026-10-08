@@ -33,17 +33,13 @@ wallets-watch-reason-helius-unavailable = { -helius } checks failed. Saved progr
 wallets-watch-reason-processing-failed = Wallet activity could not be processed. Saved progress is preserved.
 
 # Vocabulary shared by the wallet tables and dialogs.
-wallets-field-address = Address
 wallets-field-name = Wallet Name
 wallets-field-notes = Notes
 wallets-field-private-key = Private Key
-wallets-address-copy = Copy address
 wallets-modal-close =
     .aria-label = Close modal
 wallets-this-wallet = this wallet
 wallets-summary-native = { -sol }
-wallets-copied-address = Address
-wallets-copied-mint = Mint address
 wallets-copied-private-key = Private key
 
 # wallets.js: subtabs, toasts and busy states.
@@ -251,7 +247,6 @@ wallets-holdings-col-balance = Balance
 wallets-holdings-col-value = Value ({ -sol })
 wallets-holdings-col-type = Type
 wallets-holdings-col-decimals = Decimals
-wallets-holdings-col-mint = Mint
 wallets-holdings-empty-title = No token holdings
 wallets-holdings-empty-message = Tokens held by this wallet will appear here.
 wallets-holdings-no-main = No main wallet

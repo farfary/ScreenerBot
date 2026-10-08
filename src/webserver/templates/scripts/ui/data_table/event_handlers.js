@@ -9,7 +9,6 @@
 
 import { scrollStart } from "../../core/dom.js";
 import { openMenu, closeMenu, trackAnchoredMenu } from "../../core/menu_manager.js";
-import { copyToClipboard, notifyCopied, notifyCopyFailed } from "../../core/utils.js";
 
 export function applyEventHandlersMixin(DataTable) {
   const proto = DataTable.prototype;
@@ -243,7 +242,6 @@ export function applyEventHandlersMixin(DataTable) {
 
     this._attachToolbarSegmentedEvents(toolbarRoot);
     this._attachToolbarOverflowEvents(toolbarRoot);
-    this._attachToolbarIdentityEvents(toolbarRoot);
 
     // Column visibility toggle - NEW: Using settings dialog instead of dropdown
     const columnBtn = toolbarRoot?.querySelector(".dt-btn-columns");
@@ -710,6 +708,9 @@ export function applyEventHandlersMixin(DataTable) {
     // Row click
     if (this.options.onRowClick) {
       const handler = (e) => {
+        // A control inside a cell (an address's copy button or explorer link) acts
+        // on its own and never opens the row.
+        if (e.target.closest("a, button, input, select, textarea, [data-copy]")) return;
         const tr = e.target.closest("tr");
         if (tr && tr.dataset.rowId) {
           const rowId = tr.dataset.rowId;
@@ -922,26 +923,5 @@ export function applyEventHandlersMixin(DataTable) {
       }
     };
     this._addEventListener(menu, "keydown", menuKeyHandler);
-  };
-
-  /**
-   * Copy affordance on the toolbar identity address.
-   */
-  proto._attachToolbarIdentityEvents = function (toolbarRoot) {
-    const copyBtn = toolbarRoot?.querySelector("[data-toolbar-copy]");
-    if (!copyBtn) {
-      return;
-    }
-    const handler = (e) => {
-      e.stopPropagation();
-      const value = copyBtn.dataset.toolbarCopy;
-      if (!value) {
-        return;
-      }
-      copyToClipboard(value)
-        .then(() => notifyCopied(I18n.t("common-copied-address")))
-        .catch(notifyCopyFailed);
-    };
-    this._addEventListener(copyBtn, "click", handler);
   };
 }

@@ -400,6 +400,8 @@
 }
 
 .ta-info-item {
+  --ti-address-size: 0.8rem;
+
   display: flex;
   flex-direction: column;
   gap: 4px;
@@ -538,10 +540,11 @@
 }
 
 .ta-authority-address {
+  --ti-address-size: 0.75rem;
+
+  display: flex;
   width: 100%;
-  font-size: 0.75rem;
-  color: var(--text-muted);
-  word-break: break-all;
+  min-width: 0;
   padding-inline-start: calc(120px + var(--spacing-sm));
 }
 
@@ -807,13 +810,18 @@
   color: var(--text-primary);
 }
 
-.ta-pools-table td.dex {
-  font-weight: 600;
+/* Venue above the full pool address, which keeps one line at every width. */
+.ta-pool-cell {
+  --ti-address-size: 0.75rem;
+
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  min-width: 0;
 }
 
-.ta-pools-table td.address {
-  font-size: 0.8rem;
-  color: var(--text-secondary);
+.ta-pool-dex {
+  font-weight: 600;
 }
 
 .ta-pools-table td.liquidity {

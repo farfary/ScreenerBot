@@ -97,6 +97,8 @@
 }
 
 .transaction-details-dialog .tx-flow-side {
+  --ti-address-size: 0.85rem;
+
   display: flex;
   align-items: flex-start;
   flex-direction: column;
@@ -126,11 +128,6 @@
   white-space: nowrap;
 }
 
-.transaction-details-dialog .tx-flow-side > strong.tx-flow-address {
-  font-size: 0.9rem;
-  font-family: var(--font-mono);
-}
-
 .transaction-details-dialog .tx-flow-asset {
   display: inline-flex;
   align-items: center;
@@ -141,9 +138,9 @@
   font-family: var(--font-data);
 }
 
-/* The mint sits under the asset it belongs to, in full. */
+/* The mint sits under the asset it belongs to, in full; a transfer's wallets
+   take the same place at a reading size. */
 .transaction-details-dialog .tx-flow-side .ti-address {
-  max-width: 100%;
   margin-top: 2px;
 }
 

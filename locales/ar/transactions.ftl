@@ -155,7 +155,6 @@ transactions-dialog-balances-net-native = صافي تغير { -sol }
 transactions-dialog-balances-fee = رسوم المعاملة
 transactions-dialog-col-account = الحساب
 transactions-dialog-col-token = الرمز
-transactions-dialog-col-mint = عنوان الإصدار
 transactions-dialog-col-pre-balance = الرصيد قبل
 transactions-dialog-col-post-balance = الرصيد بعد
 transactions-dialog-col-change = التغير

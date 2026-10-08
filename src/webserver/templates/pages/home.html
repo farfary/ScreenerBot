@@ -16,7 +16,7 @@
       <div class="portfolio-primary">
         <h1 class="hero-label" id="portfolioHeading" data-l10n-id="home-portfolio-title"></h1>
         <div class="wallet-identity" id="homeWalletIdentity" hidden>
-          <code class="wallet-address" id="homeWalletAddress">—</code>
+          <span class="wallet-address" id="homeWalletAddress"></span>
           <div class="wallet-identity-actions">
             <button
               type="button"
@@ -67,7 +67,7 @@
                   hidden
                 />
               </div>
-              <code class="wallet-qr-address" id="homeWalletQrAddress">—</code>
+              <div class="wallet-qr-address" id="homeWalletQrAddress"></div>
             </div>
           </div>
         </div>
@@ -250,20 +250,28 @@
           </h2>
         </div>
         <div class="pipeline-grid">
-          <div class="pipeline-metric"><span data-l10n-id="home-pipeline-tracked"></span><strong id="tokensTotal">0</strong></div>
           <div class="pipeline-metric">
-            <span data-l10n-id="home-pipeline-priced"></span><strong id="tokensWithPrices">0</strong>
+            <span data-l10n-id="home-pipeline-tracked"></span><strong id="tokensTotal">0</strong>
           </div>
           <div class="pipeline-metric">
-            <span data-l10n-id="home-pipeline-passed"></span><strong class="success" id="tokensPassed">0</strong>
+            <span data-l10n-id="home-pipeline-priced"></span
+            ><strong id="tokensWithPrices">0</strong>
           </div>
           <div class="pipeline-metric">
-            <span data-l10n-id="home-pipeline-rejected"></span><strong class="danger" id="tokensRejected">0</strong>
+            <span data-l10n-id="home-pipeline-passed"></span
+            ><strong class="success" id="tokensPassed">0</strong>
           </div>
           <div class="pipeline-metric">
-            <span data-l10n-id="home-pipeline-blacklisted"></span><strong id="tokensBlacklisted">0</strong>
+            <span data-l10n-id="home-pipeline-rejected"></span
+            ><strong class="danger" id="tokensRejected">0</strong>
           </div>
-          <div class="pipeline-metric"><span data-l10n-id="home-pipeline-ohlcv"></span><strong id="tokensOhlcv">0</strong></div>
+          <div class="pipeline-metric">
+            <span data-l10n-id="home-pipeline-blacklisted"></span
+            ><strong id="tokensBlacklisted">0</strong>
+          </div>
+          <div class="pipeline-metric">
+            <span data-l10n-id="home-pipeline-ohlcv"></span><strong id="tokensOhlcv">0</strong>
+          </div>
         </div>
       </section>
     </aside>

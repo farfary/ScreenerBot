@@ -79,11 +79,11 @@
   color: var(--text-secondary);
 }
 
-.position-remove-mint {
-  font-family: var(--font-mono, monospace);
-  font-weight: 500;
-  color: var(--text-muted);
-  margin-inline-start: 4px;
+/* The full mint on its own line under the symbol. */
+.position-remove-header .ti-address {
+  --ti-address-size: 0.75rem;
+
+  margin-top: 2px;
 }
 
 /* ============================================

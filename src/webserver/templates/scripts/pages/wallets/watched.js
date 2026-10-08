@@ -6,6 +6,7 @@
 
 import { DataTable } from "../../ui/data_table.js";
 import { openCopyForWallet } from "../../ui/copy_handoff.js";
+import { addressFloorWidth, renderNamedAddress } from "../../ui/token_identity.js";
 
 const SOLANA_ADDRESS_RE = /^[1-9A-HJ-NP-Za-km-z]{32,44}$/;
 
@@ -48,7 +49,6 @@ export function createWatchedWallets({
   let loading = false;
   let hasLoadedOnce = false;
   let table = null;
-  let copyClickHandler = null;
   let budgetTarget = null;
   let savingBudget = false;
 
@@ -57,16 +57,9 @@ export function createWatchedWallets({
       id: "label",
       label: I18n.t("wallets-watched-col-wallet"),
       sortable: true,
-      minWidth: 160,
-      render: (value, row) => {
-        const label = Utils.escapeHtml(row.label || I18n.t("wallets-watched-unlabelled"));
-        const address = row.address || "";
-        const short = address ? `${address.slice(0, 6)}...${address.slice(-4)}` : "—";
-        const copyBtn = address
-          ? `<button type="button" class="copy-btn-mini" data-copy-address="${Utils.escapeHtml(address)}" title="${Utils.escapeHtml(I18n.t("wallets-address-copy"))}"><i class="icon-copy"></i></button>`
-          : "";
-        return `<div class="wt-token-meta"><span class="wt-symbol">${label}</span><span class="wt-name wt-mint-cell"><span class="wt-mint-addr" dir="ltr">${short}</span>${copyBtn}</span></div>`;
-      },
+      minWidth: addressFloorWidth() + 24,
+      render: (value, row) =>
+        renderNamedAddress(row.label || I18n.t("wallets-watched-unlabelled"), row.address),
     },
     {
       id: "_state",
@@ -374,14 +367,6 @@ export function createWatchedWallets({
       },
     });
     on(root, "click", handleListAction);
-    copyClickHandler = (e) => {
-      const btn = e.target.closest("[data-copy-address]");
-      if (!btn) return;
-      e.stopPropagation();
-      Utils.copyToClipboard(btn.dataset.copyAddress);
-      Utils.notifyCopied(I18n.t("wallets-copied-address"));
-    };
-    root.addEventListener("click", copyClickHandler);
     return table;
   }
 
@@ -626,11 +611,6 @@ export function createWatchedWallets({
     if (table) {
       table.destroy();
       table = null;
-    }
-    const root = $("#watched-wallets-root");
-    if (root && copyClickHandler) {
-      root.removeEventListener("click", copyClickHandler);
-      copyClickHandler = null;
     }
   }
 

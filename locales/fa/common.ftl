@@ -41,7 +41,6 @@ common-severity-debug = دیباگ
 
 common-error-with-message = خطا: { $message }
 
-common-copied-address = آدرس
 common-copied-signature = امضا
 common-copied-json = JSON
 common-copied-value = مقدار

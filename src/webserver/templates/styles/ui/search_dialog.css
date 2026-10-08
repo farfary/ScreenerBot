@@ -355,14 +355,18 @@
    ============================================ */
 
 .search-results {
+  container: search-results / inline-size;
   flex: 1;
   min-height: 0;
   overflow-y: auto;
   overscroll-behavior: contain;
 }
 
-/* Logo beside two lines, actions at the end. */
+/* Logo beside two lines, actions at the end. The full mint shares the second
+   line with the figures and fits its own width (token_identity.css). */
 .search-row {
+  --ti-address-size: 0.6875rem;
+
   display: grid;
   grid-template-columns: 32px minmax(0, 1fr) auto;
   grid-template-areas:
@@ -447,7 +451,6 @@
 
 .search-row-price,
 .search-row-change,
-.search-row-mint,
 .search-figure b {
   font-family: var(--font-mono);
   font-variant-numeric: tabular-nums;
@@ -480,16 +483,6 @@
 
 .search-row-change[data-tone="flat"] {
   color: var(--text-muted);
-}
-
-/* The full mint, never cropped: it wraps rather than truncates. */
-.search-row-mint {
-  flex: 1;
-  min-width: 0;
-  color: var(--text-muted);
-  font-size: 0.6875rem;
-  overflow-wrap: anywhere;
-  user-select: text;
 }
 
 .search-row-figures {
@@ -652,18 +645,32 @@
   .search-dialog-footer {
     display: none;
   }
+}
 
-  .search-row-bottom {
-    flex-wrap: wrap;
-    row-gap: 4px;
+/* Below the width that holds the mint at its floor size beside the three
+   figures, the mint takes a full-width line of its own, under the logo as well,
+   and the figures follow on the next one. Measured on the list itself, so the
+   page zoom and the panel width decide it, not the window. */
+@container search-results (width < 640px) {
+  .search-row {
+    grid-template-areas:
+      "logo top actions"
+      "mint mint mint"
+      "figures figures figures";
   }
 
-  .search-row-mint {
-    flex-basis: 100%;
+  .search-row-bottom {
+    display: contents;
+  }
+
+  .search-row .ti-address {
+    grid-area: mint;
   }
 
   .search-row-figures {
+    grid-area: figures;
     grid-template-columns: repeat(3, auto);
+    justify-content: start;
     gap: 12px;
   }
 }

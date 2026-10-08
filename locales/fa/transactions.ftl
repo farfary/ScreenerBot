@@ -155,7 +155,6 @@ transactions-dialog-balances-net-native = تغییر خالص { -sol }
 transactions-dialog-balances-fee = کارمزد تراکنش
 transactions-dialog-col-account = حساب
 transactions-dialog-col-token = توکن
-transactions-dialog-col-mint = آدرس مینت
 transactions-dialog-col-pre-balance = موجودی قبل
 transactions-dialog-col-post-balance = موجودی بعد
 transactions-dialog-col-change = تغییر

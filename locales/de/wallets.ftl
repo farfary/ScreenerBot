@@ -24,17 +24,13 @@ wallets-watch-reason-signature-budget = Diese Wallet hat mehr Aktivität, als di
 wallets-watch-reason-helius-unavailable = { -helius }-Prüfungen sind fehlgeschlagen. Der gespeicherte Fortschritt bleibt erhalten.
 wallets-watch-reason-processing-failed = Wallet-Aktivität konnte nicht verarbeitet werden. Der gespeicherte Fortschritt bleibt erhalten.
 
-wallets-field-address = Adresse
 wallets-field-name = Wallet-Name
 wallets-field-notes = Notizen
 wallets-field-private-key = Privater Schlüssel
-wallets-address-copy = Adresse kopieren
 wallets-modal-close =
     .aria-label = Dialog schließen
 wallets-this-wallet = diese Wallet
 wallets-summary-native = { -sol }
-wallets-copied-address = Adresse
-wallets-copied-mint = Mint-Adresse
 wallets-copied-private-key = Privater Schlüssel
 
 wallets-tab-main = Haupt-Wallet
@@ -233,7 +229,6 @@ wallets-holdings-col-balance = Guthaben
 wallets-holdings-col-value = Wert ({ -sol })
 wallets-holdings-col-type = Typ
 wallets-holdings-col-decimals = Dezimalstellen
-wallets-holdings-col-mint = Mint
 wallets-holdings-empty-title = Keine Token-Bestände
 wallets-holdings-empty-message = Von dieser Wallet gehaltene Token erscheinen hier.
 wallets-holdings-no-main = Keine Haupt-Wallet

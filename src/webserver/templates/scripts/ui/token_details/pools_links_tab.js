@@ -10,8 +10,8 @@
  * metadata from the token detail response.
  */
 import * as Utils from "../../core/utils.js";
-import { formatAddressCompact } from "../../core/format.js";
 import { renderTabState } from "./state_handling.js";
+import { renderAddress } from "../token_identity.js";
 import { venueLabel } from "../venue.js";
 
 const esc = (text) => Utils.escapeHtml(text);
@@ -57,7 +57,7 @@ const EXPLORER_LABELS = Object.freeze({
 });
 
 export function renderPoolsTab(token, options = {}) {
-  const { renderHintTrigger, escapeHtml, formatShortAddress } = options;
+  const { renderHintTrigger, escapeHtml } = options;
   const pools = token.pools || [];
 
   if (pools.length === 0) {
@@ -80,8 +80,14 @@ export function renderPoolsTab(token, options = {}) {
     [I18n.t("tokens-pools-total"), count(pools.length)],
     [I18n.t("tokens-pools-liquidity"), Utils.formatCurrencyUSD(totalLiquidity)],
     [I18n.t("tokens-pools-volume-24h"), Utils.formatCurrencyUSD(totalVolume24h)],
-    [I18n.t("tokens-pools-base-role"), count(pools.filter((pool) => pool.token_role === "base").length)],
-    [I18n.t("tokens-pools-quote-role"), count(pools.filter((pool) => pool.token_role === "quote").length)],
+    [
+      I18n.t("tokens-pools-base-role"),
+      count(pools.filter((pool) => pool.token_role === "base").length),
+    ],
+    [
+      I18n.t("tokens-pools-quote-role"),
+      count(pools.filter((pool) => pool.token_role === "quote").length),
+    ],
   ];
 
   const canonicalSection = canonicalPool
@@ -127,7 +133,10 @@ export function renderPoolsTab(token, options = {}) {
             ${Object.entries(programCounts)
               .sort((a, b) => b[1] - a[1])
               .map(([program, total]) =>
-                renderPoolFact(program ? venueLabel(program) : I18n.t("tokens-pools-unknown"), count(total))
+                renderPoolFact(
+                  program ? venueLabel(program) : I18n.t("tokens-pools-unknown"),
+                  count(total)
+                )
               )
               .join("")}
           </div>
@@ -142,7 +151,7 @@ export function renderPoolsTab(token, options = {}) {
           <strong>${count(pools.length)}</strong>
         </div>
         <div>
-          ${pools.map((pool) => buildPoolDetail(pool, { escapeHtml, formatShortAddress })).join("")}
+          ${pools.map((pool) => buildPoolDetail(pool, { escapeHtml })).join("")}
         </div>
       </div>
     </div>
@@ -150,9 +159,10 @@ export function renderPoolsTab(token, options = {}) {
 }
 
 function buildPoolDetail(pool, options = {}) {
-  const { escapeHtml, formatShortAddress } = options;
+  const { escapeHtml } = options;
   const reserveAccounts = Array.isArray(pool.reserve_accounts) ? pool.reserve_accounts : [];
-  const roleClass = pool.token_role === "base" || pool.token_role === "quote" ? pool.token_role : "";
+  const roleClass =
+    pool.token_role === "base" || pool.token_role === "quote" ? pool.token_role : "";
   const addressLabels = poolAddressLabels();
   const lastUpdated = pool.last_updated_unix
     ? Utils.formatTimestamp(pool.last_updated_unix * 1000)
@@ -177,19 +187,17 @@ function buildPoolDetail(pool, options = {}) {
       </div>
 
       <div class="pool-detail-addresses">
-        ${renderAddressRow(addressLabels.pool, pool.pool_id, { escapeHtml, formatShortAddress })}
-        ${renderAddressRow(addressLabels.base, pool.base_mint, { escapeHtml, formatShortAddress })}
-        ${renderAddressRow(addressLabels.quote, pool.quote_mint, { escapeHtml, formatShortAddress })}
-        ${renderAddressRow(addressLabels.paired, pool.paired_mint, { escapeHtml, formatShortAddress })}
+        ${renderAddressRow(addressLabels.pool, pool.pool_id, "account")}
+        ${renderAddressRow(addressLabels.base, pool.base_mint, "token")}
+        ${renderAddressRow(addressLabels.quote, pool.quote_mint, "token")}
+        ${renderAddressRow(addressLabels.paired, pool.paired_mint, "token")}
       </div>
 
       <div class="pool-reserves">
         <div class="pool-reserves-heading">${esc(I18n.t("tokens-pools-reserves"))} <span>${count(reserveAccounts.length)}</span></div>
         ${
           reserveAccounts.length
-            ? reserveAccounts
-                .map((address) => renderAddressRow(null, address, { escapeHtml, formatShortAddress }))
-                .join("")
+            ? reserveAccounts.map((address) => renderAddressRow(null, address, "account")).join("")
             : `<span class="pool-no-data">${esc(I18n.t("tokens-pools-no-reserves"))}</span>`
         }
       </div>
@@ -215,43 +223,23 @@ function renderPoolMetric(label, value) {
   `;
 }
 
-/** Row label (message value) and copy tooltip (`.title`) of each pool address kind. */
+/** Row label of each pool address kind. */
 function poolAddressLabels() {
   return {
-    pool: {
-      label: I18n.t("tokens-pools-address-pool"),
-      copyTitle: I18n.attr("tokens-pools-address-pool", "title"),
-    },
-    base: {
-      label: I18n.t("tokens-pools-address-base"),
-      copyTitle: I18n.attr("tokens-pools-address-base", "title"),
-    },
-    quote: {
-      label: I18n.t("tokens-pools-address-quote"),
-      copyTitle: I18n.attr("tokens-pools-address-quote", "title"),
-    },
-    paired: {
-      label: I18n.t("tokens-pools-address-paired"),
-      copyTitle: I18n.attr("tokens-pools-address-paired", "title"),
-    },
+    pool: I18n.t("tokens-pools-address-pool"),
+    base: I18n.t("tokens-pools-address-base"),
+    quote: I18n.t("tokens-pools-address-quote"),
+    paired: I18n.t("tokens-pools-address-paired"),
   };
 }
 
-/** `labels` is null for a row without a label (reserve accounts). */
-function renderAddressRow(labels, address, options = {}) {
-  const { escapeHtml, formatShortAddress } = options;
+/** `label` is null for a row without a label (reserve accounts). */
+function renderAddressRow(label, address, explorer) {
   if (!address) return "";
-  const safeAddress = escapeHtml(address);
-  const copyTitle = labels ? labels.copyTitle : I18n.t("tokens-pools-address-copy");
   return `
     <div class="pool-address-row">
-      ${labels ? `<span>${esc(labels.label)}</span>` : ""}
-      <div class="pool-address-value">
-        <code dir="ltr" title="${safeAddress}">${formatShortAddress(address)}</code>
-        <button class="copy-btn-mini" type="button" data-copy="${safeAddress}" title="${esc(copyTitle)}">
-          <i class="icon-copy" aria-hidden="true"></i>
-        </button>
-      </div>
+      ${label ? `<span class="pool-address-label">${esc(label)}</span>` : ""}
+      ${renderAddress(address, { explorer })}
     </div>
   `;
 }
@@ -299,12 +287,7 @@ function buildTokenReferenceSection(token, mint, options = {}) {
       <div>
         <div class="links-info-row">
           <span>${esc(I18n.t("tokens-links-mint-address"))}</span>
-          <div class="links-info-value">
-            <code dir="ltr" title="${safeMint}">${formatShortAddress(mint)}</code>
-            <button class="copy-btn-mini" type="button" data-copy="${safeMint}" title="${esc(I18n.attr("links-copy-mint", "title"))}">
-              <i class="icon-copy" aria-hidden="true"></i>
-            </button>
-          </div>
+          ${renderAddress(mint)}
         </div>
         ${token.data_source ? renderLinkFact(I18n.t("tokens-links-data-source"), escapeHtml(token.data_source)) : ""}
         ${token.verified ? renderLinkFact(I18n.t("tokens-links-security"), esc(I18n.t("positions-risk-low")), "verified") : ""}
@@ -323,13 +306,11 @@ function buildProfileSection(token, safeMint) {
         ${esc(isPublished ? I18n.t("tokens-links-profile-published-title") : I18n.t("tokens-links-profile-title"))}
       </div>
       <p>
-        ${
-          esc(
-            isPublished
-              ? I18n.t("tokens-links-profile-published-note")
-              : I18n.t("tokens-links-profile-create-note")
-          )
-        }
+        ${esc(
+          isPublished
+            ? I18n.t("tokens-links-profile-published-note")
+            : I18n.t("tokens-links-profile-create-note")
+        )}
       </p>
       <button
         class="links-profile-action"
@@ -353,13 +334,17 @@ function buildMediaSection(token, logoUrl, bannerUrl, options = {}) {
       <div class="links-section-title"><i class="icon-image" aria-hidden="true"></i>${esc(I18n.t("tokens-links-media-title"))}</div>
       <div class="links-media-grid">
         ${logoUrl ? renderMediaItem(I18n.t("tokens-links-media-logo"), logoUrl, symbol, "logo", { escapeHtml }) : ""}
-        ${bannerUrl ? renderMediaItem(
-              I18n.t("tokens-links-media-banner"),
-              bannerUrl,
-              I18n.t("tokens-links-media-banner-alt", { symbol }),
-              "banner",
-              { escapeHtml }
-            ) : ""}
+        ${
+          bannerUrl
+            ? renderMediaItem(
+                I18n.t("tokens-links-media-banner"),
+                bannerUrl,
+                I18n.t("tokens-links-media-banner-alt", { symbol }),
+                "banner",
+                { escapeHtml }
+              )
+            : ""
+        }
       </div>
     </section>
   `;
@@ -433,7 +418,8 @@ function buildOfficialSection(websites, options = {}) {
       <div class="links-list">
         ${websites
           .map((site) => {
-            const label = site.label || extractDomainName(site.url) || I18n.t("positions-link-website");
+            const label =
+              site.label || extractDomainName(site.url) || I18n.t("positions-link-website");
             return renderExternalRow(label, site.url, formatUrl(site.url), { escapeHtml });
           })
           .join("")}
@@ -482,10 +468,6 @@ function renderLinkFact(label, value, modifier = "") {
       <strong class="${modifier}">${value}</strong>
     </div>
   `;
-}
-
-function formatShortAddress(address) {
-  return formatAddressCompact(address, { start: 6, end: 4, ellipsis: "..." });
 }
 
 function extractDomainName(url) {

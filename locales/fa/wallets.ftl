@@ -33,17 +33,13 @@ wallets-watch-reason-helius-unavailable = بررسی‌های { -helius } نام
 wallets-watch-reason-processing-failed = پردازش فعالیت کیف پول ممکن نشد. پیشرفت ذخیره‌شده حفظ شده است.
 
 # Vocabulary shared by the wallet tables and dialogs.
-wallets-field-address = آدرس
 wallets-field-name = نام کیف پول
 wallets-field-notes = یادداشت
 wallets-field-private-key = کلید خصوصی
-wallets-address-copy = کپی آدرس
 wallets-modal-close =
     .aria-label = بستن پنجره
 wallets-this-wallet = این کیف پول
 wallets-summary-native = { -sol }
-wallets-copied-address = آدرس
-wallets-copied-mint = آدرس مینت
 wallets-copied-private-key = کلید خصوصی
 
 # wallets.js: subtabs, toasts and busy states.
@@ -251,7 +247,6 @@ wallets-holdings-col-balance = موجودی
 wallets-holdings-col-value = ارزش ({ -sol })
 wallets-holdings-col-type = نوع
 wallets-holdings-col-decimals = اعشار
-wallets-holdings-col-mint = مینت
 wallets-holdings-empty-title = هیچ توکنی نگهداری نمی‌شود
 wallets-holdings-empty-message = توکن‌هایی که این کیف پول نگه می‌دارد اینجا نمایش داده می‌شوند.
 wallets-holdings-no-main = کیف پول اصلی وجود ندارد

@@ -170,21 +170,14 @@
   font-weight: 800;
 }
 
+/* The holder's full wallet on one line; it narrows its font, never its text. */
 .security-holder-identity {
+  --ti-address-size: 0.7rem;
+
   display: flex;
   align-items: center;
   gap: 8px;
   min-width: 0;
-}
-
-.security-holder-identity > .addr-chip {
-  flex: 0 0 auto;
-  width: calc(44ch + 24px);
-}
-
-.security-holder-identity > .addr-chip .addr-chip-link {
-  width: 44ch;
-  white-space: nowrap;
 }
 
 .security-holder-tag.is-insider {
@@ -238,16 +231,6 @@
 }
 
 @container (width <= 520px) {
-  .security-holder-identity > .addr-chip {
-    width: min(100%, calc(44ch + 24px));
-  }
-
-  .security-holder-identity > .addr-chip .addr-chip-link {
-    width: min(44ch, calc(100% - 24px));
-    overflow: hidden;
-    text-overflow: ellipsis;
-  }
-
   .security-holder-share {
     grid-template-columns: 6.5ch;
   }

@@ -946,17 +946,6 @@ export function formatSignatureCompact(signature, options = {}) {
   return `${signature.slice(0, start)}…${signature.slice(-end)}`;
 }
 
-export function formatAddressCompact(address, options = {}) {
-  if (!address) return DASH;
-  const start = options.start ?? 4;
-  const end = options.end ?? 4;
-  const ellipsis = options.ellipsis ?? "…";
-  if (address.length <= start + end + 1) {
-    return address;
-  }
-  return `${address.slice(0, start)}${ellipsis}${address.slice(-end)}`;
-}
-
 /**
  * Locale-aware list of already-formatted strings ("a, b, and c"). `type` is
  * "conjunction" (and), "disjunction" (or) or "unit" (bare separators).

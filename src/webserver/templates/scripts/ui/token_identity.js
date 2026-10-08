@@ -13,9 +13,9 @@
  *   1. SOL is not a token we look up — it is rendered from the official Solana
  *      brand logomark shipped with the binary (`/assets/solana/`). The wSOL mint
  *      and native SOL are the SAME asset to a user, so both resolve to it.
- *   2. A mint address is NEVER cropped. Shortening a mint is what makes two
- *      different tokens look identical; the address is always rendered in full
- *      (it wraps rather than truncates).
+ *   2. A mint address is NEVER cropped and never wraps. Shortening a mint is what
+ *      makes two different tokens look identical, and a wrapped one cannot be read
+ *      at a glance; the address keeps one line and its size fits that line.
  *   3. Identity lookups are cache-first and batched (`/api/tokens/identities`),
  *      which is DB-only on the server — never the external-fetching token detail
  *      route, which a dialog must not trigger for every mint a swap touched.
@@ -93,6 +93,10 @@ export function getIdentity(mint) {
   return identityCache.get(mint) || makeIdentity(mint);
 }
 
+// `/api/tokens/identities` answers at most this many mints per request
+// (`MAX_IDENTITIES` in `routes/tokens/identity.rs`); larger sets are split.
+const IDENTITY_BATCH_SIZE = 50;
+
 /**
  * Resolve a batch of mints, filling the cache. Returns a Map of mint -> identity
  * for every mint asked for (unknown ones resolve to a bare identity).
@@ -104,10 +108,15 @@ export async function resolveIdentities(mints) {
   );
 
   if (missing.length > 0) {
-    const request = fetchIdentities(missing);
-    missing.forEach((mint) => inFlight.set(mint, request));
+    const requests = [];
+    for (let start = 0; start < missing.length; start += IDENTITY_BATCH_SIZE) {
+      const batch = missing.slice(start, start + IDENTITY_BATCH_SIZE);
+      const request = fetchIdentities(batch);
+      batch.forEach((mint) => inFlight.set(mint, request));
+      requests.push(request);
+    }
     try {
-      await request;
+      await Promise.allSettled(requests);
     } finally {
       missing.forEach((mint) => inFlight.delete(mint));
     }
@@ -118,6 +127,21 @@ export async function resolveIdentities(mints) {
   if (pending.length > 0) await Promise.allSettled(pending);
 
   return new Map(wanted.map((mint) => [mint, getIdentity(mint)]));
+}
+
+/**
+ * Fill the identities behind already-rendered token cells: unresolved mints are
+ * fetched, and `repaint` runs only when one was, so a poll that brings no new
+ * token never redraws. A DataTable passes `() => table.repaintRows()`.
+ */
+export function resolveTokenCells(mints, repaint) {
+  const missing = [...new Set((mints || []).filter(Boolean))].filter(
+    (mint) => !isSolMint(mint) && !identityCache.has(mint)
+  );
+  if (missing.length === 0) return;
+  resolveIdentities(missing)
+    .then(() => repaint?.())
+    .catch(() => {});
 }
 
 async function fetchIdentities(mints) {
@@ -184,42 +208,86 @@ function isBrandAsset(logoUrl) {
 
 /**
  * Asset chip: logo + symbol (+ name). Use wherever an asset is named in prose or
- * a table cell. `showMint` appends the FULL mint underneath.
+ * a table cell. `showMint` puts symbol and name on the first line and the FULL
+ * mint on its own line underneath; `plainMint` drops that mint's link and copy.
  */
 export function renderTokenChip(mintOrIdentity, options = {}) {
   const identity =
     typeof mintOrIdentity === "string" ? getIdentity(mintOrIdentity) : mintOrIdentity;
-  const { size = "sm", showName = true, showMint = false } = options;
+  const { size = "sm", showName = true, showMint = false, plainMint = false } = options;
 
   const symbol = identity.symbol || I18n.t("tokens-identity-unknown-asset");
   const name = showName && identity.name && identity.name !== identity.symbol ? identity.name : "";
+  const withMint = showMint && identity.mint;
 
   return `
-    <span class="ti-chip ti-chip-${size}" data-mint="${Utils.escapeHtml(identity.mint || "")}">
+    <span class="ti-chip ti-chip-${size}${withMint ? " ti-chip-addressed" : ""}" data-mint="${Utils.escapeHtml(identity.mint || "")}">
       ${renderTokenLogo(identity, { size })}
       <span class="ti-chip-text">
-        <span class="ti-chip-symbol token-symbol-type">${Utils.escapeHtml(symbol)}</span>
-        ${name ? `<span class="ti-chip-name token-name-type">${Utils.escapeHtml(name)}</span>` : ""}
-        ${showMint && identity.mint ? renderAddress(identity.mint) : ""}
+        <span class="ti-chip-head">
+          <span class="ti-chip-symbol token-symbol-type">${Utils.escapeHtml(symbol)}</span>
+          ${name ? `<span class="ti-chip-name token-name-type">${Utils.escapeHtml(name)}</span>` : ""}
+        </span>
+        ${withMint ? renderAddress(identity.mint, { plain: plainMint }) : ""}
       </span>
     </span>
   `;
 }
 
-const EXPLORER_PATHS = { token: "token", account: "account", tx: "tx" };
+/**
+ * A table's token cell: logo and symbol, then the FULL mint on a second line.
+ * Fields the row already carries win over the cache, which may not have them
+ * yet; a name is shown only when the row supplies one.
+ * Pair it with `TOKEN_CELL_MIN_WIDTH` as the column's `minWidth`.
+ */
+export function renderTokenCell(mint, { symbol = null, name = null, logoUrl = null } = {}) {
+  if (!mint) return symbol ? Utils.escapeHtml(symbol) : "—";
+  const identity = getIdentity(mint);
+  return renderTokenChip(
+    {
+      ...identity,
+      symbol: symbol || identity.symbol,
+      name: name || identity.name,
+      logoUrl: logoUrl || identity.logoUrl,
+    },
+    { showName: Boolean(name), showMint: true }
+  );
+}
+
+const EXPLORER_PATHS = { token: "token", account: "account" };
+
+/** Glyph advance, smallest font size and action width of `.ti-address` (token_identity.css). */
+export const ADDRESS_GLYPH_ADVANCE = 0.61;
+export const ADDRESS_FLOOR_PX = 9;
+export const ADDRESS_ACTIONS_PX = 26;
 
 /**
- * A Solana address (mint, account, pool, program) or a signature, in FULL, with copy
- * and explorer actions. This is the ONE address renderer — mints, accounts and
- * signatures differ only in which explorer page they link to, so they must not be
- * three near-identical snippets that drift apart in styling. Never shortened: it wraps.
+ * Narrowest width, in CSS pixels, that shows an address of `chars` characters on
+ * one line at the floor size: a DataTable column holding addresses uses it as its
+ * `minWidth` (plus the cell padding), so a resize can never squeeze one below it.
+ */
+export function addressFloorWidth(chars = 44, { plain = false } = {}) {
+  return Math.ceil(
+    chars * ADDRESS_GLYPH_ADVANCE * ADDRESS_FLOOR_PX + (plain ? 0 : ADDRESS_ACTIONS_PX)
+  );
+}
+
+/** `renderTokenCell` column minimum: small logo and gap, the mint at its floor, cell padding. */
+export const TOKEN_CELL_MIN_WIDTH = addressFloorWidth() + 54;
+
+/**
+ * The value markup shared by `renderAddress` and `renderSignature`: `shown` is the
+ * text on screen, `value` what the explorer link and the copy action carry.
  * Copy is handled by the global `[data-copy]` delegation in core/utils.js.
  */
-export function renderAddress(address, options = {}) {
-  if (!address) return "—";
-  const explorer = EXPLORER_PATHS[options.explorer] || EXPLORER_PATHS.token;
-  const safe = Utils.escapeHtml(address);
-  const isSignature = options.explorer === "tx";
+function valueMarkup(value, shown, { plain, path, isSignature }) {
+  const safe = Utils.escapeHtml(value);
+  const text = Utils.escapeHtml(shown);
+  const chars = `style="--ti-address-chars: ${shown.length}"`;
+  const title = shown === value ? "" : ` title="${safe}"`;
+  if (plain) {
+    return `<span class="ti-address ti-address-plain" ${chars}><span class="ti-address-value" dir="ltr" translate="no"${title}>${text}</span></span>`;
+  }
   const copyTitle = Utils.escapeHtml(
     isSignature
       ? I18n.attr("tokens-identity-copy-signature", "title")
@@ -230,14 +298,57 @@ export function renderAddress(address, options = {}) {
       ? I18n.attr("tokens-identity-copy-signature", "aria-label")
       : I18n.attr("tokens-identity-copy-address", "aria-label")
   );
+  const linkTitle = title || ` title="${Utils.escapeHtml(I18n.t("links-view-solscan"))}"`;
   return `
-    <span class="ti-address">
-      <a href="https://solscan.io/${explorer}/${safe}" target="_blank" rel="noopener" class="ti-address-value" dir="ltr" title="${Utils.escapeHtml(I18n.t("links-view-solscan"))}">${safe}</a>
+    <span class="ti-address" ${chars}>
+      <a href="https://solscan.io/${path}/${safe}" target="_blank" rel="noopener" class="ti-address-value" dir="ltr" translate="no"${linkTitle}>${text}</a>
       <button type="button" class="ti-address-copy" data-copy="${safe}" title="${copyTitle}" aria-label="${copyLabel}">
         <i class="icon-copy"></i>
       </button>
     </span>
   `;
+}
+
+/**
+ * A Solana address (mint, account, pool, program) in FULL on one line, with copy
+ * and explorer actions. This is the ONE address renderer: mints and accounts
+ * differ only in which explorer page they link to.
+ *
+ * The value never wraps and is never cropped. `token_identity.css` sizes its font
+ * from the width its line actually has (a container query over the character
+ * count carried in `--ti-address-chars`), between a floor and the surface's own
+ * size, so the layout only has to give the address a line of its own.
+ *
+ * `plain` renders the bare value without link or copy, for a row that is itself
+ * the action (search results).
+ */
+export function renderAddress(address, options = {}) {
+  if (!address) return "—";
+  const path = EXPLORER_PATHS[options.explorer] || EXPLORER_PATHS.token;
+  return valueMarkup(address, address, { plain: options.plain, path, isSignature: false });
+}
+
+/**
+ * A transaction signature in its compact `head…tail` form, with copy and explorer
+ * actions that carry the full value and a tooltip that shows it. A signature is
+ * an identifier a user copies or opens, never one they read, so unlike an address
+ * it is not worth a full line of its own.
+ */
+export function renderSignature(signature, { plain = false } = {}) {
+  if (!signature) return "—";
+  return valueMarkup(signature, Utils.formatSignatureCompact(signature), {
+    plain,
+    path: "tx",
+    isSignature: true,
+  });
+}
+
+/**
+ * A wallet or account by its name, with the full address on the line below: the
+ * table cell for anything a user names (wallets, watched wallets, imports).
+ */
+export function renderNamedAddress(name, address, { explorer = "account" } = {}) {
+  return `<div class="ti-named-address"><span class="ti-named-address-name">${Utils.escapeHtml(name || "—")}</span>${address ? renderAddress(address, { explorer }) : ""}</div>`;
 }
 
 /** Inline "logo + symbol" for tight spots (table cells, flow rows). */

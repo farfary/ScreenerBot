@@ -86,7 +86,7 @@
 .pools-summary-fact > span,
 .pools-summary-row > span,
 .pool-detail-metric > span,
-.pool-address-row > span,
+.pool-address-label,
 .pool-reserves-heading {
   color: var(--text-muted);
   font-size: 0.625rem;
@@ -212,36 +212,32 @@
   border-inline-start: 1px solid var(--border-color);
 }
 
+/* One address per row, in full: two columns would leave each address too
+   little width to keep one line. */
 .pool-detail-addresses {
-  display: grid;
-  grid-template-columns: repeat(2, minmax(0, 1fr));
-  gap: 0 18px;
   padding-top: 8px;
 }
 
+.pool-detail-addresses,
+.pool-reserves {
+  --ti-address-size: 0.68rem;
+}
+
+/* When the label and the full address no longer fit side by side, the address
+   wraps to its own line beneath the label instead of shrinking either. */
 .pool-address-row {
   display: flex;
+  flex-wrap: wrap;
   align-items: center;
   justify-content: space-between;
-  gap: 10px;
+  gap: 2px 10px;
   min-width: 0;
   min-height: 32px;
+  padding-block: 4px;
   border-bottom: 1px solid var(--border-color);
 }
 
-.pool-address-value {
-  display: flex;
-  align-items: center;
-  gap: 4px;
-  min-width: 0;
-}
-
-.pool-address-value code {
-  overflow: hidden;
-  color: var(--text-secondary);
-  font-family: var(--font-mono);
-  font-size: 0.68rem;
-  text-overflow: ellipsis;
+.pool-address-label {
   white-space: nowrap;
 }
 
@@ -268,24 +264,6 @@
   font-size: 0.7rem;
 }
 
-.copy-btn-mini {
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  flex: 0 0 auto;
-  width: 20px;
-  height: 20px;
-  padding: 0;
-  border: 0;
-  background: transparent;
-  color: var(--text-muted);
-  cursor: pointer;
-}
-
-.copy-btn-mini:hover {
-  color: var(--text-primary);
-}
-
 @media (width <= 900px) {
   .pools-container {
     grid-template-columns: 1fr;
@@ -295,11 +273,5 @@
   .pools-left-col {
     border-inline-end: 0;
     border-bottom: 1px solid var(--border-color);
-  }
-}
-
-@media (width <= 600px) {
-  .pool-detail-addresses {
-    grid-template-columns: 1fr;
   }
 }

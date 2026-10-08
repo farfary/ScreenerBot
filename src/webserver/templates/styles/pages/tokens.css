@@ -330,25 +330,15 @@
   overflow: hidden;
 }
 
-/* Mint cell in OHLCV table */
-.mint-cell {
-  display: block;
-  min-width: 0;
-  overflow: hidden;
-  font-family: var(--font-data);
-  font-size: 0.85rem;
-  color: var(--text-secondary);
-  text-overflow: ellipsis;
-}
-
+/* The delete action's space is reserved at all times: the mint fits its line to
+   the cell width, so growing the padding on hover would resize the address. */
 .ohlcv-token-cell {
   position: relative;
   display: flex;
   align-items: center;
   width: 100%;
   min-width: 0;
-  padding-inline-end: 0;
-  transition: padding-right 180ms cubic-bezier(0.22, 1, 0.36, 1);
+  padding-inline-end: 34px;
 }
 
 .ohlcv-token-actions {
@@ -363,11 +353,6 @@
     transform 120ms ease;
 }
 
-.data-table tbody tr:hover .ohlcv-token-cell,
-.data-table tbody tr:focus-within .ohlcv-token-cell {
-  padding-inline-end: 34px;
-}
-
 .data-table tbody tr:hover .ohlcv-token-actions,
 .data-table tbody tr:focus-within .ohlcv-token-actions,
 .ohlcv-token-actions:focus-within {
@@ -377,10 +362,6 @@
 }
 
 @media (hover: none), (pointer: coarse) {
-  .ohlcv-token-cell {
-    padding-inline-end: 34px;
-  }
-
   .ohlcv-token-actions {
     opacity: 1;
     pointer-events: auto;
@@ -389,7 +370,6 @@
 }
 
 @media (prefers-reduced-motion: reduce) {
-  .ohlcv-token-cell,
   .ohlcv-token-actions {
     transition: none;
   }

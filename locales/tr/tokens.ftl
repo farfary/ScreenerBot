@@ -205,7 +205,6 @@ tokens-pools-role-quote = Kote
 tokens-pools-role-unknown = Bilinmiyor
 tokens-pools-reserves = Rezerv hesapları
 tokens-pools-no-reserves = Rezerv hesabı yok
-tokens-pools-address-copy = Adresi kopyala
 tokens-pools-address-pool = Havuz
     .title = Havuzu kopyala
 tokens-pools-address-base = Baz mint
@@ -319,8 +318,6 @@ tokens-dialog-badge-profile = Yayımlanmış profil
 tokens-dialog-badge-low-risk-hint = Güncel { -rugcheck } puanına göre düşük risk; kimlik doğrulaması değildir.
 tokens-dialog-badge-immutable = Değiştirilemez
 tokens-dialog-badge-mutable = Değiştirilebilir
-tokens-dialog-badge-auth = Yetki:
-tokens-dialog-badge-update-authority = Güncelleme Yetkisi:
 tokens-dialog-badge-position = Pozisyon
 tokens-dialog-badge-blacklisted = Kara listede
 
@@ -399,7 +396,7 @@ tokens-ohlcv-active = Etkin
 tokens-ohlcv-db-size = Veritabanı Boyutu
 tokens-ohlcv-cleanup = Etkin Olmayanları Temizle
 tokens-ohlcv-delete-title = OHLCV Verilerini Sil
-tokens-ohlcv-delete-message = { $mint }... için tüm OHLCV verileri silinsin mi?
+tokens-ohlcv-delete-token-message = { $token } için tüm OHLCV verileri silinsin mi?
 tokens-ohlcv-delete-done =
     Silindi: { $candles ->
         [one] { $candles } mum

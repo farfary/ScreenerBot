@@ -33,17 +33,13 @@ wallets-watch-reason-helius-unavailable = فشلت فحوصات { -helius }. ا�
 wallets-watch-reason-processing-failed = تعذّرت معالجة نشاط المحفظة. التقدم المحفوظ باقٍ.
 
 # Vocabulary shared by the wallet tables and dialogs.
-wallets-field-address = العنوان
 wallets-field-name = اسم المحفظة
 wallets-field-notes = ملاحظات
 wallets-field-private-key = المفتاح الخاص
-wallets-address-copy = نسخ العنوان
 wallets-modal-close =
     .aria-label = إغلاق النافذة
 wallets-this-wallet = هذه المحفظة
 wallets-summary-native = { -sol }
-wallets-copied-address = العنوان
-wallets-copied-mint = عنوان الإصدار
 wallets-copied-private-key = المفتاح الخاص
 
 # wallets.js: subtabs, toasts and busy states.
@@ -271,7 +267,6 @@ wallets-holdings-col-balance = الرصيد
 wallets-holdings-col-value = القيمة ({ -sol })
 wallets-holdings-col-type = النوع
 wallets-holdings-col-decimals = الخانات العشرية
-wallets-holdings-col-mint = الإصدار
 wallets-holdings-empty-title = لا توجد حيازات رموز
 wallets-holdings-empty-message = ستظهر هنا الرموز التي تحتفظ بها هذه المحفظة.
 wallets-holdings-no-main = لا توجد محفظة رئيسية

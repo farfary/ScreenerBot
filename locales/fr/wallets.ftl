@@ -22,17 +22,13 @@ wallets-watch-reason-signature-budget = Ce portefeuille a plus d'activité que s
 wallets-watch-reason-helius-unavailable = Échec des vérifications { -helius }. La progression enregistrée est conservée.
 wallets-watch-reason-processing-failed = L'activité du portefeuille n'a pas pu être traitée. La progression enregistrée est conservée.
 
-wallets-field-address = Adresse
 wallets-field-name = Nom du portefeuille
 wallets-field-notes = Notes
 wallets-field-private-key = Clé privée
-wallets-address-copy = Copier l'adresse
 wallets-modal-close =
     .aria-label = Fermer la fenêtre
 wallets-this-wallet = ce portefeuille
 wallets-summary-native = { -sol }
-wallets-copied-address = Adresse
-wallets-copied-mint = Adresse de mint
 wallets-copied-private-key = Clé privée
 
 wallets-tab-main = Portefeuille principal
@@ -236,7 +232,6 @@ wallets-holdings-col-balance = Solde
 wallets-holdings-col-value = Valeur ({ -sol })
 wallets-holdings-col-type = Type
 wallets-holdings-col-decimals = Décimales
-wallets-holdings-col-mint = Mint
 wallets-holdings-empty-title = Aucun token détenu
 wallets-holdings-empty-message = Les tokens détenus par ce portefeuille apparaîtront ici.
 wallets-holdings-no-main = Aucun portefeuille principal

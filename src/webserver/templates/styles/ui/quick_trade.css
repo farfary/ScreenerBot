@@ -106,10 +106,14 @@
   display: flex;
 }
 
+/* Symbol and name on the first line, the full mint on the second. */
 .search-result-item {
+  --ti-address-size: 0.75rem;
+
   display: flex;
+  flex-wrap: wrap;
   align-items: center;
-  gap: 0.5rem;
+  gap: 2px 0.5rem;
   padding: 0.75rem 1rem;
   cursor: pointer;
   transition: background-color 0.1s;
@@ -145,11 +149,8 @@
   white-space: nowrap;
 }
 
-.search-result-mint {
-  font-family: var(--font-mono);
-  font-size: 0.75rem;
-  color: var(--text-muted);
-  flex-shrink: 0;
+.search-result-item > .ti-address {
+  flex-basis: 100%;
 }
 
 /* Quick Trade Recent Tokens */

@@ -41,7 +41,6 @@ common-severity-debug = Отладка
 
 common-error-with-message = Ошибка: { $message }
 
-common-copied-address = Адрес
 common-copied-signature = Подпись
 common-copied-json = JSON
 common-copied-value = Значение

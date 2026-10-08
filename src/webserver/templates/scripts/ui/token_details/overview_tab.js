@@ -8,6 +8,7 @@
  */
 import * as Utils from "../../core/utils.js";
 import { formatFixed, formatPercentValue, withSolUnit } from "../../core/format.js";
+import { renderAddress } from "../token_identity.js";
 import { venueLabel } from "../venue.js";
 
 const esc = (text) => Utils.escapeHtml(text);
@@ -23,7 +24,6 @@ function wholePercent(value) {
  * @param {Object} options - Rendering options
  * @param {Function} options.renderHintTrigger - Function to render hint triggers
  * @param {Function} options.escapeHtml - HTML escape function
- * @param {Function} options.formatShortAddress - Address formatting function
  * @returns {string} HTML string for overview tab
  */
 export function renderOverviewTab(token, options = {}) {
@@ -90,14 +90,13 @@ export function renderOverviewTab(token, options = {}) {
  * @returns {string} HTML string for the overview left column
  */
 export function renderOverviewLeft(token, options = {}) {
-  const { renderHintTrigger, escapeHtml, formatShortAddress } = options;
+  const { renderHintTrigger, escapeHtml } = options;
   return `
     <div class="overview-sheet">
       ${buildHeadlineMetrics(token)}
       ${buildOverviewContent(token, {
         renderHintTrigger,
         escapeHtml,
-        formatShortAddress,
       })}
     </div>
   `;
@@ -169,12 +168,12 @@ function buildHeadlineMetrics(token) {
 }
 
 function buildOverviewContent(token, options) {
-  const { renderHintTrigger, escapeHtml, formatShortAddress } = options;
+  const { renderHintTrigger, escapeHtml } = options;
 
   return `
     <div class="overview-sections">
-      ${buildTokenInfoSection(token, { renderHintTrigger, escapeHtml, formatShortAddress })}
-      ${buildLiquiditySection(token, { renderHintTrigger, formatShortAddress })}
+      ${buildTokenInfoSection(token, { renderHintTrigger, escapeHtml })}
+      ${buildLiquiditySection(token, { renderHintTrigger })}
       ${buildMarketPulseSection(token, { renderHintTrigger })}
       ${buildActivitySection(token, { renderHintTrigger })}
     </div>
@@ -182,7 +181,7 @@ function buildOverviewContent(token, options) {
 }
 
 function buildTokenInfoSection(token, options) {
-  const { renderHintTrigger, escapeHtml, formatShortAddress } = options;
+  const { renderHintTrigger, escapeHtml } = options;
 
   const age = token.pair_created_at
     ? Utils.formatTimeAgo(new Date(token.pair_created_at * 1000))
@@ -206,16 +205,9 @@ function buildTokenInfoSection(token, options) {
         </div>
       </div>
       <div class="overview-facts">
-          <div class="overview-fact">
+          <div class="overview-fact overview-fact-wide">
             <span class="overview-fact-label">${esc(I18n.t("tokens-overview-fact-mint"))}</span>
-            <button
-              type="button"
-              class="overview-copy-value"
-              data-copy="${escapeHtml(token.mint)}"
-              dir="ltr"
-              title="${esc(I18n.attr("links-copy-mint", "title"))}"
-              aria-label="${esc(I18n.attr("links-copy-mint", "aria-label"))}"
-            >${formatShortAddress(token.mint)}</button>
+            ${renderAddress(token.mint)}
           </div>
           <div class="overview-fact">
             <span class="overview-fact-label">${esc(I18n.t("tokens-overview-fact-decimals"))}</span>
@@ -260,7 +252,7 @@ function buildTokenInfoSection(token, options) {
 }
 
 function buildLiquiditySection(token, options) {
-  const { renderHintTrigger, formatShortAddress } = options;
+  const { renderHintTrigger } = options;
 
   return `
     <section class="overview-section">
@@ -291,7 +283,7 @@ function buildLiquiditySection(token, options) {
             ? `
         <div class="overview-pool-row">
           <span class="overview-inline-label">${esc(I18n.t("tokens-overview-pool"))}</span>
-          <a href="https://solscan.io/account/${token.pool_address}" target="_blank" rel="noopener" class="overview-pool-link" dir="ltr">${formatShortAddress(token.pool_address)}</a>
+          ${renderAddress(token.pool_address, { explorer: "account" })}
         </div>
         `
             : ""
@@ -417,7 +409,11 @@ function buildActivitySection(token, options) {
           <span class="overview-flow-stat-label">${esc(I18n.t("tokens-overview-average-24h"))}</span>
           <span class="overview-flow-stat-value">${
             total24 > 0
-              ? esc(I18n.t("tokens-overview-rate-per-hour", { amount: Utils.formatNumber(total24 / 24, { decimals: 1 }) }))
+              ? esc(
+                  I18n.t("tokens-overview-rate-per-hour", {
+                    amount: Utils.formatNumber(total24 / 24, { decimals: 1 }),
+                  })
+                )
               : "—"
           }</span>
         </div>
@@ -425,7 +421,11 @@ function buildActivitySection(token, options) {
           <span class="overview-flow-stat-label">${esc(I18n.t("tokens-overview-spike-5m"))}</span>
           <span class="overview-flow-stat-value">${
             typeof spikeFactor === "number" && Number.isFinite(spikeFactor)
-              ? esc(I18n.t("tokens-overview-spike-factor", { factor: Utils.formatNumber(spikeFactor, { decimals: 2 }) }))
+              ? esc(
+                  I18n.t("tokens-overview-spike-factor", {
+                    factor: Utils.formatNumber(spikeFactor, { decimals: 2 }),
+                  })
+                )
               : "—"
           }</span>
         </div>

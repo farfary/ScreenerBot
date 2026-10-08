@@ -21,6 +21,7 @@ import { ConfirmationDialog } from "../../ui/confirmation_dialog.js";
 import { apiErrorMessage } from "../../core/request_manager.js";
 import { RISK_SEVERITY_LABELS } from "../../ui/risk_severity.js";
 import { venueLabel } from "../../ui/venue.js";
+import { renderAddress } from "../../ui/token_identity.js";
 import { rugcheckRiskDescription, rugcheckRiskName } from "../../ui/rugcheck_risk.js";
 
 // Ids are the bands of getTaScoreBand.
@@ -830,7 +831,7 @@ function renderTaOverviewTab() {
         <div class="ta-info-grid">
           <div class="ta-info-item">
             <span class="ta-info-label" data-l10n-id="tools-analyzer-info-mint"></span>
-            <span class="ta-info-value mono" dir="ltr">${escapeHtml(overview.mint)}</span>
+            ${renderAddress(overview.mint)}
           </div>
           ${
             overview.description
@@ -910,12 +911,12 @@ function renderTaSecurityTab() {
           <div class="ta-authority-item ${security.mint_authority ? "warning" : "success"}">
             <span class="ta-authority-label" data-l10n-id="tools-analyzer-authority-mint"></span>
             <span class="ta-authority-value">${escapeHtml(I18n.label(AUTHORITY_STATE_LABELS, security.mint_authority ? "active" : "revoked"))}</span>
-            ${security.mint_authority ? `<span class="ta-authority-address mono" dir="ltr">${escapeHtml(security.mint_authority)}</span>` : ""}
+            ${security.mint_authority ? `<div class="ta-authority-address">${renderAddress(security.mint_authority, { explorer: "account" })}</div>` : ""}
           </div>
           <div class="ta-authority-item ${security.freeze_authority ? "warning" : "success"}">
             <span class="ta-authority-label" data-l10n-id="tools-analyzer-authority-freeze"></span>
             <span class="ta-authority-value">${escapeHtml(I18n.label(AUTHORITY_STATE_LABELS, security.freeze_authority ? "active" : "revoked"))}</span>
-            ${security.freeze_authority ? `<span class="ta-authority-address mono" dir="ltr">${escapeHtml(security.freeze_authority)}</span>` : ""}
+            ${security.freeze_authority ? `<div class="ta-authority-address">${renderAddress(security.freeze_authority, { explorer: "account" })}</div>` : ""}
           </div>
           <div class="ta-authority-item ${security.has_transfer_fee ? "warning" : "success"}">
             <span class="ta-authority-label" data-l10n-id="tools-analyzer-authority-transfer-fee"></span>
@@ -1157,7 +1158,6 @@ function renderTaLiquidityTab() {
             <thead>
               <tr>
                 <th data-l10n-id="tools-analyzer-pools-column-dex"></th>
-                <th data-l10n-id="tools-analyzer-pools-column-address"></th>
                 <th data-l10n-id="tools-analyzer-pools-column-liquidity"></th>
                 <th data-l10n-id="tools-analyzer-pools-column-status"></th>
               </tr>
@@ -1167,8 +1167,12 @@ function renderTaLiquidityTab() {
                 .map(
                   (pool) => `
                 <tr class="${pool.is_canonical ? "canonical" : ""}">
-                  <td class="dex">${escapeHtml(venueLabel(pool.dex))}</td>
-                  <td class="address mono" dir="ltr">${escapeHtml(pool.address.slice(0, 8))}...${escapeHtml(pool.address.slice(-6))}</td>
+                  <td>
+                    <div class="ta-pool-cell">
+                      <span class="ta-pool-dex">${escapeHtml(venueLabel(pool.dex))}</span>
+                      ${renderAddress(pool.address, { explorer: "account" })}
+                    </div>
+                  </td>
                   <td class="liquidity">${Utils.formatSol(pool.liquidity_native)}</td>
                   <td class="status">${pool.is_canonical ? '<span class="canonical-badge" data-l10n-id="tools-analyzer-pool-primary"></span>' : ""}</td>
                 </tr>

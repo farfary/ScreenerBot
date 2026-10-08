@@ -39,7 +39,10 @@
                 id="credentials-title"
                 data-l10n-id="setup-wizard-credentials-title"
               ></h1>
-              <p class="setup-step-description" data-l10n-id="setup-wizard-credentials-description"></p>
+              <p
+                class="setup-step-description"
+                data-l10n-id="setup-wizard-credentials-description"
+              ></p>
             </header>
 
             <div class="setup-credentials-grid">
@@ -51,7 +54,8 @@
 
                 <div class="setup-field">
                   <div class="setup-input-wrapper" dir="ltr">
-                    <textarea dir="ltr"
+                    <textarea
+                      dir="ltr"
                       class="setup-input"
                       id="wallet-private-key"
                       data-l10n-id="setup-dialog-wallet-input"
@@ -86,12 +90,10 @@
                   ></div>
                   <div class="setup-wallet-preview" id="wallet-address-preview" hidden>
                     <i class="icon-wallet" aria-hidden="true"></i>
-                    <span class="wallet-address-text" data-selectable="true"></span>
-                    <button
-                      type="button"
-                      class="wallet-copy-btn"
-                      data-l10n-id="setup-wallet-copy"
-                    >
+                    <span class="ti-address ti-address-plain wallet-address-text"
+                      ><span class="ti-address-value" dir="ltr" translate="no"></span
+                    ></span>
+                    <button type="button" class="wallet-copy-btn" data-l10n-id="setup-wallet-copy">
                       <i class="icon-copy" aria-hidden="true"></i>
                     </button>
                   </div>
@@ -106,7 +108,8 @@
 
                 <div class="setup-field">
                   <div class="setup-input-wrapper" dir="ltr">
-                    <textarea dir="ltr"
+                    <textarea
+                      dir="ltr"
                       class="setup-input"
                       id="rpc-urls"
                       data-l10n-id="setup-wizard-rpc-input"
@@ -127,8 +130,8 @@
                         target="_blank"
                         rel="noopener noreferrer"
                         ><span data-l10n-id="setup-provider-helius"></span>
-                        <strong data-l10n-id="setup-wizard-provider-recommended"></strong></a
-                      >
+                        <strong data-l10n-id="setup-wizard-provider-recommended"></strong
+                      ></a>
                       <a
                         href="https://www.quicknode.com"
                         target="_blank"
@@ -153,8 +156,14 @@
                   <label class="setup-gateway-option is-hidden" id="setup-gateway-option">
                     <input type="checkbox" id="setup-use-gateway" />
                     <span class="setup-gateway-copy">
-                      <span class="setup-gateway-title" data-l10n-id="setup-wizard-gateway-title"></span>
-                      <span class="setup-gateway-hint" data-l10n-id="setup-wizard-gateway-hint"></span>
+                      <span
+                        class="setup-gateway-title"
+                        data-l10n-id="setup-wizard-gateway-title"
+                      ></span>
+                      <span
+                        class="setup-gateway-hint"
+                        data-l10n-id="setup-wizard-gateway-hint"
+                      ></span>
                     </span>
                   </label>
                 </div>

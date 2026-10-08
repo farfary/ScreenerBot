@@ -5,7 +5,6 @@
 // compose the functions of core/format.js with this feature's precision.
 
 import {
-  formatAddressCompact,
   formatFixed,
   formatPercentValue,
   formatPriceSol,
@@ -239,12 +238,8 @@ export function dateTime(value) {
   return formatTimestamp(value, { includeYear: false, fallback: String(value) });
 }
 
-export function shortAddress(address) {
-  return formatAddressCompact(address, { start: 5, end: 4 });
-}
-
 export function taskName(task) {
-  return task?.label || shortAddress(task?.target_address);
+  return task?.label || I18n.t("copy-task-unnamed");
 }
 
 /** Range presets for analytics, as `from` timestamps. */

@@ -155,7 +155,6 @@ transactions-dialog-balances-net-native = Net { -sol } Change
 transactions-dialog-balances-fee = Transaction Fee
 transactions-dialog-col-account = Account
 transactions-dialog-col-token = Token
-transactions-dialog-col-mint = Mint Address
 transactions-dialog-col-pre-balance = Pre Balance
 transactions-dialog-col-post-balance = Post Balance
 transactions-dialog-col-change = Change

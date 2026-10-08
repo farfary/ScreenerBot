@@ -191,8 +191,6 @@ shell-toast-dismiss =
     .aria-label = Đóng
 shell-confirm-title = Xác nhận thao tác
 shell-confirm-message = Bạn có chắc không?
-shell-address-open-solscan = - mở trong { -solscan }
-shell-address-copy = Sao chép địa chỉ
 
 shell-assistant-label = Trợ lý
 shell-assistant-dialog =

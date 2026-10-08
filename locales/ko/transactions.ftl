@@ -155,7 +155,6 @@ transactions-dialog-balances-net-native = { -sol } 순변동
 transactions-dialog-balances-fee = 트랜잭션 수수료
 transactions-dialog-col-account = 계정
 transactions-dialog-col-token = 토큰
-transactions-dialog-col-mint = 민트 주소
 transactions-dialog-col-pre-balance = 이전 잔액
 transactions-dialog-col-post-balance = 이후 잔액
 transactions-dialog-col-change = 변동

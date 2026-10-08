@@ -230,7 +230,6 @@ tokens-pools-role-quote = مقابل
 tokens-pools-role-unknown = غير معروف
 tokens-pools-reserves = حسابات الاحتياطي
 tokens-pools-no-reserves = لا توجد حسابات احتياطي
-tokens-pools-address-copy = نسخ العنوان
 tokens-pools-address-pool = المجمع
     .title = نسخ عنوان المجمع
 tokens-pools-address-base = إصدار الأساس
@@ -348,8 +347,6 @@ tokens-dialog-badge-profile = الملف المنشور
 tokens-dialog-badge-low-risk-hint = مخاطر منخفضة وفق درجة { -rugcheck } الحالية؛ وليس تحققًا من الهوية.
 tokens-dialog-badge-immutable = غير قابل للتعديل
 tokens-dialog-badge-mutable = قابل للتعديل
-tokens-dialog-badge-auth = الصلاحية:
-tokens-dialog-badge-update-authority = صلاحية التحديث:
 tokens-dialog-badge-position = مركز
 tokens-dialog-badge-blacklisted = في القائمة السوداء
 
@@ -431,8 +428,8 @@ tokens-ohlcv-active = نشطة
 tokens-ohlcv-db-size = حجم قاعدة البيانات
 tokens-ohlcv-cleanup = تنظيف غير النشطة
 tokens-ohlcv-delete-title = حذف بيانات OHLCV
-# $mint is the first characters of the token mint.
-tokens-ohlcv-delete-message = هل تريد حذف جميع بيانات OHLCV للرمز { $mint }...؟
+# $token is the token symbol.
+tokens-ohlcv-delete-token-message = هل تريد حذف جميع بيانات OHLCV للرمز { $token }؟
 tokens-ohlcv-delete-done = تم الحذف — الشموع: { $candles }، المجمعات: { $pools }
 tokens-ohlcv-delete-failed = تعذّر حذف بيانات OHLCV
 tokens-ohlcv-cleanup-title = حذف الرموز غير النشطة

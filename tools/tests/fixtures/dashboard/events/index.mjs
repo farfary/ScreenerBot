@@ -27,6 +27,13 @@ export const endpoints = [
     rust: "src/webserver/routes/events/types.rs::EventsListResponse",
     record: null,
   },
+  {
+    method: "GET",
+    path: "/api/tokens/identities",
+    fixture: "token_identities.json",
+    rust: "src/webserver/routes/tokens/identity.rs::IdentitiesResponse",
+    record: null,
+  },
 ];
 
 export const views = [

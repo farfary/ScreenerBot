@@ -155,7 +155,6 @@ transactions-dialog-balances-net-native = { -sol } 净变动
 transactions-dialog-balances-fee = 交易费用
 transactions-dialog-col-account = 账户
 transactions-dialog-col-token = 代币
-transactions-dialog-col-mint = 铸造地址
 transactions-dialog-col-pre-balance = 变动前余额
 transactions-dialog-col-post-balance = 变动后余额
 transactions-dialog-col-change = 变动

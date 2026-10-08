@@ -41,7 +41,6 @@ common-severity-debug = Gỡ lỗi
 
 common-error-with-message = Lỗi: { $message }
 
-common-copied-address = Địa chỉ
 common-copied-signature = Chữ ký
 common-copied-json = JSON
 common-copied-value = Giá trị

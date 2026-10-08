@@ -33,17 +33,13 @@ wallets-watch-reason-helius-unavailable = Перевірки через { -heliu
 wallets-watch-reason-processing-failed = Не вдалося обробити активність гаманця. Збережений прогрес не втрачено.
 
 # Vocabulary shared by the wallet tables and dialogs.
-wallets-field-address = Адреса
 wallets-field-name = Назва гаманця
 wallets-field-notes = Нотатки
 wallets-field-private-key = Приватний ключ
-wallets-address-copy = Копіювати адресу
 wallets-modal-close =
     .aria-label = Закрити вікно
 wallets-this-wallet = цей гаманець
 wallets-summary-native = { -sol }
-wallets-copied-address = Адресу
-wallets-copied-mint = Адресу мінта
 wallets-copied-private-key = Приватний ключ
 
 # wallets.js: subtabs, toasts and busy states.
@@ -261,7 +257,6 @@ wallets-holdings-col-balance = Баланс
 wallets-holdings-col-value = Вартість ({ -sol })
 wallets-holdings-col-type = Тип
 wallets-holdings-col-decimals = Десяткові знаки
-wallets-holdings-col-mint = Мінт
 wallets-holdings-empty-title = Немає токенів
 wallets-holdings-empty-message = Токени, які утримує цей гаманець, з’являться тут.
 wallets-holdings-no-main = Немає основного гаманця

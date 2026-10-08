@@ -20,7 +20,7 @@
  * The rich form composes typed items into the `controls` / `actions` zones:
  *
  *   toolbar: {
- *     identity: { icon, title, tag, address: { value, href }, details: [...] },
+ *     identity: { icon, title, tag, address: { value, explorer }, details: [...] },
  *     summary:  [ { id, label, value, variant } ],
  *     search:   { enabled, placeholder, mode, onChange, onSubmit },
  *     views:    { id, value, options: [{ value, label, icon }], onChange },
@@ -570,30 +570,12 @@ function renderIdentity(identity) {
       }>${escapeHtml(identity.tag)}</span>`
     : "";
 
-  const address = identity.address;
-  let addressMarkup = "";
-  if (address && address.value) {
-    const copyBtn =
-      address.copy === false
-        ? ""
-        : `<button type="button" class="table-toolbar-identity__act" data-toolbar-copy="${escapeHtml(
-            address.value
-          )}" title="${escapeHtml(I18n.t("table-toolbar-copy-address"))}" aria-label="${escapeHtml(I18n.t("table-toolbar-copy-address"))}"><i class="icon-copy"></i></button>`;
-    const linkBtn = address.href
-      ? `<a class="table-toolbar-identity__act" href="${escapeHtml(
-          address.href
-        )}" target="_blank" rel="noopener" title="${escapeHtml(
-          address.linkTooltip || I18n.t("table-toolbar-open-explorer")
-        )}" aria-label="${escapeHtml(address.linkTooltip || I18n.t("table-toolbar-open-explorer"))}"><i class="icon-external-link"></i></a>`
-      : "";
-    addressMarkup = `
-      <span class="table-toolbar-identity__address-group">
-        <code class="table-toolbar-identity__address" dir="ltr">${escapeHtml(address.value)}</code>
-        ${copyBtn}
-        ${linkBtn}
-      </span>
-    `;
-  }
+  // The caller passes the address already rendered by `renderAddress`
+  // (ui/token_identity.js), which owns the one-line fit, copy and explorer link. The
+  // slot renders even before the value is known so `updateIdentity` can fill it.
+  const addressMarkup = identity.address
+    ? `<span class="table-toolbar-identity__address">${identity.address.html || ""}</span>`
+    : "";
 
   const subtitle = identity.subtitle
     ? `<span class="table-toolbar-identity__subtitle">${escapeHtml(identity.subtitle)}</span>`
@@ -963,18 +945,9 @@ export class TableToolbarView {
       }
     }
     if (identity.address !== undefined) {
-      const value = identity.address?.value ?? "";
-      const codeEl = block.querySelector(".table-toolbar-identity__address");
-      if (codeEl) {
-        codeEl.textContent = value;
-      }
-      const copyBtn = block.querySelector("[data-toolbar-copy]");
-      if (copyBtn) {
-        copyBtn.dataset.toolbarCopy = value;
-      }
-      const linkEl = block.querySelector(".table-toolbar-identity__act[href]");
-      if (linkEl && identity.address?.href) {
-        linkEl.setAttribute("href", identity.address.href);
+      const addressEl = block.querySelector(".table-toolbar-identity__address");
+      if (addressEl) {
+        addressEl.innerHTML = identity.address?.html || "";
       }
     }
   }

@@ -398,14 +398,11 @@
 }
 
 .security-authority-address {
+  --ti-address-size: 0.64rem;
+
   grid-column: 1 / -1;
   min-width: 0;
   padding-inline-start: 21px;
-}
-
-.security-authority-address .addr-chip-link {
-  color: var(--text-secondary);
-  font-size: 0.64rem;
 }
 
 .security-detail-label {

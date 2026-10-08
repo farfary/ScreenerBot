@@ -138,7 +138,6 @@ transactions-dialog-balances-net-native = Perubahan Bersih { -sol }
 transactions-dialog-balances-fee = Biaya Transaksi
 transactions-dialog-col-account = Akun
 transactions-dialog-col-token = Token
-transactions-dialog-col-mint = Alamat Mint
 transactions-dialog-col-pre-balance = Saldo Sebelum
 transactions-dialog-col-post-balance = Saldo Sesudah
 transactions-dialog-col-change = Perubahan

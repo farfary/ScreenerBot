@@ -32,7 +32,12 @@ import {
 } from "../core/format.js";
 import { escapeHtml, resolveTokenLogoUrl, showToast } from "../core/utils.js";
 import { apiErrorMessage } from "../core/request_manager.js";
-import { renderTokenLogo, resolvedTokenName, resolvedTokenSymbol } from "./token_identity.js";
+import {
+  renderAddress,
+  renderTokenLogo,
+  resolvedTokenName,
+  resolvedTokenSymbol,
+} from "./token_identity.js";
 import "./token_details_dialog.js";
 
 const SEARCH_DEBOUNCE_MS = 250;
@@ -475,7 +480,7 @@ function rowHtml(row, index) {
         <span class="search-row-change" data-tone="${tone}">${escapeHtml(formatPercentValue(change))}</span>
       </span>
       <span class="search-row-bottom">
-        <span class="search-row-mint" dir="ltr">${escapeHtml(row.mint)}</span>
+        ${renderAddress(row.mint, { plain: true })}
         <span class="search-row-figures">
           ${capFigureHtml(row)}
           ${figureHtml(

@@ -12,6 +12,12 @@ import { TransactionDetailsDialog } from "../ui/transaction_details_dialog.js";
 import { TYPE_FILTER_OPTIONS, typeLabel, typeVariant } from "../ui/transaction_type.js";
 import { directionBadge, directionLabel } from "../ui/transaction_direction.js";
 import { listStatusBadge, statusLabel } from "../ui/transaction_status.js";
+import {
+  renderSignature,
+  renderTokenCell,
+  resolveTokenCells,
+  TOKEN_CELL_MIN_WIDTH,
+} from "../ui/token_identity.js";
 import { venueLabel } from "../ui/venue.js";
 
 const PAGE_LIMIT = 100;
@@ -20,12 +26,6 @@ const DEFAULT_FILTERS = {
   direction: "all",
   status: "all",
 };
-
-function formatSignatureLink(signature) {
-  if (!signature) return "—";
-  const safe = Utils.escapeHtml(signature);
-  return `<a class="mono-text" dir="ltr" href="https://solscan.io/tx/${safe}" target="_blank" rel="noopener">${safe}</a>`;
-}
 
 function formatTypeBadge(value) {
   if (!value) return "—";
@@ -43,22 +43,6 @@ function formatStatusBadge(status, success) {
     return `<span class="badge error">${Utils.escapeHtml(status)}</span>`;
   }
   return Utils.escapeHtml(status);
-}
-
-function formatTokenDisplay(row) {
-  const symbol = row?.token_symbol?.trim();
-  if (symbol) {
-    return Utils.escapeHtml(symbol);
-  }
-  const mint = row?.token_mint?.trim();
-  if (!mint) {
-    return "—";
-  }
-  if (mint.length <= 8) {
-    return Utils.escapeHtml(mint);
-  }
-  const short = `${mint.slice(0, 4)}…${mint.slice(-4)}`;
-  return `<span class="mono-text" title="${Utils.escapeHtml(mint)}">${Utils.escapeHtml(short)}</span>`;
 }
 
 function createLifecycle() {
@@ -186,6 +170,7 @@ function createLifecycle() {
     }
   };
 
+  // Logos arrive after the rows: the token cells repaint once their identities resolve.
   const loadTransactionsPage = async ({ direction, cursor, reason, signal: _signal }) => {
     const payloadCursor = direction === "prev" ? null : (cursor ?? null);
     const payload = buildRequestPayload(payloadCursor);
@@ -222,6 +207,10 @@ function createLifecycle() {
       // Dedup is only needed for prev direction (prepending new transactions).
       if (direction !== "prev") {
         const items = Array.isArray(data?.items) ? data.items : [];
+        resolveTokenCells(
+          items.map((row) => row?.token_mint),
+          () => table?.repaintRows()
+        );
         return {
           rows: items,
           cursorNext: data?.next_cursor ?? null,
@@ -283,6 +272,10 @@ function createLifecycle() {
       }
 
       const hasMorePrev = !hitDuplicate && Boolean(nextCursor);
+      resolveTokenCells(
+        aggregated.map((row) => row?.token_mint),
+        () => table?.repaintRows()
+      );
 
       return {
         rows: aggregated,
@@ -399,8 +392,8 @@ function createLifecycle() {
         {
           id: "signature",
           label: I18n.t("transactions-col-signature"),
-          minWidth: 300,
-          render: (value) => formatSignatureLink(value),
+          minWidth: 170,
+          render: (value) => renderSignature(value),
         },
         {
           id: "transaction_type",
@@ -435,14 +428,16 @@ function createLifecycle() {
         {
           id: "token_mint",
           label: I18n.t("transactions-col-token"),
-          minWidth: 140,
-          render: (value, row) => formatTokenDisplay(row),
+          minWidth: TOKEN_CELL_MIN_WIDTH,
+          render: (value, row) =>
+            renderTokenCell(row?.token_mint?.trim(), { symbol: row?.token_symbol?.trim() }),
         },
         {
           id: "router",
           label: I18n.t("transactions-col-router"),
           minWidth: 140,
-          render: (value) => (value === null || value === undefined ? "—" : Utils.escapeHtml(venueLabel(value))),
+          render: (value) =>
+            value === null || value === undefined ? "—" : Utils.escapeHtml(venueLabel(value)),
         },
         {
           id: "instructions_count",
@@ -450,7 +445,8 @@ function createLifecycle() {
           minWidth: 90,
           // Every transaction has at least one instruction; 0 is a row stored before the
           // count was recorded, so it reads as unknown.
-          render: (value) => Utils.formatNumber(value > 0 ? value : null, { decimals: 0, fallback: "—" }),
+          render: (value) =>
+            Utils.formatNumber(value > 0 ? value : null, { decimals: 0, fallback: "—" }),
         },
       ];
 
@@ -726,11 +722,8 @@ function createLifecycle() {
     try {
       const data = await requestManager.fetch("/api/wallets/watch", { priority: "normal" });
       for (const target of data.targets || []) {
-        const short = `${target.address.slice(0, 6)}…${target.address.slice(-4)}`;
-        options.push({
-          value: target.address,
-          label: target.label ? `${target.label} · ${short}` : short,
-        });
+        // A labelled wallet is named by its label; an unlabelled one by its full address.
+        options.push({ value: target.address, label: target.label || target.address });
       }
       targetsLoaded = true;
     } catch (error) {

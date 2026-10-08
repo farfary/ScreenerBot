@@ -15,6 +15,7 @@ import {
   severityBadge,
 } from "../ui/event_labels.js";
 import { requestManager } from "../core/request_manager.js";
+import { renderTokenCell, resolveTokenCells, TOKEN_CELL_MIN_WIDTH } from "../ui/token_identity.js";
 
 const DEFAULT_FILTERS = {
   category: "all",
@@ -43,20 +44,6 @@ const CATEGORY_FILTER_VALUES = [
   "scheduled_task",
 ];
 const SEVERITY_FILTER_VALUES = ["info", "warn", "error", "debug"];
-
-function formatMint(mint) {
-  if (!mint) {
-    return "—";
-  }
-  const trimmed = mint.trim();
-  if (!trimmed) {
-    return "—";
-  }
-  const short = `${trimmed.slice(0, 4)}...${trimmed.slice(-4)}`;
-  return `<span class="mono-text" title="${Utils.escapeHtml(trimmed)}">${Utils.escapeHtml(
-    short
-  )}</span>`;
-}
 
 function formatSubtype(value) {
   return value ? eventSubtypeLabel(value) : "—";
@@ -93,7 +80,11 @@ function formatPayloadPreview(value) {
   });
 
   const remaining = entries.length - previewParts.length;
-  const preview = previewParts.join(", ") + (remaining > 0 ? `, ${Utils.escapeHtml(I18n.t("events-payload-more", { count: remaining }))}` : "");
+  const preview =
+    previewParts.join(", ") +
+    (remaining > 0
+      ? `, ${Utils.escapeHtml(I18n.t("events-payload-more", { count: remaining }))}`
+      : "");
   const fullJson = Utils.escapeHtml(JSON.stringify(value, null, 2));
 
   return `<span class="mono-text" title="${fullJson}">${preview}</span>`;
@@ -141,6 +132,7 @@ function createLifecycle() {
     ]);
   };
 
+  // Logos arrive after the rows: the token cells repaint once their identities resolve.
   const loadEventsPage = async ({ direction, cursor, reason, signal }) => {
     const existingRows = table?.getData?.() ?? [];
     const existingIds = new Set(
@@ -192,66 +184,78 @@ function createLifecycle() {
     }
 
     try {
-    if (direction === "prev") {
-      const maxId = cursor ?? existingRows[0]?.id ?? null;
-      if (!maxId) {
-        return loadEventsPage({ direction: "initial", cursor: null, reason, signal });
+      if (direction === "prev") {
+        const maxId = cursor ?? existingRows[0]?.id ?? null;
+        if (!maxId) {
+          return loadEventsPage({ direction: "initial", cursor: null, reason, signal });
+        }
+
+        const params = buildBaseParams();
+        params.set("after_id", String(maxId));
+        const data = await fetchJson(`/api/events/since?${params.toString()}`);
+
+        const fresh = normaliseEvents(data?.events, "asc");
+        resolveTokenCells(
+          fresh.map((row) => row?.mint),
+          () => table?.repaintRows()
+        );
+        const nextCursor = fresh.length > 0 ? fresh[0].id : maxId;
+        const hasMorePrev = fresh.length > 0 && (data?.events?.length ?? 0) >= PAGE_LIMIT;
+
+        return {
+          rows: fresh,
+          cursorPrev: nextCursor ?? maxId,
+          hasMorePrev,
+        };
+      }
+
+      if (direction === "next") {
+        const minId = cursor ?? existingRows[existingRows.length - 1]?.id ?? null;
+        if (!minId) {
+          return { rows: [], hasMoreNext: false };
+        }
+        const params = buildBaseParams();
+        params.set("before_id", String(minId));
+        const data = await fetchJson(`/api/events/before?${params.toString()}`);
+        const fresh = normaliseEvents(data?.events, "desc");
+        resolveTokenCells(
+          fresh.map((row) => row?.mint),
+          () => table?.repaintRows()
+        );
+        const nextCursor = fresh.length > 0 ? fresh[fresh.length - 1].id : null;
+
+        return {
+          rows: fresh,
+          cursorNext: nextCursor,
+          hasMoreNext: (data?.events?.length ?? 0) >= PAGE_LIMIT,
+        };
       }
 
       const params = buildBaseParams();
-      params.set("after_id", String(maxId));
-      const data = await fetchJson(`/api/events/since?${params.toString()}`);
+      const data = await fetchJson(`/api/events/head?${params.toString()}`);
+      const fresh = normaliseEvents(data?.events, "desc", false);
+      resolveTokenCells(
+        fresh.map((row) => row?.mint),
+        () => table?.repaintRows()
+      );
+      const cursorPrev = fresh.length > 0 ? fresh[0].id : (cursor ?? null);
+      const cursorNext = fresh.length > 0 ? fresh[fresh.length - 1].id : (cursor ?? null);
 
-      const fresh = normaliseEvents(data?.events, "asc");
-      const nextCursor = fresh.length > 0 ? fresh[0].id : maxId;
-      const hasMorePrev = fresh.length > 0 && (data?.events?.length ?? 0) >= PAGE_LIMIT;
-
-      return {
-        rows: fresh,
-        cursorPrev: nextCursor ?? maxId,
-        hasMorePrev,
-      };
-    }
-
-    if (direction === "next") {
-      const minId = cursor ?? existingRows[existingRows.length - 1]?.id ?? null;
-      if (!minId) {
-        return { rows: [], hasMoreNext: false };
+      // Store total count from API response
+      if (typeof data?.total_count === "number") {
+        state.totalCount = data.total_count;
       }
-      const params = buildBaseParams();
-      params.set("before_id", String(minId));
-      const data = await fetchJson(`/api/events/before?${params.toString()}`);
-      const fresh = normaliseEvents(data?.events, "desc");
-      const nextCursor = fresh.length > 0 ? fresh[fresh.length - 1].id : null;
+
+      state.hasLoadedOnce = true;
+      table?.hideBlockingState?.();
 
       return {
         rows: fresh,
-        cursorNext: nextCursor,
+        cursorPrev,
+        cursorNext,
         hasMoreNext: (data?.events?.length ?? 0) >= PAGE_LIMIT,
+        hasMorePrev: true,
       };
-    }
-
-    const params = buildBaseParams();
-    const data = await fetchJson(`/api/events/head?${params.toString()}`);
-    const fresh = normaliseEvents(data?.events, "desc", false);
-    const cursorPrev = fresh.length > 0 ? fresh[0].id : (cursor ?? null);
-    const cursorNext = fresh.length > 0 ? fresh[fresh.length - 1].id : (cursor ?? null);
-
-    // Store total count from API response
-    if (typeof data?.total_count === "number") {
-      state.totalCount = data.total_count;
-    }
-
-    state.hasLoadedOnce = true;
-    table?.hideBlockingState?.();
-
-    return {
-      rows: fresh,
-      cursorPrev,
-      cursorNext,
-      hasMoreNext: (data?.events?.length ?? 0) >= PAGE_LIMIT,
-      hasMorePrev: true,
-    };
     } catch (error) {
       if (error?.name === "AbortError") {
         throw error;
@@ -356,8 +360,8 @@ function createLifecycle() {
         {
           id: "mint",
           label: I18n.t("events-col-token"),
-          minWidth: 140,
-          render: (value) => formatMint(value),
+          minWidth: TOKEN_CELL_MIN_WIDTH,
+          render: (value) => renderTokenCell(value?.trim()),
         },
         {
           id: "payload",

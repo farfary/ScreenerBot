@@ -214,7 +214,6 @@ tools-analyzer-active-pools =
     }
 tools-analyzer-card-pool-details = Havuz Ayrıntıları
 tools-analyzer-pools-column-dex = DEX
-tools-analyzer-pools-column-address = Havuz Adresi
 tools-analyzer-pools-column-liquidity = Likidite ({ -sol })
 tools-analyzer-pools-column-status = Durum
 tools-analyzer-pool-primary = Birincil
@@ -475,7 +474,6 @@ tools-consolidation-action-transfer-tokens = Tüm Tokenları Aktar
 tools-consolidation-action-cleanup = ATA'ları Temizle
 tools-consolidation-action-transferring = Aktarılıyor...
 tools-consolidation-column-name = Ad
-tools-consolidation-column-address = Adres
 tools-consolidation-column-native = { -sol } Bakiyesi
 tools-consolidation-column-tokens = Tokenlar
 tools-consolidation-column-atas = Boş ATA'lar

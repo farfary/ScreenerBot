@@ -10,6 +10,7 @@ import * as Utils from "../../core/utils.js";
 import { formatPercentValue } from "../../core/format.js";
 import { RISK_SEVERITY_LABELS } from "../risk_severity.js";
 import { rugcheckRiskDescription, rugcheckRiskName } from "../rugcheck_risk.js";
+import { renderAddress } from "../token_identity.js";
 import { renderTabState } from "./state_handling.js";
 
 const esc = (text) => Utils.escapeHtml(text);
@@ -289,7 +290,7 @@ function buildAuthorityRow(label, icon, authority, safeWord, riskWord) {
       <span class="security-authority-state"><i class="${stateIcon}"></i>${esc(hasAuthority ? riskWord : safeWord)}</span>
       ${
         hasAuthority
-          ? `<div class="security-authority-address">${Utils.renderAddressChip(authority, { full: true })}</div>`
+          ? `<div class="security-authority-address">${renderAddress(authority, { explorer: "account" })}</div>`
           : ""
       }
     </div>
@@ -420,7 +421,7 @@ function buildTransferFeeSection(token) {
               ? `
           <div class="security-fact-row">
             <span class="security-detail-label">${esc(I18n.t("tokens-security-transfer-authority"))}</span>
-            <span class="security-detail-value">${Utils.renderAddressChip(token.transfer_fee_authority)}</span>
+            <span class="security-detail-value">${renderAddress(token.transfer_fee_authority, { explorer: "account" })}</span>
           </div>
           `
               : ""
@@ -496,7 +497,9 @@ function buildRisksSection(risks, options = {}) {
         ${sorted
           .map((risk) => {
             const riskSeverity = severityFor(risk);
-            const name = safe(risk.name ? rugcheckRiskName(risk.name) : I18n.t("tokens-security-risk-fallback-name"));
+            const name = safe(
+              risk.name ? rugcheckRiskName(risk.name) : I18n.t("tokens-security-risk-fallback-name")
+            );
             const description = safe(rugcheckRiskDescription(risk));
 
             return `
@@ -553,7 +556,7 @@ function buildTopHoldersSection(token) {
           <div class="security-holder-row ${holder.is_insider ? "is-insider" : ""}">
             <span class="security-holder-rank ${rank <= 3 ? "is-leading" : ""}">${String(rank).padStart(2, "0")}</span>
             <div class="security-holder-identity">
-              ${Utils.renderAddressChip(walletAddress, { full: true })}
+              ${renderAddress(walletAddress, { explorer: "account" })}
               ${
                 holder.is_insider
                   ? `<span class="security-holder-tag is-insider"><i class="icon-triangle-alert"></i>${esc(I18n.t("tokens-security-insider"))}</span>`

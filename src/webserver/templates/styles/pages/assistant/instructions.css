@@ -538,12 +538,6 @@
   color: var(--text-primary);
 }
 
-.token-mint {
-  font-size: 0.75rem;
-  color: var(--text-muted);
-  font-family: var(--font-mono);
-}
-
 .pagination {
   display: flex;
   justify-content: center;

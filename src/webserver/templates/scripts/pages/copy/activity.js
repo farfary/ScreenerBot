@@ -16,7 +16,7 @@ import {
   skipLabel,
   sol,
 } from "./format.js";
-import { ensureIdentities, sharedSymbols, tokenInline } from "./tokens.js";
+import { ensureIdentities, tokenWithMint } from "./tokens.js";
 import { panelMessage } from "./overview.js";
 
 const PAGE = 50;
@@ -140,7 +140,6 @@ export function createActivity(page, { rerender }) {
   let loaded = false;
   let error = null;
   let loadingOlder = false;
-  let shared = new Set();
   const openGroups = new Set();
 
   function reset(id) {
@@ -338,7 +337,7 @@ export function createActivity(page, { rerender }) {
     const outcome = row.outcome || {};
     const at = outcome.telemetry?.decided_at || outcome.decided_at || row.created_at;
     const token = outcome.mint
-      ? `<button class="copy-token-link" type="button" data-activity-mint="${esc(outcome.mint)}" title="${esc(`${I18n.t("copy-activity-only-token")} · ${outcome.mint}`)}">${tokenInline(outcome.mint, shared)}</button>`
+      ? `<button class="copy-token-link" type="button" data-activity-mint="${esc(outcome.mint)}" title="${esc(`${I18n.t("copy-activity-only-token")} · ${outcome.mint}`)}">${tokenWithMint(outcome.mint)}</button>`
       : "";
     const arrival = arrivalText(outcome.telemetry);
     return `<li class="copy-event ${TONES[outcome.outcome] || ""}">
@@ -408,7 +407,6 @@ export function createActivity(page, { rerender }) {
         )
       );
     }
-    shared = sharedSymbols(rows.map((row) => row.outcome?.mint));
     const more = nextBefore
       ? `<div class="copy-more"><button class="btn btn-secondary btn-sm" type="button" data-activity-older>${esc(I18n.t("copy-activity-load-older"))}</button></div>`
       : `<p class="copy-note copy-end">${esc(I18n.t("copy-activity-start"))}</p>`;

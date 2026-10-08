@@ -232,8 +232,6 @@ shell-toast-dismiss =
     .aria-label = Dispensar
 shell-confirm-title = Confirmar ação
 shell-confirm-message = Tem certeza?
-shell-address-open-solscan = — abrir no { -solscan }
-shell-address-copy = Copiar endereço
 
 # Source: scripts/core/global_chat.js
 shell-assistant-label = Assistente

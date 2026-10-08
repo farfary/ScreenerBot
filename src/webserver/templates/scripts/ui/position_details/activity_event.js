@@ -11,6 +11,7 @@
 import * as Utils from "../../core/utils.js";
 import { withSolUnit } from "../../core/format.js";
 import { directionLabel } from "../transaction_direction.js";
+import { renderAddress, renderSignature } from "../token_identity.js";
 import { TRANSACTION_STATUS_LABELS } from "../transaction_status.js";
 
 const KIND_ICONS = Object.freeze({
@@ -177,37 +178,37 @@ function renderPositionAfter(event, ctx) {
     </section>`;
 }
 
+/** Each transfer as labelled lines, so its mint and both wallets show in full. */
 function renderTransfers(event) {
   if (!event.token_transfers?.length) return "";
 
-  const rows = event.token_transfers
+  const line = (label, value) => `<dt>${esc(label)}</dt><dd>${value}</dd>`;
+  const transfers = event.token_transfers
     .map(
       (transfer) => `
-      <tr>
-        <td class="pdd-act-xfer-amount">${Utils.formatCompactNumber(transfer.amount)}</td>
-        <td dir="ltr">${Utils.formatAddressCompact(transfer.mint)}</td>
-        <td dir="ltr">${Utils.formatAddressCompact(transfer.from)}</td>
-        <td dir="ltr">${Utils.formatAddressCompact(transfer.to)}</td>
-      </tr>`
+      <dl class="pdd-act-xfer">
+        ${line(I18n.t("positions-event-transfer-amount"), `<span class="pdd-act-xfer-amount">${Utils.formatCompactNumber(transfer.amount)}</span>`)}
+        ${line(I18n.t("positions-event-transfer-mint"), renderAddress(transfer.mint))}
+        ${line(I18n.t("positions-event-transfer-from"), renderAddress(transfer.from, { explorer: "account" }))}
+        ${line(I18n.t("positions-event-transfer-to"), renderAddress(transfer.to, { explorer: "account" }))}
+      </dl>`
     )
     .join("");
 
   return `
     <section class="pdd-act-xfers">
       <h4>${esc(I18n.t("positions-event-transfers-title"))}</h4>
-      <table class="pdd-act-xfer-table">
-        <thead><tr><th>${esc(I18n.t("positions-event-transfer-amount"))}</th><th>${esc(I18n.t("positions-event-transfer-mint"))}</th><th>${esc(I18n.t("positions-event-transfer-from"))}</th><th>${esc(I18n.t("positions-event-transfer-to"))}</th></tr></thead>
-        <tbody>${rows}</tbody>
-      </table>
+      ${transfers}
     </section>`;
 }
 
-function renderSignature(event) {
-  if (!event.signature) return `<span class="pdd-act-sig-na">${esc(I18n.t("positions-event-no-signature"))}</span>`;
+function renderEventSignature(event) {
+  if (!event.signature)
+    return `<span class="pdd-act-sig-na">${esc(I18n.t("positions-event-no-signature"))}</span>`;
   const signature = Utils.escapeHtml(event.signature);
   return `
     <div class="pdd-act-signature">
-      <span class="pdd-act-sig" dir="ltr" data-copy="${signature}" title="${esc(I18n.t("positions-event-click-to-copy"))}">${Utils.formatSignatureCompact(event.signature, { start: 10, end: 10 })}</span>
+      <span class="pdd-act-sig" data-copy="${signature}" title="${esc(I18n.t("positions-event-click-to-copy"))}">${renderSignature(event.signature, { plain: true })}</span>
       <button type="button" class="pdd-act-sig-copy" data-copy="${signature}"><i class="icon-copy"></i>${esc(I18n.t("common-action-copy"))}</button>
       <a href="${Utils.solscanTxUrl(event.signature)}" target="_blank" rel="noopener" class="pdd-act-sig-link"><i class="icon-external-link"></i>${esc(I18n.t("positions-event-solscan"))}</a>
     </div>`;
@@ -220,18 +221,33 @@ function renderDetails(event, ctx) {
       I18n.t("positions-event-token-amount"),
       event.token_amount != null ? Utils.formatNumber(event.token_amount) : null
     ),
-    metric(I18n.t("positions-event-trade-price"), event.price != null ? withSolUnit(ctx.formatPrice(event.price)) : null),
-    metric(I18n.t("positions-event-native-amount"), event.sol_amount != null ? ctx.formatSol(event.sol_amount) : null),
-    metric(I18n.t("positions-event-cost-basis"), event.cost_basis != null ? ctx.formatSol(event.cost_basis) : null),
+    metric(
+      I18n.t("positions-event-trade-price"),
+      event.price != null ? withSolUnit(ctx.formatPrice(event.price)) : null
+    ),
+    metric(
+      I18n.t("positions-event-native-amount"),
+      event.sol_amount != null ? ctx.formatSol(event.sol_amount) : null
+    ),
+    metric(
+      I18n.t("positions-event-cost-basis"),
+      event.cost_basis != null ? ctx.formatSol(event.cost_basis) : null
+    ),
     metric(
       I18n.t("positions-event-usd-value"),
       event.sol_amount != null && ctx.solPriceUsd
         ? Utils.formatCurrencyUSD(event.sol_amount * ctx.solPriceUsd)
         : null
     ),
-    metric(I18n.t("positions-event-network-fee"), fee != null && fee > 0 ? ctx.formatSol(fee) : null),
+    metric(
+      I18n.t("positions-event-network-fee"),
+      fee != null && fee > 0 ? ctx.formatSol(fee) : null
+    ),
     metric(I18n.t("positions-event-router"), event.router ? Utils.escapeHtml(event.router) : null),
-    metric(I18n.t("positions-event-slot"), event.slot != null ? Utils.formatNumber(event.slot, 0) : null),
+    metric(
+      I18n.t("positions-event-slot"),
+      event.slot != null ? Utils.formatNumber(event.slot, 0) : null
+    ),
     metric(
       I18n.t("positions-event-chain-status"),
       event.status ? esc(chainStatusText(event.status)) : null
@@ -268,7 +284,7 @@ function renderDetails(event, ctx) {
       ${note}
       ${renderPositionAfter(event, ctx)}
       ${details ? `<div class="pdd-act-detail-grid">${details}</div>` : ""}
-      ${renderSignature(event)}
+      ${renderEventSignature(event)}
       ${renderTransfers(event)}
     </div>`;
 }

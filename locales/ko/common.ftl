@@ -41,7 +41,6 @@ common-severity-debug = 디버그
 
 common-error-with-message = 오류: { $message }
 
-common-copied-address = 주소
 common-copied-signature = 서명
 common-copied-json = JSON
 common-copied-value = 값

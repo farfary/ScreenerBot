@@ -10,6 +10,12 @@
 
 import { formatTimeSpan } from "../../core/format.js";
 import { timeAgoCell } from "./formatters.js";
+import {
+  getIdentity,
+  renderTokenCell,
+  resolveTokenCells,
+  TOKEN_CELL_MIN_WIDTH,
+} from "../../ui/token_identity.js";
 
 // Ids are the `status` values of /api/ohlcv/tokens.
 const OHLCV_STATUS_LABELS = Object.freeze({
@@ -40,13 +46,11 @@ export function createOhlcvModule(deps) {
         id: "mint",
         label: I18n.t("tokens-column-token"),
         sortable: true,
-        minWidth: 180,
-        maxWidth: 200,
+        minWidth: TOKEN_CELL_MIN_WIDTH + 34,
         wrap: false,
         render: (value, row) => {
-          const short = value ? `${value.slice(0, 6)}...${value.slice(-4)}` : "—";
           return `<span class="ohlcv-token-cell">
-            <span class="mint-cell" dir="ltr" title="${Utils.escapeHtml(value)}">${short}</span>
+            ${renderTokenCell(value)}
             <span class="ohlcv-token-actions">
               <button class="btn btn-sm btn-danger ohlcv-delete-btn" data-mint="${Utils.escapeHtml(row.mint)}" title="${Utils.escapeHtml(I18n.attr("tokens-ohlcv-delete", "title"))}" aria-label="${Utils.escapeHtml(I18n.attr("tokens-ohlcv-delete", "aria-label"))}">
                 <i class="icon-trash-2"></i>
@@ -207,7 +211,11 @@ export function createOhlcvModule(deps) {
           description: I18n.t("tokens-table-retry-hint"),
         });
       } else {
-        Utils.showToast({ key: "ohlcv-load", type: "error", title: I18n.t("tokens-ohlcv-load-failed-toast") });
+        Utils.showToast({
+          key: "ohlcv-load",
+          type: "error",
+          title: I18n.t("tokens-ohlcv-load-failed-toast"),
+        });
       }
     } finally {
       ohlcvState.isLoading = false;
@@ -217,6 +225,10 @@ export function createOhlcvModule(deps) {
   const updateOhlcvTable = () => {
     if (!deps.ohlcvTable) return;
     deps.ohlcvTable.setData(ohlcvState.tokens, { preserveScroll: true });
+    resolveTokenCells(
+      ohlcvState.tokens.map((token) => token.mint),
+      () => deps.ohlcvTable?.repaintRows()
+    );
     updateOhlcvToolbar();
   };
 
@@ -254,7 +266,9 @@ export function createOhlcvModule(deps) {
   const handleOhlcvDelete = async (mint) => {
     const result = await ConfirmationDialog.show({
       title: I18n.t("tokens-ohlcv-delete-title"),
-      message: I18n.t("tokens-ohlcv-delete-message", { mint: mint.slice(0, 8) }),
+      message: I18n.t("tokens-ohlcv-delete-token-message", {
+        token: getIdentity(mint).symbol || I18n.t("format-unknown"),
+      }),
       confirmLabel: I18n.t("common-action-delete"),
       cancelLabel: I18n.t("common-action-cancel"),
       variant: "danger",

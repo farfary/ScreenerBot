@@ -193,8 +193,6 @@ shell-toast-dismiss =
     .aria-label = Tutup
 shell-confirm-title = Konfirmasi Tindakan
 shell-confirm-message = Apakah Anda yakin?
-shell-address-open-solscan = — buka di { -solscan }
-shell-address-copy = Salin alamat
 
 shell-assistant-label = Asisten
 shell-assistant-dialog =

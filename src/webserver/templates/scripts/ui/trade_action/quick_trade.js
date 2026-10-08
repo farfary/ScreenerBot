@@ -4,7 +4,8 @@
 // Quick trade mixin for the TradeActionDialog - mint input with token search, token info preview and the transition to the trade step.
 
 import * as Utils from "../../core/utils.js";
-import { formatAddressCompact, formatFixed, withSolUnit } from "../../core/format.js";
+import { formatFixed, withSolUnit } from "../../core/format.js";
+import { renderAddress } from "../token_identity.js";
 
 /**
  * Quick Trade Mode Mixin for TradeActionDialog
@@ -184,12 +185,11 @@ export function applyQuickTradeMixin(TradeActionDialog) {
 
     this._searchDropdownEl.innerHTML = this._searchResults
       .map((token, index) => {
-        const mintShort = token.mint ? formatAddressCompact(token.mint, { ellipsis: "..." }) : "";
         return `
           <div class="search-result-item" data-index="${index}" data-mint="${Utils.escapeHtml(token.mint)}">
             <span class="search-result-symbol token-symbol-type">${Utils.escapeHtml(token.symbol || "???")} </span>
             <span class="search-result-name token-name-type">${Utils.escapeHtml(token.name || I18n.t("format-unknown"))}</span>
-            <span class="search-result-mint" dir="ltr">${mintShort}</span>
+            ${token.mint ? renderAddress(token.mint, { plain: true }) : ""}
           </div>
         `;
       })
@@ -317,7 +317,7 @@ export function applyQuickTradeMixin(TradeActionDialog) {
 
       // Update preview
       this._quickTokenSymbolEl.textContent = token.symbol || I18n.t("format-unknown");
-      this._quickTokenNameEl.textContent = token.name || mint.slice(0, 8) + "...";
+      this._quickTokenNameEl.textContent = token.name || "";
 
       if (token.price_sol != null && token.price_sol > 0) {
         const priceFormatted =

@@ -41,7 +41,6 @@ common-severity-debug = 调试
 
 common-error-with-message = 错误：{ $message }
 
-common-copied-address = 地址
 common-copied-signature = 签名
 common-copied-json = JSON
 common-copied-value = 数值

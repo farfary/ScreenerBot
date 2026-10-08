@@ -210,7 +210,6 @@ tools-analyzer-active-pools =
     }
 tools-analyzer-card-pool-details = Detail Pool
 tools-analyzer-pools-column-dex = DEX
-tools-analyzer-pools-column-address = Alamat Pool
 tools-analyzer-pools-column-liquidity = Likuiditas ({ -sol })
 tools-analyzer-pools-column-status = Status
 tools-analyzer-pool-primary = Utama
@@ -459,7 +458,6 @@ tools-consolidation-action-transfer-tokens = Transfer Semua Token
 tools-consolidation-action-cleanup = Bersihkan ATA
 tools-consolidation-action-transferring = Mentransfer...
 tools-consolidation-column-name = Nama
-tools-consolidation-column-address = Alamat
 tools-consolidation-column-native = Saldo { -sol }
 tools-consolidation-column-tokens = Token
 tools-consolidation-column-atas = ATA Kosong

@@ -33,17 +33,13 @@ wallets-watch-reason-helius-unavailable = { -helius } 检查失败。已保存�
 wallets-watch-reason-processing-failed = 无法处理钱包活动。已保存的进度已保留。
 
 # Vocabulary shared by the wallet tables and dialogs.
-wallets-field-address = 地址
 wallets-field-name = 钱包名称
 wallets-field-notes = 备注
 wallets-field-private-key = 私钥
-wallets-address-copy = 复制地址
 wallets-modal-close =
     .aria-label = 关闭弹窗
 wallets-this-wallet = 此钱包
 wallets-summary-native = { -sol }
-wallets-copied-address = 地址
-wallets-copied-mint = 铸造地址
 wallets-copied-private-key = 私钥
 
 # wallets.js: subtabs, toasts and busy states.
@@ -246,7 +242,6 @@ wallets-holdings-col-balance = 余额
 wallets-holdings-col-value = 价值（{ -sol }）
 wallets-holdings-col-type = 类型
 wallets-holdings-col-decimals = 小数位数
-wallets-holdings-col-mint = 铸造地址
 wallets-holdings-empty-title = 暂无代币持仓
 wallets-holdings-empty-message = 此钱包持有的代币将显示在这里。
 wallets-holdings-no-main = 没有主钱包

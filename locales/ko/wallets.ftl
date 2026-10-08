@@ -33,17 +33,13 @@ wallets-watch-reason-helius-unavailable = { -helius } 확인에 실패했습니�
 wallets-watch-reason-processing-failed = 지갑 활동을 처리하지 못했습니다. 저장된 진행 상태는 유지됩니다.
 
 # Vocabulary shared by the wallet tables and dialogs.
-wallets-field-address = 주소
 wallets-field-name = 지갑 이름
 wallets-field-notes = 메모
 wallets-field-private-key = 개인 키
-wallets-address-copy = 주소 복사
 wallets-modal-close =
     .aria-label = 창 닫기
 wallets-this-wallet = 이 지갑
 wallets-summary-native = { -sol }
-wallets-copied-address = 주소
-wallets-copied-mint = 민트 주소
 wallets-copied-private-key = 개인 키
 
 # wallets.js: subtabs, toasts and busy states.
@@ -246,7 +242,6 @@ wallets-holdings-col-balance = 잔액
 wallets-holdings-col-value = 가치 ({ -sol })
 wallets-holdings-col-type = 유형
 wallets-holdings-col-decimals = 소수 자릿수
-wallets-holdings-col-mint = 민트
 wallets-holdings-empty-title = 보유 토큰 없음
 wallets-holdings-empty-message = 이 지갑이 보유한 토큰이 여기에 표시됩니다.
 wallets-holdings-no-main = 메인 지갑 없음

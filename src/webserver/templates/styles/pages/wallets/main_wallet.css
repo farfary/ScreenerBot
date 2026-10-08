@@ -2,48 +2,6 @@
  * SPDX-License-Identifier: BUSL-1.1 */
 
 /* =============================================================================
-   Token Cell
-   ============================================================================= */
-
-.wt-token-cell {
-  display: flex;
-  flex-direction: row;
-  align-items: center;
-  gap: 8px;
-}
-
-.wt-token-cell .token-logo {
-  width: var(--token-table-logo-size-compact);
-  height: var(--token-table-logo-size-compact);
-  border-radius: var(--token-logo-radius, 3px);
-  flex-shrink: 0;
-  object-fit: cover;
-  background: var(--bg-tertiary);
-  color: var(--text-muted);
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  font-size: 0.78rem;
-}
-
-.wt-token-meta {
-  display: flex;
-  flex-direction: column;
-  gap: 1px;
-  min-width: 0;
-}
-
-.wt-symbol {
-  font-weight: 700;
-  font-size: 0.82rem;
-}
-
-.wt-name {
-  font-size: 0.68rem;
-  color: var(--text-muted);
-}
-
-/* =============================================================================
    Type Badge
    ============================================================================= */
 
@@ -66,34 +24,4 @@
 .wt-type-badge.token2022 {
   background: var(--warning-alpha-10);
   color: var(--warning-color);
-}
-
-/* =============================================================================
-   Mint Cell
-   ============================================================================= */
-
-.wt-mint-cell {
-  display: flex;
-  align-items: center;
-  gap: 4px;
-}
-
-.wt-mint-addr {
-  font-family: var(--font-mono);
-  font-size: 0.7rem;
-  color: var(--text-secondary);
-}
-
-.wt-mint-link {
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  color: var(--text-muted);
-  font-size: 11px;
-  text-decoration: none;
-  transition: color var(--transition-fast);
-}
-
-.wt-mint-link:hover {
-  color: var(--primary-color);
 }

@@ -145,7 +145,6 @@ transactions-dialog-balances-net-native = Netto-{ -sol }-Änderung
 transactions-dialog-balances-fee = Transaktionsgebühr
 transactions-dialog-col-account = Konto
 transactions-dialog-col-token = Token
-transactions-dialog-col-mint = Mint-Adresse
 transactions-dialog-col-pre-balance = Guthaben davor
 transactions-dialog-col-post-balance = Guthaben danach
 transactions-dialog-col-change = Änderung

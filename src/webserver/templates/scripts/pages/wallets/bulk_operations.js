@@ -8,6 +8,7 @@
  */
 
 import { apiErrorMessage } from "../../core/request_manager.js";
+import { renderNamedAddress } from "../../ui/token_identity.js";
 
 // Phrase typed to confirm an export that includes private keys. It is compared
 // verbatim and shown to the user in its own element, so it is never translated.
@@ -518,8 +519,7 @@ export function createBulkOperations({
 
         return `
           <tr class="${rowClass}">
-            <td>${Utils.escapeHtml(result.name || "—")}</td>
-            <td><code dir="ltr">${result.address ? `${result.address.slice(0, 8)}...${result.address.slice(-6)}` : "—"}</code></td>
+            <td>${renderNamedAddress(result.name, result.address)}</td>
             <td>${statusIcon}</td>
           </tr>
         `;
@@ -531,7 +531,6 @@ export function createBulkOperations({
         <thead>
           <tr>
             <th>${Utils.escapeHtml(I18n.t("wallets-list-col-name"))}</th>
-            <th>${Utils.escapeHtml(I18n.t("wallets-field-address"))}</th>
             <th>${Utils.escapeHtml(I18n.t("wallets-bulk-preview-status"))}</th>
           </tr>
         </thead>

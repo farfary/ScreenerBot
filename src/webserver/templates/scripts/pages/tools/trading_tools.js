@@ -14,6 +14,7 @@ import * as Hints from "../../core/hints.js";
 import { HintTrigger } from "../../ui/hint_popover.js";
 import { enhanceAllSelects } from "../../ui/custom_select.js";
 import { PoolSelector } from "../../ui/pool_selector.js";
+import { getIdentity, renderTokenCell } from "../../ui/token_identity.js";
 import { venueLabel } from "../../ui/venue.js";
 import { apiErrorMessage } from "../../core/request_manager.js";
 
@@ -344,7 +345,9 @@ async function handleTwStartWatch() {
     }
 
     Utils.showToast(
-      I18n.t("tools-trade-watcher-started", { token: data.symbol || mint.slice(0, 8) }),
+      I18n.t("tools-trade-watcher-started", {
+        token: data.symbol || getIdentity(mint).symbol || I18n.t("format-unknown"),
+      }),
       "success"
     );
 
@@ -454,10 +457,7 @@ async function loadTwActiveWatches() {
               (watch) => `
             <tr data-id="${watch.id}">
               <td>
-                <div class="tw-token-cell">
-                  <span class="tw-symbol">${Utils.escapeHtml(watch.symbol || I18n.t("format-unknown"))}</span>
-                  <span class="tw-mint" dir="ltr">${watch.mint.slice(0, 8)}...</span>
-                </div>
+                ${renderTokenCell(watch.mint, { symbol: watch.symbol })}
               </td>
               <td>
                 <span class="tw-type-badge ${watch.watch_type}">${Utils.escapeHtml(I18n.label(WATCH_TYPE_LABELS, watch.watch_type))}</span>

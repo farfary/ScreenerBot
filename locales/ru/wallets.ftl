@@ -22,17 +22,13 @@ wallets-watch-reason-signature-budget = У этого кошелька боль�
 wallets-watch-reason-helius-unavailable = Проверки через { -helius } не удались. Сохранённый прогресс не потерян.
 wallets-watch-reason-processing-failed = Не удалось обработать активность кошелька. Сохранённый прогресс не потерян.
 
-wallets-field-address = Адрес
 wallets-field-name = Название кошелька
 wallets-field-notes = Заметки
 wallets-field-private-key = Приватный ключ
-wallets-address-copy = Скопировать адрес
 wallets-modal-close =
     .aria-label = Закрыть окно
 wallets-this-wallet = этот кошелёк
 wallets-summary-native = { -sol }
-wallets-copied-address = Адрес
-wallets-copied-mint = Адрес минта
 wallets-copied-private-key = Приватный ключ
 
 wallets-tab-main = Основной кошелёк
@@ -241,7 +237,6 @@ wallets-holdings-col-balance = Баланс
 wallets-holdings-col-value = Стоимость ({ -sol })
 wallets-holdings-col-type = Тип
 wallets-holdings-col-decimals = Знаков после запятой
-wallets-holdings-col-mint = Минт
 wallets-holdings-empty-title = Нет токенов
 wallets-holdings-empty-message = Здесь появятся токены, которые хранятся в этом кошельке.
 wallets-holdings-no-main = Нет основного кошелька

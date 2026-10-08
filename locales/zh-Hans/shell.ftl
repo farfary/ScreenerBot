@@ -230,8 +230,6 @@ shell-toast-dismiss =
     .aria-label = 关闭
 shell-confirm-title = 确认操作
 shell-confirm-message = 确定吗？
-shell-address-open-solscan = — 在 { -solscan } 中打开
-shell-address-copy = 复制地址
 
 # Source: scripts/core/global_chat.js
 shell-assistant-label = 助手

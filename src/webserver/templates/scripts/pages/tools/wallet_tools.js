@@ -11,7 +11,7 @@ import { $, $$, on } from "../../core/dom.js";
 import * as Utils from "../../core/utils.js";
 import * as Hints from "../../core/hints.js";
 import { HintTrigger } from "../../ui/hint_popover.js";
-import { renderAddress } from "../../ui/token_identity.js";
+import { renderAddress, renderNamedAddress, renderSignature } from "../../ui/token_identity.js";
 import { apiErrorMessage } from "../../core/request_manager.js";
 
 // Ids are the categories of the burn scan.
@@ -169,7 +169,9 @@ async function handleScanATAs() {
     }
   } catch (error) {
     console.error("ATA scan failed:", error);
-    listEl.innerHTML = errorStateHtml(I18n.t("tools-wallet-scan-failed", { reason: error.message }));
+    listEl.innerHTML = errorStateHtml(
+      I18n.t("tools-wallet-scan-failed", { reason: error.message })
+    );
     Utils.showToast(I18n.t("tools-wallet-cleanup-scan-failed"), "error");
   } finally {
     scanBtn.disabled = false;
@@ -333,7 +335,9 @@ async function handleScanBurnTokens() {
     renderBurnTokenList();
   } catch (error) {
     console.error("Burn tokens scan failed:", error);
-    listEl.innerHTML = errorStateHtml(I18n.t("tools-wallet-scan-failed", { reason: error.message }));
+    listEl.innerHTML = errorStateHtml(
+      I18n.t("tools-wallet-scan-failed", { reason: error.message })
+    );
     Utils.showToast(I18n.t("tools-burn-scan-failed"), "error");
   } finally {
     burnTokensState.isLoading = false;
@@ -441,7 +445,7 @@ function renderBurnCategory(title, icon, tokens, description, type) {
 function renderBurnTokenRow(token) {
   const isSelected = burnTokensState.selectedMints.has(token.mint);
   const symbol = token.symbol || I18n.t("format-unknown");
-  const displayName = token.name || token.mint.substring(0, 8) + "...";
+  const displayName = token.name || "";
 
   return `
     <div class="burn-token-row ${!token.can_burn ? "disabled" : ""} ${isSelected ? "selected" : ""}" data-mint="${token.mint}">
@@ -457,9 +461,7 @@ function renderBurnTokenRow(token) {
           <span class="burn-token-symbol">${Utils.escapeHtml(symbol)}</span>
           <span class="burn-token-title">${Utils.escapeHtml(displayName)}</span>
         </div>
-        <div class="burn-token-mint" dir="ltr" title="${token.mint}">
-          ${token.mint.substring(0, 8)}...${token.mint.substring(token.mint.length - 6)}
-        </div>
+        <div class="burn-token-mint">${renderAddress(token.mint)}</div>
       </div>
       <div class="burn-token-balance">
         <span class="burn-token-amount">${Utils.formatCompactNumber(token.ui_amount)}</span>
@@ -682,7 +684,7 @@ function renderBurnFailures(failures) {
           <span class="burn-failure-symbol">${Utils.escapeHtml(symbol)}</span>
           ${renderAddress(failure.mint)}
           <span class="burn-failure-reason"${details}>${Utils.escapeHtml(reason)}</span>
-          ${failure.signature ? renderAddress(failure.signature, { explorer: "tx" }) : ""}
+          ${failure.signature ? renderSignature(failure.signature) : ""}
         </li>`;
     })
     .join("");
@@ -976,7 +978,7 @@ function renderGeneratedWallets(container) {
         </div>
         <div class="wallet-pubkey">
           <span class="label" data-l10n-id="tools-generator-public-key-label"></span>
-          <code class="pubkey-value" dir="ltr">${wallet.pubkey}</code>
+          ${renderAddress(wallet.pubkey, { explorer: "account" })}
         </div>
         <div class="wallet-secret">
           <span class="label" data-l10n-id="tools-generator-private-key-label"></span>
@@ -1247,7 +1249,6 @@ async function loadConsolidationData() {
           <tr>
             <th><input type="checkbox" id="wc-check-all" /></th>
             <th data-l10n-id="tools-consolidation-column-name"></th>
-            <th data-l10n-id="tools-consolidation-column-address"></th>
             <th data-l10n-id="tools-consolidation-column-native"></th>
             <th data-l10n-id="tools-consolidation-column-tokens"></th>
             <th data-l10n-id="tools-consolidation-column-atas"></th>
@@ -1259,8 +1260,7 @@ async function loadConsolidationData() {
               (w) => `
             <tr data-address="${w.address}" class="${w.sol_balance === 0 && w.token_count === 0 ? "empty-wallet" : ""}">
               <td><input type="checkbox" class="wc-wallet-check" data-address="${w.address}" /></td>
-              <td>${Utils.escapeHtml(w.name)}</td>
-              <td class="mono" dir="ltr">${Utils.formatAddressCompact(w.address)}</td>
+              <td>${renderNamedAddress(w.name, w.address)}</td>
               <td class="mono">${Utils.formatSol(w.sol_balance, { suffix: "" })}</td>
               <td class="mono">${w.token_count}</td>
               <td class="mono">${w.empty_atas}</td>
@@ -1437,11 +1437,7 @@ async function handleConsolidateTokens() {
     Utils.showToast(I18n.t("tools-wallet-transfer-failed", { reason: error.message }), "error");
   } finally {
     transferTokensBtn.disabled = false;
-    setButton(
-      transferTokensBtn,
-      "icon-send",
-      I18n.t("tools-consolidation-action-transfer-tokens")
-    );
+    setButton(transferTokensBtn, "icon-send", I18n.t("tools-consolidation-action-transfer-tokens"));
   }
 }
 

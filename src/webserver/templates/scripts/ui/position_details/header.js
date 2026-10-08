@@ -13,6 +13,7 @@ import { HintTrigger } from "../hint_popover.js";
 import { manualTrade } from "../manual_trade.js";
 import { POSITION_MANAGEMENT_LABELS } from "../position_management.js";
 import { POSITION_STATUS_LABELS } from "../position_status.js";
+import { renderAddress } from "../token_identity.js";
 
 const esc = (text) => Utils.escapeHtml(text);
 
@@ -55,7 +56,7 @@ export function applyHeaderMixin(PositionDetailsDialog) {
   proto._renderIdentity = function (pos) {
     const symbol = pos.symbol || "";
     const cashtag = `$${Utils.escapeHtml(symbol.toUpperCase())}`; // format-ok: token ticker cashtag, not an amount
-    const name = pos.name || symbol || Utils.formatAddressCompact(pos.mint);
+    const name = pos.name || symbol || I18n.t("format-unknown");
     const logoUrl = pos.logo_url || this.fullDetails?.token_info?.image_url || "";
     const status = this._status();
     const initial = Utils.escapeHtml((symbol || name || "?").charAt(0).toUpperCase());
@@ -71,7 +72,7 @@ export function applyHeaderMixin(PositionDetailsDialog) {
           ${symbol ? `<span class="title-symbol token-symbol-type">${cashtag}</span>` : ""}
           ${status ? `<span class="pdd-badge pdd-status is-${status}">${esc(I18n.label(POSITION_STATUS_LABELS, status))}</span>` : ""}
         </div>
-        <div class="header-mint-full" dir="ltr">${Utils.escapeHtml(pos.mint)}</div>
+        ${renderAddress(pos.mint)}
       </div>`;
 
     this._paintRegion("#pddIdentity", html, (el) => {
@@ -113,11 +114,15 @@ export function applyHeaderMixin(PositionDetailsDialog) {
     if (this._isSettled()) {
       const exitPrice = pos.average_exit_price || pos.exit_price;
       return [
-        metric(I18n.t("positions-header-exit-price"), exitPrice ? this._formatPrice(exitPrice) : "—", {
-          sub: pos.exit_time
-            ? I18n.t("positions-header-closed-ago", { ago: Utils.formatTimeAgo(pos.exit_time) })
-            : "",
-        }),
+        metric(
+          I18n.t("positions-header-exit-price"),
+          exitPrice ? this._formatPrice(exitPrice) : "—",
+          {
+            sub: pos.exit_time
+              ? I18n.t("positions-header-closed-ago", { ago: Utils.formatTimeAgo(pos.exit_time) })
+              : "",
+          }
+        ),
         metric(
           I18n.t("positions-header-realized-pnl"),
           this._formatSol(pos.pnl, { sign: true, unit: false }),
@@ -127,12 +132,16 @@ export function applyHeaderMixin(PositionDetailsDialog) {
             title: usdNote,
           }
         ),
-        metric(I18n.t("positions-header-returned"), this._formatSol(pos.sol_received, { unit: false }), {
-          sub:
-            invested != null
-              ? I18n.t("positions-header-of-invested", { amount: this._formatSol(invested) })
-              : "",
-        }),
+        metric(
+          I18n.t("positions-header-returned"),
+          this._formatSol(pos.sol_received, { unit: false }),
+          {
+            sub:
+              invested != null
+                ? I18n.t("positions-header-of-invested", { amount: this._formatSol(invested) })
+                : "",
+          }
+        ),
         entryMetric,
       ].join("");
     }
@@ -149,7 +158,9 @@ export function applyHeaderMixin(PositionDetailsDialog) {
         }
       ),
       metric(
-        live ? I18n.t("positions-header-unrealized-pnl") : I18n.t("positions-header-pnl-last-price"),
+        live
+          ? I18n.t("positions-header-unrealized-pnl")
+          : I18n.t("positions-header-pnl-last-price"),
         this._formatSol(pos.unrealized_pnl, { sign: true, unit: false }),
         {
           sub: pnlSub(pos.unrealized_pnl, pos.unrealized_pnl_percent),
@@ -182,15 +193,17 @@ export function applyHeaderMixin(PositionDetailsDialog) {
     const badges = [
       `<span class="pdd-badge" title="${esc(I18n.t("positions-header-origin-hint"))}">${this._originLabel(pos.origin)}</span>`,
     ];
+    // A copied position names its source wallet in full beside the origin badge.
+    if (pos.origin?.kind === "copy" && pos.origin.source_wallet) {
+      badges.push(renderAddress(String(pos.origin.source_wallet), { explorer: "account" }));
+    }
     if (this._status() === "open") badges.push(this._buildManagementControl(pos));
 
     const security = this.fullDetails?.security;
     if (security) {
       const level = String(security.risk_level).toLowerCase();
       const known = Object.hasOwn(RISK_LEVEL_LABELS, level);
-      const label = known
-        ? I18n.label(RISK_LEVEL_LABELS, level)
-        : I18n.t("positions-risk-unknown");
+      const label = known ? I18n.label(RISK_LEVEL_LABELS, level) : I18n.t("positions-risk-unknown");
       const tone = known ? RISK_TONES[level] : "";
       const score = security.score_normalized != null ? ` · ${security.score_normalized}/100` : "";
       badges.push(
@@ -208,14 +221,11 @@ export function applyHeaderMixin(PositionDetailsDialog) {
   proto._originLabel = function (origin) {
     const kind = origin?.kind || "auto";
     if (kind === "copy") {
-      const unknown = I18n.t("positions-origin-unknown");
-      const wallet = String(origin.source_wallet || unknown);
-      const shortWallet = wallet.length > 14 ? `${wallet.slice(0, 6)}…${wallet.slice(-4)}` : wallet;
-      // The wallet address stays outside the message: it is a value, not wording.
-      const task = I18n.t("positions-origin-copied-task", {
-        task: String(origin.task_id ?? unknown),
-      });
-      return `${esc(task)} · <span dir="ltr">${esc(shortWallet)}</span>`;
+      return esc(
+        I18n.t("positions-origin-copied-task", {
+          task: String(origin.task_id ?? I18n.t("positions-origin-unknown")),
+        })
+      );
     }
     if (kind === "manual") return esc(I18n.t("positions-origin-manual-entry"));
     if (kind === "external") return esc(I18n.t("positions-origin-wallet-entry"));
@@ -266,7 +276,9 @@ export function applyHeaderMixin(PositionDetailsDialog) {
         const label =
           swap.kind === "dca"
             ? swap.size_sol != null
-              ? I18n.t("positions-pending-adding-amount", { amount: this._formatSol(swap.size_sol) })
+              ? I18n.t("positions-pending-adding-amount", {
+                  amount: this._formatSol(swap.size_sol),
+                })
               : I18n.t("positions-pending-adding")
             : swap.exit_percentage != null
               ? I18n.t("positions-pending-selling-percent", {

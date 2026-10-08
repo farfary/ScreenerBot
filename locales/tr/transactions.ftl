@@ -135,7 +135,6 @@ transactions-dialog-balances-net-native = Net { -sol } değişimi
 transactions-dialog-balances-fee = İşlem ücreti
 transactions-dialog-col-account = Hesap
 transactions-dialog-col-token = Token
-transactions-dialog-col-mint = Mint adresi
 transactions-dialog-col-pre-balance = Önceki bakiye
 transactions-dialog-col-post-balance = Sonraki bakiye
 transactions-dialog-col-change = Değişim

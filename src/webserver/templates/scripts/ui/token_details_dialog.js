@@ -510,7 +510,9 @@ export class TokenDetailsDialog {
       )
       .join("");
 
-    const lead = allFailed ? `<span class="source-issues-lead">${esc(I18n.t("tokens-dialog-no-data"))}</span>` : "";
+    const lead = allFailed
+      ? `<span class="source-issues-lead">${esc(I18n.t("tokens-dialog-no-data"))}</span>`
+      : "";
 
     row.innerHTML = `${lead}${chips}`;
     row.hidden = false;
@@ -742,7 +744,6 @@ export class TokenDetailsDialog {
     const html = renderOverviewLeft(this.fullTokenData, {
       renderHintTrigger: this._renderHintTrigger.bind(this),
       escapeHtml: this._escapeHtml.bind(this),
-      formatShortAddress: this._formatShortAddress.bind(this),
     });
     this._renderHtmlIfChanged(liveRegion, html, "__ovHtml");
   }
@@ -1122,15 +1123,6 @@ export class TokenDetailsDialog {
         );
       }
 
-      // Update Authority badge
-      if (token.update_authority) {
-        const auth = token.update_authority;
-        const trunc = auth.slice(0, 4) + "..." + auth.slice(-4);
-        badges.push(
-          `<span class="badge badge-secondary" title="${esc(I18n.t("tokens-dialog-badge-update-authority"))} ${esc(auth)}">${esc(I18n.t("tokens-dialog-badge-auth"))} <span dir="ltr">${esc(trunc)}</span></span>`
-        );
-      }
-
       if (token.has_open_position) {
         badges.push(
           `<span class="badge badge-info">${esc(I18n.t("tokens-dialog-badge-position"))}</span>`
@@ -1472,7 +1464,9 @@ export class TokenDetailsDialog {
         const button = event.target.closest("[data-profile-mint]");
         if (!button) return;
         event.preventDefault();
-        Utils.openExternal(`https://screenerbot.io/token-profile/${encodeURIComponent(button.dataset.profileMint)}`);
+        Utils.openExternal(
+          `https://screenerbot.io/token-profile/${encodeURIComponent(button.dataset.profileMint)}`
+        );
       };
       body.addEventListener("click", this._profileLinkHandler);
 
@@ -1562,7 +1556,6 @@ export class TokenDetailsDialog {
     content.innerHTML = renderOverviewTab(tokenToUse, {
       renderHintTrigger: this._renderHintTrigger.bind(this),
       escapeHtml: this._escapeHtml.bind(this),
-      formatShortAddress: this._formatShortAddress.bind(this),
     });
 
     setTimeout(() => {
@@ -1592,7 +1585,6 @@ export class TokenDetailsDialog {
     const html = renderSecurityTab(tokenToUse, {
       renderHintTrigger: this._renderHintTrigger.bind(this),
       escapeHtml: this._escapeHtml.bind(this),
-      formatShortAddress: this._formatShortAddress.bind(this),
     });
 
     // Only repaint when the markup actually changed. While Rugcheck data is still
@@ -1622,7 +1614,6 @@ export class TokenDetailsDialog {
     content.innerHTML = renderPoolsTab(this.fullTokenData, {
       renderHintTrigger: this._renderHintTrigger.bind(this),
       escapeHtml: this._escapeHtml.bind(this),
-      formatShortAddress: this._formatShortAddress.bind(this),
     });
     content.dataset.loaded = "true";
   }

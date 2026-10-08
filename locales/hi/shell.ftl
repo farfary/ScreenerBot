@@ -192,8 +192,6 @@ shell-toast-dismiss =
     .aria-label = बंद करें
 shell-confirm-title = कार्रवाई की पुष्टि करें
 shell-confirm-message = क्या आप निश्चित हैं?
-shell-address-open-solscan = — { -solscan } में खोलें
-shell-address-copy = एड्रेस कॉपी करें
 
 shell-assistant-label = असिस्टेंट
 shell-assistant-dialog =

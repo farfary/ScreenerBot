@@ -22,17 +22,13 @@ wallets-watch-reason-signature-budget = Bu cüzdanın etkinliği, mevcut izlemen
 wallets-watch-reason-helius-unavailable = { -helius } kontrolleri başarısız oldu. Kayıtlı ilerleme korunuyor.
 wallets-watch-reason-processing-failed = Cüzdan etkinliği işlenemedi. Kayıtlı ilerleme korunuyor.
 
-wallets-field-address = Adres
 wallets-field-name = Cüzdan adı
 wallets-field-notes = Notlar
 wallets-field-private-key = Özel anahtar
-wallets-address-copy = Adresi kopyala
 wallets-modal-close =
     .aria-label = Pencereyi kapat
 wallets-this-wallet = bu cüzdan
 wallets-summary-native = { -sol }
-wallets-copied-address = Adres
-wallets-copied-mint = Mint adresi
 wallets-copied-private-key = Özel anahtar
 
 wallets-tab-main = Ana cüzdan
@@ -231,7 +227,6 @@ wallets-holdings-col-balance = Bakiye
 wallets-holdings-col-value = Değer ({ -sol })
 wallets-holdings-col-type = Tür
 wallets-holdings-col-decimals = Ondalık
-wallets-holdings-col-mint = Mint
 wallets-holdings-empty-title = Token varlığı yok
 wallets-holdings-empty-message = Bu cüzdanın sahip olduğu tokenlar burada görünecek.
 wallets-holdings-no-main = Ana cüzdan yok

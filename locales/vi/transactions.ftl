@@ -135,7 +135,6 @@ transactions-dialog-balances-net-native = Thay đổi ròng { -sol }
 transactions-dialog-balances-fee = Phí giao dịch
 transactions-dialog-col-account = Tài khoản
 transactions-dialog-col-token = Token
-transactions-dialog-col-mint = Địa chỉ mint
 transactions-dialog-col-pre-balance = Số dư trước
 transactions-dialog-col-post-balance = Số dư sau
 transactions-dialog-col-change = Thay đổi

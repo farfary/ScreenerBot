@@ -20,15 +20,13 @@
 
 import { playClick } from "../core/sounds.js";
 import { pushEscapeHandler } from "../core/escape_stack.js";
+import { renderAddress } from "./token_identity.js";
 
 const escapeHTML = (str) => {
   const div = document.createElement("div");
   div.textContent = str == null ? "" : String(str);
   return div.innerHTML;
 };
-
-const shortMint = (mint) =>
-  mint && mint.length > 10 ? `${mint.slice(0, 4)}…${mint.slice(-4)}` : mint || "";
 
 class PositionRemoveDialog {
   static activeDialog = null;
@@ -77,7 +75,6 @@ class PositionRemoveDialog {
     this.element.setAttribute("aria-labelledby", "position-remove-title");
 
     const sym = escapeHTML(this.config.symbol);
-    const mintShort = escapeHTML(shortMint(this.config.mint));
 
     const openWarning = this.config.isOpen
       ? `<div class="position-remove-open-warning" role="note">
@@ -89,7 +86,8 @@ class PositionRemoveDialog {
     this.element.innerHTML = `
       <div class="position-remove-header">
         <h3 class="position-remove-title" id="position-remove-title" data-l10n-id="positions-remove-title"></h3>
-        <p class="position-remove-subtitle">${sym} <span class="position-remove-mint" dir="ltr">${mintShort}</span></p>
+        <p class="position-remove-subtitle">${sym}</p>
+        ${this.config.mint ? renderAddress(this.config.mint, { plain: true }) : ""}
       </div>
 
       ${openWarning}

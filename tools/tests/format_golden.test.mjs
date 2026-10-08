@@ -263,12 +263,10 @@ test("surface formatter options: trimmed fixed text, extra decimals, zero sign a
   assert.equal(fmt.formatPercentValue(0), "0.00%");
   assert.equal(fmt.formatPercentValue(-1.5, { signZero: true }), "-1.50%");
   assert.equal(fmt.formatPercentValue(-1.5, { includeSign: false }), "1.50%");
-  assert.equal(fmt.formatPercentValue(2, { decimals: 0, signZero: true, includeSign: true }), "+2%");
   assert.equal(
-    fmt.formatAddressCompact("abcdefghijklmnop", { start: 4, end: 4, ellipsis: "..." }),
-    "abcd...mnop"
+    fmt.formatPercentValue(2, { decimals: 0, signZero: true, includeSign: true }),
+    "+2%"
   );
-  assert.equal(fmt.formatAddressCompact("abcdefghijklmnop", { start: 4, end: 4 }), "abcd…mnop");
   assert.equal(fmt.formatUptime(30, { style: "hm" }), "<1m");
   assert.equal(fmt.formatUptime(300, { style: "hm" }), "5m");
   assert.equal(fmt.formatUptime(3660, { style: "hm" }), "1h 1m");

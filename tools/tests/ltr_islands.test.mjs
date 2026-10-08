@@ -7,7 +7,7 @@
  * `dir="ltr"`, so the value keeps its left-to-right order and isolates from
  * surrounding right-to-left text.
  *
- * `token_identity.js` and `core/utils.js` depend on browser globals (`I18n`, `window`)
+ * `token_identity.js` depends on browser globals (`I18n`, `window`)
  * and cannot be imported in node, so the assertions read the helper source text.
  *
  * Run with `npm run test:js`.
@@ -38,12 +38,13 @@ function openingTagBefore(body, content) {
   return body.slice(body.lastIndexOf("<", at), at);
 }
 
-test("renderAddress marks the address link dir=ltr", () => {
-  const body = functionSource(read("ui/token_identity.js"), "export function renderAddress(");
-  assert.match(openingTagBefore(body, "${safe}</a>"), /class="ti-address-value"[^>]*dir="ltr"/);
+// `renderAddress` and `renderSignature` both render through `valueMarkup`.
+test("valueMarkup marks the address and signature link dir=ltr", () => {
+  const body = functionSource(read("ui/token_identity.js"), "function valueMarkup(");
+  assert.match(openingTagBefore(body, "${text}</a>"), /class="ti-address-value"[^>]*dir="ltr"/);
 });
 
-test("renderAddressChip marks the address link dir=ltr", () => {
-  const body = functionSource(read("core/utils.js"), "function renderAddressChip(");
-  assert.match(openingTagBefore(body, "${display}</a>"), /class="addr-chip-link mono"[^>]*dir="ltr"/);
+test("valueMarkup marks the plain address and signature value dir=ltr", () => {
+  const body = functionSource(read("ui/token_identity.js"), "function valueMarkup(");
+  assert.match(openingTagBefore(body, "${text}</span>"), /class="ti-address-value"[^>]*dir="ltr"/);
 });

@@ -9,8 +9,9 @@
 
 import { create, on, off } from "../core/dom.js";
 import { escapeHtml } from "../core/utils.js";
-import { formatAddressCompact, formatCompactFixed, withUsdSymbol } from "../core/format.js";
+import { formatCompactFixed, withUsdSymbol } from "../core/format.js";
 import { apiErrorMessage } from "../core/request_manager.js";
+import { renderAddress } from "./token_identity.js";
 import { venueLabel } from "./venue.js";
 
 /** Pool liquidity and volume: one decimal in K and M, whole numbers below. */
@@ -120,7 +121,7 @@ export class PoolSelector {
     content.innerHTML = `
       <div class="pool-selector-info">
         <span class="pool-count">${escapeHtml(I18n.t("tokens-pool-selector-count", { count: pools.length }))}</span>
-        <span class="pool-mint" dir="ltr">${formatAddressCompact(tokenMint, { start: 8, end: 6, ellipsis: "..." })}</span>
+        ${renderAddress(tokenMint, { plain: true })}
       </div>
       <div class="pool-list">
         ${pools
@@ -136,7 +137,7 @@ export class PoolSelector {
               <span class="pool-liquidity" title="${escapeHtml(I18n.attr("tokens-pool-selector-liquidity", "title"))}">${escapeHtml(I18n.t("tokens-pool-selector-liquidity", { amount: withUsdSymbol(formatCompact(pool.liquidity_usd)) }))}</span>
               <span class="pool-volume" title="${escapeHtml(I18n.attr("tokens-pool-selector-volume", "title"))}">${escapeHtml(I18n.t("tokens-pool-selector-volume", { amount: withUsdSymbol(formatCompact(pool.volume_24h)) }))}</span>
             </div>
-            <div class="pool-address" dir="ltr">${formatAddressCompact(pool.address, { start: 8, end: 6, ellipsis: "..." })}</div>
+            ${renderAddress(pool.address, { plain: true })}
           </div>
         `
           )

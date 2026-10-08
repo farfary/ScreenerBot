@@ -99,7 +99,8 @@
       try {
         const result = await requestJson("/api/version");
         const versionEl = document.getElementById("setup-version");
-        if (versionEl && result?.version) versionEl.textContent = I18n.t("shell-version", { version: result.version });
+        if (versionEl && result?.version)
+          versionEl.textContent = I18n.t("shell-version", { version: result.version });
       } catch {
         // Version decoration is optional and must never block setup.
       }
@@ -292,7 +293,9 @@
 
         this.renderValidationResult(validation);
         if (!validation?.valid || !validation?.validation_id) {
-          throw new Error(validation?.errors?.join(" ") || I18n.t("setup-error-credentials-failed"));
+          throw new Error(
+            validation?.errors?.join(" ") || I18n.t("setup-error-credentials-failed")
+          );
         }
 
         this.setVerificationState(
@@ -518,14 +521,16 @@
       const preview = document.getElementById("wallet-address-preview");
       const text = preview?.querySelector(".wallet-address-text");
       if (!preview || !text) return;
-      text.textContent = address;
+      // `.ti-address` (token_identity.css) fits the full address to this line.
+      text.style.setProperty("--ti-address-chars", String(address.length));
+      text.querySelector(".ti-address-value").textContent = address;
       preview.hidden = false;
     }
 
     hideWalletPreview() {
       const preview = document.getElementById("wallet-address-preview");
-      const text = preview?.querySelector(".wallet-address-text");
-      if (text) text.textContent = "";
+      const value = preview?.querySelector(".wallet-address-text .ti-address-value");
+      if (value) value.textContent = "";
       if (preview) preview.hidden = true;
     }
 

@@ -459,11 +459,11 @@
 }
 
 .wallet-address-text {
-  min-width: 0;
-  overflow: hidden;
-  font-family: var(--font-mono);
-  text-overflow: ellipsis;
-  white-space: nowrap;
+  --ti-address-size: 0.68rem;
+}
+
+.wallet-address-text .ti-address-value {
+  color: inherit;
 }
 
 .wallet-copy-btn {

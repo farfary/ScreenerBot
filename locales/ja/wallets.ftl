@@ -33,17 +33,13 @@ wallets-watch-reason-helius-unavailable = { -helius } のチェックに失敗�
 wallets-watch-reason-processing-failed = ウォレットのアクティビティを処理できませんでした。保存済みの進捗は保持されています。
 
 # Vocabulary shared by the wallet tables and dialogs.
-wallets-field-address = アドレス
 wallets-field-name = ウォレット名
 wallets-field-notes = メモ
 wallets-field-private-key = 秘密鍵
-wallets-address-copy = アドレスをコピー
 wallets-modal-close =
     .aria-label = モーダルを閉じる
 wallets-this-wallet = このウォレット
 wallets-summary-native = { -sol }
-wallets-copied-address = アドレス
-wallets-copied-mint = ミントアドレス
 wallets-copied-private-key = 秘密鍵
 
 # wallets.js: subtabs, toasts and busy states.
@@ -246,7 +242,6 @@ wallets-holdings-col-balance = 残高
 wallets-holdings-col-value = 評価額（{ -sol }）
 wallets-holdings-col-type = 種類
 wallets-holdings-col-decimals = 小数桁数
-wallets-holdings-col-mint = ミント
 wallets-holdings-empty-title = トークンの保有はありません
 wallets-holdings-empty-message = このウォレットが保有するトークンがここに表示されます。
 wallets-holdings-no-main = メインウォレットがありません

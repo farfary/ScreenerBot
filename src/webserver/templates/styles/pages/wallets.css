@@ -136,26 +136,6 @@
   color: var(--primary-color);
 }
 
-.copy-btn-mini {
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  width: 20px;
-  height: 20px;
-  border: none;
-  border-radius: var(--radius-sm);
-  background: transparent;
-  color: var(--text-muted);
-  cursor: pointer;
-  transition: all var(--transition-fast);
-  font-size: 0.75rem;
-}
-
-.copy-btn-mini:hover {
-  background: var(--primary-alpha-10);
-  color: var(--primary-color);
-}
-
 /* =============================================================================
    Modal Styles
    ============================================================================= */

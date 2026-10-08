@@ -210,7 +210,6 @@ tools-analyzer-active-pools =
     }
 tools-analyzer-card-pool-details = Дані пулу
 tools-analyzer-pools-column-dex = DEX
-tools-analyzer-pools-column-address = Адреса пулу
 tools-analyzer-pools-column-liquidity = Ліквідність ({ -sol })
 tools-analyzer-pools-column-status = Статус
 tools-analyzer-pool-primary = Основний
@@ -486,7 +485,6 @@ tools-consolidation-action-transfer-tokens = Перевести всі токе�
 tools-consolidation-action-cleanup = Очистити ATA
 tools-consolidation-action-transferring = Переказ...
 tools-consolidation-column-name = Назва
-tools-consolidation-column-address = Адреса
 tools-consolidation-column-native = Баланс { -sol }
 tools-consolidation-column-tokens = Токени
 tools-consolidation-column-atas = Порожні ATA

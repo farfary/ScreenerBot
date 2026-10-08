@@ -24,17 +24,13 @@ wallets-watch-reason-signature-budget = Dompet ini memiliki aktivitas lebih bany
 wallets-watch-reason-helius-unavailable = Pemeriksaan { -helius } gagal. Progres tersimpan dipertahankan.
 wallets-watch-reason-processing-failed = Aktivitas dompet tidak dapat diproses. Progres tersimpan dipertahankan.
 
-wallets-field-address = Alamat
 wallets-field-name = Nama Dompet
 wallets-field-notes = Catatan
 wallets-field-private-key = Private Key
-wallets-address-copy = Salin alamat
 wallets-modal-close =
     .aria-label = Tutup modal
 wallets-this-wallet = dompet ini
 wallets-summary-native = { -sol }
-wallets-copied-address = Alamat
-wallets-copied-mint = Alamat mint
 wallets-copied-private-key = Private key
 
 wallets-tab-main = Dompet Utama
@@ -228,7 +224,6 @@ wallets-holdings-col-balance = Saldo
 wallets-holdings-col-value = Nilai ({ -sol })
 wallets-holdings-col-type = Jenis
 wallets-holdings-col-decimals = Desimal
-wallets-holdings-col-mint = Mint
 wallets-holdings-empty-title = Tidak ada kepemilikan token
 wallets-holdings-empty-message = Token yang dimiliki dompet ini akan muncul di sini.
 wallets-holdings-no-main = Tidak ada dompet utama

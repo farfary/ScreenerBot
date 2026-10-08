@@ -192,8 +192,6 @@ shell-toast-dismiss =
     .aria-label = Kapat
 shell-confirm-title = Eylemi onayla
 shell-confirm-message = Emin misiniz?
-shell-address-open-solscan = — { -solscan } üzerinde aç
-shell-address-copy = Adresi kopyala
 
 shell-assistant-label = Asistan
 shell-assistant-dialog =

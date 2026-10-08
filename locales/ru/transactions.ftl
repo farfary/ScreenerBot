@@ -135,7 +135,6 @@ transactions-dialog-balances-net-native = Итоговое изменение { 
 transactions-dialog-balances-fee = Комиссия транзакции
 transactions-dialog-col-account = Аккаунт
 transactions-dialog-col-token = Токен
-transactions-dialog-col-mint = Адрес минта
 transactions-dialog-col-pre-balance = Баланс до
 transactions-dialog-col-post-balance = Баланс после
 transactions-dialog-col-change = Изменение

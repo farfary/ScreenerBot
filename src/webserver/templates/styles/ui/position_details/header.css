@@ -101,12 +101,11 @@
   font-weight: 600;
 }
 
-/* A mint is never cropped: it wraps when the column is too narrow for it. */
-.position-details-dialog .header-mint-full {
-  color: var(--text-muted);
-  font: 500 0.72rem/1.3 var(--font-mono);
-  letter-spacing: -0.015em;
-  overflow-wrap: anywhere;
+/* The full mint under the title, and a copied position's source wallet among
+   the badges, each on one line (token_identity.css fits the size). */
+.position-details-dialog .header-identity,
+.position-details-dialog .header-badges {
+  --ti-address-size: 0.72rem;
 }
 
 /* Headline figures --------------------------------------------------------- */

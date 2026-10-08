@@ -129,6 +129,13 @@ export const endpoints = [
     empty: "featured_all.empty.json",
     rust: "src/webserver/routes/featured/types.rs::FeaturedCard",
   },
+  {
+    method: "GET",
+    path: "/api/tokens/identities",
+    fixture: "token_identities.json",
+    rust: "src/webserver/routes/tokens/identity.rs::IdentitiesResponse",
+    record: null,
+  },
 ];
 
 export const views = [

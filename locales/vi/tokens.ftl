@@ -185,7 +185,6 @@ tokens-pools-role-quote = Quote
 tokens-pools-role-unknown = Không rõ
 tokens-pools-reserves = Tài khoản dự trữ
 tokens-pools-no-reserves = Không có tài khoản dự trữ
-tokens-pools-address-copy = Sao chép địa chỉ
 tokens-pools-address-pool = Pool
     .title = Sao chép pool
 tokens-pools-address-base = Mint base
@@ -295,8 +294,6 @@ tokens-dialog-badge-profile = Hồ sơ đã đăng
 tokens-dialog-badge-low-risk-hint = Rủi ro thấp theo điểm { -rugcheck } hiện tại; không phải xác minh danh tính.
 tokens-dialog-badge-immutable = Không thể thay đổi
 tokens-dialog-badge-mutable = Có thể thay đổi
-tokens-dialog-badge-auth = Quyền:
-tokens-dialog-badge-update-authority = Quyền cập nhật:
 tokens-dialog-badge-position = Vị thế
 tokens-dialog-badge-blacklisted = Trong danh sách đen
 
@@ -363,7 +360,7 @@ tokens-ohlcv-active = Đang hoạt động
 tokens-ohlcv-db-size = Kích thước CSDL
 tokens-ohlcv-cleanup = Dọn dẹp mục không hoạt động
 tokens-ohlcv-delete-title = Xóa dữ liệu OHLCV
-tokens-ohlcv-delete-message = Xóa toàn bộ dữ liệu OHLCV của { $mint }...?
+tokens-ohlcv-delete-token-message = Xóa toàn bộ dữ liệu OHLCV của { $token }?
 tokens-ohlcv-delete-done =
     Đã xóa: { $candles ->
        *[other] { $candles } nến

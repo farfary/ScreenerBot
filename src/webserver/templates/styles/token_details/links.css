@@ -71,8 +71,7 @@
   text-transform: uppercase;
 }
 
-.links-info-row > strong,
-.links-info-value {
+.links-info-row > strong {
   color: var(--text-primary);
   font-family: var(--font-data);
   font-size: 0.72rem;
@@ -81,20 +80,6 @@
 
 .links-info-row > strong.verified {
   color: var(--success-color);
-}
-
-.links-info-value {
-  display: flex;
-  align-items: center;
-  gap: 4px;
-  min-width: 0;
-}
-
-.links-info-value code {
-  overflow: hidden;
-  font-family: var(--font-mono);
-  text-overflow: ellipsis;
-  white-space: nowrap;
 }
 
 .links-media-grid {

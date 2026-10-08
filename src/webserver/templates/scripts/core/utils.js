@@ -30,7 +30,6 @@ import {
   formatBytes,
   formatDuration,
   formatSignatureCompact,
-  formatAddressCompact,
   formatSecondsToTime,
   formatList,
   formatFixed,
@@ -433,7 +432,11 @@ import {
 
   /** @param {string} label what was copied, e.g. "Mint address" */
   function notifyCopied(label) {
-    return showToast({ key: CLIPBOARD_TOAST_KEY, type: "success", title: I18n.t("shell-toast-copied", { label }) });
+    return showToast({
+      key: CLIPBOARD_TOAST_KEY,
+      type: "success",
+      title: I18n.t("shell-toast-copied", { label }),
+    });
   }
 
   function notifyCopyFailed(error) {
@@ -527,7 +530,9 @@ import {
     );
     lines.push(
       `Confidence: ${
-        price.confidence != null ? formatPercentValue(Number(price.confidence) * 100, { decimals: 1, plus: "" }) : "N/A"
+        price.confidence != null
+          ? formatPercentValue(Number(price.confidence) * 100, { decimals: 1, plus: "" })
+          : "N/A"
       }`
     );
     lines.push(
@@ -537,18 +542,26 @@ import {
     );
     lines.push(
       `Market Cap: ${
-        market.market_cap != null ? withUsdSymbol(formatNumber(market.market_cap, DEBUG_COUNT)) : "N/A"
+        market.market_cap != null
+          ? withUsdSymbol(formatNumber(market.market_cap, DEBUG_COUNT))
+          : "N/A"
       }`
     );
-    lines.push(`FDV: ${market.fdv != null ? withUsdSymbol(formatNumber(market.fdv, DEBUG_COUNT)) : "N/A"}`);
+    lines.push(
+      `FDV: ${market.fdv != null ? withUsdSymbol(formatNumber(market.fdv, DEBUG_COUNT)) : "N/A"}`
+    );
     lines.push(
       `Liquidity: ${
-        market.liquidity_usd != null ? withUsdSymbol(formatNumber(market.liquidity_usd, DEBUG_COUNT)) : "N/A"
+        market.liquidity_usd != null
+          ? withUsdSymbol(formatNumber(market.liquidity_usd, DEBUG_COUNT))
+          : "N/A"
       }`
     );
     lines.push(
       `24h Volume: ${
-        market.volume_24h != null ? withUsdSymbol(formatNumber(market.volume_24h, DEBUG_COUNT)) : "N/A"
+        market.volume_24h != null
+          ? withUsdSymbol(formatNumber(market.volume_24h, DEBUG_COUNT))
+          : "N/A"
       }`
     );
     lines.push("");
@@ -667,22 +680,12 @@ import {
       }
       if (pd.price_stats) {
         const ps = pd.price_stats;
+        lines.push(`Min Price: ${withSolUnit(formatPriceSol(ps.min_price, { fallback: "N/A" }))}`);
+        lines.push(`Max Price: ${withSolUnit(formatPriceSol(ps.max_price, { fallback: "N/A" }))}`);
+        lines.push(`Avg Price: ${withSolUnit(formatPriceSol(ps.avg_price, { fallback: "N/A" }))}`);
         lines.push(
-          `Min Price: ${withSolUnit(
-            formatPriceSol(ps.min_price, { fallback: "N/A" })
-          )}`
+          `Volatility: ${formatPercentValue(ps.price_volatility, { decimals: 2, plus: "" })}`
         );
-        lines.push(
-          `Max Price: ${withSolUnit(
-            formatPriceSol(ps.max_price, { fallback: "N/A" })
-          )}`
-        );
-        lines.push(
-          `Avg Price: ${withSolUnit(
-            formatPriceSol(ps.avg_price, { fallback: "N/A" })
-          )}`
-        );
-        lines.push(`Volatility: ${formatPercentValue(ps.price_volatility, { decimals: 2, plus: "" })}`);
         lines.push(`Data Points: ${ps.data_points}`);
         lines.push(
           `Time Span: ${ps.time_span_seconds}s (${(ps.time_span_seconds / 60).toFixed(0)} min)`
@@ -771,7 +774,9 @@ import {
             pd.fee_details.exit_fee_raw || 0
           } lamports)`
         );
-        lines.push(`  Total: ${withSolUnit(formatFixed(pd.fee_details.total_fees_native, { decimals: 6 }))}`);
+        lines.push(
+          `  Total: ${withSolUnit(formatFixed(pd.fee_details.total_fees_native, { decimals: 6 }))}`
+        );
       }
       if (pd.profit_targets) {
         lines.push(
@@ -787,10 +792,14 @@ import {
         lines.push(`  Low: ${pd.price_tracking.price_lowest}`);
         lines.push(`  Current: ${pd.price_tracking.current_price || "N/A"}`);
         if (pd.price_tracking.drawdown_from_high) {
-          lines.push(`  Drawdown from High: ${formatPercentValue(pd.price_tracking.drawdown_from_high, { decimals: 2, plus: "" })}`);
+          lines.push(
+            `  Drawdown from High: ${formatPercentValue(pd.price_tracking.drawdown_from_high, { decimals: 2, plus: "" })}`
+          );
         }
         if (pd.price_tracking.gain_from_low) {
-          lines.push(`  Gain from Low: ${formatPercentValue(pd.price_tracking.gain_from_low, { decimals: 2, plus: "" })}`);
+          lines.push(
+            `  Gain from Low: ${formatPercentValue(pd.price_tracking.gain_from_low, { decimals: 2, plus: "" })}`
+          );
         }
       }
       if (pd.phantom_details) {
@@ -858,10 +867,6 @@ import {
   }
 
   // --- Solscan URL builders (single source of truth for explorer links) -------
-  function solscanTokenUrl(mint) {
-    return `https://solscan.io/token/${mint}`;
-  }
-
   function solscanAccountUrl(address) {
     return `https://solscan.io/account/${address}`;
   }
@@ -872,43 +877,6 @@ import {
 
   function openSolscanAccount(address) {
     openExternal(solscanAccountUrl(address));
-  }
-
-  // Copy an address and surface a toast (use for wallet/pool/authority addresses).
-  function copyAddress(address) {
-    return copyToClipboard(address)
-      .then(() => notifyCopied(I18n.t("common-copied-address")))
-      .catch((err) => {
-        notifyCopyFailed(err);
-        throw err;
-      });
-  }
-
-  /**
-   * Render a reusable address chip: the address itself links to Solscan and a
-   * copy button sits beside it. Used across dialogs so every wallet / pool /
-   * authority address is consistently clickable + copyable.
-   * @param {string} address base58 account address (or signature when kind="tx")
-   * @param {Object} [opts]
-   * @param {boolean} [opts.full=false] show the whole address instead of a short form
-   * @param {string} [opts.kind="account"] "account" | "tx" | "token"
-   * @returns {string} HTML string
-   */
-  function renderAddressChip(address, opts = {}) {
-    if (!address) return '<span class="addr-chip addr-chip-empty">—</span>';
-    const { full = false, kind = "account" } = opts;
-    const raw = String(address);
-    const safe = escapeHtml(raw);
-    const display = full ? safe : escapeHtml(formatAddressCompact(raw, { start: 6, end: 6 }));
-    const url =
-      kind === "tx"
-        ? solscanTxUrl(raw)
-        : kind === "token"
-          ? solscanTokenUrl(raw)
-          : solscanAccountUrl(raw);
-    // base58 addresses contain no quotes/HTML-special chars, so inlining is safe.
-    const onclick = `event.preventDefault();event.stopPropagation();Utils.copyAddress('${raw}')`;
-    return `<span class="addr-chip${full ? " addr-chip-full" : ""}"><a class="addr-chip-link mono" dir="ltr" href="${url}" target="_blank" rel="noopener noreferrer" title="${safe} ${escapeHtml(I18n.t("shell-address-open-solscan"))}">${display}</a><button type="button" class="addr-chip-copy" title="${escapeHtml(I18n.t("shell-address-copy"))}" onclick="${onclick}"><i class="icon-copy"></i></button></span>`;
   }
 
   // DOM Helper Functions
@@ -1089,7 +1057,6 @@ import {
     formatBytes,
     formatDuration,
     formatSignatureCompact,
-    formatAddressCompact,
     formatSecondsToTime,
     formatList,
     escapeHtml,
@@ -1115,12 +1082,9 @@ import {
     openGMGN,
     openDexScreener,
     openSolscan,
-    solscanTokenUrl,
     solscanAccountUrl,
     solscanTxUrl,
     openSolscanAccount,
-    copyAddress,
-    renderAddressChip,
     debounce,
     throttle,
     createFocusTrap,
@@ -1162,7 +1126,6 @@ export {
   formatBytes,
   formatDuration,
   formatSignatureCompact,
-  formatAddressCompact,
   formatSecondsToTime,
   formatList,
 };
@@ -1193,12 +1156,9 @@ export const {
   openGMGN,
   openDexScreener,
   openSolscan,
-  solscanTokenUrl,
   solscanAccountUrl,
   solscanTxUrl,
   openSolscanAccount,
-  copyAddress,
-  renderAddressChip,
   debounce,
   throttle,
   createFocusTrap,

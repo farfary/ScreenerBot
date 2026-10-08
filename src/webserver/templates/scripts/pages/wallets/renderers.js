@@ -8,6 +8,13 @@
  */
 
 import { DataTable } from "../../ui/data_table.js";
+import {
+  addressFloorWidth,
+  renderAddress,
+  renderNamedAddress,
+  renderTokenCell,
+  TOKEN_CELL_MIN_WIDTH,
+} from "../../ui/token_identity.js";
 
 // wallet_type ids serialized by `WalletType` (src/wallets/types.rs).
 const WALLET_TYPE_LABELS = Object.freeze({
@@ -30,61 +37,37 @@ export function createWalletRenderers({
 }) {
   // DataTable instances — created once, updated via setData() on every poll
   let tokenTable = null;
-  let tokenTableClickHandler = null;
   let secondariesTable = null;
-  let secondariesClickHandler = null;
   let archiveTable = null;
-  let archiveClickHandler = null;
 
   function mainWallet() {
     return walletsData().find((w) => w.role === "main") || null;
   }
 
-  function solscanAccountUrl(address) {
-    return address ? `https://solscan.io/account/${encodeURIComponent(address)}` : "";
+  // DataTable sorts and searches `row[column.id]`. The token and wallet cells show
+  // a name with the full address beneath it, so their key carries both: sorting
+  // follows the name and the table search still finds a pasted address.
+  function tokenRows(tokens) {
+    return tokens.map((t) => ({ ...t, token: `${t.symbol || ""} ${t.name || ""} ${t.mint}` }));
   }
 
-  // Address cell shared by the Secondaries/Archive tables — same short-address +
-  // copy + Solscan-link treatment as the main wallet's token Mint column.
-  function _addressCellHtml(address) {
-    if (!address) return "—";
-    const escaped = Utils.escapeHtml(address);
-    const short = `${address.slice(0, 6)}...${address.slice(-4)}`;
-    const url = `https://solscan.io/account/${encodeURIComponent(address)}`;
-    const copyTitle = Utils.escapeHtml(I18n.t("wallets-address-copy"));
-    const linkTitle = Utils.escapeHtml(I18n.t("links-view-solscan"));
-    return `<div class="wt-mint-cell"><span class="wt-mint-addr" dir="ltr">${short}</span><button type="button" class="copy-btn-mini" data-copy-address="${escaped}" title="${copyTitle}"><i class="icon-copy"></i></button><a class="wt-mint-link" href="${url}" target="_blank" rel="noopener" title="${linkTitle}"><i class="icon-external-link"></i></a></div>`;
+  function walletAddressHtml(wallet) {
+    return wallet?.address ? renderAddress(wallet.address, { explorer: "account" }) : "";
   }
 
-  // Delegated click handler for the address copy button — mirrors the mint-copy
-  // wiring on the tokens table (one listener per table root, not per row).
-  function _wireAddressCopy(rootEl) {
-    const handler = (e) => {
-      const btn = e.target.closest("[data-copy-address]");
-      if (!btn) return;
-      e.stopPropagation();
-      Utils.copyToClipboard(btn.dataset.copyAddress);
-      Utils.notifyCopied(I18n.t("wallets-copied-address"));
-    };
-    rootEl.addEventListener("click", handler);
-    return handler;
+  function walletRows(wallets) {
+    return wallets.map((w) => ({ ...w, wallet: `${w.name || ""} ${w.address || ""}` }));
   }
 
   // Column definitions are stable across renders — define once at closure level
   const TOKEN_COLUMNS = [
     {
-      id: "symbol",
+      id: "token",
       label: I18n.t("wallets-holdings-col-token"),
       sortable: true,
-      render: (value, row) => {
-        const sym = Utils.escapeHtml(row.symbol || I18n.t("format-unknown"));
-        const name = row.name ? Utils.escapeHtml(row.name) : null;
-        const logo = row.logo_url || "";
-        const logoHtml = logo
-          ? `<img class="token-logo token-logo-artwork" src="${Utils.escapeHtml(logo)}" alt="${sym}" loading="lazy"/>`
-          : '<i class="token-logo icon-coins"></i>';
-        return `<div class="wt-token-cell">${logoHtml}<div class="wt-token-meta"><span class="wt-symbol">${sym}</span>${name ? `<span class="wt-name">${name}</span>` : ""}</div></div>`;
-      },
+      minWidth: TOKEN_CELL_MIN_WIDTH,
+      render: (value, row) =>
+        renderTokenCell(row.mint, { symbol: row.symbol, name: row.name, logoUrl: row.logo_url }),
     },
     {
       id: "ui_amount",
@@ -117,37 +100,18 @@ export function createWalletRenderers({
       sortable: true,
       render: (value) => (value != null ? value : "—"),
     },
-    {
-      id: "mint",
-      label: I18n.t("wallets-holdings-col-mint"),
-      sortable: false,
-      render: (value) => {
-        if (!value) return "—";
-        const escaped = Utils.escapeHtml(value);
-        const short = `${value.slice(0, 6)}...${value.slice(-4)}`;
-        const url = `https://solscan.io/token/${encodeURIComponent(value)}`;
-        const copyTitle = Utils.escapeHtml(I18n.attr("links-copy-mint", "title"));
-        const linkTitle = Utils.escapeHtml(I18n.t("links-view-solscan"));
-        return `<div class="wt-mint-cell"><span class="wt-mint-addr" dir="ltr">${short}</span><button type="button" class="copy-btn-mini" data-copy-mint="${escaped}" title="${copyTitle}"><i class="icon-copy"></i></button><a class="wt-mint-link" href="${url}" target="_blank" rel="noopener" title="${linkTitle}"><i class="icon-external-link"></i></a></div>`;
-      },
-    },
   ];
 
   // Shared column shape for Secondaries/Archive — only the trailing Actions
   // column differs between the two tabs.
   const WALLET_LIST_COLUMNS_BASE = [
     {
-      id: "name",
+      id: "wallet",
       label: I18n.t("wallets-list-col-name"),
       sortable: true,
       className: "wallet-name-cell",
-      render: (value) => Utils.escapeHtml(value || "—"),
-    },
-    {
-      id: "address",
-      label: I18n.t("wallets-field-address"),
-      sortable: false,
-      render: (value, row) => _addressCellHtml(row.address),
+      minWidth: addressFloorWidth() + 24,
+      render: (value, row) => renderNamedAddress(row.name, row.address),
     },
     {
       id: "balance",
@@ -284,10 +248,7 @@ export function createWalletRenderers({
     tokenTable.setToolbarIdentity({
       title: wallet?.name || I18n.t("wallets-holdings-no-main"),
       tag: wallet ? I18n.t("wallets-holdings-main-tag") : "",
-      address: {
-        value: wallet?.address || "—",
-        href: solscanAccountUrl(wallet?.address) || "#",
-      },
+      address: { html: walletAddressHtml(wallet) },
     });
 
     tokenTable.updateToolbarSummary([
@@ -316,7 +277,7 @@ export function createWalletRenderers({
 
     if (tokenTable) {
       // Silent data refresh — no DOM teardown, no visual flash, settings dialog stays open
-      tokenTable.setData(tokens);
+      tokenTable.setData(tokenRows(tokens));
       syncMainWalletToolbar(tokens);
       syncLoadingState(tokenTable, loading);
       return;
@@ -346,11 +307,7 @@ export function createWalletRenderers({
           icon: "icon-wallet",
           title: wallet?.name || I18n.t("wallets-holdings-main-title"),
           tag: I18n.t("wallets-holdings-main-tag"),
-          address: {
-            value: wallet?.address || "—",
-            href: solscanAccountUrl(wallet?.address) || "#",
-            linkTooltip: I18n.t("links-view-solscan"),
-          },
+          address: { html: walletAddressHtml(wallet) },
         },
         summary: [
           { id: "wt-sol-balance", label: I18n.t("wallets-summary-native"), value: "—" },
@@ -393,20 +350,9 @@ export function createWalletRenderers({
       },
     });
 
-    tokenTable.setData(tokens);
+    tokenTable.setData(tokenRows(tokens));
     syncMainWalletToolbar(tokens);
     syncLoadingState(tokenTable, loading);
-
-    // Event delegation for copy buttons inside DataTable cells — wired once
-    tokenTableClickHandler = (e) => {
-      const btn = e.target.closest("[data-copy-mint]");
-      if (btn) {
-        e.stopPropagation();
-        Utils.copyToClipboard(btn.dataset.copyMint);
-        Utils.notifyCopied(I18n.t("wallets-copied-mint"));
-      }
-    };
-    dtRoot.addEventListener("click", tokenTableClickHandler);
   }
 
   // =============================================================================
@@ -418,30 +364,15 @@ export function createWalletRenderers({
       tokenTable.destroy();
       tokenTable = null;
     }
-    const dtRoot = document.querySelector("#tokens-datatable-root");
-    if (dtRoot && tokenTableClickHandler) {
-      dtRoot.removeEventListener("click", tokenTableClickHandler);
-      tokenTableClickHandler = null;
-    }
 
     if (secondariesTable) {
       secondariesTable.destroy();
       secondariesTable = null;
     }
-    const secRoot = document.querySelector("#secondaries-table-container");
-    if (secRoot && secondariesClickHandler) {
-      secRoot.removeEventListener("click", secondariesClickHandler);
-      secondariesClickHandler = null;
-    }
 
     if (archiveTable) {
       archiveTable.destroy();
       archiveTable = null;
-    }
-    const archRoot = document.querySelector("#archive-table-container");
-    if (archRoot && archiveClickHandler) {
-      archRoot.removeEventListener("click", archiveClickHandler);
-      archiveClickHandler = null;
     }
   }
 
@@ -516,10 +447,9 @@ export function createWalletRenderers({
           ],
         },
       });
-      secondariesClickHandler = _wireAddressCopy(container);
     }
 
-    secondariesTable.setData(secondaryWallets);
+    secondariesTable.setData(walletRows(secondaryWallets));
     syncLoadingState(secondariesTable, loading);
     secondariesTable.updateToolbarSummary?.([
       { id: "secondaries-count", value: String(secondaryWallets.length) },
@@ -574,10 +504,9 @@ export function createWalletRenderers({
           ],
         },
       });
-      archiveClickHandler = _wireAddressCopy(container);
     }
 
-    archiveTable.setData(archivedWallets);
+    archiveTable.setData(walletRows(archivedWallets));
     syncLoadingState(archiveTable, loading);
     archiveTable.updateToolbarSummary?.([
       { id: "archive-count", value: String(archivedWallets.length) },

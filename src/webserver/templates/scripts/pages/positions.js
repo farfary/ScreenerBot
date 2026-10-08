@@ -33,21 +33,42 @@ const esc = (text) => Utils.escapeHtml(text);
 
 // Sub-tab labels: an icon followed by the view name.
 const subTabs = () => [
-  { id: "open", label: `<i class="icon-trending-up"></i> ${esc(I18n.label(POSITION_STATUS_LABELS, "open"))}` },
-  { id: "closed", label: `<i class="icon-trending-down"></i> ${esc(I18n.label(POSITION_STATUS_LABELS, "closed"))}` },
-  { id: "archived", label: `<i class="icon-archive"></i> ${esc(I18n.label(POSITION_STATUS_LABELS, "archived"))}` },
+  {
+    id: "open",
+    label: `<i class="icon-trending-up"></i> ${esc(I18n.label(POSITION_STATUS_LABELS, "open"))}`,
+  },
+  {
+    id: "closed",
+    label: `<i class="icon-trending-down"></i> ${esc(I18n.label(POSITION_STATUS_LABELS, "closed"))}`,
+  },
+  {
+    id: "archived",
+    label: `<i class="icon-archive"></i> ${esc(I18n.label(POSITION_STATUS_LABELS, "archived"))}`,
+  },
 ];
 
 // Title and aria-label attributes of an icon-only row action.
 const actionAttrs = (title, ariaLabel) => `title="${esc(title)}" aria-label="${esc(ariaLabel)}"`;
 const addAttrs = () =>
-  actionAttrs(I18n.attr("positions-action-add", "title"), I18n.attr("positions-action-add", "aria-label"));
+  actionAttrs(
+    I18n.attr("positions-action-add", "title"),
+    I18n.attr("positions-action-add", "aria-label")
+  );
 const removeAttrs = () =>
-  actionAttrs(I18n.attr("positions-action-remove", "title"), I18n.attr("positions-action-remove", "aria-label"));
+  actionAttrs(
+    I18n.attr("positions-action-remove", "title"),
+    I18n.attr("positions-action-remove", "aria-label")
+  );
 const restoreAttrs = () =>
-  actionAttrs(I18n.attr("positions-action-restore", "title"), I18n.attr("positions-action-restore", "aria-label"));
+  actionAttrs(
+    I18n.attr("positions-action-restore", "title"),
+    I18n.attr("positions-action-restore", "aria-label")
+  );
 const deleteAttrs = () =>
-  actionAttrs(I18n.attr("positions-action-delete", "title"), I18n.attr("positions-action-delete", "aria-label"));
+  actionAttrs(
+    I18n.attr("positions-action-delete", "title"),
+    I18n.attr("positions-action-delete", "aria-label")
+  );
 
 // Live-action wiring: the actions system streams every in-flight buy/sell as an
 // Action (SSE -> notificationManager) long before the on-chain position is
@@ -132,7 +153,9 @@ function createLifecycle() {
     let label;
     let icon;
     if (st === "buying") {
-      label = step ? I18n.t("positions-caption-buying-step", { step }) : I18n.t("positions-caption-buying");
+      label = step
+        ? I18n.t("positions-caption-buying-step", { step })
+        : I18n.t("positions-caption-buying");
       icon = '<span class="pos-state-spinner" aria-hidden="true"></span>';
     } else if (st === "selling") {
       label = step
@@ -671,13 +694,13 @@ function createLifecycle() {
     buyByMint.forEach((info, mint) => {
       if (presentMints.has(mint)) return; // real position exists -> it supersedes
       const failed = info.kind === "failed";
-      const shortMint = `${mint.slice(0, 4)}…${mint.slice(-4)}`;
+      const symbol = info.symbol || I18n.t("format-unknown");
       pending.push({
         id: `pending:${info.actionId}`,
         mint,
-        symbol: info.symbol || mint.slice(0, 4),
+        symbol,
         name: failed ? I18n.t("positions-pending-buy-failed") : I18n.t("positions-pending-buying"),
-        token: `${info.symbol || mint.slice(0, 4)} (${shortMint})`,
+        token: `${symbol} ${mint}`,
         _pending: true,
         _state: failed ? "failed" : "buying",
         _stepLabel: failed ? null : info.step,
@@ -728,7 +751,7 @@ function createLifecycle() {
 
       const mapped = (Array.isArray(rows) ? rows : []).map((row) => ({
         ...row,
-        token: `${row.symbol} (${row.mint.slice(0, 4)}…${row.mint.slice(-4)})`,
+        token: `${row.symbol} ${row.mint}`,
       }));
       state.lastServerRows = mapped;
 
@@ -949,7 +972,14 @@ function createLifecycle() {
           onPageLoaded: () => updateToolbar(),
         },
         toolbar: {
-          summary: [{ id: "positions-total", label: I18n.t("positions-toolbar-total"), value: "0", variant: "secondary" }],
+          summary: [
+            {
+              id: "positions-total",
+              label: I18n.t("positions-toolbar-total"),
+              value: "0",
+              variant: "secondary",
+            },
+          ],
           search: {
             enabled: true,
             mode: "client",

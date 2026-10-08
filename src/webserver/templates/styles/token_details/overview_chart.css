@@ -234,9 +234,7 @@
   grid-column: 1 / -1;
 }
 
-.overview-fact-value,
-.overview-copy-value,
-.overview-pool-link {
+.overview-fact-value {
   overflow: hidden;
   color: var(--text-primary);
   font-family: var(--font-data);
@@ -252,22 +250,6 @@
 .overview-fact-emphasis .overview-fact-value {
   font-size: 0.84rem;
   font-weight: 700;
-}
-
-.overview-copy-value {
-  width: fit-content;
-  max-width: 100%;
-  padding: 0;
-  border: 0;
-  background: transparent;
-  color: var(--link-color);
-  cursor: pointer;
-  text-align: start;
-}
-
-.overview-copy-value:hover,
-.overview-pool-link:hover {
-  text-decoration: underline;
 }
 
 .overview-tags-row,
@@ -312,11 +294,14 @@
 }
 
 .overview-pool-row {
+  align-items: center;
   justify-content: space-between;
 }
 
-.overview-pool-link {
-  color: var(--link-color);
+/* The mint and the pool in full, at the facts' reading size. */
+.overview-facts,
+.overview-pool-row {
+  --ti-address-size: 0.72rem;
 }
 
 /* Price change and volume share one time-aligned matrix so the relationship is

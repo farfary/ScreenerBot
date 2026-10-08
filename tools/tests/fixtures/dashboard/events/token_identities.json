@@ -1,0 +1,11 @@
+{
+  "identities": {
+    "SynthEventMintB7nQ2sU5xW8zA3cE6fG9hJ4kL2mN": {
+      "mint": "SynthEventMintB7nQ2sU5xW8zA3cE6fG9hJ4kL2mN",
+      "symbol": "KEST",
+      "name": "Kestrel",
+      "logo_url": null,
+      "decimals": 6
+    }
+  }
+}

@@ -33,17 +33,13 @@ wallets-watch-reason-helius-unavailable = Fallaron las revisiones de { -helius }
 wallets-watch-reason-processing-failed = No se pudo procesar la actividad de la billetera. El progreso guardado se conserva.
 
 # Vocabulary shared by the wallet tables and dialogs.
-wallets-field-address = Dirección
 wallets-field-name = Nombre de la billetera
 wallets-field-notes = Notas
 wallets-field-private-key = Clave privada
-wallets-address-copy = Copiar dirección
 wallets-modal-close =
     .aria-label = Cerrar ventana
 wallets-this-wallet = esta billetera
 wallets-summary-native = { -sol }
-wallets-copied-address = Dirección
-wallets-copied-mint = Dirección mint
 wallets-copied-private-key = Clave privada
 
 # wallets.js: subtabs, toasts and busy states.
@@ -256,7 +252,6 @@ wallets-holdings-col-balance = Saldo
 wallets-holdings-col-value = Valor ({ -sol })
 wallets-holdings-col-type = Tipo
 wallets-holdings-col-decimals = Decimales
-wallets-holdings-col-mint = Mint
 wallets-holdings-empty-title = Sin tenencias de tokens
 wallets-holdings-empty-message = Los tokens de esta billetera aparecerán aquí.
 wallets-holdings-no-main = Sin billetera principal

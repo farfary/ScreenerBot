@@ -222,7 +222,6 @@ tokens-pools-role-quote = مظنه
 tokens-pools-role-unknown = نامشخص
 tokens-pools-reserves = حساب‌های ذخیره
 tokens-pools-no-reserves = حساب ذخیره‌ای نیست
-tokens-pools-address-copy = کپی آدرس
 tokens-pools-address-pool = استخر
     .title = کپی آدرس استخر
 tokens-pools-address-base = مینت پایه
@@ -340,8 +339,6 @@ tokens-dialog-badge-profile = پروفایل منتشرشده
 tokens-dialog-badge-low-risk-hint = ریسک کم بر اساس امتیاز فعلی { -rugcheck }؛ تأیید هویت نیست.
 tokens-dialog-badge-immutable = غیرقابل تغییر
 tokens-dialog-badge-mutable = قابل تغییر
-tokens-dialog-badge-auth = اختیار:
-tokens-dialog-badge-update-authority = اختیار به‌روزرسانی:
 tokens-dialog-badge-position = پوزیشن
 tokens-dialog-badge-blacklisted = فهرست سیاه
 
@@ -423,8 +420,8 @@ tokens-ohlcv-active = فعال
 tokens-ohlcv-db-size = حجم پایگاه‌داده
 tokens-ohlcv-cleanup = پاکسازی غیرفعال‌ها
 tokens-ohlcv-delete-title = حذف داده OHLCV
-# $mint is the first characters of the token mint.
-tokens-ohlcv-delete-message = همه داده OHLCV مربوط به { $mint }... حذف شود؟
+# $token is the token symbol.
+tokens-ohlcv-delete-token-message = همه داده OHLCV مربوط به { $token } حذف شود؟
 tokens-ohlcv-delete-done =
     حذف شد: { $candles ->
         [one] { $candles } کندل

@@ -215,7 +215,6 @@ tools-analyzer-active-pools =
     }
 tools-analyzer-card-pool-details = 풀 상세 정보
 tools-analyzer-pools-column-dex = DEX
-tools-analyzer-pools-column-address = 풀 주소
 tools-analyzer-pools-column-liquidity = 유동성 ({ -sol })
 tools-analyzer-pools-column-status = 상태
 tools-analyzer-pool-primary = 주요
@@ -466,7 +465,6 @@ tools-consolidation-action-transfer-tokens = 모든 토큰 전송
 tools-consolidation-action-cleanup = ATA 정리
 tools-consolidation-action-transferring = 전송 중...
 tools-consolidation-column-name = 이름
-tools-consolidation-column-address = 주소
 tools-consolidation-column-native = { -sol } 잔액
 tools-consolidation-column-tokens = 토큰
 tools-consolidation-column-atas = 빈 ATA

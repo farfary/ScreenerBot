@@ -187,7 +187,6 @@ tokens-pools-role-quote = कोट
 tokens-pools-role-unknown = अज्ञात
 tokens-pools-reserves = रिज़र्व अकाउंट
 tokens-pools-no-reserves = कोई रिज़र्व अकाउंट नहीं
-tokens-pools-address-copy = एड्रेस कॉपी करें
 tokens-pools-address-pool = पूल
     .title = पूल कॉपी करें
 tokens-pools-address-base = बेस मिंट
@@ -297,8 +296,6 @@ tokens-dialog-badge-profile = प्रकाशित प्रोफ़ाइ�
 tokens-dialog-badge-low-risk-hint = वर्तमान { -rugcheck } स्कोर के अनुसार कम जोखिम; यह पहचान की पुष्टि नहीं है।
 tokens-dialog-badge-immutable = अपरिवर्तनीय
 tokens-dialog-badge-mutable = बदलने योग्य
-tokens-dialog-badge-auth = अथॉरिटी:
-tokens-dialog-badge-update-authority = अपडेट अथॉरिटी:
 tokens-dialog-badge-position = पोज़िशन
 tokens-dialog-badge-blacklisted = ब्लैकलिस्टेड
 
@@ -365,7 +362,7 @@ tokens-ohlcv-active = सक्रिय
 tokens-ohlcv-db-size = DB साइज़
 tokens-ohlcv-cleanup = निष्क्रिय साफ़ करें
 tokens-ohlcv-delete-title = OHLCV डेटा हटाएँ
-tokens-ohlcv-delete-message = { $mint }... का सारा OHLCV डेटा हटाएँ?
+tokens-ohlcv-delete-token-message = { $token } का सारा OHLCV डेटा हटाएँ?
 tokens-ohlcv-delete-done =
     हटाया गया: { $candles ->
         [one] { $candles } कैंडल

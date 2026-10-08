@@ -41,7 +41,6 @@ common-severity-debug = Debug
 
 common-error-with-message = Error: { $message }
 
-common-copied-address = Alamat
 common-copied-signature = Signature
 common-copied-json = JSON
 common-copied-value = Nilai

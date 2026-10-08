@@ -41,7 +41,6 @@ common-severity-debug = Hata ayıklama
 
 common-error-with-message = Hata: { $message }
 
-common-copied-address = Adres
 common-copied-signature = İmza
 common-copied-json = JSON
 common-copied-value = Değer

@@ -12,6 +12,7 @@ import { ConfirmationDialog } from "../ui/confirmation_dialog.js";
 import { playToggleOn, playToggleOff, playSuccess, playError } from "../core/sounds.js";
 import { ChatWidget } from "../core/chat_widget.js";
 import { TabBar, TabBarManager } from "../ui/tab_bar.js";
+import { renderTokenCell, resolveTokenCells } from "../ui/token_identity.js";
 import { formatLatencyMs, formatPercentValue } from "../core/format.js";
 import { LLM_PROVIDER_LABELS } from "../ui/llm_provider.js";
 
@@ -709,6 +710,13 @@ function createLifecycle() {
           : ""
       }
     `;
+    resolveTokenCells(
+      decisions.map((item) => item.mint),
+      () => {
+        const body = container.querySelector(".history-table tbody");
+        if (body) body.innerHTML = decisions.map(renderDecisionRow).join("");
+      }
+    );
   }
 
   /**
@@ -723,10 +731,7 @@ function createLifecycle() {
 
     return `
       <tr class="decision-row ${allowed ? "pass" : "reject"}">
-        <td>
-          <span class="token-symbol">${Utils.escapeHtml(item.symbol || I18n.t("format-unknown"))}</span>
-          <span class="token-mint" dir="ltr">${Utils.formatAddressCompact(item.mint)}</span>
-        </td>
+        <td>${renderTokenCell(item.mint, { symbol: item.symbol })}</td>
         <td><span class="badge ${allowed ? "success" : "error"}">${Utils.escapeHtml(analysisLabel(ANALYSIS_DECISION_LABELS, item.decision))}</span></td>
         <td>${percentText(item.confidence, "—")}</td>
         <td>${Utils.escapeHtml(analysisLabel(ANALYSIS_RISK_LABELS, item.risk_level))}</td>

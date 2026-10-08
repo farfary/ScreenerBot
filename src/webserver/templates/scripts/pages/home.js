@@ -9,6 +9,7 @@ import { formatTimeSpan, withApprox, withUsdSymbol } from "../core/format.js";
 import * as Utils from "../core/utils.js";
 import { requestManager, createScopedFetcher } from "../core/request_manager.js";
 import { showFeaturedRow, hideFeaturedRow } from "../ui/featured_row.js";
+import { renderAddress } from "../ui/token_identity.js";
 import { notifyClientReady } from "../core/client_ready.js";
 import { closeMenu, openMenu } from "../core/menu_manager.js";
 import { createCalendar } from "./home/portfolio_calendar.js";
@@ -152,9 +153,10 @@ function createLifecycle() {
       return;
     }
 
-    addressEl.textContent = Utils.formatAddressCompact(nextAddress, { start: 10, end: 10 });
-    addressEl.title = nextAddress;
-    qrAddress.textContent = nextAddress;
+    if (changed) {
+      addressEl.innerHTML = renderAddress(nextAddress, { plain: true });
+      qrAddress.innerHTML = renderAddress(nextAddress, { plain: true });
+    }
     copyButton.dataset.copy = nextAddress;
 
     if (changed) {
@@ -350,7 +352,9 @@ function createLifecycle() {
       const unpriced = wallet.unpriced_token_count || 0;
       const label = n > 0 ? I18n.t("home-holdings-token-count", { count: n }) : "";
       holdingsCountEl.textContent =
-        unpriced > 0 ? I18n.t("home-holdings-with-unpriced", { tokens: label, count: unpriced }) : label;
+        unpriced > 0
+          ? I18n.t("home-holdings-with-unpriced", { tokens: label, count: unpriced })
+          : label;
       holdingsCountEl.title =
         unpriced > 0 ? I18n.t("home-holdings-unpriced-note", { count: unpriced }) : "";
     }

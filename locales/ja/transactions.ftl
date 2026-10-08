@@ -155,7 +155,6 @@ transactions-dialog-balances-net-native = { -sol } の正味増減
 transactions-dialog-balances-fee = トランザクション手数料
 transactions-dialog-col-account = アカウント
 transactions-dialog-col-token = トークン
-transactions-dialog-col-mint = ミントアドレス
 transactions-dialog-col-pre-balance = 変更前残高
 transactions-dialog-col-post-balance = 変更後残高
 transactions-dialog-col-change = 増減

@@ -43,7 +43,6 @@ common-severity-debug = Débogage
 
 common-error-with-message = Erreur : { $message }
 
-common-copied-address = Adresse
 common-copied-signature = Signature
 common-copied-json = JSON
 common-copied-value = Valeur

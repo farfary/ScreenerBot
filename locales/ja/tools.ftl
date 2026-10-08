@@ -211,7 +211,6 @@ tools-analyzer-active-pools =
     }
 tools-analyzer-card-pool-details = プールの詳細
 tools-analyzer-pools-column-dex = DEX
-tools-analyzer-pools-column-address = プールアドレス
 tools-analyzer-pools-column-liquidity = 流動性（{ -sol }）
 tools-analyzer-pools-column-status = ステータス
 tools-analyzer-pool-primary = メイン
@@ -461,7 +460,6 @@ tools-consolidation-action-transfer-tokens = すべてのトークンを送金
 tools-consolidation-action-cleanup = ATA をクリーンアップ
 tools-consolidation-action-transferring = 送金中...
 tools-consolidation-column-name = 名前
-tools-consolidation-column-address = アドレス
 tools-consolidation-column-native = { -sol } 残高
 tools-consolidation-column-tokens = トークン
 tools-consolidation-column-atas = 空の ATA

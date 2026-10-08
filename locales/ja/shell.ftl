@@ -230,8 +230,6 @@ shell-toast-dismiss =
     .aria-label = 閉じる
 shell-confirm-title = 操作の確認
 shell-confirm-message = よろしいですか？
-shell-address-open-solscan = — { -solscan } で開く
-shell-address-copy = アドレスをコピー
 
 # Source: scripts/core/global_chat.js
 shell-assistant-label = アシスタント

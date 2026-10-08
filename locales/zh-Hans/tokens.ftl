@@ -207,7 +207,6 @@ tokens-pools-role-quote = 计价
 tokens-pools-role-unknown = 未知
 tokens-pools-reserves = 储备账户
 tokens-pools-no-reserves = 无储备账户
-tokens-pools-address-copy = 复制地址
 tokens-pools-address-pool = 流动性池
     .title = 复制流动性池地址
 tokens-pools-address-base = 基础代币铸造地址
@@ -321,8 +320,6 @@ tokens-dialog-badge-profile = 已发布的资料
 tokens-dialog-badge-low-risk-hint = 根据当前 { -rugcheck } 评分为低风险；并非身份验证。
 tokens-dialog-badge-immutable = 不可变
 tokens-dialog-badge-mutable = 可变
-tokens-dialog-badge-auth = 权限：
-tokens-dialog-badge-update-authority = 更新权限：
 tokens-dialog-badge-position = 仓位
 tokens-dialog-badge-blacklisted = 已加入黑名单
 
@@ -401,7 +398,7 @@ tokens-ohlcv-active = 活跃
 tokens-ohlcv-db-size = 数据库大小
 tokens-ohlcv-cleanup = 清理未激活
 tokens-ohlcv-delete-title = 删除 OHLCV 数据
-tokens-ohlcv-delete-message = 删除 { $mint }… 的所有 OHLCV 数据？
+tokens-ohlcv-delete-token-message = 删除 { $token } 的所有 OHLCV 数据？
 tokens-ohlcv-delete-done =
     已删除：{ $candles ->
        *[other] { $candles } 根 K 线
