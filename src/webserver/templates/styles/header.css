@@ -160,9 +160,6 @@
 .brand-logo {
   width: 31px;
   height: 31px;
-  flex-shrink: 0;
-  background-color: var(--brand-navy);
-  mask: url("/assets/logo.svg") no-repeat center / contain;
   transition:
     filter var(--transition-base),
     transform var(--transition-base);
@@ -190,18 +187,10 @@
   transform: scale(1.03);
 }
 
-[data-theme="dark"] .brand-logo {
-  background-color: var(--brand-cyan-light);
-}
-
 [data-theme="dark"] .brand-text {
   color: var(--brand-cyan-light);
   -webkit-text-stroke-color: rgb(200, 240, 255, 0.9);
   text-shadow: 0 0 8px rgb(6, 182, 212, 0.4);
-}
-
-[data-theme="light"] .brand-logo {
-  background-color: var(--brand-navy);
 }
 
 [data-theme="light"] .brand-text {

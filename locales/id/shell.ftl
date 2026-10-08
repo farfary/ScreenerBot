@@ -2,8 +2,6 @@
 
 shell-document-title = { $page } - { -brand }
 shell-brand-name = { -brand }
-shell-brand-logo =
-    .alt = { -brand }
 shell-version = v{ $version }
 
 shell-header-brand =

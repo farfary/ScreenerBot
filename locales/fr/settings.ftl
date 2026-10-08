@@ -60,8 +60,6 @@ settings-startup-notifications-hint = Affiche des notifications pour les événe
 
 ## settings_dialog.js: About tab
 
-settings-about-logo =
-    .alt = { -brand }
 settings-about-tagline = Moteur de trading Solana natif
 settings-about-link-github = { -github }
 settings-about-link-docs = Documentation

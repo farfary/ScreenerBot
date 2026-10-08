@@ -56,8 +56,6 @@ settings-startup-notifications-hint = Arka plandaki olaylar için bildirim göst
 
 ## settings_dialog.js: About tab
 
-settings-about-logo =
-    .alt = { -brand }
 settings-about-tagline = Yerel Solana Trading Motoru
 settings-about-link-github = { -github }
 settings-about-link-docs = Belgeler

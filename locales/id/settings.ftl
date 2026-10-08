@@ -54,8 +54,6 @@ settings-startup-notifications-hint = Tampilkan notifikasi untuk peristiwa di la
 
 ## settings_dialog.js: About tab
 
-settings-about-logo =
-    .alt = { -brand }
 settings-about-tagline = Mesin Trading Solana Native
 settings-about-link-github = { -github }
 settings-about-link-docs = Dokumentasi

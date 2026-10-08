@@ -60,8 +60,6 @@ settings-startup-notifications-hint = Показувати сповіщення 
 
 ## settings_dialog.js: About tab
 
-settings-about-logo =
-    .alt = { -brand }
 settings-about-tagline = Нативний торговий рушій для Solana
 settings-about-link-github = { -github }
 settings-about-link-docs = Документація

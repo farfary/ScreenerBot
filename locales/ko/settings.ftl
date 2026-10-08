@@ -54,8 +54,6 @@ settings-startup-notifications-hint = 백그라운드 이벤트 알림을 표시
 
 ## settings_dialog.js: About tab
 
-settings-about-logo =
-    .alt = { -brand }
 settings-about-tagline = 네이티브 솔라나 트레이딩 엔진
 settings-about-link-github = { -github }
 settings-about-link-docs = 문서

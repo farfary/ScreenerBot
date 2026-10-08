@@ -115,7 +115,7 @@
 .splash-detail {
   font-size: 0.75rem;
   line-height: 1.5;
-  color: var(--text-muted);
+  color: var(--text-secondary);
 }
 
 .splash-detail:empty {
@@ -127,7 +127,7 @@
   position: absolute;
   bottom: 2rem;
   font-size: 0.75rem;
-  color: var(--text-muted);
+  color: var(--text-secondary);
   font-family: var(--font-mono);
 }
 

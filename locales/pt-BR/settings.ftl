@@ -50,8 +50,6 @@ settings-startup-page-config = Config
 settings-startup-notifications-label = Mostrar notificações em segundo plano
 settings-startup-notifications-hint = Exibe notificações de eventos em segundo plano
 
-settings-about-logo =
-    .alt = { -brand }
 settings-about-tagline = Motor de trading nativo para Solana
 settings-about-link-github = { -github }
 settings-about-link-docs = Documentação

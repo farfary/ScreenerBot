@@ -811,9 +811,7 @@ export class SettingsDialog {
     const { version } = this.versionInfo;
     return `
       <div class="settings-about">
-        <div class="settings-about-logo">
-          <img src="/assets/logo.svg" alt="" data-l10n-id="settings-about-logo" />
-        </div>
+        <span class="brand-mark settings-about-logo" aria-hidden="true"></span>
         <h2 class="settings-about-name" translate="no">ScreenerBot</h2>
         <p class="settings-about-tagline" data-l10n-id="settings-about-tagline"></p>
         <div class="settings-about-version">

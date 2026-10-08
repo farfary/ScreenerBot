@@ -46,8 +46,6 @@ settings-startup-page-config = Cấu hình
 settings-startup-notifications-label = Hiện thông báo nền
 settings-startup-notifications-hint = Hiển thị thông báo cho các sự kiện chạy nền
 
-settings-about-logo =
-    .alt = { -brand }
 settings-about-tagline = Công cụ giao dịch Solana gốc
 settings-about-link-github = { -github }
 settings-about-link-docs = Tài liệu

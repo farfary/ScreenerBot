@@ -56,8 +56,6 @@ settings-startup-notifications-hint = نمایش اعلان برای رویدا�
 
 ## settings_dialog.js: About tab
 
-settings-about-logo =
-    .alt = { -brand }
 settings-about-tagline = موتور معاملاتی بومی Solana
 settings-about-link-github = { -github }
 settings-about-link-docs = مستندات

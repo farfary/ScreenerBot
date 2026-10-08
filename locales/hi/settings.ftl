@@ -50,8 +50,6 @@ settings-startup-page-config = कॉन्फ़िग
 settings-startup-notifications-label = बैकग्राउंड नोटिफ़िकेशन दिखाएँ
 settings-startup-notifications-hint = बैकग्राउंड इवेंट के नोटिफ़िकेशन दिखाएँ
 
-settings-about-logo =
-    .alt = { -brand }
 settings-about-tagline = नेटिव Solana ट्रेडिंग इंजन
 settings-about-link-github = { -github }
 settings-about-link-docs = दस्तावेज़ीकरण

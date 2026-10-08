@@ -122,6 +122,9 @@
   --brand-blue: #3b82f6;
   --brand-cyan-light: #e0f7ff;
 
+  /* The logo mark's own colour: navy on the light surfaces, light cyan on dark. */
+  --brand-mark: var(--brand-navy);
+
   /* Success Color System */
   --success-color: #10b981;
   --success-color-light: #d1fae5;
@@ -374,6 +377,7 @@ html:is(:lang(ar), :lang(fa), :lang(hi), :lang(zh), :lang(ja), :lang(ko))
      Theme blocks are palette-only. Typography, spacing, sizing, radii and
      motion live in :root so switching theme cannot change layout metrics. */
   --bg-primary: #0d1117;
+  --brand-mark: var(--brand-cyan-light);
   --bg-secondary: #161b22;
   --bg-card: #161b22;
   --bg-card-hover: #1c2128;
@@ -518,6 +522,16 @@ input,
 select,
 textarea {
   font-family: inherit;
+}
+
+/* The ScreenerBot logo mark. The SVG is a single-colour shape used as a mask, so
+   the mark takes `--brand-mark` from the active theme on every surface (shell,
+   splash, login, lock screen, setup, About). The consumer sets only its size. */
+.brand-mark {
+  display: block;
+  flex-shrink: 0;
+  background-color: var(--brand-mark);
+  mask: url("/assets/logo.svg") no-repeat center / contain;
 }
 
 /* =============================================================================

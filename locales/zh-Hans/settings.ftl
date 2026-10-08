@@ -54,8 +54,6 @@ settings-startup-notifications-hint = 为后台事件显示通知
 
 ## settings_dialog.js: About tab
 
-settings-about-logo =
-    .alt = { -brand }
 settings-about-tagline = 原生 Solana 交易引擎
 settings-about-link-github = { -github }
 settings-about-link-docs = 文档

@@ -58,8 +58,6 @@ settings-startup-notifications-hint = Display notifications for background event
 
 ## settings_dialog.js: About tab
 
-settings-about-logo =
-    .alt = { -brand }
 settings-about-tagline = Native Solana Trading Engine
 settings-about-link-github = { -github }
 settings-about-link-docs = Documentation

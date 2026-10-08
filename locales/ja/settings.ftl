@@ -54,8 +54,6 @@ settings-startup-notifications-hint = バックグラウンドのイベントを
 
 ## settings_dialog.js: About tab
 
-settings-about-logo =
-    .alt = { -brand }
 settings-about-tagline = ネイティブ Solana トレーディングエンジン
 settings-about-link-github = { -github }
 settings-about-link-docs = ドキュメント

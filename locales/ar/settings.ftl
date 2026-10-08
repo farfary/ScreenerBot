@@ -64,8 +64,6 @@ settings-startup-notifications-hint = عرض إشعارات لأحداث الخ�
 
 ## settings_dialog.js: About tab
 
-settings-about-logo =
-    .alt = { -brand }
 settings-about-tagline = محرك تداول أصلي على Solana
 settings-about-link-github = { -github }
 settings-about-link-docs = التوثيق

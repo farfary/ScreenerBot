@@ -22,8 +22,8 @@ test("an icon button gets its English aria-label", () => {
 });
 
 test("an image gets its alt text", () => {
-  const out = localizeTemplate('<img src="a.svg" data-l10n-id="shell-brand-logo" />');
-  assert.match(out, /alt="ScreenerBot"/);
+  const out = localizeTemplate('<img src="a.svg" data-l10n-id="home-wallet-qr-image" />');
+  assert.match(out, /alt="QR code for the main wallet address"/);
   assert.ok(out.endsWith(" />"));
 });
 

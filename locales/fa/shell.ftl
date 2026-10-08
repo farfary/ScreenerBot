@@ -4,8 +4,6 @@
 # Document title: the page title, then the product name.
 shell-document-title = { $page } - { -brand }
 shell-brand-name = { -brand }
-shell-brand-logo =
-    .alt = { -brand }
 # Version label; the number itself is passed as an argument.
 shell-version = v{ $version }
 
