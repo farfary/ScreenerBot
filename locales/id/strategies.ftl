@@ -39,13 +39,9 @@ strategies-card-delete =
     .title = Hapus
 
 strategies-summary-param = { $label }: { $value }
-strategies-summary-parts =
-    { $count ->
-        [1] { $first }
-        [2] { $first }, { $second }
-       *[3] { $first }, { $second }, { $third }
-    }
 strategies-summary-none = Tanpa parameter
+# An unset optional parameter: the strategy's own value it falls back to.
+strategies-param-inherit = Pengaturan strategi ({ $value })
 strategies-summary-period-seconds = Periode: { $amount } dtk
 strategies-summary-period-minutes = Periode: { $amount } mnt
 strategies-summary-period-hours = Periode: { $amount } jam

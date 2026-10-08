@@ -12,7 +12,7 @@ use crate::{
     webserver::utils::success_response,
 };
 
-use super::types::ConditionSchemasResponse;
+use super::types::{default_timeframe, ConditionSchemasResponse};
 use super::utils::err_cause;
 use crate::i18n::ids;
 use crate::webserver::api_error::ApiErrorCode;
@@ -34,6 +34,7 @@ pub async fn get_condition_schemas() -> Response {
 
     let response = ConditionSchemasResponse {
         schemas,
+        default_timeframe: default_timeframe(),
         timestamp: Utc::now().to_rfc3339(),
     };
 

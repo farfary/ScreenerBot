@@ -37,13 +37,9 @@ strategies-card-delete =
     .title = हटाएं
 
 strategies-summary-param = { $label }: { $value }
-strategies-summary-parts =
-    { $count ->
-        [1] { $first }
-        [2] { $first }, { $second }
-       *[3] { $first }, { $second }, { $third }
-    }
 strategies-summary-none = कोई पैरामीटर नहीं
+# An unset optional parameter: the strategy's own value it falls back to.
+strategies-param-inherit = रणनीति की सेटिंग ({ $value })
 strategies-summary-period-seconds = अवधि: { $amount } सेकंड
 strategies-summary-period-minutes = अवधि: { $amount } मिनट
 strategies-summary-period-hours = अवधि: { $amount } घंटे

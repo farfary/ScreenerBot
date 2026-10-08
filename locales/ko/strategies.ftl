@@ -49,15 +49,11 @@ strategies-card-duplicate =
 strategies-card-delete =
     .title = 삭제
 
-# Card summary: up to three "label: value" entries.
+# Card summary: one "label: value" entry per parameter.
 strategies-summary-param = { $label }: { $value }
-strategies-summary-parts =
-    { $count ->
-        [1] { $first }
-        [2] { $first }, { $second }
-       *[3] { $first }, { $second }, { $third }
-    }
 strategies-summary-none = 매개변수 없음
+# An unset optional parameter: the strategy's own value it falls back to.
+strategies-param-inherit = 전략 설정 ({ $value })
 strategies-summary-period-seconds = 기간: { $amount }초
 strategies-summary-period-minutes = 기간: { $amount }분
 strategies-summary-period-hours = 기간: { $amount }시간

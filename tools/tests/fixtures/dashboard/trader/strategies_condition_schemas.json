@@ -437,5 +437,6 @@
       "category_key": "strategies-condition-category-volume-analysis"
     }
   },
+  "default_timeframe": "5m",
   "timestamp": "2026-10-07T10:00:00.000000+00:00"
 }

@@ -49,15 +49,11 @@ strategies-card-duplicate =
 strategies-card-delete =
     .title = حذف
 
-# Card summary: up to three "label: value" entries.
+# Card summary: one "label: value" entry per parameter.
 strategies-summary-param = { $label }: { $value }
-strategies-summary-parts =
-    { $count ->
-        [1] { $first }
-        [2] { $first }، { $second }
-       *[3] { $first }، { $second }، { $third }
-    }
 strategies-summary-none = بدون پارامتر
+# An unset optional parameter: the strategy's own value it falls back to.
+strategies-param-inherit = تنظیم استراتژی ({ $value })
 strategies-summary-period-seconds = دوره: { $amount } ثانیه
 strategies-summary-period-minutes = دوره: { $amount } دقیقه
 strategies-summary-period-hours = دوره: { $amount } ساعت

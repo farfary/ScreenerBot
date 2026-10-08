@@ -49,15 +49,11 @@ strategies-card-duplicate =
 strategies-card-delete =
     .title = Delete
 
-# Card summary: up to three "label: value" entries.
+# Card summary: one "label: value" entry per parameter.
 strategies-summary-param = { $label }: { $value }
-strategies-summary-parts =
-    { $count ->
-        [1] { $first }
-        [2] { $first }, { $second }
-       *[3] { $first }, { $second }, { $third }
-    }
 strategies-summary-none = No parameters
+# An unset optional parameter: the strategy's own value it falls back to.
+strategies-param-inherit = Strategy setting ({ $value })
 strategies-summary-period-seconds = Period: { $amount } sec
 strategies-summary-period-minutes = Period: { $amount } min
 strategies-summary-period-hours = Period: { $amount } hrs

@@ -42,6 +42,7 @@ pub struct StrategyDetailResponse {
     pub strategy_type: String,
     pub enabled: bool,
     pub priority: i32,
+    pub timeframe: String,
     pub rules: serde_json::Value,
     pub parameters: HashMap<String, serde_json::Value>,
     pub created_at: String,
@@ -151,7 +152,8 @@ fn default_priority() -> i32 {
     10
 }
 
-fn default_timeframe() -> String {
+/// Timeframe of a strategy saved without one, and the one an unset condition timeframe falls back to.
+pub(super) fn default_timeframe() -> String {
     "5m".to_owned()
 }
 
@@ -167,5 +169,7 @@ pub struct StrategyListQuery {
 #[derive(Debug, Serialize)]
 pub struct ConditionSchemasResponse {
     pub schemas: serde_json::Value,
+    /// Timeframe a new strategy is saved with; an unset condition timeframe uses the strategy's.
+    pub default_timeframe: String,
     pub timestamp: String,
 }

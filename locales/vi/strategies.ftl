@@ -37,13 +37,9 @@ strategies-card-delete =
     .title = Xóa
 
 strategies-summary-param = { $label }: { $value }
-strategies-summary-parts =
-    { $count ->
-        [1] { $first }
-        [2] { $first }, { $second }
-       *[3] { $first }, { $second }, { $third }
-    }
 strategies-summary-none = Không có tham số
+# An unset optional parameter: the strategy's own value it falls back to.
+strategies-param-inherit = Thiết lập của chiến lược ({ $value })
 strategies-summary-period-seconds = Chu kỳ: { $amount } giây
 strategies-summary-period-minutes = Chu kỳ: { $amount } phút
 strategies-summary-period-hours = Chu kỳ: { $amount } giờ

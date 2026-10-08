@@ -19,6 +19,7 @@ export function createLifecycle() {
   let currentStrategy = null;
   let strategies = [];
   let conditionSchemas = null;
+  let defaultTimeframe = null; // timeframe a new strategy is saved with
   let categoryStates = { data: null }; // Wrapped in object to pass by reference
 
   // Editor state (vertical cards)
@@ -456,20 +457,26 @@ export function createLifecycle() {
     }
   }
 
+  /** Create, update and validate request body of the strategy being edited. */
+  function strategyRequestBody() {
+    return {
+      name: currentStrategy.name,
+      description: currentStrategy.description || null,
+      strategy_type: currentStrategy.type,
+      enabled: !!currentStrategy.enabled,
+      priority: currentStrategy.priority ?? 10,
+      timeframe: currentStrategy.timeframe || undefined,
+      rules: currentStrategy.rules || null,
+      parameters: currentStrategy.parameters || {},
+      author: currentStrategy.author || null,
+    };
+  }
+
   async function toggleCurrentStrategyEnabled() {
     if (!currentStrategy?.id) return;
 
     try {
-      const body = {
-        name: currentStrategy.name,
-        description: currentStrategy.description || null,
-        strategy_type: currentStrategy.type,
-        enabled: currentStrategy.enabled,
-        priority: currentStrategy.priority ?? 10,
-        rules: currentStrategy.rules || null,
-        parameters: currentStrategy.parameters || {},
-        author: currentStrategy.author || null,
-      };
+      const body = strategyRequestBody();
 
       await requestManager.fetch(`/api/strategies/${currentStrategy.id}`, {
         method: "PUT",
@@ -566,6 +573,7 @@ export function createLifecycle() {
         priority: "normal",
       });
       conditionSchemas = data.schemas || {};
+      defaultTimeframe = data.default_timeframe ?? null;
     } catch (error) {
       console.error("Failed to load condition schemas:", error);
       conditionSchemas = {};
@@ -684,6 +692,7 @@ export function createLifecycle() {
       type: strategyType,
       enabled: true,
       priority: 10,
+      timeframe: defaultTimeframe,
       rules: null,
       parameters: {},
     };
@@ -737,6 +746,7 @@ export function createLifecycle() {
         type: data.strategy_type,
         enabled: !!data.enabled,
         priority: data.priority,
+        timeframe: data.timeframe,
         rules: data.rules || null,
         parameters: data.parameters || {},
         created_at: data.created_at,
@@ -821,16 +831,7 @@ export function createLifecycle() {
       // Sync rule tree from editor
       conditionEditor.updateRuleTreeFromEditor();
 
-      const body = {
-        name: currentStrategy.name,
-        description: currentStrategy.description || null,
-        strategy_type: currentStrategy.type,
-        enabled: !!currentStrategy.enabled,
-        priority: currentStrategy.priority ?? 10,
-        rules: currentStrategy.rules || null,
-        parameters: currentStrategy.parameters || {},
-        author: currentStrategy.author || null,
-      };
+      const body = strategyRequestBody();
 
       const method = currentStrategy.id ? "PUT" : "POST";
       const url = currentStrategy.id ? `/api/strategies/${currentStrategy.id}` : "/api/strategies";
@@ -893,16 +894,7 @@ export function createLifecycle() {
         });
       } else {
         // Unsaved strategy - use inline validation with JSON body
-        const body = {
-          name: currentStrategy.name || "Untitled",
-          description: currentStrategy.description || null,
-          strategy_type: currentStrategy.type,
-          enabled: !!currentStrategy.enabled,
-          priority: currentStrategy.priority ?? 10,
-          rules: currentStrategy.rules,
-          parameters: currentStrategy.parameters || {},
-          author: currentStrategy.author || null,
-        };
+        const body = strategyRequestBody();
 
         data = await requestManager.fetch("/api/strategies/validate", {
           method: "POST",

@@ -49,15 +49,11 @@ strategies-card-duplicate =
 strategies-card-delete =
     .title = 删除
 
-# Card summary: up to three "label: value" entries.
+# Card summary: one "label: value" entry per parameter.
 strategies-summary-param = { $label }：{ $value }
-strategies-summary-parts =
-    { $count ->
-        [1] { $first }
-        [2] { $first }，{ $second }
-       *[3] { $first }，{ $second }，{ $third }
-    }
 strategies-summary-none = 无参数
+# An unset optional parameter: the strategy's own value it falls back to.
+strategies-param-inherit = 策略设置（{ $value }）
 strategies-summary-period-seconds = 周期：{ $amount } 秒
 strategies-summary-period-minutes = 周期：{ $amount } 分钟
 strategies-summary-period-hours = 周期：{ $amount } 小时

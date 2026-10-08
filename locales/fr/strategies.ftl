@@ -37,13 +37,9 @@ strategies-card-delete =
     .title = Supprimer
 
 strategies-summary-param = { $label } : { $value }
-strategies-summary-parts =
-    { $count ->
-        [1] { $first }
-        [2] { $first }, { $second }
-       *[3] { $first }, { $second }, { $third }
-    }
 strategies-summary-none = Aucun paramètre
+# An unset optional parameter: the strategy's own value it falls back to.
+strategies-param-inherit = Réglage de la stratégie ({ $value })
 strategies-summary-period-seconds = Période : { $amount }s
 strategies-summary-period-minutes = Période : { $amount }min
 strategies-summary-period-hours = Période : { $amount }h

@@ -7,17 +7,19 @@
  * Handles the vertical card-based condition editor for building strategies
  */
 
-import { formatFixed } from "../../core/format.js";
+import { formatFixed, formatList } from "../../core/format.js";
 import {
   categoryLabel,
   conditionDescription,
   conditionName,
   formatParamValue,
+  inheritedParamText,
   inputUnitText,
   optionLabel,
   optionValue,
   paramDescription,
   paramLabel,
+  resolvedParam,
 } from "./condition_text.js";
 
 export function createConditionEditor({
@@ -124,6 +126,7 @@ export function createConditionEditor({
           if (spec.type === "number" || spec.type === "percent" || spec.type === "sol")
             value = parseFloat(value);
           if (spec.type === "boolean") value = input.checked;
+          if (spec.type === "enum" && spec.optional && value === "") value = null;
           conditions[idx].params[key] = value;
           updateRuleTreeFromEditor();
           // Update summary text
@@ -203,53 +206,54 @@ export function createConditionEditor({
   }
 
   /**
-   * Build human-readable summary of condition parameters
+   * One-line summary of a condition: every schema parameter in editor order, with the
+   * same resolved value the editor shows (saved value, else default, else the
+   * strategy's own value for an unset optional parameter).
    */
   function buildConditionSummary(c) {
-    const schema = conditionSchemas?.[c.type] || {};
-    const params = schema.parameters || {};
-    const parts = [];
-    // A lookback given as `time_value` + `time_unit` is one "Period" entry, written last.
-    const hasPeriod = c.params.time_value !== undefined && c.params.time_unit !== undefined;
+    const params = conditionSchemas?.[c.type]?.parameters || {};
+    // A lookback given as `time_value` + `time_unit` is one "Period" entry.
+    const hasPeriod = Object.hasOwn(params, "time_value") && Object.hasOwn(params, "time_unit");
 
-    Object.entries(c.params).forEach(([key, value]) => {
-      if (hasPeriod && (key === "time_value" || key === "time_unit")) return;
-      const spec = params[key];
-      if (!spec) return;
-      parts.push(
+    const parts = Object.entries(params).flatMap(([key, spec]) => {
+      if (hasPeriod && key === "time_unit") return [];
+      if (hasPeriod && key === "time_value") {
+        return [
+          periodText(
+            resolvedParam(c.params, "time_value", spec),
+            resolvedParam(c.params, "time_unit", params.time_unit)
+          ),
+        ];
+      }
+      const value = resolvedParam(c.params, key, spec);
+      return [
         I18n.t("strategies-summary-param", {
           label: paramLabel(spec, key),
-          value: formatParamValue(value, spec),
-        })
-      );
+          value:
+            value === null && spec.optional
+              ? inheritedParamText(spec, state.currentStrategy?.[key])
+              : formatParamValue(value, spec),
+        }),
+      ];
     });
 
-    if (hasPeriod) {
-      // Ids are the `time_unit` values of the price change condition.
-      const amount = formatFixed(Number(c.params.time_value), { decimals: 4, trim: true });
-      switch (c.params.time_unit) {
-        case "SECONDS":
-          parts.push(I18n.t("strategies-summary-period-seconds", { amount }));
-          break;
-        case "MINUTES":
-          parts.push(I18n.t("strategies-summary-period-minutes", { amount }));
-          break;
-        case "HOURS":
-          parts.push(I18n.t("strategies-summary-period-hours", { amount }));
-          break;
-        default:
-          parts.push(amount);
-      }
+    return parts.length ? formatList(parts, { type: "unit" }) : I18n.t("strategies-summary-none");
+  }
+
+  /** A lookback amount and its unit as one summary entry. */
+  function periodText(value, unit) {
+    // Ids are the `time_unit` values of the price change condition.
+    const amount = formatFixed(Number(value), { decimals: 4, trim: true });
+    switch (unit) {
+      case "SECONDS":
+        return I18n.t("strategies-summary-period-seconds", { amount });
+      case "MINUTES":
+        return I18n.t("strategies-summary-period-minutes", { amount });
+      case "HOURS":
+        return I18n.t("strategies-summary-period-hours", { amount });
+      default:
+        return amount;
     }
-
-    const shown = parts.slice(0, 3);
-    if (!shown.length) return I18n.t("strategies-summary-none");
-    return I18n.t("strategies-summary-parts", {
-      count: shown.length,
-      first: shown[0],
-      second: shown[1] ?? "",
-      third: shown[2] ?? "",
-    });
   }
 
   /**
@@ -263,7 +267,7 @@ export function createConditionEditor({
     const fields = entries.map(([key, spec]) => {
       const label = paramLabel(spec, key);
       const description = paramDescription(spec);
-      const val = c.params[key] ?? spec.default ?? "";
+      const val = resolvedParam(c.params, key, spec) ?? "";
       return `
         <div class="param-field">
           <label>${Utils.escapeHtml(label)}</label>
@@ -302,13 +306,19 @@ export function createConditionEditor({
         </label>`;
       case "enum": {
         const options = spec.options || spec.values || [];
-        const optionsHtml = options
-          .map((opt) => {
-            const optValue = optionValue(opt);
-            const selected = optValue === value ? "selected" : "";
-            return `<option value="${Utils.escapeHtml(String(optValue))}" ${selected}>${Utils.escapeHtml(optionLabel(opt))}</option>`;
-          })
-          .join("");
+        // An unset optional parameter is a choice of its own: the strategy supplies it.
+        const inherit = spec.optional
+          ? `<option value="" ${value === "" ? "selected" : ""}>${Utils.escapeHtml(inheritedParamText(spec, state.currentStrategy?.[key]))}</option>`
+          : "";
+        const optionsHtml =
+          inherit +
+          options
+            .map((opt) => {
+              const optValue = optionValue(opt);
+              const selected = optValue === value ? "selected" : "";
+              return `<option value="${Utils.escapeHtml(String(optValue))}" ${selected}>${Utils.escapeHtml(optionLabel(opt))}</option>`;
+            })
+            .join("");
         return `<select id="${id}" ${data} class="select-field" data-custom-select>${optionsHtml}</select>`;
       }
       default:
@@ -330,10 +340,8 @@ export function createConditionEditor({
       .map((c) => {
         const schema = conditionSchemas?.[c.type] || { parameters: {} };
         const params = {};
-        Object.keys(schema.parameters || {}).forEach((k) => {
-          const v = c.params[k];
-          const defv = schema.parameters[k]?.default;
-          params[k] = { value: v, default: defv };
+        Object.entries(schema.parameters || {}).forEach(([k, spec]) => {
+          params[k] = { value: resolvedParam(c.params, k, spec), default: spec?.default };
         });
         return { condition: { type: c.type, parameters: params } };
       });

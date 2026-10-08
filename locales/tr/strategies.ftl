@@ -37,13 +37,9 @@ strategies-card-delete =
     .title = Sil
 
 strategies-summary-param = { $label }: { $value }
-strategies-summary-parts =
-    { $count ->
-        [1] { $first }
-        [2] { $first }, { $second }
-       *[3] { $first }, { $second }, { $third }
-    }
 strategies-summary-none = Parametre yok
+# An unset optional parameter: the strategy's own value it falls back to.
+strategies-param-inherit = Strateji ayarı ({ $value })
 strategies-summary-period-seconds = Periyot: { $amount }sn
 strategies-summary-period-minutes = Periyot: { $amount }dk
 strategies-summary-period-hours = Periyot: { $amount }sa

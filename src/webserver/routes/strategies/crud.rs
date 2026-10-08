@@ -179,6 +179,7 @@ pub async fn get_strategy_detail(Path(id): Path<String>) -> Response {
         strategy_type: strategy.strategy_type.to_string(),
         enabled: strategy.enabled,
         priority: strategy.priority,
+        timeframe: strategy.timeframe,
         rules: rules_json,
         parameters: strategy.parameters,
         created_at: strategy.created_at.to_rfc3339(),

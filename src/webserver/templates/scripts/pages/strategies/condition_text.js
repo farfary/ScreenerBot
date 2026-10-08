@@ -61,6 +61,22 @@ export function optionValue(option) {
   return option && typeof option === "object" ? option.value : option;
 }
 
+/**
+ * Value a parameter is evaluated with: the saved value, else the schema default.
+ * `null` only for an optional parameter left unset, which the strategy supplies.
+ */
+export function resolvedParam(params, key, spec) {
+  return params?.[key] ?? spec?.default ?? null;
+}
+
+/** Label of an unset optional parameter, naming the strategy's own value it falls back to. */
+export function inheritedParamText(spec, strategyValue) {
+  const option = (spec.options || []).find((opt) => optionValue(opt) === strategyValue);
+  return I18n.t("strategies-param-inherit", {
+    value: option ? optionLabel(option) : (strategyValue ?? "—"),
+  });
+}
+
 /** Text written beside a numeric input, or `null` when the parameter has none. */
 export function inputUnitText(spec) {
   if (spec.type === "percent") return I18n.t("strategies-unit-percent");
