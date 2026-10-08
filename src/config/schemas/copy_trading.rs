@@ -18,8 +18,10 @@ config_struct! {
         default_slippage_pct: f64 = 2.0,
         #[metadata(field_metadata! { impact: ConfigImpact::Low, category: ConfigCategory::CopyTrading, hidden: true, })]
         default_mode: String = "paper".to_owned(),
+        // Off by default: with the default Filtering setup almost every token fails,
+        // so requiring a pass would leave a new copy task copying nothing.
         #[metadata(field_metadata! { impact: ConfigImpact::High, category: ConfigCategory::CopyTrading, })]
-        require_filter_pass: bool = true,
+        require_filter_pass: bool = false,
         #[metadata(field_metadata! { impact: ConfigImpact::High, category: ConfigCategory::CopyTrading, hidden: true, })]
         block_on_force_stop: bool = true,
         #[metadata(field_metadata! { impact: ConfigImpact::High, category: ConfigCategory::CopyTrading, })]
@@ -104,5 +106,17 @@ mod tests {
         let mut bypass = CopyTradingConfig::default();
         bypass.block_on_force_stop = false;
         assert!(bypass.validate().is_err());
+    }
+
+    #[test]
+    fn filter_pass_is_off_by_default_and_a_saved_value_is_kept() {
+        assert!(!CopyTradingConfig::default().require_filter_pass);
+
+        let unsaved: CopyTradingConfig = toml::from_str("").expect("empty section parses");
+        assert!(!unsaved.require_filter_pass);
+
+        let saved: CopyTradingConfig =
+            toml::from_str("require_filter_pass = true").expect("saved section parses");
+        assert!(saved.require_filter_pass);
     }
 }
