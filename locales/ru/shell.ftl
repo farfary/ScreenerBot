@@ -54,6 +54,12 @@ shell-action-theme =
 shell-action-settings =
     .aria-label = Настройки
     .title = Настройки
+shell-tabs-scroll-start =
+    .aria-label = Показать предыдущие вкладки
+    .title = Показать предыдущие вкладки
+shell-tabs-scroll-end =
+    .aria-label = Показать другие вкладки
+    .title = Показать другие вкладки
 
 shell-ticker-monitoring-segment =
     .title = Токены, отслеживаемые сервисом пулов

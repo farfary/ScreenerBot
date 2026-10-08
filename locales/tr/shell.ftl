@@ -54,6 +54,12 @@ shell-action-theme =
 shell-action-settings =
     .aria-label = Ayarlar
     .title = Ayarlar
+shell-tabs-scroll-start =
+    .aria-label = Önceki sekmeleri göster
+    .title = Önceki sekmeleri göster
+shell-tabs-scroll-end =
+    .aria-label = Daha fazla sekme göster
+    .title = Daha fazla sekme göster
 
 shell-ticker-monitoring-segment =
     .title = Havuz hizmeti tarafından izlenen tokenlar

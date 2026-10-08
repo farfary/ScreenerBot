@@ -61,6 +61,12 @@ shell-action-theme =
 shell-action-settings =
     .aria-label = 设置
     .title = 设置
+shell-tabs-scroll-start =
+    .aria-label = 显示前面的标签
+    .title = 显示前面的标签
+shell-tabs-scroll-end =
+    .aria-label = 显示更多标签
+    .title = 显示更多标签
 
 ## Ticker
 

@@ -56,6 +56,12 @@ shell-action-theme =
 shell-action-settings =
     .aria-label = Pengaturan
     .title = Pengaturan
+shell-tabs-scroll-start =
+    .aria-label = Tampilkan tab sebelumnya
+    .title = Tampilkan tab sebelumnya
+shell-tabs-scroll-end =
+    .aria-label = Tampilkan tab lainnya
+    .title = Tampilkan tab lainnya
 
 shell-ticker-monitoring-segment =
     .title = Token yang dipantau oleh Pool Service

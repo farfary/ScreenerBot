@@ -61,6 +61,12 @@ shell-action-theme =
 shell-action-settings =
     .aria-label = تنظیمات
     .title = تنظیمات
+shell-tabs-scroll-start =
+    .aria-label = نمایش تب‌های قبلی
+    .title = نمایش تب‌های قبلی
+shell-tabs-scroll-end =
+    .aria-label = نمایش تب‌های بیشتر
+    .title = نمایش تب‌های بیشتر
 
 ## Ticker
 

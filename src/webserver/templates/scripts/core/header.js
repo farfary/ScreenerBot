@@ -4,13 +4,13 @@
 // Header controls for global dashboard interactions (trader toggle + metrics)
 import { loadPage } from "./router.js";
 import * as Utils from "./utils.js";
-import { dirSign, scrollStart } from "./dom.js";
 import { notificationManager } from "./notifications.js";
 import * as NotificationPanel from "../ui/notification_panel.js";
 import { ConfirmationDialog } from "../ui/confirmation_dialog.js";
 import { subscribeToBootstrap, whenInitialized } from "./bootstrap.js";
 import { createHeaderMetrics } from "./header_metrics.js";
 import { showSettingsDialog } from "../ui/settings_dialog.js";
+import { attachTabScrollStrip } from "../ui/tab_bar.js";
 import { SetupDialog } from "../ui/setup_dialog.js";
 import { playToggleOn, playToggleOff, playError } from "./sounds.js";
 // Side-effect import: registers the `screenerbot:open-token-details` window
@@ -395,65 +395,14 @@ function initRestartButton() {
   document.getElementById("restartBtn")?.addEventListener("click", () => handleRestart());
 }
 
-// ============================================================================
-// HEADER TABS SCROLL NAVIGATION
-// ============================================================================
+// The main navigation row is a tab scroll strip: edge fades, page buttons and wheel
+// scrolling come from `attachTabScrollStrip`, the owner shared with the sub-tab row.
+let navStrip = null;
 
 function initHeaderTabsScroll() {
   const headerRow = document.querySelector(".header-row-2");
-  const wrapper = document.querySelector(".header-row-2-wrapper");
-  if (!headerRow || !wrapper) return;
-
-  // Update scroll indicators based on scroll position
-  // Classes applied to WRAPPER (not scrollable element) so indicators stay fixed
-  const updateScrollIndicators = () => {
-    const { scrollWidth, clientWidth } = headerRow;
-    const fromStart = scrollStart(headerRow);
-
-    wrapper.classList.toggle("can-scroll-start", fromStart > 1);
-    wrapper.classList.toggle("can-scroll-end", fromStart < scrollWidth - clientWidth - 1);
-  };
-
-  // Mouse wheel horizontal scroll support
-  const wheelHandler = (event) => {
-    // Only handle if there's horizontal overflow
-    if (headerRow.scrollWidth <= headerRow.clientWidth) return;
-
-    // Convert vertical scroll only while the row can move in that direction; at
-    // either boundary, let the page receive the wheel event normally.
-    if (Math.abs(event.deltaY) > Math.abs(event.deltaX)) {
-      const maxScrollStart = headerRow.scrollWidth - headerRow.clientWidth;
-      const canMove =
-        event.deltaY < 0 ? scrollStart(headerRow) > 0 : scrollStart(headerRow) < maxScrollStart;
-      if (!canMove) return;
-      event.preventDefault();
-      headerRow.scrollLeft += dirSign() * event.deltaY;
-      updateScrollIndicators();
-    }
-  };
-
-  // Track scroll position for indicators
-  const scrollHandler = () => updateScrollIndicators();
-
-  // Attach event listeners
-  headerRow.addEventListener("wheel", wheelHandler, { passive: false });
-  headerRow.addEventListener("scroll", scrollHandler, { passive: true });
-
-  // The overflow changes when the row resizes AND when the tabs themselves do
-  // (web fonts landing, the nav rebuilt by the settings dialog), so observe both.
-  const resizeObserver = new ResizeObserver(() => {
-    updateScrollIndicators();
-  });
-  resizeObserver.observe(headerRow);
-  const navTabs = document.getElementById("navTabs");
-  if (navTabs) resizeObserver.observe(navTabs);
-  document.fonts?.ready.then(updateScrollIndicators).catch(() => {});
-
-  // Initial update
-  requestAnimationFrame(updateScrollIndicators);
+  if (headerRow) navStrip = attachTabScrollStrip(headerRow);
 }
-
-// END HEADER TABS SCROLL NAVIGATION
 
 // ============================================================================
 // HEADER TABS ACTIVE INDICATOR + KEYBOARD NAVIGATION
@@ -509,7 +458,7 @@ function initNavTabsIndicator() {
     // handler then refreshes the edge fades.
     if (active !== lastActive) {
       lastActive = active;
-      active.scrollIntoView({ inline: "nearest", block: "nearest" });
+      navStrip?.reveal(active);
     }
 
     // Placed first, animated after: otherwise the very first measurement slides the bar
@@ -560,7 +509,7 @@ function initNavTabsKeyboard() {
 
     event.preventDefault();
     tabs[next].focus();
-    tabs[next].scrollIntoView({ block: "nearest", inline: "nearest" });
+    navStrip?.reveal(tabs[next]);
   });
 }
 

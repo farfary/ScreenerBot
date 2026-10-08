@@ -61,6 +61,12 @@ shell-action-theme =
 shell-action-settings =
     .aria-label = الإعدادات
     .title = الإعدادات
+shell-tabs-scroll-start =
+    .aria-label = عرض التبويبات السابقة
+    .title = عرض التبويبات السابقة
+shell-tabs-scroll-end =
+    .aria-label = عرض المزيد من التبويبات
+    .title = عرض المزيد من التبويبات
 
 ## Ticker
 

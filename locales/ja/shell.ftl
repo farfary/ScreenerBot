@@ -61,6 +61,12 @@ shell-action-theme =
 shell-action-settings =
     .aria-label = 設定
     .title = 設定
+shell-tabs-scroll-start =
+    .aria-label = 前のタブを表示
+    .title = 前のタブを表示
+shell-tabs-scroll-end =
+    .aria-label = 他のタブを表示
+    .title = 他のタブを表示
 
 ## Ticker
 

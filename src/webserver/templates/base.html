@@ -401,10 +401,24 @@
       </div>
 
       <!-- Row 2: Navigation Tabs -->
-      <div class="header-row-2-wrapper">
-        <nav class="header-row header-row-2">
+      <div class="header-row-2-wrapper tab-scroll-wrapper">
+        <nav class="header-row header-row-2 tab-scroll-area">
           <div class="nav-tabs" id="navTabs">{{NAV_TABS}}</div>
         </nav>
+        <button
+          type="button"
+          class="tab-scroll-btn tab-scroll-btn--start"
+          data-l10n-id="shell-tabs-scroll-start"
+        >
+          <i class="icon-chevron-left" aria-hidden="true"></i>
+        </button>
+        <button
+          type="button"
+          class="tab-scroll-btn tab-scroll-btn--end"
+          data-l10n-id="shell-tabs-scroll-end"
+        >
+          <i class="icon-chevron-right" aria-hidden="true"></i>
+        </button>
       </div>
 
       <!-- Row 3: Live Metrics Ticker -->
@@ -627,8 +641,28 @@
     <!-- Main App Container (everything below the fixed header) -->
     <div class="app-main">
       <!-- Sub-tabs container (populated dynamically per page) -->
-      <div id="subTabsContainer" class="sub-tabs-container" style="display: none">
-        <!-- Sub-tabs will be injected here by page-specific JavaScript -->
+      <div class="tab-scroll-wrapper">
+        <div
+          id="subTabsContainer"
+          class="sub-tabs-container tab-scroll-area"
+          style="display: none"
+        >
+          <!-- Sub-tabs will be injected here by page-specific JavaScript -->
+        </div>
+        <button
+          type="button"
+          class="tab-scroll-btn tab-scroll-btn--start"
+          data-l10n-id="shell-tabs-scroll-start"
+        >
+          <i class="icon-chevron-left" aria-hidden="true"></i>
+        </button>
+        <button
+          type="button"
+          class="tab-scroll-btn tab-scroll-btn--end"
+          data-l10n-id="shell-tabs-scroll-end"
+        >
+          <i class="icon-chevron-right" aria-hidden="true"></i>
+        </button>
       </div>
 
       <!-- Toolbar container (for action buttons below sub-tabs) -->

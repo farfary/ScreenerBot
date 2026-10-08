@@ -54,6 +54,12 @@ shell-action-theme =
 shell-action-settings =
     .aria-label = Paramètres
     .title = Paramètres
+shell-tabs-scroll-start =
+    .aria-label = Afficher les onglets précédents
+    .title = Afficher les onglets précédents
+shell-tabs-scroll-end =
+    .aria-label = Afficher plus d’onglets
+    .title = Afficher plus d’onglets
 
 shell-ticker-monitoring-segment =
     .title = Tokens surveillés par le service de pools

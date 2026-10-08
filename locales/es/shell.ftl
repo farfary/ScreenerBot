@@ -61,6 +61,12 @@ shell-action-theme =
 shell-action-settings =
     .aria-label = Configuración
     .title = Configuración
+shell-tabs-scroll-start =
+    .aria-label = Mostrar pestañas anteriores
+    .title = Mostrar pestañas anteriores
+shell-tabs-scroll-end =
+    .aria-label = Mostrar más pestañas
+    .title = Mostrar más pestañas
 
 ## Ticker
 

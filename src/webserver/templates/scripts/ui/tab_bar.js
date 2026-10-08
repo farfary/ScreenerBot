@@ -141,26 +141,7 @@ export class TabBar {
     this.container.setAttribute("role", "tablist");
     this.container.setAttribute("data-ui", "tab-bar");
 
-    // Generate HTML
-    const html = this.tabs
-      .map((tab) => {
-        const active = tab.id === this.activeTab;
-        return `
-          <button
-            class="sub-tab"
-            data-tab-id="${this._escapeHtml(tab.id)}"
-            role="tab"
-            aria-selected="${active}"
-            tabindex="${active ? "0" : "-1"}"
-            type="button"
-          >
-            ${tab.label}
-          </button>
-        `;
-      })
-      .join("");
-
-    this.container.innerHTML = html;
+    this.container.innerHTML = this._buttonsHtml();
 
     // Attach single delegated event listener
     this.eventHandler = (event) => this._handleClick(event);
@@ -170,87 +151,9 @@ export class TabBar {
     this.keyboardHandler = (event) => this._handleKeyboard(event);
     this.container.addEventListener("keydown", this.keyboardHandler);
 
-    // Setup scroll navigation (mouse wheel + overflow detection)
-    this._setupScrollNavigation();
+    this.strip = attachTabScrollStrip(this.container);
 
     this.mounted = true;
-  }
-
-  // --------------------------------------------------------------------------
-  // Private: Scroll Navigation
-  // --------------------------------------------------------------------------
-
-  _setupScrollNavigation() {
-    // Mouse wheel horizontal scroll support
-    this.wheelHandler = (event) => {
-      if (!this._ownsContainer()) return;
-      // Only handle if there's horizontal overflow
-      if (this.container.scrollWidth <= this.container.clientWidth) return;
-
-      // Convert vertical scroll to horizontal
-      if (Math.abs(event.deltaY) > Math.abs(event.deltaX)) {
-        event.preventDefault();
-        this.container.scrollLeft += dirSign() * event.deltaY;
-        this._updateScrollIndicators();
-      }
-    };
-    this.container.addEventListener("wheel", this.wheelHandler, { passive: false });
-
-    // Track scroll position for indicators
-    this.scrollHandler = () => {
-      if (this._ownsContainer()) this._updateScrollIndicators();
-    };
-    this.container.addEventListener("scroll", this.scrollHandler, { passive: true });
-
-    // Watch for resize to update indicators
-    this.resizeObserver = new ResizeObserver(() => {
-      if (this._ownsContainer()) this._updateScrollIndicators();
-    });
-    this.resizeObserver.observe(this.container);
-
-    // Initial update
-    requestAnimationFrame(() => this._updateScrollIndicators());
-  }
-
-  _updateScrollIndicators() {
-    const { scrollWidth, clientWidth } = this.container;
-    const fromStart = scrollStart(this.container);
-    const wrapper = this.container.parentElement;
-
-    // Check if wrapper has the scroll wrapper class
-    if (!wrapper || !wrapper.classList.contains("tab-scroll-wrapper")) {
-      // Add wrapper classes directly to container's parent if it exists
-      // or use container itself for indicator tracking
-      const target = wrapper || this.container;
-
-      const canScrollStart = fromStart > 1;
-      const canScrollEnd = fromStart < scrollWidth - clientWidth - 1;
-
-      target.classList.toggle("can-scroll-start", canScrollStart);
-      target.classList.toggle("can-scroll-end", canScrollEnd);
-      return;
-    }
-
-    const canScrollStart = fromStart > 1;
-    const canScrollEnd = fromStart < scrollWidth - clientWidth - 1;
-
-    wrapper.classList.toggle("can-scroll-start", canScrollStart);
-    wrapper.classList.toggle("can-scroll-end", canScrollEnd);
-  }
-
-  _cleanupScrollNavigation() {
-    if (this.wheelHandler) {
-      this.container.removeEventListener("wheel", this.wheelHandler);
-      this.wheelHandler = null;
-    }
-    if (this.scrollHandler) {
-      this.container.removeEventListener("scroll", this.scrollHandler);
-      this.scrollHandler = null;
-    }
-    if (this.resizeObserver) {
-      this.resizeObserver.disconnect();
-      this.resizeObserver = null;
-    }
   }
 
   /**
@@ -445,13 +348,18 @@ export class TabBar {
       button.setAttribute("aria-selected", isActive);
       button.setAttribute("tabindex", isActive ? "0" : "-1");
     });
+    // The current sub-tab is scrolled into view whenever it changes or the bar is shown.
+    if (this._ownsContainer()) this.strip.reveal(this.container.querySelector(".sub-tab.active"));
   }
 
   _remountButtons() {
     if (!this.mounted) return;
 
-    // Regenerate HTML for current tabs
-    const html = this.tabs
+    this.container.innerHTML = this._buttonsHtml();
+  }
+
+  _buttonsHtml() {
+    return this.tabs
       .map((tab) => {
         const active = tab.id === this.activeTab;
         return `
@@ -468,9 +376,6 @@ export class TabBar {
         `;
       })
       .join("");
-
-    // Update container content
-    this.container.innerHTML = html;
   }
 
   show(options = {}) {
@@ -487,9 +392,8 @@ export class TabBar {
 
     // Remount to ensure correct buttons are displayed (important for shared containers)
     this._remountButtons();
-    this._updateTabButtons();
-
     this.container.style.display = "flex";
+    this._updateTabButtons();
     this.visible = true;
 
     if (!silent) {
@@ -569,9 +473,6 @@ export class TabBar {
       this.container.removeEventListener("keydown", this.keyboardHandler);
       this.keyboardHandler = null;
     }
-
-    // Cleanup scroll navigation
-    this._cleanupScrollNavigation();
 
     // Clear context
     this.context.clear();
@@ -683,3 +584,87 @@ class TabBarManagerClass {
 }
 
 export const TabBarManager = new TabBarManagerClass();
+
+// ============================================================================
+// Tab scroll strip - one row of tabs that scrolls sideways when it does not fit
+// ============================================================================
+
+const scrollStrips = new WeakMap();
+
+/**
+ * Give a tab row that can overflow its overflow affordances: `scroller` is the
+ * `.tab-scroll-area` inside a `.tab-scroll-wrapper`, which also holds the two
+ * `.tab-scroll-btn` page buttons (tab_bar.css). The wrapper carries `can-scroll-start` /
+ * `can-scroll-end`, which show the edge fade and the page button on each side that
+ * still has tabs out of view. Vertical wheel movement scrolls the row while it can move
+ * and reaches the page at either end. A scroller gets one strip: a second call returns
+ * the first handle, so the page TabBars that share `#subTabsContainer` attach it once.
+ *
+ * @param {HTMLElement} scroller
+ * @returns {{ update: () => void, reveal: (item: Element | null) => void }}
+ */
+export function attachTabScrollStrip(scroller) {
+  const existing = scrollStrips.get(scroller);
+  if (existing) return existing;
+
+  const wrapper = scroller.closest(".tab-scroll-wrapper");
+  const maxScrollStart = () => scroller.scrollWidth - scroller.clientWidth;
+
+  const update = () => {
+    if (!wrapper) return;
+    const fromStart = scrollStart(scroller);
+    wrapper.classList.toggle("can-scroll-start", fromStart > 1);
+    wrapper.classList.toggle("can-scroll-end", fromStart < maxScrollStart() - 1);
+  };
+
+  scroller.addEventListener(
+    "wheel",
+    (event) => {
+      if (maxScrollStart() <= 0 || Math.abs(event.deltaY) <= Math.abs(event.deltaX)) return;
+      const fromStart = scrollStart(scroller);
+      const canMove = event.deltaY < 0 ? fromStart > 0 : fromStart < maxScrollStart();
+      if (!canMove) return;
+      event.preventDefault();
+      scroller.scrollLeft += dirSign() * event.deltaY;
+    },
+    { passive: false }
+  );
+  scroller.addEventListener("scroll", update, { passive: true });
+
+  // A page button moves the row by most of its visible width, so the tab cut at the
+  // edge stays in view as the first one on the other side.
+  wrapper?.querySelectorAll(".tab-scroll-btn").forEach((button) => {
+    const toward = button.classList.contains("tab-scroll-btn--end") ? 1 : -1;
+    button.addEventListener("click", () => {
+      scroller.scrollBy({
+        left: dirSign() * toward * scroller.clientWidth * 0.8,
+        behavior: "smooth",
+      });
+    });
+  });
+
+  // The overflow changes when the row resizes, when its tabs are re-rendered and when
+  // their width changes (web fonts landing, a nav rebuilt by the settings dialog).
+  const resizeObserver = new ResizeObserver(update);
+  const observeRow = () => {
+    resizeObserver.disconnect();
+    resizeObserver.observe(scroller);
+    for (const child of scroller.children) resizeObserver.observe(child);
+  };
+  observeRow();
+  new MutationObserver(() => {
+    observeRow();
+    update();
+  }).observe(scroller, { childList: true });
+  document.fonts?.ready.then(update).catch(() => {});
+  requestAnimationFrame(update);
+
+  const strip = {
+    update,
+    reveal(item) {
+      item?.scrollIntoView({ block: "nearest", inline: "nearest" });
+    },
+  };
+  scrollStrips.set(scroller, strip);
+  return strip;
+}

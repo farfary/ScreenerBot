@@ -61,6 +61,12 @@ shell-action-theme =
 shell-action-settings =
     .aria-label = Налаштування
     .title = Налаштування
+shell-tabs-scroll-start =
+    .aria-label = Показати попередні вкладки
+    .title = Показати попередні вкладки
+shell-tabs-scroll-end =
+    .aria-label = Показати інші вкладки
+    .title = Показати інші вкладки
 
 ## Ticker
 

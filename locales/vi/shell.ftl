@@ -54,6 +54,12 @@ shell-action-theme =
 shell-action-settings =
     .aria-label = Cài đặt
     .title = Cài đặt
+shell-tabs-scroll-start =
+    .aria-label = Hiện các tab trước
+    .title = Hiện các tab trước
+shell-tabs-scroll-end =
+    .aria-label = Hiện thêm tab
+    .title = Hiện thêm tab
 
 shell-ticker-monitoring-segment =
     .title = Token đang được Pool Service theo dõi

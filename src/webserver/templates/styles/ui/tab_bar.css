@@ -54,26 +54,14 @@
    Sub-Tabs Container (Second Row)
    ============================================================================ */
 
-/* Sub-tabs also use hidden scrollbar pattern */
 .sub-tabs-container {
   background: var(--tab-bar-bg-secondary);
   border-bottom: 1px solid var(--tab-bar-border-color);
   padding: 0 12px;
   display: none; /* Hidden by default, shown by TabBar */
   gap: 2px;
-  overflow-x: auto;
-  flex: 0 0 auto;
   min-height: 0; /* No minimum height needed */
   position: relative;
-  -webkit-overflow-scrolling: touch;
-  scrollbar-width: none;
-  -ms-overflow-style: none;
-}
-
-.sub-tabs-container::-webkit-scrollbar {
-  display: none;
-  width: 0;
-  height: 0;
 }
 
 .sub-tabs-container[data-ui="tab-bar"] {
@@ -164,7 +152,10 @@
 
 /* Reduced motion support */
 @media (prefers-reduced-motion: reduce) {
-  .sub-tab {
+  .sub-tab,
+  .tab-scroll-wrapper::before,
+  .tab-scroll-wrapper::after,
+  .tab-scroll-btn {
     transition: none;
   }
 }
@@ -277,11 +268,17 @@
 }
 
 /* ============================================================================
-   Scroll Navigation - Overflow indicators and scroll buttons
+   Tab scroll strip - one row of tabs that scrolls sideways when it does not fit
    ============================================================================ */
 
-/* Wrapper for scrollable tab containers with navigation */
+/* Shared by the main navigation row and the sub-tab row (`attachTabScrollStrip` in
+   tab_bar.js). The wrapper holds the scrolling `.tab-scroll-area` and two page
+   buttons; `can-scroll-start` / `can-scroll-end` on the wrapper show the edge fade and
+   the button on each side that still has tabs out of view. The fade is painted in the
+   row's own surface colour, `--tab-scroll-bg` (the sub-tab surface by default), so it reads as the row running on. */
 .tab-scroll-wrapper {
+  --tab-scroll-fade: 40px;
+
   position: relative;
   display: flex;
   align-items: stretch;
@@ -290,95 +287,97 @@
   overflow: hidden;
 }
 
-/* The scrollable content area */
-.tab-scroll-wrapper .sub-tabs-container {
+.tab-scroll-area {
   flex: 1 1 auto;
   min-width: 0;
+  overflow: auto hidden;
+  /* A tab scrolled into view stops clear of the edge fade and its page button. */
+  scroll-padding-inline: var(--tab-scroll-fade);
+  -webkit-overflow-scrolling: touch;
 }
 
-/* Scroll navigation buttons */
-.tab-scroll-btn {
+.tab-scroll-wrapper::before,
+.tab-scroll-wrapper::after {
+  content: "";
   position: absolute;
-  top: 0;
-  bottom: 0;
-  width: 32px;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  background: linear-gradient(
-    var(--to-inline-end),
-    var(--tab-bar-bg-secondary),
-    var(--tab-bar-bg-secondary) 60%,
-    transparent
-  );
-  border: none;
-  cursor: pointer;
-  z-index: 10;
+  inset-block: 0;
+  z-index: 1;
+  width: var(--tab-scroll-fade);
   opacity: 0;
   pointer-events: none;
   transition: opacity var(--transition-base);
+}
+
+.tab-scroll-wrapper::before {
+  inset-inline-start: 0;
+  background: linear-gradient(
+    var(--to-inline-end),
+    var(--tab-scroll-bg, var(--tab-bar-bg-secondary)) 35%,
+    transparent
+  );
+}
+
+.tab-scroll-wrapper::after {
+  inset-inline-end: 0;
+  background: linear-gradient(
+    var(--to-inline-start),
+    var(--tab-scroll-bg, var(--tab-bar-bg-secondary)) 35%,
+    transparent
+  );
+}
+
+.tab-scroll-wrapper.can-scroll-start::before,
+.tab-scroll-wrapper.can-scroll-end::after {
+  opacity: 1;
+}
+
+/* A bare chevron over the fade: glyph colour is its only styling. Hidden (not just
+   transparent) while its side has nothing to reveal, so it never takes focus or clicks. */
+.tab-scroll-btn {
+  position: absolute;
+  inset-block: 0;
+  z-index: 2;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 28px;
   padding: 0;
+  border: none;
+  background: none;
   color: var(--text-secondary);
-  font-size: 1rem;
+  font-size: 14px;
+  cursor: pointer;
+  opacity: 0;
+  visibility: hidden;
+  transition:
+    opacity var(--transition-base),
+    color var(--transition-fast),
+    visibility 0s linear var(--transition-base);
 }
 
 .tab-scroll-btn:hover {
   color: var(--text-primary);
 }
 
+.tab-scroll-btn:focus-visible {
+  outline: 2px solid var(--tab-bar-active-border);
+  outline-offset: -2px;
+}
+
 .tab-scroll-btn--start {
   inset-inline-start: 0;
-  background: linear-gradient(var(--to-inline-end), var(--tab-bar-bg-secondary) 50%, transparent);
-  padding-inline-start: 4px;
 }
 
 .tab-scroll-btn--end {
   inset-inline-end: 0;
-  background: linear-gradient(var(--to-inline-start), var(--tab-bar-bg-secondary) 50%, transparent);
-  padding-inline-end: 4px;
 }
 
-/* Show buttons when there's overflow */
 .tab-scroll-wrapper.can-scroll-start .tab-scroll-btn--start,
 .tab-scroll-wrapper.can-scroll-end .tab-scroll-btn--end {
   opacity: 1;
-  pointer-events: auto;
-}
-
-/* Fade indicators (alternative to buttons, shows there's more content) */
-.tab-scroll-wrapper::before,
-.tab-scroll-wrapper::after {
-  content: "";
-  position: absolute;
-  top: 0;
-  bottom: 0;
-  width: 24px;
-  pointer-events: none;
-  z-index: 5;
-  opacity: 0;
-  transition: opacity var(--transition-base);
-}
-
-.tab-scroll-wrapper::before {
-  inset-inline-start: 0;
-  background: linear-gradient(var(--to-inline-end), var(--tab-bar-bg-secondary), transparent);
-}
-
-.tab-scroll-wrapper::after {
-  inset-inline-end: 0;
-  background: linear-gradient(var(--to-inline-start), var(--tab-bar-bg-secondary), transparent);
-}
-
-.tab-scroll-wrapper.can-scroll-start::before {
-  opacity: 1;
-}
-
-.tab-scroll-wrapper.can-scroll-end::after {
-  opacity: 1;
-}
-
-/* Hide fade indicators when using buttons */
-.tab-scroll-wrapper.has-scroll-buttons::before,
-.tab-scroll-wrapper.has-scroll-buttons::after {
-  display: none;
+  visibility: visible;
+  transition:
+    opacity var(--transition-base),
+    color var(--transition-fast),
+    visibility 0s;
 }

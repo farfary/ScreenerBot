@@ -54,6 +54,12 @@ shell-action-theme =
 shell-action-settings =
     .aria-label = सेटिंग्स
     .title = सेटिंग्स
+shell-tabs-scroll-start =
+    .aria-label = पिछले टैब दिखाएँ
+    .title = पिछले टैब दिखाएँ
+shell-tabs-scroll-end =
+    .aria-label = और टैब दिखाएँ
+    .title = और टैब दिखाएँ
 
 shell-ticker-monitoring-segment =
     .title = पूल सर्विस द्वारा मॉनिटर किए जा रहे टोकन

@@ -21,54 +21,15 @@
   --ticker-hover-bg: rgb(255, 255, 255, 0.04);
 }
 
-/* Horizontally scrollable primary navigation with fixed edge fades. */
+/* The primary navigation is a tab scroll strip (tab_bar.css); only its surface is ours. */
 .header-row-2-wrapper {
-  --nav-edge-fade: 40px;
-
-  position: relative;
-  overflow: hidden;
-}
-
-.header-row-2-wrapper::before,
-.header-row-2-wrapper::after {
-  content: "";
-  position: absolute;
-  inset-block: 0;
-  width: var(--nav-edge-fade);
-  z-index: var(--z-dropdown);
-  opacity: 0;
-  pointer-events: none;
-  transition: opacity var(--transition-base);
-}
-
-.header-row-2-wrapper::before {
-  inset-inline-start: 0;
-  background: linear-gradient(var(--to-inline-end), var(--bg-secondary), transparent);
-}
-
-.header-row-2-wrapper::after {
-  inset-inline-end: 0;
-  background: linear-gradient(var(--to-inline-start), var(--bg-secondary), transparent);
-}
-
-.header-row-2-wrapper.can-scroll-start::before,
-.header-row-2-wrapper.can-scroll-end::after {
-  opacity: 1;
+  --tab-scroll-bg: var(--bg-secondary);
 }
 
 .header-row-2 {
   height: 36px;
-  overflow: auto hidden;
-  /* A tab scrolled into view stops clear of the edge fades. */
-  scroll-padding-inline: var(--nav-edge-fade);
   border-top: 1px solid var(--border-color);
   background: var(--bg-secondary);
-  scrollbar-width: none;
-  -webkit-overflow-scrolling: touch;
-}
-
-.header-row-2::-webkit-scrollbar {
-  display: none;
 }
 
 .nav-tabs {
@@ -627,8 +588,6 @@ button.ticker-segment:hover .ticker-icon {
 }
 
 @media (prefers-reduced-motion: reduce) {
-  .header-row-2-wrapper::before,
-  .header-row-2-wrapper::after,
   .nav-tabs a,
   .nav-tabs a i,
   button.ticker-segment,

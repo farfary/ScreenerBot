@@ -61,6 +61,12 @@ shell-action-theme =
 shell-action-settings =
     .aria-label = Settings
     .title = Settings
+shell-tabs-scroll-start =
+    .aria-label = Show earlier tabs
+    .title = Show earlier tabs
+shell-tabs-scroll-end =
+    .aria-label = Show more tabs
+    .title = Show more tabs
 
 ## Ticker
 
