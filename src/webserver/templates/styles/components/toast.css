@@ -2,7 +2,10 @@
  * SPDX-License-Identifier: BUSL-1.1 */
 
 /**
- * Toast notices — top-centre, at most three at a time.
+ * Toast notices — at most three at a time, stacked in the bottom inline-end corner
+ * above the fixed status bar (and the featured row while it is shown). The top of
+ * the window holds the header, the navigation and each page's sub-tab and status
+ * strips, which a toast must never cover; the corner only overlaps page content.
  *
  * Semantics are carried by the icon glyph and the progress bar colour only:
  * the icon is a BARE glyph (no tile, ring or glow) and the card carries no
@@ -13,18 +16,21 @@
 
 .toast-container {
   position: fixed;
-  top: 64px;
-  /* rtl-ok: centered with translateX
- */
-  left: 50%;
-  transform: translateX(-50%);
+  /* Clear the fixed 26px status bar while keeping a 16px viewport gap. */
+  inset-block-end: calc(26px + 16px);
+  inset-inline-end: 16px;
   z-index: var(--z-toast);
   display: flex;
   flex-direction: column;
   align-items: stretch;
   gap: 8px;
-  width: min(380px, calc(100vw - 24px));
+  width: min(380px, calc(100vw - 32px));
   pointer-events: none;
+}
+
+/* The featured row adds 48px above the status bar while it is shown. */
+body:has(.content.has-featured-row) .toast-container {
+  inset-block-end: calc(26px + 48px + 16px);
 }
 
 .toast {
@@ -37,7 +43,7 @@
   padding: 10px 12px;
   pointer-events: auto;
   opacity: 0;
-  transform: translateY(-8px);
+  transform: translateY(8px);
   transition:
     opacity var(--transition-base),
     transform var(--transition-base);
@@ -50,7 +56,7 @@
 
 .toast--exiting {
   opacity: 0;
-  transform: translateY(-8px);
+  transform: translateY(8px);
 }
 
 .toast[data-type="success"] {

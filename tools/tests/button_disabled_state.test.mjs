@@ -27,16 +27,17 @@ const DISABLED = /:disabled|\[disabled\]|\[aria-disabled/;
 const stylesDisabledButton = (selector) =>
   selector
     .split(",")
-    .some(
-      (part) => BUTTON.test(part) && DISABLED.test(part.replace(/:not\([^)]*\)/g, "")),
-    );
+    .some((part) => BUTTON.test(part) && DISABLED.test(part.replace(/:not\([^)]*\)/g, "")));
 
 async function disabledButtonRules() {
   const rules = [];
   for (const file of (await walk(STYLES_ROOT)).filter((path) => path.endsWith(".css"))) {
     const css = readFileSync(file, "utf8").replace(/\/\*[\s\S]*?\*\//g, "");
     for (const match of css.matchAll(/([^{}]+)\{([^{}]*)\}/g)) {
-      const selector = match[1].trim().split(/\s*\n\s*/).join(" ");
+      const selector = match[1]
+        .trim()
+        .split(/\s*\n\s*/)
+        .join(" ");
       if (stylesDisabledButton(selector)) {
         rules.push({ file: repoPath(file), selector, body: match[2] });
       }
