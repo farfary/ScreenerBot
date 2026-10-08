@@ -779,6 +779,7 @@ export function applyEventHandlersMixin(DataTable) {
             scrollStart(this.elements.scrollContainer) > 0
           );
         }
+        this._maskColumnsUnderPin();
       };
       this._addEventListener(this.elements.scrollContainer, "scroll", hScrollSync);
     }

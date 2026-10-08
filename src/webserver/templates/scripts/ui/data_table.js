@@ -133,7 +133,7 @@
 /* global queueMicrotask */
 
 import * as AppState from "../core/app_state.js";
-import { $ } from "../core/dom.js";
+import { $, scrollStart } from "../core/dom.js";
 import { escapeHtml } from "../core/utils.js";
 import { enhanceAllSelects } from "./custom_select.js";
 import { TableToolbarView } from "./table_toolbar.js";
@@ -940,7 +940,7 @@ export class DataTable {
             return `
             <th
               data-column-id="${col.id}"${this._columnTypeAttr(col)}
-              class="dt-header-column ${col.sortable ? "sortable" : ""} ${isSorted ? "sorted" : ""} ${sticky.classes}"${sticky.attr}
+              class="dt-header-column ${col.sortable ? "sortable" : ""} ${isSorted ? "sorted" : ""} ${sticky.classes}${this._underPinClass(col)}"${sticky.attr}
             >
               <div class="dt-header-content">
                 <span class="dt-header-label">
@@ -970,7 +970,9 @@ export class DataTable {
         this.toolbarView?.getItem(filterId) ||
         this.options.toolbar?.filters?.find((item) => item?.id === filterId);
       if (filter && filter.defaultValue !== undefined) return value !== filter.defaultValue;
-      return value !== "" && value !== null && value !== undefined && value !== false && value !== "all";
+      return (
+        value !== "" && value !== null && value !== undefined && value !== false && value !== "all"
+      );
     });
   }
 
@@ -1371,7 +1373,7 @@ export class DataTable {
 
         return `
         <td data-column-id="${col.id}"${this._columnTypeAttr(col)}
-            class="${cellClass} ${wrapClass} ${sticky.classes}"${sticky.attr}
+            class="${cellClass} ${wrapClass} ${sticky.classes}${this._underPinClass(col)}"${sticky.attr}
             data-row-id="${rowId}">
           ${content}
         </td>
@@ -2058,6 +2060,7 @@ export class DataTable {
     this._stickyVarCount = floatingCount;
 
     if (floatingCount <= 0) {
+      this._maskColumnsUnderPin();
       return;
     }
 
@@ -2086,6 +2089,71 @@ export class DataTable {
         width = th ? th.offsetWidth : 0;
       }
       cumulative += Number.isFinite(width) ? width : 0;
+    }
+    this._maskColumnsUnderPin();
+  }
+
+  /**
+   * Scroll the body and the header to the top and the start edge. A scrollLeft of
+   * 0 is the start edge in both directions, so this is RTL-safe.
+   */
+  _scrollToStart() {
+    const container = this.elements.scrollContainer;
+    if (!container) return;
+    container.scrollTop = 0;
+    container.scrollLeft = 0;
+    if (this.elements.headerContainer) this.elements.headerContainer.scrollLeft = 0;
+    this.state.scrollPosition = 0;
+    this.elements.wrapper?.classList.remove("is-pinned-scrolled");
+    this._maskColumnsUnderPin();
+  }
+
+  /** ` dt-col-under` for a column partly scrolled under the pinned columns. */
+  _underPinClass(col) {
+    return this._underPinColumns?.has(col.id) ? " dt-col-under" : "";
+  }
+
+  /**
+   * Hide the content of any column that is partly scrolled under the pinned
+   * columns. Pinned cells are opaque, but the part of a scrolled column that sticks
+   * out past their edge would otherwise show cut-off glyph ends as stray marks,
+   * however wide that part is. Positions come from `state.columnWidths` (the same
+   * source the pin offsets use), so a scroll reads no layout. Only columns whose
+   * membership changed are touched; rendered cells take the class from
+   * `_underPinClass`.
+   */
+  _maskColumnsUnderPin() {
+    const container = this.elements.scrollContainer;
+    const wrapper = this.elements.wrapper;
+    if (!container || !wrapper) return;
+
+    const ordered = this._getOrderedColumns();
+    const floatingCount = this._getFloatingColumnCount(ordered);
+    const under = new Set();
+    const scrolled = scrollStart(container);
+    if (floatingCount > 0 && scrolled > 0) {
+      const widthOf = (col) => {
+        const width = this.state.columnWidths[col.id];
+        return Number.isFinite(width) ? width : 0;
+      };
+      const pinEdge = ordered.slice(0, floatingCount).reduce((sum, col) => sum + widthOf(col), 0);
+      const visibleFrom = scrolled + pinEdge;
+      let start = pinEdge;
+      for (const col of ordered.slice(floatingCount)) {
+        const end = start + widthOf(col);
+        if (start < visibleFrom && end > visibleFrom) under.add(col.id);
+        if (start >= visibleFrom) break;
+        start = end;
+      }
+    }
+
+    const previous = this._underPinColumns || new Set();
+    this._underPinColumns = under;
+    for (const id of new Set([...previous, ...under])) {
+      if (previous.has(id) === under.has(id)) continue;
+      wrapper
+        .querySelectorAll(`:is(th, td)[data-column-id="${CSS.escape(String(id))}"]`)
+        .forEach((cell) => cell.classList.toggle("dt-col-under", under.has(id)));
     }
   }
 
@@ -3296,9 +3364,13 @@ export class DataTable {
       this._renderTable();
     }
 
-    // Restore scroll position
+    // Restore the scroll position, or start a new column set at its top and its
+    // start edge: an offset kept from another view would open the new columns
+    // scrolled partway under the pinned ones.
     if (preserveScroll && this.elements.scrollContainer) {
       this.elements.scrollContainer.scrollTop = scrollPosition;
+    } else {
+      this._scrollToStart();
     }
 
     this._log("info", "Columns updated", {

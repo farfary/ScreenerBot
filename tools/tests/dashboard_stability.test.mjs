@@ -239,6 +239,38 @@ async function assertHeadersFit(page, label) {
   assert.deepEqual(spilled, [], `${label}: header labels spill out of their columns`);
 }
 
+/**
+ * Scrolled to its end, no visible DataTable shows content from a column that is
+ * cut by the pinned columns' edge: the cut sliver carries glyph ends otherwise.
+ */
+async function assertPinnedEdgeClean(page, label) {
+  const leaks = await page.evaluate(async () => {
+    const found = [];
+    const containers = [...document.querySelectorAll(".data-table-scroll-container")].filter(
+      (container) => container.offsetParent && container.querySelector("td.dt-col-sticky-last")
+    );
+    for (const container of containers) {
+      container.scrollLeft = container.scrollWidth;
+      container.dispatchEvent(new Event("scroll"));
+      await new Promise((resolve) => setTimeout(resolve, 50));
+      const wrapper = container.closest(".data-table-wrapper") ?? container.parentElement;
+      const edge = container.querySelector("td.dt-col-sticky-last").getBoundingClientRect();
+      for (const cell of wrapper.querySelectorAll(
+        "th[data-column-id]:not(.dt-col-sticky), tbody tr:nth-child(-n+5) td[data-column-id]:not(.dt-col-sticky)"
+      )) {
+        const box = cell.getBoundingClientRect();
+        const cut = box.left < edge.right - 1 && box.right > edge.right + 1;
+        if (cut && !cell.classList.contains("dt-col-under"))
+          found.push(`${cell.tagName.toLowerCase()} ${cell.dataset.columnId}`);
+      }
+      container.scrollLeft = 0;
+      container.dispatchEvent(new Event("scroll"));
+    }
+    return [...new Set(found)];
+  });
+  assert.deepEqual(leaks, [], `${label}: columns cut by the pinned edge still show content`);
+}
+
 /** Render every view, then check the page does not scroll sideways. */
 async function assertViewsFit(page, views, label) {
   for (const view of views) {
@@ -278,6 +310,18 @@ describe("dashboard stability", { concurrency: 4 }, () => {
         for (const view of views) {
           await assertPopulated(session.page, view);
           await assertHeadersFit(session.page, `${id} ${view.name}`);
+          await assertPinnedEdgeClean(session.page, `${id} ${view.name}`);
+        }
+        if (id === "positions") {
+          // A new column set opens at its start edge, not at the previous view's offset.
+          const container = session.page.locator("#positions-root .data-table-scroll-container");
+          await session.page.locator('#subTabsContainer [data-tab-id="open"]').click();
+          await session.page.waitForTimeout(300);
+          await container.evaluate((el) => (el.scrollLeft = el.scrollWidth));
+          assert.ok((await container.evaluate((el) => el.scrollLeft)) > 0, "Open does not scroll");
+          await session.page.locator('#subTabsContainer [data-tab-id="closed"]').click();
+          await session.page.waitForTimeout(300);
+          assert.equal(await container.evaluate((el) => el.scrollLeft), 0);
         }
         if (id === "trader") {
           await session.page.locator('#subTabsContainer [data-tab-id="general-settings"]').click();

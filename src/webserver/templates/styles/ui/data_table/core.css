@@ -831,6 +831,24 @@ body.dt-column-resizing * {
   --dt-sticky-surface: color-mix(in srgb, var(--info-color) 15%, var(--bg-primary));
 }
 
+/* A column partly scrolled under the pinned columns shows no content: the sliver
+   past the pinned edge would otherwise carry cut-off glyph ends. The table sets
+   the class from its column widths on scroll (`_maskColumnsUnderPin`). */
+.data-table :is(td, th).dt-col-under {
+  color: transparent;
+  transition: none;
+}
+
+.data-table :is(td, th).dt-col-under * {
+  visibility: hidden;
+}
+
+/* The sorted header's highlight and underline would also show in that sliver. */
+.data-table th.dt-col-under {
+  background: var(--bg-secondary);
+  border-bottom-color: var(--border-color);
+}
+
 /* Pinned edge, shown once the table has scrolled horizontally. It starts as the
    row's own opaque surface and fades out, so a glyph of a cell scrolled beneath the
    pinned group never peeks out as a sliver beside it, then carries the depth shadow. */
