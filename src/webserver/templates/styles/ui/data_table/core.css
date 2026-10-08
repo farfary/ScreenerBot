@@ -628,11 +628,22 @@ body.dt-column-resizing * {
 
 /* ==================== State Cells (Loading & Empty) ==================== */
 
-/* Loading, error and empty states are sentences, so they leave the cell's data face. */
+/* Loading, error and empty states are sentences, so they leave the cell's data face.
+   A state is the whole body, not a row: the table fills its scroll area so the message
+   sits in the middle of it, and no row rule is drawn under it across the page. */
+.data-table:has(> tbody > tr > td.dt-state-cell) {
+  height: 100%;
+}
+
+.data-table tbody tr:has(> td.dt-state-cell) {
+  border-bottom: 0;
+}
+
 .data-table td.dt-state-cell {
   font-family: var(--font-sans);
   text-align: center;
   padding: 64px 32px;
+  border-bottom: 0;
   background: transparent;
 }
 
