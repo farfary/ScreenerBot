@@ -16,7 +16,7 @@
  *   inputs marked as left-to-right islands (`dir="ltr"`: addresses, mints, keys).
  * - The shared prose surfaces (select trigger, menu and search, table search and
  *   menus, row action items, table loading/empty/error states, the strategy
- *   condition summary) declare the UI face.
+ *   condition summary, the position header's sub-lines) declare the UI face.
  *
  * Run with `npm run test:js`.
  */
@@ -59,6 +59,7 @@ test("shared prose surfaces declare the UI face", () => {
     "ui/data_table/column_types.css": [".dt-actions-dropdown-item"],
     "ui/data_table/core.css": [".data-table td.dt-state-cell"],
     "pages/strategies/condition_cards.css": [".summary-content"],
+    "ui/position_details/header.css": [".position-details-dialog .header-metric-sub"],
   };
   const found = [];
   for (const [path, selectors] of Object.entries(owners)) {

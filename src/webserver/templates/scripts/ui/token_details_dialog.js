@@ -1237,13 +1237,14 @@ export class TokenDetailsDialog {
   }
 
   /**
-   * Update the favorite button visual state (active class + title).
+   * Update the favorite button state (active class, pressed state and title).
    * @param {boolean} isFavorite
    */
   _updateFavoriteButton(isFavorite) {
     const btn = this.dialogEl?.querySelector("#favoriteBtn");
     if (!btn) return;
     btn.classList.toggle("active", isFavorite);
+    btn.setAttribute("aria-pressed", String(isFavorite));
     btn.title = isFavorite ? I18n.t("menu-favorite-remove") : I18n.t("menu-favorite-add");
     btn.setAttribute("aria-label", btn.title);
   }

@@ -157,27 +157,6 @@
   }
 }
 
-.position-details-dialog .pdd-empty-state {
-  display: flex;
-  flex-direction: column;
-  align-items: center;
-  justify-content: center;
-  gap: var(--spacing-md);
-  padding: var(--spacing-lg);
-  color: var(--text-secondary);
-  text-align: center;
-}
-
-.position-details-dialog .pdd-empty-state i {
-  font-size: 32px;
-  opacity: 0.5;
-}
-
-.position-details-dialog .pdd-empty-state p {
-  margin: 0;
-  font-size: 0.9rem;
-}
-
 /* Tones win over any element's default colour: components set their own colour through
    :where() so these two-class rules always apply. */
 .position-details-dialog .pdd-positive {

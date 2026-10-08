@@ -68,14 +68,10 @@
   color: var(--warning-color);
 }
 
+/* Active: only the star turns the warning colour. The control keeps the cluster's
+   neutral box, so no tinted tile sits behind the glyph. */
 .dialog-header-action.favorite-btn.active {
-  border-color: var(--warning-alpha-30);
-  background: var(--warning-alpha-20);
   color: var(--warning-color);
-}
-
-.dialog-header-action.favorite-btn.active:hover {
-  filter: brightness(1.15);
 }
 
 /* Close sits last in the cluster and is the only destructive-tinted control. */

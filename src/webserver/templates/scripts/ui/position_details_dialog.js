@@ -130,7 +130,7 @@ export class PositionDetailsDialog {
       // worse than an error, though, so keep counting.
       this._fetchFailures += 1;
       if (seq === this._openSeq && (!this.fullDetails || this._fetchFailures >= 3)) {
-        this._showBodyState(I18n.t("positions-details-load-failed"));
+        this._showLoadError();
       }
     } finally {
       this.isLoading = false;
@@ -219,15 +219,27 @@ export class PositionDetailsDialog {
     }
   }
 
-  /** Cover the body with a notice; used only when there is no position to show at all. */
-  _showBodyState(message) {
+  /** Cover the body with the load failure and a Retry; used only when there is no view to keep. */
+  _showLoadError() {
     const state = this.dialogEl?.querySelector("#pddBodyState");
     if (!state) return;
     state.innerHTML = `
-      <div class="pdd-empty-state">
-        <i class="icon-circle-alert"></i>
-        <p>${Utils.escapeHtml(message)}</p>
+      <div class="empty-state" role="alert">
+        <i class="empty-state-icon icon-circle-alert" aria-hidden="true"></i>
+        <p class="empty-state-title">${Utils.escapeHtml(I18n.t("positions-details-load-failed"))}</p>
+        <button class="btn btn-secondary empty-state-action" type="button">
+          <i class="icon-refresh-cw" aria-hidden="true"></i>
+          <span>${Utils.escapeHtml(I18n.t("common-action-retry"))}</span>
+        </button>
       </div>`;
+    const retry = state.querySelector(".empty-state-action");
+    retry.addEventListener("click", () => {
+      retry.disabled = true;
+      this._fetchFailures = 0;
+      void this._fetchDetails().finally(() => {
+        retry.disabled = false;
+      });
+    });
     state.hidden = false;
   }
 

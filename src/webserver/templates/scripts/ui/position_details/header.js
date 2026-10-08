@@ -93,11 +93,13 @@ export function applyHeaderMixin(PositionDetailsDialog) {
    * round shows how it ended. Nothing here is repeated in the summary rail.
    */
   proto._buildHeaderMetrics = function (pos) {
-    const metric = (label, value, { sub = "", tone = "", title = "" } = {}) => `
+    // A sub-line is prose ("closed 3h ago", "1 buy") unless `figure` marks it as
+    // numbers alone, which keep the data face.
+    const metric = (label, value, { sub = "", figure = false, tone = "", title = "" } = {}) => `
       <div class="header-metric ${tone}"${title ? ` title="${esc(title)}"` : ""}>
         <span class="header-metric-label">${esc(label)}</span>
         <span class="header-metric-value">${value}${value === "—" ? "" : "<small>SOL</small>"}</span>
-        <span class="header-metric-sub">${sub ? esc(sub) : "&nbsp;"}</span>
+        <span class="header-metric-sub${figure ? " is-figure" : ""}">${sub ? esc(sub) : "&nbsp;"}</span>
       </div>`;
 
     const pnlSub = (pnl, pct) =>
@@ -128,6 +130,7 @@ export function applyHeaderMixin(PositionDetailsDialog) {
           this._formatSol(pos.pnl, { sign: true, unit: false }),
           {
             sub: pnlSub(pos.pnl, pos.pnl_percent),
+            figure: true,
             tone: this._toneClass(pos.pnl),
             title: usdNote,
           }
@@ -164,6 +167,7 @@ export function applyHeaderMixin(PositionDetailsDialog) {
         this._formatSol(pos.unrealized_pnl, { sign: true, unit: false }),
         {
           sub: pnlSub(pos.unrealized_pnl, pos.unrealized_pnl_percent),
+          figure: true,
           tone: this._toneClass(pos.unrealized_pnl),
           title: usdNote,
         }
@@ -416,6 +420,7 @@ export function applyHeaderMixin(PositionDetailsDialog) {
       ? I18n.attr("positions-details-favorite-remove", "title")
       : I18n.attr("positions-details-favorite-add", "title");
     button.classList.toggle("active", isFavorite);
+    button.setAttribute("aria-pressed", String(isFavorite));
     button.title = label;
     button.setAttribute("aria-label", label);
   };

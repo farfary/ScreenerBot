@@ -162,11 +162,16 @@
 .position-details-dialog .header-metric-sub {
   overflow: hidden;
   color: var(--text-muted);
-  font-family: var(--font-data);
+  font-family: var(--font-sans);
   font-size: 0.68rem;
   line-height: 1.25;
   text-overflow: ellipsis;
   white-space: nowrap;
+}
+
+/* A sub-line of numbers alone (percent and USD) keeps the tabular data face. */
+.position-details-dialog .header-metric-sub.is-figure {
+  font-family: var(--font-data);
 }
 
 .position-details-dialog .header-metric.pdd-positive .header-metric-value,
