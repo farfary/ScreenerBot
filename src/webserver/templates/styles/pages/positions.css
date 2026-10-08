@@ -59,11 +59,11 @@
 }
 
 /* ===========================================================================
-   Live row state — left status bar + tint + caption
-   Open-list rows carry a left status bar encoding their lifecycle:
-   green = healthy open, amber (pulsing) = in-flight buy/sell, red = failed.
-   The bar + tint are layered with background-image so they survive zebra
-   striping regardless of selector specificity.
+   Live row state — tint + caption
+   An in-flight or failed row carries a faint tint and a caption under the token
+   symbol; a healthy open row carries neither. The tint is layered with
+   background-image so it survives zebra striping regardless of selector
+   specificity.
    =========================================================================== */
 
 /* Compact state caption under the token symbol (active states only) */
@@ -115,71 +115,18 @@
   }
 }
 
-/* Left status bar — drawn on the first cell of each open-list row.
-   `:not(.dt-col-sticky)` is critical: when the first column is pinned/floating it
-   already carries `position: sticky` (a valid containing block for the absolute
-   `::before` bar). Forcing `position: relative` here would override that equal-
-   specificity sticky rule (positions.css loads after the table core), un-sticking
-   the cell so it scrolls off-screen. Only non-sticky first cells need it. */
-.pos-row-open > td:first-child:not(.dt-col-sticky),
-.pos-row-buying > td:first-child:not(.dt-col-sticky),
-.pos-row-selling > td:first-child:not(.dt-col-sticky),
-.pos-row-closing > td:first-child:not(.dt-col-sticky),
-.pos-row-failed > td:first-child:not(.dt-col-sticky) {
-  position: relative;
-}
-
-.pos-row-open > td:first-child::before,
-.pos-row-buying > td:first-child::before,
-.pos-row-selling > td:first-child::before,
-.pos-row-closing > td:first-child::before,
-.pos-row-failed > td:first-child::before {
-  content: "";
-  position: absolute;
-  inset-block: 0;
-  inset-inline: 0 auto;
-  width: 3px;
-  border-start-start-radius: 0;
-  border-start-end-radius: 2px;
-  border-end-end-radius: 2px;
-  border-end-start-radius: 0;
-  background: var(--pos-bar-color, var(--text-muted));
-}
-
-/* Healthy open — subtle static green bar */
-.pos-row-open > td:first-child::before {
-  --pos-bar-color: rgb(16, 185, 129, 0.55);
-}
-
-/* In-flight buy — amber pulsing bar + faint tint */
-.pos-row-buying > td:first-child::before {
-  --pos-bar-color: #f59e0b;
-
-  animation: pos-bar-pulse 1.4s ease-in-out infinite;
-}
-
+/* In-flight buy */
 .pos-row-buying > td {
   background-image: linear-gradient(0deg, rgb(245, 158, 11, 0.09), rgb(245, 158, 11, 0.09));
 }
 
-/* In-flight sell / closing — orange pulsing bar + faint tint */
-.pos-row-selling > td:first-child::before,
-.pos-row-closing > td:first-child::before {
-  --pos-bar-color: #fb923c;
-
-  animation: pos-bar-pulse 1.4s ease-in-out infinite;
-}
-
+/* In-flight sell or close */
 .pos-row-selling > td,
 .pos-row-closing > td {
   background-image: linear-gradient(0deg, rgb(251, 146, 60, 0.09), rgb(251, 146, 60, 0.09));
 }
 
-/* Failed buy — static red bar + tint */
-.pos-row-failed > td:first-child::before {
-  --pos-bar-color: #ef4444;
-}
-
+/* Failed buy */
 .pos-row-failed > td {
   background-image: linear-gradient(0deg, rgb(239, 68, 68, 0.1), rgb(239, 68, 68, 0.1));
 }
@@ -195,17 +142,6 @@
   font-weight: 600;
   color: var(--text-muted);
   font-style: italic;
-}
-
-@keyframes pos-bar-pulse {
-  0%,
-  100% {
-    opacity: 1;
-  }
-
-  50% {
-    opacity: 0.35;
-  }
 }
 
 /* Arrival glow when a position lands in the Closed list */
@@ -225,12 +161,6 @@
 
 @media (prefers-reduced-motion: reduce) {
   .pos-state-spinner,
-  .pos-row-buying > td:first-child::before,
-  .pos-row-selling > td:first-child::before,
-  .pos-row-closing > td:first-child::before {
-    animation: none;
-  }
-
   .pos-row-just-closed > td {
     animation: none;
   }
