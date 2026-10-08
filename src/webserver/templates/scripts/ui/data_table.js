@@ -1499,26 +1499,28 @@ export class DataTable {
    *
    * Example configurations:
    *
-   * Multiple buttons:
+   * Multiple buttons. `buttons` is an array, or a function of the row when the set
+   * depends on the row's state. An icon-only button names itself through `tooltip`
+   * (its title) and `ariaLabel` (defaults to the tooltip).
    * {
    *   id: 'actions',
    *   label: 'Actions',
    *   type: 'actions',
    *   actions: {
-   *     buttons: [
+   *     buttons: (row) => [
    *       {
    *         id: 'edit',
-   *         label: 'Edit',
-   *         icon: '✏️',
-   *         variant: 'primary',
-   *         onClick: (row) => editRow(row)
+   *         icon: '<i class="icon-pencil"></i>',
+   *         tooltip: 'Edit',
+   *         onClick: (row, event) => editRow(row)
    *       },
    *       {
    *         id: 'delete',
-   *         label: 'Delete',
-   *         icon: '🗑️',
+   *         icon: '<i class="icon-trash-2"></i>',
+   *         tooltip: 'Delete',
+   *         ariaLabel: `Delete ${row.name}`,
    *         variant: 'danger',
-   *         onClick: (row) => deleteRow(row)
+   *         onClick: (row, event) => deleteRow(row)
    *       }
    *     ]
    *   }
@@ -1607,20 +1609,23 @@ export class DataTable {
     }
 
     // Multiple buttons style
-    if (config.buttons && Array.isArray(config.buttons)) {
+    const buttons = this._actionButtonsFor(col, row);
+    if (buttons) {
       return `
         <div class="dt-actions-container">
-          ${config.buttons
+          ${buttons
             .map((btn) => {
               const variant = btn.variant ? `dt-action-btn-${btn.variant}` : "";
               const size = btn.size === "sm" ? "dt-action-btn-sm" : "";
               const iconOnly = !btn.label && btn.icon ? "dt-action-btn-icon-only" : "";
               const disabled = btn.disabled ? "disabled" : "";
+              const ariaLabel = btn.ariaLabel ?? (iconOnly ? btn.tooltip : null);
 
               return `
-              <button class="dt-action-btn ${variant} ${size} ${iconOnly} ${disabled}" 
-                      data-action-id="${btn.id}"
-                      ${btn.tooltip ? `title="${btn.tooltip}"` : ""}>
+              <button type="button" class="dt-action-btn ${variant} ${size} ${iconOnly} ${disabled}"
+                      data-action-id="${escapeHtml(btn.id)}"
+                      ${btn.tooltip ? `title="${escapeHtml(btn.tooltip)}"` : ""}
+                      ${ariaLabel ? `aria-label="${escapeHtml(ariaLabel)}"` : ""}>
                 ${btn.icon ? `<span class="dt-action-btn-icon">${btn.icon}</span>` : ""}
                 ${btn.label ? btn.label : ""}
               </button>
@@ -1632,6 +1637,13 @@ export class DataTable {
     }
 
     return "";
+  }
+
+  /** The action buttons a column shows for `row`, or null when it shows none. */
+  _actionButtonsFor(col, row) {
+    const buttons = col.actions?.buttons;
+    const resolved = typeof buttons === "function" ? buttons(row) : buttons;
+    return Array.isArray(resolved) ? resolved : null;
   }
 
   /**

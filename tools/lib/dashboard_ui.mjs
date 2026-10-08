@@ -297,3 +297,19 @@ export function classTokens(tagText) {
 export function hasBareAttribute(tagText, name) {
   return new RegExp(`\\b${name}\\b(?!\\s*=\\s*["'\`]?\\s*\\$)`, "i").test(tagText);
 }
+
+/** Column objects of a DataTable consumer: `{ id, label, ... }` blocks with a renderer. */
+export function columnBlocks(source) {
+  const blocks = [];
+  const lines = source.split("\n");
+  lines.forEach((line, index) => {
+    const head = /^(\s*)id: "([^"]+)",$/.exec(line);
+    if (!head || !/^\s*label:/.test(lines[index + 1] ?? "")) return;
+    const close = `${head[1].slice(2)}}`;
+    let end = index + 1;
+    while (end < lines.length && !lines[end].startsWith(close)) end += 1;
+    const text = lines.slice(index, end).join("\n");
+    if (/\brender:/.test(text)) blocks.push({ id: head[2], line: index + 1, text });
+  });
+  return blocks;
+}

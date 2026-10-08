@@ -85,31 +85,73 @@ export function createWatchedWallets({
     },
     {
       id: "actions",
-      label: "",
+      label: I18n.t("wallets-list-col-actions"),
+      type: "actions",
       sortable: false,
-      minWidth: 240,
-      render: (value, row) => {
-        const restore = row.disable_reason?.kind === "signature_budget";
-        const retry = ["helius_unavailable", "processing_failed"].includes(
-          row.disable_reason?.kind
-        );
-        const toggleLabel = row.enabled
-          ? I18n.t("wallets-watched-action-pause")
-          : I18n.t("wallets-watched-action-enable");
-        const budgetLabel = restore
-          ? I18n.t("wallets-watched-action-restore")
-          : I18n.t("wallets-watched-action-options");
-        const removeName = row.label || I18n.t("wallets-watched-generic-name");
-        return `
-        <div class="watched-wallet-actions">
-          <button class="btn" type="button" data-watch-action="copy" data-watch-id="${row.id}" title="${Utils.escapeHtml(I18n.attr("wallets-watched-action-copy", "title"))}">${Utils.escapeHtml(I18n.t("wallets-watched-action-copy"))}</button>
-          <button class="btn" type="button" data-watch-action="budget" data-watch-id="${row.id}">${Utils.escapeHtml(budgetLabel)}</button>
-          ${restore ? "" : retry ? `<button class="btn btn-primary" type="button" data-watch-action="retry" data-watch-id="${row.id}">${Utils.escapeHtml(I18n.t("wallets-watched-action-retry"))}</button>` : `<button class="btn" type="button" data-watch-action="toggle" data-watch-id="${row.id}">${Utils.escapeHtml(toggleLabel)}</button>`}
-          <button class="btn-icon danger" type="button" data-watch-action="delete" data-watch-id="${row.id}" title="${Utils.escapeHtml(I18n.attr("wallets-watched-action-remove", "title"))}" aria-label="${Utils.escapeHtml(I18n.attr("wallets-watched-action-remove", "aria-label", { name: removeName }))}"><i class="icon-trash-2"></i></button>
-        </div>`;
-      },
+      actions: { buttons: watchActions },
     },
   ];
+
+  /** The row actions for one watched wallet: icon buttons named by their tooltips. */
+  function watchActions(row) {
+    const restore = row.disable_reason?.kind === "signature_budget";
+    const retry = ["helius_unavailable", "processing_failed"].includes(row.disable_reason?.kind);
+    const run = (action) => (target, event) =>
+      runWatchAction(action, target, event.target.closest("button"));
+    const actions = [
+      {
+        id: "copy",
+        icon: '<i class="icon-copy-plus"></i>',
+        tooltip: I18n.attr("wallets-watched-action-copy", "title"),
+        ariaLabel: I18n.t("wallets-watched-action-copy"),
+        size: "sm",
+        onClick: run("copy"),
+      },
+      {
+        id: "budget",
+        icon: restore
+          ? '<i class="icon-rotate-ccw"></i>'
+          : '<i class="icon-sliders-horizontal"></i>',
+        tooltip: restore
+          ? I18n.t("wallets-watched-action-restore")
+          : I18n.t("wallets-watched-action-options"),
+        size: "sm",
+        onClick: run("budget"),
+      },
+    ];
+    if (retry) {
+      actions.push({
+        id: "retry",
+        icon: '<i class="icon-rotate-cw"></i>',
+        tooltip: I18n.t("wallets-watched-action-retry"),
+        variant: "primary",
+        size: "sm",
+        onClick: run("retry"),
+      });
+    } else if (!restore) {
+      actions.push({
+        id: "toggle",
+        icon: row.enabled ? '<i class="icon-pause"></i>' : '<i class="icon-play"></i>',
+        tooltip: row.enabled
+          ? I18n.t("wallets-watched-action-pause")
+          : I18n.t("wallets-watched-action-enable"),
+        size: "sm",
+        onClick: run("toggle"),
+      });
+    }
+    actions.push({
+      id: "delete",
+      icon: '<i class="icon-trash-2"></i>',
+      tooltip: I18n.attr("wallets-watched-action-remove", "title"),
+      ariaLabel: I18n.attr("wallets-watched-action-remove", "aria-label", {
+        name: row.label || I18n.t("wallets-watched-generic-name"),
+      }),
+      variant: "danger",
+      size: "sm",
+      onClick: run("delete"),
+    });
+    return actions;
+  }
 
   function setup() {
     const form = $("#watched-wallet-form");
@@ -366,7 +408,6 @@ export function createWatchedWallets({
         ],
       },
     });
-    on(root, "click", handleListAction);
     return table;
   }
 
@@ -504,13 +545,10 @@ export function createWatchedWallets({
     }
   }
 
-  async function handleListAction(event) {
-    const button = event.target.closest("button[data-watch-action]");
-    if (!button) return;
-    const id = Number(button.dataset.watchId);
-    const action = button.dataset.watchAction;
-    const target = targets.find((item) => item.id === id);
+  async function runWatchAction(action, row, button) {
+    const target = targets.find((item) => item.id === row.id);
     if (!target) return;
+    const id = target.id;
     if (action === "copy") {
       openCopyForWallet(target.address, target.label || null);
       return;

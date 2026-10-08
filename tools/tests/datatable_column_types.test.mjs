@@ -21,28 +21,12 @@ import test from "node:test";
 import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
 
-import { SCRIPTS_ROOT, STYLES_ROOT, repoPath, walk } from "../lib/dashboard_ui.mjs";
+import { SCRIPTS_ROOT, STYLES_ROOT, columnBlocks, repoPath, walk } from "../lib/dashboard_ui.mjs";
 
 const NUMERIC_RENDER =
   /\b(?:formatSol|formatPriceSol|formatCurrencyUSD|formatPercent\w*|formatPnL|formatSignedSol|formatNumber|formatDuration|formatUptime|formatTimeSpan|formatFixed|priceCell|solCell|pnlCell|percentCell|usdCell)\b/;
 const NUMERIC_TYPE = /\btype:\s*"(?:number|price|percent|sol|currency)"/;
 const ESCAPE = /\/\/\s*column-type-ok:\s*\S/;
-
-/** Column objects of a DataTable consumer: `{ id, label, ... }` blocks with a renderer. */
-export function columnBlocks(source) {
-  const blocks = [];
-  const lines = source.split("\n");
-  lines.forEach((line, index) => {
-    const head = /^(\s*)id: "([^"]+)",$/.exec(line);
-    if (!head || !/^\s*label:/.test(lines[index + 1] ?? "")) return;
-    const close = `${head[1].slice(2)}}`;
-    let end = index + 1;
-    while (end < lines.length && !lines[end].startsWith(close)) end += 1;
-    const text = lines.slice(index, end).join("\n");
-    if (/\brender:/.test(text)) blocks.push({ id: head[2], line: index + 1, text });
-  });
-  return blocks;
-}
 
 const scripts = (await walk(SCRIPTS_ROOT)).filter((file) => file.endsWith(".js"));
 const consumers = scripts.filter((file) => {
@@ -54,7 +38,11 @@ test("numeric DataTable columns declare a value type", () => {
   const missing = [];
   for (const file of consumers) {
     for (const block of columnBlocks(readFileSync(file, "utf8"))) {
-      if (NUMERIC_RENDER.test(block.text) && !NUMERIC_TYPE.test(block.text) && !ESCAPE.test(block.text))
+      if (
+        NUMERIC_RENDER.test(block.text) &&
+        !NUMERIC_TYPE.test(block.text) &&
+        !ESCAPE.test(block.text)
+      )
         missing.push(`${repoPath(file)}:${block.line} ${block.id}`);
     }
   }
@@ -91,9 +79,9 @@ test("the stylesheet aligns exactly the numeric types the table stamps", () => {
   const types = [...declared.matchAll(/"(\w+)"/g)].map((match) => match[1]).sort();
   const css = readFileSync(`${STYLES_ROOT}/ui/data_table/column_types.css`, "utf8");
   for (const cell of ["th", "td"]) {
-    const block = new RegExp(`\\.data-table ${cell}:is\\(([^)]*)\\)\\s*\\{[^}]*text-align: end`).exec(
-      css
-    )?.[1];
+    const block = new RegExp(
+      `\\.data-table ${cell}:is\\(([^)]*)\\)\\s*\\{[^}]*text-align: end`
+    ).exec(css)?.[1];
     assert.ok(block, `no end-aligned ${cell} rule for value types`);
     const styled = [...block.matchAll(/data-type="(\w+)"/g)].map((match) => match[1]).sort();
     assert.deepEqual(styled, types, `${cell} alignment covers every numeric type`);

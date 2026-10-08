@@ -35,14 +35,6 @@
   line-height: 1.4;
 }
 
-.watched-wallet-actions {
-  display: flex;
-  flex-wrap: wrap;
-  align-items: center;
-  justify-content: flex-end;
-  gap: var(--spacing-xs);
-}
-
 #watch-budget-resume-notice {
   border-top: 1px solid var(--border-color);
   padding-top: var(--spacing-md);

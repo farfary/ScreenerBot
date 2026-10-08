@@ -417,8 +417,8 @@ export function applyEventHandlersMixin(DataTable) {
         if (row) {
           const columnId = td.dataset.columnId;
           const column = this.options.columns.find((c) => c.id === columnId);
-          if (column?.actions?.buttons) {
-            const action = column.actions.buttons.find((a) => a.id === actionId);
+          if (column) {
+            const action = this._actionButtonsFor(column, row)?.find((a) => a.id === actionId);
             if (action?.onClick) {
               try {
                 action.onClick(row, e);

@@ -101,7 +101,7 @@ export const views = [
     dialogs: [
       dialog('[data-btn-id="watched-add"]', "watch-wallet-modal", "watch-modal-close"),
       dialog(
-        `${WATCHED_ROWS} [data-watch-action="budget"]`,
+        `${WATCHED_ROWS} .dt-action-btn[data-action-id="budget"]`,
         "watch-budget-modal",
         "watch-budget-close"
       ),

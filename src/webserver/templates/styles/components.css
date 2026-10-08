@@ -130,6 +130,11 @@
   padding: var(--spacing-xs) var(--spacing-md);
   border: none;
   border-radius: var(--radius-md);
+
+  /* A `.btn` with no variant is the neutral button, never the browser's own grey
+     control; every variant below replaces this skin. */
+  background: var(--bg-secondary);
+  color: var(--text-primary);
   cursor: pointer;
   font-size: 0.85em;
   font-weight: 500;

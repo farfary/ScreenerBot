@@ -74,3 +74,27 @@ test("the dashboard never lets a control wear the OS font", async () => {
   );
   assert.ok(rule, "foundation.css must give button/input/select/textarea font-family: inherit");
 });
+
+/**
+ * The per-button skin check above accepts a rule scoped by an ancestor
+ * (`.page .btn`), so a `.btn` with no variant passed while every page that drew
+ * it outside such an ancestor showed the browser's grey control. The unscoped
+ * `.btn` rule is therefore checked on its own: it must draw the whole neutral
+ * skin, so a bare `.btn` is a finished button anywhere it lands.
+ */
+test("a bare .btn draws its whole skin without a variant or an ancestor", async () => {
+  const components = await readFile(resolve(STYLES_ROOT, "components.css"), "utf8");
+  const body = rulesIn(components)
+    .filter((rule) => rule.selector === ".btn")
+    .map((rule) => `;${rule.body}`)
+    .join("");
+  for (const [property, pattern] of Object.entries({
+    background: /;\s*background(?:-color)?\s*:\s*var\(--/,
+    color: /;\s*color\s*:\s*var\(--/,
+    border: /;\s*border\s*:/,
+    cursor: /;\s*cursor\s*:/,
+    padding: /;\s*padding\s*:/,
+  })) {
+    assert.match(body.replace(/\n/g, ";"), pattern, `.btn leaves ${property} to the browser`);
+  }
+});
