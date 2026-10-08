@@ -7,11 +7,10 @@
 //!
 //! Endpoints implemented:
 //! 1. /protocols - Get all DeFi protocols
-//! 2. /prices/current/solana:{mint} - Get current token price
 
 pub mod types;
 
-use self::types::{DefiLlamaPriceResponse, DefiLlamaProtocol};
+use self::types::DefiLlamaProtocol;
 use crate::apis::client::HttpClient;
 use crate::apis::stats::ApiStatsTracker;
 use crate::apis::Error;
@@ -25,7 +24,6 @@ use std::time::Instant;
 // ============================================================================
 
 const DEFILLAMA_BASE_URL: &str = "https://api.llama.fi";
-const DEFILLAMA_PRICES_URL: &str = "https://coins.llama.fi/prices/current";
 
 /// Request timeout - DeFiLlama protocols endpoint can be slow with 6k+ protocols, 25s recommended
 const TIMEOUT_SECS: u64 = 25;
@@ -118,75 +116,6 @@ impl DefiLlamaClient {
         self.stats.record_request(true, elapsed).await;
 
         Ok(protocols)
-    }
-
-    /// Fetch current price for a Solana token
-    ///
-    /// # Arguments
-    /// * `mint` - Solana token mint address
-    pub async fn fetch_token_price(&self, mint: &str) -> Result<f64, Error> {
-        if !self.enabled {
-            return Err(Error::Disabled {
-                provider: "DeFiLlama".to_owned(),
-            });
-        }
-
-        let start = Instant::now();
-        let url = format!("{DEFILLAMA_PRICES_URL}/solana:{mint}");
-
-        let response = self
-            .http_client
-            .client()
-            .get(&url)
-            .header("Accept", "application/json")
-            .send()
-            .await
-            .map_err(|e| {
-                let error: Error = NetworkError::RequestFailed {
-                    endpoint: url.clone(),
-                    detail: e.to_string(),
-                }
-                .into();
-                self.stats.record_cache_miss();
-                error
-            })?;
-
-        let elapsed = start.elapsed().as_millis() as f64;
-
-        if !response.status().is_success() {
-            self.stats.record_request(false, elapsed).await;
-            return Err(NetworkError::HttpStatus {
-                endpoint: url.clone(),
-                status: response.status().as_u16(),
-                body: None,
-            }
-            .into());
-        }
-
-        let price_response: DefiLlamaPriceResponse = match response.json().await {
-            Ok(parsed) => parsed,
-            Err(e) => {
-                self.stats.record_request(false, elapsed).await;
-                return Err(DataError::ParseError {
-                    data_type: url.clone(),
-                    error: e.to_string(),
-                }
-                .into());
-            }
-        };
-
-        self.stats.record_request(true, elapsed).await;
-
-        // Extract price from response
-        let price_key = format!("solana:{mint}");
-        price_response
-            .coins
-            .get(&price_key)
-            .map(|p| p.price)
-            .ok_or_else(|| Error::NotFound {
-                provider: "DeFiLlama".to_owned(),
-                resource: price_key,
-            })
     }
 
     /// Extract `chain`'s token addresses with names

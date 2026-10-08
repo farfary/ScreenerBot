@@ -6,10 +6,11 @@
 //!
 //! The two injected factories (swap routers, the wallet-watch
 //! runtime), the token-account read, the filter profile, the discovery
-//! feeds, the pool pricing driver and the settlement reader behind it. Later units add methods as
-//! their domains thread the chain through (OHLCV, wallets, trading) — a
-//! method without a caller is forbidden until then. Neutral code resolves an instance through
-//! [`crate::chains::runtime_for`] and never names a concrete chain module.
+//! feeds, the candle feeds, the pool pricing driver and the settlement reader
+//! behind it. Methods are added as further domains thread the chain through
+//! (wallets, trading) — a method without a caller is forbidden until then.
+//! Neutral code resolves an instance through [`crate::chains::runtime_for`]
+//! and never names a concrete chain module.
 
 use std::sync::Arc;
 
@@ -43,6 +44,10 @@ pub trait ChainRuntime: Send + Sync + 'static {
     /// providers, enabled per current config and in discovery order. Read on
     /// every discovery run.
     fn discovery_feeds(&self) -> Vec<crate::tokens::DiscoveryFeed>;
+    /// The candle feeds this chain contributes beyond the Data Server and
+    /// GeckoTerminal, enabled per current config and in fetch order. Read on
+    /// every fetch.
+    fn candle_feeds(&self) -> Vec<crate::ohlcvs::CandleFeed>;
     /// The pipeline that discovers, reads and prices this chain's pools.
     fn pricing_driver(&self) -> Arc<dyn crate::pools::PricingDriver>;
     /// The reader of signature verdicts, holdings and expiry bounds on this chain.

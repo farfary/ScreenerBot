@@ -4,7 +4,6 @@
 //! DeFiLlama API response types.
 
 use serde::{Deserialize, Serialize};
-use std::collections::HashMap;
 
 // ============================================================================
 // DEFILLAMA PROTOCOLS RESPONSE
@@ -26,23 +25,4 @@ pub struct DefiLlamaProtocol {
     pub category: Option<String>,
     #[serde(default)]
     pub tvl: Option<f64>,
-}
-
-// ============================================================================
-// DEFILLAMA PRICE RESPONSE
-// ============================================================================
-
-/// DeFiLlama token price from /prices/current
-#[derive(Debug, Clone, Deserialize, Serialize)]
-pub struct DefiLlamaPriceResponse {
-    pub coins: HashMap<String, DefiLlamaPrice>,
-}
-
-#[derive(Debug, Clone, Deserialize, Serialize)]
-pub struct DefiLlamaPrice {
-    pub decimals: u8,
-    pub symbol: String,
-    pub price: f64,
-    pub timestamp: i64,
-    pub confidence: f64,
 }

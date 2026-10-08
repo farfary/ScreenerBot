@@ -183,9 +183,11 @@ fn initialize_startup_stores() {
 
         let mut pools = screenerbot::pools::database::PoolsDatabase::new(ChainId::Solana);
         pools.initialize().await.expect("initialize pools database");
-        screenerbot::ohlcvs::OhlcvService::initialize()
-            .await
-            .expect("initialize OHLCV database");
+        screenerbot::ohlcvs::OhlcvService::initialize(screenerbot::chains::ChainScope::One(
+            ChainId::Solana,
+        ))
+        .await
+        .expect("initialize OHLCV database");
         screenerbot::strategies::init_strategy_system(
             screenerbot::strategies::engine::EngineConfig::default(),
         )

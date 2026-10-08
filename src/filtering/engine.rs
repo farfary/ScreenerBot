@@ -250,7 +250,7 @@ pub async fn compute_snapshot(
         positions::get_open_mints().await.into_iter().collect();
 
     let ohlcv_set: HashSet<String> =
-        match crate::ohlcvs::get_mints_with_data(&candidate_mints).await {
+        match crate::ohlcvs::get_mints_with_data(chain, &candidate_mints).await {
             Ok(set) => set,
             Err(err) => {
                 logger::warning(LogTag::Filtering, &format!("error={err}"));

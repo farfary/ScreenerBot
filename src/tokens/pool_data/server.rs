@@ -13,15 +13,17 @@
 //! "no local pool → OHLCV/chart stuck" case). On any disabled/miss/timeout/error
 //! it returns `None` so the direct providers remain the fallback.
 
+use crate::chains::ChainId;
 use crate::tokens::types::TokenPoolInfo;
 use chrono::Utc;
 
 /// Fetch a token's pools from the data server's `/v1/pools`. Returns `None` when
 /// the source is unavailable for any reason, so the direct providers remain the
 /// fallback; `data_server::access` carries the reason.
-pub async fn fetch_pools_from_server(mint: &str) -> Option<Vec<TokenPoolInfo>> {
+pub async fn fetch_pools_from_server(chain: ChainId, mint: &str) -> Option<Vec<TokenPoolInfo>> {
     let body: serde_json::Value = crate::data_server::get_json(
         crate::data_server::Surface::Tokens,
+        chain,
         "/v1/pools",
         &[("mint", mint.to_string())],
     )

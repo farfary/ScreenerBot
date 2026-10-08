@@ -316,6 +316,7 @@ impl OhlcvDatabase {
                 let latest_gap: Option<i64> = row.get(3)?;
 
                 Ok(MintGapAggregate {
+                    chain: self.chain(),
                     mint,
                     open_gaps: open_gaps.max(0) as usize,
                     largest_gap_seconds: largest_gap,

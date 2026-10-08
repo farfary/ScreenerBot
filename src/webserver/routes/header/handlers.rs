@@ -149,7 +149,9 @@ pub(super) async fn get_header_metrics() -> Json<HeaderMetricsResponse> {
     // SOL/USD price for the header price card.
     let sol = SolHeaderInfo {
         price_usd: crate::native_price::get_native_price(),
-        change_24h_percent: crate::ohlcvs::native_usd_chart::change_24h_percent(),
+        change_24h_percent: crate::native_price::get_native_price_info()
+            .and_then(|info| info.chain)
+            .and_then(crate::ohlcvs::native_usd_chart::change_24h_percent),
     };
 
     Json(HeaderMetricsResponse {

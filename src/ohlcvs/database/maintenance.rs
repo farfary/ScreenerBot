@@ -226,6 +226,7 @@ impl OhlcvDatabase {
         let tokens = stmt
             .query_map(params![self.chain_id()], |row| {
                 Ok(OhlcvTokenStatus {
+                    chain: self.chain(),
                     mint: row.get(0)?,
                     priority: row.get(1)?,
                     fetch_interval_seconds: row.get(2)?,

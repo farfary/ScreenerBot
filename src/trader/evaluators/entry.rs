@@ -10,6 +10,7 @@
 //! 2. LLM entry analysis (if enabled)
 //! 3. Strategy signals
 
+use crate::chains::ChainId;
 use crate::pools::PriceResult;
 use crate::trader::admission::{check_entry_admission, EntryBlock};
 use crate::trader::types::TradeDecision;
@@ -26,6 +27,7 @@ use crate::trader::{evaluators, llm_analysis};
 /// - Ok(None) if no entry signal or admission check failed
 /// - Err(String) if evaluation failed due to connectivity or other errors
 pub async fn evaluate_entry_for_token(
+    chain: ChainId,
     token_mint: &str,
     price_info: &PriceResult,
 ) -> crate::trader::Result<Option<TradeDecision>> {
@@ -53,18 +55,6 @@ pub async fn evaluate_entry_for_token(
     // 6. LLM entry analysis - check the model-scored entry decision when enabled.
     if llm_analysis::should_analyze_entry() {
         // Get token data for LLM analysis
-        // An unresolved chain refuses the entry: the model gate cannot be
-        // skipped on a lookup failure.
-        let chain = match crate::chains::chain_for_address(token_mint) {
-            Ok(chain) => chain,
-            Err(e) => {
-                crate::logger::warning(
-                    crate::logger::LogTag::Trader,
-                    &format!("LLM entry analysis refused entry for {token_mint}: {e}"),
-                );
-                return Ok(None);
-            }
-        };
         match crate::tokens::get_full_token_async(chain, token_mint).await {
             Ok(Some(token)) => {
                 match llm_analysis::analyze_entry(&token).await {
@@ -113,5 +103,5 @@ pub async fn evaluate_entry_for_token(
     }
 
     // 7. Strategy evaluation - check configured entry strategies
-    evaluators::StrategyEvaluator::check_entry_strategies(token_mint, price_info).await
+    evaluators::StrategyEvaluator::check_entry_strategies(chain, token_mint, price_info).await
 }

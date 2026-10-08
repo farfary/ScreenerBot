@@ -22,6 +22,7 @@
 use super::types::FeaturedCard;
 use crate::apis::dexscreener::MAX_TOKENS_PER_REQUEST;
 use crate::apis::get_api_manager;
+use crate::chains::ChainId;
 use crate::connectivity;
 use crate::logger::{self, LogTag};
 use crate::tokens;
@@ -89,16 +90,12 @@ pub(super) async fn fill_identity(cards: &mut [FeaturedCard]) {
     if missing.is_empty() {
         return;
     }
+    let chain = crate::chains::active_chain();
 
     // Stage 1: our own database — free and authoritative for identity already
     // persisted by an earlier featured request, even when the token has no market
     // row yet. Read name/symbol and artwork together in one batch.
-    match tokens::database::get_token_info_batch_async(
-        crate::chains::active_chain(),
-        missing.clone(),
-    )
-    .await
-    {
+    match tokens::database::get_token_info_batch_async(chain, missing.clone()).await {
         Ok(info) => {
             let identities = info
                 .into_iter()
@@ -134,7 +131,7 @@ pub(super) async fn fill_identity(cards: &mut [FeaturedCard]) {
     // Stage 2: our shared Data Server cache. The website Terminal reads this same
     // normalized market identity, so a token must not be named on the website while
     // the desktop app renders "???" merely because DexScreener has not indexed it.
-    let resolved = fetch_server_identity(&missing).await;
+    let resolved = fetch_server_identity(chain, &missing).await;
     apply_identity(cards, &resolved);
 
     missing = unreadable_mints(cards);
@@ -143,7 +140,7 @@ pub(super) async fn fill_identity(cards: &mut [FeaturedCard]) {
     }
 
     // Stage 3: live DexScreener lookup for anything the shared cache still lacks.
-    let resolved = fetch_dexscreener_identity(&missing).await;
+    let resolved = fetch_dexscreener_identity(chain, &missing).await;
     apply_identity(cards, &resolved);
 
     missing = unreadable_mints(cards);
@@ -153,7 +150,7 @@ pub(super) async fn fill_identity(cards: &mut [FeaturedCard]) {
 
     // Stage 4: GeckoTerminal is the final identity fallback. Newly launched pools
     // can appear here before DexScreener, which is the exact gap boosted tokens hit.
-    let resolved = fetch_geckoterminal_identity(&missing).await;
+    let resolved = fetch_geckoterminal_identity(chain, &missing).await;
     apply_identity(cards, &resolved);
 }
 
@@ -238,7 +235,7 @@ fn apply_identity(cards: &mut [FeaturedCard], resolved: &HashMap<String, TokenId
 }
 
 /// Look up identity in the Data Server's normalized market cache.
-async fn fetch_server_identity(mints: &[String]) -> HashMap<String, TokenIdentity> {
+async fn fetch_server_identity(chain: ChainId, mints: &[String]) -> HashMap<String, TokenIdentity> {
     let mut resolved = HashMap::new();
     // One question before a loop over chunks: without access every chunk would
     // be refused identically, and the reason is already published once.
@@ -249,6 +246,7 @@ async fn fetch_server_identity(mints: &[String]) -> HashMap<String, TokenIdentit
     for chunk in mints.chunks(MAX_TOKENS_PER_REQUEST) {
         let Some(payload) = crate::data_server::get_json::<ServerMarketResponse>(
             crate::data_server::Surface::Tokens,
+            chain,
             "/v1/market",
             &[("mints", chunk.join(","))],
         )
@@ -268,7 +266,10 @@ async fn fetch_server_identity(mints: &[String]) -> HashMap<String, TokenIdentit
 }
 
 /// Look up identity for the given mints via DexScreener's batch endpoint.
-async fn fetch_dexscreener_identity(mints: &[String]) -> HashMap<String, TokenIdentity> {
+async fn fetch_dexscreener_identity(
+    chain: ChainId,
+    mints: &[String],
+) -> HashMap<String, TokenIdentity> {
     let mut resolved: HashMap<String, TokenIdentity> = HashMap::new();
 
     if connectivity::is_network_offline() {
@@ -283,8 +284,10 @@ async fn fetch_dexscreener_identity(mints: &[String]) -> HashMap<String, TokenId
     for chunk in mints.chunks(MAX_TOKENS_PER_REQUEST) {
         match tokio::time::timeout(
             DIRECT_PROVIDER_TIMEOUT,
-            api.dexscreener
-                .fetch_token_batch(chunk, Some(crate::chains::adapter().market_data_network())),
+            api.dexscreener.fetch_token_batch(
+                chunk,
+                Some(crate::chains::adapter_for(chain).market_data_network()),
+            ),
         )
         .await
         {
@@ -326,7 +329,10 @@ async fn fetch_dexscreener_identity(mints: &[String]) -> HashMap<String, TokenId
 }
 
 /// Look up identity via GeckoTerminal's token batch endpoint.
-async fn fetch_geckoterminal_identity(mints: &[String]) -> HashMap<String, TokenIdentity> {
+async fn fetch_geckoterminal_identity(
+    chain: ChainId,
+    mints: &[String],
+) -> HashMap<String, TokenIdentity> {
     let mut resolved = HashMap::new();
 
     if connectivity::is_network_offline() {
@@ -343,7 +349,7 @@ async fn fetch_geckoterminal_identity(mints: &[String]) -> HashMap<String, Token
         match tokio::time::timeout(
             DIRECT_PROVIDER_TIMEOUT,
             api.geckoterminal.fetch_tokens_multi(
-                crate::chains::adapter().market_data_network(),
+                crate::chains::adapter_for(chain).market_data_network(),
                 &addresses,
                 None,
                 None,

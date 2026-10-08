@@ -758,7 +758,7 @@ pub async fn fetch_immediate(
 /// the OHLCV monitor gets a usable SOL pool in ~200ms instead of waiting on the
 /// rate-limited pipeline. Returns `None` when the server is disabled/misses.
 async fn server_only_snapshot(chain: ChainId, mint: &str) -> Option<TokenPoolsSnapshot> {
-    let server_pools = super::server::fetch_pools_from_server(mint).await?;
+    let server_pools = super::server::fetch_pools_from_server(chain, mint).await?;
     if server_pools.is_empty() {
         return None;
     }

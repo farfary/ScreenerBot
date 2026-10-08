@@ -1,12 +1,7 @@
 // Copyright (c) 2024-2026 ScreenerBot (screenerbot.io)
 // SPDX-License-Identifier: BUSL-1.1
 
-//! Neutral-facing OHLCV fallback over the Solana-only SolanaTracker client.
-//!
-//! This provider moved under the Solana adapter; the neutral OHLCV
-//! fetcher reaches it through fn seams installed by
-//! `crate::run::services::register_all_services`. This file is deleted
-//! when OHLCV sources become per-chain.
+//! The Solana candle feed over the SolanaTracker client, contributed through `ChainRuntime::candle_feeds`.
 
 use std::future::Future;
 use std::pin::Pin;
@@ -65,23 +60,22 @@ pub fn enabled() -> bool {
     client().is_enabled()
 }
 
-/// The provider call + candle mapping + ascending sort from
-/// `ohlcvs/fetcher.rs::fetch_from_solana_tracker`, verbatim except the client
-/// source. Returns the provider's own typed error so the fetcher's
-/// `err.to_string()` logging stays byte-identical.
+/// Fetches SOL-quoted candles of `timeframe` for a token, ascending by
+/// timestamp. The timeframe's canonical name is the SolanaTracker interval.
+/// Returns the provider's own typed error so the fetcher logs it unchanged.
 pub fn fetch_candles(
     mint: String,
-    interval: String,
+    timeframe: crate::ohlcvs::Timeframe,
 ) -> Pin<Box<dyn Future<Output = Result<Vec<crate::ohlcvs::Candle>, crate::apis::Error>> + Send>> {
-    Box::pin(fetch(mint, interval))
+    Box::pin(fetch(mint, timeframe))
 }
 
 async fn fetch(
     mint: String,
-    interval: String,
+    timeframe: crate::ohlcvs::Timeframe,
 ) -> Result<Vec<crate::ohlcvs::Candle>, crate::apis::Error> {
     let response = client()
-        .fetch_ohlcv(&mint, &interval, "sol", None, None)
+        .fetch_ohlcv(&mint, timeframe.as_str(), "sol", None, None)
         .await;
     match response {
         Ok(ohlcv) => {

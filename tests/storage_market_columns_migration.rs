@@ -49,9 +49,11 @@ fn market_initializers_child() {
         let mut pools =
             screenerbot::pools::database::PoolsDatabase::new(screenerbot::chains::ChainId::Solana);
         pools.initialize().await.unwrap();
-        screenerbot::ohlcvs::OhlcvService::initialize()
-            .await
-            .unwrap();
+        screenerbot::ohlcvs::OhlcvService::initialize(screenerbot::chains::ChainScope::One(
+            screenerbot::chains::ChainId::Solana,
+        ))
+        .await
+        .unwrap();
     });
     let token_path = screenerbot::chains::get_tokens_db_path();
     screenerbot::tokens::database::TokenDatabase::new(

@@ -4,12 +4,14 @@
 //! OHLCV route handlers — endpoint implementations for candlestick data.
 
 use super::types::*;
-use crate::i18n::ids;
+use crate::chains::{ChainId, ChainScope};
+use crate::i18n::{ids, MessageId};
+use crate::logger::{self, LogTag};
 use crate::ohlcvs::{
     add_token_monitoring, clear_all_ohlcv_data, delete_inactive_tokens, delete_token_data,
     get_all_tokens_with_status, get_available_pools, get_data_gaps, get_database_stats,
     get_metrics, get_ohlcv_data, record_activity, remove_token_monitoring, request_refresh,
-    ActivityType, DatabaseStats, Priority, Timeframe,
+    ActivityType, Priority, Timeframe,
 };
 use crate::webserver::api_error::{ApiError, ApiErrorCode};
 use crate::webserver::utils::success_response;
@@ -17,6 +19,20 @@ use axum::{
     extract::{Path, Query},
     response::{IntoResponse as _, Json, Response},
 };
+
+/// The chain a mint route's address belongs to. An address no single enabled chain
+/// accepts is refused as invalid input under the route's own failure message.
+fn chain_of_mint(mint: &str, failure: MessageId) -> Result<ChainId, Response> {
+    crate::chains::chain_for_address(mint).map_err(|e| {
+        logger::warning(
+            LogTag::Webserver,
+            &format!("OHLCV route refused mint={mint}: {e}"),
+        );
+        ApiError::new(ApiErrorCode::InvalidInput, failure)
+            .details(e.to_string())
+            .into_response()
+    })
+}
 
 pub(super) async fn get_ohlcv_data_handler(
     Path(mint): Path<String>,
@@ -30,9 +46,11 @@ pub(super) async fn get_ohlcv_data_handler(
         .unwrap_or(Timeframe::Minute1);
 
     let limit = params.limit.unwrap_or(100).min(1000); // Cap at 1000
+    let chain = chain_of_mint(&mint, ids::ERRORS_OHLCV_FETCH_FAILED)?;
 
     // Fetch data
     match get_ohlcv_data(
+        chain,
         &mint,
         timeframe,
         params.pool.as_deref(),
@@ -62,7 +80,8 @@ pub(super) async fn get_ohlcv_data_handler(
 }
 
 pub(super) async fn get_pools_handler(Path(mint): Path<String>) -> Result<Response, Response> {
-    match get_available_pools(&mint).await {
+    let chain = chain_of_mint(&mint, ids::ERRORS_OHLCV_POOLS_FAILED)?;
+    match get_available_pools(chain, &mint).await {
         Ok(pools) => {
             let default_pool = pools
                 .iter()
@@ -95,7 +114,8 @@ pub(super) async fn get_gaps_handler(
         .and_then(Timeframe::from_str)
         .unwrap_or(Timeframe::Minute1);
 
-    match get_data_gaps(&mint, timeframe).await {
+    let chain = chain_of_mint(&mint, ids::ERRORS_OHLCV_GAPS_FAILED)?;
+    match get_data_gaps(chain, &mint, timeframe).await {
         Ok(gap_tuples) => {
             let gaps: Vec<GapInfo> = gap_tuples
                 .iter()
@@ -124,8 +144,9 @@ pub(super) async fn get_gaps_handler(
 }
 
 pub(super) async fn get_status_handler(Path(mint): Path<String>) -> Result<Response, Response> {
+    let chain = chain_of_mint(&mint, ids::ERRORS_OHLCV_FETCH_FAILED)?;
     // Check if we have data for this token
-    let has_data = get_ohlcv_data(&mint, Timeframe::Minute1, None, 1, None, None)
+    let has_data = get_ohlcv_data(chain, &mint, Timeframe::Minute1, None, 1, None, None)
         .await
         .map(|d| !d.is_empty())
         .unwrap_or_default();
@@ -133,7 +154,7 @@ pub(super) async fn get_status_handler(Path(mint): Path<String>) -> Result<Respo
     // Check which timeframes have data
     let mut timeframes_available = Vec::new();
     for tf in Timeframe::all() {
-        if let Ok(data) = get_ohlcv_data(&mint, tf, None, 1, None, None).await {
+        if let Ok(data) = get_ohlcv_data(chain, &mint, tf, None, 1, None, None).await {
             if !data.is_empty() {
                 timeframes_available.push(tf.as_str().to_owned());
             }
@@ -141,7 +162,7 @@ pub(super) async fn get_status_handler(Path(mint): Path<String>) -> Result<Respo
     }
 
     // Get latest timestamp
-    let latest_timestamp = get_ohlcv_data(&mint, Timeframe::Minute1, None, 1, None, None)
+    let latest_timestamp = get_ohlcv_data(chain, &mint, Timeframe::Minute1, None, 1, None, None)
         .await
         .ok()
         .and_then(|d| d.first().map(|p| p.timestamp));
@@ -171,7 +192,8 @@ pub(super) async fn get_status_handler(Path(mint): Path<String>) -> Result<Respo
 }
 
 pub(super) async fn refresh_handler(Path(mint): Path<String>) -> Result<Response, Response> {
-    match request_refresh(&mint).await {
+    let chain = chain_of_mint(&mint, ids::ERRORS_OHLCV_REFRESH_FAILED)?;
+    match request_refresh(chain, &mint).await {
         Ok(_) => Ok(success_response(serde_json::json!({
             "mint": mint
         }))),
@@ -184,7 +206,7 @@ pub(super) async fn refresh_handler(Path(mint): Path<String>) -> Result<Response
 }
 
 pub(super) async fn get_metrics_handler() -> Result<Response, Response> {
-    let metrics = get_metrics().await;
+    let metrics = get_metrics(ChainScope::All).await;
 
     let response = MetricsResponse {
         tokens_monitored: metrics.tokens_monitored,
@@ -211,7 +233,8 @@ pub(super) async fn add_monitoring_handler(
         .and_then(Priority::from_str)
         .unwrap_or(Priority::Medium);
 
-    match add_token_monitoring(&mint, priority).await {
+    let chain = chain_of_mint(&mint, ids::ERRORS_OHLCV_MONITOR_START_FAILED)?;
+    match add_token_monitoring(chain, &mint, priority).await {
         Ok(_) => Ok(success_response(serde_json::json!({
             "mint": mint,
             "priority": priority.as_str()
@@ -228,7 +251,8 @@ pub(super) async fn add_monitoring_handler(
 pub(super) async fn remove_monitoring_handler(
     Path(mint): Path<String>,
 ) -> Result<Response, Response> {
-    match remove_token_monitoring(&mint).await {
+    let chain = chain_of_mint(&mint, ids::ERRORS_OHLCV_MONITOR_STOP_FAILED)?;
+    match remove_token_monitoring(chain, &mint).await {
         Ok(_) => Ok(success_response(serde_json::json!({
             "mint": mint
         }))),
@@ -242,7 +266,8 @@ pub(super) async fn remove_monitoring_handler(
 }
 
 pub(super) async fn record_view_handler(Path(mint): Path<String>) -> Result<Response, Response> {
-    match record_activity(&mint, ActivityType::ChartViewed).await {
+    let chain = chain_of_mint(&mint, ids::ERRORS_OHLCV_ACTIVITY_FAILED)?;
+    match record_activity(chain, &mint, ActivityType::ChartViewed).await {
         Ok(_) => Ok(success_response(serde_json::json!({
             "mint": mint
         }))),
@@ -256,17 +281,12 @@ pub(super) async fn record_view_handler(Path(mint): Path<String>) -> Result<Resp
 
 /// List all OHLCV tokens with their monitoring status
 pub(super) async fn get_all_tokens_handler() -> Result<Response, Response> {
-    match get_all_tokens_with_status().await {
+    match get_all_tokens_with_status(ChainScope::All).await {
         Ok(tokens) => {
             // Get database stats for the response
-            let stats = get_database_stats().await.unwrap_or(DatabaseStats {
-                total_candles: 0,
-                total_gaps: 0,
-                total_pools: 0,
-                total_configs: 0,
-                active_configs: 0,
-                database_size_bytes: 0,
-            });
+            let stats = get_database_stats(ChainScope::All)
+                .await
+                .unwrap_or_default();
 
             // Convert to response format
             let token_items: Vec<OhlcvTokenItem> = tokens
@@ -314,6 +334,7 @@ pub(super) async fn get_all_tokens_handler() -> Result<Response, Response> {
                     };
 
                     OhlcvTokenItem {
+                        chain: t.chain,
                         mint: t.mint.clone(),
                         priority: t.priority.clone(),
                         status: if t.is_active { "active" } else { "inactive" }.to_string(),
@@ -364,16 +385,11 @@ pub(super) async fn get_all_tokens_handler() -> Result<Response, Response> {
 
 /// Get OHLCV database statistics
 pub(super) async fn get_stats_handler() -> Result<Response, Response> {
-    let stats = get_database_stats().await.unwrap_or(DatabaseStats {
-        total_candles: 0,
-        total_gaps: 0,
-        total_pools: 0,
-        total_configs: 0,
-        active_configs: 0,
-        database_size_bytes: 0,
-    });
+    let stats = get_database_stats(ChainScope::All)
+        .await
+        .unwrap_or_default();
 
-    let active_tokens = match get_all_tokens_with_status().await {
+    let active_tokens = match get_all_tokens_with_status(ChainScope::All).await {
         Ok(tokens) => tokens.iter().filter(|t| t.is_active).count(),
         Err(_) => 0,
     };
@@ -392,7 +408,8 @@ pub(super) async fn get_stats_handler() -> Result<Response, Response> {
 
 /// Delete all OHLCV data for a specific token
 pub(super) async fn delete_token_handler(Path(mint): Path<String>) -> Result<Response, Response> {
-    match delete_token_data(&mint).await {
+    let chain = chain_of_mint(&mint, ids::ERRORS_OHLCV_DELETE_FAILED)?;
+    match delete_token_data(chain, &mint).await {
         Ok(result) => {
             let response = DeleteTokenResponse {
                 mint,
@@ -416,7 +433,7 @@ pub(super) async fn delete_token_handler(Path(mint): Path<String>) -> Result<Res
 /// Wipes candles + gaps and resets backfill progress so monitored tokens
 /// re-fetch from scratch; pools and the monitoring list are preserved.
 pub(super) async fn clear_all_handler() -> Result<Response, Response> {
-    match clear_all_ohlcv_data().await {
+    match clear_all_ohlcv_data(ChainScope::All).await {
         Ok(result) => Ok(success_response(ClearAllResponse {
             candles_deleted: result.candles_deleted,
             gaps_deleted: result.gaps_deleted,
@@ -436,11 +453,11 @@ pub(super) async fn cleanup_inactive_handler(
 ) -> Result<Response, Response> {
     let inactive_hours = body.inactive_hours.unwrap_or(24); // Default: 24 hours
 
-    match delete_inactive_tokens(inactive_hours).await {
-        Ok(deleted_mints) => {
+    match delete_inactive_tokens(ChainScope::All, inactive_hours).await {
+        Ok(deleted) => {
             let response = CleanupResponse {
-                deleted_count: deleted_mints.len(),
-                deleted_mints,
+                deleted_count: deleted.len(),
+                deleted,
             };
 
             Ok(success_response(response))

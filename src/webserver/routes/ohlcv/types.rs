@@ -3,6 +3,7 @@
 
 //! OHLCV route types — request/response structs and query parameters.
 
+use crate::chains::{AssetId, ChainId};
 use crate::ohlcvs::{Candle, PoolMetadata};
 use serde::{Deserialize, Serialize};
 
@@ -70,6 +71,7 @@ pub(super) struct OhlcvTokenListResponse {
 
 #[derive(Debug, Serialize)]
 pub(super) struct OhlcvTokenItem {
+    pub chain: ChainId,
     pub mint: String,
     pub priority: String,
     pub status: String,
@@ -138,7 +140,7 @@ pub(super) struct DeleteTokenResponse {
 #[derive(Debug, Serialize)]
 pub(super) struct CleanupResponse {
     pub deleted_count: usize,
-    pub deleted_mints: Vec<String>,
+    pub deleted: Vec<AssetId>,
 }
 
 #[derive(Debug, Serialize)]

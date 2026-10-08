@@ -217,58 +217,61 @@ pub(super) async fn collect_wallet_snapshot() -> Option<WalletStatusSnapshot> {
 }
 
 pub(super) async fn collect_ohlcv_stats_snapshot() -> Option<OhlcvStatsSnapshot> {
-    crate::ohlcvs::get_monitor_stats().await.map(|stats| {
-        let telemetry = stats.telemetry.clone();
-        let telemetry_snapshot = OhlcvTelemetrySnapshot {
-            monitor_cycle_started_at: telemetry.monitor_cycle_started_at,
-            monitor_cycle_completed_at: telemetry.monitor_cycle_completed_at,
-            monitor_cycle_duration_ms: telemetry.monitor_cycle_duration_ms,
-            monitor_cycle_tokens_processed: telemetry.monitor_cycle_tokens_processed,
-            monitor_cycle_total: telemetry.monitor_cycle_total,
-            gap_cycle_started_at: telemetry.gap_cycle_started_at,
-            gap_cycle_completed_at: telemetry.gap_cycle_completed_at,
-            gap_cycle_duration_ms: telemetry.gap_cycle_duration_ms,
-            gap_cycle_tokens_processed: telemetry.gap_cycle_tokens_processed,
-            gap_cycle_total: telemetry.gap_cycle_total,
-            last_rate_limit_at: telemetry.last_rate_limit_at,
-            rate_limit_events: telemetry.rate_limit_events,
-            total_backfills_scheduled: telemetry.total_backfills_scheduled,
-            total_backfills_completed: telemetry.total_backfills_completed,
-            total_backfills_failed: telemetry.total_backfills_failed,
-            last_backfill_started_at: telemetry.last_backfill_started_at,
-            last_backfill_completed_at: telemetry.last_backfill_completed_at,
-            last_backfill_duration_ms: telemetry.last_backfill_duration_ms,
-            last_backfill_points: telemetry.last_backfill_points,
-            last_backfill_error: telemetry.last_backfill_error.clone(),
-        };
+    crate::ohlcvs::get_monitor_stats(crate::chains::ChainScope::All)
+        .await
+        .map(|stats| {
+            let telemetry = stats.telemetry.clone();
+            let telemetry_snapshot = OhlcvTelemetrySnapshot {
+                monitor_cycle_started_at: telemetry.monitor_cycle_started_at,
+                monitor_cycle_completed_at: telemetry.monitor_cycle_completed_at,
+                monitor_cycle_duration_ms: telemetry.monitor_cycle_duration_ms,
+                monitor_cycle_tokens_processed: telemetry.monitor_cycle_tokens_processed,
+                monitor_cycle_total: telemetry.monitor_cycle_total,
+                gap_cycle_started_at: telemetry.gap_cycle_started_at,
+                gap_cycle_completed_at: telemetry.gap_cycle_completed_at,
+                gap_cycle_duration_ms: telemetry.gap_cycle_duration_ms,
+                gap_cycle_tokens_processed: telemetry.gap_cycle_tokens_processed,
+                gap_cycle_total: telemetry.gap_cycle_total,
+                last_rate_limit_at: telemetry.last_rate_limit_at,
+                rate_limit_events: telemetry.rate_limit_events,
+                total_backfills_scheduled: telemetry.total_backfills_scheduled,
+                total_backfills_completed: telemetry.total_backfills_completed,
+                total_backfills_failed: telemetry.total_backfills_failed,
+                last_backfill_started_at: telemetry.last_backfill_started_at,
+                last_backfill_completed_at: telemetry.last_backfill_completed_at,
+                last_backfill_duration_ms: telemetry.last_backfill_duration_ms,
+                last_backfill_points: telemetry.last_backfill_points,
+                last_backfill_error: telemetry.last_backfill_error.clone(),
+            };
 
-        let top_open_gaps = stats
-            .top_open_gaps
-            .iter()
-            .map(|gap| OhlcvGapSummarySnapshot {
-                mint: gap.mint.clone(),
-                open_gaps: gap.open_gaps,
-                largest_gap_seconds: gap.largest_gap_seconds,
-                latest_gap_end: gap.latest_gap_end,
-            })
-            .collect::<Vec<_>>();
+            let top_open_gaps = stats
+                .top_open_gaps
+                .iter()
+                .map(|gap| OhlcvGapSummarySnapshot {
+                    chain: gap.chain,
+                    mint: gap.mint.clone(),
+                    open_gaps: gap.open_gaps,
+                    largest_gap_seconds: gap.largest_gap_seconds,
+                    latest_gap_end: gap.latest_gap_end,
+                })
+                .collect::<Vec<_>>();
 
-        OhlcvStatsSnapshot {
-            total_tokens: stats.total_tokens,
-            critical_tokens: stats.critical_tokens,
-            high_tokens: stats.high_tokens,
-            medium_tokens: stats.medium_tokens,
-            low_tokens: stats.low_tokens,
-            cache_hit_rate: (stats.cache_hit_rate * 100.0).clamp(0.0, 100.0),
-            api_calls_per_minute: stats.api_calls_per_minute,
-            queue_size: stats.queue_size,
-            telemetry: telemetry_snapshot,
-            backfills_in_progress: stats.backfills_in_progress,
-            open_gap_tokens: stats.open_gap_tokens,
-            open_gap_total: stats.open_gap_total,
-            top_open_gaps,
-        }
-    })
+            OhlcvStatsSnapshot {
+                total_tokens: stats.total_tokens,
+                critical_tokens: stats.critical_tokens,
+                high_tokens: stats.high_tokens,
+                medium_tokens: stats.medium_tokens,
+                low_tokens: stats.low_tokens,
+                cache_hit_rate: (stats.cache_hit_rate * 100.0).clamp(0.0, 100.0),
+                api_calls_per_minute: stats.api_calls_per_minute,
+                queue_size: stats.queue_size,
+                telemetry: telemetry_snapshot,
+                backfills_in_progress: stats.backfills_in_progress,
+                open_gap_tokens: stats.open_gap_tokens,
+                open_gap_total: stats.open_gap_total,
+                top_open_gaps,
+            }
+        })
 }
 
 pub(super) fn collect_pool_service_snapshot() -> Option<PoolServiceStatusSnapshot> {

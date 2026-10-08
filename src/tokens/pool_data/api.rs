@@ -124,7 +124,7 @@ pub async fn fetch_from_sources(
     // Even if both direct providers fail, the server pools keep the snapshot
     // non-empty, so every consumer (OHLCV, pool service, dashboard) still gets a
     // usable pool set.
-    let server_future = super::server::fetch_pools_from_server(&mint_owned);
+    let server_future = super::server::fetch_pools_from_server(chain, &mint_owned);
 
     // Fetch the proxy-backed server (no direct rate limit) + DexScreener first.
     // Direct GeckoTerminal is a LAST-RESORT fallback below — it used to be fetched

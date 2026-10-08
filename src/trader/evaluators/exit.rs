@@ -107,12 +107,14 @@ pub(crate) async fn evaluate_policy_exit(
     current_price: f64,
 ) -> crate::trader::Result<Option<TradeDecision>> {
     let policy = crate::trader::policy::resolve_exit_policy(position).await;
+    // Resolved once: the LLM and strategy exits read the position's token on its chain.
+    let chain = crate::chains::chain_for_address(&position.mint);
 
     // Priority 3: LLM exit analysis (high priority - if enabled)
     if llm_analysis::should_analyze_exit() {
         // Get token data for LLM analysis
-        let stored = match crate::chains::chain_for_address(&position.mint) {
-            Ok(chain) => crate::tokens::get_full_token_async(chain, &position.mint).await,
+        let stored = match &chain {
+            Ok(chain) => crate::tokens::get_full_token_async(*chain, &position.mint).await,
             Err(_) => Ok(None),
         };
         match stored {
@@ -358,7 +360,21 @@ pub(crate) async fn evaluate_policy_exit(
     }
 
     // Priority 8: Strategy exit (normal priority)
-    match evaluators::StrategyEvaluator::check_exit_strategies(position, current_price).await {
+    let chain = match chain {
+        Ok(chain) => chain,
+        Err(e) => {
+            crate::logger::warning(
+                crate::logger::LogTag::Trader,
+                &format!(
+                    "Strategy exit skipped for {} this tick: {e}",
+                    position.symbol
+                ),
+            );
+            return Ok(None);
+        }
+    };
+    match evaluators::StrategyEvaluator::check_exit_strategies(chain, position, current_price).await
+    {
         Ok(Some(decision)) => {
             crate::logger::info(
                 crate::logger::LogTag::Trader,

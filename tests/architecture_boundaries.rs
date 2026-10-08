@@ -1527,10 +1527,6 @@ const PROCESS_CHAIN_SEAM_CALLER_FILES: &[&str] = &[
     "apis/native_price.rs",
     "connectivity/monitors/dexscreener.rs",
     "events/recorders/lifecycle.rs",
-    "ohlcvs/cache.rs",
-    "ohlcvs/fetcher.rs",
-    "ohlcvs/manager.rs",
-    "ohlcvs/service.rs",
     "positions/apply.rs",
     "positions/database/global.rs",
     "positions/ledger/reducer.rs",
@@ -1734,7 +1730,6 @@ const IMPLICIT_CHAIN_RESOLUTION_FILES: &[&str] = &[
     "trader/actions/manual.rs",
     "trader/copy/notify.rs",
     "trader/entry.rs",
-    "trader/evaluators/entry.rs",
     "trader/evaluators/exit.rs",
     "trader/manual/api.rs",
     "trader/manual/force.rs",
@@ -1745,6 +1740,7 @@ const IMPLICIT_CHAIN_RESOLUTION_FILES: &[&str] = &[
     "webserver/routes/filtering/analytics.rs",
     "webserver/routes/filtering/stats.rs",
     "webserver/routes/filtering/tokens.rs",
+    "webserver/routes/ohlcv/handlers.rs",
     "webserver/routes/positions/list.rs",
     "webserver/routes/tokens/blacklist.rs",
     "webserver/routes/tokens/favorites.rs",
@@ -1846,13 +1842,15 @@ fn implicit_chain_resolution_shrinks() {
 }
 
 /// Domains that take the chain from their caller: no file under these
-/// prefixes may resolve a chain from an address or a scope.
-const CHAIN_THREADED_DOMAINS: &[&str] = &["tokens/", "filtering/", "pools/"];
+/// prefixes may resolve a chain from an address or a scope, nor read the
+/// process chain seam.
+const CHAIN_THREADED_DOMAINS: &[&str] = &["tokens/", "filtering/", "pools/", "ohlcvs/"];
 
 #[test]
 fn chain_threaded_domains_never_resolve_a_chain_implicitly() {
     let inside: Vec<&str> = IMPLICIT_CHAIN_RESOLUTION_FILES
         .iter()
+        .chain(PROCESS_CHAIN_SEAM_CALLER_FILES)
         .copied()
         .filter(|entry| {
             CHAIN_THREADED_DOMAINS
@@ -1863,7 +1861,7 @@ fn chain_threaded_domains_never_resolve_a_chain_implicitly() {
     assert!(
         inside.is_empty(),
         "{} take the chain from their caller; these entries resolve it inside the \
-         domain:\n{}",
+         domain or read the process chain seam:\n{}",
         CHAIN_THREADED_DOMAINS.join(", "),
         inside.join("\n")
     );
@@ -1930,6 +1928,7 @@ const BARE_STRING_KEYED_STATIC_DIRS: &[&str] = &[
     "swaps",
     "tokens",
     "filtering",
+    "ohlcvs",
 ];
 
 /// The name of the static declared on `line`, if the line starts a `static`
@@ -2384,8 +2383,9 @@ fn shared_modules_take_asset_and_unit_facts_from_the_adapter() {
 }
 
 /// A provider's name for this chain is a chain fact. Hardcoding `"solana"` as a
-/// network/chainId/platform argument pins every market-data call to one chain;
-/// it comes from `chains::adapter().market_data_network()`.
+/// network/chainId/platform argument, or a chain-prefixed provider key such as
+/// `"solana:{mint}"`, pins every market-data call to one chain; it comes from
+/// `chains::adapter_for(chain).market_data_network()`.
 ///
 /// Doc comments may still name Solana when documenting a parameter, and the
 /// legacy schema-evolution files record it as a historical row value.
@@ -2402,10 +2402,10 @@ fn shared_modules_never_hardcode_the_market_data_network_slug() {
         }
         let production = production_text(&contents);
         for (idx, line) in code_lines(&production).lines().enumerate() {
-            if line.contains("\"solana\"") {
+            if names_network_slug(line) {
                 violations.push(format!(
                     "src/{}:{}: hardcodes the \"solana\" network slug — call \
-                     crate::chains::adapter().market_data_network()",
+                     crate::chains::adapter_for(chain).market_data_network()",
                     relative.display(),
                     idx + 1
                 ));
@@ -2415,6 +2415,139 @@ fn shared_modules_never_hardcode_the_market_data_network_slug() {
     assert!(
         violations.is_empty(),
         "the provider network slug must come from the chain adapter:\n{}",
+        violations.join("\n")
+    );
+}
+
+/// True when `line` names the Solana provider slug: the quoted literal
+/// `"solana"`, or a chain-prefixed provider key `solana:` inside a string
+/// literal. A Rust path (`chains::solana::`) and an asset path segment
+/// (`/assets/solana/`) are not slugs.
+fn names_network_slug(line: &str) -> bool {
+    if line.contains("\"solana\"") {
+        return true;
+    }
+    let bytes = line.as_bytes();
+    let mut in_string = false;
+    let mut escaped = false;
+    for (index, &byte) in bytes.iter().enumerate() {
+        if in_string {
+            if escaped {
+                escaped = false;
+                continue;
+            }
+            match byte {
+                b'\\' => escaped = true,
+                b'"' => in_string = false,
+                _ => {
+                    let rest = &bytes[index..];
+                    let preceded_by_colon = index > 0 && bytes[index - 1] == b':';
+                    if rest.starts_with(b"solana:")
+                        && rest.get(7) != Some(&b':')
+                        && !preceded_by_colon
+                    {
+                        return true;
+                    }
+                }
+            }
+        } else if byte == b'"' {
+            in_string = true;
+        }
+    }
+    false
+}
+
+#[test]
+fn network_slug_matcher_finds_literals_and_provider_keys_only() {
+    let positives = [
+        r#"let network = "solana";"#,
+        r#"let url = format!("{BASE}/solana:{mint}");"#,
+        r#"const URL: &str = "https://coins.llama.fi/prices/current/solana:";"#,
+        r#"let key = format!("solana:{mint}");"#,
+    ];
+    for line in positives {
+        assert!(names_network_slug(line), "{line}");
+    }
+    let negatives = [
+        "use crate::chains::solana::constants;",
+        r#"let path = "crate::chains::solana::runtime";"#,
+        r#"Some("/assets/solana/logo.svg")"#,
+        r#"let route = "/assets/solana/{file}";"#,
+        "let solana = adapter_for(chain);",
+        "solana: ChainId,",
+    ];
+    for line in negatives {
+        assert!(!names_network_slug(line), "{line}");
+    }
+}
+
+/// Files outside `data_server/mod.rs` that build a request to the data service
+/// themselves. The data service client's one request builder appends the
+/// `chain` parameter, so a second request path could omit it. The list only
+/// shrinks.
+const DATA_SERVICE_REQUEST_BUILDER_FILES: &[&str] = &["rpc/gateway.rs"];
+
+#[test]
+fn data_server_requests_are_built_in_one_place() {
+    const OWNER: &str = "data_server/mod.rs";
+    let mut hits: Vec<String> = Vec::new();
+    let mut new_violations = Vec::new();
+    for (relative, contents) in walk_src() {
+        let path = relative.to_string_lossy().into_owned();
+        if path == OWNER {
+            continue;
+        }
+        let production = strip_comment_text(&production_text(&contents));
+        for (idx, line) in production.lines().enumerate() {
+            if line.contains("with_app_version(") {
+                hits.push(path.clone());
+                if !DATA_SERVICE_REQUEST_BUILDER_FILES.contains(&path.as_str()) {
+                    new_violations.push(format!("src/{path}:{}: {}", idx + 1, line.trim()));
+                }
+            }
+        }
+    }
+    let stale: Vec<&str> = DATA_SERVICE_REQUEST_BUILDER_FILES
+        .iter()
+        .copied()
+        .filter(|entry| !hits.iter().any(|hit| hit.as_str() == *entry))
+        .collect();
+    assert!(
+        new_violations.is_empty() && stale.is_empty(),
+        "requests to the data service are built by crate::data_server::get_json, which \
+         names the chain (new request paths):\n{}\nremove it from the allowlist (entries \
+         that no longer build a request):\n{}",
+        new_violations.join("\n"),
+        stale.join("\n")
+    );
+}
+
+/// The neutral OHLCV domain reaches chain-specific candle providers only
+/// through `ChainRuntime::candle_feeds`, so its production code never names
+/// one. Doc comments are exempt; code and line comments are not.
+#[test]
+fn ohlcvs_names_no_chain_provider() {
+    const PROVIDER_SPELLINGS: &[&str] = &["solana_tracker", "SolanaTracker", "solanatracker"];
+    let mut violations = Vec::new();
+    for (relative, contents) in walk_src() {
+        let path = relative.to_string_lossy().into_owned();
+        if !path.starts_with("ohlcvs/") {
+            continue;
+        }
+        let production = code_lines(&production_text(&contents));
+        for (idx, line) in production.lines().enumerate() {
+            if PROVIDER_SPELLINGS
+                .iter()
+                .any(|spelling| line.contains(spelling))
+            {
+                violations.push(format!("src/{path}:{}: {}", idx + 1, line.trim()));
+            }
+        }
+    }
+    assert!(
+        violations.is_empty(),
+        "the OHLCV domain names a chain-specific candle provider; contribute it through \
+         ChainRuntime::candle_feeds instead:\n{}",
         violations.join("\n")
     );
 }

@@ -10,6 +10,7 @@ use crate::logger::{self, LogTag};
 use crate::ohlcvs::aggregator::OhlcvAggregator;
 use crate::ohlcvs::cache::OhlcvCache;
 use crate::ohlcvs::database::{OhlcvDatabase, StoredBucket};
+use crate::ohlcvs::feeds::CandleFeed;
 use crate::ohlcvs::fetcher::{CandleSource, OhlcvFetcher, MAX_CANDLES_PER_REQUEST};
 use crate::ohlcvs::gaps::{GapManager, GAP_FILL_REQUESTS_PER_CYCLE};
 use crate::ohlcvs::manager::PoolManager;
@@ -35,7 +36,7 @@ const AGGREGATED_TIMEFRAMES: [Timeframe; 6] = [
     Timeframe::Day1,
 ];
 
-const GAP_SUMMARY_LIMIT: usize = 5;
+pub(super) const GAP_SUMMARY_LIMIT: usize = 5;
 
 /// Smallest native refresh request: the forming bucket, the one before it and a margin.
 const MIN_REFRESH_CANDLES: usize = 3;
@@ -107,8 +108,8 @@ const MAX_SETTLE_SECS: i64 = 1_200;
 /// coarser 1200 s. For 1h and coarser the clamp is shorter than the server's
 /// window, so the settle read returns a final value only when the server's
 /// first read after the close ran after its upstream finalized the bucket.
-/// SolanaTracker and GeckoTerminal finalize within these delays, so the same
-/// rule holds when they are the source. Independent of priority.
+/// The chain's candle feeds and GeckoTerminal finalize within these delays, so
+/// the same rule holds when they are the source. Independent of priority.
 fn settle_delay_secs(timeframe: Timeframe) -> i64 {
     let server_freshness_window = match timeframe {
         Timeframe::Minute1 => 90,
@@ -1185,9 +1186,10 @@ impl OhlcvMonitor {
                         }
                     }
 
-                    // Pool discovery failed — try SolanaTracker directly (no pool needed)
-                    if self.fetcher.has_solana_tracker() {
-                        return self.fetch_via_solana_tracker(mint).await;
+                    // Pool discovery failed — try the chain's candle feeds (no pool needed)
+                    let feeds = self.fetcher.candle_feeds();
+                    if !feeds.is_empty() {
+                        return self.fetch_via_feeds(mint, &feeds).await;
                     }
 
                     return Err(OhlcvError::PoolNotFound(format!(
@@ -1197,9 +1199,10 @@ impl OhlcvMonitor {
                 }
             }
         } else if !has_pools {
-            // In backoff period — try SolanaTracker directly (no pool needed)
-            if self.fetcher.has_solana_tracker() {
-                return self.fetch_via_solana_tracker(mint).await;
+            // In backoff period — try the chain's candle feeds (no pool needed)
+            let feeds = self.fetcher.candle_feeds();
+            if !feeds.is_empty() {
+                return self.fetch_via_feeds(mint, &feeds).await;
             }
             return Err(OhlcvError::PoolNotFound(format!(
                 "Token {} in discovery backoff period",
@@ -1482,9 +1485,12 @@ impl OhlcvMonitor {
         Ok(())
     }
 
-    /// Fetch OHLCV directly from SolanaTracker (no pool address needed)
-    /// Used as fallback when pool discovery fails
-    async fn fetch_via_solana_tracker(&self, mint: &str) -> OhlcvResult<()> {
+    /// Fetch 1m candles by token address from the chain's candle feeds, in order,
+    /// when the token has no usable pool. The first feed that answers with
+    /// candles is stored under its label, with the mint as the pool placeholder.
+    /// A failing feed is recorded and the next one is tried; the last failure is
+    /// returned when no feed answered.
+    async fn fetch_via_feeds(&self, mint: &str, feeds: &[CandleFeed]) -> OhlcvResult<()> {
         let batch_size = {
             let active = self.active_tokens.read().await;
             let config = active
@@ -1493,95 +1499,112 @@ impl OhlcvMonitor {
             PriorityManager::calculate_batch_size(config.priority)
         };
 
-        let data = self
-            .fetcher
-            .fetch_from_solana_tracker(mint, "1m", batch_size)
-            .await;
-
-        match data {
-            Ok(candles) if !candles.is_empty() => {
-                // Store in DB (use mint as pool placeholder since we don't have one)
-                let stored_count = self.db.insert_candles_batch(
-                    mint,
-                    mint, // Use mint as pool_address for SolanaTracker-sourced data
-                    Timeframe::Minute1,
-                    &candles,
-                    "solanatracker",
-                )?;
-
-                if stored_count > 0 {
-                    if let Err(e) = self.refresh_derived_timeframes_from_1m(mint, mint) {
-                        logger::warning(
-                            LogTag::Ohlcv,
-                            &format!(
-                                "Higher-timeframe derivation failed for {} via SolanaTracker: {}",
-                                mint, e
-                            ),
-                        );
-                    }
-
-                    // Partial batch fetch; the DB holds the full series.
-                    // Invalidate rather than cache the slice (see persist_chunk).
-                    self.cache
-                        .invalidate(mint, None, Some(Timeframe::Minute1))?;
-
-                    // Mark successful fetch
-                    {
-                        let mut active = self.active_tokens.write().await;
-                        if let Some(config) = active.get_mut(mint) {
-                            config.mark_fetch();
-                            config.mark_activity();
-                        }
-                    }
-
+        let mut last_error = None;
+        for feed in feeds {
+            let data = self
+                .fetcher
+                .fetch_from_feed(feed, mint, Timeframe::Minute1, batch_size)
+                .await;
+            match data {
+                Ok(candles) if !candles.is_empty() => {
+                    return self.store_feed_candles(feed, mint, &candles).await;
+                }
+                Ok(_) => {}
+                Err(e) => {
                     record_ohlcv_event(
-                        "solanatracker_fetch_success",
-                        Severity::Info,
+                        &format!("{}_fetch_failed", feed.label),
+                        Severity::Warn,
                         Some(mint),
                         None,
                         json!({
-                            "source": "solanatracker",
-                            "candles_fetched": candles.len(),
-                            "candles_stored": stored_count,
+                            "error": e.to_string(),
+                            "source": feed.label,
                         }),
                     )
                     .await;
-
-                    logger::info(
-                        LogTag::Ohlcv,
-                        &format!(
-                            "SolanaTracker OHLCV: {} candles for {} (no pool needed)",
-                            stored_count,
-                            &mint[..mint.len().min(12)]
-                        ),
-                    );
+                    last_error = Some(e);
                 }
-
-                Ok(())
-            }
-            Ok(_) => {
-                // Empty response
-                let mut active = self.active_tokens.write().await;
-                if let Some(config) = active.get_mut(mint) {
-                    config.mark_empty_fetch();
-                }
-                Ok(())
-            }
-            Err(e) => {
-                record_ohlcv_event(
-                    "solanatracker_fetch_failed",
-                    Severity::Warn,
-                    Some(mint),
-                    None,
-                    json!({
-                        "error": e.to_string(),
-                        "source": "solanatracker",
-                    }),
-                )
-                .await;
-                Err(e)
             }
         }
+
+        if let Some(e) = last_error {
+            return Err(e);
+        }
+        // Every feed answered empty
+        let mut active = self.active_tokens.write().await;
+        if let Some(config) = active.get_mut(mint) {
+            config.mark_empty_fetch();
+        }
+        Ok(())
+    }
+
+    /// Store 1m candles a feed returned for a pool-less token and derive the
+    /// coarser timeframes from them.
+    async fn store_feed_candles(
+        &self,
+        feed: &CandleFeed,
+        mint: &str,
+        candles: &[Candle],
+    ) -> OhlcvResult<()> {
+        // Store in DB (use mint as pool placeholder since we don't have one)
+        let stored_count = self.db.insert_candles_batch(
+            mint,
+            mint, // Use mint as pool_address for feed-sourced data
+            Timeframe::Minute1,
+            candles,
+            feed.label,
+        )?;
+
+        if stored_count > 0 {
+            if let Err(e) = self.refresh_derived_timeframes_from_1m(mint, mint) {
+                logger::warning(
+                    LogTag::Ohlcv,
+                    &format!(
+                        "Higher-timeframe derivation failed for {} via {}: {}",
+                        mint, feed.label, e
+                    ),
+                );
+            }
+
+            // Partial batch fetch; the DB holds the full series.
+            // Invalidate rather than cache the slice (see persist_chunk).
+            self.cache
+                .invalidate(mint, None, Some(Timeframe::Minute1))?;
+
+            // Mark successful fetch
+            {
+                let mut active = self.active_tokens.write().await;
+                if let Some(config) = active.get_mut(mint) {
+                    config.mark_fetch();
+                    config.mark_activity();
+                }
+            }
+
+            record_ohlcv_event(
+                &format!("{}_fetch_success", feed.label),
+                Severity::Info,
+                Some(mint),
+                None,
+                json!({
+                    "source": feed.label,
+                    "candles_fetched": candles.len(),
+                    "candles_stored": stored_count,
+                }),
+            )
+            .await;
+
+            logger::info(
+                LogTag::Ohlcv,
+                &format!(
+                    "{} OHLCV: {} candles for {} (no pool needed)",
+                    feed.label,
+                    stored_count,
+                    &mint[..mint.len().min(12)]
+                ),
+            );
+        }
+
+        Ok(())
     }
 
     async fn record_monitor_cycle_start(&self, token_count: usize) {
@@ -2101,21 +2124,27 @@ impl OhlcvMonitor {
             };
 
             // Get all tokens with available prices from Pool Service (same list Trader monitors).
-            // The monitor is chainless until candles are tracked per chain, so it takes the
-            // union over every enabled chain.
-            let available_mints: Vec<String> = crate::chains::ChainScope::All
-                .chains()
-                .into_iter()
-                .flat_map(crate::pools::get_available_tokens)
-                .collect();
+            let chain = self.db.chain();
+            let available_mints: Vec<String> = crate::pools::get_available_tokens(chain);
 
-            // Get open positions to determine priority
-            let open_positions = match crate::positions::state::get_open_positions().await {
-                positions if !positions.is_empty() => positions
-                    .into_iter()
-                    .map(|p| p.mint)
-                    .collect::<std::collections::HashSet<_>>(),
-                _ => std::collections::HashSet::new(),
+            // Open positions raise priority only when the position store holds this
+            // monitor's chain.
+            let open_positions = match crate::positions::db::get_store_chain().await {
+                Ok(store_chain) if store_chain == chain => {
+                    crate::positions::state::get_open_positions()
+                        .await
+                        .into_iter()
+                        .map(|p| p.mint)
+                        .collect::<std::collections::HashSet<_>>()
+                }
+                Ok(_) => std::collections::HashSet::new(),
+                Err(e) => {
+                    logger::debug(
+                        LogTag::Ohlcv,
+                        &format!("Open positions unavailable for {chain} pool sync: {e}"),
+                    );
+                    std::collections::HashSet::new()
+                }
             };
 
             let mut added = 0;
@@ -2833,6 +2862,7 @@ fn classify_ohlcv_error(error: &OhlcvError) -> (&'static str, Severity) {
         OhlcvError::DataGap { .. } => ("data_gap", Severity::Warn),
         OhlcvError::CacheError(_) => ("cache_error", Severity::Error),
         OhlcvError::NotFound(_) => ("not_found", Severity::Warn),
+        OhlcvError::Chain(_) => ("chain_error", Severity::Error),
     }
 }
 
@@ -3194,7 +3224,7 @@ mod tests {
         state.record_source(None, false);
         assert!(state.fallback_values);
 
-        state.record_source(Some(CandleSource::SolanaTracker), true);
+        state.record_source(Some(CandleSource::Feed("feed")), true);
         assert!(state.fallback_values);
         // A Data Server page replaces the fallback values.
         state.record_source(Some(CandleSource::DataServer), true);
@@ -3233,7 +3263,7 @@ mod tests {
         // A Data Server page clears the streak; a later fallback page retries again.
         state.record_source(Some(CandleSource::DataServer), true);
         assert_eq!(state.fallback_pages, 0);
-        state.record_source(Some(CandleSource::SolanaTracker), true);
+        state.record_source(Some(CandleSource::Feed("feed")), true);
         assert!(due(&state));
     }
 

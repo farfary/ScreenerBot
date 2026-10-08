@@ -5,56 +5,30 @@
 //!
 //! Sources (in priority order):
 //! 0. ScreenerBot self-hosted OHLCV server — fast shared cache, tried FIRST
-//! 1. SolanaTracker — uses token address, credit-based, high quality
+//! 1. The chain's candle feeds (`ChainRuntime::candle_feeds`) — by token address
 //! 2. GeckoTerminal — uses pool address, rate-limited 30/min, free
 
 use crate::apis::{get_api_manager, ApiManager, Error as ApiError};
+use crate::chains::ChainId;
 use crate::errors::NetworkError;
 use crate::events::{record_ohlcv_event, Severity};
+use crate::ohlcvs::feeds::CandleFeed;
 use crate::ohlcvs::types::{Candle, OhlcvError, OhlcvResult, Priority, Timeframe};
 use serde::Deserialize;
 use serde_json::json;
 use std::collections::{BinaryHeap, VecDeque};
-use std::future::Future;
-use std::pin::Pin;
 use std::sync::{Arc, Mutex};
 use std::time::{Duration, Instant};
 
 const RATE_LIMIT_WINDOW: Duration = Duration::from_secs(60);
 pub(crate) const MAX_CANDLES_PER_REQUEST: usize = 1000;
 
-/// The SolanaTracker OHLCV fallback, registered by the composition root
-/// . Deleted when OHLCV sources become per-chain.
-type SolanaTrackerEnabledFn = fn() -> bool;
-type SolanaTrackerFetchFn =
-    fn(
-        String,
-        String,
-    ) -> Pin<Box<dyn Future<Output = Result<Vec<Candle>, crate::apis::Error>> + Send>>;
-
-static SOLANA_TRACKER: std::sync::OnceLock<SolanaTrackerSources> = std::sync::OnceLock::new();
-
-struct SolanaTrackerSources {
-    enabled: SolanaTrackerEnabledFn,
-    fetch_candles: SolanaTrackerFetchFn,
-}
-
-/// Install the chain-owned SolanaTracker source (composition root only).
-pub fn install_solana_tracker_sources(
-    enabled: SolanaTrackerEnabledFn,
-    fetch_candles: SolanaTrackerFetchFn,
-) {
-    let _ = SOLANA_TRACKER.set(SolanaTrackerSources {
-        enabled,
-        fetch_candles,
-    });
-}
-
 /// Upstream that answered a [`OhlcvFetcher::fetch_multi_source`] request.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum CandleSource {
     DataServer,
-    SolanaTracker,
+    /// A chain-owned candle feed, by its label.
+    Feed(&'static str),
     GeckoTerminal,
 }
 
@@ -127,6 +101,7 @@ impl Ord for FetchRequest {
 }
 
 pub struct OhlcvFetcher {
+    chain: ChainId,
     api_manager: Arc<ApiManager>,
     request_history: Arc<Mutex<VecDeque<Instant>>>,
     request_queue: Arc<Mutex<BinaryHeap<FetchRequest>>>,
@@ -135,8 +110,9 @@ pub struct OhlcvFetcher {
 }
 
 impl OhlcvFetcher {
-    pub fn new() -> Self {
+    pub fn new(chain: ChainId) -> Self {
         Self {
+            chain,
             api_manager: get_api_manager(),
             request_history: Arc::new(Mutex::new(VecDeque::new())),
             request_queue: Arc::new(Mutex::new(BinaryHeap::new())),
@@ -145,12 +121,12 @@ impl OhlcvFetcher {
         }
     }
 
-    /// Check if SolanaTracker source is available (enabled with API key)
-    pub fn has_solana_tracker(&self) -> bool {
-        SOLANA_TRACKER
-            .get()
-            .map(|sources| (sources.enabled)())
-            .unwrap_or(false)
+    /// The candle feeds this fetcher's chain contributes, enabled per current
+    /// config and in fetch order.
+    pub(super) fn candle_feeds(&self) -> Vec<CandleFeed> {
+        crate::chains::runtime_for(self.chain)
+            .map(|runtime| runtime.candle_feeds())
+            .unwrap_or_default()
     }
 
     /// Fetch OHLCV data for a pool with priority
@@ -211,7 +187,7 @@ impl OhlcvFetcher {
             .api_manager
             .geckoterminal
             .fetch_ohlcv(
-                crate::chains::adapter().market_data_network(),
+                crate::chains::adapter_for(self.chain).market_data_network(),
                 pool_address,
                 api_endpoint,
                 Some(aggregate),
@@ -298,36 +274,20 @@ impl OhlcvFetcher {
         }
     }
 
-    /// Map GeckoTerminal API params to SolanaTracker interval string
-    fn gt_to_st_interval(api_endpoint: &str, aggregate: u32) -> Option<&'static str> {
-        match (api_endpoint, aggregate) {
-            ("minute", 1) => Some("1m"),
-            ("minute", 5) => Some("5m"),
-            ("minute", 15) => Some("15m"),
-            ("minute", 30) => Some("30m"),
-            ("hour", 1) => Some("1h"),
-            ("hour", 4) => Some("4h"),
-            ("hour", 12) => Some("12h"),
-            ("day", 1) => Some("1d"),
-            _ => None,
-        }
-    }
-
-    /// Fetch OHLCV from SolanaTracker using token mint address
-    pub async fn fetch_from_solana_tracker(
+    /// Fetch the newest `limit` candles of `timeframe` from one chain-owned feed
+    /// by token address.
+    pub async fn fetch_from_feed(
         &self,
+        feed: &CandleFeed,
         mint: &str,
-        interval: &str,
+        timeframe: Timeframe,
         limit: usize,
     ) -> OhlcvResult<Vec<Candle>> {
-        if !self.has_solana_tracker() {
-            return Err(OhlcvError::ApiError("SolanaTracker not enabled".to_owned()));
-        }
-
         let start = Instant::now();
+        let interval = timeframe.as_str();
 
         record_ohlcv_event(
-            "solanatracker_fetch_attempt",
+            &format!("{}_fetch_attempt", feed.label),
             Severity::Debug,
             Some(mint),
             None,
@@ -339,12 +299,7 @@ impl OhlcvFetcher {
         )
         .await;
 
-        let response = match SOLANA_TRACKER.get() {
-            Some(sources) => (sources.fetch_candles)(mint.to_owned(), interval.to_owned()).await,
-            None => {
-                return Err(OhlcvError::ApiError("SolanaTracker not enabled".to_owned()));
-            }
-        };
+        let response = (feed.fetch)(mint.to_owned(), timeframe).await;
         match response {
             Ok(mut data_points) => {
                 // Limit results
@@ -357,7 +312,7 @@ impl OhlcvFetcher {
                 self.record_api_call(latency);
 
                 record_ohlcv_event(
-                    "solanatracker_fetch_complete",
+                    &format!("{}_fetch_complete", feed.label),
                     Severity::Debug,
                     Some(mint),
                     None,
@@ -376,7 +331,7 @@ impl OhlcvFetcher {
                 let latency = start.elapsed().as_millis() as u64;
 
                 record_ohlcv_event(
-                    "solanatracker_fetch_error",
+                    &format!("{}_fetch_error", feed.label),
                     Severity::Error,
                     Some(mint),
                     None,
@@ -394,21 +349,6 @@ impl OhlcvFetcher {
         }
     }
 
-    /// Map the GeckoTerminal (endpoint, aggregate) pair back to the canonical
-    /// timeframe string the ScreenerBot server expects.
-    fn server_timeframe(api_endpoint: &str, aggregate: u32) -> Option<&'static str> {
-        match (api_endpoint, aggregate) {
-            ("minute", 1) => Some("1m"),
-            ("minute", 5) => Some("5m"),
-            ("minute", 15) => Some("15m"),
-            ("hour", 1) => Some("1h"),
-            ("hour", 4) => Some("4h"),
-            ("hour", 12) => Some("12h"),
-            ("day", 1) => Some("1d"),
-            _ => None,
-        }
-    }
-
     /// Try the ScreenerBot data service. `None` on anything at all — switched
     /// off, signed out, refused, missed or timed out — so the caller falls back
     /// to the providers. The reason is published once by `data_server::access`.
@@ -423,7 +363,7 @@ impl OhlcvFetcher {
         limit: usize,
         before: Option<i64>,
     ) -> Option<FetchResponse> {
-        let tf = Self::server_timeframe(api_endpoint, aggregate)?;
+        let tf = Timeframe::from_api_params(api_endpoint, aggregate)?.as_str();
         // `stateful=true` wraps the candle array (identical field names) with the
         // series state, which says whether the server is refreshing behind a stale
         // cached answer.
@@ -439,6 +379,7 @@ impl OhlcvFetcher {
         }
         let body = crate::data_server::get_json::<StatefulOhlcv>(
             crate::data_server::Surface::Ohlcv,
+            self.chain,
             "/v1/ohlcv",
             &query,
         )
@@ -450,11 +391,12 @@ impl OhlcvFetcher {
         })
     }
 
-    /// Fetch one timeframe with multi-source fallback: the Data Server, then
-    /// SolanaTracker, then GeckoTerminal (SOL-quoted pools only). Returns the
-    /// newest `limit` candles ending now, or with `before` (unix secs, exclusive)
-    /// the newest `limit` candles strictly older than it. SolanaTracker serves
-    /// only the newest candles, so a `before` request skips it.
+    /// Fetch one timeframe with multi-source fallback: the Data Server, then the
+    /// chain's candle feeds in order, then GeckoTerminal (native-quoted pools
+    /// only). Returns the newest `limit` candles ending now, or with `before`
+    /// (unix secs, exclusive) the newest `limit` candles strictly older than it.
+    /// A candle feed serves only the newest candles, so a `before` request skips
+    /// the feeds.
     pub async fn fetch_multi_source(
         &self,
         mint: &str,
@@ -485,35 +427,12 @@ impl OhlcvFetcher {
             }
         }
 
-        // Try SolanaTracker first (uses token address, better data)
-        if before.is_none() && self.has_solana_tracker() {
-            if let Some(interval) = Self::gt_to_st_interval(api_endpoint, aggregate) {
-                match self.fetch_from_solana_tracker(mint, interval, limit).await {
-                    Ok(candles) if !candles.is_empty() => {
-                        return Ok(FetchResponse {
-                            candles,
-                            server_refreshing: false,
-                            source: Some(CandleSource::SolanaTracker),
-                        })
-                    }
-                    Ok(_) => {
-                        // Empty result, fall through to GeckoTerminal
-                    }
-                    Err(e) => {
-                        record_ohlcv_event(
-                            "solanatracker_fallback",
-                            Severity::Warn,
-                            Some(mint),
-                            Some(pool_address),
-                            json!({
-                                "reason": "SolanaTracker failed, falling back to GeckoTerminal",
-                                "error": e.to_string(),
-                            }),
-                        )
-                        .await;
-                    }
-                }
-            }
+        let feeds = feeds_serving(self.candle_feeds(), before);
+        if let Some(response) = self
+            .fetch_feeds(&feeds, mint, pool_address, api_endpoint, aggregate, limit)
+            .await
+        {
+            return Ok(response);
         }
 
         // Fallback to GeckoTerminal (uses pool address). GeckoTerminal returns
@@ -522,7 +441,7 @@ impl OhlcvFetcher {
         // would poison the SOL-denominated series (candles are keyed by
         // (mint,timeframe,ts) with no pool, so one USD candle corrupts the chart).
         // Skip Gecko entirely for non-SOL pools; the SOL-forcing sources above
-        // (data server, SolanaTracker) are the only valid path there.
+        // (the data server and the chain's candle feeds) are the only valid path there.
         if !pool_is_native {
             record_ohlcv_event(
                 "gecko_skipped_non_sol_pool",
@@ -548,6 +467,49 @@ impl OhlcvFetcher {
             server_refreshing: false,
             source: Some(CandleSource::GeckoTerminal),
         })
+    }
+
+    /// Try each candle feed in order and return the first non-empty answer. A
+    /// feed that fails is recorded and the next one is tried; `None` when no
+    /// feed answered with candles.
+    async fn fetch_feeds(
+        &self,
+        feeds: &[CandleFeed],
+        mint: &str,
+        pool_address: &str,
+        api_endpoint: &str,
+        aggregate: u32,
+        limit: usize,
+    ) -> Option<FetchResponse> {
+        let timeframe = Timeframe::from_api_params(api_endpoint, aggregate)?;
+        for feed in feeds {
+            match self.fetch_from_feed(feed, mint, timeframe, limit).await {
+                Ok(candles) if !candles.is_empty() => {
+                    return Some(FetchResponse {
+                        candles,
+                        server_refreshing: false,
+                        source: Some(CandleSource::Feed(feed.label)),
+                    })
+                }
+                Ok(_) => {
+                    // Empty result, try the next source
+                }
+                Err(e) => {
+                    record_ohlcv_event(
+                        &format!("{}_fallback", feed.label),
+                        Severity::Warn,
+                        Some(mint),
+                        Some(pool_address),
+                        json!({
+                            "reason": format!("{} failed, falling back to GeckoTerminal", feed.label),
+                            "error": e.to_string(),
+                        }),
+                    )
+                    .await;
+                }
+            }
+        }
+        None
     }
 
     /// Fetch OHLCV data immediately (bypasses queue, use for critical requests only)
@@ -583,7 +545,7 @@ impl OhlcvFetcher {
             .api_manager
             .geckoterminal
             .fetch_ohlcv(
-                crate::chains::adapter().market_data_network(),
+                crate::chains::adapter_for(self.chain).market_data_network(),
                 pool_address,
                 timeframe.to_api_param(),
                 None,
@@ -669,6 +631,14 @@ impl OhlcvFetcher {
                 }
             }
         }
+    }
+
+    /// Fetch calls recorded so far, the denominator of [`Self::average_latency_ms`].
+    pub(super) fn calls_recorded(&self) -> u64 {
+        *self
+            .api_calls_count
+            .lock()
+            .unwrap_or_else(|e| e.into_inner())
     }
 
     /// Get average latency in milliseconds
@@ -792,15 +762,130 @@ impl OhlcvFetcher {
     }
 }
 
-impl Default for OhlcvFetcher {
-    fn default() -> Self {
-        Self::new()
+/// The candle feeds that can serve a request. A feed serves only the newest
+/// candles, so a `before` request has none.
+fn feeds_serving(feeds: Vec<CandleFeed>, before: Option<i64>) -> Vec<CandleFeed> {
+    if before.is_some() {
+        Vec::new()
+    } else {
+        feeds
     }
 }
 
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::ohlcvs::feeds::CandleFeedFn;
+    use std::sync::atomic::{AtomicUsize, Ordering};
+
+    type FeedFuture = std::pin::Pin<
+        Box<dyn std::future::Future<Output = Result<Vec<Candle>, crate::apis::Error>> + Send>,
+    >;
+
+    static FAILING_CALLS: AtomicUsize = AtomicUsize::new(0);
+    static EMPTY_CALLS: AtomicUsize = AtomicUsize::new(0);
+    static ANSWERING_CALLS: AtomicUsize = AtomicUsize::new(0);
+    static UNREACHED_CALLS: AtomicUsize = AtomicUsize::new(0);
+
+    fn failing_feed(_mint: String, _timeframe: Timeframe) -> FeedFuture {
+        FAILING_CALLS.fetch_add(1, Ordering::SeqCst);
+        Box::pin(async {
+            Err(crate::apis::Error::Disabled {
+                provider: "failing".to_string(),
+            })
+        })
+    }
+
+    fn empty_feed(_mint: String, _timeframe: Timeframe) -> FeedFuture {
+        EMPTY_CALLS.fetch_add(1, Ordering::SeqCst);
+        Box::pin(async { Ok(Vec::new()) })
+    }
+
+    fn answering_feed(_mint: String, timeframe: Timeframe) -> FeedFuture {
+        ANSWERING_CALLS.fetch_add(1, Ordering::SeqCst);
+        let timestamp = timeframe.to_seconds();
+        Box::pin(async move {
+            Ok(vec![Candle {
+                timestamp,
+                open: 1.0,
+                high: 2.0,
+                low: 0.5,
+                close: 1.5,
+                volume: 3.0,
+            }])
+        })
+    }
+
+    fn unreached_feed(_mint: String, _timeframe: Timeframe) -> FeedFuture {
+        UNREACHED_CALLS.fetch_add(1, Ordering::SeqCst);
+        Box::pin(async { Ok(Vec::new()) })
+    }
+
+    fn feed(label: &'static str, fetch: CandleFeedFn) -> CandleFeed {
+        CandleFeed { label, fetch }
+    }
+
+    fn test_fetcher() -> OhlcvFetcher {
+        let _ = crate::config::utils::CONFIG
+            .get_or_init(|| std::sync::RwLock::new(crate::config::Config::default()));
+        OhlcvFetcher::new(ChainId::Solana)
+    }
+
+    #[test]
+    fn a_before_request_is_served_by_no_feed() {
+        let feeds = vec![feed("answering", answering_feed)];
+        assert_eq!(feeds_serving(feeds.clone(), None).len(), 1);
+        assert!(feeds_serving(feeds, Some(1_700_000_000)).is_empty());
+    }
+
+    #[tokio::test]
+    async fn feeds_are_tried_in_order_until_one_answers_with_candles() {
+        let fetcher = test_fetcher();
+        let feeds = [
+            feed("failing", failing_feed),
+            feed("empty", empty_feed),
+            feed("answering", answering_feed),
+            feed("unreached", unreached_feed),
+        ];
+
+        let response = fetcher
+            .fetch_feeds(&feeds, "mint", "pool", "minute", 5, 10)
+            .await
+            .expect("the answering feed serves the request");
+
+        assert_eq!(response.candles.len(), 1);
+        assert_eq!(
+            response.candles[0].timestamp,
+            Timeframe::Minute5.to_seconds()
+        );
+        assert_eq!(response.source, Some(CandleSource::Feed("answering")));
+        assert!(!response.server_refreshing);
+        assert_eq!(FAILING_CALLS.load(Ordering::SeqCst), 1);
+        assert_eq!(EMPTY_CALLS.load(Ordering::SeqCst), 1);
+        assert_eq!(ANSWERING_CALLS.load(Ordering::SeqCst), 1);
+        assert_eq!(UNREACHED_CALLS.load(Ordering::SeqCst), 0);
+    }
+
+    #[tokio::test]
+    async fn no_feed_or_an_unknown_timeframe_answers_nothing() {
+        let fetcher = test_fetcher();
+        assert!(fetcher
+            .fetch_feeds(&[], "mint", "pool", "minute", 5, 10)
+            .await
+            .is_none());
+        assert!(fetcher
+            .fetch_feeds(
+                &[feed("unreached", unreached_feed)],
+                "mint",
+                "pool",
+                "minute",
+                30,
+                10
+            )
+            .await
+            .is_none());
+        assert_eq!(UNREACHED_CALLS.load(Ordering::SeqCst), 0);
+    }
 
     #[test]
     fn stateful_body_parses_and_only_refresh_states_mark_refreshing() {

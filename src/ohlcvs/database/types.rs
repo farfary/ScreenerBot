@@ -39,6 +39,7 @@ pub struct TimeframeSummary {
 /// Status information for a single OHLCV token
 #[derive(Debug, Clone)]
 pub struct OhlcvTokenStatus {
+    pub chain: crate::chains::ChainId,
     pub mint: String,
     pub priority: String,
     pub fetch_interval_seconds: i64,
@@ -82,7 +83,7 @@ pub struct ClearAllResult {
 }
 
 /// Database statistics
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, Default)]
 pub struct DatabaseStats {
     pub total_candles: usize,
     pub total_gaps: usize,

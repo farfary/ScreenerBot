@@ -3,6 +3,7 @@
 
 //! OHLCV service — manages candlestick data collection, caching, and gap-filling for monitored tokens.
 
+use crate::chains::ChainScope;
 use crate::logger::{self, LogTag};
 use crate::ohlcvs::{ActivityType, Priority};
 use crate::services::{Service, ServiceHealth, ServiceMetrics};
@@ -36,7 +37,7 @@ impl Service for OhlcvService {
     }
 
     async fn initialize(&mut self) -> crate::Result<()> {
-        crate::ohlcvs::OhlcvService::initialize()
+        crate::ohlcvs::OhlcvService::initialize(ChainScope::All)
             .await
             .map_err(|e| {
                 crate::Error::Service(crate::errors::ServiceError::Initialize {
@@ -76,14 +77,22 @@ impl Service for OhlcvService {
         }
         logger::debug(LogTag::Ohlcv, &"AUTO_POPULATE: Adding open positions to OHLCV monitoring...".to_owned());
 
+        // Every open position lives on the position store's chain.
+        let chain = match crate::positions::db::get_store_chain().await {
+          Ok(chain) => chain,
+          Err(e) => {
+            logger::warning(LogTag::Ohlcv, &format!("AUTO_POPULATE_SKIPPED: position store unavailable: {e}"));
+            return;
+          }
+        };
         let open_positions = crate::positions::get_open_positions().await;
         for position in &open_positions {
-          if let Err(e) = crate::ohlcvs::add_token_monitoring(&position.mint, Priority::Critical).await {
+          if let Err(e) = crate::ohlcvs::add_token_monitoring(chain, &position.mint, Priority::Critical).await {
             logger::error(LogTag::Ohlcv, &format!("Failed to add {} to monitoring: {}", position.mint, e));
             continue;
           }
 
-          if let Err(e) = crate::ohlcvs::record_activity(&position.mint, ActivityType::PositionOpened).await {
+          if let Err(e) = crate::ohlcvs::record_activity(chain, &position.mint, ActivityType::PositionOpened).await {
             logger::error(LogTag::Ohlcv, &format!("Failed to record activity for {}: {}", position.mint, e));
           }
         }
@@ -102,7 +111,7 @@ impl Service for OhlcvService {
 
     async fn health(&self) -> ServiceHealth {
         // Check if OHLCV service is operational
-        let metrics = crate::ohlcvs::get_metrics().await;
+        let metrics = crate::ohlcvs::get_metrics(ChainScope::All).await;
         if metrics.tokens_monitored > 0 || metrics.data_points_stored > 0 {
             ServiceHealth::Healthy
         } else {
@@ -111,7 +120,7 @@ impl Service for OhlcvService {
     }
 
     async fn metrics(&self) -> ServiceMetrics {
-        let ohlcv_metrics = crate::ohlcvs::get_metrics().await;
+        let ohlcv_metrics = crate::ohlcvs::get_metrics(ChainScope::All).await;
 
         // OHLCV doesn't track operations/errors in the traditional sense,
         // but we can use data points stored and gaps filled as proxies

@@ -14,6 +14,7 @@
 //! client's rate limiter; the server enforces its own per-IP limit upstream.
 
 use crate::apis::rugcheck::{RugcheckInfo, RugcheckResponse};
+use crate::chains::ChainId;
 use crate::data_server::{get_json, Surface};
 use std::collections::HashMap;
 
@@ -28,9 +29,10 @@ pub const SERVER_RUGCHECK_BATCH: usize = 30;
 /// The server responds with `{ mint, fetched_at, report: <raw Rugcheck JSON> }`;
 /// the `report` is the byte-identical upstream payload, so it deserializes into
 /// the same `RugcheckResponse` and converts via the shared `from_response`.
-pub async fn fetch_report_from_server(mint: &str) -> Option<RugcheckInfo> {
+pub async fn fetch_report_from_server(chain: ChainId, mint: &str) -> Option<RugcheckInfo> {
     let body: serde_json::Value = get_json(
         Surface::Tokens,
+        chain,
         "/v1/rugcheck",
         &[("mint", mint.to_string())],
     )
@@ -50,7 +52,10 @@ pub async fn fetch_report_from_server(mint: &str) -> Option<RugcheckInfo> {
 ///
 /// Input larger than the batch cap is chunked into multiple calls. Returns an
 /// empty map when the source is disabled/unconfigured or every call misses.
-pub async fn fetch_reports_from_server(mints: &[String]) -> HashMap<String, RugcheckInfo> {
+pub async fn fetch_reports_from_server(
+    chain: ChainId,
+    mints: &[String],
+) -> HashMap<String, RugcheckInfo> {
     let mut out = HashMap::new();
     // One question before a loop of up to N chunks: an install with no access
     // must not spend a refused round trip per chunk to learn the same thing.
@@ -61,6 +66,7 @@ pub async fn fetch_reports_from_server(mints: &[String]) -> HashMap<String, Rugc
     for chunk in mints.chunks(SERVER_RUGCHECK_BATCH) {
         let Some(body) = get_json::<serde_json::Value>(
             Surface::Tokens,
+            chain,
             "/v1/rugcheck",
             &[("mints", chunk.join(","))],
         )

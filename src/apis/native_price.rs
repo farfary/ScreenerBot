@@ -84,6 +84,8 @@ pub struct NativePriceData {
     pub source: String,
     pub fetch_count: u64,
     pub error_count: u64,
+    /// The chain whose native asset this price is; `None` until a price is stored.
+    pub chain: Option<crate::chains::ChainId>,
 }
 
 impl Default for NativePriceData {
@@ -95,6 +97,7 @@ impl Default for NativePriceData {
             source: "uninitialized".to_owned(),
             fetch_count: 0,
             error_count: 0,
+            chain: None,
         }
     }
 }
@@ -214,6 +217,7 @@ pub async fn fetch_and_cache_native_price() -> Result<f64, Error> {
                 is_valid: true,
                 fetch_count: cache.fetch_count + 1,
                 error_count: cache.error_count,
+                chain: Some(crate::chains::adapter().id()),
             };
             Ok(price)
         }
@@ -568,6 +572,7 @@ async fn update_price_cache(price: f64, source: String, is_valid: bool) {
         cache.last_updated = Instant::now();
         cache.is_valid = is_valid;
         cache.source = source;
+        cache.chain = Some(crate::chains::adapter().id());
         cache.fetch_count += 1;
         logger::debug(
             LogTag::SolPrice,
@@ -635,5 +640,15 @@ pub async fn force_refresh_native_price() -> Result<f64, Error> {
             resource: "SOL price".to_owned(),
             detail: "refresh did not produce a valid price".to_owned(),
         })
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::NativePriceData;
+
+    #[test]
+    fn a_default_price_names_no_chain() {
+        assert_eq!(NativePriceData::default().chain, None);
     }
 }

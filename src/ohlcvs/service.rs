@@ -3,6 +3,8 @@
 
 //! OHLCV service — public API for querying candle data with cache and database fallback.
 
+use crate::chains::{ChainId, ChainScope, PerChain};
+use crate::logger::{self, LogTag};
 use crate::ohlcvs::aggregator::OhlcvAggregator;
 use crate::ohlcvs::cache::OhlcvCache;
 use crate::ohlcvs::database::OhlcvDatabase;
@@ -14,13 +16,9 @@ use crate::ohlcvs::types::{
     Candle, OhlcvError, OhlcvResult, OhlcvStatus, OhlcvTimeframeStatus, Timeframe, TimeframeBundle,
     BUNDLE_CANDLE_COUNT,
 };
-use crate::{
-    chains::active_chain,
-    logger::{self, LogTag},
-};
+use crate::paths::{chain_db_path, DbKind};
 use chrono::Utc;
 use std::collections::{HashMap, HashSet};
-use std::path::PathBuf;
 use std::sync::Arc;
 use std::time::{Duration, Instant};
 use tokio::sync::{Notify, OnceCell, RwLock};
@@ -32,7 +30,12 @@ const BUNDLE_CACHE_MAX_SIZE: usize = 150;
 const PARALLEL_FETCH_LIMIT: usize = 10;
 const BUNDLE_REFRESH_INTERVAL_SECONDS: u64 = 5;
 
-pub(super) static OHLCV_SERVICE: OnceCell<Arc<OhlcvServiceImpl>> = OnceCell::const_new();
+/// One OHLCV runtime per enabled chain, built on first use.
+static SERVICES: PerChain<OnceCell<Arc<OhlcvServiceImpl>>> = PerChain::new(empty_service_slot);
+
+fn empty_service_slot(_chain: ChainId) -> OnceCell<Arc<OhlcvServiceImpl>> {
+    OnceCell::const_new()
+}
 
 pub struct OhlcvService;
 
@@ -52,10 +55,13 @@ pub(super) struct OhlcvServiceImpl {
 }
 
 impl OhlcvServiceImpl {
-    fn new(db_path: PathBuf) -> OhlcvResult<Self> {
-        let db = Arc::new(OhlcvDatabase::new(db_path, active_chain())?);
-        let fetcher = Arc::new(OhlcvFetcher::new());
-        let cache = Arc::new(OhlcvCache::new(active_chain()));
+    fn new(chain: ChainId) -> OhlcvResult<Self> {
+        let db = Arc::new(OhlcvDatabase::new(
+            chain_db_path(DbKind::Ohlcvs, chain),
+            chain,
+        )?);
+        let fetcher = Arc::new(OhlcvFetcher::new(chain));
+        let cache = Arc::new(OhlcvCache::new(chain));
         let pool_manager = Arc::new(PoolManager::new(Arc::clone(&db)));
         let gap_manager = Arc::new(GapManager::new(
             Arc::clone(&db),
@@ -614,18 +620,28 @@ impl OhlcvServiceImpl {
     }
 }
 
-pub(super) async fn get_or_init_service() -> OhlcvResult<Arc<OhlcvServiceImpl>> {
-    let service = OHLCV_SERVICE
+/// The OHLCV runtime of `chain`, built on first use. Refuses a chain that is not
+/// enabled, so no runtime and no database file exist for it.
+pub(super) async fn get_or_init_service(chain: ChainId) -> OhlcvResult<Arc<OhlcvServiceImpl>> {
+    if !crate::chains::enabled_chains().contains(&chain) {
+        return Err(OhlcvError::Chain(crate::chains::Error::ChainNotEnabled {
+            chain,
+        }));
+    }
+    let service = SERVICES
+        .get(chain)
         .get_or_try_init(|| async {
             logger::info(
                 LogTag::Ohlcv,
-                &"INIT: Initializing OHLCV runtime".to_owned(),
+                &format!("INIT: Initializing {chain} OHLCV runtime"),
             );
 
-            let db_path = crate::chains::get_ohlcvs_db_path();
-            let service_impl = OhlcvServiceImpl::new(db_path)?;
+            let service_impl = OhlcvServiceImpl::new(chain)?;
 
-            logger::info(LogTag::Ohlcv, &"SUCCESS: OHLCV runtime ready".to_owned());
+            logger::info(
+                LogTag::Ohlcv,
+                &format!("SUCCESS: {chain} OHLCV runtime ready"),
+            );
             Ok::<Arc<OhlcvServiceImpl>, OhlcvError>(Arc::new(service_impl))
         })
         .await?;
@@ -633,11 +649,22 @@ pub(super) async fn get_or_init_service() -> OhlcvResult<Arc<OhlcvServiceImpl>> 
     Ok(Arc::clone(service))
 }
 
+/// The OHLCV runtime of `chain` if it has already been built; never builds one.
+pub(super) fn built_service(chain: ChainId) -> Option<Arc<OhlcvServiceImpl>> {
+    SERVICES.get(chain).get().cloned()
+}
+
 impl OhlcvService {
-    pub async fn initialize() -> OhlcvResult<()> {
-        get_or_init_service().await.map(|_| ())
+    /// Builds the OHLCV runtime of every enabled chain in `scope`.
+    pub async fn initialize(scope: ChainScope) -> OhlcvResult<()> {
+        for chain in scope.chains() {
+            get_or_init_service(chain).await?;
+        }
+        Ok(())
     }
 
+    /// Starts the monitor of every enabled chain and one task that stops them all on
+    /// shutdown. A chain that fails to start stops the monitors already started.
     pub async fn start(
         shutdown: Arc<Notify>,
         monitor: tokio_metrics::TaskMonitor,
@@ -651,16 +678,25 @@ impl OhlcvService {
             return Ok(vec![]);
         }
 
-        let service = get_or_init_service().await?;
-
-        let monitor_instance = Arc::clone(&service.monitor);
-
-        // Start background monitoring tasks before awaiting shutdown
-        monitor_instance.clone().start().await?;
-        logger::info(
-            LogTag::Ohlcv,
-            &"TASK_START: OHLCV monitoring tasks started".to_owned(),
-        );
+        let mut started: Vec<Arc<OhlcvMonitor>> = Vec::new();
+        for chain in ChainScope::All.chains() {
+            let monitor_instance = match get_or_init_service(chain).await {
+                Ok(service) => Arc::clone(&service.monitor),
+                Err(error) => {
+                    stop_monitors(&started).await;
+                    return Err(error);
+                }
+            };
+            if let Err(error) = monitor_instance.clone().start().await {
+                stop_monitors(&started).await;
+                return Err(error);
+            }
+            logger::info(
+                LogTag::Ohlcv,
+                &format!("TASK_START: {chain} OHLCV monitoring tasks started"),
+            );
+            started.push(monitor_instance);
+        }
 
         let shutdown_task = tokio::spawn(monitor.instrument(async move {
             shutdown.notified().await;
@@ -668,7 +704,7 @@ impl OhlcvService {
                 LogTag::Ohlcv,
                 &"TASK_STOP: Shutdown signal received for OHLCV monitoring".to_owned(),
             );
-            monitor_instance.stop().await;
+            stop_monitors(&started).await;
             logger::info(
                 LogTag::Ohlcv,
                 &"TASK_END: OHLCV monitoring tasks stopped".to_owned(),
@@ -677,9 +713,10 @@ impl OhlcvService {
 
         Ok(vec![shutdown_task])
     }
+}
 
-    pub async fn has_data(mint: &str) -> OhlcvResult<bool> {
-        let service = get_or_init_service().await?;
-        service.has_data(mint)
+async fn stop_monitors(monitors: &[Arc<OhlcvMonitor>]) {
+    for monitor in monitors {
+        monitor.stop().await;
     }
 }

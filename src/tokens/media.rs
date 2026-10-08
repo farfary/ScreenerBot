@@ -180,6 +180,7 @@ async fn sync_pass(db: &Arc<TokenDatabase>) -> TokenResult<usize> {
     for chunk in due.chunks(MINTS_PER_REQUEST) {
         let Some(response) = crate::data_server::get_json::<MediaResponse>(
             crate::data_server::Surface::Tokens,
+            db.chain(),
             "/v1/tokens/media",
             &[("mints", chunk.join(","))],
         )

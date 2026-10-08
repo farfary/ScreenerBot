@@ -191,31 +191,32 @@ pub async fn fetch_rugcheck_data(
     // straight through to the direct Rugcheck API below — purely an accelerator,
     // never a hard dependency. This path never touches the Rugcheck client's rate
     // limiter (the server enforces its own per-IP limit upstream).
-    let rugcheck_info =
-        if let Some(info) = super::rugcheck_server::fetch_report_from_server(mint).await {
-            info
-        } else {
-            let api_manager = crate::apis::manager::get_api_manager();
-            match api_manager.rugcheck.fetch_report(mint).await {
-                Ok(info) => info,
-                // Rugcheck has not analysed this mint yet. Matched on the variant,
-                // never on rendered text: this branch decides whether a token is
-                // simply unanalysed or genuinely failed, and a `Debug` scan for
-                // "NotFound" would silently change that the moment a variant is
-                // renamed.
-                Err(crate::apis::Error::NotFound { .. }) => return Ok(None),
-                Err(crate::apis::Error::Network(crate::errors::NetworkError::HttpStatus {
-                    status: 404,
-                    ..
-                })) => return Ok(None),
-                Err(e) => {
-                    return Err(Error::Api {
-                        provider: "Rugcheck".to_owned(),
-                        message: e.to_string(),
-                    });
-                }
+    let rugcheck_info = if let Some(info) =
+        super::rugcheck_server::fetch_report_from_server(db.chain(), mint).await
+    {
+        info
+    } else {
+        let api_manager = crate::apis::manager::get_api_manager();
+        match api_manager.rugcheck.fetch_report(mint).await {
+            Ok(info) => info,
+            // Rugcheck has not analysed this mint yet. Matched on the variant,
+            // never on rendered text: this branch decides whether a token is
+            // simply unanalysed or genuinely failed, and a `Debug` scan for
+            // "NotFound" would silently change that the moment a variant is
+            // renamed.
+            Err(crate::apis::Error::NotFound { .. }) => return Ok(None),
+            Err(crate::apis::Error::Network(crate::errors::NetworkError::HttpStatus {
+                status: 404,
+                ..
+            })) => return Ok(None),
+            Err(e) => {
+                return Err(Error::Api {
+                    provider: "Rugcheck".to_owned(),
+                    message: e.to_string(),
+                });
             }
-        };
+        }
+    };
 
     let data = persist_rugcheck(mint, &rugcheck_info, db).await?;
     Ok(Some(data))
@@ -298,7 +299,7 @@ pub async fn warm_security_from_server(
     if mints.is_empty() {
         return warmed;
     }
-    let reports = super::rugcheck_server::fetch_reports_from_server(mints).await;
+    let reports = super::rugcheck_server::fetch_reports_from_server(db.chain(), mints).await;
     for (mint, info) in reports {
         if persist_rugcheck(&mint, &info, db).await.is_ok() {
             warmed.insert(mint);

@@ -168,6 +168,7 @@ pub async fn monitor_entries(
                 // Acquire semaphore permit with timeout
                 let sem_clone = semaphore.clone();
                 let token_clone = token.clone();
+                let chain = *chain;
 
                 let future = tokio::spawn(async move {
                     let _permit = match tokio::time::timeout(
@@ -197,7 +198,9 @@ pub async fn monitor_entries(
                     };
 
                     // Evaluate entry opportunity (all safety checks + strategy evaluation)
-                    match evaluators::evaluate_entry_for_token(&token_clone, &price_info).await {
+                    match evaluators::evaluate_entry_for_token(chain, &token_clone, &price_info)
+                        .await
+                    {
                         Ok(Some(decision)) => Some(decision),
                         Ok(None) => None,
                         Err(e) => {

@@ -6,6 +6,7 @@
 //! Applies configured strategies to evaluate entry and exit opportunities.
 //! Renamed from StrategyManager to StrategyEvaluator for consistency.
 
+use crate::chains::ChainId;
 use crate::logger::{self, LogTag};
 use crate::pools::PriceResult;
 use crate::positions::Position;
@@ -32,6 +33,7 @@ pub struct StrategyEvaluator;
 impl StrategyEvaluator {
     /// Check if a token meets entry criteria based on strategies
     pub async fn check_entry_strategies(
+        chain: ChainId,
         token_mint: &str,
         price_info: &PriceResult,
     ) -> crate::trader::Result<Option<TradeDecision>> {
@@ -69,7 +71,7 @@ impl StrategyEvaluator {
         };
 
         // Prefetch OHLCV bundle from cache (non-blocking)
-        let timeframe_bundle = match crate::ohlcvs::get_timeframe_bundle(token_mint).await {
+        let timeframe_bundle = match crate::ohlcvs::get_timeframe_bundle(chain, token_mint).await {
             Ok(Some(bundle)) => {
                 logger::debug(
                     LogTag::Trader,
@@ -90,11 +92,15 @@ impl StrategyEvaluator {
                     ),
                 );
 
-                match crate::ohlcvs::build_timeframe_bundle(token_mint).await {
+                match crate::ohlcvs::build_timeframe_bundle(chain, token_mint).await {
                     Ok(bundle) => {
                         // Store in cache for future use (takes bundle by move)
-                        let _ = crate::ohlcvs::store_bundle(token_mint.to_string(), bundle.clone())
-                            .await;
+                        let _ = crate::ohlcvs::store_bundle(
+                            chain,
+                            token_mint.to_string(),
+                            bundle.clone(),
+                        )
+                        .await;
                         Some(bundle)
                     }
                     Err(e) => {
@@ -200,6 +206,7 @@ impl StrategyEvaluator {
 
     /// Check if a position should be exited based on strategies
     pub async fn check_exit_strategies(
+        chain: ChainId,
         position: &Position,
         current_price: f64,
     ) -> crate::trader::Result<Option<TradeDecision>> {
@@ -270,7 +277,9 @@ impl StrategyEvaluator {
         };
 
         // Prefetch OHLCV bundle from cache (non-blocking)
-        let timeframe_bundle = match crate::ohlcvs::get_timeframe_bundle(&position.mint).await {
+        let timeframe_bundle = match crate::ohlcvs::get_timeframe_bundle(chain, &position.mint)
+            .await
+        {
             Ok(Some(bundle)) => {
                 logger::debug(
                     LogTag::Trader,
@@ -291,11 +300,15 @@ impl StrategyEvaluator {
                     ),
                 );
 
-                match crate::ohlcvs::build_timeframe_bundle(&position.mint).await {
+                match crate::ohlcvs::build_timeframe_bundle(chain, &position.mint).await {
                     Ok(bundle) => {
                         // Store in cache for future use (takes bundle by move)
-                        let _ = crate::ohlcvs::store_bundle(position.mint.clone(), bundle.clone())
-                            .await;
+                        let _ = crate::ohlcvs::store_bundle(
+                            chain,
+                            position.mint.clone(),
+                            bundle.clone(),
+                        )
+                        .await;
                         Some(bundle)
                     }
                     Err(e) => {

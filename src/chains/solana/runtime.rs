@@ -95,6 +95,19 @@ impl ChainRuntime for SolanaRuntime {
             .map(|(_, label, fetch)| DiscoveryFeed { label, fetch })
             .collect()
     }
+
+    fn candle_feeds(&self) -> Vec<crate::ohlcvs::CandleFeed> {
+        use crate::chains::solana::apis::solana_tracker::sources;
+
+        if !sources::enabled() {
+            return Vec::new();
+        }
+        vec![crate::ohlcvs::CandleFeed {
+            label: "solanatracker",
+            fetch: sources::fetch_candles,
+        }]
+    }
+
     fn pricing_driver(&self) -> Arc<dyn crate::pools::PricingDriver> {
         Arc::new(crate::chains::solana::pools::driver::SolanaPricingDriver)
     }
@@ -116,10 +129,6 @@ pub fn install_process_seams() {
     crate::webserver::routes::featured::install_jupiter_boards(
         crate::chains::solana::apis::jupiter::sources::featured_organic,
         crate::chains::solana::apis::jupiter::sources::featured_traded,
-    );
-    crate::ohlcvs::install_solana_tracker_sources(
-        crate::chains::solana::apis::solana_tracker::sources::enabled,
-        crate::chains::solana::apis::solana_tracker::sources::fetch_candles,
     );
     crate::apis::native_price::install_jupiter_fallback(
         crate::chains::solana::apis::jupiter::sources::price_fallback,

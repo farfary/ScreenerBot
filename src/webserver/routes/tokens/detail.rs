@@ -371,7 +371,7 @@ pub async fn get_token_detail(Path(mint): Path<String>) -> Json<TokenDetailRespo
 
     // Get status flags (mix of sync and cache checks)
     let ohlcv_start = std::time::Instant::now();
-    let has_ohlcv = match crate::ohlcvs::has_data(&mint).await {
+    let has_ohlcv = match crate::ohlcvs::has_data(crate::chains::active_chain(), &mint).await {
         Ok(flag) => flag,
         Err(e) => {
             logger::info(
@@ -440,7 +440,9 @@ pub async fn get_token_detail(Path(mint): Path<String>) -> Json<TokenDetailRespo
         crate::ohlcvs::Priority::High // User is actively viewing, high priority for fast data
     };
 
-    if let Err(e) = crate::ohlcvs::add_token_monitoring(&mint, priority).await {
+    if let Err(e) =
+        crate::ohlcvs::add_token_monitoring(crate::chains::active_chain(), &mint, priority).await
+    {
         logger::info(
             LogTag::Webserver,
             &format!("Failed to add {mint} to OHLCV monitoring: {e}"),
@@ -448,8 +450,12 @@ pub async fn get_token_detail(Path(mint): Path<String>) -> Json<TokenDetailRespo
     }
 
     // Record view activity
-    if let Err(e) =
-        crate::ohlcvs::record_activity(&mint, crate::ohlcvs::ActivityType::TokenViewed).await
+    if let Err(e) = crate::ohlcvs::record_activity(
+        crate::chains::active_chain(),
+        &mint,
+        crate::ohlcvs::ActivityType::TokenViewed,
+    )
+    .await
     {
         logger::info(
             LogTag::Webserver,

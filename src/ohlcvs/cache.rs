@@ -10,7 +10,7 @@
 
 use crate::ohlcvs::types::{Candle, OhlcvError, OhlcvResult, Timeframe};
 use crate::{
-    chains::{active_chain, ChainId},
+    chains::ChainId,
     events::{record_ohlcv_event, Severity},
 };
 use serde_json::json;
@@ -238,6 +238,14 @@ impl OhlcvCache {
         Ok(())
     }
 
+    /// Hot-cache lookups recorded so far (hits plus misses), the denominator of
+    /// [`Self::hit_rate`].
+    pub(super) fn lookups(&self) -> u64 {
+        let hits = *self.hit_count.lock().unwrap_or_else(|e| e.into_inner());
+        let misses = *self.miss_count.lock().unwrap_or_else(|e| e.into_inner());
+        hits + misses
+    }
+
     /// Get cache hit rate
     pub fn hit_rate(&self) -> f64 {
         let hits = *self.hit_count.lock().unwrap_or_else(|e| e.into_inner());
@@ -337,11 +345,5 @@ impl OhlcvCache {
         }
 
         Ok(())
-    }
-}
-
-impl Default for OhlcvCache {
-    fn default() -> Self {
-        Self::new(active_chain())
     }
 }

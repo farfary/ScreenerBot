@@ -25,6 +25,7 @@ pub async fn get_token_ohlcv(
     Path(mint): Path<String>,
     Query(query): Query<OhlcvQuery>,
 ) -> Result<Json<Vec<OhlcvPoint>>, StatusCode> {
+    let chain = crate::chains::active_chain();
     let normalized_tf = query.timeframe.trim().to_ascii_lowercase();
     let timeframe = match crate::ohlcvs::Timeframe::from_str(normalized_tf.as_str()) {
         Some(tf) => tf,
@@ -41,8 +42,8 @@ pub async fn get_token_ohlcv(
     // regular OHLCV path is meaningless. Serve the SOL/USD reference chart (SOL's
     // price in USD) mirrored from the data server, so the token-details dialog shows
     // a real SOL chart. No monitoring/activity — this series is maintained globally.
-    if crate::chains::adapter().is_native_asset(&mint) {
-        let series = crate::ohlcvs::native_usd_chart::series(timeframe);
+    if crate::chains::adapter_for(chain).is_native_asset(&mint) {
+        let series = crate::ohlcvs::native_usd_chart::series(chain, timeframe);
         // `limit == 0` means "all" here (the chart sends CHART_CANDLE_LIMIT = 0 to
         // fetch the full series); otherwise keep the newest `limit` candles.
         let take = if query.limit == 0 {
@@ -82,7 +83,7 @@ pub async fn get_token_ohlcv(
         crate::ohlcvs::Priority::High // User is viewing chart, high interest
     };
 
-    if let Err(e) = crate::ohlcvs::add_token_monitoring(&mint, priority).await {
+    if let Err(e) = crate::ohlcvs::add_token_monitoring(chain, &mint, priority).await {
         logger::info(
             LogTag::Webserver,
             &format!("Failed to add {mint} to OHLCV monitoring: {e}"),
@@ -91,7 +92,7 @@ pub async fn get_token_ohlcv(
 
     // Record chart view activity (stronger signal than just viewing token)
     if let Err(e) =
-        crate::ohlcvs::record_activity(&mint, crate::ohlcvs::ActivityType::ChartViewed).await
+        crate::ohlcvs::record_activity(chain, &mint, crate::ohlcvs::ActivityType::ChartViewed).await
     {
         logger::info(
             LogTag::Webserver,
@@ -101,6 +102,7 @@ pub async fn get_token_ohlcv(
 
     // Fetch OHLCV data using new API - return empty array if no data available
     let data = match crate::ohlcvs::get_ohlcv_data(
+        chain,
         &mint,
         timeframe,
         None,
@@ -146,6 +148,7 @@ pub async fn get_token_ohlcv_status(
     Path(mint): Path<String>,
     Query(query): Query<OhlcvStatusQuery>,
 ) -> Result<Json<crate::ohlcvs::OhlcvStatus>, StatusCode> {
+    let chain = crate::chains::active_chain();
     // A span only counts when both ends are given and ordered; anything else is a plain status.
     let range = match (query.from, query.to) {
         (Some(from), Some(to)) if from <= to => Some((from, to)),
@@ -154,7 +157,7 @@ pub async fn get_token_ohlcv_status(
 
     // WSOL/SOL uses the globally-maintained SOL/USD reference chart, so synthesize
     // its status from that in-memory series (it isn't in the per-token monitor).
-    if crate::chains::adapter().is_native_asset(&mint) {
+    if crate::chains::adapter_for(chain).is_native_asset(&mint) {
         use crate::ohlcvs::{native_usd_chart, Timeframe};
         let tfs = [
             Timeframe::Minute1,
@@ -169,7 +172,7 @@ pub async fn get_token_ohlcv_status(
         let mut total = 0i64;
         let mut best: Option<String> = None;
         for tf in tfs {
-            let s = native_usd_chart::series(tf);
+            let s = native_usd_chart::series(chain, tf);
             let count = s.len() as i64;
             total += count;
             let latest = s.last().map(|c| c.timestamp);
@@ -199,13 +202,13 @@ pub async fn get_token_ohlcv_status(
             total_candles: total,
             best_timeframe: best,
             backfill_complete: total > 0,
-            last_checked_at: native_usd_chart::last_updated(),
-            last_new_data_at: native_usd_chart::last_updated(),
+            last_checked_at: native_usd_chart::last_updated(chain),
+            last_new_data_at: native_usd_chart::last_updated(chain),
             timeframes,
         }));
     }
 
-    match crate::ohlcvs::get_status(&mint, range).await {
+    match crate::ohlcvs::get_status(chain, &mint, range).await {
         Ok(status) => Ok(Json(status)),
         Err(e) => {
             logger::debug(
@@ -295,6 +298,7 @@ pub async fn refresh_token_ohlcv(
 
 /// Ensures the token is monitored at chart-view priority, then fetches it now.
 async fn run_ohlcv_refresh(mint: &str) {
+    let chain = crate::chains::active_chain();
     let priority = if positions::is_open_position(mint).await {
         crate::ohlcvs::Priority::Critical
     } else {
@@ -302,7 +306,7 @@ async fn run_ohlcv_refresh(mint: &str) {
     };
 
     // Idempotent: a token that is already monitored keeps its state.
-    if let Err(e) = crate::ohlcvs::add_token_monitoring(mint, priority).await {
+    if let Err(e) = crate::ohlcvs::add_token_monitoring(chain, mint, priority).await {
         logger::warning(
             LogTag::Webserver,
             &format!("mint={mint} priority={priority:?} ohlcv_refresh_monitoring_failed error={e}"),
@@ -311,7 +315,7 @@ async fn run_ohlcv_refresh(mint: &str) {
     }
 
     // `request_refresh` records the data-requested activity itself.
-    match crate::ohlcvs::request_refresh(mint).await {
+    match crate::ohlcvs::request_refresh(chain, mint).await {
         Ok(()) => {
             logger::info(
                 LogTag::Webserver,
@@ -339,6 +343,7 @@ pub async fn deprioritize_token_ohlcv(
         LogTag::Webserver,
         &format!("OHLCV deprioritize requested for mint={mint}"),
     );
+    let chain = crate::chains::active_chain();
 
     // Don't deprioritize if this is an open position
     let is_open_position = positions::is_open_position(&mint).await;
@@ -350,7 +355,8 @@ pub async fn deprioritize_token_ohlcv(
     }
 
     // Downgrade to Medium priority (normal monitoring level)
-    match crate::ohlcvs::update_token_priority(&mint, crate::ohlcvs::Priority::Medium).await {
+    match crate::ohlcvs::update_token_priority(chain, &mint, crate::ohlcvs::Priority::Medium).await
+    {
         Ok(_) => {
             logger::debug(
                 LogTag::Webserver,
@@ -387,32 +393,31 @@ pub async fn focus_token(
         LogTag::Webserver,
         &format!("Token focus requested: mint={mint}"),
     );
+    let chain = crate::chains::active_chain();
 
     // Set as dashboard active token
     crate::global::set_dashboard_active_token(Some(&mint));
 
     // Boost OHLCV priority to Critical
-    let ohlcv_updated = match crate::ohlcvs::update_token_priority(
-        &mint,
-        crate::ohlcvs::Priority::Critical,
-    )
-    .await
-    {
-        Ok(_) => {
-            logger::debug(
-                LogTag::Webserver,
-                &format!("mint={mint} ohlcv_priority=Critical"),
-            );
-            true
-        }
-        Err(e) => {
-            logger::debug(
-                LogTag::Webserver,
-                &format!("Failed to update OHLCV priority for {mint}: {e}"),
-            );
-            false
-        }
-    };
+    let ohlcv_updated =
+        match crate::ohlcvs::update_token_priority(chain, &mint, crate::ohlcvs::Priority::Critical)
+            .await
+        {
+            Ok(_) => {
+                logger::debug(
+                    LogTag::Webserver,
+                    &format!("mint={mint} ohlcv_priority=Critical"),
+                );
+                true
+            }
+            Err(e) => {
+                logger::debug(
+                    LogTag::Webserver,
+                    &format!("Failed to update OHLCV priority for {mint}: {e}"),
+                );
+                false
+            }
+        };
 
     logger::info(
         LogTag::Webserver,
@@ -441,6 +446,7 @@ pub async fn unfocus_token(
         LogTag::Webserver,
         &format!("Token unfocus requested: mint={mint}"),
     );
+    let chain = crate::chains::active_chain();
 
     // Clear dashboard active token
     crate::global::set_dashboard_active_token(None);
@@ -454,7 +460,9 @@ pub async fn unfocus_token(
         );
         false
     } else {
-        match crate::ohlcvs::update_token_priority(&mint, crate::ohlcvs::Priority::Medium).await {
+        match crate::ohlcvs::update_token_priority(chain, &mint, crate::ohlcvs::Priority::Medium)
+            .await
+        {
             Ok(_) => {
                 logger::debug(
                     LogTag::Webserver,

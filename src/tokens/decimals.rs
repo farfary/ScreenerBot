@@ -156,7 +156,7 @@ pub async fn get(chain: ChainId, mint: &str) -> Option<u8> {
     // Rugcheck-sourced decimals). On any disabled/miss/timeout it yields None and
     // we fall through to on-chain extraction below. This path never touches a
     // provider rate limiter (the server enforces its own per-IP limit).
-    if let Some(d) = get_from_server(mint).await {
+    if let Some(d) = get_from_server(chain, mint).await {
         cache(chain, mint, d);
         if let Err(e) = persist_to_db(chain, mint, d).await {
             logger::warning(
@@ -321,12 +321,13 @@ async fn get_from_db(chain: ChainId, mint: &str) -> Option<u8> {
 /// request misses/times out/errors, so the caller falls back to on-chain
 /// extraction. Gated by the shared `[tokens.sources.screenerbot_server]` config;
 /// deliberately at the request layer so no provider rate limiter is consumed.
-async fn get_from_server(mint: &str) -> Option<u8> {
+async fn get_from_server(chain: ChainId, mint: &str) -> Option<u8> {
     // Response shape: { "decimals": { "<mint>": <n> }, "requested": N }.
     // A cold token returns an empty map (fetch scheduled server-side); treat that
     // as a miss and fall back to chain, warming the server cache for next time.
     let body: serde_json::Value = crate::data_server::get_json(
         crate::data_server::Surface::Tokens,
+        chain,
         "/v1/decimals",
         &[("mint", mint.to_string())],
     )

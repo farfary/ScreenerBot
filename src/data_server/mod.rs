@@ -6,17 +6,26 @@
 //! ============================================================================
 //! WHY THIS MODULE EXISTS
 //! ============================================================================
-//! Six subsystems read from screenerbot.io/data — candles, the SOL/USD reference
-//! chart, the pool registry, Rugcheck reports, token decimals and boosted-token
-//! identity. Each of them used to build its own URL, own timeout, own "was that
+//! Six subsystems read from screenerbot.io/data — candles, the native/USD
+//! reference chart, the pool registry, Rugcheck reports, token decimals and
+//! boosted-token identity. Each of them used to build its own URL, own timeout, own "was that
 //! a 200?" check and own silent `None`. That was survivable while the service was
 //! open; it stopped being survivable the moment the service started asking WHO
 //! is calling, because six copies of an authentication rule is six chances to
 //! get it wrong and no place at all to answer "why is my data missing?".
 //!
 //! So: one client. It resolves the endpoint, attaches the credential, states
-//! this build's version, classifies the answer, and publishes a single
-//! availability state that the setup screen and Settings both read.
+//! this build's version, names the chain, classifies the answer, and publishes a
+//! single availability state that the setup screen and Settings both read.
+//!
+//! ============================================================================
+//! EVERY REQUEST NAMES ITS CHAIN
+//! ============================================================================
+//! `get_json` takes a `ChainId` and the one request builder appends it as the
+//! `chain` query parameter; a caller never passes it. A refusal of that chain
+//! (HTTP 400) concerns that request alone: the service already accepted the
+//! session and the version before refusing, so the shared availability state
+//! stays usable for every other chain and surface.
 //!
 //! ============================================================================
 //! IT IS AN ACCELERATOR, NEVER A DEPENDENCY
@@ -41,6 +50,8 @@ use std::time::Duration;
 
 use serde::de::DeserializeOwned;
 
+use crate::chains::ChainId;
+
 pub use access::{status, DataAccess, DataAccessStatus};
 
 /// The app states its version so the service can retire a release. Kept in step
@@ -56,7 +67,7 @@ const VERSION_HEADER: &str = "x-screenerbot-version";
 pub enum Surface {
     /// `[tokens.sources.screenerbot_server]` — pools, Rugcheck, decimals, market.
     Tokens,
-    /// `[ohlcv.sources.screenerbot_server]` — candles and the SOL/USD chart.
+    /// `[ohlcv.sources.screenerbot_server]` — candles and the native/USD chart.
     Ohlcv,
 }
 
@@ -110,6 +121,10 @@ fn access_for_refusal(
             reqwest::StatusCode::UPGRADE_REQUIRED => DataAccess::VersionUnsupported {
                 minimum: minimum.unwrap_or_else(|| "a newer release".to_string()),
             },
+            // The access gate runs before any handler, so a 400 proves the service
+            // is reachable and the session and version accepted; it refuses this
+            // request alone (an unserved chain or a malformed parameter).
+            reqwest::StatusCode::BAD_REQUEST => DataAccess::Ready,
             _ => DataAccess::Unreachable,
         },
     }
@@ -147,13 +162,33 @@ pub(crate) fn with_app_version(request: reqwest::RequestBuilder) -> reqwest::Req
     request.header(VERSION_HEADER, crate::version::VERSION)
 }
 
-/// GET a JSON payload from the data service.
+/// Builds a GET to the data service for `chain`: the app version header, the
+/// caller's query pairs in order, then exactly one `chain` pair. The single place
+/// a data service GET is built. A caller pair named `chain` would send the
+/// parameter twice, so it panics in every build profile.
+fn service_request(
+    client: &reqwest::Client,
+    url: &str,
+    chain: ChainId,
+    query: &[(&str, String)],
+) -> reqwest::RequestBuilder {
+    assert!(
+        query.iter().all(|(key, _)| *key != "chain"),
+        "the chain query parameter is appended by the request builder"
+    );
+    with_app_version(client.get(url))
+        .query(query)
+        .query(&[("chain", chain.as_str())])
+}
+
+/// GET a JSON payload from the data service for one chain.
 ///
 /// `None` means "use your own provider", for every reason: switched off,
 /// offline, signed out, refused, unreachable, or an answer we could not read.
 /// The reason is published to `access` so exactly one place has to explain it.
 pub async fn get_json<T: DeserializeOwned>(
     surface: Surface,
+    chain: ChainId,
     path: &str,
     query: &[(&str, String)],
 ) -> Option<T> {
@@ -174,9 +209,8 @@ pub async fn get_json<T: DeserializeOwned>(
     };
 
     let url = format!("{endpoint}{path}");
-    let response = with_app_version(crate::net::client().get(&url))
+    let response = service_request(&crate::net::client(), &url, chain, query)
         .bearer_auth(token)
-        .query(query)
         .timeout(timeout)
         .send()
         .await;
@@ -184,7 +218,7 @@ pub async fn get_json<T: DeserializeOwned>(
     let response = match response {
         Ok(response) => response,
         Err(error) => {
-            log::debug!("Data Server: {path} failed: {error}");
+            log::debug!("Data Server: {path} on {chain} failed: {error}");
             access::record_transport_failure();
             return None;
         }
@@ -196,6 +230,7 @@ pub async fn get_json<T: DeserializeOwned>(
         // as the status alone rather than as a transport failure.
         let body: serde_json::Value = response.json().await.unwrap_or(serde_json::Value::Null);
         let (code, minimum) = refusal_code(&body);
+        log::debug!("Data Server: {path} on {chain} refused with {status} code={code:?}");
         match access_for_refusal(status, &code, minimum) {
             DataAccess::Unreachable => access::record_transport_failure(),
             refusal => access::record(refusal),
@@ -212,7 +247,7 @@ pub async fn get_json<T: DeserializeOwned>(
             // The service answered and we could not read it. That is our bug or a
             // shape change, not a permission problem, so it is logged rather than
             // reported to the user as an account state.
-            log::debug!("Data Server: {path} returned an unreadable body: {error}");
+            log::debug!("Data Server: {path} on {chain} returned an unreadable body: {error}");
             access::record(DataAccess::Ready);
             None
         }
@@ -266,6 +301,135 @@ mod tests {
                 .get(VERSION_HEADER)
                 .map(|v| v.to_str().unwrap()),
             Some(crate::version::VERSION)
+        );
+    }
+
+    fn chain_pairs(request: &reqwest::Request) -> Vec<String> {
+        request
+            .url()
+            .query_pairs()
+            .filter(|(key, _)| key == "chain")
+            .map(|(_, value)| value.into_owned())
+            .collect()
+    }
+
+    #[test]
+    fn every_service_request_names_exactly_one_chain_after_the_caller_pairs() {
+        let query = [("mint", "abc".to_string()), ("limit", "5".to_string())];
+        for &chain in ChainId::ALL {
+            let request = service_request(
+                &reqwest::Client::new(),
+                "https://example.invalid/v1/pools",
+                chain,
+                &query,
+            )
+            .build()
+            .expect("request builds");
+            assert_eq!(chain_pairs(&request), vec![chain.as_str().to_string()]);
+            let pairs: Vec<(String, String)> = request
+                .url()
+                .query_pairs()
+                .map(|(k, v)| (k.into_owned(), v.into_owned()))
+                .collect();
+            assert_eq!(
+                &pairs[..2],
+                &[
+                    ("mint".to_string(), "abc".to_string()),
+                    ("limit".to_string(), "5".to_string()),
+                ]
+            );
+            assert_eq!(
+                request
+                    .headers()
+                    .get(VERSION_HEADER)
+                    .map(|v| v.to_str().unwrap()),
+                Some(crate::version::VERSION)
+            );
+        }
+    }
+
+    #[test]
+    fn the_solana_candle_request_is_the_caller_query_followed_by_the_chain() {
+        let query = [
+            (
+                "mint",
+                "So11111111111111111111111111111111111111112".to_string(),
+            ),
+            ("pool", "pool-address".to_string()),
+            ("timeframe", "1m".to_string()),
+            ("limit", "1000".to_string()),
+            ("stateful", "true".to_string()),
+            ("before", "1700000000".to_string()),
+        ];
+        let request = service_request(
+            &reqwest::Client::new(),
+            "https://example.invalid/v1/ohlcv",
+            ChainId::Solana,
+            &query,
+        )
+        .build()
+        .expect("request builds");
+        let pairs: Vec<(String, String)> = request
+            .url()
+            .query_pairs()
+            .map(|(k, v)| (k.into_owned(), v.into_owned()))
+            .collect();
+        let mut expected: Vec<(String, String)> = query
+            .iter()
+            .map(|(k, v)| (k.to_string(), v.clone()))
+            .collect();
+        expected.push(("chain".to_string(), "solana".to_string()));
+        assert_eq!(pairs, expected);
+    }
+
+    #[test]
+    #[should_panic(expected = "appended by the request builder")]
+    fn a_caller_query_may_not_name_the_chain() {
+        let _ = service_request(
+            &reqwest::Client::new(),
+            "https://example.invalid/v1/pools",
+            ChainId::Solana,
+            &[("chain", "solana".to_string())],
+        );
+    }
+
+    #[test]
+    fn a_bad_request_refuses_that_request_and_keeps_the_service_usable() {
+        for code in [
+            "chain_unknown",
+            "chain_not_served",
+            "chain_not_served_by_route",
+            "",
+        ] {
+            assert_eq!(
+                access_for_refusal(reqwest::StatusCode::BAD_REQUEST, code, None),
+                DataAccess::Ready,
+                "{code}"
+            );
+        }
+    }
+
+    #[test]
+    fn other_failure_statuses_still_count_as_unreachable() {
+        for status in [
+            reqwest::StatusCode::NOT_FOUND,
+            reqwest::StatusCode::TOO_MANY_REQUESTS,
+            reqwest::StatusCode::INTERNAL_SERVER_ERROR,
+            reqwest::StatusCode::BAD_GATEWAY,
+        ] {
+            assert_eq!(
+                access_for_refusal(status, "", None),
+                DataAccess::Unreachable,
+                "{status}"
+            );
+        }
+        assert_eq!(
+            access_for_refusal(reqwest::StatusCode::FORBIDDEN, "", None),
+            DataAccess::ReauthorizationRequired
+        );
+        assert_eq!(
+            access_for_refusal(reqwest::StatusCode::BAD_REQUEST, "signin_required", None),
+            DataAccess::SignedOut
         );
     }
 

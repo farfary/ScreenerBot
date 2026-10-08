@@ -70,6 +70,14 @@ impl Timeframe {
         }
     }
 
+    /// The timeframe whose GeckoTerminal API params are `(endpoint, aggregate)`;
+    /// the inverse of [`Self::to_api_params`]. `None` for a pair no timeframe uses.
+    pub fn from_api_params(endpoint: &str, aggregate: u32) -> Option<Timeframe> {
+        Timeframe::all()
+            .into_iter()
+            .find(|tf| tf.to_api_params() == (endpoint, aggregate))
+    }
+
     /// Maximum candles available from API for 30 days
     /// How many candles to request per backfill call for this timeframe. The
     /// fetcher clamps each call to MAX_CANDLES_PER_REQUEST (1000) and the server
@@ -275,7 +283,7 @@ pub struct PoolConfig {
     pub is_default: bool,
     /// Whether this pool is wSOL-quoted. A USD-quoted pool must NOT be fetched via
     /// GeckoTerminal `currency=token` (that returns USD candles that poison the
-    /// SOL-denominated series); the SOL-forcing sources (data server, SolanaTracker)
+    /// SOL-denominated series); the SOL-forcing sources (data server, the chain's candle feeds)
     /// are used instead. Defaults to true (legacy rows / unknown = assume SOL).
     pub is_native_pair: bool,
     pub last_successful_fetch: Option<DateTime<Utc>>,
@@ -500,6 +508,7 @@ impl TokenOhlcvConfig {
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct MintGapAggregate {
+    pub chain: crate::chains::ChainId,
     pub mint: String,
     pub open_gaps: usize,
     pub largest_gap_seconds: Option<i64>,
@@ -565,7 +574,7 @@ impl Default for OhlcvMetrics {
 }
 
 /// Error types for OHLCV operations
-#[derive(Debug, Clone, Serialize)]
+#[derive(Debug, Clone)]
 pub enum OhlcvError {
     DatabaseError(String),
     ApiError(String),
@@ -575,6 +584,13 @@ pub enum OhlcvError {
     DataGap { start: i64, end: i64 },
     CacheError(String),
     NotFound(String),
+    Chain(crate::chains::Error),
+}
+
+impl From<crate::chains::Error> for OhlcvError {
+    fn from(error: crate::chains::Error) -> Self {
+        OhlcvError::Chain(error)
+    }
 }
 
 impl fmt::Display for OhlcvError {
@@ -590,6 +606,7 @@ impl fmt::Display for OhlcvError {
             }
             OhlcvError::CacheError(e) => write!(f, "Cache error: {e}"),
             OhlcvError::NotFound(msg) => write!(f, "Not found: {msg}"),
+            OhlcvError::Chain(e) => write!(f, "Chain: {e}"),
         }
     }
 }

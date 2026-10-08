@@ -179,6 +179,7 @@ pub struct OhlcvTelemetrySnapshot {
 
 #[derive(Clone, Debug, Serialize)]
 pub struct OhlcvGapSummarySnapshot {
+    pub chain: crate::chains::ChainId,
     pub mint: String,
     pub open_gaps: usize,
     #[serde(skip_serializing_if = "Option::is_none")]

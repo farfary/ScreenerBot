@@ -261,7 +261,7 @@ impl OhlcvDatabase {
         // timeframe (floor to the interval), matching OhlcvAggregator's
         // `(ts / bucket) * bucket` convention. Different OHLCV providers anchor
         // some timeframes on different grids — notably 12h: GeckoTerminal returns
-        // 12h candles phased at +10h (ts % 43200 == 36000) while SolanaTracker,
+        // 12h candles phased at +10h (ts % 43200 == 36000) while the chain's candle feeds,
         // the derived-from-1m aggregator, and every other timeframe use the
         // midnight grid (offset 0). Storing both raw phases in the same
         // (mint,pool,timeframe) series interleaves candles ~2h apart and renders

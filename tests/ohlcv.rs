@@ -53,3 +53,17 @@ fn candle_bucket_snaps_to_utc_floor() {
         "snapped ts is bucket-aligned"
     );
 }
+
+#[test]
+fn api_params_round_trip_to_their_timeframe() {
+    for tf in Timeframe::all() {
+        let (endpoint, aggregate) = tf.to_api_params();
+        assert_eq!(
+            Timeframe::from_api_params(endpoint, aggregate),
+            Some(tf),
+            "{tf:?} api params"
+        );
+    }
+    assert_eq!(Timeframe::from_api_params("minute", 30), None);
+    assert_eq!(Timeframe::from_api_params("week", 1), None);
+}

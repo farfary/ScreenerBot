@@ -94,7 +94,10 @@ pub fn get_promo_header_metrics() -> HeaderMetricsResponse {
             change_24h_percent: if super::is_promo_frozen() {
                 Some(2.3)
             } else {
-                crate::ohlcvs::native_usd_chart::change_24h_percent().or(Some(2.3))
+                crate::native_price::get_native_price_info()
+                    .and_then(|info| info.chain)
+                    .and_then(crate::ohlcvs::native_usd_chart::change_24h_percent)
+                    .or(Some(2.3))
             },
         },
         copy: Some(super::copy_trading::get_promo_copy_header()),

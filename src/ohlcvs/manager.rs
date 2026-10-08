@@ -3,7 +3,6 @@
 
 //! OHLCV manager — coordinates candle fetching, caching, and priority management.
 
-use crate::chains::active_chain;
 use crate::events::{record_ohlcv_event, Severity};
 use crate::logger::{self, LogTag};
 use crate::ohlcvs::database::OhlcvDatabase;
@@ -146,11 +145,11 @@ impl PoolManager {
         // pool_data fetch queries the data server as the PRIMARY source (see
         // tokens/pool_data/server.rs), so the wSOL pools it registers here already
         // include the server's centrally-resolved pools — no OHLCV-specific hook.
-        let snapshot = match fetch_token_pools_immediate(active_chain(), mint).await {
+        let snapshot = match fetch_token_pools_immediate(self.db.chain(), mint).await {
             Ok(Some(snapshot)) => snapshot,
             Ok(None) => {
                 // Try stale fallback
-                match get_token_pools_snapshot_allow_stale(active_chain(), mint).await {
+                match get_token_pools_snapshot_allow_stale(self.db.chain(), mint).await {
                     Ok(Some(snapshot)) => snapshot,
                     Ok(None) | Err(_) => {
                         record_ohlcv_event(
@@ -214,7 +213,7 @@ impl PoolManager {
 
         // A token whose ONLY pools are USD-quoted (e.g. a pump token that only ever
         // paired with USDC) has no wSOL pool. We used to bail out ("No SOL pools")
-        // and never chart it — but the data server (and SolanaTracker) return
+        // and never chart it — but the data server (and the chain's candle feeds) return
         // SOL-denominated candles for ANY pool by forcing SOL on the paid path, so
         // we CAN chart it. Register the best USD pool as a fallback; the fetcher
         // then skips GeckoTerminal for it (is_native_pair=false) to avoid pulling USD
@@ -241,7 +240,7 @@ impl PoolManager {
                 LogTag::Ohlcv,
                 &format!(
                     "No SOL pool for mint={}; registering best USD pool ({} candidates), \
-                     OHLCV via SOL-forcing sources (server/SolanaTracker), Gecko skipped",
+                     OHLCV via SOL-forcing sources (server/candle feeds), Gecko skipped",
                     mint,
                     non_native_configs.len()
                 ),
