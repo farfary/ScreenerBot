@@ -789,55 +789,62 @@ body.dt-column-resizing * {
    header cells so nothing bleeds through during scroll. Keep the opaque header
    surface so scrolled body cells hide behind them. */
 .data-table thead th.dt-col-sticky {
+  --dt-sticky-surface: var(--bg-secondary);
+
   z-index: 6;
-  background: var(--bg-secondary);
+  background: var(--dt-sticky-surface);
 }
 
-/* Opaque body backgrounds — base is the surface color so scrolled cells hide
-   behind them rather than showing through. */
+/* Opaque body backgrounds. Every row state sets `--dt-sticky-surface`, an opaque
+   colour, and the pinned cell paints it; the edge fade below reads the same value,
+   so scrolled cells hide behind the pinned group in every state. Translucency here
+   would let the columns scrolling beneath show through. */
 .data-table td.dt-col-sticky {
-  background: var(--bg-primary);
+  --dt-sticky-surface: var(--bg-primary);
+
+  background: var(--dt-sticky-surface);
 }
 
-/* Zebra even rows: composite the zebra overlay (matches the
-   `.data-table.zebra tbody tr:nth-child(even)` rule above) over the base so
-   striping survives on the opaque sticky cell. */
+/* Zebra even rows: the zebra overlay (matches `.data-table.zebra tbody
+   tr:nth-child(even)` above) mixed into the base surface. */
 .data-table.zebra tbody tr:nth-child(even) td.dt-col-sticky {
-  background: linear-gradient(rgb(0, 0, 0, 0.02), rgb(0, 0, 0, 0.02)), var(--bg-primary);
+  --dt-sticky-surface: color-mix(in srgb, rgb(0, 0, 0) 2%, var(--bg-primary));
 }
 
-/* Hover + selected states win over the base/zebra background. These MUST stay
-   fully opaque: a sticky cell paints over the columns scrolling beneath it, so
-   any translucency lets them show through. The hover color carries an explicit
-   opaque fallback, and the selected tints are composited over an opaque surface
-   instead of being used as bare low-alpha colors. */
 .data-table tbody tr:hover td.dt-col-sticky,
 .data-table.zebra tbody tr:nth-child(even):hover td.dt-col-sticky {
-  background: var(--bg-hover, var(--bg-card-hover));
+  --dt-sticky-surface: var(--bg-hover, var(--bg-card-hover));
 }
 
 .data-table tbody tr.selected td.dt-col-sticky {
-  background:
-    linear-gradient(0deg, rgb(59, 130, 246, 0.1), rgb(59, 130, 246, 0.1)), var(--bg-primary);
+  --dt-sticky-surface: color-mix(in srgb, var(--info-color) 10%, var(--bg-primary));
 }
 
 .data-table tbody tr.selected:hover td.dt-col-sticky {
-  background:
-    linear-gradient(0deg, rgb(59, 130, 246, 0.15), rgb(59, 130, 246, 0.15)), var(--bg-primary);
+  --dt-sticky-surface: color-mix(in srgb, var(--info-color) 15%, var(--bg-primary));
 }
 
-/* Depth cue — a soft inline-end-edge shadow on the last pinned cell, revealed only
-   once the table has been scrolled horizontally. */
+/* Pinned edge, shown once the table has scrolled horizontally. It starts as the
+   row's own opaque surface and fades out, so a glyph of a cell scrolled beneath the
+   pinned group never peeks out as a sliver beside it, then carries the depth shadow. */
 .data-table th.dt-col-sticky-last::after,
 .data-table td.dt-col-sticky-last::after {
+  --dt-pin-shadow: rgb(0, 0, 0, 0.18);
+
   content: "";
   position: absolute;
   top: 0;
   inset-inline-end: 0;
   bottom: 0;
-  width: 8px;
+  width: 14px;
   transform: translateX(calc(var(--dir-sign) * 100%));
-  background: linear-gradient(var(--to-inline-end), rgb(0, 0, 0, 0.18), rgb(0, 0, 0, 0));
+  background:
+    linear-gradient(var(--to-inline-end), var(--dt-pin-shadow), transparent),
+    linear-gradient(
+      var(--to-inline-end),
+      var(--dt-sticky-surface) 40%,
+      transparent
+    );
   opacity: 0;
   pointer-events: none;
   transition: opacity var(--transition-base);
@@ -866,10 +873,10 @@ body.dt-column-resizing * {
   }
 }
 
-/* Dark theme — deeper right-edge shadow for the pinned group. */
+/* Dark theme — deeper edge shadow for the pinned group. */
 [data-theme="dark"] .data-table td.dt-col-sticky-last::after,
 [data-theme="dark"] .data-table th.dt-col-sticky-last::after {
-  background: linear-gradient(var(--to-inline-end), rgb(0, 0, 0, 0.4), rgb(0, 0, 0, 0));
+  --dt-pin-shadow: rgb(0, 0, 0, 0.4);
 }
 
 @media (prefers-reduced-motion: reduce) {
