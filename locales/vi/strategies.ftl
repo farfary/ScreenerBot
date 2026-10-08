@@ -35,6 +35,9 @@ strategies-card-duplicate =
     .title = Nhân bản
 strategies-card-delete =
     .title = Xóa
+# $name is the condition name.
+strategies-card-delete-confirm = Gỡ điều kiện
+    .message = Gỡ "{ $name }" khỏi chiến lược này?
 
 strategies-summary-param = { $label }: { $value }
 strategies-summary-none = Không có tham số
@@ -87,12 +90,6 @@ strategies-toast-toggle-failed = Bật/tắt thất bại
     .message = Không thể cập nhật trạng thái chiến lược
 strategies-toast-load-failed = Tải thất bại
     .message = Không thể tải chiến lược từ máy chủ
-strategies-toast-created = Chiến lược mới
-    .message =
-        { $type ->
-            [EXIT] Đã tạo chiến lược thoát lệnh mới
-           *[ENTRY] Đã tạo chiến lược vào lệnh mới
-        }
 strategies-toast-load-strategy-failed = Không thể tải chiến lược
 strategies-toast-no-strategy = Chưa tạo chiến lược
     .message = Hãy thêm ít nhất một điều kiện hoặc nhấp 'Chiến lược mới' để tạo chiến lược trước

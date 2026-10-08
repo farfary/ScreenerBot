@@ -48,6 +48,9 @@ strategies-card-duplicate =
     .title = تکثیر
 strategies-card-delete =
     .title = حذف
+# $name is the condition name.
+strategies-card-delete-confirm = حذف شرط
+    .message = «{ $name }» از این استراتژی حذف شود؟
 
 # Card summary: one "label: value" entry per parameter.
 strategies-summary-param = { $label }: { $value }
@@ -114,12 +117,6 @@ strategies-toast-toggle-failed = تغییر وضعیت ناموفق بود
     .message = به‌روزرسانی وضعیت استراتژی ناموفق بود
 strategies-toast-load-failed = بارگذاری ناموفق بود
     .message = بارگذاری استراتژی‌ها از سرور ناموفق بود
-strategies-toast-created = استراتژی جدید
-    .message =
-        { $type ->
-            [EXIT] استراتژی خروج جدید ساخته شد
-           *[ENTRY] استراتژی ورود جدید ساخته شد
-        }
 strategies-toast-load-strategy-failed = بارگذاری استراتژی ناموفق بود
 strategies-toast-no-strategy = استراتژی‌ای ساخته نشده است
     .message = ابتدا دست‌کم یک شرط اضافه کنید یا برای ساخت استراتژی «استراتژی جدید» را بزنید

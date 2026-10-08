@@ -17,6 +17,9 @@
  *   the strategy's value it falls back to; the saved tree keeps it unset.
  * - The saved tree carries the value the editor shows, defaults included.
  *
+ * The card actions act only where they can: Move up and Move down are disabled on the
+ * first and last card, and Delete removes a condition only after it is confirmed.
+ *
  * Run with `npm run test:js`.
  */
 
@@ -44,7 +47,7 @@ const unescape = (text) =>
     .replace(/&lt;/g, "<")
     .replace(/&amp;/g, "&");
 
-function editorFor(conditions) {
+function editorFor(conditions, confirm = async () => ({ confirmed: false })) {
   const state = { currentStrategy: { timeframe: defaultTimeframe, rules: null } };
   const editor = createConditionEditor({
     state,
@@ -54,6 +57,7 @@ function editorFor(conditions) {
     $$: () => [],
     Utils: { escapeHtml },
     announce: () => {},
+    confirm,
     enhanceAllSelects: () => {},
     addTrackedListener: () => {},
     clearScope: () => {},
@@ -115,4 +119,48 @@ test("an unset timeframe names the strategy timeframe and stays unset when saved
   assert.equal(saved.time_value.value, 5);
   assert.equal(saved.time_unit.value, "MINUTES");
   assert.equal(saved.percentage.value, 10);
+});
+
+test("move actions are disabled where the card cannot move", () => {
+  const conditions = ["PriceChangePercent", "CandleSize", "VolumeSpike"].map((type) => ({
+    type,
+    enabled: true,
+    params: {},
+  }));
+  const { editor } = editorFor(conditions);
+  const disabled = (html, action) =>
+    new RegExp(`<button[^>]*data-action="${action}"[^>]*\\sdisabled[^>]*>`).test(html);
+
+  const cards = conditions.map((condition, index) => editor.renderConditionCard(condition, index));
+  assert.deepEqual(
+    cards.map((html) => [disabled(html, "move-up"), disabled(html, "move-down")]),
+    [
+      [true, false],
+      [false, false],
+      [false, true],
+    ]
+  );
+
+  const single = [conditions[0]];
+  const html = editorFor(single).editor.renderConditionCard(single[0], 0);
+  assert.ok(disabled(html, "move-up") && disabled(html, "move-down"));
+});
+
+test("a condition is removed only once the removal is confirmed", async () => {
+  const asked = [];
+  let answer = false;
+  const conditions = [{ type: "PriceChangePercent", enabled: true, params: {} }];
+  const { editor } = editorFor(conditions, async (config) => {
+    asked.push(config);
+    return { confirmed: answer };
+  });
+
+  await editor.deleteCondition(0);
+  assert.equal(conditions.length, 1, "a declined removal keeps the condition");
+  assert.equal(asked[0].variant, "danger");
+  assert.match(plain(asked[0].message), /Price Change/);
+
+  answer = true;
+  await editor.deleteCondition(0);
+  assert.equal(conditions.length, 0);
 });

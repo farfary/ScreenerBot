@@ -48,6 +48,9 @@ strategies-card-duplicate =
     .title = 复制
 strategies-card-delete =
     .title = 删除
+# $name is the condition name.
+strategies-card-delete-confirm = 移除条件
+    .message = 要从此策略中移除“{ $name }”吗？
 
 # Card summary: one "label: value" entry per parameter.
 strategies-summary-param = { $label }：{ $value }
@@ -112,12 +115,6 @@ strategies-toast-toggle-failed = 切换失败
     .message = 更新策略状态失败
 strategies-toast-load-failed = 加载失败
     .message = 从服务器加载策略失败
-strategies-toast-created = 新建策略
-    .message =
-        { $type ->
-            [EXIT] 已新建出场策略
-           *[ENTRY] 已新建入场策略
-        }
 strategies-toast-load-strategy-failed = 加载策略失败
 strategies-toast-no-strategy = 尚未创建策略
     .message = 请至少添加一个条件，或先点击“新建策略”创建策略

@@ -48,6 +48,9 @@ strategies-card-duplicate =
     .title = تكرار
 strategies-card-delete =
     .title = حذف
+# $name is the condition name.
+strategies-card-delete-confirm = إزالة الشرط
+    .message = إزالة «{ $name }» من هذه الاستراتيجية؟
 
 # Card summary: one "label: value" entry per parameter.
 strategies-summary-param = { $label }: { $value }
@@ -122,12 +125,6 @@ strategies-toast-toggle-failed = فشل التبديل
     .message = فشل تحديث حالة الاستراتيجية
 strategies-toast-load-failed = فشل التحميل
     .message = فشل تحميل الاستراتيجيات من الخادم
-strategies-toast-created = استراتيجية جديدة
-    .message =
-        { $type ->
-            [EXIT] تم إنشاء استراتيجية خروج جديدة
-           *[ENTRY] تم إنشاء استراتيجية دخول جديدة
-        }
 strategies-toast-load-strategy-failed = فشل تحميل الاستراتيجية
 strategies-toast-no-strategy = لم يتم إنشاء استراتيجية
     .message = أضف شرطًا واحدًا على الأقل أو انقر «استراتيجية جديدة» لإنشاء استراتيجية أولًا

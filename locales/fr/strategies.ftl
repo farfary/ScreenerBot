@@ -35,6 +35,9 @@ strategies-card-duplicate =
     .title = Dupliquer
 strategies-card-delete =
     .title = Supprimer
+# $name is the condition name.
+strategies-card-delete-confirm = Retirer la condition
+    .message = Retirer « { $name } » de cette stratégie ?
 
 strategies-summary-param = { $label } : { $value }
 strategies-summary-none = Aucun paramètre
@@ -91,12 +94,6 @@ strategies-toast-toggle-failed = Échec du basculement
     .message = Impossible de mettre à jour le statut de la stratégie
 strategies-toast-load-failed = Échec du chargement
     .message = Impossible de charger les stratégies depuis le serveur
-strategies-toast-created = Nouvelle stratégie
-    .message =
-        { $type ->
-            [EXIT] Nouvelle stratégie de sortie créée
-           *[ENTRY] Nouvelle stratégie d'entrée créée
-        }
 strategies-toast-load-strategy-failed = Impossible de charger la stratégie
 strategies-toast-no-strategy = Aucune stratégie créée
     .message = Ajoutez au moins une condition ou cliquez sur « Nouvelle stratégie » pour d'abord créer une stratégie

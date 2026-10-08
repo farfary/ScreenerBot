@@ -293,7 +293,8 @@
 }
 
 /* Button states */
-.btn:disabled {
+.btn:disabled,
+.btn-icon:disabled {
   opacity: 0.5;
   cursor: not-allowed;
   pointer-events: none;

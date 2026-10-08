@@ -48,12 +48,15 @@ strategies-card-duplicate =
     .title = 複製
 strategies-card-delete =
     .title = 削除
+# $name is the condition name.
+strategies-card-delete-confirm = 条件を削除
+    .message = このストラテジーから「{ $name }」を削除しますか？
 
 # Card summary: one "label: value" entry per parameter.
 strategies-summary-param = { $label }: { $value }
 strategies-summary-none = パラメーターなし
 # An unset optional parameter: the strategy's own value it falls back to.
-strategies-param-inherit = 戦略の設定（{ $value }）
+strategies-param-inherit = ストラテジーの設定（{ $value }）
 strategies-summary-period-seconds = 期間: { $amount }秒
 strategies-summary-period-minutes = 期間: { $amount }分
 strategies-summary-period-hours = 期間: { $amount }時間
@@ -112,12 +115,6 @@ strategies-toast-toggle-failed = 切り替え失敗
     .message = ストラテジーのステータスを更新できませんでした
 strategies-toast-load-failed = 読み込み失敗
     .message = サーバーからストラテジーを読み込めませんでした
-strategies-toast-created = 新規ストラテジー
-    .message =
-        { $type ->
-            [EXIT] 新しいエグジットストラテジーを作成しました
-           *[ENTRY] 新しいエントリーストラテジーを作成しました
-        }
 strategies-toast-load-strategy-failed = ストラテジーを読み込めませんでした
 strategies-toast-no-strategy = ストラテジーが作成されていません
     .message = 条件を1つ以上追加するか、「新規ストラテジー」をクリックして先にストラテジーを作成してください

@@ -48,6 +48,9 @@ strategies-card-duplicate =
     .title = 복제
 strategies-card-delete =
     .title = 삭제
+# $name is the condition name.
+strategies-card-delete-confirm = 조건 제거
+    .message = 이 전략에서 "{ $name }"을(를) 제거할까요?
 
 # Card summary: one "label: value" entry per parameter.
 strategies-summary-param = { $label }: { $value }
@@ -112,12 +115,6 @@ strategies-toast-toggle-failed = 전환 실패
     .message = 전략 상태를 업데이트하지 못했습니다
 strategies-toast-load-failed = 불러오기 실패
     .message = 서버에서 전략을 불러오지 못했습니다
-strategies-toast-created = 새 전략
-    .message =
-        { $type ->
-            [EXIT] 새 청산 전략을 만들었습니다
-           *[ENTRY] 새 진입 전략을 만들었습니다
-        }
 strategies-toast-load-strategy-failed = 전략을 불러오지 못했습니다
 strategies-toast-no-strategy = 생성된 전략 없음
     .message = 조건을 하나 이상 추가하거나 '새 전략'을 눌러 먼저 전략을 만드세요

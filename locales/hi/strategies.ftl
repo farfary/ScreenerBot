@@ -35,11 +35,14 @@ strategies-card-duplicate =
     .title = डुप्लिकेट करें
 strategies-card-delete =
     .title = हटाएं
+# $name is the condition name.
+strategies-card-delete-confirm = शर्त हटाएं
+    .message = इस स्ट्रैटेजी से "{ $name }" हटाएं?
 
 strategies-summary-param = { $label }: { $value }
 strategies-summary-none = कोई पैरामीटर नहीं
 # An unset optional parameter: the strategy's own value it falls back to.
-strategies-param-inherit = रणनीति की सेटिंग ({ $value })
+strategies-param-inherit = स्ट्रैटेजी की सेटिंग ({ $value })
 strategies-summary-period-seconds = अवधि: { $amount } सेकंड
 strategies-summary-period-minutes = अवधि: { $amount } मिनट
 strategies-summary-period-hours = अवधि: { $amount } घंटे
@@ -89,12 +92,6 @@ strategies-toast-toggle-failed = टॉगल विफल
     .message = स्ट्रैटेजी स्टेटस अपडेट करने में विफल
 strategies-toast-load-failed = लोड विफल
     .message = सर्वर से स्ट्रैटेजी लोड करने में विफल
-strategies-toast-created = नई स्ट्रैटेजी
-    .message =
-        { $type ->
-            [EXIT] नई एग्ज़िट स्ट्रैटेजी बनाई गई
-           *[ENTRY] नई एंट्री स्ट्रैटेजी बनाई गई
-        }
 strategies-toast-load-strategy-failed = स्ट्रैटेजी लोड करने में विफल
 strategies-toast-no-strategy = कोई स्ट्रैटेजी नहीं बनी
     .message = कम से कम एक शर्त जोड़ें या पहले स्ट्रैटेजी बनाने के लिए 'नई स्ट्रैटेजी' पर क्लिक करें

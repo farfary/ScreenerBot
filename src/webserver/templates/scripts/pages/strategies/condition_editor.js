@@ -30,6 +30,7 @@ export function createConditionEditor({
   $$,
   Utils,
   announce,
+  confirm,
   enhanceAllSelects,
   addTrackedListener,
   clearScope,
@@ -138,10 +139,10 @@ export function createConditionEditor({
     );
   }
 
-  /** Icon-only action button of a condition card. */
-  function iconButton(action, icon, title) {
+  /** Icon-only action button of a condition card; `enabled` false renders it disabled. */
+  function iconButton(action, icon, title, enabled = true) {
     const text = Utils.escapeHtml(title);
-    return `<button class="btn-icon" data-action="${action}" title="${text}" aria-label="${text}"><i class="${icon}"></i></button>`;
+    return `<button type="button" class="btn-icon" data-action="${action}" title="${text}" aria-label="${text}"${enabled ? "" : " disabled"}><i class="${icon}"></i></button>`;
   }
 
   /**
@@ -181,8 +182,8 @@ export function createConditionEditor({
               </label>
             </div>
             <div class="condition-actions">
-              ${iconButton("move-up", "icon-chevron-up", I18n.attr("strategies-card-move-up", "title"))}
-              ${iconButton("move-down", "icon-chevron-down", I18n.attr("strategies-card-move-down", "title"))}
+              ${iconButton("move-up", "icon-chevron-up", I18n.attr("strategies-card-move-up", "title"), idx > 0)}
+              ${iconButton("move-down", "icon-chevron-down", I18n.attr("strategies-card-move-down", "title"), idx < conditions.length - 1)}
               ${iconButton("duplicate", "icon-copy", I18n.attr("strategies-card-duplicate", "title"))}
               ${iconButton("delete", "icon-trash-2", I18n.attr("strategies-card-delete", "title"))}
             </div>
@@ -392,10 +393,19 @@ export function createConditionEditor({
     );
   }
 
-  /**
-   * Delete a condition from the editor
-   */
-  function deleteCondition(index) {
+  /** Remove a condition from the editor once the removal is confirmed. */
+  async function deleteCondition(index) {
+    const condition = conditions[index];
+    if (!condition) return;
+    const args = { name: conditionName(conditionSchemas?.[condition.type], condition.type) };
+    const { confirmed } = await confirm({
+      title: I18n.t("strategies-card-delete-confirm"),
+      message: I18n.attr("strategies-card-delete-confirm", "message", args),
+      confirmLabel: I18n.t("common-action-remove"),
+      cancelLabel: I18n.t("common-action-cancel"),
+      variant: "danger",
+    });
+    if (!confirmed || conditions[index] !== condition) return;
     conditions.splice(index, 1);
     renderConditionsList();
     updateRuleTreeFromEditor();

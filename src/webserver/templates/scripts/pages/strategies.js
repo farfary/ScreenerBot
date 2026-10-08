@@ -121,6 +121,7 @@ export function createLifecycle() {
     $$,
     Utils,
     announce,
+    confirm: (config) => ConfirmationDialog.show(config),
     enhanceAllSelects,
     addTrackedListener,
     clearScope,
@@ -716,13 +717,6 @@ export function createLifecycle() {
 
     showEditor();
     markDirty(); // new strategy is always unsaved
-
-    const args = { type: strategyType };
-    announce(
-      "success",
-      I18n.t("strategies-toast-created", args),
-      I18n.attr("strategies-toast-created", "message", args)
-    );
   }
 
   function updateTypeBadge(type) {

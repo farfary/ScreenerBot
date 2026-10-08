@@ -37,6 +37,9 @@ strategies-card-duplicate =
     .title = Duplikat
 strategies-card-delete =
     .title = Hapus
+# $name is the condition name.
+strategies-card-delete-confirm = Hapus kondisi
+    .message = Hapus "{ $name }" dari strategi ini?
 
 strategies-summary-param = { $label }: { $value }
 strategies-summary-none = Tanpa parameter
@@ -89,12 +92,6 @@ strategies-toast-toggle-failed = Gagal Mengalihkan
     .message = Gagal memperbarui status strategi
 strategies-toast-load-failed = Gagal Memuat
     .message = Gagal memuat strategi dari server
-strategies-toast-created = Strategi Baru
-    .message =
-        { $type ->
-            [EXIT] Strategi exit baru dibuat
-           *[ENTRY] Strategi entry baru dibuat
-        }
 strategies-toast-load-strategy-failed = Gagal memuat strategi
 strategies-toast-no-strategy = Belum Ada Strategi
     .message = Tambahkan setidaknya satu kondisi atau klik 'Strategi Baru' untuk membuat strategi terlebih dahulu

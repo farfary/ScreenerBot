@@ -48,6 +48,9 @@ strategies-card-duplicate =
     .title = Дублювати
 strategies-card-delete =
     .title = Видалити
+# $name is the condition name.
+strategies-card-delete-confirm = Вилучити умову
+    .message = Вилучити «{ $name }» з цієї стратегії?
 
 # Card summary: one "label: value" entry per parameter.
 strategies-summary-param = { $label }: { $value }
@@ -118,12 +121,6 @@ strategies-toast-toggle-failed = Не вдалося перемкнути
     .message = Не вдалося оновити статус стратегії
 strategies-toast-load-failed = Помилка завантаження
     .message = Не вдалося завантажити стратегії із сервера
-strategies-toast-created = Нова стратегія
-    .message =
-        { $type ->
-            [EXIT] Створено нову стратегію виходу
-           *[ENTRY] Створено нову стратегію входу
-        }
 strategies-toast-load-strategy-failed = Не вдалося завантажити стратегію
 strategies-toast-no-strategy = Стратегію не створено
     .message = Спершу додайте хоча б одну умову або натисніть «Нова стратегія», щоб створити стратегію

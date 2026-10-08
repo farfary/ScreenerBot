@@ -35,6 +35,9 @@ strategies-card-duplicate =
     .title = Çoğalt
 strategies-card-delete =
     .title = Sil
+# $name is the condition name.
+strategies-card-delete-confirm = Koşulu kaldır
+    .message = "{ $name }" bu stratejiden kaldırılsın mı?
 
 strategies-summary-param = { $label }: { $value }
 strategies-summary-none = Parametre yok
@@ -89,12 +92,6 @@ strategies-toast-toggle-failed = Değiştirme başarısız
     .message = Strateji durumu güncellenemedi
 strategies-toast-load-failed = Yükleme başarısız
     .message = Stratejiler sunucudan yüklenemedi
-strategies-toast-created = Yeni strateji
-    .message =
-        { $type ->
-            [EXIT] Yeni çıkış stratejisi oluşturuldu
-           *[ENTRY] Yeni giriş stratejisi oluşturuldu
-        }
 strategies-toast-load-strategy-failed = Strateji yüklenemedi
 strategies-toast-no-strategy = Strateji oluşturulmadı
     .message = En az bir koşul ekleyin veya önce bir strateji oluşturmak için "Yeni strateji"ye tıklayın

@@ -48,6 +48,9 @@ strategies-card-duplicate =
     .title = Duplicate
 strategies-card-delete =
     .title = Delete
+# $name is the condition name.
+strategies-card-delete-confirm = Remove condition
+    .message = Remove "{ $name }" from this strategy?
 
 # Card summary: one "label: value" entry per parameter.
 strategies-summary-param = { $label }: { $value }
@@ -114,12 +117,6 @@ strategies-toast-toggle-failed = Toggle Failed
     .message = Failed to update strategy status
 strategies-toast-load-failed = Load Failed
     .message = Failed to load strategies from server
-strategies-toast-created = New Strategy
-    .message =
-        { $type ->
-            [EXIT] Created new exit strategy
-           *[ENTRY] Created new entry strategy
-        }
 strategies-toast-load-strategy-failed = Failed to load strategy
 strategies-toast-no-strategy = No Strategy Created
     .message = Add at least one condition or click 'New Strategy' to create a strategy first

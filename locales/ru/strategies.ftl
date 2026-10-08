@@ -35,6 +35,9 @@ strategies-card-duplicate =
     .title = Дублировать
 strategies-card-delete =
     .title = Удалить
+# $name is the condition name.
+strategies-card-delete-confirm = Удалить условие
+    .message = Удалить «{ $name }» из этой стратегии?
 
 strategies-summary-param = { $label }: { $value }
 strategies-summary-none = Нет параметров
@@ -93,12 +96,6 @@ strategies-toast-toggle-failed = Не удалось переключить
     .message = Не удалось обновить статус стратегии
 strategies-toast-load-failed = Ошибка загрузки
     .message = Не удалось загрузить стратегии с сервера
-strategies-toast-created = Новая стратегия
-    .message =
-        { $type ->
-            [EXIT] Создана новая стратегия выхода
-           *[ENTRY] Создана новая стратегия входа
-        }
 strategies-toast-load-strategy-failed = Не удалось загрузить стратегию
 strategies-toast-no-strategy = Стратегия не создана
     .message = Добавьте хотя бы одно условие или нажмите «Новая стратегия», чтобы сначала создать стратегию
