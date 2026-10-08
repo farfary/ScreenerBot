@@ -55,7 +55,7 @@ export function createConditionCatalog({
                 <span class="icon"><i class="${getCategoryIcon(category)}"></i></span>
                 ${Utils.escapeHtml(categoryLabel(list[0]))}
               </div>
-              <span class="category-toggle">▶</span>
+              <i class="category-toggle ${isCollapsed ? "icon-chevron-right" : "icon-chevron-down"}" aria-hidden="true"></i>
             </div>
             <div class="category-items ${isCollapsed ? "collapsed" : ""}">
               ${list.map((c) => renderConditionItem(c)).join("")}
@@ -111,30 +111,37 @@ export function createConditionCatalog({
     `;
   }
 
-  /**
-   * Setup bulk collapse/expand controls for categories
-   */
+  /** One control folds every category while any is open, and unfolds them all otherwise. */
   function setupCategoryBulkControls() {
-    const collapseBtn = $("#collapse-all-categories");
-    const expandBtn = $("#expand-all-categories");
+    const toggle = $("#toggle-all-categories");
+    if (!toggle) return;
+    addTrackedListener(
+      toggle,
+      "click",
+      () => setAllCategoriesCollapsed(anyCategoryOpen()),
+      CleanupScope.MODAL
+    );
+    syncBulkToggle();
+  }
 
-    if (collapseBtn) {
-      addTrackedListener(
-        collapseBtn,
-        "click",
-        () => setAllCategoriesCollapsed(true),
-        CleanupScope.MODAL
-      );
-    }
+  function anyCategoryOpen() {
+    return $$(".condition-category .category-header").some(
+      (header) => !header.classList.contains("collapsed")
+    );
+  }
 
-    if (expandBtn) {
-      addTrackedListener(
-        expandBtn,
-        "click",
-        () => setAllCategoriesCollapsed(false),
-        CleanupScope.MODAL
-      );
-    }
+  /** Label the bulk control with the action it performs next. */
+  function syncBulkToggle() {
+    const toggle = $("#toggle-all-categories");
+    if (!toggle) return;
+    const fold = anyCategoryOpen();
+    toggle.querySelector("i").className = fold ? "icon-chevrons-up" : "icon-chevrons-down";
+    const label = toggle.querySelector("span");
+    label.setAttribute(
+      "data-l10n-id",
+      fold ? "strategies-catalog-fold-all" : "strategies-catalog-unfold-all"
+    );
+    I18n.localizeTree(label);
   }
 
   /**
@@ -172,15 +179,11 @@ export function createConditionCatalog({
     const items = header.nextElementSibling;
     const toggle = header.querySelector(".category-toggle");
 
-    if (collapsed) {
-      header.classList.add("collapsed");
-      if (items) items.classList.add("collapsed");
-      if (toggle) toggle.textContent = "▶";
-    } else {
-      header.classList.remove("collapsed");
-      if (items) items.classList.remove("collapsed");
-      if (toggle) toggle.textContent = "▼";
-    }
+    header.classList.toggle("collapsed", collapsed);
+    if (items) items.classList.toggle("collapsed", collapsed);
+    // A closed section points along the reading direction (mirrored in RTL), an open one down.
+    if (toggle) toggle.className = `category-toggle ${collapsed ? "icon-chevron-right" : "icon-chevron-down"}`;
+    syncBulkToggle();
   }
 
   /**

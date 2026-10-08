@@ -98,12 +98,6 @@
 .category-toggle {
   font-size: 1rem;
   color: var(--text-muted);
-  transition: transform 0.2s;
-  font-weight: 600;
-}
-
-.category-header:not(.collapsed) .category-toggle {
-  transform: rotate(90deg);
 }
 
 .category-items {

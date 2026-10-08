@@ -377,7 +377,6 @@ export function createLifecycle() {
     // Filter conditions
     categories.forEach((cat) => {
       const items = cat.querySelectorAll(".condition-item");
-      const categoryItems = cat.querySelector(".category-items");
       const header = cat.querySelector(".category-header");
       let hasVisibleItems = false;
 
@@ -401,8 +400,7 @@ export function createLifecycle() {
       // Show/hide category based on matches
       if (hasVisibleItems) {
         cat.style.display = "block";
-        categoryItems.classList.remove("collapsed");
-        header.classList.remove("collapsed");
+        conditionCatalog.applyCategoryCollapsedState(header, false);
       } else {
         cat.style.display = "none";
       }
