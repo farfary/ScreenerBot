@@ -6,6 +6,7 @@
    Owns the top-right control cluster shared by every full-screen dialog:
    Token Details, Position Details, Transaction Details and Featured.
 
+   Every control is a bare glyph in a 32px hit area: colour is its only state.
    Dialogs supply ONLY markup:
      <div class="dialog-header-actions">
        <button class="dialog-header-action favorite-btn">…</button>
@@ -34,14 +35,13 @@
   height: 32px;
   min-height: 32px;
   padding: 0;
-  border: 1px solid var(--border-color);
-  border-radius: var(--radius-md);
-  background: var(--bg-primary);
+  border: none;
+  background: none;
   color: var(--text-secondary);
   text-decoration: none;
   cursor: pointer;
   touch-action: manipulation;
-  transition: all var(--transition-fast);
+  transition: color var(--transition-fast);
   flex-shrink: 0;
 }
 
@@ -52,9 +52,8 @@
   line-height: 1;
 }
 
-.dialog-header-action:hover {
-  border-color: var(--text-muted);
-  background: var(--bg-card-hover);
+.dialog-header-action:hover,
+.dialog-close:hover {
   color: var(--text-primary);
 }
 
@@ -63,18 +62,12 @@
   cursor: wait;
 }
 
-.dialog-header-action.favorite-btn:hover {
-  border-color: var(--warning-color);
-  color: var(--warning-color);
-}
-
-/* Active: only the star turns the warning colour. The control keeps the cluster's
-   neutral box, so no tinted tile sits behind the glyph. */
+.dialog-header-action.favorite-btn:hover,
 .dialog-header-action.favorite-btn.active {
   color: var(--warning-color);
 }
 
-/* Close sits last in the cluster and is the only destructive-tinted control. */
+/* Close sits last in the cluster. Closing loses nothing, so it stays neutral. */
 .dialog-close {
   margin-inline-start: 4px;
 }
@@ -84,12 +77,6 @@
   height: 16px;
   font-size: 16px;
   line-height: 1;
-}
-
-.dialog-close:hover {
-  border-color: var(--danger);
-  background: var(--danger-alpha-15);
-  color: var(--danger);
 }
 
 @media (pointer: coarse) {

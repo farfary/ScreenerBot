@@ -131,7 +131,7 @@ function buildTelegramTab(settings) {
           </div>
           <div class="settings-field-control telegram-token-field">
             <input type="password" id="tgBotToken" class="settings-input" placeholder="${Utils.escapeHtml(settings.bot_token && settings.bot_token.endsWith("...") ? I18n.attr("settings-telegram-token-input-saved", "placeholder") : I18n.attr("settings-telegram-token-input", "placeholder"))}" value="" autocomplete="off">
-            <button class="btn btn-secondary btn-sm btn-icon" id="tgToggleToken" data-l10n-id="settings-telegram-token-toggle">
+            <button class="btn-icon" id="tgToggleToken" data-l10n-id="settings-telegram-token-toggle">
               <i class="icon-eye"></i>
             </button>
           </div>

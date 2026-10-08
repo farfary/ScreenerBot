@@ -429,11 +429,3 @@
   }
 }
 
-.featured-row-header .hint-trigger {
-  margin-inline-start: var(--spacing-xs);
-  opacity: 0.65;
-}
-
-.featured-row-header .hint-trigger:hover {
-  opacity: 1;
-}

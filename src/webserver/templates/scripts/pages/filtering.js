@@ -1226,10 +1226,10 @@ window.filteringPage = {
                 <div class="token-name">${name}</div>
               </div>
               <div class="token-actions">
-                <button class="btn-icon small" onclick="Utils.copyToClipboard('${t.mint}')" title="${copyMintTitle}" aria-label="${copyMintTitle}">
+                <button class="btn-icon btn-icon-sm" onclick="Utils.copyToClipboard('${t.mint}')" title="${copyMintTitle}" aria-label="${copyMintTitle}">
                   <i class="icon-copy"></i>
                 </button>
-                <a href="https://dexscreener.com/solana/${t.mint}" target="_blank" class="btn-icon small" title="${dexscreenerTitle}" aria-label="${dexscreenerTitle}">
+                <a href="https://dexscreener.com/solana/${t.mint}" target="_blank" class="btn-icon btn-icon-sm" title="${dexscreenerTitle}" aria-label="${dexscreenerTitle}">
                   <i class="icon-external-link"></i>
                 </a>
               </div>

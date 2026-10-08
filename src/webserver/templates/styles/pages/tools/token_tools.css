@@ -199,36 +199,17 @@
 }
 
 .ta-header-actions .btn-icon {
-  width: 32px;
-  height: 32px;
-  padding: 0;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  border-radius: var(--radius-sm);
   font-size: 14px;
 }
 
-.ta-header-actions .action-favorite:hover {
-  border-color: var(--warning, #f0b429);
-  color: var(--warning, #f0b429);
-}
-
+.ta-header-actions .action-favorite:hover,
 .ta-header-actions .action-favorite.active {
-  background: color-mix(in srgb, var(--warning, #f0b429) 20%, transparent);
-  border-color: var(--warning, #f0b429);
-  color: var(--warning, #f0b429);
+  color: var(--warning-color);
 }
 
-.ta-header-actions .action-blacklist:hover {
-  border-color: var(--error, #f85149);
-  color: var(--error, #f85149);
-}
-
+.ta-header-actions .action-blacklist:hover,
 .ta-header-actions .action-blacklist.active {
-  background: color-mix(in srgb, var(--error, #f85149) 20%, transparent);
-  border-color: var(--error, #f85149);
-  color: var(--error, #f85149);
+  color: var(--error-color);
 }
 
 .ta-header-actions .btn-icon.loading {

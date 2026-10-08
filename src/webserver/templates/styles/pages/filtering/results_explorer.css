@@ -9,13 +9,6 @@
   font-size: 0.9rem;
 }
 
-/* .btn-icon.small migrated to .btn-icon.btn-icon-sm in components.css */
-.btn-icon.small {
-  width: 24px;
-  height: 24px;
-  font-size: 0.8rem;
-}
-
 /* Explorer Tree View - Desktop App Style (matches config page pattern) */
 .explorer-view-container {
   flex: 1;

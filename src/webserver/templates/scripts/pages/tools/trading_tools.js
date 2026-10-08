@@ -65,7 +65,7 @@ function renderTradeWatcherTool(container, actionsContainer) {
                 <label data-l10n-id="tools-trade-watcher-pool-label"></label>
                 <div class="selected-pool-card" id="tw-selected-pool">
                   <span class="pool-info" data-l10n-id="tools-trade-watcher-pool-none"></span>
-                  <button type="button" class="btn btn-sm btn-icon" id="tw-clear-pool-btn" data-l10n-id="tools-trade-watcher-pool-clear">
+                  <button type="button" class="btn-icon" id="tw-clear-pool-btn" data-l10n-id="tools-trade-watcher-pool-clear">
                     <i class="icon-x"></i>
                   </button>
                 </div>
@@ -254,7 +254,7 @@ function updateTwPoolDisplay() {
         <span class="pool-pair">${Utils.escapeHtml(twSelectedPool.base_symbol || "?")}/${Utils.escapeHtml(twSelectedPool.quote_symbol || "?")}</span>
         <span class="pool-source ${(twSelectedPool.source || "").toLowerCase()}">${Utils.escapeHtml(twSelectedPool.source || "")}</span>
       </div>
-      <button type="button" class="btn btn-sm btn-icon" id="tw-clear-pool-btn" data-l10n-id="tools-trade-watcher-pool-clear">
+      <button type="button" class="btn-icon" id="tw-clear-pool-btn" data-l10n-id="tools-trade-watcher-pool-clear">
         <i class="icon-x"></i>
       </button>
     `;
@@ -466,7 +466,7 @@ async function loadTwActiveWatches() {
               <td class="mono">${watch.action_amount_sol ? Utils.formatSol(watch.action_amount_sol) : "—"}</td>
               <td class="mono">${formatNumber(watch.trigger_count || 0, 0)}</td>
               <td>
-                <button class="btn btn-sm btn-icon danger tw-stop-btn" data-l10n-id="tools-trade-watcher-stop-watch">
+                <button class="btn-icon danger tw-stop-btn" data-l10n-id="tools-trade-watcher-stop-watch">
                   <i class="icon-x"></i>
                 </button>
               </td>

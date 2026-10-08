@@ -288,31 +288,3 @@
   box-shadow: none;
 }
 
-.strategies-page .btn-icon {
-  padding: 0.5rem;
-  background: var(--surface-color);
-  border: 1px solid var(--border-color);
-  border-radius: var(--radius-md);
-  cursor: pointer;
-  font-size: 14px;
-  color: var(--text-muted);
-  transition: all var(--transition-base);
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  width: 32px;
-  height: 32px;
-  line-height: 1;
-}
-
-.strategies-page .btn-icon:hover {
-  background: var(--hover-color);
-  color: var(--text-color);
-  border-color: var(--primary-color);
-  transform: translateY(-1px);
-  box-shadow: 0 2px 6px rgb(0, 0, 0, 0.08);
-}
-
-.strategies-page .btn-icon:active {
-  transform: translateY(0);
-}

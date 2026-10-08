@@ -234,7 +234,8 @@
   font-size: 1rem;
 }
 
-/* Icon-only button (square) */
+/* Icon-only button: a bare glyph in a square hit area. Size and colour are its only
+   styling; hover and the semantic variants change the glyph colour alone. */
 .btn-icon {
   display: inline-flex;
   align-items: center;
@@ -242,19 +243,16 @@
   width: 32px;
   height: 32px;
   padding: 0;
-  background: var(--bg-primary);
-  border: 1px solid var(--border-color);
-  border-radius: var(--radius-md);
+  background: none;
+  border: none;
   color: var(--text-secondary);
   font-size: 0.9rem;
   cursor: pointer;
-  transition: all var(--transition-fast);
+  transition: color var(--transition-fast);
   flex-shrink: 0;
 }
 
 .btn-icon:hover {
-  background: var(--bg-card-hover);
-  border-color: var(--text-secondary);
   color: var(--text-primary);
 }
 
@@ -275,20 +273,14 @@
 }
 
 .btn-icon.danger:hover {
-  background: var(--danger-alpha-10);
-  border-color: var(--error-color);
   color: var(--error-color);
 }
 
 .btn-icon.success:hover {
-  background: var(--success-alpha-10);
-  border-color: var(--success-color);
   color: var(--success-color);
 }
 
 .btn-icon.primary:hover {
-  background: var(--primary-alpha-10);
-  border-color: var(--primary-color);
   color: var(--primary-color);
 }
 
@@ -570,7 +562,6 @@
 }
 
 .modal-close:hover {
-  background: var(--bg-card-hover);
   color: var(--text-primary);
 }
 

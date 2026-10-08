@@ -580,16 +580,16 @@ function renderTaTokenHeader(overview) {
     </div>
     <div class="ta-header-center">
       <div class="ta-header-actions">
-        <button class="btn btn-sm btn-icon action-favorite" data-mint="${escapeHtml(mint)}" data-symbol="${escapeHtml(symbol)}" data-name="${escapeHtml(name)}" data-logo="${escapeHtml(logoUrl)}" data-l10n-id="tools-analyzer-favorite-add">
+        <button class="btn-icon action-favorite" data-mint="${escapeHtml(mint)}" data-symbol="${escapeHtml(symbol)}" data-name="${escapeHtml(name)}" data-logo="${escapeHtml(logoUrl)}" data-l10n-id="tools-analyzer-favorite-add">
           <i class="icon-star"></i>
         </button>
-        <button class="btn btn-sm btn-icon action-blacklist" data-mint="${escapeHtml(mint)}" data-symbol="${escapeHtml(symbol)}" data-l10n-id="tools-analyzer-blacklist-add">
+        <button class="btn-icon action-blacklist" data-mint="${escapeHtml(mint)}" data-symbol="${escapeHtml(symbol)}" data-l10n-id="tools-analyzer-blacklist-add">
           <i class="icon-slash"></i>
         </button>
-        <button class="btn btn-sm btn-icon action-copy-mint" data-mint="${escapeHtml(mint)}" data-l10n-id="links-copy-mint">
+        <button class="btn-icon action-copy-mint" data-mint="${escapeHtml(mint)}" data-l10n-id="links-copy-mint">
           <i class="icon-copy"></i>
         </button>
-        <button class="btn btn-sm btn-icon action-open-dexscreener" data-mint="${escapeHtml(mint)}" data-l10n-id="links-view-dexscreener">
+        <button class="btn-icon action-open-dexscreener" data-mint="${escapeHtml(mint)}" data-l10n-id="links-view-dexscreener">
           <i class="icon-external-link"></i>
         </button>
       </div>

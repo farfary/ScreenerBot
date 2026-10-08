@@ -210,8 +210,8 @@
   border-inline-start: 1px solid var(--border-color);
 }
 
-/* Same box as `.dialog-header-action` — 32px, 1px border, --radius-md — with a label and
-   a semantic colour, so every control in the header shares one grid. */
+/* A labelled trade action: 32px high like the bare header controls beside it, with a
+   bordered box because it carries text and a semantic colour. */
 .position-details-dialog .pdd-trade-btn {
   display: inline-flex;
   align-items: center;
