@@ -13,16 +13,6 @@
   gap: 0;
 }
 
-.header-action-btn.global-chat-btn:hover {
-  background: var(--primary-alpha-15);
-  border-color: var(--primary-alpha-40);
-}
-
-.header-action-btn.global-chat-btn.is-open {
-  background: var(--primary-alpha-20);
-  border-color: var(--primary-alpha-50);
-}
-
 /* Hide button on the Assistant page (chat already visible) */
 [data-page="assistant"] .header-action-btn.global-chat-btn,
 .header-action-btn.global-chat-btn.hidden {

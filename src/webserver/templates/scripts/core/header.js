@@ -30,6 +30,7 @@ import "./action_toasts.js";
 // and the manual-trade submitter with the rest of the dashboard.
 import "../ui/quick_trade_shortcuts.js";
 import { apiErrorMessage } from "./request_manager.js";
+import { pushEscapeHandler } from "./escape_stack.js";
 
 const state = {
   traderEnabled: false,
@@ -162,8 +163,7 @@ async function controlTrader(action) {
     const payload = await res.json().catch(() => null);
 
     if (!res.ok) {
-      const message =
-        apiErrorMessage(payload, `Trader request failed (${res.status})`);
+      const message = apiErrorMessage(payload, `Trader request failed (${res.status})`);
       throw new Error(message);
     }
 
@@ -246,58 +246,92 @@ function initTraderControls() {
   });
 }
 
+/**
+ * The quick actions sit inline while they fit beside the header cards and fold behind
+ * one disclosure toggle only when they do not. The fold is measured, not tied to a
+ * viewport width: the cards scroll inside their own strip, so the actions fit exactly
+ * when that strip does not overflow with the actions laid out inline. Phones (the
+ * two-row header) always fold; the tablet header gives the actions their own cell and
+ * never folds.
+ */
 function initHeaderActionsToggle() {
   const actions = document.getElementById("headerActions");
   const toggle = document.getElementById("headerActionsToggle");
-  if (!actions || !toggle) return;
-  const drawerMode = window.matchMedia(
-    "(min-width: 800px) and (max-width: 1279px), (max-width: 500px)"
-  );
+  const items = document.getElementById("headerActionsItems");
+  const cards = document.getElementById("headerCards");
+  const row = actions?.closest(".header-row-1");
+  if (!actions || !toggle || !items || !cards || !row) return;
+  const phone = window.matchMedia("(width <= 500px)");
+  const tablet = window.matchMedia("(width >= 501px) and (width <= 799px)");
+  let releaseEscape = null;
 
-  const open = () => {
-    if (!drawerMode.matches) return;
-    actions.classList.add("is-open");
-    toggle.setAttribute("aria-expanded", "true");
-  };
+  const isOpen = () => actions.classList.contains("is-open");
 
   const close = ({ restoreFocus = false } = {}) => {
+    if (!isOpen()) return;
     actions.classList.remove("is-open");
     toggle.setAttribute("aria-expanded", "false");
-    if (restoreFocus && !toggle.hidden) toggle.focus();
+    releaseEscape?.();
+    releaseEscape = null;
+    if (restoreFocus) toggle.focus();
+  };
+
+  const open = () => {
+    if (isOpen() || !actions.classList.contains("is-folded")) return;
+    actions.classList.add("is-open");
+    toggle.setAttribute("aria-expanded", "true");
+    releaseEscape = pushEscapeHandler(() => close({ restoreFocus: true }));
+  };
+
+  // Measured with the actions inline, in one synchronous pass, so nothing paints between
+  // the unfold and the re-fold.
+  const shouldFold = () => {
+    if (phone.matches) return true;
+    if (tablet.matches) return false;
+    actions.classList.remove("is-folded");
+    return cards.scrollWidth > cards.clientWidth + 1 || row.scrollWidth > row.clientWidth + 1;
+  };
+
+  let measurePending = false;
+  const measure = () => {
+    if (measurePending) return;
+    measurePending = true;
+    // Deferred out of the ResizeObserver callback: folding resizes observed elements.
+    requestAnimationFrame(() => {
+      measurePending = false;
+      const fold = shouldFold();
+      actions.classList.toggle("is-folded", fold);
+      if (!fold) close();
+    });
   };
 
   toggle.addEventListener("click", (event) => {
     event.stopPropagation();
-    if (actions.classList.contains("is-open")) {
+    if (isOpen()) {
       close();
     } else {
       open();
     }
   });
-  actions.addEventListener("mouseenter", open);
-  actions.addEventListener("mouseleave", () => {
-    if (!actions.contains(document.activeElement)) close();
-  });
-  actions.addEventListener("focusin", open);
+
+  // A chosen action closes the group before its own handler runs, so a dialog it opens
+  // does not find the group still registered as an open overlay.
+  items.addEventListener("click", () => close(), true);
   actions.addEventListener("focusout", (event) => {
     if (!actions.contains(event.relatedTarget)) close();
   });
-  drawerMode.addEventListener("change", () => close());
-
-  // Close when tapping/clicking anywhere outside the actions cluster.
   document.addEventListener("click", (event) => {
-    if (actions.classList.contains("is-open") && !actions.contains(event.target)) {
-      close();
-    }
+    if (isOpen() && !actions.contains(event.target)) close();
   });
 
-  // Close on Escape for keyboard users.
-  document.addEventListener("keydown", (event) => {
-    if (event.key === "Escape" && actions.classList.contains("is-open")) {
-      event.preventDefault();
-      close({ restoreFocus: true });
-    }
-  });
+  const resizeObserver = new ResizeObserver(measure);
+  resizeObserver.observe(row);
+  resizeObserver.observe(items);
+  cards.querySelectorAll(".header-card").forEach((card) => resizeObserver.observe(card));
+  phone.addEventListener("change", measure);
+  tablet.addEventListener("change", measure);
+  document.fonts?.ready.then(measure).catch(() => {});
+  measure();
 }
 
 function initCardHandlers() {
@@ -574,7 +608,11 @@ async function handleRestart() {
   try {
     // ONE notice for the whole restart: it is replaced in place if the restart
     // fails, and the page reloads out from under it when it succeeds.
-    Utils.showToast({ key: "system-restart", type: "progress", title: I18n.t("shell-restart-progress") });
+    Utils.showToast({
+      key: "system-restart",
+      type: "progress",
+      title: I18n.t("shell-restart-progress"),
+    });
 
     const res = await fetch("/api/system/reboot", {
       method: "POST",

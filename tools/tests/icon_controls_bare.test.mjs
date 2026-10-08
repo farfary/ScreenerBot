@@ -5,8 +5,8 @@
 /**
  * Guard: an icon-only control is a bare glyph. The shared icon controls (the icon
  * button, the full-screen dialog header actions and close, the modal close, the help
- * hint and the hint popover's title glyph) state hover, active and semantic variants
- * through the glyph colour alone. No rule for them, in their owner or in a page,
+ * hint, the hint popover's title glyph and the app header's quick actions) state
+ * hover, active and semantic variants through the glyph colour alone. No rule for them, in their owner or in a page,
  * paints a background, a border or a shadow behind the glyph.
  *
  * Run with `npm run test:js`.
@@ -25,6 +25,8 @@ const ICON_CONTROLS = [
   "modal-close",
   "hint-trigger",
   "hint-popover__icon",
+  "header-action-btn",
+  "header-actions-toggle",
 ];
 
 const names = (selector) =>

@@ -452,6 +452,51 @@
   display: none;
 }
 
+/* Folded: header.js sets .is-folded only when the actions do not fit beside the
+   header cards. The toggle fans them out inline over the cards, inside the header
+   row, so the open group never covers the navigation or a page's status strip. */
+.modern-header .header-actions.is-folded {
+  position: relative;
+}
+
+.modern-header .header-actions.is-folded .header-actions-toggle {
+  display: inline-flex;
+}
+
+.modern-header .header-actions.is-folded .header-actions-items {
+  position: absolute;
+  top: 50%;
+  inset-inline-end: calc(100% + 4px);
+  z-index: var(--z-popover);
+  padding: 6px 8px;
+  border: 1px solid var(--header-border);
+  border-radius: var(--radius-xl);
+  background: var(--header-solid-bg);
+  box-shadow: var(--shadow-floating-md);
+  opacity: 0;
+  visibility: hidden;
+  pointer-events: none;
+  translate: 0 -50%;
+  transform: scale(0.98);
+  transform-origin: calc(50% + var(--dir-sign) * 50%) center;
+  transition:
+    opacity var(--transition-base),
+    transform var(--transition-base),
+    visibility 0s linear var(--transition-base);
+}
+
+.modern-header .header-actions.is-folded.is-open .header-actions-items {
+  opacity: 1;
+  visibility: visible;
+  pointer-events: auto;
+  transform: scale(1);
+  transition:
+    opacity var(--transition-base),
+    transform var(--transition-base),
+    visibility 0s;
+}
+
+/* Bare glyphs: hover and the open menu brighten the glyph only. */
 .modern-header .header-action-btn,
 .modern-header .header-actions-toggle {
   position: relative;
@@ -459,21 +504,17 @@
   min-width: 34px;
   height: 34px;
   padding: 0;
-  border: 1px solid var(--border-color);
+  border: none;
   border-radius: var(--radius-lg);
-  background: transparent;
+  background: none;
   color: var(--text-secondary);
   cursor: pointer;
-  transition:
-    background-color var(--transition-fast),
-    border-color var(--transition-fast),
-    color var(--transition-fast);
+  transition: color var(--transition-fast);
 }
 
 .modern-header .header-action-btn:hover,
-.modern-header .header-actions-toggle:hover {
-  border-color: var(--primary-alpha-40);
-  background: var(--primary-alpha-10);
+.modern-header .header-actions-toggle:hover,
+.modern-header .header-actions-toggle[aria-expanded="true"] {
   color: var(--text-primary);
 }
 

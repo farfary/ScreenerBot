@@ -58,7 +58,7 @@ class GlobalChat {
     I18n.localizeTree(this._overlay);
 
     // Insert as first child of the action items group (before search button) so it
-    // folds together with the other actions on mid screens. Fall back to the
+    // folds together with the other actions when they do not fit. Fall back to the
     // actions container, then body, if the expected structure is missing.
     const headerActionsItems =
       document.querySelector(".header-actions-items") || document.querySelector(".header-actions");
@@ -101,7 +101,6 @@ class GlobalChat {
       });
     }
 
-    this._btn.classList.add("is-open");
     this._overlay.classList.add("is-open");
     this._overlay.setAttribute("aria-hidden", "false");
     this._releaseEscape = pushEscapeHandler(() => this.close());
@@ -121,7 +120,6 @@ class GlobalChat {
     if (!this._isOpen) return;
     this._isOpen = false;
 
-    this._btn.classList.remove("is-open");
     this._overlay.classList.remove("is-open");
     this._overlay.setAttribute("aria-hidden", "true");
     this._releaseEscape?.();

@@ -363,7 +363,7 @@ button.ticker-segment:hover .ticker-icon {
   }
 }
 
-/* Mid-width overflow drawer. It opens below the row instead of covering metrics. */
+/* Mid-width: the Explore setup control gives up its detail line first. */
 @media (width >= 800px) and (width <= 1279px) {
   .explore-setup-control {
     flex-basis: auto;
@@ -377,45 +377,8 @@ button.ticker-segment:hover .ticker-icon {
   }
 
   .modern-header .header-actions {
-    position: relative;
     margin-inline-start: 0;
     padding-inline-start: 4px;
-  }
-
-  .modern-header .header-actions-toggle {
-    display: inline-flex;
-  }
-
-  .modern-header .header-actions-items {
-    position: absolute;
-    top: calc(100% + 8px);
-    inset-inline-end: 0;
-    z-index: var(--z-popover);
-    padding: 8px 10px;
-    border: 1px solid var(--header-border);
-    border-radius: var(--radius-xl);
-    background: var(--header-solid-bg);
-    box-shadow: var(--shadow-floating-md);
-    opacity: 0;
-    visibility: hidden;
-    pointer-events: none;
-    transform: translateY(-6px) scale(0.98);
-    transform-origin: calc(50% + var(--dir-sign) * 50%) top;
-    transition:
-      opacity var(--transition-base),
-      transform var(--transition-base),
-      visibility 0s linear var(--transition-base);
-  }
-
-  .modern-header .header-actions.is-open .header-actions-items {
-    opacity: 1;
-    visibility: visible;
-    pointer-events: auto;
-    transform: translateY(0) scale(1);
-    transition:
-      opacity var(--transition-base),
-      transform var(--transition-base),
-      visibility 0s;
   }
 }
 
@@ -530,50 +493,27 @@ button.ticker-segment:hover .ticker-icon {
     min-width: 0;
   }
 
-  .modern-header .header-actions {
-    position: relative;
-  }
-
-  .modern-header .header-actions-toggle {
-    display: inline-flex;
+  .modern-header .header-actions.is-folded .header-actions-toggle {
     width: 40px;
     min-width: 40px;
     height: 40px;
   }
 
-  .modern-header .header-actions-items {
-    position: absolute;
+  /* No room beside the brand and trader: the actions open as a grid below the row. */
+  .modern-header .header-actions.is-folded .header-actions-items {
     top: calc(100% + 6px);
     inset-inline-end: 0;
-    z-index: var(--z-popover);
     display: grid;
     grid-template-columns: repeat(4, 40px);
     gap: 6px;
     padding: 8px;
-    border: 1px solid var(--header-border);
-    border-radius: var(--radius-xl);
-    background: var(--header-solid-bg);
-    box-shadow: var(--shadow-floating-md);
-    opacity: 0;
-    visibility: hidden;
-    pointer-events: none;
+    translate: 0;
     transform: translateY(-6px) scale(0.98);
     transform-origin: calc(50% + var(--dir-sign) * 50%) top;
-    transition:
-      opacity var(--transition-base),
-      transform var(--transition-base),
-      visibility 0s linear var(--transition-base);
   }
 
-  .modern-header .header-actions.is-open .header-actions-items {
-    opacity: 1;
-    visibility: visible;
-    pointer-events: auto;
+  .modern-header .header-actions.is-folded.is-open .header-actions-items {
     transform: translateY(0) scale(1);
-    transition:
-      opacity var(--transition-base),
-      transform var(--transition-base),
-      visibility 0s;
   }
 
   .modern-header .header-action-btn {
