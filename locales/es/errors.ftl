@@ -50,6 +50,7 @@ errors-system-url-empty = La URL no puede estar vacía
 errors-system-open-url-failed = No se pudo abrir la URL
 
 errors-initialization-required = Se requiere la inicialización del bot antes de acceder a este endpoint. Completa el proceso de inicialización desde la interfaz web.
+errors-initialization-explore-unavailable = El Modo Explorar no tiene una billetera conectada. Completa la configuración para usar billeteras y copy trading.
 errors-initialization-onboarding-update-failed = Error al actualizar el estado de la configuración inicial
 errors-initialization-validation-required = Se requiere verificar las credenciales antes de guardar la configuración
 errors-initialization-encrypt-failed = Error al cifrar la clave privada

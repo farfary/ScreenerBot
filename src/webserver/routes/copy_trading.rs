@@ -6,6 +6,7 @@
 
 use axum::{
     extract::{Path, Query},
+    middleware::from_fn,
     response::Response,
     routing::{get, post},
     Json, Router,
@@ -18,6 +19,7 @@ use crate::i18n::ids;
 use crate::trader::copy::workspace::{self, ActivityFilter, CloneRequest, RangeQuery};
 use crate::trader::copy::{control, CopyMode, CopySkip, CopyTask, CopyTaskInput};
 use crate::webserver::api_error::{ApiError, ApiErrorCode};
+use crate::webserver::middleware::full_setup_gate;
 use crate::webserver::promo;
 use crate::webserver::state::AppState;
 use crate::webserver::utils::success_response;
@@ -36,7 +38,10 @@ pub fn routes() -> Router<Arc<AppState>> {
     Router::new()
         .route("/overview", get(overview))
         .route("/status", get(status))
-        .route("/tasks", get(list_tasks).post(create_task))
+        .route(
+            "/tasks",
+            get(list_tasks).merge(post(create_task).route_layer(from_fn(full_setup_gate))),
+        )
         .route(
             "/tasks/{id}",
             get(get_task).patch(update_task).delete(delete_task),
@@ -46,7 +51,10 @@ pub fn routes() -> Router<Arc<AppState>> {
         .route("/tasks/{id}/workspace", get(task_workspace))
         .route("/tasks/{id}/activity", get(task_activity))
         .route("/tasks/{id}/insights", get(task_insights))
-        .route("/tasks/{id}/clone", post(clone_task))
+        .route(
+            "/tasks/{id}/clone",
+            post(clone_task).route_layer(from_fn(full_setup_gate)),
+        )
         .route("/tasks/{id}/reset", post(reset_paper_book))
         .route("/tasks/{id}/holdings/{mint}/close", post(close_holding))
         .route("/insights", get(compare_tasks))

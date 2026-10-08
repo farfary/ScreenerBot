@@ -61,6 +61,7 @@ errors-system-open-url-failed = 无法打开该 URL
 
 # Initialization
 errors-initialization-required = 访问此接口前需要先完成机器人初始化。请通过网页界面完成初始化流程。
+errors-initialization-explore-unavailable = 探索模式未连接钱包。请完成设置以使用钱包和跟单交易。
 errors-initialization-onboarding-update-failed = 更新引导状态失败
 errors-initialization-validation-required = 保存设置前需要先验证凭据
 errors-initialization-encrypt-failed = 加密私钥失败

@@ -61,6 +61,7 @@ errors-system-open-url-failed = URL을 열 수 없습니다
 
 # Initialization
 errors-initialization-required = 이 엔드포인트에 접근하려면 봇 초기화가 필요합니다. 웹 인터페이스에서 초기화 과정을 완료하세요.
+errors-initialization-explore-unavailable = 탐색 모드에는 연결된 지갑이 없습니다. 지갑과 카피 트레이딩을 사용하려면 설정을 완료하세요.
 errors-initialization-onboarding-update-failed = 온보딩 상태를 업데이트하지 못했습니다
 errors-initialization-validation-required = 설정을 저장하기 전에 자격 증명 확인이 필요합니다
 errors-initialization-encrypt-failed = 프라이빗 키를 암호화하지 못했습니다

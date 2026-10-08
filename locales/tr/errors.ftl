@@ -58,6 +58,7 @@ errors-system-open-url-failed = URL açılamadı
 
 # Initialization
 errors-initialization-required = Bu uç noktaya erişmeden önce bot kurulumu gerekli. Lütfen kurulumu web arayüzünden tamamlayın.
+errors-initialization-explore-unavailable = Keşif Modu'nda bağlı cüzdan yok. Cüzdanları ve kopya işlemi kullanmak için kurulumu tamamlayın.
 errors-initialization-onboarding-update-failed = Karşılama durumu güncellenemedi
 errors-initialization-validation-required = Kurulumu kaydetmeden önce kimlik bilgilerinin doğrulanması gerekli
 errors-initialization-encrypt-failed = Özel anahtar şifrelenemedi

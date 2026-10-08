@@ -58,6 +58,7 @@ errors-system-open-url-failed = Impossible d'ouvrir l'URL
 
 # Initialization
 errors-initialization-required = L'initialisation du bot est requise avant d'accéder à cet endpoint. Veuillez terminer l'initialisation via l'interface web.
+errors-initialization-explore-unavailable = Le Mode Explorer n'a aucun portefeuille connecté. Terminez la configuration pour utiliser les portefeuilles et le copy trading.
 errors-initialization-onboarding-update-failed = Échec de la mise à jour de l'état d'intégration
 errors-initialization-validation-required = La vérification des identifiants est requise avant d'enregistrer la configuration
 errors-initialization-encrypt-failed = Échec du chiffrement de la clé privée

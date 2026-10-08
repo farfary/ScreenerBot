@@ -50,6 +50,7 @@ errors-system-url-empty = URL không được để trống
 errors-system-open-url-failed = Không mở được URL
 
 errors-initialization-required = Cần khởi tạo bot trước khi truy cập endpoint này. Vui lòng hoàn tất quá trình khởi tạo qua giao diện web.
+errors-initialization-explore-unavailable = Chế độ khám phá chưa kết nối ví nào. Hoàn tất thiết lập để dùng ví và giao dịch sao chép.
 errors-initialization-onboarding-update-failed = Không cập nhật được trạng thái làm quen
 errors-initialization-validation-required = Cần xác minh thông tin xác thực trước khi lưu thiết lập
 errors-initialization-encrypt-failed = Không mã hóa được khóa riêng tư

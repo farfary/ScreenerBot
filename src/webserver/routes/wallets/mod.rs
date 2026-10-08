@@ -7,11 +7,13 @@
 //! Includes bulk import/export with CSV and Excel support.
 
 use axum::{
+    middleware::from_fn,
     routing::{delete, get, post, put},
     Router,
 };
 use std::sync::Arc;
 
+use crate::webserver::middleware::full_setup_gate;
 use crate::webserver::state::AppState;
 
 pub mod crud;
@@ -44,4 +46,5 @@ pub fn routes() -> Router<Arc<AppState>> {
         .route("/{id}/archive", post(crud::archive_wallet))
         .route("/{id}/restore", post(crud::restore_wallet))
         .nest("/watch", watch::routes())
+        .route_layer(from_fn(full_setup_gate))
 }

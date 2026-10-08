@@ -53,6 +53,7 @@ errors-system-url-empty = URL tidak boleh kosong
 errors-system-open-url-failed = Tidak dapat membuka URL
 
 errors-initialization-required = Inisialisasi bot diperlukan sebelum mengakses endpoint ini. Selesaikan proses inisialisasi melalui antarmuka web.
+errors-initialization-explore-unavailable = Mode Jelajah tidak memiliki dompet yang terhubung. Selesaikan penyiapan untuk memakai dompet dan copy trading.
 errors-initialization-onboarding-update-failed = Gagal memperbarui status onboarding
 errors-initialization-validation-required = Verifikasi kredensial diperlukan sebelum menyimpan pengaturan awal
 errors-initialization-encrypt-failed = Gagal mengenkripsi private key

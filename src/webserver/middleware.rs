@@ -205,8 +205,9 @@ pub async fn initialization_gate(request: Request, next: Next) -> Response {
 
     // If initialized, allow everything. Explore Mode (wallet + RPC skipped) is
     // also treated as "allowed": the dashboard is usable for token discovery/browsing,
-    // and wallet/RPC-dependent endpoints enforce their own deeper guards
-    // (are_core_services_ready / FORCE_STOP) so trading still cannot happen.
+    // wallet-backed routes sit behind `full_setup_gate`, and RPC-dependent endpoints
+    // enforce their own deeper guards (are_core_services_ready / FORCE_STOP) so
+    // trading still cannot happen.
     if global::is_initialization_complete() || global::is_explore_mode() {
         return next.run(request).await;
     }
@@ -260,6 +261,38 @@ pub async fn initialization_gate(request: Request, next: Next) -> Response {
     )
     .details("Please complete the initialization process through the web interface")
     .into_response()
+}
+
+/// Explore Mode gate for routes that need the wallet a full setup opens
+///
+/// Explore Mode passes `initialization_gate` so the discovery pages work without a
+/// wallet, but the wallet store, the watch store and every copy task are opened or
+/// funded only by a full setup. Those routes answer `INITIALIZATION_REQUIRED` with a
+/// translated message instead of failing inside a store that was never opened.
+pub async fn full_setup_gate(request: Request, next: Next) -> Response {
+    if !requires_full_setup(
+        global::is_initialization_complete(),
+        crate::webserver::promo::are_promo_fixtures_enabled(),
+    ) {
+        return next.run(request).await;
+    }
+    logger::debug(
+        LogTag::Webserver,
+        &format!(
+            "Blocked Explore Mode request to {} (full setup required)",
+            request.uri().path()
+        ),
+    );
+    ApiError::new(
+        ApiErrorCode::InitializationRequired,
+        ids::ERRORS_INITIALIZATION_EXPLORE_UNAVAILABLE,
+    )
+    .into_response()
+}
+
+/// Promotional fixtures answer wallet reads without a wallet, so a capture passes.
+fn requires_full_setup(initialization_complete: bool, promo_fixtures: bool) -> bool {
+    !initialization_complete && !promo_fixtures
 }
 
 /// Cache control middleware
@@ -443,6 +476,14 @@ mod tests {
         ] {
             assert!(!has_valid_local_request_headers(&headers));
         }
+    }
+
+    #[test]
+    fn wallet_routes_require_a_full_setup_outside_promo_capture() {
+        assert!(requires_full_setup(false, false));
+        assert!(!requires_full_setup(true, false));
+        assert!(!requires_full_setup(false, true));
+        assert!(!requires_full_setup(true, true));
     }
 
     #[test]

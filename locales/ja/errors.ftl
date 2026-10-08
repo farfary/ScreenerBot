@@ -53,6 +53,7 @@ errors-system-url-empty = URL を空にすることはできません
 errors-system-open-url-failed = URL を開けませんでした
 
 errors-initialization-required = このエンドポイントにアクセスするには、ボットの初期化が必要です。Web インターフェースで初期化を完了してください。
+errors-initialization-explore-unavailable = Explore モードではウォレットが接続されていません。ウォレットとコピートレードを使うにはセットアップを完了してください。
 errors-initialization-onboarding-update-failed = オンボーディングの状態を更新できませんでした
 errors-initialization-validation-required = セットアップを保存する前に、認証情報の検証が必要です
 errors-initialization-encrypt-failed = 秘密鍵を暗号化できませんでした

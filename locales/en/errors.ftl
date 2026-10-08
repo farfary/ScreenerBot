@@ -63,6 +63,7 @@ errors-system-open-url-failed = Could not open the URL
 
 # Initialization
 errors-initialization-required = Bot initialization is required before accessing this endpoint. Please complete the initialization process through the web interface.
+errors-initialization-explore-unavailable = Explore Mode has no wallet connected. Complete setup to use wallets and copy trading.
 errors-initialization-onboarding-update-failed = Failed to update onboarding state
 errors-initialization-validation-required = Credential verification is required before saving setup
 errors-initialization-encrypt-failed = Failed to encrypt private key

@@ -50,6 +50,7 @@ errors-system-url-empty = URL खाली नहीं हो सकता
 errors-system-open-url-failed = URL नहीं खुल सका
 
 errors-initialization-required = इस एंडपॉइंट तक पहुँचने से पहले बॉट का इनिशियलाइज़ेशन आवश्यक है। कृपया वेब इंटरफ़ेस से इनिशियलाइज़ेशन प्रक्रिया पूरी करें।
+errors-initialization-explore-unavailable = एक्सप्लोर मोड में कोई वॉलेट कनेक्ट नहीं है। वॉलेट और कॉपी ट्रेडिंग इस्तेमाल करने के लिए सेटअप पूरा करें।
 errors-initialization-onboarding-update-failed = ऑनबोर्डिंग स्थिति अपडेट करने में विफल
 errors-initialization-validation-required = सेटअप सहेजने से पहले क्रेडेंशियल सत्यापन आवश्यक है
 errors-initialization-encrypt-failed = प्राइवेट की एन्क्रिप्ट करने में विफल

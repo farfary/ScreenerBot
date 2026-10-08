@@ -36,8 +36,8 @@ use axum::http::{Request, StatusCode};
 use rusqlite::Connection;
 use screenerbot::chains::ChainId;
 use screenerbot::global::{
-    CONNECTIVITY_SYSTEM_READY, INITIALIZATION_COMPLETE, POOL_SERVICE_READY, POSITIONS_SYSTEM_READY,
-    TOKENS_SYSTEM_READY, TRANSACTIONS_SYSTEM_READY,
+    CONNECTIVITY_SYSTEM_READY, EXPLORE_MODE, INITIALIZATION_COMPLETE, POOL_SERVICE_READY,
+    POSITIONS_SYSTEM_READY, TOKENS_SYSTEM_READY, TRANSACTIONS_SYSTEM_READY,
 };
 use screenerbot::tokens::schema::CREATE_TABLES;
 use screenerbot::tokens::TokenDatabase;
@@ -65,14 +65,15 @@ fn readiness_lock() -> MutexGuard<'static, ()> {
 /// Restores every readiness flag it captured, whatever the test did or panicked on.
 struct ReadinessFlags {
     _guard: MutexGuard<'static, ()>,
-    saved: [(&'static std::sync::atomic::AtomicBool, bool); 6],
+    saved: [(&'static std::sync::atomic::AtomicBool, bool); 7],
 }
 
 impl ReadinessFlags {
     fn capture() -> Self {
         let guard = readiness_lock();
-        let flags: [&'static std::sync::atomic::AtomicBool; 6] = [
+        let flags: [&'static std::sync::atomic::AtomicBool; 7] = [
             &INITIALIZATION_COMPLETE,
+            &EXPLORE_MODE,
             &CONNECTIVITY_SYSTEM_READY,
             &TOKENS_SYSTEM_READY,
             &POSITIONS_SYSTEM_READY,
@@ -90,6 +91,7 @@ impl ReadinessFlags {
     /// launch is in for as long as the services take to come up.
     fn full_mode_still_starting(&self) {
         INITIALIZATION_COMPLETE.store(true, Ordering::SeqCst);
+        EXPLORE_MODE.store(false, Ordering::SeqCst);
         for flag in [
             &CONNECTIVITY_SYSTEM_READY,
             &TOKENS_SYSTEM_READY,
@@ -99,6 +101,14 @@ impl ReadinessFlags {
         ] {
             flag.store(false, Ordering::SeqCst);
         }
+    }
+}
+
+impl ReadinessFlags {
+    /// Explore Mode: setup skipped, so no wallet and no RPC were ever opened.
+    fn explore_mode(&self) {
+        INITIALIZATION_COMPLETE.store(false, Ordering::SeqCst);
+        EXPLORE_MODE.store(true, Ordering::SeqCst);
     }
 }
 
@@ -113,9 +123,15 @@ impl Drop for ReadinessFlags {
 /// Issue one request against the REAL router (every middleware included) and
 /// return the status, the decoded JSON body and how long it took.
 async fn call_api(path: &str) -> (StatusCode, Value, Duration) {
+    send_api("GET", path).await
+}
+
+/// `call_api` with an explicit method and an empty body.
+async fn send_api(method: &str, path: &str) -> (StatusCode, Value, Duration) {
     let state = Arc::new(AppState::new());
     let router = routes::create_router(state);
     let request = Request::builder()
+        .method(method)
         .uri(path)
         .body(Body::empty())
         .expect("build request");
@@ -293,6 +309,38 @@ async fn an_uninitialized_wallet_database_is_reported_absent_not_fatal() {
         body.get("wallet_last_updated").is_none_or(Value::is_null),
         "there is no snapshot, so there is no timestamp to report"
     );
+}
+
+/// Explore Mode never opens the wallet store or the watch store, and a copy task
+/// needs a wallet to follow with. Every route behind them answers the typed
+/// setup-required error with a translated message, before any body is parsed,
+/// instead of a 500 from a store that was never opened.
+#[tokio::test]
+async fn explore_mode_wallet_routes_ask_for_setup_instead_of_failing() {
+    let _dir = common::isolated_env();
+    let flags = ReadinessFlags::capture();
+    flags.explore_mode();
+
+    for (method, path) in [
+        ("GET", "/api/wallets"),
+        ("GET", "/api/wallets/summary"),
+        ("GET", "/api/wallets/main"),
+        ("POST", "/api/wallets"),
+        ("GET", "/api/wallets/watch"),
+        ("POST", "/api/copy-trading/tasks"),
+        ("POST", "/api/copy-trading/tasks/1/clone"),
+    ] {
+        let (status, body, _) = send_api(method, path).await;
+        assert_eq!(status, StatusCode::SERVICE_UNAVAILABLE, "{method} {path}");
+        assert_eq!(
+            body["error"]["code"], "INITIALIZATION_REQUIRED",
+            "{method} {path}"
+        );
+        assert_eq!(
+            body["error"]["text"]["id"], "errors-initialization-explore-unavailable",
+            "{method} {path}"
+        );
+    }
 }
 
 /// The webserver comes up before the services it reports on and must stay usable

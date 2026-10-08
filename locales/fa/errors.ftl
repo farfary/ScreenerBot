@@ -63,6 +63,7 @@ errors-system-open-url-failed = باز کردن URL ممکن نشد
 
 # Initialization
 errors-initialization-required = پیش از دسترسی به این اندپوینت، راه‌اندازی اولیه ربات لازم است. فرایند راه‌اندازی را از طریق رابط وب کامل کنید.
+errors-initialization-explore-unavailable = در حالت کاوش هیچ کیف پولی متصل نیست. برای استفاده از کیف پول‌ها و کپی ترید، راه‌اندازی را کامل کنید.
 errors-initialization-onboarding-update-failed = به‌روزرسانی وضعیت راه‌اندازی اولیه ناموفق بود
 errors-initialization-validation-required = پیش از ذخیره تنظیمات، تأیید اعتبارنامه‌ها لازم است
 errors-initialization-encrypt-failed = رمزگذاری کلید خصوصی ناموفق بود

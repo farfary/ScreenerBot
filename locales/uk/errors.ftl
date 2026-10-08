@@ -50,6 +50,7 @@ errors-system-url-empty = URL не може бути порожнім
 errors-system-open-url-failed = Не вдалося відкрити URL
 
 errors-initialization-required = Перед доступом до цієї кінцевої точки потрібна ініціалізація бота. Завершіть процес ініціалізації у вебінтерфейсі.
+errors-initialization-explore-unavailable = У режимі огляду гаманець не підключено. Завершіть налаштування, щоб користуватися гаманцями та копітрейдингом.
 errors-initialization-onboarding-update-failed = Не вдалося оновити стан початкового налаштування
 errors-initialization-validation-required = Перед збереженням налаштувань потрібна перевірка облікових даних
 errors-initialization-encrypt-failed = Не вдалося зашифрувати приватний ключ

@@ -53,6 +53,7 @@ errors-system-url-empty = A URL não pode estar vazia
 errors-system-open-url-failed = Não foi possível abrir a URL
 
 errors-initialization-required = É necessário inicializar o bot antes de acessar este endpoint. Conclua o processo de inicialização pela interface web.
+errors-initialization-explore-unavailable = O Modo Explorar não tem carteira conectada. Conclua a configuração para usar carteiras e copy trading.
 errors-initialization-onboarding-update-failed = Falha ao atualizar o estado da introdução
 errors-initialization-validation-required = É necessário verificar as credenciais antes de salvar a configuração
 errors-initialization-encrypt-failed = Falha ao criptografar a chave privada

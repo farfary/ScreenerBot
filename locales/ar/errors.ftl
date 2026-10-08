@@ -63,6 +63,7 @@ errors-system-open-url-failed = تعذّر فتح عنوان URL
 
 # Initialization
 errors-initialization-required = تهيئة البوت مطلوبة قبل الوصول إلى نقطة الاتصال هذه. يرجى إكمال عملية التهيئة عبر واجهة الويب.
+errors-initialization-explore-unavailable = لا توجد محفظة متصلة في وضع الاستكشاف. أكمل الإعداد لاستخدام المحافظ ونسخ التداول.
 errors-initialization-onboarding-update-failed = تعذّر تحديث حالة الإعداد الأولي
 errors-initialization-validation-required = التحقق من بيانات الاعتماد مطلوب قبل حفظ الإعداد
 errors-initialization-encrypt-failed = تعذّر تشفير المفتاح الخاص
