@@ -43,6 +43,16 @@ startup-config-load-parse-remedy = Geçerli bir yapılandırmayı geri yükleyin
 startup-option-invalid-title = Geçersiz başlatma seçeneği
 startup-option-invalid-remedy = Bir komut satırı seçeneği geçersiz. { -brand } uygulamasını bu seçenek olmadan başlatın veya düzeltip tekrar deneyin.
 
+## Storage upgrade.
+
+startup-storage-upgrade-title = Verileriniz yükseltilemedi
+startup-storage-upgrade-detail =
+    { -brand }, { $database } dosyasını bu sürüme yükseltemedi ve değiştirmeden önce durdu. Verileriniz değiştirilmedi.
+
+    Neden:
+    { $error }
+startup-storage-upgrade-remedy = Ayrıntıları kopyalayın ve günlük dosyasıyla birlikte t.me/screenerbotio_support adresindeki desteğe gönderin. Veritabanını düzenlemeyin, taşımayın veya silmeyin: bir düzeltme yüklendiğinde { -brand } onu yeniden açar.
+
 ## Generic failures.
 
 startup-generic-title = { -brand } başlatılamadı

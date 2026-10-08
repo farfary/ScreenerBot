@@ -66,6 +66,9 @@ pub enum StartupErrorCode {
     LockHeld,
     /// `config.toml` exists but could not be read or parsed.
     ConfigInvalid,
+    /// A store could not be upgraded to this version; its open refused before
+    /// committing anything.
+    StorageUpgrade,
     /// Any other fatal startup failure without a dedicated remedy.
     Generic,
 }
@@ -78,6 +81,7 @@ impl StartupErrorCode {
             StartupErrorCode::PortInUse => "port_in_use",
             StartupErrorCode::LockHeld => "lock_held",
             StartupErrorCode::ConfigInvalid => "config_invalid",
+            StartupErrorCode::StorageUpgrade => "storage_upgrade",
             StartupErrorCode::Generic => "generic",
         }
     }
@@ -207,6 +211,19 @@ impl StartupError {
         Self::generic(UiText::new(id).arg("error", UiArg::Text(error.to_string())))
     }
 
+    /// A store refused its upgrade. `database` names the store files and `causes` is
+    /// the cause chain of the refusal, outermost first.
+    pub fn storage_upgrade(database: &str, causes: &[String]) -> Self {
+        Self::new(
+            StartupErrorCode::StorageUpgrade,
+            UiText::new(ids::STARTUP_STORAGE_UPGRADE_TITLE),
+            UiText::new(ids::STARTUP_STORAGE_UPGRADE_DETAIL)
+                .arg("database", UiArg::Text(database.to_owned()))
+                .arg("error", UiArg::Text(causes.join("\n"))),
+            UiText::new(ids::STARTUP_STORAGE_UPGRADE_REMEDY),
+        )
+    }
+
     /// Fatal error for an invalid command-line option; `error` is the technical detail.
     pub fn invalid_option(error: impl std::fmt::Display) -> Self {
         Self::new(
@@ -262,22 +279,22 @@ impl StartupError {
         let mut block = String::new();
         block.push('\n');
         block.push_str(&boxed_top());
-        block.push_str(&boxed_line("STARTUP FAILED", true));
+        block.push_str(&boxed_lines("STARTUP FAILED", true));
         let title = self.title.render_source_plain();
         let detail = self.detail.render_source_plain();
         let remedy = self.remedy.render_source_plain();
-        block.push_str(&boxed_line(&title, false));
+        block.push_str(&boxed_lines(&title, false));
         block.push_str(&boxed_separator());
         for line in detail.lines() {
-            block.push_str(&boxed_line(line, false));
+            block.push_str(&boxed_lines(line, false));
         }
         block.push_str(&boxed_separator());
-        block.push_str(&boxed_line("How to fix:", false));
+        block.push_str(&boxed_lines("How to fix:", false));
         for line in remedy.lines() {
-            block.push_str(&boxed_line(line, false));
+            block.push_str(&boxed_lines(line, false));
         }
         block.push_str(&boxed_separator());
-        block.push_str(&boxed_line(&format!("Log file: {}", self.log_path), false));
+        block.push_str(&boxed_lines(&format!("Log file: {}", self.log_path), false));
         block.push_str(&boxed_bottom());
         logger::error(LogTag::System, &block);
 
@@ -311,22 +328,43 @@ impl From<StartupError> for String {
 
 const BOX_WIDTH: usize = 78;
 
-fn boxed_line(text: &str, heading: bool) -> String {
-    // Truncate overly long lines so the box stays aligned in narrow terminals.
+/// One text line as box rows, wrapped at word boundaries (a word longer than a row
+/// is split) so a long cause or path is shown whole and the box stays aligned.
+fn boxed_lines(text: &str, heading: bool) -> String {
     let inner = BOX_WIDTH - 4;
-    let content: String = if text.chars().count() > inner {
-        let mut s: String = text.chars().take(inner - 1).collect();
-        s.push('…');
-        s
+    let text = if heading {
+        text.to_uppercase()
     } else {
         text.to_owned()
     };
-    let pad = inner - content.chars().count();
-    if heading {
-        format!("  | {}{} |\n", content.to_uppercase(), " ".repeat(pad))
-    } else {
-        format!("  | {}{} |\n", content, " ".repeat(pad))
+    let mut rows: Vec<String> = vec![String::new()];
+    for word in text.split(' ') {
+        let mut word: Vec<char> = word.chars().collect();
+        loop {
+            let row = rows.last_mut().expect("rows starts non-empty");
+            let used = row.chars().count();
+            let gap = usize::from(used > 0);
+            if used + gap + word.len() <= inner {
+                if gap == 1 {
+                    row.push(' ');
+                }
+                row.extend(word.iter());
+                break;
+            }
+            if used > 0 {
+                rows.push(String::new());
+                continue;
+            }
+            row.extend(word.drain(..inner));
+            rows.push(String::new());
+        }
     }
+    if rows.len() > 1 && rows.last().is_some_and(String::is_empty) {
+        rows.pop();
+    }
+    rows.iter()
+        .map(|row| format!("  | {row}{} |\n", " ".repeat(inner - row.chars().count())))
+        .collect()
 }
 
 fn boxed_top() -> String {
@@ -381,6 +419,10 @@ mod tests {
                 UiText::new(ids::STARTUP_CONFIG_LOAD_PARSE_REMEDY),
             ),
             StartupError::invalid_option("bad port"),
+            StartupError::storage_upgrade(
+                "positions.db",
+                &["service lifecycle failed".to_owned(), "refused".to_owned()],
+            ),
             StartupError::generic_error("boom"),
             StartupError::failed(ids::STARTUP_FAILURE_DIRECTORIES, "denied"),
             StartupError::failed(ids::STARTUP_FAILURE_CONFIG_LOAD, "denied"),
@@ -404,6 +446,56 @@ mod tests {
             }
             assert!(!error.summary().is_empty());
         }
+    }
+
+    #[test]
+    fn storage_upgrade_names_the_database_and_every_cause() {
+        let error = StartupError::storage_upgrade(
+            "positions.db",
+            &[
+                "service lifecycle failed".to_owned(),
+                "unrecognized column positions.flag".to_owned(),
+            ],
+        );
+        assert_eq!(error.code.as_str(), "storage_upgrade");
+        let detail = error.detail.render_source_plain();
+        assert!(detail.contains("positions.db"), "{detail}");
+        assert!(detail.contains("service lifecycle failed\nunrecognized column positions.flag"));
+    }
+
+    /// Every row of the box has the same width, and a long cause is wrapped in full
+    /// instead of being cut off.
+    #[test]
+    fn long_box_lines_wrap_without_losing_text() {
+        let detail = format!(
+            "{} {} {}",
+            "positions schema migration failed:",
+            "x".repeat(150),
+            "word ".repeat(25).trim_end()
+        );
+        assert!(detail.chars().count() > 300);
+        let rows = boxed_lines(&detail, false);
+        let widths = rows
+            .lines()
+            .map(|row| row.chars().count())
+            .collect::<Vec<_>>();
+        assert!(widths.len() > 4);
+        assert!(widths.iter().all(|width| *width == BOX_WIDTH + 2), "{rows}");
+        let rejoined = rows
+            .lines()
+            .map(|row| {
+                row.trim_start_matches("  | ")
+                    .trim_end_matches(" |")
+                    .trim_end()
+            })
+            .collect::<Vec<_>>()
+            .concat();
+        assert_eq!(
+            rejoined.replace(' ', ""),
+            detail.replace(' ', ""),
+            "every character is kept"
+        );
+        assert_eq!(boxed_lines("", false).lines().count(), 1);
     }
 
     #[test]

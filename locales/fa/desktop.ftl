@@ -43,6 +43,7 @@ desktop-boot-subtitle-port-in-use = یک پورت شبکه موردنیاز مش
 desktop-boot-subtitle-lock-held = { -brand } از قبل در حال اجراست
 desktop-boot-subtitle-config-invalid = مشکل در پیکربندی
 desktop-boot-subtitle-directory-setup = مشکل در فضای ذخیره‌سازی
+desktop-boot-subtitle-storage-upgrade = مشکل در ارتقای پایگاه داده
 desktop-boot-subtitle-generic = خطای راه‌اندازی
 
 ## Boot errors raised by the shell itself (the backend never reported one).

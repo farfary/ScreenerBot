@@ -50,6 +50,16 @@ startup-config-load-parse-remedy = Restaure uma configuração válida ou conclu
 startup-option-invalid-title = Opção de inicialização inválida
 startup-option-invalid-remedy = Uma opção de linha de comando é inválida. Inicie o { -brand } sem essa opção ou corrija-a e tente novamente.
 
+## Storage upgrade.
+
+startup-storage-upgrade-title = Não foi possível atualizar seus dados
+startup-storage-upgrade-detail =
+    O { -brand } não conseguiu atualizar { $database } para esta versão e parou antes de alterá-lo. Seus dados não foram alterados.
+
+    Causa:
+    { $error }
+startup-storage-upgrade-remedy = Copie os detalhes e envie-os com o arquivo de log ao suporte em t.me/screenerbotio_support. Não edite, mova nem exclua o banco de dados: o { -brand } o abrirá novamente assim que uma correção for instalada.
+
 ## Generic failures.
 
 startup-generic-title = Não foi possível iniciar o { -brand }

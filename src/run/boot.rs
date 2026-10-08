@@ -99,6 +99,7 @@ pub async fn boot() {
     // boot apart from a clean shutdown.
     if let Err(e) = super::run_bot().await {
         crate::errors::StartupError::from(e).emit();
+        logger::flush();
         std::process::exit(1);
     }
 

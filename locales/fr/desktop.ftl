@@ -29,6 +29,7 @@ desktop-boot-subtitle-port-in-use = Un port réseau requis est occupé
 desktop-boot-subtitle-lock-held = { -brand } est déjà en cours d'exécution
 desktop-boot-subtitle-config-invalid = Problème de configuration
 desktop-boot-subtitle-directory-setup = Problème de stockage
+desktop-boot-subtitle-storage-upgrade = Problème de mise à niveau de la base de données
 desktop-boot-subtitle-generic = Erreur de démarrage
 
 desktop-boot-error-title = { -brand } n'a pas pu démarrer

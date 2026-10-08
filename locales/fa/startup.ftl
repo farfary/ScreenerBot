@@ -50,6 +50,16 @@ startup-config-load-parse-remedy = یک پیکربندی معتبر را باز�
 startup-option-invalid-title = گزینه راه‌اندازی نامعتبر
 startup-option-invalid-remedy = یکی از گزینه‌های خط فرمان نامعتبر است. { -brand } را بدون آن گزینه اجرا کنید یا آن را اصلاح کنید و دوباره تلاش کنید.
 
+## Storage upgrade.
+
+startup-storage-upgrade-title = ارتقای داده‌های شما ممکن نشد
+startup-storage-upgrade-detail =
+    { -brand } نتوانست { $database } را به این نسخه ارتقا دهد و پیش از هر تغییری متوقف شد. داده‌های شما تغییری نکرده است.
+
+    علت:
+    { $error }
+startup-storage-upgrade-remedy = جزئیات را کپی کنید و همراه فایل گزارش برای پشتیبانی در t.me/screenerbotio_support بفرستید. پایگاه داده را ویرایش، جابه‌جا یا حذف نکنید: { -brand } پس از نصب اصلاحیه دوباره آن را باز می‌کند.
+
 ## Generic failures.
 
 startup-generic-title = { -brand } شروع نشد

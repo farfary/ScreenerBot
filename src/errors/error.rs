@@ -219,6 +219,34 @@ impl From<tokio::time::error::Elapsed> for Error {
     }
 }
 
+impl Error {
+    /// The store files whose upgrade refused, when this error is such a refusal. These
+    /// opens run in one transaction, or only add tables, so the store is unchanged.
+    pub fn storage_upgrade_database(&self) -> Option<String> {
+        let backup = |error: &DatabaseError| match error {
+            DatabaseError::Backup { store, .. } => Some(store.clone()),
+            _ => None,
+        };
+        match self {
+            Error::Positions(crate::positions::Error::SchemaMigration { .. }) => {
+                Some("positions.db".to_owned())
+            }
+            Error::Positions(crate::positions::Error::Database(error)) | Error::Database(error) => {
+                backup(error)
+            }
+            Error::Transactions(crate::transactions::Error::Migration { .. }) => {
+                Some("transactions.db".to_owned())
+            }
+            // Wallet records and the balance history share the wallets error vocabulary.
+            Error::Wallets(crate::wallets::Error::Migration { .. }) => {
+                Some("wallets.db, wallet.db".to_owned())
+            }
+            Error::Tools(crate::tools::Error::Migration { .. }) => Some("tools.db".to_owned()),
+            _ => None,
+        }
+    }
+}
+
 // =============================================================================
 // Structured error builders (migration helpers)
 // =============================================================================

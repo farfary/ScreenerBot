@@ -43,6 +43,7 @@ desktop-boot-subtitle-port-in-use = Un puerto de red necesario está ocupado
 desktop-boot-subtitle-lock-held = { -brand } ya se está ejecutando
 desktop-boot-subtitle-config-invalid = Problema de configuración
 desktop-boot-subtitle-directory-setup = Problema de almacenamiento
+desktop-boot-subtitle-storage-upgrade = Problema al actualizar la base de datos
 desktop-boot-subtitle-generic = Error de inicio
 
 ## Boot errors raised by the shell itself (the backend never reported one).

@@ -50,6 +50,16 @@ startup-config-load-parse-remedy = استعد إعدادات صالحة أو أ�
 startup-option-invalid-title = خيار بدء تشغيل غير صالح
 startup-option-invalid-remedy = أحد خيارات سطر الأوامر غير صالح. شغّل { -brand } بدون هذا الخيار، أو صحّحه وحاول مرة أخرى.
 
+## Storage upgrade.
+
+startup-storage-upgrade-title = تعذّرت ترقية بياناتك
+startup-storage-upgrade-detail =
+    تعذّر على { -brand } ترقية { $database } إلى هذا الإصدار، فتوقف قبل تغييرها. لم تتغير بياناتك.
+
+    السبب:
+    { $error }
+startup-storage-upgrade-remedy = انسخ التفاصيل وأرسلها مع ملف السجل إلى الدعم على t.me/screenerbotio_support. لا تعدّل قاعدة البيانات ولا تنقلها ولا تحذفها: سيفتحها { -brand } مجددًا بعد تثبيت الإصلاح.
+
 ## Generic failures.
 
 startup-generic-title = تعذّر تشغيل { -brand }

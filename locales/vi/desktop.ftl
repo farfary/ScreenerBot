@@ -29,6 +29,7 @@ desktop-boot-subtitle-port-in-use = Một cổng mạng cần thiết đang bậ
 desktop-boot-subtitle-lock-held = { -brand } đang chạy
 desktop-boot-subtitle-config-invalid = Lỗi cấu hình
 desktop-boot-subtitle-directory-setup = Lỗi lưu trữ
+desktop-boot-subtitle-storage-upgrade = Sự cố nâng cấp cơ sở dữ liệu
 desktop-boot-subtitle-generic = Lỗi khởi động
 
 desktop-boot-error-title = { -brand } không thể khởi động

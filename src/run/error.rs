@@ -5,7 +5,9 @@
 
 use std::time::Duration;
 
-use crate::errors::{ErrorClass, ServiceError, Severity, StartupError, StartupErrorCode};
+use crate::errors::{
+    source_chain, ErrorClass, ServiceError, Severity, StartupError, StartupErrorCode,
+};
 use crate::i18n::{ids, UiArg, UiText};
 
 /// Everything that can go wrong while starting or stopping the process lifecycle.
@@ -87,6 +89,7 @@ impl ErrorClass for Error {
                 StartupErrorCode::PortInUse
                 | StartupErrorCode::LockHeld
                 | StartupErrorCode::ConfigInvalid
+                | StartupErrorCode::StorageUpgrade
                 | StartupErrorCode::Generic => Severity::Error,
             },
             Error::Service(error) => error.severity(),
@@ -103,7 +106,7 @@ impl ErrorClass for Error {
             Error::Startup(startup) => match startup.code {
                 StartupErrorCode::WalletMismatch | StartupErrorCode::ConfigInvalid => 400,
                 StartupErrorCode::PortInUse | StartupErrorCode::LockHeld => 409,
-                StartupErrorCode::Generic => 500,
+                StartupErrorCode::StorageUpgrade | StartupErrorCode::Generic => 500,
             },
             Error::Service(error) => error.http_status(),
             Error::Core { source } => source.http_status(),
@@ -139,11 +142,99 @@ impl From<Error> for StartupError {
                         UiText::new(ids::STARTUP_CONFIG_PARSE_REMEDY),
                     )
                 }
-                source => StartupError::generic_error(Error::Core {
-                    source: Box::new(source),
-                }),
+                source => match source.storage_upgrade_database() {
+                    Some(database) => StartupError::storage_upgrade(
+                        &database,
+                        &source_chain(&Error::Core {
+                            source: Box::new(source),
+                        }),
+                    ),
+                    None => StartupError::generic_error(
+                        source_chain(&Error::Core {
+                            source: Box::new(source),
+                        })
+                        .join("\n"),
+                    ),
+                },
             },
-            error => StartupError::generic_error(error),
+            error => StartupError::generic_error(source_chain(&error).join("\n")),
         }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    fn core(source: crate::Error) -> Error {
+        Error::Core {
+            source: Box::new(source),
+        }
+    }
+
+    /// Every typed upgrade refusal reaches the storage-upgrade screen with the store
+    /// it belongs to and the refusal itself, not only the lifecycle wrapper.
+    #[test]
+    fn upgrade_refusals_name_their_store_and_cause() {
+        let cases = [
+            (
+                crate::Error::Positions(crate::positions::Error::SchemaMigration {
+                    detail: "unrecognized column positions.flag".to_owned(),
+                }),
+                "positions.db",
+            ),
+            (
+                crate::Error::Positions(crate::positions::Error::Database(
+                    crate::errors::DatabaseError::Backup {
+                        store: "positions.db".to_owned(),
+                        message: "disk full".to_owned(),
+                    },
+                )),
+                "positions.db",
+            ),
+            (
+                crate::Error::Transactions(crate::transactions::Error::Migration {
+                    step: "rename".to_owned(),
+                    detail: "refused".to_owned(),
+                }),
+                "transactions.db",
+            ),
+            (
+                crate::Error::Wallets(crate::wallets::Error::Migration {
+                    step: "rebuild tables".to_owned(),
+                    detail: "refused".to_owned(),
+                }),
+                "wallets.db, wallet.db",
+            ),
+            (
+                crate::Error::Tools(crate::tools::Error::Migration {
+                    step: "create table".to_owned(),
+                    detail: "refused".to_owned(),
+                }),
+                "tools.db",
+            ),
+        ];
+        for (source, database) in cases {
+            let cause = source.to_string();
+            let startup = StartupError::from(core(source));
+            assert_eq!(startup.code, StartupErrorCode::StorageUpgrade, "{cause}");
+            let detail = startup.detail.render_source_plain();
+            assert!(detail.contains(database), "{detail}");
+            assert!(detail.contains(&cause), "{detail}");
+        }
+    }
+
+    #[test]
+    fn a_generic_failure_shows_its_whole_cause_chain() {
+        let source = crate::Error::Service(ServiceError::Start {
+            service: "tokens".to_owned(),
+            message: "orchestrator missing".to_owned(),
+        });
+        let cause = source.to_string();
+        let startup = StartupError::from(core(source));
+        assert_eq!(startup.code, StartupErrorCode::Generic);
+        let detail = startup.detail.render_source_plain();
+        assert!(detail.contains("service lifecycle failed"), "{detail}");
+        assert!(detail.contains(&cause), "{detail}");
     }
 }

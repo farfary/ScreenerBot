@@ -43,6 +43,16 @@ startup-config-load-parse-remedy = Відновіть дійсну конфіг�
 startup-option-invalid-title = Недійсний параметр запуску
 startup-option-invalid-remedy = Параметр командного рядка недійсний. Запустіть { -brand } без цього параметра або виправте його й спробуйте ще раз.
 
+## Storage upgrade.
+
+startup-storage-upgrade-title = Не вдалося оновити ваші дані
+startup-storage-upgrade-detail =
+    { -brand } не зміг оновити { $database } до цієї версії й зупинився, нічого не змінивши. Ваші дані не змінено.
+
+    Причина:
+    { $error }
+startup-storage-upgrade-remedy = Скопіюйте подробиці й надішліть їх разом із файлом журналу до підтримки: t.me/screenerbotio_support. Не редагуйте, не переміщуйте й не видаляйте базу даних: { -brand } знову відкриє її після встановлення виправлення.
+
 ## Generic failures.
 
 startup-generic-title = Не вдалося запустити { -brand }

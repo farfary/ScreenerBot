@@ -71,6 +71,7 @@
     lock_held: 'desktop-boot-subtitle-lock-held',
     config_invalid: 'desktop-boot-subtitle-config-invalid',
     directory_setup: 'desktop-boot-subtitle-directory-setup',
+    storage_upgrade: 'desktop-boot-subtitle-storage-upgrade',
     generic: 'desktop-boot-subtitle-generic'
   };
 

@@ -43,6 +43,16 @@ startup-config-load-parse-remedy = Hãy khôi phục một cấu hình hợp l�
 startup-option-invalid-title = Tùy chọn khởi động không hợp lệ
 startup-option-invalid-remedy = Một tùy chọn dòng lệnh không hợp lệ. Hãy khởi động { -brand } mà không dùng tùy chọn đó, hoặc sửa lại rồi thử lại.
 
+## Storage upgrade.
+
+startup-storage-upgrade-title = Không thể nâng cấp dữ liệu của bạn
+startup-storage-upgrade-detail =
+    { -brand } không thể nâng cấp { $database } lên phiên bản này và đã dừng trước khi thay đổi. Dữ liệu của bạn không bị thay đổi.
+
+    Nguyên nhân:
+    { $error }
+startup-storage-upgrade-remedy = Sao chép chi tiết và gửi kèm tệp nhật ký đến bộ phận hỗ trợ tại t.me/screenerbotio_support. Đừng chỉnh sửa, di chuyển hoặc xóa cơ sở dữ liệu: { -brand } sẽ mở lại sau khi bản sửa lỗi được cài đặt.
+
 ## Generic failures.
 
 startup-generic-title = { -brand } không thể khởi động

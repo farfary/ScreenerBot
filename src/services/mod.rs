@@ -107,6 +107,18 @@ impl ServiceLogEvent {
     }
 }
 
+/// Log a service that failed to `phase` with its whole cause chain, so the log names
+/// the service and the failure that started it.
+fn log_start_failure(service: &str, phase: &str, error: &crate::Error) {
+    logger::error(
+        LogTag::System,
+        &format!(
+            "Service '{service}' failed to {phase}: {}",
+            crate::errors::source_chain(error).join(": ")
+        ),
+    );
+}
+
 pub struct ServiceStartupFailure {
     pub name: &'static str,
     pub error: String,
@@ -252,7 +264,10 @@ impl ServiceManager {
                 startup::mark_service_start(service_name);
                 log_service_event(service_name, ServiceLogEvent::InitializeStart, None, false);
                 let init_start = Instant::now();
-                service.initialize().await?;
+                if let Err(error) = service.initialize().await {
+                    log_start_failure(service_name, "initialize", &error);
+                    return Err(error);
+                }
                 let init_elapsed = init_start.elapsed().as_millis();
 
                 log_service_event(
@@ -264,9 +279,13 @@ impl ServiceManager {
 
                 log_service_event(service_name, ServiceLogEvent::StartStart, None, false);
                 let start_timer = Instant::now();
-                let handles = service
-                    .start(self.shutdown.clone(), monitor.clone())
-                    .await?;
+                let handles = match service.start(self.shutdown.clone(), monitor.clone()).await {
+                    Ok(handles) => handles,
+                    Err(error) => {
+                        log_start_failure(service_name, "start", &error);
+                        return Err(error);
+                    }
+                };
                 let start_elapsed = start_timer.elapsed().as_millis();
                 let handle_count = handles.len();
 
@@ -418,13 +437,13 @@ impl ServiceManager {
                         );
                     }
                     Err(e) => {
-                        logger::error(
-                            LogTag::System,
-                            &format!("Failed to initialize service '{service_name}': {e}"),
-                        );
+                        log_start_failure(service_name, "initialize", &e);
                         failed_starts.push(ServiceStartupFailure {
                             name: service_name,
-                            error: format!("Initialize failed: {e}"),
+                            error: format!(
+                                "Initialize failed: {}",
+                                crate::errors::source_chain(&e).join(": ")
+                            ),
                         });
                         continue; // Skip starting this service
                     }
@@ -462,13 +481,13 @@ impl ServiceManager {
                             .await;
                     }
                     Err(e) => {
-                        logger::error(
-                            LogTag::System,
-                            &format!("Failed to start service '{service_name}': {e}"),
-                        );
+                        log_start_failure(service_name, "start", &e);
                         failed_starts.push(ServiceStartupFailure {
                             name: service_name,
-                            error: format!("Start failed: {e}"),
+                            error: format!(
+                                "Start failed: {}",
+                                crate::errors::source_chain(&e).join(": ")
+                            ),
                         });
                     }
                 }

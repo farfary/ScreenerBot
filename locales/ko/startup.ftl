@@ -46,6 +46,16 @@ startup-config-load-parse-remedy = 올바른 설정을 복원하거나 설정을
 startup-option-invalid-title = 시작 옵션이 올바르지 않습니다
 startup-option-invalid-remedy = 명령줄 옵션이 올바르지 않습니다. 해당 옵션 없이 { -brand }을 시작하거나, 옵션을 수정한 후 다시 시도하세요.
 
+## Storage upgrade.
+
+startup-storage-upgrade-title = 데이터를 업그레이드할 수 없습니다
+startup-storage-upgrade-detail =
+    { -brand }이(가) { $database }을(를) 이 버전으로 업그레이드하지 못해 변경하기 전에 중지했습니다. 데이터는 변경되지 않았습니다.
+
+    원인:
+    { $error }
+startup-storage-upgrade-remedy = 세부 정보를 복사해 로그 파일과 함께 t.me/screenerbotio_support 지원팀에 보내 주세요. 데이터베이스를 편집, 이동, 삭제하지 마세요. 수정 사항이 설치되면 { -brand }이(가) 다시 엽니다.
+
 ## Generic failures.
 
 startup-generic-title = { -brand }을 시작할 수 없습니다

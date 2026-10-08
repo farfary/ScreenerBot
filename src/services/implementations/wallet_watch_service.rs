@@ -47,12 +47,7 @@ impl Service for WalletWatchService {
         shutdown: Arc<Notify>,
         _monitor: tokio_metrics::TaskMonitor,
     ) -> crate::Result<Vec<JoinHandle<()>>> {
-        let handle = crate::wallets::watch::start(shutdown).await.map_err(|e| {
-            crate::Error::Service(crate::errors::ServiceError::Start {
-                service: "wallet_watch".to_owned(),
-                message: e.to_string(),
-            })
-        })?;
+        let handle = crate::wallets::watch::start(shutdown).await?;
 
         Ok(vec![handle])
     }

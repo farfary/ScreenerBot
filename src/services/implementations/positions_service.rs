@@ -39,14 +39,8 @@ impl Service for PositionsService {
         shutdown: Arc<Notify>,
         monitor: tokio_metrics::TaskMonitor,
     ) -> crate::Result<Vec<JoinHandle<()>>> {
-        let handle = crate::positions::start_positions_manager_service(shutdown.clone(), monitor)
-            .await
-            .map_err(|e| {
-                crate::Error::Service(crate::errors::ServiceError::Start {
-                    service: "positions".to_owned(),
-                    message: format!("Failed to start positions service: {e}"),
-                })
-            })?;
+        let handle =
+            crate::positions::start_positions_manager_service(shutdown.clone(), monitor).await?;
 
         // Return verification_worker handle so ServiceManager can wait for graceful shutdown
         Ok(vec![handle])

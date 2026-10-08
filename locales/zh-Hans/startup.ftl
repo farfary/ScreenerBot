@@ -50,6 +50,16 @@ startup-config-load-parse-remedy = 请恢复有效的配置，或重新完成设
 startup-option-invalid-title = 启动选项无效
 startup-option-invalid-remedy = 某个命令行选项无效。请不带该选项启动 { -brand }，或更正后重试。
 
+## Storage upgrade.
+
+startup-storage-upgrade-title = 无法升级你的数据
+startup-storage-upgrade-detail =
+    { -brand } 无法将 { $database } 升级到此版本，已在更改之前停止。你的数据未被更改。
+
+    原因：
+    { $error }
+startup-storage-upgrade-remedy = 复制详细信息，并连同日志文件发送给 t.me/screenerbotio_support 的支持团队。请勿编辑、移动或删除数据库：安装修复后，{ -brand } 会再次打开它。
+
 ## Generic failures.
 
 startup-generic-title = { -brand } 无法启动

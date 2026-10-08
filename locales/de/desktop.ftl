@@ -38,6 +38,7 @@ desktop-boot-subtitle-port-in-use = Ein benötigter Netzwerkport ist belegt
 desktop-boot-subtitle-lock-held = { -brand } läuft bereits
 desktop-boot-subtitle-config-invalid = Konfigurationsproblem
 desktop-boot-subtitle-directory-setup = Speicherproblem
+desktop-boot-subtitle-storage-upgrade = Problem beim Datenbank-Upgrade
 desktop-boot-subtitle-generic = Startfehler
 
 ## Boot errors raised by the shell itself (the backend never reported one).

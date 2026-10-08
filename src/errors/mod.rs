@@ -9,6 +9,7 @@
 
 mod account;
 
+mod chain;
 mod configuration;
 mod data;
 mod database;
@@ -22,6 +23,7 @@ mod startup;
 mod traits;
 
 pub use account::*;
+pub use chain::source_chain;
 pub use configuration::*;
 pub use data::*;
 pub use database::*;

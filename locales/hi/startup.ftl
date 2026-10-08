@@ -35,6 +35,14 @@ startup-config-load-parse-remedy = कोई मान्य कॉन्फ़�
 startup-option-invalid-title = स्टार्टअप विकल्प अमान्य है
 startup-option-invalid-remedy = कोई कमांड-लाइन विकल्प अमान्य है। उस विकल्प के बिना { -brand } शुरू करें, या उसे सुधारकर दोबारा प्रयास करें।
 
+startup-storage-upgrade-title = आपका डेटा अपग्रेड नहीं हो सका
+startup-storage-upgrade-detail =
+    { -brand } { $database } को इस वर्ज़न में अपग्रेड नहीं कर सका और उसे बदलने से पहले रुक गया। आपका डेटा नहीं बदला गया।
+
+    कारण:
+    { $error }
+startup-storage-upgrade-remedy = विवरण कॉपी करें और लॉग फ़ाइल के साथ t.me/screenerbotio_support पर सपोर्ट को भेजें। डेटाबेस को एडिट, मूव या डिलीट न करें: फ़िक्स इंस्टॉल होते ही { -brand } उसे फिर से खोलेगा।
+
 startup-generic-title = { -brand } शुरू नहीं हो सका
 startup-generic-remedy = विवरण के लिए लॉग फ़ाइल देखें, फिर ऐप रीस्टार्ट करें। समस्या बनी रहे तो t.me/screenerbotio_support पर सपोर्ट से संपर्क करें।
 startup-generic-detail = { $error }

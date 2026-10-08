@@ -52,13 +52,7 @@ impl Service for TransactionsService {
         // Start global transaction service and capture handle (passing monitor)
         let handle =
             crate::transactions::service::start_global_transaction_service(&subject, monitor)
-                .await
-                .map_err(|e| {
-                    crate::Error::Service(crate::errors::ServiceError::Start {
-                        service: "transactions".to_owned(),
-                        message: format!("Failed to start transactions service: {e}"),
-                    })
-                })?;
+                .await?;
 
         // Return service handle so ServiceManager can wait for graceful shutdown
         Ok(vec![handle])

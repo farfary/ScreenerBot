@@ -50,6 +50,16 @@ startup-config-load-parse-remedy = Pulihkan konfigurasi yang valid atau selesaik
 startup-option-invalid-title = Opsi startup tidak valid
 startup-option-invalid-remedy = Opsi command-line tidak valid. Mulai { -brand } tanpa opsi tersebut, atau perbaiki lalu coba lagi.
 
+## Storage upgrade.
+
+startup-storage-upgrade-title = Data Anda tidak dapat ditingkatkan
+startup-storage-upgrade-detail =
+    { -brand } tidak dapat meningkatkan { $database } ke versi ini dan berhenti sebelum mengubahnya. Data Anda tidak diubah.
+
+    Penyebab:
+    { $error }
+startup-storage-upgrade-remedy = Salin detailnya dan kirimkan bersama file log ke dukungan di t.me/screenerbotio_support. Jangan mengedit, memindahkan, atau menghapus database: { -brand } akan membukanya lagi setelah perbaikan dipasang.
+
 ## Generic failures.
 
 startup-generic-title = { -brand } tidak dapat dimulai

@@ -43,6 +43,7 @@ desktop-boot-subtitle-port-in-use = 所需的网络端口被占用
 desktop-boot-subtitle-lock-held = { -brand } 已在运行
 desktop-boot-subtitle-config-invalid = 配置问题
 desktop-boot-subtitle-directory-setup = 存储问题
+desktop-boot-subtitle-storage-upgrade = 数据库升级问题
 desktop-boot-subtitle-generic = 启动错误
 
 ## Boot errors raised by the shell itself (the backend never reported one).

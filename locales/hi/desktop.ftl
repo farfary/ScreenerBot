@@ -29,6 +29,7 @@ desktop-boot-subtitle-port-in-use = ज़रूरी नेटवर्क प
 desktop-boot-subtitle-lock-held = { -brand } पहले से चल रहा है
 desktop-boot-subtitle-config-invalid = कॉन्फ़िगरेशन समस्या
 desktop-boot-subtitle-directory-setup = स्टोरेज समस्या
+desktop-boot-subtitle-storage-upgrade = डेटाबेस अपग्रेड समस्या
 desktop-boot-subtitle-generic = स्टार्टअप एरर
 
 desktop-boot-error-title = { -brand } शुरू नहीं हो सका
