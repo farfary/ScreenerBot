@@ -417,6 +417,7 @@ errors-positions-unverified-entry-archive = لم يتم تأكيد عملية ش
 errors-positions-not-archived = المركز غير مؤرشف
 errors-positions-archive-failed = تعذّرت أرشفة المركز
 errors-positions-unarchive-failed = تعذّر إلغاء أرشفة المركز
+errors-positions-unarchive-duplicate-open = لهذا الرمز أكثر من مركز مفتوح ({ $positions })، ولا يمكن أن يكون نشطًا إلا واحد منها. أغلق المراكز الأخرى أو أرشفها أولًا.
 errors-positions-management-invalid = الإدارة المملوكة للنسخ تتطلب مركزًا من أصل نسخ
 errors-positions-management-failed = تعذّر تحديث إدارة المركز
 errors-positions-delete-failed = تعذّر حذف المركز

@@ -408,6 +408,7 @@ errors-positions-unverified-entry-archive = Bu pozisyonun alımı henüz doğrul
 errors-positions-not-archived = Pozisyon arşivlenmemiş
 errors-positions-archive-failed = Pozisyon arşivlenemedi
 errors-positions-unarchive-failed = Pozisyon arşivden çıkarılamadı
+errors-positions-unarchive-duplicate-open = Bu tokenin birden fazla açık pozisyonu var ({ $positions }) ve yalnızca biri aktif olabilir. Önce diğerlerini kapatın veya arşivleyin.
 errors-positions-management-invalid = Kopyaya ait yönetim, kopya kaynaklı bir pozisyon gerektirir
 errors-positions-management-failed = Pozisyon yönetimi güncellenemedi
 errors-positions-delete-failed = Pozisyon silinemedi

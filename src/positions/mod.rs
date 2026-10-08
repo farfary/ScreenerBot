@@ -43,13 +43,14 @@ pub use operations::{
 };
 
 pub use state::{
-    acquire_position_lock, get_active_frozen_cooldowns, get_archived_positions,
+    acquire_position_lock, buy_target, get_active_frozen_cooldowns, get_archived_positions,
     get_closed_positions, get_open_mints, get_open_positions, get_open_positions_count,
-    get_pending_dca_swaps_for_mint, get_pending_partial_exits_for_mint, get_position_by_id,
-    get_position_by_mint, init_global_position_semaphore, is_open_position,
-    is_partial_exit_pending, is_token_in_cooldown, reconcile_global_position_semaphore,
-    remove_position_by_id, set_position_archived_in_memory, set_position_management_in_memory,
-    MINT_TO_POSITION_INDEX, POSITIONS, SIG_TO_MINT_INDEX,
+    get_open_round_by_mint, get_pending_dca_swaps_for_mint, get_pending_partial_exits_for_mint,
+    get_position_by_id, get_position_by_mint, holds_open_round, init_global_position_semaphore,
+    is_open_position, is_partial_exit_pending, is_token_in_cooldown,
+    reconcile_global_position_semaphore, remove_position_by_id, set_position_archived_in_memory,
+    set_position_management_in_memory, BuyTarget, MINT_TO_POSITION_INDEX, POSITIONS,
+    SIG_TO_MINT_INDEX,
 };
 
 pub use tracking::update_position_tracking;

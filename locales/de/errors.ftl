@@ -378,6 +378,7 @@ errors-positions-unverified-entry-archive = Der Kauf für diese Position ist noc
 errors-positions-not-archived = Die Position ist nicht archiviert
 errors-positions-archive-failed = Position konnte nicht archiviert werden
 errors-positions-unarchive-failed = Position konnte nicht aus dem Archiv geholt werden
+errors-positions-unarchive-duplicate-open = Dieser Token hat mehr als eine offene Position ({ $positions }), und nur eine davon kann aktiv sein. Schließen oder archivieren Sie zuerst die anderen.
 errors-positions-management-invalid = Copy-eigene Verwaltung erfordert eine Position mit Copy-Ursprung
 errors-positions-management-failed = Positionsverwaltung konnte nicht aktualisiert werden
 errors-positions-delete-failed = Position konnte nicht gelöscht werden

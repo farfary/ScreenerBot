@@ -379,12 +379,21 @@ export class TradeActionDialog {
               <!-- Shown only when the quoted impact exceeds the slippage this trade will
                    execute with — the same threshold the confirm-time gate uses, so the
                    preview warns about exactly what will stop the user on confirm. -->
-              <div class="quote-warning" data-visible="false">
+              <div class="quote-warning quote-impact-warning" data-visible="false">
                 <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true">
                   <path d="M10.29 3.86L1.82 18a2 2 0 001.71 3h16.94a2 2 0 001.71-3L13.71 3.86a2 2 0 00-3.42 0z"/>
                   <path d="M12 9v4M12 17h.01"/>
                 </svg>
                 <span class="quote-warning-text"></span>
+              </div>
+              <!-- Shown when the token's open position is archived: the buy is added to it
+                   and brings it back to the open positions. The text comes from the quote. -->
+              <div class="quote-warning quote-buy-notice" data-visible="false">
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true">
+                  <circle cx="12" cy="12" r="10"/>
+                  <path d="M12 16v-4M12 8h.01"/>
+                </svg>
+                <span class="quote-buy-notice-text"></span>
               </div>
               <p class="quote-disclaimer" data-l10n-id="trade-quote-disclaimer"></p>
             </div>
@@ -491,8 +500,10 @@ export class TradeActionDialog {
     this.quoteMinReceivedEl = overlay.querySelector(".quote-min-received");
     this.quoteYouPayEl = overlay.querySelector(".quote-you-pay");
     this.quoteRoutePathEl = overlay.querySelector(".quote-route-path");
-    this.quoteWarningEl = overlay.querySelector(".quote-warning");
+    this.quoteWarningEl = overlay.querySelector(".quote-impact-warning");
     this.quoteWarningTextEl = overlay.querySelector(".quote-warning-text");
+    this.quoteBuyNoticeEl = overlay.querySelector(".quote-buy-notice");
+    this.quoteBuyNoticeTextEl = overlay.querySelector(".quote-buy-notice-text");
     this.quoteContentEl = overlay.querySelector(".trade-action-quote-content");
 
     // Amount controls (slider + MAX)

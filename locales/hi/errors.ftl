@@ -378,6 +378,7 @@ errors-positions-unverified-entry-archive = इस पोज़िशन की 
 errors-positions-not-archived = पोज़िशन आर्काइव नहीं है
 errors-positions-archive-failed = पोज़िशन आर्काइव करने में विफल
 errors-positions-unarchive-failed = पोज़िशन आर्काइव से निकालने में विफल
+errors-positions-unarchive-duplicate-open = इस टोकन की एक से अधिक खुली पोज़िशन हैं ({ $positions }), और उनमें से केवल एक सक्रिय हो सकती है। पहले बाकी को बंद या आर्काइव करें।
 errors-positions-management-invalid = कॉपी-स्वामित्व वाले प्रबंधन के लिए कॉपी-मूल की पोज़िशन ज़रूरी है
 errors-positions-management-failed = पोज़िशन प्रबंधन अपडेट करने में विफल
 errors-positions-delete-failed = पोज़िशन हटाने में विफल

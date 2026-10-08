@@ -22,15 +22,18 @@ use super::db::{
 };
 use super::ledger::is_wallet_history_close_reason;
 use super::pnl::position_pnl;
-use super::round_state::{attributable_held, follow_round, is_closed, FollowOutcome};
+use super::round_state::{
+    attributable_held, follow_round, hand_over_leg, hand_over_round, is_closed, FollowOutcome,
+    Handover, Leg,
+};
 use super::types::{EntryRecord, ExitRecord, Position};
 use super::{
     loss_detection::process_position_loss_detection,
     state::{
         clear_pending_dca_swap, get_position_by_id, get_position_by_mint, other_swap_in_flight,
-        position_has_pending_swap, publish_committed, register_position_slot,
-        release_position_slot, remove_position_by_id, remove_signature_from_index,
-        try_consume_global_position_permit, update_position_state, with_booking_lock,
+        position_has_pending_swap, publish_committed, reclaim_position_slot, release_position_slot,
+        remove_position_by_id, remove_signature_from_index, set_position_archived_in_memory,
+        update_position_state, with_booking_lock,
     },
     transitions::PositionTransition,
 };
@@ -85,6 +88,7 @@ pub async fn apply_transition(transition: PositionTransition) -> Result<ApplyEff
                 position_id,
                 snapshot.entry_transaction_signature.as_deref(),
                 held_after,
+                snapshot.entry_time,
             )
             .await;
             let store_chain = get_store_chain().await?;
@@ -112,6 +116,7 @@ pub async fn apply_transition(transition: PositionTransition) -> Result<ApplyEff
                 let late = after_write_off
                     .map(|after_write_off| {
                         late_fill(row, reads, reading, store_chain, after_write_off)
+                            .and_then(|late| bring_back_reopened(row, reads, late))
                     })
                     .transpose()?;
                 let record = row.entry_transaction_signature.clone().map(|signature| {
@@ -218,6 +223,7 @@ pub async fn apply_transition(transition: PositionTransition) -> Result<ApplyEff
                 position_id,
                 Some(&exit_signature),
                 held_after,
+                exit_time,
             )
             .await;
             let store_chain = get_store_chain().await?;
@@ -586,6 +592,7 @@ pub async fn apply_transition(transition: PositionTransition) -> Result<ApplyEff
                 position_id,
                 Some(&exit_signature),
                 held_after,
+                exit_time,
             )
             .await;
             let store_chain = get_store_chain().await?;
@@ -930,23 +937,51 @@ pub async fn apply_transition(transition: PositionTransition) -> Result<ApplyEff
                 position_id,
                 Some(&dca_signature),
                 held_after,
+                dca_time,
             )
             .await;
             let store_chain = get_store_chain().await?;
             let committed = book_position(position_id, |row, reads| {
-                if reads.entry_record_exists(&dca_signature)? {
+                // A buy handed over to the open position of the mint is recorded there, so
+                // the record of any position of the mint marks it booked.
+                if reads.entry_recorded_for_mint(&row.mint, &dca_signature)? {
                     return Ok(Booking::Skip(None));
                 }
-                let after_write_off = is_closed(row).then_some(row.synthetic_exit);
-                row.book_dca(&fill)?;
-                let late = after_write_off
-                    .map(|after_write_off| {
-                        late_fill(row, reads, reading, store_chain, after_write_off)
-                    })
-                    .transpose()?;
+                let (late, kept) = match is_closed(row).then_some(row.synthetic_exit) {
+                    None => {
+                        row.book_dca(&fill)?;
+                        (None, None)
+                    }
+                    Some(after_write_off) => {
+                        let (late, kept) = late_dca(
+                            row,
+                            reads,
+                            reading,
+                            store_chain,
+                            after_write_off,
+                            LateDca {
+                                fill: &fill,
+                                price: effective_price,
+                                fee_raw,
+                            },
+                        )?;
+                        (Some(bring_back_reopened(row, reads, late)?), Some(kept))
+                    }
+                };
+                // An add on an archived open position brings it back to the open positions
+                // with the booking.
+                let unarchived =
+                    late.is_none() && row.archived && may_unarchive(reads, &row.mint, position_id)?;
+                if unarchived {
+                    row.archived = false;
+                    row.archived_at = None;
+                }
                 // An open or reopened position averages its cost over what it now holds; a
                 // row that stays closed keeps the average its round was priced at.
-                if late.is_none_or(|late| late.follow == FollowOutcome::Reopened) {
+                if late
+                    .as_ref()
+                    .is_none_or(|late| late.follow == FollowOutcome::Reopened)
+                {
                     let remaining = row.remaining_token_amount.unwrap_or_default();
                     match row.recompute_average_entry_price(decimals) {
                         DcaAverage::Recomputed => {}
@@ -968,25 +1003,34 @@ pub async fn apply_transition(transition: PositionTransition) -> Result<ApplyEff
                         ),
                     }
                 }
-                Ok(Booking::Write {
-                    record: Some(BookingRecord::Entry(EntryRecord {
+                // The record carries the part of the buy this position booked: all of it,
+                // or, after a handover, the part the open position did not take.
+                let (amount, native, fee) = kept
+                    .map_or((tokens_bought, native_spent, fee_raw), |kept: KeptLeg| {
+                        (kept.leg.tokens, kept.leg.cost_native, kept.fee_raw)
+                    });
+                let record = (amount > RawAmount::ZERO).then(|| {
+                    BookingRecord::Entry(EntryRecord {
                         id: None,
                         position_id,
                         timestamp: dca_time,
-                        amount: tokens_bought,
+                        amount,
                         price: effective_price,
-                        native_spent,
+                        native_spent: native,
                         transaction_signature: dca_signature.clone(),
                         is_dca: true,
-                        fees_raw: Some(fee_raw),
-                    })),
-                    outcome: late,
+                        fees_raw: Some(fee),
+                    })
+                });
+                Ok(Booking::Write {
+                    record,
+                    outcome: Some((late, unarchived)),
                 })
             })
             .await?;
             let Committed::Written {
                 row: candidate,
-                outcome: late,
+                outcome: Some((late, unarchived)),
             } = committed
             else {
                 logger::debug(
@@ -1045,6 +1089,10 @@ pub async fn apply_transition(transition: PositionTransition) -> Result<ApplyEff
                     candidate.total_size_native,
                     candidate.dca_count,
                 ));
+            }
+
+            if unarchived {
+                brought_back_from_archive(&candidate).await;
             }
 
             if let Some(late) = late {
@@ -1306,12 +1354,25 @@ pub(crate) async fn book_position<T>(
 }
 
 /// A verified swap booked onto a position that was already closed.
-#[derive(Debug, Clone, Copy)]
+#[derive(Debug, Clone)]
 struct LateFill {
     /// The position was an operator write-off when the swap was booked.
     after_write_off: bool,
     /// What following the round did with the position.
     follow: FollowOutcome,
+    /// The open position of the mint the holding was handed over to, as booked.
+    handed_to: Option<HandedTo>,
+    /// The buy reopened the position out of the archive.
+    unarchived: bool,
+}
+
+/// The open position a closed one handed its holding to, booked in the same transaction.
+#[derive(Debug, Clone)]
+struct HandedTo {
+    /// The open position as written.
+    row: Position,
+    /// The add brought it back from the archive.
+    unarchived: bool,
 }
 
 /// Whether the close of `row` came from the wallet history and its proceeds already count
@@ -1338,44 +1399,55 @@ enum ExitClear {
     WrittenOffSaleDropped,
 }
 
-/// The wallet's holding of a mint after a swap, as a late fill of one position may use it.
-#[derive(Debug, Clone, Copy)]
+/// The wallet's holding of a mint after a swap, as a late fill of one position may use it,
+/// and the swap itself, which an add on the open position of the mint is recorded under.
+#[derive(Debug, Clone)]
 struct LateFillReading {
     /// The holding read after the swap, `None` when it could not be read.
     held_after: Option<RawAmount>,
     /// Another bot swap of the mint may still move the holding, so the reading may or may
     /// not hold its tokens.
     other_swap_in_flight: bool,
+    /// The swap's signature.
+    signature: Option<String>,
+    /// When the swap was booked.
+    time: DateTime<Utc>,
+    /// The token's decimals, `None` when they are unknown.
+    decimals: Option<u8>,
 }
 
 impl LateFillReading {
-    /// The reading for the fill of `signature`, a swap of position `position_id`.
+    /// The reading for the fill of `signature`, a swap of position `position_id` at `time`.
     async fn of(
         mint: &str,
         position_id: i64,
         signature: Option<&str>,
         held_after: Option<RawAmount>,
+        time: DateTime<Utc>,
     ) -> Self {
         Self {
             held_after,
             other_swap_in_flight: other_swap_in_flight(mint, position_id, signature).await,
+            signature: signature.map(str::to_owned),
+            time,
+            decimals: crate::tokens::get_decimals(crate::chains::active_chain(), mint).await,
         }
     }
 }
 
-/// Makes a closed `row`, with a late swap's own leg already booked on it, follow its round.
-/// The reading's holding is the wallet's holding of the mint after the swap, of which the
-/// row owns what the other open positions of the mint do not hold, up to what it acquired.
-/// Without that reading, or while another swap of the mint or another position's entry is
-/// still unsettled, nothing can be decided, so the booking fails retryably and is read
-/// again.
-fn late_fill(
-    row: &mut Position,
+/// The wallet's holding attributable to closed `row` after a late swap, counting
+/// `unbooked` more acquired than the row has booked. The reading's holding is the wallet's
+/// holding of the mint after the swap, of which the row owns what the other open positions
+/// of the mint do not hold, up to what it acquired. Without that reading, or while another
+/// swap of the mint or another position's entry is still unsettled, nothing can be decided,
+/// so the booking fails retryably and is read again.
+fn late_fill_holding(
+    row: &Position,
     reads: &BookingReads<'_>,
-    reading: LateFillReading,
+    reading: &LateFillReading,
     chain: ChainId,
-    after_write_off: bool,
-) -> Result<LateFill> {
+    unbooked: RawAmount,
+) -> Result<RawAmount> {
     if reading.other_swap_in_flight {
         return Err(Error::HoldingUnattributable {
             mint: row.mint.clone(),
@@ -1395,16 +1467,309 @@ fn late_fill(
         }
         .into());
     };
-    let Some(acquired) = row.acquired_amount() else {
+    let Some(acquired) = row
+        .acquired_amount()
+        .and_then(|acquired| acquired.checked_add(unbooked))
+    else {
         return Err(Error::AmountOverflow {
             mint: row.mint.clone(),
             operation: "following the round",
         });
     };
-    let held = attributable_held(held_after, reads.other_open_held(&row.mint)?, acquired);
+    Ok(attributable_held(
+        held_after,
+        reads.other_open_held(&row.mint)?,
+        acquired,
+    ))
+}
+
+/// Makes a closed `row`, with a late swap's own leg already booked on it, follow its round
+/// (see [`late_fill_holding`]). Beside another open position of the mint, the holding is
+/// handed to that position at the row's average cost.
+fn late_fill(
+    row: &mut Position,
+    reads: &BookingReads<'_>,
+    reading: LateFillReading,
+    chain: ChainId,
+    after_write_off: bool,
+) -> Result<LateFill> {
+    let held = late_fill_holding(row, reads, &reading, chain, RawAmount::ZERO)?;
+    let Some(open_round_id) = reads.open_round_beside(&row.mint)? else {
+        return Ok(LateFill {
+            after_write_off,
+            follow: follow_round(row, held)?,
+            handed_to: None,
+            unarchived: false,
+        });
+    };
+    let (follow, handover) = hand_over_round(row, held)?;
+    let handed_to = handover
+        .map(|handover| {
+            hand_over(
+                row,
+                reads,
+                &reading,
+                open_round_id,
+                HandoverRecord {
+                    handover,
+                    price: None,
+                    fees_raw: None,
+                },
+            )
+        })
+        .transpose()?;
     Ok(LateFill {
         after_write_off,
-        follow: follow_round(row, held)?,
+        follow,
+        handed_to,
+        unarchived: false,
+    })
+}
+
+/// A buy added to a position, as verified.
+struct LateDca<'a> {
+    fill: &'a DcaFill,
+    /// The buy's effective price, native per whole token.
+    price: f64,
+    /// The buy's transaction fee, raw native units.
+    fee_raw: u64,
+}
+
+/// The part of a late buy a closed position books itself, with its share of the fee.
+#[derive(Debug, Clone, Copy)]
+struct KeptLeg {
+    leg: Leg,
+    fee_raw: u64,
+}
+
+/// `fee_raw` in proportion to `part` of `whole`, rounded down; the whole fee for an empty
+/// whole.
+fn prorated_fee(fee_raw: u64, part: RawAmount, whole: RawAmount) -> u64 {
+    if whole == RawAmount::ZERO {
+        return fee_raw;
+    }
+    let share = (u128::from(fee_raw)).saturating_mul(part.raw()) / whole.raw();
+    u64::try_from(share).unwrap_or(fee_raw).min(fee_raw)
+}
+
+/// Books a buy that landed on closed `row`. Without another open position of the mint the
+/// row books the whole buy and follows its round. Beside one, the buy is split by
+/// [`hand_over_leg`]: the part the wallet still holds goes to the open position at the buy's
+/// own price and fee share, with any of the row's earlier tokens still held at the row's
+/// average cost, and the row keeps only the part no longer held. Returns the part the row
+/// booked, which its own entry record carries; the records of one buy sum to the buy.
+fn late_dca(
+    row: &mut Position,
+    reads: &BookingReads<'_>,
+    reading: LateFillReading,
+    chain: ChainId,
+    after_write_off: bool,
+    dca: LateDca<'_>,
+) -> Result<(LateFill, KeptLeg)> {
+    let whole = KeptLeg {
+        leg: Leg {
+            tokens: dca.fill.tokens_bought,
+            cost_native: dca.fill.native_spent,
+        },
+        fee_raw: dca.fee_raw,
+    };
+    let held = late_fill_holding(row, reads, &reading, chain, dca.fill.tokens_bought)?;
+    let Some(open_round_id) = reads.open_round_beside(&row.mint)? else {
+        row.book_dca(dca.fill)?;
+        let late = LateFill {
+            after_write_off,
+            follow: follow_round(row, held)?,
+            handed_to: None,
+            unarchived: false,
+        };
+        return Ok((late, whole));
+    };
+    let (follow, split) = hand_over_leg(row, dca.fill, held)?;
+    if follow != FollowOutcome::HandedOver {
+        let late = LateFill {
+            after_write_off,
+            follow,
+            handed_to: None,
+            unarchived: false,
+        };
+        return Ok((late, whole));
+    }
+    let Some(handover) = split.handed() else {
+        return Err(Error::AmountOverflow {
+            mint: row.mint.clone(),
+            operation: "handing a late buy over",
+        });
+    };
+    let handed_fee = prorated_fee(dca.fee_raw, split.handed_leg.tokens, dca.fill.tokens_bought);
+    // Only the buy's own tokens are at the buy's price; earlier tokens carried with them make
+    // the record's price their blended average.
+    let price = (split.handed_earlier.tokens == RawAmount::ZERO).then_some(dca.price);
+    let handed_to = hand_over(
+        row,
+        reads,
+        &reading,
+        open_round_id,
+        HandoverRecord {
+            handover,
+            price,
+            fees_raw: Some(handed_fee),
+        },
+    )?;
+    let late = LateFill {
+        after_write_off,
+        follow,
+        handed_to: Some(handed_to),
+        unarchived: false,
+    };
+    let kept = KeptLeg {
+        leg: split.kept,
+        fee_raw: dca.fee_raw - handed_fee,
+    };
+    Ok((late, kept))
+}
+
+/// Brings `row` back from the archive when a late buy reopened it: a reopened position is an
+/// open position again, and a buy on an archived open position brings it back.
+fn bring_back_reopened(
+    row: &mut Position,
+    reads: &BookingReads<'_>,
+    mut late: LateFill,
+) -> Result<LateFill> {
+    let Some(position_id) = row.id else {
+        return Ok(late);
+    };
+    if late.follow == FollowOutcome::Reopened
+        && row.archived
+        && may_unarchive(reads, &row.mint, position_id)?
+    {
+        row.archived = false;
+        row.archived_at = None;
+        late.unarchived = true;
+    }
+    Ok(late)
+}
+
+/// Whether a buy booked on the archived open position `position_id` may bring it back to
+/// active management: not while another open position of its mint is active, which only a
+/// store holding several open positions of the mint from before the open-round index can
+/// have. Such a buy is still booked, and the position stays archived.
+fn may_unarchive(reads: &BookingReads<'_>, mint: &str, position_id: i64) -> Result<bool> {
+    let active = reads.active_open_rounds_beside(mint, position_id)?;
+    if active.is_empty() {
+        return Ok(true);
+    }
+    logger::error(
+        LogTag::Positions,
+        &format!(
+            "Position {position_id} of {mint} stays archived after a buy booked onto it: open positions {active:?} of the mint are active, and a mint has one active open position"
+        ),
+    );
+    Ok(false)
+}
+
+/// What a closed position hands to the open position of its mint, and how the add is
+/// recorded there.
+struct HandoverRecord {
+    handover: Handover,
+    /// The record's price; `None` records the handed-over cost over the handed-over tokens.
+    price: Option<f64>,
+    /// The record's share of the swap's fee, when it is known.
+    fees_raw: Option<u64>,
+}
+
+/// Books what closed `row` handed over as an add on the open position `open_round_id`, in
+/// the booking transaction of `row`: the tokens and their cost are added, the average entry
+/// price is recomputed, an archived position returns to the open positions, and the add is
+/// recorded as a DCA entry under the late swap's signature. The open position already
+/// holding a record of that swap while `row` does not is an inconsistency the booking
+/// refuses, so nothing is moved twice.
+fn hand_over(
+    row: &Position,
+    reads: &BookingReads<'_>,
+    reading: &LateFillReading,
+    open_round_id: i64,
+    record: HandoverRecord,
+) -> Result<HandedTo> {
+    let HandoverRecord {
+        handover,
+        price,
+        fees_raw,
+    } = record;
+    let Some(signature) = reading.signature.clone() else {
+        return Err(Error::TransitionFailed {
+            transition: "late_fill",
+            mint: row.mint.clone(),
+            detail: format!(
+                "closed position {:?} hands its holding to position {open_round_id}, but the fill has no signature",
+                row.id
+            ),
+        });
+    };
+    let price = price.unwrap_or_else(|| {
+        reading
+            .decimals
+            .map(|decimals| handover.cost_native / handover.tokens.to_whole_units(decimals))
+            .filter(|price| price.is_finite() && *price > 0.0)
+            .unwrap_or(row.average_entry_price)
+    });
+    let may_unarchive = may_unarchive(reads, &row.mint, open_round_id)?;
+    let mut unarchived = false;
+    let open = reads.book_open_round(open_round_id, &signature, |open| {
+        open.book_dca(&DcaFill {
+            tokens_bought: handover.tokens,
+            native_spent: handover.cost_native,
+            dca_time: reading.time,
+        })?;
+        match reading.decimals {
+            Some(decimals) => {
+                if open.recompute_average_entry_price(decimals) != DcaAverage::Recomputed {
+                    logger::error(
+                        LogTag::Positions,
+                        &format!(
+                            "Average entry price of position {open_round_id} was not recomputed after a handover from position {:?}",
+                            row.id
+                        ),
+                    );
+                }
+            }
+            None => logger::error(
+                LogTag::Positions,
+                &format!(
+                    "Decimals of {} are unknown: the average entry price of position {open_round_id} is not recomputed after a handover",
+                    row.mint
+                ),
+            ),
+        }
+        if open.archived && may_unarchive {
+            unarchived = true;
+            open.archived = false;
+            open.archived_at = None;
+        }
+        Ok(EntryRecord {
+            id: None,
+            position_id: open_round_id,
+            timestamp: reading.time,
+            amount: handover.tokens,
+            price,
+            native_spent: handover.cost_native,
+            transaction_signature: signature.clone(),
+            is_dca: true,
+            fees_raw,
+        })
+    })?;
+    let Some(open) = open else {
+        return Err(Error::TransitionFailed {
+            transition: "late_fill",
+            mint: row.mint.clone(),
+            detail: format!(
+                "position {open_round_id} already records swap {signature}, which closed position {:?} has not booked",
+                row.id
+            ),
+        });
+    };
+    Ok(HandedTo {
+        row: open,
+        unarchived,
     })
 }
 
@@ -1422,18 +1787,13 @@ struct LateFillLeg<'a> {
 /// position is recorded as one warning event.
 async fn after_late_fill(position: &Position, late: LateFill, leg: LateFillLeg<'_>) {
     let reopened = late.follow == FollowOutcome::Reopened;
-    if let (true, false, Some(position_id)) = (reopened, position.archived, position.id) {
-        if try_consume_global_position_permit() {
-            register_position_slot(position_id).await;
-        } else {
-            logger::warning(
-                LogTag::Positions,
-                &format!(
-                    "Position {position_id} ({}) reopened by a late fill, but no trading slot is free",
-                    position.symbol
-                ),
-            );
-        }
+    if late.unarchived {
+        brought_back_from_archive(position).await;
+    } else if reopened && !position.archived {
+        reclaim_position_slot(position).await;
+    }
+    if let Some(handed_to) = &late.handed_to {
+        after_handover(position, handed_to).await;
     }
 
     crate::trader::safety::loss_limit::sync_from_books().await;
@@ -1468,6 +1828,62 @@ async fn after_late_fill(position: &Position, late: LateFill, leg: LateFillLeg<'
         )
         .await;
     }
+}
+
+/// Publishes the open position a closed one handed its holding to. Its row is read back
+/// under its own booking lock, so memory never adopts it out of commit order; an add that
+/// brought it back from the archive is mirrored and takes a trading slot back.
+async fn after_handover(position: &Position, handed_to: &HandedTo) {
+    let Some(open_round_id) = handed_to.row.id else {
+        return;
+    };
+    with_booking_lock(open_round_id, async {
+        match super::db::get_position_by_id(open_round_id).await {
+            Ok(Some(row)) => {
+                publish_committed(&row).await;
+            }
+            Ok(None) => log_missing_position(open_round_id, "handover"),
+            Err(e) => logger::error(
+                LogTag::Positions,
+                &format!(
+                    "Position {open_round_id} took a handover but was not read back for memory: {e}"
+                ),
+            ),
+        }
+    })
+    .await;
+    if handed_to.unarchived {
+        brought_back_from_archive(&handed_to.row).await;
+    }
+    crate::events::record_position_event_flexible(
+        "late_fill_handed_over",
+        crate::events::Severity::Warn,
+        Some(&position.mint),
+        None,
+        serde_json::json!({
+            "closed_position_id": position.id,
+            "open_position_id": open_round_id,
+            "unarchived": handed_to.unarchived,
+        }),
+    )
+    .await;
+}
+
+/// Mirrors into memory an open position a booked buy brought back from the archive, and
+/// gives it back the trading slot its archiving released.
+async fn brought_back_from_archive(position: &Position) {
+    let Some(position_id) = position.id else {
+        return;
+    };
+    set_position_archived_in_memory(position_id, false).await;
+    reclaim_position_slot(position).await;
+    logger::info(
+        LogTag::Positions,
+        &format!(
+            "Position {position_id} ({}) left the archive with a buy booked onto it",
+            position.symbol
+        ),
+    );
 }
 
 fn log_missing_position(position_id: i64, transition: &str) {

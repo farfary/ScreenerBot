@@ -9,12 +9,13 @@ use r2d2_sqlite::SqliteConnectionManager;
 use rusqlite::{params, Connection, OptionalExtension};
 use std::sync::atomic::Ordering;
 
-use crate::database;
+use crate::database::{self, WriteTransaction};
 use crate::errors::DatabaseError;
 use crate::logger::{self, LogTag};
 use crate::positions::types::{Position, PositionManagement, PositionOrigin};
 use crate::positions::{Error, Result};
 
+use super::open_round::{install_open_round_index, query_open_round_id, OPEN_ROUND_INDEX_NAME};
 use super::provenance::{merge_ledger_duplicates, migrate_position_provenance};
 use super::raw_migration::migrate_position_amounts;
 use super::types::*;
@@ -212,6 +213,18 @@ impl PositionsDatabase {
                 .map_err(|e| Error::SchemaMigration {
                     detail: format!("failed to create positions index: {e}"),
                 })?;
+        }
+        for duplicate in install_open_round_index(&conn)? {
+            logger::error(
+                LogTag::Positions,
+                &format!(
+                    "Positions {:?} of mint {} (chain {}, wallet {}) are all open: a mint has one open position, so the index {OPEN_ROUND_INDEX_NAME} is installed once all but one of them are closed; their books are left unchanged",
+                    duplicate.position_ids,
+                    duplicate.mint,
+                    duplicate.chain_id,
+                    duplicate.wallet_address
+                ),
+            );
         }
 
         // Set schema version
@@ -414,7 +427,10 @@ impl PositionsDatabase {
         })
     }
 
-    /// Insert new position and return the assigned ID
+    /// Insert a new position and return the assigned ID. An open position is refused with
+    /// [`Error::AlreadyOpen`] while its mint already has an open row in this chain and
+    /// wallet, archived or not: the check and the insert share one write transaction, and
+    /// the open-round index refuses it in storage as well.
     pub async fn insert_position(&self, position: &Position) -> Result<i64> {
         logger::debug(
             LogTag::Positions,
@@ -424,13 +440,39 @@ impl PositionsDatabase {
             ),
         );
 
-        let conn = self.get_connection()?;
+        let mut conn = self.get_connection()?;
         let wallet_address =
             crate::utils::get_wallet_address().map_err(|e| Error::WalletUnavailable {
                 detail: e.to_string(),
             })?;
 
-        let position_id = conn
+        let sqlite = |e| DatabaseError::classify_sqlite_failure("insert_position", e);
+        // The transaction lives in this block only: it is not `Send`, so it must be gone
+        // before the state history is recorded across an await.
+        let position_id = {
+            let tx = conn.write_tx().map_err(sqlite)?;
+            if position.exit_time.is_none() {
+                if let Some(open_id) = query_open_round_id(
+                    &tx,
+                    self.chain.as_str(),
+                    &wallet_address,
+                    &position.mint,
+                    None,
+                )? {
+                    logger::warning(
+                    LogTag::Positions,
+                    &format!(
+                        "Refused a second open position for mint {}: position {open_id} is its open position",
+                        position.mint
+                    ),
+                );
+                    return Err(Error::AlreadyOpen {
+                        mint: position.mint.clone(),
+                        open_position_id: open_id,
+                    });
+                }
+            }
+            let position_id = tx
             .query_row(
                 r#"
       INSERT INTO positions (
@@ -512,6 +554,10 @@ impl PositionsDatabase {
                 operation: "insert_position".to_owned(),
                 message: e.to_string(),
             })?;
+            tx.commit().map_err(sqlite)?;
+            position_id
+        };
+        drop(conn);
 
         // Record initial state as Open
         self.record_state_change(
@@ -1065,6 +1111,7 @@ mod tests {
     use crate::chains::RawAmount;
 
     use super::super::booking::Booking;
+    use super::super::open_round::OPEN_ROUND_INDEX_NAME;
     use super::{PositionsDatabase, POSITIONS_INDEXES, POSITIONS_SCHEMA_VERSION};
 
     fn test_database() -> (PositionsDatabase, tempfile::TempDir) {
@@ -1136,6 +1183,35 @@ mod tests {
                 .unwrap();
             assert_eq!(exists, 1, "missing index {index_name}");
         }
+        assert!(
+            has_open_round_index(connection),
+            "missing index {OPEN_ROUND_INDEX_NAME}"
+        );
+        assert_store_is_sound(connection);
+        assert_eq!(
+            connection
+                .query_row(
+                    "SELECT value FROM position_metadata WHERE key = 'schema_version'",
+                    [],
+                    |row| row.get::<_, String>(0),
+                )
+                .unwrap(),
+            POSITIONS_SCHEMA_VERSION.to_string()
+        );
+    }
+
+    fn has_open_round_index(connection: &Connection) -> bool {
+        connection
+            .query_row(
+                "SELECT COUNT(*) FROM sqlite_master WHERE type = 'index' AND name = ?1",
+                [OPEN_ROUND_INDEX_NAME],
+                |row| row.get::<_, i64>(0),
+            )
+            .unwrap()
+            == 1
+    }
+
+    fn assert_store_is_sound(connection: &Connection) {
         assert_eq!(
             connection
                 .query_row("PRAGMA integrity_check", [], |row| row.get::<_, String>(0))
@@ -1150,16 +1226,146 @@ mod tests {
                 .unwrap(),
             0
         );
-        assert_eq!(
-            connection
-                .query_row(
-                    "SELECT value FROM position_metadata WHERE key = 'schema_version'",
-                    [],
-                    |row| row.get::<_, String>(0),
-                )
-                .unwrap(),
-            POSITIONS_SCHEMA_VERSION.to_string()
+    }
+
+    /// Every column of every position row and every child row, in id order.
+    fn store_contents(connection: &Connection) -> Vec<String> {
+        let mut contents = Vec::new();
+        for table in ["positions", "position_states", "position_entries"] {
+            let mut statement = connection
+                .prepare(&format!("SELECT * FROM {table} ORDER BY id"))
+                .unwrap();
+            let width = statement.column_count();
+            let rows = statement
+                .query_map([], |row| {
+                    let mut values = Vec::with_capacity(width);
+                    for index in 0..width {
+                        values.push(format!("{:?}", row.get_ref(index)?));
+                    }
+                    Ok(format!("{table}: {}", values.join(" | ")))
+                })
+                .unwrap();
+            for row in rows {
+                contents.push(row.unwrap());
+            }
+        }
+        contents
+    }
+
+    #[tokio::test]
+    async fn full_schema_initialization_leaves_duplicate_open_rows_untouched_until_one_closes() {
+        let (mut database, _directory) = test_database();
+        {
+            let legacy = database.get_connection().unwrap();
+            legacy
+                .execute_batch(include_str!(
+                    "../../../tests/fixtures/v0.2.13-positions.sql"
+                ))
+                .unwrap();
+            for (id, entry_time) in [(41, "2026-01-01"), (42, "2026-01-02")] {
+                legacy
+                    .execute(
+                        "INSERT INTO positions (id, chain_id, wallet_address, mint, symbol, name, entry_price, entry_time, position_type, entry_size_sol, total_size_sol, price_highest, price_lowest, token_amount, remaining_token_amount, origin_kind, management) VALUES (?1, 'solana', 'wallet', 'mint', 'SYM', 'Token', 0.5, ?2, 'buy', 1.0, 1.0, 0.5, 0.5, 2, 2, 'manual', 'user_only')",
+                        params![id, entry_time],
+                    )
+                    .unwrap();
+                legacy
+                    .execute(
+                        "INSERT INTO position_states (position_id, state) VALUES (?1, 'Open')",
+                        [id],
+                    )
+                    .unwrap();
+            }
+        }
+
+        database.initialize_schema(false).await.unwrap();
+        let initialized = store_contents(&database.get_connection().unwrap());
+        database.initialize_schema(false).await.unwrap();
+
+        let connection = database.get_connection().unwrap();
+        assert!(
+            !has_open_round_index(&connection),
+            "the index was installed over two open rows of one mint"
         );
+        assert_store_is_sound(&connection);
+        assert_eq!(
+            store_contents(&connection),
+            initialized,
+            "a second initialization changed the duplicate rows"
+        );
+        let open: Vec<(i64, String, String)> = connection
+            .prepare("SELECT id, token_amount, remaining_token_amount FROM positions WHERE exit_time IS NULL ORDER BY id")
+            .unwrap()
+            .query_map([], |row| Ok((row.get(0)?, row.get(1)?, row.get(2)?)))
+            .unwrap()
+            .collect::<rusqlite::Result<_>>()
+            .unwrap();
+        assert_eq!(
+            open,
+            vec![
+                (41, "2".to_owned(), "2".to_owned()),
+                (42, "2".to_owned(), "2".to_owned())
+            ],
+            "a duplicate open row lost its data"
+        );
+
+        connection
+            .execute(
+                "UPDATE positions SET exit_time = '2026-01-03T00:00:00Z' WHERE id = 41",
+                [],
+            )
+            .unwrap();
+        drop(connection);
+        database.initialize_schema(false).await.unwrap();
+        database.initialize_schema(false).await.unwrap();
+
+        let connection = database.get_connection().unwrap();
+        assert_current_schema(&connection);
+        let second_open = connection.execute(
+            "INSERT INTO positions (chain_id, wallet_address, mint, symbol, name, entry_price, entry_time, position_type, entry_size_native, total_size_native, price_highest, price_lowest) VALUES ('solana', 'wallet', 'mint', 'SYM', 'Token', 0.5, '2026-01-04', 'buy', 1.0, 1.0, 0.5, 0.5)",
+            [],
+        );
+        assert!(second_open.is_err(), "storage accepted a second open row");
+    }
+
+    #[tokio::test]
+    async fn a_booking_that_unarchives_its_row_clears_the_stored_archive_flag() {
+        let (mut database, _directory) = test_database();
+        database.initialize_schema(false).await.unwrap();
+        database.get_connection().unwrap().execute(
+            "INSERT INTO positions (id, chain_id, wallet_address, mint, symbol, name, entry_price, entry_time, position_type, entry_size_native, total_size_native, price_highest, price_lowest, archived, archived_at, origin_kind, management) VALUES (41, 'solana', 'wallet', 'mint', 'SYM', 'Token', 0.5, '2026-01-01T00:00:00Z', 'buy', 1.0, 1.0, 0.5, 0.5, 1, '2026-01-02T00:00:00Z', 'manual', 'user_only')",
+            [],
+        ).unwrap();
+        let archived = || -> (bool, Option<String>) {
+            database
+                .get_connection()
+                .unwrap()
+                .query_row(
+                    "SELECT archived, archived_at FROM positions WHERE id = 41",
+                    [],
+                    |row| Ok((row.get(0)?, row.get(1)?)),
+                )
+                .unwrap()
+        };
+        let book = |unarchive: bool| {
+            database
+                .commit_booking(41, Ok("wallet"), |row, _| {
+                    if unarchive {
+                        row.archived = false;
+                        row.archived_at = None;
+                    }
+                    Ok(Booking::Write {
+                        record: None,
+                        outcome: (),
+                    })
+                })
+                .unwrap();
+        };
+
+        book(false);
+        assert_eq!(archived(), (true, Some("2026-01-02T00:00:00Z".to_owned())));
+        book(true);
+        assert_eq!(archived(), (false, None));
     }
 
     #[tokio::test]

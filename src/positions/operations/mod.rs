@@ -79,10 +79,24 @@ fn position_save_backoff_ms(attempt: usize) -> u64 {
     (POSITION_SAVE_BASE_BACKOFF_MS * growth).min(POSITION_SAVE_MAX_BACKOFF_MS)
 }
 
-async fn persist_position_with_retry(position: &Position) -> i64 {
+/// Where a new open position was persisted.
+enum Persisted {
+    /// Stored as a new row with this id.
+    Opened(i64),
+    /// Refused because the mint already has the open position with this id, read in the
+    /// refusing transaction: the swap that bought it is that position's add, never a second
+    /// row.
+    Added(i64),
+}
+
+/// Persists a new open position, retrying transient failures.
+async fn persist_position_with_retry(position: &Position) -> Persisted {
     let mut attempt = 1;
     loop {
         match save_position(position).await {
+            Err(Error::AlreadyOpen {
+                open_position_id, ..
+            }) => return Persisted::Added(open_position_id),
             Ok(id) => {
                 if attempt > 1 {
                     logger::info(
@@ -95,7 +109,7 @@ async fn persist_position_with_retry(position: &Position) -> i64 {
                         ),
                     );
                 }
-                return id;
+                return Persisted::Opened(id);
             }
             Err(err) => {
                 logger::warning(

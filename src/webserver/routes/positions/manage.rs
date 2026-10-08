@@ -143,6 +143,19 @@ pub(super) async fn unarchive_position(Path(position_id): Path<i64>) -> Response
     }
 
     if let Err(e) = positions::set_position_archived_db(position_id, false).await {
+        if let positions::Error::DuplicateOpenRound { position_ids, .. } = &e {
+            let positions = position_ids
+                .iter()
+                .map(|id| format!("#{id}"))
+                .collect::<Vec<_>>()
+                .join(", ");
+            return ApiError::new(
+                ApiErrorCode::Conflict,
+                ids::ERRORS_POSITIONS_UNARCHIVE_DUPLICATE_OPEN,
+            )
+            .text_arg("positions", positions)
+            .into_response();
+        }
         return ApiError::new(
             ApiErrorCode::Internal,
             ids::ERRORS_POSITIONS_UNARCHIVE_FAILED,
@@ -153,24 +166,8 @@ pub(super) async fn unarchive_position(Path(position_id): Path<i64>) -> Response
     positions::set_position_archived_in_memory(position_id, false).await;
 
     // If this position is still open it re-enters active management — reclaim a slot.
-    let reclaimed = if holds_open_slot(&position) {
-        let ok = positions::state::try_consume_global_position_permit();
-        if ok {
-            // Register it as a slot holder, or the release when it eventually closes finds
-            // no holder, does nothing, and the slot stays consumed forever.
-            positions::state::register_position_slot(position_id).await;
-        } else {
-            logger::warning(
-                LogTag::Positions,
-                &format!(
-                    "Unarchived open position {position_id} but no free slot to reclaim (at capacity)"
-                ),
-            );
-        }
-        ok
-    } else {
-        false
-    };
+    let reclaimed =
+        holds_open_slot(&position) && positions::state::reclaim_position_slot(&position).await;
 
     logger::info(
         LogTag::Positions,

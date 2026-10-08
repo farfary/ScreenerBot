@@ -913,30 +913,6 @@ pub async fn apply_plan(plan: SyncPlan) -> AppliedPlan {
     let mut applied = AppliedPlan::default();
     let mut wrote_a_bot_row = false;
     let busy_mints = crate::positions::state::mints_with_pending_swaps().await;
-    for mut position in plan.inserts {
-        if busy_mints.contains(&position.mint) {
-            applied.skipped += 1;
-            continue;
-        }
-        match crate::positions::db::save_position(&position).await {
-            Ok(id) => {
-                applied.inserted += 1;
-                position.id = Some(id);
-                // Mirror into memory. If the positions service has not loaded yet, its
-                // load replaces the whole vector from the database (which now contains
-                // this row), so neither ordering can duplicate it.
-                crate::positions::state::add_position(position).await;
-            }
-            Err(e) => logger::warning(
-                LogTag::Positions,
-                &format!(
-                    "Wallet-history sync failed to insert round {}: {e}",
-                    position.round_key.as_deref().unwrap_or("?")
-                ),
-            ),
-        }
-    }
-
     for update in plan.updates {
         let Some(id) = update.position.id else {
             continue;
@@ -1029,6 +1005,32 @@ pub async fn apply_plan(plan: SyncPlan) -> AppliedPlan {
             .await;
         }
     }
+    // Inserts follow the updates: a mint has one open position, so a round the history
+    // closed must be closed before the next round of its mint can open a row.
+    for mut position in plan.inserts {
+        if busy_mints.contains(&position.mint) {
+            applied.skipped += 1;
+            continue;
+        }
+        match crate::positions::db::save_position(&position).await {
+            Ok(id) => {
+                applied.inserted += 1;
+                position.id = Some(id);
+                // Mirror into memory. If the positions service has not loaded yet, its
+                // load replaces the whole vector from the database (which now contains
+                // this row), so neither ordering can duplicate it.
+                crate::positions::state::add_position(position).await;
+            }
+            Err(e) => logger::warning(
+                LogTag::Positions,
+                &format!(
+                    "Wallet-history sync failed to insert round {}: {e}",
+                    position.round_key.as_deref().unwrap_or("?")
+                ),
+            ),
+        }
+    }
+
     // A bot row the ledger closed, or whose P&L it rewrote, changes the realized losses
     // the loss limiter counts from the books.
     if wrote_a_bot_row {

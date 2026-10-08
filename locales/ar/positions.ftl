@@ -113,6 +113,7 @@ positions-toast-not-found = لم يتم العثور على بيانات الم�
 positions-toast-deleted = تم حذف المركز
 positions-toast-archived = تمت أرشفة المركز
 positions-toast-restored = تمت استعادة المركز
+positions-buy-adds-to-archived = لهذا الرمز مركز مفتوح بالفعل في الأرشيف. تُضاف عملية الشراء إلى ذلك المركز، ويعود إلى المراكز المفتوحة. ويحتفظ بوضع الإدارة الحالي.
 positions-action-failed = فشل الإجراء
 positions-delete-title = حذف المركز نهائيًا
 # $symbol is the token symbol.

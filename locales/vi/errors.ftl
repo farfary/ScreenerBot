@@ -378,6 +378,7 @@ errors-positions-unverified-entry-archive = Giao dịch mua vị thế này chư
 errors-positions-not-archived = Vị thế chưa được lưu trữ
 errors-positions-archive-failed = Không lưu trữ được vị thế
 errors-positions-unarchive-failed = Không bỏ lưu trữ được vị thế
+errors-positions-unarchive-duplicate-open = Token này có nhiều hơn một vị thế đang mở ({ $positions }), và chỉ một vị thế được phép hoạt động. Hãy đóng hoặc lưu trữ các vị thế khác trước.
 errors-positions-management-invalid = Quản lý theo copy chỉ áp dụng cho vị thế có nguồn gốc từ copy
 errors-positions-management-failed = Không cập nhật được cách quản lý vị thế
 errors-positions-delete-failed = Không xóa được vị thế

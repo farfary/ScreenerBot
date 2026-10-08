@@ -381,6 +381,7 @@ errors-positions-unverified-entry-archive = A compra desta posição ainda não 
 errors-positions-not-archived = A posição não está arquivada
 errors-positions-archive-failed = Falha ao arquivar a posição
 errors-positions-unarchive-failed = Falha ao desarquivar a posição
+errors-positions-unarchive-duplicate-open = Este token tem mais de uma posição aberta ({ $positions }), e apenas uma delas pode ficar ativa. Feche ou arquive as outras primeiro.
 errors-positions-management-invalid = O gerenciamento por cópia exige uma posição de origem de cópia
 errors-positions-management-failed = Falha ao atualizar o gerenciamento da posição
 errors-positions-delete-failed = Falha ao excluir a posição

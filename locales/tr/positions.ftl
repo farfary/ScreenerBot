@@ -83,6 +83,7 @@ positions-toast-not-found = Pozisyon verisi bulunamadı
 positions-toast-deleted = Pozisyon silindi
 positions-toast-archived = Pozisyon arşivlendi
 positions-toast-restored = Pozisyon geri yüklendi
+positions-buy-adds-to-archived = Bu tokenin arşivde zaten açık bir pozisyonu var. Alım bu pozisyona eklenir ve pozisyon açık pozisyonlara geri döner. Pozisyonun mevcut yönetim modu korunur.
 positions-action-failed = İşlem başarısız
 positions-delete-title = Pozisyonu kalıcı olarak sil
 positions-delete-message = { $symbol } kalıcı olarak silinsin mi? Pozisyon ve geçmişi veritabanından kaldırılır, bu işlem geri alınamaz. İşlemleriniz ve token verileriniz etkilenmez.

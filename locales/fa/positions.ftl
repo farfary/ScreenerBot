@@ -105,6 +105,7 @@ positions-toast-not-found = اطلاعات پوزیشن پیدا نشد
 positions-toast-deleted = پوزیشن حذف شد
 positions-toast-archived = پوزیشن بایگانی شد
 positions-toast-restored = پوزیشن بازگردانده شد
+positions-buy-adds-to-archived = این توکن از قبل یک پوزیشن باز در بایگانی دارد. خرید به همان پوزیشن افزوده می‌شود و آن پوزیشن به پوزیشن‌های باز برمی‌گردد. حالت مدیریت فعلی آن حفظ می‌شود.
 positions-action-failed = عملیات ناموفق بود
 positions-delete-title = حذف دائمی پوزیشن
 # $symbol is the token symbol.

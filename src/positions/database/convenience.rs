@@ -13,6 +13,7 @@ use crate::positions::{Error, Result};
 
 use super::booking::{query_other_open_held, Booking, BookingReads, Committed, OtherOpenHeld};
 use super::global::GLOBAL_POSITIONS_DB;
+use super::open_round::{query_open_round_id, refuse_second_active_open_round};
 use super::queries::{query_trader_swap_legs, TraderSwapLeg};
 use super::types::{DailyTradingStats, PeriodTradingStats, TokenSnapshot};
 
@@ -34,6 +35,33 @@ pub(crate) async fn get_other_open_held(
             detail: e.to_string(),
         })?;
     query_other_open_held(&conn, db.chain.as_str(), &wallet_address, mint, excluded)
+}
+
+/// The id of the open row of `mint` in this store's chain and wallet, archived or not:
+/// the position every buy of the mint is booked onto.
+pub(crate) async fn get_open_round_id(mint: &str) -> Result<Option<i64>> {
+    let db_guard = GLOBAL_POSITIONS_DB.lock().await;
+    let db = db_guard.as_ref().ok_or(Error::NotInitialised)?;
+    let conn = db.get_connection()?;
+    let wallet_address =
+        crate::utils::get_wallet_address().map_err(|e| Error::WalletUnavailable {
+            detail: e.to_string(),
+        })?;
+    query_open_round_id(&conn, db.chain.as_str(), &wallet_address, mint, None)
+}
+
+/// Refuses to make the open position `position_id` of `mint` active again while another open
+/// position of the mint in this store's chain and wallet is active, with
+/// [`Error::DuplicateOpenRound`] naming every one involved.
+pub(crate) async fn refuse_reactivating_open_round(mint: &str, position_id: i64) -> Result<()> {
+    let db_guard = GLOBAL_POSITIONS_DB.lock().await;
+    let db = db_guard.as_ref().ok_or(Error::NotInitialised)?;
+    let conn = db.get_connection()?;
+    let wallet_address =
+        crate::utils::get_wallet_address().map_err(|e| Error::WalletUnavailable {
+            detail: e.to_string(),
+        })?;
+    refuse_second_active_open_round(&conn, db.chain.as_str(), &wallet_address, mint, position_id)
 }
 
 /// Load all positions from database

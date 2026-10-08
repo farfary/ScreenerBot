@@ -63,6 +63,22 @@ fn finish(
     }
 }
 
+/// What a buy of `size` SOL did, as the buy tool reports it: opened a position, or added to
+/// the open one, with the notice the buyer is shown when that brings it back from the
+/// archive.
+fn buy_message(target: crate::positions::BuyTarget, size: f64) -> String {
+    match target {
+        crate::positions::BuyTarget::NewPosition => format!("Bought with {size} SOL"),
+        crate::positions::BuyTarget::Add { position_id, .. } => {
+            let added = format!("Added {size} SOL to open position {position_id}");
+            match target.notice() {
+                Some(notice) => format!("{added}. {}", notice.render_source_plain()),
+                None => added,
+            }
+        }
+    }
+}
+
 /// Agent trades are capped at the configured trade size: an agent can size down,
 /// never past what the owner set the auto trader to risk per trade.
 fn checked_size(
@@ -109,11 +125,12 @@ impl Tool for BuyTokenTool {
     fn definition(&self) -> ToolDefinition {
         ToolDefinition {
             name: "buy_token".to_owned(),
-            description:
-                "Open a new position with a real on-chain buy. Refused while the emergency \
-                 stop is active, for blacklisted tokens, or when a position is already open \
-                 (use add_to_position). The size is capped at trader.trade_size_sol."
-                    .to_owned(),
+            description: "Buy a token with a real on-chain swap. A token has one open position: \
+                 without one the buy opens it, with one (archived included) the buy is added \
+                 to it, and an archived one returns to the open positions; the result message \
+                 says which. Refused while the emergency stop is active or for blacklisted \
+                 tokens. The size is capped at trader.trade_size_sol."
+                .to_owned(),
             category: ToolCategory::Trading,
             parameters: json!({
                 "type": "object",
@@ -166,12 +183,9 @@ impl Tool for BuyTokenTool {
             return ToolResult::error(e.to_string());
         }
         let management = params.management.unwrap_or(PositionManagement::AutoTrader);
+        let target = crate::positions::buy_target(&params.mint_address).await;
         let result = manual::manual_buy(&params.mint_address, size, management, slippage).await;
-        finish(
-            result,
-            params.mint_address,
-            format!("Bought with {size} SOL"),
-        )
+        finish(result, params.mint_address, buy_message(target, size))
     }
     fn sends_transaction(&self) -> bool {
         true
@@ -395,8 +409,39 @@ impl Tool for ClosePositionTool {
 
 #[cfg(test)]
 mod tests {
-    use super::{AddToPositionParams, BuyTokenParams};
+    use super::{buy_message, AddToPositionParams, BuyTokenParams};
+    use crate::positions::BuyTarget;
     use serde_json::json;
+
+    #[test]
+    fn the_buy_result_names_the_add_and_the_archive_notice() {
+        assert_eq!(
+            buy_message(BuyTarget::NewPosition, 0.5),
+            "Bought with 0.5 SOL"
+        );
+        assert_eq!(
+            buy_message(
+                BuyTarget::Add {
+                    position_id: 7,
+                    archived: false
+                },
+                0.5
+            ),
+            "Added 0.5 SOL to open position 7"
+        );
+        let archived = buy_message(
+            BuyTarget::Add {
+                position_id: 7,
+                archived: true,
+            },
+            0.5,
+        );
+        assert!(archived.starts_with("Added 0.5 SOL to open position 7. "));
+        assert!(
+            archived.contains("archive"),
+            "the archive notice is missing: {archived}"
+        );
+    }
 
     #[test]
     fn trade_size_params_reject_unknown_fields() {

@@ -1010,7 +1010,8 @@ body.trade-action-dialog-open {
   color: var(--semantic-error-text);
 }
 
-/* ---- Size warning: shown only when impact exceeds this trade's slippage ---- */
+/* ---- Quote callouts: the impact warning, shown only when impact exceeds this trade's
+   slippage, and the notice that a buy adds to an archived open position ---- */
 .quote-warning {
   display: flex;
   align-items: flex-start;

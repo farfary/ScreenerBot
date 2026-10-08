@@ -84,6 +84,7 @@ positions-toast-not-found = पोज़िशन डेटा नहीं म�
 positions-toast-deleted = पोज़िशन हटा दी गई
 positions-toast-archived = पोज़िशन आर्काइव की गई
 positions-toast-restored = पोज़िशन वापस लाई गई
+positions-buy-adds-to-archived = इस टोकन की एक खुली पोज़िशन पहले से आर्काइव में है। यह खरीद उसी पोज़िशन में जोड़ी जाएगी, और वह खुली पोज़िशनों में लौट आएगी। उसका मौजूदा प्रबंधन मोड बना रहता है।
 positions-action-failed = कार्रवाई विफल
 positions-delete-title = पोज़िशन हमेशा के लिए हटाएं
 positions-delete-message = { $symbol } को हमेशा के लिए हटाएं? इससे पोज़िशन और उसका इतिहास डेटाबेस से हट जाएगा और इसे वापस नहीं किया जा सकता। आपके ट्रांज़ैक्शन और टोकन डेटा पर कोई असर नहीं पड़ेगा।

@@ -10,6 +10,7 @@ use rusqlite::types::Value;
 use rusqlite::Connection;
 use screenerbot::chains::RawAmount;
 use screenerbot::errors::{DatabaseError, ErrorClass};
+use screenerbot::i18n::{ids, UiText};
 use screenerbot::positions::apply::apply_transition;
 use screenerbot::positions::operations::{force_close_position, mark_exit_submitted};
 use screenerbot::positions::price_updater::update_position_price_and_pnl;
@@ -17,9 +18,9 @@ use screenerbot::positions::round_state::exit_awaiting_verification;
 use screenerbot::positions::transitions::NotLandedEvidence;
 use screenerbot::positions::verifier::{check_exit_residual, classify_exit_residual, ExitResidual};
 use screenerbot::positions::{
-    db, state, ApplyFailureDisposition, Error, GiveUpReason, PendingDcaSwap, PendingPartialExit,
-    Position, PositionManagement, PositionTransition, PriceSource, VerificationItem,
-    VerificationKind, FORCE_CLOSED_PREFIX,
+    buy_target, db, state, ApplyFailureDisposition, BuyTarget, Error, GiveUpReason, PendingDcaSwap,
+    PendingPartialExit, Position, PositionManagement, PositionOrigin, PositionTransition,
+    PriceSource, VerificationItem, VerificationKind, FORCE_CLOSED_PREFIX,
 };
 use screenerbot::trader::safety::loss_limit::{
     get_loss_limit_status, initialize_from_history, is_entry_blocked_by_loss_limit,
@@ -95,6 +96,34 @@ async fn store_position(configure: impl FnOnce(&mut Position)) -> i64 {
         .await
         .expect("persist test position");
     position.id = Some(id);
+    state::add_position(position).await;
+    id
+}
+
+/// Persists one more OPEN position of the mint beside its open one, as a store written
+/// before the open-round index can still hold it: storage refuses a second open row, so the
+/// row is stored closed and reopened in storage with the index dropped, then loaded into
+/// memory open.
+async fn store_legacy_duplicate(configure: impl FnOnce(&mut Position)) -> i64 {
+    let mut position = common::test_position(1.0, 1.0);
+    position.id = None;
+    position.token_amount = Some(RawAmount::new(HELD));
+    position.remaining_token_amount = Some(RawAmount::new(HELD));
+    configure(&mut position);
+    assert!(position.exit_time.is_none(), "a duplicate open row is open");
+    position.exit_time = Some(Utc::now());
+    let id = db::save_position(&position)
+        .await
+        .expect("persist test position");
+    let store = injector();
+    store
+        .execute_batch("DROP INDEX IF EXISTS idx_positions_open_round")
+        .expect("drop the open-round index");
+    store
+        .execute("UPDATE positions SET exit_time = NULL WHERE id = ?1", [id])
+        .expect("reopen the duplicate row");
+    position.id = Some(id);
+    position.exit_time = None;
     state::add_position(position).await;
     id
 }
@@ -1887,7 +1916,7 @@ fn an_orphan_removal_refuses_a_position_with_a_dca_or_partial_exit_in_flight() {
             let _cfg = common::config_guard();
             state::init_global_position_semaphore(2);
             let with_dca = open_position(unverified_entry(ORPHAN_ENTRY)).await;
-            let with_partial = store_position(unverified_entry(ORPHAN_ENTRY)).await;
+            let with_partial = store_legacy_duplicate(unverified_entry(ORPHAN_ENTRY)).await;
             for id in [with_dca, with_partial] {
                 assert!(state::try_consume_global_position_permit());
                 state::register_position_slot(id).await;
@@ -1908,7 +1937,7 @@ fn an_orphan_removal_refuses_a_position_with_a_dca_or_partial_exit_in_flight() {
             );
 
             // The pending entries of another position of the mint refuse nothing.
-            let unrelated = store_position(unverified_entry(ORPHAN_ENTRY)).await;
+            let unrelated = store_legacy_duplicate(unverified_entry(ORPHAN_ENTRY)).await;
             apply_transition(orphan_removal(unrelated, ORPHAN_ENTRY))
                 .await
                 .expect("a row with no fill in flight is removed");
@@ -1929,7 +1958,7 @@ fn an_orphan_removal_refuses_a_position_with_an_exit_submitted() {
                 position.exit_transaction_signature = Some(CLOSE_SIGNATURE.to_owned());
             })
             .await;
-            let partial_exit = store_position(|position| {
+            let partial_exit = store_legacy_duplicate(|position| {
                 unverified_entry(ORPHAN_ENTRY)(position);
                 position.partial_exit_count = 1;
             })
@@ -1969,6 +1998,8 @@ fn removing_a_row_keeps_the_signatures_of_other_rows_of_the_mint() {
             let kept = open_position(|position| {
                 position.entry_transaction_signature = Some("kept-entry".to_owned());
                 position.exit_transaction_signature = Some("kept-exit".to_owned());
+                position.exit_time = Some(Utc::now());
+                position.transaction_exit_verified = true;
             })
             .await;
             state::add_signature_to_index(PARTIAL_SIGNATURE, common::TEST_MINT).await;
@@ -2283,7 +2314,7 @@ fn a_full_exit_residual_counts_only_the_positions_own_tokens() {
             let _dir = common::isolated_env();
             let _cfg = common::config_guard();
             let id = open_position(|_| {}).await;
-            store_position(|_| {}).await;
+            store_legacy_duplicate(|_| {}).await;
 
             assert_eq!(
                 classify_exit_residual(Some(id), RawAmount::new(HELD))
@@ -2307,6 +2338,8 @@ fn a_full_exit_residual_counts_only_the_positions_own_tokens() {
 /// reading: a closed row holds nothing, a row that recorded no amount holds nothing, an
 /// archived open row still holds its tokens, and an unverified entry makes the holding
 /// unattributable rather than guessed, so the residual is never taken for this position's.
+/// Other open rows of the mint exist only in a store that held them before the open-round
+/// index.
 #[test]
 fn a_full_exit_residual_reads_the_other_positions_as_storage_has_them() {
     common::run_isolated(
@@ -2323,7 +2356,7 @@ fn a_full_exit_residual_reads_the_other_positions_as_storage_has_them() {
                 position.transaction_exit_verified = true;
             })
             .await;
-            store_position(|position| {
+            store_legacy_duplicate(|position| {
                 position.token_amount = None;
                 position.remaining_token_amount = None;
             })
@@ -2336,7 +2369,7 @@ fn a_full_exit_residual_reads_the_other_positions_as_storage_has_them() {
                 "a closed row or a row without an amount is taken to hold the residual"
             );
 
-            store_position(|position| position.archived = true).await;
+            store_legacy_duplicate(|position| position.archived = true).await;
             assert_eq!(
                 residual().await.expect("an archived row is attributable"),
                 ExitResidual::Dust,
@@ -2344,7 +2377,8 @@ fn a_full_exit_residual_reads_the_other_positions_as_storage_has_them() {
             );
 
             let unverified =
-                store_position(|position| position.transaction_entry_verified = false).await;
+                store_legacy_duplicate(|position| position.transaction_entry_verified = false)
+                    .await;
             assert_eq!(
                 residual()
                     .await
@@ -2361,8 +2395,10 @@ fn a_full_exit_residual_reads_the_other_positions_as_storage_has_them() {
 /// An archived open row whose entry never verifies cannot hold another position's close
 /// forever: whatever the balance the close leaves, the close is booked rather than retried,
 /// because the balance may be the archived row's tokens and a retried close sells the
-/// wallet's holding. A residual above dust is reported, never logged as none: one warning
-/// event names the blocking position and what the sale left unsold.
+/// wallet's holding. A residual above dust is reported, never logged as none: one error
+/// event names the blocking position and what the sale left unsold. Two open rows of one
+/// mint breach the one-open-position invariant; only a store that held them before the
+/// open-round index reaches this.
 #[test]
 fn an_unverified_entry_of_another_position_never_stalls_a_close() {
     common::run_isolated(
@@ -2372,7 +2408,7 @@ fn an_unverified_entry_of_another_position_never_stalls_a_close() {
             let _cfg = common::config_guard();
             start_events().await;
             let id = open_position(|_| {}).await;
-            let blocking = store_position(|position| {
+            let blocking = store_legacy_duplicate(|position| {
                 position.archived = true;
                 position.transaction_entry_verified = false;
                 position.token_amount = None;
@@ -2683,10 +2719,13 @@ fn an_entry_after_a_write_off_reopens_with_the_real_amount() {
     );
 }
 
+/// A closed archived position reopened by a late buy, with no other open position of the
+/// mint, comes back from the archive: unarchived in storage and memory, in the open list and
+/// holding a trading slot again.
 #[test]
-fn an_archived_row_reopened_by_a_late_buy_stays_archived_and_takes_no_slot() {
+fn an_archived_row_reopened_by_a_late_buy_is_brought_back_and_takes_a_slot() {
     common::run_isolated(
-        "an_archived_row_reopened_by_a_late_buy_stays_archived_and_takes_no_slot",
+        "an_archived_row_reopened_by_a_late_buy_is_brought_back_and_takes_a_slot",
         || async {
             let _dir = common::isolated_env();
             let _cfg = common::config_guard();
@@ -2707,19 +2746,21 @@ fn an_archived_row_reopened_by_a_late_buy_stays_archived_and_takes_no_slot() {
 
             for position in [stored_position(id).await, memory_position(id).await] {
                 assert!(position.exit_time.is_none(), "the position is open again");
-                assert!(position.archived, "the position stays archived");
+                assert!(!position.archived, "the reopened position stays archived");
+                assert_eq!(position.archived_at, None);
             }
             assert!(
-                !state::get_open_positions()
+                state::get_open_positions()
                     .await
                     .iter()
                     .any(|position| position.id == Some(id)),
-                "an archived position stays out of the open list"
+                "the reopened position is missing from the open list"
             );
             assert!(
-                state::try_consume_global_position_permit(),
-                "an archived position takes no slot"
+                !state::try_consume_global_position_permit(),
+                "the reopened position did not take its trading slot back"
             );
+            assert_eq!(buy_target(common::TEST_MINT).await.notice(), None);
         },
     );
 }
@@ -2826,14 +2867,28 @@ fn a_late_fill_waits_while_another_position_of_the_mint_has_an_unverified_entry(
             apply_transition(late_dca(id, Some(RawAmount::new(HELD + 500_000 + HELD))))
                 .await
                 .expect("the late DCA is booked once the sibling's holding is known");
+            // The mint has one open position: the closed one hands what it holds to it as
+            // an add instead of reopening beside it.
             for position in [stored_position(id).await, memory_position(id).await] {
-                assert!(position.exit_time.is_none(), "the position is open again");
+                assert!(
+                    position.exit_time.is_some(),
+                    "the closed position stays closed"
+                );
+                assert_eq!(position.remaining_token_amount, Some(RawAmount::ZERO));
+            }
+            for position in [
+                stored_position(sibling).await,
+                memory_position(sibling).await,
+            ] {
+                assert!(position.exit_time.is_none());
                 assert_eq!(
                     position.remaining_token_amount,
-                    Some(RawAmount::new(HELD + 500_000)),
-                    "the reopened position holds the sibling's tokens"
+                    Some(RawAmount::new(HELD + HELD + 500_000)),
+                    "the open position holds its own tokens and the handed-over ones"
                 );
+                assert_eq!(position.dca_count, 1);
             }
+            assert_eq!(open_rows_of_mint(), 1);
         },
     );
 }
@@ -3139,7 +3194,11 @@ fn deleting_the_archived_positions_clears_the_markers_of_every_row_deleted() {
             let _dir = common::isolated_env();
             let _cfg = common::config_guard();
             let kept = open_position(|_| {}).await;
-            let archived = store_position(|_| {}).await;
+            let archived = store_position(|position| {
+                position.exit_time = Some(Utc::now());
+                position.transaction_exit_verified = true;
+            })
+            .await;
             assert!(db::set_position_archived_db(archived, true)
                 .await
                 .expect("archive the row"));
@@ -3417,6 +3476,9 @@ fn archiving_requires_a_verified_entry_only_while_the_position_is_open() {
                 Err(Error::UnverifiedEntryArchive { position_id }) if position_id == unverified
             ));
             assert!(!stored_position(unverified).await.archived);
+            apply_transition(orphan_removal(unverified, "entry-sig"))
+                .await
+                .expect("the unlanded entry's row is removed");
 
             let verified = store_position(|_| {}).await;
             assert!(db::set_position_archived_db(verified, true)
@@ -3637,6 +3699,502 @@ fn every_fill_on_a_position_missing_from_memory_is_refused_as_not_found() {
                     "{label}: the item is abandoned with its reason, not retried"
                 );
             }
+        },
+    );
+}
+
+// =============================================================================
+// ONE OPEN POSITION PER TOKEN
+// =============================================================================
+
+/// The open rows of the test mint in storage, archived ones included.
+fn open_rows_of_mint() -> i64 {
+    injector()
+        .query_row(
+            "SELECT COUNT(*) FROM positions WHERE mint = ?1 AND exit_time IS NULL",
+            [common::TEST_MINT],
+            |row| row.get(0),
+        )
+        .expect("count open rows")
+}
+
+/// Archives `id` as the user does: on the row, then in memory, releasing its slot.
+async fn archive(id: i64) {
+    assert!(db::set_position_archived_db(id, true)
+        .await
+        .expect("archive the row"));
+    assert!(state::set_position_archived_in_memory(id, true).await);
+    state::release_position_slot(id).await;
+}
+
+/// Storage holds one open row per mint, archived or not: a second open row is refused
+/// whoever writes it, while closed rows of the mint are kept beside the open one.
+#[test]
+fn storage_refuses_a_second_open_position_of_a_mint() {
+    common::run_isolated(
+        "storage_refuses_a_second_open_position_of_a_mint",
+        || async {
+            let _dir = common::isolated_env();
+            let _cfg = common::config_guard();
+            let open = open_position(|_| {}).await;
+            store_position(|position| {
+                position.exit_time = Some(Utc::now());
+                position.transaction_exit_verified = true;
+            })
+            .await;
+
+            let mut second = common::test_position(1.0, 1.0);
+            second.id = None;
+            for archived in [false, true] {
+                if archived {
+                    archive(open).await;
+                }
+                assert!(
+                    matches!(
+                        db::save_position(&second).await,
+                        Err(Error::AlreadyOpen { open_position_id, .. }) if open_position_id == open
+                    ),
+                    "a second open row was stored beside an open row archived={archived}, \
+                     or the refusal did not name it"
+                );
+            }
+            let refused_raw = injector().execute(
+                "UPDATE positions SET exit_time = NULL WHERE mint = ?1",
+                [common::TEST_MINT],
+            );
+            assert!(
+                refused_raw.is_err(),
+                "the index let a closed row reopen beside the open one"
+            );
+            assert_eq!(open_rows_of_mint(), 1);
+        },
+    );
+}
+
+/// The second buy of a held token is an add on its open position, whoever made the first:
+/// the buy target names that position, the add books onto it, and the mint ends with one
+/// open row holding the sum of both buys.
+async fn assert_second_buy_adds(first_origin: PositionOrigin) {
+    let id = open_position(|position| position.origin = first_origin).await;
+    assert_eq!(
+        buy_target(common::TEST_MINT).await,
+        BuyTarget::Add {
+            position_id: id,
+            archived: false
+        }
+    );
+    assert_eq!(buy_target(common::TEST_MINT).await.notice(), None);
+    assert!(state::holds_open_round(common::TEST_MINT).await);
+
+    register_dca(id).await;
+    apply_transition(dca(id)).await.expect("the add is booked");
+
+    for position in [stored_position(id).await, memory_position(id).await] {
+        assert!(position.exit_time.is_none());
+        assert_eq!(
+            position.remaining_token_amount,
+            Some(RawAmount::new(HELD + 500_000))
+        );
+        assert_eq!(position.total_size_native, 1.5);
+        assert_eq!(position.dca_count, 1);
+    }
+    assert_eq!(entry_records(id).await, 1);
+    assert_eq!(open_rows_of_mint(), 1);
+}
+
+#[test]
+fn a_manual_buy_of_a_token_with_a_manual_position_adds_to_it() {
+    common::run_isolated(
+        "a_manual_buy_of_a_token_with_a_manual_position_adds_to_it",
+        || async {
+            let _dir = common::isolated_env();
+            let _cfg = common::config_guard();
+            assert_second_buy_adds(PositionOrigin::Manual).await;
+        },
+    );
+}
+
+#[test]
+fn a_manual_buy_of_a_token_with_a_bot_position_adds_to_it() {
+    common::run_isolated(
+        "a_manual_buy_of_a_token_with_a_bot_position_adds_to_it",
+        || async {
+            let _dir = common::isolated_env();
+            let _cfg = common::config_guard();
+            assert_second_buy_adds(PositionOrigin::Auto { strategy_id: None }).await;
+        },
+    );
+}
+
+/// A buy of a token whose open position is archived carries the core's notice, and the add
+/// brings the position back: unarchived in storage and memory, holding a trading slot again.
+#[test]
+fn a_buy_beside_an_archived_open_position_adds_to_it_and_brings_it_back() {
+    common::run_isolated(
+        "a_buy_beside_an_archived_open_position_adds_to_it_and_brings_it_back",
+        || async {
+            let _dir = common::isolated_env();
+            let _cfg = common::config_guard();
+            state::init_global_position_semaphore(1);
+            let id = open_position(|_| {}).await;
+            assert!(state::try_consume_global_position_permit());
+            state::register_position_slot(id).await;
+            archive(id).await;
+
+            assert!(!state::is_open_position(common::TEST_MINT).await);
+            assert!(
+                state::holds_open_round(common::TEST_MINT).await,
+                "an archived open position still holds the token"
+            );
+            let target = buy_target(common::TEST_MINT).await;
+            assert_eq!(
+                target,
+                BuyTarget::Add {
+                    position_id: id,
+                    archived: true
+                }
+            );
+            assert_eq!(
+                target.notice(),
+                Some(UiText::new(ids::POSITIONS_BUY_ADDS_TO_ARCHIVED)),
+                "the buyer is not told the buy brings the archived position back"
+            );
+
+            register_dca(id).await;
+            apply_transition(dca(id)).await.expect("the add is booked");
+
+            for position in [stored_position(id).await, memory_position(id).await] {
+                assert!(
+                    !position.archived,
+                    "the position stays archived after a buy"
+                );
+                assert_eq!(position.archived_at, None);
+                assert_eq!(
+                    position.remaining_token_amount,
+                    Some(RawAmount::new(HELD + 500_000))
+                );
+            }
+            assert!(state::is_open_position(common::TEST_MINT).await);
+            assert!(
+                !state::try_consume_global_position_permit(),
+                "the position did not take its trading slot back"
+            );
+            assert_eq!(buy_target(common::TEST_MINT).await.notice(), None);
+            assert_eq!(open_rows_of_mint(), 1);
+
+            let before = in_storage(id).await;
+            apply_transition(dca(id))
+                .await
+                .expect("a repeated add is skipped");
+            assert_unchanged(id, &before).await;
+            assert_eq!(entry_records(id).await, 1);
+            state::release_global_position_permit();
+            assert!(
+                state::try_consume_global_position_permit(),
+                "the position holds more than one trading slot"
+            );
+        },
+    );
+}
+
+/// A fill that lands late on a closed position of a mint that has opened again is booked as
+/// an add on the open position, archived or not: the closed one stays closed with the
+/// handed-over cost removed from its books, and the open one holds both, back from the
+/// archive.
+#[test]
+fn a_late_fill_after_a_new_buy_adds_to_the_open_position() {
+    common::run_isolated(
+        "a_late_fill_after_a_new_buy_adds_to_the_open_position",
+        || async {
+            let _dir = common::isolated_env();
+            let _cfg = common::config_guard();
+            start_events().await;
+            let closed = written_off(|_| {}).await;
+            let open = store_position(|_| {}).await;
+            assert!(state::try_consume_global_position_permit());
+            state::register_position_slot(open).await;
+            archive(open).await;
+
+            // The wallet holds the open position's tokens and everything the closed one
+            // acquired, its late DCA included.
+            apply_transition(late_dca(
+                closed,
+                Some(RawAmount::new(HELD + HELD + 500_000)),
+            ))
+            .await
+            .expect("the late DCA is booked");
+            apply_transition(late_dca(
+                closed,
+                Some(RawAmount::new(HELD + HELD + 500_000)),
+            ))
+            .await
+            .expect("a repeated late DCA is skipped");
+
+            for position in [stored_position(closed).await, memory_position(closed).await] {
+                assert!(position.exit_time.is_some(), "the closed position reopened");
+                assert_eq!(position.remaining_token_amount, Some(RawAmount::ZERO));
+                assert!(position.total_size_native.abs() < 1e-9);
+            }
+            for position in [stored_position(open).await, memory_position(open).await] {
+                assert!(position.exit_time.is_none());
+                assert!(
+                    !position.archived,
+                    "the add left the open position archived"
+                );
+                assert_eq!(
+                    position.remaining_token_amount,
+                    Some(RawAmount::new(HELD + HELD + 500_000))
+                );
+                assert!((position.total_size_native - 2.5).abs() < 1e-9);
+                assert_eq!(position.dca_count, 1);
+            }
+            assert_eq!(
+                entry_records(closed).await,
+                0,
+                "a leg wholly handed over is recorded on the closed position"
+            );
+            assert_eq!(entry_records(open).await, 1);
+            assert_eq!(open_rows_of_mint(), 1);
+            assert_eq!(position_events("late_fill_handed_over").await, 1);
+            assert!(
+                !state::try_consume_global_position_permit(),
+                "the open position did not take its trading slot back"
+            );
+        },
+    );
+}
+
+/// A late fill whose tokens already left the wallet hands nothing over: beside an open
+/// position of the mint, the closed one stays closed and the open one is untouched.
+#[test]
+fn a_late_fill_whose_tokens_are_gone_leaves_the_open_position_untouched() {
+    common::run_isolated(
+        "a_late_fill_whose_tokens_are_gone_leaves_the_open_position_untouched",
+        || async {
+            let _dir = common::isolated_env();
+            let _cfg = common::config_guard();
+            let closed = written_off(|_| {}).await;
+            let open = store_position(|_| {}).await;
+            let before = in_storage(open).await;
+
+            apply_transition(late_dca(closed, Some(RawAmount::new(HELD))))
+                .await
+                .expect("the late DCA is booked");
+
+            for position in [stored_position(closed).await, memory_position(closed).await] {
+                assert!(position.exit_time.is_some(), "the closed position reopened");
+                assert_eq!(position.remaining_token_amount, Some(RawAmount::ZERO));
+            }
+            assert_unchanged(open, &before).await;
+            assert_eq!(entry_records(open).await, 0);
+            assert_eq!(open_rows_of_mint(), 1);
+        },
+    );
+}
+
+/// A DCA bought below the entry price that confirms after its position closed and a new
+/// position of the mint opened moves to the open position at its own cost: the closed
+/// position keeps its realized loss, the open one shows no P&L at an unchanged price, the
+/// swap is recorded once, and a replay changes nothing.
+#[test]
+fn a_late_dca_below_the_entry_price_moves_at_its_own_cost() {
+    common::run_isolated(
+        "a_late_dca_below_the_entry_price_moves_at_its_own_cost",
+        || async {
+            let _dir = common::isolated_env();
+            let _cfg = common::config_guard();
+            let closed = open_position(|_| {}).await;
+            apply_transition(PositionTransition::ExitVerified {
+                position_id: closed,
+                effective_exit_price: 0.6,
+                native_received: 0.6,
+                fee_raw: 0,
+                exit_time: Utc::now(),
+                exit_signature: CLOSE_SIGNATURE.to_owned(),
+                exit_amount: RawAmount::new(HELD),
+                held_after: None,
+            })
+            .await
+            .expect("the close is booked");
+            let realized = stored_position(closed).await.pnl.expect("a realized P&L");
+            assert!((realized + 0.4).abs() < 1e-9, "realized {realized}");
+
+            let open = store_position(|position| {
+                position.token_amount = Some(RawAmount::new(2 * HELD));
+                position.remaining_token_amount = Some(RawAmount::new(2 * HELD));
+                position.entry_price = 0.5;
+                position.effective_entry_price = Some(0.5);
+                position.average_entry_price = 0.5;
+                position.current_price = Some(0.5);
+            })
+            .await;
+
+            let late_dca = || PositionTransition::DcaVerified {
+                position_id: closed,
+                tokens_bought: RawAmount::new(HELD),
+                native_spent: 0.5,
+                effective_price: 0.5,
+                fee_raw: 0,
+                dca_time: Utc::now(),
+                dca_signature: DCA_SIGNATURE.to_owned(),
+                held_after: Some(RawAmount::new(3 * HELD)),
+            };
+            apply_transition(late_dca())
+                .await
+                .expect("the late DCA is booked");
+
+            for position in [stored_position(closed).await, memory_position(closed).await] {
+                assert!(position.exit_time.is_some(), "the closed position reopened");
+                assert_eq!(position.remaining_token_amount, Some(RawAmount::ZERO));
+                assert!((position.total_size_native - 1.0).abs() < 1e-9);
+                let pnl = position.pnl.expect("a realized P&L");
+                assert!(
+                    (pnl - realized).abs() < 1e-9,
+                    "the closed position's realized P&L moved from {realized} to {pnl}"
+                );
+            }
+            for position in [stored_position(open).await, memory_position(open).await] {
+                assert_eq!(
+                    position.remaining_token_amount,
+                    Some(RawAmount::new(3 * HELD))
+                );
+                assert!((position.total_size_native - 1.5).abs() < 1e-9);
+                assert!(
+                    (position.average_entry_price - 0.5).abs() < 1e-9,
+                    "average {}",
+                    position.average_entry_price
+                );
+                assert_eq!(position.dca_count, 1);
+                let (unrealized, _) =
+                    screenerbot::positions::pnl::calculate_position_pnl(&position, Some(0.5)).await;
+                assert!(
+                    unrealized.abs() < 1e-9,
+                    "the open position shows {unrealized} at an unchanged price"
+                );
+            }
+            assert_eq!(entry_records(closed).await, 0);
+            let records = db::get_entry_history(open).await.expect("read entries");
+            assert_eq!(records.len(), 1);
+            assert_eq!(records[0].amount, RawAmount::new(HELD));
+            assert!((records[0].native_spent - 0.5).abs() < 1e-9);
+            assert_eq!(records[0].transaction_signature, DCA_SIGNATURE);
+
+            let closed_before = in_storage(closed).await;
+            let open_before = in_storage(open).await;
+            apply_transition(late_dca())
+                .await
+                .expect("a repeated late DCA is skipped");
+            assert_unchanged(closed, &closed_before).await;
+            assert_unchanged(open, &open_before).await;
+            assert_eq!(entry_records(closed).await, 0);
+            assert_eq!(entry_records(open).await, 1);
+        },
+    );
+}
+
+/// A store that still holds two open rows of a mint names the same one as its open position
+/// in memory and in storage: an active row before an archived one, then the earliest.
+#[test]
+fn a_store_with_two_open_rows_names_the_same_open_position_in_memory_and_storage() {
+    common::run_isolated(
+        "a_store_with_two_open_rows_names_the_same_open_position_in_memory_and_storage",
+        || async {
+            let _dir = common::isolated_env();
+            let _cfg = common::config_guard();
+            let first = open_position(|_| {}).await;
+            let duplicate = store_legacy_duplicate(|_| {}).await;
+            let mut probe = common::test_position(1.0, 1.0);
+            probe.id = None;
+
+            for expected in [first, duplicate] {
+                if expected == duplicate {
+                    archive(first).await;
+                }
+                assert_eq!(
+                    buy_target(common::TEST_MINT).await,
+                    BuyTarget::Add {
+                        position_id: expected,
+                        archived: false
+                    },
+                    "memory named another open position"
+                );
+                assert!(
+                    matches!(
+                        db::save_position(&probe).await,
+                        Err(Error::AlreadyOpen { open_position_id, .. }) if open_position_id == expected
+                    ),
+                    "storage named another open position than {expected}"
+                );
+            }
+        },
+    );
+}
+
+/// Bringing an archived row back beside another active open row of the mint is refused,
+/// naming every row involved, and the row stays archived while buys add to the active one.
+#[test]
+fn unarchiving_beside_another_active_open_row_is_refused_naming_both() {
+    common::run_isolated(
+        "unarchiving_beside_another_active_open_row_is_refused_naming_both",
+        || async {
+            let _dir = common::isolated_env();
+            let _cfg = common::config_guard();
+            let first = open_position(|_| {}).await;
+            let duplicate = store_legacy_duplicate(|_| {}).await;
+            archive(first).await;
+
+            let refused = db::set_position_archived_db(first, false).await;
+            assert!(
+                matches!(
+                    &refused,
+                    Err(Error::DuplicateOpenRound { position_ids, .. })
+                        if *position_ids == vec![first, duplicate]
+                ),
+                "unarchiving beside an active open row was not refused, got {refused:?}"
+            );
+            assert!(stored_position(first).await.archived);
+            assert_eq!(
+                buy_target(common::TEST_MINT).await,
+                BuyTarget::Add {
+                    position_id: duplicate,
+                    archived: false
+                }
+            );
+        },
+    );
+}
+
+/// Taking a position's trading slot back is idempotent, and a wallet-derived position takes
+/// none, as at the startup rebuild.
+#[test]
+fn reclaiming_a_slot_takes_one_permit_and_none_for_a_wallet_derived_position() {
+    common::run_isolated(
+        "reclaiming_a_slot_takes_one_permit_and_none_for_a_wallet_derived_position",
+        || async {
+            let _dir = common::isolated_env();
+            let _cfg = common::config_guard();
+            state::init_global_position_semaphore(2);
+            let id = open_position(|_| {}).await;
+            let position = memory_position(id).await;
+
+            assert!(state::reclaim_position_slot(&position).await);
+            assert!(
+                state::reclaim_position_slot(&position).await,
+                "a position already holding its slot reports it held"
+            );
+            let mut derived = position.clone();
+            derived.id = Some(id + 1);
+            derived.origin = PositionOrigin::External;
+            assert!(!state::reclaim_position_slot(&derived).await);
+
+            assert!(
+                state::try_consume_global_position_permit(),
+                "the reclaims took more than one slot"
+            );
+            assert!(
+                !state::try_consume_global_position_permit(),
+                "the first reclaim took no slot"
+            );
         },
     );
 }

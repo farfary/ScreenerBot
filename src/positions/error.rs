@@ -42,8 +42,18 @@ pub enum Error {
     Chain(#[from] crate::chains::Error),
 
     // --- state conflicts ---
-    #[error("an open position already exists for token {mint}")]
-    AlreadyOpen { mint: String },
+    #[error("an open position already exists for token {mint}: position {open_position_id}")]
+    AlreadyOpen { mint: String, open_position_id: i64 },
+    /// Another open of the token was sent and may still land, so a second is not sent.
+    #[error("an open of token {mint} is still pending")]
+    OpenPending { mint: String },
+    /// The store holds several open positions of one mint; the change would leave more than
+    /// one of them active.
+    #[error("token {mint} has more than one open position ({position_ids:?}); only one of them may be active")]
+    DuplicateOpenRound {
+        mint: String,
+        position_ids: Vec<i64>,
+    },
     #[error("position {position_id} is already closed")]
     AlreadyClosed { position_id: i64 },
     #[error("the entry transaction for position {position_id} is not verified")]
@@ -148,8 +158,10 @@ impl ErrorClass for Error {
             | Error::TokenNotFound { .. } => false,
             // State conflicts describe the world as it is right now.
             Error::AlreadyOpen { .. }
+            | Error::OpenPending { .. }
             | Error::AlreadyClosed { .. }
             | Error::AlreadyStored { .. }
+            | Error::DuplicateOpenRound { .. }
             | Error::EntryLanded { .. }
             | Error::UnverifiedEntryArchive { .. }
             | Error::UnknownPersistedValue { .. } => false,
@@ -198,12 +210,13 @@ impl ErrorClass for Error {
             | Error::NotFoundBySignature { .. }
             | Error::TokenNotFound { .. } => Severity::Info,
             Error::AlreadyOpen { .. }
+            | Error::OpenPending { .. }
             | Error::AlreadyClosed { .. }
             | Error::EntryLanded { .. }
             | Error::UnverifiedEntryArchive { .. }
             | Error::HoldingUnattributable { .. }
             | Error::UnknownPersistedValue { .. } => Severity::Warning,
-            Error::AlreadyStored { .. } => Severity::Error,
+            Error::AlreadyStored { .. } | Error::DuplicateOpenRound { .. } => Severity::Error,
             Error::InvalidPrice { .. }
             | Error::InvalidTradeSize { .. }
             | Error::InvalidExitPercentage { .. }
@@ -230,8 +243,10 @@ impl ErrorClass for Error {
             | Error::NotFoundBySignature { .. }
             | Error::TokenNotFound { .. } => 404,
             Error::AlreadyOpen { .. }
+            | Error::OpenPending { .. }
             | Error::AlreadyClosed { .. }
             | Error::AlreadyStored { .. }
+            | Error::DuplicateOpenRound { .. }
             | Error::EntryLanded { .. }
             | Error::UnverifiedEntryArchive { .. }
             | Error::HoldingUnattributable { .. }

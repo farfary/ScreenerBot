@@ -324,6 +324,14 @@ export function applyQuoteManagerMixin(TradeActionDialog) {
       }
     }
 
+    // A buy of a token whose open position is archived adds to that position and brings
+    // it back; the quote carries the core's notice so the user sees it before confirming.
+    if (this.quoteBuyNoticeEl && this.quoteBuyNoticeTextEl) {
+      const notice = quote.buy_notice ? I18n.text(quote.buy_notice) : "";
+      this.quoteBuyNoticeEl.dataset.visible = notice ? "true" : "false";
+      this.quoteBuyNoticeTextEl.textContent = notice;
+    }
+
     // The header badge counts the same 15s the refresh timer does; seed it here so it
     // does not show the previous quote's remainder for the first second.
     if (this.quoteAgeEl) {

@@ -13,7 +13,7 @@ use crate::telegram::formatters::{self, nested_arg, row, text_arg};
 use crate::telegram::keyboards;
 use crate::telegram::text::{tg, tg_escape, tg_id, with_icon};
 use crate::telegram::{Error, Result};
-use crate::trader::manual::manual_add;
+use crate::trader::manual::{guard, manual_buy};
 use teloxide::prelude::*;
 use teloxide::types::{ChatId, ParseMode};
 
@@ -409,7 +409,7 @@ pub(super) async fn send_confirm_token_buy(
         }
     };
 
-    let msg = row(
+    let mut msg = row(
         "💰",
         UiText::new(ids::TELEGRAM_TOKEN_CONFIRM_BUY)
             .arg("symbol", text_arg(token.symbol.as_str()))
@@ -419,6 +419,10 @@ pub(super) async fn send_confirm_token_buy(
             )
             .arg("amount", text_arg(amount.to_string())),
     );
+    if let Some(notice) = positions::buy_target(&token.mint).await.notice() {
+        msg.push_str("\n\n");
+        msg.push_str(&row("⚠️", notice));
+    }
 
     send_with_keyboard(
         bot,
@@ -547,8 +551,26 @@ pub(super) async fn execute_token_buy(
             detail: e.to_string(),
         })?;
 
-    // Execute the buy via manual trading system
-    match manual_add(&token.mint, amount, None).await {
+    // A manual buy passes the gates every manual buy passes, then opens the token's
+    // position, or adds to the open one when it is held.
+    let bought = match guard::preflight(
+        guard::ManualTradeKind::Buy,
+        &token.mint,
+        guard::BlacklistPolicy::Enforce,
+    )
+    .await
+    {
+        Ok(()) => manual_buy(
+            &token.mint,
+            amount,
+            positions::PositionManagement::UserOnly,
+            None,
+        )
+        .await
+        .map_err(|e| e.to_string()),
+        Err(e) => Err(e.to_string()),
+    };
+    match bought {
         Ok(_) => {
             let success_msg = row(
                 "✅",
@@ -563,7 +585,7 @@ pub(super) async fn execute_token_buy(
                 "❌",
                 UiText::new(ids::TELEGRAM_TOKEN_BUY_FAILED)
                     .arg("symbol", text_arg(token.symbol.as_str()))
-                    .arg("detail", text_arg(e.to_string())),
+                    .arg("detail", text_arg(e)),
             );
             send_with_keyboard(bot, chat_id, &error_msg, keyboards::tokens_menu()).await
         }

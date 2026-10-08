@@ -53,6 +53,19 @@ async fn is_blacklisted(mint: &str) -> bool {
         .unwrap_or(false)
 }
 
+/// Whether the mint holds the position a trade of `kind` needs: none for a buy, the open
+/// position archived or not for an add, which brings it back from the archive, and an
+/// active open position for a sell.
+async fn holds_position_for(kind: ManualTradeKind, mint: &str) -> bool {
+    match kind {
+        ManualTradeKind::Buy => true,
+        ManualTradeKind::Add => crate::positions::get_open_round_by_mint(mint)
+            .await
+            .is_some(),
+        ManualTradeKind::Sell => crate::positions::is_open_position(mint).await,
+    }
+}
+
 /// Run every gate a manual trade must pass before it may be submitted.
 pub async fn preflight(
     kind: ManualTradeKind,
@@ -74,7 +87,7 @@ pub async fn preflight(
         Some(Error::Blacklisted {
             mint: mint.to_owned(),
         })
-    } else if kind != ManualTradeKind::Buy && !crate::positions::is_open_position(mint).await {
+    } else if !holds_position_for(kind, mint).await {
         Some(Error::NoOpenPosition {
             mint: mint.to_owned(),
         })

@@ -387,6 +387,11 @@ pub async fn quote_preview_handler(Query(req): Query<QuotePreviewRequest>) -> Re
                 route: quote.route_plan,
                 slippage_bps: quote.slippage_bps,
                 expires_in_secs: 30, // Quotes typically valid for ~30s
+                buy_notice: if direction == "buy" {
+                    crate::positions::buy_target(&req.mint).await.notice()
+                } else {
+                    None
+                },
             };
 
             success_response(response)

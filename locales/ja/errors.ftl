@@ -381,6 +381,7 @@ errors-positions-unverified-entry-archive = このポジションの購入はま
 errors-positions-not-archived = ポジションはアーカイブされていません
 errors-positions-archive-failed = ポジションをアーカイブできませんでした
 errors-positions-unarchive-failed = ポジションのアーカイブを解除できませんでした
+errors-positions-unarchive-duplicate-open = このトークンにはオープン中のポジションが複数あり（{ $positions }）、アクティブにできるのは1つだけです。先に他のポジションをクローズするかアーカイブしてください。
 errors-positions-management-invalid = コピー管理には、コピー由来のポジションが必要です
 errors-positions-management-failed = ポジション管理を更新できませんでした
 errors-positions-delete-failed = ポジションを削除できませんでした

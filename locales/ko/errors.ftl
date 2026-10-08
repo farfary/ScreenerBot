@@ -411,6 +411,7 @@ errors-positions-unverified-entry-archive = 이 포지션의 매수가 아직 �
 errors-positions-not-archived = 보관되지 않은 포지션입니다
 errors-positions-archive-failed = 포지션을 보관하지 못했습니다
 errors-positions-unarchive-failed = 포지션 보관을 해제하지 못했습니다
+errors-positions-unarchive-duplicate-open = 이 토큰에는 보유 포지션이 둘 이상 있으며({ $positions }), 그중 하나만 활성 상태일 수 있습니다. 먼저 다른 포지션을 종료하거나 보관하세요.
 errors-positions-management-invalid = 카피 관리는 카피에서 시작된 포지션에만 사용할 수 있습니다
 errors-positions-management-failed = 포지션 관리를 업데이트하지 못했습니다
 errors-positions-delete-failed = 포지션을 삭제하지 못했습니다

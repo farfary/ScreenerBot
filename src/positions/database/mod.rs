@@ -6,6 +6,7 @@ mod booking;
 mod column_names;
 mod convenience;
 mod global;
+mod open_round;
 mod operations;
 mod provenance;
 mod queries;
@@ -38,7 +39,9 @@ pub(crate) use booking::{Booking, BookingReads, BookingRecord, Committed, OtherO
 pub(crate) use operations::carry_columns_not_booked;
 
 // Re-export convenience functions
-pub(crate) use convenience::{commit_booking, get_other_open_held};
+pub(crate) use convenience::{
+    commit_booking, get_open_round_id, get_other_open_held, refuse_reactivating_open_round,
+};
 pub use convenience::{
     delete_archived_positions, delete_position_by_id, force_database_sync,
     get_all_positions_for_mint, get_closed_positions, get_closed_positions_count_since,

@@ -52,6 +52,13 @@ async fn buy(
         });
     }
 
+    // A mint has one open position, archived or not: a buy of a held token is an add on
+    // it, never a second position. Routed here, not in a route, so every caller of a
+    // manual buy (dashboard, agent tools, Telegram) books the same way.
+    if let positions::BuyTarget::Add { .. } = positions::buy_target(mint).await {
+        return add(mint, size_native, slippage_pct).await;
+    }
+
     // Get token symbol for action display
     let symbol = match crate::chains::chain_for_address(mint) {
         Ok(chain) => crate::tokens::get_full_token_async(chain, mint)
@@ -67,21 +74,6 @@ async fn buy(
 
     // Step 1: Validation
     action.start_validation().await;
-
-    // A buy OPENS a position. `open_position_with_size` does not check for an existing
-    // one, so buying a token that is already held would create a SECOND open position
-    // for the same mint — and `update_position_state()` resolves by mint (first match),
-    // so the two would corrupt each other's state and the sell/add routes could not tell
-    // them apart. Adding to the existing position is the only correct interpretation.
-    // Enforced here (not in the route) so the Agent Control trading tool is covered too.
-    if positions::is_open_position(mint).await {
-        let error = "Position already open for this token - use add to position instead";
-        action.fail_validation(error).await;
-        return Err(positions::Error::AlreadyOpen {
-            mint: mint.to_owned(),
-        }
-        .into());
-    }
 
     // Validate SOL amount
     if !size_native.is_finite() {
@@ -234,8 +226,8 @@ async fn sell(
     }
     .map(|t| t.symbol);
 
-    // Validate position exists first (needed for action metadata)
-    let position = positions::get_position_by_mint(mint).await;
+    // The open position of the mint, archived or not (needed for action metadata)
+    let position = positions::get_open_round_by_mint(mint).await;
     let position_id = position.as_ref().and_then(|p| p.id);
 
     // Create action tracker
@@ -382,8 +374,8 @@ async fn add(
     }
     .map(|t| t.symbol);
 
-    // Validate position exists first (needed for action metadata)
-    let position = positions::get_position_by_mint(mint).await;
+    // The open position of the mint, archived or not (needed for action metadata)
+    let position = positions::get_open_round_by_mint(mint).await;
     let position_id = position.as_ref().and_then(|p| p.id);
 
     // Create action tracker

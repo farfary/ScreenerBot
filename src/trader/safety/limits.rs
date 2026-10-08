@@ -17,10 +17,8 @@ pub async fn check_position_limits() -> crate::trader::Result<bool> {
     Ok(open_positions.len() < max_positions)
 }
 
-/// Check if a specific token already has an open position
-/// This includes checking pending-open flags to prevent race conditions
+/// Whether a token is held: it has an open position, archived ones included, or an open
+/// is pending, so the bot never enters a token it already holds.
 pub async fn has_open_position(mint: &str) -> crate::trader::Result<bool> {
-    // Use positions module's is_open_position which checks both actual positions
-    // and pending-open flags to prevent concurrent duplicate entries
-    Ok(positions::is_open_position(mint).await)
+    Ok(positions::holds_open_round(mint).await)
 }

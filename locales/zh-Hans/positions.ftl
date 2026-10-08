@@ -103,6 +103,7 @@ positions-toast-not-found = 未找到仓位数据
 positions-toast-deleted = 仓位已删除
 positions-toast-archived = 仓位已归档
 positions-toast-restored = 仓位已恢复
+positions-buy-adds-to-archived = 该代币在归档中已有一个持仓中的仓位。此次买入将加到该仓位上，该仓位会回到持仓列表。 该仓位保持当前的管理模式。
 positions-action-failed = 操作失败
 positions-delete-title = 永久删除仓位
 # $symbol is the token symbol.

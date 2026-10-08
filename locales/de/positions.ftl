@@ -85,6 +85,7 @@ positions-toast-not-found = Positionsdaten nicht gefunden
 positions-toast-deleted = Position gelöscht
 positions-toast-archived = Position archiviert
 positions-toast-restored = Position wiederhergestellt
+positions-buy-adds-to-archived = Für diesen Token gibt es bereits eine offene Position im Archiv. Der Kauf wird dieser Position hinzugefügt, und sie kehrt zu den offenen Positionen zurück. Sie behält ihren aktuellen Verwaltungsmodus.
 positions-action-failed = Aktion fehlgeschlagen
 positions-delete-title = Position endgültig löschen
 positions-delete-message = { $symbol } endgültig löschen? Dadurch werden die Position und ihre Historie aus der Datenbank entfernt. Das lässt sich nicht rückgängig machen. Ihre Transaktionen und Token-Daten bleiben unberührt.

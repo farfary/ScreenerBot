@@ -103,6 +103,7 @@ positions-toast-not-found = ポジションデータが見つかりません
 positions-toast-deleted = ポジションを削除しました
 positions-toast-archived = ポジションをアーカイブしました
 positions-toast-restored = ポジションを復元しました
+positions-buy-adds-to-archived = このトークンにはアーカイブ内にオープン中のポジションがあります。購入はそのポジションに追加され、ポジションはオープンポジションに戻ります。 ポジションの現在の管理モードはそのまま維持されます。
 positions-action-failed = 操作に失敗しました
 positions-delete-title = ポジションを完全に削除
 # $symbol is the token symbol.

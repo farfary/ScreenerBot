@@ -109,6 +109,7 @@ positions-toast-not-found = Дані позиції не знайдено
 positions-toast-deleted = Позицію видалено
 positions-toast-archived = Позицію архівовано
 positions-toast-restored = Позицію відновлено
+positions-buy-adds-to-archived = У цього токена вже є відкрита позиція в архіві. Купівля додасться до цієї позиції, і вона повернеться до відкритих позицій. Режим керування позицією зберігається.
 positions-action-failed = Дія не вдалася
 positions-delete-title = Остаточно видалити позицію
 # $symbol is the token symbol.

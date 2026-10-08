@@ -103,6 +103,7 @@ positions-toast-not-found = 포지션 데이터를 찾을 수 없습니다
 positions-toast-deleted = 포지션이 삭제되었습니다
 positions-toast-archived = 포지션이 보관되었습니다
 positions-toast-restored = 포지션이 복원되었습니다
+positions-buy-adds-to-archived = 이 토큰에는 이미 보관함에 보유 포지션이 있습니다. 매수는 해당 포지션에 추가되며, 포지션은 보유 포지션 목록으로 돌아갑니다. 포지션의 현재 관리 모드는 그대로 유지됩니다.
 positions-action-failed = 작업에 실패했습니다
 positions-delete-title = 포지션 영구 삭제
 # $symbol is the token symbol.

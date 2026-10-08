@@ -12,6 +12,7 @@ use crate::logger::{self, LogTag};
 use crate::positions::types::{EntryRecord, ExitRecord, Position};
 use crate::positions::{Error, Result};
 
+use super::open_round::{query_active_open_round_ids, query_open_round_id};
 use super::operations::write_position_row;
 use super::queries::{query_trader_swap_legs, TraderSwapLeg};
 use super::types::{PositionsDatabase, POSITION_SELECT_COLUMNS};
@@ -46,8 +47,11 @@ pub(crate) enum Committed<T> {
 }
 
 /// The reads a booking may make inside its transaction, consistent with the row it was
-/// handed.
+/// handed, and the one write it may make beyond that row: booking onto the open position of
+/// its mint ([`BookingReads::book_open_round`]), so a closed row hands its holding over in
+/// the same transaction.
 pub(crate) struct BookingReads<'a> {
+    db: &'a PositionsDatabase,
     conn: &'a Connection,
     chain: &'a str,
     position_id: i64,
@@ -61,6 +65,37 @@ impl BookingReads<'_> {
             "SELECT 1 FROM position_entries WHERE position_id = ?1 AND transaction_signature = ?2 LIMIT 1",
             signature,
         )
+    }
+
+    /// True when any position of `mint` in this store's chain already has an entry record
+    /// for `signature`: a buy whose tokens were handed to the open position of its mint is
+    /// recorded there, not on the position it was bought for.
+    pub(crate) fn entry_recorded_for_mint(&self, mint: &str, signature: &str) -> Result<bool> {
+        Ok(self
+            .conn
+            .query_row(
+                "SELECT 1 FROM position_entries
+                 WHERE transaction_signature = ?1
+                   AND position_id IN (SELECT id FROM positions WHERE chain_id = ?2 AND mint = ?3)
+                 LIMIT 1",
+                params![signature, self.chain, mint],
+                |_| Ok(()),
+            )
+            .optional()
+            .map_err(|e| DatabaseError::classify_sqlite_failure("commit_booking", e))?
+            .is_some())
+    }
+
+    /// The active (not archived) open positions of `mint` in this wallet other than
+    /// `position_id`; empty unless the store held several open positions of the mint before
+    /// the open-round index.
+    pub(crate) fn active_open_rounds_beside(
+        &self,
+        mint: &str,
+        position_id: i64,
+    ) -> Result<Vec<i64>> {
+        let wallet_address = self.wallet_address.clone()?;
+        query_active_open_round_ids(self.conn, self.chain, wallet_address, mint, position_id)
     }
 
     /// True when this position already has an exit record for `signature`.
@@ -100,6 +135,57 @@ impl BookingReads<'_> {
             Some(self.position_id),
         )?
         .booked(mint)
+    }
+
+    /// The open position of `mint` in this wallet other than this one, archived or not.
+    pub(crate) fn open_round_beside(&self, mint: &str) -> Result<Option<i64>> {
+        let wallet_address = self.wallet_address.clone()?;
+        query_open_round_id(
+            self.conn,
+            self.chain,
+            wallet_address,
+            mint,
+            Some(self.position_id),
+        )
+    }
+
+    /// Books onto the open position `open_round_id` inside this transaction: reads its row,
+    /// hands it to `book`, then writes the row and the entry record `book` returns under
+    /// `signature`. An archived row that `book` unarchives is unarchived with the booking.
+    /// Returns the row as written, which the caller publishes once the transaction commits,
+    /// or `None` without writing anything when the open position already has an entry
+    /// record for `signature`: the booking is already on it.
+    pub(crate) fn book_open_round(
+        &self,
+        open_round_id: i64,
+        signature: &str,
+        book: impl FnOnce(&mut Position) -> Result<EntryRecord>,
+    ) -> Result<Option<Position>> {
+        let wallet_address = self.wallet_address.clone()?;
+        let sqlite = |e| DatabaseError::classify_sqlite_failure("commit_booking", e);
+        let already_booked = self
+            .conn
+            .query_row(
+                "SELECT 1 FROM position_entries WHERE position_id = ?1 AND transaction_signature = ?2 LIMIT 1",
+                params![open_round_id, signature],
+                |_| Ok(()),
+            )
+            .optional()
+            .map_err(sqlite)?
+            .is_some();
+        if already_booked {
+            return Ok(None);
+        }
+        let mut row = read_row(self.db, self.conn, self.chain, open_round_id)?;
+        let was_archived = row.archived;
+        let record = book(&mut row)?;
+        write_position_row(self.conn, self.chain, open_round_id, &row).map_err(sqlite)?;
+        if was_archived && !row.archived {
+            write_unarchived(self.conn, self.chain, open_round_id).map_err(sqlite)?;
+        }
+        insert_entry_record(self.conn, wallet_address, &record).map_err(sqlite)?;
+        log_saved_record(&BookingRecord::Entry(record));
+        Ok(Some(row))
     }
 
     /// The swap legs the trader booked for this position.
@@ -229,19 +315,11 @@ impl PositionsDatabase {
         let sqlite = |e| DatabaseError::classify_sqlite_failure("commit_booking", e);
         let tx = conn.write_tx().map_err(sqlite)?;
 
-        let mut row = tx
-            .query_row(
-                &format!(
-                    "SELECT {POSITION_SELECT_COLUMNS} FROM positions WHERE id = ?1 AND chain_id = ?2"
-                ),
-                params![position_id, chain],
-                |row| self.row_to_position(row),
-            )
-            .optional()
-            .map_err(sqlite)?
-            .ok_or(Error::NotFoundById { position_id })?;
+        let mut row = read_row(self, &tx, chain, position_id)?;
+        let was_archived = row.archived;
 
         let reads = BookingReads {
+            db: self,
             conn: &tx,
             chain,
             position_id,
@@ -262,6 +340,9 @@ impl PositionsDatabase {
         };
 
         write_position_row(&tx, chain, position_id, &row).map_err(sqlite)?;
+        if was_archived && !row.archived {
+            write_unarchived(&tx, chain, position_id).map_err(sqlite)?;
+        }
         if let Some(record) = &record {
             let wallet_address = wallet_address.clone()?;
             match record {
@@ -277,6 +358,34 @@ impl PositionsDatabase {
         }
         Ok(Committed::Written { row, outcome })
     }
+}
+
+/// The stored row of `position_id` on `chain`, read inside the booking transaction.
+fn read_row(
+    db: &PositionsDatabase,
+    conn: &Connection,
+    chain: &str,
+    position_id: i64,
+) -> Result<Position> {
+    conn.query_row(
+        &format!("SELECT {POSITION_SELECT_COLUMNS} FROM positions WHERE id = ?1 AND chain_id = ?2"),
+        params![position_id, chain],
+        |row| db.row_to_position(row),
+    )
+    .optional()
+    .map_err(|e| DatabaseError::classify_sqlite_failure("commit_booking", e))?
+    .ok_or(Error::NotFoundById { position_id })
+}
+
+/// Clears the archive flag of a row a booking brought back to the open positions. The flag
+/// is not among the columns [`write_position_row`] writes, so the booking writes it here, in
+/// its own transaction; memory mirrors it once the booking commits.
+fn write_unarchived(conn: &Connection, chain: &str, position_id: i64) -> rusqlite::Result<usize> {
+    conn.execute(
+        "UPDATE positions SET archived = 0, archived_at = NULL, updated_at = datetime('now')
+         WHERE id = ?1 AND chain_id = ?2",
+        params![position_id, chain],
+    )
 }
 
 /// Inserts an exit record unless one already exists for its position and signature: one

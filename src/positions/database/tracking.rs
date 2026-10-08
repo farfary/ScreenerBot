@@ -6,10 +6,12 @@
 use chrono::{DateTime, Utc};
 use rusqlite::{params, OptionalExtension};
 
+use crate::database::WriteTransaction;
 use crate::errors::DatabaseError;
 use crate::logger::{self, LogTag};
 use crate::positions::{Error, Result};
 
+use super::open_round::refuse_second_active_open_round;
 use super::types::*;
 
 impl PositionsDatabase {
@@ -37,8 +39,36 @@ impl PositionsDatabase {
     /// Archived tab. `archived_at` is stamped when archiving and cleared when
     /// unarchiving. Deliberately separate from the booking row write, which
     /// does not carry the flag, so routine price/state writes never clobber it.
+    ///
+    /// Unarchiving an open position is refused with [`Error::DuplicateOpenRound`] while
+    /// another open position of its mint is active, checked in the same write transaction.
     pub async fn set_position_archived(&self, id: i64, archived: bool) -> Result<bool> {
-        let conn = self.get_connection()?;
+        let mut conn = self.get_connection()?;
+        let query_error = |e: rusqlite::Error| DatabaseError::Query {
+            operation: "set position archived flag".to_owned(),
+            message: e.to_string(),
+        };
+        let tx = conn.write_tx().map_err(query_error)?;
+
+        if !archived {
+            let open_row = tx
+                .query_row(
+                    "SELECT mint, wallet_address FROM positions WHERE id = ?1 AND chain_id = ?2 AND exit_time IS NULL",
+                    params![id, self.chain.as_str()],
+                    |row| Ok((row.get::<_, String>(0)?, row.get::<_, String>(1)?)),
+                )
+                .optional()
+                .map_err(query_error)?;
+            if let Some((mint, wallet_address)) = open_row {
+                refuse_second_active_open_round(
+                    &tx,
+                    self.chain.as_str(),
+                    &wallet_address,
+                    &mint,
+                    id,
+                )?;
+            }
+        }
 
         let archived_at = if archived {
             Some(Utc::now().to_rfc3339())
@@ -46,20 +76,18 @@ impl PositionsDatabase {
             None
         };
 
-        let unverified_open = conn
+        let unverified_open = tx
             .query_row(
                 "UPDATE positions SET archived = CASE WHEN ?2 = 0 OR exit_time IS NOT NULL OR transaction_entry_verified = 1 THEN ?2 ELSE archived END, archived_at = CASE WHEN ?2 = 0 OR exit_time IS NOT NULL OR transaction_entry_verified = 1 THEN ?3 ELSE archived_at END, updated_at = CASE WHEN ?2 = 0 OR exit_time IS NOT NULL OR transaction_entry_verified = 1 THEN datetime('now') ELSE updated_at END WHERE id = ?1 AND chain_id = ?4 RETURNING exit_time IS NULL AND transaction_entry_verified = 0 AND ?2 = 1",
                 params![id, archived, archived_at, self.chain.as_str()],
                 |row| row.get::<_, bool>(0),
             )
             .optional()
-            .map_err(|e| DatabaseError::Query {
-                operation: "set position archived flag".to_owned(),
-                message: e.to_string(),
-            })?;
+            .map_err(query_error)?;
         if unverified_open == Some(true) {
             return Err(Error::UnverifiedEntryArchive { position_id: id });
         }
+        tx.commit().map_err(query_error)?;
 
         // Force WAL checkpoint so other pooled connections see the change immediately.
         if let Ok(mut stmt) = conn.prepare("PRAGMA wal_checkpoint(PASSIVE);") {

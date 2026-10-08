@@ -257,6 +257,39 @@ pub async fn rebuild_position_slot_holders() {
     *SLOT_HOLDERS.write().await = open_ids;
 }
 
+/// Take a trading slot back for `position`, an open position that re-enters active
+/// management (unarchived, or reopened by a late fill): consumes a free permit and registers
+/// the position as its holder, so the release at its close frees it. Idempotent: a position
+/// that already holds a slot keeps it and consumes no second permit, checked under the
+/// holder registry's lock. A wallet-derived position never holds a slot, as at the startup
+/// rebuild ([`rebuild_position_slot_holders`]). Returns whether the position holds a slot
+/// afterwards; false, with a warning, when every slot is taken.
+pub async fn reclaim_position_slot(position: &Position) -> bool {
+    let Some(position_id) = position.id else {
+        return false;
+    };
+    if position.is_wallet_derived() {
+        return false;
+    }
+    let mut holders = SLOT_HOLDERS.write().await;
+    if holders.contains(&position_id) {
+        return true;
+    }
+    if try_consume_global_position_permit() {
+        holders.insert(position_id);
+        true
+    } else {
+        logger::warning(
+            LogTag::Positions,
+            &format!(
+                "Position {position_id} ({}) re-entered active management, but no trading slot is free",
+                position.symbol
+            ),
+        );
+        false
+    }
+}
+
 /// Try to consume one global position permit at runtime (e.g. when an already-open
 /// position is unarchived and re-enters active management). Returns true if a slot
 /// was available. The permit is `forget()`-ten so it stays consumed for the
@@ -469,20 +502,84 @@ async fn rebuild_position_indexes(positions: &[Position]) {
 /// user's Buy to an Add — which the write side then rejected with "no open position",
 /// because `is_open_position` (below) correctly excluded it.
 pub(crate) fn is_position_open(position: &Position) -> bool {
-    !position.archived
-        && position.position_type == "buy"
+    !position.archived && is_open_round(position)
+}
+
+/// Is this position the OPEN ROUND of its mint: open as [`is_position_open`] defines it,
+/// archived or not. A mint has at most one such position per chain and wallet; every buy of
+/// the mint is booked onto it, and storage refuses a second (`idx_positions_open_round`).
+pub(crate) fn is_open_round(position: &Position) -> bool {
+    position.position_type == "buy"
         && position.exit_time.is_none()
         && (position.exit_transaction_signature.is_none() || !position.transaction_exit_verified)
 }
 
-/// The OPEN position for a mint, or None. A closed position is never returned —
-/// history is reached explicitly by position id (`get_position_by_id`).
-pub async fn get_position_by_mint(mint: &str) -> Option<Position> {
+/// The open round of a mint, archived or not (see [`is_open_round`]): the one position a
+/// buy of the mint is booked onto. Where a store still holds several, the choice is the one
+/// storage makes (`positions::db` `query_open_round_id`): an active position before an
+/// archived one, then the earliest by entry time and id.
+pub async fn get_open_round_by_mint(mint: &str) -> Option<Position> {
     let positions = POSITIONS.read().await;
     positions
         .iter()
-        .find(|p| p.mint == mint && is_position_open(p))
+        .filter(|p| p.mint == mint && is_open_round(p))
+        .min_by_key(|p| open_round_order(p))
         .cloned()
+}
+
+/// The order in which the open rounds of one mint are chosen from: active first, then the
+/// earliest entry, then the lowest id.
+fn open_round_order(position: &Position) -> (bool, DateTime<Utc>, Option<i64>) {
+    (position.archived, position.entry_time, position.id)
+}
+
+/// What a buy of a mint is booked as.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum BuyTarget {
+    /// The mint has no open round: the buy opens a position.
+    NewPosition,
+    /// The buy is an add on the open round `position_id`. An `archived` one is brought back
+    /// to the open positions by the booking of the add.
+    Add { position_id: i64, archived: bool },
+}
+
+impl BuyTarget {
+    /// The notice a buyer is shown before a buy that brings an archived position back.
+    pub fn notice(self) -> Option<crate::i18n::UiText> {
+        match self {
+            BuyTarget::Add { archived: true, .. } => Some(crate::i18n::UiText::new(
+                crate::i18n::ids::POSITIONS_BUY_ADDS_TO_ARCHIVED,
+            )),
+            BuyTarget::Add {
+                archived: false, ..
+            }
+            | BuyTarget::NewPosition => None,
+        }
+    }
+}
+
+/// What a buy of `mint` would be booked as now.
+pub async fn buy_target(mint: &str) -> BuyTarget {
+    match get_open_round_by_mint(mint).await {
+        Some(Position {
+            id: Some(position_id),
+            archived,
+            ..
+        }) => BuyTarget::Add {
+            position_id,
+            archived,
+        },
+        _ => BuyTarget::NewPosition,
+    }
+}
+
+/// The OPEN position for a mint, or None: its open round (see [`get_open_round_by_mint`])
+/// while that is not archived. A closed position is never returned — history is reached
+/// explicitly by position id (`get_position_by_id`).
+pub async fn get_position_by_mint(mint: &str) -> Option<Position> {
+    get_open_round_by_mint(mint)
+        .await
+        .filter(|position| !position.archived)
 }
 
 /// Get all open positions (archived positions are excluded — they live in the Archived tab)
@@ -530,9 +627,9 @@ pub async fn get_open_positions_count() -> usize {
     get_open_positions().await.len()
 }
 
-/// Check if position is open for given mint
+/// Check if position is open for given mint, or an open is pending for it. An archived
+/// position does not count; [`holds_open_round`] is the guard that counts it.
 pub async fn is_open_position(mint: &str) -> bool {
-    // Check existing open position first
     {
         let positions = POSITIONS.read().await;
         if positions
@@ -542,39 +639,40 @@ pub async fn is_open_position(mint: &str) -> bool {
             return true;
         }
     }
+    is_open_pending(mint)
+}
 
-    // Then check pending-open window (lazily expire any stale entries)
-    {
-        let now = Utc::now();
-        let is_pending = {
-            let mut pending = pending_open_swaps();
-            let is_pending = pending.get(mint).is_some_and(|exp| *exp > now);
-            pending.retain(|m, exp| {
-                let live = *exp > now;
-                if !live {
-                    logger::debug(
-                        LogTag::Positions,
-                        &format!("Pending-open expired for mint: {m}"),
-                    );
-                }
-                live
-            });
-            is_pending
-        };
+/// True when the mint has an open round, archived or not (see [`is_open_round`]), or an open
+/// is pending for it: the guard every new position of the mint must pass.
+pub async fn holds_open_round(mint: &str) -> bool {
+    get_open_round_by_mint(mint).await.is_some() || is_open_pending(mint)
+}
 
-        if is_pending {
-            logger::debug(
-                LogTag::Positions,
-                &format!(
-                    "is_open_position pending-open lock active for mint: {}",
-                    mint
-                ),
-            );
-            return true;
-        }
+/// True while an open of `mint` is pending; stale entries expire lazily.
+fn is_open_pending(mint: &str) -> bool {
+    let now = Utc::now();
+    let is_pending = {
+        let mut pending = pending_open_swaps();
+        let is_pending = pending.get(mint).is_some_and(|exp| *exp > now);
+        pending.retain(|m, exp| {
+            let live = *exp > now;
+            if !live {
+                logger::debug(
+                    LogTag::Positions,
+                    &format!("Pending-open expired for mint: {m}"),
+                );
+            }
+            live
+        });
+        is_pending
+    };
+    if is_pending {
+        logger::debug(
+            LogTag::Positions,
+            &format!("Pending-open lock active for mint: {mint}"),
+        );
     }
-
-    false
+    is_pending
 }
 
 /// Get list of open position mints

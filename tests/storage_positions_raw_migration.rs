@@ -218,7 +218,17 @@ fn released_position_amounts_survive_initialization() {
             |row| row.get(0),
         )
         .unwrap();
-    assert_eq!(index_count, 20);
+    assert_eq!(index_count, 21);
+    assert_eq!(
+        conn.query_row(
+            "SELECT COUNT(*) FROM sqlite_master WHERE type = 'index' AND name = 'idx_positions_open_round'",
+            [],
+            |row| row.get::<_, i64>(0),
+        )
+        .unwrap(),
+        1,
+        "the one-open-position index is missing after initialization"
+    );
     assert_eq!(
         conn.query_row(
             "SELECT value FROM position_metadata WHERE key = 'sentinel'",

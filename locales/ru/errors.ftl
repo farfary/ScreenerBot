@@ -378,6 +378,7 @@ errors-positions-unverified-entry-archive = Покупка этой позици
 errors-positions-not-archived = Позиция не в архиве
 errors-positions-archive-failed = Не удалось архивировать позицию
 errors-positions-unarchive-failed = Не удалось вернуть позицию из архива
+errors-positions-unarchive-duplicate-open = У этого токена больше одной открытой позиции ({ $positions }), и активной может быть только одна. Сначала закройте или архивируйте остальные.
 errors-positions-management-invalid = Управление копированием доступно только для позиции, открытой через копитрейдинг
 errors-positions-management-failed = Не удалось обновить управление позицией
 errors-positions-delete-failed = Не удалось удалить позицию

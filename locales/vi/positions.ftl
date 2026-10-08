@@ -81,6 +81,7 @@ positions-toast-not-found = Không tìm thấy dữ liệu vị thế
 positions-toast-deleted = Đã xóa vị thế
 positions-toast-archived = Đã lưu trữ vị thế
 positions-toast-restored = Đã khôi phục vị thế
+positions-buy-adds-to-archived = Token này đã có một vị thế đang mở trong kho lưu trữ. Lệnh mua được cộng vào vị thế đó, và vị thế quay lại danh sách vị thế đang mở. Vị thế giữ nguyên chế độ quản lý hiện tại.
 positions-action-failed = Thao tác thất bại
 positions-delete-title = Xóa vĩnh viễn vị thế
 positions-delete-message = Xóa vĩnh viễn { $symbol }? Thao tác này xóa vị thế và lịch sử của nó khỏi cơ sở dữ liệu và không thể hoàn tác. Giao dịch và dữ liệu token của bạn không bị ảnh hưởng.

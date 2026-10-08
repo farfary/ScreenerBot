@@ -381,6 +381,7 @@ errors-positions-unverified-entry-archive = Pembelian posisi ini belum dikonfirm
 errors-positions-not-archived = Posisi tidak diarsipkan
 errors-positions-archive-failed = Gagal mengarsipkan posisi
 errors-positions-unarchive-failed = Gagal membatalkan arsip posisi
+errors-positions-unarchive-duplicate-open = Token ini memiliki lebih dari satu posisi terbuka ({ $positions }), dan hanya satu yang boleh aktif. Tutup atau arsipkan yang lain terlebih dahulu.
 errors-positions-management-invalid = Pengelolaan oleh salin memerlukan posisi berasal dari salin
 errors-positions-management-failed = Gagal memperbarui pengelolaan posisi
 errors-positions-delete-failed = Gagal menghapus posisi

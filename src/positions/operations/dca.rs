@@ -30,8 +30,9 @@ pub async fn add_to_position(
 ) -> Result<String> {
     // Serialize per-mint DCA operations
     let _lock = acquire_position_lock(token_mint).await;
-    // Get position
-    let position = crate::positions::state::get_position_by_mint(token_mint)
+    // The open position of the mint, archived or not: an add on an archived one unarchives
+    // it when the add is booked.
+    let position = crate::positions::state::get_open_round_by_mint(token_mint)
         .await
         .ok_or_else(|| Error::NotFound {
             mint: token_mint.to_owned(),
@@ -42,6 +43,13 @@ pub async fn add_to_position(
         mint: token_mint.to_owned(),
         detail: "position has no id".to_owned(),
     })?;
+
+    // The add brings an archived position back to active management; a store that still
+    // holds another active open position of the mint would then hold two, so the add is
+    // refused before anything is sent.
+    if position.archived {
+        crate::positions::db::refuse_reactivating_open_round(token_mint, position_id).await?;
+    }
 
     // The DCA config governs what the AUTO-TRADER may do on its own — it is not a
     // capability switch for the user. A manual "Add to Position" from the dashboard is

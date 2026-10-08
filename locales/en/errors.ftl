@@ -417,6 +417,7 @@ errors-positions-unverified-entry-archive = This position's buy is not confirmed
 errors-positions-not-archived = Position is not archived
 errors-positions-archive-failed = Failed to archive position
 errors-positions-unarchive-failed = Failed to unarchive position
+errors-positions-unarchive-duplicate-open = This token has more than one open position ({ $positions }), and only one of them can be active. Close or archive the others first.
 errors-positions-management-invalid = Copy-owned management requires a copy-origin position
 errors-positions-management-failed = Failed to update position management
 errors-positions-delete-failed = Failed to delete position

@@ -143,6 +143,9 @@ pub struct QuotePreviewResponse {
     pub route: String,
     pub slippage_bps: u16,
     pub expires_in_secs: u64,
+    /// For a buy of a token whose open position is archived: the buy is added to that
+    /// position, which returns to the open positions.
+    pub buy_notice: Option<crate::i18n::UiText>,
 }
 
 // =============================================================================

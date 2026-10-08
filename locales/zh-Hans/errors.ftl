@@ -411,6 +411,7 @@ errors-positions-unverified-entry-archive = 此仓位的买入尚未确认。确
 errors-positions-not-archived = 仓位未归档
 errors-positions-archive-failed = 归档仓位失败
 errors-positions-unarchive-failed = 取消归档仓位失败
+errors-positions-unarchive-duplicate-open = 该代币有多个持仓中的仓位（{ $positions }），只能有一个处于活跃状态。请先平仓或归档其他仓位。
 errors-positions-management-invalid = 跟单管理方式要求仓位来源为跟单
 errors-positions-management-failed = 更新仓位管理方式失败
 errors-positions-delete-failed = 删除仓位失败

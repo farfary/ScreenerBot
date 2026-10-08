@@ -79,7 +79,9 @@ pub enum ExitResidual {
     Dust,
     /// The holding is more than dust while another open position of the mint, `position_id`,
     /// has an unverified entry: it may be that position's tokens, and a retried close sells
-    /// the wallet's holding, so the close is booked rather than retried.
+    /// the wallet's holding, so the close is booked rather than retried. A mint has one open
+    /// position, so this needs two open rows of one mint: a breach of that invariant, which
+    /// only a store holding duplicate open rows from before the open-round index can reach.
     Unattributable { position_id: i64 },
     /// More than dust of the holding is the position's own: another close must sell it.
     Own,
@@ -171,8 +173,9 @@ pub async fn check_exit_residual(
 }
 
 /// Records a full close booked while the wallet still holds more than dust of the mint that
-/// cannot be told apart from the tokens of `blocking_position`, whose entry is not verified:
-/// a warning log and a warning event naming that position and the part of what the closing
+/// cannot be told apart from the tokens of `blocking_position`, whose entry is not verified.
+/// Two open positions of one mint breach the one-open-position invariant, so this is an
+/// error log and an error event naming that position and the part of what the closing
 /// position held that its sale left unsold, which no position manages.
 async fn record_unattributed_residual(
     item: &VerificationItem,
@@ -190,16 +193,16 @@ async fn record_unattributed_residual(
         .and_then(|held| held.checked_sub(sold))
         .unwrap_or(RawAmount::ZERO);
     let symbol = position.map_or_else(|| item.mint.clone(), |position| position.symbol);
-    logger::warning(
+    logger::error(
         LogTag::Positions,
         &format!(
-            "Exit verified for mint {} (position {:?}) with residual {remaining_balance} left in the wallet: the entry of position {blocking_position} of the mint is not verified, so the residual may be its tokens and the close is booked without a retry; the sale left {unsold} of what this position held unsold",
+            "Invariant breach: mint {} has a second open position {blocking_position} beside closing position {:?}. Exit verified with residual {remaining_balance} left in the wallet: the entry of position {blocking_position} is not verified, so the residual may be its tokens and the close is booked without a retry; the sale left {unsold} of what this position held unsold",
             item.mint, item.position_id
         ),
     );
     crate::events::record_position_event_flexible(
         "exit_residual_unattributed",
-        crate::events::Severity::Warn,
+        crate::events::Severity::Error,
         Some(&item.mint),
         item.position_id.map(|id| id.to_string()).as_deref(),
         crate::events::with_text(

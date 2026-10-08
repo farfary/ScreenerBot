@@ -417,6 +417,7 @@ errors-positions-unverified-entry-archive = خرید این پوزیشن هنو�
 errors-positions-not-archived = پوزیشن بایگانی نشده است
 errors-positions-archive-failed = بایگانی پوزیشن ناموفق بود
 errors-positions-unarchive-failed = خروج پوزیشن از بایگانی ناموفق بود
+errors-positions-unarchive-duplicate-open = این توکن بیش از یک پوزیشن باز دارد ({ $positions }) و فقط یکی از آن‌ها می‌تواند فعال باشد. ابتدا بقیه را ببندید یا بایگانی کنید.
 errors-positions-management-invalid = مدیریت متعلق به کپی به پوزیشنی با منشأ کپی نیاز دارد
 errors-positions-management-failed = به‌روزرسانی مدیریت پوزیشن ناموفق بود
 errors-positions-delete-failed = حذف پوزیشن ناموفق بود

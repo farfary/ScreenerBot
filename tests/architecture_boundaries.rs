@@ -1,7 +1,8 @@
 // Copyright (c) 2024-2026 ScreenerBot (screenerbot.io)
 // SPDX-License-Identifier: BUSL-1.1
 
-//! Source-scanning guards for the chain-ownership boundary.
+//! Source-scanning guards for the chain-ownership boundary and for the one writer of new
+//! position rows.
 //!
 //! Shared domain modules (everything outside `src/chains/solana/`) define
 //! chain-neutral intent/models/contracts; `src/chains/solana` implements
@@ -3797,11 +3798,25 @@ fn every_position_swap_marks_its_mint_before_it_is_sent() {
     );
 }
 
-/// Once a position operation's swap is sent and its signature known, the operation reads
-/// the expiry bound and queues the signature's verification. Nothing from that read to the
-/// end of the operation may return early, or the sent swap is never verified or booked.
+/// The body of the function `code[from..]` sits in: up to the first line that closes an
+/// item at column zero.
+fn rest_of_item(code: &str, from: usize) -> &str {
+    let end = code[from..]
+        .find("\n}\n")
+        .map_or(code.len(), |offset| from + offset);
+    &code[from..end]
+}
+
+/// Once a position operation's swap is sent, its signature reaches verification whatever
+/// happens next: from the send to the end of the operation the only early error is the
+/// swap's own failure, which proves nothing landed, and every async helper of the same file
+/// the operation ends in after the send queues the swap for verification with no early
+/// error of its own. An error there would drop a signature that may have bought or sold
+/// tokens.
 #[test]
 fn a_sent_position_swap_is_always_queued_for_verification() {
+    const SWAP_FAILED: &str = "return Err(Error::SwapFailed {";
+    let mut helpers_seen = 0;
     for operation in ["open.rs", "close.rs", "dca.rs", "partial_close.rs"] {
         let path = Path::new(env!("CARGO_MANIFEST_DIR"))
             .join("src/positions/operations")
@@ -3809,19 +3824,212 @@ fn a_sent_position_swap_is_always_queued_for_verification() {
         let contents = fs::read_to_string(&path).expect("read operation source");
         let code = blank_literals(&strip_comment_text(&production_text(&contents)));
         let sent = code
-            .find("submission_expiry_bound()")
-            .unwrap_or_else(|| panic!("{operation}: the sent swap reads its expiry bound"));
-        let end = code[sent..]
-            .find("\n}\n")
-            .map_or(code.len(), |offset| sent + offset);
-        let tail = &code[sent..end];
-        assert!(
-            tail.contains("enqueue_verification("),
-            "{operation}: the sent swap is not queued for verification"
+            .find("execute_swap_with_fallback(")
+            .unwrap_or_else(|| panic!("{operation}: the operation sends a swap"));
+        let tail = rest_of_item(&code, sent);
+        assert_eq!(
+            tail.matches(SWAP_FAILED).count(),
+            1,
+            "{operation}: the swap's own failure is the one early error after the send"
         );
+        let after_send = tail.replacen(SWAP_FAILED, "", 1);
         assert!(
-            !tail.contains('?') && !tail.contains("return Err"),
+            !after_send.contains('?') && !after_send.contains("return Err"),
             "{operation}: an error after the swap was sent drops its signature"
         );
+        assert!(
+            after_send.contains("submission_expiry_bound()")
+                && after_send.contains("enqueue_verification("),
+            "{operation}: the sent swap is not queued for verification"
+        );
+        for (at, _) in code.match_indices("async fn ") {
+            let name_end = code[at + "async fn ".len()..]
+                .find('(')
+                .map(|offset| at + "async fn ".len() + offset)
+                .expect("a function name");
+            let name = &code[at + "async fn ".len()..name_end];
+            let call = format!("{name}(");
+            let ends_in_helper = after_send.match_indices("return ").any(|(from, _)| {
+                let statement = &after_send[from..];
+                let statement = &statement[..statement.find(';').unwrap_or(statement.len())];
+                statement.contains(&call)
+            });
+            if at <= sent || !ends_in_helper {
+                continue;
+            }
+            helpers_seen += 1;
+            let body = rest_of_item(&code, at);
+            assert!(
+                body.contains("enqueue_verification("),
+                "{operation}: {name} takes a sent swap but does not queue it for verification"
+            );
+            assert!(
+                !body.contains('?') && !body.contains("return Err"),
+                "{operation}: {name} can fail after the swap was sent and drop its signature"
+            );
+        }
     }
+    assert!(
+        helpers_seen >= 1,
+        "the guard must see the helper an open hands a refused entry swap to"
+    );
+}
+
+/// Callers of a manual trade that reach it without the preflight, per file. Each entry is a
+/// call to move behind `guard::preflight`; the counts only shrink.
+const MANUAL_TRADES_WITHOUT_PREFLIGHT: &[(&str, usize)] =
+    &[("telegram/commands/callback_positions.rs", 4)];
+
+/// Every manual trade entered from outside `trader/manual` passes the same gates first:
+/// `guard::preflight` runs in the calling function before `manual_buy`, `manual_add` or
+/// `manual_sell`, so the force stop, readiness, address and blacklist gates hold for the
+/// dashboard, the agent tools and Telegram alike.
+#[test]
+fn every_manual_trade_runs_the_preflight_first() {
+    let mut unguarded: Vec<(String, usize)> = Vec::new();
+    let mut calls_seen = 0;
+    for (relative, contents) in walk_src() {
+        if relative.starts_with("trader/manual") {
+            continue;
+        }
+        let code = blank_literals(&strip_comment_text(&production_text(&contents)));
+        let mut count = 0;
+        for entry in ["manual_buy(", "manual_add(", "manual_sell("] {
+            for (at, _) in code.match_indices(entry) {
+                let preceded_by_name = code[..at]
+                    .chars()
+                    .next_back()
+                    .is_some_and(|c| c.is_alphanumeric() || c == '_');
+                if preceded_by_name || code[..at].ends_with("fn ") {
+                    continue;
+                }
+                calls_seen += 1;
+                let function = code[..at].rfind("fn ").unwrap_or(0);
+                if !code[function..at].contains("preflight(") {
+                    count += 1;
+                }
+            }
+        }
+        if count > 0 {
+            unguarded.push((relative.to_string_lossy().into_owned(), count));
+        }
+    }
+    let mut problems = Vec::new();
+    for (path, count) in &unguarded {
+        match MANUAL_TRADES_WITHOUT_PREFLIGHT
+            .iter()
+            .find(|(file, _)| file == path)
+        {
+            None => problems.push(format!(
+                "src/{path}: {count} manual trades without the preflight, not on the allowlist"
+            )),
+            Some((_, listed)) if listed != count => problems.push(format!(
+                "src/{path}: {count} manual trades without the preflight, the allowlist says {listed}"
+            )),
+            Some(_) => {}
+        }
+    }
+    for (file, listed) in MANUAL_TRADES_WITHOUT_PREFLIGHT {
+        if !unguarded.iter().any(|(path, _)| path == file) {
+            problems.push(format!(
+                "src/{file}: allowlisted for {listed} manual trades without the preflight but has none"
+            ));
+        }
+    }
+    assert!(
+        calls_seen >= 8,
+        "the guard must see the manual trade callers ({calls_seen} seen)"
+    );
+    assert!(
+        problems.is_empty(),
+        "run guard::preflight before a manual trade, and lower or remove the allowlist entry \
+         in the same change:\n{}",
+        problems.join("\n")
+    );
+}
+
+/// Statements that write a new row into the positions table, whatever their spelling:
+/// `INSERT`, `INSERT OR <conflict>` and `REPLACE` all name the table after `INTO`.
+fn position_row_inserts(text: &str) -> usize {
+    const TARGET: &str = "into positions";
+    let normalized = text
+        .to_ascii_lowercase()
+        .split_whitespace()
+        .collect::<Vec<_>>()
+        .join(" ");
+    normalized
+        .match_indices(TARGET)
+        .filter(|(at, _)| {
+            normalized[..*at].ends_with(' ')
+                && normalized[at + TARGET.len()..]
+                    .chars()
+                    .next()
+                    .is_none_or(|next| next == ' ' || next == '(')
+        })
+        .count()
+}
+
+#[test]
+fn position_row_insert_matcher_names_the_positions_table_only() {
+    assert_eq!(
+        position_row_inserts("INSERT INTO positions (id) VALUES (1)"),
+        1
+    );
+    assert_eq!(position_row_inserts("insert   into\n positions(id)"), 1);
+    assert_eq!(
+        position_row_inserts("INSERT OR REPLACE INTO positions (id)"),
+        1
+    );
+    assert_eq!(
+        position_row_inserts("INSERT OR IGNORE INTO positions (id)"),
+        1
+    );
+    assert_eq!(position_row_inserts("REPLACE INTO positions (id)"), 1);
+    assert_eq!(position_row_inserts("INSERT INTO position_entries (id)"), 0);
+    assert_eq!(
+        position_row_inserts("INSERT INTO positions_archive (id)"),
+        0
+    );
+}
+
+/// A mint has one open position, and `PositionsDatabase::insert_position` is the one place
+/// that refuses a second: every new position row is written there, and reaches it only
+/// through `save_position`, whose callers are the open operation and the wallet-history
+/// import. Any other writer would bypass the refusal.
+#[test]
+fn new_position_rows_are_written_only_by_the_open_round_owner() {
+    let mut inserts = Vec::new();
+    let mut save_callers = Vec::new();
+    for (relative, contents) in walk_src() {
+        if is_test_support_file(&relative) {
+            continue;
+        }
+        let text = code_lines(&production_text(&contents));
+        let count = position_row_inserts(&text);
+        if count > 0 {
+            inserts.push((relative.display().to_string(), count));
+        }
+        let saves = text.matches("save_position(").count()
+            + text.matches("insert_position(").count()
+            - text.matches("fn save_position(").count()
+            - text.matches("fn insert_position(").count();
+        if saves > 0 {
+            save_callers.push(relative.display().to_string());
+        }
+    }
+    save_callers.sort();
+    assert_eq!(
+        inserts,
+        vec![("positions/database/operations.rs".to_owned(), 1)],
+        "a position row is inserted outside PositionsDatabase::insert_position"
+    );
+    assert_eq!(
+        save_callers,
+        vec![
+            "positions/database/convenience.rs".to_owned(),
+            "positions/ledger/sync.rs".to_owned(),
+            "positions/operations/mod.rs".to_owned(),
+        ],
+        "a new caller writes position rows; it must go through the open-round refusal"
+    );
 }

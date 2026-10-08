@@ -124,11 +124,20 @@ async fn open_position_impl(
     // Acquire per-mint lock SECOND to serialize opens for same token
     let _lock = acquire_position_lock(&api_token.mint).await;
 
-    // Re-check no existing open position for this mint (prevents duplicate concurrent entries)
-    if crate::positions::state::is_open_position(&api_token.mint).await {
-        // Record event for better post-mortem visibility
+    // A mint has one open position, archived or not, and every later buy of it is an add on
+    // that position: an open is refused while memory or storage holds one, or while another
+    // open of the mint is pending. A storage read that fails refuses the open too, since
+    // nothing has been sent yet.
+    let in_memory = crate::positions::state::get_open_round_by_mint(&api_token.mint)
+        .await
+        .and_then(|position| position.id);
+    let open_position_id = match in_memory {
+        Some(id) => Some(id),
+        None => positions_db::get_open_round_id(&api_token.mint).await?,
+    };
+    if let Some(open_position_id) = open_position_id {
         crate::events::record_position_event(
-            "0",
+            &open_position_id.to_string(),
             &api_token.mint,
             "open_blocked",
             None,
@@ -139,74 +148,28 @@ async fn open_position_impl(
             None,
         )
         .await;
-
         crate::events::record_position_event_flexible(
-            "open_blocked_in_memory",
+            "open_blocked_by_open_round",
             crate::events::Severity::Warn,
             Some(&api_token.mint),
             None,
             json!({
-              "reason": "is_open_position_guard",
               "mint": api_token.mint,
+              "open_position_id": open_position_id,
+              "source": if in_memory.is_some() { "memory" } else { "storage" },
             }),
         )
         .await;
         return Err(Error::AlreadyOpen {
             mint: api_token.mint.clone(),
+            open_position_id,
         });
     }
-
-    // Extra safety: consult database for any existing open or unverified position for this mint.
-    // This covers edge cases across restarts or rare state desyncs where in-memory guards miss.
-    if let Ok(db_pos_opt) = positions_db::get_latest_position_by_mint(&api_token.mint).await {
-        if let Some(db_pos) = db_pos_opt {
-            let is_still_open = db_pos.position_type == "buy"
-                && db_pos.exit_time.is_none()
-                && (db_pos.exit_transaction_signature.is_none()
-                    || !db_pos.transaction_exit_verified);
-            if is_still_open {
-                logger::warning(
-          LogTag::Positions,
-          &format!(
- "DB guard: mint {} already has open/unverified position (id: {:?}, entry_sig: {:?}, exit_sig: {:?})",
-            &api_token.mint,
-            db_pos.id,
-            db_pos.entry_transaction_signature,
-            db_pos.exit_transaction_signature
-          ),
-        );
-                // Record event for DB guard block
-                crate::events::record_position_event(
-                    &db_pos.id.unwrap_or_default().to_string(),
-                    &api_token.mint,
-                    "open_blocked_db",
-                    db_pos.entry_transaction_signature.as_deref(),
-                    db_pos.exit_transaction_signature.as_deref(),
-                    trade_size_native,
-                    RawAmount::ZERO,
-                    None,
-                    None,
-                )
-                .await;
-
-                crate::events::record_position_event_flexible(
-                    "open_blocked_db_guard",
-                    crate::events::Severity::Warn,
-                    Some(&api_token.mint),
-                    db_pos.entry_transaction_signature.as_deref(),
-                    json!({
-                      "db_position_id": db_pos.id,
-                      "entry_sig": db_pos.entry_transaction_signature,
-                      "exit_sig": db_pos.exit_transaction_signature,
-                      "has_exit_verified": db_pos.transaction_exit_verified,
-                    }),
-                )
-                .await;
-                return Err(Error::AlreadyOpen {
-                    mint: api_token.mint.clone(),
-                });
-            }
-        }
+    if crate::positions::state::holds_open_round(&api_token.mint).await {
+        // No open position of the mint exists yet, but another open of it may still land.
+        return Err(Error::OpenPending {
+            mint: api_token.mint.clone(),
+        });
     }
 
     // Note: No need to check MAX_OPEN_POSITIONS here anymore - the semaphore enforces it atomically
@@ -393,7 +356,20 @@ async fn open_position_impl(
     };
 
     // Save to database (with retry) and get ID
-    let position_id = super::persist_position_with_retry(&position).await;
+    let position_id = match super::persist_position_with_retry(&position).await {
+        super::Persisted::Opened(position_id) => position_id,
+        super::Persisted::Added(open_position_id) => {
+            return Ok(book_entry_as_add(
+                &api_token.mint,
+                open_position_id,
+                &transaction_signature,
+                trade_size_native,
+                confirmation_pending,
+                effective_entry_price,
+            )
+            .await);
+        }
+    };
 
     let mut position_with_id = position;
     position_with_id.id = Some(position_id);
@@ -494,6 +470,67 @@ async fn open_position_impl(
         confirmation_pending,
         entry_price_native: effective_entry_price,
     })
+}
+
+/// Books a sent entry swap as an add on `position_id`, the open position its mint gained
+/// while the swap was in flight, as storage named it when it refused the second row: the
+/// swap is registered as that position's pending DCA and verified as one, so its tokens and
+/// cost land on the one open position. Nothing here can fail after the send: a target that
+/// closed meanwhile is handled when the add is verified, as a late fill on a closed
+/// position. The global slot this open took is returned when its permit drops, since no
+/// position was created.
+async fn book_entry_as_add(
+    mint: &str,
+    position_id: i64,
+    signature: &str,
+    trade_size_native: f64,
+    confirmation_pending: bool,
+    entry_price_native: f64,
+) -> EntrySubmission {
+    logger::warning(
+        LogTag::Positions,
+        &format!(
+            "Entry swap {signature} for {mint} is booked as an add on open position {position_id}, which the mint gained while the swap was in flight"
+        ),
+    );
+    let expiry_height = crate::positions::settle::submission_expiry_bound().await;
+    let pending = crate::positions::types::PendingDcaSwap {
+        signature: signature.to_owned(),
+        mint: mint.to_owned(),
+        position_id,
+        expiry_height,
+        created_at: Utc::now(),
+        size_sol: trade_size_native,
+    };
+    if let Err(e) = crate::positions::state::register_pending_dca_swap(pending).await {
+        logger::error(
+            LogTag::Positions,
+            &format!(
+                "Pending add {signature} for position {position_id} (mint {mint}) is held in memory only, not persisted: {e}"
+            ),
+        );
+    }
+    enqueue_verification(VerificationItem::new_dca(
+        signature.to_owned(),
+        mint.to_owned(),
+        Some(position_id),
+        expiry_height,
+    ))
+    .await;
+    crate::events::record_position_event_flexible(
+        "entry_booked_as_add",
+        crate::events::Severity::Warn,
+        Some(mint),
+        Some(signature),
+        json!({ "position_id": position_id, "size_native": trade_size_native }),
+    )
+    .await;
+    crate::positions::state::clear_pending_open(mint);
+    EntrySubmission {
+        transaction_signature: signature.to_owned(),
+        confirmation_pending,
+        entry_price_native,
+    }
 }
 
 fn effective_entry_price_native(

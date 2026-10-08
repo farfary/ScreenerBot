@@ -83,6 +83,7 @@ positions-toast-not-found = Data posisi tidak ditemukan
 positions-toast-deleted = Posisi dihapus
 positions-toast-archived = Posisi diarsipkan
 positions-toast-restored = Posisi dipulihkan
+positions-buy-adds-to-archived = Token ini sudah memiliki posisi terbuka di arsip. Pembelian ditambahkan ke posisi tersebut, dan posisi itu kembali ke posisi terbuka. Posisi itu tetap memakai mode pengelolaan saat ini.
 positions-action-failed = Tindakan gagal
 positions-delete-title = Hapus posisi permanen
 positions-delete-message = Hapus { $symbol } secara permanen? Ini menghapus posisi dan riwayatnya dari database dan tidak dapat dibatalkan. Transaksi dan data token Anda tidak terpengaruh.
