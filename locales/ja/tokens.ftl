@@ -424,29 +424,44 @@ tokens-lightbox-token-age = トークンの経過期間
 tokens-search-placeholder-dialog = 名前、シンボル、ミントで検索...
 tokens-search-input-label = トークンを検索
 tokens-search-results-label = 検索結果
-tokens-search-hint = トークン名、シンボルを入力、またはミントを貼り付け
-tokens-search-no-matches = 一致なし — 別の語句をお試しください
 tokens-search-tip-nav = 移動
 tokens-search-tip-open = 開く
 tokens-search-tip-close = 閉じる
 tokens-search-failed = 検索に失敗しました
 tokens-search-error = エラー: { $message }
-tokens-search-action-favorite =
-    .title = お気に入りに追加
-    .aria-label = お気に入りに追加
-tokens-search-action-blacklist =
-    .title = ブラックリストに追加
-    .aria-label = ブラックリストに追加
-tokens-search-no-mint = トークンにミントアドレスがありません
-tokens-search-open-failed = トークン詳細を開けませんでした
-tokens-search-copy-failed = クリップボードにコピーできませんでした
-tokens-search-favorite-added = { $symbol } をお気に入りに追加しました
-tokens-search-favorite-already = すでにお気に入りに登録されています
-tokens-search-favorite-failed = お気に入りに追加できませんでした
-tokens-search-blacklist-message = { $symbol } をブラックリストに追加しますか？ このトークンは取引の対象から除外されます。
-tokens-search-blacklist-done = { $symbol } をブラックリストに追加しました
-tokens-search-blacklisted = ブラックリスト登録済み
-tokens-search-blacklist-failed = トークンをブラックリストに追加できませんでした
+tokens-search-clear =
+    .title = 検索をクリア
+    .aria-label = 検索をクリア
+tokens-search-recent = 最近
+tokens-search-recent-label = 最近の検索
+tokens-search-lists-label = トークンリスト
+tokens-search-tab-trending = トレンド
+tokens-search-kinds = 名前 · シンボル · ミント
+tokens-search-empty-trending = ボットが最初のプールの価格を算出すると、トレンドトークンが表示されます。
+tokens-search-empty-positions = 現在オープン中のポジションはありません。
+tokens-search-empty-favorites = トークンにスターを付けると、次の検索でここに表示されます。
+tokens-search-empty-boosted = 現在ブースト中のトークンはありません。
+tokens-search-list-failed = このリストを読み込めませんでした。
+tokens-search-searching = マーケットを検索中…
+# $count is the number of tokens found.
+tokens-search-result-count =
+    { $count ->
+       *[other] { $count }件
+    }
+tokens-search-order = 一致度順、次に 24h 出来高順
+tokens-search-metric-mc = 時価
+    .title = 時価総額
+tokens-search-metric-fdv = FDV
+    .title = 完全希薄化後評価額
+tokens-search-metric-liq = 流動
+    .title = 流動性
+tokens-search-metric-vol = 出来高
+    .title = 24h 出来高
+tokens-search-more =
+    .title = その他の操作
+    .aria-label = その他の操作
+# $query is the text the user typed.
+tokens-search-no-match = 「{ $query }」に一致するトークンはありません。
 
 tokens-featured-category-boosted = ブースト中
 tokens-featured-category-jupiter-organic = { -jupiter } オーガニック上位

@@ -458,29 +458,44 @@ tokens-lightbox-token-age = 토큰 경과 기간
 tokens-search-placeholder-dialog = 이름, 심볼 또는 민트 검색...
 tokens-search-input-label = 토큰 검색
 tokens-search-results-label = 검색 결과
-tokens-search-hint = 토큰 이름, 심볼을 입력하거나 민트를 붙여넣으세요
-tokens-search-no-matches = 일치하는 항목이 없습니다 — 다른 검색어를 시도하세요
 tokens-search-tip-nav = 이동
 tokens-search-tip-open = 열기
 tokens-search-tip-close = 닫기
 tokens-search-failed = 검색에 실패했습니다
 tokens-search-error = 오류: { $message }
-tokens-search-action-favorite =
-    .title = 즐겨찾기에 추가
-    .aria-label = 즐겨찾기에 추가
-tokens-search-action-blacklist =
-    .title = 블랙리스트에 추가
-    .aria-label = 블랙리스트에 추가
-tokens-search-no-mint = 토큰에 민트 주소가 없습니다
-tokens-search-open-failed = 토큰 상세를 열지 못했습니다
-tokens-search-copy-failed = 클립보드에 복사하지 못했습니다
-tokens-search-favorite-added = 즐겨찾기에 추가됨: { $symbol }
-tokens-search-favorite-already = 이미 즐겨찾기에 있습니다
-tokens-search-favorite-failed = 즐겨찾기에 추가하지 못했습니다
-tokens-search-blacklist-message = 블랙리스트에 추가할 토큰: { $symbol }. 이 토큰은 거래에서 제외됩니다.
-tokens-search-blacklist-done = 블랙리스트 등록됨: { $symbol }
-tokens-search-blacklisted = 블랙리스트 등록됨
-tokens-search-blacklist-failed = 토큰을 블랙리스트에 추가하지 못했습니다
+tokens-search-clear =
+    .title = 검색 지우기
+    .aria-label = 검색 지우기
+tokens-search-recent = 최근
+tokens-search-recent-label = 최근 검색
+tokens-search-lists-label = 토큰 목록
+tokens-search-tab-trending = 트렌딩
+tokens-search-kinds = 이름 · 심볼 · 민트
+tokens-search-empty-trending = 봇이 첫 풀의 가격을 산출하면 트렌딩 토큰이 표시됩니다.
+tokens-search-empty-positions = 현재 열린 포지션이 없습니다.
+tokens-search-empty-favorites = 토큰에 별표를 하면 다음 검색 때 여기에 표시됩니다.
+tokens-search-empty-boosted = 현재 부스트된 토큰이 없습니다.
+tokens-search-list-failed = 이 목록을 불러오지 못했습니다.
+tokens-search-searching = 마켓 검색 중…
+# $count is the number of tokens found.
+tokens-search-result-count =
+    { $count ->
+       *[other] 결과 { $count }개
+    }
+tokens-search-order = 가장 일치하는 순, 그다음 24h 거래량 순
+tokens-search-metric-mc = 시총
+    .title = 시가총액
+tokens-search-metric-fdv = FDV
+    .title = 완전 희석 가치
+tokens-search-metric-liq = 유동성
+    .title = 유동성
+tokens-search-metric-vol = 거래량
+    .title = 24h 거래량
+tokens-search-more =
+    .title = 추가 작업
+    .aria-label = 추가 작업
+# $query is the text the user typed.
+tokens-search-no-match = “{ $query }”와 일치하는 토큰이 없습니다.
 
 # Featured dialog (scripts/ui/featured_dialog.js)
 # Category and source ids are those of CATEGORIES; provider names are terms.

@@ -464,29 +464,45 @@ tokens-lightbox-token-age = Token Yaşı
 tokens-search-placeholder-dialog = Ad, sembol veya mint ara...
 tokens-search-input-label = Token ara
 tokens-search-results-label = Arama sonuçları
-tokens-search-hint = Token adı veya sembolü yazın ya da mint yapıştırın
-tokens-search-no-matches = Eşleşme yok — farklı bir terim deneyin
 tokens-search-tip-nav = gezin
 tokens-search-tip-open = aç
 tokens-search-tip-close = kapat
 tokens-search-failed = Arama başarısız oldu
 tokens-search-error = Hata: { $message }
-tokens-search-action-favorite =
-    .title = Favorilere ekle
-    .aria-label = Favorilere ekle
-tokens-search-action-blacklist =
-    .title = Kara listeye ekle
-    .aria-label = Kara listeye ekle
-tokens-search-no-mint = Tokenın mint adresi yok
-tokens-search-open-failed = Token ayrıntıları açılamadı
-tokens-search-copy-failed = Panoya kopyalanamadı
-tokens-search-favorite-added = Favorilere eklendi: { $symbol }
-tokens-search-favorite-already = Zaten Favorilerde
-tokens-search-favorite-failed = Favorilere eklenemedi
-tokens-search-blacklist-message = Kara listeye alınacak token: { $symbol }. Bu token işlemlerin dışında bırakılacak. Onaylıyor musunuz?
-tokens-search-blacklist-done = Kara listeye alındı: { $symbol }
-tokens-search-blacklisted = Kara listede
-tokens-search-blacklist-failed = Token kara listeye alınamadı
+tokens-search-clear =
+    .title = Aramayı temizle
+    .aria-label = Aramayı temizle
+tokens-search-recent = Son
+tokens-search-recent-label = Son aramalar
+tokens-search-lists-label = Token listeleri
+tokens-search-tab-trending = Trend
+tokens-search-kinds = Ad · sembol · mint
+tokens-search-empty-trending = Bot ilk havuzlarını fiyatladığında trend tokenlar burada görünür.
+tokens-search-empty-positions = Şu anda açık pozisyon yok.
+tokens-search-empty-favorites = Bir tokeni yıldızlayın, sonraki aramada burada sizi bekler.
+tokens-search-empty-boosted = Şu anda boost'lu token yok.
+tokens-search-list-failed = Bu liste yüklenemedi.
+tokens-search-searching = Piyasalarda aranıyor…
+# $count is the number of tokens found.
+tokens-search-result-count =
+    { $count ->
+        [one] { $count } sonuç
+       *[other] { $count } sonuç
+    }
+tokens-search-order = En iyi eşleşme önce, sonra 24sa hacim
+tokens-search-metric-mc = PD
+    .title = Piyasa değeri
+tokens-search-metric-fdv = FDV
+    .title = Tamamen seyreltilmiş değerleme
+tokens-search-metric-liq = Lik
+    .title = Likidite
+tokens-search-metric-vol = Hcm
+    .title = 24sa hacim
+tokens-search-more =
+    .title = Diğer işlemler
+    .aria-label = Diğer işlemler
+# $query is the text the user typed.
+tokens-search-no-match = “{ $query }” ile eşleşen token yok.
 
 # Featured dialog (scripts/ui/featured_dialog.js)
 # Category and source ids are those of CATEGORIES; provider names are terms.

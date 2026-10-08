@@ -42,7 +42,10 @@
   --z-hint-popover: 10001;
   --z-confirmation: 10002;
   --z-confirmation-dialog: 10003;
-  --z-search-dialog: 10004;
+  /* Search sits on the featured layer's side of the dialog stack, below every
+     dialog: token details, a trade or a confirmation opened from a search row
+     stacks ABOVE it, and closing that dialog returns the user to the search. */
+  --z-search-dialog: 9600;
   --z-context-menu-overlay: 10005;
   --z-context-menu: 10006;
   --z-pool-selector-overlay: 10005;

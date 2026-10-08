@@ -495,31 +495,50 @@ tokens-lightbox-token-age = عمر الرمز
 tokens-search-placeholder-dialog = ابحث بالاسم أو الرمز المختصر أو الإصدار...
 tokens-search-input-label = البحث في الرموز
 tokens-search-results-label = نتائج البحث
-tokens-search-hint = اكتب اسم الرمز أو رمزه المختصر أو الصق عنوان الإصدار
-tokens-search-no-matches = لا توجد نتائج مطابقة — جرّب مصطلحًا آخر
 tokens-search-tip-nav = تنقّل
 tokens-search-tip-open = فتح
 tokens-search-tip-close = إغلاق
 tokens-search-failed = فشل البحث
 # $message is the failure text.
 tokens-search-error = خطأ: { $message }
-tokens-search-action-favorite =
-    .title = إضافة إلى المفضلة
-    .aria-label = إضافة إلى المفضلة
-tokens-search-action-blacklist =
-    .title = إضافة إلى القائمة السوداء
-    .aria-label = إضافة إلى القائمة السوداء
-tokens-search-no-mint = ليس للرمز عنوان إصدار
-tokens-search-open-failed = تعذّر فتح تفاصيل الرمز
-tokens-search-copy-failed = تعذّر النسخ إلى الحافظة
-# $symbol is the token symbol, or its mint when the symbol is unknown.
-tokens-search-favorite-added = تمت إضافة { $symbol } إلى المفضلة
-tokens-search-favorite-already = موجود في المفضلة بالفعل
-tokens-search-favorite-failed = تعذّرت الإضافة إلى المفضلة
-tokens-search-blacklist-message = هل تريد إضافة { $symbol } إلى القائمة السوداء؟ سيُستبعد هذا الرمز من التداول.
-tokens-search-blacklist-done = تمت إضافة { $symbol } إلى القائمة السوداء
-tokens-search-blacklisted = في القائمة السوداء
-tokens-search-blacklist-failed = تعذّرت إضافة الرمز إلى القائمة السوداء
+tokens-search-clear =
+    .title = مسح البحث
+    .aria-label = مسح البحث
+tokens-search-recent = الأخيرة
+tokens-search-recent-label = عمليات البحث الأخيرة
+tokens-search-lists-label = قوائم الرموز
+tokens-search-tab-trending = الرائجة
+tokens-search-kinds = الاسم · الرمز · عنوان السك
+tokens-search-empty-trending = تظهر الرموز الرائجة بعد أن يسعّر البوت مجمّعاته الأولى.
+tokens-search-empty-positions = لا توجد مراكز مفتوحة حاليًا.
+tokens-search-empty-favorites = ضع نجمة على رمز ليظهر هنا في بحثك التالي.
+tokens-search-empty-boosted = لا يوجد رمز معزَّز حاليًا.
+tokens-search-list-failed = تعذّر تحميل هذه القائمة.
+tokens-search-searching = جارٍ البحث في الأسواق…
+# $count is the number of tokens found.
+tokens-search-result-count =
+    { $count ->
+        [zero] { $count } نتيجة
+        [one] نتيجة واحدة
+        [two] نتيجتان
+        [few] { $count } نتائج
+        [many] { $count } نتيجة
+       *[other] { $count } نتيجة
+    }
+tokens-search-order = الأقرب تطابقًا أولًا، ثم حجم التداول خلال 24h
+tokens-search-metric-mc = ق.س
+    .title = القيمة السوقية
+tokens-search-metric-fdv = FDV
+    .title = القيمة المخففة بالكامل
+tokens-search-metric-liq = سيولة
+    .title = السيولة
+tokens-search-metric-vol = حجم
+    .title = حجم التداول خلال 24h
+tokens-search-more =
+    .title = إجراءات أخرى
+    .aria-label = إجراءات أخرى
+# $query is the text the user typed.
+tokens-search-no-match = لا يوجد رمز يطابق «{ $query }».
 
 # Featured dialog (scripts/ui/featured_dialog.js)
 # Category and source ids are those of CATEGORIES; provider names are terms.

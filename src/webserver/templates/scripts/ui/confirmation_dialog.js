@@ -16,6 +16,7 @@
  */
 
 import { playClick } from "../core/sounds.js";
+import { pushEscapeHandler } from "../core/escape_stack.js";
 import { closeAllMenus } from "../core/menu_manager.js";
 
 class ConfirmationDialog {
@@ -185,17 +186,16 @@ class ConfirmationDialog {
       checkbox.addEventListener("change", this._checkboxHandler);
     }
 
-    // Keyboard shortcuts
+    // Keyboard shortcuts. Escape goes through the stack so it cancels this
+    // dialog, not an overlay opened beneath it.
     this._keydownHandler = (e) => {
       if (e.key === "Enter") {
         e.preventDefault();
         this._handleConfirm();
-      } else if (e.key === "Escape") {
-        e.preventDefault();
-        this._handleCancel();
       }
     };
     document.addEventListener("keydown", this._keydownHandler);
+    this._releaseEscape = pushEscapeHandler(() => this._handleCancel());
   }
 
   _handleConfirm() {
@@ -237,6 +237,10 @@ class ConfirmationDialog {
     if (this._keydownHandler) {
       document.removeEventListener("keydown", this._keydownHandler);
       this._keydownHandler = null;
+    }
+    if (this._releaseEscape) {
+      this._releaseEscape();
+      this._releaseEscape = null;
     }
 
     if (this._confirmHandler) {

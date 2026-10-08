@@ -7,7 +7,7 @@
  *
  * Features:
  * - macOS-style appearance with blur, shadows, animations
- * - Keyboard navigation (arrow keys, enter, escape)
+ * - Keyboard navigation (arrow keys, enter; Escape through core/escape_stack.js)
  * - Submenus with hover delay
  * - Lucide font icons
  * - Token-specific actions (trade, blacklist, copy)
@@ -17,6 +17,7 @@
  */
 
 import { dirSign } from "../core/dom.js";
+import { pushEscapeHandler } from "../core/escape_stack.js";
 import { showToast, notifyCopied, notifyCopyFailed } from "../core/utils.js";
 import { POSITION_MANAGEMENT_LABELS } from "./position_management.js";
 
@@ -112,14 +113,6 @@ class ContextMenuManager {
       },
       true
     );
-
-    // Close on escape anywhere
-    document.addEventListener("keydown", (e) => {
-      if (e.key === "Escape" && this.isVisible) {
-        e.preventDefault();
-        this.hide();
-      }
-    });
   }
 
   _isEditableElement(el) {
@@ -380,6 +373,9 @@ class ContextMenuManager {
 
       this._createMenuElement();
       this._positionMenu(x, y);
+      // The menu is the topmost overlay while it is open: Escape closes it and
+      // leaves the dialog it was opened from (search, token details) in place.
+      this._releaseEscape = pushEscapeHandler(() => this.hide());
 
       // Show with animation
       requestAnimationFrame(() => {
@@ -442,6 +438,7 @@ class ContextMenuManager {
 
     this.isTransitioning = true;
     this._clearTimeouts();
+    this._releaseEscapeHandler();
 
     if (this.menuEl) {
       this.menuEl.classList.remove("visible");
@@ -469,7 +466,13 @@ class ContextMenuManager {
   /**
    * Clean up menu elements and state
    */
+  _releaseEscapeHandler() {
+    this._releaseEscape?.();
+    this._releaseEscape = null;
+  }
+
   _cleanup() {
+    this._releaseEscapeHandler();
     if (this.menuEl) {
       this.menuEl.remove();
       this.menuEl = null;
@@ -869,11 +872,6 @@ class ContextMenuManager {
         } else {
           this._closeCurrentSubmenu();
         }
-        break;
-
-      case "Escape":
-        e.preventDefault();
-        this.hide();
         break;
     }
   }

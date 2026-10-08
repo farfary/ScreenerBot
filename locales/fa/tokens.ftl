@@ -490,31 +490,46 @@ tokens-lightbox-token-age = عمر توکن
 tokens-search-placeholder-dialog = جست‌وجوی نام، نماد یا مینت...
 tokens-search-input-label = جست‌وجوی توکن‌ها
 tokens-search-results-label = نتایج جست‌وجو
-tokens-search-hint = نام یا نماد توکن را بنویسید یا مینت را جای‌گذاری کنید
-tokens-search-no-matches = موردی پیدا نشد — عبارت دیگری امتحان کنید
 tokens-search-tip-nav = پیمایش
 tokens-search-tip-open = باز کردن
 tokens-search-tip-close = بستن
 tokens-search-failed = جست‌وجو ناموفق بود
 # $message is the failure text.
 tokens-search-error = خطا: { $message }
-tokens-search-action-favorite =
-    .title = افزودن به علاقه‌مندی‌ها
-    .aria-label = افزودن به علاقه‌مندی‌ها
-tokens-search-action-blacklist =
-    .title = افزودن به فهرست سیاه
-    .aria-label = افزودن به فهرست سیاه
-tokens-search-no-mint = این توکن آدرس مینت ندارد
-tokens-search-open-failed = باز کردن جزئیات توکن ناموفق بود
-tokens-search-copy-failed = کپی در کلیپ‌بورد ناموفق بود
-# $symbol is the token symbol, or its mint when the symbol is unknown.
-tokens-search-favorite-added = { $symbol } به علاقه‌مندی‌ها اضافه شد
-tokens-search-favorite-already = از قبل در علاقه‌مندی‌هاست
-tokens-search-favorite-failed = افزودن به علاقه‌مندی‌ها ناموفق بود
-tokens-search-blacklist-message = { $symbol } به فهرست سیاه اضافه شود؟ این توکن از معاملات کنار گذاشته می‌شود.
-tokens-search-blacklist-done = { $symbol } به فهرست سیاه اضافه شد
-tokens-search-blacklisted = در فهرست سیاه
-tokens-search-blacklist-failed = افزودن توکن به فهرست سیاه ناموفق بود
+tokens-search-clear =
+    .title = پاک‌کردن جست‌وجو
+    .aria-label = پاک‌کردن جست‌وجو
+tokens-search-recent = اخیر
+tokens-search-recent-label = جست‌وجوهای اخیر
+tokens-search-lists-label = فهرست‌های توکن
+tokens-search-tab-trending = پرطرفدار
+tokens-search-kinds = نام · نماد · مینت
+tokens-search-empty-trending = توکن‌های پرطرفدار پس از قیمت‌گذاری نخستین پول‌ها توسط ربات نمایش داده می‌شوند.
+tokens-search-empty-positions = اکنون هیچ پوزیشن بازی وجود ندارد.
+tokens-search-empty-favorites = به یک توکن ستاره بدهید تا در جست‌وجوی بعدی اینجا منتظرتان باشد.
+tokens-search-empty-boosted = اکنون هیچ توکنی بوست نشده است.
+tokens-search-list-failed = این فهرست بارگیری نشد.
+tokens-search-searching = در حال جست‌وجوی بازارها…
+# $count is the number of tokens found.
+tokens-search-result-count =
+    { $count ->
+        [one] { $count } نتیجه
+       *[other] { $count } نتیجه
+    }
+tokens-search-order = بهترین تطابق نخست، سپس حجم 24h
+tokens-search-metric-mc = ارزش
+    .title = ارزش بازار
+tokens-search-metric-fdv = FDV
+    .title = ارزش کاملاً رقیق‌شده
+tokens-search-metric-liq = نقد
+    .title = نقدینگی
+tokens-search-metric-vol = حجم
+    .title = حجم 24h
+tokens-search-more =
+    .title = اقدامات بیشتر
+    .aria-label = اقدامات بیشتر
+# $query is the text the user typed.
+tokens-search-no-match = هیچ توکنی با «{ $query }» مطابقت ندارد.
 
 # Featured dialog (scripts/ui/featured_dialog.js)
 # Category and source ids are those of CATEGORIES; provider names are terms.

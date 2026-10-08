@@ -424,29 +424,44 @@ tokens-lightbox-token-age = Usia Token
 tokens-search-placeholder-dialog = Cari nama, simbol, atau mint...
 tokens-search-input-label = Cari token
 tokens-search-results-label = Hasil pencarian
-tokens-search-hint = Ketik nama token, simbol, atau tempel mint
-tokens-search-no-matches = Tidak ada hasil — coba kata kunci lain
 tokens-search-tip-nav = navigasi
 tokens-search-tip-open = buka
 tokens-search-tip-close = tutup
 tokens-search-failed = Pencarian gagal
 tokens-search-error = Error: { $message }
-tokens-search-action-favorite =
-    .title = Tambah ke Favorit
-    .aria-label = Tambah ke Favorit
-tokens-search-action-blacklist =
-    .title = Tambah ke Daftar Hitam
-    .aria-label = Tambah ke Daftar Hitam
-tokens-search-no-mint = Token tidak memiliki alamat mint
-tokens-search-open-failed = Gagal membuka detail token
-tokens-search-copy-failed = Gagal menyalin ke clipboard
-tokens-search-favorite-added = { $symbol } ditambahkan ke favorit
-tokens-search-favorite-already = Sudah ada di Favorit
-tokens-search-favorite-failed = Gagal menambahkan ke favorit
-tokens-search-blacklist-message = Masukkan { $symbol } ke daftar hitam? Token ini akan dikecualikan dari trading.
-tokens-search-blacklist-done = { $symbol } dimasukkan ke daftar hitam
-tokens-search-blacklisted = Masuk Daftar Hitam
-tokens-search-blacklist-failed = Gagal memasukkan token ke daftar hitam
+tokens-search-clear =
+    .title = Hapus pencarian
+    .aria-label = Hapus pencarian
+tokens-search-recent = Terbaru
+tokens-search-recent-label = Pencarian terbaru
+tokens-search-lists-label = Daftar token
+tokens-search-tab-trending = Trending
+tokens-search-kinds = Nama · simbol · mint
+tokens-search-empty-trending = Token trending muncul setelah bot menghitung harga pool pertamanya.
+tokens-search-empty-positions = Tidak ada posisi terbuka saat ini.
+tokens-search-empty-favorites = Beri bintang pada token dan token itu menunggu di sini untuk pencarian berikutnya.
+tokens-search-empty-boosted = Tidak ada token yang di-boost saat ini.
+tokens-search-list-failed = Daftar ini tidak dapat dimuat.
+tokens-search-searching = Mencari di pasar…
+# $count is the number of tokens found.
+tokens-search-result-count =
+    { $count ->
+       *[other] { $count } hasil
+    }
+tokens-search-order = Kecocokan terbaik dulu, lalu volume 24h
+tokens-search-metric-mc = MC
+    .title = Kapitalisasi pasar
+tokens-search-metric-fdv = FDV
+    .title = Valuasi terdilusi penuh
+tokens-search-metric-liq = Liq
+    .title = Likuiditas
+tokens-search-metric-vol = Vol
+    .title = Volume 24h
+tokens-search-more =
+    .title = Tindakan lainnya
+    .aria-label = Tindakan lainnya
+# $query is the text the user typed.
+tokens-search-no-match = Tidak ada token yang cocok dengan “{ $query }”.
 
 tokens-featured-category-boosted = Di-boost
 tokens-featured-category-jupiter-organic = Top Organik { -jupiter }

@@ -173,6 +173,13 @@
       }
     };
 
+    // A favorite toggled anywhere else (token details, position header, search)
+    // must not leave this menu offering the opposite action.
+    window.addEventListener("screenerbot:favorites-changed", (event) => {
+      const { mint, isFavorite } = event.detail || {};
+      if (mint) manager._updateFavoriteCache(mint, isFavorite === true);
+    });
+
     /**
      * Toggle favorite status for a token
      */

@@ -425,29 +425,45 @@ tokens-lightbox-token-age = टोकन आयु
 tokens-search-placeholder-dialog = नाम, सिंबल या मिंट खोजें...
 tokens-search-input-label = टोकन खोजें
 tokens-search-results-label = खोज परिणाम
-tokens-search-hint = टोकन का नाम, सिंबल लिखें या मिंट पेस्ट करें
-tokens-search-no-matches = कोई मिलान नहीं — कोई और शब्द आज़माएँ
 tokens-search-tip-nav = नेविगेट
 tokens-search-tip-open = खोलें
 tokens-search-tip-close = बंद करें
 tokens-search-failed = खोज विफल रही
 tokens-search-error = त्रुटि: { $message }
-tokens-search-action-favorite =
-    .title = पसंदीदा में जोड़ें
-    .aria-label = पसंदीदा में जोड़ें
-tokens-search-action-blacklist =
-    .title = ब्लैकलिस्ट में जोड़ें
-    .aria-label = ब्लैकलिस्ट में जोड़ें
-tokens-search-no-mint = टोकन का कोई मिंट एड्रेस नहीं है
-tokens-search-open-failed = टोकन विवरण खोलने में विफल
-tokens-search-copy-failed = क्लिपबोर्ड पर कॉपी करने में विफल
-tokens-search-favorite-added = { $symbol } पसंदीदा में जोड़ा गया
-tokens-search-favorite-already = पहले से पसंदीदा में है
-tokens-search-favorite-failed = पसंदीदा में जोड़ने में विफल
-tokens-search-blacklist-message = { $symbol } को ब्लैकलिस्ट करें? इस टोकन को ट्रेडिंग से बाहर रखा जाएगा।
-tokens-search-blacklist-done = { $symbol } ब्लैकलिस्ट किया गया
-tokens-search-blacklisted = ब्लैकलिस्ट किया गया
-tokens-search-blacklist-failed = टोकन ब्लैकलिस्ट करने में विफल
+tokens-search-clear =
+    .title = खोज साफ़ करें
+    .aria-label = खोज साफ़ करें
+tokens-search-recent = हाल के
+tokens-search-recent-label = हाल की खोजें
+tokens-search-lists-label = टोकन सूचियाँ
+tokens-search-tab-trending = ट्रेंडिंग
+tokens-search-kinds = नाम · सिंबल · मिंट
+tokens-search-empty-trending = बॉट के पहले पूल की कीमत तय होते ही ट्रेंडिंग टोकन यहाँ दिखेंगे।
+tokens-search-empty-positions = अभी कोई खुली पोज़िशन नहीं है।
+tokens-search-empty-favorites = किसी टोकन पर स्टार लगाएँ, वह अगली खोज के लिए यहाँ मिलेगा।
+tokens-search-empty-boosted = अभी कोई टोकन बूस्टेड नहीं है।
+tokens-search-list-failed = यह सूची लोड नहीं हो सकी।
+tokens-search-searching = मार्केट में खोज रहे हैं…
+# $count is the number of tokens found.
+tokens-search-result-count =
+    { $count ->
+        [one] { $count } परिणाम
+       *[other] { $count } परिणाम
+    }
+tokens-search-order = सबसे अच्छा मिलान पहले, फिर 24h वॉल्यूम
+tokens-search-metric-mc = MC
+    .title = मार्केट कैप
+tokens-search-metric-fdv = FDV
+    .title = पूर्ण रूप से डाइल्यूटेड वैल्यूएशन
+tokens-search-metric-liq = Liq
+    .title = लिक्विडिटी
+tokens-search-metric-vol = Vol
+    .title = 24h वॉल्यूम
+tokens-search-more =
+    .title = और कार्रवाइयाँ
+    .aria-label = और कार्रवाइयाँ
+# $query is the text the user typed.
+tokens-search-no-match = “{ $query }” से कोई टोकन मेल नहीं खाता।
 
 tokens-featured-category-boosted = बूस्टेड
 tokens-featured-category-jupiter-organic = { -jupiter } टॉप ऑर्गेनिक

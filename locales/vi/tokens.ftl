@@ -420,29 +420,44 @@ tokens-lightbox-token-age = Tuổi token
 tokens-search-placeholder-dialog = Tìm theo tên, ký hiệu hoặc mint...
 tokens-search-input-label = Tìm token
 tokens-search-results-label = Kết quả tìm kiếm
-tokens-search-hint = Nhập tên, ký hiệu token hoặc dán mint
-tokens-search-no-matches = Không có kết quả — hãy thử từ khóa khác
 tokens-search-tip-nav = di chuyển
 tokens-search-tip-open = mở
 tokens-search-tip-close = đóng
 tokens-search-failed = Tìm kiếm thất bại
 tokens-search-error = Lỗi: { $message }
-tokens-search-action-favorite =
-    .title = Thêm vào yêu thích
-    .aria-label = Thêm vào yêu thích
-tokens-search-action-blacklist =
-    .title = Thêm vào danh sách đen
-    .aria-label = Thêm vào danh sách đen
-tokens-search-no-mint = Token không có địa chỉ mint
-tokens-search-open-failed = Không mở được chi tiết token
-tokens-search-copy-failed = Không sao chép được vào bộ nhớ tạm
-tokens-search-favorite-added = Đã thêm { $symbol } vào yêu thích
-tokens-search-favorite-already = Đã có trong yêu thích
-tokens-search-favorite-failed = Không thêm được vào yêu thích
-tokens-search-blacklist-message = Đưa { $symbol } vào danh sách đen? Token này sẽ bị loại khỏi giao dịch.
-tokens-search-blacklist-done = Đã đưa { $symbol } vào danh sách đen
-tokens-search-blacklisted = Trong danh sách đen
-tokens-search-blacklist-failed = Không đưa được token vào danh sách đen
+tokens-search-clear =
+    .title = Xóa tìm kiếm
+    .aria-label = Xóa tìm kiếm
+tokens-search-recent = Gần đây
+tokens-search-recent-label = Tìm kiếm gần đây
+tokens-search-lists-label = Danh sách token
+tokens-search-tab-trending = Thịnh hành
+tokens-search-kinds = Tên · ký hiệu · mint
+tokens-search-empty-trending = Token thịnh hành sẽ xuất hiện khi bot định giá các pool đầu tiên.
+tokens-search-empty-positions = Hiện không có vị thế nào đang mở.
+tokens-search-empty-favorites = Gắn sao cho một token và nó sẽ chờ ở đây cho lần tìm kiếm tiếp theo.
+tokens-search-empty-boosted = Hiện không có token nào được boost.
+tokens-search-list-failed = Không thể tải danh sách này.
+tokens-search-searching = Đang tìm trên các thị trường…
+# $count is the number of tokens found.
+tokens-search-result-count =
+    { $count ->
+       *[other] { $count } kết quả
+    }
+tokens-search-order = Khớp nhất trước, sau đó theo khối lượng 24h
+tokens-search-metric-mc = VH
+    .title = Vốn hóa
+tokens-search-metric-fdv = FDV
+    .title = Định giá pha loãng hoàn toàn
+tokens-search-metric-liq = TK
+    .title = Thanh khoản
+tokens-search-metric-vol = KL
+    .title = Khối lượng 24h
+tokens-search-more =
+    .title = Thao tác khác
+    .aria-label = Thao tác khác
+# $query is the text the user typed.
+tokens-search-no-match = Không có token nào khớp với “{ $query }”.
 
 tokens-featured-category-boosted = Được boost
 tokens-featured-category-jupiter-organic = { -jupiter } Top tự nhiên

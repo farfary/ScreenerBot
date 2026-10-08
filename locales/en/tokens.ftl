@@ -490,31 +490,46 @@ tokens-lightbox-token-age = Token Age
 tokens-search-placeholder-dialog = Search name, symbol or mint...
 tokens-search-input-label = Search tokens
 tokens-search-results-label = Search results
-tokens-search-hint = Type token name, symbol or paste mint
-tokens-search-no-matches = No matches — try different term
 tokens-search-tip-nav = nav
 tokens-search-tip-open = open
 tokens-search-tip-close = close
 tokens-search-failed = Search failed
 # $message is the failure text.
 tokens-search-error = Error: { $message }
-tokens-search-action-favorite =
-    .title = Add to Favorites
-    .aria-label = Add to Favorites
-tokens-search-action-blacklist =
-    .title = Add to Blacklist
-    .aria-label = Add to Blacklist
-tokens-search-no-mint = Token has no mint address
-tokens-search-open-failed = Failed to open token details
-tokens-search-copy-failed = Failed to copy to clipboard
-# $symbol is the token symbol, or its mint when the symbol is unknown.
-tokens-search-favorite-added = Added { $symbol } to favorites
-tokens-search-favorite-already = Already in Favorites
-tokens-search-favorite-failed = Failed to add to favorites
-tokens-search-blacklist-message = Blacklist { $symbol }? This token will be excluded from trading.
-tokens-search-blacklist-done = Blacklisted { $symbol }
-tokens-search-blacklisted = Blacklisted
-tokens-search-blacklist-failed = Failed to blacklist token
+tokens-search-clear =
+    .title = Clear search
+    .aria-label = Clear search
+tokens-search-recent = Recent
+tokens-search-recent-label = Recent searches
+tokens-search-lists-label = Token lists
+tokens-search-tab-trending = Trending
+tokens-search-kinds = Name · symbol · mint
+tokens-search-empty-trending = Trending tokens appear once the bot has priced its first pools.
+tokens-search-empty-positions = No open positions right now.
+tokens-search-empty-favorites = Star a token and it waits here for the next search.
+tokens-search-empty-boosted = No token is boosted right now.
+tokens-search-list-failed = This list could not be loaded.
+tokens-search-searching = Searching markets…
+# $count is the number of tokens found.
+tokens-search-result-count =
+    { $count ->
+        [one] { $count } result
+       *[other] { $count } results
+    }
+tokens-search-order = Best match first, then 24h volume
+tokens-search-metric-mc = MC
+    .title = Market cap
+tokens-search-metric-fdv = FDV
+    .title = Fully diluted valuation
+tokens-search-metric-liq = Liq
+    .title = Liquidity
+tokens-search-metric-vol = Vol
+    .title = 24h volume
+tokens-search-more =
+    .title = More actions
+    .aria-label = More actions
+# $query is the text the user typed.
+tokens-search-no-match = No token matches “{ $query }”.
 
 # Featured dialog (scripts/ui/featured_dialog.js)
 # Category and source ids are those of CATEGORIES; provider names are terms.

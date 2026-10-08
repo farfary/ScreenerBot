@@ -435,29 +435,47 @@ tokens-lightbox-token-age = Возраст токена
 tokens-search-placeholder-dialog = Поиск по названию, символу или минту...
 tokens-search-input-label = Поиск токенов
 tokens-search-results-label = Результаты поиска
-tokens-search-hint = Введите название или символ токена либо вставьте минт
-tokens-search-no-matches = Ничего не найдено — попробуйте другой запрос
 tokens-search-tip-nav = навигация
 tokens-search-tip-open = открыть
 tokens-search-tip-close = закрыть
 tokens-search-failed = Не удалось выполнить поиск
 tokens-search-error = Ошибка: { $message }
-tokens-search-action-favorite =
-    .title = Добавить в избранное
-    .aria-label = Добавить в избранное
-tokens-search-action-blacklist =
-    .title = Добавить в чёрный список
-    .aria-label = Добавить в чёрный список
-tokens-search-no-mint = У токена нет адреса минта
-tokens-search-open-failed = Не удалось открыть сведения о токене
-tokens-search-copy-failed = Не удалось скопировать в буфер обмена
-tokens-search-favorite-added = { $symbol } добавлен в избранное
-tokens-search-favorite-already = Уже в избранном
-tokens-search-favorite-failed = Не удалось добавить в избранное
-tokens-search-blacklist-message = Добавить { $symbol } в чёрный список? Этот токен будет исключён из торговли.
-tokens-search-blacklist-done = { $symbol } добавлен в чёрный список
-tokens-search-blacklisted = В чёрном списке
-tokens-search-blacklist-failed = Не удалось добавить токен в чёрный список
+tokens-search-clear =
+    .title = Очистить поиск
+    .aria-label = Очистить поиск
+tokens-search-recent = Недавние
+tokens-search-recent-label = Недавние поиски
+tokens-search-lists-label = Списки токенов
+tokens-search-tab-trending = В тренде
+tokens-search-kinds = Название · символ · минт
+tokens-search-empty-trending = Токены в тренде появятся, когда бот рассчитает цены первых пулов.
+tokens-search-empty-positions = Сейчас нет открытых позиций.
+tokens-search-empty-favorites = Отметьте токен звёздочкой, и он будет ждать здесь при следующем поиске.
+tokens-search-empty-boosted = Сейчас нет токенов с бустом.
+tokens-search-list-failed = Не удалось загрузить этот список.
+tokens-search-searching = Поиск по рынкам…
+# $count is the number of tokens found.
+tokens-search-result-count =
+    { $count ->
+        [one] { $count } результат
+        [few] { $count } результата
+        [many] { $count } результатов
+       *[other] { $count } результата
+    }
+tokens-search-order = Сначала лучшие совпадения, затем объём за 24 ч
+tokens-search-metric-mc = Кап.
+    .title = Рыночная капитализация
+tokens-search-metric-fdv = FDV
+    .title = Полностью разводнённая оценка
+tokens-search-metric-liq = Ликв.
+    .title = Ликвидность
+tokens-search-metric-vol = Объём
+    .title = Объём за 24 ч
+tokens-search-more =
+    .title = Другие действия
+    .aria-label = Другие действия
+# $query is the text the user typed.
+tokens-search-no-match = Нет токенов, соответствующих «{ $query }».
 
 tokens-featured-category-boosted = С бустом
 tokens-featured-category-jupiter-organic = { -jupiter }: топ органики

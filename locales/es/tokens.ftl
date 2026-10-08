@@ -430,29 +430,46 @@ tokens-lightbox-token-age = Antigüedad del token
 tokens-search-placeholder-dialog = Buscar nombre, símbolo o mint...
 tokens-search-input-label = Buscar tokens
 tokens-search-results-label = Resultados de búsqueda
-tokens-search-hint = Escribe el nombre o símbolo del token, o pega el mint
-tokens-search-no-matches = Sin coincidencias — prueba con otro término
 tokens-search-tip-nav = navegar
 tokens-search-tip-open = abrir
 tokens-search-tip-close = cerrar
 tokens-search-failed = Error en la búsqueda
 tokens-search-error = Error: { $message }
-tokens-search-action-favorite =
-    .title = Añadir a favoritos
-    .aria-label = Añadir a favoritos
-tokens-search-action-blacklist =
-    .title = Añadir a la lista negra
-    .aria-label = Añadir a la lista negra
-tokens-search-no-mint = El token no tiene dirección mint
-tokens-search-open-failed = Error al abrir los detalles del token
-tokens-search-copy-failed = Error al copiar al portapapeles
-tokens-search-favorite-added = { $symbol } añadido a favoritos
-tokens-search-favorite-already = Ya está en favoritos
-tokens-search-favorite-failed = Error al añadir a favoritos
-tokens-search-blacklist-message = ¿Añadir { $symbol } a la lista negra? Este token se excluirá del trading.
-tokens-search-blacklist-done = { $symbol } añadido a la lista negra
-tokens-search-blacklisted = En lista negra
-tokens-search-blacklist-failed = Error al añadir el token a la lista negra
+tokens-search-clear =
+    .title = Borrar búsqueda
+    .aria-label = Borrar búsqueda
+tokens-search-recent = Recientes
+tokens-search-recent-label = Búsquedas recientes
+tokens-search-lists-label = Listas de tokens
+tokens-search-tab-trending = En tendencia
+tokens-search-kinds = Nombre · símbolo · mint
+tokens-search-empty-trending = Los tokens en tendencia aparecen cuando el bot cotiza sus primeros pools.
+tokens-search-empty-positions = No hay posiciones abiertas ahora mismo.
+tokens-search-empty-favorites = Marca un token con una estrella y te esperará aquí en la próxima búsqueda.
+tokens-search-empty-boosted = Ningún token está impulsado ahora mismo.
+tokens-search-list-failed = No se pudo cargar esta lista.
+tokens-search-searching = Buscando en los mercados…
+# $count is the number of tokens found.
+tokens-search-result-count =
+    { $count ->
+        [one] { $count } resultado
+        [many] { $count } resultados
+       *[other] { $count } resultados
+    }
+tokens-search-order = Mejor coincidencia primero, luego volumen 24h
+tokens-search-metric-mc = MC
+    .title = Capitalización de mercado
+tokens-search-metric-fdv = FDV
+    .title = Valoración totalmente diluida
+tokens-search-metric-liq = Liq
+    .title = Liquidez
+tokens-search-metric-vol = Vol
+    .title = Volumen 24h
+tokens-search-more =
+    .title = Más acciones
+    .aria-label = Más acciones
+# $query is the text the user typed.
+tokens-search-no-match = Ningún token coincide con «{ $query }».
 
 tokens-featured-category-boosted = Impulsados
 tokens-featured-category-jupiter-organic = Top orgánicos de { -jupiter }

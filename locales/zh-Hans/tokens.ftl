@@ -463,29 +463,44 @@ tokens-lightbox-token-age = 代币年龄
 tokens-search-placeholder-dialog = 搜索名称、符号或铸造地址…
 tokens-search-input-label = 搜索代币
 tokens-search-results-label = 搜索结果
-tokens-search-hint = 输入代币名称、符号或粘贴铸造地址
-tokens-search-no-matches = 无匹配项，请尝试其他关键词
 tokens-search-tip-nav = 导航
 tokens-search-tip-open = 打开
 tokens-search-tip-close = 关闭
 tokens-search-failed = 搜索失败
 tokens-search-error = 错误：{ $message }
-tokens-search-action-favorite =
-    .title = 添加到收藏
-    .aria-label = 添加到收藏
-tokens-search-action-blacklist =
-    .title = 加入黑名单
-    .aria-label = 加入黑名单
-tokens-search-no-mint = 代币没有铸造地址
-tokens-search-open-failed = 打开代币详情失败
-tokens-search-copy-failed = 复制到剪贴板失败
-tokens-search-favorite-added = 已将 { $symbol } 添加到收藏
-tokens-search-favorite-already = 已在收藏中
-tokens-search-favorite-failed = 添加到收藏失败
-tokens-search-blacklist-message = 将 { $symbol } 加入黑名单？该代币将被排除在交易之外。
-tokens-search-blacklist-done = 已将 { $symbol } 加入黑名单
-tokens-search-blacklisted = 已加入黑名单
-tokens-search-blacklist-failed = 将代币加入黑名单失败
+tokens-search-clear =
+    .title = 清除搜索
+    .aria-label = 清除搜索
+tokens-search-recent = 最近
+tokens-search-recent-label = 最近搜索
+tokens-search-lists-label = 代币列表
+tokens-search-tab-trending = 趋势
+tokens-search-kinds = 名称 · 符号 · 铸币地址
+tokens-search-empty-trending = 机器人为首批池子定价后，这里会显示趋势代币。
+tokens-search-empty-positions = 当前没有未平仓仓位。
+tokens-search-empty-favorites = 为代币加星标，下次搜索时它会在这里等你。
+tokens-search-empty-boosted = 当前没有已加速的代币。
+tokens-search-list-failed = 无法加载此列表。
+tokens-search-searching = 正在搜索市场…
+# $count is the number of tokens found.
+tokens-search-result-count =
+    { $count ->
+       *[other] { $count } 个结果
+    }
+tokens-search-order = 最佳匹配优先，其次按 24h 成交量
+tokens-search-metric-mc = 市值
+    .title = 市值
+tokens-search-metric-fdv = FDV
+    .title = 完全稀释估值
+tokens-search-metric-liq = 流动性
+    .title = 流动性
+tokens-search-metric-vol = 成交量
+    .title = 24h 成交量
+tokens-search-more =
+    .title = 更多操作
+    .aria-label = 更多操作
+# $query is the text the user typed.
+tokens-search-no-match = 没有与“{ $query }”匹配的代币。
 
 # Featured dialog (scripts/ui/featured_dialog.js)
 # Category and source ids are those of CATEGORIES; provider names are terms.

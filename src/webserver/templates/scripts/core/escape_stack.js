@@ -43,7 +43,9 @@ export function hasOpenOverlay() {
       'dialog[open], [aria-modal="true"], [role="dialog"], .modal-overlay, .dialog-overlay'
     )
   ).some((element) => {
-    if (element.hidden || element.getAttribute("aria-hidden") === "true") return false;
+    // A closed drawer hides its container, not the dialog inside it, so the
+    // nearest hidden ancestor decides as well.
+    if (element.closest('[hidden], [aria-hidden="true"], [inert]')) return false;
     const style = window.getComputedStyle(element);
     return style.display !== "none" && style.visibility !== "hidden" && style.opacity !== "0";
   });
