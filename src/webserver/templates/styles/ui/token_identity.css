@@ -179,8 +179,12 @@
   align-items: flex-start;
 }
 
+/* The text column sits at the top either way; taking part in baseline alignment
+   makes the symbol line the chip's baseline, so a baseline-aligned line of text
+   beside the chip meets the symbol rather than the logo. */
 .ti-chip-addressed .ti-chip-text {
   flex: 1;
+  align-self: first baseline;
 }
 
 .ti-chip-addressed .ti-chip-head {

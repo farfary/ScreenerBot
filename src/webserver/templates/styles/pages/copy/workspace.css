@@ -476,10 +476,11 @@
   min-width: 0;
 }
 
+/* The headline meets the token chip's symbol line, not the middle of the chip. */
 .copy-event-line {
   display: flex;
   flex-wrap: wrap;
-  align-items: center;
+  align-items: first baseline;
   gap: var(--spacing-sm);
   font-size: var(--font-size-sm);
 }
