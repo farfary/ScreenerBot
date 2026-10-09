@@ -260,15 +260,15 @@ impl PoolDecoder for MeteoraDammDecoder {
                 0.0
             };
 
-            // BUG-34 FIX: sqrt_price offset varies across DAMM pool versions and can produce
-            // wildly wrong prices (e.g. 1 million x too high). The vault ratio is always reliable
-            // for standard AMM pools. When sqrt-derived price diverges >300% from vault ratio,
-            // fall back to vault ratio which is derived from actual on-chain vault balances.
+            // The sqrt_price offset varies across DAMM pool versions, so a sqrt-derived price
+            // can be off by orders of magnitude. The vault ratio comes from the on-chain vault
+            // balances; when the sqrt price diverges from it by more than 300%, the vault ratio
+            // is the price.
             let final_oriented = if vault_ratio_diag > 0.0 && diff_pct > 300.0 {
                 logger::warning(
                     LogTag::PoolDecoder,
                     &format!(
-                        "DAMM BUG-34: sqrt price {:.12e} diverges {:.0}% from vault ratio {:.12e} — using vault ratio",
+                        "DAMM sqrt price {:.12e} diverges {:.0}% from vault ratio {:.12e} — using vault ratio",
                         oriented, diff_pct, vault_ratio_diag
                     ),
                 );
