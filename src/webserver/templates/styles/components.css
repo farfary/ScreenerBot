@@ -859,6 +859,27 @@
   overflow-wrap: anywhere;
 }
 
+/* A value that reads as one figure (a pair such as "+3.5% / -24.4%") never wraps:
+   split across two lines it reads as two numbers. Its card's content box is a
+   size container, so 100cqi is the width the grid track gives the value, and the
+   font is that width over the glyph count the script sets in
+   `--metric-value-chars` (the data font advances 0.6em per glyph; 0.61 absorbs
+   rounding), between a 10px floor (a German "+150,0 % / -45,2 %" in the
+   narrowest stats track) and the card's value size. */
+.metric-content:has(> .metric-value-fit) {
+  container-type: inline-size;
+}
+
+.metric-value-fit {
+  overflow-wrap: normal;
+  white-space: nowrap;
+  font-size: clamp(
+    0.625rem,
+    100cqi / (var(--metric-value-chars, 12) * 0.61),
+    var(--font-size-lg)
+  );
+}
+
 .metric-detail {
   margin-top: var(--spacing-xs);
   color: var(--text-muted);

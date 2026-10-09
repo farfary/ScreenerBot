@@ -430,7 +430,11 @@ function createLifecycle() {
         const el = $(`#${id}`);
         if (!el) return;
         el.textContent = text;
-        el.className = tone ? `metric-value ${tone}` : "metric-value";
+        el.classList.remove("positive", "negative");
+        if (tone) el.classList.add(tone);
+        if (el.classList.contains("metric-value-fit")) {
+          el.style.setProperty("--metric-value-chars", String([...text].length));
+        }
       };
       const setDetail = (id, text) => {
         const el = $(`#${id}`);
@@ -576,7 +580,8 @@ function createLifecycle() {
         const el = $(`#${id}`);
         if (el) {
           el.textContent = "—";
-          el.className = "metric-value";
+          el.classList.remove("positive", "negative");
+          el.style.removeProperty("--metric-value-chars");
         }
       }
     }
