@@ -192,16 +192,8 @@
   padding: 1px 5px;
   border-radius: var(--radius-sm);
   flex-shrink: 0;
-}
-
-.strategy-type-tag.entry {
-  background: var(--success-alpha-15);
-  color: var(--success-color);
-}
-
-.strategy-type-tag.exit {
-  background: var(--danger-alpha-15);
-  color: var(--error-color);
+  background: var(--strategy-kind-tint);
+  color: var(--strategy-kind-color);
 }
 
 .strategy-state-tag {

@@ -43,6 +43,24 @@
 }
 
 /* ==========================================================================
+   Strategy kind colours: the one pair for every strategy surface. Entry is blue
+   and Exit is amber; red stays reserved for errors.
+   ========================================================================== */
+:is(.strategy-type-tag, .strategy-type-badge).entry,
+.type-card[data-type="ENTRY"] {
+  --strategy-kind-color: var(--primary-color);
+  --strategy-kind-tint: var(--primary-alpha-10);
+  --strategy-kind-edge: var(--primary-alpha-30);
+}
+
+:is(.strategy-type-tag, .strategy-type-badge).exit,
+.type-card[data-type="EXIT"] {
+  --strategy-kind-color: var(--warning-color);
+  --strategy-kind-tint: var(--warning-alpha-10);
+  --strategy-kind-edge: var(--warning-alpha-30);
+}
+
+/* ==========================================================================
    Strategy Type Badge (Editor Header)
    ========================================================================== */
 .strategy-type-badge {
@@ -56,23 +74,14 @@
   text-transform: uppercase;
   letter-spacing: 0.04em;
   flex-shrink: 0;
+  background: var(--strategy-kind-tint);
+  color: var(--strategy-kind-color);
+  border: 1px solid var(--strategy-kind-edge);
 }
 
 .strategy-type-badge i {
   font-size: 14px;
   line-height: 1;
-}
-
-.strategy-type-badge.entry {
-  background: rgb(16, 185, 129, 0.15);
-  color: var(--success-color);
-  border: 1px solid rgb(16, 185, 129, 0.3);
-}
-
-.strategy-type-badge.exit {
-  background: rgb(239, 68, 68, 0.15);
-  color: var(--error-color);
-  border: 1px solid rgb(239, 68, 68, 0.3);
 }
 
 /* ==========================================================================
@@ -136,18 +145,11 @@
 .type-card .type-icon {
   font-size: 1.75rem;
   line-height: 1;
+  color: var(--strategy-kind-color);
 }
 
 .type-card .type-icon i {
   font-size: 28px;
-}
-
-.type-card[data-type="ENTRY"] .type-icon {
-  color: var(--success-color);
-}
-
-.type-card[data-type="EXIT"] .type-icon {
-  color: var(--error-color);
 }
 
 .type-card .type-name {
