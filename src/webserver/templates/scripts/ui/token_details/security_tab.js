@@ -11,7 +11,7 @@ import { formatPercentValue } from "../../core/format.js";
 import { RISK_SEVERITY_LABELS } from "../risk_severity.js";
 import { rugcheckRiskDescription, rugcheckRiskName } from "../rugcheck_risk.js";
 import { renderAddress } from "../token_identity.js";
-import { renderTabState } from "./state_handling.js";
+import { renderStateView } from "../state_view.js";
 
 const esc = (text) => Utils.escapeHtml(text);
 
@@ -81,7 +81,7 @@ function buildSecurityLoadingContent(token, options) {
         </section>
       </div>
       <div class="security-right-col">
-        ${renderTabState({ kind: "loading", message: I18n.t("tokens-security-analyzing") })}
+        ${renderStateView({ kind: "loading", message: I18n.t("tokens-security-analyzing") })}
       </div>
     </div>
   `;

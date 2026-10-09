@@ -10,7 +10,7 @@
  * metadata from the token detail response.
  */
 import * as Utils from "../../core/utils.js";
-import { renderTabState } from "./state_handling.js";
+import { renderStateView } from "../state_view.js";
 import { renderAddress } from "../token_identity.js";
 import { venueLabel } from "../venue.js";
 
@@ -61,7 +61,7 @@ export function renderPoolsTab(token, options = {}) {
   const pools = token.pools || [];
 
   if (pools.length === 0) {
-    return renderTabState({
+    return renderStateView({
       icon: "icon-droplet",
       title: I18n.t("tokens-pools-empty-title"),
       message: I18n.t("tokens-pools-empty-message"),

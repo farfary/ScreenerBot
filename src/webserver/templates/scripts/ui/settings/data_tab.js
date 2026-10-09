@@ -10,6 +10,7 @@ import * as Utils from "../../core/utils.js";
 import { setIconLabel } from "../../core/dom.js";
 import { formatSizeAt } from "../../core/format.js";
 import { ConfirmationDialog } from "../confirmation_dialog.js";
+import { renderStateView } from "../state_view.js";
 import { apiErrorMessage } from "../../core/request_manager.js";
 
 /** Database id -> label key, keyed by `DatabaseId` (webserver/routes/system/types.rs). */
@@ -426,7 +427,11 @@ async function loadDataOverview(content) {
       pathDisplay.title = data.config_path;
     }
   } catch {
-    card.innerHTML = `<div class="data-stats-loading">${Utils.escapeHtml(I18n.t("settings-data-stats-load-failed"))}</div>`;
+    card.innerHTML = renderStateView({
+      kind: "error",
+      icon: "icon-triangle-alert",
+      title: I18n.t("settings-data-stats-load-failed"),
+    });
   }
 }
 

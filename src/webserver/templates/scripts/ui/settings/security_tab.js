@@ -8,6 +8,7 @@
  */
 import * as Utils from "../../core/utils.js";
 import { enhanceAllSelects } from "../custom_select.js";
+import { renderStateView } from "../state_view.js";
 import { apiErrorMessage } from "../../core/request_manager.js";
 
 // Ids are the stored lockscreen `password_type` values.
@@ -56,9 +57,11 @@ export async function loadSecurityTab(dialog, content) {
     enhanceAllSelects(content);
   } catch (error) {
     console.error("[Settings] Failed to load security status:", error);
-    content.innerHTML =
-      '<div class="settings-error" data-l10n-id="settings-security-load-failed"></div>';
-    I18n.localizeTree(content);
+    content.innerHTML = renderStateView({
+      kind: "error",
+      icon: "icon-triangle-alert",
+      title: I18n.t("settings-security-load-failed"),
+    });
   }
 }
 

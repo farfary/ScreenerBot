@@ -258,16 +258,6 @@
   font-size: 0.85rem;
 }
 
-.settings-error {
-  padding: 12px 14px;
-  border: 1px solid var(--danger-alpha-30);
-  border-radius: var(--radius-lg);
-  background: var(--danger-alpha-10);
-  color: var(--semantic-error-text);
-  font-size: 0.82rem;
-  line-height: 1.45;
-}
-
 /* =============================================================================
    SECTIONS & FIELDS - Enhanced Card Style
    ============================================================================= */

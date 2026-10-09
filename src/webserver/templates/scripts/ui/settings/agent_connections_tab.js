@@ -42,6 +42,7 @@
  */
 import { apiErrorMessage } from "../../core/request_manager.js";
 import { formatList } from "../../core/format.js";
+import { renderStateView } from "../state_view.js";
 
 const LIST_URL = "/api/agent-control/pairings";
 const pairingUrl = (clientId) => `${LIST_URL}/${encodeURIComponent(clientId)}`;
@@ -762,9 +763,11 @@ export async function loadAgentConnectionsTab(_dialog, content) {
     ]);
   } catch {
     if (generation !== loadGeneration) return;
-    content.innerHTML =
-      '<div class="settings-error" data-l10n-id="settings-agent-load-failed"></div>';
-    I18n.localizeTree(content);
+    content.innerHTML = renderStateView({
+      kind: "error",
+      icon: "icon-triangle-alert",
+      title: I18n.t("settings-agent-load-failed"),
+    });
     return;
   }
 
@@ -832,17 +835,21 @@ export async function loadAgentConnectionsTab(_dialog, content) {
         signal: controller.signal,
       });
       if (!res.ok) {
-        listEl.innerHTML =
-          '<div class="settings-error" data-l10n-id="settings-agent-list-failed"></div>';
-        I18n.localizeTree(listEl);
+        listEl.innerHTML = renderStateView({
+          kind: "error",
+          icon: "icon-triangle-alert",
+          title: I18n.t("settings-agent-list-failed"),
+        });
         return;
       }
       renderList(listEl, await res.json());
     } catch {
       if (controller.signal.aborted) return;
-      listEl.innerHTML =
-        '<div class="settings-error" data-l10n-id="settings-agent-list-failed"></div>';
-      I18n.localizeTree(listEl);
+      listEl.innerHTML = renderStateView({
+        kind: "error",
+        icon: "icon-triangle-alert",
+        title: I18n.t("settings-agent-list-failed"),
+      });
     }
   }
 

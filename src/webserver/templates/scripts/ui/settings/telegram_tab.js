@@ -8,6 +8,7 @@
  */
 import * as Utils from "../../core/utils.js";
 import { enhanceAllSelects } from "../custom_select.js";
+import { renderStateView } from "../state_view.js";
 import { apiErrorMessage } from "../../core/request_manager.js";
 import { populateLanguageOptions } from "./interface_tab.js";
 
@@ -71,9 +72,11 @@ export async function loadTelegramTab(dialog, content) {
     await loadTelegramAuthState(dialog, content);
   } catch (error) {
     console.error("[Settings] Failed to load Telegram settings:", error);
-    content.innerHTML =
-      '<div class="settings-error" data-l10n-id="settings-telegram-load-failed"></div>';
-    I18n.localizeTree(content);
+    content.innerHTML = renderStateView({
+      kind: "error",
+      icon: "icon-triangle-alert",
+      title: I18n.t("settings-telegram-load-failed"),
+    });
   }
 }
 

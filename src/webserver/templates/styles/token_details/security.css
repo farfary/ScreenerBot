@@ -37,7 +37,7 @@
   flex-shrink: 0;
 }
 
-.security-right-col > .tdd-state {
+.security-right-col > .state-view {
   flex: 1 0 auto;
 }
 

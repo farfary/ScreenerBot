@@ -9,7 +9,7 @@
  */
 import * as Utils from "../../core/utils.js";
 import { requestManager } from "../../core/request_manager.js";
-import { renderTabState } from "./state_handling.js";
+import { renderStateView } from "../state_view.js";
 import { typeKind, typeLabel, typeShortLabel } from "../transaction_type.js";
 
 /**
@@ -27,7 +27,7 @@ export function applyTransactionsTabMixin(DialogClass) {
   proto._loadTransactionsTab = async function (content) {
     if (content.dataset.loaded === "true") return;
 
-    content.innerHTML = renderTabState({
+    content.innerHTML = renderStateView({
       kind: "loading",
       message: I18n.t("tokens-transactions-loading"),
     });
@@ -42,7 +42,7 @@ export function applyTransactionsTabMixin(DialogClass) {
         const transactions = response;
 
         if (transactions.length === 0) {
-          content.innerHTML = renderTabState({
+          content.innerHTML = renderStateView({
             icon: "icon-activity",
             title: I18n.t("tokens-transactions-empty-title"),
             message: I18n.t("tokens-transactions-empty-history"),
@@ -61,7 +61,7 @@ export function applyTransactionsTabMixin(DialogClass) {
 
         content.dataset.loaded = "true";
       } else {
-        content.innerHTML = renderTabState({
+        content.innerHTML = renderStateView({
           icon: "icon-activity",
           title: I18n.t("tokens-transactions-empty-title"),
           message: I18n.t("tokens-transactions-empty-data"),

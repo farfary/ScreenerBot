@@ -17,6 +17,8 @@
  * genuine data change still repaints exactly once.
  */
 
+import { renderStateView } from "../state_view.js";
+
 function backendLooksOffline() {
   if (navigator.onLine === false) return true;
   if (document.documentElement.hasAttribute("data-backend-offline")) return true;
@@ -25,52 +27,6 @@ function backendLooksOffline() {
   } catch {
     return false;
   }
-}
-
-function escapeStateText(value) {
-  const node = document.createElement("div");
-  node.textContent = String(value ?? "");
-  return node.innerHTML;
-}
-
-/**
- * Build the canonical full-tab state used by every Token Details subtab.
- * Keeping this renderer outside the mixin lets pure tab renderers use the same
- * DOM contract without duplicating markup.
- */
-export function renderTabState({
-  kind = "empty",
-  icon = "icon-info",
-  title = "",
-  message = "",
-  retry = false,
-} = {}) {
-  const safeKind = ["loading", "empty", "error"].includes(kind) ? kind : "empty";
-  const safeIcon = /^icon-[a-z0-9-]+$/.test(icon) ? icon : "icon-info";
-  const role = safeKind === "error" ? 'role="alert"' : 'role="status" aria-live="polite"';
-
-  if (safeKind === "loading") {
-    return `
-      <div class="tdd-state tdd-state-loading" ${role}>
-        <div class="loading-spinner">${escapeStateText(message || I18n.t("common-loading"))}</div>
-      </div>
-    `;
-  }
-
-  return `
-    <div class="tdd-state tdd-state-${safeKind}" ${role}>
-      <i class="tdd-state-icon ${safeIcon}" aria-hidden="true"></i>
-      ${title ? `<div class="tdd-state-title">${escapeStateText(title)}</div>` : ""}
-      ${message ? `<div class="tdd-state-message">${escapeStateText(message)}</div>` : ""}
-      ${
-        retry
-          ? `<button type="button" class="tdd-state-retry" data-action="tdd-retry">
-              <i class="icon-refresh-cw" aria-hidden="true"></i> ${escapeStateText(I18n.t("common-action-retry"))}
-            </button>`
-          : ""
-      }
-    </div>
-  `;
 }
 
 export function applyStateHandlingMixin(DialogClass) {
@@ -161,12 +117,12 @@ export function applyStateHandlingMixin(DialogClass) {
       (navigator.onLine === false
         ? I18n.t("tokens-state-offline")
         : I18n.t("tokens-state-request-failed"));
-    const html = renderTabState({
+    const html = renderStateView({
       kind: "error",
       icon: "icon-triangle-alert",
       title,
       message,
-      retry: true,
+      retry: "tdd-retry",
     });
     this._renderHtmlIfChanged(content, html, "__stateHtml");
     content.dataset.loaded = "false";
@@ -180,7 +136,7 @@ export function applyStateHandlingMixin(DialogClass) {
    */
   proto._renderTabWaiting = function (content, label = I18n.t("tokens-state-waiting")) {
     if (!content) return;
-    const html = renderTabState({ kind: "loading", message: label });
+    const html = renderStateView({ kind: "loading", message: label });
     this._renderHtmlIfChanged(content, html, "__stateHtml");
   };
 

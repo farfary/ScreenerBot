@@ -15,7 +15,7 @@
 import * as Utils from "../../core/utils.js";
 import { formatPercentValue, withSolUnit } from "../../core/format.js";
 import { requestManager } from "../../core/request_manager.js";
-import { renderTabState } from "./state_handling.js";
+import { renderStateView } from "../state_view.js";
 import { POSITION_MANAGEMENT_LABELS } from "../position_management.js";
 import { POSITION_STATUS_LABELS } from "../position_status.js";
 import { closeReasonText } from "../trade_reason.js";
@@ -34,7 +34,7 @@ export function applyPositionsTabMixin(DialogClass) {
     if (!mint) {
       this._renderHtmlIfChanged(
         content,
-        renderTabState({
+        renderStateView({
           icon: "icon-chart-bar",
           title: I18n.t("tokens-positions-empty-title"),
           message: I18n.t("tokens-positions-no-token"),
@@ -55,7 +55,7 @@ export function applyPositionsTabMixin(DialogClass) {
     if (!content.__posHtml) {
       this._renderHtmlIfChanged(
         content,
-        renderTabState({ kind: "loading", message: I18n.t("tokens-positions-loading") }),
+        renderStateView({ kind: "loading", message: I18n.t("tokens-positions-loading") }),
         "__posHtml"
       );
     }
@@ -77,7 +77,7 @@ export function applyPositionsTabMixin(DialogClass) {
     if (!position) {
       this._renderHtmlIfChanged(
         content,
-        renderTabState({
+        renderStateView({
           icon: "icon-chart-bar",
           title: I18n.t("tokens-positions-empty-title"),
           message: I18n.t("tokens-positions-empty-message"),

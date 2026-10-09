@@ -29,7 +29,8 @@ import { applyTransactionsTabMixin } from "./token_details/transactions_tab.js";
 import { applyChartTabMixin } from "./token_details/chart_tab.js";
 import { fetchCandles, triggerRefresh } from "./chart_data.js";
 import { applyUtilitiesMixin } from "./token_details/utilities.js";
-import { applyStateHandlingMixin, renderTabState } from "./token_details/state_handling.js";
+import { applyStateHandlingMixin } from "./token_details/state_handling.js";
+import { renderStateView } from "./state_view.js";
 import { applyPositionsTabMixin } from "./token_details/positions_tab.js";
 import { resolvedTokenName, resolvedTokenSymbol } from "./token_identity.js";
 
@@ -1019,22 +1020,22 @@ export class TokenDetailsDialog {
 
         <div class="dialog-body">
           <div class="tab-content active" data-tab-content="overview">
-            ${renderTabState({ kind: "loading", message: I18n.t("tokens-dialog-loading-overview") })}
+            ${renderStateView({ kind: "loading", message: I18n.t("tokens-dialog-loading-overview") })}
           </div>
           <div class="tab-content" data-tab-content="security">
-            ${renderTabState({ kind: "loading", message: I18n.t("tokens-dialog-loading-security") })}
+            ${renderStateView({ kind: "loading", message: I18n.t("tokens-dialog-loading-security") })}
           </div>
           <div class="tab-content" data-tab-content="positions">
-            ${renderTabState({ kind: "loading", message: I18n.t("tokens-positions-loading") })}
+            ${renderStateView({ kind: "loading", message: I18n.t("tokens-positions-loading") })}
           </div>
           <div class="tab-content" data-tab-content="pools">
-            ${renderTabState({ kind: "loading", message: I18n.t("tokens-dialog-loading-pools") })}
+            ${renderStateView({ kind: "loading", message: I18n.t("tokens-dialog-loading-pools") })}
           </div>
           <div class="tab-content" data-tab-content="links">
-            ${renderTabState({ kind: "loading", message: I18n.t("tokens-dialog-loading-links") })}
+            ${renderStateView({ kind: "loading", message: I18n.t("tokens-dialog-loading-links") })}
           </div>
           <div class="tab-content" data-tab-content="transactions">
-            ${renderTabState({ kind: "loading", message: I18n.t("tokens-transactions-loading") })}
+            ${renderStateView({ kind: "loading", message: I18n.t("tokens-transactions-loading") })}
           </div>
         </div>
       </div>

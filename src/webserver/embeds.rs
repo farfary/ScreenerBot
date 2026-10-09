@@ -149,6 +149,7 @@ pub(super) const DIALOG_HEADER_ACTIONS_STYLES: &str =
     include_str!("templates/styles/ui/dialog_header_actions.css");
 pub(super) const ACTION_BAR_STYLES: &str = include_str!("templates/styles/ui/action_bar.css");
 pub(super) const EXPAND_TOGGLE_STYLES: &str = include_str!("templates/styles/ui/expand_toggle.css");
+pub(super) const STATE_VIEW_STYLES: &str = include_str!("templates/styles/ui/state_view.css");
 pub(super) const TABLE_SETTINGS_DIALOG_STYLES: &str =
     include_str!("templates/styles/ui/table_settings_dialog.css");
 pub(super) const CONFIRMATION_DIALOG_STYLES: &str =
@@ -379,6 +380,7 @@ pub const DIALOG_TAB_BAR_UI: &str = include_str!("templates/scripts/ui/dialog_ta
 pub const NAV_MORE_MENU_UI: &str = include_str!("templates/scripts/ui/nav_more_menu.js");
 pub const ACTION_BAR_UI: &str = include_str!("templates/scripts/ui/action_bar.js");
 pub const EXPAND_TOGGLE_UI: &str = include_str!("templates/scripts/ui/expand_toggle.js");
+pub const STATE_VIEW_UI: &str = include_str!("templates/scripts/ui/state_view.js");
 pub const TABLE_SETTINGS_DIALOG_UI: &str =
     include_str!("templates/scripts/ui/table_settings_dialog.js");
 pub const TOKEN_DETAILS_DIALOG_UI: &str =

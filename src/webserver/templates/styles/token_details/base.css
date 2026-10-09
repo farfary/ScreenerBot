@@ -854,70 +854,10 @@
 }
 
 /* =============================================================================
-   Shared tab state blocks (loading / empty / error) + connection chip
-   Used by every tab so all full-tab placeholders present state the
-   same way and a dropped connection is shown without wiping content.
+   Connection chip: a dropped connection is shown without wiping content.
+   Tab placeholders (loading / empty / error) are the shared state view,
+   ui/state_view.css.
    ============================================================================= */
-.tdd-state {
-  display: flex;
-  flex-direction: column;
-  align-items: center;
-  justify-content: center;
-  height: 100%;
-  min-height: min(300px, 100%);
-  padding: clamp(24px, 6vh, 64px) var(--spacing-lg);
-  gap: var(--spacing-sm);
-  text-align: center;
-  color: var(--text-secondary);
-}
-
-.tdd-state-icon {
-  margin-bottom: 2px;
-  color: var(--text-muted);
-  font-size: 1.75rem;
-  opacity: 0.75;
-}
-
-.tdd-state-error .tdd-state-icon {
-  color: var(--warning-color);
-}
-
-.tdd-state-title {
-  font-size: 0.95rem;
-  font-weight: 650;
-  color: var(--text-primary);
-}
-
-.tdd-state-message {
-  font-size: 0.82rem;
-  line-height: 1.5;
-  color: var(--text-secondary);
-  max-width: 360px;
-}
-
-.tdd-state-retry {
-  margin-top: var(--spacing-sm);
-  display: inline-flex;
-  align-items: center;
-  gap: 6px;
-  padding: 7px 16px;
-  border: 1px solid var(--border-color);
-  border-radius: var(--radius-md);
-  background: var(--bg-secondary);
-  color: var(--text-primary);
-  font-size: 0.8rem;
-  font-weight: 600;
-  cursor: pointer;
-  transition:
-    background 0.15s ease,
-    border-color 0.15s ease;
-}
-
-.tdd-state-retry:hover {
-  background: var(--bg-card-hover);
-  border-color: var(--primary-alpha-30);
-}
-
 /* Connection warning in the header status area. It is static and text-led,
    using a bare glyph rather than a pulsing dot or a decorated chip. */
 .token-details-dialog .tdd-connection-chip {
