@@ -120,12 +120,26 @@
   max-width: 100%;
 }
 
-.copy-watch-resume > small {
+.copy-watch-resume small {
   color: var(--text-muted);
 }
 
+/* One way out of the paused watch: its control, its consequence and its action stay together. */
+.copy-watch-choice {
+  display: grid;
+  justify-items: start;
+  gap: var(--spacing-xs);
+  width: 100%;
+}
+
+.copy-watch-choice + .copy-watch-choice {
+  margin-top: var(--spacing-sm);
+  padding-top: var(--spacing-sm);
+  border-top: 1px solid var(--border-color);
+}
+
 .copy-watch-resume .copy-watch-ack {
-  margin: var(--spacing-sm) 0 0;
+  margin: var(--spacing-xs) 0;
   color: var(--text-secondary);
 }
 

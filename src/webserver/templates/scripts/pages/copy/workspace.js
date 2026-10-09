@@ -294,11 +294,16 @@ export function createWorkspace(page) {
     return `<div class="copy-watch-resume" role="group" aria-labelledby="copy-watch-resume-title">
       <h3 id="copy-watch-resume-title">${esc(I18n.t("copy-watch-recovery-title"))}</h3>
       <p>${esc(I18n.t("copy-watch-recovery-budget-intro"))}</p>
-      ${helius?.available ? `<button class="btn" type="button" data-ws-action="approve-helius">${esc(I18n.t("copy-watch-approve"))}</button><small>${esc(I18n.t("copy-watch-approve-help"))}</small>` : helius ? `<small>${esc(I18n.t("copy-watch-approve-unavailable"))}</small>` : `<small>${esc(I18n.t("copy-watch-no-provider"))}</small>`}
-      <label class="copy-watch-budget-field" for="copy-watch-page-budget">${esc(I18n.t("copy-watch-budget-label"))}</label>
-      <input id="copy-watch-page-budget" data-watch-page-budget type="number" min="${WATCH_SIGNATURES.min}" max="${WATCH_SIGNATURES.max}" step="${WATCH_SIGNATURES.step}" value="${suggestedLimit}" aria-describedby="copy-watch-budget-hint" />
-      <small id="copy-watch-budget-hint">${esc(I18n.t("copy-watch-budget-hint", WATCH_SIGNATURES))}</small>
-      <label class="checkbox-label copy-watch-ack"><input type="checkbox" data-watch-resume-ack /><span>${esc(I18n.t("copy-watch-ack"))}</span></label>
+      <div class="copy-watch-choice">
+        ${helius?.available ? `<button class="btn btn-primary btn-sm" type="button" data-ws-action="approve-helius">${esc(I18n.t("copy-watch-approve"))}</button><small>${esc(I18n.t("copy-watch-approve-help"))}</small>` : helius ? `<small>${esc(I18n.t("copy-watch-approve-unavailable"))}</small>` : `<small>${esc(I18n.t("copy-watch-no-provider"))}</small>`}
+      </div>
+      <div class="copy-watch-choice">
+        <label class="copy-watch-budget-field" for="copy-watch-page-budget">${esc(I18n.t("copy-watch-budget-label"))}</label>
+        <input id="copy-watch-page-budget" data-watch-page-budget type="number" min="${WATCH_SIGNATURES.min}" max="${WATCH_SIGNATURES.max}" step="${WATCH_SIGNATURES.step}" value="${suggestedLimit}" aria-describedby="copy-watch-budget-hint" />
+        <small id="copy-watch-budget-hint">${esc(I18n.t("copy-watch-budget-hint", WATCH_SIGNATURES))}</small>
+        <label class="checkbox-label copy-watch-ack"><input type="checkbox" data-watch-resume-ack /><span>${esc(I18n.t("copy-watch-ack"))}</span></label>
+        <button class="btn btn-outline btn-sm" type="button" data-ws-action="resume-budget" disabled>${esc(I18n.t("copy-action-resume-from-now"))}</button>
+      </div>
     </div>`;
   }
 
@@ -313,12 +318,7 @@ export function createWorkspace(page) {
             ) && watchStatuses.get(task.target_address)?.status?.target?.enabled
           ? button("resume", "btn-primary", "icon-play", I18n.t("copy-action-resume-copy"))
           : task.pause_reason?.kind === "watch_budget_exceeded"
-            ? button(
-                "resume-budget",
-                "btn-primary",
-                "icon-play",
-                I18n.t("copy-action-resume-from-now")
-              )
+            ? ""
             : ["helius_unavailable", "watch_processing_failed"].includes(task.pause_reason?.kind)
               ? button(
                   "retry-watch",
