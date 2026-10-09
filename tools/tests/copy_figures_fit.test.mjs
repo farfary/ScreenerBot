@@ -4,9 +4,12 @@
 
 /**
  * Guard: a Copy Trading summary figure is one line. A value with its unit
- * ("2.54 / 8.00 SOL") never wraps the unit under the amount and never runs out of its
+ * ("2.54 / 8 SOL") never wraps the unit under the amount and never runs out of its
  * card, at the narrowest desktop window and wider, in left-to-right and right-to-left
  * locales. The task list's budget line follows the same rule.
+ *
+ * A free-standing SOL amount follows the one trim rule of core/format.js: a budget beside a
+ * P&L reads "0 / 2 SOL" next to "0 SOL", never "0.00 / 2.00 SOL".
  *
  * Run with `npm run test:js`.
  */
@@ -86,7 +89,7 @@ test("every copy P&L figure has one SOL precision", async (t) => {
   await page.waitForSelector(".copy-row-pnl");
   await page.waitForSelector("#copy-figures .copy-figure");
   const figures = await page.$$eval(".copy-row-pnl, #copy-figures .copy-figure-value", (nodes) =>
-    // Signed figures are the P&L ones; a budget ("2.54 / 8.00 SOL") is not a P&L.
+    // Signed figures are the P&L ones; a budget ("2.54 / 8 SOL") is not a P&L.
     nodes.map((node) => node.textContent.trim()).filter((text) => /^[+\-−].*SOL/.test(text))
   );
   const decimals = new Set(figures.map((text) => /[.,](\d+)\s*SOL/.exec(text)?.[1].length ?? 0));
@@ -107,4 +110,35 @@ test("no copy P&L call picks its own precision", async () => {
     }
   }
   assert.deepEqual(offenders, [], "signedSol takes the one P&L precision");
+});
+
+test("a free-standing copy SOL amount carries no padded fraction zeros", async (t) => {
+  const context = await browser.newContext({ viewport: { width: 1440, height: 900 } });
+  const api = createApiHandler([copy, shell], "populated");
+  const host = await serveDashboard(context, { locale: "en", onApi: api.onApi });
+  t.after(async () => {
+    await context.close();
+    await host.close();
+  });
+  const page = await context.newPage();
+  await page.goto(`${host.origin}/copy`);
+  await page.waitForSelector(".copy-row-budget");
+  const amounts = await page.$$eval(".copy-row-budget > span:last-child", (nodes) =>
+    nodes.map((node) => node.textContent.replace(/[\u2066-\u2069]/g, "").trim())
+  );
+  assert.ok(amounts.length > 0, "the task list prints budget lines");
+  const padded = amounts.filter((text) => /\d[.,]\d*0(?!\d)/.test(text));
+  assert.deepEqual(padded, [], `budget lines ${amounts.join(" | ")}`);
+});
+
+test("no copy SOL amount is formatted as a plain fixed number", async () => {
+  const directory = resolve(SCRIPTS_ROOT, "pages/copy");
+  const offenders = [];
+  for (const name of await readdir(directory)) {
+    const source = await readFile(resolve(directory, name), "utf8");
+    for (const match of source.matchAll(/\bfixed\([^()]*(?:native|spent|budget)[^()]*\)/g)) {
+      offenders.push(`${name}: ${match[0]}`);
+    }
+  }
+  assert.deepEqual(offenders, [], "a SOL amount takes solNumber, sol or a cell formatter");
 });

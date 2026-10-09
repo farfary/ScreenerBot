@@ -2,7 +2,7 @@
 // SPDX-License-Identifier: BUSL-1.1
 //
 // The status strip and the totals row above the wallet list.
-import { fixed, pct, seconds, signedSol, toneClass, unrealizedFigure } from "./format.js";
+import { pct, seconds, signedSol, solNumber, toneClass, unrealizedFigure } from "./format.js";
 import { gateControl, setupRequired } from "../../ui/setup_gate.js";
 
 export function renderStrip(page) {
@@ -112,7 +112,7 @@ export function renderFigures(page) {
     figure(
       I18n.t("copy-metric-budget-spent"),
       budget > 0
-        ? I18n.t("copy-budget-of", { spent: fixed(spent, 2), budget: fixed(budget, 2) })
+        ? I18n.t("copy-budget-of", { spent: solNumber(spent, 2), budget: solNumber(budget, 2) })
         : "—",
       {
         note:

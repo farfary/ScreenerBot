@@ -8,10 +8,10 @@ import {
   definitionRows,
   duration,
   exitModeLabel,
-  fixed,
   modeLabel,
   pct,
   sol,
+  solNumber,
   taskName,
 } from "./format.js";
 import { formatList } from "../../core/format.js";
@@ -62,8 +62,8 @@ export function createArmGate(page) {
         [
           I18n.t("copy-arm-budget-left"),
           I18n.t("copy-arm-budget-left-value", {
-            left: fixed(ws.live_remaining_budget_native, 3),
-            total: fixed(ws.total_budget_native, 3),
+            left: solNumber(ws.live_remaining_budget_native, 3),
+            total: solNumber(ws.total_budget_native, 3),
           }),
           I18n.t("copy-arm-budget-left-note"),
         ],
@@ -100,8 +100,8 @@ export function createArmGate(page) {
       : [
           ack(
             I18n.t("copy-arm-ack-real-native", {
-              budget: fixed(ws.live_remaining_budget_native, 3),
-              trade: fixed(ws.max_native_per_trade, 3),
+              budget: solNumber(ws.live_remaining_budget_native, 3),
+              trade: solNumber(ws.max_native_per_trade, 3),
             })
           ),
           ack(I18n.t("copy-arm-ack-fees")),

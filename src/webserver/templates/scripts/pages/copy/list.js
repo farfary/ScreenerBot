@@ -6,11 +6,11 @@
 import { renderAddress } from "../../ui/token_identity.js";
 import { sparkline } from "./charts.js";
 import {
-  fixed,
   modeLabel,
   pauseReasonShort,
   segmented,
   signedSol,
+  solNumber,
   stateLabel,
   taskName,
   toneClass,
@@ -105,7 +105,7 @@ export function createTaskList(page) {
         <span class="copy-row-pnl ${toneClass(pnl)}">${esc(signedSol(pnl))}</span>
       </span>
       <span class="copy-row-line copy-row-detail">
-        <span class="copy-row-budget"><span class="copy-meter" aria-hidden="true"><span style="width:${budgetPct.toFixed(1)}%"></span></span><span>${esc(I18n.t("copy-budget-of", { spent: fixed(spent, 2), budget: fixed(budget, 2) }))}</span></span>
+        <span class="copy-row-budget"><span class="copy-meter" aria-hidden="true"><span style="width:${budgetPct.toFixed(1)}%"></span></span><span>${esc(I18n.t("copy-budget-of", { spent: solNumber(spent, 2), budget: solNumber(budget, 2) }))}</span></span>
         ${sparkline(task.pnl_trend)}
       </span>
     </button>`;

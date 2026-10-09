@@ -158,6 +158,14 @@ export function sol(value, decimals = 4) {
   return formatSol(value, { decimals, fallback: "—" });
 }
 
+/**
+ * A free-standing SOL amount whose message names the unit ("{ $spent } / { $budget } SOL"):
+ * trimmed like `sol()`, so it reads beside the P&L figures of the same card.
+ */
+export function solNumber(value, decimals = 4) {
+  return formatSol(value, { decimals, fallback: "—", suffix: "" });
+}
+
 /** A SOL amount in a table cell: the column header names the unit, so the cell does not. */
 export function solCell(value) {
   return formatSol(value, { decimals: 4, fallback: "—", suffix: "", trim: false });

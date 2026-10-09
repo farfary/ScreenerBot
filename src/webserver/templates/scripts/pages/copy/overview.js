@@ -15,6 +15,7 @@ import {
   signedSol,
   skipLabel,
   sol,
+  solNumber,
   toneClass,
   unrealizedFigure,
 } from "./format.js";
@@ -158,8 +159,8 @@ function book(ws, esc) {
         sol(ws.spent_native, 3),
         I18n.t("copy-book-budget-note", {
           mode: modeLabel(ws.mode),
-          total: fixed(ws.total_budget_native, 3),
-          remaining: fixed(ws.remaining_budget_native, 3),
+          total: solNumber(ws.total_budget_native, 3),
+          remaining: solNumber(ws.remaining_budget_native, 3),
         }),
         "",
         esc
