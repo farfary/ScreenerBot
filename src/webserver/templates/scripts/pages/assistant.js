@@ -73,9 +73,21 @@ const ANALYSIS_RISK_LABELS = Object.freeze({
   critical: "assistant-risk-critical",
 });
 
+const ASSISTANT_TAB_ICONS = Object.freeze({
+  chat: "icon-message-square",
+  stats: "icon-chart-bar",
+  providers: "icon-plug",
+  instructions: "icon-file-text",
+  automation: "icon-workflow",
+  history: "icon-history",
+  testing: "icon-flask-conical",
+  settings: "icon-settings",
+});
+
 function buildAssistantTabs() {
   return [...ASSISTANT_TAB_IDS].map((id) => ({
     id,
+    icon: ASSISTANT_TAB_ICONS[id],
     label: I18n.label(ASSISTANT_TAB_LABELS, id),
   }));
 }

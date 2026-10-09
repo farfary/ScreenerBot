@@ -32,19 +32,14 @@ const ORIGIN_CLASSES = Object.freeze({ copy: "copy", manual: "manual", external:
 
 const esc = (text) => Utils.escapeHtml(text);
 
-// Sub-tab labels: an icon followed by the view name.
+// Sub-tabs: an icon and the view name.
 const subTabs = () => [
-  {
-    id: "open",
-    label: `<i class="icon-trending-up"></i> ${esc(I18n.label(POSITION_STATUS_LABELS, "open"))}`,
-  },
-  {
-    id: "closed",
-    label: `<i class="icon-trending-down"></i> ${esc(I18n.label(POSITION_STATUS_LABELS, "closed"))}`,
-  },
+  { id: "open", icon: "icon-trending-up", label: I18n.label(POSITION_STATUS_LABELS, "open") },
+  { id: "closed", icon: "icon-trending-down", label: I18n.label(POSITION_STATUS_LABELS, "closed") },
   {
     id: "archived",
-    label: `<i class="icon-archive"></i> ${esc(I18n.label(POSITION_STATUS_LABELS, "archived"))}`,
+    icon: "icon-archive",
+    label: I18n.label(POSITION_STATUS_LABELS, "archived"),
   },
 ];
 

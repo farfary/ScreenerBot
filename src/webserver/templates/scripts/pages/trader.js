@@ -44,10 +44,7 @@ const EXIT_TYPE_LABELS = Object.freeze({
 // Sub-tabs configuration. Strategy Control is second and the embedded Strategies
 // editor is third (Strategies was formerly its own top-level tab).
 function buildSubTabs() {
-  const tab = (id, icon, name) => ({
-    id,
-    label: `<i class="${icon}"></i> ${Utils.escapeHtml(name)}`,
-  });
+  const tab = (id, icon, label) => ({ id, icon, label });
   return [
     tab("stats", "icon-chart-bar", I18n.t("trader-tab-stats")),
     tab("strategy-control", "icon-puzzle", I18n.t("trader-tab-strategy-control")),

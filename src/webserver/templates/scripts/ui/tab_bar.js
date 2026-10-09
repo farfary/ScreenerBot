@@ -23,8 +23,8 @@
  * const tabBar = new TabBar({
  *   container: '#subTabsContainer',
  *   tabs: [
- *     { id: 'pool', label: 'Pool Service' },
- *     { id: 'all', label: 'All Tokens' }
+ *     { id: 'pool', icon: 'icon-droplet', label: 'Pool Service' },
+ *     { id: 'all', icon: 'icon-list', label: 'All Tokens' }
  *   ],
  *   defaultTab: 'pool',
  *   stateKey: 'tokens.activeTab',
@@ -33,6 +33,8 @@
  *   onShow: () => { ... },
  *   onHide: () => { ... }
  * });
+ *
+ * A tab's `label` is text and `icon` an optional icon class; the bar owns their markup.
  *
  * // Integrate with lifecycle
  * ctx.manageTabBar(tabBar);
@@ -362,6 +364,9 @@ export class TabBar {
     return this.tabs
       .map((tab) => {
         const active = tab.id === this.activeTab;
+        const icon = tab.icon
+          ? `<i class="${this._escapeHtml(tab.icon)}" aria-hidden="true"></i> `
+          : "";
         return `
           <button
             class="sub-tab"
@@ -371,7 +376,7 @@ export class TabBar {
             tabindex="${active ? "0" : "-1"}"
             type="button"
           >
-            ${tab.label}
+            ${icon}${this._escapeHtml(tab.label)}
           </button>
         `;
       })

@@ -756,7 +756,7 @@ export function createLifecycle() {
       if (!tabBar) {
         tabBar = new TabBar({
           container: "#subTabsContainer",
-          tabs: buildFilterTabs(Utils.escapeHtml),
+          tabs: buildFilterTabs(),
           defaultTab: state.activeTab,
           stateKey: TABBAR_STATE_KEY,
           pageName: "filtering",

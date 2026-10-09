@@ -2,12 +2,7 @@
 // SPDX-License-Identifier: BUSL-1.1
 //
 
-/**
- * Constants and configuration for tokens page
- * Lines extracted from tokens.js (16-116, 185-271)
- */
-
-import { escapeHtml } from "../../core/utils.js";
+/** Constants and configuration for the Tokens page. */
 
 // Ids are the `view` query values of /api/tokens/list.
 const TOKEN_VIEW_LABELS = Object.freeze({
@@ -35,41 +30,25 @@ export const TOKEN_VIEW_EMPTY_LABELS = Object.freeze({
   recent: "tokens-view-recent-empty",
 });
 
-const viewLabel = (id, icon) =>
-  `<i class="${icon}"></i> ${escapeHtml(I18n.label(TOKEN_VIEW_LABELS, id))}`;
+const view = (id, icon, hintKey) => ({
+  id,
+  icon,
+  label: I18n.label(TOKEN_VIEW_LABELS, id),
+  hintKey,
+});
 
 // Sub-tabs (views) configuration with hint references
 export const TOKEN_VIEWS = [
-  { id: "favorites", label: viewLabel("favorites", "icon-star"), hintKey: "tokens.favorites" },
-  { id: "pool", label: viewLabel("pool", "icon-droplet"), hintKey: "tokens.poolService" },
-  {
-    id: "no_market",
-    label: viewLabel("no_market", "icon-trending-down"),
-    hintKey: "tokens.noMarketData",
-  },
-  { id: "all", label: viewLabel("all", "icon-list"), hintKey: "tokens.allTokens" },
-  { id: "passed", label: viewLabel("passed", "icon-check"), hintKey: "tokens.passedTokens" },
-  {
-    id: "rejected",
-    label: viewLabel("rejected", "icon-circle-x"),
-    hintKey: "tokens.rejectedTokens",
-  },
-  {
-    id: "blacklisted",
-    label: viewLabel("blacklisted", "icon-ban"),
-    hintKey: "tokens.blacklistedTokens",
-  },
-  {
-    id: "positions",
-    label: viewLabel("positions", "icon-chart-bar"),
-    hintKey: "tokens.positionsTokens",
-  },
-  { id: "recent", label: viewLabel("recent", "icon-clock"), hintKey: "tokens.recentTokens" },
-  {
-    id: "ohlcv",
-    label: viewLabel("ohlcv", "icon-chart-candlestick"),
-    hintKey: "tokens.ohlcvData",
-  },
+  view("favorites", "icon-star", "tokens.favorites"),
+  view("pool", "icon-droplet", "tokens.poolService"),
+  view("no_market", "icon-trending-down", "tokens.noMarketData"),
+  view("all", "icon-list", "tokens.allTokens"),
+  view("passed", "icon-check", "tokens.passedTokens"),
+  view("rejected", "icon-circle-x", "tokens.rejectedTokens"),
+  view("blacklisted", "icon-ban", "tokens.blacklistedTokens"),
+  view("positions", "icon-chart-bar", "tokens.positionsTokens"),
+  view("recent", "icon-clock", "tokens.recentTokens"),
+  view("ohlcv", "icon-chart-candlestick", "tokens.ohlcvData"),
 ];
 
 // Constants

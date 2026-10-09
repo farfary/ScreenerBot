@@ -27,16 +27,11 @@ import { renderSetupGate, setupRequired } from "../ui/setup_gate.js";
 
 const POLL_INTERVAL = 30000; // 30 seconds for balance updates
 
-const walletTab = (id, icon, name) => ({
-  id,
-  label: `<i class="${icon}"></i> ${Utils.escapeHtml(name)}`,
-});
-
 const buildWalletTabs = () => [
-  walletTab("main", "icon-star", I18n.t("wallets-tab-main")),
-  walletTab("secondaries", "icon-wallet", I18n.t("wallets-tab-secondaries")),
-  walletTab("archive", "icon-archive", I18n.t("wallets-tab-archive")),
-  walletTab("watched", "icon-eye", I18n.t("wallets-tab-watched")),
+  { id: "main", icon: "icon-star", label: I18n.t("wallets-tab-main") },
+  { id: "secondaries", icon: "icon-wallet", label: I18n.t("wallets-tab-secondaries") },
+  { id: "archive", icon: "icon-archive", label: I18n.t("wallets-tab-archive") },
+  { id: "watched", icon: "icon-eye", label: I18n.t("wallets-tab-watched") },
 ];
 
 // Replaces a button's content with an icon and a text label built through the DOM.

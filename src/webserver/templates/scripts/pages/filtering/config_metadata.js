@@ -49,12 +49,9 @@ export const TIME_RANGE_LABELS = Object.freeze({
   all: "filtering-range-all",
 });
 
-/**
- * The sub-tabs, each labelled with its icon and localized name. `escapeHtml` escapes the
- * name, which the tab bar inserts as markup.
- */
-export function buildFilterTabs(escapeHtml) {
-  const tab = (id, icon, name) => ({ id, label: `<i class="${icon}"></i> ${escapeHtml(name)}` });
+/** The sub-tabs, each with its icon and localized name. */
+export function buildFilterTabs() {
+  const tab = (id, icon, label) => ({ id, icon, label });
   return [
     tab("status", "icon-chart-bar", I18n.t("filtering-tab-status")),
     tab("analytics", "icon-chart-pie", I18n.t("filtering-tab-analytics")),
