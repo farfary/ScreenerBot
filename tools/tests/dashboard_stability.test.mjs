@@ -12,8 +12,9 @@
  *
  * A page's `views` (in its fixture index) say what must render: tables with rows,
  * charts that draw a canvas, empty-state text, and dialogs that open and close.
- * An empty table keeps its body, with its message centred and no pager under it, and
- * a value-typed cell shows its value whole on one line.
+ * An empty table keeps its body, with its message centred and no pager under it, an
+ * empty state's glyph shares one row with its heading, and a value-typed cell shows
+ * its value whole on one line.
  * A check carrying a `defect` description documents a dashboard fault that is
  * not fixed yet: it leaves the page's regular tests and runs alone as a todo test.
  *
@@ -181,7 +182,31 @@ async function assertEmpty(page, view) {
           `${selector}: expected empty state text ${pattern}, found ${JSON.stringify(shown)}`
         );
       });
+    await assertGlyphBesideHeading(page, selector);
   }
+}
+
+/**
+ * A state view's glyph sits on its heading's row, never alone on a row above it: the
+ * glyph's vertical centre lies within the heading text's box.
+ */
+async function assertGlyphBesideHeading(page, selector) {
+  const placement = await page.evaluate((css) => {
+    const state = [...document.querySelectorAll(css)].find((candidate) => candidate.offsetParent);
+    const glyph = state?.querySelector(".state-view-icon");
+    const heading = state?.querySelector(".state-view-heading > span");
+    if (!glyph || !heading) return null;
+    const icon = glyph.getBoundingClientRect();
+    const text = heading.getBoundingClientRect();
+    const centre = icon.top + icon.height / 2;
+    return { centre, top: text.top, bottom: text.bottom };
+  }, selector);
+  if (!placement) return;
+  assert.ok(
+    placement.centre >= placement.top && placement.centre <= placement.bottom,
+    `${selector}: the glyph (centre ${Math.round(placement.centre)}px) is not on its heading's row ` +
+      `(${Math.round(placement.top)}-${Math.round(placement.bottom)}px)`
+  );
 }
 
 async function assertDialogs(page, view) {
@@ -381,14 +406,17 @@ async function assertEmptyTablesKeepBody(page, label) {
   const found = await page.evaluate(() => {
     const problems = [];
     const containers = [...document.querySelectorAll(".data-table-scroll-container")].filter(
-      (container) => container.offsetParent && container.querySelector(".dt-empty-state")
+      (container) =>
+        container.offsetParent && container.querySelector(".dt-state-cell > .state-view-empty")
     );
     for (const container of containers) {
       const name = container.closest("[id]")?.id ?? "table";
       const box = container.getBoundingClientRect();
       const top = box.top + container.clientTop;
       const bottom = top + container.clientHeight;
-      const message = container.querySelector(".dt-empty-state").getBoundingClientRect();
+      const message = container
+        .querySelector(".dt-state-cell > .state-view-empty")
+        .getBoundingClientRect();
       if (message.top < top - 0.5 || message.bottom > bottom + 0.5) {
         problems.push(`${name}: message clipped by a ${Math.round(container.clientHeight)}px body`);
       }

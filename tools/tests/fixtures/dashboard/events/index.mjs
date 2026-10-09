@@ -44,7 +44,7 @@ export const views = [
       { selector: "#events-root tbody .badge.error", min: 2 },
       { selector: "#events-root tbody .badge.warning", min: 4 },
     ],
-    empty: [{ selector: "#events-root .dt-empty-state", text: "No events yet" }],
+    empty: [{ selector: "#events-root .dt-state-cell > .state-view-empty", text: "No events yet" }],
     dialogs: [
       {
         trigger: "#events-root tbody tr[data-row-id]",

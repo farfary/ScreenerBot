@@ -2,9 +2,10 @@
  * SPDX-License-Identifier: BUSL-1.1 */
 
 /* The one loading / empty / error state - see scripts/ui/state_view.js. It
-   fills the space its content would take and centres a bare glyph, a title, a
-   message and an optional Retry button, so a failed load in a dialog tab or a
-   Settings section reads the same. */
+   fills the space its content would take and centres a heading row (a bare glyph
+   inline with the title), a message and an optional Retry button, so an empty or
+   failed view reads the same in a dialog tab, a Settings section, a table body and
+   the Actions panel. */
 
 .state-view {
   display: flex;
@@ -19,10 +20,24 @@
   color: var(--text-secondary);
 }
 
+.state-view-compact {
+  height: auto;
+  min-height: 0;
+  padding: var(--spacing-lg);
+}
+
+.state-view-heading {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: var(--spacing-sm);
+  max-width: 100%;
+}
+
 .state-view-icon {
-  margin-bottom: 2px;
+  flex: none;
   color: var(--text-muted);
-  font-size: 1.75rem;
+  font-size: 1.15rem;
   opacity: 0.75;
 }
 

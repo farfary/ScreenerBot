@@ -145,6 +145,7 @@ import * as AppState from "../core/app_state.js";
 import { $, scrollStart } from "../core/dom.js";
 import { escapeHtml } from "../core/utils.js";
 import { enhanceAllSelects } from "./custom_select.js";
+import { renderStateView } from "./state_view.js";
 import { TableToolbarView } from "./table_toolbar.js";
 
 /** Column types whose header and cells are end-aligned numeric values. */
@@ -1011,15 +1012,15 @@ export class DataTable {
       ? I18n.t("table-empty-filtered-message")
       : resolve(this.options.emptyMessage);
 
+    const state = renderStateView({
+      icon: emptyIcon,
+      title: emptyTitle,
+      message: emptyMessage,
+      compact: true,
+    });
     return `
         <tr>
-          <td colspan="100" class="dt-state-cell">
-            <div class="dt-empty-state">
-              <i class="dt-empty-icon ${emptyIcon}"></i>
-              <div class="dt-empty-title">${escapeHtml(emptyTitle)}</div>
-              <div class="dt-empty-message">${escapeHtml(emptyMessage)}</div>
-            </div>
-          </td>
+          <td colspan="100" class="dt-state-cell">${state}</td>
         </tr>`;
   }
 
@@ -1243,7 +1244,7 @@ export class DataTable {
     }
 
     // Check if currently showing empty state
-    if (tbody.querySelector(".dt-empty-state")) {
+    if (tbody.querySelector(".dt-state-cell > .state-view")) {
       tbody.innerHTML = "";
     }
 

@@ -4,7 +4,10 @@
 // Recorded API responses and view assertions for the positions dashboard page.
 
 const ROWS = "#positions-root tr[data-row-id]";
-const emptyState = (text) => ({ selector: "#positions-root .dt-empty-state", text });
+const emptyState = (text) => ({
+  selector: "#positions-root .dt-state-cell > .state-view-empty",
+  text,
+});
 const DETAILS = {
   trigger: `${ROWS} .ti-row-cell__symbol`,
   dialog: ".position-details-dialog .dialog-container",

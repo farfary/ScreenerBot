@@ -13,6 +13,7 @@
  * - The clear control is named, disabled while no filter applies and enabled by one.
  * - Every tab whose count is above zero lists cards, also when every action has been
  *   dismissed (completed and failed actions are auto-dismissed).
+ * - An empty tab shows the shared state view, its glyph on the message's row.
  *
  * Run with `npm run test:js`.
  */
@@ -130,4 +131,27 @@ test("every tab with a count above zero lists its actions, dismissed ones includ
     assert.ok(cards > 0, `the ${tab} tab counts ${count} actions and lists ${cards}`);
   }
   assert.deepEqual(counted, ["all", "completed", "all"], "the fixture counts All and Done");
+});
+
+test("an empty tab shows the shared state view with its glyph on the message's row", async (t) => {
+  const emptyContext = await browser.newContext({ viewport: { width: 1440, height: 900 } });
+  const emptyApi = createApiHandler([await loadIndex("home"), await loadIndex("shell")], "empty");
+  const emptyHost = await serveDashboard(emptyContext, { locale: "en", onApi: emptyApi.onApi });
+  t.after(async () => {
+    await emptyContext.close();
+    await emptyHost.close();
+  });
+  const panel = await emptyContext.newPage();
+  await panel.goto(`${emptyHost.origin}/home`);
+  await panel.waitForSelector(READY);
+  await panel.click("#notificationBtn");
+  const state = panel.locator("#notificationList > .state-view-empty");
+  await state.waitFor();
+  assert.equal((await state.locator(".state-view-message").textContent()).trim(), "No actions");
+  const [icon, message] = await Promise.all([
+    state.locator(".state-view-icon").boundingBox(),
+    state.locator(".state-view-message").boundingBox(),
+  ]);
+  const centre = icon.y + icon.height / 2;
+  assert.ok(centre >= message.y && centre <= message.y + message.height);
 });

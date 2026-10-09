@@ -170,7 +170,7 @@ export const views = [
       ...settings("time-rules", "time-rules-tab", 4).populated,
       { selector: "#time-positions-status tbody .ti-row-cell", min: 3 },
     ],
-    empty: [{ selector: "#time-positions-status .dt-empty-state", text: "No open positions" }],
+    empty: [{ selector: "#time-positions-status .dt-state-cell > .state-view-empty", text: "No open positions" }],
   },
   settings("dca", "dca-tab", 5),
   settings(

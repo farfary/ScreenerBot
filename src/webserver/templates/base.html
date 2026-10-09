@@ -634,9 +634,11 @@
 
         <!-- Notification list with infinite scroll -->
         <div class="notification-list" id="notificationList" role="feed" data-l10n-id="shell-notification-list">
-          <div class="notification-empty">
-            <i class="icon-inbox"></i>
-            <p data-l10n-id="shell-notification-empty"></p>
+          <div class="state-view state-view-empty state-view-compact" role="status" aria-live="polite">
+            <div class="state-view-heading">
+              <i class="state-view-icon icon-inbox" aria-hidden="true"></i>
+              <span class="state-view-message" data-l10n-id="shell-notification-empty"></span>
+            </div>
           </div>
         </div>
 

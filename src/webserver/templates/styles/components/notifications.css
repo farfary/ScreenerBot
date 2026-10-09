@@ -559,32 +559,6 @@ body.notification-drawer-open {
 }
 
 /* -----------------------------------------------------------------------------
-   Empty State - Compact
-   ----------------------------------------------------------------------------- */
-
-.notification-empty {
-  display: flex;
-  flex-direction: column;
-  align-items: center;
-  justify-content: center;
-  padding: 40px 20px;
-  text-align: center;
-  color: var(--text-muted);
-}
-
-.notification-empty i {
-  font-size: 32px;
-  margin-bottom: 12px;
-  opacity: 0.4;
-}
-
-.notification-empty p {
-  margin: 0;
-  font-size: 13px;
-  font-weight: 500;
-}
-
-/* -----------------------------------------------------------------------------
    Loading & Back to Top
    ----------------------------------------------------------------------------- */
 

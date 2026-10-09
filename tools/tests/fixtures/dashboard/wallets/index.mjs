@@ -52,7 +52,12 @@ export const views = [
     name: "main wallet holdings",
     click: [tab("main")],
     populated: [{ selector: MAIN_ROWS, min: 5 }],
-    empty: [{ selector: "#tokens-datatable-root .dt-empty-state", text: "No token holdings" }],
+    empty: [
+      {
+        selector: "#tokens-datatable-root .dt-state-cell > .state-view-empty",
+        text: "No token holdings",
+      },
+    ],
     dialogs: [dialog('[data-btn-id="wt-export-key"]', "export-modal", "export-modal-close")],
   },
   {
@@ -60,7 +65,10 @@ export const views = [
     click: [tab("secondaries")],
     populated: [{ selector: SECONDARY_ROWS, min: 2 }],
     empty: [
-      { selector: "#secondaries-table-container .dt-empty-state", text: "No secondary wallets" },
+      {
+        selector: "#secondaries-table-container .dt-state-cell > .state-view-empty",
+        text: "No secondary wallets",
+      },
     ],
     dialogs: [dialog('[data-btn-id="secondaries-add"]', "add-wallet-modal", "modal-close-btn")],
   },
@@ -84,13 +92,23 @@ export const views = [
     name: "archived wallets",
     click: [tab("archive")],
     populated: [{ selector: ARCHIVE_ROWS, min: 2 }],
-    empty: [{ selector: "#archive-table-container .dt-empty-state", text: "No archived wallets" }],
+    empty: [
+      {
+        selector: "#archive-table-container .dt-state-cell > .state-view-empty",
+        text: "No archived wallets",
+      },
+    ],
   },
   {
     name: "watched addresses",
     click: [tab("watched")],
     populated: [{ selector: WATCHED_ROWS, min: 3 }],
-    empty: [{ selector: "#watched-wallets-root .dt-empty-state", text: "No watched addresses" }],
+    empty: [
+      {
+        selector: "#watched-wallets-root .dt-state-cell > .state-view-empty",
+        text: "No watched addresses",
+      },
+    ],
     dialogs: [
       dialog('[data-btn-id="watched-add"]', "watch-wallet-modal", "watch-modal-close"),
       dialog(

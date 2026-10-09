@@ -5,7 +5,10 @@
 
 const LIST_RUST = "src/webserver/routes/tokens/types.rs::TokenListResponse";
 const ROWS = "#tokens-root tr[data-row-id]";
-const emptyState = (text) => ({ selector: "#tokens-root .dt-empty-state", text });
+const emptyState = (text) => ({
+  selector: "#tokens-root .dt-state-cell > .state-view-empty",
+  text,
+});
 const tab = (id) => `#subTabsContainer [data-tab-id="${id}"]`;
 const DETAILS = {
   trigger: `${ROWS} .ti-row-cell__symbol`,
@@ -165,13 +168,23 @@ export const views = [
     name: "favorite tokens",
     click: [tab("favorites")],
     populated: [{ selector: "#favorites-table-container tr[data-row-id]", min: 3 }],
-    empty: [{ selector: "#favorites-table-container .dt-empty-state", text: "No Favorites Yet" }],
+    empty: [
+      {
+        selector: "#favorites-table-container .dt-state-cell > .state-view-empty",
+        text: "No Favorites Yet",
+      },
+    ],
   },
   {
     name: "tokens with candle data",
     click: [tab("ohlcv")],
     populated: [{ selector: "#ohlcv-table-container tr[data-row-id]", min: 5 }],
-    empty: [{ selector: "#ohlcv-table-container .dt-empty-state", text: "No chart data yet" }],
+    empty: [
+      {
+        selector: "#ohlcv-table-container .dt-state-cell > .state-view-empty",
+        text: "No chart data yet",
+      },
+    ],
     dialogs: [
       { trigger: '#ohlcv-table-container [data-btn-id="cleanup"]', dialog: ".input-dialog" },
     ],

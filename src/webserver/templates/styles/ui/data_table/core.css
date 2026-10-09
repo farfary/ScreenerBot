@@ -663,32 +663,9 @@ body.dt-column-resizing * {
   padding-inline: 32px;
 }
 
-/* Empty State */
-.dt-empty-state {
-  display: flex;
-  flex-direction: column;
-  align-items: center;
-  gap: 12px;
-  color: var(--text-tertiary);
-}
-
-.dt-empty-icon {
-  font-size: 2.5rem;
-  opacity: 0.4;
-  color: var(--text-secondary);
-}
-
-.dt-empty-title {
-  font-size: 1.05rem;
-  font-weight: 600;
-  color: var(--text-secondary);
-}
-
-.dt-empty-message {
-  font-size: 0.875rem;
-  color: var(--text-tertiary);
-  max-width: 320px;
-  line-height: 1.5;
+/* The cell carries the vertical space; the state view inside it adds none. */
+.data-table td.dt-state-cell > .state-view {
+  padding-block: 0;
 }
 
 /* Loading state */

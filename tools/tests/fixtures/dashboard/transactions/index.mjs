@@ -52,7 +52,12 @@ export const views = [
   {
     name: "wallet transactions",
     populated: [{ selector: ROWS, min: 7 }],
-    empty: [{ selector: "#transactions-root .dt-empty-state", text: "No transactions yet" }],
+    empty: [
+      {
+        selector: "#transactions-root .dt-state-cell > .state-view-empty",
+        text: "No transactions yet",
+      },
+    ],
     dialogs: [
       {
         trigger: `${ROWS} td`,

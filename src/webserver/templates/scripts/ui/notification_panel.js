@@ -18,6 +18,7 @@ import { closeReasonText } from "./trade_reason.js";
 import { ConfirmationDialog } from "./confirmation_dialog.js";
 import { enhanceAllSelects } from "./custom_select.js";
 import { playTabSwitch } from "../core/sounds.js";
+import { renderStateView } from "./state_view.js";
 
 /** Notifications younger than a week show a relative time; older ones their date. */
 const WEEK_MS = 7 * 24 * 60 * 60 * 1000;
@@ -569,12 +570,12 @@ async function renderNotifications() {
         console.error("[NotificationPanel] Failed to fetch history:", error);
         isLoadingMore = false;
         showLoading(false);
-        list.innerHTML = `
-          <div class="notification-empty">
-            <i class="icon-triangle-alert"></i>
-            <p>${Utils.escapeHtml(I18n.t("notifications-load-failed"))}</p>
-          </div>
-        `;
+        list.innerHTML = renderStateView({
+          kind: "error",
+          icon: "icon-triangle-alert",
+          message: I18n.t("notifications-load-failed"),
+          compact: true,
+        });
         return;
       }
     }
@@ -603,12 +604,11 @@ async function renderNotifications() {
   });
 
   if (notifications.length === 0) {
-    list.innerHTML = `
-      <div class="notification-empty">
-        <i class="icon-inbox"></i>
-        <p>${Utils.escapeHtml(I18n.label(EMPTY_TAB_LABELS, currentTab))}</p>
-      </div>
-    `;
+    list.innerHTML = renderStateView({
+      icon: "icon-inbox",
+      message: I18n.label(EMPTY_TAB_LABELS, currentTab),
+      compact: true,
+    });
     return;
   }
 
