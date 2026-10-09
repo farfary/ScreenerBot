@@ -555,7 +555,8 @@ export function formatPercent(value, { style = "plain", decimals = 2, fallback =
  * A SOL amount at up to `decimals`, without padded fraction zeros ("0.050" -> "0.05").
  * A table cell passes `trim: false` so a column keeps one fixed decimal count. With
  * `subscript`, a non-zero amount too small for `decimals` takes the price notation
- * (5.29e-9 -> "0.0₈5290") instead of reading as zero.
+ * (5.29e-9 -> "0.0₈5290") instead of reading as zero, and a true zero reads "0" so it
+ * is never mistaken for a rounded tiny amount.
  */
 export function formatSol(
   amount,
@@ -567,9 +568,10 @@ export function formatSol(
   }
   const digits = num.toFixed(decimals);
   const belowResolution = subscript && num !== 0 && Number(digits) === 0;
+  const trueZero = subscript && num === 0;
   const formatted = belowResolution
     ? formatPriceSubscript(num, { trim })
-    : localizeDecimal(trim ? trimZeros(digits) : digits);
+    : localizeDecimal(trim || trueZero ? trimZeros(digits) : digits);
   if (suffix === undefined) {
     return displayed(I18n.t("format-native-amount", { amount: formatted }));
   }

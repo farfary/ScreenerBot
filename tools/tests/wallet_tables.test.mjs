@@ -7,7 +7,7 @@
  * name in the Secondaries, Archive and Watched tables uses one font and weight, and no
  * toolbar chip repeats its label inside its value ("SOL 4.2187 SOL"). A holding worth less
  * than the Value column's resolution keeps its digits in subscript notation rather than
- * reading "0.0000"; only a holding without a price reads "—". Every listed wallet shows the
+ * reading "0.0000", a true zero reads "0", and only a holding without a price reads "—". Every listed wallet shows the
  * SOL balance the list response carries for it, in the Main Wallet chip and in the Secondaries
  * and Archive Balance column; only a balance the server could not read is "—".
  *
@@ -91,7 +91,7 @@ test("every wallet table names a wallet in one font and weight", async (t) => {
   assert.equal(all.length, 1, `wallet names render in ${JSON.stringify(styles)}`);
 });
 
-test("the holdings Value column keeps a tiny value's digits and dashes only an unpriced one", async (t) => {
+test("the holdings Value column keeps a tiny value's digits, reads a true zero as 0 and dashes only an unpriced one", async (t) => {
   const holdings = JSON.parse(readFileSync(`${FIXTURES_ROOT}/wallets/wallet_tokens.json`, "utf8"));
   const [tiny, zero, unpriced] = holdings.tokens;
   tiny.value_sol = 5.29e-9;
@@ -105,7 +105,7 @@ test("the holdings Value column keeps a tiny value's digits and dashes only an u
       .evaluate((node) => node.textContent.replace(/[\u2066-\u2069]/g, "").trim());
   await page.waitForSelector(`#tokens-datatable-root tr[data-row-id="${tiny.mint}"]`);
   assert.equal(await cell(tiny.mint), "0.0₈5290");
-  assert.equal(await cell(zero.mint), "0.0000");
+  assert.equal(await cell(zero.mint), "0");
   assert.equal(await cell(unpriced.mint), "—");
 });
 
@@ -135,7 +135,7 @@ test("every listed wallet shows the balance its list row carries", async (t) => 
     3: "0.0₈5000",
   });
   assert.deepEqual(await balances("archive", "#archive-table-container"), {
-    4: "0.0000",
+    4: "0",
     5: "—",
   });
 });

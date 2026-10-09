@@ -278,6 +278,12 @@ test("surface formatter options: trimmed fixed text, extra decimals, zero sign a
   // A free-standing amount drops padded zeros; a table cell keeps its column's fixed count.
   assert.equal(fmt.formatSol(0.05), "0.05 SOL");
   assert.equal(fmt.formatSol(0.05, { decimals: 4, trim: false }), "0.0500 SOL");
+  // A wide-range amount column: a tiny amount keeps its digits, a true zero reads "0".
+  const column = { decimals: 4, trim: false, subscript: true };
+  assert.equal(fmt.formatSol(0, column), "0 SOL");
+  assert.equal(fmt.formatSol(-0, column), "0 SOL");
+  assert.equal(fmt.formatSol(5.29e-9, column), "0.0₈5290 SOL");
+  assert.equal(fmt.formatSol(0.5, column), "0.5000 SOL");
   assert.equal(fmt.formatSignedSol(0.25), "+0.25 SOL");
   assert.equal(fmt.formatSignedSol(0.25, { minDecimals: 4, unit: false }), "+0.2500");
   assert.match(fmt.formatPnL(-1.5), />-1\.5 SOL</);

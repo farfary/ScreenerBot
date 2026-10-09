@@ -2317,7 +2317,7 @@
 {"fn":"formatSol","args":[0.00003,{"decimals":4,"suffix":"","trim":false,"subscript":true}],"out":"0.0₄3000"},
 {"fn":"formatSol","args":[-5.29e-9,{"decimals":4,"subscript":true}],"out":"-0.0₈529 SOL"},
 {"fn":"formatSol","args":[0.00012,{"decimals":4,"suffix":"","trim":false,"subscript":true}],"out":"0.0001"},
-{"fn":"formatSol","args":[0,{"decimals":4,"suffix":"","trim":false,"subscript":true}],"out":"0.0000"},
+{"fn":"formatSol","args":[0,{"decimals":4,"suffix":"","trim":false,"subscript":true}],"out":"0"},
 {"fn":"formatSol","args":[5.29e-9,{"decimals":4,"suffix":"","trim":false}],"out":"0.0000"},
 {"fn":"formatPnL","args":[0],"out":"<span class=\"pnl-neutral\">0 SOL</span>"},
 {"fn":"formatPnL","args":[0,{"decimals":2}],"out":"<span class=\"pnl-neutral\">0 SOL</span>"},
