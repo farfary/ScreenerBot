@@ -15,6 +15,7 @@ import { HintTrigger } from "../../ui/hint_popover.js";
 import { enhanceAllSelects } from "../../ui/custom_select.js";
 import { renderAddress } from "../../ui/token_identity.js";
 import { apiErrorMessage } from "../../core/request_manager.js";
+import { renderStateView } from "../../ui/state_view.js";
 
 // Ids are the states of a multi-wallet session.
 const SESSION_STATE_LABELS = Object.freeze({
@@ -834,13 +835,11 @@ async function handleMultiSellScan() {
     const data = await response.json();
 
     if (data.wallets.length === 0) {
-      walletList.innerHTML = `
-        <div class="empty-state">
-          <i class="icon-inbox"></i>
-          <p data-l10n-id="tools-multi-sell-empty"></p>
-        </div>
-      `;
-      I18n.localizeTree(walletList);
+      walletList.innerHTML = renderStateView({
+        icon: "icon-inbox",
+        message: I18n.t("tools-multi-sell-empty"),
+        compact: true,
+      });
       walletsSection.style.display = "block";
       return;
     }

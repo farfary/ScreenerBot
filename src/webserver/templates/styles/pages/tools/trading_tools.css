@@ -496,29 +496,3 @@
   max-height: 300px;
   overflow-y: auto;
 }
-
-.holder-watch-tool .hw-token-list .empty-state {
-  display: flex;
-  flex-direction: column;
-  align-items: center;
-  justify-content: center;
-  gap: var(--spacing-xs);
-  padding: var(--spacing-xl);
-  color: var(--text-secondary);
-  text-align: center;
-}
-
-.holder-watch-tool .hw-token-list .empty-state i {
-  font-size: 2rem;
-  opacity: 0.5;
-}
-
-.holder-watch-tool .hw-token-list .empty-state p {
-  margin: 0;
-  font-weight: 500;
-}
-
-.holder-watch-tool .hw-token-list .empty-state small {
-  font-size: 0.75rem;
-  color: var(--text-muted);
-}

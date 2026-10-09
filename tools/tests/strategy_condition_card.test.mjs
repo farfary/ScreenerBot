@@ -59,6 +59,7 @@ function editorFor(conditions, confirm = async () => ({ confirmed: false })) {
     $: () => null,
     $$: () => [],
     Utils: { escapeHtml },
+    renderStateView: () => "",
     announce: () => {},
     confirm,
     enhanceAllSelects: () => {},

@@ -15,6 +15,7 @@ import { typeIcon, typeLabel } from "./transaction_type.js";
 import { directionBadge } from "./transaction_direction.js";
 import { statusBadge } from "./transaction_status.js";
 import { venueLabel } from "./venue.js";
+import { renderStateView } from "./state_view.js";
 import { explorerMenuButton, openExplorerMenu } from "./context_menu.js";
 import {
   getIdentity,
@@ -143,7 +144,7 @@ export class TransactionDetailsDialog {
   _showError(message) {
     const content = this.dialogEl?.querySelector(".tab-content.active");
     if (content) {
-      content.innerHTML = `<div class="error-state"><i class="icon-circle-alert"></i><p>${Utils.escapeHtml(message)}</p></div>`;
+      content.innerHTML = renderStateView({ kind: "error", icon: "icon-circle-alert", message });
     }
   }
 
@@ -902,7 +903,10 @@ export class TransactionDetailsDialog {
     const instructions = tx.instructions || tx.instruction_info || [];
 
     if (instructions.length === 0) {
-      content.innerHTML = `<div class="empty-state"><i class="icon-code"></i><p>${Utils.escapeHtml(I18n.t("transactions-dialog-instructions-empty"))}</p></div>`;
+      content.innerHTML = renderStateView({
+        icon: "icon-code",
+        message: I18n.t("transactions-dialog-instructions-empty"),
+      });
       return;
     }
 
@@ -990,7 +994,10 @@ export class TransactionDetailsDialog {
     const logs = tx.log_messages || [];
 
     if (logs.length === 0) {
-      content.innerHTML = `<div class="empty-state"><i class="icon-file-text"></i><p>${Utils.escapeHtml(I18n.t("transactions-dialog-logs-empty"))}</p></div>`;
+      content.innerHTML = renderStateView({
+        icon: "icon-file-text",
+        message: I18n.t("transactions-dialog-logs-empty"),
+      });
       return;
     }
 
@@ -1075,7 +1082,10 @@ export class TransactionDetailsDialog {
     const ataOps = tx.ata_operations || [];
 
     if (!ataAnalysis && ataOps.length === 0) {
-      content.innerHTML = `<div class="empty-state"><i class="icon-layers"></i><p>${Utils.escapeHtml(I18n.t("transactions-dialog-ata-empty"))}</p></div>`;
+      content.innerHTML = renderStateView({
+        icon: "icon-layers",
+        message: I18n.t("transactions-dialog-ata-empty"),
+      });
       return;
     }
 

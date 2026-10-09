@@ -119,9 +119,9 @@ export const views = [
       { selector: "#stats-extremes:not([hidden]) #best-trade.positive" },
     ],
     empty: [
-      { selector: "#daily-pnl .info-state", text: "No closed trades in this window" },
+      { selector: "#daily-pnl .state-view-empty", text: "No closed trades in this window" },
       {
-        selector: "#exit-breakdown .info-state",
+        selector: "#exit-breakdown .state-view-empty",
         text: "No closed trades in the last \\W*30\\W* days",
       },
     ],
@@ -142,17 +142,17 @@ export const views = [
     ],
     empty: [
       {
-        selector: "#entry-strategies .strategy-list-state.is-empty",
+        selector: "#entry-strategies .state-view-empty",
         text: "No strategies defined",
       },
-      { selector: "#exit-strategies .strategy-list-state.is-empty", text: "No strategies defined" },
+      { selector: "#exit-strategies .state-view-empty", text: "No strategies defined" },
     ],
   },
   {
     name: "strategies editor",
     click: [tab("strategies")],
     populated: [{ selector: "#strategy-list .strategy-item", min: 5 }],
-    empty: [{ selector: "#strategy-list .empty-state", text: "No strategies yet" }],
+    empty: [{ selector: "#strategy-list .state-view-empty", text: "No strategies yet" }],
     dialogs: [
       {
         trigger: "#create-strategy",

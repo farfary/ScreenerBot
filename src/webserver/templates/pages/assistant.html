@@ -547,13 +547,15 @@
         <div class="instructions-list-container">
           <div class="instructions-list" id="instructions-list">
             <!-- Rendered by JavaScript -->
-            <div class="empty-state" id="no-instructions">
-              <i class="empty-icon icon-file-text"></i>
-              <p class="empty-text" data-l10n-id="assistant-instructions-empty"></p>
+            <div class="state-view state-view-empty state-view-compact" role="status" aria-live="polite">
+              <div class="state-view-heading">
+                <i class="state-view-icon icon-file-text" aria-hidden="true"></i>
+                <span class="state-view-message" data-l10n-id="assistant-instructions-empty"></span>
+              </div>
               <button
                 type="button"
-                class="btn btn-secondary"
-                id="empty-add-instruction-btn"
+                class="btn btn-sm btn-secondary state-view-action"
+                data-action="create-instruction"
                 data-l10n-id="assistant-instructions-empty-add"
               ></button>
             </div>
@@ -621,17 +623,16 @@
         <!-- Task List -->
         <div class="automation-list-container">
           <div class="automation-list" id="automation-list">
-            <div class="empty-state" id="no-automation-tasks">
-              <i class="empty-icon icon-zap"></i>
-              <p class="empty-text" data-l10n-id="assistant-automation-empty"></p>
-              <p
-                class="empty-state-subtitle"
-                data-l10n-id="assistant-automation-empty-subtitle"
-              ></p>
+            <div class="state-view state-view-empty state-view-compact" role="status" aria-live="polite">
+              <div class="state-view-heading">
+                <i class="state-view-icon icon-zap" aria-hidden="true"></i>
+                <span class="state-view-title" data-l10n-id="assistant-automation-empty"></span>
+              </div>
+              <div class="state-view-message" data-l10n-id="assistant-automation-empty-subtitle"></div>
               <button
                 type="button"
-                class="btn btn-secondary"
-                id="empty-add-automation-btn"
+                class="btn btn-sm btn-secondary state-view-action"
+                data-action="create-automation-task"
                 data-l10n-id="assistant-automation-empty-add"
               ></button>
             </div>

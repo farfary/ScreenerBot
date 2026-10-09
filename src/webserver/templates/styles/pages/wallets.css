@@ -66,12 +66,6 @@
   margin: var(--spacing-lg);
 }
 
-/* The page-wide icon centering collapses line height; the notice icon keeps its
-   own line so it stays clear of the title. */
-.wallets-page .wallets-setup-gate .empty-state-icon {
-  line-height: 1;
-}
-
 /* =============================================================================
    Main Wallet Section - Enhanced Design
    ============================================================================= */

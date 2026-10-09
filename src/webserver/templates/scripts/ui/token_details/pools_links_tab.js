@@ -244,12 +244,11 @@ export function renderLinksTab(token, options = {}) {
         ${buildSocialSection(socials, { escapeHtml })}
         ${
           websites.length === 0 && socials.length === 0
-            ? `
-              <div class="links-empty-notice">
-                <i class="icon-link-2-off" aria-hidden="true"></i>
-                <span>${esc(I18n.t("tokens-links-empty"))}</span>
-              </div>
-            `
+            ? renderStateView({
+                icon: "icon-link-2-off",
+                message: I18n.t("tokens-links-empty"),
+                compact: true,
+              })
             : ""
         }
       </div>

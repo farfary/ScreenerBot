@@ -210,16 +210,6 @@
   opacity: 1;
 }
 
-.links-empty-notice {
-  display: flex;
-  align-items: center;
-  gap: 8px;
-  padding: 15px 0;
-  border-top: 1px solid var(--border-color);
-  color: var(--text-muted);
-  font-size: 0.74rem;
-}
-
 @media (width <= 900px) {
   .links-container {
     grid-template-columns: 1fr;

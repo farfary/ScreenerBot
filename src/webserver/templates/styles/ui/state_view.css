@@ -3,11 +3,14 @@
 
 /* The one loading / empty / error state - see scripts/ui/state_view.js. It
    fills the space its content would take and centres a heading row (a bare glyph
-   inline with the title), a message and an optional Retry button, so an empty or
-   failed view reads the same in a dialog tab, a Settings section, a table body and
-   the Actions panel. */
+   inline with the title, at the title's size), a message and an optional Retry
+   button, so an empty or failed view reads the same in a dialog tab, a Settings
+   section, a table body and the Actions panel. */
 
 .state-view {
+  --state-view-title-size: 0.95rem;
+  --state-view-message-size: 0.82rem;
+
   display: flex;
   flex-direction: column;
   align-items: center;
@@ -37,8 +40,17 @@
 .state-view-icon {
   flex: none;
   color: var(--text-muted);
-  font-size: 1.15rem;
+  font-size: var(--state-view-title-size);
   opacity: 0.75;
+}
+
+.state-view-icon:has(+ .state-view-message) {
+  font-size: var(--state-view-message-size);
+}
+
+.state-view-success .state-view-icon {
+  color: var(--success-color);
+  opacity: 1;
 }
 
 .state-view-error .state-view-icon {
@@ -46,18 +58,19 @@
 }
 
 .state-view-title {
-  font-size: 0.95rem;
+  font-size: var(--state-view-title-size);
   font-weight: 650;
   color: var(--text-primary);
 }
 
 .state-view-message {
-  font-size: 0.82rem;
+  font-size: var(--state-view-message-size);
   line-height: 1.5;
   color: var(--text-secondary);
   max-width: 360px;
 }
 
-.state-view-retry {
+.state-view-retry,
+.state-view-action {
   margin-top: var(--spacing-sm);
 }

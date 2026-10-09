@@ -433,7 +433,7 @@ function buildTransferFeeSection(token) {
         </div>
         `
           : `
-        <div class="security-empty-line is-good">
+        <div class="security-clear-line is-good">
           <i class="icon-shield"></i>
           <span>${esc(I18n.t("tokens-security-transfer-none"))}</span>
         </div>
@@ -451,7 +451,7 @@ function buildRisksSection(risks, options = {}) {
     return `
       <section class="security-detail-section">
         ${buildSectionHeader(`<span class="security-section-title">${esc(I18n.t("tokens-security-risks-title"))}</span>`)}
-        <div class="security-empty-line is-good">
+        <div class="security-clear-line is-good">
           <i class="icon-sparkles"></i>
           <span>${esc(I18n.t("tokens-security-risks-none"))}</span>
         </div>

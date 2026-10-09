@@ -9,6 +9,7 @@ import { $, $$ } from "../core/dom.js";
 import * as Utils from "../core/utils.js";
 import * as AppState from "../core/app_state.js";
 import { ConfirmationDialog } from "../ui/confirmation_dialog.js";
+import { renderStateView } from "../ui/state_view.js";
 import { playToggleOn, playToggleOff, playSuccess, playError } from "../core/sounds.js";
 import { ChatWidget } from "../core/chat_widget.js";
 import { TabBar, TabBarManager } from "../ui/tab_bar.js";
@@ -321,7 +322,11 @@ function createLifecycle() {
     if (!container) return;
 
     if (!decisions || decisions.length === 0) {
-      container.innerHTML = `<div class="empty-state">${Utils.escapeHtml(I18n.t("assistant-decisions-empty"))}</div>`;
+      container.innerHTML = renderStateView({
+        icon: "icon-inbox",
+        message: I18n.t("assistant-decisions-empty"),
+        compact: true,
+      });
       return;
     }
 
@@ -630,9 +635,14 @@ function createLifecycle() {
       addTrackedListener(newBtn, "click", () => instructionsTab.createInstruction());
     }
 
-    const emptyBtn = $("#empty-add-instruction-btn");
-    if (emptyBtn) {
-      addTrackedListener(emptyBtn, "click", () => instructionsTab.createInstruction());
+    // The list's empty state is re-rendered, so its call to action is wired on the list.
+    const list = $("#instructions-list");
+    if (list) {
+      addTrackedListener(list, "click", (event) => {
+        if (event.target.closest('[data-action="create-instruction"]')) {
+          instructionsTab.createInstruction();
+        }
+      });
     }
   }
 
@@ -663,7 +673,12 @@ function createLifecycle() {
       console.error("[Assistant] Error loading history:", error);
       const container = $("#history-list");
       if (container) {
-        container.innerHTML = `<div class="empty-state">${Utils.escapeHtml(I18n.t("assistant-history-load-failed"))}</div>`;
+        container.innerHTML = renderStateView({
+          kind: "error",
+          icon: "icon-circle-alert",
+          message: I18n.t("assistant-history-load-failed"),
+          compact: true,
+        });
       }
     }
   }
@@ -676,11 +691,11 @@ function createLifecycle() {
     if (!container) return;
 
     if (!decisions || decisions.length === 0) {
-      container.innerHTML = `
-        <div class="empty-state">
-          <p class="empty-text">${Utils.escapeHtml(I18n.t("assistant-history-empty"))}</p>
-        </div>
-      `;
+      container.innerHTML = renderStateView({
+        icon: "icon-history",
+        message: I18n.t("assistant-history-empty"),
+        compact: true,
+      });
       return;
     }
 
@@ -853,7 +868,6 @@ function createLifecycle() {
   api.configureProvider = providersTab.configureProvider;
 
   // Instructions Tab API
-  api.createInstruction = instructionsTab.createInstruction;
   api.saveNewInstruction = instructionsTab.saveNewInstruction;
   api.toggleInstruction = instructionsTab.toggleInstruction;
   api.editInstruction = instructionsTab.editInstruction;
@@ -866,7 +880,6 @@ function createLifecycle() {
   api.customizeTemplate = instructionsTab.customizeTemplate;
 
   // Automation Tab API
-  api.createAutomationTask = automationTab.createAutomationTask;
   api.saveNewAutomationTask = automationTab.saveNewAutomationTask;
   api.saveEditedAutomationTask = automationTab.saveEditedAutomationTask;
   api.updateScheduleHint = automationTab.updateScheduleHint;

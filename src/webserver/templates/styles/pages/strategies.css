@@ -179,29 +179,12 @@
   display: inline-flex;
 }
 
-/* Empty state — centered placeholder when no strategy is selected */
-.editor-empty {
+/* Holds the editor's empty state, filling the editor while no strategy is selected */
+.editor-placeholder {
   flex: 1;
   display: flex;
   flex-direction: column;
-  align-items: center;
-  justify-content: center;
-  gap: 10px;
-  color: var(--text-muted);
   pointer-events: none;
-}
-
-.editor-empty i {
-  font-size: 2.25rem;
-  opacity: 0.2;
-  line-height: 1;
-}
-
-.editor-empty p {
-  font-size: 0.82rem;
-  color: var(--text-muted);
-  margin: 0;
-  text-align: center;
 }
 
 /* Scrollable Content */

@@ -132,14 +132,16 @@ export const views = [
       { selector: "#chat-panel .cw-chat-messages .message", min: 4 },
     ],
     empty: [
-      { selector: "#chat-panel .cw-sessions-list .empty-state", text: "No chat sessions yet" },
+      { selector: "#chat-panel .cw-sessions-list .state-view-empty", text: "No chat sessions yet" },
     ],
   },
   {
     name: "overview",
     click: [tab("stats")],
     populated: [{ selector: "#recent-decisions-container .decision-card", min: 4 }],
-    empty: [{ selector: "#recent-decisions-container .empty-state", text: "No recent decisions" }],
+    empty: [
+      { selector: "#recent-decisions-container .state-view-empty", text: "No recent decisions" },
+    ],
   },
   {
     name: "providers",
@@ -159,7 +161,9 @@ export const views = [
       { selector: "#instructions-list .instruction-item", min: 4 },
       { selector: "#templates-list .template-card", min: 6 },
     ],
-    empty: [{ selector: "#instructions-list .empty-state", text: "No custom instructions yet" }],
+    empty: [
+      { selector: "#instructions-list .state-view-empty", text: "No custom instructions yet" },
+    ],
     dialogs: [
       modal("#new-instruction-btn", ".instruction-modal"),
       modal("#templates-list .template-card", ".instruction-modal"),
@@ -173,7 +177,7 @@ export const views = [
       { selector: "#automation-runs-list .automation-run-item", min: 3 },
     ],
     empty: [
-      { selector: "#automation-list .empty-state", text: "No scheduled tasks yet" },
+      { selector: "#automation-list .state-view-empty", text: "No scheduled tasks yet" },
       { selector: "#automation-runs-list .automation-runs-empty", text: "No runs yet" },
     ],
     dialogs: [
@@ -185,7 +189,7 @@ export const views = [
     name: "history",
     click: [tab("history")],
     populated: [{ selector: "#history-list .history-table tbody tr", min: 4 }],
-    empty: [{ selector: "#history-list .empty-state", text: "No LLM-analysis requests yet" }],
+    empty: [{ selector: "#history-list .state-view-empty", text: "No LLM-analysis requests yet" }],
   },
   {
     name: "testing",

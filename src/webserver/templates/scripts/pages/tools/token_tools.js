@@ -23,6 +23,7 @@ import { RISK_SEVERITY_LABELS } from "../../ui/risk_severity.js";
 import { venueLabel } from "../../ui/venue.js";
 import { renderAddress } from "../../ui/token_identity.js";
 import { rugcheckRiskDescription, rugcheckRiskName } from "../../ui/rugcheck_risk.js";
+import { renderStateView } from "../../ui/state_view.js";
 
 // Ids are the bands of getTaScoreBand.
 const SCORE_BAND_LABELS = Object.freeze({
@@ -274,11 +275,12 @@ function renderHolderWatchContent(container, actionsContainer, config) {
             </button>
           </div>
           <div id="hw-token-list" class="hw-token-list">
-            <div class="empty-state">
-              <i class="icon-eye-off"></i>
-              <p data-l10n-id="tools-holder-watch-empty"></p>
-              <small data-l10n-id="tools-holder-watch-empty-hint"></small>
-            </div>
+            ${renderStateView({
+              icon: "icon-eye-off",
+              title: I18n.t("tools-holder-watch-empty"),
+              message: I18n.t("tools-holder-watch-empty-hint"),
+              compact: true,
+            })}
           </div>
         </div>
       </div>
@@ -356,13 +358,12 @@ function renderTokenAnalyzerTool(container, actionsContainer) {
       </div>
 
       <!-- Loading State -->
-      <div id="ta-loading" class="ta-loading" style="display: none;">
-        <i class="icon-loader spin"></i>
-        <p data-l10n-id="tools-analyzer-loading"></p>
+      <div id="ta-loading" style="display: none;">
+        ${renderStateView({ kind: "loading", message: I18n.t("tools-analyzer-loading"), compact: true })}
       </div>
 
       <!-- Error State -->
-      <div id="ta-error" class="ta-error" style="display: none;"></div>
+      <div id="ta-error" style="display: none;"></div>
 
       <!-- Results Section (hidden until analyzed) -->
       <div id="ta-results" class="ta-results" style="display: none;">
@@ -390,10 +391,13 @@ function renderTokenAnalyzerTool(container, actionsContainer) {
       </div>
 
       <!-- Empty State -->
-      <div id="ta-empty" class="ta-empty-state">
-        <i class="icon-search"></i>
-        <p data-l10n-id="tools-analyzer-empty"></p>
-        <small data-l10n-id="tools-analyzer-empty-hint"></small>
+      <div id="ta-empty">
+        ${renderStateView({
+          icon: "icon-search",
+          title: I18n.t("tools-analyzer-empty"),
+          message: I18n.t("tools-analyzer-empty-hint"),
+          compact: true,
+        })}
       </div>
     </div>
   `;
@@ -493,7 +497,7 @@ async function analyzeToken(mint) {
   if (emptyEl) emptyEl.style.display = "none";
   if (errorEl) errorEl.style.display = "none";
   if (resultsEl) resultsEl.style.display = "none";
-  if (loadingEl) loadingEl.style.display = "flex";
+  if (loadingEl) loadingEl.style.display = "block";
   if (analyzeBtn) {
     analyzeBtn.disabled = true;
     analyzeBtn.innerHTML =
@@ -535,12 +539,17 @@ async function analyzeToken(mint) {
     if (loadingEl) loadingEl.style.display = "none";
     if (errorEl) {
       errorEl.style.display = "block";
-      errorEl.innerHTML = `
-        <i class="icon-circle-alert"></i>
-        <p>${escapeHtml(error.message)}</p>
-        <button class="btn btn-sm" data-l10n-id="common-action-dismiss" onclick="document.getElementById('ta-error').style.display='none'; document.getElementById('ta-empty').style.display='flex';"></button>
-      `;
-      I18n.localizeTree(errorEl);
+      errorEl.innerHTML = renderStateView({
+        kind: "error",
+        icon: "icon-circle-alert",
+        message: error.message,
+        action: { id: "dismiss-analysis-error", label: I18n.t("common-action-dismiss") },
+        compact: true,
+      });
+      errorEl.querySelector(".state-view-action").addEventListener("click", () => {
+        errorEl.style.display = "none";
+        if (emptyEl) emptyEl.style.display = "block";
+      });
     }
     if (refreshBtn) refreshBtn.disabled = true;
     if (copyBtn) copyBtn.disabled = true;
@@ -875,14 +884,12 @@ function renderTaSecurityTab() {
   const { security } = taAnalysisData;
 
   if (!security) {
-    contentEl.innerHTML = `
-      <div class="ta-empty-tab">
-        <i class="icon-shield-off"></i>
-        <p data-l10n-id="tools-analyzer-security-empty"></p>
-        <small data-l10n-id="tools-analyzer-security-empty-hint"></small>
-      </div>
-    `;
-    I18n.localizeTree(contentEl);
+    contentEl.innerHTML = renderStateView({
+      icon: "icon-shield-off",
+      title: I18n.t("tools-analyzer-security-empty"),
+      message: I18n.t("tools-analyzer-security-empty-hint"),
+      compact: true,
+    });
     return;
   }
 
@@ -999,14 +1006,12 @@ function renderTaMarketTab() {
   const { market } = taAnalysisData;
 
   if (!market) {
-    contentEl.innerHTML = `
-      <div class="ta-empty-tab">
-        <i class="icon-trending-up"></i>
-        <p data-l10n-id="tools-analyzer-market-empty"></p>
-        <small data-l10n-id="tools-analyzer-market-empty-hint"></small>
-      </div>
-    `;
-    I18n.localizeTree(contentEl);
+    contentEl.innerHTML = renderStateView({
+      icon: "icon-trending-up",
+      title: I18n.t("tools-analyzer-market-empty"),
+      message: I18n.t("tools-analyzer-market-empty-hint"),
+      compact: true,
+    });
     return;
   }
 
@@ -1113,14 +1118,12 @@ function renderTaLiquidityTab() {
   const { liquidity } = taAnalysisData;
 
   if (!liquidity) {
-    contentEl.innerHTML = `
-      <div class="ta-empty-tab">
-        <i class="icon-droplet"></i>
-        <p data-l10n-id="tools-analyzer-liquidity-empty"></p>
-        <small data-l10n-id="tools-analyzer-liquidity-empty-hint"></small>
-      </div>
-    `;
-    I18n.localizeTree(contentEl);
+    contentEl.innerHTML = renderStateView({
+      icon: "icon-droplet",
+      title: I18n.t("tools-analyzer-liquidity-empty"),
+      message: I18n.t("tools-analyzer-liquidity-empty-hint"),
+      compact: true,
+    });
     return;
   }
 

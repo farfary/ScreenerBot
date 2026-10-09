@@ -14,10 +14,12 @@
 
     <div class="sidebar-content">
       <div class="strategy-list" id="strategy-list">
-        <div class="empty-state">
-          <i class="icon-square-pen"></i>
-          <p data-l10n-id="strategies-list-empty-title"></p>
-          <small data-l10n-id="strategies-list-empty-hint"></small>
+        <div class="state-view state-view-empty state-view-compact" role="status" aria-live="polite">
+          <div class="state-view-heading">
+            <i class="state-view-icon icon-file-text" aria-hidden="true"></i>
+            <span class="state-view-title" data-l10n-id="strategies-list-empty-title"></span>
+          </div>
+          <div class="state-view-message" data-l10n-id="strategies-list-empty-hint"></div>
         </div>
       </div>
     </div>
@@ -67,19 +69,25 @@
     </header>
 
     <!-- Empty state: shown when no strategy is selected -->
-    <div class="editor-empty" id="editor-empty">
-      <i class="icon-square-pen"></i>
-      <p data-l10n-id="strategies-editor-empty"></p>
+    <div class="editor-placeholder" id="editor-empty">
+      <div class="state-view state-view-empty" role="status" aria-live="polite">
+        <div class="state-view-heading">
+          <i class="state-view-icon icon-square-pen" aria-hidden="true"></i>
+          <span class="state-view-message" data-l10n-id="strategies-editor-empty"></span>
+        </div>
+      </div>
     </div>
 
     <!-- Scrollable Content Area -->
     <div class="editor-scroll-area" id="editor-scroll-area">
       <div class="conditions-container">
         <div class="conditions-list" id="conditions-list">
-          <div class="empty-state">
-            <i class="icon-puzzle"></i>
-            <p data-l10n-id="strategies-conditions-empty-title"></p>
-            <small data-l10n-id="strategies-conditions-empty-hint"></small>
+          <div class="state-view state-view-empty state-view-compact" role="status" aria-live="polite">
+            <div class="state-view-heading">
+              <i class="state-view-icon icon-puzzle" aria-hidden="true"></i>
+              <span class="state-view-title" data-l10n-id="strategies-conditions-empty-title"></span>
+            </div>
+            <div class="state-view-message" data-l10n-id="strategies-conditions-empty-hint"></div>
           </div>
         </div>
       </div>

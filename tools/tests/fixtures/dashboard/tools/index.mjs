@@ -28,7 +28,7 @@ export const views = [
       { selector: "#tools-nav .nav-item.feature-coming-soon .status-badge.coming-soon", min: 10 },
       { selector: "#tool-actions #scan-atas-btn" },
     ],
-    empty: [{ selector: "#ata-list .empty-state", text: 'Click "Scan Wallet" to find empty ATAs' }],
+    empty: [{ selector: "#ata-list .state-view", text: 'Click "Scan Wallet" to find empty ATAs' }],
     dialogs: [
       { trigger: "#tool-hint .hint-trigger", dialog: ".hint-popover", close: ".hint-popover__close" },
     ],
@@ -37,9 +37,9 @@ export const views = [
     name: "wallet cleanup scan",
     click: ['#tools-nav .nav-item[data-tool="wallet-cleanup"]', "#scan-atas-btn"],
     populated: [
-      { selector: "#ata-list .success-state" },
+      { selector: "#ata-list .state-view-success" },
       { selector: "#tool-actions #cleanup-atas-btn:not([disabled])" },
     ],
-    empty: [{ selector: "#ata-list .empty-state", text: "No empty ATAs found - wallet is clean!" }],
+    empty: [{ selector: "#ata-list .state-view", text: "No empty ATAs found - wallet is clean!" }],
   },
 ];

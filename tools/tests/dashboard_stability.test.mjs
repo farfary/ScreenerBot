@@ -188,7 +188,8 @@ async function assertEmpty(page, view) {
 
 /**
  * A state view's glyph sits on its heading's row, never alone on a row above it: the
- * glyph's vertical centre lies within the heading text's box.
+ * glyph's vertical centre lies within the heading text's box, and the glyph is set at
+ * the heading's font size.
  */
 async function assertGlyphBesideHeading(page, selector) {
   const placement = await page.evaluate((css) => {
@@ -199,13 +200,25 @@ async function assertGlyphBesideHeading(page, selector) {
     const icon = glyph.getBoundingClientRect();
     const text = heading.getBoundingClientRect();
     const centre = icon.top + icon.height / 2;
-    return { centre, top: text.top, bottom: text.bottom };
+    const size = (node) => getComputedStyle(node).fontSize;
+    return {
+      centre,
+      top: text.top,
+      bottom: text.bottom,
+      glyphSize: size(glyph),
+      headingSize: size(heading),
+    };
   }, selector);
   if (!placement) return;
   assert.ok(
     placement.centre >= placement.top && placement.centre <= placement.bottom,
     `${selector}: the glyph (centre ${Math.round(placement.centre)}px) is not on its heading's row ` +
       `(${Math.round(placement.top)}-${Math.round(placement.bottom)}px)`
+  );
+  assert.equal(
+    placement.glyphSize,
+    placement.headingSize,
+    `${selector}: the glyph is not set at its heading's font size`
   );
 }
 

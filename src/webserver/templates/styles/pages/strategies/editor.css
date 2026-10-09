@@ -406,23 +406,6 @@
   cursor: pointer;
 }
 
-.empty-state-content .icon {
-  font-size: 3rem;
-  display: block;
-  margin-bottom: 1rem;
-}
-
-.empty-state-content h3 {
-  font-size: 1.2rem;
-  margin: 0 0 0.5rem;
-  color: var(--text-color);
-}
-
-.empty-state-content p {
-  color: var(--text-muted);
-  margin-bottom: 1.5rem;
-}
-
 .quick-start {
   display: flex;
   gap: 0.5rem;

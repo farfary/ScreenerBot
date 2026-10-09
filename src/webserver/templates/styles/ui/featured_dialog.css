@@ -595,37 +595,8 @@
 }
 
 /* =============================================================================
-   STATES + RESPONSIVE
+   SPINNER + RESPONSIVE
    ============================================================================= */
-
-.featured-state {
-  display: flex;
-  flex-direction: column;
-  align-items: center;
-  gap: var(--spacing-sm, 8px);
-  padding: 3rem 1rem;
-  color: var(--text-secondary);
-  text-align: center;
-}
-
-.featured-state i {
-  font-size: 2rem;
-  opacity: 0.6;
-}
-
-.featured-state span {
-  font-size: 0.875rem;
-}
-
-.featured-loading i {
-  color: var(--link-color);
-  opacity: 1;
-}
-
-.featured-error i {
-  color: var(--error-color);
-  opacity: 1;
-}
 
 .spin {
   animation: featured-spin 1s linear infinite;

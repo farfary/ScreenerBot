@@ -65,13 +65,13 @@ test("a failed details load offers Retry and recovers", async (t) => {
   await page.waitForSelector("body:not(.initialization-mode) main.content:not([data-loading])");
   await page.locator(ROW_SYMBOL).first().click();
 
-  const state = page.locator(`${BODY_STATE}:not([hidden]) .empty-state`);
+  const state = page.locator(`${BODY_STATE}:not([hidden]) .state-view-error`);
   await state.waitFor();
   assert.equal(
-    (await state.locator(".empty-state-title").textContent()).trim(),
+    (await state.locator(".state-view-title").textContent()).trim(),
     "Failed to load position details"
   );
-  const retry = state.locator("button.empty-state-action");
+  const retry = state.locator("button.state-view-retry");
   assert.equal((await retry.textContent()).trim(), "Retry");
 
   failDetails = false;

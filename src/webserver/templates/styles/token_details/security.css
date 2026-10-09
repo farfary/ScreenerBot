@@ -206,7 +206,7 @@
 .security-grade,
 .security-rugged,
 .security-status-text,
-.security-empty-line,
+.security-clear-line,
 .security-inline-note {
   display: inline-flex;
   align-items: center;
@@ -223,7 +223,7 @@
 .security-grade.is-good,
 .security-status-text.is-good,
 .security-detail-value.is-good,
-.security-empty-line.is-good {
+.security-clear-line.is-good {
   color: var(--success-color);
 }
 
@@ -267,7 +267,7 @@
 
 .security-rugged i,
 .security-status-text i,
-.security-empty-line i,
+.security-clear-line i,
 .security-inline-note i {
   flex: 0 0 auto;
   font-size: 0.8rem;
@@ -444,7 +444,7 @@
   white-space: nowrap;
 }
 
-.security-empty-line,
+.security-clear-line,
 .security-inline-note {
   padding: 10px 12px;
   font-size: 0.68rem;

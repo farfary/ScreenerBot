@@ -236,19 +236,6 @@
   border-radius: 0 0 var(--radius-sm) var(--radius-sm);
 }
 
-/* Empty State */
-.empty-icon {
-  width: 48px;
-  height: 48px;
-  margin-bottom: 16px;
-  opacity: 0.5;
-}
-
-.empty-text {
-  color: var(--text-secondary);
-  margin-bottom: 16px;
-}
-
 /* Templates Section (Collapsible) */
 .templates-section {
   background: var(--bg-secondary);

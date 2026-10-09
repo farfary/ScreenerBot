@@ -10,6 +10,7 @@ import { apiErrorMessage } from "../../core/request_manager.js";
 import * as Utils from "../../core/utils.js";
 import { AGENT_TOOL_LABELS } from "../../ui/agent_tool.js";
 import { ConfirmationDialog } from "../../ui/confirmation_dialog.js";
+import { renderStateView } from "../../ui/state_view.js";
 import { LLM_PROVIDER_LABELS } from "../../ui/llm_provider.js";
 import { TOOL_CALL_STATUS_LABELS } from "../../ui/tool_call_status.js";
 
@@ -135,15 +136,13 @@ export function createAutomationTab({ state, _eventCleanups, addTrackedListener 
     if (!container) return;
 
     if (!tasks || tasks.length === 0) {
-      container.innerHTML = `
-      <div class="empty-state" id="no-automation-tasks">
-        <i class="empty-icon icon-zap"></i>
-        <p class="empty-text" data-l10n-id="assistant-automation-empty"></p>
-        <p class="empty-state-subtitle" data-l10n-id="assistant-automation-empty-subtitle"></p>
-        <button class="btn btn-secondary" data-l10n-id="assistant-automation-empty-add" onclick="window.assistantPage.createAutomationTask()"></button>
-      </div>
-    `;
-      I18n.localizeTree(container);
+      container.innerHTML = renderStateView({
+        icon: "icon-zap",
+        title: I18n.t("assistant-automation-empty"),
+        message: I18n.t("assistant-automation-empty-subtitle"),
+        action: { id: "create-automation-task", label: I18n.t("assistant-automation-empty-add") },
+        compact: true,
+      });
       return;
     }
 
@@ -933,9 +932,12 @@ export function createAutomationTab({ state, _eventCleanups, addTrackedListener 
     if (newBtn) {
       addTrackedListener(newBtn, "click", createAutomationTask);
     }
-    const emptyBtn = $("#empty-add-automation-btn");
-    if (emptyBtn) {
-      addTrackedListener(emptyBtn, "click", createAutomationTask);
+    // The list's empty state is re-rendered, so its call to action is wired on the list.
+    const list = $("#automation-list");
+    if (list) {
+      addTrackedListener(list, "click", (event) => {
+        if (event.target.closest('[data-action="create-automation-task"]')) createAutomationTask();
+      });
     }
   }
 
@@ -949,7 +951,6 @@ export function createAutomationTab({ state, _eventCleanups, addTrackedListener 
     renderAutomationStats,
     renderAutomationList,
     renderAutomationRuns,
-    createAutomationTask,
     saveNewAutomationTask,
     saveEditedAutomationTask,
     updateScheduleHint,

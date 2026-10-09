@@ -13,6 +13,7 @@ import * as Hints from "../../core/hints.js";
 import { HintTrigger } from "../../ui/hint_popover.js";
 import { renderAddress, renderNamedAddress, renderSignature } from "../../ui/token_identity.js";
 import { apiErrorMessage } from "../../core/request_manager.js";
+import { renderStateView } from "../../ui/state_view.js";
 
 // Ids are the categories of the burn scan.
 const BURN_CATEGORY_LABELS = Object.freeze({
@@ -43,12 +44,12 @@ async function responseError(response) {
 }
 
 function errorStateHtml(text) {
-  return `
-      <div class="error-state">
-        <i class="icon-circle-alert"></i>
-        <p>${Utils.escapeHtml(text)}</p>
-      </div>
-    `;
+  return renderStateView({
+    kind: "error",
+    icon: "icon-circle-alert",
+    message: text,
+    compact: true,
+  });
 }
 
 // =============================================================================
@@ -84,11 +85,12 @@ function renderWalletCleanupTool(container, actionsContainer) {
             </div>
           </div>
           <div class="ata-list" id="ata-list">
-            <div class="empty-state">
-              <i class="icon-scan"></i>
-              <p data-l10n-id="tools-wallet-cleanup-prompt"></p>
-              <small data-l10n-id="tools-wallet-cleanup-prompt-hint"></small>
-            </div>
+            ${renderStateView({
+              icon: "icon-scan",
+              title: I18n.t("tools-wallet-cleanup-prompt"),
+              message: I18n.t("tools-wallet-cleanup-prompt-hint"),
+              compact: true,
+            })}
           </div>
         </div>
       </div>
@@ -128,7 +130,11 @@ async function handleScanATAs() {
 
   scanBtn.disabled = true;
   setButton(scanBtn, "icon-loader spin", I18n.t("tools-wallet-action-scanning"));
-  listEl.innerHTML = `<div class="loading-state"><i class="icon-loader spin"></i> ${Utils.escapeHtml(I18n.t("tools-wallet-cleanup-scanning"))}</div>`;
+  listEl.innerHTML = renderStateView({
+    kind: "loading",
+    message: I18n.t("tools-wallet-cleanup-scanning"),
+    compact: true,
+  });
 
   try {
     const response = await fetch("/api/tools/ata-scan");
@@ -151,21 +157,20 @@ async function handleScanATAs() {
         count: stats.empty_count,
         amount: Utils.formatSol(stats.reclaimable_native || 0),
       });
-      listEl.innerHTML = `
-        <div class="success-state">
-          <i class="icon-circle-check"></i>
-          <p>${Utils.escapeHtml(found)}</p>
-        </div>
-      `;
+      listEl.innerHTML = renderStateView({
+        kind: "success",
+        icon: "icon-circle-check",
+        message: found,
+        compact: true,
+      });
       if (cleanupBtn) cleanupBtn.disabled = false;
     } else {
-      listEl.innerHTML = `
-        <div class="empty-state">
-          <i class="icon-circle-check"></i>
-          <p data-l10n-id="tools-wallet-cleanup-clean"></p>
-        </div>
-      `;
-      I18n.localizeTree(listEl);
+      listEl.innerHTML = renderStateView({
+        kind: "success",
+        icon: "icon-circle-check",
+        message: I18n.t("tools-wallet-cleanup-clean"),
+        compact: true,
+      });
     }
   } catch (error) {
     console.error("ATA scan failed:", error);
@@ -257,10 +262,11 @@ function renderBurnTokensTool(container, actionsContainer) {
           </div>
 
           <div class="burn-token-list" id="burn-token-list">
-            <div class="empty-state">
-              <i class="icon-search"></i>
-              <p data-l10n-id="tools-burn-prompt"></p>
-            </div>
+            ${renderStateView({
+              icon: "icon-search",
+              message: I18n.t("tools-burn-prompt"),
+              compact: true,
+            })}
           </div>
 
           <div class="burn-failures" id="burn-failures" hidden></div>
@@ -311,7 +317,11 @@ async function handleScanBurnTokens() {
   burnTokensState.isLoading = true;
   scanBtn.disabled = true;
   setButton(scanBtn, "icon-loader spin", I18n.t("tools-wallet-action-scanning"));
-  listEl.innerHTML = `<div class="loading-state"><i class="icon-loader spin"></i> ${Utils.escapeHtml(I18n.t("tools-burn-scanning"))}</div>`;
+  listEl.innerHTML = renderStateView({
+    kind: "loading",
+    message: I18n.t("tools-burn-scanning"),
+    compact: true,
+  });
 
   try {
     const response = await fetch("/api/tools/burn-tokens/scan");
@@ -353,13 +363,11 @@ function renderBurnTokenList() {
   const tokens = burnTokensState.tokens;
 
   if (tokens.length === 0) {
-    listEl.innerHTML = `
-      <div class="empty-state">
-        <i class="icon-circle-check"></i>
-        <p data-l10n-id="tools-burn-empty"></p>
-      </div>
-    `;
-    I18n.localizeTree(listEl);
+    listEl.innerHTML = renderStateView({
+      icon: "icon-circle-check",
+      message: I18n.t("tools-burn-empty"),
+      compact: true,
+    });
     return;
   }
 
@@ -771,10 +779,11 @@ function renderAirdropCheckerTool(container, actionsContainer) {
         </div>
         <div class="section-content">
           <div class="airdrop-list" id="airdrop-list">
-            <div class="empty-state">
-              <i class="icon-scan"></i>
-              <p data-l10n-id="tools-airdrop-prompt"></p>
-            </div>
+            ${renderStateView({
+              icon: "icon-scan",
+              message: I18n.t("tools-airdrop-prompt"),
+              compact: true,
+            })}
           </div>
         </div>
       </div>
@@ -837,10 +846,11 @@ function renderWalletGeneratorTool(container, actionsContainer) {
         </div>
         <div class="section-content">
           <div class="generated-wallets" id="generated-wallets">
-            <div class="empty-state">
-              <i class="icon-key"></i>
-              <p data-l10n-id="tools-generator-empty"></p>
-            </div>
+            ${renderStateView({
+              icon: "icon-key",
+              message: I18n.t("tools-generator-empty"),
+              compact: true,
+            })}
           </div>
         </div>
       </div>
@@ -948,13 +958,11 @@ function renderGeneratedWallets(container) {
   if (!container) return;
 
   if (generatedWallets.length === 0) {
-    container.innerHTML = `
-      <div class="empty-state">
-        <i class="icon-key"></i>
-        <p data-l10n-id="tools-generator-empty"></p>
-      </div>
-    `;
-    I18n.localizeTree(container);
+    container.innerHTML = renderStateView({
+      icon: "icon-key",
+      message: I18n.t("tools-generator-empty"),
+      compact: true,
+    });
     return;
   }
 
@@ -1143,10 +1151,11 @@ function renderWalletConsolidationTool(container, actionsContainer) {
         </div>
         <div class="section-content">
           <div class="wc-wallets-container" id="wc-wallets-container">
-            <div class="loading-state">
-              <i class="icon-loader spin"></i>
-              <p data-l10n-id="tools-consolidation-loading-wallets"></p>
-            </div>
+            ${renderStateView({
+              kind: "loading",
+              message: I18n.t("tools-consolidation-loading-wallets"),
+              compact: true,
+            })}
           </div>
           <div class="wc-selection-summary" id="wc-selection-summary">
             <!-- Selection summary -->
@@ -1198,13 +1207,11 @@ async function loadConsolidationData() {
     refreshBtn.innerHTML = '<i class="icon-loader spin"></i>';
   }
 
-  container.innerHTML = `
-    <div class="loading-state">
-      <i class="icon-loader spin"></i>
-      <p data-l10n-id="tools-consolidation-loading-data"></p>
-    </div>
-  `;
-  I18n.localizeTree(container);
+  container.innerHTML = renderStateView({
+    kind: "loading",
+    message: I18n.t("tools-consolidation-loading-data"),
+    compact: true,
+  });
 
   try {
     const response = await fetch("/api/tools/wallets/summary");
@@ -1232,14 +1239,12 @@ async function loadConsolidationData() {
 
     // Render wallets table
     if (consolidationState.wallets.length === 0) {
-      container.innerHTML = `
-        <div class="empty-state">
-          <i class="icon-wallet"></i>
-          <p data-l10n-id="tools-consolidation-empty"></p>
-          <small data-l10n-id="tools-consolidation-empty-hint"></small>
-        </div>
-      `;
-      I18n.localizeTree(container);
+      container.innerHTML = renderStateView({
+        icon: "icon-wallet",
+        title: I18n.t("tools-consolidation-empty"),
+        message: I18n.t("tools-consolidation-empty-hint"),
+        compact: true,
+      });
       return;
     }
 

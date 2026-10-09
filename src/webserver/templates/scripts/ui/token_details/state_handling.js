@@ -141,7 +141,7 @@ export function applyStateHandlingMixin(DialogClass) {
   };
 
   /**
-   * Retry the initial load after an error-state Retry click: reset the retry
+   * Retry the initial load after a Retry click in the error state: reset the retry
    * budget, show the waiting placeholder again, and kick a fresh fetch. The
    * background poller keeps running regardless, so this is just for immediacy.
    */

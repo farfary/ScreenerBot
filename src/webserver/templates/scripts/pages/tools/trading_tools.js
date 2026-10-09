@@ -17,6 +17,7 @@ import { PoolSelector } from "../../ui/pool_selector.js";
 import { getIdentity, renderTokenCell } from "../../ui/token_identity.js";
 import { venueLabel } from "../../ui/venue.js";
 import { apiErrorMessage } from "../../core/request_manager.js";
+import { renderStateView } from "../../ui/state_view.js";
 
 // Message key of each watch type, as the badge in the active watches table.
 const WATCH_TYPE_LABELS = Object.freeze({
@@ -32,6 +33,16 @@ const WATCH_TYPE_LABELS = Object.freeze({
 // Trade Watcher state
 let twPoolSelector = null;
 let twSelectedPool = null;
+
+/** The watch list before any watch exists, in the panel and after the last one stops. */
+function tradeWatcherEmptyState() {
+  return renderStateView({
+    icon: "icon-eye-off",
+    title: I18n.t("tools-trade-watcher-empty"),
+    message: I18n.t("tools-trade-watcher-empty-hint"),
+    compact: true,
+  });
+}
 
 function renderTradeWatcherTool(container, actionsContainer) {
   const hint = Hints.getHint("tools.tradeWatcher");
@@ -112,11 +123,7 @@ function renderTradeWatcherTool(container, actionsContainer) {
         </div>
         <div class="section-content">
           <div class="tw-watches-table" id="tw-watches-table">
-            <div class="empty-state">
-              <i class="icon-eye-off"></i>
-              <p data-l10n-id="tools-trade-watcher-empty"></p>
-              <small data-l10n-id="tools-trade-watcher-empty-hint"></small>
-            </div>
+            ${tradeWatcherEmptyState()}
           </div>
         </div>
       </div>
@@ -428,14 +435,7 @@ async function loadTwActiveWatches() {
     if (stopAllBtn) stopAllBtn.disabled = watches.length === 0;
 
     if (watches.length === 0) {
-      tableEl.innerHTML = `
-        <div class="empty-state">
-          <i class="icon-eye-off"></i>
-          <p data-l10n-id="tools-trade-watcher-empty"></p>
-          <small data-l10n-id="tools-trade-watcher-empty-hint"></small>
-        </div>
-      `;
-      I18n.localizeTree(tableEl);
+      tableEl.innerHTML = tradeWatcherEmptyState();
       return;
     }
 
@@ -491,13 +491,12 @@ async function loadTwActiveWatches() {
     });
   } catch (error) {
     console.error("Failed to load watches:", error);
-    tableEl.innerHTML = `
-      <div class="error-state">
-        <i class="icon-circle-alert"></i>
-        <p data-l10n-id="tools-trade-watcher-load-failed"></p>
-      </div>
-    `;
-    I18n.localizeTree(tableEl);
+    tableEl.innerHTML = renderStateView({
+      kind: "error",
+      icon: "icon-circle-alert",
+      message: I18n.t("tools-trade-watcher-load-failed"),
+      compact: true,
+    });
   }
 }
 

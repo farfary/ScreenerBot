@@ -8,6 +8,7 @@ import { $, $$ } from "../core/dom.js";
 import * as Utils from "../core/utils.js";
 import * as AppState from "../core/app_state.js";
 import { ConfirmationDialog } from "../ui/confirmation_dialog.js";
+import { renderStateView } from "../ui/state_view.js";
 import { STRATEGY_TYPE_LABELS } from "../ui/strategy_type.js";
 import { requestManager } from "../core/request_manager.js";
 import { enhanceAllSelects } from "../ui/custom_select.js";
@@ -120,6 +121,7 @@ export function createLifecycle() {
     $,
     $$,
     Utils,
+    renderStateView,
     announce,
     confirm: (config) => ConfirmationDialog.show(config),
     enhanceAllSelects,
@@ -591,13 +593,12 @@ export function createLifecycle() {
     if (!listContainer) return;
 
     if (strategies.length === 0) {
-      listContainer.innerHTML = `
-        <div class="empty-state">
-          <span class="icon"><i class="icon-file-text"></i></span>
-          <p>${Utils.escapeHtml(I18n.t("strategies-list-empty-title"))}</p>
-          <small>${Utils.escapeHtml(I18n.t("strategies-list-empty-hint"))}</small>
-        </div>
-      `;
+      listContainer.innerHTML = renderStateView({
+        icon: "icon-file-text",
+        title: I18n.t("strategies-list-empty-title"),
+        message: I18n.t("strategies-list-empty-hint"),
+        compact: true,
+      });
       return;
     }
 

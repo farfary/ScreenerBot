@@ -86,8 +86,8 @@ test("Wallets shows the setup notice and reads no wallet route", async (t) => {
 
   const gate = page.locator("#wallets-setup-gate .setup-gate");
   await gate.waitFor();
-  assert.equal(await gate.locator(".empty-state-title").textContent(), "Wallets need setup");
-  assert.equal(await gate.locator(".empty-state-description").textContent(), REASON);
+  assert.equal(await gate.locator(".state-view-title").textContent(), "Wallets need setup");
+  assert.equal(await gate.locator(".state-view-message").textContent(), REASON);
   assert.equal(await gate.locator("button").textContent(), "Complete setup");
   assert.equal(await page.locator(".wallets-tab-panels").isVisible(), false);
   await page.waitForTimeout(500);
@@ -105,7 +105,7 @@ test("Copy Trading gates its wallet-backed controls with one reason", async (t) 
   const gate = page.locator("#copy-setup-gate .setup-gate");
   await gate.waitFor();
   assert.equal(
-    await gate.locator(".empty-state-title").textContent(),
+    await gate.locator(".state-view-title").textContent(),
     "Copy trading needs a wallet"
   );
   assert.equal(await page.locator("#copy-onboarding").isVisible(), false);
@@ -134,11 +134,8 @@ test("Transactions shows the setup notice and reads no transaction route", async
 
   const gate = page.locator("#transactions-setup-gate .setup-gate");
   await gate.waitFor();
-  assert.equal(
-    await gate.locator(".empty-state-title").textContent(),
-    "Transactions need a wallet"
-  );
-  assert.equal(await gate.locator(".empty-state-description").textContent(), REASON);
+  assert.equal(await gate.locator(".state-view-title").textContent(), "Transactions need a wallet");
+  assert.equal(await gate.locator(".state-view-message").textContent(), REASON);
   assert.equal(await page.locator("#transactions-root").isVisible(), false);
   await page.waitForTimeout(1000);
   assert.deepEqual(
@@ -154,8 +151,8 @@ test("Tools gates a wallet-backed tool with the setup notice", async (t) => {
 
   const gate = page.locator("#tools-content .setup-gate");
   await gate.waitFor();
-  assert.equal(await gate.locator(".empty-state-title").textContent(), "This tool needs a wallet");
-  assert.equal(await gate.locator(".empty-state-description").textContent(), REASON);
+  assert.equal(await gate.locator(".state-view-title").textContent(), "This tool needs a wallet");
+  assert.equal(await gate.locator(".state-view-message").textContent(), REASON);
   const scan = page.locator("#tool-actions #scan-atas-btn");
   assert.equal(await scan.isDisabled(), true);
   assert.equal(await scan.getAttribute("title"), REASON);

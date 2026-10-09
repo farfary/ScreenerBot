@@ -44,7 +44,9 @@ async function openChat(viewport) {
   const page = await context.newPage();
   page.setDefaultTimeout(WAIT_MS);
   await page.goto(`${host.origin}/assistant`);
-  await page.waitForSelector("#chat-panel .cw-sessions-list .empty-state", { state: "visible" });
+  await page.waitForSelector("#chat-panel .cw-sessions-list .state-view-empty", {
+    state: "visible",
+  });
   await page.waitForSelector("#chat-panel .quick-prompt", { state: "visible" });
   const close = async () => {
     await context.close();
@@ -60,7 +62,7 @@ test("a fresh chat offers one new-chat action and a disabled delete", async () =
       const panel = document.querySelector("#chat-panel");
       const visible = (element) => element.getClientRects().length > 0;
       const list = panel.querySelector(".cw-sessions-list");
-      const message = list.querySelector(".empty-state-description");
+      const message = list.querySelector(".state-view-message");
       const listStyle = getComputedStyle(list);
       return {
         newChat: [...panel.querySelectorAll("button")]

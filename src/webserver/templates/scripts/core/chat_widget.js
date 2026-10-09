@@ -13,6 +13,7 @@
 import * as Utils from "./utils.js";
 import { formatNumber, formatTimestamp } from "./format.js";
 import { ConfirmationDialog } from "../ui/confirmation_dialog.js";
+import { renderStateView } from "../ui/state_view.js";
 import { AGENT_TOOL_LABELS } from "../ui/agent_tool.js";
 import { TOOL_CALL_STATUS_LABELS } from "../ui/tool_call_status.js";
 import { playSuccess, playError } from "./sounds.js";
@@ -791,11 +792,11 @@ export class ChatWidget {
       const message = searchQuery
         ? I18n.t("assistant-chat-sessions-empty-search")
         : I18n.t("assistant-chat-sessions-empty");
-      container.innerHTML = `
-        <div class="empty-state compact">
-          <i class="empty-state-icon icon-message-square" aria-hidden="true"></i>
-          <p class="empty-state-description">${Utils.escapeHtml(message)}</p>
-        </div>`;
+      container.innerHTML = renderStateView({
+        icon: "icon-message-square",
+        message,
+        compact: true,
+      });
       this._prevSessionsJson = "";
       return;
     }

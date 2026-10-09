@@ -6,6 +6,7 @@
 // notice that states it and opens setup.
 import { getBootstrapState } from "../core/bootstrap.js";
 import { SetupDialog } from "./setup_dialog.js";
+import { renderStateView } from "./state_view.js";
 
 /** True while the app runs in Explore Mode, without a wallet or RPC. */
 export function setupRequired() {
@@ -30,16 +31,12 @@ export function gateControl(control) {
 /** Paints the notice into `container`: a title, the reason and the setup action. */
 export function renderSetupGate(container, title) {
   if (!container) return;
-  container.innerHTML = `
-    <div class="empty-state setup-gate" role="status">
-      <i class="empty-state-icon icon-wallet" aria-hidden="true"></i>
-      <h3 class="empty-state-title"></h3>
-      <p class="empty-state-description"></p>
-      <button class="btn btn-primary empty-state-action" type="button"></button>
-    </div>`;
-  container.querySelector(".empty-state-title").textContent = title;
-  container.querySelector(".empty-state-description").textContent = setupRequiredReason();
-  const action = container.querySelector(".empty-state-action");
-  action.textContent = I18n.t("shell-explore-action");
-  action.addEventListener("click", () => SetupDialog.show());
+  container.innerHTML = `<div class="setup-gate">${renderStateView({
+    icon: "icon-wallet",
+    title,
+    message: setupRequiredReason(),
+    action: { id: "open-setup", label: I18n.t("shell-explore-action"), primary: true },
+    compact: true,
+  })}</div>`;
+  container.querySelector(".state-view-action").addEventListener("click", () => SetupDialog.show());
 }

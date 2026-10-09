@@ -10,6 +10,7 @@ import { formatFixed } from "../core/format.js";
 import * as Utils from "../core/utils.js";
 import { TabBar, TabBarManager } from "../ui/tab_bar.js";
 import { DataTable } from "../ui/data_table.js";
+import { renderStateView } from "../ui/state_view.js";
 import { renderTokenRowCell } from "../ui/token_identity.js";
 import { ConfirmationDialog } from "../ui/confirmation_dialog.js";
 import { closeReasonText } from "../ui/trade_reason.js";
@@ -617,7 +618,11 @@ function createLifecycle() {
     }
 
     if (!Array.isArray(days) || days.every((d) => (d.trades || 0) === 0)) {
-      container.innerHTML = `<div class="info-state"><i class="icon-inbox"></i><span>${Utils.escapeHtml(I18n.t("trader-stats-empty"))}</span></div>`;
+      container.innerHTML = renderStateView({
+        icon: "icon-inbox",
+        message: I18n.t("trader-stats-empty"),
+        compact: true,
+      });
       _lastDailyKey = null;
       return;
     }
@@ -723,7 +728,7 @@ function createLifecycle() {
         periodDays === 1
           ? I18n.t("trader-exit-empty-day")
           : I18n.t("trader-exit-empty-days", { count: periodDays, amount: String(periodDays) });
-      container.innerHTML = `<div class="info-state"><i class="icon-inbox"></i><span>${Utils.escapeHtml(message)}</span></div>`;
+      container.innerHTML = renderStateView({ icon: "icon-inbox", message, compact: true });
       _lastExitKey = null;
       return;
     }
@@ -808,12 +813,11 @@ function createLifecycle() {
     ["#entry-strategies", "#exit-strategies"].forEach((selector) => {
       const container = $(selector);
       if (!container) return;
-      container.innerHTML = `
-        <div class="strategy-list-state">
-          <i class="icon-loader spinning"></i>
-          <span>${Utils.escapeHtml(I18n.t("trader-strategy-loading"))}</span>
-        </div>
-      `;
+      container.innerHTML = renderStateView({
+        kind: "loading",
+        message: I18n.t("trader-strategy-loading"),
+        compact: true,
+      });
     });
   }
 
@@ -854,12 +858,12 @@ function createLifecycle() {
     ["#entry-strategies", "#exit-strategies"].forEach((selector) => {
       const container = $(selector);
       if (!container) return;
-      container.innerHTML = `
-        <div class="strategy-list-state is-error">
-          <i class="icon-circle-alert"></i>
-          <span>${Utils.escapeHtml(I18n.t("trader-strategy-load-failed"))}</span>
-        </div>
-      `;
+      container.innerHTML = renderStateView({
+        kind: "error",
+        icon: "icon-circle-alert",
+        message: I18n.t("trader-strategy-load-failed"),
+        compact: true,
+      });
     });
   }
 
@@ -871,12 +875,11 @@ function createLifecycle() {
     if (!container) return;
 
     if (strategies.length === 0) {
-      container.innerHTML = `
-        <div class="strategy-list-state is-empty">
-          <i class="icon-circle"></i>
-          <span>${Utils.escapeHtml(I18n.t("trader-strategy-empty"))}</span>
-        </div>
-      `;
+      container.innerHTML = renderStateView({
+        icon: "icon-circle",
+        message: I18n.t("trader-strategy-empty"),
+        compact: true,
+      });
       return;
     }
 

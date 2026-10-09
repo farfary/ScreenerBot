@@ -17,6 +17,7 @@
  */
 import { Poller } from "../../core/poller.js";
 import * as Utils from "../../core/utils.js";
+import { renderStateView } from "../state_view.js";
 import {
   CHART_TIMEFRAMES,
   barForTimestamp,
@@ -140,8 +141,11 @@ export function applyChartMixin(PositionDetailsDialog) {
     if (!container) return;
 
     if (!window.createAdvancedChart) {
-      container.innerHTML =
-        `<div class="pdd-chart-empty"><i class="icon-circle-alert"></i><p>${esc(I18n.t("positions-chart-unavailable"))}</p></div>`;
+      container.innerHTML = renderStateView({
+        kind: "error",
+        icon: "icon-circle-alert",
+        message: I18n.t("positions-chart-unavailable"),
+      });
       return;
     }
 

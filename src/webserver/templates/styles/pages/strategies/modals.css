@@ -185,39 +185,6 @@
   color: var(--error-color);
 }
 
-/* Empty State - Scoped to strategies page */
-.strategies-page .empty-state {
-  display: flex;
-  flex-direction: column;
-  align-items: center;
-  justify-content: center;
-  padding: 3rem 2rem;
-  text-align: center;
-  color: var(--text-muted);
-}
-
-.strategies-page .empty-state .icon,
-.strategies-page .empty-state i[class^="icon-"] {
-  font-size: 3rem;
-  margin-bottom: 1rem;
-  opacity: 0.3;
-  color: var(--text-muted);
-  line-height: 1;
-}
-
-.strategies-page .empty-state p {
-  margin: 0.5rem 0 0.25rem;
-  font-size: 1rem;
-  font-weight: 600;
-  color: var(--text-color);
-}
-
-.strategies-page .empty-state small {
-  font-size: 0.8rem;
-  opacity: 0.7;
-  color: var(--text-secondary);
-}
-
 /* Buttons - Scoped to strategies page */
 .strategies-page .btn {
   padding: 0.5rem 0.875rem;

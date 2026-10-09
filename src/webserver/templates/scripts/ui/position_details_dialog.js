@@ -17,6 +17,7 @@ import { requestManager } from "../core/request_manager.js";
 import { notificationManager } from "../core/notifications.js";
 import { pushEscapeHandler } from "../core/escape_stack.js";
 import { HintTrigger } from "./hint_popover.js";
+import { renderStateView } from "./state_view.js";
 import { POSITION_MANAGEMENT_LABELS } from "./position_management.js";
 import { applyHeaderMixin } from "./position_details/header.js";
 import { applySummaryMixin } from "./position_details/summary.js";
@@ -223,16 +224,13 @@ export class PositionDetailsDialog {
   _showLoadError() {
     const state = this.dialogEl?.querySelector("#pddBodyState");
     if (!state) return;
-    state.innerHTML = `
-      <div class="empty-state" role="alert">
-        <i class="empty-state-icon icon-circle-alert" aria-hidden="true"></i>
-        <p class="empty-state-title">${Utils.escapeHtml(I18n.t("positions-details-load-failed"))}</p>
-        <button class="btn btn-secondary empty-state-action" type="button">
-          <i class="icon-refresh-cw" aria-hidden="true"></i>
-          <span>${Utils.escapeHtml(I18n.t("common-action-retry"))}</span>
-        </button>
-      </div>`;
-    const retry = state.querySelector(".empty-state-action");
+    state.innerHTML = renderStateView({
+      kind: "error",
+      icon: "icon-circle-alert",
+      title: I18n.t("positions-details-load-failed"),
+      retry: "retry-details",
+    });
+    const retry = state.querySelector(".state-view-retry");
     retry.addEventListener("click", () => {
       retry.disabled = true;
       this._fetchFailures = 0;

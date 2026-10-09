@@ -29,6 +29,7 @@ export function createConditionEditor({
   $,
   $$,
   Utils,
+  renderStateView,
   announce,
   confirm,
   enhanceAllSelects,
@@ -43,7 +44,12 @@ export function createConditionEditor({
     const list = $("#conditions-list");
     if (!list) return;
     if (!conditions.length) {
-      list.innerHTML = `<div class="empty-state"><i class="icon-puzzle"></i><p>${Utils.escapeHtml(I18n.t("strategies-conditions-empty-title"))}</p><small>${Utils.escapeHtml(I18n.t("strategies-conditions-empty-hint"))}</small></div>`;
+      list.innerHTML = renderStateView({
+        icon: "icon-puzzle",
+        title: I18n.t("strategies-conditions-empty-title"),
+        message: I18n.t("strategies-conditions-empty-hint"),
+        compact: true,
+      });
       return;
     }
 

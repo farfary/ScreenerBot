@@ -1,30 +1,6 @@
 /* Copyright (c) 2024-2026 ScreenerBot (screenerbot.io)
  * SPDX-License-Identifier: BUSL-1.1 */
 
-.trader-page .loading-state,
-.trader-page .info-state,
-.trader-page .empty-state {
-  display: flex;
-  flex-direction: column;
-  align-items: center;
-  justify-content: center;
-  gap: 0.75rem;
-  padding: 2rem;
-  color: var(--text-secondary);
-  font-size: 0.875rem;
-}
-
-.trader-page .loading-state i,
-.trader-page .info-state i,
-.trader-page .empty-state i {
-  font-size: 2rem;
-  opacity: 0.5;
-}
-
-.trader-page .loading-state i {
-  animation: spin 1s linear infinite;
-}
-
 /* ============================================================================
    Daily P&L
    ============================================================================ */

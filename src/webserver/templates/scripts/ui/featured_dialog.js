@@ -26,6 +26,7 @@ import {
   resolveTokenBannerUrl,
 } from "../core/utils.js";
 import { manualTrade } from "./manual_trade.js";
+import { renderStateView } from "./state_view.js";
 import { boostTier, formatBoostCount } from "../core/boosts.js";
 import { getTokenAccent, fallbackAccent } from "../core/token_accent.js";
 // Side-effect import: registers the global "screenerbot:open-token-details"
@@ -199,25 +200,22 @@ class FeaturedDialog {
   _showLoading() {
     const container = $("#featured-categories");
     if (container) {
-      container.innerHTML = `
-        <div class="featured-state featured-loading">
-          <i class="icon-loader spin"></i>
-          <span>${this._escapeHtml(I18n.t("tokens-featured-loading"))}</span>
-        </div>
-      `;
+      container.innerHTML = renderStateView({
+        kind: "loading",
+        message: I18n.t("tokens-featured-loading"),
+      });
     }
   }
 
   _showError(message) {
     const container = $("#featured-categories");
     if (container) {
-      container.innerHTML = `
-        <div class="featured-state featured-error">
-          <i class="icon-circle-alert"></i>
-          <span>${this._escapeHtml(message)}</span>
-          <span style="font-size:0.75rem;opacity:0.6">${this._escapeHtml(I18n.t("tokens-featured-error-hint"))}</span>
-        </div>
-      `;
+      container.innerHTML = renderStateView({
+        kind: "error",
+        icon: "icon-circle-alert",
+        title: message,
+        message: I18n.t("tokens-featured-error-hint"),
+      });
     }
   }
 
@@ -228,12 +226,10 @@ class FeaturedDialog {
     const visible = CATEGORIES.filter((cat) => (this.data[cat.key] || []).length > 0);
 
     if (visible.length === 0) {
-      container.innerHTML = `
-        <div class="featured-state featured-empty">
-          <i class="icon-inbox"></i>
-          <span>${this._escapeHtml(I18n.t("tokens-featured-empty"))}</span>
-        </div>
-      `;
+      container.innerHTML = renderStateView({
+        icon: "icon-inbox",
+        message: I18n.t("tokens-featured-empty"),
+      });
       return;
     }
 

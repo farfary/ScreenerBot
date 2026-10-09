@@ -143,29 +143,6 @@
   display: none;
 }
 
-.position-details-dialog .pdd-chart-empty {
-  position: absolute;
-  inset: 0;
-  display: flex;
-  flex-direction: column;
-  align-items: center;
-  justify-content: center;
-  gap: var(--spacing-sm);
-  color: var(--text-secondary);
-  text-align: center;
-}
-
-.position-details-dialog .pdd-chart-empty i {
-  font-size: 2rem;
-  opacity: 0.5;
-}
-
-.position-details-dialog .pdd-chart-empty p {
-  margin: 0;
-  color: var(--text-primary);
-  font-size: 0.875rem;
-}
-
 @media (width <= 640px) {
   .position-details-dialog .pdd-chart-header .chart-ohlcv-display,
   .position-details-dialog .pdd-legend-note {

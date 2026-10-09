@@ -24,8 +24,26 @@ import { loadMarkupSources, loadStylesheets } from "../lib/dashboard_ui.mjs";
 import { serveDashboard } from "../lib/dashboard_host.mjs";
 import { createApiHandler, loadIndex } from "../lib/dashboard_fixtures.mjs";
 
-const PRIVATE_STATES =
-  /(?<![\w-])(?:tdd-state[\w-]*|settings-error|renderTabState|dt-empty[\w-]*|notification-empty)(?![\w-])/;
+const PRIVATE_STATES = new RegExp(
+  "(?<![\\w-])(?:" +
+    [
+      "tdd-state[\\w-]*",
+      "settings-error",
+      "renderTabState",
+      "dt-empty[\\w-]*",
+      "notification-empty",
+      "empty-state(?:-icon|-title|-description|-action|-content)?",
+      "empty-icon",
+      "empty-text",
+      "(?:loading|error|info|success)-state",
+      "ta-empty-(?:state|tab)",
+      "featured-(?:state|loading|error|empty)",
+      "pdd-chart-empty",
+      "links-empty-notice",
+      "strategy-list-state",
+    ].join("|") +
+    ")(?![\\w-])"
+);
 
 /**
  * An element whose class names an empty state with a glyph as its first child: the
@@ -41,25 +59,9 @@ const GLYPH_FIRST_EMPTY_STATE =
  * `renderStateView`.
  */
 const PRIVATE_EMPTY_STATE_FILES = [
-  "src/webserver/templates/pages/assistant.html",
-  "src/webserver/templates/pages/strategies.html",
+  // The chat welcome: a kicker line (its glyph inline with the kicker), a title, a
+  // subtitle and the quick-prompt buttons, shown until the first message.
   "src/webserver/templates/scripts/core/chat_widget.js",
-  "src/webserver/templates/scripts/pages/assistant/automation_tab.js",
-  "src/webserver/templates/scripts/pages/assistant/instructions_tab.js",
-  "src/webserver/templates/scripts/pages/strategies.js",
-  "src/webserver/templates/scripts/pages/strategies/condition_editor.js",
-  "src/webserver/templates/scripts/pages/tools/multi_wallet_tools.js",
-  "src/webserver/templates/scripts/pages/tools/token_tools.js",
-  "src/webserver/templates/scripts/pages/tools/trading_tools.js",
-  "src/webserver/templates/scripts/pages/tools/wallet_tools.js",
-  "src/webserver/templates/scripts/pages/trader.js",
-  "src/webserver/templates/scripts/ui/featured_dialog.js",
-  "src/webserver/templates/scripts/ui/position_details/chart.js",
-  "src/webserver/templates/scripts/ui/position_details_dialog.js",
-  "src/webserver/templates/scripts/ui/setup_gate.js",
-  "src/webserver/templates/scripts/ui/token_details/pools_links_tab.js",
-  "src/webserver/templates/scripts/ui/token_details/security_tab.js",
-  "src/webserver/templates/scripts/ui/transaction_details_dialog.js",
 ];
 
 test("no dashboard source spells a private state block", async () => {

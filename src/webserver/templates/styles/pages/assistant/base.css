@@ -241,13 +241,6 @@
   padding-inline-end: 0.25rem;
 }
 
-#recent-decisions-container .empty-state {
-  padding: 2rem;
-  text-align: center;
-  color: var(--text-muted);
-  font-size: 0.85rem;
-}
-
 .decision-card {
   display: flex;
   align-items: center;

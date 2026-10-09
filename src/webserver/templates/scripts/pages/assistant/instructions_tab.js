@@ -8,6 +8,7 @@ import { closeMenu, openMenu, trackAnchoredMenu } from "../../core/menu_manager.
 import * as Utils from "../../core/utils.js";
 import { formatNumber } from "../../core/format.js";
 import { ConfirmationDialog } from "../../ui/confirmation_dialog.js";
+import { renderStateView } from "../../ui/state_view.js";
 
 // Message key of each instruction category; the static filter in assistant.html
 // uses the same messages.
@@ -77,8 +78,12 @@ export function createInstructionsTab({ state, _eventCleanups }) {
       console.error("[Assistant] Error loading instructions:", error);
       const container = $("#instructions-list");
       if (container) {
-        container.innerHTML = '<div class="empty-state" data-l10n-id="assistant-instructions-load-failed"></div>';
-        I18n.localizeTree(container);
+        container.innerHTML = renderStateView({
+          kind: "error",
+          icon: "icon-circle-alert",
+          message: I18n.t("assistant-instructions-load-failed"),
+          compact: true,
+        });
       }
     }
   }
@@ -107,14 +112,12 @@ export function createInstructionsTab({ state, _eventCleanups }) {
     if (!container) return;
 
     if (!instructions || instructions.length === 0) {
-      container.innerHTML = `
-      <div class="empty-state" id="no-instructions">
-        <span class="empty-icon">📝</span>
-        <p class="empty-text" data-l10n-id="assistant-instructions-empty"></p>
-        <button class="btn btn-secondary" data-l10n-id="assistant-instructions-empty-add" onclick="window.assistantPage.createInstruction()"></button>
-      </div>
-    `;
-      I18n.localizeTree(container);
+      container.innerHTML = renderStateView({
+        icon: "icon-file-text",
+        message: I18n.t("assistant-instructions-empty"),
+        action: { id: "create-instruction", label: I18n.t("assistant-instructions-empty-add") },
+        compact: true,
+      });
       return;
     }
 
@@ -459,12 +462,11 @@ export function createInstructionsTab({ state, _eventCleanups }) {
     if (!container) return;
 
     if (!templates || templates.length === 0) {
-      container.innerHTML = `
-      <div class="empty-state">
-        <p class="empty-text" data-l10n-id="assistant-templates-empty"></p>
-      </div>
-    `;
-      I18n.localizeTree(container);
+      container.innerHTML = renderStateView({
+        icon: "icon-library",
+        message: I18n.t("assistant-templates-empty"),
+        compact: true,
+      });
       return;
     }
 

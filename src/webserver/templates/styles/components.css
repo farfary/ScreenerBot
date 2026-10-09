@@ -436,61 +436,12 @@
   }
 }
 
-/* =============================================================================
-   Empty State Component
-   ============================================================================= */
-
-.empty-state {
-  text-align: center;
-  padding: var(--spacing-2xl);
-  color: var(--text-muted);
-  display: flex;
-  flex-direction: column;
-  align-items: center;
-  gap: var(--spacing-sm);
-}
-
 /* The Explore Mode setup notice (ui/setup_gate.js) is framed as a card on every page
    that shows it; the page only places it. */
-.empty-state.setup-gate {
+.setup-gate {
   border: 1px solid var(--border-color);
   border-radius: var(--radius-lg);
   background: var(--bg-card);
-}
-
-.empty-state-icon {
-  font-size: 2.5rem;
-  margin-bottom: var(--spacing-xs);
-  opacity: 0.5;
-  color: var(--text-secondary);
-}
-
-.empty-state-title {
-  font-size: var(--font-size-lg);
-  font-weight: 600;
-  color: var(--text-secondary);
-  margin: 0;
-}
-
-.empty-state-description {
-  font-size: var(--font-size-sm);
-  color: var(--text-muted);
-  max-width: 300px;
-  line-height: 1.5;
-  margin: 0;
-}
-
-.empty-state-action {
-  margin-top: var(--spacing-sm);
-}
-
-/* Compact empty state variant */
-.empty-state.compact {
-  padding: var(--spacing-lg);
-}
-
-.empty-state.compact .empty-state-icon {
-  font-size: 1.5rem;
 }
 
 /* Modal Styles */
