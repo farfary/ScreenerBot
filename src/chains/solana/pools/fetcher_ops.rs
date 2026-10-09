@@ -8,9 +8,9 @@
 
 use super::fetcher::{AccountFetcher, ACCOUNT_BATCH_SIZE};
 use super::fetcher_types::{
-    account_refresh_interval, calculation_trigger, AccountData, CalculationTrigger,
-    MissingAccountState, MissingPoolState, PoolAccountBundle, SOL_MINT_PUBKEY,
-    SYSTEM_PROGRAM_PUBKEY,
+    account_refresh_interval, accounts_to_refresh, calculation_trigger, quiet_batch_floor,
+    AccountData, CalculationTrigger, MissingAccountState, MissingPoolState, PoolAccountBundle,
+    RefreshCandidate, SOL_MINT_PUBKEY, SYSTEM_PROGRAM_PUBKEY,
 };
 use super::reserve_accounts::reserve_pubkeys;
 use super::types::ProgramKind;
@@ -120,7 +120,7 @@ impl AccountFetcher {
 
         // Collect all reserve accounts we need to check from valid pools
         let heartbeat = crate::pools::types::price_refresh_heartbeat();
-        let mut accounts_to_check: Vec<(Pubkey, Duration)> = Vec::new();
+        let mut accounts_to_check: Vec<(Pubkey, Duration, bool)> = Vec::new();
 
         for (idx, pool) in pools.iter().enumerate() {
             if !valid_pool_indices.contains(&idx) {
@@ -134,12 +134,13 @@ impl AccountFetcher {
                 pool.base_mint.address()
             };
 
-            let threshold = account_refresh_interval(open_mints.contains(target_mint), heartbeat);
+            let has_open_position = open_mints.contains(target_mint);
+            let threshold = account_refresh_interval(has_open_position, heartbeat);
 
             match reserve_pubkeys(pool) {
                 Ok(pubkeys) => {
                     for pubkey in pubkeys {
-                        accounts_to_check.push((pubkey, threshold));
+                        accounts_to_check.push((pubkey, threshold, !has_open_position));
                     }
                 }
                 Err(e) => {
@@ -151,19 +152,21 @@ impl AccountFetcher {
             }
         }
 
-        // Now check last fetch times with a single lock acquisition
-        // Only read the entries we actually need
-        {
+        // Read last fetch times under a single lock acquisition, then select the
+        // due accounts plus the quiet accounts that share the quiet batch.
+        let candidates: Vec<RefreshCandidate> = {
             let last_fetch = account_last_fetch.read().unwrap();
-            for (account, threshold) in accounts_to_check {
-                let needs_fetch = match last_fetch.get(&account) {
-                    Some(last_time) => last_time.elapsed() >= threshold,
-                    None => true, // Never fetched
-                };
-                if needs_fetch {
-                    pending_accounts.insert(account);
-                }
-            }
+            accounts_to_check
+                .iter()
+                .map(|(account, interval, quiet)| RefreshCandidate {
+                    elapsed: last_fetch.get(account).map(Instant::elapsed),
+                    interval: *interval,
+                    quiet: *quiet,
+                })
+                .collect()
+        };
+        for idx in accounts_to_refresh(&candidates, heartbeat) {
+            pending_accounts.insert(accounts_to_check[idx].0);
         }
 
         // Filter out blacklisted accounts in parallel
@@ -821,9 +824,10 @@ impl AccountFetcher {
         }
 
         // Decide repricing once per pool, after every re-fetched account is merged:
-        // reprice on fresh reserve data, or on the heartbeat so a quiet pool's
-        // price never outlives the cache TTL.
-        let heartbeat = crate::pools::types::price_refresh_heartbeat();
+        // reprice on fresh reserve data, or from the quiet batch floor so a quiet
+        // pool fetched early to share a batch is repriced too and its price never
+        // outlives the cache TTL.
+        let reprice_after = quiet_batch_floor(crate::pools::types::price_refresh_heartbeat());
         for (pool_id, update) in local_updates.iter_mut() {
             let reserves = pool_reserve_pubkeys
                 .get(pool_id)
@@ -839,7 +843,7 @@ impl AccountFetcher {
                     crate::chains::ChainId::Solana,
                     target_token_mint(&update.descriptor),
                 ),
-                heartbeat,
+                reprice_after,
             );
             if update.trigger.is_some() {
                 update.bundle.mark_calculation_requested();
