@@ -27,7 +27,10 @@ export function buildInterfaceTab(settings) {
 
   return `
     <div class="settings-section">
-      <h3 class="settings-section-title" data-l10n-id="settings-interface-section-appearance"></h3>
+      <h3 class="settings-section-title">
+        <i class="icon-palette"></i>
+        <span data-l10n-id="settings-interface-section-appearance"></span>
+      </h3>
       <div class="settings-group">
         <div class="settings-field">
           <div class="settings-field-info">
@@ -102,7 +105,10 @@ export function buildInterfaceTab(settings) {
     </div>
 
     <div class="settings-section">
-      <h3 class="settings-section-title" data-l10n-id="settings-interface-section-data"></h3>
+      <h3 class="settings-section-title">
+        <i class="icon-table-2"></i>
+        <span data-l10n-id="settings-interface-section-data"></span>
+      </h3>
       <div class="settings-group">
         <div class="settings-field">
           <div class="settings-field-info">
@@ -191,7 +197,10 @@ export function buildInterfaceTab(settings) {
     </div>
 
     <div class="settings-section">
-      <h3 class="settings-section-title" data-l10n-id="settings-interface-section-sound"></h3>
+      <h3 class="settings-section-title">
+        <i class="icon-volume-2"></i>
+        <span data-l10n-id="settings-interface-section-sound"></span>
+      </h3>
       <div class="settings-group">
         <div class="settings-field">
           <div class="settings-field-info">

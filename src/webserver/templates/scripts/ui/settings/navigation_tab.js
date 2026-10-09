@@ -72,7 +72,10 @@ export function buildNavigationTab(settings) {
 
   return `
     <div class="settings-section">
-      <h3 class="settings-section-title" data-l10n-id="settings-navigation-section-layout"></h3>
+      <h3 class="settings-section-title">
+        <i class="icon-panels-top-left"></i>
+        <span data-l10n-id="settings-navigation-section-layout"></span>
+      </h3>
       <div class="settings-group">
         <div class="settings-field">
           <div class="settings-field-info">

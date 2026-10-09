@@ -19,34 +19,53 @@ let instance = null;
 export function buildAccountTab() {
   return `
     <div class="settings-section">
-      <h3 class="settings-section-title" data-l10n-id="settings-account-title"></h3>
+      <h3 class="settings-section-title">
+        <i class="icon-circle-user"></i>
+        <span data-l10n-id="settings-account-title"></span>
+      </h3>
       <p class="settings-section-description" data-l10n-id="settings-account-description"></p>
 
       <div class="account-panel" id="settingsAccountPanel"></div>
     </div>
 
     <div class="settings-section">
-      <h3 class="settings-section-title" data-l10n-id="settings-account-data-title"></h3>
+      <h3 class="settings-section-title">
+        <i class="icon-database"></i>
+        <span data-l10n-id="settings-account-data-title"></span>
+      </h3>
       <p class="settings-section-description" data-l10n-id="settings-account-data-description"></p>
       <div class="settings-data-access" id="settingsDataAccess" aria-live="polite"></div>
       <p class="settings-section-description" data-l10n-id="settings-account-data-fallback"></p>
     </div>
 
     <div class="settings-section">
-      <h3 class="settings-section-title" data-l10n-id="settings-account-gateway-title"></h3>
+      <h3 class="settings-section-title">
+        <i class="icon-send"></i>
+        <span data-l10n-id="settings-account-gateway-title"></span>
+      </h3>
       <p class="settings-section-description" data-l10n-id="settings-account-gateway-description"></p>
 
-      <label class="settings-toggle-row">
-        <input type="checkbox" id="settingsUseGateway" />
-        <span class="settings-toggle-copy">
-          <span class="settings-toggle-title" data-l10n-id="settings-account-gateway-label"></span>
-          <span class="settings-toggle-hint" data-l10n-id="settings-account-gateway-hint"></span>
-        </span>
-      </label>
+      <div class="settings-group">
+        <div class="settings-field">
+          <div class="settings-field-info">
+            <label for="settingsUseGateway" data-l10n-id="settings-account-gateway-label"></label>
+            <span class="settings-field-hint" data-l10n-id="settings-account-gateway-hint"></span>
+          </div>
+          <div class="settings-field-control">
+            <label class="toggle">
+              <input type="checkbox" id="settingsUseGateway" />
+              <span class="toggle-track"></span>
+            </label>
+          </div>
+        </div>
+      </div>
     </div>
 
     <div class="settings-section">
-      <h3 class="settings-section-title" data-l10n-id="settings-account-manage-title"></h3>
+      <h3 class="settings-section-title">
+        <i class="icon-external-link"></i>
+        <span data-l10n-id="settings-account-manage-title"></span>
+      </h3>
       <p class="settings-section-description" data-l10n-id="settings-account-manage-description"></p>
       <button
         type="button"
@@ -136,7 +155,7 @@ function renderDataAccess(access) {
     </div>`;
 }
 
-/** Read the current flag so the checkbox reflects config rather than a guess. */
+/** Read the current flag so the switch reflects config rather than a guess. */
 async function syncGatewayToggle() {
   const gateway = document.getElementById("settingsUseGateway");
   if (!gateway) return;

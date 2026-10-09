@@ -26,6 +26,8 @@
  * - The Data section sets both stored paths at one start edge inside their cards, and
  *   every button and input in it stands at one height.
  * - A disabled Security action states in its row what it waits for.
+ * - Every boolean in Settings is a switch, never a bare checkbox, and every section
+ *   title carries its glyph.
  *
  * Run with `npm run test:js`.
  */
@@ -293,4 +295,57 @@ test("a disabled Security action names what it waits for", async (t) => {
   );
   assert.ok(rows.length >= 2, "the fixture has no password, so actions wait for one");
   for (const text of rows) assert.match(text, /first to use this/);
+});
+
+test("every Settings boolean is a switch and every section title has its glyph", async (t) => {
+  const browser = await chromium.launch({ headless: true });
+  t.after(() => browser.close());
+  const context = await browser.newContext({ viewport: { width: 1440, height: 900 } });
+  const api = createApiHandler([await loadIndex("home"), await loadIndex("shell")], "populated");
+  const host = await serveDashboard(context, { locale: "en", onApi: api.onApi });
+  t.after(() => host.close());
+  const page = await context.newPage();
+  page.setDefaultTimeout(15000);
+  await page.goto(`${host.origin}/home`);
+  await page.waitForSelector("body:not(.initialization-mode) main.content:not([data-loading])");
+  await page.locator("#settingsBtn").dispatchEvent("click");
+  await page.waitForSelector(".settings-dialog.active .settings-nav");
+  const tabs = await page.$$eval(".settings-nav-item[data-tab]", (items) =>
+    items.map((item) => item.dataset.tab)
+  );
+  // Sections whose per-page group titles have no glyph owner yet (the hint
+  // categories are page names, and page glyphs live in the navigation config).
+  // This list only shrinks.
+  const unglyphedTabs = new Set(["hints"]);
+  const bare = [];
+  const untitled = [];
+  for (const tab of tabs) {
+    await page.locator(`.settings-nav-item[data-tab="${tab}"]`).click();
+    await page.waitForTimeout(400);
+    if (!unglyphedTabs.has(tab))
+      untitled.push(
+        ...(await page.$$eval(
+          ".settings-content .settings-section-title",
+          (titles, name) =>
+            titles
+              .filter((title) => title.getClientRects().length > 0 && !title.querySelector("i"))
+              .map((title) => `${name}: ${title.textContent.trim()}`),
+          tab
+        ))
+      );
+    bare.push(
+      ...(await page.$$eval(
+        '.settings-content input[type="checkbox"]',
+        (inputs, name) =>
+          inputs
+            .filter((input) => !input.closest(".toggle"))
+            .filter((input) => input.closest(".settings-content > *")?.getClientRects().length > 0)
+            .map((input) => `${name}#${input.id}`),
+        tab
+      ))
+    );
+  }
+  assert.ok(tabs.includes("account"), "the Account section is listed");
+  assert.deepEqual(bare, []);
+  assert.deepEqual(untitled, [], "every section title carries its glyph");
 });

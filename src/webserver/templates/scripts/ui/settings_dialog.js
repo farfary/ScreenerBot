@@ -706,7 +706,10 @@ export class SettingsDialog {
 
     return `
       <div class="settings-section">
-        <h3 class="settings-section-title" data-l10n-id="settings-startup-section-title"></h3>
+        <h3 class="settings-section-title">
+          <i class="icon-power"></i>
+          <span data-l10n-id="settings-startup-section-title"></span>
+        </h3>
         <div class="settings-group">
           <div class="settings-field settings-field--disabled">
             <div class="settings-field-info">
