@@ -19,6 +19,8 @@ mod identity;
 mod list;
 mod ohlcv;
 mod source_status;
+#[cfg(test)]
+mod source_status_tests;
 pub mod types;
 
 // Re-export handler functions for use by the router

@@ -7,8 +7,6 @@ tokens-result-source-unavailable = { $label } 不可用，正在重试
 tokens-result-source-not-listed = 未在 { $label } 上架
 tokens-result-security-available = 安全报告可用
 tokens-result-security-missing = 无 { -rugcheck } 报告
-tokens-result-chart-available = 图表数据可用
-tokens-result-chart-missing = 暂无图表数据
 
 # Token details dialog: shared tab states (ui/token_details/state_handling.js)
 

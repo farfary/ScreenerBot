@@ -61,14 +61,6 @@ fn token_source_results_render_english() {
         render(UiText::new(ids::TOKENS_RESULT_SECURITY_MISSING)),
         "No RugCheck report"
     );
-    assert_eq!(
-        render(UiText::new(ids::TOKENS_RESULT_CHART_AVAILABLE)),
-        "Chart data available"
-    );
-    assert_eq!(
-        render(UiText::new(ids::TOKENS_RESULT_CHART_MISSING)),
-        "No chart data yet"
-    );
 }
 
 #[test]

@@ -460,8 +460,9 @@ export class TokenDetailsDialog {
    * - DexScreener and GeckoTerminal are one "market" concern: if either has data,
    *   neither is listed (the token IS priced — the other provider is just an
    *   unused alternative, not a real gap).
-   * - The chart is only flagged once its poll has actually settled on "empty"
-   *   (backed off), not while candles may still be loading.
+   * - It carries only dialog-wide notices (market and security data). Chart data
+   *   is stated by the chart's own overlay and data indicator on Overview, so no
+   *   chart state ever appears here or shifts the tabs below it.
    * @param {Array<{source:string,label:string,state:string,text:object}>} sourceStatus
    */
   _renderSourceIssues(sourceStatus) {
@@ -486,20 +487,14 @@ export class TokenDetailsDialog {
       // Rugcheck: flag once settled and still absent.
       if (!isOk("rugcheck") && by.rugcheck) issues.push(by.rugcheck);
     }
-    // Chart: independent of the grace timer — only once the poll has confirmed
-    // there is no OHLCV (backed off), so it never shows mid-load.
-    if (!isOk("ohlcv") && this._chartPollBackedOff && by.ohlcv) {
-      issues.push(by.ohlcv);
-    }
-
     if (issues.length === 0) {
       row.hidden = true;
       row.innerHTML = "";
       return;
     }
 
-    // "All failed" = no market, no security, no chart — the full blackout case.
-    const allFailed = !marketOk && !isOk("rugcheck") && !isOk("ohlcv");
+    // "All failed" = no market and no security data — the full blackout case.
+    const allFailed = !marketOk && !isOk("rugcheck");
     const icon = (state) => (state === "unavailable" ? "icon-circle-alert" : "icon-circle-x");
 
     const chips = issues

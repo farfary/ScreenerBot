@@ -7,8 +7,6 @@ tokens-result-source-unavailable = { $label } 사용 불가 — 재시도 중
 tokens-result-source-not-listed = { $label }에 등록되지 않음
 tokens-result-security-available = 보안 리포트 있음
 tokens-result-security-missing = { -rugcheck } 리포트 없음
-tokens-result-chart-available = 차트 데이터 있음
-tokens-result-chart-missing = 아직 차트 데이터가 없습니다
 
 # Token details dialog: shared tab states (ui/token_details/state_handling.js)
 

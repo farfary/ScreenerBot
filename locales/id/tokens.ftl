@@ -7,8 +7,6 @@ tokens-result-source-unavailable = { $label } tidak tersedia — mencoba lagi
 tokens-result-source-not-listed = Tidak terdaftar di { $label }
 tokens-result-security-available = Laporan keamanan tersedia
 tokens-result-security-missing = Tidak ada laporan { -rugcheck }
-tokens-result-chart-available = Data grafik tersedia
-tokens-result-chart-missing = Belum ada data grafik
 
 tokens-state-error-title = Tidak dapat memuat data
 tokens-state-offline = Anda tampaknya sedang offline.

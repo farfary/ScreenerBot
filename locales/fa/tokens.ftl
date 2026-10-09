@@ -7,8 +7,6 @@ tokens-result-source-unavailable = { $label } در دسترس نیست — در 
 tokens-result-source-not-listed = در { $label } فهرست نشده است
 tokens-result-security-available = گزارش امنیتی موجود است
 tokens-result-security-missing = گزارش { -rugcheck } موجود نیست
-tokens-result-chart-available = داده نمودار موجود است
-tokens-result-chart-missing = هنوز داده نمودار موجود نیست
 
 # Token details dialog: shared tab states (ui/token_details/state_handling.js)
 

@@ -3,8 +3,6 @@ tokens-result-source-unavailable = { $label } indisponible — nouvelle tentativ
 tokens-result-source-not-listed = Non listé sur { $label }
 tokens-result-security-available = Rapport de sécurité disponible
 tokens-result-security-missing = Aucun rapport { -rugcheck }
-tokens-result-chart-available = Données de graphique disponibles
-tokens-result-chart-missing = Pas encore de données de graphique
 
 tokens-state-error-title = Impossible de charger les données
 tokens-state-offline = Vous semblez être hors ligne.

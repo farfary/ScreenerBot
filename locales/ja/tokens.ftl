@@ -7,8 +7,6 @@ tokens-result-source-unavailable = { $label } は利用できません — 再�
 tokens-result-source-not-listed = { $label } に掲載されていません
 tokens-result-security-available = セキュリティレポートあり
 tokens-result-security-missing = { -rugcheck } のレポートなし
-tokens-result-chart-available = チャートデータあり
-tokens-result-chart-missing = チャートデータはまだありません
 
 tokens-state-error-title = データを読み込めませんでした
 tokens-state-offline = オフラインの可能性があります。

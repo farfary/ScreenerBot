@@ -120,7 +120,7 @@ pub async fn get_token_detail(Path(mint): Path<String>) -> Json<TokenDetailRespo
                 has_pool_price: false,
                 has_open_position: false,
                 blacklisted: false,
-                source_status: build_source_status(false, false, false, false).await,
+                source_status: build_source_status(false, false, false).await,
                 timestamp: chrono::Utc::now().to_rfc3339(),
             });
         }
@@ -711,8 +711,7 @@ pub async fn get_token_detail(Path(mint): Path<String>) -> Json<TokenDetailRespo
         } else {
             (false, false, false)
         };
-    let source_status =
-        build_source_status(has_dexscreener, has_geckoterminal, has_rugcheck, has_ohlcv).await;
+    let source_status = build_source_status(has_dexscreener, has_geckoterminal, has_rugcheck).await;
 
     Json(TokenDetailResponse {
         mint: token.mint.clone(),

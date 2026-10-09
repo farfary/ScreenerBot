@@ -3,8 +3,6 @@ tokens-result-source-unavailable = { $label } không khả dụng — đang th�
 tokens-result-source-not-listed = Chưa được niêm yết trên { $label }
 tokens-result-security-available = Có báo cáo bảo mật
 tokens-result-security-missing = Không có báo cáo { -rugcheck }
-tokens-result-chart-available = Có dữ liệu biểu đồ
-tokens-result-chart-missing = Chưa có dữ liệu biểu đồ
 
 tokens-state-error-title = Không tải được dữ liệu
 tokens-state-offline = Có vẻ bạn đang ngoại tuyến.

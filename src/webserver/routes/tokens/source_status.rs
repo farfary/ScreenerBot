@@ -17,7 +17,6 @@ pub(super) async fn build_source_status(
     has_dexscreener: bool,
     has_geckoterminal: bool,
     has_rugcheck: bool,
-    has_ohlcv: bool,
 ) -> Vec<SourceStatus> {
     async fn market_state(endpoint: &str, label: &str, has_data: bool) -> SourceStatus {
         let (state, text) = if has_data {
@@ -76,16 +75,5 @@ pub(super) async fn build_source_status(
         }
     };
 
-    let ohlcv = SourceStatus {
-        source: "ohlcv".to_owned(),
-        label: "Chart".to_owned(),
-        state: if has_ohlcv { "ok" } else { "no_data" }.to_owned(),
-        text: UiText::new(if has_ohlcv {
-            ids::TOKENS_RESULT_CHART_AVAILABLE
-        } else {
-            ids::TOKENS_RESULT_CHART_MISSING
-        }),
-    };
-
-    vec![dex, gecko, rug, ohlcv]
+    vec![dex, gecko, rug]
 }

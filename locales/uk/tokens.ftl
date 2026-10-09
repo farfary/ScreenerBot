@@ -3,8 +3,6 @@ tokens-result-source-unavailable = { $label } недоступний — пов�
 tokens-result-source-not-listed = Немає в переліку { $label }
 tokens-result-security-available = Звіт про безпеку доступний
 tokens-result-security-missing = Немає звіту { -rugcheck }
-tokens-result-chart-available = Дані графіка доступні
-tokens-result-chart-missing = Даних графіка ще немає
 
 tokens-state-error-title = Не вдалося завантажити дані
 tokens-state-offline = Схоже, ви офлайн.

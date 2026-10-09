@@ -3,8 +3,6 @@ tokens-result-source-unavailable = { $label } nicht verfügbar — neuer Versuch
 tokens-result-source-not-listed = Nicht auf { $label } gelistet
 tokens-result-security-available = Sicherheitsbericht verfügbar
 tokens-result-security-missing = Kein { -rugcheck }-Bericht
-tokens-result-chart-available = Chartdaten verfügbar
-tokens-result-chart-missing = Noch keine Chartdaten
 
 tokens-state-error-title = Daten konnten nicht geladen werden
 tokens-state-offline = Sie scheinen offline zu sein.

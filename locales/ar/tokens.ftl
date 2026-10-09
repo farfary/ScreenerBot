@@ -7,8 +7,6 @@ tokens-result-source-unavailable = { $label } غير متاح — جارٍ إع�
 tokens-result-source-not-listed = غير مدرج على { $label }
 tokens-result-security-available = تقرير الأمان متاح
 tokens-result-security-missing = لا يوجد تقرير من { -rugcheck }
-tokens-result-chart-available = بيانات المخطط متاحة
-tokens-result-chart-missing = لا توجد بيانات مخطط بعد
 
 # Token details dialog: shared tab states (ui/token_details/state_handling.js)
 

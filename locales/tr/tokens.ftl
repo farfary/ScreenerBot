@@ -3,8 +3,6 @@ tokens-result-source-unavailable = { $label } kullanılamıyor — yeniden denen
 tokens-result-source-not-listed = { $label } üzerinde listelenmemiş
 tokens-result-security-available = Güvenlik raporu mevcut
 tokens-result-security-missing = { -rugcheck } raporu yok
-tokens-result-chart-available = Grafik verisi mevcut
-tokens-result-chart-missing = Henüz grafik verisi yok
 
 # Token details dialog: shared tab states (ui/token_details/state_handling.js)
 

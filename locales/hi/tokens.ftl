@@ -3,8 +3,6 @@ tokens-result-source-unavailable = { $label } उपलब्ध नहीं �
 tokens-result-source-not-listed = { $label } पर लिस्ट नहीं है
 tokens-result-security-available = सिक्योरिटी रिपोर्ट उपलब्ध है
 tokens-result-security-missing = कोई { -rugcheck } रिपोर्ट नहीं
-tokens-result-chart-available = चार्ट डेटा उपलब्ध है
-tokens-result-chart-missing = अभी तक कोई चार्ट डेटा नहीं
 
 tokens-state-error-title = डेटा लोड नहीं हो सका
 tokens-state-offline = ऐसा लगता है कि आप ऑफ़लाइन हैं।

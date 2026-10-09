@@ -7,8 +7,6 @@ tokens-result-source-unavailable = { $label } indisponível — tentando novamen
 tokens-result-source-not-listed = Não listado no { $label }
 tokens-result-security-available = Relatório de segurança disponível
 tokens-result-security-missing = Sem relatório do { -rugcheck }
-tokens-result-chart-available = Dados do gráfico disponíveis
-tokens-result-chart-missing = Ainda sem dados do gráfico
 
 # Token details dialog: shared tab states (ui/token_details/state_handling.js)
 
