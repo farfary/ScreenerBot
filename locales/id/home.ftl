@@ -70,6 +70,6 @@ home-pipeline-title = Pipeline pasar
 home-pipeline-tracked = Dilacak
 home-pipeline-priced = Ada harga
 home-pipeline-passed = Lolos filter
-home-pipeline-rejected = Ditolak
+home-pipeline-not-passed = Tidak lolos (semua dilacak)
 home-pipeline-blacklisted = Masuk daftar hitam
 home-pipeline-ohlcv = OHLCV

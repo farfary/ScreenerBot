@@ -76,6 +76,6 @@ home-pipeline-title = Ринковий конвеєр
 home-pipeline-tracked = Відстежується
 home-pipeline-priced = З ціною
 home-pipeline-passed = Пройшли фільтри
-home-pipeline-rejected = Відхилено
+home-pipeline-not-passed = Не пройшли (усі відстежувані)
 home-pipeline-blacklisted = У чорному списку
 home-pipeline-ohlcv = OHLCV

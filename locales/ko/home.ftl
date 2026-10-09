@@ -70,6 +70,6 @@ home-pipeline-title = 시장 파이프라인
 home-pipeline-tracked = 추적 중
 home-pipeline-priced = 가격 확인됨
 home-pipeline-passed = 필터 통과
-home-pipeline-rejected = 제외
+home-pipeline-not-passed = 미통과 (추적 전체)
 home-pipeline-blacklisted = 블랙리스트
 home-pipeline-ohlcv = OHLCV

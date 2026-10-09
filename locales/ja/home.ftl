@@ -70,6 +70,6 @@ home-pipeline-title = 市場パイプライン
 home-pipeline-tracked = 追跡中
 home-pipeline-priced = 価格取得済み
 home-pipeline-passed = フィルター通過
-home-pipeline-rejected = 除外
+home-pipeline-not-passed = 未通過（追跡中すべて）
 home-pipeline-blacklisted = ブラックリスト
 home-pipeline-ohlcv = OHLCV

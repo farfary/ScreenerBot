@@ -70,6 +70,6 @@ home-pipeline-title = 市场流水线
 home-pipeline-tracked = 已跟踪
 home-pipeline-priced = 已定价
 home-pipeline-passed = 通过过滤
-home-pipeline-rejected = 未通过
+home-pipeline-not-passed = 未通过（全部已跟踪）
 home-pipeline-blacklisted = 已加入黑名单
 home-pipeline-ohlcv = OHLCV

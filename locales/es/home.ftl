@@ -74,6 +74,6 @@ home-pipeline-title = Flujo de mercado
 home-pipeline-tracked = En seguimiento
 home-pipeline-priced = Con precio
 home-pipeline-passed = Filtros aprobados
-home-pipeline-rejected = Rechazados
+home-pipeline-not-passed = No aprobados (todo el seguimiento)
 home-pipeline-blacklisted = En lista negra
 home-pipeline-ohlcv = OHLCV

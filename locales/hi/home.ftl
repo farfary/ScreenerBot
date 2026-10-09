@@ -66,6 +66,6 @@ home-pipeline-title = मार्केट पाइपलाइन
 home-pipeline-tracked = ट्रैक किए गए
 home-pipeline-priced = कीमत वाले
 home-pipeline-passed = फ़िल्टर पास
-home-pipeline-rejected = अस्वीकृत
+home-pipeline-not-passed = पास नहीं (सभी ट्रैक किए गए)
 home-pipeline-blacklisted = ब्लैकलिस्टेड
 home-pipeline-ohlcv = OHLCV

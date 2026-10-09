@@ -80,6 +80,6 @@ home-pipeline-title = مسار السوق
 home-pipeline-tracked = المتتبَّعة
 home-pipeline-priced = المسعّرة
 home-pipeline-passed = اجتازت المرشحات
-home-pipeline-rejected = المرفوضة
+home-pipeline-not-passed = لم تجتز (كل المتتبَّعة)
 home-pipeline-blacklisted = في القائمة السوداء
 home-pipeline-ohlcv = OHLCV

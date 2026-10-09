@@ -72,6 +72,6 @@ home-pipeline-title = خط لوله بازار
 home-pipeline-tracked = تحت پایش
 home-pipeline-priced = قیمت‌دار
 home-pipeline-passed = تأییدشده در فیلترها
-home-pipeline-rejected = ردشده
+home-pipeline-not-passed = ردنشده (همه موارد تحت پایش)
 home-pipeline-blacklisted = در فهرست سیاه
 home-pipeline-ohlcv = OHLCV

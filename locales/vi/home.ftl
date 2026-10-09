@@ -62,6 +62,6 @@ home-pipeline-title = Quy trình thị trường
 home-pipeline-tracked = Đang theo dõi
 home-pipeline-priced = Có giá
 home-pipeline-passed = Đạt bộ lọc
-home-pipeline-rejected = Bị loại
+home-pipeline-not-passed = Không đạt (mọi token theo dõi)
 home-pipeline-blacklisted = Trong danh sách đen
 home-pipeline-ohlcv = OHLCV

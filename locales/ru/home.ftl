@@ -76,6 +76,6 @@ home-pipeline-title = Рыночный конвейер
 home-pipeline-tracked = Отслеживается
 home-pipeline-priced = С ценой
 home-pipeline-passed = Прошли фильтры
-home-pipeline-rejected = Отклонено
+home-pipeline-not-passed = Не прошли (все отслеживаемые)
 home-pipeline-blacklisted = В чёрном списке
 home-pipeline-ohlcv = OHLCV

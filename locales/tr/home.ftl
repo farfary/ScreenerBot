@@ -72,6 +72,6 @@ home-pipeline-title = Piyasa hattı
 home-pipeline-tracked = Takip edilen
 home-pipeline-priced = Fiyatlanan
 home-pipeline-passed = Filtreleri geçen
-home-pipeline-rejected = Reddedilen
+home-pipeline-not-passed = Geçmeyen (tüm takip edilenler)
 home-pipeline-blacklisted = Kara listedeki
 home-pipeline-ohlcv = OHLCV

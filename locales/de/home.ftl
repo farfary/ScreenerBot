@@ -72,6 +72,6 @@ home-pipeline-title = Markt-Pipeline
 home-pipeline-tracked = Beobachtet
 home-pipeline-priced = Mit Preis
 home-pipeline-passed = Filter bestanden
-home-pipeline-rejected = Abgelehnt
+home-pipeline-not-passed = Nicht bestanden (alle beobachteten)
 home-pipeline-blacklisted = Auf der Blacklist
 home-pipeline-ohlcv = OHLCV
