@@ -391,9 +391,9 @@ impl OhlcvFetcher {
         })
     }
 
-    /// Fetch one timeframe with multi-source fallback: the Data Server, then the
-    /// chain's candle feeds in order, then GeckoTerminal (native-quoted pools
-    /// only). Returns the newest `limit` candles ending now, or with `before`
+    /// Fetch one timeframe with multi-source fallback: the Data Server, then, for a
+    /// native-quoted pool only, the chain's candle feeds in order and GeckoTerminal.
+    /// Returns the newest `limit` candles ending now, or with `before`
     /// (unix secs, exclusive) the newest `limit` candles strictly older than it.
     /// A candle feed serves only the newest candles, so a `before` request skips
     /// the feeds.
@@ -427,21 +427,11 @@ impl OhlcvFetcher {
             }
         }
 
-        let feeds = feeds_serving(self.candle_feeds(), before);
-        if let Some(response) = self
-            .fetch_feeds(&feeds, mint, pool_address, api_endpoint, aggregate, limit)
-            .await
-        {
-            return Ok(response);
-        }
-
-        // Fallback to GeckoTerminal (uses pool address). GeckoTerminal returns
-        // candles in the pool's QUOTE token (`currency=token`), so it is SOL only
-        // for a wSOL-quoted pool. On a USD-quoted pool it returns USD candles that
-        // would poison the SOL-denominated series (candles are keyed by
-        // (mint,timeframe,ts) with no pool, so one USD candle corrupts the chart).
-        // Skip Gecko entirely for non-SOL pools; the SOL-forcing sources above
-        // (the data server and the chain's candle feeds) are the only valid path there.
+        // Only the data server converts a non-native pool's candles to SOL.
+        // GeckoTerminal answers in the pool's quote token (`currency=token`) and a
+        // candle feed answers by token address for whatever pool it picks, so on a
+        // USD-quoted or unknown-quote series pool either would write foreign-unit
+        // candles into the SOL series. Both fallbacks are skipped there.
         if !pool_is_native {
             record_ohlcv_event(
                 "gecko_skipped_non_sol_pool",
@@ -449,11 +439,19 @@ impl OhlcvFetcher {
                 Some(mint),
                 Some(pool_address),
                 json!({
-                    "reason": "USD-quoted pool; GeckoTerminal would return USD candles",
+                    "reason": "non-native pool; only the data server serves SOL candles",
                 }),
             )
             .await;
             return Ok(FetchResponse::default());
+        }
+
+        let feeds = feeds_serving(self.candle_feeds(), before);
+        if let Some(response) = self
+            .fetch_feeds(&feeds, mint, pool_address, api_endpoint, aggregate, limit)
+            .await
+        {
+            return Ok(response);
         }
 
         // GeckoTerminal's `before_timestamp` may include a candle stamped exactly
@@ -885,6 +883,17 @@ mod tests {
             .await
             .is_none());
         assert_eq!(UNREACHED_CALLS.load(Ordering::SeqCst), 0);
+    }
+
+    #[tokio::test]
+    async fn a_non_native_pool_is_never_served_by_a_fallback() {
+        let fetcher = test_fetcher();
+        let response = fetcher
+            .fetch_multi_source("mint", "usd-pool", "minute", 5, 10, false, None)
+            .await
+            .expect("a skipped fallback is an empty answer, not an error");
+        assert!(response.candles.is_empty());
+        assert_eq!(response.source, None);
     }
 
     #[test]

@@ -395,13 +395,7 @@ async fn refresh_token_pools_and_cache(
         return Ok(None);
     }
 
-    let (pools_map, success_sources) = match api::fetch_from_sources(
-        chain,
-        mint_trimmed,
-        rate_budget(chain),
-    )
-    .await
-    {
+    let fetched = match api::fetch_from_sources(chain, mint_trimmed, rate_budget(chain)).await {
         Ok(result) => result,
         Err(err) => {
             let message = err.to_string();
@@ -452,6 +446,12 @@ async fn refresh_token_pools_and_cache(
             return Err(err);
         }
     };
+
+    let api::FetchedPools {
+        pools: pools_map,
+        success_sources,
+        series_pool,
+    } = fetched;
 
     if pools_map.is_empty() && success_sources == 0 {
         if let Some(snapshot) = persisted_snapshot.as_ref() {
@@ -504,6 +504,7 @@ async fn refresh_token_pools_and_cache(
         mint: mint_trimmed.to_string(),
         pools,
         canonical_pool_address,
+        series_pool_address: series_pool,
         pool_data_last_fetched_at: Utc::now(),
     };
 
@@ -696,6 +697,12 @@ pub async fn prefetch(chain: ChainId, mints: &[String]) {
     }
 }
 
+/// Whether a snapshot for `mint` is cached and within its TTL. A pure cache read:
+/// no fetch and no refresh is scheduled.
+pub fn has_fresh_snapshot(chain: ChainId, mint: &str) -> bool {
+    get_cached_pool_snapshot(chain, mint.trim()).is_some()
+}
+
 /// Fetch pool snapshot immediately (bypasses background queue)
 /// Use this for user-viewed tokens that need immediate data
 pub async fn fetch_immediate(
@@ -758,13 +765,13 @@ pub async fn fetch_immediate(
 /// the OHLCV monitor gets a usable SOL pool in ~200ms instead of waiting on the
 /// rate-limited pipeline. Returns `None` when the server is disabled/misses.
 async fn server_only_snapshot(chain: ChainId, mint: &str) -> Option<TokenPoolsSnapshot> {
-    let server_pools = super::server::fetch_pools_from_server(chain, mint).await?;
-    if server_pools.is_empty() {
+    let server = super::server::fetch_pools_from_server(chain, mint).await?;
+    if server.pools.is_empty() {
         return None;
     }
 
     let mut pools_map: HashMap<String, TokenPoolInfo> = HashMap::new();
-    for info in server_pools {
+    for info in server.pools {
         super::operations::ingest_pool_entry(&mut pools_map, info);
     }
     let mut pools: Vec<TokenPoolInfo> = pools_map.into_values().collect();
@@ -775,6 +782,7 @@ async fn server_only_snapshot(chain: ChainId, mint: &str) -> Option<TokenPoolsSn
         mint: mint.to_string(),
         pools,
         canonical_pool_address,
+        series_pool_address: server.series_pool,
         pool_data_last_fetched_at: Utc::now(),
     };
 
@@ -822,5 +830,23 @@ mod tests {
     #[test]
     fn slot_keys_are_the_trimmed_mint() {
         assert_eq!(slot_key(" mint "), "mint");
+    }
+
+    #[test]
+    fn only_a_cached_snapshot_within_its_ttl_is_fresh() {
+        let chain = ChainId::Solana;
+        let snapshot = |mint: &str, age_secs: i64| TokenPoolsSnapshot {
+            mint: mint.to_owned(),
+            pool_data_last_fetched_at: Utc::now() - chrono::Duration::seconds(age_secs),
+            ..Default::default()
+        };
+        assert!(!has_fresh_snapshot(chain, "fresh-snapshot-test-missing"));
+        store_pool_snapshot(chain, snapshot("fresh-snapshot-test-new", 0));
+        assert!(has_fresh_snapshot(chain, " fresh-snapshot-test-new "));
+        store_pool_snapshot(
+            chain,
+            snapshot("fresh-snapshot-test-old", TOKEN_POOLS_TTL_SECS as i64 + 60),
+        );
+        assert!(!has_fresh_snapshot(chain, "fresh-snapshot-test-old"));
     }
 }

@@ -211,6 +211,9 @@ impl TokenDatabase {
             mint: mint.to_string(),
             pools,
             canonical_pool_address,
+            // The server's series pool is not persisted; the OHLCV pool rows keep
+            // the chosen default until the next server answer.
+            series_pool_address: None,
             pool_data_last_fetched_at,
         }))
     }

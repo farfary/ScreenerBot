@@ -22,13 +22,23 @@ use serde_json::json;
 /// Timeout for acquiring rate limit permits (prevents indefinite blocking)
 const RATE_LIMIT_ACQUIRE_TIMEOUT: Duration = Duration::from_secs(5);
 
+/// The merged answer of every pool source for one mint.
+pub struct FetchedPools {
+    /// Pools by address, server pools first, enriched by the direct providers.
+    pub pools: HashMap<String, TokenPoolInfo>,
+    /// How many sources answered.
+    pub success_sources: usize,
+    /// The data server's canonical (series) pool, when the server answered.
+    pub series_pool: Option<String>,
+}
+
 /// Fetch pools from all enabled sources (DexScreener + GeckoTerminal)
 /// Uses timeouts on rate limit acquisition to prevent indefinite blocking
 pub async fn fetch_from_sources(
     chain: ChainId,
     mint: &str,
     coordinator: Arc<RateLimitCoordinator>,
-) -> TokenResult<(HashMap<String, TokenPoolInfo>, usize)> {
+) -> TokenResult<FetchedPools> {
     let api = get_api_manager();
     let native_price = get_native_price();
 
@@ -138,11 +148,13 @@ pub async fn fetch_from_sources(
     let mut success_sources = 0usize;
     let mut failures: Vec<String> = Vec::new();
 
+    let mut series_pool = None;
     let server_ok = match server_pools {
-        Some(pools) if !pools.is_empty() => {
-            for info in pools {
+        Some(server) if !server.pools.is_empty() => {
+            for info in server.pools {
                 ingest_pool_entry(&mut pools_map, info);
             }
+            series_pool = server.series_pool;
             true
         }
         _ => false,
@@ -276,5 +288,9 @@ pub async fn fetch_from_sources(
         .await;
     }
 
-    Ok((pools_map, success_sources))
+    Ok(FetchedPools {
+        pools: pools_map,
+        success_sources,
+        series_pool,
+    })
 }

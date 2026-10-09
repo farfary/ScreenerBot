@@ -13,8 +13,8 @@ mod migrations;
 pub mod types;
 
 pub use types::{
-    ClearAllResult, DatabaseStats, DeleteResult, GapRecord, OhlcvTokenStatus, StoredBucket,
-    TimeframeSummary,
+    ClearAllResult, DatabaseStats, DeleteResult, GapRecord, OhlcvTokenStatus, SeriesPoolReset,
+    StoredBucket, TimeframeSummary,
 };
 
 use crate::database::WriteTransaction;

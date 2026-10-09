@@ -82,6 +82,14 @@ pub struct ClearAllResult {
     pub tokens_reset: usize,
 }
 
+/// Result of moving a token's candle series onto a new pool: the rows of every
+/// other pool removed. The token's backfill flags are reset with them.
+#[derive(Debug, Clone, Default)]
+pub struct SeriesPoolReset {
+    pub candles_deleted: usize,
+    pub gaps_deleted: usize,
+}
+
 /// Database statistics
 #[derive(Debug, Clone, Default)]
 pub struct DatabaseStats {

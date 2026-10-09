@@ -28,8 +28,8 @@ mod utils;
 
 // Re-export public API
 pub use cache::{
-    clear_cache, fetch_immediate, get_snapshot, get_snapshot_allow_stale, metrics as cache_metrics,
-    prefetch,
+    clear_cache, fetch_immediate, get_snapshot, get_snapshot_allow_stale, has_fresh_snapshot,
+    metrics as cache_metrics, prefetch,
 };
 
 pub use operations::{choose_canonical_pool, merge_pool_info, sort_pools_for_snapshot};

@@ -473,8 +473,14 @@ impl Default for TokenPoolInfo {
 pub struct TokenPoolsSnapshot {
     pub mint: String,
     pub pools: Vec<TokenPoolInfo>,
+    /// The trading-price pool: the deepest native pool (`choose_canonical_pool`).
     #[serde(skip_serializing_if = "Option::is_none")]
     pub canonical_pool_address: Option<String>,
+    /// The data server's canonical pool for this mint, the OHLCV chart's series
+    /// pool. It may be USD-quoted; the server serves its candles in SOL. `None`
+    /// when the server did not answer this refresh.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub series_pool_address: Option<String>,
     pub pool_data_last_fetched_at: DateTime<Utc>,
 }
 

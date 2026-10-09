@@ -16,8 +16,8 @@ use crate::ohlcvs::gaps::{GapManager, GAP_FILL_REQUESTS_PER_CYCLE};
 use crate::ohlcvs::manager::PoolManager;
 use crate::ohlcvs::priorities::{ActivityType, PriorityManager};
 use crate::ohlcvs::types::{
-    Candle, MonitorStats, MonitorTelemetrySnapshot, OhlcvError, OhlcvResult, Priority, Timeframe,
-    TokenOhlcvConfig,
+    Candle, MonitorStats, MonitorTelemetrySnapshot, OhlcvError, OhlcvResult, PoolConfig, Priority,
+    Timeframe, TokenOhlcvConfig,
 };
 use chrono::{DateTime, Utc};
 use serde_json::json;
@@ -800,10 +800,15 @@ impl OhlcvMonitor {
         Ok(should_trigger_fetch)
     }
 
-    /// Force refresh for a token. An explicit refresh also re-resolves the token's pools in the
-    /// background, so a stale default is corrected by the one action that asks for fresh data.
+    /// Force refresh for a token. Pools are re-resolved in the background only when the token
+    /// has none registered or its pool snapshot is past its TTL: a timeframe switch refreshes
+    /// candles, and re-discovering on every one moved the series pool under the chart.
     pub async fn force_refresh(&self, mint: &str) -> OhlcvResult<()> {
-        self.spawn_pool_discovery(mint);
+        let has_pools = !self.pool_manager.get_pools(mint).await?.is_empty();
+        let snapshot_fresh = crate::tokens::has_fresh_token_pools_snapshot(self.db.chain(), mint);
+        if pool_rediscovery_due(has_pools, snapshot_fresh) {
+            self.spawn_pool_discovery(mint);
+        }
         self.fetch_token_data(mint).await
     }
 
@@ -2701,19 +2706,13 @@ impl OhlcvMonitor {
         }
     }
 
-    /// The pool's denomination, so a USD-quoted pool skips GeckoTerminal (see
-    /// `fetch_multi_source`). Unknown/missing rows default to SOL.
+    /// The pool's denomination, so a non-native pool is served by the data server only
+    /// (see `fetch_multi_source`). See `registered_pool_is_native`.
     fn pool_is_native(&self, mint: &str, pool_address: &str) -> bool {
         self.db
             .get_pools(mint)
-            .ok()
-            .and_then(|pools| {
-                pools
-                    .into_iter()
-                    .find(|p| p.address == pool_address)
-                    .map(|p| p.is_native_pair)
-            })
-            .unwrap_or(true)
+            .map(|pools| registered_pool_is_native(&pools, pool_address))
+            .unwrap_or(false)
     }
 
     /// Newest stored native bucket of a series and whether it is caught up.
@@ -2872,6 +2871,21 @@ fn count_by_priority(configs: &HashMap<String, TokenOhlcvConfig>) -> HashMap<Pri
         *counts.entry(config.priority).or_default() += 1;
     }
     counts
+}
+
+/// Whether an explicit refresh re-resolves the token's pools: only with no registered pool or
+/// a pool snapshot past its TTL.
+fn pool_rediscovery_due(has_pools: bool, snapshot_fresh: bool) -> bool {
+    !has_pools || !snapshot_fresh
+}
+
+/// Whether `pool_address` is a registered native-quoted pool. An unknown pool or quote is not
+/// native, so it never reaches a source that answers in the pool's quote token.
+fn registered_pool_is_native(pools: &[PoolConfig], pool_address: &str) -> bool {
+    pools
+        .iter()
+        .find(|p| p.address == pool_address)
+        .is_some_and(|p| p.is_native_pair)
 }
 
 #[cfg(test)]
@@ -3493,5 +3507,26 @@ mod tests {
             newest_storable_bucket(&[candle(CURRENT, f64::NAN)], tf),
             None
         );
+    }
+
+    #[test]
+    fn an_explicit_refresh_rediscovers_only_without_pools_or_a_fresh_snapshot() {
+        assert!(!pool_rediscovery_due(true, true));
+        assert!(pool_rediscovery_due(true, false));
+        assert!(pool_rediscovery_due(false, true));
+        assert!(pool_rediscovery_due(false, false));
+    }
+
+    #[test]
+    fn an_unknown_pool_or_quote_is_not_native() {
+        let mut sol = PoolConfig::new("sol".to_owned(), "dex".to_owned(), 1.0);
+        sol.is_native_pair = true;
+        let mut usd = PoolConfig::new("usd".to_owned(), "dex".to_owned(), 1.0);
+        usd.is_native_pair = false;
+        let pools = [sol, usd];
+        assert!(registered_pool_is_native(&pools, "sol"));
+        assert!(!registered_pool_is_native(&pools, "usd"));
+        assert!(!registered_pool_is_native(&pools, "unregistered"));
+        assert!(!registered_pool_is_native(&[], "sol"));
     }
 }

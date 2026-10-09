@@ -5,6 +5,7 @@
 
 use crate::events::{record_ohlcv_event, Severity};
 use crate::logger::{self, LogTag};
+use crate::ohlcvs::cache::OhlcvCache;
 use crate::ohlcvs::database::OhlcvDatabase;
 use crate::ohlcvs::types::{OhlcvError, OhlcvResult, PoolConfig, PoolMetadata};
 use crate::tokens::pools;
@@ -15,13 +16,19 @@ use std::cmp::Ordering;
 use std::collections::HashMap;
 use std::sync::Arc;
 
+/// Without a data server series pool, a native pool replaces the current series
+/// pool only at this multiple of its liquidity. The data server applies the same
+/// factor before it moves a stored series, so both sides switch on one rule.
+const SERIES_POOL_SWITCH_FACTOR: f64 = 2.0;
+
 pub struct PoolManager {
     db: Arc<OhlcvDatabase>,
+    cache: Arc<OhlcvCache>,
 }
 
 impl PoolManager {
-    pub fn new(db: Arc<OhlcvDatabase>) -> Self {
-        Self { db }
+    pub fn new(db: Arc<OhlcvDatabase>, cache: Arc<OhlcvCache>) -> Self {
+        Self { db, cache }
     }
 
     /// Register a pool for a token
@@ -129,6 +136,12 @@ impl PoolManager {
 
     /// Discover and register pools for a token using centralized token snapshots.
     /// Uses immediate fetch (bypasses background queue) for fast response.
+    ///
+    /// The default (series) pool is the data server's canonical pool whenever the
+    /// snapshot names one, whatever its quote. Otherwise the current default is
+    /// kept unless a native pool holds `SERIES_POOL_SWITCH_FACTOR` times its
+    /// liquidity. When the series pool changes, the other pools' rows and the
+    /// token's backfill flags are reset together (`reset_series_to_pool`).
     pub async fn discover_pools(&self, mint: &str) -> OhlcvResult<Vec<PoolConfig>> {
         record_ohlcv_event(
             "pool_discovery_start",
@@ -186,14 +199,22 @@ impl PoolManager {
             }
         };
 
-        let canonical_address = snapshot
-            .canonical_pool_address
-            .clone()
-            .or_else(|| pools::choose_canonical_pool(&snapshot.pools));
+        let server_series = snapshot.series_pool_address.as_deref().filter(|address| {
+            snapshot
+                .pools
+                .iter()
+                .any(|pool| pool.pool_address == *address)
+        });
 
-        let mut existing_map: HashMap<String, PoolConfig> = self
-            .db
-            .get_pools(mint)?
+        let existing_pools = self.db.get_pools(mint)?;
+        let previous_series = PoolConfig::series_pool(&existing_pools)
+            .or_else(|| existing_pools.iter().find(|p| p.is_default))
+            .map(|p| p.address.clone());
+        let previous_default = existing_pools
+            .iter()
+            .find(|p| p.is_default)
+            .map(|p| p.address.clone());
+        let mut existing_map: HashMap<String, PoolConfig> = existing_pools
             .into_iter()
             .map(|cfg| (cfg.address.clone(), cfg))
             .collect();
@@ -203,8 +224,8 @@ impl PoolManager {
 
         for pool in snapshot.pools.iter() {
             let existing = existing_map.remove(&pool.pool_address);
-            let config = Self::merge_pool_info(pool, canonical_address.as_deref(), existing);
-            if pool.is_native_pair {
+            let config = Self::merge_pool_info(pool, existing);
+            if pool.is_native_pair || server_series == Some(pool.pool_address.as_str()) {
                 discovered_configs.push(config);
             } else {
                 non_native_configs.push(config);
@@ -212,13 +233,11 @@ impl PoolManager {
         }
 
         // A token whose ONLY pools are USD-quoted (e.g. a pump token that only ever
-        // paired with USDC) has no wSOL pool. We used to bail out ("No SOL pools")
-        // and never chart it — but the data server (and the chain's candle feeds) return
-        // SOL-denominated candles for ANY pool by forcing SOL on the paid path, so
-        // we CAN chart it. Register the best USD pool as a fallback; the fetcher
-        // then skips GeckoTerminal for it (is_native_pair=false) to avoid pulling USD
-        // candles that would poison the SOL series, and relies on the SOL-forcing
-        // sources instead.
+        // paired with USDC) has no wSOL pool. The data server returns SOL-denominated
+        // candles for any pool, so its USD pools are registered instead; the fetcher
+        // serves a non-native pool from the data server only (is_native_pair=false),
+        // never from a candle feed or GeckoTerminal, whose USD candles would poison
+        // the SOL series.
         if discovered_configs.is_empty() {
             if non_native_configs.is_empty() {
                 record_ohlcv_event(
@@ -239,8 +258,8 @@ impl PoolManager {
             logger::debug(
                 LogTag::Ohlcv,
                 &format!(
-                    "No SOL pool for mint={}; registering best USD pool ({} candidates), \
-                     OHLCV via SOL-forcing sources (server/candle feeds), Gecko skipped",
+                    "No SOL pool for mint={}; registering {} USD pools, \
+                     OHLCV from the data server only",
                     mint,
                     non_native_configs.len()
                 ),
@@ -248,10 +267,13 @@ impl PoolManager {
             discovered_configs = non_native_configs;
         }
 
-        if !discovered_configs.iter().any(|cfg| cfg.is_default) {
-            if let Some(best_idx) = Self::best_pool_index(&discovered_configs) {
-                discovered_configs[best_idx].is_default = true;
-            }
+        let default_address = select_series_default(
+            server_series,
+            previous_default.as_deref(),
+            &discovered_configs,
+        );
+        for config in &mut discovered_configs {
+            config.is_default = default_address.as_deref() == Some(config.address.as_str());
         }
 
         for config in &discovered_configs {
@@ -305,6 +327,14 @@ impl PoolManager {
             );
         }
 
+        let series = PoolConfig::series_pool(&discovered_configs).map(|p| p.address.clone());
+        if let (Some(previous), Some(current)) = (previous_series.as_deref(), series.as_deref()) {
+            if previous != current {
+                self.reset_series(mint, previous, current, server_series.is_some())
+                    .await?;
+            }
+        }
+
         record_ohlcv_event(
             "pool_discovery_complete",
             Severity::Info,
@@ -315,7 +345,8 @@ impl PoolManager {
                 "pools_found": discovered_configs.len(),
                 "sol_pool": discovered_configs.iter().any(|c| c.is_native_pair),
                 "removed_pools": removed_addresses.len(),
-                "canonical_address": canonical_address,
+                "series_pool": series,
+                "server_series_pool": server_series,
             }),
         )
         .await;
@@ -323,11 +354,46 @@ impl PoolManager {
         Ok(discovered_configs)
     }
 
-    fn merge_pool_info(
-        pool: &TokenPoolInfo,
-        canonical: Option<&str>,
-        existing: Option<PoolConfig>,
-    ) -> PoolConfig {
+    /// Move the token's series onto `current`: other pools' rows and the backfill
+    /// flags in one transaction, then the hot candle cache, so no reader keeps
+    /// serving the previous pool's series.
+    async fn reset_series(
+        &self,
+        mint: &str,
+        previous: &str,
+        current: &str,
+        from_server: bool,
+    ) -> OhlcvResult<()> {
+        let reset = self.db.reset_series_to_pool(mint, current)?;
+        self.cache.invalidate(mint, None, None)?;
+
+        logger::info(
+            LogTag::Ohlcv,
+            &format!(
+                "Series pool for mint={} moved {} -> {} (data server pool: {}); removed {} candles and {} gaps, backfill restarts",
+                mint, previous, current, from_server, reset.candles_deleted, reset.gaps_deleted
+            ),
+        );
+        record_ohlcv_event(
+            "default_pool_changed",
+            Severity::Info,
+            Some(mint),
+            Some(current),
+            json!({
+                "mint": mint,
+                "previous_pool": previous,
+                "pool_address": current,
+                "from_data_server": from_server,
+                "candles_deleted": reset.candles_deleted,
+                "gaps_deleted": reset.gaps_deleted,
+            }),
+        )
+        .await;
+
+        Ok(())
+    }
+
+    fn merge_pool_info(pool: &TokenPoolInfo, existing: Option<PoolConfig>) -> PoolConfig {
         let dex_label = pools::extract_dex_label(pool);
         let liquidity = pools::extract_pool_liquidity(pool);
 
@@ -350,13 +416,9 @@ impl PoolManager {
             config.liquidity = liquidity;
         }
 
-        // Carry the pool's SOL/USD denomination so the fetcher can avoid running
-        // GeckoTerminal (USD) on a USD-quoted pool.
+        // Carry the pool's SOL/USD denomination so the fetcher serves a
+        // USD-quoted pool from the data server only.
         config.is_native_pair = pool.is_native_pair;
-
-        if let Some(canonical_address) = canonical {
-            config.is_default = canonical_address == config.address;
-        }
 
         // When re-discovering an existing pool, reset its failure_count so it
         // gets a fresh chance. The pool service just confirmed the pool exists
@@ -368,26 +430,6 @@ impl PoolManager {
         }
 
         config
-    }
-
-    fn best_pool_index(configs: &[PoolConfig]) -> Option<usize> {
-        configs
-            .iter()
-            .enumerate()
-            .max_by(|(_, a), (_, b)| {
-                Self::pool_config_liquidity(a)
-                    .partial_cmp(&Self::pool_config_liquidity(b))
-                    .unwrap_or(Ordering::Equal)
-            })
-            .map(|(idx, _)| idx)
-    }
-
-    fn pool_config_liquidity(config: &PoolConfig) -> f64 {
-        if config.liquidity.is_finite() && config.liquidity > 0.0 {
-            config.liquidity
-        } else {
-            0.0
-        }
     }
 
     /// Get pool metadata for API responses
@@ -431,10 +473,127 @@ impl PoolManager {
     }
 }
 
+/// The default (series) pool among the registered `candidates`: the data server's
+/// pool when it is registered; else the current default, replaced only by a native
+/// pool with `SERIES_POOL_SWITCH_FACTOR` times its liquidity; else the deepest
+/// native pool, else the deepest pool.
+fn select_series_default(
+    server_series: Option<&str>,
+    current_default: Option<&str>,
+    candidates: &[PoolConfig],
+) -> Option<String> {
+    if let Some(server) = server_series {
+        if candidates.iter().any(|c| c.address == server) {
+            return Some(server.to_owned());
+        }
+    }
+    let deepest = |native_only: bool| {
+        candidates
+            .iter()
+            .filter(|c| !native_only || c.is_native_pair)
+            .max_by(|a, b| {
+                pool_liquidity(a)
+                    .partial_cmp(&pool_liquidity(b))
+                    .unwrap_or(Ordering::Equal)
+            })
+    };
+    let current =
+        current_default.and_then(|address| candidates.iter().find(|c| c.address == address));
+    let chosen = match (current, deepest(true)) {
+        (Some(current), Some(native))
+            if native.address != current.address
+                && pool_liquidity(native)
+                    >= SERIES_POOL_SWITCH_FACTOR * pool_liquidity(current) =>
+        {
+            native
+        }
+        (Some(current), _) => current,
+        (None, Some(native)) => native,
+        (None, None) => deepest(false)?,
+    };
+    Some(chosen.address.clone())
+}
+
+fn pool_liquidity(config: &PoolConfig) -> f64 {
+    if config.liquidity.is_finite() && config.liquidity > 0.0 {
+        config.liquidity
+    } else {
+        0.0
+    }
+}
+
 #[derive(Debug, Clone)]
 pub struct PoolStats {
     pub total_pools: usize,
     pub healthy_pools: usize,
     pub total_liquidity: f64,
     pub has_default: bool,
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    fn pool(address: &str, liquidity: f64, native: bool) -> PoolConfig {
+        let mut config = PoolConfig::new(address.to_owned(), "dex".to_owned(), liquidity);
+        config.is_native_pair = native;
+        config
+    }
+
+    #[test]
+    fn the_data_server_pool_is_the_default_even_when_usd_quoted() {
+        let candidates = [pool("sol", 900_000.0, true), pool("usdc", 100_000.0, false)];
+        assert_eq!(
+            select_series_default(Some("usdc"), Some("sol"), &candidates).as_deref(),
+            Some("usdc")
+        );
+    }
+
+    #[test]
+    fn native_pools_within_the_switch_factor_keep_the_current_default() {
+        // The pools swapped depth order, but neither holds twice the other's liquidity.
+        let candidates = [pool("a", 150_000.0, true), pool("b", 100_000.0, true)];
+        assert_eq!(
+            select_series_default(None, Some("b"), &candidates).as_deref(),
+            Some("b")
+        );
+        // A server pool that is not registered is no server pool.
+        assert_eq!(
+            select_series_default(Some("gone"), Some("b"), &candidates).as_deref(),
+            Some("b")
+        );
+    }
+
+    #[test]
+    fn a_native_pool_at_the_switch_factor_replaces_the_current_default() {
+        let candidates = [pool("a", 200_000.0, true), pool("b", 100_000.0, true)];
+        assert_eq!(
+            select_series_default(None, Some("b"), &candidates).as_deref(),
+            Some("a")
+        );
+        // A USD default yields only to a native pool at the factor.
+        let candidates = [pool("sol", 150_000.0, true), pool("usdc", 100_000.0, false)];
+        assert_eq!(
+            select_series_default(None, Some("usdc"), &candidates).as_deref(),
+            Some("usdc")
+        );
+    }
+
+    #[test]
+    fn without_a_default_the_deepest_native_pool_wins_then_the_deepest_pool() {
+        let candidates = [pool("usdc", 900_000.0, false), pool("sol", 100_000.0, true)];
+        assert_eq!(
+            select_series_default(None, None, &candidates).as_deref(),
+            Some("sol")
+        );
+        let candidates = [
+            pool("usdc", 900_000.0, false),
+            pool("usdt", 100_000.0, false),
+        ];
+        assert_eq!(
+            select_series_default(None, Some("gone"), &candidates).as_deref(),
+            Some("usdc")
+        );
+        assert_eq!(select_series_default(None, None, &[]), None);
+    }
 }
