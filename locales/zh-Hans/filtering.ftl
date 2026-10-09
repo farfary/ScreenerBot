@@ -153,12 +153,12 @@ filtering-footer-in-sync = 配置已同步
 
 ## Info bar and status metrics
 
-filtering-info-total = 总计：
-filtering-info-priced = 有价格：
-filtering-info-passed = 已通过：
-filtering-info-positions = 仓位：
-filtering-info-blacklisted = 黑名单：
-filtering-info-cache = 缓存：
+filtering-info-total = 总计
+filtering-info-priced = 有价格
+filtering-info-passed = 已通过
+filtering-info-positions = 仓位
+filtering-info-blacklisted = 黑名单
+filtering-info-cache = 缓存
 # A count followed by its share of the total, e.g. "120 (4.0%)".
 filtering-count-share = { $count }（{ $share }）
 filtering-refresh-building = 构建中…

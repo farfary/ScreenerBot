@@ -153,12 +153,12 @@ filtering-footer-in-sync = Configuración sincronizada
 
 ## Info bar and status metrics
 
-filtering-info-total = Total:
-filtering-info-priced = Con precio:
-filtering-info-passed = Aprobados:
-filtering-info-positions = Posiciones:
-filtering-info-blacklisted = En lista negra:
-filtering-info-cache = Caché:
+filtering-info-total = Total
+filtering-info-priced = Con precio
+filtering-info-passed = Aprobados
+filtering-info-positions = Posiciones
+filtering-info-blacklisted = En lista negra
+filtering-info-cache = Caché
 # A count followed by its share of the total, e.g. "120 (4.0%)".
 filtering-count-share = { $count } ({ $share })
 filtering-refresh-building = Creando…

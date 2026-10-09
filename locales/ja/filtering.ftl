@@ -153,12 +153,12 @@ filtering-footer-in-sync = 設定は同期済みです
 
 ## Info bar and status metrics
 
-filtering-info-total = 合計:
-filtering-info-priced = 価格あり:
-filtering-info-passed = 通過:
-filtering-info-positions = ポジション:
-filtering-info-blacklisted = ブラックリスト:
-filtering-info-cache = キャッシュ:
+filtering-info-total = 合計
+filtering-info-priced = 価格あり
+filtering-info-passed = 通過
+filtering-info-positions = ポジション
+filtering-info-blacklisted = ブラックリスト
+filtering-info-cache = キャッシュ
 # A count followed by its share of the total, e.g. "120 (4.0%)".
 filtering-count-share = { $count }（{ $share }）
 filtering-refresh-building = 構築中…

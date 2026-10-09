@@ -153,12 +153,12 @@ filtering-footer-in-sync = 설정이 동기화됨
 
 ## Info bar and status metrics
 
-filtering-info-total = 전체:
-filtering-info-priced = 가격 있음:
-filtering-info-passed = 통과:
-filtering-info-positions = 포지션:
-filtering-info-blacklisted = 블랙리스트:
-filtering-info-cache = 캐시:
+filtering-info-total = 전체
+filtering-info-priced = 가격 있음
+filtering-info-passed = 통과
+filtering-info-positions = 포지션
+filtering-info-blacklisted = 블랙리스트
+filtering-info-cache = 캐시
 # A count followed by its share of the total, e.g. "120 (4.0%)".
 filtering-count-share = { $count } ({ $share })
 filtering-refresh-building = 생성 중…

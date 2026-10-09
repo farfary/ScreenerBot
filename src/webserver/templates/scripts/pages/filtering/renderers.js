@@ -93,6 +93,13 @@ export function createFilteringRenderers({ state, $: _$, Utils, requestManager: 
     return I18n.t("filtering-tokens-count", { count, amount: Utils.formatNumber(count, 0) });
   }
 
+  // One summary figure in the shared table-toolbar chip shape, so the strip reads like
+  // the summary rows of every DataTable page.
+  function summaryChip(label, value, variant) {
+    const tone = variant ? ` data-variant="${variant}"` : "";
+    return `<div class="table-toolbar-chip"${tone}><span class="table-toolbar-chip__label">${Utils.escapeHtml(label)}</span><span class="table-toolbar-chip__value">${Utils.escapeHtml(value)}</span></div>`;
+  }
+
   function renderInfoBar() {
     if (!state.stats) return "";
 
@@ -109,32 +116,22 @@ export function createFilteringRenderers({ state, $: _$, Utils, requestManager: 
     const passedRate = percentOf(passed_filtering, total_tokens);
     const cacheAge = refreshedLabel(updated_at);
 
-    return `
-      <div class="info-item highlight">
-        <span class="label">${Utils.escapeHtml(I18n.t("filtering-info-total"))}</span>
-        <span class="value">${Utils.escapeHtml(Utils.formatNumber(total_tokens, 0))}</span>
-      </div>
-      <div class="info-item">
-        <span class="label">${Utils.escapeHtml(I18n.t("filtering-info-priced"))}</span>
-        <span class="value">${Utils.escapeHtml(countWithShare(with_pool_price, priceRate))}</span>
-      </div>
-      <div class="info-item highlight">
-        <span class="label">${Utils.escapeHtml(I18n.t("filtering-info-passed"))}</span>
-        <span class="value">${Utils.escapeHtml(countWithShare(passed_filtering, passedRate))}</span>
-      </div>
-      <div class="info-item">
-        <span class="label">${Utils.escapeHtml(I18n.t("filtering-info-positions"))}</span>
-        <span class="value">${Utils.escapeHtml(Utils.formatNumber(open_positions, 0))}</span>
-      </div>
-      <div class="info-item warning">
-        <span class="label">${Utils.escapeHtml(I18n.t("filtering-info-blacklisted"))}</span>
-        <span class="value">${Utils.escapeHtml(Utils.formatNumber(blacklisted, 0))}</span>
-      </div>
-      <div class="info-item">
-        <span class="label">${Utils.escapeHtml(I18n.t("filtering-info-cache"))}</span>
-        <span class="value">${Utils.escapeHtml(cacheAge)}</span>
-      </div>
-  `;
+    return [
+      summaryChip(I18n.t("filtering-info-total"), Utils.formatNumber(total_tokens, 0)),
+      summaryChip(I18n.t("filtering-info-priced"), countWithShare(with_pool_price, priceRate)),
+      summaryChip(
+        I18n.t("filtering-info-passed"),
+        countWithShare(passed_filtering, passedRate),
+        "success"
+      ),
+      summaryChip(I18n.t("filtering-info-positions"), Utils.formatNumber(open_positions, 0)),
+      summaryChip(
+        I18n.t("filtering-info-blacklisted"),
+        Utils.formatNumber(blacklisted, 0),
+        "warning"
+      ),
+      summaryChip(I18n.t("filtering-info-cache"), cacheAge),
+    ].join("");
   }
 
   function renderStatusView() {

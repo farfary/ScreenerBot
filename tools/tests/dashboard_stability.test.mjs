@@ -231,6 +231,20 @@ async function assertUnitsInside(page, label) {
   assert.deepEqual(found, [], `${label}: number-field units`);
 }
 
+/**
+ * Every page summary figure is a shared toolbar chip, whose label is a bare caption:
+ * the chip separates label and value, so a label never ends in a colon.
+ */
+async function assertSummaryLabelsBare(page, label) {
+  const found = await page.evaluate(() =>
+    [...document.querySelectorAll(".table-toolbar-chip__label")]
+      .filter((caption) => caption.getClientRects().length)
+      .map((caption) => caption.textContent.trim())
+      .filter((text) => /[:：]$/.test(text))
+  );
+  assert.deepEqual(found, [], `${label}: summary labels`);
+}
+
 /** Horizontal overflow of the page itself, as a scroll bar would show it. */
 async function overflow(page) {
   return page.evaluate(() => {
@@ -408,6 +422,7 @@ describe("dashboard stability", { concurrency: 4 }, () => {
           await assertHeadersFit(session.page, `${id} ${view.name}`);
           await assertPinnedEdgeClean(session.page, `${id} ${view.name}`);
           await assertUnitsInside(session.page, `${id} ${view.name}`);
+          await assertSummaryLabelsBare(session.page, `${id} ${view.name}`);
         }
         if (id === "positions") {
           // A new column set opens at its start edge, not at the previous view's offset.
@@ -507,6 +522,7 @@ describe("dashboard stability", { concurrency: 4 }, () => {
         await assertViewsFit(page, views, RTL_LOCALE, async (current, label) => {
           await assertValuesInOrder(current, label);
           await assertUnitsInside(current, label);
+          await assertSummaryLabelsBare(current, label);
         });
         await finish(session);
       });

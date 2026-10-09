@@ -49,37 +49,6 @@
   -webkit-overflow-scrolling: touch;
 }
 
-.filtering-info-bar .info-item {
-  display: flex;
-  align-items: center;
-  gap: var(--spacing-xs);
-  font-size: 0.8rem;
-  color: var(--text-secondary);
-  white-space: nowrap;
-}
-
-.filtering-info-bar .info-item .label {
-  color: var(--text-secondary);
-  font-weight: 500;
-}
-
-.filtering-info-bar .info-item .value {
-  font-weight: 600;
-  color: var(--text-primary);
-  font-family: var(--font-data);
-  font-feature-settings:
-    "tnum" 1,
-    "zero" 1;
-}
-
-.filtering-info-bar .info-item.highlight .value {
-  color: var(--link-color);
-}
-
-.filtering-info-bar .info-item.warning .value {
-  color: var(--error-color);
-}
-
 /* =============================================================================
    Settings sub-tab toolbar
    Filter-by-name, how much of the source is on screen, and the source master

@@ -153,12 +153,12 @@ filtering-footer-in-sync = الإعدادات متزامنة
 
 ## Info bar and status metrics
 
-filtering-info-total = الإجمالي:
-filtering-info-priced = المسعّرة:
-filtering-info-passed = الناجحة:
-filtering-info-positions = المراكز:
-filtering-info-blacklisted = في القائمة السوداء:
-filtering-info-cache = الذاكرة المؤقتة:
+filtering-info-total = الإجمالي
+filtering-info-priced = المسعّرة
+filtering-info-passed = الناجحة
+filtering-info-positions = المراكز
+filtering-info-blacklisted = في القائمة السوداء
+filtering-info-cache = الذاكرة المؤقتة
 # A count followed by its share of the total, e.g. "120 (4.0%)".
 filtering-count-share = { $count } ({ $share })
 filtering-refresh-building = جارٍ البناء…

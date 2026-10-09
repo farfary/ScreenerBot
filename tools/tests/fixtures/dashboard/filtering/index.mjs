@@ -56,7 +56,7 @@ export const views = [
     name: "status",
     click: [tab("status")],
     populated: [
-      { selector: "#filtering-info-bar .info-item", min: 6 },
+      { selector: "#filtering-info-bar .table-toolbar-chip", min: 6 },
       { selector: ".status-view .metric-card", min: 7 },
       { selector: ".status-rejection-section .rej-source-pill", min: 5 },
       { selector: ".status-rejection-section .rejection-item", min: 14 },

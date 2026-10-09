@@ -153,12 +153,12 @@ filtering-footer-in-sync = پیکربندی همگام است
 
 ## Info bar and status metrics
 
-filtering-info-total = مجموع:
-filtering-info-priced = دارای قیمت:
-filtering-info-passed = تأییدشده:
-filtering-info-positions = پوزیشن‌ها:
-filtering-info-blacklisted = در فهرست سیاه:
-filtering-info-cache = کش:
+filtering-info-total = مجموع
+filtering-info-priced = دارای قیمت
+filtering-info-passed = تأییدشده
+filtering-info-positions = پوزیشن‌ها
+filtering-info-blacklisted = در فهرست سیاه
+filtering-info-cache = کش
 # A count followed by its share of the total, e.g. "120 (4.0%)".
 filtering-count-share = { $count } ({ $share })
 filtering-refresh-building = در حال ساخت…
