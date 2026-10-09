@@ -63,30 +63,6 @@
   color: var(--text-primary);
 }
 
-.table-settings-close {
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  width: 30px;
-  height: 30px;
-  min-width: 30px;
-  min-height: 30px;
-  border: 1px solid transparent;
-  background: transparent;
-  border-radius: var(--radius-md);
-  color: var(--text-secondary);
-  cursor: pointer;
-  transition: all var(--transition-fast);
-  flex-shrink: 0;
-}
-
-.table-settings-close:hover,
-.table-settings-close:focus-visible {
-  background: var(--danger-alpha-15);
-  border-color: var(--danger-alpha-30);
-  color: var(--danger);
-}
-
 .table-settings-body {
   padding: 20px;
   overflow-y: auto;
@@ -401,7 +377,6 @@ body.table-settings-open {
 
 /* Search */
 .table-settings-search-container {
-  padding: 0 20px;
   margin-bottom: 10px;
 }
 

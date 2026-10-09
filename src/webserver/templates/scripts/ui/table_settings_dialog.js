@@ -167,7 +167,7 @@ export class TableSettingsDialog {
       <div class="table-settings-dialog" role="dialog" aria-modal="true" aria-labelledby="table-settings-title" tabindex="-1">
         <header class="table-settings-header">
           <h2 id="table-settings-title" class="table-settings-title" data-l10n-id="table-settings-title"></h2>
-          <button type="button" class="table-settings-close" data-action="close" data-l10n-id="table-settings-close">&times;</button>
+          <button type="button" class="modal-close" data-action="close" data-l10n-id="table-settings-close"><i class="icon-x" aria-hidden="true"></i></button>
         </header>
         <div class="table-settings-body">
           ${this._renderPaginationToggle()}
