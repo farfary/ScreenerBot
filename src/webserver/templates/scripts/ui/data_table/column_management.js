@@ -7,6 +7,8 @@
  * Handles column width calculations, resizing, and auto-sizing
  */
 
+/* global NodeFilter */
+
 import { dirSign } from "../../core/dom.js";
 
 /**
