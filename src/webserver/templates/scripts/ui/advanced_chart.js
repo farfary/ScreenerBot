@@ -56,9 +56,6 @@
     barSpacing: 12,
     minBarSpacing: 4,
     indicators: [], // ['ema9', 'ema21']
-    // Significant digits for every price this chart prints (axis, tooltip).
-    // Not decimal places — see Utils.formatPriceSubscript.
-    pricePrecision: 5,
     volumePrecision: 2,
     // Optional (bar) => [{ label, value, cls }] hook: extra tooltip rows for the
     // surface that owns the chart (e.g. a position's entry and P&L at that bar).
@@ -799,10 +796,7 @@
       refs.open.textContent = this._formatPrice(bar.open);
       refs.high.textContent = this._formatPrice(bar.high);
       refs.low.textContent = this._formatPrice(bar.low);
-      refs.delta.textContent = window.Utils.formatPriceSubscript(delta, {
-        precision: this.options.pricePrecision,
-        sign: "always",
-      });
+      refs.delta.textContent = window.Utils.formatPriceSubscript(delta, { sign: "always" });
       refs.delta.className = `tooltip-value ${changeClass}`;
       refs.range.textContent = rangePercent === null ? "—" : window.Utils.formatPercentValue(rangePercent, { decimals: 2, plus: "" });
       // Always rendered, including 0: a row that appears and disappears between
@@ -1057,9 +1051,7 @@
      * number can never render two ways on one screen.
      */
     _formatPrice(price) {
-      return window.Utils.formatPriceSubscript(price, {
-        precision: this.options.pricePrecision,
-      });
+      return window.Utils.formatPriceSubscript(price);
     }
 
     /** Bar open time; the clock is dropped once bars are a day or wider. */

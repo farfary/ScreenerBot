@@ -243,7 +243,7 @@ test("Copy Trading Compare shows each mode whole and names curves as the table d
   assert.deepEqual([...legend].sort(), [...names].sort());
 });
 
-test("the Tokens price column keeps one significant-digit count", async (t) => {
+test("the Tokens price column keeps four significant digits on every row", async (t) => {
   const page = await openPage(t, "tokens");
   const root = "#tokens-root";
   await page.waitForSelector(`${root} tbody tr[data-row-id] td[data-column-id="price_sol"]`);
@@ -258,5 +258,5 @@ test("the Tokens price column keeps one significant-digit count", async (t) => {
   };
   const counts = new Set(prices.map(significant));
   assert.ok(prices.length > 1, "the fixture prices several tokens");
-  assert.equal(counts.size, 1, `one digit count across ${prices.join(" | ")}`);
+  assert.deepEqual([...counts], [4], `four significant digits across ${prices.join(" | ")}`);
 });

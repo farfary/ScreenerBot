@@ -147,7 +147,7 @@ function buildHeadlineMetrics(token) {
       <div class="overview-headline-item">
         <span class="overview-headline-label">${esc(I18n.t("tokens-overview-price"))}</span>
         <span class="overview-headline-readout">
-          <span class="overview-headline-value">${token.price_sol ? withSolUnit(Utils.formatPriceSubscript(token.price_sol, { precision: 5 })) : "—"}</span>
+          <span class="overview-headline-value">${token.price_sol ? withSolUnit(Utils.formatPriceSubscript(token.price_sol)) : "—"}</span>
           ${hasChange24h ? `<span class="overview-headline-change ${changeClass}">${formatChange(change24h)}</span>` : ""}
         </span>
       </div>

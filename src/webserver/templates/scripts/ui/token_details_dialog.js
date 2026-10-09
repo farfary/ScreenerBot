@@ -1370,11 +1370,7 @@ export class TokenDetailsDialog {
     const volume24h = value(token.volume_24h);
     const holders = value(token.total_holders);
 
-    update(
-      "price-sol",
-      priceSol === null ? "—" : Utils.formatPriceSubscript(priceSol, { precision: 5 }),
-      priceSol
-    );
+    update("price-sol", priceSol === null ? "—" : Utils.formatPriceSubscript(priceSol), priceSol);
     update("price-usd", priceUsd === null ? "—" : Utils.formatCurrencyUSD(priceUsd), priceUsd);
     update(
       "market-cap",

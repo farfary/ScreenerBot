@@ -273,7 +273,7 @@ function pickPrice(...candidates) {
 
 function fmtPrice(value) {
   if (value === null || value === undefined || !Number.isFinite(Number(value))) return "—";
-  return withSolUnit(Utils.formatPriceSubscript(Number(value), { precision: 5 }));
+  return withSolUnit(Utils.formatPriceSubscript(Number(value)));
 }
 
 function fmtSol(value) {

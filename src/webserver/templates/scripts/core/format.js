@@ -322,7 +322,7 @@ function usdText(num, trim) {
   if (abs > 0 && abs < 0.01) {
     // Sub-cent prices round to $0.00 with toFixed(2); render the real value in
     // subscript notation (e.g. $0.0₅8142) so tiny token prices stay visible.
-    return withUsdSymbol(formatPriceSubscript(num, { precision: 4 }));
+    return withUsdSymbol(formatPriceSubscript(num));
   }
 
   return withUsdSymbol(localizeDecimal(num.toFixed(2)));
@@ -334,6 +334,13 @@ function usdText(num, trim) {
  * 0.00005101. A larger price prints its zeros, "0.0004249".
  */
 const SUBSCRIPT_MIN_ZEROS = 4;
+
+/**
+ * Significant digits of a price wherever it is shown: a cell, a chart readout, a
+ * dialog figure. One budget keeps two prices of one row, and a whole column, at the
+ * same length.
+ */
+const PRICE_SIGNIFICANT_DIGITS = 4;
 
 /**
  * The parts of a price at `precision` significant digits: `plain` ("0.0105": `lead`
@@ -384,7 +391,10 @@ function priceParts(absPrice, precision, trim) {
  */
 export function formatPriceSubscript(
   price,
-  { fallback = DASH, precision = 5, sign: signMode = "negative", alignWith = [], trim = true } = {}
+  {
+    fallback = DASH,
+    precision = PRICE_SIGNIFICANT_DIGITS,
+    sign: signMode = "negative", alignWith = [], trim = true } = {}
 ) {
   const num = coerceNumber(price);
   if (!Number.isFinite(num)) {

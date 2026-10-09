@@ -726,7 +726,7 @@ export function applyChartMixin(PositionDetailsDialog) {
     if (!last) return;
     const set = (id, v) => {
       const el = this.dialogEl?.querySelector(id);
-      if (el) el.textContent = Utils.formatPriceSubscript(v, { precision: 5 });
+      if (el) el.textContent = Utils.formatPriceSubscript(v);
     };
     set("#pddO", last.open);
     set("#pddH", last.high);
