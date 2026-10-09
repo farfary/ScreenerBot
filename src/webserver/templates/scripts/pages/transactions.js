@@ -139,7 +139,7 @@ function createLifecycle() {
         label: I18n.t("transactions-summary-failed"),
         value:
           failedCountGlobal === null ? "—" : Utils.formatNumber(failedCountGlobal, { decimals: 0 }),
-        variant: Utils.countTone(failedCountGlobal, "warning") || "secondary",
+        variant: Utils.countTone(failedCountGlobal, "error") || "secondary",
       },
     ]);
   };

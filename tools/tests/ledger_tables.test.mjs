@@ -150,6 +150,11 @@ test("Transactions keeps its columns on screen and states each fact once", async
     chips.map((chip) => chip.dataset.summaryId)
   );
   assert.ok(summary.includes("tx-total"), "the toolbar states the total");
+  assert.equal(
+    await page.$eval(`${root} [data-summary-id="tx-failed"]`, (chip) => chip.dataset.variant),
+    "error",
+    "a failure count takes the error tone"
+  );
   assert.ok(!summary.includes("tx-estimate"), "no separate estimate count");
 });
 
