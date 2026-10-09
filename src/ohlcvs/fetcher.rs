@@ -427,14 +427,9 @@ impl OhlcvFetcher {
             }
         }
 
-        // Only the data server converts a non-native pool's candles to SOL.
-        // GeckoTerminal answers in the pool's quote token (`currency=token`) and a
-        // candle feed answers by token address for whatever pool it picks, so on a
-        // USD-quoted or unknown-quote series pool either would write foreign-unit
-        // candles into the SOL series. Both fallbacks are skipped there.
-        if !pool_is_native {
+        let Some(feeds) = fallback_feeds(pool_is_native, || self.candle_feeds(), before) else {
             record_ohlcv_event(
-                "gecko_skipped_non_sol_pool",
+                "fallback_skipped_non_native_pool",
                 Severity::Debug,
                 Some(mint),
                 Some(pool_address),
@@ -444,9 +439,8 @@ impl OhlcvFetcher {
             )
             .await;
             return Ok(FetchResponse::default());
-        }
+        };
 
-        let feeds = feeds_serving(self.candle_feeds(), before);
         if let Some(response) = self
             .fetch_feeds(&feeds, mint, pool_address, api_endpoint, aggregate, limit)
             .await
@@ -762,6 +756,20 @@ impl OhlcvFetcher {
 
 /// The candle feeds that can serve a request. A feed serves only the newest
 /// candles, so a `before` request has none.
+/// The candle feeds a fetch may fall back to after the Data Server, or `None` when every
+/// fallback is skipped. Only the data server converts a non-native pool's candles to SOL.
+/// GeckoTerminal answers in the pool's quote token (`currency=token`) and a candle feed
+/// answers by token address for whatever pool it picks, so on a USD-quoted or unknown-quote
+/// series pool either would write foreign-unit candles into the SOL series. `feeds` is
+/// consulted only for a native pool.
+fn fallback_feeds(
+    pool_is_native: bool,
+    feeds: impl FnOnce() -> Vec<CandleFeed>,
+    before: Option<i64>,
+) -> Option<Vec<CandleFeed>> {
+    pool_is_native.then(|| feeds_serving(feeds(), before))
+}
+
 fn feeds_serving(feeds: Vec<CandleFeed>, before: Option<i64>) -> Vec<CandleFeed> {
     if before.is_some() {
         Vec::new()
@@ -894,6 +902,18 @@ mod tests {
             .expect("a skipped fallback is an empty answer, not an error");
         assert!(response.candles.is_empty());
         assert_eq!(response.source, None);
+
+        // The feed list is never consulted for a non-native pool.
+        assert!(fallback_feeds(
+            false,
+            || panic!("feeds consulted for a non-native pool"),
+            None
+        )
+        .is_none());
+        let native = fallback_feeds(true, || vec![feed("answering", answering_feed)], None);
+        assert_eq!(native.map(|feeds| feeds.len()), Some(1));
+        let before = fallback_feeds(true, || vec![feed("answering", answering_feed)], Some(1));
+        assert_eq!(before.map(|feeds| feeds.len()), Some(0));
     }
 
     #[test]

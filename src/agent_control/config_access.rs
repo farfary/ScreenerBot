@@ -373,11 +373,8 @@ mod tests {
     fn schema_renders_english_text_from_the_catalog() {
         let schema = schema(Some("trader.max_open_positions")).expect("field schema");
         assert_eq!(schema["label"], "Max Open Positions");
-        assert_eq!(
-            schema["hint"],
-            "Max simultaneous positions (2-5 conservative)"
-        );
-        assert_eq!(schema["unit"], "positions");
+        assert_eq!(schema["hint"], "Most positions held open at the same time");
+        assert_eq!(schema["unit"], "pos");
         assert_eq!(schema["category"], "Core Trading");
         assert_eq!(schema["impact"], "critical");
         assert!(schema["key"].is_string());

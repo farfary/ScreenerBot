@@ -316,27 +316,13 @@ impl PoolConfig {
         self.failure_count < 5
     }
 
-    /// The ONE pool a token's candle series lives on: the healthy default, else the deepest
-    /// healthy pool. Every writer (monitor fetch, backfill) and every reader (chart, status)
-    /// resolves through this, because two rules drifted before: the chart read the default
-    /// while the monitor wrote the deepest pool, so a token whose default was not its deepest
-    /// pool collected candles the chart never showed.
+    /// The ONE pool a token's candle series lives on: the default pool, while it is healthy.
+    /// Every writer (monitor fetch, backfill) and every reader (chart, status) resolves
+    /// through this. There is no fallback to another pool: the series moves only through
+    /// `OhlcvDatabase::write_series_pools`, which resets the token's rows and backfill flags
+    /// with the move, so the flags always describe the pool read here.
     pub fn series_pool(pools: &[PoolConfig]) -> Option<&PoolConfig> {
-        if let Some(default) = pools.iter().find(|p| p.is_default && p.is_healthy()) {
-            return Some(default);
-        }
-        pools.iter().filter(|p| p.is_healthy()).max_by(|a, b| {
-            let depth = |p: &PoolConfig| {
-                if p.liquidity.is_finite() {
-                    p.liquidity
-                } else {
-                    0.0
-                }
-            };
-            depth(a)
-                .partial_cmp(&depth(b))
-                .unwrap_or(std::cmp::Ordering::Equal)
-        })
+        pools.iter().find(|p| p.is_default && p.is_healthy())
     }
 }
 
@@ -581,10 +567,18 @@ pub enum OhlcvError {
     RateLimitExceeded,
     PoolNotFound(String),
     InvalidTimeframe(String),
-    DataGap { start: i64, end: i64 },
+    DataGap {
+        start: i64,
+        end: i64,
+    },
     CacheError(String),
     NotFound(String),
     Chain(crate::chains::Error),
+    /// A candle or backfill-flag write for a pool that is no longer the token's series pool.
+    SeriesPoolMoved {
+        mint: String,
+        pool: String,
+    },
 }
 
 impl From<crate::chains::Error> for OhlcvError {
@@ -607,6 +601,9 @@ impl fmt::Display for OhlcvError {
             OhlcvError::CacheError(e) => write!(f, "Cache error: {e}"),
             OhlcvError::NotFound(msg) => write!(f, "Not found: {msg}"),
             OhlcvError::Chain(e) => write!(f, "Chain: {e}"),
+            OhlcvError::SeriesPoolMoved { mint, pool } => {
+                write!(f, "Pool {pool} is no longer the series pool of {mint}")
+            }
         }
     }
 }
@@ -768,31 +765,20 @@ mod tests {
     }
 
     #[test]
-    fn a_healthy_default_wins_over_a_deeper_pool() {
-        // The shape that hid a token's candles: a shallow default and a deep non-default.
+    fn the_series_pool_is_the_healthy_default_and_never_another_pool() {
+        // A shallow default wins over a deeper pool.
         let pools = [
             pool("deep", 61_364.0, false, 0),
             pool("default", 476.0, true, 0),
         ];
         assert_eq!(resolved(&pools), Some("default"));
-    }
-
-    #[test]
-    fn an_unhealthy_default_falls_back_to_the_deepest_healthy_pool() {
+        // An unhealthy default resolves to no pool rather than to an unreset fallback.
         let pools = [
             pool("default", 90_000.0, true, 5),
-            pool("mid", 5_000.0, false, 0),
-            pool("deep_but_failing", 80_000.0, false, 7),
-            pool("deep", 20_000.0, false, 4),
+            pool("deep", 20_000.0, false, 0),
         ];
-        assert_eq!(resolved(&pools), Some("deep"));
-    }
-
-    #[test]
-    fn non_finite_liquidity_ranks_last_and_no_healthy_pool_resolves_to_none() {
-        let pools = [pool("nan", f64::NAN, false, 0), pool("real", 1.0, false, 0)];
-        assert_eq!(resolved(&pools), Some("real"));
-        assert_eq!(resolved(&[pool("dead", 1.0, true, 5)]), None);
+        assert_eq!(resolved(&pools), None);
+        assert_eq!(resolved(&[pool("other", 1.0, false, 0)]), None);
         assert_eq!(resolved(&[]), None);
     }
 }

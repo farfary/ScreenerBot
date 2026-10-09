@@ -8,7 +8,7 @@ use crate::ohlcvs::types::{Candle, OhlcvError, OhlcvResult, Timeframe};
 use chrono::Utc;
 use rusqlite::{params, OptionalExtension};
 
-use super::{OhlcvDatabase, SeriesPoolReset, StoredBucket, TimeframeSummary};
+use super::{ensure_series_pool, OhlcvDatabase, StoredBucket, TimeframeSummary};
 
 impl OhlcvDatabase {
     /// Source label of candles the monitor derives locally from stored 1m rows.
@@ -111,7 +111,7 @@ impl OhlcvDatabase {
         now: i64,
     ) -> OhlcvResult<usize> {
         let bucket = timeframe.to_seconds();
-        self.upsert_storable_candles(timeframe, candles, |candle| candle, |tx, candle, aligned_ts| {
+        self.upsert_storable_candles(mint, pool_address, timeframe, candles, |candle| candle, |tx, candle, aligned_ts| {
             tx.execute(
                 "INSERT INTO ohlcv_candles
                  (chain_id, mint, pool_address, timeframe, timestamp, open, high, low, close, volume, source)
@@ -187,6 +187,8 @@ impl OhlcvDatabase {
     ) -> OhlcvResult<usize> {
         let bucket = timeframe.to_seconds();
         self.upsert_storable_candles(
+            mint,
+            pool_address,
             timeframe,
             candles,
             |(candle, _)| candle,
@@ -239,10 +241,13 @@ impl OhlcvDatabase {
 
     /// Shared body of the candle upserts: drops candles that are not storable,
     /// snaps each timestamp to its canonical bucket and runs `write` for every
-    /// remaining item inside one transaction. Returns the summed row count of
-    /// the writes that succeeded.
+    /// remaining item inside one write transaction, which first refuses a pool
+    /// that is no longer the token's series pool (`OhlcvError::SeriesPoolMoved`).
+    /// Returns the summed row count of the writes that succeeded.
     fn upsert_storable_candles<T>(
         &self,
+        mint: &str,
+        pool_address: &str,
         timeframe: Timeframe,
         items: &[T],
         candle_of: impl Fn(&T) -> &Candle,
@@ -252,11 +257,12 @@ impl OhlcvDatabase {
             return Ok(0);
         }
 
-        let conn = self.conn()?;
+        let mut conn = self.conn()?;
 
         let tx = conn
-            .unchecked_transaction()
+            .write_tx()
             .map_err(|e| OhlcvError::DatabaseError(format!("Transaction failed: {e}")))?;
+        ensure_series_pool(&tx, self.chain_id(), mint, pool_address)?;
 
         // Snap every timestamp to the canonical UTC-anchored bucket for this
         // timeframe (floor to the interval), matching OhlcvAggregator's
@@ -525,76 +531,6 @@ impl OhlcvDatabase {
             .collect()
     }
 
-    /// Delete every candle stored under a pool that is no longer the token's
-    /// resolved pool. Called when pool discovery drops a pool from a token so a
-    /// stale pool's price series can never resurface or be combined with the
-    /// current pool's candles. Returns the number of rows removed.
-    pub fn delete_candles_for_pool(&self, mint: &str, pool_address: &str) -> OhlcvResult<usize> {
-        let conn = self.conn()?;
-
-        let removed = conn
-            .execute(
-                "DELETE FROM ohlcv_candles WHERE chain_id = ?1 AND mint = ?2 AND pool_address = ?3",
-                params![self.chain_id(), mint, pool_address],
-            )
-            .map_err(|e| OhlcvError::DatabaseError(format!("Delete failed: {e}")))?;
-
-        Ok(removed)
-    }
-
-    /// Move a token's candle series onto `series_pool`. In one transaction: every
-    /// candle and gap row of the token's other pools is deleted and every backfill
-    /// flag is reset, because the flags are per token while candles are per pool,
-    /// so flags left complete would describe a pool the series no longer reads.
-    pub fn reset_series_to_pool(
-        &self,
-        mint: &str,
-        series_pool: &str,
-    ) -> OhlcvResult<SeriesPoolReset> {
-        let mut conn = self.conn()?;
-        let tx = conn.write_tx().map_err(|e| {
-            OhlcvError::DatabaseError(format!("Failed to begin series pool reset: {e}"))
-        })?;
-
-        let candles_deleted = tx
-            .execute(
-                "DELETE FROM ohlcv_candles WHERE chain_id = ?1 AND mint = ?2 AND pool_address != ?3",
-                params![self.chain_id(), mint, series_pool],
-            )
-            .map_err(|e| OhlcvError::DatabaseError(format!("Delete failed: {e}")))?;
-        let gaps_deleted = tx
-            .execute(
-                "DELETE FROM ohlcv_gaps WHERE chain_id = ?1 AND mint = ?2 AND pool_address != ?3",
-                params![self.chain_id(), mint, series_pool],
-            )
-            .map_err(|e| OhlcvError::DatabaseError(format!("Delete failed: {e}")))?;
-        tx.execute(
-            "UPDATE ohlcv_monitor_config SET
-                backfill_1m_complete = 0,
-                backfill_5m_complete = 0,
-                backfill_15m_complete = 0,
-                backfill_1h_complete = 0,
-                backfill_4h_complete = 0,
-                backfill_12h_complete = 0,
-                backfill_1d_complete = 0,
-                backfill_started_at = NULL,
-                backfill_completed_at = NULL,
-                updated_at = CURRENT_TIMESTAMP
-             WHERE chain_id = ?1 AND mint = ?2",
-            params![self.chain_id(), mint],
-        )
-        .map_err(|e| OhlcvError::DatabaseError(format!("Update failed: {e}")))?;
-
-        tx.commit().map_err(|e| {
-            OhlcvError::DatabaseError(format!("Failed to commit series pool reset: {e}"))
-        })?;
-
-        Ok(SeriesPoolReset {
-            candles_deleted,
-            gaps_deleted,
-        })
-    }
-
     /// Per-timeframe time of the most recent candle write (unix secs), i.e. the
     /// last successful fetch that produced new candles. `fetched_at` is stored as
     /// a TEXT timestamp, so convert to epoch in SQL.
@@ -668,10 +604,15 @@ impl OhlcvDatabase {
         Ok(result == 1)
     }
 
-    /// Mark backfill as complete for timeframe
-    pub fn mark_backfill_complete(&self, mint: &str, timeframe: Timeframe) -> OhlcvResult<()> {
-        let conn = self.conn()?;
-
+    /// Mark backfill as complete for timeframe on `pool_address`. Refused with
+    /// `OhlcvError::SeriesPoolMoved` when that pool is no longer the token's series
+    /// pool, so a backfill of a previous pool never marks the current one complete.
+    pub fn mark_backfill_complete(
+        &self,
+        mint: &str,
+        pool_address: &str,
+        timeframe: Timeframe,
+    ) -> OhlcvResult<()> {
         let column = format!("backfill_{}_complete", timeframe.as_str().replace('-', ""));
 
         let query = format!(
@@ -679,10 +620,21 @@ impl OhlcvDatabase {
             column
         );
 
-        conn.execute(&query, params![self.chain_id(), mint])
-            .map_err(|e| OhlcvError::DatabaseError(format!("Update failed: {e}")))?;
+        self.write_series_flags(mint, pool_address, &query)
+    }
 
-        Ok(())
+    /// Run a backfill-flag `query` (bound to chain and mint) in a write transaction
+    /// that first refuses a pool that is no longer the token's series pool.
+    fn write_series_flags(&self, mint: &str, pool_address: &str, query: &str) -> OhlcvResult<()> {
+        let mut conn = self.conn()?;
+        let tx = conn
+            .write_tx()
+            .map_err(|e| OhlcvError::DatabaseError(format!("Transaction failed: {e}")))?;
+        ensure_series_pool(&tx, self.chain_id(), mint, pool_address)?;
+        tx.execute(query, params![self.chain_id(), mint])
+            .map_err(|e| OhlcvError::DatabaseError(format!("Update failed: {e}")))?;
+        tx.commit()
+            .map_err(|e| OhlcvError::DatabaseError(format!("Commit failed: {e}")))
     }
 
     /// Mark backfill as incomplete for timeframe. The token is no longer fully
@@ -703,13 +655,14 @@ impl OhlcvDatabase {
         Ok(())
     }
 
-    /// Mark all backfills as complete. `backfill_completed_at` records the
+    /// Mark all backfills as complete on `pool_address`, refused like
+    /// [`Self::mark_backfill_complete`]. `backfill_completed_at` records the
     /// transition to complete, so a token that is already complete is left
     /// untouched.
-    pub fn mark_all_backfills_complete(&self, mint: &str) -> OhlcvResult<()> {
-        let conn = self.conn()?;
-
-        conn.execute(
+    pub fn mark_all_backfills_complete(&self, mint: &str, pool_address: &str) -> OhlcvResult<()> {
+        self.write_series_flags(
+            mint,
+            pool_address,
             "UPDATE ohlcv_monitor_config SET 
              backfill_1m_complete = 1,
              backfill_5m_complete = 1,
@@ -721,11 +674,7 @@ impl OhlcvDatabase {
              backfill_completed_at = CURRENT_TIMESTAMP,
              updated_at = CURRENT_TIMESTAMP
              WHERE chain_id = ?1 AND mint = ?2 AND backfill_completed_at IS NULL",
-            params![self.chain_id(), mint],
         )
-        .map_err(|e| OhlcvError::DatabaseError(format!("Update failed: {e}")))?;
-
-        Ok(())
     }
 }
 
@@ -734,7 +683,7 @@ mod tests {
     use super::super::migrations::test_path;
     use super::*;
     use crate::chains::ChainId;
-    use crate::ohlcvs::types::{Priority, TokenOhlcvConfig};
+    use crate::ohlcvs::types::{PoolConfig, Priority, TokenOhlcvConfig};
 
     const HOUR: i64 = 3_600;
     const NOW: i64 = 1_700_000_000 - 1_700_000_000 % HOUR + 1_800;
@@ -1116,65 +1065,168 @@ mod tests {
             .unwrap();
         };
 
-        db.mark_all_backfills_complete("mint").unwrap();
+        db.mark_all_backfills_complete("mint", "pool").unwrap();
         assert!(completed_at(&db).is_some());
         set_completed_at(&db, "2000-01-01 00:00:00");
-        db.mark_all_backfills_complete("mint").unwrap();
+        db.mark_all_backfills_complete("mint", "pool").unwrap();
         assert_eq!(completed_at(&db).as_deref(), Some("2000-01-01 00:00:00"));
 
         db.mark_backfill_incomplete("mint", Timeframe::Hour4)
             .unwrap();
         assert_eq!(completed_at(&db), None);
         assert!(!db.is_backfill_complete("mint", Timeframe::Hour4).unwrap());
-        db.mark_all_backfills_complete("mint").unwrap();
+        db.mark_all_backfills_complete("mint", "pool").unwrap();
         assert!(completed_at(&db).is_some());
         assert!(db.is_backfill_complete("mint", Timeframe::Hour4).unwrap());
         close_db(db, path);
     }
 
+    fn registered(address: &str, liquidity: f64) -> PoolConfig {
+        PoolConfig::new(address.to_string(), "dex".to_string(), liquidity)
+    }
+
+    fn seed_rows(db: &OhlcvDatabase, mint: &str, pool: &str) {
+        db.insert_candles_batch_at(
+            mint,
+            pool,
+            Timeframe::Hour1,
+            &[candle(CLOSED, 1.0)],
+            OhlcvDatabase::NATIVE_SOURCE,
+            NOW,
+        )
+        .unwrap();
+        db.insert_gap(mint, pool, Timeframe::Hour1, CLOSED - HOUR, CLOSED)
+            .unwrap();
+    }
+
+    fn has_rows(db: &OhlcvDatabase, mint: &str, pool: &str) -> bool {
+        db.get_time_bounds(mint, pool, Timeframe::Hour1)
+            .unwrap()
+            .is_some()
+    }
+
     #[test]
-    fn a_series_pool_reset_clears_other_pools_and_every_flag_of_the_token_only() {
+    fn a_series_move_resets_other_pools_and_every_flag_of_the_token_in_one_write() {
         let (db, path) = open_db("series-pool-reset");
         for mint in ["mint", "other-mint"] {
             db.upsert_monitor_config(&TokenOhlcvConfig::new(mint.to_string(), Priority::High))
                 .unwrap();
-            db.mark_all_backfills_complete(mint).unwrap();
+            db.mark_all_backfills_complete(mint, "old").unwrap();
         }
-        let rows = [candle(CLOSED, 1.0)];
+        // Rows written before any pool is registered: a token without a default accepts any pool.
         for (mint, pool) in [("mint", "old"), ("mint", "new"), ("other-mint", "old")] {
-            db.insert_candles_batch_at(
-                mint,
-                pool,
-                Timeframe::Hour1,
-                &rows,
-                OhlcvDatabase::NATIVE_SOURCE,
-                NOW,
-            )
-            .unwrap();
-            db.insert_gap(mint, pool, Timeframe::Hour1, CLOSED - HOUR, CLOSED)
-                .unwrap();
+            seed_rows(&db, mint, pool);
         }
+        let pools = [registered("old", 2.0), registered("new", 1.0)];
 
-        let reset = db.reset_series_to_pool("mint", "new").unwrap();
-
-        assert_eq!(reset.candles_deleted, 1);
-        assert_eq!(reset.gaps_deleted, 1);
-        assert!(db
-            .get_time_bounds("mint", "old", Timeframe::Hour1)
-            .unwrap()
-            .is_none());
-        assert!(db
-            .get_time_bounds("mint", "new", Timeframe::Hour1)
-            .unwrap()
-            .is_some());
+        let first = db.write_series_pools("mint", &pools, "new").unwrap();
+        let reset = first.reset.expect("a first default is a series move");
+        assert_eq!(reset.previous_pool, None);
+        assert_eq!((reset.candles_deleted, reset.gaps_deleted), (1, 1));
+        assert!(!has_rows(&db, "mint", "old"));
+        assert!(has_rows(&db, "mint", "new"));
         for tf in Timeframe::all() {
             assert!(!db.is_backfill_complete("mint", tf).unwrap(), "{tf:?}");
             assert!(db.is_backfill_complete("other-mint", tf).unwrap(), "{tf:?}");
         }
+        assert!(has_rows(&db, "other-mint", "old"));
+
+        db.mark_all_backfills_complete("mint", "new").unwrap();
+        let unchanged = db.write_series_pools("mint", &pools, "new").unwrap();
+        assert!(unchanged.reset.is_none());
+        assert!(db.is_backfill_complete("mint", Timeframe::Hour1).unwrap());
+        assert!(has_rows(&db, "mint", "new"));
+
+        let moved = db.write_series_pools("mint", &pools, "old").unwrap();
+        let reset = moved.reset.expect("the default moved");
+        assert_eq!(reset.previous_pool.as_deref(), Some("new"));
+        assert!(!has_rows(&db, "mint", "new"));
+        assert!(!db.is_backfill_complete("mint", Timeframe::Hour1).unwrap());
+
+        let stored = db.get_pools("mint").unwrap();
+        assert_eq!(stored.iter().filter(|p| p.is_default).count(), 1);
+        assert_eq!(
+            PoolConfig::series_pool(&stored).map(|p| p.address.as_str()),
+            Some("old")
+        );
+        close_db(db, path);
+    }
+
+    #[test]
+    fn a_pool_left_out_of_the_set_is_deleted_with_its_rows_and_never_stays_a_default() {
+        let (db, path) = open_db("series-pool-removed");
+        db.write_series_pools("mint", &[registered("usd", 5.0)], "usd")
+            .unwrap();
+        seed_rows(&db, "mint", "usd");
+
+        let write = db
+            .write_series_pools("mint", &[registered("sol", 1.0)], "sol")
+            .unwrap();
+
+        assert_eq!(write.removed_pools, vec!["usd".to_string()]);
+        assert!(!has_rows(&db, "mint", "usd"));
         assert!(db
-            .get_time_bounds("other-mint", "old", Timeframe::Hour1)
+            .get_open_gaps("mint", "usd", 0, u32::MAX)
             .unwrap()
-            .is_some());
+            .is_empty());
+        let stored = db.get_pools("mint").unwrap();
+        assert_eq!(stored.len(), 1);
+        assert!(stored[0].is_default && stored[0].address == "sol");
+        assert!(matches!(
+            db.write_series_pools("mint", &[registered("sol", 1.0)], "absent"),
+            Err(OhlcvError::PoolNotFound(_))
+        ));
+        close_db(db, path);
+    }
+
+    #[test]
+    fn a_write_for_a_previous_series_pool_is_refused_after_the_move() {
+        let (db, path) = open_db("series-pool-guard");
+        db.upsert_monitor_config(&TokenOhlcvConfig::new("mint".to_string(), Priority::High))
+            .unwrap();
+        let pools = [registered("old", 2.0), registered("new", 1.0)];
+        db.write_series_pools("mint", &pools, "old").unwrap();
+        seed_rows(&db, "mint", "old");
+
+        // The move commits while a backfill of the previous pool is still in flight.
+        db.write_series_pools("mint", &pools, "new").unwrap();
+
+        let refused = |result: OhlcvResult<()>| matches!(result, Err(OhlcvError::SeriesPoolMoved { ref pool, .. }) if pool == "old");
+        assert!(refused(
+            db.insert_candles_batch_at(
+                "mint",
+                "old",
+                Timeframe::Hour1,
+                &[candle(CLOSED, 2.0)],
+                OhlcvDatabase::NATIVE_SOURCE,
+                NOW,
+            )
+            .map(|_| ())
+        ));
+        assert!(refused(
+            db.upsert_aggregate_candles(
+                "mint",
+                "old",
+                Timeframe::Hour1,
+                &[(candle(CLOSED, 2.0), CLOSED)],
+                NOW
+            )
+            .map(|_| ())
+        ));
+        assert!(refused(db.mark_backfill_complete(
+            "mint",
+            "old",
+            Timeframe::Hour1
+        )));
+        assert!(refused(db.mark_all_backfills_complete("mint", "old")));
+        assert!(!has_rows(&db, "mint", "old"));
+        for tf in Timeframe::all() {
+            assert!(!db.is_backfill_complete("mint", tf).unwrap(), "{tf:?}");
+        }
+
+        db.mark_backfill_complete("mint", "new", Timeframe::Hour1)
+            .unwrap();
+        assert!(db.is_backfill_complete("mint", Timeframe::Hour1).unwrap());
         close_db(db, path);
     }
 }

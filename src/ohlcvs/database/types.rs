@@ -82,10 +82,21 @@ pub struct ClearAllResult {
     pub tokens_reset: usize,
 }
 
+/// Result of writing a token's registered pools (`OhlcvDatabase::write_series_pools`).
+#[derive(Debug, Clone, Default)]
+pub struct SeriesPoolWrite {
+    /// Registered pools that were not in the new set, deleted with their candles and gaps.
+    pub removed_pools: Vec<String>,
+    /// Set when the series pool moved and the token's series was reset.
+    pub reset: Option<SeriesPoolReset>,
+}
+
 /// Result of moving a token's candle series onto a new pool: the rows of every
 /// other pool removed. The token's backfill flags are reset with them.
 #[derive(Debug, Clone, Default)]
 pub struct SeriesPoolReset {
+    /// The series pool before the move; `None` when the token had no default pool.
+    pub previous_pool: Option<String>,
     pub candles_deleted: usize,
     pub gaps_deleted: usize,
 }

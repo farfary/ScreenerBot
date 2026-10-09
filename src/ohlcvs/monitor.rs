@@ -804,12 +804,18 @@ impl OhlcvMonitor {
     /// has none registered or its pool snapshot is past its TTL: a timeframe switch refreshes
     /// candles, and re-discovering on every one moved the series pool under the chart.
     pub async fn force_refresh(&self, mint: &str) -> OhlcvResult<()> {
-        let has_pools = !self.pool_manager.get_pools(mint).await?.is_empty();
         let snapshot_fresh = crate::tokens::has_fresh_token_pools_snapshot(self.db.chain(), mint);
-        if pool_rediscovery_due(has_pools, snapshot_fresh) {
+        if self.pool_rediscovery_due(mint, snapshot_fresh).await? {
             self.spawn_pool_discovery(mint);
         }
         self.fetch_token_data(mint).await
+    }
+
+    /// Whether an explicit refresh re-resolves the token's pools: only with no registered pool
+    /// or a pool snapshot past its TTL.
+    async fn pool_rediscovery_due(&self, mint: &str, snapshot_fresh: bool) -> OhlcvResult<bool> {
+        let has_pools = !self.pool_manager.get_pools(mint).await?.is_empty();
+        Ok(!has_pools || !snapshot_fresh)
     }
 
     /// Whether the given mint is currently in the active monitoring set.
@@ -2372,6 +2378,24 @@ impl OhlcvMonitor {
         );
 
         for timeframe in timeframes {
+            // A series move during the backfill resets the token onto another pool; the
+            // backfill of this pool stops instead of fetching rows the write guard refuses.
+            let still_series = self
+                .pool_manager
+                .series_pool(mint)
+                .await?
+                .is_some_and(|pool| pool.address == pool_address);
+            if !still_series {
+                logger::debug(
+                    LogTag::Ohlcv,
+                    &format!(
+                        "Stopping backfill for mint={} pool={}: no longer the series pool",
+                        mint, pool_address
+                    ),
+                );
+                return Ok(total_fetched);
+            }
+
             // Check if already complete and backed by stored candles.
             if self.is_timeframe_backfill_ready(mint, pool_address, timeframe)? {
                 logger::debug(
@@ -2390,7 +2414,8 @@ impl OhlcvMonitor {
             // mean the depth is fetched and only coverage decides completion.
             let (newest, caught_up) = self.native_coverage(mint, pool_address, timeframe)?;
             if newest.is_some() && caught_up {
-                self.db.mark_backfill_complete(mint, timeframe)?;
+                self.db
+                    .mark_backfill_complete(mint, pool_address, timeframe)?;
                 continue;
             }
 
@@ -2416,7 +2441,8 @@ impl OhlcvMonitor {
                     let (newest, caught_up) =
                         self.native_coverage(mint, pool_address, timeframe)?;
                     if newest.is_some() && caught_up {
-                        self.db.mark_backfill_complete(mint, timeframe)?;
+                        self.db
+                            .mark_backfill_complete(mint, pool_address, timeframe)?;
                         logger::debug(
                             LogTag::Ohlcv,
                             &format!(
@@ -2448,6 +2474,7 @@ impl OhlcvMonitor {
                         );
                     }
                 }
+                Err(e @ OhlcvError::SeriesPoolMoved { .. }) => return Err(e),
                 Err(e) => {
                     self.db.mark_backfill_incomplete(mint, timeframe)?;
                     logger::warning(
@@ -2469,7 +2496,7 @@ impl OhlcvMonitor {
         }
 
         if self.are_all_timeframes_backfill_ready(mint, pool_address)? {
-            self.db.mark_all_backfills_complete(mint)?;
+            self.db.mark_all_backfills_complete(mint, pool_address)?;
         }
 
         logger::debug(
@@ -2862,6 +2889,7 @@ fn classify_ohlcv_error(error: &OhlcvError) -> (&'static str, Severity) {
         OhlcvError::CacheError(_) => ("cache_error", Severity::Error),
         OhlcvError::NotFound(_) => ("not_found", Severity::Warn),
         OhlcvError::Chain(_) => ("chain_error", Severity::Error),
+        OhlcvError::SeriesPoolMoved { .. } => ("series_pool_moved", Severity::Debug),
     }
 }
 
@@ -2871,12 +2899,6 @@ fn count_by_priority(configs: &HashMap<String, TokenOhlcvConfig>) -> HashMap<Pri
         *counts.entry(config.priority).or_default() += 1;
     }
     counts
-}
-
-/// Whether an explicit refresh re-resolves the token's pools: only with no registered pool or
-/// a pool snapshot past its TTL.
-fn pool_rediscovery_due(has_pools: bool, snapshot_fresh: bool) -> bool {
-    !has_pools || !snapshot_fresh
 }
 
 /// Whether `pool_address` is a registered native-quoted pool. An unknown pool or quote is not
@@ -3509,12 +3531,45 @@ mod tests {
         );
     }
 
-    #[test]
-    fn an_explicit_refresh_rediscovers_only_without_pools_or_a_fresh_snapshot() {
-        assert!(!pool_rediscovery_due(true, true));
-        assert!(pool_rediscovery_due(true, false));
-        assert!(pool_rediscovery_due(false, true));
-        assert!(pool_rediscovery_due(false, false));
+    #[tokio::test]
+    async fn an_explicit_refresh_rediscovers_only_without_pools_or_a_fresh_snapshot() {
+        use crate::chains::ChainId;
+        let _ = crate::config::utils::CONFIG
+            .get_or_init(|| std::sync::RwLock::new(crate::config::Config::default()));
+        let path = std::env::temp_dir().join(format!(
+            "screenerbot-ohlcv-monitor-rediscovery-{}.db",
+            std::process::id()
+        ));
+        let _ = std::fs::remove_file(&path);
+        let db = Arc::new(OhlcvDatabase::new(&path, ChainId::Solana).unwrap());
+        let fetcher = Arc::new(OhlcvFetcher::new(ChainId::Solana));
+        let cache = Arc::new(OhlcvCache::new(ChainId::Solana));
+        let pool_manager = Arc::new(PoolManager::new(Arc::clone(&db), Arc::clone(&cache)));
+        let gap_manager = Arc::new(GapManager::new(
+            Arc::clone(&db),
+            Arc::clone(&fetcher),
+            Arc::clone(&cache),
+        ));
+        let monitor = OhlcvMonitor::new(Arc::clone(&db), fetcher, cache, pool_manager, gap_manager);
+
+        // The production freshness input: a mint the token cache never saw is not fresh.
+        assert!(!crate::tokens::has_fresh_token_pools_snapshot(
+            ChainId::Solana,
+            "never-seen-mint"
+        ));
+        assert!(monitor.pool_rediscovery_due("mint", true).await.unwrap());
+        assert!(monitor.pool_rediscovery_due("mint", false).await.unwrap());
+        db.upsert_pool(
+            "mint",
+            &PoolConfig::new("pool".to_string(), "dex".to_string(), 1.0),
+        )
+        .unwrap();
+        assert!(!monitor.pool_rediscovery_due("mint", true).await.unwrap());
+        assert!(monitor.pool_rediscovery_due("mint", false).await.unwrap());
+
+        drop(monitor);
+        drop(db);
+        let _ = std::fs::remove_file(path);
     }
 
     #[test]

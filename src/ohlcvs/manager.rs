@@ -6,10 +6,10 @@
 use crate::events::{record_ohlcv_event, Severity};
 use crate::logger::{self, LogTag};
 use crate::ohlcvs::cache::OhlcvCache;
-use crate::ohlcvs::database::OhlcvDatabase;
+use crate::ohlcvs::database::{OhlcvDatabase, SeriesPoolReset};
 use crate::ohlcvs::types::{OhlcvError, OhlcvResult, PoolConfig, PoolMetadata};
 use crate::tokens::pools;
-use crate::tokens::types::TokenPoolInfo;
+use crate::tokens::types::{TokenPoolInfo, TokenPoolsSnapshot};
 use crate::tokens::{fetch_token_pools_immediate, get_token_pools_snapshot_allow_stale};
 use serde_json::json;
 use std::cmp::Ordering;
@@ -71,31 +71,6 @@ impl PoolManager {
         Ok(PoolConfig::series_pool(&pools).cloned())
     }
 
-    /// Set a pool as default
-    pub async fn set_default_pool(&self, mint: &str, pool_address: &str) -> OhlcvResult<()> {
-        let mut pools = self.db.get_pools(mint)?;
-
-        for pool in &mut pools {
-            pool.is_default = pool.address == pool_address;
-            self.db.upsert_pool(mint, pool)?;
-        }
-
-        // INFO: Record default pool change
-        record_ohlcv_event(
-            "default_pool_changed",
-            Severity::Info,
-            Some(mint),
-            Some(pool_address),
-            json!({
-                "mint": mint,
-                "pool_address": pool_address,
-            }),
-        )
-        .await;
-
-        Ok(())
-    }
-
     /// Mark a pool as failed
     pub async fn mark_failure(&self, mint: &str, pool_address: &str) -> OhlcvResult<()> {
         self.db.mark_pool_failure(mint, pool_address)?;
@@ -113,16 +88,22 @@ impl PoolManager {
         )
         .await;
 
-        // A default that just went unhealthy hands the default to the pool the series now
-        // resolves to, so the choice survives a restart.
+        // A default that just went unhealthy hands the series to the healthy pool the
+        // discovery rule would pick, through the same write that resets the token's rows and
+        // backfill flags. With no healthy pool left the default stays and the token resolves
+        // no series pool until discovery restores one.
         let pools = self.db.get_pools(mint)?;
         let default_failed = pools
             .iter()
             .any(|p| p.is_default && p.address == pool_address && !p.is_healthy());
         if default_failed {
-            if let Some(next) = PoolConfig::series_pool(&pools) {
-                let next_address = next.address.clone();
-                self.set_default_pool(mint, &next_address).await?;
+            let healthy: Vec<PoolConfig> =
+                pools.iter().filter(|p| p.is_healthy()).cloned().collect();
+            if let Some(next) = select_series_default(None, None, &healthy) {
+                let write = self.db.write_series_pools(mint, &pools, &next)?;
+                if let Some(reset) = write.reset {
+                    self.series_moved(mint, &next, &reset, false).await?;
+                }
             }
         }
 
@@ -140,8 +121,9 @@ impl PoolManager {
     /// The default (series) pool is the data server's canonical pool whenever the
     /// snapshot names one, whatever its quote. Otherwise the current default is
     /// kept unless a native pool holds `SERIES_POOL_SWITCH_FACTOR` times its
-    /// liquidity. When the series pool changes, the other pools' rows and the
-    /// token's backfill flags are reset together (`reset_series_to_pool`).
+    /// liquidity. The pools, the single default and, when the series pool changes,
+    /// the reset of the other pools' rows and the token's backfill flags are one
+    /// write (`OhlcvDatabase::write_series_pools`).
     pub async fn discover_pools(&self, mint: &str) -> OhlcvResult<Vec<PoolConfig>> {
         record_ohlcv_event(
             "pool_discovery_start",
@@ -199,6 +181,17 @@ impl PoolManager {
             }
         };
 
+        self.register_snapshot_pools(mint, &snapshot).await
+    }
+
+    /// Register the pools of `snapshot` for `mint` (see [`Self::discover_pools`]): the
+    /// planned pools, their single default and, when the series moves, the reset of the
+    /// token's rows and flags are one write; the hot cache is invalidated after it commits.
+    async fn register_snapshot_pools(
+        &self,
+        mint: &str,
+        snapshot: &TokenPoolsSnapshot,
+    ) -> OhlcvResult<Vec<PoolConfig>> {
         let server_series = snapshot.series_pool_address.as_deref().filter(|address| {
             snapshot
                 .pools
@@ -207,9 +200,6 @@ impl PoolManager {
         });
 
         let existing_pools = self.db.get_pools(mint)?;
-        let previous_series = PoolConfig::series_pool(&existing_pools)
-            .or_else(|| existing_pools.iter().find(|p| p.is_default))
-            .map(|p| p.address.clone());
         let previous_default = existing_pools
             .iter()
             .find(|p| p.is_default)
@@ -218,96 +208,54 @@ impl PoolManager {
             .into_iter()
             .map(|cfg| (cfg.address.clone(), cfg))
             .collect();
+        let merged: Vec<PoolConfig> = snapshot
+            .pools
+            .iter()
+            .map(|pool| Self::merge_pool_info(pool, existing_map.remove(&pool.pool_address)))
+            .collect();
 
-        let mut discovered_configs = Vec::new();
-        let mut non_native_configs = Vec::new();
+        let Some(plan) = plan_series_pools(merged, server_series, previous_default.as_deref())
+        else {
+            record_ohlcv_event(
+                "pool_discovery_empty",
+                Severity::Warn,
+                Some(mint),
+                None,
+                json!({ "mint": mint }),
+            )
+            .await;
 
-        for pool in snapshot.pools.iter() {
-            let existing = existing_map.remove(&pool.pool_address);
-            let config = Self::merge_pool_info(pool, existing);
-            if pool.is_native_pair || server_series == Some(pool.pool_address.as_str()) {
-                discovered_configs.push(config);
-            } else {
-                non_native_configs.push(config);
-            }
-        }
+            return Err(OhlcvError::NotFound(format!(
+                "No pools available for mint {}",
+                mint
+            )));
+        };
 
-        // A token whose ONLY pools are USD-quoted (e.g. a pump token that only ever
-        // paired with USDC) has no wSOL pool. The data server returns SOL-denominated
-        // candles for any pool, so its USD pools are registered instead; the fetcher
-        // serves a non-native pool from the data server only (is_native_pair=false),
-        // never from a candle feed or GeckoTerminal, whose USD candles would poison
-        // the SOL series.
-        if discovered_configs.is_empty() {
-            if non_native_configs.is_empty() {
-                record_ohlcv_event(
-                    "pool_discovery_empty",
-                    Severity::Warn,
-                    Some(mint),
-                    None,
-                    json!({ "mint": mint }),
-                )
-                .await;
-
-                return Err(OhlcvError::NotFound(format!(
-                    "No pools available for mint {}",
-                    mint
-                )));
-            }
-
+        if !plan.pools.iter().any(|p| p.is_native_pair) {
             logger::debug(
                 LogTag::Ohlcv,
                 &format!(
                     "No SOL pool for mint={}; registering {} USD pools, \
                      OHLCV from the data server only",
                     mint,
-                    non_native_configs.len()
+                    plan.pools.len()
                 ),
             );
-            discovered_configs = non_native_configs;
         }
 
-        let default_address = select_series_default(
-            server_series,
-            previous_default.as_deref(),
-            &discovered_configs,
-        );
-        for config in &mut discovered_configs {
-            config.is_default = default_address.as_deref() == Some(config.address.as_str());
-        }
+        let write = self
+            .db
+            .write_series_pools(mint, &plan.pools, &plan.series)?;
 
-        for config in &discovered_configs {
-            self.db.upsert_pool(mint, config)?;
-        }
-
-        let mut removed_addresses = Vec::new();
-        for leftover in existing_map.into_values() {
-            self.db.delete_pool(mint, &leftover.address)?;
-            // Also drop the removed pool's candles so a stale pool's price series
-            // can never resurface or be combined with the current pool's candles
-            // (the chart/status must only ever reflect the single resolved pool).
-            if let Ok(removed) = self.db.delete_candles_for_pool(mint, &leftover.address) {
-                if removed > 0 {
-                    logger::debug(
-                        LogTag::Ohlcv,
-                        &format!(
-                            "Removed {} candles from dropped pool {} for mint={}",
-                            removed, leftover.address, mint
-                        ),
-                    );
-                }
-            }
-            removed_addresses.push(leftover.address);
-        }
-
-        if !removed_addresses.is_empty() {
-            let preview: Vec<&str> = removed_addresses
+        if !write.removed_pools.is_empty() {
+            let preview: Vec<&str> = write
+                .removed_pools
                 .iter()
                 .take(3)
                 .map(String::as_str)
                 .collect();
-            let suffix = if removed_addresses.len() > 3 {
-                format!(" (+{} more)", removed_addresses.len() - 3)
+            let suffix = if write.removed_pools.len() > 3 {
+                format!(" (+{} more)", write.removed_pools.len() - 3)
             } else {
                 String::new()
             };
@@ -315,24 +263,18 @@ impl PoolManager {
             logger::debug(
                 LogTag::Ohlcv,
                 &format!(
-                    "Removed {} stale pool entries for mint={}{}",
-                    removed_addresses.len(),
+                    "Removed {} stale pool entries with their candles and gaps for mint={} [{}]{}",
+                    write.removed_pools.len(),
                     mint,
-                    if preview.is_empty() {
-                        String::new()
-                    } else {
-                        format!(" [{}]{}", preview.join(", "), suffix)
-                    }
+                    preview.join(", "),
+                    suffix
                 ),
             );
         }
 
-        let series = PoolConfig::series_pool(&discovered_configs).map(|p| p.address.clone());
-        if let (Some(previous), Some(current)) = (previous_series.as_deref(), series.as_deref()) {
-            if previous != current {
-                self.reset_series(mint, previous, current, server_series.is_some())
-                    .await?;
-            }
+        if let Some(reset) = &write.reset {
+            self.series_moved(mint, &plan.series, reset, server_series.is_some())
+                .await?;
         }
 
         record_ohlcv_event(
@@ -342,31 +284,30 @@ impl PoolManager {
             None,
             json!({
                 "mint": mint,
-                "pools_found": discovered_configs.len(),
-                "sol_pool": discovered_configs.iter().any(|c| c.is_native_pair),
-                "removed_pools": removed_addresses.len(),
-                "series_pool": series,
+                "pools_found": plan.pools.len(),
+                "sol_pool": plan.pools.iter().any(|c| c.is_native_pair),
+                "removed_pools": write.removed_pools.len(),
+                "series_pool": plan.series,
                 "server_series_pool": server_series,
             }),
         )
         .await;
 
-        Ok(discovered_configs)
+        Ok(plan.pools)
     }
 
-    /// Move the token's series onto `current`: other pools' rows and the backfill
-    /// flags in one transaction, then the hot candle cache, so no reader keeps
-    /// serving the previous pool's series.
-    async fn reset_series(
+    /// Follow up a committed series move onto `current`: invalidate the hot candle cache, so
+    /// no reader keeps serving the previous pool's series, and record the move.
+    async fn series_moved(
         &self,
         mint: &str,
-        previous: &str,
         current: &str,
+        reset: &SeriesPoolReset,
         from_server: bool,
     ) -> OhlcvResult<()> {
-        let reset = self.db.reset_series_to_pool(mint, current)?;
         self.cache.invalidate(mint, None, None)?;
 
+        let previous = reset.previous_pool.as_deref().unwrap_or("none");
         logger::info(
             LogTag::Ohlcv,
             &format!(
@@ -381,7 +322,7 @@ impl PoolManager {
             Some(current),
             json!({
                 "mint": mint,
-                "previous_pool": previous,
+                "previous_pool": reset.previous_pool,
                 "pool_address": current,
                 "from_data_server": from_server,
                 "candles_deleted": reset.candles_deleted,
@@ -473,6 +414,42 @@ impl PoolManager {
     }
 }
 
+/// The pools a snapshot registers for a token and its series pool among them.
+#[derive(Debug)]
+struct SeriesPoolPlan {
+    /// Every pool to keep registered, exactly one of them `is_default`.
+    pools: Vec<PoolConfig>,
+    series: String,
+}
+
+/// Plan a token's registered pools from its snapshot pools (merged with their stored rows).
+///
+/// A token with a native pool registers its native pools, the data server's series pool and
+/// the current default while the snapshot still lists it; every other pool is dropped, so no
+/// unregistered pool can keep a stale default. A token without a native pool registers all
+/// of its pools (the data server serves them in SOL). `None` when the snapshot has no pool.
+fn plan_series_pools(
+    snapshot_pools: Vec<PoolConfig>,
+    server_series: Option<&str>,
+    previous_default: Option<&str>,
+) -> Option<SeriesPoolPlan> {
+    let has_native = snapshot_pools.iter().any(|p| p.is_native_pair);
+    let mut pools: Vec<PoolConfig> = snapshot_pools
+        .into_iter()
+        .filter(|p| {
+            !has_native
+                || p.is_native_pair
+                || server_series == Some(p.address.as_str())
+                || previous_default == Some(p.address.as_str())
+        })
+        .collect();
+    let series = select_series_default(server_series, previous_default, &pools)?;
+    for pool in &mut pools {
+        pool.is_default = pool.address == series;
+    }
+    Some(SeriesPoolPlan { pools, series })
+}
+
 /// The default (series) pool among the registered `candidates`: the data server's
 /// pool when it is registered; else the current default, replaced only by a native
 /// pool with `SERIES_POOL_SWITCH_FACTOR` times its liquidity; else the deepest
@@ -533,6 +510,8 @@ pub struct PoolStats {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::chains::ChainId;
+    use crate::ohlcvs::types::{Candle, Priority, Timeframe, TokenOhlcvConfig};
 
     fn pool(address: &str, liquidity: f64, native: bool) -> PoolConfig {
         let mut config = PoolConfig::new(address.to_owned(), "dex".to_owned(), liquidity);
@@ -595,5 +574,196 @@ mod tests {
             Some("usdc")
         );
         assert_eq!(select_series_default(None, None, &[]), None);
+    }
+
+    fn plan(
+        pools: Vec<PoolConfig>,
+        server: Option<&str>,
+        previous: Option<&str>,
+    ) -> (Vec<String>, String) {
+        let plan = plan_series_pools(pools, server, previous).expect("a plan");
+        assert_eq!(plan.pools.iter().filter(|p| p.is_default).count(), 1);
+        assert!(plan
+            .pools
+            .iter()
+            .any(|p| p.is_default && p.address == plan.series));
+        let mut addresses: Vec<String> = plan.pools.into_iter().map(|p| p.address).collect();
+        addresses.sort();
+        (addresses, plan.series)
+    }
+
+    fn names(addresses: &[&str]) -> Vec<String> {
+        addresses.iter().map(|a| a.to_string()).collect()
+    }
+
+    #[test]
+    fn a_token_with_a_native_pool_keeps_native_server_and_current_default_pools_only() {
+        let snapshot = || {
+            vec![
+                pool("sol", 300_000.0, true),
+                pool("usdc", 200_000.0, false),
+                pool("usdt", 50_000.0, false),
+            ]
+        };
+        // The data server names a USD pool: it is registered and is the series.
+        assert_eq!(
+            plan(snapshot(), Some("usdc"), Some("sol")),
+            (names(&["sol", "usdc"]), "usdc".to_string())
+        );
+        // A server-less refresh keeps the USD default while it is listed: sticky, no flip.
+        assert_eq!(
+            plan(snapshot(), None, Some("usdc")),
+            (names(&["sol", "usdc"]), "usdc".to_string())
+        );
+        // A default the snapshot no longer lists is dropped with every other non-native pool.
+        assert_eq!(
+            plan(snapshot(), None, Some("gone")),
+            (names(&["sol"]), "sol".to_string())
+        );
+    }
+
+    #[test]
+    fn a_token_without_a_native_pool_registers_every_pool() {
+        let snapshot = || vec![pool("usdc", 900.0, false), pool("usdt", 100.0, false)];
+        // A legacy USD-only token whose server pool is another USD pool moves to it.
+        assert_eq!(
+            plan(snapshot(), Some("usdt"), Some("usdc")),
+            (names(&["usdc", "usdt"]), "usdt".to_string())
+        );
+        assert_eq!(
+            plan(snapshot(), None, None),
+            (names(&["usdc", "usdt"]), "usdc".to_string())
+        );
+        // A new SOL pool below the switch factor keeps the USD default and drops the rest.
+        let mut with_sol = snapshot();
+        with_sol.push(pool("sol", 1_000.0, true));
+        assert_eq!(
+            plan(with_sol, None, Some("usdc")),
+            (names(&["sol", "usdc"]), "usdc".to_string())
+        );
+        assert!(plan_series_pools(Vec::new(), None, Some("usdc")).is_none());
+    }
+
+    struct Harness {
+        manager: PoolManager,
+        db: Arc<OhlcvDatabase>,
+        path: std::path::PathBuf,
+    }
+
+    impl Harness {
+        fn open(label: &str) -> Self {
+            let path = std::env::temp_dir().join(format!(
+                "screenerbot-ohlcv-manager-{label}-{}.db",
+                std::process::id()
+            ));
+            let _ = std::fs::remove_file(&path);
+            let db = Arc::new(OhlcvDatabase::new(&path, ChainId::Solana).unwrap());
+            let cache = Arc::new(OhlcvCache::new(ChainId::Solana));
+            let manager = PoolManager::new(Arc::clone(&db), cache);
+            Self { manager, db, path }
+        }
+
+        async fn discover(&self, server: Option<&str>, pools: &[(&str, f64, bool)]) -> String {
+            let snapshot = TokenPoolsSnapshot {
+                mint: "mint".to_string(),
+                pools: pools
+                    .iter()
+                    .map(|(address, liquidity, native)| TokenPoolInfo {
+                        pool_address: address.to_string(),
+                        dex: Some("dex".to_string()),
+                        is_native_pair: *native,
+                        liquidity_native: Some(*liquidity),
+                        ..TokenPoolInfo::default()
+                    })
+                    .collect(),
+                series_pool_address: server.map(str::to_string),
+                ..TokenPoolsSnapshot::default()
+            };
+            let returned = self
+                .manager
+                .register_snapshot_pools("mint", &snapshot)
+                .await
+                .unwrap();
+            let stored = self.db.get_pools("mint").unwrap();
+            assert_eq!(stored.iter().filter(|p| p.is_default).count(), 1);
+            let series = PoolConfig::series_pool(&stored).unwrap().address.clone();
+            assert_eq!(
+                PoolConfig::series_pool(&returned).map(|p| p.address.as_str()),
+                Some(series.as_str())
+            );
+            series
+        }
+
+        fn seed(&self, pool: &str) {
+            self.db
+                .insert_candles_batch(
+                    "mint",
+                    pool,
+                    Timeframe::Hour1,
+                    &[Candle::new(3_600, 1.0, 1.0, 1.0, 1.0, 1.0)],
+                    OhlcvDatabase::NATIVE_SOURCE,
+                )
+                .unwrap();
+        }
+
+        fn rows(&self, pool: &str) -> bool {
+            self.db
+                .get_time_bounds("mint", pool, Timeframe::Hour1)
+                .unwrap()
+                .is_some()
+        }
+    }
+
+    impl Drop for Harness {
+        fn drop(&mut self) {
+            let _ = std::fs::remove_file(&self.path);
+        }
+    }
+
+    #[tokio::test]
+    async fn a_server_less_discovery_keeps_a_usd_series_pool_and_one_default() {
+        let h = Harness::open("usd-sticky");
+        h.db.upsert_monitor_config(&TokenOhlcvConfig::new("mint".to_string(), Priority::High))
+            .unwrap();
+        let pools = [("sol", 300.0, true), ("usdc", 200.0, false)];
+        assert_eq!(h.discover(Some("usdc"), &pools).await, "usdc");
+        h.seed("usdc");
+        h.db.mark_all_backfills_complete("mint", "usdc").unwrap();
+
+        // The server does not answer: the USD default stays the only default and keeps its rows.
+        assert_eq!(h.discover(None, &pools).await, "usdc");
+        assert!(h.rows("usdc"));
+        assert!(h.db.is_backfill_complete("mint", Timeframe::Hour1).unwrap());
+
+        // The server moves the series: one write moves the default and resets the token.
+        assert_eq!(h.discover(Some("sol"), &pools).await, "sol");
+        assert!(!h.rows("usdc"));
+        assert!(!h.db.is_backfill_complete("mint", Timeframe::Hour1).unwrap());
+    }
+
+    #[tokio::test]
+    async fn a_failing_default_hands_the_series_over_through_the_reset() {
+        let h = Harness::open("failure-handover");
+        h.db.upsert_monitor_config(&TokenOhlcvConfig::new("mint".to_string(), Priority::High))
+            .unwrap();
+        let pools = [("deep", 300.0, true), ("shallow", 100.0, true)];
+        assert_eq!(h.discover(None, &pools).await, "deep");
+        h.seed("deep");
+        h.db.mark_all_backfills_complete("mint", "deep").unwrap();
+
+        for _ in 0..5 {
+            h.manager.mark_failure("mint", "deep").await.unwrap();
+        }
+
+        let stored = h.db.get_pools("mint").unwrap();
+        assert_eq!(stored.iter().filter(|p| p.is_default).count(), 1);
+        assert_eq!(
+            PoolConfig::series_pool(&stored).map(|p| p.address.as_str()),
+            Some("shallow")
+        );
+        assert!(!h.rows("deep"));
+        for tf in Timeframe::all() {
+            assert!(!h.db.is_backfill_complete("mint", tf).unwrap(), "{tf:?}");
+        }
     }
 }
