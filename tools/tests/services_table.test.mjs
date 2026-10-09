@@ -11,14 +11,22 @@
  *   measured value.
  * - The dependency chips sit on one line, so a service with several dependencies is no
  *   taller than one with none; an empty list is "—", not a placeholder chip.
+ * - Every rendered row has one height: the activity reading (track over a meta line) fits
+ *   the height the status badge sets.
+ * - A disabled service is off by choice: its Enabled mark is neutral, never the error
+ *   colour, which is reserved for failures.
  *
  * Run with `npm run test:js`.
  */
 
-import test from "node:test";
+import test, { after } from "node:test";
 import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
 
+import { chromium } from "playwright";
+
+import { serveDashboard } from "../lib/dashboard_host.mjs";
+import { createApiHandler, loadIndex } from "../lib/dashboard_fixtures.mjs";
 import { SCRIPTS_ROOT, STYLES_ROOT, rulesIn } from "../lib/dashboard_ui.mjs";
 
 const SCRIPT = readFileSync(`${SCRIPTS_ROOT}/pages/services.js`, "utf8");
@@ -48,5 +56,41 @@ test("activity fills take their colour from theme tokens", () => {
   assert.ok(fills.length > 0, "services.css declares the activity tiers");
   for (const rule of fills) {
     assert.match(declaration(rule.body, "background") ?? "", /^var\(--/, rule.selector);
+  }
+});
+
+test("a disabled service's Enabled mark is neutral", () => {
+  const off = STYLES.find((rule) => rule.selector === ".services-enabled-icon.is-off");
+  assert.ok(off, "services.css declares the disabled mark");
+  assert.doesNotMatch(declaration(off.body, "color") ?? "", /error|danger/);
+});
+
+test("every Services row has one height", async () => {
+  const browser = await chromium.launch({ headless: true });
+  after(() => browser.close());
+  const context = await browser.newContext({ viewport: { width: 1440, height: 900 } });
+  const api = createApiHandler(
+    [await loadIndex("services"), await loadIndex("shell")],
+    "populated"
+  );
+  const host = await serveDashboard(context, {
+    locale: "en",
+    onApi: (request) => api.onApi(request),
+  });
+  try {
+    const page = await context.newPage();
+    await page.goto(`${host.origin}/services`);
+    await page.waitForSelector(".data-table tbody tr .activity-cell", { timeout: 15000 });
+    const heights = await page.evaluate(() => [
+      ...new Set(
+        [...document.querySelectorAll(".data-table tbody tr")].map((row) =>
+          Math.round(row.getBoundingClientRect().height)
+        )
+      ),
+    ]);
+    assert.equal(heights.length, 1, `row heights ${heights.join(", ")}`);
+  } finally {
+    await context.close();
+    await host.close();
   }
 });
