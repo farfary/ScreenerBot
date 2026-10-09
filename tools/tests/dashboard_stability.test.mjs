@@ -36,6 +36,14 @@ const PAGES = (process.env.DASHBOARD_PAGES?.split(",") ?? PAGE_IDS).filter((id) 
   PAGE_IDS.includes(id)
 );
 const WAIT_MS = 15000;
+/**
+ * Budget for opening a page until it reports ready. `npm run test:js` starts about one test file
+ * per core at once and many of them launch Chromium, so the first page loads of this file share
+ * the machine with every other file's browser start-up, which `withSlot` cannot see. Under the
+ * full suite those first loads measured about 16 s (about 2 s alone); the budget is about
+ * three times that.
+ */
+const LOAD_MS = 45000;
 const DESKTOP = { width: 1440, height: 900 };
 const PHONE = { width: 390, height: 844 };
 const RTL_LOCALE = "fa";
@@ -99,8 +107,11 @@ async function open(
     (response) =>
       response.status() >= 400 && problems.push(`HTTP ${response.status()}: ${response.url()}`)
   );
-  await page.goto(`${host.origin}/${id}?theme=${theme}`);
-  await page.waitForSelector("body:not(.initialization-mode) main.content:not([data-loading])");
+  const loadDeadline = Date.now() + LOAD_MS;
+  await page.goto(`${host.origin}/${id}?theme=${theme}`, { timeout: LOAD_MS });
+  await page.waitForSelector("body:not(.initialization-mode) main.content:not([data-loading])", {
+    timeout: Math.max(1, loadDeadline - Date.now()),
+  });
   return { page, context, problems, api, host };
 }
 
