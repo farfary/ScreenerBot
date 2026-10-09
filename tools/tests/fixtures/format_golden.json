@@ -3715,4 +3715,11 @@
 {"fn":"countTone","args":[-2,"success"],"out":""},
 {"fn":"countTone","args":[null,"success"],"out":""},
 {"fn":"countTone","args":[{"$":"undefined"},"success"],"out":""},
-{"fn":"countTone","args":[{"$":"NaN"},"success"],"out":""}]}
+{"fn":"countTone","args":[{"$":"NaN"},"success"],"out":""},
+{"fn":"formatPriceSubscript","args":[0.0105,{"alignWith":[0.00966]}],"out":"0.01050"},
+{"fn":"formatPriceSubscript","args":[0.00966,{"alignWith":[0.0105]}],"out":"0.00966"},
+{"fn":"formatPriceSubscript","args":[0.0021,{"alignWith":[0.002625]}],"out":"0.002100"},
+{"fn":"formatPriceSubscript","args":[1.2e-05,{"alignWith":[1.344e-05]}],"out":"0.0₄1200"},
+{"fn":"formatPriceSubscript","args":[1.5,{"alignWith":[12.25]}],"out":"1.50"},
+{"fn":"formatPriceSubscript","args":[0.0105,{"alignWith":[1.2e-05]}],"out":"0.0105"},
+{"fn":"formatPriceSubscript","args":[0.0105,{"alignWith":[null,0]}],"out":"0.0105"}]}

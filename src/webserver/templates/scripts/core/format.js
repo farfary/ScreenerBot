@@ -329,26 +329,11 @@ function usdText(num, trim) {
 }
 
 /**
- * Format price with subscript notation for very small numbers
- * Uses subscript notation: 0.0₉12345 means 0.000000000012345 (9 zeros after decimal)
- * @param {number} price - The price to format
- * @param {Object} options - Formatting options
- * @param {string} options.fallback - Value to return if price is invalid
- * @param {number} options.precision - Number of significant digits
- * @param {string} options.sign - "negative" signs only negatives; "always" also adds the
- *   locale's plus to a positive (a price change). Zero stays unsigned.
- * @returns {string} Formatted price string
+ * The parts of a price at `precision` significant digits: `plain` ("0.0105": `lead`
+ * "0", `digits` "0105") or `sub` (0.000012 -> `zeros` 4, `digits` "12"). Fraction
+ * digits carry no trailing zeros; `alignWith` in formatPriceSubscript pads them back.
  */
-export function formatPriceSubscript(price, { fallback = DASH, precision = 5, sign: signMode = "negative" } = {}) {
-  const num = coerceNumber(price);
-  if (!Number.isFinite(num)) {
-    return fallback;
-  }
-  if (num === 0) return "0";
-
-  const absPrice = Math.abs(num);
-  const sign = num < 0 ? signPrefix(true) : signMode === "always" ? signPrefix(false) : "";
-
+function priceParts(absPrice, precision) {
   // Normal-sized numbers (>= 0.0001) get the SAME significant-digit budget as
   // the subscript branch below: decimals are derived from the magnitude, never
   // a flat toFixed(). A flat toFixed printed 0.000105191666 for a price whose
@@ -359,35 +344,73 @@ export function formatPriceSubscript(price, { fallback = DASH, precision = 5, si
     const magnitude = Math.floor(Math.log10(absPrice));
     const minDecimals = absPrice >= 1 ? 2 : 0;
     const decimals = Math.min(12, Math.max(minDecimals, precision - 1 - magnitude));
-    const formatted = absPrice.toFixed(decimals);
-    return (
-      sign + localizeDecimal(formatted.includes(".") ? formatted.replace(/\.?0+$/, "") : formatted)
-    );
+    const [lead, fraction = ""] = absPrice.toFixed(decimals).split(".");
+    return { kind: "plain", lead, digits: fraction.replace(/0+$/, "") };
   }
 
-  // Count leading zeros after decimal
+  // Significant digits after the leading zeros. Trailing zeros are padding from the
+  // fixed-20 expansion, not precision — 0.0₇50000 is the same number as 0.0₇5 and
+  // only makes the column wider.
   const str = absPrice.toFixed(20);
-  const match = str.match(/^0\.0*/);
-  if (!match) return sign + localizeDecimal(absPrice.toPrecision(precision));
+  const leading = str.match(/^0\.0*/)[0];
+  const significantPart = str.substring(leading.length);
+  return {
+    kind: "sub",
+    zeros: leading.length - 2,
+    digits: significantPart
+      .substring(0, Math.min(precision, significantPart.length))
+      .replace(/0+$/, ""),
+  };
+}
 
-  const leadingZeros = match[0].length - 2; // Subtract "0."
+/**
+ * Format price with subscript notation for very small numbers
+ * Uses subscript notation: 0.0₉12345 means 0.000000000012345 (9 zeros after decimal)
+ * @param {number} price - The price to format
+ * @param {Object} options - Formatting options
+ * @param {string} options.fallback - Value to return if price is invalid
+ * @param {number} options.precision - Number of significant digits
+ * @param {string} options.sign - "negative" signs only negatives; "always" also adds the
+ *   locale's plus to a positive (a price change). Zero stays unsigned.
+ * @param {Array<number>} options.alignWith - Prices shown beside this one (one table
+ *   row); the fraction is padded with zeros to the longest fraction among them of the
+ *   same notation, so "0.0105" beside "0.00966" reads "0.01050".
+ * @returns {string} Formatted price string
+ */
+export function formatPriceSubscript(
+  price,
+  { fallback = DASH, precision = 5, sign: signMode = "negative", alignWith = [] } = {}
+) {
+  const num = coerceNumber(price);
+  if (!Number.isFinite(num)) {
+    return fallback;
+  }
+  if (num === 0) return "0";
 
-  // Get significant digits after zeros. Trailing zeros are padding from the
-  // fixed-20 expansion, not precision — 0.0₇50000 is the same number as
-  // 0.0₇5 and only makes the column wider.
-  const significantPart = str.substring(match[0].length);
-  const significant = significantPart
-    .substring(0, Math.min(precision, significantPart.length))
-    .replace(/0+$/, "");
+  const absPrice = Math.abs(num);
+  const sign = num < 0 ? signPrefix(true) : signMode === "always" ? signPrefix(false) : "";
+  const parts = priceParts(absPrice, precision);
 
-  // Use subscript for zero count
+  let width = parts.digits.length;
+  for (const peer of alignWith) {
+    const peerNum = Math.abs(coerceNumber(peer));
+    if (!Number.isFinite(peerNum) || peerNum === 0) continue;
+    const peerParts = priceParts(peerNum, precision);
+    if (peerParts.kind === parts.kind && peerParts.zeros === parts.zeros) {
+      width = Math.max(width, peerParts.digits.length);
+    }
+  }
+  const digits = parts.digits.padEnd(width, "0");
+
+  if (parts.kind === "plain") {
+    return sign + localizeDecimal(digits ? `${parts.lead}.${digits}` : parts.lead);
+  }
+
   let subscript = "";
-  const zeroStr = leadingZeros.toString();
-  for (const char of zeroStr) {
+  for (const char of parts.zeros.toString()) {
     subscript += SUBSCRIPT_DIGITS[parseInt(char, 10)];
   }
-
-  return `${sign}0${decimalSeparator()}0${subscript}${significant}`;
+  return `${sign}0${decimalSeparator()}0${subscript}${digits}`;
 }
 
 export function formatPriceSol(price, { fallback, decimals = 12 } = {}) {

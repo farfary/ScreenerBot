@@ -16,7 +16,8 @@
  * - Transactions: every column but the signature is on screen, the Time cell is one
  *   line, a failed row's Type is absent, Δ SOL carries no padded decimals and the
  *   toolbar has no separate estimate count.
- * - Positions Open and Closed: both P&L columns are on screen and headed "P&L".
+ * - Positions Open and Closed: both P&L columns are on screen and headed "P&L", and
+ *   the two prices of a row show the same digits.
  * - A position origin tag is set apart from the name as an uppercase caption.
  * - Main Wallet: "Last used" is relative, the toolbar stays on one row and a token
  *   balance carries no padded zeros.
@@ -77,6 +78,34 @@ function assertOnScreen(columns, ids, where) {
   }
 }
 
+/** The digits after the point (or after the subscript zero count) of a price cell. */
+function priceDigits(text) {
+  const sub = text.match(/^-?0\.0([₀-₉]+)(\d+)$/);
+  if (sub) return { notation: `sub${sub[1]}`, digits: sub[2].length };
+  const plain = text.match(/^-?[\d,]+(?:\.(\d+))?$/);
+  return plain ? { notation: "plain", digits: plain[1]?.length ?? 0 } : null;
+}
+
+/** Two prices in one row are padded to the same digits when they share a notation. */
+async function assertPricesAligned(page, root, first, second) {
+  const pairs = await page.$$eval(
+    `${root} tbody tr[data-row-id]`,
+    (rows, ids) =>
+      rows.map((row) =>
+        ids.map((id) => row.querySelector(`td[data-column-id="${id}"]`)?.textContent.trim())
+      ),
+    [first, second]
+  );
+  let compared = 0;
+  for (const [a, b] of pairs) {
+    const [left, right] = [priceDigits(a ?? ""), priceDigits(b ?? "")];
+    if (!left || !right || left.notation !== right.notation) continue;
+    compared += 1;
+    assert.equal(left.digits, right.digits, `"${a}" and "${b}" show the same digits`);
+  }
+  assert.ok(compared > 0, `${first} and ${second} rows share a notation`);
+}
+
 test("Transactions keeps its columns on screen and states each fact once", async (t) => {
   const page = await openPage(t, "transactions");
   const root = "#transactions-root";
@@ -125,12 +154,14 @@ test("Positions Open and Closed keep P&L on screen under one term", async (t) =>
   await page.waitForSelector(`${root} tbody tr[data-row-id]`);
   const open = await columnsOnScreen(page, root);
   assertOnScreen(open, ["unrealized_pnl", "unrealized_pnl_percent"], "Positions Open");
+  await assertPricesAligned(page, root, "average_entry_price", "current_price");
 
   await page.click(tab("closed"));
   await page.waitForSelector(`${root} th[data-column-id="pnl"]`);
   await page.waitForSelector(`${root} tbody tr[data-row-id]`);
   const closed = await columnsOnScreen(page, root);
   assertOnScreen(closed, ["pnl", "pnl_percent"], "Positions Closed");
+  await assertPricesAligned(page, root, "average_entry_price", "average_exit_price");
 
   for (const column of [...open, ...closed]) {
     assert.doesNotMatch(column.label, /PnL/i, `${column.id} spells P&L`);

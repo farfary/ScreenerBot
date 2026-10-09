@@ -225,13 +225,16 @@ function createLifecycle() {
       actionCount,
     });
 
-  // Significant digits in the cell; the exact price on hover.
-  const priceCell = (value) =>
+  // Significant digits in the cell, padded to the digits of the row's other price so
+  // the two read side by side; the exact price on hover.
+  const priceCell = (value, peer) =>
     value == null
       ? "—"
       : `<span title="${esc(formatFixed(value, { decimals: 12, trim: true }))}">${esc(
-          Utils.formatPriceSubscript(value, { fallback: "—" })
+          Utils.formatPriceSubscript(value, { fallback: "—", alignWith: [peer] })
         )}</span>`;
+  const entryPrice = (r) => r.average_entry_price || r.entry_price;
+  const exitPrice = (r) => r.average_exit_price ?? r.exit_price;
   const solCell = (v) => Utils.formatSol(v, { decimals: 4 });
   const pnlCell = (v) => Utils.formatPnL(v, { decimals: 4 });
   const percentCell = (v) => Utils.formatPercent(v, { style: "pnl", decimals: 2, fallback: "—" });
@@ -341,7 +344,7 @@ function createLifecycle() {
       type: "price",
       sortable: true,
       minWidth: 120,
-      render: (v, r) => basisCell(r, () => priceCell(v || r.entry_price)),
+      render: (v, r) => basisCell(r, () => priceCell(entryPrice(r))),
     },
     {
       id: "total_size_native",
@@ -406,7 +409,7 @@ function createLifecycle() {
           type: "price",
           sortable: true,
           minWidth: 120,
-          render: (v, r) => basisCell(r, () => priceCell(v)),
+          render: (v, r) => basisCell(r, () => priceCell(v, r.current_price)),
         },
         {
           id: "current_price",
@@ -414,7 +417,7 @@ function createLifecycle() {
           type: "price",
           sortable: true,
           minWidth: 120,
-          render: (v) => (v == null ? "—" : priceCell(v)),
+          render: (v, r) => (v == null ? "—" : priceCell(v, entryPrice(r))),
         },
         {
           id: "unrealized_pnl",
@@ -492,7 +495,7 @@ function createLifecycle() {
           type: "price",
           sortable: true,
           minWidth: 120,
-          render: (v, r) => basisCell(r, () => priceCell(v || r.entry_price)),
+          render: (v, r) => basisCell(r, () => priceCell(entryPrice(r), exitPrice(r))),
         },
         {
           id: "average_exit_price",
@@ -500,7 +503,7 @@ function createLifecycle() {
           type: "price",
           sortable: true,
           minWidth: 120,
-          render: (v, r) => (v == null ? priceCell(r.exit_price) : priceCell(v)),
+          render: (v, r) => priceCell(exitPrice(r), entryPrice(r)),
         },
         {
           id: "pnl",
