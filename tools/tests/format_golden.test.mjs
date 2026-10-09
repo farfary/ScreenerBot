@@ -499,3 +499,32 @@ test("every formatTimestamp caller passes only options the formatter implements"
   }
   assert.deepEqual(unknown, []);
 });
+
+test("a price column keeps one significant-digit count across both notations", () => {
+  const { fmt } = load("en-u-nu-latn");
+  const column = { trim: false };
+  const shown = {
+    0.0004249: "0.00042490",
+    0.00046152: "0.00046152",
+    0.0223: "0.022300",
+    0.00005101: "0.0₄51010",
+    22.6796: "22.680",
+  };
+  for (const [price, text] of Object.entries(shown)) {
+    assert.equal(fmt.formatPriceSubscript(Number(price), column), text, `price ${price}`);
+  }
+  // A free-standing price still drops the padding.
+  assert.equal(fmt.formatPriceSubscript(0.0223), "0.0223");
+});
+
+test("the subscript starts at four leading zeros and both notations round", () => {
+  const { fmt } = load("en-u-nu-latn");
+  assert.equal(fmt.formatPriceSubscript(0.0001), "0.0001");
+  assert.equal(fmt.formatPriceSubscript(0.000099), "0.0₄99");
+  // Rounded, not truncated, in both notations.
+  assert.equal(fmt.formatPriceSubscript(0.0000123456), "0.0₄12346");
+  assert.equal(fmt.formatPriceSubscript(0.000123456), "0.00012346");
+  // A price that rounds up to the threshold leaves the subscript.
+  assert.equal(fmt.formatPriceSubscript(0.0000999999, { trim: false }), "0.00010000");
+  assert.equal(fmt.formatPriceSubscript(1e-25), "0.0₂₄1");
+});

@@ -156,7 +156,10 @@ function createLifecycle() {
       return row;
     }
 
-    const formattedCurrent = Utils.formatPriceSubscript(numericPrice, { fallback: "" });
+    const formattedCurrent = Utils.formatPriceSubscript(numericPrice, {
+      fallback: "",
+      trim: false,
+    });
     const now = Date.now();
     const record = priceHistory.get(mint);
 

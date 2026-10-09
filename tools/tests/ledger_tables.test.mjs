@@ -242,3 +242,21 @@ test("Copy Trading Compare shows each mode whole and names curves as the table d
   assert.ok(names.includes("Unnamed task"), "an unnamed task is in the fixture");
   assert.deepEqual([...legend].sort(), [...names].sort());
 });
+
+test("the Tokens price column keeps one significant-digit count", async (t) => {
+  const page = await openPage(t, "tokens");
+  const root = "#tokens-root";
+  await page.waitForSelector(`${root} tbody tr[data-row-id] td[data-column-id="price_sol"]`);
+  const prices = await page.$$eval(`${root} tbody td[data-column-id="price_sol"]`, (cells) =>
+    cells.map((cell) => cell.textContent.trim()).filter((text) => /\d/.test(text))
+  );
+  // Significant digits: the digits after the zero run (and any subscript count).
+  const significant = (text) => {
+    const digits = text.replace(/[^\d₀-₉]/g, "");
+    const plain = digits.replace(/[₀-₉]+/, "").replace(/^0+/, "");
+    return plain.length;
+  };
+  const counts = new Set(prices.map(significant));
+  assert.ok(prices.length > 1, "the fixture prices several tokens");
+  assert.equal(counts.size, 1, `one digit count across ${prices.join(" | ")}`);
+});

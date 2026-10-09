@@ -231,7 +231,7 @@ function createLifecycle() {
     value == null
       ? "—"
       : `<span title="${esc(formatFixed(value, { decimals: 12, trim: true }))}">${esc(
-          Utils.formatPriceSubscript(value, { fallback: "—", alignWith: [peer] })
+          Utils.formatPriceSubscript(value, { fallback: "—", alignWith: [peer], trim: false })
         )}</span>`;
   const entryPrice = (r) => r.average_entry_price || r.entry_price;
   const exitPrice = (r) => r.average_exit_price ?? r.exit_price;

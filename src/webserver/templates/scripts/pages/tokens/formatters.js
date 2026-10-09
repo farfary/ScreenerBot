@@ -40,7 +40,7 @@ export function priceCell(value, row = null) {
   // price: it takes the same placeholder as any other unknown value.
   const price = value === null || value === undefined || value === "" ? Number.NaN : Number(value);
   const known = Number.isFinite(price) && price > 0;
-  const formatted = known ? Utils.formatPriceSubscript(price, { fallback: "—" }) : "—";
+  const formatted = known ? Utils.formatPriceSubscript(price, { fallback: "—", trim: false }) : "—";
   const exact = known ? formatFixed(price, { decimals: 12, trim: true }) : "";
   const baseValue = Utils.escapeHtml(formatted);
 

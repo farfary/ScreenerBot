@@ -329,43 +329,45 @@ function usdText(num, trim) {
 }
 
 /**
- * The parts of a price at `precision` significant digits: `plain` ("0.0105": `lead`
- * "0", `digits` "0105") or `sub` (0.000012 -> `zeros` 4, `digits` "12"). Fraction
- * digits carry no trailing zeros; `alignWith` in formatPriceSubscript pads them back.
+ * The subscript threshold: a price with at least this many zeros after the decimal
+ * point (below 0.0001) prints the zero run as a lowered count, "0.0₄5101" for
+ * 0.00005101. A larger price prints its zeros, "0.0004249".
  */
-function priceParts(absPrice, precision) {
-  // Normal-sized numbers (>= 0.0001) get the SAME significant-digit budget as
-  // the subscript branch below: decimals are derived from the magnitude, never
-  // a flat toFixed(). A flat toFixed printed 0.000105191666 for a price whose
-  // meaningful part is 0.00010519, which overflowed every column and tooltip
-  // it landed in. Prices >= 1 keep at least 2 decimals so they still read as
-  // amounts rather than rounded integers.
-  if (absPrice >= 0.0001) {
-    const magnitude = Math.floor(Math.log10(absPrice));
-    const minDecimals = absPrice >= 1 ? 2 : 0;
-    const decimals = Math.min(12, Math.max(minDecimals, precision - 1 - magnitude));
-    const [lead, fraction = ""] = absPrice.toFixed(decimals).split(".");
-    return { kind: "plain", lead, digits: fraction.replace(/0+$/, "") };
+const SUBSCRIPT_MIN_ZEROS = 4;
+
+/**
+ * The parts of a price at `precision` significant digits: `plain` ("0.0105": `lead`
+ * "0", `digits` "0105") or `sub` (0.000012 -> `zeros` 4, `digits` "12"). With `trim`
+ * the fraction carries no trailing zeros; without it every price keeps exactly
+ * `precision` significant digits. `alignWith` in formatPriceSubscript pads further.
+ */
+function priceParts(absPrice, precision, trim) {
+  const cut = (digits) => (trim ? digits.replace(/0+$/, "") : digits);
+  // Both notations round to the same significant-digit budget. The subscript branch
+  // rounds in exponent form; a price that rounds up to the threshold (0.000099999
+  // at 4 digits is 0.0001000) leaves it for the plain branch.
+  const [mantissa, exponent] = absPrice.toExponential(Math.max(0, precision - 1)).split("e");
+  const zeros = -Number(exponent) - 1;
+  if (zeros >= SUBSCRIPT_MIN_ZEROS) {
+    return { kind: "sub", zeros, digits: cut(mantissa.replace(".", "")) };
   }
 
-  // Significant digits after the leading zeros. Trailing zeros are padding from the
-  // fixed-20 expansion, not precision — 0.0₇50000 is the same number as 0.0₇5 and
-  // only makes the column wider.
-  const str = absPrice.toFixed(20);
-  const leading = str.match(/^0\.0*/)[0];
-  const significantPart = str.substring(leading.length);
-  return {
-    kind: "sub",
-    zeros: leading.length - 2,
-    digits: significantPart
-      .substring(0, Math.min(precision, significantPart.length))
-      .replace(/0+$/, ""),
-  };
+  // Plain prices take their decimals from the magnitude, never a flat toFixed(). A
+  // flat toFixed printed 0.000105191666 for a price whose meaningful part is
+  // 0.00010519, which overflowed every column and tooltip it landed in. Prices >= 1
+  // keep at least 2 decimals so they still read as amounts rather than rounded integers.
+  // The magnitude is the ROUNDED price's, so 0.0000999999 counts as 0.0001.
+  const magnitude = Number(exponent);
+  const minDecimals = absPrice >= 1 ? 2 : 0;
+  const decimals = Math.min(12, Math.max(minDecimals, precision - 1 - magnitude));
+  const [lead, fraction = ""] = absPrice.toFixed(decimals).split(".");
+  return { kind: "plain", lead, digits: cut(fraction) };
 }
 
 /**
  * Format price with subscript notation for very small numbers
- * Uses subscript notation: 0.0₉12345 means 0.000000000012345 (9 zeros after decimal)
+ * Uses subscript notation below the threshold (`SUBSCRIPT_MIN_ZEROS`): 0.0₉12345 means
+ * 0.000000000012345 (9 zeros after the decimal point)
  * @param {number} price - The price to format
  * @param {Object} options - Formatting options
  * @param {string} options.fallback - Value to return if price is invalid
@@ -375,11 +377,14 @@ function priceParts(absPrice, precision) {
  * @param {Array<number>} options.alignWith - Prices shown beside this one (one table
  *   row); the fraction is padded with zeros to the longest fraction among them of the
  *   same notation, so "0.0105" beside "0.00966" reads "0.01050".
+ * @param {boolean} options.trim - true (the default, for a free-standing price) drops
+ *   trailing fraction zeros ("0.0223"); false keeps `precision` significant digits on
+ *   every price ("0.022300", "0.00042490"), so a table column scans evenly.
  * @returns {string} Formatted price string
  */
 export function formatPriceSubscript(
   price,
-  { fallback = DASH, precision = 5, sign: signMode = "negative", alignWith = [] } = {}
+  { fallback = DASH, precision = 5, sign: signMode = "negative", alignWith = [], trim = true } = {}
 ) {
   const num = coerceNumber(price);
   if (!Number.isFinite(num)) {
@@ -389,13 +394,13 @@ export function formatPriceSubscript(
 
   const absPrice = Math.abs(num);
   const sign = num < 0 ? signPrefix(true) : signMode === "always" ? signPrefix(false) : "";
-  const parts = priceParts(absPrice, precision);
+  const parts = priceParts(absPrice, precision, trim);
 
   let width = parts.digits.length;
   for (const peer of alignWith) {
     const peerNum = Math.abs(coerceNumber(peer));
     if (!Number.isFinite(peerNum) || peerNum === 0) continue;
-    const peerParts = priceParts(peerNum, precision);
+    const peerParts = priceParts(peerNum, precision, trim);
     if (peerParts.kind === parts.kind && peerParts.zeros === parts.zeros) {
       width = Math.max(width, peerParts.digits.length);
     }

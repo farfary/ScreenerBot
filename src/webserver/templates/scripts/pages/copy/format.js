@@ -225,10 +225,11 @@ export function toneClass(value) {
   return number > 0 ? "is-positive" : "is-negative";
 }
 
-/** A pool price in SOL at significant digits, the price rule of every table and chart. */
+/** A pool price in SOL at a fixed count of significant digits, the price rule of every
+ * Copy table and chart: one column keeps one digit count. */
 export function price(value) {
   const number = finite(value);
-  return number === null ? "—" : formatPriceSubscript(number);
+  return number === null ? "—" : formatPriceSubscript(number, { trim: false });
 }
 
 /** A pool price with its SOL unit, for tooltips and messages. */
