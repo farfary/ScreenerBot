@@ -72,7 +72,8 @@
 
 .transaction-details-dialog .tx-story-heading > span,
 .transaction-details-dialog .tx-section-label,
-.transaction-details-dialog .tx-detail-heading {
+.transaction-details-dialog .tx-detail-heading,
+.transaction-details-dialog .tx-panel-header {
   color: var(--text-muted);
   font-size: 0.65rem;
   font-weight: 700;
@@ -161,15 +162,11 @@
   display: inline-flex;
   align-items: center;
   justify-content: center;
-  width: 36px;
-  height: 36px;
-  border-radius: var(--radius-full);
-  background: var(--primary-alpha-10);
   color: var(--primary-color);
 }
 
 .transaction-details-dialog .tx-flow-arrow i {
-  font-size: 16px;
+  font-size: 20px;
 }
 
 .transaction-details-dialog .tx-story-amount {
@@ -428,8 +425,6 @@
   }
 
   .transaction-details-dialog .tx-flow-arrow {
-    width: 30px;
-    height: 30px;
     transform: rotate(calc(var(--dir-sign) * 90deg));
   }
 

@@ -642,7 +642,8 @@ export function formatSignedNumber(
   return signedDigits(num, { decimals, minDecimals, sign, grouping: true });
 }
 
-export function formatPnL(value, { decimals = 4, fallback = HYPHEN } = {}) {
+/** A signed SOL amount in its tone span; `trim` drops trailing fraction zeros. */
+export function formatPnL(value, { decimals = 4, fallback = HYPHEN, trim = false } = {}) {
   const num = coerceNumber(value);
   if (!Number.isFinite(num)) {
     return fallback;
@@ -651,6 +652,7 @@ export function formatPnL(value, { decimals = 4, fallback = HYPHEN } = {}) {
   const formatted = formatSol(Math.abs(num), {
     decimals,
     fallback: fallback === HYPHEN ? HYPHEN : fallback,
+    trim,
   });
   if (formatted === fallback) {
     return fallback;

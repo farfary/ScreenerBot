@@ -3,16 +3,10 @@
  *
  * Transaction details dialog tab content - instruction cards, searchable log entries and the raw JSON view. */
 
-.transaction-details-dialog .section-header {
-  padding: 0.5rem 0.75rem;
-  margin-bottom: 0;
-  padding-bottom: 0.375rem;
+/* Panel headings share the overview section label typography (overview.css). */
+.transaction-details-dialog .tx-panel-header {
+  padding: 0.5rem 0.75rem 0.375rem;
   background: var(--bg-card-hover);
-  font-size: 0.7rem;
-  font-weight: 700;
-  color: var(--text-primary);
-  text-transform: uppercase;
-  letter-spacing: 0.05em;
   border-bottom: 1px solid var(--border-color);
   display: flex;
   align-items: center;
@@ -22,25 +16,20 @@
 
 /* A section titled after an asset shows that asset's logo (SOL uses the official
    Solana logomark shipped with the binary). */
-.transaction-details-dialog .section-title {
+.transaction-details-dialog .tx-panel-title {
   display: inline-flex;
   align-items: center;
   gap: 6px;
   min-width: 0;
 }
 
-.transaction-details-dialog .section-title i {
+.transaction-details-dialog .tx-panel-title i {
   font-size: 13px;
   color: var(--text-muted);
 }
 
-.transaction-details-dialog .section-count {
-  font-size: 0.65rem;
-  font-weight: 600;
-  padding: 2px 8px;
-  background: var(--bg-primary);
-  border-radius: var(--radius-lg);
-  color: var(--text-secondary);
+.transaction-details-dialog .tx-panel-count {
+  font-variant-numeric: tabular-nums;
 }
 
 .transaction-details-dialog .mono-text {
@@ -437,6 +426,9 @@
 
 .transaction-details-dialog .ata-table .numeric {
   font-family: var(--font-data);
+  font-feature-settings:
+    "tnum" 1,
+    "zero" 1;
   text-align: end;
 }
 

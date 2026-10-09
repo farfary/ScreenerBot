@@ -18,7 +18,7 @@
   "fee_sol": 0.000105,
   "fee_raw": 105000,
   "compute_units_consumed": 182340,
-  "instructions_count": 6,
+  "instructions_count": 2,
   "accounts_count": 24,
   "sol_balance_change": -0.5021,
   "token_transfers": [
