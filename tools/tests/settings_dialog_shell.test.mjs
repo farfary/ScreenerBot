@@ -28,7 +28,7 @@
  *   every button and input in it stands at one height.
  * - A disabled Security action states in its row what it waits for.
  * - Every boolean in Settings is a switch, never a bare checkbox, and every section
- *   title carries its glyph. A field whose control stands far taller than its label
+ *   title carries its glyph and is not repeated as a heading inside its section. A field whose control stands far taller than its label
  *   block heads that control from the top edge. No Settings action is a frameless
  *   ghost button, whose label reads as indented text; the account panel shared with
  *   the setup screen keeps its own button set and is the one exemption.
@@ -321,7 +321,7 @@ test("a disabled Security action names what it waits for", async (t) => {
   for (const text of rows) assert.match(text, /first to use this/);
 });
 
-test("every Settings boolean is a switch, every title has its glyph, tall fields align to the top", async (t) => {
+test("every Settings boolean is a switch, every title has its glyph and is said once, tall fields align to the top", async (t) => {
   const browser = await chromium.launch({ headless: true });
   t.after(() => browser.close());
   const context = await browser.newContext({ viewport: { width: 1440, height: 900 } });
@@ -345,6 +345,7 @@ test("every Settings boolean is a switch, every title has its glyph, tall fields
   const untitled = [];
   const floating = [];
   const ghosts = [];
+  const repeated = [];
   for (const tab of tabs) {
     await page.locator(`.settings-nav-item[data-tab="${tab}"]`).click();
     await page.waitForTimeout(400);
@@ -379,6 +380,26 @@ test("every Settings boolean is a switch, every title has its glyph, tall fields
         tab
       ))
     );
+    repeated.push(
+      ...(await page.$$eval(
+        ".settings-content .settings-section",
+        (sections, name) =>
+          sections
+            .filter((section) => section.getClientRects().length > 0)
+            .flatMap((section) => {
+              const title = section.querySelector(":scope > .settings-section-title");
+              const text = title?.textContent.trim();
+              if (!text) return [];
+              return [...section.querySelectorAll("*")]
+                .filter((node) => !title.contains(node) && node.children.length === 0)
+                .filter((node) => node.closest(":is(h1, h2, h3, h4, h5, h6, [class*='title'])"))
+                .filter((node) => node.getClientRects().length > 0)
+                .filter((node) => node.textContent.trim() === text)
+                .map(() => `${name}: ${text}`);
+            }),
+        tab
+      ))
+    );
     if (!unglyphedTabs.has(tab))
       untitled.push(
         ...(await page.$$eval(
@@ -405,6 +426,7 @@ test("every Settings boolean is a switch, every title has its glyph, tall fields
   assert.ok(tabs.includes("account"), "the Account section is listed");
   assert.deepEqual(bare, []);
   assert.deepEqual(untitled, [], "every section title carries its glyph");
+  assert.deepEqual(repeated, [], "no section repeats its own title inside it");
   assert.deepEqual(floating, [], "a tall control's label sits on its top edge");
   assert.deepEqual(ghosts, [], "no Settings action is a frameless ghost button");
 });

@@ -235,13 +235,9 @@ function buildTelegramTab(settings) {
       <p class="settings-section-description" data-l10n-id="settings-telegram-auth-description"></p>
 
       <div class="settings-group telegram-auth-section" id="tgAuthSection">
-        <!-- Command Authentication Subsection -->
+        <!-- Command authentication status: the section heading above names it -->
         <div class="telegram-auth-subsection">
           <div class="telegram-auth-header">
-            <div class="telegram-auth-title">
-              <i class="icon-shield"></i>
-              <span data-l10n-id="settings-telegram-auth-title"></span>
-            </div>
             <div class="telegram-auth-status" id="tg-auth-status" role="status" aria-live="polite">
               <i class="icon-loader spin"></i> <span data-l10n-id="common-loading"></span>
             </div>
