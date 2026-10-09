@@ -135,17 +135,8 @@
   }
 
   .splash-spinner {
-    animation: splash-breathe 1.8s ease-in-out infinite;
-  }
+    --pulse-to: 0.35;
 
-  @keyframes splash-breathe {
-    0%,
-    100% {
-      opacity: 1;
-    }
-
-    50% {
-      opacity: 0.35;
-    }
+    animation: pulse 1.8s ease-in-out infinite;
   }
 }

@@ -430,9 +430,44 @@ if (
   errors.push("Natural token logos must preserve their canvas with --token-logo-fit: contain");
 }
 
-/* One rotation keyframe: `spin` in foundation.css. A spinner chooses its speed and
-   timing, never its own copy of the rotation. Every animation names a keyframe some
+/* The shared motions live in foundation.css: `spin` (rotation), `pulse` (an opacity
+   loop whose range a surface sets with --pulse-from/--pulse-to) and `shimmer` (an
+   inline sweep). A surface chooses duration and timing, never its own copy. Every
+   stylesheet ships in one combined sheet, so a keyframe name declared twice is one
+   global animation whichever loads last. Every animation names a keyframe some
    stylesheet declares; an undeclared name renders no motion at all. */
+
+/** The `{ ... }` block opening at `open`, brace-matched. */
+function blockAt(css, open) {
+  let depth = 0;
+  for (let index = open; index < css.length; index += 1) {
+    if (css[index] === "{") depth += 1;
+    else if (css[index] === "}" && --depth === 0) return css.slice(open + 1, index);
+  }
+  return css.slice(open + 1);
+}
+
+/** A keyframe body in one spelling: `from`/`to` as percentages, whitespace collapsed. */
+function keyframeShape(body) {
+  return body
+    .replace(/\bfrom\b/g, "0%")
+    .replace(/\bto\b(?=\s*[,{])/g, "100%")
+    .replace(/\s+/g, " ")
+    .replace(/\s*([{};:,])\s*/g, "$1")
+    .trim();
+}
+
+/** The pulse shape: opacity only, resting at 0% and 100% and turning at 50%. */
+function isPulseShape(body) {
+  const declarations = [...body.matchAll(/([\w-]+)\s*:/g)].map((m) => m[1]);
+  if (declarations.length === 0 || declarations.some((name) => name !== "opacity")) return false;
+  const frames = new Map();
+  for (const frame of body.matchAll(/([^{}]+)\{([^{}]*)\}/g)) {
+    for (const stop of frame[1].split(",")) frames.set(keyframeShape(stop), frame[2].trim());
+  }
+  const stops = [...frames.keys()].sort().join(" ");
+  return stops === "0% 100% 50%" && frames.get("0%") === frames.get("100%");
+}
 const animationKeywords = new Set([
   "none",
   "initial",
@@ -457,21 +492,19 @@ const animationKeywords = new Set([
   "running",
   "paused",
 ]);
-const declaredKeyframes = new Set();
+const declaredKeyframes = new Map();
 const animationUses = [];
+const keyframes = [];
 for (const file of cssFiles) {
   const css = await readFile(file, "utf8");
   const path = relative(stylesRoot, file);
   const lineOf = (index) => css.slice(0, index).split("\n").length;
   for (const match of css.matchAll(/@keyframes\s+([\w-]+)\s*\{/g)) {
-    declaredKeyframes.add(match[1]);
-    const end = css.indexOf("\n}", match.index);
-    const body = css.slice(match.index, end < 0 ? undefined : end);
-    if (path !== "foundation.css" && /rotate\(\s*360deg\s*\)/.test(body)) {
-      errors.push(
-        `${path}:${lineOf(match.index)}: @keyframes ${match[1]} repeats the rotation; animate with spin from foundation.css`
-      );
-    }
+    const name = match[1];
+    const where = `${path}:${lineOf(match.index)}`;
+    declaredKeyframes.set(name, [...(declaredKeyframes.get(name) ?? []), where]);
+    const body = blockAt(css, match.index + match[0].length - 1);
+    keyframes.push({ path, where, name, body, shape: keyframeShape(body) });
   }
   for (const match of css.matchAll(/(?<![\w-])animation(?:-name)?\s*:\s*([^;}]+)/g)) {
     if (/var\(/.test(match[1])) continue;
@@ -489,6 +522,28 @@ for (const file of cssFiles) {
 for (const { path, line, name } of animationUses) {
   if (!declaredKeyframes.has(name)) {
     errors.push(`${path}:${line}: animation ${name} names no declared @keyframes`);
+  }
+}
+for (const [name, places] of declaredKeyframes) {
+  if (places.length > 1) {
+    errors.push(`@keyframes ${name} is declared ${places.length} times: ${places.join(", ")}`);
+  }
+}
+const sharedShapes = new Map(
+  keyframes.filter((k) => k.path === "foundation.css").map((k) => [k.shape, k.name])
+);
+for (const { path, where, name, body, shape } of keyframes) {
+  if (path === "foundation.css") continue;
+  if (/rotate\(\s*360deg\s*\)/.test(body)) {
+    errors.push(`${where}: @keyframes ${name} repeats the rotation; animate with spin`);
+  } else if (sharedShapes.has(shape)) {
+    errors.push(
+      `${where}: @keyframes ${name} copies ${sharedShapes.get(shape)} from foundation.css`
+    );
+  } else if (isPulseShape(body)) {
+    errors.push(
+      `${where}: @keyframes ${name} repeats the pulse; animate with pulse and set --pulse-from/--pulse-to`
+    );
   }
 }
 

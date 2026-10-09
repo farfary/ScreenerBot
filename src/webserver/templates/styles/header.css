@@ -393,7 +393,9 @@
 }
 
 .modern-header .bot-card[data-status="running"] .card-icon {
-  animation: header-status-pulse 2.4s ease-in-out infinite;
+  --pulse-to: 0.58;
+
+  animation: pulse 2.4s ease-in-out infinite;
 }
 
 .modern-header .bot-card[data-status="force_stopped"] .card-icon,
@@ -420,17 +422,6 @@
 .modern-header .bot-card[data-status="stopped"] .card-icon,
 .modern-header .bot-card[data-status="stopped"] .card-status {
   color: var(--text-secondary);
-}
-
-@keyframes header-status-pulse {
-  0%,
-  100% {
-    opacity: 1;
-  }
-
-  50% {
-    opacity: 0.58;
-  }
 }
 
 /* Compact icon actions leave room for the right-side financial summaries. */

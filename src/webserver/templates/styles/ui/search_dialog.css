@@ -579,25 +579,19 @@
 }
 
 .search-skeleton-row span {
+  --pulse-from: 0.45;
+  --pulse-to: 1;
+
   height: 10px;
   border-radius: var(--radius-xs);
   background: var(--bg-hover);
-  animation: search-skeleton 1.2s ease-in-out infinite alternate;
+  animation: pulse 2.4s ease-in-out infinite;
 }
 
 .search-skeleton-row span:first-child {
   width: 32px;
   height: 32px;
   border-radius: var(--radius-full);
-}
-
-@keyframes search-skeleton {
-  from {
-    opacity: 0.45;
-  }
-  to {
-    opacity: 1;
-  }
 }
 
 @media (prefers-reduced-motion: reduce) {

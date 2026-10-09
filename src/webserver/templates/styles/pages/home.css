@@ -639,16 +639,6 @@
 }
 
 /* Loading state */
-@keyframes home-shimmer {
-  from {
-    transform: translateX(calc(var(--dir-sign) * -100%));
-  }
-
-  to {
-    transform: translateX(calc(var(--dir-sign) * 100%));
-  }
-}
-
 .home-dashboard.loading {
   position: relative;
 }
@@ -663,7 +653,7 @@
     color-mix(in srgb, var(--text-primary) 3%, transparent),
     transparent
   );
-  animation: home-shimmer 1.5s ease-in-out infinite;
+  animation: shimmer 1.5s ease-in-out infinite;
   pointer-events: none;
 }
 

@@ -547,7 +547,7 @@
   background: rgb(0 0 0 / 0.6);
   backdrop-filter: blur(4px);
   z-index: var(--z-dialog);
-  animation: fadeIn 0.15s ease;
+  animation: wallet-tools-fade-in 0.15s ease;
 }
 
 .burn-confirm-dialog {
@@ -607,7 +607,7 @@
   border-radius: 0 0 var(--radius-lg) var(--radius-lg);
 }
 
-@keyframes fadeIn {
+@keyframes wallet-tools-fade-in {
   from {
     opacity: 0;
   }

@@ -49,9 +49,11 @@
 }
 
 .badge.loading {
+  --pulse-to: 0.7;
+
   background: var(--warning-alpha-10);
   color: var(--semantic-warning-text);
-  animation: badgePulse 2s ease-in-out infinite;
+  animation: pulse 2s ease-in-out infinite;
 }
 
 .badge.error {
@@ -97,17 +99,6 @@
 
 .security-score--baseline {
   color: #64748b;
-}
-
-@keyframes badgePulse {
-  0%,
-  100% {
-    opacity: 1;
-  }
-
-  50% {
-    opacity: 0.7;
-  }
 }
 
 .progress-bar {

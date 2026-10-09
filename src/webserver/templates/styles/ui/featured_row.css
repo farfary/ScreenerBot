@@ -343,18 +343,10 @@
 }
 
 .skeleton-pulse {
-  animation: skeleton-pulse 1.4s ease-in-out infinite;
-}
+  --pulse-from: 0.35;
+  --pulse-to: 0.75;
 
-@keyframes skeleton-pulse {
-  0%,
-  100% {
-    opacity: 0.35;
-  }
-
-  50% {
-    opacity: 0.75;
-  }
+  animation: pulse 1.4s ease-in-out infinite;
 }
 
 /* ============================================

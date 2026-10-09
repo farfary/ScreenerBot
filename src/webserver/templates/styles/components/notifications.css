@@ -495,16 +495,6 @@ body.notification-drawer-open {
   animation: shimmer 1.5s infinite;
 }
 
-@keyframes shimmer {
-  0% {
-    transform: translateX(calc(var(--dir-sign) * -100%));
-  }
-
-  100% {
-    transform: translateX(calc(var(--dir-sign) * 100%));
-  }
-}
-
 .progress-text {
   font-size: 10px;
   font-weight: 500;
