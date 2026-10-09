@@ -138,9 +138,6 @@
   border: 1px solid var(--border-color);
   border-radius: var(--radius-xl);
   padding: 8px;
-  max-height: 380px;
-  overflow-y: auto;
-  scroll-behavior: smooth;
 }
 
 .settings-nav-tab-item {
@@ -206,16 +203,12 @@
 }
 
 .settings-nav-tab-position {
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  width: 22px;
-  height: 22px;
-  background: var(--bg-secondary);
-  border-radius: var(--radius-md);
-  font-size: 0.7rem;
-  font-weight: 700;
-  color: var(--text-secondary);
+  width: 2ch;
+  font-family: var(--font-data);
+  font-size: 0.75rem;
+  font-variant-numeric: tabular-nums;
+  color: var(--text-muted);
+  text-align: end;
   flex-shrink: 0;
 }
 
@@ -239,20 +232,12 @@
 }
 
 .settings-nav-tab-icon {
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  width: 32px;
-  height: 32px;
-  background: var(--primary-alpha-10);
-  border-radius: var(--radius-lg);
-  color: var(--primary-color);
-  flex-shrink: 0;
-}
-
-.settings-nav-tab-icon i {
+  width: 20px;
   font-size: 1rem;
   line-height: 1;
+  color: var(--primary-color);
+  text-align: center;
+  flex-shrink: 0;
 }
 
 .settings-nav-tab-info {
@@ -269,53 +254,8 @@
   color: var(--text-primary);
 }
 
-.settings-nav-tab-status {
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  width: 24px;
-  height: 24px;
-  border-radius: var(--radius-md);
-  transition: all var(--transition-fast);
-}
-
-.settings-nav-tab-status.enabled {
-  color: var(--success-color);
-  opacity: 0.8;
-}
-
-.settings-nav-tab-status.disabled {
-  color: var(--text-secondary);
-  opacity: 0.4;
-}
-
-.settings-nav-tab-status i {
-  font-size: 0.875rem;
-  line-height: 1;
-}
-
 .settings-nav-tab-toggle {
   margin-inline-start: 4px;
-}
-
-.settings-nav-tabs-note {
-  display: flex;
-  align-items: center;
-  gap: 10px;
-  margin-top: 16px;
-  padding: 10px 14px;
-  background: var(--primary-alpha-10);
-  border: 1px solid var(--primary-alpha-20);
-  border-radius: var(--radius-lg);
-  font-size: 0.8rem;
-  color: var(--primary-color);
-}
-
-.settings-nav-tabs-note i {
-  font-size: 1rem;
-  line-height: 1;
-  opacity: 0.8;
-  flex-shrink: 0;
 }
 
 /* =============================================================================

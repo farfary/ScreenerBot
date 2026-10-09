@@ -517,7 +517,6 @@ settings-navigation-overflow-label = Sığmayan sekmeler
 settings-navigation-overflow-hint = Sekme satırını yana kaydırın veya sığmayan sekmeleri sonundaki Daha Fazla menüsünde toplayın.
 settings-navigation-overflow-scroll = Kaydır
 settings-navigation-overflow-menu = Daha Fazla menüsü
-settings-navigation-note = Değişiklikler kaydettikten sonra uygulanır. Gezinme çubuğundaki güncellemeleri görmek için sayfayı yenileyin.
 settings-navigation-drag-handle =
     .title = Yeniden sıralamak için sürükleyin
 settings-navigation-defaults-failed = Varsayılan gezinme yüklenemedi

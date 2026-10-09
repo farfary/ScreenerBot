@@ -512,7 +512,6 @@ settings-navigation-overflow-label = 放不下的标签页
 settings-navigation-overflow-hint = 横向滚动标签行，或将放不下的标签页收进末尾的“更多”菜单。
 settings-navigation-overflow-scroll = 滚动
 settings-navigation-overflow-menu = “更多”菜单
-settings-navigation-note = 更改在保存后生效。请刷新页面以查看导航栏的更新。
 settings-navigation-drag-handle =
     .title = 拖动以调整顺序
 settings-navigation-defaults-failed = 无法加载默认导航

@@ -528,7 +528,6 @@ settings-navigation-overflow-label = Tabs That Do Not Fit
 settings-navigation-overflow-hint = Scroll the tab row sideways, or gather the tabs that do not fit under a More menu at its end.
 settings-navigation-overflow-scroll = Scroll
 settings-navigation-overflow-menu = More menu
-settings-navigation-note = Changes apply after saving. Refresh the page to see updates in the navigation bar.
 settings-navigation-drag-handle =
     .title = Drag to reorder
 settings-navigation-defaults-failed = Could not load the default navigation

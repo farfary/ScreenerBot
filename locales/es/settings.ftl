@@ -522,7 +522,6 @@ settings-navigation-overflow-label = Pestañas que no caben
 settings-navigation-overflow-hint = Desplaza la fila de pestañas lateralmente o agrupa las que no caben en un menú «Más» al final.
 settings-navigation-overflow-scroll = Desplazar
 settings-navigation-overflow-menu = Menú «Más»
-settings-navigation-note = Los cambios se aplican tras guardar. Actualiza la página para ver los cambios en la barra de navegación.
 settings-navigation-drag-handle =
     .title = Arrastra para reordenar
 settings-navigation-defaults-failed = No se pudo cargar la navegación predeterminada

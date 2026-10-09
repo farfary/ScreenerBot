@@ -47,14 +47,9 @@ function renderTabItems(tabs) {
         <div class="settings-nav-tab-handle" data-l10n-id="settings-navigation-drag-handle">
           <i class="icon-grip-vertical"></i>
         </div>
-        <div class="settings-nav-tab-icon">
-          <i class="${Utils.escapeHtml(tab.icon)}"></i>
-        </div>
+        <i class="settings-nav-tab-icon ${Utils.escapeHtml(tab.icon)}" aria-hidden="true"></i>
         <div class="settings-nav-tab-info">
           <span class="settings-nav-tab-label">${Utils.escapeHtml(tabLabel(tab.id))}</span>
-        </div>
-        <div class="settings-nav-tab-status ${tab.enabled ? "enabled" : "disabled"}">
-          ${tab.enabled ? '<i class="icon-eye"></i>' : '<i class="icon-eye-off"></i>'}
         </div>
         <div class="settings-nav-tab-toggle">
           <label class="toggle">
@@ -109,10 +104,6 @@ export function buildNavigationTab(settings) {
       </div>
       <div class="settings-nav-tabs-list" id="navTabsList">
         ${renderTabItems(tabs)}
-      </div>
-      <div class="settings-nav-tabs-note">
-        <i class="icon-info"></i>
-        <span data-l10n-id="settings-navigation-note"></span>
       </div>
     </div>
   `;
@@ -199,17 +190,6 @@ export function attachNavigationHandlers(dialog, content) {
 
     const item = e.target.closest(".settings-nav-tab-item");
     if (!item || item === draggedItem) return;
-
-    // Auto-scroll when near edges
-    const listRect = list.getBoundingClientRect();
-    const scrollZone = 50;
-    const scrollSpeed = 8;
-
-    if (e.clientY < listRect.top + scrollZone) {
-      list.scrollTop -= scrollSpeed;
-    } else if (e.clientY > listRect.bottom - scrollZone) {
-      list.scrollTop += scrollSpeed;
-    }
 
     // Calculate position for visual feedback
     const rect = item.getBoundingClientRect();
@@ -312,14 +292,6 @@ export function attachNavigationHandlers(dialog, content) {
         const tab = tabs.find((t) => t.id === tabId);
         if (tab) {
           tab.enabled = e.target.checked;
-          // Update status icon
-          const statusEl = item.querySelector(".settings-nav-tab-status");
-          if (statusEl) {
-            statusEl.className = `settings-nav-tab-status ${tab.enabled ? "enabled" : "disabled"}`;
-            statusEl.innerHTML = tab.enabled
-              ? '<i class="icon-eye"></i>'
-              : '<i class="icon-eye-off"></i>';
-          }
           setTabs(tabs);
         }
       }

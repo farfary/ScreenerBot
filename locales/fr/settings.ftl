@@ -524,7 +524,6 @@ settings-navigation-overflow-label = Onglets qui ne tiennent pas
 settings-navigation-overflow-hint = Faire défiler la rangée d’onglets latéralement, ou regrouper ceux qui ne tiennent pas dans un menu « Plus » à la fin.
 settings-navigation-overflow-scroll = Défiler
 settings-navigation-overflow-menu = Menu « Plus »
-settings-navigation-note = Les modifications s'appliquent après l'enregistrement. Actualisez la page pour voir les changements dans la barre de navigation.
 settings-navigation-drag-handle =
     .title = Faire glisser pour réorganiser
 settings-navigation-defaults-failed = Impossible de charger la navigation par défaut

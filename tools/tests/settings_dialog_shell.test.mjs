@@ -19,6 +19,9 @@
  *   "Saved" when nothing is pending.
  * - Every select in one settings list has one width (Theme, Language and Refresh
  *   were each as wide as their own value), and no select cuts its value.
+ * - The Navigation list shows every tab row at its full height inside the dialog's own
+ *   scroll, each row's glyph bare, with the switch as the only visibility control and
+ *   no note asking for a page refresh (saving rebuilds the navigation bar).
  *
  * Run with `npm run test:js`.
  */
@@ -148,4 +151,56 @@ test("every select in one settings list has one width", async (t) => {
     }
   }
   assert.ok(lists > 0, "a settings list holds more than one select");
+});
+
+test("the Navigation list shows every row with bare glyphs and one visibility control", async (t) => {
+  const browser = await chromium.launch({ headless: true });
+  t.after(() => browser.close());
+  const context = await browser.newContext({ viewport: { width: 1440, height: 900 } });
+  const api = createApiHandler([await loadIndex("home"), await loadIndex("shell")], "populated");
+  const host = await serveDashboard(context, { locale: "en", onApi: api.onApi });
+  t.after(() => host.close());
+  const page = await context.newPage();
+  page.setDefaultTimeout(15000);
+  await page.goto(`${host.origin}/home`);
+  await page.waitForSelector("body:not(.initialization-mode) main.content:not([data-loading])");
+  await page.locator("#settingsBtn").dispatchEvent("click");
+  await page.waitForSelector(".settings-dialog.active .settings-nav");
+  await page.locator('.settings-nav-item[data-tab="navigation"]').click();
+  await page.waitForFunction(
+    () => document.querySelector("#navTabsList .settings-nav-tab-item")?.getClientRects().length > 0
+  );
+
+  const list = await page.evaluate(() => {
+    const root = document.querySelector("#navTabsList");
+    const rows = [...root.querySelectorAll(".settings-nav-tab-item")];
+    const painted = (element) => {
+      const style = getComputedStyle(element);
+      return (
+        style.backgroundColor !== "rgba(0, 0, 0, 0)" ||
+        style.borderStyle !== "none" ||
+        style.boxShadow !== "none"
+      );
+    };
+    return {
+      rows: rows.length,
+      scrolls: root.scrollHeight > root.clientHeight + 1,
+      boxed: rows
+        .flatMap((row) => [
+          ...row.querySelectorAll(".settings-nav-tab-icon, .settings-nav-tab-position"),
+        ])
+        .filter(painted).length,
+      controls: rows.map((row) => row.querySelectorAll("input, .settings-nav-tab-status").length),
+      refreshNote: /refresh/i.test(root.closest(".settings-section").textContent),
+    };
+  });
+
+  assert.ok(list.rows > 8, "the fixture lists every navigation tab");
+  assert.equal(list.scrolls, false, "the list takes its own height");
+  assert.equal(list.boxed, 0, "row glyphs and positions are bare");
+  assert.ok(
+    list.controls.every((count) => count === 1),
+    "the switch is each row's only visibility control"
+  );
+  assert.equal(list.refreshNote, false, "no note asks for a page refresh");
 });

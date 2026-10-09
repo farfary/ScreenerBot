@@ -517,7 +517,6 @@ settings-navigation-overflow-label = زبانه‌هایی که جا نمی‌ش
 settings-navigation-overflow-hint = ردیف زبانه‌ها را افقی پیمایش کنید، یا زبانه‌هایی را که جا نمی‌شوند در منوی «بیشتر» در انتهای آن جمع کنید.
 settings-navigation-overflow-scroll = پیمایش
 settings-navigation-overflow-menu = منوی «بیشتر»
-settings-navigation-note = تغییرات پس از ذخیره اعمال می‌شود. برای دیدن به‌روزرسانی‌ها در نوار پیمایش، صفحه را تازه کنید.
 settings-navigation-drag-handle =
     .title = برای تغییر ترتیب بکشید
 settings-navigation-defaults-failed = بارگذاری پیمایش پیش‌فرض ممکن نشد

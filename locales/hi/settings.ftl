@@ -487,7 +487,6 @@ settings-navigation-overflow-label = जो टैब फिट नहीं ह
 settings-navigation-overflow-hint = टैब पंक्ति को बगल में स्क्रॉल करें, या जो टैब फिट नहीं होते उन्हें अंत में "और" मेनू में रखें।
 settings-navigation-overflow-scroll = स्क्रॉल
 settings-navigation-overflow-menu = "और" मेनू
-settings-navigation-note = बदलाव सहेजने के बाद लागू होते हैं। नेविगेशन बार में अपडेट देखने के लिए पेज रीफ़्रेश करें।
 settings-navigation-drag-handle =
     .title = क्रम बदलने के लिए खींचें
 settings-navigation-defaults-failed = डिफ़ॉल्ट नेविगेशन लोड नहीं हो सका

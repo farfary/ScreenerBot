@@ -527,7 +527,6 @@ settings-navigation-overflow-label = Вкладки, которые не пом�
 settings-navigation-overflow-hint = Прокручивать ряд вкладок вбок или собирать не поместившиеся вкладки в меню «Ещё» в конце.
 settings-navigation-overflow-scroll = Прокрутка
 settings-navigation-overflow-menu = Меню «Ещё»
-settings-navigation-note = Изменения применяются после сохранения. Обновите страницу, чтобы увидеть изменения в панели навигации.
 settings-navigation-drag-handle =
     .title = Перетащите, чтобы изменить порядок
 settings-navigation-defaults-failed = Не удалось загрузить навигацию по умолчанию

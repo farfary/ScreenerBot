@@ -512,7 +512,6 @@ settings-navigation-overflow-label = 収まらないタブ
 settings-navigation-overflow-hint = タブの行を横にスクロールするか、収まらないタブを末尾の「その他」メニューにまとめます。
 settings-navigation-overflow-scroll = スクロール
 settings-navigation-overflow-menu = 「その他」メニュー
-settings-navigation-note = 変更は保存後に適用されます。ナビゲーションバーに反映するにはページを再読み込みしてください。
 settings-navigation-drag-handle =
     .title = ドラッグして並べ替え
 settings-navigation-defaults-failed = デフォルトのナビゲーションを読み込めませんでした

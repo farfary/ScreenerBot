@@ -490,7 +490,6 @@ settings-navigation-overflow-label = Abas que não cabem
 settings-navigation-overflow-hint = Rolar a fileira de abas para o lado ou reunir as que não cabem em um menu Mais no final.
 settings-navigation-overflow-scroll = Rolar
 settings-navigation-overflow-menu = Menu Mais
-settings-navigation-note = As alterações são aplicadas após salvar. Atualize a página para ver as mudanças na barra de navegação.
 settings-navigation-drag-handle =
     .title = Arraste para reordenar
 settings-navigation-defaults-failed = Não foi possível carregar a navegação padrão

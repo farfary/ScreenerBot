@@ -512,7 +512,6 @@ settings-navigation-overflow-label = 들어가지 않는 탭
 settings-navigation-overflow-hint = 탭 줄을 옆으로 스크롤하거나, 들어가지 않는 탭을 끝의 더보기 메뉴에 모읍니다.
 settings-navigation-overflow-scroll = 스크롤
 settings-navigation-overflow-menu = 더보기 메뉴
-settings-navigation-note = 변경 사항은 저장 후 적용됩니다. 내비게이션 바의 변경 사항을 보려면 페이지를 새로고침하세요.
 settings-navigation-drag-handle =
     .title = 드래그하여 순서 변경
 settings-navigation-defaults-failed = 기본 내비게이션을 불러오지 못했습니다

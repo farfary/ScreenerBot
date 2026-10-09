@@ -512,7 +512,6 @@ settings-navigation-overflow-label = Tab yang Tidak Muat
 settings-navigation-overflow-hint = Gulir baris tab ke samping, atau kumpulkan tab yang tidak muat di menu Lainnya di ujungnya.
 settings-navigation-overflow-scroll = Gulir
 settings-navigation-overflow-menu = Menu Lainnya
-settings-navigation-note = Perubahan berlaku setelah disimpan. Segarkan halaman untuk melihat pembaruan di bilah navigasi.
 settings-navigation-drag-handle =
     .title = Seret untuk mengurutkan ulang
 settings-navigation-defaults-failed = Tidak dapat memuat navigasi default

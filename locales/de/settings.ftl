@@ -517,7 +517,6 @@ settings-navigation-overflow-label = Tabs, die nicht passen
 settings-navigation-overflow-hint = Die Tab-Leiste seitlich scrollen oder nicht passende Tabs in einem Menü „Mehr“ am Ende sammeln.
 settings-navigation-overflow-scroll = Scrollen
 settings-navigation-overflow-menu = Menü „Mehr“
-settings-navigation-note = Änderungen gelten nach dem Speichern. Laden Sie die Seite neu, um die Aktualisierungen in der Navigationsleiste zu sehen.
 settings-navigation-drag-handle =
     .title = Zum Umsortieren ziehen
 settings-navigation-defaults-failed = Die Standardnavigation konnte nicht geladen werden
