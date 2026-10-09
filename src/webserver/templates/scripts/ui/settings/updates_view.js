@@ -211,7 +211,7 @@ export function createUpdatesView(Utils) {
     let icon = "icon-circle-alert";
     let tone = "warning";
     let actions = [
-      button("updatesCheck", I18n.t("updates-action-check-again"), "icon-refresh-cw", "ghost"),
+      button("updatesCheck", I18n.t("updates-action-check-again"), "icon-refresh-cw", "secondary"),
     ];
     let progressHtml = "";
 
@@ -404,7 +404,7 @@ export function createUpdatesView(Utils) {
           <p>
             ${escape(error ? I18n.t("updates-notes-empty-error") : I18n.t("updates-notes-empty-none"))}
           </p>
-          ${button("updatesNotesRetry", I18n.t("updates-action-try-again"), "icon-refresh-cw", "ghost")}
+          ${button("updatesNotesRetry", I18n.t("updates-action-try-again"), "icon-refresh-cw", "secondary")}
         </div>
       `;
     }

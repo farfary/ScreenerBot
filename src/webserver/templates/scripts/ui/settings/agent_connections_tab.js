@@ -598,7 +598,7 @@ function buildShell() {
           </div>
         </div>
 
-        <div class="settings-field agent-perm-field">
+        <div class="settings-field settings-field--tall agent-perm-field">
           <div class="settings-field-info">
             <span class="settings-field-label" data-l10n-id="settings-agent-permissions-label"></span>
             <span class="settings-field-hint" data-l10n-id="settings-agent-permissions-hint"></span>

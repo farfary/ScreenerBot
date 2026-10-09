@@ -69,7 +69,7 @@ export function buildAccountTab() {
       <p class="settings-section-description" data-l10n-id="settings-account-manage-description"></p>
       <button
         type="button"
-        class="account-btn account-btn-ghost"
+        class="btn btn-secondary btn-sm"
         id="settingsOpenDashboard"
         data-l10n-id="settings-account-open-dashboard"
       ></button>

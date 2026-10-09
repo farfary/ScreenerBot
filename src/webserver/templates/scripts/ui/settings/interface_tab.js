@@ -57,7 +57,7 @@ export function buildInterfaceTab(settings) {
           </div>
         </div>
 
-        <div class="settings-field settings-field--logo-shape">
+        <div class="settings-field settings-field--tall">
           <div class="settings-field-info">
             <label id="tokenLogoShapeLabel" data-l10n-id="settings-interface-logo-shape-label"></label>
             <span class="settings-field-hint" data-l10n-id="settings-interface-logo-shape-hint"></span>

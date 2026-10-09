@@ -399,7 +399,10 @@
   flex-shrink: 0;
 }
 
-.settings-field--logo-shape {
+/* A field whose control stands taller than its label block (an option grid, a
+   permission list) sets both on the top edge, so the label heads its control
+   instead of floating at its middle. */
+.settings-field--tall {
   align-items: flex-start;
 }
 
