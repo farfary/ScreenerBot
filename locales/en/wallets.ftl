@@ -105,7 +105,7 @@ wallets-watch-budget-title-options = Wallet watch options
 wallets-watch-budget-title-restore = Restore wallet watch
 wallets-watch-budget-close =
     .aria-label = Close
-wallets-watch-budget-label-signatures = Signatures checked per check
+wallets-watch-budget-label-signatures = Signatures Checked per Check
 wallets-watch-budget-label-transactions = Successful full transactions checked per check
 wallets-watch-budget-hint-signatures = Current limit: { $limit }. Choose 500–5,000 signatures per check in steps of 100.
 wallets-watch-budget-hint-transactions = Current limit: { $limit }. Choose 500–5,000 successful transactions per check in steps of 100.
@@ -238,7 +238,7 @@ wallets-bulk-confirm-warning =
 wallets-bulk-confirm-risk-steal = Anyone with this file can steal all funds
 wallets-bulk-confirm-risk-share = Never share this file with anyone
 wallets-bulk-confirm-risk-delete = Delete the file immediately after use
-wallets-bulk-confirm-prompt = Type the phrase below to confirm
+wallets-bulk-confirm-prompt = Type the Phrase Below to Confirm
 wallets-bulk-confirm-submit = Export Keys
 
 # renderers.js: main wallet holdings and wallet lists.

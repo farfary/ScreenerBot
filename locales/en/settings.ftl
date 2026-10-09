@@ -43,7 +43,7 @@ settings-dialog-link-terms = Terms of Service
 ## settings_dialog.js: Startup tab
 
 settings-startup-section-title = Startup Behavior
-settings-startup-auto-start-label = Auto-start Trader
+settings-startup-auto-start-label = Auto-Start Trader
 settings-startup-auto-start-hint = Automatically start trader on launch
 settings-startup-coming-soon = Coming Soon
 settings-startup-default-page-label = Default Page
@@ -105,7 +105,7 @@ settings-interface-page-size-rows =
         [one] { $count } row
        *[other] { $count } rows
     }
-settings-interface-auto-expand-label = Auto-expand Categories
+settings-interface-auto-expand-label = Auto-Expand Categories
 settings-interface-auto-expand-hint = Expand config categories by default
 settings-interface-hints-label = Show Contextual Hints
 settings-interface-hints-hint = Display help icons explaining dashboard features
@@ -204,7 +204,7 @@ settings-security-2fa-password-prompt = Enter your password to continue:
 settings-security-2fa-password-input =
     .placeholder = Enter password
 settings-security-2fa-continue = Continue
-settings-security-2fa-manual-code = Manual entry code:
+settings-security-2fa-manual-code = Manual Entry Code:
 settings-security-2fa-qr =
     .alt = TOTP QR Code
 settings-security-2fa-code-prompt = Enter the 6-digit code from your authenticator app:
@@ -295,7 +295,7 @@ settings-agent-name-control-characters = Name must not contain control character
 
 settings-agent-title = Agent Connections
 settings-agent-description = Connect { -claude }, { -codex }, { -hermes }, { -openclaw }, or any stdio MCP client. { -brand } must remain running. Each connection carries its own permissions: full access by default, limited per connection whenever you want. No connection can ever read or change your wallet key.
-settings-agent-name-label = Connection name
+settings-agent-name-label = Connection Name
 settings-agent-name-hint = Shown in the list below so you can tell connections apart.
 settings-agent-name-input =
     .placeholder = Laptop coding agent
@@ -373,7 +373,7 @@ settings-telegram-discovery-step-send = Send any message (or @mention your bot i
 settings-telegram-discovery-listening = Listening for messages...
 settings-telegram-discovery-select = Select
 settings-telegram-chat-id-label = ID:
-settings-telegram-language-label = Message language
+settings-telegram-language-label = Message Language
 settings-telegram-language-hint = Language of { -telegram } bot messages and buttons
 settings-telegram-language-follow-app = Follow app language
 settings-telegram-test-label = Test Connection

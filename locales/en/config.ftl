@@ -3,12 +3,12 @@
 
 ## account
 
-config-account-auto-wallet-signin = Sign in automatically with my wallet
+config-account-auto-wallet-signin = Sign In Automatically with My Wallet
     .hint = When this wallet already has a { -brand } account, sign in without asking at startup. Off by default: signing a message with your trading key is something you should choose, not something the bot decides.
-config-account-refresh-margin-secs = Token refresh margin
+config-account-refresh-margin-secs = Token Refresh Margin
     .hint = How early to renew the sign-in token before it expires. Only change this if you are debugging authentication.
     .unit = s
-config-account-use-gateway-rpc = Use { -brand } RPC for sending transactions
+config-account-use-gateway-rpc = Use { -brand } RPC for Sending Transactions
     .hint = Broadcast signed swap transactions through screenerbot.io instead of your own RPC. Signing always happens on this machine; the server cannot alter a signed transaction. Your own RPC is still required for price data.
 
 ## agent_control
@@ -738,8 +738,9 @@ config-ohlcv-sources-geckoterminal-enabled = Enabled
     .hint = Enable { -geckoterminal } as an OHLCV data source
 config-ohlcv-sources-geckoterminal-endpoint = Endpoint
     .hint = { -geckoterminal } API base URL
-config-ohlcv-sources-geckoterminal-rate-limit-per-minute = Rate Limit (req/min)
+config-ohlcv-sources-geckoterminal-rate-limit-per-minute = Rate Limit
     .hint = Maximum API requests per minute ({ -geckoterminal } enforces strict limits)
+    .unit = req/min
 config-ohlcv-sources-geckoterminal-timeout-seconds = Timeout
     .hint = HTTP request timeout for { -geckoterminal } calls
     .unit = s
@@ -760,8 +761,9 @@ config-ohlcv-sources-solana-tracker-enabled = Enabled
     .hint = Enable SolanaTracker as an OHLCV fallback source (credit-based, requires API key)
 config-ohlcv-sources-solana-tracker-endpoint = Endpoint
     .hint = SolanaTracker API base URL
-config-ohlcv-sources-solana-tracker-rate-limit-per-minute = Rate Limit (req/min)
+config-ohlcv-sources-solana-tracker-rate-limit-per-minute = Rate Limit
     .hint = Maximum API requests per minute (credit-based, be conservative)
+    .unit = req/min
 config-ohlcv-sources-solana-tracker-timeout-seconds = Timeout
     .hint = HTTP request timeout for SolanaTracker calls
     .unit = s
@@ -840,12 +842,12 @@ config-positions-trailing-stop-enabled = Enable Trailing Stop
 
 ## referral
 
-config-referral-code = Referral code
+config-referral-code = Referral Code
     .hint = Optional. If someone introduced you to { -brand }, their code credits them with a share of the fees you pay us — at no extra cost to you. Leave empty and nothing is ever sent from this machine.
     .placeholder = e.g. FARHAD
-config-referral-endpoint = Activation endpoint
+config-referral-endpoint = Activation Endpoint
     .hint = Where the referral code is registered. Only change this if you are testing against a staging server.
-config-referral-reannounce-hours = Re-announce every
+config-referral-reannounce-hours = Re-Announce Every
     .hint = How often to re-send, so a wallet you add later is still attributed. 0 sends only once per launch.
     .unit = h
 
@@ -1005,8 +1007,9 @@ config-tokens-sources-geckoterminal-enabled = Enabled
     .hint = Enable or disable this data source
 config-tokens-sources-geckoterminal-endpoint = Endpoint
     .hint = API base URL (leave default for the standard endpoint)
-config-tokens-sources-geckoterminal-rate-limit-per-minute = Rate Limit (req/min)
+config-tokens-sources-geckoterminal-rate-limit-per-minute = Rate Limit
     .hint = Maximum API requests per minute to this source
+    .unit = req/min
 config-tokens-sources-geckoterminal-timeout-seconds = Timeout
     .hint = HTTP request timeout in seconds
     .unit = s
@@ -1016,8 +1019,9 @@ config-tokens-sources-rugcheck-enabled = Enabled
     .hint = Enable or disable this data source
 config-tokens-sources-rugcheck-endpoint = Endpoint
     .hint = API base URL (leave default for the standard endpoint)
-config-tokens-sources-rugcheck-rate-limit-per-minute = Rate Limit (req/min)
+config-tokens-sources-rugcheck-rate-limit-per-minute = Rate Limit
     .hint = Maximum API requests per minute to this source
+    .unit = req/min
 config-tokens-sources-rugcheck-timeout-seconds = Timeout
     .hint = HTTP request timeout in seconds
     .unit = s

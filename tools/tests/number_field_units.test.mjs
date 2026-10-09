@@ -11,7 +11,7 @@
  *
  * - Every config field's `.unit` attribute, and every message a page writes as a field
  *   unit, is at most `MAX_COLUMNS` display columns in every locale.
- * - A label never repeats the unit in parentheses ("Timeout (seconds)").
+ * - A config field label never carries a unit in parentheses ("Timeout (seconds)").
  * - `unitColumns` counts an East Asian wide character as two columns.
  *
  * The rendered placement is checked on every page by `dashboard_stability.test.mjs`.
@@ -93,17 +93,21 @@ test("every field unit is short in every locale", () => {
   assert.deepEqual(long, []);
 });
 
-test("a field label never repeats its unit in parentheses", () => {
+test("a config field label never carries a unit in parentheses", () => {
   const repeated = [];
   for (const [locale, entries] of all) {
-    for (const [key] of entries) {
-      if (!key.endsWith(".unit")) continue;
-      const id = key.slice(0, -".unit".length);
-      const label = entries.get(id) ?? "";
+    const units = new Set(
+      [...entries]
+        .filter(([key]) => key.endsWith(".unit"))
+        .map(([, value]) => value.trim())
+        .concat(["%"])
+    );
+    for (const [key, label] of entries) {
+      if (!key.startsWith("config-") || key.includes(".")) continue;
       const note = /[（(]([^()（）]*)[)）]\s*$/.exec(label)?.[1].trim();
-      // A parenthesised window ("Min TX (1h)") qualifies the label; the unit itself does not.
-      if (note && (note === entries.get(key).trim() || note === "%" || note.includes("-sol"))) {
-        repeated.push(`${locale} ${id}: ${label}`);
+      // A parenthesised window ("Min TX (1h)") qualifies the label; a unit belongs in the field.
+      if (note && (units.has(note) || note.includes("-sol"))) {
+        repeated.push(`${locale} ${key}: ${label}`);
       }
     }
   }
