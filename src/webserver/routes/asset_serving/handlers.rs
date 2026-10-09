@@ -82,7 +82,6 @@ pub async fn get_core_script(Path(file): Path<String>) -> Response {
         "agent_approvals.js" => Some(embeds::CORE_AGENT_APPROVALS),
         "request_manager.js" => Some(embeds::CORE_REQUEST_MANAGER),
         "client_ready.js" => Some(embeds::CORE_CLIENT_READY),
-        "brand_text.js" => Some(embeds::CORE_BRAND_TEXT),
         "i18n.js" => Some(embeds::CORE_I18N),
         "splash.js" => Some(embeds::CORE_SPLASH),
         "onboarding.js" => Some(embeds::CORE_ONBOARDING),

@@ -440,7 +440,6 @@ pub fn login_template(content: &str, locale: &LanguageIdentifier) -> String {
     <script src="/assets/fluent-bundle.js?v={}"></script>
     <script src="/i18n/{}/catalog.js?v={}"></script>
     <script src="/scripts/core/i18n.js?v={}"></script>
-    <script src="/scripts/core/brand_text.js?v={}"></script>
     <script type="module" src="/scripts/pages/login.js?v={}"></script>
 </body>
 </html>"#,
@@ -451,7 +450,6 @@ pub fn login_template(content: &str, locale: &LanguageIdentifier) -> String {
         content,
         asset_version,
         locale,
-        asset_version,
         asset_version,
         asset_version,
         asset_version

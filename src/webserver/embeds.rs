@@ -324,7 +324,6 @@ pub const CORE_ACTION_MESSAGE: &str = include_str!("templates/scripts/core/actio
 pub const CORE_AGENT_APPROVALS: &str = include_str!("templates/scripts/core/agent_approvals.js");
 pub const CORE_REQUEST_MANAGER: &str = include_str!("templates/scripts/core/request_manager.js");
 pub const CORE_CLIENT_READY: &str = include_str!("templates/scripts/core/client_ready.js");
-pub const CORE_BRAND_TEXT: &str = include_str!("templates/scripts/core/brand_text.js");
 pub const CORE_I18N: &str = include_str!("templates/scripts/core/i18n.js");
 pub const CORE_SPLASH: &str = include_str!("templates/scripts/core/splash.js");
 pub const CORE_ONBOARDING: &str = include_str!("templates/scripts/core/onboarding.js");

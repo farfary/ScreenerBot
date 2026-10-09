@@ -379,8 +379,6 @@
 
 html:is(:lang(ar), :lang(fa), :lang(hi), :lang(zh), :lang(ja), :lang(ko))
   *:not(
-    .font-brand,
-    .brand-name,
     .brand-text,
     .splash-brand,
     .lockscreen-brand,
@@ -787,23 +785,6 @@ select,
     "tnum" 1,
     "zero" 1;
   color: var(--error-color);
-}
-
-/* Brand text using Orbitron */
-.font-brand {
-  font-family: var(--font-brand);
-  font-weight: 900;
-  letter-spacing: 0.05em;
-  text-transform: uppercase;
-}
-
-/* Exact product-name treatment inside otherwise unrelated interface copy. */
-.brand-name {
-  font-family: var(--font-brand) !important;
-  font-style: normal;
-  font-weight: 700;
-  line-height: inherit;
-  letter-spacing: 0.02em;
 }
 
 /* Monospace for addresses, hashes, signatures */
