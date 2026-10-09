@@ -11,6 +11,7 @@ import { requestManager, createScopedFetcher } from "../core/request_manager.js"
 import { showFeaturedRow, hideFeaturedRow } from "../ui/featured_row.js";
 import { renderAddress } from "../ui/token_identity.js";
 import { notifyClientReady } from "../core/client_ready.js";
+import { WALLET_CHANGE_PERCENT_DECIMALS } from "../core/header_metrics.js";
 import { closeMenu, openMenu } from "../core/menu_manager.js";
 import { createCalendar } from "./home/portfolio_calendar.js";
 import { createUpdateNotice } from "./home/update_notice.js";
@@ -34,6 +35,7 @@ function createLifecycle() {
   let walletAddress = "";
   let walletQrOpen = false;
   let walletIdentityCleanup = null;
+  let sparkRoomCleanup = null;
   // Animation intervals tracking
   const animationIntervals = [];
 
@@ -248,6 +250,30 @@ function createLifecycle() {
     return PNL_CLASSES[Utils.signedTone(value, decimals)];
   }
 
+  // The sparkline shares the headline row with the balance, which never shrinks. It
+  // takes the room the balance leaves, and is dropped when that room is below its CSS
+  // `min-width`, so it is never squeezed into an unreadable sliver.
+  function mountSparkRoom() {
+    const headline = document.querySelector(".portfolio-headline");
+    const primary = headline?.querySelector(".portfolio-primary");
+    const svg = document.getElementById("heroSpark");
+    if (!headline || !primary || !svg || typeof ResizeObserver !== "function") return;
+    const fit = () => {
+      const style = getComputedStyle(headline);
+      const room =
+        headline.clientWidth -
+        parseFloat(style.paddingInlineStart) -
+        parseFloat(style.paddingInlineEnd) -
+        parseFloat(style.columnGap) -
+        primary.getBoundingClientRect().width;
+      svg.classList.toggle("no-room", room < parseFloat(getComputedStyle(svg).minWidth));
+    };
+    const observer = new ResizeObserver(fit);
+    observer.observe(headline);
+    observer.observe(primary);
+    sparkRoomCleanup = () => observer.disconnect();
+  }
+
   // Render the balance-trend sparkline from an oldest-first array of SOL values.
   function renderSparkline(history) {
     const line = document.getElementById("heroSparkLine");
@@ -326,7 +352,7 @@ function createLifecycle() {
       changeEl.className = `hero-change ${cls}`;
       const percent = Number.isFinite(wallet.change_percent)
         ? `<span class="change-percent ${cls}">(${Utils.formatPercent(wallet.change_percent, {
-            decimals: 2,
+            decimals: WALLET_CHANGE_PERCENT_DECIMALS,
           })})</span>`
         : "";
       changeEl.innerHTML = `
@@ -527,6 +553,7 @@ function createLifecycle() {
       calendar.mount();
       updateNotice = createUpdateNotice(Utils);
       mountWalletIdentity();
+      mountSparkRoom();
     },
 
     activate: (ctx) => {
@@ -548,6 +575,9 @@ function createLifecycle() {
       }
       if (!walletIdentityCleanup) {
         mountWalletIdentity();
+      }
+      if (!sparkRoomCleanup) {
+        mountSparkRoom();
       }
 
       // If we have cached data from a previous visit, show it immediately
@@ -600,6 +630,8 @@ function createLifecycle() {
       updateNotice = null;
       walletIdentityCleanup?.();
       walletIdentityCleanup = null;
+      sparkRoomCleanup?.();
+      sparkRoomCleanup = null;
       walletAddress = "";
 
       // Note: cachedData is deliberately kept — it lets a revisit paint real

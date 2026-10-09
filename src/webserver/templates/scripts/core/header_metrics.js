@@ -13,6 +13,9 @@ const METRICS_POLL_INTERVAL = 5000;
 // reads 1.234 in one place and 1.2345 in the other looks like two different numbers.
 const WALLET_SOL_DECIMALS = 4;
 
+/** Decimals of the wallet's day-change percent, in the header Worth card and the Home hero. */
+export const WALLET_CHANGE_PERCENT_DECIMALS = 1;
+
 // Effective Auto Trader states: badge text and the card's control hint.
 const TRADER_STATE_LABELS = Object.freeze({
   explore: "shell-bot-state-explore",
@@ -113,10 +116,10 @@ function updateWalletCard(wallet, state) {
     if (Number.isFinite(changePercent)) {
       const direction = changePercent > 0 ? "↑" : changePercent < 0 ? "↓" : "";
       change.textContent = `${direction}${formatPercentValue(Math.abs(changePercent), {
-        decimals: 1,
+        decimals: WALLET_CHANGE_PERCENT_DECIMALS,
         includeSign: false,
       })}`;
-      setValueClass(change, changePercent, 1);
+      setValueClass(change, changePercent, WALLET_CHANGE_PERCENT_DECIMALS);
     } else {
       change.textContent = "—";
       change.classList.remove("positive", "negative", "neutral");

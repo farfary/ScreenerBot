@@ -367,22 +367,10 @@ pub async fn get_home_dashboard(State(state): State<Arc<AppState>>) -> Json<Home
         services_total,
     };
 
-    // Process token statistics (filtering already fetched in parallel).
-    //
-    // Via the async wrapper, which runs the query on a blocking thread. Called directly,
-    // `count_tokens()` takes the token database's connection lock ON THE ASYNC WORKER
-    // THREAD, so while a filtering snapshot held that connection this one line parked a
-    // whole tokio worker for the duration — measured at 8.9s against the owner's database.
-    // With few workers, a couple of concurrent dashboard polls doing this starved the
-    // runtime, which is why unrelated panels (wallet, positions) stalled together.
-    let total_in_database = crate::tokens::count_tokens_async(crate::chains::ChainScope::All)
-        .await
-        .unwrap_or_default();
-
-    // Get filtering stats from the already fetched result (absent until the first snapshot
-    // finishes building in the background). Absent stays absent all the way to the hero:
-    // zeroing these would have the panel state that nothing passed and nothing is priced,
-    // which is a different claim from "not counted yet".
+    // Process token statistics (filtering already fetched in parallel). Absent until the
+    // first snapshot finishes building in the background, and absent stays absent all the
+    // way to the hero: zeroing these would have the panel state that nothing passed and
+    // nothing is priced, which is a different claim from "not counted yet".
     let filtering_stats = filtering_stats_result;
 
     let passed_filters = filtering_stats.as_ref().map(|s| s.passed_filtering);
@@ -390,14 +378,19 @@ pub async fn get_home_dashboard(State(state): State<Arc<AppState>>) -> Json<Home
     let blacklisted = filtering_stats.as_ref().map(|s| s.blacklisted);
     let with_ohlcv = filtering_stats.as_ref().map(|s| s.with_ohlcv);
 
-    // Calculate rejected as total - passed - blacklisted
-    let rejected_filters = passed_filters
-        .zip(blacklisted)
-        .map(|(passed, blacklisted)| {
-            total_in_database
-                .saturating_sub(passed)
-                .saturating_sub(blacklisted)
-        });
+    // Tracked, passed, rejected and blacklisted come from ONE filtering snapshot, so the
+    // pipeline adds up: rejected = tracked - passed - blacklisted at the same instant.
+    // Only before the first snapshot is the tracked total counted live, through the
+    // async wrapper: called directly, `count_tokens()` takes the token database's
+    // connection lock on the async worker thread and parks it for the duration
+    // (measured at 8.9s), starving unrelated dashboard panels.
+    let total_in_database = match filtering_stats.as_ref() {
+        Some(stats) => stats.total_tokens_in_database,
+        None => crate::tokens::count_tokens_async(crate::chains::ChainScope::All)
+            .await
+            .unwrap_or_default(),
+    };
+    let rejected_filters = filtering_stats.as_ref().map(pipeline_rejected);
 
     let tokens = TokenStatistics {
         snapshot_state: SnapshotState::of(&filtering_stats),
@@ -427,6 +420,15 @@ pub async fn get_home_dashboard(State(state): State<Arc<AppState>>) -> Json<Home
         trader_status,
         timestamp: now.to_rfc3339(),
     })
+}
+
+/// The pipeline's rejected count: every tracked token that neither passed nor is
+/// blacklisted, all read from one filtering snapshot so the pipeline adds up.
+fn pipeline_rejected(stats: &crate::filtering::FilteringStatsSnapshot) -> usize {
+    stats
+        .total_tokens_in_database
+        .saturating_sub(stats.passed_filtering)
+        .saturating_sub(stats.blacklisted)
 }
 
 #[cfg(test)]
@@ -465,6 +467,25 @@ mod tests {
         assert_eq!(wallet.token_count, Some(3));
         assert_eq!(wallet.change_native, Some(1.0));
         assert_eq!(wallet.change_percent, Some(100.0));
+    }
+
+    #[test]
+    fn pipeline_counts_add_up_within_one_snapshot() {
+        let stats = crate::filtering::FilteringStatsSnapshot {
+            total_tokens_in_database: 1_000,
+            total_tokens: 400,
+            with_pool_price: 1,
+            open_positions: 0,
+            blacklisted: 20,
+            with_ohlcv: 5,
+            passed_filtering: 3,
+            updated_at: chrono::Utc::now(),
+        };
+        let rejected = pipeline_rejected(&stats);
+        assert_eq!(
+            rejected + stats.passed_filtering + stats.blacklisted,
+            stats.total_tokens_in_database
+        );
     }
 
     #[test]

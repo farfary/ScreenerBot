@@ -359,12 +359,19 @@
   color: var(--text-muted);
 }
 
+/* The trend takes the room the balance leaves, down to `min-width`; below that the
+   page marks it `no-room` (mountSparkRoom in scripts/pages/home.js) and it is not
+   drawn, rather than squeezed into a sliver. */
 .hero-spark {
   width: 8.25rem;
-  min-width: 0;
+  min-width: 4.5rem;
   height: 2.75rem;
   flex: 0 1 auto;
   overflow: visible;
+}
+
+.hero-spark.no-room {
+  display: none;
 }
 
 .hero-spark.empty {

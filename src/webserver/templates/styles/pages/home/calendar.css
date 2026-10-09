@@ -85,7 +85,7 @@
 /* Cells stay opaque: the grid paints its 1px gaps with the border colour, so a
    translucent cell would show that colour through its whole face. Quiet days dim
    their content; days not yet reached take the out-of-month fill. */
-.calendar-cell.empty > *,
+.calendar-cell.no-trades > *,
 .calendar-cell.skeleton > * {
   opacity: 0.7;
 }
@@ -146,14 +146,15 @@
   font-feature-settings: "tnum" 1;
 }
 
-/* Empty days (no trades) show only the portfolio value — keep it bottom-aligned. */
-.calendar-cell.empty .cell-value {
+/* Days without trades show only the end balance, which the popover names — keep it
+   bottom-aligned. */
+.calendar-cell.no-trades .cell-value {
   margin-top: auto;
 }
 
 /* Profit/loss cells carry a saturated heatmap tint (the JS raises the alpha
    floor in light theme so the fill stays a solid colour, not a pale pastel), so
-   white text reads on the coloured cells in BOTH themes. Empty/no-trade cells
+   white text reads on the coloured cells in BOTH themes. No-trade cells
    have no tint and keep their dark --text-muted for contrast on the light card. */
 .calendar-cell.profit .cell-pnl,
 .calendar-cell.loss .cell-pnl {

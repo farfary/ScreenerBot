@@ -138,7 +138,9 @@ export function createCalendar(fetcher) {
       let cls = "calendar-cell";
       if (isFuture) cls += " future";
       if (isToday) cls += " today";
-      if (!d.has_data && !isFuture) cls += " empty";
+      // A past day without trades still shows its end balance; it is a quiet day,
+      // not an empty one.
+      if (!d.has_data && !isFuture) cls += " no-trades";
       if (pnl > 0) cls += " profit";
       else if (pnl < 0) cls += " loss";
 
@@ -167,9 +169,10 @@ export function createCalendar(fetcher) {
           ? `${Utils.formatSol(d.portfolio_value_native, { decimals: 2, suffix: "" })}`
           : "";
 
-      // Only days with trade activity are hoverable; expose them for the popover.
-      const detailAttr = d.has_data ? ` data-date="${d.date}"` : "";
-      if (d.has_data) dayMap.set(d.date, d);
+      // Every day that shows a figure is hoverable, so the popover names it.
+      const hasDetail = d.has_data || d.portfolio_value_native != null;
+      const detailAttr = hasDetail ? ` data-date="${d.date}"` : "";
+      if (hasDetail) dayMap.set(d.date, d);
 
       cells.push(
         `<div class="${cls}"${style}${detailAttr}>` +
@@ -247,18 +250,20 @@ export function createCalendar(fetcher) {
     const losses = Math.max(0, trades - wins);
     const winRate = trades > 0 ? Math.round((wins / trades) * 100) : 0;
 
-    const rows = [
-      popoverRow(I18n.t("home-calendar-pop-net-pnl"), Utils.formatSignedSol(pnl), pnlCls),
-      popoverRow(I18n.t("home-calendar-trades"), String(trades)),
-      popoverRow(
-        I18n.t("home-calendar-pop-win-rate"),
-        I18n.t("home-calendar-pop-win-rate-value", {
-          rate: Utils.formatPercentValue(winRate, { decimals: 0, includeSign: false }),
-          wins,
-          losses,
-        })
-      ),
-    ];
+    const rows = d.has_data
+      ? [
+          popoverRow(I18n.t("home-calendar-pop-net-pnl"), Utils.formatSignedSol(pnl), pnlCls),
+          popoverRow(I18n.t("home-calendar-trades"), String(trades)),
+          popoverRow(
+            I18n.t("home-calendar-pop-win-rate"),
+            I18n.t("home-calendar-pop-win-rate-value", {
+              rate: Utils.formatPercentValue(winRate, { decimals: 0, includeSign: false }),
+              wins,
+              losses,
+            })
+          ),
+        ]
+      : [popoverRow(I18n.t("home-calendar-trades"), Utils.formatNumber(0, { decimals: 0 }))];
     if (d.profit_native) {
       rows.push(
         popoverRow(
