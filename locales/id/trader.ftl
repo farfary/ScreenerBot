@@ -228,6 +228,7 @@ trader-time-note = <strong>Catatan:</strong> Posisi yang untung atau rugi lebih 
 trader-time-positions-title = Status Posisi Saat Ini
 trader-time-positions-loading = Memuat posisi...
 trader-time-positions-empty = Tidak ada posisi terbuka
+trader-time-positions-empty-message = Posisi terbuka muncul di sini dengan waktu tahan dan ROI terhadap batas waktu.
 trader-time-positions-token = Token
 trader-time-positions-hold = Durasi Hold
 trader-time-positions-roi = ROI

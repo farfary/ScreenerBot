@@ -237,6 +237,7 @@ trader-time-note = <strong>नोट:</strong> प्रॉफ़िट या �
 trader-time-positions-title = मौजूदा पोज़िशन की स्थिति
 trader-time-positions-loading = पोज़िशन लोड हो रही हैं...
 trader-time-positions-empty = कोई खुली पोज़िशन नहीं
+trader-time-positions-empty-message = खुली पोज़िशन यहाँ समय सीमा के सापेक्ष अपने होल्ड समय और ROI के साथ दिखाई देती हैं।
 trader-time-positions-token = टोकन
 trader-time-positions-hold = होल्ड टाइम
 trader-time-positions-roi = ROI

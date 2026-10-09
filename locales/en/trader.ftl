@@ -292,6 +292,7 @@ trader-time-note = <strong>Note:</strong> Positions at profit or smaller losses 
 trader-time-positions-title = Current Positions Status
 trader-time-positions-loading = Loading positions...
 trader-time-positions-empty = No open positions
+trader-time-positions-empty-message = Open positions appear here with their hold time and ROI against the time limit.
 trader-time-positions-token = Token
 trader-time-positions-hold = Hold Time
 trader-time-positions-roi = ROI

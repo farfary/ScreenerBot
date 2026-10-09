@@ -336,6 +336,7 @@ trader-time-note = <strong>ملاحظة:</strong> لن يتم الخروج من 
 trader-time-positions-title = حالة المراكز الحالية
 trader-time-positions-loading = جارٍ تحميل المراكز...
 trader-time-positions-empty = لا توجد مراكز مفتوحة
+trader-time-positions-empty-message = تظهر هنا المراكز المفتوحة مع مدة الاحتفاظ والعائد مقارنةً بالحد الزمني.
 trader-time-positions-token = الرمز
 trader-time-positions-hold = مدة الاحتفاظ
 trader-time-positions-roi = العائد

@@ -280,6 +280,7 @@ trader-time-note = <strong>참고:</strong> 수익 상태이거나 손실이 더
 trader-time-positions-title = 현재 포지션 상태
 trader-time-positions-loading = 포지션 불러오는 중...
 trader-time-positions-empty = 보유 중인 포지션 없음
+trader-time-positions-empty-message = 보유 중인 포지션이 보유 시간과 시간 제한 대비 ROI와 함께 여기에 표시됩니다.
 trader-time-positions-token = 토큰
 trader-time-positions-hold = 보유 시간
 trader-time-positions-roi = ROI

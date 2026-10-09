@@ -303,6 +303,7 @@ trader-time-note = <strong>Nota:</strong> posições com lucro ou com perdas men
 trader-time-positions-title = Status das posições atuais
 trader-time-positions-loading = Carregando posições...
 trader-time-positions-empty = Nenhuma posição aberta
+trader-time-positions-empty-message = As posições abertas aparecem aqui com o tempo de retenção e o ROI em relação ao limite de tempo.
 trader-time-positions-token = Token
 trader-time-positions-hold = Tempo de posse
 trader-time-positions-roi = ROI

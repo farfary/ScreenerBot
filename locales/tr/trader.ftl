@@ -237,6 +237,7 @@ trader-time-note = <strong>Not:</strong> Kârda olan veya zararı daha küçük 
 trader-time-positions-title = Mevcut pozisyonların durumu
 trader-time-positions-loading = Pozisyonlar yükleniyor...
 trader-time-positions-empty = Açık pozisyon yok
+trader-time-positions-empty-message = Açık pozisyonlar, tutma süreleri ve zaman sınırına göre ROI değerleriyle burada görünür.
 trader-time-positions-token = Token
 trader-time-positions-hold = Tutma süresi
 trader-time-positions-roi = ROI

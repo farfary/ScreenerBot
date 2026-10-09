@@ -281,6 +281,7 @@ trader-time-note = <strong>注意：</strong>盈利或亏损较小的仓位不�
 trader-time-positions-title = 当前仓位状态
 trader-time-positions-loading = 正在加载仓位...
 trader-time-positions-empty = 没有持仓中的仓位
+trader-time-positions-empty-message = 持仓中的仓位会在此显示其持有时间以及相对时间限制的 ROI。
 trader-time-positions-token = 代币
 trader-time-positions-hold = 持仓时间
 trader-time-positions-roi = ROI

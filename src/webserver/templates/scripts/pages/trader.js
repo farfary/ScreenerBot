@@ -1024,6 +1024,7 @@ function createLifecycle() {
         fitToContainer: true,
         sorting: { mode: "client", column: "hold_seconds", direction: "desc" },
         emptyTitle: I18n.t("trader-time-positions-empty"),
+        emptyMessage: I18n.t("trader-time-positions-empty-message"),
       });
     }
     return timePositions;

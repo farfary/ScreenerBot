@@ -281,6 +281,7 @@ trader-time-note = <strong>注意:</strong> 利益が出ているポジション
 trader-time-positions-title = 現在のポジション状況
 trader-time-positions-loading = ポジションを読み込み中...
 trader-time-positions-empty = オープンポジションはありません
+trader-time-positions-empty-message = オープンポジションは、保有時間と時間制限に対する ROI とともにここに表示されます。
 trader-time-positions-token = トークン
 trader-time-positions-hold = 保有時間
 trader-time-positions-roi = ROI
