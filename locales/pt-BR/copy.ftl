@@ -517,6 +517,7 @@ copy-compare-back = Voltar à carteira
 copy-compare-load-failed = Não foi possível carregar a comparação: { $error }
 copy-compare-loading = Carregando comparação…
 copy-compare-empty = Nenhuma tarefa para comparar.
+copy-compare-empty-message = Adicione uma tarefa de cópia para comparar seus resultados com as outras.
 copy-compare-curve-title = P&L realizado acumulado
 copy-table-wallet = Carteira
 copy-table-mode = Modo

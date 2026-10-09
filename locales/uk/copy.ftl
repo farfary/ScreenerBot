@@ -560,6 +560,7 @@ copy-compare-back = Назад до гаманця
 copy-compare-load-failed = Не вдалося завантажити порівняння: { $error }
 copy-compare-loading = Завантаження порівняння…
 copy-compare-empty = Немає завдань для порівняння.
+copy-compare-empty-message = Додайте завдання копіювання, щоб порівняти його результати з іншими.
 copy-compare-curve-title = Накопичений реалізований прибуток/збиток
 copy-table-wallet = Гаманець
 copy-table-mode = Режим

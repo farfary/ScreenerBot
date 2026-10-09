@@ -550,6 +550,7 @@ copy-compare-back = Retour au portefeuille
 copy-compare-load-failed = La comparaison n'a pas pu être chargée : { $error }
 copy-compare-loading = Chargement de la comparaison…
 copy-compare-empty = Aucune tâche à comparer.
+copy-compare-empty-message = Ajoutez une tâche de copie pour comparer ses résultats aux autres.
 copy-compare-curve-title = P&L réalisé cumulé
 copy-table-wallet = Portefeuille
 copy-table-mode = Mode

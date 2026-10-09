@@ -20,7 +20,7 @@
   "tasks": [
     {
       "task_id": 1,
-      "name": "Momentum desk",
+      "label": "Momentum desk",
       "target_address": "CopyTargetAAA1111111111111111111111111111111",
       "mode": "paper",
       "enabled": true,

@@ -126,11 +126,12 @@ export function histogram(buckets, escapeHtml) {
     .join("")}</div>`;
 }
 
-/** Several cumulative P&L curves on one time axis: `[{ name, points }]`. */
+/** Several cumulative P&L curves on one time axis: `[{ nameHtml, points }]`, where
+ * `nameHtml` is the legend entry's markup, already escaped. */
 export function comparisonCurves(series, { escapeHtml = String } = {}) {
   const lines = (series || [])
     .map((entry) => ({
-      name: entry.name,
+      nameHtml: entry.nameHtml,
       points: (entry.points || [])
         .map((point) => ({
           at: new Date(point.at).getTime(),
@@ -166,7 +167,7 @@ export function comparisonCurves(series, { escapeHtml = String } = {}) {
   const legend = lines
     .map(
       (entry, index) =>
-        `<span class="copy-legend-item ${SERIES_CLASSES[index % SERIES_CLASSES.length]}"><span class="copy-legend-swatch"></span>${escapeHtml(entry.name)}</span>`
+        `<span class="copy-legend-item ${SERIES_CLASSES[index % SERIES_CLASSES.length]}"><span class="copy-legend-swatch"></span>${entry.nameHtml}</span>`
     )
     .join("");
   return `${chart}<div class="copy-legend">${legend}</div>`;

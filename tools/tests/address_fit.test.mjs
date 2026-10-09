@@ -11,6 +11,10 @@
  * compact through `renderSignature`, whose crop is `formatSignatureCompact`
  * (core/format.js).
  *
+ * The backend is held to the same rule: no recorded API response (the dashboard
+ * fixtures) carries an address already cropped to "head…tail", because a value
+ * cropped before it reaches the dashboard bypasses `renderAddress` entirely.
+ *
  * Run with `npm run test:js`.
  */
 
@@ -102,4 +106,32 @@ test("no dashboard script crops an address or mint", () => {
       });
   }
   assert.deepEqual(offenders, [], "render the value with renderAddress (ui/token_identity.js)");
+});
+
+test("no API response carries a cropped address", () => {
+  const fixtures = new URL("./fixtures/dashboard/", import.meta.url).pathname;
+  const base58 = "[1-9A-HJ-NP-Za-km-z]";
+  const cropped = new RegExp(`^${base58}{3,8}(?:…|\\.\\.\\.)${base58}{3,8}$`);
+  const offenders = [];
+  const visit = (value, where) => {
+    if (typeof value === "string") {
+      if (cropped.test(value)) offenders.push(`${where}: ${value}`);
+    } else if (value && typeof value === "object") {
+      for (const [key, child] of Object.entries(value)) visit(child, `${where}.${key}`);
+    }
+  };
+  const jsonFiles = (dir) =>
+    fs.readdirSync(dir, { withFileTypes: true }).flatMap((entry) => {
+      const full = path.join(dir, entry.name);
+      if (entry.isDirectory()) return jsonFiles(full);
+      return entry.name.endsWith(".json") ? [full] : [];
+    });
+  for (const file of jsonFiles(fixtures)) {
+    visit(JSON.parse(fs.readFileSync(file, "utf8")), path.relative(fixtures, file));
+  }
+  assert.deepEqual(
+    offenders,
+    [],
+    "send the full address; the dashboard sizes it with renderAddress"
+  );
 });

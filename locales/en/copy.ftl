@@ -569,6 +569,7 @@ copy-compare-back = Back to wallet
 copy-compare-load-failed = Comparison could not be loaded: { $error }
 copy-compare-loading = Loading comparison…
 copy-compare-empty = No tasks to compare.
+copy-compare-empty-message = Add a copy task to compare its results with the others.
 copy-compare-curve-title = Cumulative realized P&L
 copy-table-wallet = Wallet
 copy-table-mode = Mode

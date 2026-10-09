@@ -524,6 +524,7 @@ copy-compare-back = Zurück zur Wallet
 copy-compare-load-failed = Vergleich konnte nicht geladen werden: { $error }
 copy-compare-loading = Vergleich wird geladen…
 copy-compare-empty = Keine Aufgaben zum Vergleichen.
+copy-compare-empty-message = Füge eine Kopieraufgabe hinzu, um ihre Ergebnisse mit den anderen zu vergleichen.
 copy-compare-curve-title = Kumulierte realisierte GuV
 copy-table-wallet = Wallet
 copy-table-mode = Modus

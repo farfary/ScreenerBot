@@ -503,6 +503,7 @@ copy-compare-back = 返回钱包
 copy-compare-load-failed = 无法加载对比：{ $error }
 copy-compare-loading = 正在加载对比…
 copy-compare-empty = 没有可对比的任务。
+copy-compare-empty-message = 添加一个复制任务，即可与其他任务比较结果。
 copy-compare-curve-title = 累计已实现盈亏
 copy-table-wallet = 钱包
 copy-table-mode = 模式

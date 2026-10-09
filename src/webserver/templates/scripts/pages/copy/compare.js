@@ -3,6 +3,8 @@
 //
 // Compare view: every task's closed rounds over one date range, as curves and a
 // table. Choosing a wallet opens its workspace.
+import { DataTable } from "../../ui/data_table.js";
+import { addressFloorWidth, renderAddress, renderNamedAddress } from "../../ui/token_identity.js";
 import { comparisonCurves } from "./charts.js";
 import {
   RANGES,
@@ -15,9 +17,13 @@ import {
   segmented,
   signedPct,
   signedSol,
+  taskName,
   toneClass,
 } from "./format.js";
+import { forget } from "./tokens.js";
 import { panelMessage } from "./overview.js";
+
+const TABLE_ID = "copy-compare-table";
 
 export function createCompare(page) {
   const { $, Utils, api, state, on, paint } = page;
@@ -34,9 +40,7 @@ export function createCompare(page) {
         void refresh();
         return;
       }
-      const task = event.target.closest("[data-compare-task]");
-      if (task) page.select(Number(task.dataset.compareTask));
-      else if (event.target.closest("[data-compare-close]")) page.openCompare();
+      if (event.target.closest("[data-compare-close]")) page.openCompare();
     });
   }
 
@@ -52,41 +56,115 @@ export function createCompare(page) {
     if (state.view === "compare") render();
   }
 
-  function table(rows) {
-    const body = [...rows]
-      .sort((a, b) => b.realized_pnl_native - a.realized_pnl_native)
-      .map(
-        (row) => `<tr>
-          <td><button class="copy-token-link" type="button" data-compare-task="${row.task_id}">${esc(row.name)}</button></td>
-          <td><span class="copy-row-mode copy-mode-${esc(row.mode)}">${esc(modeLabel(row.mode))}</span>${row.enabled ? "" : `<small class="copy-muted"> ${esc(I18n.t("copy-paused-suffix"))}</small>`}</td>
-          <td class="num">${row.rounds}</td>
-          <td class="num">${esc(row.rounds ? pct(row.win_rate_pct, 0) : "—")}</td>
-          <td class="num ${toneClass(row.realized_pnl_native)}">${esc(signedSol(row.realized_pnl_native))}</td>
-          <td class="num">${esc(fixed(row.profit_factor, 2))}</td>
-          <td class="num">${esc(duration(row.average_hold_seconds))}</td>
-          <td class="num">${esc(seconds(row.arrival_median_ms))}</td>
-          <td class="num">${esc(signedPct(row.slippage_median_pct, 2))}</td>
-          <td class="num">${row.fills}</td>
-          <td class="num">${row.skips}</td>
-        </tr>`
-      )
-      .join("");
-    const head = [
-      ["", I18n.t("copy-table-wallet")],
-      ["", I18n.t("copy-table-mode")],
-      ["num", I18n.t("copy-table-rounds")],
-      ["num", I18n.t("copy-metric-win-rate")],
-      ["num", I18n.t("copy-table-realized")],
-      ["num", I18n.t("copy-table-profit-factor")],
-      ["num", I18n.t("copy-table-average-hold")],
-      ["num", I18n.t("copy-metric-median-arrival")],
-      ["num", I18n.t("copy-table-median-slippage")],
-      ["num", I18n.t("copy-kind-fills")],
-      ["num", I18n.t("copy-kind-skips")],
-    ]
-      .map(([cls, text]) => `<th scope="col"${cls ? ` class="${cls}"` : ""}>${esc(text)}</th>`)
-      .join("");
-    return `<div class="copy-table-wrap"><table class="copy-table"><thead><tr>${head}</tr></thead><tbody>${body}</tbody></table></div>`;
+  let table = null;
+
+  const columns = () => [
+    {
+      id: "label",
+      label: I18n.t("copy-table-wallet"),
+      sortable: true,
+      minWidth: addressFloorWidth() + 24,
+      render: (_value, row) => renderNamedAddress(taskName(row), row.target_address),
+      sortFn: (a, b) => taskName(a).localeCompare(taskName(b)),
+    },
+    {
+      id: "mode",
+      label: I18n.t("copy-table-mode"),
+      sortable: true,
+      wrap: false,
+      render: (_value, row) =>
+        `<span class="copy-row-mode copy-mode-${esc(row.mode)}">${esc(modeLabel(row.mode))}</span>${row.enabled ? "" : `<small class="copy-muted"> ${esc(I18n.t("copy-paused-suffix"))}</small>`}`,
+    },
+    {
+      id: "rounds",
+      label: I18n.t("copy-table-rounds"),
+      type: "number",
+      sortable: true,
+      render: (value) => esc(String(value)),
+    },
+    {
+      id: "win_rate_pct",
+      label: I18n.t("copy-metric-win-rate"),
+      type: "percent",
+      sortable: true,
+      render: (value, row) => esc(row.rounds ? pct(value, 0) : "—"),
+    },
+    {
+      id: "realized_pnl_native",
+      label: I18n.t("copy-table-realized"),
+      type: "sol",
+      sortable: true,
+      render: (value) => `<span class="${toneClass(value)}">${esc(signedSol(value))}</span>`,
+    },
+    {
+      id: "profit_factor",
+      label: I18n.t("copy-table-profit-factor"),
+      type: "number",
+      sortable: true,
+      render: (value) => esc(fixed(value, 2)),
+    },
+    {
+      id: "average_hold_seconds",
+      label: I18n.t("copy-table-average-hold"),
+      type: "number",
+      sortable: true,
+      render: (value) => esc(duration(value)),
+    },
+    {
+      id: "arrival_median_ms",
+      label: I18n.t("copy-metric-median-arrival"),
+      type: "number",
+      sortable: true,
+      render: (value) => esc(seconds(value)),
+    },
+    {
+      id: "slippage_median_pct",
+      label: I18n.t("copy-table-median-slippage"),
+      type: "percent",
+      sortable: true,
+      render: (value) => esc(signedPct(value, 2)),
+    },
+    {
+      id: "fills",
+      label: I18n.t("copy-kind-fills"),
+      type: "number",
+      sortable: true,
+      render: (value) => esc(String(value)),
+    },
+    {
+      id: "skips",
+      label: I18n.t("copy-kind-skips"),
+      type: "number",
+      sortable: true,
+      render: (value) => esc(String(value)),
+    },
+  ];
+
+  function dropTable() {
+    table?.destroy();
+    table = null;
+  }
+
+  /** The shared DataTable in its own slot, created once and refreshed in place. */
+  function showTable(slot, rows) {
+    if (table && table.elements.container !== slot) dropTable();
+    if (!table) {
+      table = new DataTable({
+        container: slot,
+        columns: columns(),
+        rowIdField: "task_id",
+        stateKey: "copy.compare-table",
+        compact: true,
+        stickyHeader: true,
+        zebra: true,
+        fitToContainer: true,
+        sorting: { mode: "client", column: "realized_pnl_native", direction: "desc" },
+        emptyTitle: I18n.t("copy-compare-empty"),
+        emptyMessage: I18n.t("copy-compare-empty-message"),
+        onRowClick: (row) => page.select(Number(row.task_id)),
+      });
+    }
+    table.setData(rows);
   }
 
   function render() {
@@ -110,12 +188,23 @@ export function createCompare(page) {
     else if (!rows.length) body = panelMessage(I18n.t("copy-compare-empty"), esc);
     else {
       body = `<section class="copy-card"><h4>${esc(I18n.t("copy-compare-curve-title"))}</h4>${comparisonCurves(
-        rows.map((row) => ({ name: row.name, points: row.pnl_curve })),
+        rows.map((row) => ({
+          nameHtml: row.label ? esc(row.label) : renderAddress(row.target_address, { plain: true }),
+          points: row.pnl_curve,
+        })),
         { escapeHtml: esc }
-      )}</section>${table(rows)}`;
+      )}</section>`;
     }
-    paint(root, head + body);
+    if (!root.querySelector(`#${TABLE_ID}`)) {
+      dropTable();
+      forget(root);
+      root.innerHTML = `<div data-compare-view></div><div class="copy-compare-table" id="${TABLE_ID}"></div>`;
+    }
+    paint(root.querySelector("[data-compare-view]"), head + body);
+    const slot = root.querySelector(`#${TABLE_ID}`);
+    slot.hidden = !rows?.length;
+    if (rows?.length) showTable(slot, rows);
   }
 
-  return { setup, refresh, render };
+  return { setup, refresh, render, dispose: dropTable };
 }

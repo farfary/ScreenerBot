@@ -604,6 +604,7 @@ copy-compare-back = العودة إلى المحفظة
 copy-compare-load-failed = تعذّر تحميل المقارنة: { $error }
 copy-compare-loading = جارٍ تحميل المقارنة…
 copy-compare-empty = لا توجد مهام للمقارنة.
+copy-compare-empty-message = أضف مهمة نسخ لمقارنة نتائجها بالمهام الأخرى.
 copy-compare-curve-title = الأرباح والخسائر المحققة التراكمية
 copy-table-wallet = المحفظة
 copy-table-mode = الوضع

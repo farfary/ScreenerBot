@@ -484,6 +484,7 @@ copy-compare-back = Cüzdana dön
 copy-compare-load-failed = Karşılaştırma yüklenemedi: { $error }
 copy-compare-loading = Karşılaştırma yükleniyor…
 copy-compare-empty = Karşılaştırılacak görev yok.
+copy-compare-empty-message = Sonuçlarını diğerleriyle karşılaştırmak için bir kopyalama görevi ekleyin.
 copy-compare-curve-title = Kümülatif gerçekleşmiş K/Z
 copy-table-wallet = Cüzdan
 copy-table-mode = Mod

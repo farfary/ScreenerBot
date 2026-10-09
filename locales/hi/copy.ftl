@@ -498,6 +498,7 @@ copy-compare-back = वॉलेट पर वापस
 copy-compare-load-failed = तुलना लोड नहीं हो सकी: { $error }
 copy-compare-loading = तुलना लोड हो रही है…
 copy-compare-empty = तुलना के लिए कोई टास्क नहीं।
+copy-compare-empty-message = इसके परिणामों की दूसरों से तुलना करने के लिए एक कॉपी कार्य जोड़ें।
 copy-compare-curve-title = संचयी वास्तविक लाभ-हानि
 copy-table-wallet = वॉलेट
 copy-table-mode = मोड

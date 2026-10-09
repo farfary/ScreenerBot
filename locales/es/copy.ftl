@@ -545,6 +545,7 @@ copy-compare-back = Volver a la billetera
 copy-compare-load-failed = No se pudo cargar la comparación: { $error }
 copy-compare-loading = Cargando comparación…
 copy-compare-empty = No hay tareas que comparar.
+copy-compare-empty-message = Añade una tarea de copia para comparar sus resultados con las demás.
 copy-compare-curve-title = P&L realizado acumulado
 copy-table-wallet = Billetera
 copy-table-mode = Modo

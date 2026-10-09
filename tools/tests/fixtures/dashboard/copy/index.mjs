@@ -161,7 +161,7 @@ export const views = [
     name: "compare",
     click: ["#copy-compare-open"],
     populated: [
-      { selector: "#copy-compare .copy-table tbody tr", min: 3 },
+      { selector: "#copy-compare-table tbody tr[data-row-id]", min: 3 },
       { selector: "#copy-compare .copy-chart-plot", min: 1 },
     ],
     empty: [{ selector: "#copy-compare .copy-chart-empty", text: "No closed rounds to compare" }],

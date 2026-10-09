@@ -566,6 +566,7 @@ copy-compare-back = Назад к кошельку
 copy-compare-load-failed = Не удалось загрузить сравнение: { $error }
 copy-compare-loading = Загрузка сравнения…
 copy-compare-empty = Нет задач для сравнения.
+copy-compare-empty-message = Добавьте задачу копирования, чтобы сравнить её результаты с другими.
 copy-compare-curve-title = Накопленный реализованный P&L
 copy-table-wallet = Кошелёк
 copy-table-mode = Режим

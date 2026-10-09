@@ -13,9 +13,8 @@ use serde::{Deserialize, Serialize};
 use super::control::{self, open_database, CopyTaskSummary, TASK_ACTIVITY_WINDOW};
 use super::insights::CurvePoint;
 use super::{
-    build_insights, closed_rounds, management_for_exit_mode, notify, ActivityQuery,
-    CopyActivityRow, CopyBook, CopyInsights, CopyMode, CopyTask, InsightRange, PaperPosition,
-    LIVE_ARM_CONFIRMATION,
+    build_insights, closed_rounds, management_for_exit_mode, ActivityQuery, CopyActivityRow,
+    CopyBook, CopyInsights, CopyMode, CopyTask, InsightRange, PaperPosition, LIVE_ARM_CONFIRMATION,
 };
 use crate::config::with_config;
 use crate::positions::{Position, PositionManagement};
@@ -394,11 +393,12 @@ pub fn arrival_limit_ms() -> u64 {
     with_config(|config| config.copy_trading.max_arrival_distance_ms)
 }
 
-/// One row of the task comparison.
+/// One row of the task comparison. An unnamed task has no `label`; the dashboard
+/// shows its full `target_address` instead of a shortened one.
 #[derive(Debug, Serialize)]
 pub struct TaskComparison {
     pub task_id: i64,
-    pub name: String,
+    pub label: Option<String>,
     pub target_address: String,
     pub mode: CopyMode,
     pub enabled: bool,
@@ -418,7 +418,7 @@ pub struct TaskComparison {
 pub fn comparison(task: &CopyTask, insights: CopyInsights) -> TaskComparison {
     TaskComparison {
         task_id: task.id,
-        name: notify::task_name(task),
+        label: task.label.clone(),
         target_address: task.target_address.clone(),
         mode: task.mode,
         enabled: task.enabled,
@@ -499,3 +499,7 @@ pub fn defaults() -> CopyDefaults {
         live_confirmation: LIVE_ARM_CONFIRMATION,
     }
 }
+
+#[cfg(test)]
+#[path = "workspace_tests.rs"]
+mod tests;

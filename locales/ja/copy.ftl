@@ -503,6 +503,7 @@ copy-compare-back = ウォレットに戻る
 copy-compare-load-failed = 比較を読み込めませんでした: { $error }
 copy-compare-loading = 比較を読み込み中…
 copy-compare-empty = 比較するタスクがありません。
+copy-compare-empty-message = コピータスクを追加すると、他のタスクと結果を比較できます。
 copy-compare-curve-title = 累積確定損益
 copy-table-wallet = ウォレット
 copy-table-mode = モード

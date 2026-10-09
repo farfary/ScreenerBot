@@ -11,6 +11,7 @@ import {
   pct,
   seconds,
   signedSol,
+  taskName,
   timeAgo,
   toneClass,
 } from "./format.js";
@@ -70,7 +71,7 @@ export function createProfile(page) {
     const rows = tasks
       .map(
         (task) => `<tr>
-          <td><button class="copy-token-link" type="button" data-profile-task="${task.task_id}">${esc(task.name)}</button></td>
+          <td><button class="copy-token-link" type="button" data-profile-task="${task.task_id}">${esc(taskName(task))}</button></td>
           <td>${esc(task.enabled ? modeLabel(task.mode) : I18n.t("copy-mode-paused", { mode: modeLabel(task.mode) }))}</td>
           <td class="num">${task.rounds}</td>
           <td class="num">${esc(task.rounds ? pct(task.win_rate_pct, 0) : "—")}</td>

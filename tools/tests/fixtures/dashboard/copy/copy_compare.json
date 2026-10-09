@@ -2,7 +2,7 @@
   "tasks": [
     {
       "task_id": 1,
-      "name": "Momentum desk",
+      "label": "Momentum desk",
       "target_address": "CopyTargetAAA1111111111111111111111111111111",
       "mode": "paper",
       "enabled": true,
@@ -87,7 +87,7 @@
     },
     {
       "task_id": 2,
-      "name": "Early entries",
+      "label": "Early entries",
       "target_address": "CopyTargetBBB1111111111111111111111111111111",
       "mode": "live",
       "enabled": true,
@@ -148,7 +148,7 @@
     },
     {
       "task_id": 3,
-      "name": "CopyT…1111",
+      "label": null,
       "target_address": "CopyTargetCCC1111111111111111111111111111111",
       "mode": "paper",
       "enabled": false,

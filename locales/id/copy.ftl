@@ -503,6 +503,7 @@ copy-compare-back = Kembali ke dompet
 copy-compare-load-failed = Perbandingan tidak dapat dimuat: { $error }
 copy-compare-loading = Memuat perbandingan…
 copy-compare-empty = Tidak ada tugas untuk dibandingkan.
+copy-compare-empty-message = Tambahkan tugas salin untuk membandingkan hasilnya dengan yang lain.
 copy-compare-curve-title = P&L terealisasi kumulatif
 copy-table-wallet = Dompet
 copy-table-mode = Mode

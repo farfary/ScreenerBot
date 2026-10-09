@@ -506,6 +506,7 @@ copy-compare-back = 지갑으로 돌아가기
 copy-compare-load-failed = 비교를 불러오지 못했습니다: { $error }
 copy-compare-loading = 비교 불러오는 중…
 copy-compare-empty = 비교할 작업이 없습니다.
+copy-compare-empty-message = 복사 작업을 추가하면 다른 작업과 결과를 비교할 수 있습니다.
 copy-compare-curve-title = 누적 실현 손익
 copy-table-wallet = 지갑
 copy-table-mode = 모드

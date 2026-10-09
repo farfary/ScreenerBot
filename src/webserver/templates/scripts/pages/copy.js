@@ -262,6 +262,7 @@ function createLifecycle() {
     },
 
     dispose() {
+      page?.compare.dispose();
       poller?.stop({ silent: true });
       poller = null;
       listeners.forEach((remove) => remove());

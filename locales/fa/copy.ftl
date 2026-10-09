@@ -524,6 +524,7 @@ copy-compare-back = بازگشت به کیف پول
 copy-compare-load-failed = بارگذاری مقایسه ممکن نشد: { $error }
 copy-compare-loading = در حال بارگذاری مقایسه…
 copy-compare-empty = وظیفه‌ای برای مقایسه وجود ندارد.
+copy-compare-empty-message = یک وظیفهٔ کپی اضافه کنید تا نتیجه‌اش را با بقیه مقایسه کنید.
 copy-compare-curve-title = سود و زیان تحقق‌یافته تجمعی
 copy-table-wallet = کیف پول
 copy-table-mode = حالت

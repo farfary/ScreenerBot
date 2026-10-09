@@ -475,6 +475,7 @@ copy-compare-back = Quay lại ví
 copy-compare-load-failed = Không thể tải phần so sánh: { $error }
 copy-compare-loading = Đang tải phần so sánh…
 copy-compare-empty = Không có tác vụ nào để so sánh.
+copy-compare-empty-message = Thêm một tác vụ sao chép để so sánh kết quả với các tác vụ khác.
 copy-compare-curve-title = P&L đã chốt lũy kế
 copy-table-wallet = Ví
 copy-table-mode = Chế độ
