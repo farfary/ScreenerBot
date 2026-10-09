@@ -385,6 +385,7 @@ test("a percentage that rounds to zero is shown unsigned and neutral", () => {
         const zero = fmt.formatPercentValue(0, { decimals });
         assert.equal(fmt.formatPercentValue(value, { decimals }), zero, `${locale} ${value}`);
         assert.equal(fmt.signedTone(value, decimals), "neutral", `${locale} ${value}`);
+        assert.equal(fmt.directionArrow(value, decimals), "", `${locale} ${value}`);
         assert.match(fmt.formatPercent(value, { style: "pnl", decimals }), /pnl-neutral/);
       }
     }

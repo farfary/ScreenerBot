@@ -637,6 +637,16 @@ export function signedTone(value, decimals = 4) {
 }
 
 /**
+ * Direction arrow of a signed amount as shown at `decimals`: "↑", "↓", or "" for a
+ * value that rounds to zero (or is not a number). It follows `signedTone`, so a
+ * displayed "0.0%" never points anywhere.
+ */
+export function directionArrow(value, decimals = 4) {
+  const tone = signedTone(value, decimals);
+  return tone === "positive" ? "↑" : tone === "negative" ? "↓" : "";
+}
+
+/**
  * Tone class of a count: `tone` while the count is a positive number, otherwise "" so a
  * zero or an absent count ("—") stays neutral. A count's colour states that something
  * is there, never that the metric exists.

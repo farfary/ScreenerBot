@@ -5,6 +5,7 @@
 import { Poller } from "./poller.js";
 import { requestManager } from "./request_manager.js";
 import {
+  directionArrow,
   formatCallRate,
   formatCurrencyUSD,
   formatPercentValue,
@@ -120,7 +121,7 @@ function updateWalletCard(wallet, state) {
   const changePercent = finiteNumber(wallet.change_today_percent);
   if (change) {
     if (Number.isFinite(changePercent)) {
-      const direction = changePercent > 0 ? "↑" : changePercent < 0 ? "↓" : "";
+      const direction = directionArrow(changePercent, WALLET_CHANGE_PERCENT_DECIMALS);
       change.textContent = `${direction}${formatPercentValue(Math.abs(changePercent), {
         decimals: WALLET_CHANGE_PERCENT_DECIMALS,
         includeSign: false,
