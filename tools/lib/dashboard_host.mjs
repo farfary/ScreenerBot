@@ -268,10 +268,12 @@ function assetFile(pathname) {
  * `context` at it; every other origin is blocked and recorded in `unserved`.
  *
  * `onApi({ method, url })` returns `{ status?, body, contentType? }` for an
- * `/api` request. A plain HTTP server keeps asset serving off the DevTools
- * protocol, which is what bounds the suite's runtime.
+ * `/api` request. `startupPage` is the page `/` renders, as the root handler
+ * renders the configured Default Page (`startup_page` in
+ * src/webserver/routes/mod.rs). A plain HTTP server keeps asset serving off the
+ * DevTools protocol, which is what bounds the suite's runtime.
  */
-export async function serveDashboard(context, { locale, onApi }) {
+export async function serveDashboard(context, { locale, onApi, startupPage = "home" }) {
   const unserved = [];
   const server = createServer(async (request, response) => {
     const url = new URL(request.url, "http://localhost");
@@ -285,7 +287,7 @@ export async function serveDashboard(context, { locale, onApi }) {
       request.headers["sec-fetch-dest"] === "document" &&
       (pathname === "/" || PAGE_IDS.includes(page))
     ) {
-      return send(200, "text/html; charset=utf-8", renderShell(page || "home", locale));
+      return send(200, "text/html; charset=utf-8", renderShell(page || startupPage, locale));
     }
     if (pathname.startsWith("/api/pages/")) {
       const id = pathname.slice("/api/pages/".length);

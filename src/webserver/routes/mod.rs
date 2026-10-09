@@ -49,6 +49,8 @@ pub mod wallets;
 
 #[cfg(test)]
 mod result_text_tests;
+#[cfg(test)]
+mod startup_page_tests;
 
 use asset_serving::*;
 
