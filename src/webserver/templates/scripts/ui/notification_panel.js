@@ -588,9 +588,10 @@ async function renderNotifications() {
   // Apply UI state from cache
   notifications = notifications.map(mergeWithStoredState);
 
-  // Active and All are notification inbox views, so dismissed items stay hidden.
-  // Completed/Failed remain retained history views and show the persisted record.
-  if (currentTab === "active" || currentTab === "all") {
+  // Active is the inbox, so a dismissed action leaves it. All, Completed and Failed are
+  // history views: they list every action their tab count includes, dismissed or not
+  // (completed and failed actions are auto-dismissed shortly after they finish).
+  if (currentTab === "active") {
     notifications = notifications.filter((n) => !n.dismissed);
   }
 
@@ -656,12 +657,10 @@ async function loadMoreNotifications() {
       // Append new items to DOM
       const list = document.getElementById("notificationList");
       if (list) {
-        let itemsToAppend = newNotifications.map(mergeWithStoredState);
-        if (currentTab === "all") {
-          itemsToAppend = itemsToAppend.filter((n) => !n.dismissed);
-        }
-
-        const newHtml = itemsToAppend.map((n) => renderNotification(n)).join("");
+        const newHtml = newNotifications
+          .map(mergeWithStoredState)
+          .map((n) => renderNotification(n))
+          .join("");
         list.insertAdjacentHTML("beforeend", newHtml);
       }
     } else {

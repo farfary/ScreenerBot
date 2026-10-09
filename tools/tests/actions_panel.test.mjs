@@ -11,6 +11,8 @@
  *
  * - An unread card carries a tint and border that a read card does not.
  * - The clear control is named, disabled while no filter applies and enabled by one.
+ * - Every tab whose count is above zero lists cards, also when every action has been
+ *   dismissed (completed and failed actions are auto-dismissed).
  *
  * Run with `npm run test:js`.
  */
@@ -18,10 +20,12 @@
 import test, { after } from "node:test";
 import assert from "node:assert/strict";
 
+import { readFileSync } from "node:fs";
+
 import { chromium } from "playwright";
 
 import { serveDashboard } from "../lib/dashboard_host.mjs";
-import { createApiHandler, loadIndex } from "../lib/dashboard_fixtures.mjs";
+import { createApiHandler, FIXTURES_ROOT, loadIndex } from "../lib/dashboard_fixtures.mjs";
 
 const READY = "body:not(.initialization-mode) main.content:not([data-loading])";
 
@@ -76,4 +80,54 @@ test("the filter clear control is named and applies only to an active filter", a
 
   await clear.click();
   assert.equal(await clear.isDisabled(), true, "disabled again after clearing");
+});
+
+test("every tab with a count above zero lists its actions, dismissed ones included", async (t) => {
+  const history = JSON.parse(readFileSync(`${FIXTURES_ROOT}/shell/actions_history.json`, "utf8"));
+  for (const action of history.actions) action.dismissed = true;
+  const dismissedContext = await browser.newContext({ viewport: { width: 1440, height: 900 } });
+  const dismissedApi = createApiHandler(
+    [await loadIndex("home"), await loadIndex("shell")],
+    "populated"
+  );
+  const dismissedHost = await serveDashboard(dismissedContext, {
+    locale: "en",
+    onApi: (request) =>
+      request.url.pathname === "/api/actions/history"
+        ? { body: JSON.stringify(history) }
+        : dismissedApi.onApi(request),
+  });
+  t.after(async () => {
+    await dismissedContext.close();
+    await dismissedHost.close();
+  });
+  const panel = await dismissedContext.newPage();
+  await panel.goto(`${dismissedHost.origin}/home`);
+  await panel.waitForSelector(READY);
+  await panel.click("#notificationBtn");
+  await panel.waitForSelector('#notificationDrawer[data-state="open"]');
+
+  // Active renders from memory; the history tabs render after their own history read.
+  const HISTORY_TABS = new Set(["all", "completed", "failed"]);
+  const tabs = ["all", "active", "completed", "failed", "all"];
+  const counted = [];
+  for (const tab of tabs) {
+    const rendered = HISTORY_TABS.has(tab)
+      ? panel.waitForResponse((response) => response.url().includes("/api/actions/history"))
+      : Promise.resolve();
+    await panel.click(`.notification-tab[data-tab="${tab}"]`);
+    await rendered;
+    await panel.waitForFunction(
+      () => getComputedStyle(document.getElementById("notificationLoading")).display === "none"
+    );
+    const count = Number(await panel.textContent(`#${tab}Count`));
+    if (count === 0) continue;
+    counted.push(tab);
+    const cards = await panel.$$eval(
+      "#notificationList .notification-item",
+      (items) => items.length
+    );
+    assert.ok(cards > 0, `the ${tab} tab counts ${count} actions and lists ${cards}`);
+  }
+  assert.deepEqual(counted, ["all", "completed", "all"], "the fixture counts All and Done");
 });
