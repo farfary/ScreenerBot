@@ -454,6 +454,8 @@
 }
 
 .modal-dialog {
+  --scale-from: 0.96;
+
   width: 100%;
   max-width: 900px;
   max-height: 90vh;
@@ -464,21 +466,7 @@
   border-radius: var(--radius-xl);
   overflow: hidden;
   box-shadow: 0 20px 60px rgb(0, 0, 0, 0.3);
-  animation: modal-dialog-in 0.25s cubic-bezier(0.16, 1, 0.3, 1);
-}
-
-/* One open motion for every dialog: the assistant modals each carried their own
-   copy of these exact keyframes under a different name. */
-@keyframes modal-dialog-in {
-  from {
-    opacity: 0;
-    transform: scale(0.96);
-  }
-
-  to {
-    opacity: 1;
-    transform: scale(1);
-  }
+  animation: scaleIn 0.25s cubic-bezier(0.16, 1, 0.3, 1);
 }
 
 @media (prefers-reduced-motion: reduce) {

@@ -28,6 +28,9 @@ body.trade-action-dialog-open {
 
 /* Dialog Container */
 .trade-action-dialog {
+  --scale-from: 0.96;
+  --scale-rise: 24px;
+
   width: min(460px, 94vw);
   max-height: 90vh;
   display: flex;
@@ -40,7 +43,7 @@ body.trade-action-dialog-open {
     0 0 0 1px rgb(255, 255, 255, 0.05),
     0 24px 48px -12px rgb(0, 0, 0, 0.5);
   overflow: hidden;
-  animation: trade-dialog-slide-up 300ms cubic-bezier(0.16, 1, 0.3, 1);
+  animation: scaleIn 300ms cubic-bezier(0.16, 1, 0.3, 1);
 }
 
 /* Action-specific accent colors.
@@ -1048,18 +1051,6 @@ body.trade-action-dialog-open {
 
 /* Animations */
 
-@keyframes trade-dialog-slide-up {
-  from {
-    opacity: 0;
-    transform: translateY(24px) scale(0.96);
-  }
-
-  to {
-    opacity: 1;
-    transform: translateY(0) scale(1);
-  }
-}
-
 @keyframes trade-error-shake {
   0%,
   100% {
@@ -1144,6 +1135,9 @@ body.trade-action-dialog-open {
 }
 
 .trade-slippage-warning {
+  --scale-from: 0.96;
+  --scale-rise: 24px;
+
   width: min(380px, 90vw);
   padding: 24px;
   background: var(--bg-secondary, #161b22);
@@ -1154,7 +1148,7 @@ body.trade-action-dialog-open {
   border: 1px solid var(--danger-alpha-30);
   border-radius: var(--radius-xl, 12px);
   text-align: center;
-  animation: trade-dialog-slide-up 200ms ease;
+  animation: scaleIn 200ms ease;
 }
 
 .slippage-warning-icon {

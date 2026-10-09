@@ -57,6 +57,10 @@ const canonicalOwners = new Map([
   [".sub-tabs-container", "ui/tab_bar.css"],
   [".sub-tab", "ui/tab_bar.css"],
   [".spin", "foundation.css"],
+  [".pulse", "foundation.css"],
+  [".shimmer", "foundation.css"],
+  [".fade-in", "foundation.css"],
+  [".scale-in", "foundation.css"],
 ]);
 
 /* Selector + declaration body per rule, so a check can look at what a rule
@@ -432,8 +436,10 @@ if (
 
 /* The shared motions live in foundation.css: `spin` (rotation), `pulse` (an opacity
    loop whose range a surface sets with --pulse-from/--pulse-to), `shimmer` (an inline
-   sweep) and `fadeIn` (an entrance whose start a surface sets with --fade-from and
-   --fade-rise). A surface chooses duration and timing, never its own copy. Every
+   sweep), `fadeIn` (an entrance whose start a surface sets with --fade-from and
+   --fade-rise) and `scaleIn` (a dialog entrance whose start a surface sets with
+   --scale-from and --scale-rise). A surface chooses duration and timing, never its own
+   copy, and the motion classes are styled only in foundation.css. Every
    stylesheet ships in one combined sheet, so a keyframe name declared twice is one
    global animation whichever loads last. Every animation names a keyframe some
    stylesheet declares; an undeclared name renders no motion at all. A keyframe that no
@@ -507,6 +513,30 @@ function isFadeInShape(body) {
     rise(end.get("transform") ?? end.get("translate"))
   );
 }
+
+/** The scale-in shape: from a lower opacity and a smaller scale to 1, optionally rising. */
+function isScaleInShape(body) {
+  const frames = keyframeStops(body);
+  if ([...frames.keys()].sort().join(" ") !== "0% 100%") return false;
+  const start = stopDeclarations(frames.get("0%"));
+  const end = stopDeclarations(frames.get("100%"));
+  const entranceTransform = (value) =>
+    value === undefined || /^(?:(?:translateY|scale)\([^)]*\)\s*)+$/.test(value);
+  const onlyEntranceProperties = (declarations) =>
+    [...declarations.keys()].every((property) =>
+      ["opacity", "transform", "translate", "scale"].includes(property)
+    );
+  return (
+    onlyEntranceProperties(start) &&
+    onlyEntranceProperties(end) &&
+    Number(start.get("opacity")) < 1 &&
+    end.get("opacity") === "1" &&
+    (start.has("scale") || /scale\(/.test(start.get("transform") ?? "")) &&
+    entranceTransform(start.get("transform")) &&
+    entranceTransform(end.get("transform"))
+  );
+}
+
 const animationKeywords = new Set([
   "none",
   "initial",
@@ -585,6 +615,10 @@ for (const { path, where, name, body, shape } of keyframes) {
   } else if (isFadeInShape(body)) {
     errors.push(
       `${where}: @keyframes ${name} repeats the fade-in; animate with fadeIn and set --fade-from/--fade-rise`
+    );
+  } else if (isScaleInShape(body)) {
+    errors.push(
+      `${where}: @keyframes ${name} repeats the scale-in; animate with scaleIn and set --scale-from/--scale-rise`
     );
   }
 }

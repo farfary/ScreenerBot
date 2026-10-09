@@ -19,6 +19,9 @@
 }
 
 .setup-dialog {
+  --scale-from: 0.98;
+  --scale-rise: 12px;
+
   width: 100%;
   max-width: 560px;
   background: var(--card-bg, #161b22);
@@ -26,19 +29,7 @@
   border-radius: var(--radius-xl, 14px);
   box-shadow: 0 24px 60px rgb(0, 0, 0, 0.5);
   overflow: hidden;
-  animation: setup-dialog-rise 0.2s cubic-bezier(0.4, 0, 0.2, 1);
-}
-
-@keyframes setup-dialog-rise {
-  from {
-    transform: translateY(12px) scale(0.98);
-    opacity: 0;
-  }
-
-  to {
-    transform: translateY(0) scale(1);
-    opacity: 1;
-  }
+  animation: scaleIn 0.2s cubic-bezier(0.4, 0, 0.2, 1);
 }
 
 .setup-dialog-header {

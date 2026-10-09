@@ -844,6 +844,18 @@ select,
   initial-value: 4px;
 }
 
+@property --scale-from {
+  syntax: "<number>";
+  inherits: false;
+  initial-value: 0.95;
+}
+
+@property --scale-rise {
+  syntax: "<length>";
+  inherits: false;
+  initial-value: 0;
+}
+
 /* Pulse animation for attention. A surface sets its own range with --pulse-from
    (rest opacity) and --pulse-to (mid-cycle opacity), and its own duration. */
 .pulse {
@@ -914,7 +926,9 @@ select,
   }
 }
 
-/* Scale in animation for modals/dialogs */
+/* Scale in animation for modals/dialogs. A surface sets its own start scale with
+   --scale-from and its rise with --scale-rise (0 for no rise), and its own duration.
+   The scale and translate properties compose with the element's own transform. */
 .scale-in {
   animation: scaleIn 0.2s cubic-bezier(0.25, 0.46, 0.45, 0.94);
 }
@@ -922,12 +936,14 @@ select,
 @keyframes scaleIn {
   from {
     opacity: 0;
-    transform: scale(0.95);
+    scale: var(--scale-from);
+    translate: 0 var(--scale-rise);
   }
 
   to {
     opacity: 1;
-    transform: scale(1);
+    scale: none;
+    translate: none;
   }
 }
 

@@ -27,6 +27,8 @@
   }
 
   .context-badge {
+    --scale-rise: 4px;
+
     display: inline-flex;
     align-items: center;
     gap: 6px;
@@ -37,19 +39,7 @@
     font-size: 0.75rem;
     font-weight: 500;
     color: var(--primary-color);
-    animation: badge-slide-in 0.2s ease-out;
-  }
-
-  @keyframes badge-slide-in {
-    from {
-      opacity: 0;
-      transform: translateY(4px) scale(0.95);
-    }
-
-    to {
-      opacity: 1;
-      transform: translateY(0) scale(1);
-    }
+    animation: scaleIn 0.2s ease-out;
   }
 
   .context-badge i {
