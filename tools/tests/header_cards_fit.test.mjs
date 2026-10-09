@@ -7,6 +7,8 @@
  * keep their content width; when they outgrow their slot they overflow towards the end,
  * where the strip scrolls and the quick actions fold, never back over the trader card.
  *
+ * The Explore setup control sizes to its own text: no line of it is cut with an ellipsis.
+ *
  * Every trader state the card can show (Explore, Running with a Today P&L, Paused,
  * Stopped) is rendered at the narrowest desktop window and at a common laptop width, in
  * a left-to-right and a right-to-left locale.
@@ -29,6 +31,7 @@ const METRICS = JSON.parse(readFileSync(`${FIXTURES_ROOT}/shell/header_metrics.j
 const INITIALIZATION = JSON.parse(
   readFileSync(`${FIXTURES_ROOT}/shell/initialization_status.json`, "utf8")
 );
+const BOOTSTRAP = JSON.parse(readFileSync(`${FIXTURES_ROOT}/shell/system_bootstrap.json`, "utf8"));
 
 const STATES = {
   explore: { trader: { enabled: false, state: "explore" }, explore: true },
@@ -54,6 +57,9 @@ async function measure(state, width, locale) {
   const onApi = async (request) => {
     if (request.url.pathname === "/api/header/metrics") {
       return { body: JSON.stringify({ ...METRICS, trader }) };
+    }
+    if (request.url.pathname === "/api/system/bootstrap") {
+      return { body: JSON.stringify({ ...BOOTSTRAP, explore_mode: explore }) };
     }
     if (request.url.pathname === "/api/initialization/status") {
       return {
@@ -98,7 +104,11 @@ async function measure(state, width, locale) {
     const cards = [...strip.querySelectorAll(".header-card")]
       .filter(visible)
       .map((card) => ({ selector: `#${card.id}`, ...rect(card) }));
-    return { controls, strip: rect(strip), cards };
+    const clipped = [...document.querySelectorAll("#exploreSetupControl :is(strong, span)")]
+      .filter(visible)
+      .filter((element) => element.scrollWidth > element.clientWidth + 0.5)
+      .map((element) => element.className);
+    return { controls, strip: rect(strip), cards, clipped };
   });
   await context.close();
   return boxes;
@@ -108,8 +118,9 @@ for (const locale of LOCALES) {
   for (const width of WIDTHS) {
     test(`header controls never overlap at ${width}px (${locale})`, async () => {
       for (const state of Object.keys(STATES)) {
-        const { controls, strip, cards } = await measure(state, width, locale);
+        const { controls, strip, cards, clipped } = await measure(state, width, locale);
         const where = `${state} at ${width}px (${locale})`;
+        assert.deepEqual(clipped, [], `${where}: the Explore setup control cuts no text`);
         const ordered = [...controls].sort((a, b) => a.start - b.start);
         for (let index = 1; index < ordered.length; index += 1) {
           const [before, next] = [ordered[index - 1], ordered[index]];

@@ -69,9 +69,7 @@
 .explore-setup-control {
   display: flex;
   align-items: center;
-  flex: 0 1 286px;
-  min-width: 190px;
-  max-width: 286px;
+  flex: 0 0 auto;
   height: 44px;
   gap: 9px;
   padding: 5px 10px;

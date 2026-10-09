@@ -404,12 +404,6 @@ button.ticker-segment:hover .ticker-icon {
 
 /* Mid-width: the Explore setup control gives up its detail line first. */
 @media (width >= 800px) and (width <= 1279px) {
-  .explore-setup-control {
-    flex-basis: auto;
-    min-width: 0;
-    max-width: none;
-  }
-
   .explore-setup-detail,
   .explore-setup-arrow {
     display: none;
