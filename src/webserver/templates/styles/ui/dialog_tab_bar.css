@@ -1,7 +1,9 @@
 /* Copyright (c) 2024-2026 ScreenerBot (screenerbot.io)
  * SPDX-License-Identifier: BUSL-1.1 */
 
-/* Shared tab row for token, position, and transaction details dialogs. */
+/* Shared tab row for token, position, and transaction details dialogs. A tab is as wide
+   as its glyph, label and count, with the page sub-tab spacing (`ui/tab_bar.css`); no
+   minimum width, so a short label carries no trailing gap. */
 
 .details-tab-row {
   display: flex;
@@ -16,7 +18,7 @@
 .details-tab-list {
   display: flex;
   align-items: stretch;
-  gap: 4px;
+  gap: 2px;
   min-width: 0;
   padding: 0 20px;
   overflow-x: auto;
@@ -29,9 +31,8 @@
   display: inline-flex;
   align-items: center;
   justify-content: center;
-  gap: 7px;
+  gap: 6px;
   box-sizing: border-box;
-  min-inline-size: 112px;
   min-height: 44px;
   margin-bottom: -1px;
   padding: 0 14px;
@@ -127,8 +128,7 @@
   }
 
   .details-tab {
-    min-inline-size: 100px;
-    padding: 0 11px;
+    padding: 0 12px;
   }
 
   .details-tab-actions {
@@ -142,9 +142,8 @@
   }
 
   .details-tab {
-    min-inline-size: 88px;
     gap: 5px;
-    padding: 0 9px;
+    padding: 0 10px;
     font-size: 0.7rem;
   }
 

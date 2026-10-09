@@ -7,7 +7,8 @@
  * Every amount drops trailing fraction zeros, numeric column headers align with their values,
  * each counted tab shows the number of entries its panel lists, glyphs stand bare, and every
  * panel heading uses one label size. The header opens the explorers from one control
- * whose menu names each explorer.
+ * whose menu names each explorer. Each tab is as wide as what it shows: no minimum
+ * width reserves a trailing gap after a short label.
  *
  * Run with `npm run test:js`.
  */
@@ -191,4 +192,34 @@ test("the header opens explorers from one control with a named menu", async (t) 
   );
   const box = await control.boundingBox();
   assert.ok(Math.abs(menu - (box.x + box.width)) < 2, "the menu drops from the control's end edge");
+});
+
+test("each tab is as wide as its glyph, label and count", async (t) => {
+  const page = await openDialog(t);
+  const slack = await page.$$eval(`${DIALOG} .details-tab`, (tabs) =>
+    tabs.map((tab) => {
+      const style = getComputedStyle(tab);
+      const children = [...tab.children].filter((child) => child.getClientRects().length);
+      const outer = (child) => {
+        const box = getComputedStyle(child);
+        const margin = parseFloat(box.marginInlineStart) + parseFloat(box.marginInlineEnd);
+        return child.getBoundingClientRect().width + margin;
+      };
+      const content =
+        children.reduce((sum, child) => sum + outer(child), 0) +
+        parseFloat(style.columnGap) * (children.length - 1);
+      const padding = parseFloat(style.paddingInlineStart) + parseFloat(style.paddingInlineEnd);
+      return {
+        tab: tab.dataset.dialogTab,
+        slack: tab.getBoundingClientRect().width - content - padding,
+      };
+    })
+  );
+  assert.equal(slack.length, 6);
+  for (const { tab, slack: extra } of slack) {
+    assert.ok(
+      Math.abs(extra) < 1,
+      `the ${tab} tab reserves ${extra.toFixed(1)}px beyond its content`
+    );
+  }
 });
