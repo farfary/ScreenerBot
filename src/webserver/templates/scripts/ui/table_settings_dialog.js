@@ -440,7 +440,7 @@ export class TableSettingsDialog {
             <button type="button" class="btn-icon btn-icon-sm table-settings-pin${isPinned ? " is-active" : ""}" data-role="floating-toggle" data-column-id="${columnId}"${pinDisabledAttr} aria-pressed="${isPinned ? "true" : "false"}" title="${pinLabel}" aria-label="${pinLabel}">
               <i class="${isPinned ? "icon-pin-off" : "icon-pin"}" aria-hidden="true"></i>
             </button>
-            <button type="button" class="btn-icon btn-icon-sm table-settings-column-menu" data-role="order-menu" data-column-id="${columnId}" data-can-move-up="${canMoveUp}" data-can-move-down="${canMoveDown}"${menuDisabled ? " disabled" : ""} aria-haspopup="menu" title="${menuLabel}" aria-label="${menuLabel}">
+            <button type="button" class="btn-icon btn-icon-sm" data-role="order-menu" data-column-id="${columnId}" data-can-move-up="${canMoveUp}" data-can-move-down="${canMoveDown}"${menuDisabled ? " disabled" : ""} aria-haspopup="menu" title="${menuLabel}" aria-label="${menuLabel}">
               <i class="icon-ellipsis-vertical" aria-hidden="true"></i>
             </button>
           </div>

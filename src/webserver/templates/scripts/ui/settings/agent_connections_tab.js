@@ -42,7 +42,6 @@
  */
 import { apiErrorMessage } from "../../core/request_manager.js";
 import { formatList } from "../../core/format.js";
-import { renderStateView } from "../state_view.js";
 
 const LIST_URL = "/api/agent-control/pairings";
 const pairingUrl = (clientId) => `${LIST_URL}/${encodeURIComponent(clientId)}`;
@@ -458,6 +457,7 @@ export function validateLabel(raw) {
 
 /** Set by the loader before any builder runs; keeps the pure helpers node-safe. */
 let Utils = null;
+let renderStateView = null;
 
 /**
  * One category's three-way choice, as a segmented track. A fixed choice set of
@@ -757,17 +757,15 @@ export async function loadAgentConnectionsTab(_dialog, content) {
 
   let ConfirmationDialog;
   try {
-    [Utils, { ConfirmationDialog }] = await Promise.all([
+    [Utils, { ConfirmationDialog }, { renderStateView }] = await Promise.all([
       import("../../core/utils.js"),
       import("../confirmation_dialog.js"),
+      import("../state_view.js"),
     ]);
   } catch {
+    // The shared state view is one of the modules that failed to load.
     if (generation !== loadGeneration) return;
-    content.innerHTML = renderStateView({
-      kind: "error",
-      icon: "icon-triangle-alert",
-      title: I18n.t("settings-agent-load-failed"),
-    });
+    content.textContent = I18n.t("settings-agent-load-failed");
     return;
   }
 

@@ -30,7 +30,7 @@ export const views = [
     ],
     empty: [{ selector: "#ata-list .empty-state", text: 'Click "Scan Wallet" to find empty ATAs' }],
     dialogs: [
-      { trigger: "#tool-help-btn", dialog: ".hint-popover", close: ".hint-popover__close" },
+      { trigger: "#tool-hint .hint-trigger", dialog: ".hint-popover", close: ".hint-popover__close" },
     ],
   },
   {
