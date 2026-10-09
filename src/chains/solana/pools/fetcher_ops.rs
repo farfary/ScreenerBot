@@ -48,6 +48,38 @@ fn target_token_mint(descriptor: &PoolDescriptor) -> &str {
     }
 }
 
+/// The accounts among `accounts` that the fetcher skips because they are on the
+/// account blacklist. An account whose blacklist state cannot be read is skipped too,
+/// with a warning, and checked again on the next scan.
+async fn blacklisted_accounts(accounts: impl IntoIterator<Item = Pubkey>) -> HashSet<Pubkey> {
+    let unique: HashSet<Pubkey> = accounts.into_iter().collect();
+    let checks = unique.into_iter().map(|account| async move {
+        let key = account.to_string();
+        let result =
+            crate::pools::db::is_account_blacklisted(crate::chains::ChainId::Solana, &key).await;
+        (account, key, result)
+    });
+    let mut blacklisted = HashSet::new();
+    for (account, key, result) in join_all(checks).await {
+        match result {
+            Ok(false) => {}
+            Ok(true) => {
+                blacklisted.insert(account);
+            }
+            Err(e) => {
+                logger::warning(
+                    LogTag::PoolFetcher,
+                    &format!(
+                        "Failed to check blacklist for account {key}: {e} - skipping as precaution"
+                    ),
+                );
+                blacklisted.insert(account);
+            }
+        }
+    }
+    blacklisted
+}
+
 impl AccountFetcher {
     /// Add stale accounts from pools to pending fetch list
     pub(crate) async fn add_stale_accounts_to_pending(
@@ -152,56 +184,22 @@ impl AccountFetcher {
             }
         }
 
-        // Read last fetch times under a single lock acquisition, then select the
-        // due accounts plus the quiet accounts that share the quiet batch.
+        // Blacklisted accounts are never fetched, so they are no candidates. Then read
+        // last fetch times under a single lock acquisition and select the due accounts
+        // plus the quiet accounts that share the quiet batch.
+        let blacklisted =
+            blacklisted_accounts(accounts_to_check.iter().map(|(account, _, _)| *account)).await;
         let (keys, candidates) = {
             let last_fetch = account_last_fetch.read().unwrap();
-            refresh_candidates(&accounts_to_check, &last_fetch, Instant::now())
+            refresh_candidates(
+                &accounts_to_check,
+                &last_fetch,
+                &blacklisted,
+                Instant::now(),
+            )
         };
         for idx in accounts_to_refresh(&candidates, heartbeat) {
             pending_accounts.insert(keys[idx]);
-        }
-
-        // Filter out blacklisted accounts in parallel
-        let pending_list: Vec<Pubkey> = pending_accounts.iter().copied().collect();
-        let account_blacklist_futures: Vec<_> = pending_list
-            .iter()
-            .map(|account| {
-                let acc = *account;
-                let acc_str = acc.to_string();
-                async move {
-                    let result = crate::pools::db::is_account_blacklisted(
-                        crate::chains::ChainId::Solana,
-                        &acc_str,
-                    )
-                    .await;
-                    (acc, acc_str, result)
-                }
-            })
-            .collect();
-
-        let account_blacklist_results = join_all(account_blacklist_futures).await;
-
-        for (account, account_str, result) in account_blacklist_results {
-            match result {
-                Ok(true) => {
-                    pending_accounts.remove(&account);
-                }
-                Ok(false) => {
-                    // Not blacklisted, keep in pending
-                }
-                Err(e) => {
-                    logger::warning(
-                        LogTag::PoolFetcher,
-                        &format!(
-                            "Failed to check blacklist for account {}: {} - keeping in pending for retry",
-                            account_str, e
-                        ),
-                    );
-                    // FAIL-OPEN: Keep in pending if blacklist check fails - will retry on next cycle
-                    // This prevents losing track of accounts due to transient DB errors
-                }
-            }
         }
     }
 
@@ -231,54 +229,11 @@ impl AccountFetcher {
             return;
         }
 
-        // Pre-compute string representations to avoid allocations in the async loop
-        let account_strings: Vec<(Pubkey, String)> = drained_accounts
+        let blacklisted = blacklisted_accounts(drained_accounts.iter().copied()).await;
+        let accounts_to_fetch: Vec<Pubkey> = drained_accounts
             .into_iter()
-            .map(|acc| {
-                let s = acc.to_string();
-                (acc, s)
-            })
+            .filter(|account| !blacklisted.contains(account))
             .collect();
-
-        // Check blacklist status in parallel using join_all
-        let blacklist_futures: Vec<_> = account_strings
-            .iter()
-            .map(|(account, account_key)| {
-                let key = account_key.clone();
-                let acc = *account;
-                async move {
-                    let is_blacklisted = crate::pools::db::is_account_blacklisted(
-                        crate::chains::ChainId::Solana,
-                        &key,
-                    )
-                    .await;
-                    (acc, key, is_blacklisted)
-                }
-            })
-            .collect();
-
-        let blacklist_results = futures::future::join_all(blacklist_futures).await;
-
-        let mut accounts_to_fetch = Vec::with_capacity(blacklist_results.len());
-        for (account, account_key, result) in blacklist_results {
-            match result {
-                Ok(true) => {
-                    // Blacklisted, skip
-                }
-                Ok(false) => {
-                    accounts_to_fetch.push(account);
-                }
-                Err(e) => {
-                    logger::warning(
-                        LogTag::PoolFetcher,
-                        &format!(
-                            "Failed to check blacklist for account {}: {} - skipping as precaution",
-                            account_key, e
-                        ),
-                    );
-                }
-            }
-        }
 
         if accounts_to_fetch.is_empty() {
             return;

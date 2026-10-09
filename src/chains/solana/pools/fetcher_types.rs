@@ -9,7 +9,7 @@ use crate::chains::solana::constants::SOL_MINT;
 use crate::chains::solana::constants::SYSTEM_PROGRAM_ID;
 
 use crate::chains::solana::solana_sdk::{account::Account, pubkey::Pubkey};
-use std::collections::HashMap;
+use std::collections::{HashMap, HashSet};
 use std::str::FromStr;
 use std::sync::LazyLock;
 use std::time::{Duration, Instant};
@@ -182,18 +182,19 @@ impl RefreshCandidate {
 /// The keys and refresh candidates of a stale-account scan over `accounts`
 /// (key, [`account_refresh_interval`], quiet), aged from `last_fetch` at `now`.
 ///
-/// Only [`is_fetchable_account`] keys are candidates. A key the batch fetch drops
-/// never records a fetch, so it would stay new, keep the quiet batch due at every
-/// scan and pull every quiet account each [`quiet_batch_floor`] instead of each
-/// heartbeat.
+/// Only keys the batch fetch fetches are candidates: [`is_fetchable_account`] keys
+/// outside `blacklisted`. A key the fetch skips never records a fetch, so it would
+/// stay due at every scan, keep the quiet batch open and pull every quiet account
+/// each [`quiet_batch_floor`] instead of each heartbeat.
 pub(crate) fn refresh_candidates(
     accounts: &[(Pubkey, Duration, bool)],
     last_fetch: &HashMap<Pubkey, Instant>,
+    blacklisted: &HashSet<Pubkey>,
     now: Instant,
 ) -> (Vec<Pubkey>, Vec<RefreshCandidate>) {
     accounts
         .iter()
-        .filter(|(key, _, _)| is_fetchable_account(key))
+        .filter(|(key, _, _)| is_fetchable_account(key) && !blacklisted.contains(key))
         .map(|(key, interval, quiet)| {
             let candidate = RefreshCandidate {
                 elapsed: last_fetch
@@ -548,29 +549,38 @@ mod tests {
     }
 
     #[test]
-    fn keys_the_batch_fetch_drops_do_not_hold_the_quiet_batch_open() {
+    fn keys_the_batch_fetch_skips_do_not_hold_the_quiet_batch_open() {
         let start = Instant::now();
         let ttl = Duration::from_secs(30);
         let heartbeat = ttl / 2;
         let interval = account_refresh_interval(false, heartbeat);
-        let mut accounts = vec![(*SOL_MINT_PUBKEY, interval, true)];
+        let blacklisted_key = Pubkey::new_unique();
+        let blacklisted = HashSet::from([blacklisted_key]);
+        let mut accounts = vec![
+            (*SOL_MINT_PUBKEY, interval, true),
+            (blacklisted_key, interval, true),
+        ];
         for _ in 0..4 {
             accounts.push((Pubkey::new_unique(), interval, true));
             accounts.push((Pubkey::new_unique(), interval, true));
             accounts.push((*SYSTEM_PROGRAM_PUBKEY, interval, true));
         }
-        let mut last_fetch: HashMap<Pubkey, Instant> = HashMap::new();
+        // A blacklisted key last fetched while it was still answering.
+        let mut last_fetch: HashMap<Pubkey, Instant> = HashMap::from([(blacklisted_key, start)]);
+        let fetched_by_batch =
+            |key: &Pubkey| is_fetchable_account(key) && !blacklisted.contains(key);
         let window = Duration::from_secs(600);
         let mut calls = 0usize;
         let mut now = Duration::ZERO;
         while now < heartbeat * 3 + window {
             now += Duration::from_millis(500);
-            let (keys, candidates) = refresh_candidates(&accounts, &last_fetch, start + now);
-            assert!(keys.iter().all(is_fetchable_account));
+            let (keys, candidates) =
+                refresh_candidates(&accounts, &last_fetch, &blacklisted, start + now);
+            assert!(keys.iter().all(fetched_by_batch));
             let fetched: Vec<Pubkey> = accounts_to_refresh(&candidates, heartbeat)
                 .into_iter()
                 .map(|idx| keys[idx])
-                .filter(is_fetchable_account)
+                .filter(fetched_by_batch)
                 .collect();
             if fetched.is_empty() {
                 continue;
