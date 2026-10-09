@@ -299,21 +299,25 @@ export function withApprox(text) {
   return displayed(I18n.t("format-approx", { value: String(text) }));
 }
 
-export function formatCurrencyUSD(value, { fallback = DASH, approx = false } = {}) {
+/**
+ * A US dollar amount: cents below a thousand, compact steps from a thousand. A
+ * free-standing compact amount drops trailing fraction zeros ("$462M", "$8.4M");
+ * `trim: false` keeps both fraction digits ("$9.90M") for a table column, where every
+ * figure must carry one decimal count to scan and align.
+ */
+export function formatCurrencyUSD(value, { fallback = DASH, approx = false, trim = true } = {}) {
   const num = coerceNumber(value);
   if (!Number.isFinite(num)) {
     return fallback;
   }
-  const text = usdText(num);
+  const text = usdText(num, trim);
   return approx ? withApprox(text) : text;
 }
 
-function usdText(num) {
+function usdText(num, trim) {
   const abs = Math.abs(num);
   if (abs >= 1_000) {
-    // Compact dollars drop trailing fraction zeros ("$462M", "$8.4M"); cents below a
-    // thousand keep both digits.
-    return withUsdSymbol(compactFixed(num, 2, true, true));
+    return withUsdSymbol(compactFixed(num, 2, true, trim));
   }
   if (abs > 0 && abs < 0.01) {
     // Sub-cent prices round to $0.00 with toFixed(2); render the real value in

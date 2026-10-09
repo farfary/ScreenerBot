@@ -71,8 +71,9 @@ export function priceCell(value, row = null) {
   return `<span class="price-change ${directionClass}"${titleAttr}><span class="${arrowClass}" aria-hidden="true">${arrowSymbol}</span><span class="price-change-value">${valueHtml}</span></span>`;
 }
 
+/** A dollar column cell: compact figures keep both fraction digits so the column aligns. */
 export function usdCell(value) {
-  return Utils.formatCurrencyUSD(value, { fallback: "—" });
+  return Utils.formatCurrencyUSD(value, { fallback: "—", trim: false });
 }
 
 export function percentCell(value) {

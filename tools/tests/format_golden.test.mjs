@@ -294,6 +294,22 @@ test("every compact figure uses one compact system per locale", () => {
   assert.equal(ar.formatCurrencyUSD(810060), ar.formatCompactNumber(810060, { usd: true }));
 });
 
+test("a compact dollar amount trims free-standing and keeps both digits in a column", () => {
+  const { fmt } = load("en-u-nu-latn");
+  assert.equal(fmt.formatCurrencyUSD(9_900_000), "$9.9M");
+  assert.equal(fmt.formatCurrencyUSD(462_000_000), "$462M");
+  const column = [17_480_000, 12_400_000, 9_900_000, 887_980, 1_000_000_000].map((value) =>
+    fmt.formatCurrencyUSD(value, { trim: false })
+  );
+  assert.deepEqual(column, ["$17.48M", "$12.40M", "$9.90M", "$887.98K", "$1.00B"]);
+  for (const text of column)
+    assert.match(text, /\.\d{2}[KMB]$/, `${text} keeps two fraction digits`);
+  assert.equal(
+    load("de-u-nu-latn").fmt.formatCurrencyUSD(9_900_000, { trim: false }),
+    "$9,90\u00a0Mio."
+  );
+});
+
 test("de keeps digits for the surface formatters; only separators change", () => {
   const { fmt } = load("de-u-nu-latn");
   assert.equal(fmt.formatCompactFixed(1234567), "1,23\u00a0Mio.");

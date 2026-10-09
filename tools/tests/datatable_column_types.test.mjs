@@ -13,6 +13,9 @@
  * - No column carries an alignment class or an `align` key, and no stylesheet
  *   aligns a cell by its column id.
  * - The numeric types the table stamps are exactly the ones the stylesheet aligns.
+ * - A dollar column keeps one decimal count: its cells render compact amounts at
+ *   fixed fraction digits ("$9.90M" beside "$12.48M"), never the trimmed
+ *   free-standing form ("$9.9M").
  *
  * Run with `npm run test:js`.
  */
@@ -54,6 +57,28 @@ test("numeric DataTable columns declare a value type", () => {
     }
   }
   assert.deepEqual(missing, [], "numeric columns without a numeric `type`");
+});
+
+test("a dollar column keeps fixed compact fraction digits", () => {
+  const trimmed = [];
+  for (const file of consumers) {
+    for (const block of columnBlocks(readFileSync(file, "utf8"))) {
+      const dollars =
+        /\bformatCurrencyUSD\(/.test(block.text) ||
+        /\bformatCompactNumber\([^)]*usd:\s*true/.test(block.text);
+      if (dollars && !/\btrim:\s*false\b/.test(block.text))
+        trimmed.push(`${repoPath(file)}:${block.line} ${block.id}`);
+    }
+  }
+  assert.deepEqual(trimmed, [], "dollar columns that trim compact fraction digits");
+  const usdCell = /export function usdCell\([^)]*\) \{([\s\S]*?)\n\}/.exec(
+    readFileSync(`${SCRIPTS_ROOT}/pages/tokens/formatters.js`, "utf8")
+  );
+  assert.match(
+    usdCell?.[1] ?? "",
+    /formatCurrencyUSD\([^)]*trim:\s*false/,
+    "usdCell keeps fixed fraction digits"
+  );
 });
 
 test("no DataTable column aligns itself outside its type", () => {
