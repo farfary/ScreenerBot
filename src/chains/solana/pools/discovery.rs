@@ -19,11 +19,11 @@ use crate::chains::{adapter_for, AssetId, ChainId, PoolId};
 use crate::events::{record_safe, Event, EventCategory};
 use crate::logger::{self, LogTag};
 use crate::pools::types::{max_watched_tokens, PoolDescriptor};
-use crate::tokens::{get_token_pools_snapshot, prefetch_token_pools};
+use crate::tokens::{get_token_pools_snapshot, prefetch_token_pools, TokenDatabase};
 use crate::utils::run_or_shutdown;
 
 use crate::chains::solana::solana_sdk::pubkey::Pubkey;
-use std::collections::HashMap;
+use std::collections::{HashMap, HashSet};
 use std::str::FromStr;
 use std::sync::atomic::AtomicBool;
 use std::sync::Arc;
@@ -32,6 +32,20 @@ use tokio::sync::Notify;
 
 // Timing constants
 const DISCOVERY_TICK_INTERVAL_SECS: u64 = 5;
+
+/// Whether discovery drops a token's pool because the token is blacklisted.
+///
+/// The token blacklist refuses new entries (`trader::admission`); it does not stop marking
+/// what the wallet already owns. A position, held or paper-held token keeps its live pool
+/// price, or its P&L and the reported wallet worth fall back to slower API and market
+/// prices. A failed blacklist read does not skip the pool.
+pub fn skips_blacklisted_token(
+    db: &TokenDatabase,
+    token_mint: &str,
+    owned_mints: &HashSet<String>,
+) -> bool {
+    !owned_mints.contains(token_mint) && db.is_blacklisted(token_mint).unwrap_or(false)
+}
 
 /// Pool discovery service state
 pub struct PoolDiscovery {
@@ -163,9 +177,17 @@ impl PoolDiscovery {
         let held_mints: Vec<String> = on_solana(crate::wallet::get_held_mints());
         // Paper copy holdings are marked and exited at the pool price, so they rank here too.
         let paper_mints: Vec<String> = on_solana(crate::trader::copy::held_paper_mints());
+        // Mints the wallet owns or marks: position, held and paper-held tokens. Their price is
+        // what the P&L and the reported worth depend on.
+        let owned_mints: HashSet<String> = open_position_mints
+            .iter()
+            .chain(held_mints.iter())
+            .chain(paper_mints.iter())
+            .cloned()
+            .collect();
         let initial_count = tokens.len();
 
-        let mut token_set: std::collections::HashSet<String> = tokens.iter().cloned().collect();
+        let mut token_set: HashSet<String> = tokens.iter().cloned().collect();
 
         for mint in open_position_mints
             .iter()
@@ -202,16 +224,9 @@ impl PoolDiscovery {
         // user (a wrong P&L, an understated wallet worth, a paper exit rule that never
         // fires). Discovery candidates take what is left.
         if tokens.len() > max_watched {
-            let priority_mints: std::collections::HashSet<String> = open_position_mints
-                .iter()
-                .chain(held_mints.iter())
-                .chain(paper_mints.iter())
-                .cloned()
-                .collect();
-
             let (mut priority_tokens, mut other_tokens): (Vec<String>, Vec<String>) = tokens
                 .into_iter()
-                .partition(|mint| priority_mints.contains(mint));
+                .partition(|mint| owned_mints.contains(mint));
 
             let remaining_slots = max_watched.saturating_sub(priority_tokens.len());
             other_tokens.truncate(remaining_slots);
@@ -382,17 +397,13 @@ impl PoolDiscovery {
 
                 if let Some(db) = crate::tokens::database::database(crate::chains::ChainId::Solana)
                 {
-                    // is_blacklisted is a synchronous function that uses an internal Mutex,
-                    // so we can call it directly without blocking wrappers
-                    if let Ok(is_blacklisted) = db.is_blacklisted(token_mint) {
-                        if is_blacklisted {
-                            logger::debug(
-                                LogTag::PoolDiscovery,
-                                &format!("Skipping pool for blacklisted token: {token_mint}"),
-                            );
-                            blacklist_filtered += 1;
-                            continue;
-                        }
+                    if skips_blacklisted_token(&db, token_mint, &owned_mints) {
+                        logger::debug(
+                            LogTag::PoolDiscovery,
+                            &format!("Skipping pool for blacklisted token: {token_mint}"),
+                        );
+                        blacklist_filtered += 1;
+                        continue;
                     }
                 }
 
