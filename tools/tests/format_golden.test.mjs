@@ -482,6 +482,28 @@ test("right-to-left formatter output differs from left-to-right only by isolatio
     assert.equal(rtl.fmt[fn](value), `\u2068${ltr.fmt[fn](value)}\u2069`, fn);
 });
 
+test("no module defines its own function under a core formatter's name", () => {
+  // A local namesake hides the owner and drifts from it ("0.1 SOL" built twice).
+  // Known namesakes still to fold into their owner; this list only shrinks.
+  const KNOWN = new Set(["ui/notification_panel.js: formatDuration"]);
+  const owned = new Set([...FORMAT_JS.matchAll(/^export function (\w+)/gm)].map((m) => m[1]));
+  const scripts = new URL("templates/scripts/", WEBSERVER);
+  const shadows = fs
+    .readdirSync(scripts, { recursive: true })
+    .filter((name) => name.endsWith(".js") && name !== "core/format.js")
+    .flatMap((name) =>
+      [
+        ...fs
+          .readFileSync(new URL(name, scripts), "utf8")
+          .matchAll(/^\s*(?:export\s+)?(?:async\s+)?function\s+(\w+)\s*\(/gm),
+      ]
+        .filter((match) => owned.has(match[1]))
+        .map((match) => `${name}: ${match[1]}`)
+    )
+    .filter((shadow) => !KNOWN.has(shadow));
+  assert.deepEqual(shadows, []);
+});
+
 test("every formatUptime caller names a style the formatter implements", () => {
   const STYLES = new Set(["detailed", "hm", "compact", "trimmed"]);
   const scripts = new URL("templates/scripts/", WEBSERVER);

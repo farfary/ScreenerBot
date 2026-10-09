@@ -7,12 +7,11 @@ import * as Utils from "../core/utils.js";
 import { apiErrorMessage } from "../core/request_manager.js";
 import {
   formatDate,
-  formatFixed,
   formatPercentValue,
+  formatSol,
   formatTimeAgo,
   formatTimeSpan,
   formatTimestamp,
-  withSolUnit,
 } from "../core/format.js";
 import { stepLabel } from "./action_step.js";
 import { closeReasonText } from "./trade_reason.js";
@@ -760,9 +759,9 @@ function renderNotification(notification) {
   const sizeSol = Number(md.size_sol);
   const inputLamports = Number(md.input_amount);
   if (Number.isFinite(sizeSol) && sizeSol > 0) {
-    details.push(withSolUnit(formatSol(sizeSol)));
+    details.push(formatSol(sizeSol));
   } else if (Number.isFinite(inputLamports) && inputLamports > 0) {
-    details.push(withSolUnit(formatSol(inputLamports / 1_000_000_000)));
+    details.push(formatSol(inputLamports / 1_000_000_000));
   }
 
   const pct = Number(md.percentage);
@@ -853,11 +852,6 @@ function renderNotification(notification) {
       ${footerHtml}
     </div>
   `;
-}
-
-/** Format a SOL amount compactly (trim trailing zeros, max 4 dp). */
-function formatSol(value) {
-  return formatFixed(value, { decimals: 4, trim: true, fallback: "0" });
 }
 
 /** Derive an "auto" | "manual" source tag from the operation field. */
