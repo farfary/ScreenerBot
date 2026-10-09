@@ -21,7 +21,8 @@
  *   were each as wide as their own value), and no select cuts its value.
  * - The Navigation list shows every tab row at its full height inside the dialog's own
  *   scroll, each row's glyph bare, with the switch as the only visibility control and
- *   no note asking for a page refresh (saving rebuilds the navigation bar).
+ *   no note asking for a page refresh: saving rebuilds the navigation bar in place, in
+ *   the saved order and visibility.
  * - A field's status badge sits on its title's line, not stacked under the hint.
  * - Startup > Default Page offers exactly the navigation tabs, under their names.
  * - The Data section sets both stored paths at one start edge inside their cards, and
@@ -170,7 +171,11 @@ test("the Navigation list shows every row with bare glyphs and one visibility co
   t.after(() => browser.close());
   const context = await browser.newContext({ viewport: { width: 1440, height: 900 } });
   const api = createApiHandler([await loadIndex("home"), await loadIndex("shell")], "populated");
-  const host = await serveDashboard(context, { locale: "en", onApi: api.onApi });
+  const onApi = (request) =>
+    request.method === "PATCH" && request.url.pathname === "/api/config/gui"
+      ? { body: JSON.stringify({ success: true }) }
+      : api.onApi(request);
+  const host = await serveDashboard(context, { locale: "en", onApi });
   t.after(() => host.close());
   const page = await context.newPage();
   page.setDefaultTimeout(15000);
@@ -215,6 +220,32 @@ test("the Navigation list shows every row with bare glyphs and one visibility co
     "the switch is each row's only visibility control"
   );
   assert.equal(list.refreshNote, false, "no note asks for a page refresh");
+
+  // Saving applies the list to the navigation bar in place: no reload.
+  await page.evaluate(() => {
+    window.navigationSaveMarker = true;
+  });
+  const hidden = await page.$eval(
+    "#navTabsList .settings-nav-tab-item:has(input:checked:not(:disabled))",
+    (row) => row.dataset.tabId
+  );
+  await page
+    .locator(`#navTabsList .settings-nav-tab-item[data-tab-id="${hidden}"] .toggle`)
+    .click();
+  await page.locator("#settingsSaveBtn").click();
+  await page.waitForFunction(
+    (id) => !document.querySelector(`#navTabs > a.tab[data-page="${id}"]`),
+    hidden
+  );
+  const applied = await page.evaluate(() => ({
+    marker: window.navigationSaveMarker === true,
+    nav: [...document.querySelectorAll("#navTabs > a.tab")].map((tab) => tab.dataset.page),
+    list: [...document.querySelectorAll("#navTabsList .settings-nav-tab-item")]
+      .filter((row) => row.querySelector("input").checked)
+      .map((row) => row.dataset.tabId),
+  }));
+  assert.equal(applied.marker, true, "saving does not reload the page");
+  assert.deepEqual(applied.nav, applied.list, "the navigation bar follows the saved list");
 });
 
 test("Startup badges sit on their title line and Data controls share one frame", async (t) => {
