@@ -150,6 +150,7 @@ import { applyColumnManagementMixin } from "./data_table/column_management.js";
 import { applyClientPaginationMixin } from "./data_table/client_pagination.js";
 import { applyServerPaginationMixin } from "./data_table/server_pagination.js";
 import { applyEventHandlersMixin } from "./data_table/event_handlers.js";
+import { columnLayoutSignature, reconcileSavedLayout } from "./data_table/layout_state.js";
 
 // Reload reasons that mean "give me the current rows" rather than "the query changed".
 // These coalesce with a load already in flight instead of cancelling it — see
@@ -2541,7 +2542,16 @@ export class DataTable {
    * Load state from server
    */
   _loadState() {
-    const saved = AppState.load(this.options.stateKey);
+    // The signature of the definitions this table loads under; saved with the state so
+    // a later change to the column definitions retires the saved layout.
+    this._layoutSignature = columnLayoutSignature(this.options.columns);
+    const { state: saved, reset: layoutReset } = reconcileSavedLayout(
+      AppState.load(this.options.stateKey),
+      this._layoutSignature
+    );
+    if (layoutReset) {
+      this._log("info", "Saved column layout predates the column definitions; using defaults");
+    }
     // Whether the user already has a persisted floating set (even an empty one):
     // if so we must NOT re-seed defaults, or unpinning every column would silently
     // come back on the next load.
@@ -2726,6 +2736,7 @@ export class DataTable {
       tableWidth: this.state.tableWidth,
       userResizedColumns: this.state.userResizedColumns,
       serverPageSize: this.state.serverPaginationState.pageSize,
+      layoutSignature: this._layoutSignature,
     };
     AppState.save(this.options.stateKey, toSave);
     this._log("debug", "State saved", toSave);
