@@ -330,12 +330,12 @@ export function createWorkspace(page) {
       task.mode === "live"
         ? button("paper", "btn-outline", "icon-rotate-ccw", I18n.t("copy-action-return-paper"))
         : "",
-      button("edit", "btn-secondary", "icon-pencil", I18n.t("copy-action-edit-rules")),
-      button("clone", "btn-ghost", "icon-copy-plus", I18n.t("copy-action-clone")),
-      button("profile", "btn-ghost", "icon-user-search", I18n.t("copy-action-profile")),
+      button("edit", "btn-outline", "icon-pencil", I18n.t("copy-action-edit-rules")),
+      button("clone", "btn-outline", "icon-copy-plus", I18n.t("copy-action-clone")),
+      button("profile", "btn-outline", "icon-user-search", I18n.t("copy-action-profile")),
       button(
         "delete",
-        "btn-ghost copy-danger-action",
+        "btn-outline copy-danger-action",
         "icon-trash-2",
         I18n.t("common-action-delete")
       ),

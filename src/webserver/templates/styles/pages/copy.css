@@ -144,6 +144,7 @@
   border-radius: var(--radius-md);
   background: var(--bg-card);
   min-width: 0;
+  container-type: inline-size;
 }
 
 .copy-figure-label,
@@ -155,10 +156,13 @@
   color: var(--text-muted);
 }
 
+/* A figure stays on one line: in a narrow card the value scales down with the card
+   width (its container) instead of wrapping the unit under the amount. */
 .copy-figure-value {
   font-family: var(--font-data);
-  font-size: var(--font-size-lg);
+  font-size: clamp(var(--font-size-sm), 10.5cqi, var(--font-size-lg));
   color: var(--text-primary);
+  white-space: nowrap;
 }
 
 .copy-figure-note,
@@ -482,6 +486,11 @@
 .copy-danger-action,
 .copy-danger-action:hover {
   color: var(--error-color);
+}
+
+.btn-outline.copy-danger-action:hover {
+  border-color: var(--error-color);
+  background: var(--danger-alpha-10);
 }
 
 .copy-link {
