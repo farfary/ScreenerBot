@@ -51,7 +51,7 @@ export function applyUtilitiesMixin(PositionDetailsDialog) {
 
   proto._formatPrice = function (price) {
     if (price === null || price === undefined) return "—";
-    return Utils.formatPriceSubscript(price);
+    return Utils.formatPriceSubscript(price, { trim: false });
   };
 
   /**

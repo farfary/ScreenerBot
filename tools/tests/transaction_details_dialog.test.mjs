@@ -4,7 +4,9 @@
 
 /**
  * Guard: the transaction details dialog states amounts and counts the way it lists them.
- * Every amount drops trailing fraction zeros, numeric column headers align with their values,
+ * Every amount drops trailing fraction zeros, while the execution price keeps the four
+ * significant digits of every trade price ("0.009790 SOL", as in Positions); numeric column
+ * headers align with their values,
  * each counted tab shows the number of entries its panel lists, glyphs stand bare, and every
  * panel heading uses one label size. The header opens the explorers from one control
  * whose menu names each explorer. Each tab is as wide as what it shows: no minimum
@@ -16,10 +18,12 @@
 import test, { after } from "node:test";
 import assert from "node:assert/strict";
 
+import { readFileSync } from "node:fs";
+
 import { chromium } from "playwright";
 
 import { serveDashboard } from "../lib/dashboard_host.mjs";
-import { createApiHandler, loadIndex } from "../lib/dashboard_fixtures.mjs";
+import { createApiHandler, FIXTURES_ROOT, loadIndex } from "../lib/dashboard_fixtures.mjs";
 
 const READY = "body:not(.initialization-mode) main.content:not([data-loading])";
 const DIALOG = ".transaction-details-dialog";
@@ -29,10 +33,16 @@ const browser = await chromium.launch({ headless: true });
 after(() => browser.close());
 const [transactions, shell] = await Promise.all([loadIndex("transactions"), loadIndex("shell")]);
 
-async function openDialog(t) {
+async function openDialog(t, answers = {}) {
   const context = await browser.newContext({ viewport: { width: 1440, height: 900 } });
   const api = createApiHandler([transactions, shell], "populated");
-  const host = await serveDashboard(context, { locale: "en", onApi: api.onApi });
+  const host = await serveDashboard(context, {
+    locale: "en",
+    onApi: (request) => {
+      const body = answers[request.url.pathname];
+      return body ? { body } : api.onApi(request);
+    },
+  });
   t.after(async () => {
     await context.close();
     await host.close();
@@ -52,13 +62,19 @@ async function showTab(page, tab) {
 
 /**
  * Visible English text in `scope` ending a decimal fraction on a zero ("0.500", "1.0 SOL").
- * A subscript zero run ("0.0₆12") is price notation, not padding.
+ * A subscript zero run ("0.0₆12") is price notation, not padding, and the execution price
+ * keeps its significant digits by rule.
  */
 function trailingZeros(page, scope) {
   return page.evaluate(
     ([dialog, selector]) =>
       [...document.querySelectorAll(`${dialog} ${selector}`)]
         .filter((element) => element.getClientRects().length && !element.children.length)
+        .filter(
+          (element) =>
+            element.closest(".tx-execution-metric")?.querySelector("span")?.textContent !==
+            "Execution price"
+        )
         .map((element) => element.textContent.trim())
         .filter((text) => /\d\.\d*0(?![\d₀-₉])/.test(text)),
     [DIALOG, scope]
@@ -222,4 +238,19 @@ test("each tab is as wide as its glyph, label and count", async (t) => {
       `the ${tab} tab reserves ${extra.toFixed(1)}px beyond its content`
     );
   }
+});
+
+test("the execution price keeps four significant digits", async (t) => {
+  const detail = JSON.parse(
+    readFileSync(`${FIXTURES_ROOT}/transactions/transaction_detail.json`, "utf8")
+  );
+  detail.swap_pnl_info.calculated_price_sol = 0.00979;
+  const page = await openDialog(t, {
+    [`/api/transactions/${detail.signature}`]: JSON.stringify(detail),
+  });
+  const price = await page
+    .locator(`${DIALOG} .tx-execution-metric`, { hasText: "Execution price" })
+    .locator("strong")
+    .evaluate((node) => node.textContent.replace(/[\u2066-\u2069]/g, "").trim());
+  assert.equal(price, "0.009790 SOL");
 });

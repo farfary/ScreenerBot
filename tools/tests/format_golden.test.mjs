@@ -516,6 +516,25 @@ test("every formatTimestamp caller passes only options the formatter implements"
   assert.deepEqual(unknown, []);
 });
 
+test("every trade price keeps the four significant digits of the Positions columns", () => {
+  // Execution, entry, exit and range prices of a trade, read beside the Positions columns.
+  const owners = [
+    "ui/transaction_details_dialog.js",
+    "ui/position_details/utilities.js",
+    "ui/token_details/positions_tab.js",
+  ];
+  const trimmed = owners.flatMap((name) =>
+    [
+      ...fs
+        .readFileSync(new URL(`templates/scripts/${name}`, WEBSERVER), "utf8")
+        .matchAll(/formatPriceSubscript\(.*$/gm),
+    ]
+      .filter((match) => !/trim: false/.test(match[0]))
+      .map((match) => `${name}: ${match[0]}`)
+  );
+  assert.deepEqual(trimmed, []);
+});
+
 test("a price column keeps one significant-digit count across both notations", () => {
   const { fmt } = load("en-u-nu-latn");
   const column = { trim: false };
