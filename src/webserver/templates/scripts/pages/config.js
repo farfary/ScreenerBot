@@ -422,7 +422,7 @@ function renderHeader(sectionId) {
   // discard — a live-looking button that silently does nothing reads as broken.
   const revertBtn = create("button", {
     type: "button",
-    className: "btn btn-sm btn-danger",
+    className: "btn btn-sm btn-secondary",
     disabled: state.saving || !hasSectionChanges(sectionId),
   });
   revertBtn.textContent = I18n.t("system-config-revert-section");
