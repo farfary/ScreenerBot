@@ -210,10 +210,12 @@
 }
 
 /* Truthful two-line metric summaries */
+/* Safe end alignment: cards that outgrow the slot overflow towards the end, where the
+   strip scrolls and the actions fold, never back over the trader card at the start. */
 .modern-header .header-cards {
   display: flex;
   align-items: center;
-  justify-content: flex-end;
+  justify-content: safe flex-end;
   flex: 1 1 auto;
   min-width: 0;
   gap: 12px;
