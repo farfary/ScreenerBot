@@ -20,12 +20,16 @@
   margin-bottom: 16px;
 }
 
+/* The product title is the wordmark: the brand face with the header wordmark's
+   weight, tracking and capitals. */
 .settings-about-name {
   margin: 0 0 4px;
+  font-family: var(--font-brand);
   font-size: 1.5rem;
-  font-weight: 700;
+  font-weight: 900;
   color: var(--text-primary);
-  letter-spacing: -0.02em;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
 }
 
 .settings-about-tagline {
@@ -278,11 +282,9 @@
 }
 
 .licenses-header i {
-  font-size: 1.5rem;
+  font-size: 1.25rem;
+  line-height: 1.2;
   color: var(--primary-color);
-  background: var(--primary-alpha-10);
-  padding: 10px;
-  border-radius: var(--radius-xl);
 }
 
 .licenses-header h3 {
@@ -351,6 +353,8 @@
   display: inline-flex;
   align-items: center;
   gap: 4px;
+  min-width: 0;
+  text-align: start;
   font-size: 0.85rem;
   font-weight: 600;
   color: var(--text-primary);

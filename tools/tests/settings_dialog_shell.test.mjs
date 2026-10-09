@@ -31,6 +31,8 @@
  *   block heads that control from the top edge. No Settings action is a frameless
  *   ghost button, whose label reads as indented text; the account panel shared with
  *   the setup screen keeps its own button set and is the one exemption.
+ * - Licenses: the header glyph is bare and a package name that wraps starts every
+ *   line on the card's start edge. About: the product title is set in the wordmark face.
  *
  * Run with `npm run test:js`.
  */
@@ -386,4 +388,57 @@ test("every Settings boolean is a switch, every title has its glyph, tall fields
   assert.deepEqual(untitled, [], "every section title carries its glyph");
   assert.deepEqual(floating, [], "a tall control's label sits on its top edge");
   assert.deepEqual(ghosts, [], "no Settings action is a frameless ghost button");
+});
+
+test("Licenses names start-align and the About title is the wordmark", async (t) => {
+  const browser = await chromium.launch({ headless: true });
+  t.after(() => browser.close());
+  const context = await browser.newContext({ viewport: { width: 1440, height: 900 } });
+  const api = createApiHandler([await loadIndex("home"), await loadIndex("shell")], "populated");
+  const host = await serveDashboard(context, { locale: "en", onApi: api.onApi });
+  t.after(() => host.close());
+  const page = await context.newPage();
+  page.setDefaultTimeout(15000);
+  await page.goto(`${host.origin}/home`);
+  await page.waitForSelector("body:not(.initialization-mode) main.content:not([data-loading])");
+  await page.locator("#settingsBtn").dispatchEvent("click");
+  await page.waitForSelector(".settings-dialog.active .settings-nav");
+  await page.locator('.settings-nav-item[data-tab="licenses"]').click();
+  await page.waitForFunction(
+    () => document.querySelector(".license-item-name")?.getClientRects().length > 0
+  );
+  const licenses = await page.evaluate(() => {
+    const glyph = getComputedStyle(document.querySelector(".licenses-header i"));
+    const misaligned = [...document.querySelectorAll(".license-item-name")]
+      .filter((name) => name.getClientRects().length > 0)
+      .filter((name) => {
+        const range = document.createRange();
+        const text = [...name.childNodes].find(
+          (node) => node.nodeType === Node.TEXT_NODE && node.textContent.trim()
+        );
+        range.selectNodeContents(text);
+        const lines = [...range.getClientRects()];
+        const start = Math.round(name.getBoundingClientRect().left);
+        return lines.some((line) => Math.abs(Math.round(line.left) - start) > 1);
+      })
+      .map((name) => name.textContent.trim());
+    return {
+      boxed: glyph.backgroundColor !== "rgba(0, 0, 0, 0)" || glyph.paddingTop !== "0px",
+      misaligned,
+    };
+  });
+  assert.equal(licenses.boxed, false, "the Licenses glyph is bare");
+  assert.deepEqual(licenses.misaligned, [], "every name line starts on the card edge");
+
+  await page.locator('.settings-nav-item[data-tab="about"]').click();
+  await page.waitForFunction(
+    () => document.querySelector(".settings-about-name")?.getClientRects().length > 0
+  );
+  const brand = await page.evaluate(() =>
+    [
+      getComputedStyle(document.querySelector(".settings-about-name")).fontFamily,
+      getComputedStyle(document.documentElement).getPropertyValue("--font-brand"),
+    ].map((family) => family.replace(/["']/g, "").trim())
+  );
+  assert.equal(brand[0], brand[1], "the About title is set in the wordmark face");
 });
