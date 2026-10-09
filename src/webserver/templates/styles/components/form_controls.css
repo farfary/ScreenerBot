@@ -957,13 +957,19 @@ input[type="radio"]:disabled {
   pointer-events: none;
 }
 
+/* A word-length unit ("minutes", "tokens") stays beside the field and reads as a word in
+   the UI face; a symbol-length unit inside the box takes the value's data face. */
 .input-unit {
-  font-family: var(--font-data);
+  font-family: var(--font-sans);
   font-size: 0.8125rem;
   font-weight: 500;
   color: var(--text-muted);
   white-space: nowrap;
   user-select: none;
+}
+
+.number-field-suffix > .input-unit {
+  font-family: var(--font-data);
 }
 
 /* Stepper: bare chevrons, never a tile or ring behind them. Idle they stay out

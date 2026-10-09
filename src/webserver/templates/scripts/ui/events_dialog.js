@@ -454,7 +454,7 @@ export class EventDetailsDialog {
       line(I18n.t("events-dialog-field-time"), formatEventTimestamp(event.event_time));
       line(
         I18n.t("events-dialog-field-age"),
-        Utils.formatTimeAgo(event.event_time, { fallback: "-" })
+        Utils.formatTimeAgo(event.event_time, { fallback: notAvailable() })
       );
     }
 
