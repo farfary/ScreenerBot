@@ -63,6 +63,12 @@ shell-tabs-scroll-start =
 shell-tabs-scroll-end =
     .aria-label = Tampilkan tab lainnya
     .title = Tampilkan tab lainnya
+shell-ticker-scroll-start =
+    .aria-label = Tampilkan metrik sebelumnya
+    .title = Tampilkan metrik sebelumnya
+shell-ticker-scroll-end =
+    .aria-label = Tampilkan metrik lainnya
+    .title = Tampilkan metrik lainnya
 
 shell-ticker-monitoring-segment =
     .title = Token yang dipantau oleh Pool Service

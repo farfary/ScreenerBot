@@ -91,12 +91,15 @@
 }
 
 /* Scroll container — body only, scrolls both axes */
+/* The scroll area is the inline-size container of what it shows, so a state cell can
+   size its message to the visible width rather than the table's scroll width. */
 .data-table-scroll-container {
   flex: 1;
   overflow: auto;
   position: relative;
   min-height: 0; /* Critical for flex scrolling */
   scrollbar-gutter: var(--scrollbar-gutter);
+  container: dt-viewport / inline-size;
 }
 
 /* Scrollbar styling - uses global scrollbar-table pattern */
@@ -641,11 +644,24 @@ body.dt-column-resizing * {
   border-bottom: 0;
 }
 
+/* The cell spans every column, so it is as wide as the table. Its message is pinned to
+   the visible start edge and as wide as the visible area, so it stays centred in what
+   the user sees however wide the table scrolls. The cell does not clip, or it would
+   become the message's scroll container and the pin would follow the table. */
 .data-table td.dt-state-cell {
   text-align: center;
-  padding: 64px 32px;
+  padding: 64px 0;
+  overflow: visible;
   border-bottom: 0;
   background: transparent;
+}
+
+.data-table td.dt-state-cell > * {
+  position: sticky;
+  inset-inline-start: 0;
+  box-sizing: border-box;
+  inline-size: 100cqi;
+  padding-inline: 32px;
 }
 
 /* Empty State */
@@ -674,22 +690,6 @@ body.dt-column-resizing * {
   color: var(--text-tertiary);
   max-width: 320px;
   line-height: 1.5;
-}
-
-/* Legacy empty/loading styles (backward compatibility) */
-.data-table td.dt-empty {
-  text-align: center;
-  padding: 48px 32px;
-  color: var(--text-tertiary);
-  font-size: 0.9375rem;
-}
-
-.data-table td.dt-empty::before {
-  content: "📭";
-  display: block;
-  font-size: 2.5rem;
-  margin-bottom: 12px;
-  opacity: 0.5;
 }
 
 /* Loading state */

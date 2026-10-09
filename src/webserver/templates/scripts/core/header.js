@@ -429,13 +429,16 @@ function initRestartButton() {
   document.getElementById("restartBtn")?.addEventListener("click", () => handleRestart());
 }
 
-// The main navigation row is a tab scroll strip: edge fades, page buttons and wheel
-// scrolling come from `attachTabScrollStrip`, the owner shared with the sub-tab row.
+// The main navigation row and the metrics ticker are tab scroll strips: edge fades,
+// page buttons and wheel scrolling come from `attachTabScrollStrip`, the owner shared
+// with the sub-tab row.
 let navStrip = null;
 
 function initHeaderTabsScroll() {
   const headerRow = document.querySelector(".header-row-2");
   if (headerRow) navStrip = attachTabScrollStrip(headerRow);
+  const tickerRow = document.querySelector(".header-row-3");
+  if (tickerRow) attachTabScrollStrip(tickerRow);
 }
 
 // ============================================================================

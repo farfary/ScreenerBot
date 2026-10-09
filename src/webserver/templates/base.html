@@ -422,79 +422,95 @@
       </div>
 
       <!-- Row 3: Live Metrics Ticker -->
-      <div class="header-row header-row-3">
-        <div class="ticker-container">
-          <div class="ticker-scroll" id="tickerScroll">
-            <button
-              type="button"
-              class="ticker-segment"
-              id="tickerMonitoring"
-              data-l10n-id="shell-ticker-monitoring-segment"
-            >
-              <i class="ticker-icon icon-scan"></i>
-              <span class="ticker-text"
-                ><span data-l10n-id="shell-ticker-monitoring"></span>
-                <strong id="tickerMonitoringCount">—</strong></span
+      <div class="header-row-3-wrapper tab-scroll-wrapper">
+        <div class="header-row header-row-3 tab-scroll-area">
+          <div class="ticker-container">
+            <div class="ticker-scroll" id="tickerScroll">
+              <button
+                type="button"
+                class="ticker-segment"
+                id="tickerMonitoring"
+                data-l10n-id="shell-ticker-monitoring-segment"
               >
-            </button>
-            <button
-              type="button"
-              class="ticker-segment"
-              id="tickerFiltering"
-              data-l10n-id="shell-ticker-filtering-segment"
-            >
-              <i class="ticker-icon icon-funnel"></i>
-              <span class="ticker-text"
-                ><span data-l10n-id="shell-ticker-passed"></span>
-                <strong id="tickerPassedCount">—</strong
-                ><span class="ticker-separator" aria-hidden="true">·</span
-                ><span data-l10n-id="shell-ticker-rejected"></span>
-                <strong id="tickerRejectedCount">—</strong></span
+                <i class="ticker-icon icon-scan"></i>
+                <span class="ticker-text"
+                  ><span data-l10n-id="shell-ticker-monitoring"></span>
+                  <strong id="tickerMonitoringCount">—</strong></span
+                >
+              </button>
+              <button
+                type="button"
+                class="ticker-segment"
+                id="tickerFiltering"
+                data-l10n-id="shell-ticker-filtering-segment"
               >
-            </button>
-            <button
-              type="button"
-              class="ticker-segment"
-              id="tickerPnL"
-              data-l10n-id="shell-ticker-pnl-segment"
-            >
-              <i class="ticker-icon icon-trending-up"></i>
-              <span class="ticker-text"
-                ><span data-l10n-id="shell-ticker-pnl"></span>
-                <strong class="ticker-value" id="tickerTodayPnL">—</strong></span
+                <i class="ticker-icon icon-funnel"></i>
+                <span class="ticker-text"
+                  ><span data-l10n-id="shell-ticker-passed"></span>
+                  <strong id="tickerPassedCount">—</strong
+                  ><span class="ticker-separator" aria-hidden="true">·</span
+                  ><span data-l10n-id="shell-ticker-rejected"></span>
+                  <strong id="tickerRejectedCount">—</strong></span
+                >
+              </button>
+              <button
+                type="button"
+                class="ticker-segment"
+                id="tickerPnL"
+                data-l10n-id="shell-ticker-pnl-segment"
               >
-            </button>
-            <div
-              class="ticker-segment"
-              id="tickerRPC"
-              data-l10n-id="shell-ticker-rpc-segment"
-            >
-              <i class="ticker-icon icon-zap"></i>
-              <span class="ticker-text"
-                ><span data-l10n-id="shell-ticker-rpc"></span>
-                <strong id="tickerRPCCalls">—</strong
-                ><span class="ticker-separator" aria-hidden="true">·</span
-                ><strong id="tickerRPCSuccess">—</strong></span
+                <i class="ticker-icon icon-trending-up"></i>
+                <span class="ticker-text"
+                  ><span data-l10n-id="shell-ticker-pnl"></span>
+                  <strong class="ticker-value" id="tickerTodayPnL">—</strong></span
+                >
+              </button>
+              <div
+                class="ticker-segment"
+                id="tickerRPC"
+                data-l10n-id="shell-ticker-rpc-segment"
               >
+                <i class="ticker-icon icon-zap"></i>
+                <span class="ticker-text"
+                  ><span data-l10n-id="shell-ticker-rpc"></span>
+                  <strong id="tickerRPCCalls">—</strong
+                  ><span class="ticker-separator" aria-hidden="true">·</span
+                  ><strong id="tickerRPCSuccess">—</strong></span
+                >
+              </div>
+              <button
+                type="button"
+                class="ticker-segment"
+                id="tickerServices"
+                data-l10n-id="shell-ticker-services-segment"
+              >
+                <i class="ticker-icon icon-activity"></i>
+                <span class="ticker-text" id="tickerServicesText"
+                  ><span class="status-dot"></span
+                  ><span
+                    id="tickerServicesLine"
+                    data-l10n-id="shell-ticker-services-loading"
+                    data-l10n-markup
+                  ></span
+                ></span>
+              </button>
             </div>
-            <button
-              type="button"
-              class="ticker-segment"
-              id="tickerServices"
-              data-l10n-id="shell-ticker-services-segment"
-            >
-              <i class="ticker-icon icon-activity"></i>
-              <span class="ticker-text" id="tickerServicesText"
-                ><span class="status-dot"></span
-                ><span
-                  id="tickerServicesLine"
-                  data-l10n-id="shell-ticker-services-loading"
-                  data-l10n-markup
-                ></span
-              ></span>
-            </button>
           </div>
         </div>
+        <button
+          type="button"
+          class="tab-scroll-btn tab-scroll-btn--start"
+          data-l10n-id="shell-ticker-scroll-start"
+        >
+          <i class="icon-chevron-left" aria-hidden="true"></i>
+        </button>
+        <button
+          type="button"
+          class="tab-scroll-btn tab-scroll-btn--end"
+          data-l10n-id="shell-ticker-scroll-end"
+        >
+          <i class="icon-chevron-right" aria-hidden="true"></i>
+        </button>
       </div>
     </header>
 

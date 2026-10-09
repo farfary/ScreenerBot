@@ -61,6 +61,12 @@ shell-tabs-scroll-start =
 shell-tabs-scroll-end =
     .aria-label = Afficher plus d’onglets
     .title = Afficher plus d’onglets
+shell-ticker-scroll-start =
+    .aria-label = Afficher les indicateurs précédents
+    .title = Afficher les indicateurs précédents
+shell-ticker-scroll-end =
+    .aria-label = Afficher plus d’indicateurs
+    .title = Afficher plus d’indicateurs
 
 shell-ticker-monitoring-segment =
     .title = Tokens surveillés par le service de pools

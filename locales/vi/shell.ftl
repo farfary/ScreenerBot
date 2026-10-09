@@ -61,6 +61,12 @@ shell-tabs-scroll-start =
 shell-tabs-scroll-end =
     .aria-label = Hiện thêm tab
     .title = Hiện thêm tab
+shell-ticker-scroll-start =
+    .aria-label = Hiện các chỉ số trước
+    .title = Hiện các chỉ số trước
+shell-ticker-scroll-end =
+    .aria-label = Hiện thêm chỉ số
+    .title = Hiện thêm chỉ số
 
 shell-ticker-monitoring-segment =
     .title = Token đang được Pool Service theo dõi

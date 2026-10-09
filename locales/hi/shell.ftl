@@ -61,6 +61,12 @@ shell-tabs-scroll-start =
 shell-tabs-scroll-end =
     .aria-label = और टैब दिखाएँ
     .title = और टैब दिखाएँ
+shell-ticker-scroll-start =
+    .aria-label = पिछले मेट्रिक्स दिखाएँ
+    .title = पिछले मेट्रिक्स दिखाएँ
+shell-ticker-scroll-end =
+    .aria-label = और मेट्रिक्स दिखाएँ
+    .title = और मेट्रिक्स दिखाएँ
 
 shell-ticker-monitoring-segment =
     .title = पूल सर्विस द्वारा मॉनिटर किए जा रहे टोकन

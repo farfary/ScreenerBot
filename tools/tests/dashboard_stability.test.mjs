@@ -271,6 +271,34 @@ async function assertPinnedEdgeClean(page, label) {
   assert.deepEqual(leaks, [], `${label}: columns cut by the pinned edge still show content`);
 }
 
+/**
+ * A table's loading or empty message sits in the middle of the visible scroll area,
+ * at either end of a table wider than its view: the state cell spans the table's
+ * whole scroll width, so a message centred in the cell drifts off to one side.
+ */
+async function assertStatesCentred(page, label) {
+  const offsets = await page.evaluate(() => {
+    const found = [];
+    const containers = [...document.querySelectorAll(".data-table-scroll-container")].filter(
+      (container) => container.offsetParent && container.querySelector("td.dt-state-cell > *")
+    );
+    for (const container of containers) {
+      const message = container.querySelector("td.dt-state-cell > *");
+      for (const end of [0, container.scrollWidth]) {
+        container.scrollLeft = end;
+        const box = container.getBoundingClientRect();
+        const centre = box.left + container.clientLeft + container.clientWidth / 2;
+        const rect = message.getBoundingClientRect();
+        const offset = Math.round(rect.left + rect.width / 2 - centre);
+        if (Math.abs(offset) > 2) found.push(`${container.closest("[id]")?.id}: ${offset}px`);
+      }
+      container.scrollLeft = 0;
+    }
+    return found;
+  });
+  assert.deepEqual(offsets, [], `${label}: table state messages off the visible centre`);
+}
+
 /** Render every view, then check the page does not scroll sideways. */
 async function assertViewsFit(page, views, label, alsoAssert) {
   for (const view of views) {
@@ -419,7 +447,10 @@ describe("dashboard stability", { concurrency: 4 }, () => {
 
       scenario("renders empty states", async () => {
         const session = await open(id, { variant: "empty" });
-        for (const view of views) await assertEmpty(session.page, view);
+        for (const view of views) {
+          await assertEmpty(session.page, view);
+          await assertStatesCentred(session.page, `${id} ${view.name}`);
+        }
         await finish(session);
       });
 

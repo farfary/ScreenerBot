@@ -61,6 +61,12 @@ shell-tabs-scroll-start =
 shell-tabs-scroll-end =
     .aria-label = Daha fazla sekme göster
     .title = Daha fazla sekme göster
+shell-ticker-scroll-start =
+    .aria-label = Önceki metrikleri göster
+    .title = Önceki metrikleri göster
+shell-ticker-scroll-end =
+    .aria-label = Daha fazla metrik göster
+    .title = Daha fazla metrik göster
 
 shell-ticker-monitoring-segment =
     .title = Havuz hizmeti tarafından izlenen tokenlar

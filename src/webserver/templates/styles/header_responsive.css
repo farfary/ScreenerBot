@@ -8,6 +8,7 @@
   --header-border: #d1d5db;
   --header-shadow: 0 4px 20px rgb(0, 0, 0, 0.08);
   --ticker-bg: linear-gradient(180deg, #e2e8f0 0%, #f1f5f9 100%);
+  --ticker-edge-bg: #eaeef5;
   --ticker-border: rgb(0, 0, 0, 0.08);
   --ticker-hover-bg: rgb(0, 0, 0, 0.04);
 }
@@ -17,6 +18,7 @@
   --header-border: #30363d;
   --header-shadow: 0 4px 20px rgb(0, 0, 0, 0.4);
   --ticker-bg: linear-gradient(180deg, rgb(15, 23, 42, 0.85) 0%, rgb(15, 23, 42, 0.7) 100%);
+  --ticker-edge-bg: #0f1626;
   --ticker-border: rgb(255, 255, 255, 0.06);
   --ticker-hover-bg: rgb(255, 255, 255, 0.04);
 }
@@ -175,15 +177,18 @@
   opacity: 0.9;
 }
 
-/* The ticker scrolls by touch/trackpad when it cannot fit; the old dormant
-   marquee clipped tablet content and had no reachable start/end state. */
+/* The ticker is a tab scroll strip (tab_bar.css), the same overflow treatment as the
+   navigation row above it: edge fades and page buttons show the metrics out of view.
+   `--ticker-edge-bg` is the solid mid tone of the ticker gradient, which the fade paints. */
+.header-row-3-wrapper {
+  --tab-scroll-bg: var(--ticker-edge-bg);
+}
+
 .header-row-3 {
   height: 24px;
-  overflow: auto hidden;
   border-top: 1px solid var(--ticker-border);
   background: var(--ticker-bg);
   scrollbar-width: none;
-  -webkit-overflow-scrolling: touch;
 }
 
 .header-row-3::-webkit-scrollbar {
@@ -473,7 +478,7 @@ button.ticker-segment:hover .ticker-icon {
     padding-inline: 7px;
   }
 
-  .header-row-3 {
+  .header-row-3-wrapper {
     display: none;
   }
 }

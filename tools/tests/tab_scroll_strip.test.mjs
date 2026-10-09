@@ -11,8 +11,9 @@
  * say more tabs exist, and a second copy of the overflow tracking drifts from the first
  * (the sub-tab row once toggled its fade classes on a parent that drew no fade).
  *
- * - Each `.tab-scroll-area` in the shell sits in a `.tab-scroll-wrapper` with a start
- *   and an end page button, each labelled through a Fluent id.
+ * - Each `.tab-scroll-area` in the shell (the navigation row and the metrics ticker)
+ *   sits in a `.tab-scroll-wrapper` with a start and an end page button, each
+ *   labelled through the Fluent id for its side.
  * - Only `tab_bar.js` toggles the `can-scroll-*` state and only `tab_bar.css` styles it.
  * - The page button is a bare glyph: no background, border or shadow.
  *
@@ -68,7 +69,7 @@ test("every scrolling tab row in the shell is a complete tab scroll strip", () =
         classTokens(tag.tag).statics.includes(`tab-scroll-btn--${side}`)
       );
       assert.ok(button, `${wrapper.tag} has no ${side} page button`);
-      assert.match(button.tag, /data-l10n-id="shell-tabs-scroll-/);
+      assert.match(button.tag, new RegExp(`data-l10n-id="shell-[a-z]+-scroll-${side}"`));
       assert.match(button.tag, /type="button"/);
     }
     assert.match(inner, /class="[^"]*\btab-scroll-area\b/);

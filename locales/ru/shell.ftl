@@ -61,6 +61,12 @@ shell-tabs-scroll-start =
 shell-tabs-scroll-end =
     .aria-label = Показать другие вкладки
     .title = Показать другие вкладки
+shell-ticker-scroll-start =
+    .aria-label = Показать предыдущие метрики
+    .title = Показать предыдущие метрики
+shell-ticker-scroll-end =
+    .aria-label = Показать другие метрики
+    .title = Показать другие метрики
 
 shell-ticker-monitoring-segment =
     .title = Токены, отслеживаемые сервисом пулов
