@@ -56,6 +56,7 @@ const canonicalOwners = new Map([
   [".input-unit", "components/form_controls.css"],
   [".sub-tabs-container", "ui/tab_bar.css"],
   [".sub-tab", "ui/tab_bar.css"],
+  [".spin", "foundation.css"],
 ]);
 
 /* Selector + declaration body per rule, so a check can look at what a rule

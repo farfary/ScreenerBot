@@ -272,10 +272,6 @@
    Animations
    ============================================================================= */
 
-.spin {
-  animation: spin 1s linear infinite;
-}
-
 @keyframes fade-in-animation {
   from {
     opacity: 0;

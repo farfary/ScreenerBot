@@ -595,17 +595,8 @@
 }
 
 /* =============================================================================
-   SPINNER + RESPONSIVE
+   RESPONSIVE
    ============================================================================= */
-
-.spin {
-  animation: featured-spin 1s linear infinite;
-}
-
-@keyframes featured-spin {
-  from { transform: rotate(0deg); }
-  to { transform: rotate(360deg); }
-}
 
 @media (width <= 1100px) {
   .featured-cat-grid {
