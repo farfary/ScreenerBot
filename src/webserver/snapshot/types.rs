@@ -23,7 +23,7 @@ impl From<&RpcStats> for RpcMetricsSummary {
             total_calls: stats.total_calls(),
             total_errors: stats.total_errors(),
             success_rate: stats.success_rate(),
-            recent_calls_per_minute: stats.calls_per_minute_recent(5),
+            recent_calls_per_minute: stats.calls_per_minute(),
         }
     }
 }

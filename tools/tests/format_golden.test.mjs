@@ -339,6 +339,15 @@ test("de keeps digits for the surface formatters; only separators change", () =>
   assert.equal(fmt.formatNumber(1234.56789, { decimals: 0, maxDecimals: 3 }), "1.234,568");
 });
 
+test("a call rate is whole calls per minute, and absent without a measurement", () => {
+  const { fmt } = load("en-u-nu-latn");
+  assert.equal(fmt.formatCallRate(29.4), "29/min");
+  assert.equal(fmt.formatCallRate(33), "33/min");
+  assert.equal(fmt.formatCallRate(1234.5), "1,235/min");
+  assert.equal(fmt.formatCallRate(Number.NaN), "—");
+  assert.equal(fmt.formatCallRate(null), "—");
+});
+
 test("signed plain numbers group per locale and take the locale's sign", () => {
   const de = load("de-u-nu-latn").fmt;
   assert.equal(de.formatSignedNumber(1234567.891, { decimals: 2 }), "+1.234.567,89");
@@ -467,6 +476,7 @@ test("right-to-left formatter output differs from left-to-right only by isolatio
   for (const [fn, value] of [
     ["formatMemoryMb", 134],
     ["formatLatencyMs", 382],
+    ["formatCallRate", 33],
     ["formatSol", 0.5],
   ])
     assert.equal(rtl.fmt[fn](value), `\u2068${ltr.fmt[fn](value)}\u2069`, fn);

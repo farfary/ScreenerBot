@@ -91,7 +91,6 @@ shell-ticker-pnl = Today P&L:
 shell-ticker-rpc-segment =
     .title = RPC calls per minute and success rate
 shell-ticker-rpc = RPC:
-shell-ticker-rpc-rate = { $amount }/min
 shell-ticker-services-segment =
     .title = Background services health status
 shell-ticker-services-loading = Services: <strong>Loading</strong>
@@ -138,8 +137,6 @@ shell-status-bar-version = v
 shell-status-bar-uptime = Up
 shell-status-bar-memory = Mem
 shell-status-bar-rpc = RPC
-# RPC calls in the last minute; $rate is a formatted number.
-shell-status-rpc-per-minute = { $rate }/min
 shell-status-bar-trading = Trading
 shell-status-bar-positions = Pos
 shell-status-bar-tokens = Tokens

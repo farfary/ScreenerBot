@@ -13,6 +13,8 @@
  *   with a manager and no calls the rate is 0 and the success rate is "—".
  * - Status bar: with no calls the success rate is "—" and the health dot is
  *   "unknown".
+ * - One call rate reads identically in the ticker and the status bar: both format it
+ *   through `formatCallRate`, at one precision.
  *
  * Run with `npm run test:js`.
  */
@@ -93,4 +95,15 @@ test("no calls yet: no success rate anywhere", async (t) => {
   await painted(page, "#statusBarRpcRate");
   assert.equal(await text(page, "#statusBarRpcSuccess"), "—");
   assert.equal(await page.locator("#statusBarRpcHealth").getAttribute("data-health"), "unknown");
+});
+
+test("one call rate reads the same in the ticker and the status bar", async (t) => {
+  const page = await open(t, {
+    headerRpc: { calls_per_minute: 29.4 },
+    statusRpc: { recent_calls_per_minute: 29.4 },
+  });
+  await painted(page, "#tickerRPCCalls");
+  await painted(page, "#statusBarRpcRate");
+  assert.equal(await text(page, "#tickerRPCCalls"), "29/min");
+  assert.equal(await text(page, "#statusBarRpcRate"), "29/min");
 });

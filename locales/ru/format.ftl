@@ -170,4 +170,7 @@ format-memory-gb =
         [many] { $amount } ГБ
        *[other] { $amount } ГБ
     }
+
+# A call rate per minute; $amount is the formatted number.
+format-calls-per-minute = { $amount }/мин
 format-under-minute = { "<1 мин" }

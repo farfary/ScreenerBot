@@ -149,5 +149,8 @@ format-memory-gb =
        *[other] { $amount }GB
     }
 
+# A call rate per minute; $amount is the formatted number.
+format-calls-per-minute = { $amount }/min
+
 # Uptime below one minute.
 format-under-minute = { "<1m" }

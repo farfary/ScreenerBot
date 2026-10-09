@@ -128,12 +128,15 @@ impl RpcStats {
         }
     }
 
-    /// Get calls per minute for recent N minutes
-    ///
-    /// Uses calls_last_minute as approximation since detailed
-    /// minute-by-minute data requires database access.
-    pub fn calls_per_minute_recent(&self, _minutes: usize) -> f64 {
-        self.calls_last_minute as f64
+    /// The displayed RPC call rate per minute: the last completed minute's count, or the
+    /// session average while that minute has no calls (the first minute of a session has
+    /// no completed minute yet, so a raw count would read 0 while calls are being made).
+    pub fn calls_per_minute(&self) -> f64 {
+        if self.calls_last_minute > 0 {
+            self.calls_last_minute as f64
+        } else {
+            self.calls_per_second() * 60.0
+        }
     }
 
     /// Get minute buckets
@@ -213,4 +216,46 @@ pub async fn start_rpc_stats_auto_save_service(shutdown: std::sync::Arc<tokio::s
     }
 
     logger::info(LogTag::Rpc, "RPC stats monitoring service stopped");
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    fn stats(total_calls: u64, uptime_secs: u64, calls_last_minute: u64) -> RpcStats {
+        RpcStats {
+            session_id: String::new(),
+            startup_time: Utc::now(),
+            total_calls,
+            total_errors: 0,
+            success_rate: 100.0,
+            avg_latency_ms: 0.0,
+            uptime_secs,
+            calls_last_minute,
+            provider_count: 1,
+            healthy_provider_count: 1,
+            calls_per_url: HashMap::new(),
+            errors_per_url: HashMap::new(),
+            calls_per_method: HashMap::new(),
+            errors_per_method: HashMap::new(),
+            minute_buckets: Vec::new(),
+            last_session: None,
+        }
+    }
+
+    #[test]
+    fn call_rate_reads_the_last_completed_minute() {
+        assert_eq!(stats(5_000, 600, 33).calls_per_minute(), 33.0);
+    }
+
+    #[test]
+    fn call_rate_is_the_session_average_before_a_minute_completes() {
+        // 49 calls in the first 100 seconds: no completed minute yet, 29.4 calls per minute.
+        assert!((stats(49, 100, 0).calls_per_minute() - 29.4).abs() < 1e-9);
+    }
+
+    #[test]
+    fn call_rate_is_zero_before_any_call() {
+        assert_eq!(stats(0, 0, 0).calls_per_minute(), 0.0);
+    }
 }

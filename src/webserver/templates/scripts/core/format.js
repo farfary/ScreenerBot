@@ -996,6 +996,15 @@ export function formatMemoryMb(megabytes, { fallback = DASH } = {}) {
   return displayed(I18n.t("format-memory-mb", counted(Math.round(num))));
 }
 
+/** A call rate per minute in whole calls ("33/min"), for every RPC rate surface. */
+export function formatCallRate(perMinute, { fallback = DASH } = {}) {
+  const num = coerceNumber(perMinute);
+  if (!Number.isFinite(num) || num < 0) {
+    return fallback;
+  }
+  return displayed(I18n.t("format-calls-per-minute", { amount: formatNumber(num, 0) }));
+}
+
 /** Round-trip latency in milliseconds; two decimals in seconds from 1000 ms. */
 export function formatLatencyMs(milliseconds, { fallback = DASH } = {}) {
   const num = coerceNumber(milliseconds);

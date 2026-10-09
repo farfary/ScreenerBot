@@ -114,7 +114,7 @@ pub async fn gather_status_snapshot() -> StatusSnapshot {
             .num_seconds(),
         session_id: stats.session_id.clone(),
         session_started_at: stats.startup_time,
-        recent_calls_per_minute: stats.calls_per_minute_recent(5),
+        recent_calls_per_minute: stats.calls_per_minute(),
         minute_buckets: stats.get_minute_buckets(),
         last_session: stats.last_session.clone(),
     });

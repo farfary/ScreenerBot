@@ -4,7 +4,13 @@
 // Live metrics and effective Auto Trader state for the global dashboard header.
 import { Poller } from "./poller.js";
 import { requestManager } from "./request_manager.js";
-import { formatCurrencyUSD, formatPercentValue, formatSignedSol, signedTone } from "./format.js";
+import {
+  formatCallRate,
+  formatCurrencyUSD,
+  formatPercentValue,
+  formatSignedSol,
+  signedTone,
+} from "./format.js";
 import { formatNumber, showToast } from "./utils.js";
 
 const METRICS_POLL_INTERVAL = 5000;
@@ -250,10 +256,7 @@ function updateTicker(metrics) {
 
   // Each value and its unit are one text run, so the ticker's flex gap never splits them.
   if (rpcCalls) {
-    const calls = finiteNumber(metrics.rpc?.calls_per_minute);
-    rpcCalls.textContent = Number.isFinite(calls)
-      ? I18n.t("shell-ticker-rpc-rate", { amount: formatNumber(calls, 1) })
-      : "—";
+    rpcCalls.textContent = formatCallRate(finiteNumber(metrics.rpc?.calls_per_minute));
   }
   if (rpcSuccess) {
     rpcSuccess.textContent = formatPercentValue(metrics.rpc?.success_rate_percent, {
