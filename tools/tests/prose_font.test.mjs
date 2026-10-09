@@ -77,7 +77,17 @@ test("a number-field unit is in the data face, inside the field", () => {
   const faces = rules
     .filter(({ selector, body }) => /\.input-unit\b/.test(selector) && fontOf(body))
     .map(({ selector, body }) => [selector, fontOf(body)]);
-  assert.deepEqual(faces, [[".input-unit", "var(--font-data)"]]);
+  assert.ok(
+    faces.some(([selector]) => selector === ".input-unit"),
+    "the unit owner declares its face"
+  );
+  // A unit picked in place re-declares the face on the select label, which the
+  // custom select otherwise sets in the UI face.
+  assert.deepEqual(
+    faces.filter(([, font]) => font !== "var(--font-data)"),
+    [],
+    "a unit renders outside the data face"
+  );
 });
 
 test("shared prose surfaces declare the UI face", () => {
