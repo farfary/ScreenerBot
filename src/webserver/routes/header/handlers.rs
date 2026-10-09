@@ -12,7 +12,7 @@ use crate::filtering::{try_fetch_stats, SnapshotState};
 use crate::global::are_core_services_ready;
 use crate::rpc::{get_global_rpc_stats, RpcStats};
 use crate::services::get_service_manager;
-use crate::wallet::{get_balance_at_time, get_wallet_worth};
+use crate::wallet::{get_balance_at_time, get_wallet_worth, WalletWorth};
 
 use super::types::*;
 
@@ -92,17 +92,7 @@ pub(super) async fn get_header_metrics() -> Json<HeaderMetricsResponse> {
         today_pnl_percent,
     };
 
-    let wallet = WalletHeaderInfo {
-        sol_balance: worth.native_balance,
-        tokens_worth_native: worth.tokens_worth_native,
-        total_equity_native: worth.total_equity_native,
-        change_today_native: start_balance_sol.map(|start| worth.total_equity_native - start),
-        change_today_percent: start_balance_sol
-            .filter(|start| *start > f64::EPSILON)
-            .map(|start| (worth.total_equity_native - start) / start * 100.0),
-        token_count: worth.token_count,
-        last_updated: worth.updated_at.to_rfc3339(),
-    };
+    let wallet = wallet_header_info(&worth, start_balance_sol);
 
     let rpc = rpc_header_info(get_global_rpc_stats().as_ref());
 
@@ -138,6 +128,27 @@ pub(super) async fn get_header_metrics() -> Json<HeaderMetricsResponse> {
         copy: copy_header().await,
         timestamp: now.to_rfc3339(),
     })
+}
+
+/// The header's wallet card from the live worth. Without a snapshot (no wallet, or the
+/// first balance read has not landed) the worth is unknown, so its default zeroes never
+/// reach the header as an empty wallet.
+fn wallet_header_info(worth: &WalletWorth, start_balance_sol: Option<f64>) -> WalletHeaderInfo {
+    let known = |value| worth.has_snapshot.then_some(value);
+    let equity = known(worth.total_equity_native);
+    WalletHeaderInfo {
+        sol_balance: known(worth.native_balance),
+        tokens_worth_native: known(worth.tokens_worth_native),
+        total_equity_native: equity,
+        change_today_native: equity
+            .zip(start_balance_sol)
+            .map(|(equity, start)| equity - start),
+        change_today_percent: equity
+            .zip(start_balance_sol.filter(|start| *start > f64::EPSILON))
+            .map(|(equity, start)| (equity - start) / start * 100.0),
+        token_count: worth.has_snapshot.then_some(worth.token_count),
+        last_updated: worth.has_snapshot.then(|| worth.updated_at.to_rfc3339()),
+    }
 }
 
 async fn copy_header() -> Option<CopyHeaderInfo> {
@@ -241,6 +252,38 @@ mod tests {
             minute_buckets: Vec::new(),
             last_session: None,
         }
+    }
+
+    fn worth(has_snapshot: bool) -> WalletWorth {
+        WalletWorth {
+            native_balance: 1.5,
+            tokens_worth_native: 0.5,
+            total_equity_native: 2.0,
+            token_count: 3,
+            has_snapshot,
+            ..WalletWorth::default()
+        }
+    }
+
+    #[test]
+    fn wallet_figures_are_absent_until_the_first_snapshot() {
+        let wallet = wallet_header_info(&worth(false), Some(1.0));
+        assert_eq!(wallet.sol_balance, None);
+        assert_eq!(wallet.tokens_worth_native, None);
+        assert_eq!(wallet.total_equity_native, None);
+        assert_eq!(wallet.change_today_native, None);
+        assert_eq!(wallet.change_today_percent, None);
+        assert_eq!(wallet.token_count, None);
+        assert_eq!(wallet.last_updated, None);
+
+        let measured = wallet_header_info(&worth(true), Some(1.0));
+        assert_eq!(measured.sol_balance, Some(1.5));
+        assert_eq!(measured.tokens_worth_native, Some(0.5));
+        assert_eq!(measured.total_equity_native, Some(2.0));
+        assert_eq!(measured.change_today_native, Some(1.0));
+        assert_eq!(measured.change_today_percent, Some(100.0));
+        assert_eq!(measured.token_count, Some(3));
+        assert!(measured.last_updated.is_some());
     }
 
     #[test]

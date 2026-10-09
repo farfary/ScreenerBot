@@ -1,0 +1,47 @@
+{
+  "trader": {
+    "enabled": true,
+    "state": "running",
+    "today_pnl_native": 0.0,
+    "today_pnl_percent": 0.0
+  },
+  "wallet": {
+    "sol_balance": null,
+    "tokens_worth_native": null,
+    "total_equity_native": null,
+    "change_today_native": null,
+    "change_today_percent": null,
+    "token_count": null,
+    "last_updated": null
+  },
+  "rpc": {
+    "success_rate_percent": 99.4,
+    "avg_latency_ms": 142,
+    "calls_per_minute": 86.5,
+    "healthy": true
+  },
+  "filtering": {
+    "snapshot_state": "ready",
+    "monitoring_count": 1248,
+    "passed_count": 37,
+    "rejected_count": 1211,
+    "last_refresh": "2026-10-07T09:29:40+00:00"
+  },
+  "system": {
+    "all_services_healthy": true,
+    "unhealthy_services": [],
+    "critical_degraded": false
+  },
+  "sol": {
+    "price_usd": 165.0,
+    "change_24h_percent": 1.8
+  },
+  "copy": {
+    "enabled": true,
+    "total_tasks": 2,
+    "paper_tasks": 1,
+    "live_tasks": 1,
+    "notices": []
+  },
+  "timestamp": "2026-10-07T09:30:00+00:00"
+}

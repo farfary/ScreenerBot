@@ -81,6 +81,7 @@ export const endpoints = [
     method: "GET",
     path: "/api/header/metrics",
     fixture: "header_metrics.json",
+    empty: "header_metrics.empty.json",
     rust: "src/webserver/routes/header/types.rs::HeaderMetricsResponse",
   },
   {

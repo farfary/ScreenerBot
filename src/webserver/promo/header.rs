@@ -53,13 +53,13 @@ pub fn get_promo_header_metrics() -> HeaderMetricsResponse {
     let promo_equity = PROMO_SOL_BALANCE + open.current_value_sol;
     let change_today_native = promo_equity - PROMO_START_BALANCE;
     let wallet = WalletHeaderInfo {
-        sol_balance: PROMO_SOL_BALANCE,
-        tokens_worth_native: open.current_value_sol,
-        total_equity_native: promo_equity,
+        sol_balance: Some(PROMO_SOL_BALANCE),
+        tokens_worth_native: Some(open.current_value_sol),
+        total_equity_native: Some(promo_equity),
         change_today_native: Some(change_today_native),
         change_today_percent: Some(change_today_native / PROMO_START_BALANCE * 100.0),
-        token_count: open.count,
-        last_updated: now.to_rfc3339(),
+        token_count: Some(open.count),
+        last_updated: Some(now.to_rfc3339()),
     };
 
     let rpc = RpcHeaderInfo {

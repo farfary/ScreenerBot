@@ -51,6 +51,9 @@ export const views = [
     ],
     empty: [
       { selector: "#featured-row .featured-row-skeleton-caption", text: "No featured tokens" },
+      { selector: "#walletWorth", text: "^—$" },
+      { selector: "#walletSol", text: "^—$" },
+      { selector: "#walletTokenCount", text: "^—$" },
       { selector: "#calendarMonthTrades", text: "^0$" },
       { selector: "#positionsBest", text: "^—$" },
     ],

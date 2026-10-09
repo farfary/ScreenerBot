@@ -58,20 +58,22 @@ pub enum TraderHeaderState {
 }
 
 /// The header's wallet card. `total_equity_native` is the headline and MUST be the same
-/// number the home hero shows — both come from `wallet::get_wallet_worth()`.
+/// number the home hero shows — both come from `wallet::get_wallet_worth()`. Every field
+/// is None until a wallet snapshot exists: an unknown balance is absent, never a measured
+/// zero.
 #[derive(Debug, Serialize)]
 pub struct WalletHeaderInfo {
     /// Free (uninvested) SOL.
-    pub sol_balance: f64,
+    pub sol_balance: Option<f64>,
     /// SOL value of the held tokens.
-    pub tokens_worth_native: f64,
+    pub tokens_worth_native: Option<f64>,
     /// Full wallet worth: cash + holdings. The card's headline.
-    pub total_equity_native: f64,
+    pub total_equity_native: Option<f64>,
     /// Change vs the start-of-day WORTH (same quantity as the headline, never cash).
     pub change_today_native: Option<f64>,
     pub change_today_percent: Option<f64>,
-    pub token_count: usize,
-    pub last_updated: String,
+    pub token_count: Option<usize>,
+    pub last_updated: Option<String>,
 }
 
 #[derive(Debug, Serialize)]
