@@ -42,7 +42,8 @@ async fn resolve_evaluation_input(position: &Position) -> Option<(Position, f64)
     let current_price = match get_price_with_api_fallback(&position.mint).await {
         Some((price_result, source)) => {
             if price_result.price_native > 0.0 && price_result.price_native.is_finite() {
-                // Apply pool price bias correction (BUG-31: DAMM pools underestimate ~5-6%)
+                // A pool-computed price can sit a few percent below the executed swap price
+                // (about 5-6% on DAMM pools); the entry's own gap corrects it.
                 crate::positions::price_resolution::apply_pool_bias_correction(
                     price_result.price_native,
                     source,

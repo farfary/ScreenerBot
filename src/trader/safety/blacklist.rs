@@ -19,8 +19,8 @@ use chrono::Utc;
 /// service (fallback to alternative pools) and should not block entry for tokens that have
 /// valid alternative pools with working prices.
 ///
-/// See BUG-30: Pool blacklist was propagating to token-level via filtering engine,
-/// blocking entry for tokens with valid alternative pools.
+/// Reading the pool blacklist here would turn one failed pool into a token-level block and
+/// refuse entry to a token whose other pools still price it.
 pub async fn is_blacklisted(mint: &str) -> bool {
     // Check token-level blacklist in DB (the authoritative source for "bad token")
     match crate::tokens::database::database(crate::chains::active_chain()) {
