@@ -21,12 +21,13 @@ use chrono::{Duration, Utc};
 
 use crate::wallets::watch::{WatchSource, WatchStatus, WatchTarget};
 use crate::wallets::{Wallet, WalletRole, WalletType};
+use crate::webserver::routes::wallets::types::WalletListEntry;
 
-use super::data::PROMO_WALLET_ADDRESS;
+use super::data::{PROMO_SOL_BALANCE, PROMO_WALLET_ADDRESS};
 
 /// One wallet record: (id, name, address, role, type, age days, last-used hours,
-/// notes). The main row reuses `PROMO_WALLET_ADDRESS` so the Wallets table and the
-/// header describe the same wallet.
+/// notes, SOL balance). The main row reuses `PROMO_WALLET_ADDRESS` and
+/// `PROMO_SOL_BALANCE` so the Wallets table and the header describe the same wallet.
 type PromoWallet = (
     i64,
     &'static str,
@@ -36,6 +37,7 @@ type PromoWallet = (
     i64,
     Option<i64>,
     Option<&'static str>,
+    f64,
 );
 
 fn promo_wallets() -> Vec<PromoWallet> {
@@ -49,6 +51,7 @@ fn promo_wallets() -> Vec<PromoWallet> {
             168,
             Some(0),
             Some("Auto-trading wallet. Funded from cold storage weekly."),
+            PROMO_SOL_BALANCE,
         ),
         (
             2,
@@ -59,6 +62,7 @@ fn promo_wallets() -> Vec<PromoWallet> {
             96,
             Some(3),
             Some("Small size, new-pair entries only."),
+            1.284,
         ),
         (
             3,
@@ -69,6 +73,7 @@ fn promo_wallets() -> Vec<PromoWallet> {
             72,
             Some(19),
             Some("Manual swaps and position tests."),
+            3.517,
         ),
         (
             4,
@@ -79,6 +84,7 @@ fn promo_wallets() -> Vec<PromoWallet> {
             310,
             Some(2_160),
             Some("Retired after the Q1 rotation. Drained."),
+            0.0,
         ),
         (
             5,
@@ -89,6 +95,7 @@ fn promo_wallets() -> Vec<PromoWallet> {
             420,
             None,
             Some("Offline backup key. Never used for trading."),
+            0.0021,
         ),
     ]
 }
@@ -99,15 +106,15 @@ fn promo_wallets() -> Vec<PromoWallet> {
 /// inactive, so the Secondaries tab asks without it and the Archive tab asks with
 /// it. Returning the archive rows unconditionally would leave the Secondaries table
 /// listing wallets it is meant to exclude.
-pub fn get_promo_wallets(include_inactive: bool) -> Vec<Wallet> {
+pub fn get_promo_wallets(include_inactive: bool) -> Vec<WalletListEntry> {
     let now = Utc::now();
 
     promo_wallets()
         .into_iter()
         .map(
-            |(id, name, address, role, wallet_type, age_days, used_hours, notes)| {
+            |(id, name, address, role, wallet_type, age_days, used_hours, notes, balance)| {
                 let is_active = role != WalletRole::Archive;
-                Wallet {
+                let wallet = Wallet {
                     id,
                     name: name.to_owned(),
                     address: address.to_owned(),
@@ -117,10 +124,14 @@ pub fn get_promo_wallets(include_inactive: bool) -> Vec<Wallet> {
                     last_used_at: used_hours.map(|hours| now - Duration::hours(hours)),
                     notes: notes.map(str::to_owned),
                     is_active,
+                };
+                WalletListEntry {
+                    wallet,
+                    balance: Some(balance),
                 }
             },
         )
-        .filter(|wallet| include_inactive || wallet.is_active)
+        .filter(|entry| include_inactive || entry.wallet.is_active)
         .collect()
 }
 

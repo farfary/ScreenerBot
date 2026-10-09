@@ -13,7 +13,9 @@ pub mod balances;
 pub mod keypair;
 pub mod signing;
 
-pub use balances::{fetch_wallet_sol_balance, fetch_wallet_token_balances};
+pub use balances::{
+    fetch_wallet_sol_balance, fetch_wallet_sol_balances, fetch_wallet_token_balances,
+};
 pub use keypair::{
     address_from_encrypted_key, address_from_private_key, decrypt_to_keypair, export_private_key,
     generate_and_encrypt_keypair, generate_keypair, generate_keypair_strings,

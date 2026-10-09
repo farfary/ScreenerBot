@@ -24,7 +24,9 @@ pub(crate) use main_wallet::get_main_wallet_encrypted_key;
 pub use main_wallet::{get_main_address, get_main_wallet, has_main_wallet};
 
 mod balance_queries;
-pub use balance_queries::{get_all_wallet_balances, get_wallets_with_token};
+pub use balance_queries::{
+    get_all_wallet_balances, get_wallet_sol_balances, get_wallets_with_token,
+};
 
 mod migration;
 

@@ -20,7 +20,9 @@ use crate::webserver::api_error::{ApiError, ApiErrorCode};
 use crate::webserver::utils::{status_for, success_response};
 use axum::response::IntoResponse as _;
 
-use super::types::{ListWalletsQuery, SetMainResponse, WalletCreatedResponse, WalletListResponse};
+use super::types::{
+    ListWalletsQuery, SetMainResponse, WalletCreatedResponse, WalletListEntry, WalletListResponse,
+};
 
 /// The category for a failed wallet operation, carrying the status the typed
 /// error already has.
@@ -44,6 +46,12 @@ pub async fn list_wallets(Query(query): Query<ListWalletsQuery>) -> Response {
 
     match wallets::list_wallets(query.include_inactive).await {
         Ok(wallets) => {
+            let balances = wallets::get_wallet_sol_balances(&wallets).await;
+            let wallets: Vec<WalletListEntry> = wallets
+                .into_iter()
+                .zip(balances)
+                .map(|(wallet, balance)| WalletListEntry { wallet, balance })
+                .collect();
             let total = wallets.len();
             success_response(WalletListResponse { wallets, total })
         }

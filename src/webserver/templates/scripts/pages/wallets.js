@@ -435,10 +435,8 @@ async function loadWallets() {
     if (!response.ok) throw new Error(`HTTP ${response.status}`);
 
     const data = await response.json();
+    // Each row carries its SOL balance, read by the server for every listed wallet.
     walletsData = data.wallets || [];
-
-    // Fetch balance for main wallet
-    await fetchMainWalletBalance();
   } catch (error) {
     console.error("[Wallets] Failed to load wallets:", error);
     walletsData = [];
@@ -460,23 +458,6 @@ async function loadTokenHoldings({ force = false } = {}) {
   } catch (error) {
     console.debug("[Wallets] Failed to load token holdings:", error);
     tokenHoldings = [];
-  }
-}
-
-async function fetchMainWalletBalance() {
-  try {
-    const response = await fetch("/api/wallet/current");
-    if (response.ok) {
-      const data = await response.json();
-      if (data) {
-        const mainWallet = walletsData.find((w) => w.role === "main");
-        if (mainWallet) {
-          mainWallet.balance = data.sol_balance || 0;
-        }
-      }
-    }
-  } catch (error) {
-    console.debug("[Wallets] Balance fetch failed:", error);
   }
 }
 

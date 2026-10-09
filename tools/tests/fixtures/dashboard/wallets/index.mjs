@@ -33,13 +33,6 @@ export const endpoints = [
   },
   {
     method: "GET",
-    path: "/api/wallet/current",
-    fixture: "wallet_current.json",
-    empty: "wallet_current.empty.json",
-    rust: "src/webserver/routes/wallet/types.rs::WalletCurrentResponse",
-  },
-  {
-    method: "GET",
     path: "/api/wallets/watch",
     fixture: "wallets_watch.json",
     empty: "wallets_watch.empty.json",

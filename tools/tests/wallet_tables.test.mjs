@@ -7,7 +7,9 @@
  * name in the Secondaries, Archive and Watched tables uses one font and weight, and no
  * toolbar chip repeats its label inside its value ("SOL 4.2187 SOL"). A holding worth less
  * than the Value column's resolution keeps its digits in subscript notation rather than
- * reading "0.0000"; only a holding without a price reads "—".
+ * reading "0.0000"; only a holding without a price reads "—". Every listed wallet shows the
+ * SOL balance the list response carries for it, in the Main Wallet chip and in the Secondaries
+ * and Archive Balance column; only a balance the server could not read is "—".
  *
  * Run with `npm run test:js`.
  */
@@ -105,4 +107,35 @@ test("the holdings Value column keeps a tiny value's digits and dashes only an u
   assert.equal(await cell(tiny.mint), "0.0₈5290");
   assert.equal(await cell(zero.mint), "0.0000");
   assert.equal(await cell(unpriced.mint), "—");
+});
+
+test("every listed wallet shows the balance its list row carries", async (t) => {
+  const page = await openWallets(t);
+  const chip = '.table-toolbar-chip[data-summary-id="wt-sol-balance"] .table-toolbar-chip__value';
+  await page.waitForSelector(chip);
+  assert.equal(await page.$eval(chip, (node) => node.textContent.trim()), "4.2187");
+
+  const balances = async (tab, container) => {
+    await page.click(`[data-tab-id="${tab}"]`);
+    await page.waitForSelector(`${container} tr[data-row-id] >> visible=true`);
+    return page.$$eval(`${container} tr[data-row-id]`, (rows) =>
+      Object.fromEntries(
+        rows.map((row) => [
+          row.dataset.rowId,
+          row
+            .querySelector('td[data-column-id="balance"]')
+            .textContent.replace(/[\u2066-\u2069]/g, "")
+            .trim(),
+        ])
+      )
+    );
+  };
+  assert.deepEqual(await balances("secondaries", "#secondaries-table-container"), {
+    2: "1.2841",
+    3: "0.0₈5000",
+  });
+  assert.deepEqual(await balances("archive", "#archive-table-container"), {
+    4: "0.0000",
+    5: "—",
+  });
 });

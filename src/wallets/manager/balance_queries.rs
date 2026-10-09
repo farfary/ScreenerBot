@@ -4,12 +4,16 @@
 //! Wallet balance queries — query stored balance data with filtering and aggregation.
 
 use crate::chains::adapter;
-use crate::chains::solana::accounts::{fetch_wallet_sol_balance, fetch_wallet_token_balances};
+use crate::chains::solana::accounts::{
+    fetch_wallet_sol_balance, fetch_wallet_sol_balances, fetch_wallet_token_balances,
+};
 use crate::chains::solana::constants::RENT_EXEMPT_MINIMUM_LAMPORTS;
 use crate::logger::{self, LogTag};
 
 use super::super::error::Error;
-use super::super::types::{SimpleTokenBalance, WalletBalanceSummary, WalletWithTokenBalance};
+use super::super::types::{
+    SimpleTokenBalance, Wallet, WalletBalanceSummary, WalletWithTokenBalance,
+};
 use super::list_active_wallets;
 
 // =============================================================================
@@ -30,6 +34,16 @@ fn native_topup_needed(native_balance: f64) -> (bool, f64) {
 fn reclaimable_ata_rent(empty_ata_count: u32) -> f64 {
     let ata_rent_exempt = adapter().raw_to_native(RENT_EXEMPT_MINIMUM_LAMPORTS);
     empty_ata_count as f64 * ata_rent_exempt
+}
+
+/// SOL balance of each wallet, aligned with `wallets`, read in batched account
+/// calls; `None` where the balance could not be read.
+pub async fn get_wallet_sol_balances(wallets: &[Wallet]) -> Vec<Option<f64>> {
+    let addresses: Vec<String> = wallets
+        .iter()
+        .map(|wallet| wallet.address.clone())
+        .collect();
+    fetch_wallet_sol_balances(&addresses).await
 }
 
 /// Get all active wallets that hold a specific token

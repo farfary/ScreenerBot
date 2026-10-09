@@ -49,8 +49,17 @@ pub const MAX_FILE_SIZE: usize = 2 * 1024 * 1024;
 
 #[derive(Serialize)]
 pub struct WalletListResponse {
-    pub wallets: Vec<Wallet>,
+    pub wallets: Vec<WalletListEntry>,
     pub total: usize,
+}
+
+/// One listed wallet with its SOL balance, which the server reads for every row so
+/// the page only formats it. `None` when the balance could not be read.
+#[derive(Serialize)]
+pub struct WalletListEntry {
+    #[serde(flatten)]
+    pub wallet: Wallet,
+    pub balance: Option<f64>,
 }
 
 #[derive(Serialize)]

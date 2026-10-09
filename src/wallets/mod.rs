@@ -84,6 +84,7 @@ pub use manager::{
     // Access
     get_wallet,
     get_wallet_by_address,
+    get_wallet_sol_balances,
     // Tools & summary
     get_wallets_summary,
     get_wallets_with_token,
