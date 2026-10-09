@@ -23,6 +23,14 @@ pub(crate) static SYSTEM_PROGRAM_PUBKEY: LazyLock<Pubkey> = LazyLock::new(|| {
     Pubkey::from_str(SYSTEM_PROGRAM_ID).expect("SYSTEM_PROGRAM_ID is a valid pubkey")
 });
 
+/// Whether `key` names an account `getMultipleAccounts` returns data for. The
+/// native SOL mint and the system program appear among pool reserve keys, but the
+/// RPC answers null for them, so they are never fetched, never complete a bundle
+/// and never take part in a stale-account scan.
+pub(crate) fn is_fetchable_account(key: &Pubkey) -> bool {
+    *key != *SOL_MINT_PUBKEY && *key != *SYSTEM_PROGRAM_PUBKEY
+}
+
 #[derive(Debug, Clone)]
 pub(crate) struct MissingAccountState {
     pub(crate) failures: u32,
@@ -171,6 +179,34 @@ impl RefreshCandidate {
     }
 }
 
+/// The keys and refresh candidates of a stale-account scan over `accounts`
+/// (key, [`account_refresh_interval`], quiet), aged from `last_fetch` at `now`.
+///
+/// Only [`is_fetchable_account`] keys are candidates. A key the batch fetch drops
+/// never records a fetch, so it would stay new, keep the quiet batch due at every
+/// scan and pull every quiet account each [`quiet_batch_floor`] instead of each
+/// heartbeat.
+pub(crate) fn refresh_candidates(
+    accounts: &[(Pubkey, Duration, bool)],
+    last_fetch: &HashMap<Pubkey, Instant>,
+    now: Instant,
+) -> (Vec<Pubkey>, Vec<RefreshCandidate>) {
+    accounts
+        .iter()
+        .filter(|(key, _, _)| is_fetchable_account(key))
+        .map(|(key, interval, quiet)| {
+            let candidate = RefreshCandidate {
+                elapsed: last_fetch
+                    .get(key)
+                    .map(|fetched| now.saturating_duration_since(*fetched)),
+                interval: *interval,
+                quiet: *quiet,
+            };
+            (*key, candidate)
+        })
+        .unzip()
+}
+
 /// Indices of the candidates a stale-account scan fetches now.
 ///
 /// Every due or never-fetched account is fetched. When a quiet account is due or
@@ -229,13 +265,12 @@ impl PoolAccountBundle {
         // Resetting it here can cause premature recalculation before all accounts are updated
     }
 
-    /// Check if bundle is complete (has all required accounts)
-    /// Skips the native SOL mint since it's not a real on-chain account and
-    /// RPC returns null for it, which would prevent bundles from ever completing.
+    /// Whether the bundle holds every required account that can be fetched
+    /// (see [`is_fetchable_account`]).
     pub fn is_complete(&self, required_accounts: &[Pubkey]) -> bool {
         required_accounts
             .iter()
-            .filter(|key| **key != *SOL_MINT_PUBKEY && **key != *SYSTEM_PROGRAM_PUBKEY)
+            .filter(|key| is_fetchable_account(key))
             .all(|key| self.accounts.contains_key(key))
     }
 
@@ -509,6 +544,50 @@ mod tests {
             outcome.calls_per_minute > 4.0,
             "{} calls/min",
             outcome.calls_per_minute
+        );
+    }
+
+    #[test]
+    fn keys_the_batch_fetch_drops_do_not_hold_the_quiet_batch_open() {
+        let start = Instant::now();
+        let ttl = Duration::from_secs(30);
+        let heartbeat = ttl / 2;
+        let interval = account_refresh_interval(false, heartbeat);
+        let mut accounts = vec![(*SOL_MINT_PUBKEY, interval, true)];
+        for _ in 0..4 {
+            accounts.push((Pubkey::new_unique(), interval, true));
+            accounts.push((Pubkey::new_unique(), interval, true));
+            accounts.push((*SYSTEM_PROGRAM_PUBKEY, interval, true));
+        }
+        let mut last_fetch: HashMap<Pubkey, Instant> = HashMap::new();
+        let window = Duration::from_secs(600);
+        let mut calls = 0usize;
+        let mut now = Duration::ZERO;
+        while now < heartbeat * 3 + window {
+            now += Duration::from_millis(500);
+            let (keys, candidates) = refresh_candidates(&accounts, &last_fetch, start + now);
+            assert!(keys.iter().all(is_fetchable_account));
+            let fetched: Vec<Pubkey> = accounts_to_refresh(&candidates, heartbeat)
+                .into_iter()
+                .map(|idx| keys[idx])
+                .filter(is_fetchable_account)
+                .collect();
+            if fetched.is_empty() {
+                continue;
+            }
+            if now >= heartbeat * 3 {
+                calls += 1;
+            }
+            now += Duration::from_secs(1);
+            for key in fetched {
+                last_fetch.insert(key, start + now);
+            }
+        }
+        let calls_per_minute = calls as f64 * 60.0 / window.as_secs_f64();
+        let bound = 60.0 / heartbeat.as_secs_f64();
+        assert!(
+            calls_per_minute <= bound,
+            "{calls_per_minute} calls/min above {bound}"
         );
     }
 

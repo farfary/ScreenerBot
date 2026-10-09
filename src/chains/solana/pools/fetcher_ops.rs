@@ -8,9 +8,9 @@
 
 use super::fetcher::{AccountFetcher, ACCOUNT_BATCH_SIZE};
 use super::fetcher_types::{
-    account_refresh_interval, accounts_to_refresh, calculation_trigger, quiet_batch_floor,
-    AccountData, CalculationTrigger, MissingAccountState, MissingPoolState, PoolAccountBundle,
-    RefreshCandidate, SOL_MINT_PUBKEY, SYSTEM_PROGRAM_PUBKEY,
+    account_refresh_interval, accounts_to_refresh, calculation_trigger, is_fetchable_account,
+    quiet_batch_floor, refresh_candidates, AccountData, CalculationTrigger, MissingAccountState,
+    MissingPoolState, PoolAccountBundle,
 };
 use super::reserve_accounts::reserve_pubkeys;
 use super::types::ProgramKind;
@@ -154,19 +154,12 @@ impl AccountFetcher {
 
         // Read last fetch times under a single lock acquisition, then select the
         // due accounts plus the quiet accounts that share the quiet batch.
-        let candidates: Vec<RefreshCandidate> = {
+        let (keys, candidates) = {
             let last_fetch = account_last_fetch.read().unwrap();
-            accounts_to_check
-                .iter()
-                .map(|(account, interval, quiet)| RefreshCandidate {
-                    elapsed: last_fetch.get(account).map(Instant::elapsed),
-                    interval: *interval,
-                    quiet: *quiet,
-                })
-                .collect()
+            refresh_candidates(&accounts_to_check, &last_fetch, Instant::now())
         };
         for idx in accounts_to_refresh(&candidates, heartbeat) {
-            pending_accounts.insert(accounts_to_check[idx].0);
+            pending_accounts.insert(keys[idx]);
         }
 
         // Filter out blacklisted accounts in parallel
@@ -229,11 +222,9 @@ impl AccountFetcher {
             return;
         }
 
-        // Convert to vector and batch, filtering out native SOL mint which is not a
-        // real on-chain account (RPC returns null for it, wasting batch slots)
         let drained_accounts: Vec<Pubkey> = pending_accounts
             .drain()
-            .filter(|key| *key != *SOL_MINT_PUBKEY && *key != *SYSTEM_PROGRAM_PUBKEY)
+            .filter(is_fetchable_account)
             .collect();
 
         if drained_accounts.is_empty() {
