@@ -25,6 +25,7 @@ tools-status-badge-coming = 即将推出
 tools-status-badge-beta = 测试版
 tools-toast-coming-soon = 此工具即将推出
 tools-toast-disabled = 此工具当前已停用
+tools-setup-gate-title = 此工具需要先连接钱包
 
 ## Tool names.
 

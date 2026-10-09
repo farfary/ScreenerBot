@@ -13,12 +13,46 @@ use crate::global::{
 use crate::positions;
 use crate::rpc::get_global_rpc_stats;
 use crate::trader::is_trader_running;
+use crate::wallet::WalletWorth;
 use crate::webserver::promo;
 use crate::webserver::snapshot::get_cached_system_metrics;
 use crate::webserver::state::AppState;
 
 use super::types::*;
 use super::utils::format_uptime;
+
+/// The hero's wallet block from the live worth. Without a snapshot (no wallet, or the
+/// first balance read has not landed) the worth is unknown, so its default zeroes never
+/// reach the hero as a measured balance. No baseline means the change is unknown, not
+/// zero: falling back to the current worth reported a flat day the header shows as
+/// unknown.
+fn wallet_analytics(
+    wallet_address: String,
+    worth: &WalletWorth,
+    start_of_day_balance_native: Option<f64>,
+    native_price_usd: f64,
+    balance_history: Vec<f64>,
+) -> WalletAnalytics {
+    let known = |value| worth.has_snapshot.then_some(value);
+    let equity = known(worth.total_equity_native);
+    WalletAnalytics {
+        wallet_address,
+        current_balance_native: known(worth.native_balance),
+        token_count: worth.has_snapshot.then_some(worth.token_count),
+        tokens_worth_native: known(worth.tokens_worth_native),
+        total_equity_native: equity,
+        unpriced_token_count: worth.has_snapshot.then_some(worth.unpriced_token_count),
+        start_of_day_balance_native,
+        change_native: equity
+            .zip(start_of_day_balance_native)
+            .map(|(equity, start)| equity - start),
+        change_percent: equity
+            .zip(start_of_day_balance_native.filter(|start| *start > 0.0))
+            .map(|(equity, start)| (equity - start) / start * 100.0),
+        native_price_usd,
+        balance_history,
+    }
+}
 
 /// GET /api/dashboard/home
 /// Comprehensive home dashboard with all analytics
@@ -138,14 +172,6 @@ pub async fn get_home_dashboard(State(state): State<Arc<AppState>>) -> Json<Home
     let worth = crate::wallet::get_wallet_worth();
     let recent_snapshots = recent_snapshots_result.unwrap_or_default();
 
-    // No baseline means the change is unknown, not zero: falling back to the
-    // current worth reported a flat day the header shows as unknown.
-    let start_of_day_balance_native = start_of_day_balance_result.ok().flatten();
-    let change_native = start_of_day_balance_native.map(|start| worth.total_equity_native - start);
-    let change_percent = start_of_day_balance_native
-        .filter(|start| *start > 0.0)
-        .map(|start| (worth.total_equity_native - start) / start * 100.0);
-
     // Oldest-first worth trend for the sparkline (reverse of newest-first). It plots the
     // same quantity as the headline above it — it used to plot cash while the headline
     // showed equity.
@@ -155,19 +181,13 @@ pub async fn get_home_dashboard(State(state): State<Arc<AppState>>) -> Json<Home
         .map(|s| s.total_equity_native)
         .collect();
 
-    let wallet = WalletAnalytics {
-        wallet_address: main_wallet_address_result.unwrap_or_default(),
-        current_balance_native: worth.native_balance,
-        token_count: worth.token_count,
-        tokens_worth_native: worth.tokens_worth_native,
-        total_equity_native: worth.total_equity_native,
-        unpriced_token_count: worth.unpriced_token_count,
-        start_of_day_balance_native,
-        change_native,
-        change_percent,
-        native_price_usd: crate::native_price::get_native_price(),
+    let wallet = wallet_analytics(
+        main_wallet_address_result.unwrap_or_default(),
+        &worth,
+        start_of_day_balance_result.ok().flatten(),
+        crate::native_price::get_native_price(),
         balance_history,
-    };
+    );
 
     // Process positions snapshot from parallel results
     let open_positions = open_positions_result.unwrap_or_default();
@@ -271,23 +291,11 @@ pub async fn get_home_dashboard(State(state): State<Arc<AppState>>) -> Json<Home
         })
         .sum();
 
-    let unrealized_pnl_percent = if total_invested_native > 0.0 {
-        (unrealized_pnl_native / total_invested_native) * 100.0
-    } else {
-        0.0
-    };
-
-    let avg_position_size_native = if open_count > 0 {
-        total_invested_native / open_count as f64
-    } else {
-        0.0
-    };
-
-    let avg_hold_duration_mins = if open_count > 0 {
-        total_hold_duration_mins / open_count
-    } else {
-        0
-    };
+    let unrealized_pnl_percent = (total_invested_native > 0.0)
+        .then(|| (unrealized_pnl_native / total_invested_native) * 100.0);
+    let avg_position_size_native =
+        (open_count > 0).then(|| total_invested_native / open_count as f64);
+    let avg_hold_duration_mins = (open_count > 0).then(|| total_hold_duration_mins / open_count);
 
     let positions_snapshot = PositionsSnapshot {
         open_count,
@@ -419,4 +427,51 @@ pub async fn get_home_dashboard(State(state): State<Arc<AppState>>) -> Json<Home
         trader_status,
         timestamp: now.to_rfc3339(),
     })
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    fn worth(has_snapshot: bool) -> WalletWorth {
+        WalletWorth {
+            native_balance: 1.5,
+            tokens_worth_native: 0.5,
+            total_equity_native: 2.0,
+            token_count: 3,
+            unpriced_token_count: 1,
+            has_snapshot,
+            ..WalletWorth::default()
+        }
+    }
+
+    #[test]
+    fn wallet_without_snapshot_reports_no_worth() {
+        let wallet = wallet_analytics(String::new(), &worth(false), Some(1.0), 150.0, vec![]);
+        assert_eq!(wallet.current_balance_native, None);
+        assert_eq!(wallet.tokens_worth_native, None);
+        assert_eq!(wallet.total_equity_native, None);
+        assert_eq!(wallet.token_count, None);
+        assert_eq!(wallet.unpriced_token_count, None);
+        assert_eq!(wallet.change_native, None);
+        assert_eq!(wallet.change_percent, None);
+    }
+
+    #[test]
+    fn wallet_with_snapshot_reports_worth_and_change() {
+        let wallet = wallet_analytics("addr".to_owned(), &worth(true), Some(1.0), 150.0, vec![]);
+        assert_eq!(wallet.current_balance_native, Some(1.5));
+        assert_eq!(wallet.total_equity_native, Some(2.0));
+        assert_eq!(wallet.token_count, Some(3));
+        assert_eq!(wallet.change_native, Some(1.0));
+        assert_eq!(wallet.change_percent, Some(100.0));
+    }
+
+    #[test]
+    fn wallet_without_baseline_reports_no_change() {
+        let wallet = wallet_analytics("addr".to_owned(), &worth(true), None, 150.0, vec![]);
+        assert_eq!(wallet.total_equity_native, Some(2.0));
+        assert_eq!(wallet.change_native, None);
+        assert_eq!(wallet.change_percent, None);
+    }
 }

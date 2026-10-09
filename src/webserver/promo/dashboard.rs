@@ -52,11 +52,11 @@ pub fn get_promo_home_dashboard() -> HomeDashboardResponse {
     let promo_equity = PROMO_SOL_BALANCE + open.current_value_sol;
     let wallet = WalletAnalytics {
         wallet_address: PROMO_WALLET_ADDRESS.to_owned(),
-        current_balance_native: PROMO_SOL_BALANCE,
-        token_count: open.count,
-        tokens_worth_native: open.current_value_sol,
-        total_equity_native: promo_equity,
-        unpriced_token_count: 0,
+        current_balance_native: Some(PROMO_SOL_BALANCE),
+        token_count: Some(open.count),
+        tokens_worth_native: Some(open.current_value_sol),
+        total_equity_native: Some(promo_equity),
+        unpriced_token_count: Some(0),
         start_of_day_balance_native: Some(PROMO_START_BALANCE),
         change_native: Some(promo_equity - PROMO_START_BALANCE),
         change_percent: Some((promo_equity - PROMO_START_BALANCE) / PROMO_START_BALANCE * 100.0),
@@ -74,13 +74,9 @@ pub fn get_promo_home_dashboard() -> HomeDashboardResponse {
         open_count: open.count as i64,
         total_invested_native: open.invested_sol,
         unrealized_pnl_native: open.unrealized_pnl_sol,
-        unrealized_pnl_percent: open.unrealized_pnl_percent,
-        avg_position_size_native: if open.count > 0 {
-            open.invested_sol / open.count as f64
-        } else {
-            0.0
-        },
-        avg_hold_duration_mins: open.avg_hold_minutes,
+        unrealized_pnl_percent: Some(open.unrealized_pnl_percent),
+        avg_position_size_native: (open.count > 0).then(|| open.invested_sol / open.count as f64),
+        avg_hold_duration_mins: Some(open.avg_hold_minutes),
         best_performer: Some(PositionPerformer {
             symbol: open.best.symbol.to_owned(),
             pnl_percent: open.best.pnl_percent,

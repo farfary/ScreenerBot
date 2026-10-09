@@ -22,6 +22,7 @@ tools-status-badge-coming = Yakında
 tools-status-badge-beta = Beta
 tools-toast-coming-soon = Bu araç yakında geliyor
 tools-toast-disabled = Bu araç şu anda devre dışı
+tools-setup-gate-title = Bu araç bir cüzdan gerektirir
 
 ## Tool names. `-title` names the tool in the navigation and the header, `-summary` is the
 ## navigation line, `-description` is the header line. Ids are the tool ids of the registry.

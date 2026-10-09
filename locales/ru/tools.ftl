@@ -22,6 +22,7 @@ tools-status-badge-coming = Скоро
 tools-status-badge-beta = Бета
 tools-toast-coming-soon = Этот инструмент скоро появится
 tools-toast-disabled = Этот инструмент сейчас отключён
+tools-setup-gate-title = Для этого инструмента нужен кошелёк
 
 ## Tool names.
 

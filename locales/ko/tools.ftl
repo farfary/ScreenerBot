@@ -25,6 +25,7 @@ tools-status-badge-coming = 출시 예정
 tools-status-badge-beta = 베타
 tools-toast-coming-soon = 이 도구는 곧 출시됩니다
 tools-toast-disabled = 이 도구는 현재 사용할 수 없습니다
+tools-setup-gate-title = 이 도구를 사용하려면 지갑이 필요합니다
 
 ## Tool names.
 

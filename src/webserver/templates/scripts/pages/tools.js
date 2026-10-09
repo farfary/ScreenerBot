@@ -13,6 +13,7 @@ import * as Utils from "../core/utils.js";
 import * as AppState from "../core/app_state.js";
 import * as Hints from "../core/hints.js";
 import { enhanceAllSelects } from "../ui/custom_select.js";
+import { gateControl, renderSetupGate, setupRequired } from "../ui/setup_gate.js";
 
 // Import tool modules
 import {
@@ -133,19 +134,22 @@ const TOOL_DESCRIPTION_LABELS = Object.freeze({
 });
 
 /**
- * Tool definitions with metadata and content generators
+ * Tool definitions with metadata and content generators. `wallet` marks a tool that
+ * reads or signs with the user's wallet, which Explore Mode does not have.
  */
 const TOOL_DEFINITIONS = {
   "wallet-cleanup": {
     id: "wallet-cleanup",
     icon: "icon-trash-2",
     category: "wallet",
+    wallet: true,
     render: renderWalletCleanupTool,
   },
   "burn-tokens": {
     id: "burn-tokens",
     icon: "icon-flame",
     category: "wallet",
+    wallet: true,
     render: renderBurnTokensTool,
   },
   "token-analyzer": {
@@ -158,6 +162,7 @@ const TOOL_DEFINITIONS = {
     id: "create-token",
     icon: "icon-circle-plus",
     category: "token",
+    wallet: true,
     render: renderCreateTokenTool,
   },
   "token-watch": {
@@ -176,24 +181,28 @@ const TOOL_DEFINITIONS = {
     id: "buy-multi-wallets",
     icon: "icon-shopping-cart",
     category: "single-token",
+    wallet: true,
     render: renderBuyMultiWalletsTool,
   },
   "sell-multi-wallets": {
     id: "sell-multi-wallets",
     icon: "icon-package",
     category: "single-token",
+    wallet: true,
     render: renderSellMultiWalletsTool,
   },
   "wallet-consolidation": {
     id: "wallet-consolidation",
     icon: "icon-git-merge",
     category: "utilities",
+    wallet: true,
     render: renderWalletConsolidationTool,
   },
   "airdrop-checker": {
     id: "airdrop-checker",
     icon: "icon-gift",
     category: "more",
+    wallet: true,
     render: renderAirdropCheckerTool,
   },
   "wallet-generator": {
@@ -359,8 +368,15 @@ function selectTool(toolId, { historyMode = "push" } = {}) {
     actionsEl.innerHTML = "";
     definition.render(contentEl, actionsEl);
 
-    // Enhance any native select elements with custom styling
-    enhanceAllSelects(contentEl);
+    if (definition.wallet && setupRequired()) {
+      // The actions stay visible, disabled with the reason; the panel states it and
+      // links to setup.
+      actionsEl.querySelectorAll("button").forEach(gateControl);
+      renderSetupGate(contentEl, I18n.t("tools-setup-gate-title"));
+    } else {
+      // Enhance any native select elements with custom styling
+      enhanceAllSelects(contentEl);
+    }
   }
 
   // Save state

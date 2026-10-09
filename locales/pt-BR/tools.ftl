@@ -25,6 +25,7 @@ tools-status-badge-coming = Em breve
 tools-status-badge-beta = Beta
 tools-toast-coming-soon = Esta ferramenta chegará em breve
 tools-toast-disabled = Esta ferramenta está desativada no momento
+tools-setup-gate-title = Esta ferramenta exige uma carteira
 
 ## Tool names.
 

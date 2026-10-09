@@ -20,6 +20,7 @@ tools-status-badge-coming = जल्द आ रहा है
 tools-status-badge-beta = बीटा
 tools-toast-coming-soon = यह टूल जल्द आ रहा है
 tools-toast-disabled = यह टूल फ़िलहाल बंद है
+tools-setup-gate-title = इस टूल के लिए वॉलेट ज़रूरी है
 
 tools-tool-wallet-cleanup-title = वॉलेट क्लीनअप
 tools-tool-wallet-cleanup-summary = खाली ATA बंद करें

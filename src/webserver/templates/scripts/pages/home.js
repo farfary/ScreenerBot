@@ -15,6 +15,8 @@ import { closeMenu, openMenu } from "../core/menu_manager.js";
 import { createCalendar } from "./home/portfolio_calendar.js";
 import { createUpdateNotice } from "./home/update_notice.js";
 
+const ABSENT = "—";
+
 function createLifecycle() {
   let poller = null;
   let scopedFetch = null;
@@ -226,20 +228,22 @@ function createLifecycle() {
   }
 
   // Number + a small muted "SOL" unit span. Suppress formatSol's built-in
-  // " SOL" suffix so the unit isn't doubled.
-  function solHtml(value, decimals = 4) {
-    return `${Utils.formatSol(value || 0, { decimals, suffix: "" })}<span class="hero-unit">SOL</span>`;
+  // " SOL" suffix so the unit isn't doubled. An unknown amount is a bare dash.
+  function solHtml(value) {
+    if (!Number.isFinite(value)) return ABSENT;
+    return `${Utils.formatSol(value, { suffix: "" })}<span class="hero-unit">SOL</span>`;
   }
 
   // Signed variant of solHtml for the P&L stats.
-  function signedSolHtml(value, decimals = 4) {
-    return `${Utils.formatSignedSol(value || 0, { decimals, unit: false })}<span class="hero-unit">SOL</span>`;
+  function signedSolHtml(value) {
+    if (!Number.isFinite(value)) return ABSENT;
+    return `${Utils.formatSignedSol(value, { unit: false })}<span class="hero-unit">SOL</span>`;
   }
 
   const PNL_CLASSES = Object.freeze({ positive: "profit", negative: "loss", neutral: "flat" });
 
-  // Profit/loss/flat semantic class for a signed value as shown at `decimals`: a value
-  // that rounds to zero is flat.
+  // Profit/loss/flat semantic class for a signed value as shown at `decimals` (the SOL
+  // formatters' precision when omitted): a value that rounds to zero is flat.
   function pnlClass(value, decimals) {
     return PNL_CLASSES[Utils.signedTone(value, decimals)];
   }
@@ -298,14 +302,14 @@ function createLifecycle() {
     // Headline: total equity (cash + holdings).
     const balanceEl = document.getElementById("walletBalance");
     if (balanceEl) {
-      balanceEl.innerHTML = solHtml(wallet.total_equity_native, 4);
+      balanceEl.innerHTML = solHtml(wallet.total_equity_native);
     }
 
     // Approximate USD value of total equity.
     const usdEl = document.getElementById("walletUsd");
     if (usdEl) {
-      const usd = (wallet.total_equity_native || 0) * (wallet.native_price_usd || 0);
-      if (usd > 0) {
+      const usd = wallet.total_equity_native * wallet.native_price_usd;
+      if (Number.isFinite(usd) && usd > 0) {
         usdEl.textContent = withApprox(withUsdSymbol(Utils.formatNumber(usd, 2)));
         usdEl.style.display = "";
       } else {
@@ -318,7 +322,7 @@ function createLifecycle() {
     if (changeEl) {
       // Without a start-of-day baseline the change is unknown: a dash, as in the header.
       const known = Number.isFinite(wallet.change_native);
-      const cls = known ? pnlClass(wallet.change_native, 4) : "flat";
+      const cls = known ? pnlClass(wallet.change_native) : "flat";
       changeEl.className = `hero-change ${cls}`;
       const percent = Number.isFinite(wallet.change_percent)
         ? `<span class="change-percent ${cls}">(${Utils.formatPercent(wallet.change_percent, {
@@ -327,7 +331,7 @@ function createLifecycle() {
         : "";
       changeEl.innerHTML = `
         <span class="hero-change-value change-value ${cls}">${
-          known ? Utils.formatSignedSol(wallet.change_native) : "—"
+          known ? Utils.formatSignedSol(wallet.change_native) : ABSENT
         }</span>
         ${percent}
       `;
@@ -336,20 +340,20 @@ function createLifecycle() {
     // Cash tile — free SOL available to trade.
     const cashEl = document.getElementById("heroCash");
     if (cashEl) {
-      cashEl.innerHTML = solHtml(wallet.current_balance_native, 4);
+      cashEl.innerHTML = solHtml(wallet.current_balance_native);
     }
 
     // Holdings tile — SOL value of held tokens, with a token-count subscript.
     const holdingsEl = document.getElementById("heroHoldings");
     if (holdingsEl) {
-      holdingsEl.innerHTML = solHtml(wallet.tokens_worth_native, 4);
+      holdingsEl.innerHTML = solHtml(wallet.tokens_worth_native);
     }
     const holdingsCountEl = document.getElementById("heroHoldingsCount");
     if (holdingsCountEl) {
-      const n = wallet.token_count || 0;
+      const n = wallet.token_count ?? 0;
       // A held token we cannot price contributes 0 to the worth. Say so rather than
       // quietly reporting a headline that is short by an unknown amount.
-      const unpriced = wallet.unpriced_token_count || 0;
+      const unpriced = wallet.unpriced_token_count ?? 0;
       const label = n > 0 ? I18n.t("home-holdings-token-count", { count: n }) : "";
       holdingsCountEl.textContent =
         unpriced > 0
@@ -359,23 +363,28 @@ function createLifecycle() {
         unpriced > 0 ? I18n.t("home-holdings-unpriced-note", { count: unpriced }) : "";
     }
 
+    // Without a wallet nothing trades, so the P&L tiles have no value to show; the
+    // Explore banner explains why.
+    const hasWallet = Boolean(wallet.wallet_address);
+
     // Open P&L tile — unrealized, from the positions snapshot.
     const openPnlEl = document.getElementById("heroOpenPnl");
     if (openPnlEl && data.positions) {
-      const v = data.positions.unrealized_pnl_native || 0;
-      const pct = data.positions.unrealized_pnl_percent || 0;
-      openPnlEl.innerHTML = `${signedSolHtml(
-        v
-      )} <span class="hero-stat-sub">${Utils.formatPercent(pct, { decimals: 1 })}</span>`;
-      openPnlEl.className = `hero-stat-value ${pnlClass(v, 4)}`;
+      const v = hasWallet ? data.positions.unrealized_pnl_native : null;
+      const pct = hasWallet ? data.positions.unrealized_pnl_percent : null;
+      const sub = Number.isFinite(pct)
+        ? ` <span class="hero-stat-sub">${Utils.formatPercent(pct, { decimals: 1 })}</span>`
+        : "";
+      openPnlEl.innerHTML = `${signedSolHtml(v)}${sub}`;
+      openPnlEl.className = `hero-stat-value ${pnlClass(v)}`;
     }
 
     // Realized Today — banked net P&L today, from trader analytics.
     const realizedEl = document.getElementById("heroRealizedToday");
     if (realizedEl && data.trader && data.trader.today) {
-      const v = data.trader.today.net_pnl_native || 0;
+      const v = hasWallet ? data.trader.today.net_pnl_native : null;
       realizedEl.innerHTML = signedSolHtml(v);
-      realizedEl.className = `hero-stat-value ${pnlClass(v, 4)}`;
+      realizedEl.className = `hero-stat-value ${pnlClass(v)}`;
     }
 
     // Balance-trend sparkline.
@@ -396,15 +405,17 @@ function createLifecycle() {
     if (countEl) animateValue(countEl, positions.open_count);
     if (investedEl)
       investedEl.textContent = Utils.formatSol(positions.total_invested_native, {
-        decimals: 4,
+        fallback: ABSENT,
       });
     if (avgSizeEl)
       avgSizeEl.textContent = Utils.formatSol(positions.avg_position_size_native, {
-        decimals: 4,
+        fallback: ABSENT,
       });
     if (avgHoldEl) {
-      const mins = positions.avg_hold_duration_mins || 0;
-      if (mins >= 60) {
+      const mins = positions.avg_hold_duration_mins;
+      if (!Number.isFinite(mins)) {
+        avgHoldEl.textContent = ABSENT;
+      } else if (mins >= 60) {
         const hours = Math.floor(mins / 60);
         const remainingMins = mins % 60;
         const hoursText = formatTimeSpan(hours, { unit: "hour" });

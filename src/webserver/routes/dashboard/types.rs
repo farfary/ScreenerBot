@@ -173,27 +173,30 @@ pub struct TradingPeriodStats {
 }
 
 /// The home hero's wallet block. Monetary fields come from `wallet::get_wallet_worth()`,
-/// the same call the header makes — the two must never show different numbers.
+/// the same call the header makes — the two must never show different numbers. The worth
+/// fields are None until a wallet snapshot exists (always in Explore Mode, which has no
+/// wallet): an unknown balance is absent, never a measured zero.
 #[derive(Debug, Serialize, Deserialize)]
 pub struct WalletAnalytics {
     /// Public address of the active main wallet; empty in Explore Mode.
     pub wallet_address: String,
     /// Free (uninvested) SOL sitting in the wallet.
-    pub current_balance_native: f64,
+    pub current_balance_native: Option<f64>,
     /// Number of distinct fungible tokens held.
-    pub token_count: usize,
+    pub token_count: Option<usize>,
     /// SOL value of the held tokens.
-    pub tokens_worth_native: f64,
+    pub tokens_worth_native: Option<f64>,
     /// Total portfolio value: cash SOL + token holdings value. The hero headline.
-    pub total_equity_native: f64,
+    pub total_equity_native: Option<f64>,
     /// Held tokens with no price available — they contribute 0, so a non-zero count
     /// means the worth is a known-low estimate rather than the whole truth.
-    pub unpriced_token_count: usize,
+    pub unpriced_token_count: Option<usize>,
     /// Wallet WORTH at 00:00 UTC today — the change baseline (same quantity as the
     /// headline; using cash here reported a phantom gain the size of the holdings).
     /// None until a snapshot from today exists, as in the header.
     pub start_of_day_balance_native: Option<f64>,
-    /// total_equity_native - start_of_day_balance_native; None without a baseline.
+    /// total_equity_native - start_of_day_balance_native; None without a baseline or a
+    /// current worth.
     pub change_native: Option<f64>,
     /// None without a positive baseline.
     pub change_percent: Option<f64>,
@@ -208,10 +211,12 @@ pub struct PositionsSnapshot {
     pub open_count: i64,
     pub total_invested_native: f64,
     pub unrealized_pnl_native: f64,
-    pub unrealized_pnl_percent: f64,
-    // Enhanced metrics
-    pub avg_position_size_native: f64,
-    pub avg_hold_duration_mins: i64,
+    /// None while no open position has a cost basis.
+    pub unrealized_pnl_percent: Option<f64>,
+    /// None with no open position.
+    pub avg_position_size_native: Option<f64>,
+    /// None with no open position.
+    pub avg_hold_duration_mins: Option<i64>,
     pub best_performer: Option<PositionPerformer>,
     pub worst_performer: Option<PositionPerformer>,
     pub dca_count: i64,

@@ -20,6 +20,7 @@ tools-status-badge-coming = Próximamente
 tools-status-badge-beta = Beta
 tools-toast-coming-soon = Esta herramienta estará disponible próximamente
 tools-toast-disabled = Esta herramienta está desactivada actualmente
+tools-setup-gate-title = Esta herramienta requiere una billetera
 
 tools-tool-wallet-cleanup-title = Limpieza de billetera
 tools-tool-wallet-cleanup-summary = Cerrar ATA vacías

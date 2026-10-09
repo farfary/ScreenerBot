@@ -25,6 +25,7 @@ tools-status-badge-coming = Segera Hadir
 tools-status-badge-beta = Beta
 tools-toast-coming-soon = Alat ini segera hadir
 tools-toast-disabled = Alat ini sedang dinonaktifkan
+tools-setup-gate-title = Alat ini memerlukan dompet
 
 ## Tool names.
 

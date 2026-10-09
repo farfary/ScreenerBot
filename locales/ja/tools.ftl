@@ -25,6 +25,7 @@ tools-status-badge-coming = 近日公開
 tools-status-badge-beta = ベータ
 tools-toast-coming-soon = このツールは近日公開予定です
 tools-toast-disabled = このツールは現在無効です
+tools-setup-gate-title = このツールにはウォレットが必要です
 
 ## Tool names. `-title` names the tool in the navigation and the header, `-summary` is the
 ## navigation line, `-description` is the header line. Ids are the tool ids of the registry.

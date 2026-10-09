@@ -9,8 +9,9 @@ import * as Utils from "../../core/utils.js";
 // every locale (fa would otherwise name the Persian month over Gregorian days).
 const GRID_CALENDAR = "gregory";
 
-// P&L amounts on the calendar are shown at 3 decimals; tone follows that rounding.
-const PNL_DECIMALS = 3;
+// A day cell has room for 3 decimals; its tone follows that rounding. The month summary
+// and the day popover use the SOL formatters' own precision, as the rest of Home does.
+const CELL_PNL_DECIMALS = 3;
 const PNL_CLASSES = Object.freeze({ positive: "profit", negative: "loss", neutral: "flat" });
 const POPOVER_PNL_CLASSES = Object.freeze({ positive: "profit", negative: "loss", neutral: "" });
 
@@ -148,7 +149,7 @@ export function createCalendar(fetcher) {
       // pale pastel that white cell text can't sit on. Keep it saturated so the
       // white text (matching dark theme) always reads.
       let style = "";
-      const tone = Utils.signedTone(pnl, PNL_DECIMALS);
+      const tone = Utils.signedTone(pnl, CELL_PNL_DECIMALS);
       if (d.has_data && maxAbs > 0 && tone !== "neutral") {
         const ratio = Math.sqrt(Math.abs(pnl) / maxAbs);
         const intensity = isLight
@@ -159,7 +160,7 @@ export function createCalendar(fetcher) {
       }
 
       const pnlText = d.has_data
-        ? Utils.formatSignedSol(pnl, { decimals: PNL_DECIMALS, unit: false })
+        ? Utils.formatSignedSol(pnl, { decimals: CELL_PNL_DECIMALS, unit: false })
         : "";
       const valText =
         d.portfolio_value_native != null
@@ -185,8 +186,8 @@ export function createCalendar(fetcher) {
     const pnlEl = document.getElementById("calendarMonthPnl");
     if (pnlEl) {
       const mp = data.month_net_pnl_native || 0;
-      const cls = PNL_CLASSES[Utils.signedTone(mp, PNL_DECIMALS)];
-      pnlEl.textContent = Utils.formatSignedSol(mp, { decimals: PNL_DECIMALS });
+      const cls = PNL_CLASSES[Utils.signedTone(mp)];
+      pnlEl.textContent = Utils.formatSignedSol(mp);
       pnlEl.className = `calendar-summary-value ${cls}`;
     }
     const tradesEl = document.getElementById("calendarMonthTrades");
@@ -224,10 +225,6 @@ export function createCalendar(fetcher) {
     return popoverEl;
   }
 
-  function fmtSol(v, decimals = 3) {
-    return Utils.formatSol(v, { decimals });
-  }
-
   function popoverRow(label, value, cls = "") {
     return (
       `<div class="cal-pop-row"><span class="cal-pop-label">${Utils.escapeHtml(label)}</span>` +
@@ -237,7 +234,7 @@ export function createCalendar(fetcher) {
 
   function buildPopoverHtml(d) {
     const pnl = d.net_pnl_native || 0;
-    const pnlCls = POPOVER_PNL_CLASSES[Utils.signedTone(pnl, PNL_DECIMALS)];
+    const pnlCls = POPOVER_PNL_CLASSES[Utils.signedTone(pnl)];
     const dt = new Date(`${d.date}T00:00:00Z`);
     const dateStr = Utils.formatDate(dt, {
       includeYear: false,
@@ -251,7 +248,7 @@ export function createCalendar(fetcher) {
     const winRate = trades > 0 ? Math.round((wins / trades) * 100) : 0;
 
     const rows = [
-      popoverRow(I18n.t("home-calendar-pop-net-pnl"), Utils.formatSignedSol(pnl, { decimals: PNL_DECIMALS }), pnlCls),
+      popoverRow(I18n.t("home-calendar-pop-net-pnl"), Utils.formatSignedSol(pnl), pnlCls),
       popoverRow(I18n.t("home-calendar-trades"), String(trades)),
       popoverRow(
         I18n.t("home-calendar-pop-win-rate"),
@@ -266,8 +263,8 @@ export function createCalendar(fetcher) {
       rows.push(
         popoverRow(
           I18n.t("home-calendar-pop-gross-profit"),
-          Utils.formatSignedSol(d.profit_native, { decimals: PNL_DECIMALS }),
-          POPOVER_PNL_CLASSES[Utils.signedTone(d.profit_native, PNL_DECIMALS)]
+          Utils.formatSignedSol(d.profit_native),
+          POPOVER_PNL_CLASSES[Utils.signedTone(d.profit_native)]
         )
       );
     }
@@ -276,13 +273,13 @@ export function createCalendar(fetcher) {
       rows.push(
         popoverRow(
           I18n.t("home-calendar-pop-gross-loss"),
-          Utils.formatSignedSol(loss, { decimals: PNL_DECIMALS }),
-          POPOVER_PNL_CLASSES[Utils.signedTone(loss, PNL_DECIMALS)]
+          Utils.formatSignedSol(loss),
+          POPOVER_PNL_CLASSES[Utils.signedTone(loss)]
         )
       );
     }
     if (d.portfolio_value_native != null) {
-      rows.push(popoverRow(I18n.t("home-calendar-pop-end-balance"), fmtSol(d.portfolio_value_native)));
+      rows.push(popoverRow(I18n.t("home-calendar-pop-end-balance"), Utils.formatSol(d.portfolio_value_native)));
     }
 
     return (

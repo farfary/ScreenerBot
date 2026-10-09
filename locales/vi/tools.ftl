@@ -22,6 +22,7 @@ tools-status-badge-coming = Sắp ra mắt
 tools-status-badge-beta = Beta
 tools-toast-coming-soon = Công cụ này sắp ra mắt
 tools-toast-disabled = Công cụ này hiện đã tắt
+tools-setup-gate-title = Công cụ này cần có ví
 
 ## Tool names. `-title` names the tool in the navigation and the header, `-summary` is the
 ## navigation line, `-description` is the header line. Ids are the tool ids of the registry.

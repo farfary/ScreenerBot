@@ -533,10 +533,12 @@
   padding: 0.75rem 1rem;
 }
 
+/* The ledger rows compress toward their content height on a short window; when
+   even that does not fit, the section scrolls rather than clipping its last row. */
 .exposure-section {
   display: grid;
   grid-template-rows: auto minmax(0, 1fr);
-  overflow: hidden;
+  overflow: hidden auto;
 }
 
 .section-count {
@@ -549,7 +551,7 @@
 
 .metric-ledger {
   display: grid;
-  grid-template-rows: repeat(5, minmax(2.5rem, auto));
+  grid-template-rows: repeat(5, minmax(min-content, 2.5rem));
   align-content: start;
   min-height: 0;
   border-top: 1px solid var(--border-color);

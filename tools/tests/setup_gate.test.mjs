@@ -18,6 +18,10 @@
  *   onboarding card while no task exists.
  * - Transactions shows the setup notice in place of its table and requests no
  *   transaction or wallet route, so no refresh failure is raised.
+ * - Tools shows the setup notice in place of a wallet-backed tool and keeps its
+ *   actions visible, disabled with the reason.
+ * - Home shows no wallet figure: the worth the API cannot know arrives as null and
+ *   every portfolio, P&L and exposure value reads "—", never a measured zero.
  *
  * Run with `npm run test:js`.
  */
@@ -142,4 +146,38 @@ test("Transactions shows the setup notice and reads no transaction route", async
     []
   );
   assert.equal(await page.locator(".toast").count(), 0);
+});
+
+test("Tools gates a wallet-backed tool with the setup notice", async (t) => {
+  const { page, close } = await openExplore("tools");
+  t.after(close);
+
+  const gate = page.locator("#tools-content .setup-gate");
+  await gate.waitFor();
+  assert.equal(await gate.locator(".empty-state-title").textContent(), "This tool needs a wallet");
+  assert.equal(await gate.locator(".empty-state-description").textContent(), REASON);
+  const scan = page.locator("#tool-actions #scan-atas-btn");
+  assert.equal(await scan.isDisabled(), true);
+  assert.equal(await scan.getAttribute("title"), REASON);
+});
+
+test("Home shows no wallet figure without a wallet", async (t) => {
+  const { page, close } = await openExplore("home", {
+    "/api/dashboard/home": readFileSync(`${FIXTURES_ROOT}/home/dashboard_home.empty.json`, "utf8"),
+  });
+  t.after(close);
+
+  await page.waitForSelector(".home-dashboard:not(.loading)");
+  const ids = [
+    "walletBalance",
+    "heroCash",
+    "heroHoldings",
+    "heroOpenPnl",
+    "heroRealizedToday",
+    "positionsAvgSize",
+    "positionsAvgHold",
+  ];
+  const values = {};
+  for (const id of ids) values[id] = (await page.locator(`#${id}`).textContent()).trim();
+  assert.deepEqual(values, Object.fromEntries(ids.map((id) => [id, "—"])));
 });
