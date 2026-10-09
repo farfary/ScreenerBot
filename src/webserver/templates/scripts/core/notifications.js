@@ -2,13 +2,15 @@
 // SPDX-License-Identifier: BUSL-1.1
 //
 // Real-time notification manager for action progress tracking
-/* global EventSource */
+/* global EventSource, BroadcastChannel */
 
 import { waitForReady } from "./bootstrap.js";
 
 const AUTO_DISMISS_COMPLETED_MS = 10000; // 10 seconds
 const AUTO_DISMISS_FAILED_MS = 30000; // 30 seconds
 const RECONNECT_DELAY_MS = 3000;
+const STREAM_LOCK = "screenerbot-actions-stream";
+const STREAM_CHANNEL = "screenerbot-actions-stream";
 
 // Action types that represent an in-flight trade for a token. Used by the
 // positions list and the position-details dialog to disable Add/Sell/Close
@@ -31,6 +33,8 @@ class NotificationManager {
     this.autoDismissTimers = new Map();
     this.hadInitialConnect = false;
     this.activeSyncPromise = null;
+    this.channel = null;
+    this.releaseStreamLock = null;
   }
 
   /**
@@ -44,9 +48,43 @@ class NotificationManager {
   }
 
   /**
-   * Connect to the SSE stream
+   * Join the action stream.
+   *
+   * A browser keeps at most six HTTP/1.1 connections open to one origin, and an
+   * `EventSource` holds one of them for as long as the page lives. One stream per tab
+   * therefore stalls every request of a sixth dashboard tab: its page fragment, styles and
+   * API reads queue behind the streams and the page stays blank. Every tab of the origin
+   * shares one stream instead. The tab holding the `STREAM_LOCK` Web Lock opens it and
+   * relays each event over the `STREAM_CHANNEL` broadcast channel; when that tab closes,
+   * the lock passes to another tab, which opens the stream there. Without Web Locks (an
+   * insecure origin such as a LAN address over plain HTTP) each tab opens its own stream.
    */
   connect() {
+    if (!navigator.locks || typeof BroadcastChannel !== "function") {
+      this.openStream();
+      return;
+    }
+    if (this.channel) return;
+
+    this.channel = new BroadcastChannel(STREAM_CHANNEL);
+    this.channel.onmessage = (event) => this.handleRelay(event.data);
+    navigator.locks
+      .request(
+        STREAM_LOCK,
+        () =>
+          new Promise((release) => {
+            this.releaseStreamLock = release;
+            this.openStream();
+          })
+      )
+      .catch((error) => {
+        console.error("[NotificationManager] Stream lock request failed", error);
+      });
+    this.channel.postMessage({ kind: "status-request" });
+  }
+
+  /** Open the SSE stream in this tab and relay its events to the other tabs. */
+  openStream() {
     if (this.eventSource) {
       this.eventSource.close();
     }
@@ -54,51 +92,98 @@ class NotificationManager {
     this.eventSource = new EventSource("/api/actions/stream");
 
     this.eventSource.onopen = () => {
-      this.isConnected = true;
-      this.lastConnectionChange = Date.now();
-      const isReconnect = this.hadInitialConnect;
-      this.hadInitialConnect = true;
-      this.notifySubscribers({
-        type: "connection",
-        status: "connected",
-        changedAt: this.lastConnectionChange,
-        isReconnect,
-      });
-      if (this.reconnectTimer) {
-        clearTimeout(this.reconnectTimer);
-        this.reconnectTimer = null;
-      }
-      this.syncActiveActions({ reason: isReconnect ? "reconnect" : "initial_connect" }).catch(
-        (error) => {
-          console.error("[NotificationManager] Active sync on connect failed", error);
-        }
-      );
+      this.handleStreamOpen();
+      this.relay({ kind: "open" });
     };
 
     this.eventSource.onmessage = (event) => {
-      try {
-        const update = JSON.parse(event.data);
-        this.handleUpdate(update);
-      } catch (error) {
-        console.error("Failed to parse notification update:", error);
-      }
+      this.handleStreamMessage(event.data);
+      this.relay({ kind: "message", data: event.data });
     };
 
     this.eventSource.addEventListener("lag", (event) => {
       this.handleLagEvent(event);
+      this.relay({ kind: "lag", data: event.data });
     });
 
     this.eventSource.onerror = () => {
-      this.isConnected = false;
-      this.lastConnectionChange = Date.now();
-      this.notifySubscribers({
-        type: "connection",
-        status: "disconnected",
-        changedAt: this.lastConnectionChange,
-      });
+      this.handleStreamClosed();
+      this.relay({ kind: "closed" });
       this.eventSource.close();
       this.scheduleReconnect();
     };
+  }
+
+  /** Post a stream event to the other tabs; a no-op for a tab with its own stream. */
+  relay(message) {
+    this.channel?.postMessage(message);
+  }
+
+  /** Apply a stream event relayed by the tab that holds the stream. */
+  handleRelay(message) {
+    switch (message?.kind) {
+      case "open":
+        this.handleStreamOpen();
+        break;
+      case "message":
+        this.handleStreamMessage(message.data);
+        break;
+      case "lag":
+        this.handleLagEvent({ data: message.data });
+        break;
+      case "closed":
+        this.handleStreamClosed();
+        break;
+      case "status-request":
+        // A tab that just joined learns that the shared stream is already open.
+        if (this.eventSource && this.isConnected) this.relay({ kind: "status", connected: true });
+        break;
+      case "status":
+        if (message.connected && !this.isConnected) this.handleStreamOpen();
+        break;
+      default:
+        break;
+    }
+  }
+
+  handleStreamOpen() {
+    this.isConnected = true;
+    this.lastConnectionChange = Date.now();
+    const isReconnect = this.hadInitialConnect;
+    this.hadInitialConnect = true;
+    this.notifySubscribers({
+      type: "connection",
+      status: "connected",
+      changedAt: this.lastConnectionChange,
+      isReconnect,
+    });
+    if (this.reconnectTimer) {
+      clearTimeout(this.reconnectTimer);
+      this.reconnectTimer = null;
+    }
+    this.syncActiveActions({ reason: isReconnect ? "reconnect" : "initial_connect" }).catch(
+      (error) => {
+        console.error("[NotificationManager] Active sync on connect failed", error);
+      }
+    );
+  }
+
+  handleStreamMessage(data) {
+    try {
+      this.handleUpdate(JSON.parse(data));
+    } catch (error) {
+      console.error("Failed to parse notification update:", error);
+    }
+  }
+
+  handleStreamClosed() {
+    this.isConnected = false;
+    this.lastConnectionChange = Date.now();
+    this.notifySubscribers({
+      type: "connection",
+      status: "disconnected",
+      changedAt: this.lastConnectionChange,
+    });
   }
 
   /**
@@ -109,7 +194,7 @@ class NotificationManager {
 
     this.reconnectTimer = setTimeout(() => {
       this.reconnectTimer = null;
-      this.connect();
+      this.openStream();
     }, RECONNECT_DELAY_MS);
   }
 
@@ -709,6 +794,10 @@ class NotificationManager {
       this.eventSource.close();
       this.eventSource = null;
     }
+    this.channel?.close();
+    this.channel = null;
+    this.releaseStreamLock?.();
+    this.releaseStreamLock = null;
 
     if (this.reconnectTimer) {
       clearTimeout(this.reconnectTimer);
