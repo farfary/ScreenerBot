@@ -448,66 +448,68 @@ export class SettingsDialog {
 
         <div class="settings-body">
           <nav class="settings-nav">
-            <button class="settings-nav-item active" data-tab="interface">
-              <i class="icon-palette"></i>
-              <span data-l10n-id="settings-dialog-tab-interface"></span>
-            </button>
-            <button class="settings-nav-item" data-tab="navigation">
-              <i class="icon-layout-grid"></i>
-              <span data-l10n-id="settings-dialog-tab-navigation"></span>
-            </button>
-            <button class="settings-nav-item" data-tab="startup">
-              <i class="icon-zap"></i>
-              <span data-l10n-id="settings-dialog-tab-startup"></span>
-            </button>
-            <button class="settings-nav-item" data-tab="hints">
-              <i class="icon-lightbulb"></i>
-              <span data-l10n-id="settings-dialog-tab-hints"></span>
-            </button>
-            <button class="settings-nav-item" data-tab="data">
-              <i class="icon-database"></i>
-              <span data-l10n-id="settings-dialog-tab-data"></span>
-            </button>
-            <button class="settings-nav-item" data-tab="security">
-              <i class="icon-lock"></i>
-              <span data-l10n-id="settings-dialog-tab-security"></span>
-            </button>
-            <button class="settings-nav-item" data-tab="account">
-              <i class="icon-circle-user"></i>
-              <span data-l10n-id="settings-dialog-tab-account"></span>
-            </button>
-            <button class="settings-nav-item" data-tab="telegram">
-              <i class="icon-send"></i>
-              <span data-l10n-id="settings-dialog-tab-telegram"></span>
-            </button>
-            <button class="settings-nav-item" data-tab="agent-connections">
-              <i class="icon-plug"></i>
-              <span data-l10n-id="settings-dialog-tab-agent-connections"></span>
-            </button>
-            <div class="settings-nav-divider"></div>
-            <button class="settings-nav-item" data-tab="updates">
-              <i class="icon-refresh-cw"></i>
-              <span data-l10n-id="settings-dialog-tab-updates"></span>
-            </button>
-            <button class="settings-nav-item" data-tab="licenses">
-              <i class="icon-scale"></i>
-              <span data-l10n-id="settings-dialog-tab-licenses"></span>
-            </button>
-            <button class="settings-nav-item" data-tab="about">
-              <i class="icon-info"></i>
-              <span data-l10n-id="settings-dialog-tab-about"></span>
-            </button>
+            <div class="settings-nav-list">
+              <button class="settings-nav-item active" data-tab="interface">
+                <i class="icon-palette"></i>
+                <span data-l10n-id="settings-dialog-tab-interface"></span>
+              </button>
+              <button class="settings-nav-item" data-tab="navigation">
+                <i class="icon-layout-grid"></i>
+                <span data-l10n-id="settings-dialog-tab-navigation"></span>
+              </button>
+              <button class="settings-nav-item" data-tab="startup">
+                <i class="icon-zap"></i>
+                <span data-l10n-id="settings-dialog-tab-startup"></span>
+              </button>
+              <button class="settings-nav-item" data-tab="hints">
+                <i class="icon-lightbulb"></i>
+                <span data-l10n-id="settings-dialog-tab-hints"></span>
+              </button>
+              <button class="settings-nav-item" data-tab="data">
+                <i class="icon-database"></i>
+                <span data-l10n-id="settings-dialog-tab-data"></span>
+              </button>
+              <button class="settings-nav-item" data-tab="security">
+                <i class="icon-lock"></i>
+                <span data-l10n-id="settings-dialog-tab-security"></span>
+              </button>
+              <button class="settings-nav-item" data-tab="account">
+                <i class="icon-circle-user"></i>
+                <span data-l10n-id="settings-dialog-tab-account"></span>
+              </button>
+              <button class="settings-nav-item" data-tab="telegram">
+                <i class="icon-send"></i>
+                <span data-l10n-id="settings-dialog-tab-telegram"></span>
+              </button>
+              <button class="settings-nav-item" data-tab="agent-connections">
+                <i class="icon-plug"></i>
+                <span data-l10n-id="settings-dialog-tab-agent-connections"></span>
+              </button>
+              <div class="settings-nav-divider"></div>
+              <button class="settings-nav-item" data-tab="updates">
+                <i class="icon-refresh-cw"></i>
+                <span data-l10n-id="settings-dialog-tab-updates"></span>
+              </button>
+              <button class="settings-nav-item" data-tab="licenses">
+                <i class="icon-scale"></i>
+                <span data-l10n-id="settings-dialog-tab-licenses"></span>
+              </button>
+              <button class="settings-nav-item" data-tab="about">
+                <i class="icon-info"></i>
+                <span data-l10n-id="settings-dialog-tab-about"></span>
+              </button>
+            </div>
             <div class="settings-nav-footer">
-            <button class="settings-nav-item settings-nav-link" data-external-url="https://screenerbot.io/privacy">
-              <i class="icon-shield"></i>
-              <span data-l10n-id="settings-dialog-link-privacy"></span>
-              <i class="icon-external-link settings-nav-external"></i>
-            </button>
-            <button class="settings-nav-item settings-nav-link" data-external-url="https://screenerbot.io/terms">
-              <i class="icon-file-text"></i>
-              <span data-l10n-id="settings-dialog-link-terms"></span>
-              <i class="icon-external-link settings-nav-external"></i>
-            </button>
+              <button class="settings-nav-item settings-nav-link" data-external-url="https://screenerbot.io/privacy">
+                <i class="icon-shield"></i>
+                <span data-l10n-id="settings-dialog-link-privacy"></span>
+                <i class="icon-external-link settings-nav-external"></i>
+              </button>
+              <button class="settings-nav-item settings-nav-link" data-external-url="https://screenerbot.io/terms">
+                <i class="icon-file-text"></i>
+                <span data-l10n-id="settings-dialog-link-terms"></span>
+                <i class="icon-external-link settings-nav-external"></i>
+              </button>
             </div>
           </nav>
 

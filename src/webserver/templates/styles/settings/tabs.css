@@ -503,11 +503,17 @@
   .settings-nav {
     width: 100%;
     flex-direction: row;
-    overflow-x: auto;
     padding: 8px;
     border-inline-end: none;
     border-bottom: 1px solid var(--border-color);
     gap: 4px;
+  }
+
+  .settings-nav-list {
+    flex-direction: row;
+    overflow-x: auto;
+    overflow-y: hidden;
+    padding: 0;
   }
 
   .settings-nav-item {
@@ -527,9 +533,7 @@
   }
 
   .settings-nav-footer {
-    position: static;
     flex-direction: row;
-    margin: 0;
     padding: 0;
     padding-inline-start: 4px;
     border-block-start: none;

@@ -12,7 +12,9 @@
  * on first open read "Save Changes" with nothing pending.
  *
  * - Every section opens at the top.
- * - The external links stay inside the sidebar and every divider is drawn.
+ * - The section list scrolls on its own; the external links sit below it, outside
+ *   the scroller, at the foot of the sidebar, and every divider is drawn. A sticky
+ *   footer inside the scroller drew over the last sections instead.
  * - The Save button keeps one place in the header on every section, and reads
  *   "Saved" when nothing is pending.
  *
@@ -50,18 +52,29 @@ test("Settings sections share one steady frame in a short window", async (t) => 
 
   const sidebar = await page.evaluate(() => {
     const nav = document.querySelector(".settings-nav").getBoundingClientRect();
+    const list = document.querySelector(".settings-nav-list");
+    const footer = document.querySelector(".settings-nav-footer");
     const links = [...document.querySelectorAll(".settings-nav-link")].map((link) =>
       link.getBoundingClientRect()
     );
+    list.scrollTop = list.scrollHeight;
+    const last = [...list.querySelectorAll(".settings-nav-item")].at(-1).getBoundingClientRect();
     return {
-      overflows: document.querySelector(".settings-nav").scrollHeight > nav.height,
+      overflows: list.scrollHeight > list.clientHeight,
+      footerOutsideScroller:
+        !list.contains(footer) && getComputedStyle(footer).position === "static",
+      footerAtFoot: Math.abs(footer.getBoundingClientRect().bottom - nav.bottom) <= 1,
+      lastSectionClear: last.bottom <= footer.getBoundingClientRect().top + 0.5,
       linksInside: links.every((link) => link.top >= nav.top && link.bottom <= nav.bottom),
       dividers: [...document.querySelectorAll(".settings-nav-divider")].map(
         (divider) => divider.getBoundingClientRect().height
       ),
     };
   });
-  assert.ok(sidebar.overflows, "the window is short enough for the sidebar to scroll");
+  assert.ok(sidebar.overflows, "the window is short enough for the section list to scroll");
+  assert.ok(sidebar.footerOutsideScroller, "the external links are not part of the scroller");
+  assert.ok(sidebar.footerAtFoot, "the external links sit at the foot of the sidebar");
+  assert.ok(sidebar.lastSectionClear, "the last section scrolls clear of the external links");
   assert.ok(sidebar.linksInside, "the external links stay in view");
   for (const height of sidebar.dividers) {
     assert.ok(height >= 1, `divider height ${height}`);
