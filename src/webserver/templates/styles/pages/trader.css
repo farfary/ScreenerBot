@@ -469,19 +469,24 @@
   margin-bottom: 0;
 }
 
+/* A lane's header icon and count chip take the strategy kind colour. */
+.config-card.strategy-lane-card .card-header h3 i {
+  color: var(--strategy-kind-color);
+}
+
 .strategy-lane-count {
   display: inline-flex;
   align-items: center;
   justify-content: center;
   min-width: 5.5rem;
   padding: 0.3rem 0.6rem;
-  color: var(--primary-color);
+  color: var(--strategy-kind-color);
   font-family: var(--font-data);
   font-size: 0.75rem;
   font-weight: 700;
   white-space: nowrap;
-  background: var(--primary-alpha-10);
-  border: 1px solid var(--primary-alpha-20);
+  background: var(--strategy-kind-tint);
+  border: 1px solid var(--strategy-kind-edge);
   border-radius: var(--radius-xl);
 }
 

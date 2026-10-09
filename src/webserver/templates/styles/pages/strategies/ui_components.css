@@ -47,14 +47,16 @@
    and Exit is amber; red stays reserved for errors.
    ========================================================================== */
 :is(.strategy-type-tag, .strategy-type-badge).entry,
-.type-card[data-type="ENTRY"] {
+.type-card[data-type="ENTRY"],
+.strategy-lane-card-entry {
   --strategy-kind-color: var(--primary-color);
   --strategy-kind-tint: var(--primary-alpha-10);
   --strategy-kind-edge: var(--primary-alpha-30);
 }
 
 :is(.strategy-type-tag, .strategy-type-badge).exit,
-.type-card[data-type="EXIT"] {
+.type-card[data-type="EXIT"],
+.strategy-lane-card-exit {
   --strategy-kind-color: var(--warning-color);
   --strategy-kind-tint: var(--warning-alpha-10);
   --strategy-kind-edge: var(--warning-alpha-30);
