@@ -6,13 +6,11 @@
 //! Contains helper methods for the AccountFetcher including batch processing,
 //! missing account handling, and account organization into pool bundles.
 
-use super::fetcher::{
-    AccountFetcher, ACCOUNT_BATCH_SIZE, ACCOUNT_STALE_THRESHOLD_SECONDS,
-    OPEN_POSITION_ACCOUNT_STALE_THRESHOLD_SECONDS,
-};
+use super::fetcher::{AccountFetcher, ACCOUNT_BATCH_SIZE};
 use super::fetcher_types::{
-    calculation_trigger, AccountData, CalculationTrigger, MissingAccountState, MissingPoolState,
-    PoolAccountBundle, SOL_MINT_PUBKEY, SYSTEM_PROGRAM_PUBKEY,
+    account_refresh_interval, calculation_trigger, AccountData, CalculationTrigger,
+    MissingAccountState, MissingPoolState, PoolAccountBundle, SOL_MINT_PUBKEY,
+    SYSTEM_PROGRAM_PUBKEY,
 };
 use super::reserve_accounts::reserve_pubkeys;
 use super::types::ProgramKind;
@@ -121,7 +119,8 @@ impl AccountFetcher {
         }
 
         // Collect all reserve accounts we need to check from valid pools
-        let mut accounts_to_check: Vec<(Pubkey, u64)> = Vec::new();
+        let heartbeat = crate::pools::types::price_refresh_heartbeat();
+        let mut accounts_to_check: Vec<(Pubkey, Duration)> = Vec::new();
 
         for (idx, pool) in pools.iter().enumerate() {
             if !valid_pool_indices.contains(&idx) {
@@ -135,12 +134,7 @@ impl AccountFetcher {
                 pool.base_mint.address()
             };
 
-            // Choose threshold – accelerate if this token has an open position
-            let threshold = if open_mints.contains(target_mint) {
-                OPEN_POSITION_ACCOUNT_STALE_THRESHOLD_SECONDS
-            } else {
-                ACCOUNT_STALE_THRESHOLD_SECONDS
-            };
+            let threshold = account_refresh_interval(open_mints.contains(target_mint), heartbeat);
 
             match reserve_pubkeys(pool) {
                 Ok(pubkeys) => {
@@ -163,7 +157,7 @@ impl AccountFetcher {
             let last_fetch = account_last_fetch.read().unwrap();
             for (account, threshold) in accounts_to_check {
                 let needs_fetch = match last_fetch.get(&account) {
-                    Some(last_time) => last_time.elapsed().as_secs() > threshold,
+                    Some(last_time) => last_time.elapsed() >= threshold,
                     None => true, // Never fetched
                 };
                 if needs_fetch {

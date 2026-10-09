@@ -123,6 +123,25 @@ pub(crate) fn calculation_trigger(
     }
 }
 
+/// Longest an open position's pool accounts go without a re-fetch.
+const OPEN_POSITION_ACCOUNT_REFRESH: Duration = Duration::from_secs(5);
+
+/// Longest a pool's reserve accounts go without a re-fetch. `heartbeat` is the
+/// repricing heartbeat (half the price cache TTL).
+///
+/// A pool whose reserves do not change is repriced only when its accounts are
+/// re-fetched (see [`calculation_trigger`]), so this cadence bounds the age of its
+/// published price. Any cadence at or above the TTL lets the price expire before
+/// the next re-fetch, and every reader falls back to another price source until
+/// the pool is repriced.
+pub(crate) fn account_refresh_interval(has_open_position: bool, heartbeat: Duration) -> Duration {
+    if has_open_position {
+        OPEN_POSITION_ACCOUNT_REFRESH.min(heartbeat)
+    } else {
+        heartbeat
+    }
+}
+
 /// Pool account bundle - all accounts for a specific pool
 #[derive(Debug, Clone)]
 pub struct PoolAccountBundle {
@@ -234,6 +253,67 @@ mod tests {
         assert_eq!(
             calculation_trigger(true, false, None, HEARTBEAT),
             Some(CalculationTrigger::Heartbeat)
+        );
+    }
+
+    /// Oldest price age a quiet pool reaches over ten minutes of fetch ticks, when
+    /// every re-fetch takes `fetch_latency` before its bundle is repriced.
+    fn oldest_quiet_pool_price_age(
+        has_open_position: bool,
+        ttl: Duration,
+        fetch_latency: Duration,
+    ) -> Duration {
+        let tick = Duration::from_millis(500);
+        let heartbeat = ttl / 2;
+        let refresh = account_refresh_interval(has_open_position, heartbeat);
+        let mut now = Duration::ZERO;
+        let mut last_fetch = Duration::ZERO;
+        let mut priced_at = Duration::ZERO;
+        let mut oldest = Duration::ZERO;
+        while now < Duration::from_secs(600) {
+            now += tick;
+            oldest = oldest.max(now - priced_at);
+            if now - last_fetch >= refresh {
+                let fetched = now + fetch_latency;
+                oldest = oldest.max(fetched - priced_at);
+                if calculation_trigger(true, false, Some(fetched - priced_at), heartbeat).is_some()
+                {
+                    priced_at = fetched;
+                }
+                last_fetch = fetched;
+                now = fetched;
+            }
+        }
+        oldest
+    }
+
+    #[test]
+    fn a_quiet_pool_is_repriced_before_its_price_expires() {
+        // The configured TTL range is 10..=120 s; a re-fetch may take a few seconds.
+        for ttl_secs in (10..=120).step_by(5) {
+            let ttl = Duration::from_secs(ttl_secs);
+            for has_open_position in [false, true] {
+                let oldest =
+                    oldest_quiet_pool_price_age(has_open_position, ttl, Duration::from_secs(3));
+                assert!(
+                    oldest < ttl,
+                    "ttl {ttl_secs}s open_position={has_open_position}: price reached {oldest:?}"
+                );
+            }
+        }
+    }
+
+    #[test]
+    fn an_open_position_refreshes_at_least_every_five_seconds() {
+        let heartbeat = Duration::from_secs(15);
+        assert_eq!(
+            account_refresh_interval(true, heartbeat),
+            Duration::from_secs(5)
+        );
+        assert_eq!(account_refresh_interval(false, heartbeat), heartbeat);
+        assert_eq!(
+            account_refresh_interval(true, Duration::from_secs(4)),
+            Duration::from_secs(4)
         );
     }
 

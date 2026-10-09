@@ -29,8 +29,6 @@ use tokio::sync::{mpsc, Notify};
 /// Constants for batch processing
 pub(crate) const ACCOUNT_BATCH_SIZE: usize = 50;
 const FETCH_INTERVAL_MS: u64 = 500;
-pub(crate) const ACCOUNT_STALE_THRESHOLD_SECONDS: u64 = 30;
-pub(crate) const OPEN_POSITION_ACCOUNT_STALE_THRESHOLD_SECONDS: u64 = 5;
 
 /// Account fetcher service
 pub struct AccountFetcher {
