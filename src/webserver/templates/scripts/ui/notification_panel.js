@@ -214,9 +214,18 @@ function setupFilters() {
   const filterState = document.getElementById("filterState");
   const clearFiltersBtn = document.getElementById("clearFiltersBtn");
 
+  // Clearing is offered only while a filter narrows the list.
+  const syncClearFilters = () => {
+    if (clearFiltersBtn) {
+      clearFiltersBtn.disabled = !currentFilters.action_type && !currentFilters.state;
+    }
+  };
+  syncClearFilters();
+
   if (filterActionType) {
     handlers.filterActionType = () => {
       currentFilters.action_type = filterActionType.value;
+      syncClearFilters();
       resetScrollState();
       renderNotifications();
     };
@@ -226,6 +235,7 @@ function setupFilters() {
   if (filterState) {
     handlers.filterState = () => {
       currentFilters.state = filterState.value;
+      syncClearFilters();
       resetScrollState();
       renderNotifications();
     };
@@ -237,6 +247,7 @@ function setupFilters() {
       currentFilters = { action_type: "", state: "" };
       if (filterActionType) filterActionType.value = "";
       if (filterState) filterState.value = "";
+      syncClearFilters();
       resetScrollState();
       renderNotifications();
     };
