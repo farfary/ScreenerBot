@@ -302,7 +302,7 @@ function buildTelegramTab(settings) {
             <span class="settings-field-hint" data-l10n-id="settings-telegram-notify-opened-hint"></span>
           </div>
           <div class="settings-field-control">
-            <label class="toggle" data-level="item">
+            <label class="toggle">
               <input type="checkbox" id="tgNotifyOpened" ${settings.notifications?.position_opened !== false ? "checked" : ""}>
               <span class="toggle-track"></span>
             </label>
@@ -315,7 +315,7 @@ function buildTelegramTab(settings) {
             <span class="settings-field-hint" data-l10n-id="settings-telegram-notify-closed-hint"></span>
           </div>
           <div class="settings-field-control">
-            <label class="toggle" data-level="item">
+            <label class="toggle">
               <input type="checkbox" id="tgNotifyClosed" ${settings.notifications?.position_closed !== false ? "checked" : ""}>
               <span class="toggle-track"></span>
             </label>
@@ -328,7 +328,7 @@ function buildTelegramTab(settings) {
             <span class="settings-field-hint" data-l10n-id="settings-telegram-notify-partial-hint"></span>
           </div>
           <div class="settings-field-control">
-            <label class="toggle" data-level="item">
+            <label class="toggle">
               <input type="checkbox" id="tgNotifyPartial" ${settings.notifications?.partial_exit !== false ? "checked" : ""}>
               <span class="toggle-track"></span>
             </label>
@@ -341,7 +341,7 @@ function buildTelegramTab(settings) {
             <span class="settings-field-hint" data-l10n-id="settings-telegram-notify-dca-hint"></span>
           </div>
           <div class="settings-field-control">
-            <label class="toggle" data-level="item">
+            <label class="toggle">
               <input type="checkbox" id="tgNotifyDca" ${settings.notifications?.dca_executed !== false ? "checked" : ""}>
               <span class="toggle-track"></span>
             </label>
@@ -354,7 +354,7 @@ function buildTelegramTab(settings) {
             <span class="settings-field-hint" data-l10n-id="settings-telegram-notify-errors-hint"></span>
           </div>
           <div class="settings-field-control">
-            <label class="toggle" data-level="item">
+            <label class="toggle">
               <input type="checkbox" id="tgNotifyError" ${settings.notifications?.errors !== false ? "checked" : ""}>
               <span class="toggle-track"></span>
             </label>
@@ -367,7 +367,7 @@ function buildTelegramTab(settings) {
             <span class="settings-field-hint" data-l10n-id="settings-telegram-notify-startup-hint"></span>
           </div>
           <div class="settings-field-control">
-            <label class="toggle" data-level="item">
+            <label class="toggle">
               <input type="checkbox" id="tgNotifyStartup" ${settings.notifications?.startup_shutdown !== false ? "checked" : ""}>
               <span class="toggle-track"></span>
             </label>
@@ -380,7 +380,7 @@ function buildTelegramTab(settings) {
             <span class="settings-field-hint" data-l10n-id="settings-telegram-notify-filtering-hint"></span>
           </div>
           <div class="settings-field-control">
-            <label class="toggle" data-level="item">
+            <label class="toggle">
               <input type="checkbox" id="tgNotifyFiltering" ${settings.notifications?.filtering_alerts !== false ? "checked" : ""}>
               <span class="toggle-track"></span>
             </label>
@@ -393,7 +393,7 @@ function buildTelegramTab(settings) {
             <span class="settings-field-hint" data-l10n-id="settings-telegram-notify-trades-hint"></span>
           </div>
           <div class="settings-field-control">
-            <label class="toggle" data-level="item">
+            <label class="toggle">
               <input type="checkbox" id="tgNotifyTradeAlerts" ${settings.notifications?.trade_alerts !== false ? "checked" : ""}>
               <span class="toggle-track"></span>
             </label>
@@ -406,7 +406,7 @@ function buildTelegramTab(settings) {
             <span class="settings-field-hint" data-l10n-id="settings-telegram-notify-daily-hint"></span>
           </div>
           <div class="settings-field-control">
-            <label class="toggle" data-level="item">
+            <label class="toggle">
               <input type="checkbox" id="tgNotifyDailySummary" ${settings.notifications?.daily_summary === true ? "checked" : ""}>
               <span class="toggle-track"></span>
             </label>
@@ -430,7 +430,7 @@ function buildTelegramTab(settings) {
             <span class="settings-field-hint" data-l10n-id="settings-telegram-commands-hint"></span>
           </div>
           <div class="settings-field-control">
-            <label class="toggle" data-level="group">
+            <label class="toggle">
               <input type="checkbox" id="tgCommandsEnabled" ${settings.commands_enabled !== false ? "checked" : ""}>
               <span class="toggle-track"></span>
             </label>
@@ -443,7 +443,7 @@ function buildTelegramTab(settings) {
             <span class="settings-field-hint" data-l10n-id="settings-telegram-require-2fa-hint"></span>
           </div>
           <div class="settings-field-control">
-            <label class="toggle" data-level="item">
+            <label class="toggle">
               <input type="checkbox" id="tgRequire2fa" ${settings.commands_require_2fa !== false ? "checked" : ""}>
               <span class="toggle-track"></span>
             </label>
@@ -456,7 +456,7 @@ function buildTelegramTab(settings) {
             <span class="settings-field-hint" data-l10n-id="settings-telegram-inline-hint"></span>
           </div>
           <div class="settings-field-control">
-            <label class="toggle" data-level="item">
+            <label class="toggle">
               <input type="checkbox" id="tgInlineActions" ${settings.inline_actions !== false ? "checked" : ""}>
               <span class="toggle-track"></span>
             </label>

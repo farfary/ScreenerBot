@@ -633,7 +633,7 @@ export function createFilteringRenderers({ state, $: _$, Utils, requestManager: 
   function renderBooleanInput(field, source) {
     const value = getConfigValue(state.draft, source, field.key);
     return `
-      <label class="toggle" data-level="item" aria-label="${Utils.escapeHtml(field.label)}">
+      <label class="toggle" aria-label="${Utils.escapeHtml(field.label)}">
         <input
           type="checkbox"
           id="field-${source}-${field.key}"
@@ -797,7 +797,7 @@ export function createFilteringRenderers({ state, $: _$, Utils, requestManager: 
 
     const enableToggle = group.enableKey
       ? `
-        <label class="toggle" data-level="group" ${group.enableHint ? `title="${Utils.escapeHtml(group.enableHint)}"` : ""} aria-label="${Utils.escapeHtml(I18n.attr("filtering-group-enable", "aria-label", { group: group.title }))}">
+        <label class="toggle" ${group.enableHint ? `title="${Utils.escapeHtml(group.enableHint)}"` : ""} aria-label="${Utils.escapeHtml(I18n.attr("filtering-group-enable", "aria-label", { group: group.title }))}">
           <input
             type="checkbox"
             data-category-toggle="${Utils.escapeHtml(group.source)}"

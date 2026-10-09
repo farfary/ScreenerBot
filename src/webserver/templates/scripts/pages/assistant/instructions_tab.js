@@ -135,7 +135,7 @@ export function createInstructionsTab({ state, _eventCleanups }) {
         </div>
       </div>
       <div class="instruction-actions">
-        <label class="toggle toggle-sm instruction-toggle">
+        <label class="toggle instruction-toggle">
           <input type="checkbox" ${inst.enabled ? "checked" : ""}
                  onchange="window.assistantPage.toggleInstruction('${inst.id}', this.checked)">
           <span class="toggle-track"></span>

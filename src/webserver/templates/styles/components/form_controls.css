@@ -37,12 +37,12 @@
   --control-accent: var(--primary-color);
   --control-mark: var(--bg-primary);
 
-  /* Switch geometry - default (unlevelled) size. Radius is ~1/3 of the height:
-     a soft rounded rect, never a pill. */
-  --toggle-width: 40px;
-  --toggle-height: 22px;
+  /* Switch geometry - the one normal size. Radius is ~1/3 of the height: a soft
+     rounded rect, never a pill. */
+  --toggle-width: 36px;
+  --toggle-height: 20px;
   --toggle-radius: 7px;
-  --toggle-knob-size: 16px;
+  --toggle-knob-size: 14px;
   --toggle-knob-radius: 5px;
   --toggle-knob-offset: 3px;
 
@@ -415,14 +415,11 @@ select.select-lg {
    to adjacent status text, never to the control's selection skin; otherwise a
    mixed settings view looks like unrelated green and blue component libraries.
 
-   HIERARCHY. A switch declares its depth with data-level, never with a size
-   class and never with a different colour, so a master switch, its groups and
-   their rules keep one identity and only their scale changes:
-     data-level="root"   the master over a whole source/section
-     data-level="group"  a group of rules inside that section
-     data-level="item"   a single rule/row inside a group
-   The bare sizes (.toggle-sm) stay for compact standalone switches - toolbar
-   chips, list rows - that are not part of a hierarchy.
+   SIZES. A switch has exactly two sizes and one off state. Every switch uses
+   the normal size; only the master switch over a whole section or source
+   (Enable Telegram, the trader and assistant on/off, a filtering source)
+   declares data-level="root" and renders larger. Depth inside a section is
+   carried by layout, never by a smaller switch or a different colour.
    ============================================================================= */
 
 /* -----------------------------------------------------------------------------
@@ -565,38 +562,13 @@ select.select-lg {
   opacity: 0.45;
 }
 
-/* Hierarchy levels - scale only, one identity. */
+/* Section master switch - the one larger size. */
 .toggle[data-level="root"] {
   --toggle-width: 44px;
   --toggle-height: 24px;
   --toggle-radius: 8px;
   --toggle-knob-size: 18px;
   --toggle-knob-radius: 6px;
-}
-
-.toggle[data-level="group"] {
-  --toggle-width: 36px;
-  --toggle-height: 20px;
-  --toggle-radius: 7px;
-  --toggle-knob-size: 14px;
-  --toggle-knob-radius: 5px;
-}
-
-.toggle[data-level="item"] {
-  --toggle-width: 30px;
-  --toggle-height: 18px;
-  --toggle-radius: 6px;
-  --toggle-knob-size: 12px;
-  --toggle-knob-radius: 4px;
-}
-
-/* Compact standalone size (not a hierarchy level). */
-.toggle-sm {
-  --toggle-width: 32px;
-  --toggle-height: 18px;
-  --toggle-radius: 6px;
-  --toggle-knob-size: 12px;
-  --toggle-knob-radius: 4px;
 }
 
 /* -----------------------------------------------------------------------------

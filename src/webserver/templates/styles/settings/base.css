@@ -482,10 +482,6 @@
   background-color: var(--bg-card-hover);
 }
 
-/* Toggle Switch - Now uses centralized .toggle from form_controls.css */
-
-/* Migrated: Use <label class="toggle"><input type="checkbox"><span class="toggle-track"></span></label> */
-
 /* =============================================================================
    HINTS TAB - Contextual hint management rows
    ============================================================================= */

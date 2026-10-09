@@ -160,7 +160,7 @@ function buildSecurityTab(status) {
               <span class="settings-field-hint" data-l10n-id="settings-security-lock-blur-hint"></span>
             </div>
             <div class="settings-field-control">
-              <label class="toggle" data-level="item">
+              <label class="toggle">
                 <input type="checkbox" id="securityLockOnBlur" ${lockOnBlur ? "checked" : ""} ${!hasPassword ? "disabled" : ""}>
                 <span class="toggle-track"></span>
               </label>

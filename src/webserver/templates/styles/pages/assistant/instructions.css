@@ -200,7 +200,6 @@
   padding-inline-start: 12px;
 }
 
-/* Instruction toggle - uses centralized .toggle-sm from form_controls.css */
 .instruction-toggle {
   flex-shrink: 0;
 }

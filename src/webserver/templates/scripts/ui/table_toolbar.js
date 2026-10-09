@@ -366,7 +366,7 @@ function renderSwitch(item, stateFilters = {}) {
   return `
     <div class="table-toolbar-field table-toolbar-field--switch" data-filter-id="${escapeHtml(item.id)}" ${commonAttrs(item)}>
       ${label}
-      <label class="toggle toggle-sm">
+      <label class="toggle">
         <input
           type="checkbox"
           class="dt-filter"

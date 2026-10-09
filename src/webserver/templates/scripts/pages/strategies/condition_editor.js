@@ -176,7 +176,7 @@ export function createConditionEditor({
           </div>
           <div class="card-header-right">
             <div class="condition-status">
-              <label class="toggle" data-level="item" title="${Utils.escapeHtml(c.enabled ? I18n.t("common-state-enabled") : I18n.t("common-state-disabled"))}">
+              <label class="toggle" title="${Utils.escapeHtml(c.enabled ? I18n.t("common-state-enabled") : I18n.t("common-state-disabled"))}">
                 <input type="checkbox" class="toggle-enabled" ${c.enabled ? "checked" : ""}/>
                 <span class="toggle-track"></span>
               </label>

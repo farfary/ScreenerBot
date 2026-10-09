@@ -180,7 +180,7 @@ export function createAutomationTab({ state, _eventCleanups, addTrackedListener 
         </div>
         <div class="automation-task-actions">
           <span class="status-indicator ${statusClass}">${esc(statusLabel)}</span>
-          <label class="toggle toggle-sm">
+          <label class="toggle">
             <input type="checkbox" ${task.enabled ? "checked" : ""}
                    onchange="window.assistantPage.toggleAutomationTask(${task.id}, this.checked)">
             <span class="toggle-track"></span>
