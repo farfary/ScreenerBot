@@ -877,7 +877,6 @@ export class ChatWidget {
     } else if (newCount < existingCount) {
       container.innerHTML = "";
       if (welcome) container.appendChild(welcome);
-      welcome.style.display = "none";
       container.insertAdjacentHTML(
         "beforeend",
         this.state.messages.map((m) => this._renderMessage(m)).join("")
