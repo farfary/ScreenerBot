@@ -4,7 +4,7 @@
 // Compare view: every task's closed rounds over one date range, as curves and a
 // table. Choosing a wallet opens its workspace.
 import { DataTable } from "../../ui/data_table.js";
-import { addressFloorWidth, renderAddress, renderNamedAddress } from "../../ui/token_identity.js";
+import { addressFloorWidth, renderNamedAddress } from "../../ui/token_identity.js";
 import { comparisonCurves } from "./charts.js";
 import {
   RANGES,
@@ -72,6 +72,7 @@ export function createCompare(page) {
       label: I18n.t("copy-table-mode"),
       sortable: true,
       wrap: false,
+      minWidth: "content",
       render: (_value, row) =>
         `<span class="copy-row-mode copy-mode-${esc(row.mode)}">${esc(modeLabel(row.mode))}</span>${row.enabled ? "" : `<small class="copy-muted"> ${esc(I18n.t("copy-paused-suffix"))}</small>`}`,
     },
@@ -189,7 +190,8 @@ export function createCompare(page) {
     else {
       body = `<section class="copy-card"><h4>${esc(I18n.t("copy-compare-curve-title"))}</h4>${comparisonCurves(
         rows.map((row) => ({
-          nameHtml: row.label ? esc(row.label) : renderAddress(row.target_address, { plain: true }),
+          // The table's name for the task; its wallet is the entry's tooltip.
+          nameHtml: `<span title="${esc(row.target_address)}">${esc(taskName(row))}</span>`,
           points: row.pnl_curve,
         })),
         { escapeHtml: esc }

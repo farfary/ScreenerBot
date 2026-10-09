@@ -79,8 +79,13 @@
  *   'currency' are stamped as `data-type` on the header and every cell, which
  *   end-aligns both and makes the cell a tabular-figure LTR island
  *   (styles/ui/data_table/column_types.css). Every numeric column declares one.
+ *   A value-typed cell never wraps, and its column is never narrower than its
+ *   widest value.
  * - sortable: Enable sorting (optional, default: false)
  * - width: Column width in px or 'auto' (optional)
+ * - minWidth: Minimum width in px (optional, default 80), or "content" for a
+ *   short label that must never be cut: the column is then never narrower than
+ *   its widest cell
  * - maxWidth: Maximum width in px (optional, clamps auto + resize)
  * - resizable: Enable column resizing (optional, default: true)
  * - visible: Initial visibility (optional, default: true)

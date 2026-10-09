@@ -9,6 +9,41 @@
 
 import { dirSign } from "../../core/dom.js";
 
+/**
+ * The one-line extent of a cell's content plus its inline padding and borders.
+ * Text runs and inline boxes are measured, never a block wrapper, whose box
+ * reports the column's width rather than what the value needs.
+ */
+function naturalCellWidth(cell, range) {
+  let start = Infinity;
+  let end = -Infinity;
+  const include = (rect) => {
+    if (!rect.width) return;
+    start = Math.min(start, rect.left);
+    end = Math.max(end, rect.right);
+  };
+  const walker = document.createTreeWalker(cell, NodeFilter.SHOW_TEXT);
+  for (let node = walker.nextNode(); node; node = walker.nextNode()) {
+    if (!node.textContent.trim()) continue;
+    range.selectNodeContents(node);
+    Array.from(range.getClientRects()).forEach(include);
+  }
+  for (const element of cell.querySelectorAll("*")) {
+    if (getComputedStyle(element).display.startsWith("inline")) {
+      include(element.getBoundingClientRect());
+    }
+  }
+  if (end <= start) return 0;
+  const style = getComputedStyle(cell);
+  const frame = [
+    "paddingInlineStart",
+    "paddingInlineEnd",
+    "borderInlineStartWidth",
+    "borderInlineEndWidth",
+  ].reduce((sum, key) => sum + (parseFloat(style[key]) || 0), 0);
+  return Math.ceil(end - start + frame);
+}
+
 export function applyColumnManagementMixin(DataTable) {
   const proto = DataTable.prototype;
 
@@ -21,11 +56,15 @@ export function applyColumnManagementMixin(DataTable) {
    * less than its header needs. A header's text may overflow into the cell's end
    * padding without growing its scroll width, so neither content sizing nor the
    * proportional fit would see it; the measured header floor keeps every column at
-   * least as wide as its label and sort mark.
+   * least as wide as its label and sort mark. A column whose cells are never cut
+   * (see `_measureContentFloors`) is also never narrower than its widest value.
    */
   proto._getColumnMinWidth = function (columnId) {
     const column = this._getColumnConfig(columnId);
-    const floor = this._headerFloors?.[columnId] || 0;
+    const floor = Math.max(
+      this._headerFloors?.[columnId] || 0,
+      this._contentFloors?.[columnId] || 0
+    );
     if (!column) {
       return Math.max(80, floor);
     }
@@ -33,6 +72,67 @@ export function applyColumnManagementMixin(DataTable) {
       return Math.max(column.minWidth, floor);
     }
     return Math.max(80, floor);
+  };
+
+  /**
+   * Measure the widest value of every column whose cells are never cut: the
+   * value-typed columns (their cells carry `data-type` and do not wrap, so an amount
+   * and its unit stay on one line) and any column declared `minWidth: "content"`
+   * (a short label such as a mode with its paused mark). The floor is the value's
+   * one-line extent plus the cell's inline padding, so the proportional fit can never
+   * squeeze such a column below what it shows.
+   *
+   * Before the one-time fit every sampled cell is measured precisely. After it, a
+   * render (every poll) only reads whether a cell overflows: a cell that does not
+   * overflow already fits, and one that does reports its full need as its scroll
+   * width, since it cannot wrap. Between fits floors only grow, so a column never
+   * narrows under a value it has shown.
+   */
+  proto._measureContentFloors = function () {
+    const precise = !this.state.hasAutoFitted;
+    // A refit (new columns, density, locale) measures afresh.
+    const floors = precise ? {} : { ...this._contentFloors };
+    const rows = Array.from(this.elements.tbody?.querySelectorAll("tr[data-row-id]") || []).slice(
+      0,
+      this.options.autoSizeSample
+    );
+    const range = precise ? document.createRange() : null;
+    for (const column of this._getOrderedColumns()) {
+      if (!this._isColumnVisible(column.id)) continue;
+      let widest = floors[column.id] || 0;
+      for (const row of rows) {
+        const cell = row.querySelector(`td[data-column-id="${column.id}"]`);
+        if (!cell || (column.minWidth !== "content" && !cell.hasAttribute("data-type"))) continue;
+        if (precise) widest = Math.max(widest, naturalCellWidth(cell, range));
+        else if (cell.scrollWidth > cell.clientWidth) widest = Math.max(widest, cell.scrollWidth);
+      }
+      if (widest > 0) floors[column.id] = widest;
+    }
+    this._contentFloors = floors;
+  };
+
+  /**
+   * Widen every column that sits below its minimum. The fit to the container runs
+   * once, so a floor that grows with later rows is applied here on every sizing
+   * pass; a column the user resized keeps the user's width.
+   */
+  proto._raiseColumnsToFloors = function () {
+    let raised = false;
+    for (const column of this._getOrderedColumns()) {
+      const width = this.state.columnWidths[column.id];
+      if (typeof width !== "number" || this.state.userResizedColumns?.[column.id]) continue;
+      const floor = this._getColumnMinWidth(column.id);
+      if (width >= floor) continue;
+      this.state.columnWidths[column.id] = floor;
+      this._applyColumnWidth(column.id, floor);
+      raised = true;
+    }
+    if (!raised) return;
+    const total = this._computeTableWidthFromState();
+    if (typeof total === "number" && total > (this.state.tableWidth || 0)) {
+      this.state.tableWidth = total;
+      this._applyTableWidth();
+    }
   };
 
   /**
@@ -176,6 +276,7 @@ export function applyColumnManagementMixin(DataTable) {
     if (!this._isLaidOut()) return;
 
     this._measureHeaderFloors();
+    this._measureContentFloors();
     this._autoSizeColumnsFromContent();
     this._snapshotColumnWidths();
     this._applyStoredColumnWidths();
@@ -185,6 +286,7 @@ export function applyColumnManagementMixin(DataTable) {
     if (this.options.fitToContainer !== false && !this.state.hasAutoFitted) {
       this.state.hasAutoFitted = this._fitColumnsToContainer() === true;
     }
+    this._raiseColumnsToFloors();
   };
 
   proto._autoSizeColumnsFromContent = function () {

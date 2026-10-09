@@ -21,6 +21,8 @@
  * - A position origin tag is set apart from the name as an uppercase caption.
  * - Main Wallet: "Last used" is relative, the toolbar stays on one row and a token
  *   balance carries no padded zeros.
+ * - Copy Trading Compare: a paused task's mode is shown whole, and each curve in the
+ *   chart legend is named as the table names its task ("Unnamed task", not a wallet).
  *
  * Run with `npm run test:js`.
  */
@@ -203,4 +205,32 @@ test("Main Wallet states last use relatively, on one toolbar row, with unpadded 
   for (const balance of balances) {
     assert.doesNotMatch(balance, /\.\d*0$/, `balance "${balance}" pads no zeros`);
   }
+});
+
+test("Copy Trading Compare shows each mode whole and names curves as the table does", async (t) => {
+  const page = await openPage(t, "copy");
+  await page.click("#copy-compare-open");
+  const root = "#copy-compare-table";
+  await page.waitForSelector(`${root} tbody tr[data-row-id]`);
+
+  const modes = await page.$$eval(`${root} td[data-column-id="mode"]`, (tds) =>
+    tds.map((td) => ({
+      text: td.textContent.trim().replace(/\s+/g, " "),
+      cut: td.scrollWidth > td.clientWidth + 1,
+    }))
+  );
+  assert.ok(
+    modes.some((mode) => /paused/i.test(mode.text)),
+    "a paused task is in the fixture"
+  );
+  for (const mode of modes) assert.equal(mode.cut, false, `mode "${mode.text}" is cut`);
+
+  const names = await page.$$eval(`${root} .ti-named-address-name`, (nodes) =>
+    nodes.map((node) => node.textContent.trim())
+  );
+  const legend = await page.$$eval("#copy-compare .copy-legend-item", (nodes) =>
+    nodes.map((node) => node.textContent.trim())
+  );
+  assert.ok(names.includes("Unnamed task"), "an unnamed task is in the fixture");
+  assert.deepEqual([...legend].sort(), [...names].sort());
 });

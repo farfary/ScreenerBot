@@ -12,7 +12,8 @@
  *
  * A page's `views` (in its fixture index) say what must render: tables with rows,
  * charts that draw a canvas, empty-state text, and dialogs that open and close.
- * An empty table keeps its body, with its message centred and no pager under it.
+ * An empty table keeps its body, with its message centred and no pager under it, and
+ * a value-typed cell shows its value whole on one line.
  * A check carrying a `defect` description documents a dashboard fault that is
  * not fixed yet: it leaves the page's regular tests and runs alone as a todo test.
  *
@@ -349,6 +350,28 @@ async function assertStatesCentred(page, label) {
 }
 
 /**
+ * A value-typed cell (`td[data-type]`: an amount, price, percentage or count) shows
+ * its value whole on one line: it never wraps its unit onto a second line and its
+ * column is never narrower than the value.
+ */
+async function assertValuesWhole(page, label) {
+  const found = await page.evaluate(() =>
+    [...document.querySelectorAll(".data-table td[data-type]")]
+      .filter((cell) => cell.getClientRects().length && cell.textContent.trim())
+      .flatMap((cell) => {
+        const name = `${cell.closest("[id]")?.id ?? "table"} ${cell.dataset.columnId}`;
+        const text = cell.textContent.trim().replace(/\s+/g, " ");
+        if (getComputedStyle(cell).whiteSpace !== "nowrap") return [`${name}: "${text}" may wrap`];
+        if (cell.scrollWidth > cell.clientWidth + 1) {
+          return [`${name}: "${text}" needs ${cell.scrollWidth}px of ${cell.clientWidth}px`];
+        }
+        return [];
+      })
+  );
+  assert.deepEqual([...new Set(found)], [], `${label}: values cut or wrapped`);
+}
+
+/**
  * An empty table keeps its body: the empty message sits whole and vertically centred
  * in the table's scroll area, and no pager is drawn under it. A sibling that takes
  * the table's height, or a "0 of 0" pager, squeezes the body until the message is
@@ -459,6 +482,7 @@ describe("dashboard stability", { concurrency: 4 }, () => {
           await assertPinnedEdgeClean(session.page, `${id} ${view.name}`);
           await assertUnitsInside(session.page, `${id} ${view.name}`);
           await assertSummaryLabelsBare(session.page, `${id} ${view.name}`);
+          await assertValuesWhole(session.page, `${id} ${view.name}`);
         }
         if (id === "positions") {
           // A new column set opens at its start edge, not at the previous view's offset.

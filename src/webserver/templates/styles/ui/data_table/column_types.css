@@ -594,6 +594,22 @@
   text-align: end;
   direction: ltr;
   unicode-bidi: isolate;
+  white-space: nowrap;
+}
+
+/* A value never wraps, its unit included ("0.0391 SOL"), even inside the line
+   clamp of a uniform-row table; the column is never narrower than its widest value
+   (`_measureContentFloors` in scripts/ui/data_table/column_management.js). */
+.data-table.uniform-rows
+  td:is(
+    [data-type="number"],
+    [data-type="price"],
+    [data-type="percent"],
+    [data-type="sol"],
+    [data-type="currency"]
+  )
+  .dt-cell-clamp {
+  white-space: nowrap;
 }
 
 /* Inside the LTR island `end` is the physical right; an RTL table's numeric end is
