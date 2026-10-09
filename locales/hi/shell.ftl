@@ -86,6 +86,7 @@ shell-ticker-rpc-rate = { $amount }/मिनट
 shell-ticker-services-segment =
     .title = बैकग्राउंड सर्विस की सेहत का स्टेटस
 shell-ticker-services-loading = सर्विस: <strong>लोड हो रही हैं</strong>
+shell-ticker-services-unknown = सर्विस: <strong>—</strong>
 
 shell-notification-title = कार्रवाइयां
 shell-notification-mark-all-read =
@@ -160,7 +161,6 @@ shell-restart-helper-unavailable = ऑटोमैटिक रीस्टा�
 
 shell-page-title-fallback = डैशबोर्ड
 shell-page-load-failed = पेज लोड करने में विफल
-shell-page-offline-detail = कोर तक अभी पहुंच नहीं हो रही। कनेक्शन लौटते ही यह पेज अपने आप लोड होगा।
 
 shell-bot-state-explore = एक्सप्लोर
 shell-bot-state-halted = रुका हुआ

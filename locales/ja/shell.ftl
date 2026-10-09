@@ -95,6 +95,7 @@ shell-ticker-rpc-rate = { $amount }/分
 shell-ticker-services-segment =
     .title = バックグラウンドサービスの稼働状況
 shell-ticker-services-loading = サービス: <strong>読み込み中</strong>
+shell-ticker-services-unknown = サービス: <strong>—</strong>
 
 ## Notification drawer
 
@@ -183,7 +184,6 @@ shell-restart-helper-unavailable = 自動再起動ヘルパーを利用できま
 # Source: scripts/core/router.js
 shell-page-title-fallback = ダッシュボード
 shell-page-load-failed = ページを読み込めませんでした
-shell-page-offline-detail = 現在コアに接続できません。接続が復旧すると、このページは自動的に読み込まれます。
 
 # Source: scripts/core/header_metrics.js
 

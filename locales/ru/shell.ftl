@@ -86,6 +86,7 @@ shell-ticker-rpc-rate = { $amount }/мин
 shell-ticker-services-segment =
     .title = Состояние фоновых сервисов
 shell-ticker-services-loading = Сервисы: <strong>загрузка</strong>
+shell-ticker-services-unknown = Сервисы: <strong>—</strong>
 
 shell-notification-title = Действия
 shell-notification-mark-all-read =
@@ -160,7 +161,6 @@ shell-restart-helper-unavailable = Помощник автоматическог
 
 shell-page-title-fallback = Дашборд
 shell-page-load-failed = Не удалось загрузить страницу
-shell-page-offline-detail = Ядро сейчас недоступно. Страница загрузится автоматически, когда соединение восстановится.
 
 shell-bot-state-explore = ОБЗОР
 shell-bot-state-halted = ОСТАНОВЛЕН

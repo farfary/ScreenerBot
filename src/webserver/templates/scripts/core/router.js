@@ -378,11 +378,11 @@ export async function loadPage(pageName, { historyMode = "push" } = {}) {
     mainContent.setAttribute("aria-busy", "true");
 
     // A connection error (backend crashed / network dropped / restart in
-    // progress) gets a calm, auto-recovering offline state rather than a hard
-    // error — the connectivity watcher already shows the global overlay, and we
-    // reload this page automatically the moment the backend answers again.
+    // progress) keeps the page in its loading state: the connectivity watcher's
+    // overlay is the one outage notice, and the page loads the moment the
+    // backend answers again.
     if (isConnectionError(error)) {
-      renderOfflinePlaceholder(loadingEl, pageName);
+      loadOnReconnect(loadingEl, pageName);
       return;
     }
 
@@ -411,27 +411,9 @@ function isConnectionError(error) {
   return isNetworkError(error) || error?.name === "TimeoutError";
 }
 
-function renderOfflinePlaceholder(loadingEl, pageName) {
-  loadingEl.innerHTML = `
-    <div class="page-offline">
-      <span class="page-offline-spinner" aria-hidden="true"></span>
-      <h2 data-l10n-id="shell-connection-waiting"></h2>
-      <p data-l10n-id="shell-page-offline-detail"></p>
-      <button type="button" class="page-load-retry" data-l10n-id="shell-connection-retry-now"></button>
-    </div>
-  `;
-  I18n.localizeTree(loadingEl);
-  const retryBtn = loadingEl.querySelector(".page-load-retry");
-  if (retryBtn) {
-    retryBtn.addEventListener("click", () => {
-      if (window.__SB_CONNECTIVITY__) window.__SB_CONNECTIVITY__.pingNow();
-      loadPage(pageName, { historyMode: "replace" });
-    });
-  }
-  // Auto-recover: reload this page the moment the backend comes back.
+function loadOnReconnect(loadingEl, pageName) {
   const onReconnect = () => {
-    window.removeEventListener("screenerbot:reconnected", onReconnect);
-    // Only reload if this failed navigation is still the visible placeholder.
+    // Only reload if this failed navigation is still the visible loading state.
     if (loadingEl.isConnected) loadPage(pageName, { historyMode: "replace" });
   };
   window.addEventListener("screenerbot:reconnected", onReconnect, { once: true });

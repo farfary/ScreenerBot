@@ -86,6 +86,7 @@ shell-ticker-rpc-rate = { $amount }/phút
 shell-ticker-services-segment =
     .title = Tình trạng hoạt động của các dịch vụ nền
 shell-ticker-services-loading = Dịch vụ: <strong>Đang tải</strong>
+shell-ticker-services-unknown = Dịch vụ: <strong>—</strong>
 
 shell-notification-title = Hành động
 shell-notification-mark-all-read =
@@ -160,7 +161,6 @@ shell-restart-helper-unavailable = Trình hỗ trợ khởi động lại tự �
 
 shell-page-title-fallback = Bảng điều khiển
 shell-page-load-failed = Không thể tải trang
-shell-page-offline-detail = Hiện không thể kết nối tới core. Trang sẽ tự tải khi kết nối được khôi phục.
 
 shell-bot-state-explore = KHÁM PHÁ
 shell-bot-state-halted = ĐÃ DỪNG

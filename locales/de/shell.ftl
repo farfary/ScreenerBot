@@ -92,6 +92,7 @@ shell-ticker-rpc-rate = { $amount }/Min.
 shell-ticker-services-segment =
     .title = Zustand der Hintergrunddienste
 shell-ticker-services-loading = Dienste: <strong>Lädt</strong>
+shell-ticker-services-unknown = Dienste: <strong>—</strong>
 
 ## Notification drawer
 
@@ -174,7 +175,6 @@ shell-restart-helper-unavailable = Der automatische Neustart-Helfer ist nicht ve
 
 shell-page-title-fallback = Dashboard
 shell-page-load-failed = Seite konnte nicht geladen werden
-shell-page-offline-detail = Der Kern ist derzeit nicht erreichbar. Diese Seite wird automatisch geladen, sobald die Verbindung wieder besteht.
 
 ## Auto Trader card
 

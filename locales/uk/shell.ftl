@@ -95,6 +95,7 @@ shell-ticker-rpc-rate = { $amount }/хв
 shell-ticker-services-segment =
     .title = Стан працездатності фонових сервісів
 shell-ticker-services-loading = Сервіси: <strong>Завантаження</strong>
+shell-ticker-services-unknown = Сервіси: <strong>—</strong>
 
 ## Notification drawer
 
@@ -183,7 +184,6 @@ shell-restart-helper-unavailable = Помічник автоматичного �
 # Source: scripts/core/router.js
 shell-page-title-fallback = Панель керування
 shell-page-load-failed = Не вдалося завантажити сторінку
-shell-page-offline-detail = Ядро зараз недоступне. Сторінка завантажиться автоматично, щойно з’єднання відновиться.
 
 # Source: scripts/core/header_metrics.js
 

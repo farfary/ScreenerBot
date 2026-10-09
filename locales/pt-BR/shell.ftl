@@ -95,6 +95,7 @@ shell-ticker-rpc-rate = { $amount }/min
 shell-ticker-services-segment =
     .title = Status de saúde dos serviços em segundo plano
 shell-ticker-services-loading = Serviços: <strong>Carregando</strong>
+shell-ticker-services-unknown = Serviços: <strong>—</strong>
 
 ## Notification drawer
 
@@ -183,7 +184,6 @@ shell-restart-helper-unavailable = O auxiliar de reinicialização automática e
 # Source: scripts/core/router.js
 shell-page-title-fallback = Painel
 shell-page-load-failed = Falha ao carregar a página
-shell-page-offline-detail = O core está inacessível no momento. Esta página será carregada automaticamente quando a conexão voltar.
 
 # Source: scripts/core/header_metrics.js
 

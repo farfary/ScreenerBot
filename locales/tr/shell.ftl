@@ -86,6 +86,7 @@ shell-ticker-rpc-rate = { $amount }/dk
 shell-ticker-services-segment =
     .title = Arka plan hizmetlerinin sağlık durumu
 shell-ticker-services-loading = Hizmetler: <strong>Yükleniyor</strong>
+shell-ticker-services-unknown = Hizmetler: <strong>—</strong>
 
 shell-notification-title = Eylemler
 shell-notification-mark-all-read =
@@ -160,7 +161,6 @@ shell-restart-helper-unavailable = Otomatik yeniden başlatma yardımcısı kull
 
 shell-page-title-fallback = Panel
 shell-page-load-failed = Sayfa yüklenemedi
-shell-page-offline-detail = Çekirdeğe şu anda ulaşılamıyor. Bağlantı geri geldiğinde bu sayfa otomatik olarak yüklenecek.
 
 shell-bot-state-explore = KEŞİF
 shell-bot-state-halted = DURDURULDU

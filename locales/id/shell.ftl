@@ -88,6 +88,7 @@ shell-ticker-rpc-rate = { $amount }/mnt
 shell-ticker-services-segment =
     .title = Status kesehatan layanan latar belakang
 shell-ticker-services-loading = Layanan: <strong>Memuat</strong>
+shell-ticker-services-unknown = Layanan: <strong>—</strong>
 
 shell-notification-title = Aksi
 shell-notification-mark-all-read =
@@ -162,7 +163,6 @@ shell-restart-helper-unavailable = Helper mulai ulang otomatis tidak tersedia. M
 
 shell-page-title-fallback = Dasbor
 shell-page-load-failed = Gagal Memuat Halaman
-shell-page-offline-detail = Core tidak dapat dijangkau saat ini. Halaman ini akan dimuat otomatis setelah koneksi kembali.
 
 shell-bot-state-explore = JELAJAH
 shell-bot-state-halted = DIHENTIKAN

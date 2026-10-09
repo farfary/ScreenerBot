@@ -95,6 +95,7 @@ shell-ticker-rpc-rate = { $amount }/min
 shell-ticker-services-segment =
     .title = Estado de salud de los servicios en segundo plano
 shell-ticker-services-loading = Servicios: <strong>Cargando</strong>
+shell-ticker-services-unknown = Servicios: <strong>—</strong>
 
 ## Notification drawer
 
@@ -183,7 +184,6 @@ shell-restart-helper-unavailable = El asistente de reinicio automático no está
 # Source: scripts/core/router.js
 shell-page-title-fallback = Panel
 shell-page-load-failed = No se pudo cargar la página
-shell-page-offline-detail = No se puede acceder al núcleo en este momento. Esta página se cargará automáticamente cuando se restablezca la conexión.
 
 # Source: scripts/core/header_metrics.js
 

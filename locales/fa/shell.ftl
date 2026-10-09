@@ -95,6 +95,7 @@ shell-ticker-rpc-rate = { $amount }/دقیقه
 shell-ticker-services-segment =
     .title = وضعیت سلامت سرویس‌های پس‌زمینه
 shell-ticker-services-loading = سرویس‌ها: <strong>در حال بارگذاری</strong>
+shell-ticker-services-unknown = سرویس‌ها: <strong>—</strong>
 
 ## Notification drawer
 
@@ -183,7 +184,6 @@ shell-restart-helper-unavailable = ابزار راه‌اندازی مجدد خ�
 # Source: scripts/core/router.js
 shell-page-title-fallback = داشبورد
 shell-page-load-failed = بارگذاری صفحه ناموفق بود
-shell-page-offline-detail = هسته در حال حاضر در دسترس نیست. با برقراری اتصال، این صفحه به‌طور خودکار بارگذاری می‌شود.
 
 # Source: scripts/core/header_metrics.js
 

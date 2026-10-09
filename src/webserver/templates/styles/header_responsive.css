@@ -339,6 +339,10 @@ button.ticker-segment:hover .ticker-icon {
   background: var(--semantic-error-text);
 }
 
+.ticker-segment .status-dot.unknown {
+  background: var(--text-muted);
+}
+
 /* Wide desktop */
 @media (width >= 1600px) {
   .modern-header {

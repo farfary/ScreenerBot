@@ -95,6 +95,7 @@ shell-ticker-rpc-rate = { $amount }/분
 shell-ticker-services-segment =
     .title = 백그라운드 서비스 상태
 shell-ticker-services-loading = 서비스: <strong>불러오는 중</strong>
+shell-ticker-services-unknown = 서비스: <strong>—</strong>
 
 ## Notification drawer
 
@@ -183,7 +184,6 @@ shell-restart-helper-unavailable = 자동 재시작 도우미를 사용할 수 �
 # Source: scripts/core/router.js
 shell-page-title-fallback = 대시보드
 shell-page-load-failed = 페이지를 불러오지 못했습니다
-shell-page-offline-detail = 지금은 코어에 연결할 수 없습니다. 연결이 복구되면 이 페이지가 자동으로 로드됩니다.
 
 # Source: scripts/core/header_metrics.js
 

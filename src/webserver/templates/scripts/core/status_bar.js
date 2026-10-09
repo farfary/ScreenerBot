@@ -119,6 +119,16 @@ import { formatLatencyMs, formatMemoryMb, formatNumber, formatPercentValue, form
     }
   }
 
+  // While the core is unreachable every live figure reads "—"; the version is not live.
+  function markUnknown() {
+    const live = ["uptime", "memory", "rpcRate", "rpcSuccess", "rpcLatency", "trading", "positions", "tokens"];
+    for (const key of live) {
+      if (elements[key]) elements[key].textContent = "—";
+    }
+    if (elements.rpcHealth) elements.rpcHealth.setAttribute("data-health", "unknown");
+    if (elements.trading) elements.trading.removeAttribute("data-active");
+  }
+
   async function fetchStatusData() {
     try {
       const response = await fetch("/api/status");
@@ -164,6 +174,10 @@ import { formatLatencyMs, formatMemoryMb, formatNumber, formatPercentValue, form
 
     // Cleanup on page unload
     window.addEventListener("beforeunload", stopPolling);
+
+    // Events of core/connectivity_watcher.js.
+    window.addEventListener("screenerbot:offline", markUnknown);
+    window.addEventListener("screenerbot:reconnected", fetchStatusData);
   }
 
   // The status bar is the one always-on refresh that is not a `Poller`, so it

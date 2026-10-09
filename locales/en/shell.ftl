@@ -95,6 +95,7 @@ shell-ticker-rpc-rate = { $amount }/min
 shell-ticker-services-segment =
     .title = Background services health status
 shell-ticker-services-loading = Services: <strong>Loading</strong>
+shell-ticker-services-unknown = Services: <strong>—</strong>
 
 ## Notification drawer
 
@@ -184,7 +185,6 @@ shell-restart-helper-unavailable = Automatic restart helper is unavailable. Relo
 # Source: scripts/core/router.js
 shell-page-title-fallback = Dashboard
 shell-page-load-failed = Failed to Load Page
-shell-page-offline-detail = The core is unreachable right now. This page will load automatically once the connection is back.
 
 # Source: scripts/core/header_metrics.js
 

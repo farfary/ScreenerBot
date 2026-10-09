@@ -273,6 +273,16 @@ function updateTicker(metrics) {
   }
 }
 
+/**
+ * While the core is unreachable the ticker states nothing it cannot know: every live
+ * figure reads "—" and Services is unknown, instead of the last values received.
+ */
+function markTickerUnknown() {
+  updateTicker({});
+  const servicesText = document.getElementById("tickerServicesText");
+  if (servicesText) renderServicesStatus(servicesText, "unknown", "shell-ticker-services-unknown");
+}
+
 /** Dispatched by `core/action_toasts.js` when a trade completes or fails. */
 const TRADE_SETTLED_EVENT = "screenerbot:trade-settled";
 
@@ -348,6 +358,12 @@ export function createHeaderMetrics({ state, setAvailability }) {
       });
       // A settled trade moves the wallet; show it now instead of on the next poll.
       window.addEventListener(TRADE_SETTLED_EVENT, () => {
+        fetchHeaderMetrics().catch(() => {});
+      });
+      // Events of core/connectivity_watcher.js: blank the live figures while the core is
+      // unreachable and refill them as soon as it answers again.
+      window.addEventListener("screenerbot:offline", markTickerUnknown);
+      window.addEventListener("screenerbot:reconnected", () => {
         fetchHeaderMetrics().catch(() => {});
       });
       visibilityHandlerAdded = true;

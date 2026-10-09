@@ -95,6 +95,7 @@ shell-ticker-rpc-rate = { $amount }/分钟
 shell-ticker-services-segment =
     .title = 后台服务健康状态
 shell-ticker-services-loading = 服务：<strong>加载中</strong>
+shell-ticker-services-unknown = 服务：<strong>—</strong>
 
 ## Notification drawer
 
@@ -183,7 +184,6 @@ shell-restart-helper-unavailable = 自动重启助手不可用。请稍后重新
 # Source: scripts/core/router.js
 shell-page-title-fallback = 仪表盘
 shell-page-load-failed = 页面加载失败
-shell-page-offline-detail = 目前无法连接核心程序。连接恢复后，此页面将自动加载。
 
 # Source: scripts/core/header_metrics.js
 

@@ -86,6 +86,7 @@ shell-ticker-rpc-rate = { $amount }/min
 shell-ticker-services-segment =
     .title = État de santé des services en arrière-plan
 shell-ticker-services-loading = Services : <strong>Chargement</strong>
+shell-ticker-services-unknown = Services : <strong>—</strong>
 
 shell-notification-title = Actions
 shell-notification-mark-all-read =
@@ -160,7 +161,6 @@ shell-restart-helper-unavailable = L'assistant de redémarrage automatique est i
 
 shell-page-title-fallback = Tableau de bord
 shell-page-load-failed = Échec du chargement de la page
-shell-page-offline-detail = Le noyau est actuellement injoignable. Cette page se chargera automatiquement dès le retour de la connexion.
 
 shell-bot-state-explore = EXPLORER
 shell-bot-state-halted = ARRÊTÉ

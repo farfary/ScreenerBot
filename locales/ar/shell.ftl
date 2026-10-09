@@ -95,6 +95,7 @@ shell-ticker-rpc-rate = { $amount }/د
 shell-ticker-services-segment =
     .title = حالة سلامة خدمات الخلفية
 shell-ticker-services-loading = الخدمات: <strong>جارٍ التحميل</strong>
+shell-ticker-services-unknown = الخدمات: <strong>—</strong>
 
 ## Notification drawer
 
@@ -183,7 +184,6 @@ shell-restart-helper-unavailable = مساعد إعادة التشغيل التل
 # Source: scripts/core/router.js
 shell-page-title-fallback = لوحة التحكم
 shell-page-load-failed = فشل تحميل الصفحة
-shell-page-offline-detail = تعذّر الوصول إلى النواة حاليًا. ستُحمَّل هذه الصفحة تلقائيًا عند عودة الاتصال.
 
 # Source: scripts/core/header_metrics.js
 
