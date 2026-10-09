@@ -138,6 +138,7 @@
   align-items: center;
   justify-content: center;
   gap: 0.5em;
+  min-height: var(--control-height);
   padding: var(--spacing-xs) var(--spacing-md);
   border: none;
   border-radius: var(--radius-md);
@@ -229,8 +230,10 @@
   color: var(--text-primary);
 }
 
-/* Button sizes */
+/* Button sizes. `.btn-sm` changes type and padding at the shared control height;
+   `.btn-xs` is the inline density inside text and dense rows. */
 .btn-xs {
+  min-height: 0;
   padding: 2px 6px;
   font-size: 0.75rem;
 }
@@ -910,10 +913,10 @@
   color: var(--text-muted);
   font-size: var(--font-size-xs);
   line-height: 1.35;
+  text-wrap: pretty;
 }
 
 .metric-value.positive,
-  text-wrap: pretty;
 .metric-card[data-accent="success"] .metric-icon {
   color: var(--success-color);
 }
@@ -938,10 +941,10 @@
 /* Metric Card Grid Layout Helper */
 .metric-grid {
   display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
   gap: var(--spacing-md);
 }
 
-  grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
 /* Image Lightbox -------------------------------------------------- */
 
 .clickable-logo {

@@ -164,7 +164,7 @@
 }
 
 .input-dialog__button--confirm {
-  background: var(--primary-color);
+  background: var(--button-primary-bg);
   border-color: transparent;
   color: #fff;
 }

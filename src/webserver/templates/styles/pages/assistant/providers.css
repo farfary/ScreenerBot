@@ -173,13 +173,13 @@
 }
 
 .provider-btn.primary {
-  background: var(--primary, #3b82f6);
-  border-color: var(--primary, #3b82f6);
+  background: var(--button-primary-bg);
+  border-color: var(--button-primary-bg);
   color: white;
 }
 
 .provider-btn.primary:hover {
-  background: var(--primary-hover, #2563eb);
+  background: var(--button-primary-hover);
 }
 
 .provider-btn.test-btn:disabled {

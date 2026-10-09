@@ -460,6 +460,7 @@ a.ti-address-value:hover {
   width: 28px;
   height: 28px;
   min-width: 28px;
+  min-height: 28px;
   padding: 0;
   border: 0;
   background: transparent;

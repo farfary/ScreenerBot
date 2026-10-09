@@ -148,14 +148,14 @@
 
 /* Button variants */
 .action-bar-btn--primary {
-  background: var(--primary-color);
+  background: var(--button-primary-bg);
   color: #fff;
-  border-color: var(--primary-color);
+  border-color: var(--button-primary-bg);
 }
 
 .action-bar-btn--primary:hover:not(:disabled) {
-  background: var(--primary-hover);
-  border-color: var(--primary-hover);
+  background: var(--button-primary-hover);
+  border-color: var(--button-primary-hover);
   transform: translateY(-1px);
   box-shadow: 0 2px 6px var(--shadow-md);
 }

@@ -18,7 +18,7 @@
 /* ===================== Bar ===================== */
 
 .data-table-toolbar {
-  --table-toolbar-control-height: 32px;
+  --table-toolbar-control-height: var(--control-height);
 
   container: table-toolbar / inline-size;
   display: flex;
@@ -848,14 +848,14 @@
 }
 
 .table-toolbar-btn--primary {
-  background: var(--primary-color);
-  border-color: var(--primary-color);
+  background: var(--button-primary-bg);
+  border-color: var(--button-primary-bg);
   color: #fff;
 }
 
 .table-toolbar-btn--primary:hover:not(:disabled) {
-  background: var(--primary-hover, var(--primary-color));
-  border-color: var(--primary-hover, var(--primary-color));
+  background: var(--button-primary-hover);
+  border-color: var(--button-primary-hover);
   color: #fff;
 }
 

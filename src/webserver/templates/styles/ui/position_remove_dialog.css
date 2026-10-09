@@ -268,7 +268,7 @@
 }
 
 .position-remove-btn--confirm {
-  background: var(--primary-color);
+  background: var(--button-primary-bg);
   color: var(--control-mark);
 }
 

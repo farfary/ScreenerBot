@@ -166,7 +166,7 @@
   font-size: 0.9375rem;
   font-weight: 600;
   color: white;
-  background: var(--primary-color);
+  background: var(--button-primary-bg);
   border: none;
   border-radius: var(--radius-md);
   cursor: pointer;
@@ -176,7 +176,7 @@
 }
 
 .login-submit:hover:not(:disabled) {
-  background: var(--primary-hover);
+  background: var(--button-primary-hover);
 }
 
 .login-submit:active:not(:disabled) {

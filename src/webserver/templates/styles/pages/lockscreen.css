@@ -336,7 +336,7 @@
   gap: 0.5rem;
   width: 100%;
   padding: 14px 24px;
-  background: var(--primary-color);
+  background: var(--button-primary-bg);
   border: none;
   border-radius: var(--radius-lg);
   font-size: 0.875rem;
@@ -349,7 +349,7 @@
 }
 
 .lockscreen-password-submit:hover {
-  background: var(--primary-hover);
+  background: var(--button-primary-hover);
   transform: translateY(-1px);
   box-shadow: 0 4px 16px var(--primary-alpha-30);
 }

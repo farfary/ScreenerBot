@@ -208,49 +208,28 @@
   line-height: 1;
 }
 
-/* Action button variants */
-.dt-action-btn-primary {
-  background: var(--primary-color);
-  color: white;
+/* Action button variants. A row action is one neutral outline button in every
+   table; the variant colours only the glyph and border on hover and focus, so a
+   destructive action reads red at the moment it is about to act and is never a
+   filled block repeated down the table. */
+.dt-action-btn-primary:is(:hover, :focus-visible) {
   border-color: var(--primary-color);
+  color: var(--primary-color);
 }
 
-.dt-action-btn-primary:hover {
-  background: var(--primary-hover, #2563eb);
-  border-color: var(--primary-hover, #2563eb);
+.dt-action-btn-success:is(:hover, :focus-visible) {
+  border-color: var(--success-color);
+  color: var(--success-color);
 }
 
-.dt-action-btn-success {
-  background: var(--success-color, #10b981);
-  color: white;
-  border-color: var(--success-color, #10b981);
+.dt-action-btn-danger:is(:hover, :focus-visible) {
+  border-color: var(--error-color);
+  color: var(--error-color);
 }
 
-.dt-action-btn-success:hover {
-  background: var(--success-hover, #059669);
-  border-color: var(--success-hover, #059669);
-}
-
-.dt-action-btn-danger {
-  background: var(--error-color, #ef4444);
-  color: white;
-  border-color: var(--error-color, #ef4444);
-}
-
-.dt-action-btn-danger:hover {
-  background: var(--error-hover, #dc2626);
-  border-color: var(--error-hover, #dc2626);
-}
-
-.dt-action-btn-warning {
-  background: var(--warning-color, #f59e0b);
-  color: white;
-  border-color: var(--warning-color, #f59e0b);
-}
-
-.dt-action-btn-warning:hover {
-  background: var(--warning-hover, #d97706);
-  border-color: var(--warning-hover, #d97706);
+.dt-action-btn-warning:is(:hover, :focus-visible) {
+  border-color: var(--warning-color);
+  color: var(--warning-color);
 }
 
 .dt-action-btn-ghost {

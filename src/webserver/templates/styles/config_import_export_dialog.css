@@ -731,12 +731,12 @@
 }
 
 .config-dialog-btn.primary {
-  background: var(--primary-color);
+  background: var(--button-primary-bg);
   color: white;
 }
 
 .config-dialog-btn.primary:hover:not(:disabled) {
-  background: var(--primary-hover);
+  background: var(--button-primary-hover);
 }
 
 .config-dialog-btn.secondary {

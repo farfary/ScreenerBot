@@ -218,6 +218,10 @@
   --spacing-xl: 32px;
   --spacing-2xl: 48px;
 
+  /* Control height: every text button and toolbar control of a page or table row
+     stands at this height, so actions of one role line up across pages. */
+  --control-height: 32px;
+
   /* Border Radius Scale */
   --radius-xs: 2px;
   --radius-sm: 4px;
