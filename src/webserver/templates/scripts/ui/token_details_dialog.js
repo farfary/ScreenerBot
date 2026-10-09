@@ -1396,6 +1396,11 @@ export class TokenDetailsDialog {
       volume24h
     );
     update("holders", holders === null ? "—" : Utils.formatCompactNumber(holders), holders);
+    // The strip is compact; the exact count is its tooltip (Token Info prints it exact).
+    const holdersEl = container.querySelector('[data-live-value="holders"]');
+    if (holdersEl) {
+      holdersEl.title = holders === null ? "" : Utils.formatNumber(holders, { decimals: 0 });
+    }
 
     const changeEl = container.querySelector("[data-live-change]");
     const change24h = value(token.price_change_periods?.h24);
