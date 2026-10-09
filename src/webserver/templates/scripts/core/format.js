@@ -425,8 +425,9 @@ function shiftPercent(digits) {
  * digits of |value|, and the sign follows them: a value that rounds to zero is
  * shown as zero. `sign`: "auto" shows a minus for negatives and a plus for
  * positives, "negative" only the minus, "none" no sign, "always" plus for zero too.
+ * `trim` drops trailing fraction zeros ("2.50%" -> "2.5%", "2.00%" -> "2%").
  */
-function percentText(value, decimals, sign) {
+function percentText(value, decimals, sign, trim = false) {
   const digits = Math.abs(value).toFixed(decimals);
   const num = Number(digits) === 0 ? 0 : value;
   const negative = num < 0;
@@ -434,7 +435,7 @@ function percentText(value, decimals, sign) {
     // Magnitudes from 1e21 stringify in exponent form, which has no decimal
     // shift; they keep their exponent text and are not locale placed.
     const shown = negative ? signPrefix(true) : sign === "auto" || sign === "always" ? signPrefix(false) : "";
-    return `${shown}${localizeDecimal(digits)}%`;
+    return `${shown}${localizeDecimal(trim ? trimZeros(digits) : digits)}%`;
   }
   const magnitude = shiftPercent(digits);
   let signDisplay = "never";
@@ -443,7 +444,7 @@ function percentText(value, decimals, sign) {
   return displayed(
     intl(Intl.NumberFormat, {
       style: "percent",
-      minimumFractionDigits: decimals,
+      minimumFractionDigits: trim ? 0 : decimals,
       maximumFractionDigits: decimals,
       useGrouping: false,
       signDisplay,
@@ -453,19 +454,26 @@ function percentText(value, decimals, sign) {
 
 export function formatPercentValue(
   value,
-  { fallback = DASH, decimals = 2, includeSign = true, plus = "+", signZero = false } = {}
+  {
+    fallback = DASH,
+    decimals = 2,
+    includeSign = true,
+    plus = "+",
+    signZero = false,
+    trim = false,
+  } = {}
 ) {
   const num = coerceNumber(value);
   if (!Number.isFinite(num)) {
     return fallback;
   }
   if (!includeSign) {
-    return percentText(Math.abs(num), decimals, "none");
+    return percentText(Math.abs(num), decimals, "none", trim);
   }
   if (num === 0) {
-    return percentText(0, decimals, signZero && plus === "+" ? "always" : "none");
+    return percentText(0, decimals, signZero && plus === "+" ? "always" : "none", trim);
   }
-  return percentText(num, decimals, plus === "+" ? "auto" : "negative");
+  return percentText(num, decimals, plus === "+" ? "auto" : "negative", trim);
 }
 
 export function formatPercent(value, { style = "plain", decimals = 2, fallback = HYPHEN } = {}) {
@@ -492,12 +500,14 @@ export function formatPercent(value, { style = "plain", decimals = 2, fallback =
   return text;
 }
 
-export function formatSol(amount, { decimals = 4, fallback = HYPHEN, suffix } = {}) {
+/** A SOL amount at `decimals`; `trim` drops trailing fraction zeros ("0.050" -> "0.05"). */
+export function formatSol(amount, { decimals = 4, fallback = HYPHEN, suffix, trim = false } = {}) {
   const num = coerceNumber(amount);
   if (!Number.isFinite(num)) {
     return fallback;
   }
-  const formatted = localizeDecimal(num.toFixed(decimals));
+  const digits = num.toFixed(decimals);
+  const formatted = localizeDecimal(trim ? trimZeros(digits) : digits);
   if (suffix === undefined) {
     return displayed(I18n.t("format-native-amount", { amount: formatted }));
   }

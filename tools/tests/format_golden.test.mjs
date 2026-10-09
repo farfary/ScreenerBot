@@ -263,6 +263,13 @@ test("surface formatter options: trimmed fixed text, extra decimals, zero sign a
   assert.equal(fmt.formatPercentValue(0), "0.00%");
   assert.equal(fmt.formatPercentValue(-1.5, { signZero: true }), "-1.50%");
   assert.equal(fmt.formatPercentValue(-1.5, { includeSign: false }), "1.50%");
+  assert.equal(fmt.formatPercentValue(2, { plus: "", trim: true }), "2%");
+  assert.equal(fmt.formatPercentValue(2.5, { plus: "", trim: true }), "2.5%");
+  assert.equal(fmt.formatPercentValue(-0.001, { trim: true }), "0%");
+  assert.equal(fmt.formatSol(0.05, { decimals: 4, trim: true }), "0.05 SOL");
+  assert.equal(fmt.formatSol(2, { decimals: 4, trim: true }), "2 SOL");
+  assert.equal(fmt.formatSol(0.00004, { decimals: 4, trim: true }), "0 SOL");
+  assert.equal(fmt.formatSol(0.05, { decimals: 4 }), "0.0500 SOL");
   assert.equal(
     fmt.formatPercentValue(2, { decimals: 0, signZero: true, includeSign: true }),
     "+2%"
