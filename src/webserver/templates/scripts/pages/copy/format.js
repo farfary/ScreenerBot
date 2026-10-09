@@ -161,8 +161,11 @@ export function sol(value, decimals = 4) {
 /** Sign glyph of a change: a typographic minus so it aligns with the plus. */
 const changeSign = (number) => (number > 0 ? "+" : number < 0 ? "−" : "");
 
-export function signedSol(value, decimals = 4) {
-  return formatSignedSol(value, { decimals, fallback: "—" });
+/** Decimals of every Copy Trading P&L figure: list rows, cards, buckets and charts. */
+export const PNL_SOL_DECIMALS = 4;
+
+export function signedSol(value) {
+  return formatSignedSol(value, { decimals: PNL_SOL_DECIMALS, fallback: "—" });
 }
 
 export function signedPct(value, decimals = 1) {

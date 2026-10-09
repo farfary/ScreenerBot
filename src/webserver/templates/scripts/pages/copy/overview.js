@@ -58,7 +58,7 @@ function results(insights, esc) {
     value: bucket.pnl_sol,
     display: I18n.t("copy-exit-bucket", {
       count: bucket.legs,
-      pnl: signedSol(bucket.pnl_sol, 3),
+      pnl: signedSol(bucket.pnl_sol),
     }),
     tone: toneClass(bucket.pnl_sol),
   }));

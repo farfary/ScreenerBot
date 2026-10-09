@@ -13,9 +13,12 @@
 
 import test, { after } from "node:test";
 import assert from "node:assert/strict";
+import { readFile, readdir } from "node:fs/promises";
+import { resolve } from "node:path";
 
 import { chromium } from "playwright";
 
+import { SCRIPTS_ROOT } from "../lib/dashboard_ui.mjs";
 import { serveDashboard } from "../lib/dashboard_host.mjs";
 import { createApiHandler, loadIndex } from "../lib/dashboard_fixtures.mjs";
 
@@ -69,3 +72,39 @@ for (const [width, locale] of VIEWS) {
     }
   });
 }
+
+test("every copy P&L figure has one SOL precision", async (t) => {
+  const context = await browser.newContext({ viewport: { width: 1440, height: 900 } });
+  const api = createApiHandler([copy, shell], "populated");
+  const host = await serveDashboard(context, { locale: "en", onApi: api.onApi });
+  t.after(async () => {
+    await context.close();
+    await host.close();
+  });
+  const page = await context.newPage();
+  await page.goto(`${host.origin}/copy`);
+  await page.waitForSelector(".copy-row-pnl");
+  await page.waitForSelector("#copy-figures .copy-figure");
+  const figures = await page.$$eval(".copy-row-pnl, #copy-figures .copy-figure-value", (nodes) =>
+    // Signed figures are the P&L ones; a budget ("2.54 / 8.00 SOL") is not a P&L.
+    nodes.map((node) => node.textContent.trim()).filter((text) => /^[+\-−].*SOL/.test(text))
+  );
+  const decimals = new Set(figures.map((text) => /[.,](\d+)\s*SOL/.exec(text)?.[1].length ?? 0));
+  assert.ok(
+    figures.some((text) => text),
+    "the list and the cards print SOL figures"
+  );
+  assert.deepEqual([...decimals], [4], `one precision across ${figures.join(" | ")}`);
+});
+
+test("no copy P&L call picks its own precision", async () => {
+  const directory = resolve(SCRIPTS_ROOT, "pages/copy");
+  const offenders = [];
+  for (const name of await readdir(directory)) {
+    const source = await readFile(resolve(directory, name), "utf8");
+    for (const match of source.matchAll(/signedSol\([^()]*(?:\([^()]*\)[^()]*)*,/g)) {
+      offenders.push(`${name}: ${match[0]}`);
+    }
+  }
+  assert.deepEqual(offenders, [], "signedSol takes the one P&L precision");
+});

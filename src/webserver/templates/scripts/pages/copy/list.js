@@ -102,7 +102,7 @@ export function createTaskList(page) {
       }
       <span class="copy-row-line">
         <span class="copy-row-state ${stateClass}">${esc(stateText(task))}</span>
-        <span class="copy-row-pnl ${toneClass(pnl)}">${esc(signedSol(pnl, 3))}</span>
+        <span class="copy-row-pnl ${toneClass(pnl)}">${esc(signedSol(pnl))}</span>
       </span>
       <span class="copy-row-line copy-row-detail">
         <span class="copy-row-budget"><span class="copy-meter" aria-hidden="true"><span style="width:${budgetPct.toFixed(1)}%"></span></span><span>${esc(I18n.t("copy-budget-of", { spent: fixed(spent, 2), budget: fixed(budget, 2) }))}</span></span>
