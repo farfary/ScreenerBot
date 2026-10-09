@@ -752,6 +752,7 @@ copy-editor-rule-aria = { $rule } ayarı
 copy-editor-rule-empty-uses = Boş bırakılırsa Trader varsayılanı kullanılır: { $value }
 copy-editor-rule-follows = Trader'ı izler: { $summary }
 copy-editor-rule-follows-plain = Trader'ın ayarını izler.
+copy-editor-rule-follows-own = Açma/kapama Trader'ı izler, değerler bu görevin: { $summary }
 copy-editor-rule-off-note = Trader ne kullanırsa kullansın bu görev için kapalı.
 copy-task-unnamed = Adsız görev
 copy-editor-review-head = { $name } · { $mode } · { $status }

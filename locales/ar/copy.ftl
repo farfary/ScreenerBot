@@ -904,6 +904,7 @@ copy-editor-rule-aria = إعداد { $rule }
 copy-editor-rule-empty-uses = الفارغ يستخدم افتراضي المتداول: { $value }
 copy-editor-rule-follows = يتبع المتداول: { $summary }
 copy-editor-rule-follows-plain = يتبع إعداد المتداول.
+copy-editor-rule-follows-own = يتبع مفتاح المتداول بقيم هذه المهمة: { $summary }
 copy-editor-rule-off-note = معطّل لهذه المهمة، مهما استخدم المتداول.
 copy-task-unnamed = مهمة بلا اسم
 copy-editor-review-head = { $name } · { $mode } · { $status }

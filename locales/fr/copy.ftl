@@ -836,6 +836,7 @@ copy-editor-rule-aria = Réglage { $rule }
 copy-editor-rule-empty-uses = Vide, la valeur par défaut du Trader est utilisée : { $value }
 copy-editor-rule-follows = Suit le Trader : { $summary }
 copy-editor-rule-follows-plain = Suit le réglage du Trader.
+copy-editor-rule-follows-own = Suit l'interrupteur du Trader avec les valeurs de cette tâche : { $summary }
 copy-editor-rule-off-note = Désactivée pour cette tâche, quel que soit le réglage du Trader.
 copy-task-unnamed = Tâche sans nom
 copy-editor-review-head = { $name } · { $mode } · { $status }

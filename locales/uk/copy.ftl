@@ -844,6 +844,7 @@ copy-editor-rule-aria = Налаштування: { $rule }
 copy-editor-rule-empty-uses = Порожнє поле використовує стандарт трейдера: { $value }
 copy-editor-rule-follows = Слідує трейдеру: { $summary }
 copy-editor-rule-follows-plain = Слідує налаштуванню трейдера.
+copy-editor-rule-follows-own = Увімкнення — як у трейдера, значення — цього завдання: { $summary }
 copy-editor-rule-off-note = Вимкнено для цього завдання, незалежно від налаштувань трейдера.
 copy-task-unnamed = Завдання без назви
 copy-editor-review-head = { $name } · { $mode } · { $status }

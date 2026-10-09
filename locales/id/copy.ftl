@@ -778,6 +778,7 @@ copy-editor-rule-aria = Pengaturan { $rule }
 copy-editor-rule-empty-uses = Kosong memakai default Trader: { $value }
 copy-editor-rule-follows = Mengikuti Trader: { $summary }
 copy-editor-rule-follows-plain = Mengikuti pengaturan Trader.
+copy-editor-rule-follows-own = Mengikuti sakelar Trader dengan nilai tugas ini: { $summary }
 copy-editor-rule-off-note = Nonaktif untuk tugas ini, apa pun yang dipakai Trader.
 copy-task-unnamed = Tugas tanpa nama
 copy-editor-review-head = { $name } · { $mode } · { $status }

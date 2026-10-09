@@ -778,6 +778,7 @@ copy-editor-rule-aria = { $rule }设置
 copy-editor-rule-empty-uses = 留空则使用交易引擎默认值：{ $value }
 copy-editor-rule-follows = 跟随交易引擎：{ $summary }
 copy-editor-rule-follows-plain = 跟随交易引擎的设置。
+copy-editor-rule-follows-own = 开关跟随交易引擎，数值使用此任务的设置：{ $summary }
 copy-editor-rule-off-note = 此任务已关闭，无论交易引擎如何设置。
 copy-task-unnamed = 未命名任务
 copy-editor-review-head = { $name } · { $mode } · { $status }

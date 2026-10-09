@@ -804,6 +804,7 @@ copy-editor-rule-aria = Einstellung: { $rule }
 copy-editor-rule-empty-uses = Leer verwendet den Trader-Standard: { $value }
 copy-editor-rule-follows = Folgt dem Trader: { $summary }
 copy-editor-rule-follows-plain = Folgt der Einstellung des Traders.
+copy-editor-rule-follows-own = Folgt dem Schalter des Traders mit den Werten dieser Aufgabe: { $summary }
 copy-editor-rule-off-note = Für diese Aufgabe aus, unabhängig von der Einstellung des Traders.
 copy-task-unnamed = Unbenannte Aufgabe
 copy-editor-review-head = { $name } · { $mode } · { $status }

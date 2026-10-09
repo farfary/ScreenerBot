@@ -804,6 +804,7 @@ copy-editor-rule-aria = تنظیم { $rule }
 copy-editor-rule-empty-uses = خالی یعنی پیش‌فرض معامله‌گر: { $value }
 copy-editor-rule-follows = پیرو معامله‌گر: { $summary }
 copy-editor-rule-follows-plain = پیرو تنظیم معامله‌گر.
+copy-editor-rule-follows-own = روشن/خاموش پیرو معامله‌گر، با مقدارهای این وظیفه: { $summary }
 copy-editor-rule-off-note = برای این وظیفه خاموش است، هر چه معامله‌گر استفاده کند.
 copy-task-unnamed = وظیفه بدون نام
 copy-editor-review-head = { $name } · { $mode } · { $status }

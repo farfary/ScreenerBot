@@ -22,8 +22,8 @@ import {
   effectivePolicy,
   exitWarnings,
   fieldText,
+  inheritNote,
   matchPreset,
-  ruleSummary,
   validateOverrides,
 } from "./policy.js";
 import { rulesHtml } from "./rules.js";
@@ -296,7 +296,7 @@ function ruleCard(rule, { draft, defaults }, esc) {
       })
       .join("")}</div>`;
   } else if (state === "inherit") {
-    body = `<p class="copy-note">${esc(inherited ? I18n.t("copy-editor-rule-follows", { summary: ruleSummary(rule, inherited) }) : I18n.t("copy-editor-rule-follows-plain"))}</p>`;
+    body = `<p class="copy-note">${esc(inheritNote(rule, inherited, draft.exit_policy_overrides))}</p>`;
   } else {
     body = `<p class="copy-note">${esc(I18n.t("copy-editor-rule-off-note"))}</p>`;
   }

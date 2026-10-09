@@ -830,6 +830,7 @@ copy-editor-rule-aria = Ajuste de { $rule }
 copy-editor-rule-empty-uses = Vacío usa el valor del Trader: { $value }
 copy-editor-rule-follows = Sigue al Trader: { $summary }
 copy-editor-rule-follows-plain = Sigue el ajuste del Trader.
+copy-editor-rule-follows-own = Sigue el interruptor del Trader con los valores de esta tarea: { $summary }
 copy-editor-rule-off-note = Desactivada para esta tarea, sea cual sea el ajuste del Trader.
 copy-task-unnamed = Tarea sin nombre
 copy-editor-review-head = { $name } · { $mode } · { $status }

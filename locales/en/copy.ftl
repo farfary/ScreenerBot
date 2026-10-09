@@ -885,6 +885,7 @@ copy-editor-rule-empty-uses = Empty uses the Trader default: { $value }
 # $summary is the Trader's setting for the rule.
 copy-editor-rule-follows = Follows the Trader: { $summary }
 copy-editor-rule-follows-plain = Follows the Trader's setting.
+copy-editor-rule-follows-own = Follows the Trader's switch with this task's values: { $summary }
 copy-editor-rule-off-note = Off for this task, whatever the Trader uses.
 copy-task-unnamed = Unnamed task
 # $name is the task name, $mode its execution mode and $status what happens once saved.

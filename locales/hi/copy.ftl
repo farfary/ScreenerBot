@@ -766,6 +766,7 @@ copy-editor-rule-aria = { $rule } सेटिंग
 copy-editor-rule-empty-uses = खाली छोड़ने पर ट्रेडर डिफ़ॉल्ट लगता है: { $value }
 copy-editor-rule-follows = ट्रेडर का अनुसरण: { $summary }
 copy-editor-rule-follows-plain = ट्रेडर की सेटिंग का अनुसरण।
+copy-editor-rule-follows-own = चालू/बंद ट्रेडर के अनुसार, मान इस कार्य के: { $summary }
 copy-editor-rule-off-note = इस टास्क के लिए बंद, ट्रेडर चाहे जो इस्तेमाल करे।
 copy-task-unnamed = बिना नाम का टास्क
 copy-editor-review-head = { $name } · { $mode } · { $status }

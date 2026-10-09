@@ -782,6 +782,7 @@ copy-editor-rule-aria = { $rule } 설정
 copy-editor-rule-empty-uses = 비워 두면 트레이더 기본값 사용: { $value }
 copy-editor-rule-follows = 트레이더 설정을 따름: { $summary }
 copy-editor-rule-follows-plain = 트레이더 설정을 따릅니다.
+copy-editor-rule-follows-own = 켜기/끄기는 트레이더를 따르고 값은 이 작업의 값: { $summary }
 copy-editor-rule-off-note = 트레이더 설정과 관계없이 이 작업에서는 꺼져 있습니다.
 copy-task-unnamed = 이름 없는 작업
 copy-editor-review-head = { $name } · { $mode } · { $status }

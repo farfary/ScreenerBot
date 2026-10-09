@@ -192,6 +192,22 @@ export function ruleSummary(rule, policy) {
     .join(" · ");
 }
 
+/**
+ * The note on a rule that follows the Trader's switch. The backend merges overrides per field,
+ * so a stored value under an inherited switch still applies: the note reads the same resolved
+ * policy the exit warnings read, and says when the values are the task's own.
+ */
+export function inheritNote(rule, traderDefaults, overrides) {
+  if (!traderDefaults) return I18n.t("copy-editor-rule-follows-plain");
+  const summary = ruleSummary(rule, effectivePolicy(traderDefaults, overrides));
+  const own = rule.fields.some(
+    (field) => field.key !== "enabled" && isOverridden(overrides, rule.group, field.key)
+  );
+  return own
+    ? I18n.t("copy-editor-rule-follows-own", { summary })
+    : I18n.t("copy-editor-rule-follows", { summary });
+}
+
 function preset(groups) {
   const overrides = blankOverrides();
   Object.entries(groups).forEach(([group, values]) => Object.assign(overrides[group], values));

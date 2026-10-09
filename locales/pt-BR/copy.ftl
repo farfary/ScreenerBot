@@ -790,6 +790,7 @@ copy-editor-rule-aria = Configuração de { $rule }
 copy-editor-rule-empty-uses = Vazio usa o padrão do Trader: { $value }
 copy-editor-rule-follows = Segue o Trader: { $summary }
 copy-editor-rule-follows-plain = Segue a configuração do Trader.
+copy-editor-rule-follows-own = Segue a chave do Trader com os valores desta tarefa: { $summary }
 copy-editor-rule-off-note = Desativada nesta tarefa, independentemente do que o Trader usa.
 copy-task-unnamed = Tarefa sem nome
 copy-editor-review-head = { $name } · { $mode } · { $status }

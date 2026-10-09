@@ -778,6 +778,7 @@ copy-editor-rule-aria = { $rule }の設定
 copy-editor-rule-empty-uses = 空欄の場合はトレーダーのデフォルトを使用します: { $value }
 copy-editor-rule-follows = トレーダーに従います: { $summary }
 copy-editor-rule-follows-plain = トレーダーの設定に従います。
+copy-editor-rule-follows-own = オン/オフはトレーダーに従い、値はこのタスクのもの: { $summary }
 copy-editor-rule-off-note = トレーダーの設定に関わらず、このタスクでは無効です。
 copy-task-unnamed = 名前のないタスク
 copy-editor-review-head = { $name } · { $mode } · { $status }

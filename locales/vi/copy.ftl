@@ -738,6 +738,7 @@ copy-editor-rule-aria = Cài đặt { $rule }
 copy-editor-rule-empty-uses = Để trống sẽ dùng mặc định của Trader: { $value }
 copy-editor-rule-follows = Theo Trader: { $summary }
 copy-editor-rule-follows-plain = Theo cài đặt của Trader.
+copy-editor-rule-follows-own = Bật/tắt theo Trader, giá trị của tác vụ này: { $summary }
 copy-editor-rule-off-note = Tắt cho tác vụ này, bất kể Trader dùng gì.
 copy-task-unnamed = Tác vụ chưa đặt tên
 copy-editor-review-head = { $name } · { $mode } · { $status }
