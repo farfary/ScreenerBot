@@ -270,7 +270,3 @@ trader-timing-concurrency = Konkurensi Pemeriksaan Entry
 trader-timing-concurrency-hint = Jumlah token yang diperiksa bersamaan (makin tinggi = makin cepat tetapi lebih banyak CPU)
 trader-timing-unit-minutes = mnt
 trader-timing-unit-tokens = token
-trader-timing-intervals = Interval Monitor
-trader-timing-intervals-badge = Hanya baca
-trader-timing-intervals-hint = Ditetapkan oleh aplikasi dan tidak dapat diubah
-trader-timing-intervals-value = <strong>Monitor Entry:</strong> 30 dtk | <strong>Monitor Exit:</strong> 5 dtk

@@ -279,7 +279,3 @@ trader-timing-concurrency = Giriş kontrolü eşzamanlılığı
 trader-timing-concurrency-hint = Aynı anda kontrol edilecek token sayısı (yüksek = daha hızlı ama daha fazla CPU)
 trader-timing-unit-minutes = dk
 trader-timing-unit-tokens = token
-trader-timing-intervals = İzleyici aralıkları
-trader-timing-intervals-badge = Salt okunur
-trader-timing-intervals-hint = Uygulama tarafından belirlenir ve değiştirilemez
-trader-timing-intervals-value = <strong>Giriş izleyici:</strong> 30sn | <strong>Çıkış izleyici:</strong> 5sn

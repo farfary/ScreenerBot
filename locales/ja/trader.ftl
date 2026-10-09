@@ -329,7 +329,3 @@ trader-timing-concurrency = エントリーチェックの同時実行数
 trader-timing-concurrency-hint = 同時にチェックするトークン数（大きいほど高速ですが CPU 負荷が増えます）
 trader-timing-unit-minutes = 分
 trader-timing-unit-tokens = 銘柄
-trader-timing-intervals = モニター間隔
-trader-timing-intervals-badge = 読み取り専用
-trader-timing-intervals-hint = アプリで固定されており、変更できません
-trader-timing-intervals-value = <strong>エントリーモニター:</strong> 30秒 | <strong>エグジットモニター:</strong> 5秒

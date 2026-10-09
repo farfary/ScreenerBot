@@ -301,7 +301,3 @@ trader-timing-concurrency = Параллельность проверки вхо
 trader-timing-concurrency-hint = Сколько токенов проверять одновременно (больше — быстрее, но выше нагрузка на процессор)
 trader-timing-unit-minutes = мин
 trader-timing-unit-tokens = токенов
-trader-timing-intervals = Интервалы мониторинга
-trader-timing-intervals-badge = Только чтение
-trader-timing-intervals-hint = Задаются приложением и не меняются
-trader-timing-intervals-value = <strong>Мониторинг входов:</strong> 30 с | <strong>Мониторинг выходов:</strong> 5 с

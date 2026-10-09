@@ -11,7 +11,7 @@
  * in link blue, and DCA wore a dollar sign although it is denominated in SOL.
  *
  * - A step glyph has no background, border or shadow.
- * - A field badge appears only where it states a fact the title does not (read-only).
+ * - No field carries a badge.
  * - A summary line's sentence is body text; only its glyph and figure take the tone.
  * - No rule tab uses a dollar-sign glyph.
  * - Entry Sizes, a list of SOL amounts, matches the number fields beside it.
@@ -64,9 +64,7 @@ for (const id of TABS) {
             style.borderStyle === "none",
         };
       });
-      const badges = [...root.querySelectorAll(".config-badge")].map(
-        (el) => el.dataset.l10nId
-      );
+      const badges = [...root.querySelectorAll(".config-badge")].map((el) => el.dataset.l10nId);
       const body = getComputedStyle(document.body).color;
       const summaries = [...root.querySelectorAll(".summary-item")].map((el) => ({
         text: el.textContent.trim().slice(0, 40),
@@ -76,12 +74,11 @@ for (const id of TABS) {
       return { steps, badges, body, summaries, dollars };
     });
 
-    assert.ok(report.steps.every((step) => step.bare), `${id}: every step glyph is bare`);
-    assert.deepEqual(
-      report.badges.filter((badge) => badge !== "trader-timing-intervals-badge"),
-      [],
-      `${id}: no field badge restates its title`
+    assert.ok(
+      report.steps.every((step) => step.bare),
+      `${id}: every step glyph is bare`
     );
+    assert.deepEqual(report.badges, [], `${id}: no field carries a badge`);
     for (const summary of report.summaries) {
       assert.equal(summary.color, report.body, `${id}: "${summary.text}" is body text`);
     }

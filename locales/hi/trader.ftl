@@ -279,7 +279,3 @@ trader-timing-concurrency = एंट्री जांच समवर्त�
 trader-timing-concurrency-hint = एक साथ जांचे जाने वाले टोकन की संख्या (ज़्यादा = तेज़ पर ज़्यादा CPU)
 trader-timing-unit-minutes = मि
 trader-timing-unit-tokens = टोकन
-trader-timing-intervals = मॉनिटर अंतराल
-trader-timing-intervals-badge = केवल पढ़ने योग्य
-trader-timing-intervals-hint = ऐप द्वारा तय, इन्हें बदला नहीं जा सकता
-trader-timing-intervals-value = <strong>एंट्री मॉनिटर:</strong> 30s | <strong>एग्ज़िट मॉनिटर:</strong> 5s

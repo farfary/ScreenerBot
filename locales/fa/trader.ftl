@@ -340,7 +340,3 @@ trader-timing-concurrency = همروندی بررسی ورود
 trader-timing-concurrency-hint = تعداد توکن‌هایی که هم‌زمان بررسی می‌شوند (بیشتر = سریع‌تر اما مصرف CPU بیشتر)
 trader-timing-unit-minutes = دقیقه
 trader-timing-unit-tokens = توکن
-trader-timing-intervals = فاصله‌های پایش
-trader-timing-intervals-badge = فقط خواندنی
-trader-timing-intervals-hint = توسط برنامه تعیین می‌شوند و قابل تغییر نیستند
-trader-timing-intervals-value = <strong>پایش ورود:</strong> 30 ثانیه | <strong>پایش خروج:</strong> 5 ثانیه

@@ -351,7 +351,3 @@ trader-timing-concurrency = Simultaneidade da checagem de entrada
 trader-timing-concurrency-hint = Número de tokens verificados ao mesmo tempo (maior = mais rápido, porém mais CPU)
 trader-timing-unit-minutes = min
 trader-timing-unit-tokens = tokens
-trader-timing-intervals = Intervalos dos monitores
-trader-timing-intervals-badge = Somente leitura
-trader-timing-intervals-hint = Definidos pelo aplicativo e não podem ser alterados
-trader-timing-intervals-value = <strong>Monitor de entrada:</strong> 30s | <strong>Monitor de saída:</strong> 5s

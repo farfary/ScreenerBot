@@ -287,7 +287,3 @@ trader-timing-concurrency = Parallelität der Einstiegsprüfung
 trader-timing-concurrency-hint = Anzahl der Token, die gleichzeitig geprüft werden (höher = schneller, aber mehr CPU)
 trader-timing-unit-minutes = Min.
 trader-timing-unit-tokens = Tokens
-trader-timing-intervals = Monitor-Intervalle
-trader-timing-intervals-badge = Nur lesbar
-trader-timing-intervals-hint = Von der App festgelegt und nicht änderbar
-trader-timing-intervals-value = <strong>Einstiegsmonitor:</strong> 30s | <strong>Ausstiegsmonitor:</strong> 5s

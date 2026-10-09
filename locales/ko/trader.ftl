@@ -328,7 +328,3 @@ trader-timing-concurrency = 진입 확인 동시 처리 수
 trader-timing-concurrency-hint = 동시에 확인할 토큰 수 (높을수록 빠르지만 CPU 사용량 증가)
 trader-timing-unit-minutes = 분
 trader-timing-unit-tokens = 개
-trader-timing-intervals = 모니터 간격
-trader-timing-intervals-badge = 읽기 전용
-trader-timing-intervals-hint = 앱에서 고정되며 변경할 수 없습니다
-trader-timing-intervals-value = <strong>진입 모니터:</strong> 30s | <strong>청산 모니터:</strong> 5s

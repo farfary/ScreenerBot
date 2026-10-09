@@ -170,22 +170,6 @@
   font-size: 0.875rem;
 }
 
-.config-badge {
-  flex: 0 0 auto;
-  padding: 0.1875rem 0.5rem;
-  border-radius: var(--radius-xl);
-  font-size: 0.625rem;
-  font-weight: 600;
-  text-transform: uppercase;
-  letter-spacing: 0.5px;
-  white-space: nowrap;
-}
-
-.config-badge-info {
-  background: var(--primary-alpha-10);
-  color: var(--primary);
-}
-
 .config-hint {
   margin: 0 0 0.625rem;
   font-size: 0.6875rem;

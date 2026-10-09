@@ -268,7 +268,3 @@ trader-timing-concurrency = Số luồng kiểm tra vào lệnh
 trader-timing-concurrency-hint = Số token kiểm tra cùng lúc (càng cao càng nhanh nhưng tốn CPU hơn)
 trader-timing-unit-minutes = phút
 trader-timing-unit-tokens = token
-trader-timing-intervals = Chu kỳ giám sát
-trader-timing-intervals-badge = Chỉ đọc
-trader-timing-intervals-hint = Do ứng dụng cố định, không thể thay đổi
-trader-timing-intervals-value = <strong>Giám sát vào lệnh:</strong> 30 giây | <strong>Giám sát thoát lệnh:</strong> 5 giây

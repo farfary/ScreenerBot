@@ -384,7 +384,3 @@ trader-timing-concurrency = تزامن فحص الدخول
 trader-timing-concurrency-hint = عدد الرموز المفحوصة في وقت واحد (الأعلى أسرع لكنه يستهلك معالجًا أكثر)
 trader-timing-unit-minutes = دقيقة
 trader-timing-unit-tokens = رمز
-trader-timing-intervals = فترات المراقبة
-trader-timing-intervals-badge = للقراءة فقط
-trader-timing-intervals-hint = يضبطها التطبيق ولا يمكن تغييرها
-trader-timing-intervals-value = <strong>مراقب الدخول:</strong> 30s | <strong>مراقب الخروج:</strong> 5s

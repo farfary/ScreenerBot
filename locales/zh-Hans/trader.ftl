@@ -329,7 +329,3 @@ trader-timing-concurrency = 入场检查并发数
 trader-timing-concurrency-hint = 同时检查的代币数量（越高越快，但占用更多 CPU）
 trader-timing-unit-minutes = 分钟
 trader-timing-unit-tokens = 个
-trader-timing-intervals = 监控间隔
-trader-timing-intervals-badge = 只读
-trader-timing-intervals-hint = 由应用固定，无法更改
-trader-timing-intervals-value = <strong>入场监控：</strong>30 秒 | <strong>出场监控：</strong>5 秒
