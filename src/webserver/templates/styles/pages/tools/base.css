@@ -51,13 +51,6 @@
 }
 
 .sidebar-brand i {
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  width: 32px;
-  height: 32px;
-  border-radius: var(--radius-md);
-  background: var(--primary-alpha-10);
   color: var(--primary-color);
   font-size: 1rem;
 }
@@ -128,7 +121,6 @@
   text-align: start;
   cursor: pointer;
   transition: all var(--transition-fast);
-  position: relative;
 }
 
 .nav-item:hover {
@@ -146,8 +138,7 @@
 }
 
 .nav-item.active .nav-item-icon {
-  background: var(--primary-color);
-  color: #fff;
+  color: var(--primary-color);
 }
 
 .nav-item.active .nav-item-title {
@@ -155,23 +146,19 @@
   font-weight: 600;
 }
 
-/* Item Icon */
+/* Item Icon: a bare glyph in a fixed-width slot, so every title starts on one edge. */
 .nav-item-icon {
   display: flex;
   align-items: center;
   justify-content: center;
-  width: 36px;
-  height: 36px;
-  border-radius: var(--radius-md);
-  background: var(--bg-secondary);
+  width: 20px;
   color: var(--text-secondary);
   font-size: 0.95rem;
-  transition: all var(--transition-fast);
+  transition: color var(--transition-fast);
   flex-shrink: 0;
 }
 
 .nav-item:hover .nav-item-icon {
-  background: var(--primary-alpha-10);
   color: var(--primary-color);
 }
 
@@ -266,24 +253,17 @@
   background: transparent;
 }
 
-.nav-item[data-status="disabled"] .nav-item-icon {
-  background: var(--bg-secondary);
-  color: var(--text-muted);
-}
-
+.nav-item[data-status="disabled"] .nav-item-icon,
 .nav-item[data-status="disabled"]:hover .nav-item-icon {
-  background: var(--bg-secondary);
   color: var(--text-muted);
 }
 
-/* Status Badges */
+/* Status Badges: in the row after the title, never laid over the status dot. */
 .status-badge {
-  position: absolute;
-  top: 4px;
-  inset-inline-end: 4px;
-  font-size: 0.5rem;
+  flex-shrink: 0;
+  font-size: 0.625rem;
   font-weight: 600;
-  padding: 2px 5px;
+  padding: 2px 6px;
   border-radius: var(--radius-sm);
   text-transform: uppercase;
   letter-spacing: 0.03em;
@@ -306,7 +286,11 @@
   opacity: 0.6;
 }
 
-/* Sidebar Footer */
+/* Sidebar Footer: holds only the "select a tool" hint, so it leaves with it. */
+.sidebar-footer[hidden] {
+  display: none;
+}
+
 .sidebar-footer {
   padding: var(--spacing-sm) var(--spacing-md);
   border-top: 1px solid var(--border-color);

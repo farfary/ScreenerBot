@@ -354,8 +354,8 @@ function selectTool(toolId, { historyMode = "push" } = {}) {
 
   if (iconEl) iconEl.innerHTML = `<i class="${definition.icon}"></i>`;
   // The "select a tool" prompt is only true while nothing is selected.
-  const hintEl = $(".sidebar-hint");
-  if (hintEl) hintEl.hidden = true;
+  const hintFooter = $(".sidebar-footer");
+  if (hintFooter) hintFooter.hidden = true;
   if (titleEl) titleEl.textContent = I18n.label(TOOL_TITLE_LABELS, toolId);
   if (descEl) descEl.textContent = I18n.label(TOOL_DESCRIPTION_LABELS, toolId);
 
