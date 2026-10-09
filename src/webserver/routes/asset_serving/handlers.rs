@@ -211,6 +211,7 @@ pub async fn get_ui_script(Path(file): Path<String>) -> Response {
         "data_table/client_pagination.js" => Some(embeds::DATA_TABLE_CLIENT_PAGINATION),
         "data_table/server_pagination.js" => Some(embeds::DATA_TABLE_SERVER_PAGINATION),
         "data_table/event_handlers.js" => Some(embeds::DATA_TABLE_EVENT_HANDLERS),
+        "data_table/layout_state.js" => Some(embeds::DATA_TABLE_LAYOUT_STATE),
         "table_toolbar.js" => Some(embeds::TABLE_TOOLBAR_UI),
         "toast.js" => Some(embeds::TOAST_UI),
         "quick_trade_shortcuts.js" => Some(embeds::QUICK_TRADE_SHORTCUTS),
