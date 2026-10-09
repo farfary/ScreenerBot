@@ -406,10 +406,12 @@
   border-inline-start: 1px solid var(--border-color);
 }
 
+/* Each stat stacks from the top so the labels and values of the strip share one line
+   whether or not a stat carries a sub line. */
 .portfolio-stat {
   display: flex;
   flex-direction: column;
-  justify-content: center;
+  justify-content: flex-start;
   align-items: flex-start;
   gap: 0.38rem;
   min-width: 0;

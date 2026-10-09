@@ -573,6 +573,16 @@ export function signedTone(value, decimals = 4) {
 }
 
 /**
+ * Tone class of a count: `tone` while the count is a positive number, otherwise "" so a
+ * zero or an absent count ("—") stays neutral. A count's colour states that something
+ * is there, never that the metric exists.
+ */
+export function countTone(value, tone) {
+  const num = coerceNumber(value);
+  return Number.isFinite(num) && num > 0 ? tone : "";
+}
+
+/**
  * A signed SOL amount ("+0.1500 SOL", "-0.0077 SOL"). The sign is the locale's own
  * (`signPrefix`), attached to the digits before the unit, so it stays at the number's
  * start in right-to-left text. The sign follows the rounded digits: a value that rounds
@@ -874,11 +884,17 @@ export function formatUptime(seconds, { fallback, style = "detailed" } = {}) {
     return `${unit.day(days)} ${unit.hour(hours)}`;
   }
 
-  if (days > 0) return `${unit.day(days)} ${unit.hour(hours)} ${unit.minute(minutes)}`;
-  if (hours > 0)
-    return `${unit.hour(hours)} ${unit.minute(minutes)} ${unit.second(remainingSeconds)}`;
-  if (minutes > 0) return `${unit.minute(minutes)} ${unit.second(remainingSeconds)}`;
-  return unit.second(remainingSeconds);
+  // `detailed` names every non-zero unit from days down, with seconds only below an
+  // hour: "1d 1h 1m", "3h 12m", "5m 3s", "2m". Zero itself is "0s".
+  const parts = [
+    [days, unit.day],
+    [hours, unit.hour],
+    [minutes, unit.minute],
+    [total < 3600 ? remainingSeconds : 0, unit.second],
+  ]
+    .filter(([count]) => count > 0)
+    .map(([count, word]) => word(count));
+  return parts.length > 0 ? parts.join(" ") : unit.second(0);
 }
 
 /**

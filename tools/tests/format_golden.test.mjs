@@ -235,6 +235,12 @@ test("page-level formatter options: date parts, trimmed spans and detailed elaps
   assert.equal(fmt.formatUptime(90000, { style: "trimmed" }), "1d 1h");
   assert.equal(fmt.formatUptime(86400, { style: "trimmed" }), "1d");
   assert.equal(fmt.formatUptime(45, { style: "trimmed" }), "45s");
+  // Detailed spans carry seconds only below an hour and never a zero part.
+  assert.equal(fmt.formatUptime(11520), "3h 12m");
+  assert.equal(fmt.formatUptime(20160), "5h 36m");
+  assert.equal(fmt.formatUptime(86460), "1d 1m");
+  assert.equal(fmt.formatUptime(303), "5m 3s");
+  assert.equal(fmt.formatUptime(120), "2m");
   assert.equal(fmt.formatTimeAgo(now - 2000, { style: "detailed" }), "just now");
   assert.equal(fmt.formatTimeAgo(now - 45000, { style: "detailed" }), "45s ago");
   assert.equal(fmt.formatTimeAgo(now - 11100000, { style: "detailed" }), "3h 5m ago");
@@ -458,4 +464,20 @@ test("right-to-left formatter output differs from left-to-right only by isolatio
     ["formatSol", 0.5],
   ])
     assert.equal(rtl.fmt[fn](value), `\u2068${ltr.fmt[fn](value)}\u2069`, fn);
+});
+
+test("every formatUptime caller names a style the formatter implements", () => {
+  const STYLES = new Set(["detailed", "hm", "compact", "trimmed"]);
+  const scripts = new URL("templates/scripts/", WEBSERVER);
+  const files = fs
+    .readdirSync(scripts, { recursive: true })
+    .filter((name) => name.endsWith(".js") || name.endsWith(".mjs"));
+  const unknown = [];
+  for (const name of files) {
+    const source = fs.readFileSync(new URL(name, scripts), "utf8");
+    for (const match of source.matchAll(/formatUptime\([^;]*?style:\s*"([^"]+)"/g)) {
+      if (!STYLES.has(match[1])) unknown.push(`${name}: ${match[1]}`);
+    }
+  }
+  assert.deepEqual(unknown, []);
 });

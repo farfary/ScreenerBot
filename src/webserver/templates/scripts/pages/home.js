@@ -5,7 +5,7 @@
 /* global */
 import { registerPage } from "../core/lifecycle.js";
 import { Poller } from "../core/poller.js";
-import { formatTimeSpan, withApprox, withUsdSymbol } from "../core/format.js";
+import { withApprox, withUsdSymbol } from "../core/format.js";
 import * as Utils from "../core/utils.js";
 import { requestManager, createScopedFetcher } from "../core/request_manager.js";
 import { showFeaturedRow, hideFeaturedRow } from "../ui/featured_row.js";
@@ -413,19 +413,7 @@ function createLifecycle() {
       });
     if (avgHoldEl) {
       const mins = positions.avg_hold_duration_mins;
-      if (!Number.isFinite(mins)) {
-        avgHoldEl.textContent = ABSENT;
-      } else if (mins >= 60) {
-        const hours = Math.floor(mins / 60);
-        const remainingMins = mins % 60;
-        const hoursText = formatTimeSpan(hours, { unit: "hour" });
-        avgHoldEl.textContent =
-          remainingMins > 0
-            ? `${hoursText} ${formatTimeSpan(remainingMins, { unit: "minute" })}`
-            : hoursText;
-      } else {
-        avgHoldEl.textContent = formatTimeSpan(mins, { unit: "minute" });
-      }
+      avgHoldEl.textContent = Number.isFinite(mins) ? Utils.formatUptime(mins * 60) : ABSENT;
     }
     if (bestEl) {
       if (positions.best_performer) {
@@ -453,8 +441,7 @@ function createLifecycle() {
     }
   }
 
-  // Update system statistics
-  // Update token statistics
+  // Market pipeline counts; a passed or rejected count is coloured only above zero.
   function updateTokenStats(tokens) {
     if (!tokens) return;
 
@@ -467,8 +454,14 @@ function createLifecycle() {
 
     if (totalEl) animateValue(totalEl, tokens.total_in_database);
     if (withPricesEl) animateValue(withPricesEl, tokens.with_prices);
-    if (passedEl) animateValue(passedEl, tokens.passed_filters);
-    if (rejectedEl) animateValue(rejectedEl, tokens.rejected_filters);
+    if (passedEl) {
+      animateValue(passedEl, tokens.passed_filters);
+      passedEl.className = Utils.countTone(tokens.passed_filters, "success");
+    }
+    if (rejectedEl) {
+      animateValue(rejectedEl, tokens.rejected_filters);
+      rejectedEl.className = Utils.countTone(tokens.rejected_filters, "danger");
+    }
     if (blacklistedEl) animateValue(blacklistedEl, tokens.blacklisted);
     if (ohlcvEl) animateValue(ohlcvEl, tokens.with_ohlcv);
   }

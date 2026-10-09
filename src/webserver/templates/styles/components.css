@@ -842,13 +842,16 @@
 
 /* Metric Cards ---------------------------------------------------- */
 
-/* Metric Card: For displaying key metrics, statistics, values */
+/* Metric Card: the one stat card of every page. Label, value and detail stack from the
+   top edge at the inline start, so the labels and values of a row line up whatever the
+   detail lines below them hold. A border tint is a state (`metric-highlight-danger`),
+   never decoration. */
 .metric-card {
   background: var(--bg-card);
   border: 1px solid var(--border-color);
   border-radius: var(--radius-lg);
   padding: var(--spacing-md);
-  text-align: center;
+  text-align: start;
   transition:
     border-color var(--transition-base),
     background-color var(--transition-base);
@@ -861,7 +864,7 @@
 
 .metric-card--with-icon {
   display: flex;
-  align-items: center;
+  align-items: flex-start;
   gap: var(--spacing-md);
   text-align: start;
 }
@@ -910,7 +913,7 @@
 }
 
 .metric-value.positive,
-.metric-highlight-success .metric-icon,
+  text-wrap: pretty;
 .metric-card[data-accent="success"] .metric-icon {
   color: var(--success-color);
 }
@@ -928,20 +931,6 @@
   color: var(--semantic-warning-text);
 }
 
-.metric-card-primary,
-.metric-card[data-accent="primary"] {
-  border-color: var(--primary-alpha-30);
-}
-
-.metric-highlight-success,
-.metric-card[data-accent="success"] {
-  border-color: var(--success-alpha-30);
-}
-
-.metric-card[data-accent="warning"] {
-  border-color: var(--warning-alpha-30);
-}
-
 .metric-highlight-danger {
   border-color: var(--danger-alpha-30);
 }
@@ -952,26 +941,7 @@
   gap: var(--spacing-md);
 }
 
-.metric-grid-2 {
-  grid-template-columns: repeat(2, 1fr);
-}
-
-.metric-grid-3 {
-  grid-template-columns: repeat(3, 1fr);
-}
-
-.metric-grid-4 {
-  grid-template-columns: repeat(4, 1fr);
-}
-
-@media (width <= 768px) {
-  .metric-grid-2,
-  .metric-grid-3,
-  .metric-grid-4 {
-    grid-template-columns: 1fr;
-  }
-}
-
+  grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
 /* Image Lightbox -------------------------------------------------- */
 
 .clickable-logo {

@@ -122,13 +122,13 @@ export function createFilteringRenderers({ state, $: _$, Utils, requestManager: 
       summaryChip(
         I18n.t("filtering-info-passed"),
         countWithShare(passed_filtering, passedRate),
-        "success"
+        Utils.countTone(passed_filtering, "success")
       ),
       summaryChip(I18n.t("filtering-info-positions"), Utils.formatNumber(open_positions, 0)),
       summaryChip(
         I18n.t("filtering-info-blacklisted"),
         Utils.formatNumber(blacklisted, 0),
-        "warning"
+        Utils.countTone(blacklisted, "warning")
       ),
       summaryChip(I18n.t("filtering-info-cache"), cacheAge),
     ].join("");
@@ -166,7 +166,7 @@ export function createFilteringRenderers({ state, $: _$, Utils, requestManager: 
 
     const metricsHtml = `
       <div class="status-view">
-        <div class="metric-card" data-accent="primary">
+        <div class="metric-card">
           <span class="metric-label">${Utils.escapeHtml(I18n.t("filtering-status-total"))}</span>
           <span class="metric-value">${Utils.formatNumber(total_tokens, 0)}</span>
           <span class="metric-detail">${Utils.escapeHtml(cacheDetail)}</span>
@@ -176,7 +176,7 @@ export function createFilteringRenderers({ state, $: _$, Utils, requestManager: 
           <span class="metric-value">${Utils.formatNumber(with_pool_price, 0)}</span>
           <span class="metric-detail">${Utils.escapeHtml(I18n.t("filtering-status-priced-detail", { share: shareText(priceRate) }))}</span>
         </div>
-        <div class="metric-card" data-accent="primary">
+        <div class="metric-card">
           <span class="metric-label">${Utils.escapeHtml(I18n.t("filtering-status-passed"))}</span>
           <span class="metric-value">${Utils.formatNumber(passed_filtering, 0)}</span>
           <span class="metric-detail">${Utils.escapeHtml(I18n.t("filtering-status-passed-detail", { share: shareText(passedRate) }))}</span>
@@ -186,7 +186,7 @@ export function createFilteringRenderers({ state, $: _$, Utils, requestManager: 
           <span class="metric-value">${Utils.formatNumber(open_positions, 0)}</span>
           <span class="metric-detail">${Utils.escapeHtml(I18n.t("filtering-status-positions-detail"))}</span>
         </div>
-        <div class="metric-card" data-accent="warning">
+        <div class="metric-card">
           <span class="metric-label">${Utils.escapeHtml(I18n.t("filtering-status-blacklisted"))}</span>
           <span class="metric-value">${Utils.formatNumber(blacklisted, 0)}</span>
           <span class="metric-detail">${Utils.escapeHtml(I18n.t("filtering-status-blacklisted-detail"))}</span>
@@ -290,46 +290,36 @@ export function createFilteringRenderers({ state, $: _$, Utils, requestManager: 
     </div>
   `;
 
-    // KPI Cards
-    const kpiHtml = `
-    <div class="kpi-grid">
-      <!-- Total Tokens -->
-      <div class="kpi-card">
-        <div class="kpi-content">
-          <span class="kpi-label">${Utils.escapeHtml(I18n.t("filtering-analytics-scanned"))}</span>
-          <span class="kpi-value">${Utils.formatNumber(data.total_tokens, 0)}</span>
-          <span class="kpi-subtext">
-            <i class="icon-clock"></i> ${Utils.escapeHtml(I18n.t("filtering-analytics-updated", { time: refreshedLabel(data.last_updated, data.snapshot_state) }))}
-          </span>
-        </div>
-        <i class="icon-database kpi-icon"></i>
-      </div>
-
-      <!-- Passed -->
-      <div class="kpi-card">
-        <div class="kpi-content">
-          <span class="kpi-label">${Utils.escapeHtml(I18n.t("filtering-analytics-passed"))}</span>
-          <span class="kpi-value text-success">${Utils.formatNumber(data.total_passed, 0)}</span>
-          <span class="kpi-subtext">
-            <span class="kpi-rate kpi-rate--success">${I18n.markup("filtering-analytics-pass-rate", { share: shareText(data.pass_rate) })}</span>
-          </span>
-        </div>
-        <i class="icon-circle-check kpi-icon text-success" style="opacity: 0.2"></i>
-        <div class="pass-rate-visual">
-          <div class="pass-rate-segment passed" style="width: ${Number.isFinite(data.pass_rate) ? data.pass_rate : 0}%"></div>
+    // Headline figures in the shared metric card. A count and its share take their
+    // colour only when they are above zero.
+    const headlineHtml = `
+    <div class="metric-grid">
+      <div class="metric-card metric-card--with-icon">
+        <div class="metric-icon"><i class="icon-database" aria-hidden="true"></i></div>
+        <div class="metric-content">
+          <div class="metric-label">${Utils.escapeHtml(I18n.t("filtering-analytics-scanned"))}</div>
+          <div class="metric-value">${Utils.formatNumber(data.total_tokens, 0)}</div>
+          <div class="metric-detail">${Utils.escapeHtml(I18n.t("filtering-analytics-updated", { time: refreshedLabel(data.last_updated, data.snapshot_state) }))}</div>
         </div>
       </div>
-
-      <!-- Rejected -->
-      <div class="kpi-card">
-        <div class="kpi-content">
-          <span class="kpi-label">${Utils.escapeHtml(I18n.t("filtering-analytics-rejected"))}</span>
-          <span class="kpi-value text-error">${Utils.formatNumber(data.total_rejected, 0)}</span>
-          <span class="kpi-subtext">
-            <span class="kpi-rate kpi-rate--error">${I18n.markup("filtering-analytics-rejection-rate", { share: shareText(data.rejection_rate) })}</span>
-          </span>
+      <div class="metric-card metric-card--with-icon">
+        <div class="metric-icon"><i class="icon-circle-check" aria-hidden="true"></i></div>
+        <div class="metric-content">
+          <div class="metric-label">${Utils.escapeHtml(I18n.t("filtering-analytics-passed"))}</div>
+          <div class="metric-value ${Utils.countTone(data.total_passed, "positive")}">${Utils.formatNumber(data.total_passed, 0)}</div>
+          <div class="metric-detail share-rate ${Utils.countTone(data.pass_rate, "share-rate--success")}">${I18n.markup("filtering-analytics-pass-rate", { share: shareText(data.pass_rate) })}</div>
+          <div class="pass-rate-visual">
+            <div class="pass-rate-segment passed" style="width: ${Number.isFinite(data.pass_rate) ? data.pass_rate : 0}%"></div>
+          </div>
         </div>
-        <i class="icon-circle-x kpi-icon text-error" style="opacity: 0.2"></i>
+      </div>
+      <div class="metric-card metric-card--with-icon">
+        <div class="metric-icon"><i class="icon-circle-x" aria-hidden="true"></i></div>
+        <div class="metric-content">
+          <div class="metric-label">${Utils.escapeHtml(I18n.t("filtering-analytics-rejected"))}</div>
+          <div class="metric-value ${Utils.countTone(data.total_rejected, "negative")}">${Utils.formatNumber(data.total_rejected, 0)}</div>
+          <div class="metric-detail share-rate ${Utils.countTone(data.rejection_rate, "share-rate--error")}">${I18n.markup("filtering-analytics-rejection-rate", { share: shareText(data.rejection_rate) })}</div>
+        </div>
       </div>
     </div>
   `;
@@ -469,7 +459,7 @@ export function createFilteringRenderers({ state, $: _$, Utils, requestManager: 
     <div class="analytics-scroll-area">
       <div class="analytics-view">
         ${headerHtml}
-        ${kpiHtml}
+        ${headlineHtml}
         ${chartsHtml}
         ${bottomHtml}
       </div>

@@ -67,7 +67,7 @@ export const views = [
     name: "analytics",
     click: [tab("analytics")],
     populated: [
-      { selector: ".analytics-view .kpi-card", min: 3 },
+      { selector: ".analytics-view .metric-card", min: 3 },
       { selector: ".analytics-view .bar-chart-row", min: 10 },
       { selector: ".analytics-view .reasons-table tbody tr", min: 10 },
     ],

@@ -533,7 +533,7 @@ function createLifecycle() {
       );
 
       const holdText = (hours) =>
-        Number.isFinite(hours) ? Utils.formatUptime(hours * 3600, { style: "short" }) : "—";
+        Number.isFinite(hours) ? Utils.formatUptime(hours * 3600) : "—";
       setValue("median-hold", holdText(data.median_hold_time_hours));
       setDetail(
         "median-hold-detail",

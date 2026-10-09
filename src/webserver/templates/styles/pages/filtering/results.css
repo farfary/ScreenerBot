@@ -40,93 +40,17 @@
    not); this file owns the cards and charts inside it.
    ============================================ */
 
-/* KPI Grid */
-.kpi-grid {
-  display: grid;
-  grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
-  gap: var(--spacing-md);
-}
-
-.kpi-card {
-  background: var(--bg-card);
-  border: 1px solid var(--border-color);
-  border-radius: var(--radius-lg);
-  padding: var(--spacing-lg);
-  display: flex;
-  align-items: flex-start;
-  justify-content: space-between;
-  transition: all var(--transition-base);
-  position: relative;
-  overflow: hidden;
-}
-
-.kpi-card:hover {
-  border-color: var(--primary-alpha-30);
-  transform: translateY(-2px);
-  box-shadow: var(--shadow-md);
-}
-
-.kpi-content {
-  display: flex;
-  flex-direction: column;
-  gap: var(--spacing-xs);
-  z-index: 1;
-}
-
-.kpi-label {
-  font-size: 0.7rem;
-  text-transform: uppercase;
-  letter-spacing: 0.05em;
-  color: var(--text-secondary);
-  font-weight: 600;
-}
-
-.kpi-value {
-  font-size: 1.75rem;
-  font-weight: 700;
-  color: var(--text-primary);
-  font-family: var(--font-data);
-  font-feature-settings:
-    "tnum" 1,
-    "zero" 1;
-  line-height: 1.1;
-}
-
-.kpi-subtext {
-  font-size: 0.75rem;
-  color: var(--text-muted);
-  display: flex;
-  align-items: center;
-  gap: 6px;
-  margin-top: 4px;
-}
-
-.kpi-rate strong {
+/* Share line of a headline metric card: the share takes the tone only above zero. */
+.share-rate strong {
   font-weight: inherit;
 }
 
-.kpi-rate--success strong {
+.share-rate--success strong {
   color: var(--success-color);
 }
 
-.kpi-rate--error strong {
+.share-rate--error strong {
   color: var(--error-color);
-}
-
-.kpi-icon {
-  font-size: 1.5rem;
-  color: var(--text-muted);
-  opacity: 0.1;
-  position: absolute;
-  inset-inline-end: var(--spacing-lg);
-  top: var(--spacing-lg);
-  transition: all var(--transition-base);
-}
-
-.kpi-card:hover .kpi-icon {
-  opacity: 0.2;
-  transform: scale(1.1) rotate(5deg);
-  color: var(--link-color);
 }
 
 /* Charts Grid */
@@ -271,14 +195,13 @@
   border-radius: var(--radius-xs);
 }
 
-/* The pass-rate bar sits along the bottom edge of its KPI card. The track was
-   never declared, so the segment's `height: 100%` resolved against an auto-height
-   static box and the bar was invisible at every pass rate. */
+/* The pass-rate bar under the Passed share line. The track height is declared so the
+   segment's `height: 100%` resolves against it. */
 .pass-rate-visual {
-  position: absolute;
-  inset-inline: 0;
-  bottom: 0;
   height: 3px;
+  margin-top: var(--spacing-sm);
+  overflow: hidden;
+  border-radius: var(--radius-xs);
   background: var(--bg-tertiary);
 }
 
