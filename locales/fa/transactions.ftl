@@ -47,6 +47,8 @@ transactions-direction-sol-in = ورود { -sol }
 transactions-direction-sol-out = خروج { -sol }
 transactions-direction-internal = داخلی
 transactions-direction-unknown = طبقه‌بندی‌نشده
+transactions-direction-incoming = ورودی
+transactions-direction-outgoing = خروجی
 
 # Chain status. Ids come from TransactionStatus in src/transactions/types.rs
 # (ui/transaction_status.js); Success and Unknown label a row without a status.

@@ -47,6 +47,8 @@ transactions-direction-sol-in = { -sol } 입금
 transactions-direction-sol-out = { -sol } 출금
 transactions-direction-internal = 내부
 transactions-direction-unknown = 미분류
+transactions-direction-incoming = 입금
+transactions-direction-outgoing = 출금
 
 # Chain status. Ids come from TransactionStatus in src/transactions/types.rs
 # (ui/transaction_status.js); Success and Unknown label a row without a status.

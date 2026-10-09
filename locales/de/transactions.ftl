@@ -42,6 +42,8 @@ transactions-direction-sol-in = { -sol } rein
 transactions-direction-sol-out = { -sol } raus
 transactions-direction-internal = Intern
 transactions-direction-unknown = Nicht klassifiziert
+transactions-direction-incoming = Eingehend
+transactions-direction-outgoing = Ausgehend
 
 transactions-status-pending = Ausstehend
 transactions-status-confirmed = Bestätigt

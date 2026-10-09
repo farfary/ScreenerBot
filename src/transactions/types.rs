@@ -429,6 +429,12 @@ pub enum TransactionDirection {
     SolOut,
     Internal,
     Unknown,
+    /// Stored history only: written before the direction named its subject. Current
+    /// analysis never emits it; the reclassification sweep replaces it whenever the
+    /// row still has its raw transaction, and a row without one keeps this label.
+    Incoming,
+    /// Stored history only; see `Incoming`.
+    Outgoing,
 }
 
 impl Default for TransactionDirection {
@@ -472,12 +478,15 @@ impl TransactionDirection {
             Self::SolOut => "SolOut",
             Self::Internal => "Internal",
             Self::Unknown => "Unknown",
+            Self::Incoming => "Incoming",
+            Self::Outgoing => "Outgoing",
         }
     }
 
     /// Reads a persisted id. Ids written before the direction named its subject
-    /// (`Incoming`, `Outgoing`) cannot say what moved; they read as `Unknown` until
-    /// the reclassification sweep re-derives the row from its raw transaction.
+    /// (`Incoming`, `Outgoing`) keep their own label until the reclassification
+    /// sweep re-derives the row from its raw transaction; stored history never
+    /// falls through to `Unknown`.
     pub fn from_stored(value: &str) -> Self {
         match value {
             "TokensIn" => Self::TokensIn,
@@ -485,6 +494,8 @@ impl TransactionDirection {
             "SolIn" => Self::SolIn,
             "SolOut" => Self::SolOut,
             "Internal" => Self::Internal,
+            "Incoming" => Self::Incoming,
+            "Outgoing" => Self::Outgoing,
             _ => Self::Unknown,
         }
     }

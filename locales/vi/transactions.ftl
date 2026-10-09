@@ -40,6 +40,8 @@ transactions-direction-sol-in = { -sol } vào
 transactions-direction-sol-out = { -sol } ra
 transactions-direction-internal = Nội bộ
 transactions-direction-unknown = Chưa phân loại
+transactions-direction-incoming = Đến
+transactions-direction-outgoing = Đi
 
 transactions-status-pending = Đang chờ
 transactions-status-confirmed = Đã xác nhận

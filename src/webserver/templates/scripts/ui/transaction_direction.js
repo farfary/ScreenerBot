@@ -18,6 +18,10 @@ export const DIRECTION_LABELS = Object.freeze({
   SolOut: "transactions-direction-sol-out",
   Internal: "transactions-direction-internal",
   Unknown: "transactions-direction-unknown",
+  // Stored history written before the direction named its subject keeps its own
+  // label until the reclassification sweep re-derives the row.
+  Incoming: "transactions-direction-incoming",
+  Outgoing: "transactions-direction-outgoing",
 });
 
 // A direction is a neutral fact about the wallet, not an outcome: every direction
@@ -29,9 +33,9 @@ const DIRECTION_GLYPHS = {
   SolIn: "↓ ",
   SolOut: "↑ ",
   Internal: "⟲ ",
-  // Only rows written before the direction named its subject can still be Unknown;
-  // the reclassification sweep clears them.
   Unknown: "",
+  Incoming: "↓ ",
+  Outgoing: "↑ ",
 };
 
 /** Directions in the order the transaction list filter offers them. */
@@ -45,8 +49,8 @@ export const DIRECTION_FILTER_VALUES = Object.freeze([
 
 /** "in" when something arrived in the wallet, "out" when something left, else null. */
 export function directionFlow(direction) {
-  if (direction === "TokensIn" || direction === "SolIn") return "in";
-  if (direction === "TokensOut" || direction === "SolOut") return "out";
+  if (direction === "TokensIn" || direction === "SolIn" || direction === "Incoming") return "in";
+  if (direction === "TokensOut" || direction === "SolOut" || direction === "Outgoing") return "out";
   return null;
 }
 

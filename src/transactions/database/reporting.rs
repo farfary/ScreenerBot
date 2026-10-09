@@ -179,8 +179,8 @@ impl TransactionDatabase {
                 // `type_kind` -- the stable discriminant -- not the serialized
                 // payload, which no consumer of a list row can read.
                 let transaction_type: Option<String> = row.get(7)?;
-                // Through the enum, so an id written before the direction named its
-                // subject reads as `Unknown` here exactly as it does in the detail view.
+                // Through the enum, so a stored id reads the same here as it does in
+                // the detail view.
                 let direction: Option<String> = row.get::<_, Option<String>>(8)?.map(|stored| {
                     TransactionDirection::from_stored(&stored)
                         .as_str()

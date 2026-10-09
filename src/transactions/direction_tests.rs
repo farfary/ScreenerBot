@@ -43,6 +43,8 @@ fn every_direction_round_trips_through_its_stored_id() {
         TransactionDirection::SolOut,
         TransactionDirection::Internal,
         TransactionDirection::Unknown,
+        TransactionDirection::Incoming,
+        TransactionDirection::Outgoing,
     ] {
         let id = direction.as_str();
         assert_eq!(TransactionDirection::from_stored(id).as_str(), id);
@@ -55,10 +57,24 @@ fn every_direction_round_trips_through_its_stored_id() {
 }
 
 #[test]
-fn ids_that_do_not_name_a_subject_read_as_unknown() {
-    for legacy in ["Incoming", "Outgoing", ""] {
+fn stored_history_keeps_its_label() {
+    // Ids written before the direction named its subject keep their own variant: a
+    // row the sweep cannot re-derive must never read as unclassified.
+    assert!(matches!(
+        TransactionDirection::from_stored("Incoming"),
+        TransactionDirection::Incoming
+    ));
+    assert!(matches!(
+        TransactionDirection::from_stored("Outgoing"),
+        TransactionDirection::Outgoing
+    ));
+}
+
+#[test]
+fn ids_that_name_no_direction_read_as_unknown() {
+    for unnamed in ["", "incoming", "Sideways"] {
         assert!(matches!(
-            TransactionDirection::from_stored(legacy),
+            TransactionDirection::from_stored(unnamed),
             TransactionDirection::Unknown
         ));
     }

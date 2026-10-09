@@ -47,6 +47,8 @@ transactions-direction-sol-in = { -sol } 转入
 transactions-direction-sol-out = { -sol } 转出
 transactions-direction-internal = 内部
 transactions-direction-unknown = 未分类
+transactions-direction-incoming = 转入
+transactions-direction-outgoing = 转出
 
 # Chain status. Ids come from TransactionStatus in src/transactions/types.rs
 # (ui/transaction_status.js); Success and Unknown label a row without a status.

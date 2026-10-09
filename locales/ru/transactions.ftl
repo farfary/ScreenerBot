@@ -40,6 +40,8 @@ transactions-direction-sol-in = { -sol } пришли
 transactions-direction-sol-out = { -sol } ушли
 transactions-direction-internal = Внутренняя
 transactions-direction-unknown = Не классифицировано
+transactions-direction-incoming = Входящая
+transactions-direction-outgoing = Исходящая
 
 transactions-status-pending = Ожидает
 transactions-status-confirmed = Подтверждена

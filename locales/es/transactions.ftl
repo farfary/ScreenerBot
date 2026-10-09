@@ -47,6 +47,8 @@ transactions-direction-sol-in = Entrada de { -sol }
 transactions-direction-sol-out = Salida de { -sol }
 transactions-direction-internal = Interna
 transactions-direction-unknown = Sin clasificar
+transactions-direction-incoming = Entrante
+transactions-direction-outgoing = Saliente
 
 # Chain status. Ids come from TransactionStatus in src/transactions/types.rs
 # (ui/transaction_status.js); Success and Unknown label a row without a status.

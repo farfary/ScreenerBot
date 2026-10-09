@@ -55,7 +55,7 @@ CREATE TABLE IF NOT EXISTS processed_transactions (
     wallet_address TEXT NOT NULL,
     transaction_type TEXT NOT NULL, -- serde JSON of the TransactionType enum (rich variants round-trip)
     type_kind TEXT NOT NULL DEFAULT 'unknown', -- TransactionType::kind(): the stable value the UI filters and groups on
-    direction TEXT NOT NULL, -- 'Incoming', 'Outgoing', 'Internal', 'Unknown'
+    direction TEXT NOT NULL, -- TransactionDirection::as_str(); 'Incoming' and 'Outgoing' remain on rows written before the direction named its subject
 
     -- Balance change data (calculated fresh, not cached)
     native_balance_change TEXT, -- JSON blob of SolBalanceChange

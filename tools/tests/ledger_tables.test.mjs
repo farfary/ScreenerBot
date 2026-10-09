@@ -16,7 +16,8 @@
  * - Transactions: every column but the signature is on screen, the Time cell is one
  *   line, a failed row's Type is absent, Δ SOL carries no padded decimals and the
  *   toolbar has no separate estimate count. Direction is a neutral badge in every row
- *   that names what moved, so a buy reads "Tokens in" beside its negative Δ SOL.
+ *   that names what moved, so a buy reads "Tokens in" beside its negative Δ SOL; a
+ *   stored row written before that keeps its own "Incoming" or "Outgoing" label.
  *   In every locale each badge fits its cell, and every column but the signature is
  *   on screen apart from the locales still listed as too wide.
  * - Positions Open and Closed: both P&L columns are on screen and headed "P&L", and
@@ -48,10 +49,16 @@ after(() => browser.close());
 
 const shell = await loadIndex("shell");
 
-async function openPage(t, name, locale = "en") {
+/** `rewrite` maps an API path to a function that edits its parsed fixture body. */
+async function openPage(t, name, locale = "en", rewrite = {}) {
   const context = await browser.newContext({ viewport: { width: 1200, height: 800 } });
   const api = createApiHandler([await loadIndex(name), shell], "populated");
-  const host = await serveDashboard(context, { locale, onApi: api.onApi });
+  const onApi = async (request) => {
+    const answer = await api.onApi(request);
+    const edit = rewrite[request.url.pathname];
+    return edit ? { ...answer, body: JSON.stringify(edit(JSON.parse(answer.body))) } : answer;
+  };
+  const host = await serveDashboard(context, { locale, onApi });
   t.after(async () => {
     await context.close();
     await host.close();
@@ -232,6 +239,23 @@ test("Transactions keeps its columns on screen and states each fact once", async
     "a failure count takes the error tone"
   );
   assert.ok(!summary.includes("tx-estimate"), "no separate estimate count");
+});
+
+test("a stored legacy direction keeps its own label", async (t) => {
+  const page = await openPage(t, "transactions", "en", {
+    "/api/transactions/list": (body) => {
+      body.items[0].direction = "Incoming";
+      body.items[1].direction = "Outgoing";
+      return body;
+    },
+  });
+  const root = "#transactions-root";
+  await page.waitForSelector(`${root} tbody tr[data-row-id]`);
+  const directions = await page.$$eval(
+    `${root} tbody tr[data-row-id] td[data-column-id="direction"]`,
+    (cells) => cells.slice(0, 2).map((cell) => cell.textContent.trim())
+  );
+  assert.deepEqual(directions, ["↓ Incoming", "↑ Outgoing"]);
 });
 
 // Locales whose Transactions labels still push a column past the 1200px window; their

@@ -40,6 +40,8 @@ transactions-direction-sol-in = { -sol } entrant
 transactions-direction-sol-out = { -sol } sortant
 transactions-direction-internal = Interne
 transactions-direction-unknown = Non classée
+transactions-direction-incoming = Entrante
+transactions-direction-outgoing = Sortante
 
 transactions-status-pending = En attente
 transactions-status-confirmed = Confirmée

@@ -43,6 +43,8 @@ transactions-direction-sol-in = { -sol } masuk
 transactions-direction-sol-out = { -sol } keluar
 transactions-direction-internal = Internal
 transactions-direction-unknown = Tidak terklasifikasi
+transactions-direction-incoming = Masuk
+transactions-direction-outgoing = Keluar
 
 transactions-status-pending = Tertunda
 transactions-status-confirmed = Terkonfirmasi

@@ -19,6 +19,8 @@ fn direction_key(direction: &TransactionDirection) -> &'static str {
         TransactionDirection::SolOut => "transactions-direction-sol-out",
         TransactionDirection::Internal => "transactions-direction-internal",
         TransactionDirection::Unknown => "transactions-direction-unknown",
+        TransactionDirection::Incoming => "transactions-direction-incoming",
+        TransactionDirection::Outgoing => "transactions-direction-outgoing",
     }
 }
 
@@ -55,6 +57,8 @@ fn direction_labels_exist_in_the_catalog() {
         TransactionDirection::SolOut,
         TransactionDirection::Internal,
         TransactionDirection::Unknown,
+        TransactionDirection::Incoming,
+        TransactionDirection::Outgoing,
     ] {
         assert_in_catalog(direction_key(&direction));
     }

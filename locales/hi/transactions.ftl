@@ -40,6 +40,8 @@ transactions-direction-sol-in = { -sol } आवक
 transactions-direction-sol-out = { -sol } जावक
 transactions-direction-internal = आंतरिक
 transactions-direction-unknown = अवर्गीकृत
+transactions-direction-incoming = आवक
+transactions-direction-outgoing = जावक
 
 transactions-status-pending = लंबित
 transactions-status-confirmed = पुष्टि हुई

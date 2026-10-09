@@ -40,6 +40,8 @@ transactions-direction-sol-in = { -sol } girişi
 transactions-direction-sol-out = { -sol } çıkışı
 transactions-direction-internal = Dahili
 transactions-direction-unknown = Sınıflandırılmamış
+transactions-direction-incoming = Gelen
+transactions-direction-outgoing = Giden
 
 transactions-status-pending = Bekliyor
 transactions-status-confirmed = Onaylandı
