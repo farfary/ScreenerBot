@@ -48,9 +48,9 @@ strategies-summary-param = { $label }: { $value }
 strategies-summary-none = Tanpa parameter
 # An unset optional parameter: the strategy's own value it falls back to.
 strategies-param-inherit = Pengaturan strategi ({ $value })
-strategies-summary-period-seconds = Periode: { $amount } dtk
-strategies-summary-period-minutes = Periode: { $amount } mnt
-strategies-summary-period-hours = Periode: { $amount } jam
+strategies-summary-period-seconds = Periode lookback: { $amount } dtk
+strategies-summary-period-minutes = Periode lookback: { $amount } mnt
+strategies-summary-period-hours = Periode lookback: { $amount } jam
 
 strategies-value-percent = { $amount }%
 strategies-value-multiplier = { $amount }×
@@ -192,13 +192,13 @@ strategies-condition-price-change-percent-param-direction = Arah
 strategies-condition-price-change-percent-param-direction-option-above = Naik (+%)
 strategies-condition-price-change-percent-param-direction-option-below = Turun (-%)
 strategies-condition-price-change-percent-param-direction-option-within = Dalam Rentang (±%)
-strategies-condition-price-change-percent-param-time-value = Periode Waktu
-    .description = Nilai periode lookback (1-3600 untuk detik, 1-1440 untuk menit, 1-720 untuk jam)
+strategies-condition-price-change-percent-param-time-value = Periode lookback
+    .description = Seberapa jauh ke belakang perubahan diukur, dalam satuan yang dipilih di dalam kolom (1-3600 dtk, 1-1440 mnt, 1-720 jam)
 strategies-condition-price-change-percent-param-time-unit = Satuan Waktu
     .description = Satuan waktu untuk periode lookback
-strategies-condition-price-change-percent-param-time-unit-option-seconds = Detik
-strategies-condition-price-change-percent-param-time-unit-option-minutes = Menit
-strategies-condition-price-change-percent-param-time-unit-option-hours = Jam
+strategies-condition-price-change-percent-param-time-unit-option-seconds = dtk
+strategies-condition-price-change-percent-param-time-unit-option-minutes = mnt
+strategies-condition-price-change-percent-param-time-unit-option-hours = jam
 
 strategies-condition-price-to-ma = Harga vs Moving Average
     .description = Periksa apakah harga di atas, di bawah, atau dalam rentang Simple Moving Average-nya
@@ -220,7 +220,7 @@ strategies-condition-volume-spike-param-multiplier = Pengali Volume
     .description = Berapa kali di atas rata-rata (mis., 2.0 = 200% dari rata-rata)
 
 strategies-condition-param-timeframe = Timeframe
-    .description = Timeframe candle yang dianalisis (default ke timeframe strategi jika tidak diatur)
+    .description = Ukuran candle: durasi setiap candle yang dibaca kondisi (timeframe strategi jika tidak diatur)
 strategies-condition-timeframe-option-1m = 1 Menit
 strategies-condition-timeframe-option-5m = 5 Menit
 strategies-condition-timeframe-option-15m = 15 Menit

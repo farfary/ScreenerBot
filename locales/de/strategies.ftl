@@ -52,9 +52,9 @@ strategies-summary-param = { $label }: { $value }
 strategies-summary-none = Keine Parameter
 # An unset optional parameter: the strategy's own value it falls back to.
 strategies-param-inherit = Wert der Strategie ({ $value })
-strategies-summary-period-seconds = Zeitraum: { $amount } s
-strategies-summary-period-minutes = Zeitraum: { $amount } Min.
-strategies-summary-period-hours = Zeitraum: { $amount } Std.
+strategies-summary-period-seconds = Rückblick: { $amount } s
+strategies-summary-period-minutes = Rückblick: { $amount } Min.
+strategies-summary-period-hours = Rückblick: { $amount } Std.
 
 strategies-value-percent = { $amount } %
 strategies-value-multiplier = { $amount }×
@@ -208,13 +208,13 @@ strategies-condition-price-change-percent-param-direction = Richtung
 strategies-condition-price-change-percent-param-direction-option-above = Gewinn (+%)
 strategies-condition-price-change-percent-param-direction-option-below = Verlust (-%)
 strategies-condition-price-change-percent-param-direction-option-within = Innerhalb der Spanne (±%)
-strategies-condition-price-change-percent-param-time-value = Zeitraum
-    .description = Wert des Rückblickzeitraums (1–3600 für Sekunden, 1–1440 für Minuten, 1–720 für Stunden)
+strategies-condition-price-change-percent-param-time-value = Rückblick
+    .description = Wie weit zurück die Änderung gemessen wird, in der im Feld gewählten Einheit (1–3600 s, 1–1440 Min., 1–720 Std.)
 strategies-condition-price-change-percent-param-time-unit = Zeiteinheit
     .description = Zeiteinheit für den Rückblickzeitraum
-strategies-condition-price-change-percent-param-time-unit-option-seconds = Sekunden
-strategies-condition-price-change-percent-param-time-unit-option-minutes = Minuten
-strategies-condition-price-change-percent-param-time-unit-option-hours = Stunden
+strategies-condition-price-change-percent-param-time-unit-option-seconds = s
+strategies-condition-price-change-percent-param-time-unit-option-minutes = Min.
+strategies-condition-price-change-percent-param-time-unit-option-hours = Std.
 
 strategies-condition-price-to-ma = Preis vs. gleitender Durchschnitt
     .description = Prüfen, ob der Preis über, unter oder innerhalb der Spanne seines einfachen gleitenden Durchschnitts liegt
@@ -238,7 +238,7 @@ strategies-condition-volume-spike-param-multiplier = Volumenmultiplikator
 ## Shared by every condition
 
 strategies-condition-param-timeframe = Zeitrahmen
-    .description = Zu analysierender Kerzen-Zeitrahmen (Standard ist der Strategie-Zeitrahmen, wenn nicht gesetzt)
+    .description = Kerzengröße: die Dauer jeder Kerze, die die Bedingung liest (Strategie-Zeitrahmen, wenn nicht gesetzt)
 strategies-condition-timeframe-option-1m = 1 Minute
 strategies-condition-timeframe-option-5m = 5 Minuten
 strategies-condition-timeframe-option-15m = 15 Minuten

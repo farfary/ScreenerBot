@@ -60,9 +60,9 @@ strategies-summary-param = { $label }: { $value }
 strategies-summary-none = No parameters
 # An unset optional parameter: the strategy's own value it falls back to.
 strategies-param-inherit = Strategy setting ({ $value })
-strategies-summary-period-seconds = Period: { $amount } sec
-strategies-summary-period-minutes = Period: { $amount } min
-strategies-summary-period-hours = Period: { $amount } hrs
+strategies-summary-period-seconds = Lookback: { $amount } s
+strategies-summary-period-minutes = Lookback: { $amount } min
+strategies-summary-period-hours = Lookback: { $amount } h
 
 # Parameter values in a card summary. $count selects the plural, $amount is the formatted number.
 strategies-value-percent = { $amount }%
@@ -220,13 +220,13 @@ strategies-condition-price-change-percent-param-direction = Direction
 strategies-condition-price-change-percent-param-direction-option-above = Gain (+%)
 strategies-condition-price-change-percent-param-direction-option-below = Loss (-%)
 strategies-condition-price-change-percent-param-direction-option-within = Within Range (±%)
-strategies-condition-price-change-percent-param-time-value = Time Period
-    .description = Lookback period value (1-3600 for seconds, 1-1440 for minutes, 1-720 for hours)
+strategies-condition-price-change-percent-param-time-value = Lookback
+    .description = How far back the change is measured, in the unit picked inside the field (1-3600 s, 1-1440 min, 1-720 h)
 strategies-condition-price-change-percent-param-time-unit = Time Unit
     .description = Time unit for lookback period
-strategies-condition-price-change-percent-param-time-unit-option-seconds = Seconds
-strategies-condition-price-change-percent-param-time-unit-option-minutes = Minutes
-strategies-condition-price-change-percent-param-time-unit-option-hours = Hours
+strategies-condition-price-change-percent-param-time-unit-option-seconds = s
+strategies-condition-price-change-percent-param-time-unit-option-minutes = min
+strategies-condition-price-change-percent-param-time-unit-option-hours = h
 
 strategies-condition-price-to-ma = Price vs Moving Average
     .description = Check if price is above, below, or within range of its Simple Moving Average
@@ -250,7 +250,7 @@ strategies-condition-volume-spike-param-multiplier = Volume Multiplier
 ## Shared by every condition
 
 strategies-condition-param-timeframe = Timeframe
-    .description = Candle timeframe to analyze (defaults to strategy timeframe if not set)
+    .description = Candle size: the length of each candle the condition reads (the strategy timeframe when not set)
 strategies-condition-timeframe-option-1m = 1 Minute
 strategies-condition-timeframe-option-5m = 5 Minutes
 strategies-condition-timeframe-option-15m = 15 Minutes

@@ -60,9 +60,9 @@ strategies-summary-param = { $label }: { $value }
 strategies-summary-none = لا توجد معاملات
 # An unset optional parameter: the strategy's own value it falls back to.
 strategies-param-inherit = إعداد الاستراتيجية ({ $value })
-strategies-summary-period-seconds = الفترة: { $amount } ث
-strategies-summary-period-minutes = الفترة: { $amount } د
-strategies-summary-period-hours = الفترة: { $amount } س
+strategies-summary-period-seconds = فترة الرجوع: { $amount } ث
+strategies-summary-period-minutes = فترة الرجوع: { $amount } د
+strategies-summary-period-hours = فترة الرجوع: { $amount } س
 
 # Parameter values in a card summary. $count selects the plural, $amount is the formatted number.
 strategies-value-percent = { $amount }%
@@ -228,13 +228,13 @@ strategies-condition-price-change-percent-param-direction = الاتجاه
 strategies-condition-price-change-percent-param-direction-option-above = ارتفاع (+%)
 strategies-condition-price-change-percent-param-direction-option-below = انخفاض (-%)
 strategies-condition-price-change-percent-param-direction-option-within = ضمن النطاق (±%)
-strategies-condition-price-change-percent-param-time-value = الفترة الزمنية
-    .description = قيمة فترة الرجوع (1-3600 للثواني، 1-1440 للدقائق، 1-720 للساعات)
+strategies-condition-price-change-percent-param-time-value = فترة الرجوع
+    .description = مدى الرجوع لقياس التغير، بالوحدة المختارة داخل الحقل (1-3600 ثانية، 1-1440 دقيقة، 1-720 ساعة)
 strategies-condition-price-change-percent-param-time-unit = وحدة الوقت
     .description = وحدة الوقت لفترة الرجوع
-strategies-condition-price-change-percent-param-time-unit-option-seconds = ثوانٍ
-strategies-condition-price-change-percent-param-time-unit-option-minutes = دقائق
-strategies-condition-price-change-percent-param-time-unit-option-hours = ساعات
+strategies-condition-price-change-percent-param-time-unit-option-seconds = ثانية
+strategies-condition-price-change-percent-param-time-unit-option-minutes = دقيقة
+strategies-condition-price-change-percent-param-time-unit-option-hours = ساعة
 
 strategies-condition-price-to-ma = السعر مقابل المتوسط المتحرك
     .description = فحص ما إذا كان السعر أعلى من المتوسط المتحرك البسيط أو أدنى منه أو ضمن نطاقه
@@ -258,7 +258,7 @@ strategies-condition-volume-spike-param-multiplier = مضاعف حجم التد�
 ## Shared by every condition
 
 strategies-condition-param-timeframe = الإطار الزمني
-    .description = الإطار الزمني للشموع المراد تحليلها (يُستخدم إطار الاستراتيجية افتراضيًا إذا لم يُحدد)
+    .description = حجم الشمعة: مدة كل شمعة يقرؤها الشرط (إطار الاستراتيجية إذا لم يُحدد)
 strategies-condition-timeframe-option-1m = دقيقة واحدة
 strategies-condition-timeframe-option-5m = 5 دقائق
 strategies-condition-timeframe-option-15m = 15 دقيقة

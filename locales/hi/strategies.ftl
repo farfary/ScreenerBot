@@ -46,9 +46,9 @@ strategies-summary-param = { $label }: { $value }
 strategies-summary-none = कोई पैरामीटर नहीं
 # An unset optional parameter: the strategy's own value it falls back to.
 strategies-param-inherit = स्ट्रैटेजी की सेटिंग ({ $value })
-strategies-summary-period-seconds = अवधि: { $amount } सेकंड
-strategies-summary-period-minutes = अवधि: { $amount } मिनट
-strategies-summary-period-hours = अवधि: { $amount } घंटे
+strategies-summary-period-seconds = लुकबैक अवधि: { $amount } सेकंड
+strategies-summary-period-minutes = लुकबैक अवधि: { $amount } मिनट
+strategies-summary-period-hours = लुकबैक अवधि: { $amount } घंटे
 
 strategies-value-percent = { $amount }%
 strategies-value-multiplier = { $amount }×
@@ -192,13 +192,13 @@ strategies-condition-price-change-percent-param-direction = दिशा
 strategies-condition-price-change-percent-param-direction-option-above = बढ़त (+%)
 strategies-condition-price-change-percent-param-direction-option-below = गिरावट (-%)
 strategies-condition-price-change-percent-param-direction-option-within = रेंज के भीतर (±%)
-strategies-condition-price-change-percent-param-time-value = समय अवधि
-    .description = लुकबैक अवधि का मान (सेकंड के लिए 1-3600, मिनट के लिए 1-1440, घंटे के लिए 1-720)
+strategies-condition-price-change-percent-param-time-value = लुकबैक अवधि
+    .description = बदलाव कितना पीछे से मापा जाता है, फ़ील्ड के अंदर चुनी गई इकाई में (1-3600 से, 1-1440 मि, 1-720 घं)
 strategies-condition-price-change-percent-param-time-unit = समय इकाई
     .description = लुकबैक अवधि की समय इकाई
-strategies-condition-price-change-percent-param-time-unit-option-seconds = सेकंड
-strategies-condition-price-change-percent-param-time-unit-option-minutes = मिनट
-strategies-condition-price-change-percent-param-time-unit-option-hours = घंटे
+strategies-condition-price-change-percent-param-time-unit-option-seconds = से
+strategies-condition-price-change-percent-param-time-unit-option-minutes = मि
+strategies-condition-price-change-percent-param-time-unit-option-hours = घं
 
 strategies-condition-price-to-ma = प्राइस बनाम मूविंग एवरेज
     .description = जांचें कि प्राइस अपने सिंपल मूविंग एवरेज से ऊपर, नीचे या रेंज के भीतर है
@@ -220,7 +220,7 @@ strategies-condition-volume-spike-param-multiplier = वॉल्यूम ग�
     .description = औसत से कितने गुना ऊपर (जैसे, 2.0 = औसत का 200%)
 
 strategies-condition-param-timeframe = टाइमफ़्रेम
-    .description = विश्लेषण के लिए कैंडल टाइमफ़्रेम (सेट न होने पर स्ट्रैटेजी टाइमफ़्रेम लागू होता है)
+    .description = कैंडल आकार: शर्त जिस हर कैंडल को पढ़ती है उसकी अवधि (सेट न होने पर स्ट्रैटेजी टाइमफ़्रेम)
 strategies-condition-timeframe-option-1m = 1 मिनट
 strategies-condition-timeframe-option-5m = 5 मिनट
 strategies-condition-timeframe-option-15m = 15 मिनट

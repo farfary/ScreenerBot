@@ -46,9 +46,9 @@ strategies-summary-param = { $label }: { $value }
 strategies-summary-none = Нет параметров
 # An unset optional parameter: the strategy's own value it falls back to.
 strategies-param-inherit = Настройка стратегии ({ $value })
-strategies-summary-period-seconds = Период: { $amount } с
-strategies-summary-period-minutes = Период: { $amount } мин
-strategies-summary-period-hours = Период: { $amount } ч
+strategies-summary-period-seconds = Период просмотра: { $amount } с
+strategies-summary-period-minutes = Период просмотра: { $amount } мин
+strategies-summary-period-hours = Период просмотра: { $amount } ч
 
 strategies-value-percent = { $amount }%
 strategies-value-multiplier = { $amount }×
@@ -197,13 +197,13 @@ strategies-condition-price-change-percent-param-direction = Направлени
 strategies-condition-price-change-percent-param-direction-option-above = Рост (+%)
 strategies-condition-price-change-percent-param-direction-option-below = Падение (-%)
 strategies-condition-price-change-percent-param-direction-option-within = В диапазоне (±%)
-strategies-condition-price-change-percent-param-time-value = Период времени
-    .description = Значение периода просмотра (1–3600 для секунд, 1–1440 для минут, 1–720 для часов)
+strategies-condition-price-change-percent-param-time-value = Период просмотра
+    .description = Насколько далеко назад измеряется изменение, в единице, выбранной в поле (1–3600 с, 1–1440 мин, 1–720 ч)
 strategies-condition-price-change-percent-param-time-unit = Единица времени
     .description = Единица времени для периода просмотра
-strategies-condition-price-change-percent-param-time-unit-option-seconds = Секунды
-strategies-condition-price-change-percent-param-time-unit-option-minutes = Минуты
-strategies-condition-price-change-percent-param-time-unit-option-hours = Часы
+strategies-condition-price-change-percent-param-time-unit-option-seconds = с
+strategies-condition-price-change-percent-param-time-unit-option-minutes = мин
+strategies-condition-price-change-percent-param-time-unit-option-hours = ч
 
 strategies-condition-price-to-ma = Цена и скользящая средняя
     .description = Проверяет, находится ли цена выше, ниже или в диапазоне простой скользящей средней (SMA)
@@ -225,7 +225,7 @@ strategies-condition-volume-spike-param-multiplier = Множитель объё
     .description = Во сколько раз выше среднего (например, 2.0 = 200% от среднего)
 
 strategies-condition-param-timeframe = Таймфрейм
-    .description = Таймфрейм свечей для анализа (если не задан, используется таймфрейм стратегии)
+    .description = Размер свечи: длительность каждой свечи, которую читает условие (таймфрейм стратегии, если не задан)
 strategies-condition-timeframe-option-1m = 1 минута
 strategies-condition-timeframe-option-5m = 5 минут
 strategies-condition-timeframe-option-15m = 15 минут

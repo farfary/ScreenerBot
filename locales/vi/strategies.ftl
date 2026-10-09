@@ -46,9 +46,9 @@ strategies-summary-param = { $label }: { $value }
 strategies-summary-none = Không có tham số
 # An unset optional parameter: the strategy's own value it falls back to.
 strategies-param-inherit = Thiết lập của chiến lược ({ $value })
-strategies-summary-period-seconds = Chu kỳ: { $amount } giây
-strategies-summary-period-minutes = Chu kỳ: { $amount } phút
-strategies-summary-period-hours = Chu kỳ: { $amount } giờ
+strategies-summary-period-seconds = Khoảng nhìn lại: { $amount } giây
+strategies-summary-period-minutes = Khoảng nhìn lại: { $amount } phút
+strategies-summary-period-hours = Khoảng nhìn lại: { $amount } giờ
 
 strategies-value-percent = { $amount }%
 strategies-value-multiplier = { $amount }×
@@ -190,13 +190,13 @@ strategies-condition-price-change-percent-param-direction = Hướng
 strategies-condition-price-change-percent-param-direction-option-above = Tăng (+%)
 strategies-condition-price-change-percent-param-direction-option-below = Giảm (-%)
 strategies-condition-price-change-percent-param-direction-option-within = Trong khoảng (±%)
-strategies-condition-price-change-percent-param-time-value = Khoảng thời gian
-    .description = Giá trị khoảng nhìn lại (1-3600 với giây, 1-1440 với phút, 1-720 với giờ)
+strategies-condition-price-change-percent-param-time-value = Khoảng nhìn lại
+    .description = Khoảng thời gian nhìn lại để đo thay đổi, theo đơn vị chọn trong ô (1-3600 giây, 1-1440 phút, 1-720 giờ)
 strategies-condition-price-change-percent-param-time-unit = Đơn vị thời gian
     .description = Đơn vị thời gian của khoảng nhìn lại
-strategies-condition-price-change-percent-param-time-unit-option-seconds = Giây
-strategies-condition-price-change-percent-param-time-unit-option-minutes = Phút
-strategies-condition-price-change-percent-param-time-unit-option-hours = Giờ
+strategies-condition-price-change-percent-param-time-unit-option-seconds = giây
+strategies-condition-price-change-percent-param-time-unit-option-minutes = phút
+strategies-condition-price-change-percent-param-time-unit-option-hours = giờ
 
 strategies-condition-price-to-ma = Giá so với đường trung bình động
     .description = Kiểm tra giá ở trên, dưới hoặc trong khoảng của đường trung bình động đơn giản (SMA)
@@ -218,7 +218,7 @@ strategies-condition-volume-spike-param-multiplier = Hệ số khối lượng
     .description = Cao hơn trung bình bao nhiêu lần (ví dụ: 2.0 = 200% mức trung bình)
 
 strategies-condition-param-timeframe = Khung thời gian
-    .description = Khung thời gian nến cần phân tích (mặc định theo khung thời gian của chiến lược nếu không đặt)
+    .description = Kích thước nến: độ dài mỗi cây nến mà điều kiện đọc (khung thời gian của chiến lược nếu không đặt)
 strategies-condition-timeframe-option-1m = 1 phút
 strategies-condition-timeframe-option-5m = 5 phút
 strategies-condition-timeframe-option-15m = 15 phút

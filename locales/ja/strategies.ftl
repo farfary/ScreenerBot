@@ -60,9 +60,9 @@ strategies-summary-param = { $label }: { $value }
 strategies-summary-none = パラメーターなし
 # An unset optional parameter: the strategy's own value it falls back to.
 strategies-param-inherit = ストラテジーの設定（{ $value }）
-strategies-summary-period-seconds = 期間: { $amount }秒
-strategies-summary-period-minutes = 期間: { $amount }分
-strategies-summary-period-hours = 期間: { $amount }時間
+strategies-summary-period-seconds = 参照期間: { $amount }秒
+strategies-summary-period-minutes = 参照期間: { $amount }分
+strategies-summary-period-hours = 参照期間: { $amount }時間
 
 # Parameter values in a card summary. $count selects the plural, $amount is the formatted number.
 strategies-value-percent = { $amount }%
@@ -218,8 +218,8 @@ strategies-condition-price-change-percent-param-direction = 方向
 strategies-condition-price-change-percent-param-direction-option-above = 上昇（+%）
 strategies-condition-price-change-percent-param-direction-option-below = 下落（-%）
 strategies-condition-price-change-percent-param-direction-option-within = 範囲内（±%）
-strategies-condition-price-change-percent-param-time-value = 期間
-    .description = 参照期間の値（秒は 1～3600、分は 1～1440、時間は 1～720）
+strategies-condition-price-change-percent-param-time-value = 参照期間
+    .description = 変化を測る期間。単位はフィールド内で選択（1～3600 秒、1～1440 分、1～720 時間）
 strategies-condition-price-change-percent-param-time-unit = 時間の単位
     .description = 参照期間の時間単位
 strategies-condition-price-change-percent-param-time-unit-option-seconds = 秒
@@ -248,7 +248,7 @@ strategies-condition-volume-spike-param-multiplier = 出来高倍率
 ## Shared by every condition
 
 strategies-condition-param-timeframe = 時間足
-    .description = 分析するローソク足の時間足（未設定の場合はストラテジーの時間足を使用）
+    .description = ローソク足のサイズ：条件が読む各ローソク足の長さ（未設定の場合はストラテジーの時間足）
 strategies-condition-timeframe-option-1m = 1分
 strategies-condition-timeframe-option-5m = 5分
 strategies-condition-timeframe-option-15m = 15分

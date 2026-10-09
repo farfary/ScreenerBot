@@ -46,9 +46,9 @@ strategies-summary-param = { $label } : { $value }
 strategies-summary-none = Aucun paramètre
 # An unset optional parameter: the strategy's own value it falls back to.
 strategies-param-inherit = Réglage de la stratégie ({ $value })
-strategies-summary-period-seconds = Période : { $amount }s
-strategies-summary-period-minutes = Période : { $amount }min
-strategies-summary-period-hours = Période : { $amount }h
+strategies-summary-period-seconds = Période de référence : { $amount }s
+strategies-summary-period-minutes = Période de référence : { $amount }min
+strategies-summary-period-hours = Période de référence : { $amount }h
 
 strategies-value-percent = { $amount } %
 strategies-value-multiplier = { $amount }×
@@ -194,13 +194,13 @@ strategies-condition-price-change-percent-param-direction = Sens
 strategies-condition-price-change-percent-param-direction-option-above = Hausse (+ %)
 strategies-condition-price-change-percent-param-direction-option-below = Baisse (- %)
 strategies-condition-price-change-percent-param-direction-option-within = Dans la fourchette (± %)
-strategies-condition-price-change-percent-param-time-value = Période
-    .description = Valeur de la période de référence (1-3600 pour les secondes, 1-1440 pour les minutes, 1-720 pour les heures)
+strategies-condition-price-change-percent-param-time-value = Période de référence
+    .description = Jusqu'où remonte la mesure de la variation, dans l'unité choisie dans le champ (1-3600 s, 1-1440 min, 1-720 h)
 strategies-condition-price-change-percent-param-time-unit = Unité de temps
     .description = Unité de temps de la période de référence
-strategies-condition-price-change-percent-param-time-unit-option-seconds = Secondes
-strategies-condition-price-change-percent-param-time-unit-option-minutes = Minutes
-strategies-condition-price-change-percent-param-time-unit-option-hours = Heures
+strategies-condition-price-change-percent-param-time-unit-option-seconds = s
+strategies-condition-price-change-percent-param-time-unit-option-minutes = min
+strategies-condition-price-change-percent-param-time-unit-option-hours = h
 
 strategies-condition-price-to-ma = Prix vs moyenne mobile
     .description = Vérifie si le prix est au-dessus, en dessous ou dans la fourchette de sa moyenne mobile simple
@@ -222,7 +222,7 @@ strategies-condition-volume-spike-param-multiplier = Multiplicateur de volume
     .description = Combien de fois au-dessus de la moyenne (p. ex. 2.0 = 200 % de la moyenne)
 
 strategies-condition-param-timeframe = Période des bougies
-    .description = Période des bougies à analyser (par défaut, celle de la stratégie si non définie)
+    .description = Taille des bougies : la durée de chaque bougie lue par la condition (celle de la stratégie si non définie)
 strategies-condition-timeframe-option-1m = 1 minute
 strategies-condition-timeframe-option-5m = 5 minutes
 strategies-condition-timeframe-option-15m = 15 minutes

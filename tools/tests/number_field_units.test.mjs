@@ -9,11 +9,13 @@
  * to be short: "%", "SOL", "s", "min", "h" or a short count label. A word-length unit
  * ("seconds", "closed rounds") leaves the value no room in a compact field.
  *
- * - Every config field's `.unit` attribute, and every message a page writes as a field
- *   unit, is at most `MAX_COLUMNS` display columns in every locale.
+ * - Every config field's `.unit` attribute, every message a page writes as a field
+ *   unit, and every option of a unit picked inside its field (a strategy lookback's
+ *   `time_unit`) is at most `MAX_COLUMNS` display columns in every locale.
  * - A config field label never carries a unit in parentheses ("Timeout (seconds)"), and
  *   never repeats its field's unit of measure as a word ("Stop Loss Threshold %").
- * - `unitColumns` counts an East Asian wide character as two columns.
+ * - `unitColumns` counts an East Asian wide character as two columns; a unit picked in
+ *   place reserves its widest option plus its chevron, whatever is selected.
  *
  * The rendered placement is checked on every page by `dashboard_stability.test.mjs`.
  *
@@ -22,11 +24,15 @@
 
 import test from "node:test";
 import assert from "node:assert/strict";
+import { readFileSync } from "node:fs";
 import { readFile, readdir } from "node:fs/promises";
 import { resolve } from "node:path";
 
 import { REPO_ROOT, loadMarkupSources } from "../lib/dashboard_ui.mjs";
-import { unitColumns } from "../../src/webserver/templates/scripts/ui/number_field.js";
+import {
+  unitColumns,
+  unitElementColumns,
+} from "../../src/webserver/templates/scripts/ui/number_field.js";
 
 const MAX_COLUMNS = 8;
 const LOCALES_ROOT = resolve(REPO_ROOT, "locales");
@@ -75,7 +81,22 @@ async function fieldUnitIds() {
   return ids;
 }
 
+/** Option ids of every unit the strategy editor lets a field pick in place. */
+function pickedUnitIds() {
+  const { schemas } = JSON.parse(
+    readFileSync(
+      new URL("./fixtures/dashboard/trader/strategies_condition_schemas.json", import.meta.url),
+      "utf8"
+    )
+  );
+  return Object.values(schemas)
+    .map((schema) => schema.parameters || {})
+    .filter((params) => params.time_value && params.time_unit)
+    .flatMap((params) => params.time_unit.options.map((option) => option.key));
+}
+
 const [all, unitIds] = await Promise.all([catalogs(), fieldUnitIds()]);
+for (const id of pickedUnitIds()) unitIds.add(id);
 const english = all.get("en");
 
 test("every field unit is short in every locale", () => {
@@ -142,4 +163,17 @@ test("an East Asian wide character takes two columns", () => {
   assert.equal(unitColumns("時間"), 4);
   assert.equal(unitColumns("시간"), 4);
   assert.equal(unitColumns(" µlam/CU "), 7);
+});
+
+test("a unit picked in place reserves its widest option and its chevron", () => {
+  const picked = (...labels) => ({
+    textContent: labels.join(""),
+    querySelector: () => ({ options: labels.map((text) => ({ text })) }),
+  });
+  assert.equal(unitElementColumns(picked("s", "min", "h")), 6);
+  assert.equal(unitElementColumns(picked("秒", "分钟", "小时")), 7);
+  assert.equal(
+    unitElementColumns({ textContent: "SOL", querySelector: () => null }),
+    unitColumns("SOL")
+  );
 });

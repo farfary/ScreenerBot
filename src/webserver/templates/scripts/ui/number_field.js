@@ -9,7 +9,10 @@
  * stepper instead of the browser's spin buttons, and the `.input-unit` written
  * next to the input adopted into the field's box over a reserved gutter. Every
  * unit sits inside its field, in its short form ("%", "SOL", "s", "min", "h",
- * a short count label); the unit text owns the brevity, not this module.
+ * a short count label); the unit text owns the brevity, not this module. A unit
+ * the value is entered in by choice (a lookback in s, min or h) is an
+ * `.input-unit` holding a `select[data-custom-select]`: the same suffix, picked
+ * in place.
  *
  * It is installed once, document-wide (see `installGlobalNumberFieldEnhancer`),
  * for the same reason the select enhancer is: pages render their markup as HTML
@@ -107,6 +110,22 @@ export function unitColumns(text) {
   return columns;
 }
 
+/** Columns a unit select's chevron and its gap to the label take. */
+const UNIT_SELECT_ARROW_COLUMNS = 3;
+
+/**
+ * Display columns a unit takes. A selectable unit takes its widest option plus
+ * its chevron, so the reserve never changes with the choice; its rendered text
+ * cannot be measured, as it holds the menu and the sizers as well.
+ * @param {Element} unit
+ */
+export function unitElementColumns(unit) {
+  const select = unit.querySelector("select");
+  if (!select) return unitColumns(unit.textContent);
+  const widest = Math.max(0, ...Array.from(select.options, (option) => unitColumns(option.text)));
+  return widest + UNIT_SELECT_ARROW_COLUMNS;
+}
+
 /**
  * Reserve the gutter for a unit's current text. Pages fill a unit after the
  * field is built (localized text, a unit read from config metadata), so the
@@ -115,7 +134,7 @@ export function unitColumns(text) {
 function syncUnitSpace(unit) {
   const shell = unit.closest(".number-field");
   if (!shell) return;
-  shell.style.setProperty("--number-field-unit-len", String(unitColumns(unit.textContent)));
+  shell.style.setProperty("--number-field-unit-len", String(unitElementColumns(unit)));
 }
 
 function buildSuffix(document_, unit) {

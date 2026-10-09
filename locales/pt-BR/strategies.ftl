@@ -60,9 +60,9 @@ strategies-summary-param = { $label }: { $value }
 strategies-summary-none = Sem parâmetros
 # An unset optional parameter: the strategy's own value it falls back to.
 strategies-param-inherit = Configuração da estratégia ({ $value })
-strategies-summary-period-seconds = Período: { $amount } s
-strategies-summary-period-minutes = Período: { $amount } min
-strategies-summary-period-hours = Período: { $amount } h
+strategies-summary-period-seconds = Janela de análise: { $amount } s
+strategies-summary-period-minutes = Janela de análise: { $amount } min
+strategies-summary-period-hours = Janela de análise: { $amount } h
 
 # Parameter values in a card summary. $count selects the plural, $amount is the formatted number.
 strategies-value-percent = { $amount }%
@@ -222,13 +222,13 @@ strategies-condition-price-change-percent-param-direction = Direção
 strategies-condition-price-change-percent-param-direction-option-above = Alta (+%)
 strategies-condition-price-change-percent-param-direction-option-below = Queda (-%)
 strategies-condition-price-change-percent-param-direction-option-within = Dentro da faixa (±%)
-strategies-condition-price-change-percent-param-time-value = Período
-    .description = Valor da janela de análise (1-3600 para segundos, 1-1440 para minutos, 1-720 para horas)
+strategies-condition-price-change-percent-param-time-value = Janela de análise
+    .description = Até quando a variação é medida, na unidade escolhida dentro do campo (1-3600 s, 1-1440 min, 1-720 h)
 strategies-condition-price-change-percent-param-time-unit = Unidade de tempo
     .description = Unidade de tempo da janela de análise
-strategies-condition-price-change-percent-param-time-unit-option-seconds = Segundos
-strategies-condition-price-change-percent-param-time-unit-option-minutes = Minutos
-strategies-condition-price-change-percent-param-time-unit-option-hours = Horas
+strategies-condition-price-change-percent-param-time-unit-option-seconds = s
+strategies-condition-price-change-percent-param-time-unit-option-minutes = min
+strategies-condition-price-change-percent-param-time-unit-option-hours = h
 
 strategies-condition-price-to-ma = Preço vs média móvel
     .description = Verifica se o preço está acima, abaixo ou dentro da faixa da sua média móvel simples
@@ -252,7 +252,7 @@ strategies-condition-volume-spike-param-multiplier = Multiplicador de volume
 ## Shared by every condition
 
 strategies-condition-param-timeframe = Timeframe
-    .description = Timeframe dos candles a analisar (usa o timeframe da estratégia se não definido)
+    .description = Tamanho do candle: a duração de cada candle que a condição lê (o timeframe da estratégia se não definido)
 strategies-condition-timeframe-option-1m = 1 minuto
 strategies-condition-timeframe-option-5m = 5 minutos
 strategies-condition-timeframe-option-15m = 15 minutos

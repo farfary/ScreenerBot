@@ -60,9 +60,9 @@ strategies-summary-param = { $label }: { $value }
 strategies-summary-none = 매개변수 없음
 # An unset optional parameter: the strategy's own value it falls back to.
 strategies-param-inherit = 전략 설정 ({ $value })
-strategies-summary-period-seconds = 기간: { $amount }초
-strategies-summary-period-minutes = 기간: { $amount }분
-strategies-summary-period-hours = 기간: { $amount }시간
+strategies-summary-period-seconds = 조회 기간: { $amount }초
+strategies-summary-period-minutes = 조회 기간: { $amount }분
+strategies-summary-period-hours = 조회 기간: { $amount }시간
 
 # Parameter values in a card summary. $count selects the plural, $amount is the formatted number.
 strategies-value-percent = { $amount }%
@@ -218,8 +218,8 @@ strategies-condition-price-change-percent-param-direction = 방향
 strategies-condition-price-change-percent-param-direction-option-above = 상승 (+%)
 strategies-condition-price-change-percent-param-direction-option-below = 하락 (-%)
 strategies-condition-price-change-percent-param-direction-option-within = 범위 내 (±%)
-strategies-condition-price-change-percent-param-time-value = 기간
-    .description = 조회 기간 값 (초 1-3600, 분 1-1440, 시간 1-720)
+strategies-condition-price-change-percent-param-time-value = 조회 기간
+    .description = 변화를 측정할 과거 기간, 필드 안에서 고른 단위 기준 (1-3600초, 1-1440분, 1-720시간)
 strategies-condition-price-change-percent-param-time-unit = 시간 단위
     .description = 조회 기간의 시간 단위
 strategies-condition-price-change-percent-param-time-unit-option-seconds = 초
@@ -248,7 +248,7 @@ strategies-condition-volume-spike-param-multiplier = 거래량 배수
 ## Shared by every condition
 
 strategies-condition-param-timeframe = 타임프레임
-    .description = 분석할 캔들 타임프레임 (설정하지 않으면 전략 타임프레임 사용)
+    .description = 캔들 크기: 조건이 읽는 각 캔들의 길이 (설정하지 않으면 전략 타임프레임)
 strategies-condition-timeframe-option-1m = 1분
 strategies-condition-timeframe-option-5m = 5분
 strategies-condition-timeframe-option-15m = 15분

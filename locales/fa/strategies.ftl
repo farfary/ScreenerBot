@@ -60,9 +60,9 @@ strategies-summary-param = { $label }: { $value }
 strategies-summary-none = بدون پارامتر
 # An unset optional parameter: the strategy's own value it falls back to.
 strategies-param-inherit = تنظیم استراتژی ({ $value })
-strategies-summary-period-seconds = دوره: { $amount } ثانیه
-strategies-summary-period-minutes = دوره: { $amount } دقیقه
-strategies-summary-period-hours = دوره: { $amount } ساعت
+strategies-summary-period-seconds = بازه بازبینی: { $amount } ثانیه
+strategies-summary-period-minutes = بازه بازبینی: { $amount } دقیقه
+strategies-summary-period-hours = بازه بازبینی: { $amount } ساعت
 
 # Parameter values in a card summary. $count selects the plural, $amount is the formatted number.
 strategies-value-percent = { $amount }%
@@ -220,8 +220,8 @@ strategies-condition-price-change-percent-param-direction = جهت
 strategies-condition-price-change-percent-param-direction-option-above = افزایش (+%)
 strategies-condition-price-change-percent-param-direction-option-below = کاهش (-%)
 strategies-condition-price-change-percent-param-direction-option-within = درون بازه (±%)
-strategies-condition-price-change-percent-param-time-value = بازه زمانی
-    .description = مقدار بازه بازبینی (1 تا 3600 برای ثانیه، 1 تا 1440 برای دقیقه، 1 تا 720 برای ساعت)
+strategies-condition-price-change-percent-param-time-value = بازه بازبینی
+    .description = تا چه زمانی به عقب تغییر سنجیده می‌شود، با واحدی که داخل فیلد انتخاب می‌شود (1 تا 3600 ثانیه، 1 تا 1440 دقیقه، 1 تا 720 ساعت)
 strategies-condition-price-change-percent-param-time-unit = واحد زمان
     .description = واحد زمان برای بازه بازبینی
 strategies-condition-price-change-percent-param-time-unit-option-seconds = ثانیه
@@ -250,7 +250,7 @@ strategies-condition-volume-spike-param-multiplier = ضریب حجم
 ## Shared by every condition
 
 strategies-condition-param-timeframe = بازه زمانی
-    .description = بازه زمانی کندل برای تحلیل (در صورت تنظیم نشدن، بازه زمانی استراتژی استفاده می‌شود)
+    .description = اندازه کندل: طول هر کندلی که شرط می‌خواند (در صورت تنظیم نشدن، بازه زمانی استراتژی)
 strategies-condition-timeframe-option-1m = 1 دقیقه
 strategies-condition-timeframe-option-5m = 5 دقیقه
 strategies-condition-timeframe-option-15m = 15 دقیقه

@@ -60,9 +60,9 @@ strategies-summary-param = { $label }：{ $value }
 strategies-summary-none = 无参数
 # An unset optional parameter: the strategy's own value it falls back to.
 strategies-param-inherit = 策略设置（{ $value }）
-strategies-summary-period-seconds = 周期：{ $amount } 秒
-strategies-summary-period-minutes = 周期：{ $amount } 分钟
-strategies-summary-period-hours = 周期：{ $amount } 小时
+strategies-summary-period-seconds = 回溯期：{ $amount } 秒
+strategies-summary-period-minutes = 回溯期：{ $amount } 分钟
+strategies-summary-period-hours = 回溯期：{ $amount } 小时
 
 # Parameter values in a card summary. $count selects the plural, $amount is the formatted number.
 strategies-value-percent = { $amount }%
@@ -218,8 +218,8 @@ strategies-condition-price-change-percent-param-direction = 方向
 strategies-condition-price-change-percent-param-direction-option-above = 上涨（+%）
 strategies-condition-price-change-percent-param-direction-option-below = 下跌（-%）
 strategies-condition-price-change-percent-param-direction-option-within = 区间内（±%）
-strategies-condition-price-change-percent-param-time-value = 时间周期
-    .description = 回溯期数值（秒为 1-3600，分钟为 1-1440，小时为 1-720）
+strategies-condition-price-change-percent-param-time-value = 回溯期
+    .description = 向前回溯测量变化的时长，单位在字段内选择（1-3600 秒、1-1440 分钟、1-720 小时）
 strategies-condition-price-change-percent-param-time-unit = 时间单位
     .description = 回溯期的时间单位
 strategies-condition-price-change-percent-param-time-unit-option-seconds = 秒
@@ -248,7 +248,7 @@ strategies-condition-volume-spike-param-multiplier = 成交量倍数
 ## Shared by every condition
 
 strategies-condition-param-timeframe = 时间周期
-    .description = 要分析的 K 线时间周期（未设置时默认使用策略的时间周期）
+    .description = K 线大小：条件读取的每根 K 线的时长（未设置时使用策略的时间周期）
 strategies-condition-timeframe-option-1m = 1 分钟
 strategies-condition-timeframe-option-5m = 5 分钟
 strategies-condition-timeframe-option-15m = 15 分钟

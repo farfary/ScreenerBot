@@ -60,9 +60,9 @@ strategies-summary-param = { $label }: { $value }
 strategies-summary-none = Без параметрів
 # An unset optional parameter: the strategy's own value it falls back to.
 strategies-param-inherit = Налаштування стратегії ({ $value })
-strategies-summary-period-seconds = Період: { $amount } с
-strategies-summary-period-minutes = Період: { $amount } хв
-strategies-summary-period-hours = Період: { $amount } год
+strategies-summary-period-seconds = Період огляду: { $amount } с
+strategies-summary-period-minutes = Період огляду: { $amount } хв
+strategies-summary-period-hours = Період огляду: { $amount } год
 
 # Parameter values in a card summary. $count selects the plural, $amount is the formatted number.
 strategies-value-percent = { $amount }%
@@ -224,13 +224,13 @@ strategies-condition-price-change-percent-param-direction = Напрямок
 strategies-condition-price-change-percent-param-direction-option-above = Зростання (+%)
 strategies-condition-price-change-percent-param-direction-option-below = Падіння (-%)
 strategies-condition-price-change-percent-param-direction-option-within = У межах діапазону (±%)
-strategies-condition-price-change-percent-param-time-value = Часовий період
-    .description = Значення періоду огляду (1–3600 для секунд, 1–1440 для хвилин, 1–720 для годин)
+strategies-condition-price-change-percent-param-time-value = Період огляду
+    .description = Наскільки далеко назад вимірюється зміна, в одиниці, обраній у полі (1–3600 с, 1–1440 хв, 1–720 год)
 strategies-condition-price-change-percent-param-time-unit = Одиниця часу
     .description = Одиниця часу для періоду огляду
-strategies-condition-price-change-percent-param-time-unit-option-seconds = Секунди
-strategies-condition-price-change-percent-param-time-unit-option-minutes = Хвилини
-strategies-condition-price-change-percent-param-time-unit-option-hours = Години
+strategies-condition-price-change-percent-param-time-unit-option-seconds = с
+strategies-condition-price-change-percent-param-time-unit-option-minutes = хв
+strategies-condition-price-change-percent-param-time-unit-option-hours = год
 
 strategies-condition-price-to-ma = Ціна відносно ковзної середньої
     .description = Перевірка, чи ціна вище, нижче або в межах діапазону від її простої ковзної середньої
@@ -254,7 +254,7 @@ strategies-condition-volume-spike-param-multiplier = Множник обсягу
 ## Shared by every condition
 
 strategies-condition-param-timeframe = Таймфрейм
-    .description = Таймфрейм свічок для аналізу (якщо не задано, береться таймфрейм стратегії)
+    .description = Розмір свічки: тривалість кожної свічки, яку читає умова (таймфрейм стратегії, якщо не задано)
 strategies-condition-timeframe-option-1m = 1 хв
 strategies-condition-timeframe-option-5m = 5 хв
 strategies-condition-timeframe-option-15m = 15 хв

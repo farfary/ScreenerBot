@@ -976,6 +976,34 @@ input[type="radio"]:disabled {
   user-select: none;
 }
 
+/* A unit picked in place (`.input-unit` holding a custom select) is the same
+   muted suffix with a chevron: no box, no fill, no border of its own, so the field
+   still reads as one control. It takes its clicks back from the suffix, and its
+   label uses the data face the gutter is measured in. */
+.number-field-suffix > .input-unit:has(select) {
+  pointer-events: auto;
+}
+
+.number-field-suffix > .input-unit .custom-select .cs-trigger {
+  gap: 4px;
+  padding: 0;
+  border: none;
+  background: none;
+  color: var(--text-muted);
+}
+
+.number-field-suffix > .input-unit .custom-select:hover .cs-trigger,
+.number-field-suffix > .input-unit .custom-select.open .cs-trigger {
+  background: none;
+  color: var(--text-primary);
+}
+
+.number-field-suffix > .input-unit .cs-value,
+.number-field-suffix > .input-unit .cs-sizer {
+  font-family: var(--font-data);
+  font-size: 0.8125rem;
+}
+
 /* Stepper: bare chevrons, never a tile or ring behind them. Idle they stay out
    of the way and only the value is legible; hover or focus brings them up. The
    column keeps its width at all times, so nothing reflows when they appear. */

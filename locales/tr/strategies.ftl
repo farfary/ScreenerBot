@@ -46,9 +46,9 @@ strategies-summary-param = { $label }: { $value }
 strategies-summary-none = Parametre yok
 # An unset optional parameter: the strategy's own value it falls back to.
 strategies-param-inherit = Strateji ayarı ({ $value })
-strategies-summary-period-seconds = Periyot: { $amount }sn
-strategies-summary-period-minutes = Periyot: { $amount }dk
-strategies-summary-period-hours = Periyot: { $amount }sa
+strategies-summary-period-seconds = Geriye bakış: { $amount }sn
+strategies-summary-period-minutes = Geriye bakış: { $amount }dk
+strategies-summary-period-hours = Geriye bakış: { $amount }sa
 
 strategies-value-percent = %{ $amount }
 strategies-value-multiplier = { $amount }×
@@ -192,13 +192,13 @@ strategies-condition-price-change-percent-param-direction = Yön
 strategies-condition-price-change-percent-param-direction-option-above = Artış (+%)
 strategies-condition-price-change-percent-param-direction-option-below = Kayıp (-%)
 strategies-condition-price-change-percent-param-direction-option-within = Aralık içinde (±%)
-strategies-condition-price-change-percent-param-time-value = Zaman dilimi
-    .description = Geriye bakış dönemi değeri (saniye için 1-3600, dakika için 1-1440, saat için 1-720)
+strategies-condition-price-change-percent-param-time-value = Geriye bakış
+    .description = Değişimin ne kadar geriden ölçüldüğü, alanın içinde seçilen birimle (1-3600 sn, 1-1440 dk, 1-720 sa)
 strategies-condition-price-change-percent-param-time-unit = Zaman birimi
     .description = Geriye bakış dönemi için zaman birimi
-strategies-condition-price-change-percent-param-time-unit-option-seconds = Saniye
-strategies-condition-price-change-percent-param-time-unit-option-minutes = Dakika
-strategies-condition-price-change-percent-param-time-unit-option-hours = Saat
+strategies-condition-price-change-percent-param-time-unit-option-seconds = sn
+strategies-condition-price-change-percent-param-time-unit-option-minutes = dk
+strategies-condition-price-change-percent-param-time-unit-option-hours = sa
 
 strategies-condition-price-to-ma = Fiyat ve hareketli ortalama
     .description = Fiyatın Basit Hareketli Ortalamasının üstünde, altında veya aralığında olup olmadığını kontrol eder
@@ -220,7 +220,7 @@ strategies-condition-volume-spike-param-multiplier = Hacim çarpanı
     .description = Ortalamanın kaç katı üstünde (örn. 2,0 = ortalamanın %200'ü)
 
 strategies-condition-param-timeframe = Zaman dilimi
-    .description = Analiz edilecek mum zaman dilimi (ayarlanmazsa strateji zaman dilimi kullanılır)
+    .description = Mum boyutu: koşulun okuduğu her mumun süresi (ayarlanmazsa strateji zaman dilimi)
 strategies-condition-timeframe-option-1m = 1 dakika
 strategies-condition-timeframe-option-5m = 5 dakika
 strategies-condition-timeframe-option-15m = 15 dakika

@@ -54,9 +54,9 @@ strategies-summary-param = { $label }: { $value }
 strategies-summary-none = Sin parámetros
 # An unset optional parameter: the strategy's own value it falls back to.
 strategies-param-inherit = Ajuste de la estrategia ({ $value })
-strategies-summary-period-seconds = Período: { $amount } s
-strategies-summary-period-minutes = Período: { $amount } min
-strategies-summary-period-hours = Período: { $amount } h
+strategies-summary-period-seconds = Período de revisión: { $amount } s
+strategies-summary-period-minutes = Período de revisión: { $amount } min
+strategies-summary-period-hours = Período de revisión: { $amount } h
 
 # Parameter values in a card summary. $count selects the plural, $amount is the formatted number.
 strategies-value-percent = { $amount }%
@@ -216,13 +216,13 @@ strategies-condition-price-change-percent-param-direction = Dirección
 strategies-condition-price-change-percent-param-direction-option-above = Ganancia (+%)
 strategies-condition-price-change-percent-param-direction-option-below = Pérdida (-%)
 strategies-condition-price-change-percent-param-direction-option-within = Dentro del rango (±%)
-strategies-condition-price-change-percent-param-time-value = Período de tiempo
-    .description = Valor del período de revisión (1-3600 para segundos, 1-1440 para minutos, 1-720 para horas)
+strategies-condition-price-change-percent-param-time-value = Período de revisión
+    .description = Hasta dónde se mide el cambio, en la unidad elegida dentro del campo (1-3600 s, 1-1440 min, 1-720 h)
 strategies-condition-price-change-percent-param-time-unit = Unidad de tiempo
     .description = Unidad de tiempo del período de revisión
-strategies-condition-price-change-percent-param-time-unit-option-seconds = Segundos
-strategies-condition-price-change-percent-param-time-unit-option-minutes = Minutos
-strategies-condition-price-change-percent-param-time-unit-option-hours = Horas
+strategies-condition-price-change-percent-param-time-unit-option-seconds = s
+strategies-condition-price-change-percent-param-time-unit-option-minutes = min
+strategies-condition-price-change-percent-param-time-unit-option-hours = h
 
 strategies-condition-price-to-ma = Precio vs. media móvil
     .description = Comprueba si el precio está por encima, por debajo o dentro del rango de su media móvil simple
@@ -246,7 +246,7 @@ strategies-condition-volume-spike-param-multiplier = Multiplicador de volumen
 ## Shared by every condition
 
 strategies-condition-param-timeframe = Temporalidad
-    .description = Temporalidad de las velas a analizar (usa la de la estrategia si no se define)
+    .description = Tamaño de vela: la duración de cada vela que lee la condición (la temporalidad de la estrategia si no se define)
 strategies-condition-timeframe-option-1m = 1 minuto
 strategies-condition-timeframe-option-5m = 5 minutos
 strategies-condition-timeframe-option-15m = 15 minutos

@@ -16,6 +16,9 @@
  * - An unset optional parameter is its own editor choice and summary value, naming
  *   the strategy's value it falls back to; the saved tree keeps it unset.
  * - The saved tree carries the value the editor shows, defaults included.
+ * - A lookback stored as `time_value` + `time_unit` is one duration field: the amount
+ *   input with its unit select as the field's `.input-unit`, under one label, saved
+ *   as the same two parameters.
  *
  * The card actions act only where they can: Move up and Move down are disabled on the
  * first and last card, and Delete removes a condition only after it is confirmed.
@@ -100,7 +103,7 @@ test("the summary names every parameter with the option the editor shows", () =>
         );
       }
     }
-    if (period) assert.match(summary, /Period: 5 min/, `${type} lookback missing`);
+    if (period) assert.match(summary, /Lookback: 5 min/, `${type} lookback missing`);
   }
 });
 
@@ -119,6 +122,34 @@ test("an unset timeframe names the strategy timeframe and stays unset when saved
   assert.equal(saved.time_value.value, 5);
   assert.equal(saved.time_unit.value, "MINUTES");
   assert.equal(saved.percentage.value, 10);
+});
+
+test("a lookback is one duration field with its unit picked inside it", () => {
+  const condition = {
+    type: "PriceChangePercent",
+    enabled: true,
+    params: { time_value: 2, time_unit: "HOURS" },
+  };
+  const { editor, state } = editorFor([condition]);
+  const html = editor.renderParamEditor(condition, schemas.PriceChangePercent, 0);
+  const lookback = html
+    .split('<div class="param-field">')
+    .slice(1)
+    .filter((field) => /data-key="time_(value|unit)"/.test(field));
+
+  assert.equal(lookback.length, 1, "amount and unit share one field");
+  assert.match(lookback[0], /<label>Lookback<\/label>/);
+  assert.match(
+    lookback[0],
+    /<input [^>]*data-key="time_value" type="number" value="2"[^>]*>\s*<span class="input-unit"><select [^>]*data-key="time_unit"[^>]*aria-label="Time Unit"[^>]*data-custom-select/,
+    "the unit select is the amount's own unit"
+  );
+  assert.deepEqual(selectedOptions(lookback[0]), { time_unit: "h" });
+
+  editor.updateRuleTreeFromEditor();
+  const saved = state.currentStrategy.rules.condition.parameters;
+  assert.equal(saved.time_value.value, 2);
+  assert.equal(saved.time_unit.value, "HOURS");
 });
 
 test("move actions are disabled where the card cannot move", () => {

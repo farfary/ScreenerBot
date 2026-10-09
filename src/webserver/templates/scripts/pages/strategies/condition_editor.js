@@ -261,23 +261,63 @@ export function createConditionEditor({
    * Render parameter editor section for a condition
    */
   function renderParamEditor(c, schema, idx) {
-    const entries = Object.entries(schema.parameters || {});
+    const params = schema.parameters || {};
+    const entries = Object.entries(params);
     if (!entries.length)
       return `<div class="param-row">${Utils.escapeHtml(I18n.t("strategies-summary-none"))}</div>`;
-    // Basic approach: show all params; could gate last N as advanced in future
-    const fields = entries.map(([key, spec]) => {
+    // A lookback given as `time_value` + `time_unit` is one duration field.
+    const hasPeriod = Object.hasOwn(params, "time_value") && Object.hasOwn(params, "time_unit");
+    const shown = hasPeriod ? entries.filter(([key]) => key !== "time_unit") : entries;
+    const fields = shown.map(([key, spec]) => {
       const label = paramLabel(spec, key);
       const description = paramDescription(spec);
       const val = resolvedParam(c.params, key, spec) ?? "";
+      const unit = params.time_unit;
+      const control =
+        hasPeriod && key === "time_value"
+          ? renderPeriodInput(idx, spec, val, unit, resolvedParam(c.params, "time_unit", unit))
+          : renderParamInput(idx, key, spec, val);
       return `
         <div class="param-field">
           <label>${Utils.escapeHtml(label)}</label>
-          ${renderParamInput(idx, key, spec, val)}
+          ${control}
           ${description ? `<div class="property-description">${Utils.escapeHtml(description)}</div>` : ""}
         </div>
       `;
     });
     return `<div class="param-row">${fields.join("")}</div>`;
+  }
+
+  /**
+   * A lookback as one duration field: the amount, with its unit picked inside the
+   * field. The unit select is the field's `.input-unit`, which `ui/number_field.js`
+   * adopts into the numeric shell; both keep their own `data-key`, so the stored
+   * `time_value` / `time_unit` pair is unchanged.
+   */
+  function renderPeriodInput(idx, valueSpec, value, unitSpec, unit) {
+    const amount = renderParamInput(idx, "time_value", valueSpec, value);
+    const unitLabel = Utils.escapeHtml(paramLabel(unitSpec, "time_unit"));
+    return `${amount}
+          <span class="input-unit"><select id="param-${idx}-time_unit" data-key="time_unit" aria-label="${unitLabel}" data-custom-select data-cs-fit-options>${renderParamOptions("time_unit", unitSpec, unit ?? "")}</select></span>`;
+  }
+
+  /** The `<option>` list of an enum parameter, with the unset choice of an optional one. */
+  function renderParamOptions(key, spec, value) {
+    const options = spec.options || spec.values || [];
+    // An unset optional parameter is a choice of its own: the strategy supplies it.
+    const inherit = spec.optional
+      ? `<option value="" ${value === "" ? "selected" : ""}>${Utils.escapeHtml(inheritedParamText(spec, state.currentStrategy?.[key]))}</option>`
+      : "";
+    return (
+      inherit +
+      options
+        .map((opt) => {
+          const optValue = optionValue(opt);
+          const selected = optValue === value ? "selected" : "";
+          return `<option value="${Utils.escapeHtml(String(optValue))}" ${selected}>${Utils.escapeHtml(optionLabel(opt))}</option>`;
+        })
+        .join("")
+    );
   }
 
   /**
@@ -305,23 +345,8 @@ export function createConditionEditor({
           <input id="${id}" ${data} type="checkbox" ${value ? "checked" : ""}>
           <span class="toggle-track"></span>
         </label>`;
-      case "enum": {
-        const options = spec.options || spec.values || [];
-        // An unset optional parameter is a choice of its own: the strategy supplies it.
-        const inherit = spec.optional
-          ? `<option value="" ${value === "" ? "selected" : ""}>${Utils.escapeHtml(inheritedParamText(spec, state.currentStrategy?.[key]))}</option>`
-          : "";
-        const optionsHtml =
-          inherit +
-          options
-            .map((opt) => {
-              const optValue = optionValue(opt);
-              const selected = optValue === value ? "selected" : "";
-              return `<option value="${Utils.escapeHtml(String(optValue))}" ${selected}>${Utils.escapeHtml(optionLabel(opt))}</option>`;
-            })
-            .join("");
-        return `<select id="${id}" ${data} class="select-field" data-custom-select>${optionsHtml}</select>`;
-      }
+      case "enum":
+        return `<select id="${id}" ${data} class="select-field" data-custom-select>${renderParamOptions(key, spec, value)}</select>`;
       default:
         return `<input id="${id}" ${data} type="text" value="${Utils.escapeHtml(String(value))}">`;
     }
