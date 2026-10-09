@@ -265,8 +265,12 @@
   background: var(--danger-alpha-10);
 }
 
+/* A list grows with its lines, so the last entry is never cut at the box edge; past
+   twenty lines it scrolls. */
 .config-field-control textarea {
+  field-sizing: content;
   min-height: 84px;
+  max-height: 20lh;
   font-family: var(--font-mono);
   font-size: 0.8rem;
   resize: vertical;

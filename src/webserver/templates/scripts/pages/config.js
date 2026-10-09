@@ -392,7 +392,7 @@ function renderHeader(sectionId) {
 
   const saveBtn = create("button", {
     type: "button",
-    className: "config-header-action primary",
+    className: "btn btn-sm btn-primary",
     disabled: state.saving || state.pendingChanges.size === 0,
   });
   saveBtn.textContent = state.saving
@@ -403,7 +403,7 @@ function renderHeader(sectionId) {
 
   const reloadBtn = create("button", {
     type: "button",
-    className: "config-header-action ghost",
+    className: "btn btn-sm btn-secondary",
     disabled: state.loading,
   });
   reloadBtn.textContent = I18n.t("system-config-reload");
@@ -412,7 +412,7 @@ function renderHeader(sectionId) {
 
   const diffBtn = create("button", {
     type: "button",
-    className: "config-header-action ghost",
+    className: "btn btn-sm btn-secondary",
   });
   diffBtn.textContent = I18n.t("system-config-compare");
   on(diffBtn, "click", handleDiff);
@@ -422,7 +422,7 @@ function renderHeader(sectionId) {
   // discard — a live-looking button that silently does nothing reads as broken.
   const revertBtn = create("button", {
     type: "button",
-    className: "config-header-action destructive",
+    className: "btn btn-sm btn-danger",
     disabled: state.saving || !hasSectionChanges(sectionId),
   });
   revertBtn.textContent = I18n.t("system-config-revert-section");
