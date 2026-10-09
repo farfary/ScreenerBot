@@ -11,8 +11,10 @@
  *   measured value.
  * - The dependency chips sit on one line, so a service with several dependencies is no
  *   taller than one with none; an empty list is "—", not a placeholder chip.
- * - Every rendered row has one height: the activity reading (track over a meta line) fits
- *   the height the status badge sets.
+ * - Every rendered row has one height, and the activity reading shares the row's text
+ *   line: the bar and its reading sit side by side, not stacked.
+ * - A rate column names its unit in the header ("Cycles/sec", "Ops/sec"), since its
+ *   cells are bare numbers.
  * - A disabled service is off by choice: its Enabled mark is neutral, never the error
  *   colour, which is reserved for failures.
  *
@@ -65,7 +67,7 @@ test("a disabled service's Enabled mark is neutral", () => {
   assert.doesNotMatch(declaration(off.body, "color") ?? "", /error|danger/);
 });
 
-test("every Services row has one height", async () => {
+test("every Services row has one height and one text line", async () => {
   const browser = await chromium.launch({ headless: true });
   after(() => browser.close());
   const context = await browser.newContext({ viewport: { width: 1440, height: 900 } });
@@ -89,6 +91,38 @@ test("every Services row has one height", async () => {
       ),
     ]);
     assert.equal(heights.length, 1, `row heights ${heights.join(", ")}`);
+
+    // An empty inline-block's top edge is the baseline of the line it sits on.
+    const offsets = await page.evaluate(() => {
+      const baseline = (element) => {
+        const marker = document.createElement("span");
+        marker.style.cssText = "display:inline-block;width:0;height:0";
+        element.append(marker);
+        const top = marker.getBoundingClientRect().top;
+        marker.remove();
+        return top;
+      };
+      return [...document.querySelectorAll(".data-table tbody tr")]
+        .filter((row) => row.querySelector(".activity-meta span"))
+        .map(
+          (row) =>
+            baseline(row.querySelector(".activity-meta span")) -
+            baseline(row.querySelector('td[data-column-id="uptime"]'))
+        );
+    });
+    assert.ok(offsets.length > 0, "the fixture carries activity readings");
+    for (const offset of offsets) {
+      assert.ok(Math.abs(offset) <= 1, `the activity reading sits ${offset}px off the row line`);
+    }
+
+    const rates = await page.$$eval(
+      '.data-table thead th:is([data-column-id="cycleRate"], [data-column-id="ops"])',
+      (headers) => headers.map((header) => header.textContent.trim())
+    );
+    assert.equal(rates.length, 2, "both rate columns are shown");
+    for (const label of rates) {
+      assert.match(label, /\//, `"${label}" names its per-second unit`);
+    }
   } finally {
     await context.close();
     await host.close();

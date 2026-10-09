@@ -25,17 +25,22 @@
   color: var(--text-muted);
 }
 
+/* Bar and reading share one line, so the reading sits on the row's text line like
+   every other cell. */
 .activity-cell {
+  display: flex;
+  align-items: center;
+  gap: var(--spacing-sm);
   min-width: 170px;
 }
 
 .activity-track {
-  width: 100%;
+  flex: 1 1 auto;
+  min-width: 48px;
   height: 6px;
   border-radius: var(--radius-full);
   overflow: hidden;
   background: var(--border-color);
-  margin-block-end: 2px;
 }
 
 .activity-fill {
@@ -59,14 +64,13 @@
   background: var(--text-secondary);
 }
 
-/* Track, gap and this line together stay within the status badge's height, so a row with
-   an activity reading is as tall as one without. */
 .activity-meta {
   display: flex;
-  justify-content: space-between;
+  gap: var(--spacing-sm);
   font-size: 0.75rem;
   line-height: 1.4;
   color: var(--text-secondary);
+  white-space: nowrap;
 }
 
 /* Dependencies stay on one line so every row keeps the table's row height. */
