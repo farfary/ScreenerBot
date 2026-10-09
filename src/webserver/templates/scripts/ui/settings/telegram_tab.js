@@ -90,7 +90,7 @@ function buildTelegramTab(settings) {
       <div class="telegram-session-item" data-session-id="${s.user_id}">
         <div class="telegram-session-info">
           <span class="telegram-session-user">${Utils.escapeHtml(s.username || I18n.t("settings-telegram-unknown"))}</span>
-          <span class="telegram-session-time">${Utils.escapeHtml(I18n.t("settings-telegram-session-active", { duration: Utils.formatDuration(s.created_at_secs * 1000) }))}</span>
+          <span class="telegram-session-time">${Utils.escapeHtml(I18n.t("settings-telegram-session-active", { duration: Utils.formatUptime(s.created_at_secs, { style: "trimmed" }) }))}</span>
         </div>
         <button class="btn btn-danger btn-sm telegram-session-revoke-btn" data-session-id="${s.user_id}">
           <i class="icon-x"></i> <span data-l10n-id="settings-telegram-session-revoke"></span>

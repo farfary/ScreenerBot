@@ -992,6 +992,10 @@ export function formatSizeAt(value, { unit: unitName = "mb", decimals = 1, fallb
   return words(num, localizeDecimal(num.toFixed(decimals)));
 }
 
+/**
+ * A span given in nanoseconds (a service cycle or poll), in ns, µs, ms or s. An
+ * elapsed span in seconds (a hold time, a session age) is `formatUptime`'s.
+ */
 export function formatDuration(nanos, fallback) {
   const num = coerceNumber(nanos);
   if (!Number.isFinite(num) || num < 0) {

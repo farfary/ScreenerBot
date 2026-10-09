@@ -993,7 +993,7 @@ function createLifecycle() {
       statusList.innerHTML = positions
         .map((position) => {
           const holdSeconds = position.entry_time ? Date.now() / 1000 - position.entry_time : 0;
-          const holdTime = Utils.formatDuration(holdSeconds);
+          const holdTime = Utils.formatUptime(holdSeconds, { style: "trimmed" });
           const roi = position.unrealized_pnl_percent ?? 0;
 
           return `
