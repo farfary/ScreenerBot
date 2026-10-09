@@ -88,10 +88,12 @@
    SCROLL CONTAINER + ARROWS (minimal, clean)
    ============================================ */
 
+/* The arrows are flex items on either side of the scroller, so neither ever covers a
+   card; a hidden arrow keeps its slot and the cards do not shift when it appears. */
 .featured-row-scroll {
-  position: relative;
   display: flex;
   align-items: center;
+  gap: var(--spacing-xs);
   flex: 1;
   min-width: 0;
 }
@@ -110,9 +112,7 @@
 
 /* Scroll arrows - subtle */
 .featured-row-arrow {
-  position: absolute;
-  top: 50%;
-  transform: translateY(-50%);
+  flex-shrink: 0;
   width: 20px;
   height: 20px;
   display: flex;
@@ -123,7 +123,6 @@
   border-radius: var(--radius-full);
   color: var(--text-secondary);
   cursor: pointer;
-  z-index: 10;
   transition: all var(--transition-fast);
 }
 
@@ -133,17 +132,8 @@
   border-color: var(--link-color);
 }
 
-.featured-row-arrow-start {
-  inset-inline-start: 0;
-}
-
-.featured-row-arrow-end {
-  inset-inline-end: 0;
-}
-
 .featured-row-arrow.hidden {
-  opacity: 0;
-  pointer-events: none;
+  visibility: hidden;
 }
 
 .featured-row-arrow i {
