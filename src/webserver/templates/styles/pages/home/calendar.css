@@ -82,13 +82,20 @@
   border: none;
 }
 
-.calendar-cell.empty,
-.calendar-cell.skeleton {
+/* Cells stay opaque: the grid paints its 1px gaps with the border colour, so a
+   translucent cell would show that colour through its whole face. Quiet days dim
+   their content; days not yet reached take the out-of-month fill. */
+.calendar-cell.empty > *,
+.calendar-cell.skeleton > * {
   opacity: 0.7;
 }
 
 .calendar-cell.future {
-  opacity: 0.28;
+  background: var(--bg-primary);
+}
+
+.calendar-cell.future > * {
+  opacity: 0.4;
 }
 
 /* Day number: top-left marker; today gets an accent pill instead of a heavy
