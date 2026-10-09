@@ -16,6 +16,8 @@
  * - No rule tab uses a dollar-sign glyph.
  * - Entry Sizes, a list of SOL amounts, matches the number fields beside it.
  * - A strategy card shows its state only through its toggle, and no chip repeats its lane.
+ * - An example figure (a SOL price or a percent) never ends its fraction in a zero, so
+ *   one strip does not mix "+10%" with "+32.0%" or print "1.0000 SOL".
  *
  * Run with `npm run test:js`.
  */
@@ -85,6 +87,27 @@ for (const id of TABS) {
     assert.equal(report.dollars, 0, `${id}: no dollar-sign glyph`);
   });
 }
+
+test("example figures carry no trailing fraction zero on any rule tab", async () => {
+  for (const id of TABS) {
+    await page.click(`#subTabsContainer [data-tab-id="${id}"]`);
+    const panel = page.locator(`#${id}-tab`);
+    await panel.waitFor();
+    const figures = await panel.evaluate((root) =>
+      [...root.querySelectorAll('[id*="example"]')]
+        .filter((el) => el.children.length === 0 || el.id.endsWith("-pct"))
+        .map((el) => ({ id: el.id, text: el.textContent.trim() }))
+        .filter((figure) => /\d/.test(figure.text))
+    );
+    for (const figure of figures) {
+      assert.doesNotMatch(
+        figure.text,
+        /\d\.\d*0(?!\d)/,
+        `${id} #${figure.id}: "${figure.text}" has no trailing fraction zero`
+      );
+    }
+  }
+});
 
 test("Entry Sizes, a list of amounts, uses the face and weight of the number fields", async () => {
   await page.click('#subTabsContainer [data-tab-id="general-settings"]');

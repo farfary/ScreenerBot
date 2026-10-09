@@ -219,6 +219,9 @@ export function createExampleUpdaters({ $, Utils: _Utils }) {
     }
   }
 
+  /** A percent figure in an example strip: one decimal at most, no trailing zero. */
+  const examplePercent = (value) => formatFixed(value, { decimals: 1, trim: true });
+
   /**
    * Update trailing stop visual example calculations
    */
@@ -250,7 +253,7 @@ export function createExampleUpdaters({ $, Utils: _Utils }) {
       const activationDetail = $("#example-activation-pct");
       if (activationDetail) {
         activationDetail.textContent = I18n.t("trader-example-profit", {
-          value: String(activation),
+          value: examplePercent(activation),
         });
       }
     }
@@ -260,7 +263,7 @@ export function createExampleUpdaters({ $, Utils: _Utils }) {
       if (peakDetail) {
         const gainFromEntry = ((peakPrice - entryPrice) / entryPrice) * 100;
         peakDetail.textContent = I18n.t("trader-example-profit", {
-          value: formatFixed(gainFromEntry, { decimals: 1 }),
+          value: examplePercent(gainFromEntry),
         });
       }
     }
@@ -269,7 +272,7 @@ export function createExampleUpdaters({ $, Utils: _Utils }) {
       const exitDetail = $("#example-exit-pct");
       if (exitDetail) {
         exitDetail.textContent = I18n.t("trader-trailing-final", {
-          value: formatFixed(protectedProfit, { decimals: 1 }),
+          value: examplePercent(protectedProfit),
         });
       }
     }
@@ -279,13 +282,13 @@ export function createExampleUpdaters({ $, Utils: _Utils }) {
     const summaryAvoided = $("#example-avoided");
     if (summaryProtected) {
       summaryProtected.innerHTML = I18n.markup("trader-trailing-summary-protected", {
-        value: formatPercentValue(protectedProfit, { decimals: 1, plus: "" }),
+        value: formatPercentValue(protectedProfit, { decimals: 1, plus: "", trim: true }),
       });
     }
     if (summaryAvoided) {
       const avoidedLoss = ((peakPrice - exitPrice) / peakPrice) * 100;
       summaryAvoided.innerHTML = I18n.markup("trader-trailing-summary-avoided", {
-        value: formatPercentValue(avoidedLoss, { decimals: 1, plus: "" }),
+        value: formatPercentValue(avoidedLoss, { decimals: 1, plus: "", trim: true }),
       });
     }
   }
