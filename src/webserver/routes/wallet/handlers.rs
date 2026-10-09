@@ -206,7 +206,8 @@ fn token_balance_info(
     })
 }
 
-/// Enrich a snapshot's token balances with metadata (symbol/name/logo) and decimals.
+/// Enrich a snapshot's token balances with metadata (symbol/name/logo), decimals and the
+/// live-worth price of each holding.
 ///
 /// Cache-first by design: known mints (already a metadata row in the token DB) are
 /// served straight from cache. Mints the bot has never seen are bootstrapped once
@@ -277,30 +278,12 @@ async fn enrich_token_holdings(
         );
     }
 
-    // Latest price in SOL per mint, sourced from the assembled token's market data
-    // (None for mints without market data — they simply show no value).
-    let price_fetches = mints_by_chain
-        .iter()
-        .flat_map(|(&chain, chain_mints)| chain_mints.iter().map(move |mint| (chain, mint)))
-        .map(|(chain, mint)| async move {
-            let price = crate::tokens::database::get_full_token_async(chain, mint)
-                .await
-                .ok()
-                .flatten()
-                .map(|t| t.price_sol)
-                .filter(|p| *p > 0.0);
-            (mint.clone(), price)
-        });
-    let price_map: HashMap<String, Option<f64>> = futures::future::join_all(price_fetches)
-        .await
-        .into_iter()
-        .collect();
-
     token_balances
         .iter()
         .map(|tb| {
             let (symbol, name) = metadata_map.get(&tb.mint).cloned().unwrap_or((None, None));
-            let price_sol = price_map.get(&tb.mint).copied().flatten();
+            // Priced by the worth owner, so the rows sum to the header and Home figure.
+            let price_sol = crate::wallet::held_token_price_native(&tb.mint);
             let value_sol = price_sol.map(|p| p * tb.balance_ui);
             Ok(WalletTokenHolding {
                 mint: tb.mint.clone(),

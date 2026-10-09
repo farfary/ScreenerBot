@@ -29,7 +29,8 @@ use super::database::{
 };
 use super::types::*;
 use super::worth::{
-    publish_snapshot, request_balance_refresh, settle_refresh_burst, wait_for_refresh_request,
+    load_market_prices, publish_snapshot, request_balance_refresh, settle_refresh_burst,
+    value_collected_snapshot, wait_for_refresh_request, MarketPrices,
 };
 use crate::wallets::Error;
 
@@ -51,7 +52,10 @@ pub async fn initialize_wallet_database() -> Result<(), Error> {
     // the home hero show a real figure immediately, instead of zeroes until the first
     // collection tick lands.
     match db.get_latest_snapshot_with_balances() {
-        Ok(Some(snapshot)) => publish_snapshot(Arc::new(snapshot)),
+        Ok(Some(snapshot)) => {
+            let market_prices = load_market_prices(&snapshot).await;
+            publish_snapshot(Arc::new(snapshot), market_prices);
+        }
         Ok(None) => {}
         Err(err) => logger::warning(
             LogTag::Wallet,
@@ -90,8 +94,9 @@ pub async fn refresh_wallet_monitor_subject() -> Result<(), Error> {
 // WALLET MONITORING SERVICE
 // =============================================================================
 
-/// Collect current wallet balance and token balances
-async fn collect_wallet_snapshot() -> Result<WalletSnapshot, Error> {
+/// Collect current wallet balance and token balances, with the market prices the
+/// holdings were valued at.
+async fn collect_wallet_snapshot() -> Result<(WalletSnapshot, MarketPrices), Error> {
     // Get wallet address
     let wallet_address = get_wallet_address().map_err(|e| Error::Dependency {
         dependency: "config",
@@ -212,41 +217,37 @@ async fn collect_wallet_snapshot() -> Result<WalletSnapshot, Error> {
     let total_tokens_count = token_balances.len() as u32;
     let total_nfts_count = nft_balances.len() as u32;
 
-    // Value the holdings at the prices in force right now, so the persisted row is a
-    // point-in-time worth. Historical rows can never be re-valued honestly later (we
-    // would be pricing yesterday's holdings at today's price), so it has to happen here.
-    // The live-worth pricing rule applies: pool price first, token market price when
-    // the pool cache has none, so a missed pool tick does not drop the holding to 0.
-    let tokens_worth_native: f64 = token_balances
-        .iter()
-        .filter_map(|balance| {
-            super::worth::price_token_native(&balance.mint).map(|price| balance.balance_ui * price)
-        })
-        .sum();
-
-    logger::debug(
-        LogTag::Wallet,
-        &format!(
-            "Collected snapshot: SOL {:.6}, {} tokens, {} NFTs, worth {:.6} SOL",
-            native_balance,
-            total_tokens_count,
-            total_nfts_count,
-            native_balance + tokens_worth_native
-        ),
-    );
-
-    Ok(WalletSnapshot {
+    let mut snapshot = WalletSnapshot {
         id: None,
         wallet_address,
         snapshot_time,
         native_balance,
         native_balance_raw,
-        total_equity_native: native_balance + tokens_worth_native,
+        total_equity_native: native_balance,
         total_tokens_count,
         total_nfts_count,
         token_balances,
         nft_balances,
-    })
+    };
+
+    // Value the holdings at the prices in force right now, so the persisted row is a
+    // point-in-time worth. Historical rows can never be re-valued honestly later (we
+    // would be pricing yesterday's holdings at today's price), so it has to happen here.
+    // The live-worth pricing rule applies: pool price first, the market price read
+    // with this snapshot otherwise, so a missed pool tick does not drop the holding to 0.
+    let market_prices = load_market_prices(&snapshot).await;
+    snapshot.total_equity_native =
+        value_collected_snapshot(&snapshot, &market_prices).total_equity_native;
+
+    logger::debug(
+        LogTag::Wallet,
+        &format!(
+            "Collected snapshot: SOL {:.6}, {} tokens, {} NFTs, worth {:.6} SOL",
+            native_balance, total_tokens_count, total_nfts_count, snapshot.total_equity_native
+        ),
+    );
+
+    Ok((snapshot, market_prices))
 }
 
 /// Collect a fresh snapshot, publish it as the live worth, and persist it.
@@ -255,11 +256,12 @@ async fn collect_wallet_snapshot() -> Result<WalletSnapshot, Error> {
 /// write so the UI reflects a new balance immediately even if the write is slow, and
 /// still would if it failed.
 async fn collect_publish_and_store() -> Result<Arc<WalletSnapshot>, Error> {
-    let snapshot = Arc::new(collect_wallet_snapshot().await?);
+    let (snapshot, market_prices) = collect_wallet_snapshot().await?;
+    let snapshot = Arc::new(snapshot);
 
     increment_operations();
     increment_snapshots();
-    publish_snapshot(Arc::clone(&snapshot));
+    publish_snapshot(Arc::clone(&snapshot), market_prices);
 
     let db_guard = GLOBAL_WALLET_DB.lock().await;
     match db_guard.as_ref() {

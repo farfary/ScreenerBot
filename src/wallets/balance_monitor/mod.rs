@@ -51,7 +51,10 @@ pub use database::{get_wallet_service_metrics, is_wallet_database_ready};
 
 // The single source of truth for what the wallet is worth, and the hook that keeps
 // it live. Every user-facing wallet figure goes through `get_wallet_worth()`.
-pub use worth::{get_held_mints, get_wallet_worth, live_wallet_snapshot, request_balance_refresh};
+pub use worth::{
+    get_held_mints, get_wallet_worth, held_token_price_native, live_wallet_snapshot,
+    request_balance_refresh,
+};
 
 // Re-export public types
 pub use types::{
