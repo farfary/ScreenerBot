@@ -87,6 +87,10 @@
  *   short label that must never be cut: the column is then never narrower than
  *   its widest cell
  * - maxWidth: Maximum width in px (optional, clamps auto + resize)
+ * - grow: true on a name column (the token, wallet, task, service). When the
+ *   columns need less than the container, only grow columns take the spare
+ *   width; every other column keeps what its content needs. A table without one
+ *   gives the spare to its last column.
  * - resizable: Enable column resizing (optional, default: true)
  * - visible: Initial visibility (optional, default: true)
  * - render: (value, row) => string - Custom cell renderer (optional)

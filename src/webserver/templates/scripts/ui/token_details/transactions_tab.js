@@ -11,7 +11,7 @@ import * as Utils from "../../core/utils.js";
 import { withSolUnit } from "../../core/format.js";
 import { requestManager } from "../../core/request_manager.js";
 import { renderTabState } from "./state_handling.js";
-import { typeKind, typeLabel } from "../transaction_type.js";
+import { typeKind, typeLabel, typeShortLabel } from "../transaction_type.js";
 
 /**
  * Apply transactions tab mixin to TokenDetailsDialog class
@@ -224,7 +224,9 @@ export function applyTransactionsTabMixin(DialogClass) {
     // Simple HTML table for speed
     const rows = recent
       .map((tx) => {
-        const label = typeLabel(tx.transaction_type || tx.type);
+        const type = tx.transaction_type || tx.type;
+        const label = typeShortLabel(type);
+        const fullLabel = typeLabel(type);
         const kind = transactionKind(tx);
         const timeDisplay = Utils.formatTimestamp(new Date(tx.timestamp), { includeDate: false });
         const price = tx.price_sol
@@ -235,7 +237,7 @@ export function applyTransactionsTabMixin(DialogClass) {
 
         const rowInner = `
           <span class="transaction-time">${this._escapeHtml(timeDisplay)}</span>
-          <strong class="transaction-kind ${kind}">${this._escapeHtml(label)}</strong>
+          <strong class="transaction-kind ${kind}" title="${this._escapeHtml(fullLabel)}">${this._escapeHtml(label)}</strong>
           <span class="transaction-price-cell">${price}</span>
           <span class="transaction-total">${this._escapeHtml(total)}</span>
           <i class="icon-external-link transaction-external" aria-hidden="true"></i>

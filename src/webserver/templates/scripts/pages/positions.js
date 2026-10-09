@@ -318,6 +318,7 @@ function createLifecycle() {
     {
       id: "token",
       label: I18n.t("positions-column-token"),
+      grow: true,
       sortable: true,
       floating: true,
       minWidth: 200,
@@ -390,6 +391,7 @@ function createLifecycle() {
         {
           id: "token",
           label: I18n.t("positions-column-token"),
+          grow: true,
           sortable: true,
           floating: true,
           minWidth: 200,
@@ -476,6 +478,7 @@ function createLifecycle() {
         {
           id: "token",
           label: I18n.t("positions-column-token"),
+          grow: true,
           sortable: true,
           floating: true,
           minWidth: 200,

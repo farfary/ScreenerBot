@@ -68,8 +68,8 @@ test("the one-shot fit flag is only set by a fit that actually ran", async () =>
 
   assert.match(
     source,
-    /this\.state\.hasAutoFitted = this\._fitColumnsToContainer\(\) === true;/,
-    "hasAutoFitted must come from the fit's own return value"
+    /const fitted = this\._fitColumnsToContainer\(\) === true;\s*\n\s*this\.state\.hasAutoFitted = fitted && this\._hasMeasurableRows\(\);/,
+    "hasAutoFitted must come from the fit's own return value, over measured rows"
   );
   assert.doesNotMatch(
     source,

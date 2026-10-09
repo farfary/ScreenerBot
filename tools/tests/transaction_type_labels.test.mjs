@@ -12,6 +12,7 @@ import {
   TYPE_FILTER_OPTIONS,
   typeKind,
   typeLabel,
+  typeShortLabel,
 } from "../../src/webserver/templates/scripts/ui/transaction_type.js";
 
 const KIND_LABELS = {
@@ -69,4 +70,23 @@ test("the type filter keeps its wording and order", () => {
       ["unknown", "Unclassified"],
     ]
   );
+});
+
+test("a table shows the short form of a long type label, the dialog the full one", () => {
+  const SHORT = {
+    ata_create: "ATA open",
+    ata_close: "Rent back",
+    sol_transfer: "Transfer",
+    token_transfer: "Transfer",
+    liquidity_add: "LP add",
+    liquidity_remove: "LP remove",
+  };
+  for (const kind of Object.keys(KIND_LABELS)) {
+    const expected = SHORT[kind] ?? KIND_LABELS[kind];
+    assert.equal(typeShortLabel(kind), expected, kind);
+    assert.equal(typeLabel(kind), KIND_LABELS[kind], kind);
+  }
+  // A described program call keeps its own description in both places.
+  const described = { Other: { description: "Stake" } };
+  assert.equal(typeShortLabel(described), typeLabel(described));
 });

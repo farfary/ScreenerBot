@@ -56,6 +56,7 @@ export function createWatchedWallets({
     {
       id: "label",
       label: I18n.t("wallets-watched-col-wallet"),
+      grow: true,
       sortable: true,
       minWidth: addressFloorWidth() + 24,
       render: (value, row) =>

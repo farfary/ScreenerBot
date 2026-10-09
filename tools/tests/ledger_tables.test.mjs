@@ -20,8 +20,8 @@
  * - Positions Open and Closed: both P&L columns are on screen and headed "P&L", and
  *   the two prices of a row show the same digits.
  * - A position origin tag is set apart from the name as an uppercase caption.
- * - Main Wallet: "Last used" is relative, the toolbar stays on one row and a token
- *   balance carries no padded zeros.
+ * - Main Wallet: "Last used" is relative, the toolbar stays on one row, a token
+ *   balance carries no padded zeros, and spare width goes to the Token column only.
  * - Copy Trading Compare: a paused task's mode is shown whole, and each curve in the
  *   chart legend is named as the table names its task ("Unnamed task", not a wallet).
  *
@@ -44,10 +44,10 @@ after(() => browser.close());
 
 const shell = await loadIndex("shell");
 
-async function openPage(t, name) {
+async function openPage(t, name, locale = "en") {
   const context = await browser.newContext({ viewport: { width: 1200, height: 800 } });
   const api = createApiHandler([await loadIndex(name), shell], "populated");
-  const host = await serveDashboard(context, { locale: "en", onApi: api.onApi });
+  const host = await serveDashboard(context, { locale, onApi: api.onApi });
   t.after(async () => {
     await context.close();
     await host.close();
@@ -109,6 +109,23 @@ async function assertPricesAligned(page, root, first, second) {
   assert.ok(compared > 0, `${first} and ${second} rows share a notation`);
 }
 
+/** Each badge in the Type, Direction and Status cells ends inside its own cell. */
+function badgeOverflows(page, root) {
+  return page.$$eval(`${root} tbody tr[data-row-id]`, (rows) =>
+    rows.flatMap((row) =>
+      ["transaction_type", "direction", "status"].flatMap((id) => {
+        const cell = row.querySelector(`td[data-column-id="${id}"]`);
+        const badge = cell?.querySelector(".badge");
+        if (!badge) return [];
+        const cellBox = cell.getBoundingClientRect();
+        const badgeBox = badge.getBoundingClientRect();
+        const inside = badgeBox.left >= cellBox.left - 0.5 && badgeBox.right <= cellBox.right + 0.5;
+        return inside ? [] : [`${id}: ${badge.textContent.trim()}`];
+      })
+    )
+  );
+}
+
 test("Transactions keeps its columns on screen and states each fact once", async (t) => {
   const page = await openPage(t, "transactions");
   const root = "#transactions-root";
@@ -131,6 +148,7 @@ test("Transactions keeps its columns on screen and states each fact once", async
         delta: cell("native_delta").textContent.trim(),
         direction: cell("direction").querySelector(".badge")?.className ?? null,
         directionText: cell("direction").textContent.trim(),
+        typeTitle: cell("transaction_type").querySelector(".badge")?.title ?? "",
       };
     })
   );
@@ -145,6 +163,8 @@ test("Transactions keeps its columns on screen and states each fact once", async
       assert.match(cell.directionText, /Tokens|SOL/, `"${cell.directionText}" names its subject`);
     }
     if (/^Buy/.test(cell.type)) assert.equal(cell.directionText, "↓ Tokens in");
+    // A table shows the short type label; the full one is its tooltip.
+    if (cell.type === "ATA open") assert.equal(cell.typeTitle, "Account opened");
     if (/failed/i.test(cell.status)) {
       assert.equal(cell.type, "—", "a failed row leaves its Type to the Status column");
     }
@@ -157,6 +177,11 @@ test("Transactions keeps its columns on screen and states each fact once", async
     cells.some((cell) => /^Buy/.test(cell.type)),
     "the fixture carries a buy row"
   );
+  assert.ok(
+    cells.some((cell) => cell.type === "ATA open"),
+    "an account opening reads its short label"
+  );
+  assert.deepEqual(await badgeOverflows(page, root), [], "every badge fits its cell");
   const summary = await page.$$eval(`${root} [data-summary-id]`, (chips) =>
     chips.map((chip) => chip.dataset.summaryId)
   );
@@ -167,6 +192,15 @@ test("Transactions keeps its columns on screen and states each fact once", async
     "a failure count takes the error tone"
   );
   assert.ok(!summary.includes("tx-estimate"), "no separate estimate count");
+});
+
+test("Transactions never paints a label under the next column in a long locale", async (t) => {
+  const page = await openPage(t, "transactions", "de");
+  const root = "#transactions-root";
+  await page.waitForSelector(`${root} tbody tr[data-row-id]`);
+  // Each label column is at least as wide as its widest badge; when the columns
+  // need more than the screen, the table scrolls instead of overlapping.
+  assert.deepEqual(await badgeOverflows(page, root), [], "every badge fits its cell");
 });
 
 test("Positions Open and Closed keep P&L on screen under one term", async (t) => {
@@ -224,6 +258,22 @@ test("Main Wallet states last use relatively, on one toolbar row, with unpadded 
   for (const balance of balances) {
     assert.doesNotMatch(balance, /\.\d*0$/, `balance "${balance}" pads no zeros`);
   }
+  // Spare width goes to the name column only: a short badge or number column keeps
+  // the width its content needs.
+  const widths = await page.$$eval(`${root} thead th[data-column-id]`, (ths) =>
+    Object.fromEntries(ths.map((th) => [th.dataset.columnId, th.getBoundingClientRect().width]))
+  );
+  for (const id of ["ui_amount", "value_sol", "is_token_2022", "decimals"]) {
+    assert.ok(
+      widths[id] < 160,
+      `${id} holds ${Math.round(widths[id])}px, not a share of spare width`
+    );
+  }
+  const others = Object.entries(widths).filter(([id]) => id !== "token");
+  assert.ok(
+    others.every(([, width]) => widths.token > width),
+    `the Token column takes the spare width (${JSON.stringify(widths)})`
+  );
 });
 
 test("Copy Trading Compare shows each mode whole and names curves as the table does", async (t) => {

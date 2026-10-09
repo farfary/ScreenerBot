@@ -11,7 +11,13 @@ import { withApprox } from "../core/format.js";
 import { DataTable } from "../ui/data_table.js";
 import { requestManager } from "../core/request_manager.js";
 import { TransactionDetailsDialog } from "../ui/transaction_details_dialog.js";
-import { TYPE_FILTER_OPTIONS, typeKind, typeLabel, typeVariant } from "../ui/transaction_type.js";
+import {
+  TYPE_FILTER_OPTIONS,
+  typeKind,
+  typeLabel,
+  typeShortLabel,
+  typeVariant,
+} from "../ui/transaction_type.js";
 import {
   DIRECTION_FILTER_VALUES,
   directionBadge,
@@ -40,7 +46,11 @@ const DEFAULT_FILTERS = {
  */
 function formatTypeBadge(value) {
   if (!value || typeKind(value) === "failed") return "—";
-  return `<span class="badge ${typeVariant(value)}">${Utils.escapeHtml(typeLabel(value))}</span>`;
+  // The short label fits the column; the full label is the badge's tooltip.
+  const full = typeLabel(value);
+  const short = typeShortLabel(value);
+  const title = short === full ? "" : ` title="${Utils.escapeHtml(full)}"`;
+  return `<span class="badge ${typeVariant(value)}"${title}>${Utils.escapeHtml(short)}</span>`;
 }
 
 function formatStatusBadge(status, success) {
@@ -411,19 +421,21 @@ function createLifecycle() {
         {
           id: "transaction_type",
           label: I18n.t("transactions-col-type"),
-          minWidth: 90,
+          // The widest label on screen sets the floor, so a badge never runs under
+          // the next column; short labels keep that floor small enough for 1200px.
+          minWidth: "content",
           render: (value) => formatTypeBadge(value),
         },
         {
           id: "direction",
           label: I18n.t("transactions-col-direction"),
-          minWidth: 110,
+          minWidth: "content",
           render: (value) => directionBadge(value, "—"),
         },
         {
           id: "status",
           label: I18n.t("transactions-col-status"),
-          minWidth: 100,
+          minWidth: "content",
           render: (value, row) => formatStatusBadge(value, row?.success),
         },
         {
@@ -443,6 +455,7 @@ function createLifecycle() {
         {
           id: "token_mint",
           label: I18n.t("transactions-col-token"),
+          grow: true,
           minWidth: TOKEN_CELL_MIN_WIDTH,
           render: (value, row) =>
             renderTokenCell(row?.token_mint?.trim(), { symbol: row?.token_symbol?.trim() }),

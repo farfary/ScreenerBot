@@ -901,6 +901,7 @@ function createLifecycle() {
       {
         id: "token",
         label: I18n.t("tokens-column-token"),
+        grow: true,
         sortable: true,
         floating: true,
         minWidth: 260,

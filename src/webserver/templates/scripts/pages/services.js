@@ -257,6 +257,7 @@ function createLifecycle() {
         {
           id: "name",
           label: I18n.t("services-col-service"),
+          grow: true,
           sortable: true,
           floating: true,
           minWidth: 140,

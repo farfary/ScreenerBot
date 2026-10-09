@@ -62,6 +62,7 @@ export function createCompare(page) {
     {
       id: "label",
       label: I18n.t("copy-table-wallet"),
+      grow: true,
       sortable: true,
       minWidth: addressFloorWidth() + 24,
       render: (_value, row) => renderNamedAddress(taskName(row), row.target_address),

@@ -284,11 +284,18 @@ export function applyColumnManagementMixin(DataTable) {
     this._applyStoredColumnWidths();
 
     // Fit ONCE (prevents double-fitting); the flag is set only when the fit
-    // actually measured something, so a deferred fit stays pending.
+    // actually measured something, so a deferred fit stays pending. A table with no
+    // rows yet (still loading) has measured only its headers: it fits for now and
+    // fits again, against its content floors, once rows arrive.
     if (this.options.fitToContainer !== false && !this.state.hasAutoFitted) {
-      this.state.hasAutoFitted = this._fitColumnsToContainer() === true;
+      const fitted = this._fitColumnsToContainer() === true;
+      this.state.hasAutoFitted = fitted && this._hasMeasurableRows();
     }
     this._raiseColumnsToFloors();
+  };
+
+  proto._hasMeasurableRows = function () {
+    return Boolean(this.elements.tbody?.querySelector("tr[data-row-id]"));
   };
 
   proto._autoSizeColumnsFromContent = function () {
@@ -324,6 +331,7 @@ export function applyColumnManagementMixin(DataTable) {
     const sampleSize = Math.min(this.options.autoSizeSample, allRows.length);
     const sampleRows = sampleSize > 0 ? allRows.slice(0, sampleSize) : [];
     const padding = this.options.autoSizePadding;
+    const range = document.createRange();
 
     let didChange = false;
 
@@ -359,31 +367,32 @@ export function applyColumnManagementMixin(DataTable) {
         return;
       }
 
-      const headerCell = this.elements.thead.querySelector(`th[data-column-id="${columnId}"]`);
-
-      let maxWidth = headerCell ? Math.ceil(headerCell.scrollWidth) : 0;
+      // What the header and the values NEED, not the boxes they sit in: a cell's
+      // scroll width is the column's laid-out width whenever its content is
+      // narrower, so measuring it handed every column a share of the table's
+      // spare width (a 50px badge in a 228px column).
+      let maxWidth = this._headerFloors?.[columnId] || 0;
 
       sampleRows.forEach((row) => {
         const cell = row.querySelector(`td[data-column-id="${columnId}"]`);
         if (!cell) {
           return;
         }
-        const cellWidth = Math.ceil(cell.scrollWidth);
+        const cellWidth = naturalCellWidth(cell, range);
         if (cellWidth > maxWidth) {
           maxWidth = cellWidth;
         }
       });
-
-      if (maxWidth === 0 && headerCell) {
-        maxWidth = Math.ceil(headerCell.offsetWidth);
-      }
 
       const minWidth = this._getColumnMinWidth(columnId);
       const maxWidthLimit = this._getColumnMaxWidth(columnId);
       let finalWidth = Math.max(minWidth, maxWidth + padding);
       const previous = this.state.columnWidths[columnId];
 
-      if (Number.isFinite(previous)) {
+      // Before the one-time fit a width on record is only an earlier pass's guess (an
+      // empty table's header-only layout), so the measurement replaces it; after the
+      // fit, the guard below keeps polled rows from jittering the columns.
+      if (Number.isFinite(previous) && this.state.hasAutoFitted) {
         // Prevent oscillation: only allow width changes if content significantly changed
         // Use a higher threshold to prevent micro-adjustments from causing visual jitter
         const growthThreshold = 4;
@@ -509,8 +518,9 @@ export function applyColumnManagementMixin(DataTable) {
     const applyFinal = () => {
       // After adjusting individual columns, recompute and set table width
       const recomputed = this._computeTableWidthFromState();
-      // Snap to target to avoid 1px rounding horizontal scrollbars
-      this.state.tableWidth = targetWidth;
+      // Snap to target to avoid 1px rounding horizontal scrollbars; minimums that
+      // exceed the container keep their sum, and the table scrolls.
+      this.state.tableWidth = Math.max(targetWidth, recomputed ?? 0);
       this._applyTableWidth();
 
       this._log("info", "Columns fitted to container", {
@@ -520,71 +530,62 @@ export function applyColumnManagementMixin(DataTable) {
       });
     };
 
-    // Proportional scale when overflowing
+    // Overflow: every column gives up width in proportion to what it holds above its
+    // minimum, so a column already at its minimum never pushes the rest further out.
+    // The table overflows (and scrolls) only by what the minimums themselves exceed.
     if (totalWidth > targetWidth) {
-      const scaleFactor = targetWidth / totalWidth;
-      let runningTotal = 0;
-      const lastIdx = visibleColumns.length - 1;
-
-      visibleColumns.forEach((col, idx) => {
-        const currentWidth = this.state.columnWidths[col.id];
-        if (typeof currentWidth === "number" && !Number.isNaN(currentWidth)) {
-          // Skip user-resized columns - preserve their width
-          if (this.state.userResizedColumns?.[col.id]) {
-            runningTotal += currentWidth;
-            return;
-          }
-
-          const minWidth = this._getColumnMinWidth(col.id);
-          const maxWidth = this._getColumnMaxWidth(col.id);
-          // Round down to avoid overflow accumulation, we'll fix remainder on last column
-          let scaled = Math.max(minWidth, Math.floor(currentWidth * scaleFactor));
-
-          if (Number.isFinite(maxWidth)) {
-            scaled = Math.min(maxWidth, scaled);
-          }
-
-          // On last column, absorb remainder so total matches targetWidth exactly (or as close as min allows)
-          if (idx === lastIdx) {
-            const remainder = targetWidth - runningTotal;
-            // If remainder is less than minWidth, respect minWidth but it may still overflow in extreme cases
-            const capped = Number.isFinite(maxWidth) ? Math.min(maxWidth, remainder) : remainder;
-            scaled = Math.max(minWidth, capped);
-          }
-
-          runningTotal += scaled;
-          this.state.columnWidths[col.id] = scaled;
-          this._applyColumnWidth(col.id, scaled);
-        }
+      const shrinkable = visibleColumns
+        .filter(
+          (col) =>
+            !this.state.userResizedColumns?.[col.id] &&
+            Number.isFinite(this.state.columnWidths[col.id])
+        )
+        .map((col) => {
+          const width = this.state.columnWidths[col.id];
+          return { col, width, slack: Math.max(0, width - this._getColumnMinWidth(col.id)) };
+        })
+        .filter((entry) => entry.slack > 0);
+      const totalSlack = shrinkable.reduce((sum, entry) => sum + entry.slack, 0);
+      let deficit = Math.min(totalWidth - targetWidth, totalSlack);
+      shrinkable.forEach((entry, idx) => {
+        const remainingSlack = shrinkable.slice(idx).reduce((sum, e) => sum + e.slack, 0);
+        const cut =
+          idx === shrinkable.length - 1
+            ? deficit
+            : Math.min(entry.slack, Math.ceil((deficit * entry.slack) / remainingSlack));
+        deficit -= cut;
+        const newWidth = entry.width - cut;
+        this.state.columnWidths[entry.col.id] = newWidth;
+        this._applyColumnWidth(entry.col.id, newWidth);
       });
 
       applyFinal();
       return true;
     }
 
-    // If under target, expand last non-user-resized column to fill remaining gap for exact fit
+    // Spare width goes to the name columns (`grow: true`: the token, the wallet, the
+    // task), which are the only cells that read better wider; a badge or a number
+    // column keeps the width its content needs. A table without a name column gives
+    // the spare to its last column.
     if (totalWidth < targetWidth) {
-      // Choose the last visible column that wasn't manually resized to absorb the gap
-      let lastCol = null;
-      for (let i = visibleColumns.length - 1; i >= 0; i--) {
-        if (!this.state.userResizedColumns?.[visibleColumns[i].id]) {
-          lastCol = visibleColumns[i];
-          break;
-        }
-      }
-
-      if (lastCol) {
-        const currentWidth = this.state.columnWidths[lastCol.id];
-        if (typeof currentWidth === "number" && !Number.isNaN(currentWidth)) {
-          const gap = targetWidth - totalWidth;
-          const minWidth = this._getColumnMinWidth(lastCol.id);
-          const maxWidth = this._getColumnMaxWidth(lastCol.id);
-          const unclamped = currentWidth + gap;
-          const newWidth = Math.min(maxWidth, Math.max(minWidth, unclamped));
-          this.state.columnWidths[lastCol.id] = newWidth;
-          this._applyColumnWidth(lastCol.id, newWidth);
-        }
-      }
+      const adjustable = visibleColumns.filter(
+        (col) =>
+          !this.state.userResizedColumns?.[col.id] &&
+          Number.isFinite(this.state.columnWidths[col.id])
+      );
+      const growing = adjustable.filter((col) => col.grow === true);
+      const receivers = growing.length > 0 ? growing : adjustable.slice(-1);
+      let gap = targetWidth - totalWidth;
+      receivers.forEach((col, idx) => {
+        const currentWidth = this.state.columnWidths[col.id];
+        const share =
+          idx === receivers.length - 1 ? gap : Math.floor(gap / (receivers.length - idx));
+        const maxWidth = this._getColumnMaxWidth(col.id);
+        const newWidth = Math.min(maxWidth, currentWidth + share);
+        gap -= newWidth - currentWidth;
+        this.state.columnWidths[col.id] = newWidth;
+        this._applyColumnWidth(col.id, newWidth);
+      });
 
       applyFinal();
       return true;

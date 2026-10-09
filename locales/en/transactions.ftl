@@ -1,19 +1,27 @@
 # Transaction type labels. Ids come from TransactionType::kind() in
 # src/transactions/types.rs; the dashboard maps them in ui/transaction_type.js.
+# `.short` is the form a table cell shows, with the value as its tooltip; the
+# details dialog shows the value. In a table the Direction column names the subject.
 
 transactions-type-buy = Buy
 transactions-type-sell = Sell
 transactions-type-swap = Swap
 transactions-type-sol-transfer = SOL transfer
+    .short = Transfer
 transactions-type-token-transfer = Token transfer
+    .short = Transfer
 transactions-type-transfer = Transfer
 transactions-type-dust = Dust
 transactions-type-spam = Spam
 transactions-type-ata-create = Account opened
+    .short = ATA open
 transactions-type-ata-close = Rent reclaimed
+    .short = Rent back
 transactions-type-ata = Token account
 transactions-type-liquidity-add = Add liquidity
+    .short = LP add
 transactions-type-liquidity-remove = Remove liquidity
+    .short = LP remove
 transactions-type-nft = NFT
 transactions-type-program = Program call
 transactions-type-compute = Compute

@@ -353,6 +353,7 @@ function createLifecycle() {
         {
           id: "message",
           label: I18n.t("events-col-message"),
+          grow: true,
           minWidth: 320,
           wrap: false,
           render: (_value, row) => formatMessagePreview(row),

@@ -45,6 +45,7 @@ export function createOhlcvModule(deps) {
       {
         id: "mint",
         label: I18n.t("tokens-column-token"),
+        grow: true,
         sortable: true,
         minWidth: TOKEN_CELL_MIN_WIDTH + 34,
         wrap: false,

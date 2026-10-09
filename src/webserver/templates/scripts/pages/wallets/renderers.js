@@ -64,6 +64,7 @@ export function createWalletRenderers({
     {
       id: "token",
       label: I18n.t("wallets-holdings-col-token"),
+      grow: true,
       sortable: true,
       minWidth: TOKEN_CELL_MIN_WIDTH,
       render: (value, row) =>
@@ -113,6 +114,7 @@ export function createWalletRenderers({
     {
       id: "wallet",
       label: I18n.t("wallets-list-col-name"),
+      grow: true,
       sortable: true,
       minWidth: addressFloorWidth() + 24,
       render: (value, row) => renderNamedAddress(row.name, row.address),

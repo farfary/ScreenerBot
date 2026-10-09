@@ -486,6 +486,8 @@ describe("dashboard stability", { concurrency: 4 }, () => {
         }
         if (id === "positions") {
           // A new column set opens at its start edge, not at the previous view's offset.
+          // A narrow window makes the Open columns wider than the table, so it scrolls.
+          await session.page.setViewportSize({ width: 900, height: DESKTOP.height });
           const container = session.page.locator("#positions-root .data-table-scroll-container");
           await session.page.locator('#subTabsContainer [data-tab-id="open"]').click();
           await session.page.waitForTimeout(300);

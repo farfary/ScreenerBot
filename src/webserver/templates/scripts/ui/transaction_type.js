@@ -136,6 +136,17 @@ export function typeLabel(value) {
   return I18n.label(TRANSACTION_TYPE_LABELS, kind);
 }
 
+/**
+ * The label a table cell shows: the message's `.short` form where one exists ("Rent
+ * back" for "Rent reclaimed"), else the full label. The cell carries the full label
+ * as its tooltip (`typeLabel`), and the details dialog shows the full label.
+ */
+export function typeShortLabel(value) {
+  const kind = typeKind(value);
+  if (kind === "program") return typeLabel(value);
+  return I18n.labelAttr(TRANSACTION_TYPE_LABELS, kind, "short") ?? typeLabel(value);
+}
+
 export function typeVariant(value) {
   return (KINDS[typeKind(value)] ?? KINDS.unknown).variant;
 }

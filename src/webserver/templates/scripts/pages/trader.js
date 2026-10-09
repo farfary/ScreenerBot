@@ -988,6 +988,7 @@ function createLifecycle() {
           {
             id: "symbol",
             label: I18n.t("trader-time-positions-token"),
+            grow: true,
             sortable: true,
             minWidth: 200,
             wrap: false,
