@@ -78,10 +78,20 @@ export const endpoints = [
     rust: "src/webserver/routes/tokens/types.rs::TokenDetailResponse",
     record: `/api/tokens/${mint}`,
   })),
+  // The candles are recorded at 5m only, so the status fixture lists candles for 5m alone
+  // and every other timeframe answers with no candles.
   {
     method: "GET",
     path: "/api/tokens/{mint}/ohlcv",
+    query: { timeframe: "5m" },
     fixture: "token_ohlcv.json",
+    rust: "src/webserver/routes/tokens/types.rs::OhlcvPoint",
+    record: null,
+  },
+  {
+    method: "GET",
+    path: "/api/tokens/{mint}/ohlcv",
+    fixture: "token_ohlcv_other_timeframes.json",
     rust: "src/webserver/routes/tokens/types.rs::OhlcvPoint",
     record: null,
   },

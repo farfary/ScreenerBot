@@ -145,16 +145,9 @@
     {
       "position_id": 103,
       "position_index": 1,
-      "state": "open",
+      "state": "Open",
       "changed_at": 1791255600,
-      "reason": null
-    },
-    {
-      "position_id": 103,
-      "position_index": 1,
-      "state": "closed",
-      "changed_at": 1791261000,
-      "reason": "manual"
+      "reason": "position_created"
     }
   ],
   "native_price_usd": 152.4,

@@ -2,19 +2,20 @@
   "mint": "DezXAZ8z7PnrnRJjz3wXBoRgixCa6xjnB7YaB1pPB263",
   "monitored": true,
   "has_data": true,
-  "total_candles": 4200,
-  "best_timeframe": "1m",
+  "total_candles": 600,
+  "best_timeframe": "5m",
   "backfill_complete": true,
   "last_checked_at": 1791331200,
   "last_new_data_at": 1791331200,
   "timeframes": [
     {
       "timeframe": "1m",
-      "candles": 600,
+      "candles": 0,
       "backfill_complete": true,
-      "earliest_timestamp": 1791072000,
-      "latest_timestamp": 1791331200,
-      "last_new_data_at": 1791331200
+      "earliest_timestamp": null,
+      "latest_timestamp": null,
+      "range_candles": 0,
+      "last_new_data_at": null
     },
     {
       "timeframe": "5m",
@@ -22,47 +23,53 @@
       "backfill_complete": true,
       "earliest_timestamp": 1791072000,
       "latest_timestamp": 1791331200,
+      "range_candles": 72,
       "last_new_data_at": 1791331200
     },
     {
       "timeframe": "15m",
-      "candles": 600,
+      "candles": 0,
       "backfill_complete": true,
-      "earliest_timestamp": 1791072000,
-      "latest_timestamp": 1791331200,
-      "last_new_data_at": 1791331200
+      "earliest_timestamp": null,
+      "latest_timestamp": null,
+      "range_candles": 0,
+      "last_new_data_at": null
     },
     {
       "timeframe": "1h",
-      "candles": 600,
+      "candles": 0,
       "backfill_complete": true,
-      "earliest_timestamp": 1791072000,
-      "latest_timestamp": 1791331200,
-      "last_new_data_at": 1791331200
+      "earliest_timestamp": null,
+      "latest_timestamp": null,
+      "range_candles": 0,
+      "last_new_data_at": null
     },
     {
       "timeframe": "4h",
-      "candles": 600,
+      "candles": 0,
       "backfill_complete": true,
-      "earliest_timestamp": 1791072000,
-      "latest_timestamp": 1791331200,
-      "last_new_data_at": 1791331200
+      "earliest_timestamp": null,
+      "latest_timestamp": null,
+      "range_candles": 0,
+      "last_new_data_at": null
     },
     {
       "timeframe": "12h",
-      "candles": 600,
+      "candles": 0,
       "backfill_complete": true,
-      "earliest_timestamp": 1791072000,
-      "latest_timestamp": 1791331200,
-      "last_new_data_at": 1791331200
+      "earliest_timestamp": null,
+      "latest_timestamp": null,
+      "range_candles": 0,
+      "last_new_data_at": null
     },
     {
       "timeframe": "1d",
-      "candles": 600,
+      "candles": 0,
       "backfill_complete": true,
-      "earliest_timestamp": 1791072000,
-      "latest_timestamp": 1791331200,
-      "last_new_data_at": 1791331200
+      "earliest_timestamp": null,
+      "latest_timestamp": null,
+      "range_candles": 0,
+      "last_new_data_at": null
     }
   ]
 }

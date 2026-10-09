@@ -48,7 +48,7 @@
   "fdv": 2007500000,
   "market_cap": 1752000000,
   "pool_address": "Poo1AdKK7PsFmd7RPfB53RmFDjbHhP3fF5sjfuZDRwoK",
-  "pool_program": "raydium-cpmm",
+  "pool_program": "raydium_cpmm",
   "pool_reserves_native": 119750.656167979,
   "pool_reserves_token": 27848989.806506746,
   "txn_periods": {
@@ -125,7 +125,7 @@
   "pools": [
     {
       "pool_id": "Poo1AdKK7PsFmd7RPfB53RmFDjbHhP3fF5sjfuZDRwoK",
-      "program": "raydium-cpmm",
+      "program": "raydium_cpmm",
       "base_mint": "JUPyiwrYJFskUPiHa7hkeR8VUtAeFoSYbKedZNsDvCN",
       "quote_mint": "So11111111111111111111111111111111111111112",
       "token_role": "base",

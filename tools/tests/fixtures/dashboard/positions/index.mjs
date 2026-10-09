@@ -67,18 +67,35 @@ export const endpoints = [
       record: `/api/positions/id:${id}/activity`,
     },
   ]),
+  // Each token's candles are recorded at 5m only, so the status fixture lists candles for
+  // 5m alone and every other timeframe answers with no candles.
   ...DETAIL_POSITIONS.map(({ mint, symbol }) => ({
     method: "GET",
     path: `/api/tokens/${mint}/ohlcv`,
+    query: { timeframe: "5m" },
     fixture: `token_ohlcv_${symbol}.json`,
     rust: "src/webserver/routes/tokens/types.rs::OhlcvPoint",
     record: `/api/tokens/${mint}/ohlcv?timeframe=5m&limit=0`,
   })),
   {
     method: "GET",
+    path: "/api/tokens/{mint}/ohlcv",
+    fixture: "token_ohlcv_other_timeframes.json",
+    rust: "src/webserver/routes/tokens/types.rs::OhlcvPoint",
+    record: null,
+  },
+  {
+    method: "GET",
     path: "/api/tokens/{mint}/ohlcv/status",
     fixture: "token_ohlcv_status.json",
     rust: "src/ohlcvs/types.rs::OhlcvStatus",
+    record: null,
+  },
+  {
+    method: "POST",
+    path: "/api/tokens/{mint}/ohlcv/refresh",
+    fixture: "token_ohlcv_refresh.json",
+    rust: "src/webserver/routes/tokens/ohlcv.rs::refresh_token_ohlcv",
     record: null,
   },
   {

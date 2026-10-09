@@ -108,7 +108,7 @@
   },
   "pool_info": {
     "pool_address": "Poo1Ad9mHfdX3T9jqoqhX3Mmw57uRT17qDPdqqsTq1ww",
-    "pool_program": "raydium-cpmm",
+    "pool_program": "raydium_cpmm",
     "liquidity_native": 1820.5
   },
   "external_links": {
