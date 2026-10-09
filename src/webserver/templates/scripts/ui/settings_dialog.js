@@ -710,9 +710,11 @@ export class SettingsDialog {
         <div class="settings-group">
           <div class="settings-field settings-field--disabled">
             <div class="settings-field-info">
-              <label data-l10n-id="settings-startup-auto-start-label"></label>
+              <div class="settings-field-title">
+                <label data-l10n-id="settings-startup-auto-start-label"></label>
+                <span class="settings-field-badge" data-l10n-id="settings-startup-coming-soon"></span>
+              </div>
               <span class="settings-field-hint" data-l10n-id="settings-startup-auto-start-hint"></span>
-              <span class="settings-field-badge" data-l10n-id="settings-startup-coming-soon"></span>
             </div>
             <div class="settings-field-control">
               <label class="toggle">

@@ -5,11 +5,11 @@
    DATA TAB - Database Overview and Config Management
    ============================================================================= */
 
+/* The storage overview and the data directory share one card, the same shape as
+   the configuration card below it (actions, then the config location). */
 .data-overview-card {
-  background: var(--bg-secondary);
-  border: 1px solid var(--border-color);
-  border-radius: var(--radius-lg);
-  padding: 16px;
+  padding: 16px 20px;
+  border-bottom: 1px solid var(--border-color);
 }
 
 .data-stats-loading {
@@ -121,12 +121,6 @@
   flex-wrap: wrap;
   padding: 16px 20px;
   border-bottom: 1px solid var(--border-color);
-}
-
-.config-actions-row .btn {
-  min-height: 36px;
-  padding: 8px 16px;
-  font-size: 0.8rem;
 }
 
 .config-info-box {

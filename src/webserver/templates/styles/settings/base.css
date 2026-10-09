@@ -374,6 +374,14 @@
   line-height: 1.4;
 }
 
+/* A field title with a status badge set on the title's own line. */
+.settings-field-title {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  gap: 2px 8px;
+}
+
 .settings-field-badge {
   display: inline-flex;
   align-items: center;
@@ -385,8 +393,6 @@
   font-weight: 600;
   text-transform: uppercase;
   letter-spacing: 0.03em;
-  margin-top: 4px;
-  width: fit-content;
 }
 
 .settings-field-control {

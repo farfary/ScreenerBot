@@ -38,14 +38,15 @@ export function buildDataTab() {
         </h3>
         <p class="settings-section-description" data-l10n-id="settings-data-storage-description"></p>
 
-        <div class="data-overview-card" id="dataOverviewCard">
-          <div class="data-stats-loading"><i class="icon-loader"></i> <span data-l10n-id="settings-data-stats-loading"></span></div>
-        </div>
-
-        <div class="config-info-box">
-          <div class="config-info-item">
-            <span class="config-info-label" data-l10n-id="settings-data-directory-label"></span>
-            <span class="config-info-value" id="dataPathDisplay" data-l10n-id="common-loading"></span>
+        <div class="settings-group">
+          <div class="data-overview-card" id="dataOverviewCard">
+            <div class="data-stats-loading"><i class="icon-loader"></i> <span data-l10n-id="settings-data-stats-loading"></span></div>
+          </div>
+          <div class="config-info-box">
+            <div class="config-info-item">
+              <span class="config-info-label" data-l10n-id="settings-data-directory-label"></span>
+              <span class="config-info-value" id="dataPathDisplay" data-l10n-id="common-loading"></span>
+            </div>
           </div>
         </div>
       </div>
@@ -99,7 +100,7 @@ export function buildDataTab() {
               <span class="settings-field-hint" data-l10n-id="settings-data-ohlcv-cleanup-hint"></span>
             </div>
             <div class="settings-field-control data-action-group">
-              <input type="number" id="cleanupHours" class="settings-input small" value="24" min="1" max="720" />
+              <input type="number" id="cleanupHours" class="settings-input small input-sm" value="24" min="1" max="720" />
               <span class="input-unit" data-l10n-id="settings-data-cleanup-hours-unit"></span>
               <button id="cleanupOhlcvBtn" class="btn btn-warning btn-sm">
                 <i class="icon-trash-2"></i>
@@ -127,7 +128,7 @@ export function buildDataTab() {
               <span class="settings-field-hint" data-l10n-id="settings-data-ui-cache-hint"></span>
             </div>
             <div class="settings-field-control">
-              <button id="clearUiStateBtn" class="btn btn-secondary btn-sm">
+              <button id="clearUiStateBtn" class="btn btn-warning btn-sm">
                 <i class="icon-refresh-cw"></i>
                 <span data-l10n-id="settings-data-ui-cache-clear"></span>
               </button>

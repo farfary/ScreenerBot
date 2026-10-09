@@ -22,6 +22,9 @@
  * - The Navigation list shows every tab row at its full height inside the dialog's own
  *   scroll, each row's glyph bare, with the switch as the only visibility control and
  *   no note asking for a page refresh (saving rebuilds the navigation bar).
+ * - A field's status badge sits on its title's line, not stacked under the hint.
+ * - The Data section sets both stored paths at one start edge inside their cards, and
+ *   every button and input in it stands at one height.
  *
  * Run with `npm run test:js`.
  */
@@ -203,4 +206,64 @@ test("the Navigation list shows every row with bare glyphs and one visibility co
     "the switch is each row's only visibility control"
   );
   assert.equal(list.refreshNote, false, "no note asks for a page refresh");
+});
+
+test("Startup badges sit on their title line and Data controls share one frame", async (t) => {
+  const browser = await chromium.launch({ headless: true });
+  t.after(() => browser.close());
+  const context = await browser.newContext({ viewport: { width: 1440, height: 900 } });
+  const api = createApiHandler([await loadIndex("home"), await loadIndex("shell")], "populated");
+  const host = await serveDashboard(context, { locale: "en", onApi: api.onApi });
+  t.after(() => host.close());
+  const page = await context.newPage();
+  page.setDefaultTimeout(15000);
+  await page.goto(`${host.origin}/home`);
+  await page.waitForSelector("body:not(.initialization-mode) main.content:not([data-loading])");
+  await page.locator("#settingsBtn").dispatchEvent("click");
+  await page.waitForSelector(".settings-dialog.active .settings-nav");
+
+  await page.locator('.settings-nav-item[data-tab="startup"]').click();
+  await page.waitForFunction(
+    () =>
+      document.querySelector(".settings-content .settings-field-badge")?.getClientRects().length > 0
+  );
+  const badges = await page.$$eval(".settings-content .settings-field-badge", (nodes) =>
+    nodes
+      .filter((badge) => badge.getClientRects().length > 0)
+      .map((badge) => {
+        const info = badge.closest(".settings-field-info");
+        const title = info.querySelector("label").getBoundingClientRect();
+        const box = badge.getBoundingClientRect();
+        return box.top < title.bottom && box.bottom > title.top;
+      })
+  );
+  assert.ok(badges.length > 0 && badges.every(Boolean), "each badge shares its title's line");
+
+  await page.locator('.settings-nav-item[data-tab="data"]').click();
+  await page.waitForFunction(
+    () => document.querySelector("#dataPathDisplay")?.getClientRects().length > 0
+  );
+  const data = await page.evaluate(() => {
+    const content = document.querySelector(".settings-content");
+    const visible = (node) => node.getClientRects().length > 0;
+    return {
+      paths: ["#dataPathDisplay", "#configPathDisplay"].map((selector) => ({
+        start: Math.round(content.querySelector(selector).getBoundingClientRect().left),
+        carded: Boolean(content.querySelector(selector).closest(".settings-group")),
+      })),
+      heights: [
+        ...new Set(
+          [...content.querySelectorAll("button.btn, .settings-field-control input")]
+            .filter(visible)
+            .map((node) => Math.round(node.getBoundingClientRect().height))
+        ),
+      ],
+    };
+  });
+  assert.ok(
+    data.paths.every((path) => path.carded),
+    "both paths sit inside a card"
+  );
+  assert.equal(data.paths[0].start, data.paths[1].start, "both paths share one start edge");
+  assert.deepEqual(data.heights, [32], "every Data control stands at one height");
 });
