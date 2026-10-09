@@ -314,8 +314,9 @@ trader-time-note = <strong>Примітка:</strong> позиції з приб
 trader-time-positions-title = Стан поточних позицій
 trader-time-positions-loading = Завантаження позицій...
 trader-time-positions-empty = Немає відкритих позицій
-trader-time-positions-hold = Час утримання:
-trader-time-positions-roi = ROI:
+trader-time-positions-token = Токен
+trader-time-positions-hold = Час утримання
+trader-time-positions-roi = ROI
 
 ## Strategy control
 

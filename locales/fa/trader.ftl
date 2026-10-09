@@ -292,8 +292,9 @@ trader-time-note = <strong>نکته:</strong> از پوزیشن‌های سود�
 trader-time-positions-title = وضعیت پوزیشن‌های فعلی
 trader-time-positions-loading = در حال بارگذاری پوزیشن‌ها...
 trader-time-positions-empty = پوزیشن بازی وجود ندارد
-trader-time-positions-hold = مدت نگهداری:
-trader-time-positions-roi = ROI:
+trader-time-positions-token = توکن
+trader-time-positions-hold = مدت نگهداری
+trader-time-positions-roi = ROI
 
 ## Strategy control
 

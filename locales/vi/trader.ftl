@@ -226,8 +226,9 @@ trader-time-note = <strong>Lưu ý:</strong> Các vị thế đang có lãi ho�
 trader-time-positions-title = Trạng thái vị thế hiện tại
 trader-time-positions-loading = Đang tải vị thế...
 trader-time-positions-empty = Không có vị thế đang mở
-trader-time-positions-hold = Thời gian nắm giữ:
-trader-time-positions-roi = ROI:
+trader-time-positions-token = Token
+trader-time-positions-hold = Thời gian nắm giữ
+trader-time-positions-roi = ROI
 
 trader-strategy-entry-title = Chiến lược vào lệnh
 trader-strategy-entry-subtitle = Các tín hiệu có thể mở vị thế mới.

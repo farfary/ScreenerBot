@@ -248,8 +248,9 @@ trader-time-note = <strong>Remarque :</strong> les positions en profit ou avec 
 trader-time-positions-title = État des positions actuelles
 trader-time-positions-loading = Chargement des positions...
 trader-time-positions-empty = Aucune position ouverte
-trader-time-positions-hold = Durée de détention :
-trader-time-positions-roi = ROI :
+trader-time-positions-token = Token
+trader-time-positions-hold = Durée de détention
+trader-time-positions-roi = ROI
 
 trader-strategy-entry-title = Stratégies d'entrée
 trader-strategy-entry-subtitle = Signaux pouvant ouvrir une nouvelle position.

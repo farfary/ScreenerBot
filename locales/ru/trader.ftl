@@ -259,8 +259,9 @@ trader-time-note = <strong>Примечание:</strong> позиции в пл
 trader-time-positions-title = Состояние текущих позиций
 trader-time-positions-loading = Загрузка позиций...
 trader-time-positions-empty = Нет открытых позиций
-trader-time-positions-hold = Время удержания:
-trader-time-positions-roi = ROI:
+trader-time-positions-token = Токен
+trader-time-positions-hold = Время удержания
+trader-time-positions-roi = ROI
 
 trader-strategy-entry-title = Стратегии входа
 trader-strategy-entry-subtitle = Сигналы, которые могут открыть новую позицию.

@@ -786,20 +786,6 @@
   margin-top: 0.75rem;
 }
 
-.status-list-items {
-  list-style: none;
-  padding: 0;
-  margin: 0;
-}
-
-.status-list-items li {
-  padding: 0.5rem;
-  margin-bottom: 0.5rem;
-  background: var(--bg-secondary);
-  border-radius: 0.375rem;
-  font-size: 0.875rem;
-}
-
 .strategies-grid {
   display: grid;
   grid-template-columns: repeat(auto-fill, minmax(300px, 1fr));

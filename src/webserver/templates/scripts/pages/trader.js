@@ -6,9 +6,11 @@
 import { registerPage } from "../core/lifecycle.js";
 import { Poller } from "../core/poller.js";
 import { $, $$ } from "../core/dom.js";
-import { formatFixed, formatPercentValue } from "../core/format.js";
+import { formatFixed } from "../core/format.js";
 import * as Utils from "../core/utils.js";
 import { TabBar, TabBarManager } from "../ui/tab_bar.js";
+import { DataTable } from "../ui/data_table.js";
+import { renderTokenRowCell } from "../ui/token_identity.js";
 import { ConfirmationDialog } from "../ui/confirmation_dialog.js";
 import { closeReasonText } from "../ui/trade_reason.js";
 import { requestManager } from "../core/request_manager.js";
@@ -68,6 +70,7 @@ function createLifecycle() {
   let configPoller = null;
   let strategiesPoller = null;
   let lifecycleContext = null;
+  let timePositions = null;
 
   // Realized window for the Stats tab, in days. Owned here and sent to the API —
   // the tab never labels a window it did not ask for.
@@ -972,51 +975,74 @@ function createLifecycle() {
     }
   }
 
-  /**
-   * Update time rules status display
-   */
+  /** The open positions on the Time Rules tab: one shared DataTable, created once and refreshed in place. */
+  function timePositionsTable(container) {
+    if (timePositions && timePositions.elements.container !== container) {
+      timePositions.destroy();
+      timePositions = null;
+    }
+    if (!timePositions) {
+      timePositions = new DataTable({
+        container,
+        columns: [
+          {
+            id: "symbol",
+            label: I18n.t("trader-time-positions-token"),
+            sortable: true,
+            minWidth: 200,
+            wrap: false,
+            render: (_value, row) =>
+              renderTokenRowCell(row.mint, {
+                symbol: row.symbol,
+                name: row.name,
+                logoUrl: row.logo_url || row.image_url,
+              }),
+          },
+          {
+            id: "hold_seconds",
+            label: I18n.t("trader-time-positions-hold"),
+            type: "number",
+            sortable: true,
+            render: (value) =>
+              value == null
+                ? "—"
+                : Utils.escapeHtml(Utils.formatUptime(value, { style: "trimmed" })),
+          },
+          {
+            id: "unrealized_pnl_percent",
+            label: I18n.t("trader-time-positions-roi"),
+            type: "percent",
+            sortable: true,
+            render: (value) =>
+              Utils.formatPercent(value, { style: "pnl", decimals: 2, fallback: "—" }),
+          },
+        ],
+        rowIdField: "id",
+        stateKey: "trader.time-positions",
+        compact: true,
+        zebra: true,
+        fitToContainer: true,
+        sorting: { mode: "client", column: "hold_seconds", direction: "desc" },
+        emptyTitle: I18n.t("trader-time-positions-empty"),
+      });
+    }
+    return timePositions;
+  }
+
+  /** Refresh the Time Rules open-position table with each position's hold time. */
   async function updateTimeRulesStatus() {
     try {
       const open = await requestManager.fetch("/api/positions?status=open&limit=0", {
         priority: "normal",
       });
-      const positions = Array.isArray(open) ? open : [];
-
-      const statusList = $("#time-positions-status");
-      if (!statusList) return;
-
-      if (positions.length === 0) {
-        statusList.innerHTML = `<div class="empty-state">${Utils.escapeHtml(I18n.t("trader-time-positions-empty"))}</div>`;
-        return;
-      }
-
-      statusList.innerHTML = positions
-        .map((position) => {
-          const holdSeconds = position.entry_time ? Date.now() / 1000 - position.entry_time : 0;
-          const holdTime = Utils.formatUptime(holdSeconds, { style: "trimmed" });
-          const roi = position.unrealized_pnl_percent ?? 0;
-
-          return `
-            <div class="time-rule-item">
-              <div class="time-rule-token">
-                ${Utils.escapeHtml(position.symbol || I18n.t("format-unknown"))}
-              </div>
-              <div class="time-rule-metrics">
-                <div class="time-rule-metric">
-                  <span class="time-rule-label">${Utils.escapeHtml(I18n.t("trader-time-positions-hold"))}</span>
-                  <span class="time-rule-value">${Utils.escapeHtml(holdTime)}</span>
-                </div>
-                <div class="time-rule-metric">
-                  <span class="time-rule-label">${Utils.escapeHtml(I18n.t("trader-time-positions-roi"))}</span>
-                  <span class="time-rule-value ${roi >= 0 ? "value-positive" : "value-negative"}">
-                    ${roi >= 0 ? "+" : ""}${formatPercentValue(roi, { plus: "" })}
-                  </span>
-                </div>
-              </div>
-            </div>
-          `;
-        })
-        .join("");
+      const container = $("#time-positions-status");
+      if (!container) return;
+      const now = Date.now() / 1000;
+      const rows = (Array.isArray(open) ? open : []).map((position) => ({
+        ...position,
+        hold_seconds: position.entry_time ? Math.max(0, now - position.entry_time) : null,
+      }));
+      timePositionsTable(container).setData(rows);
     } catch (error) {
       console.error("[Trader] Failed to update time rules status:", error);
     }
@@ -1364,6 +1390,9 @@ function createLifecycle() {
       // Remove the per-card Save/Reset controls + their listeners
       configCards?.dispose();
       configCards = null;
+
+      timePositions?.destroy();
+      timePositions = null;
 
       // Clean up all tracked event listeners
       eventCleanups.forEach((cleanup) => cleanup());
