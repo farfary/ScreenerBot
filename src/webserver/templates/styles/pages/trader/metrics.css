@@ -43,6 +43,10 @@
   fill: var(--danger);
 }
 
+.daily-pnl-bar.neutral {
+  fill: var(--text-muted);
+}
+
 /* Non-scaling stroke keeps the cumulative line 1px wide despite the chart's
    non-uniform viewBox scaling — without it the line stretches with the x axis. */
 .daily-pnl-line {
@@ -178,6 +182,10 @@
 
 .exit-breakdown-fill.negative {
   background: var(--danger);
+}
+
+.exit-breakdown-fill.neutral {
+  background: var(--text-muted);
 }
 
 .exit-breakdown-meta {

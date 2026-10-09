@@ -361,6 +361,7 @@
 
 .copy-spark polyline {
   fill: none;
+  stroke: var(--text-muted);
   stroke-width: 1.5;
 }
 

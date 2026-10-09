@@ -10,6 +10,9 @@ import * as Utils from "../../core/utils.js";
 import { withSolUnit } from "../../core/format.js";
 
 const LAMPORTS_PER_SOL = 1e9;
+/** One lamport: `_formatSol` prints every amount at or above it as non-zero. */
+const SOL_TONE_DECIMALS = 9;
+const PDD_TONES = { positive: "pdd-positive", negative: "pdd-negative", neutral: "" };
 
 export function applyUtilitiesMixin(PositionDetailsDialog) {
   const proto = PositionDetailsDialog.prototype;
@@ -90,10 +93,13 @@ export function applyUtilitiesMixin(PositionDetailsDialog) {
     return `${num < 0 ? "-" : "+"}${Utils.formatCurrencyUSD(Math.abs(num * solPrice))}`;
   };
 
-  proto._toneClass = function (value) {
-    const num = Number(value);
-    if (value === null || value === undefined || !Number.isFinite(num) || num === 0) return "";
-    return num > 0 ? "pdd-positive" : "pdd-negative";
+  /**
+   * Tone class of a figure as shown: a SOL amount by default, whose every non-zero
+   * lamport `_formatSol` prints, or a percentage at the `decimals` `_formatPct` uses.
+   */
+  proto._toneClass = function (value, decimals = SOL_TONE_DECIMALS) {
+    if (value === null || value === undefined) return "";
+    return PDD_TONES[Utils.signedTone(value, decimals)];
   };
 
   proto._lamportsToSol = function (lamports) {

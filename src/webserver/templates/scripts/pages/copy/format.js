@@ -14,6 +14,7 @@ import {
   formatTimeSpan,
   formatTimestamp,
   formatUptime,
+  signedTone,
   withSolUnit,
 } from "../../core/format.js";
 import { closeReasonText } from "../../ui/trade_reason.js";
@@ -242,10 +243,11 @@ export function unrealizedFigure(pnlSol, openHoldings, unpricedHoldings) {
   };
 }
 
+const TONE_CLASSES = { positive: "is-positive", negative: "is-negative", neutral: "" };
+
+/** Tone class of a SOL P&L as `signedSol` prints it; "" when it reads as zero or is absent. */
 export function toneClass(value) {
-  const number = finite(value);
-  if (number === null || number === 0) return "";
-  return number > 0 ? "is-positive" : "is-negative";
+  return TONE_CLASSES[signedTone(finite(value), PNL_SOL_DECIMALS)];
 }
 
 /** A pool price in SOL at a fixed count of significant digits, the price rule of every

@@ -176,7 +176,7 @@ export function applySummaryMixin(PositionDetailsDialog) {
         ? fact(
             settled ? I18n.t("positions-fact-exit-vs-peak") : I18n.t("positions-fact-now-vs-peak"),
             this._formatPct(fromPeak, 1),
-            { tone: this._toneClass(fromPeak) }
+            { tone: this._toneClass(fromPeak, 1) }
           )
         : "",
       minEntry !== null && minEntry !== maxEntry
@@ -327,7 +327,7 @@ export function applySummaryMixin(PositionDetailsDialog) {
             `<span class="pdd-changes">${changes
               .map(
                 ([period, value]) =>
-                  `<span class="pdd-change">${Utils.escapeHtml(period)} <span class="${this._toneClass(value)}">${this._formatPct(value, 1)}</span></span>`
+                  `<span class="pdd-change">${Utils.escapeHtml(period)} <span class="${this._toneClass(value, 1)}">${this._formatPct(value, 1)}</span></span>`
               )
               .join("")}</span>`
           )

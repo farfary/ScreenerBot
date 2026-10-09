@@ -36,6 +36,7 @@ import "./token_details_dialog.js";
 import { apiErrorMessage } from "../core/request_manager.js";
 
 const DIALOG_ID = "featured-dialog";
+const CHANGE_TONES = { positive: "pos", negative: "neg", neutral: "" };
 
 // Ids are the `id` values of CATEGORIES below.
 const CATEGORY_LABELS = Object.freeze({
@@ -378,7 +379,7 @@ class FeaturedDialog {
     const change = token.price_change_24h;
     const changeHtml =
       change != null
-        ? `<span class="feat-card-change ${change >= 0 ? "pos" : "neg"}">${Utils.formatPercentValue(change, { decimals: 1 })}</span>`
+        ? `<span class="feat-card-change ${CHANGE_TONES[Utils.signedTone(change, 1)]}">${Utils.formatPercentValue(change, { decimals: 1 })}</span>`
         : "";
 
     const priceHtml =

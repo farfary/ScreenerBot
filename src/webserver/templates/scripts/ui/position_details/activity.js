@@ -159,6 +159,7 @@ export function applyActivityMixin(PositionDetailsDialog) {
       expanded: this._activityExpanded,
       formatPrice: (price) => this._formatPrice(price),
       formatSol: (value, options) => this._formatSol(value, options),
+      toneClass: (value) => this._toneClass(value),
       currentPositionId,
     };
 

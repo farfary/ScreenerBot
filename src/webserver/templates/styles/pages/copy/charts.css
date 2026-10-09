@@ -57,6 +57,7 @@
 
 .copy-curve-line {
   fill: none;
+  stroke: var(--text-muted);
   stroke-width: 2;
 }
 

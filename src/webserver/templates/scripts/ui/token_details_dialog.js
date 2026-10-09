@@ -1401,8 +1401,9 @@ export class TokenDetailsDialog {
     const change24h = value(token.price_change_periods?.h24);
     if (changeEl) {
       changeEl.hidden = change24h === null;
-      changeEl.classList.toggle("positive", change24h !== null && change24h >= 0);
-      changeEl.classList.toggle("negative", change24h !== null && change24h < 0);
+      const tone = Utils.signedTone(change24h, 2);
+      changeEl.classList.toggle("positive", tone === "positive");
+      changeEl.classList.toggle("negative", tone === "negative");
       if (change24h !== null) {
         const changeText = Utils.formatPercentValue(change24h, { decimals: 2, signZero: true });
         update("change-24h", changeText, change24h);

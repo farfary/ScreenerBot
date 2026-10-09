@@ -141,8 +141,9 @@ export function createCalendar(fetcher) {
       // A past day without trades still shows its end balance; it is a quiet day,
       // not an empty one.
       if (!d.has_data && !isFuture) cls += " no-trades";
-      if (pnl > 0) cls += " profit";
-      else if (pnl < 0) cls += " loss";
+      const tone = Utils.signedTone(pnl, CELL_PNL_DECIMALS);
+      if (tone === "positive") cls += " profit";
+      else if (tone === "negative") cls += " loss";
 
       // Heatmap tint intensity relative to the month's largest absolute P&L.
       // Uses a sqrt curve + a solid floor so even a faint day reads as clearly
@@ -151,7 +152,6 @@ export function createCalendar(fetcher) {
       // pale pastel that white cell text can't sit on. Keep it saturated so the
       // white text (matching dark theme) always reads.
       let style = "";
-      const tone = Utils.signedTone(pnl, CELL_PNL_DECIMALS);
       if (d.has_data && maxAbs > 0 && tone !== "neutral") {
         const ratio = Math.sqrt(Math.abs(pnl) / maxAbs);
         const intensity = isLight

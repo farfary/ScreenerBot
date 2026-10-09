@@ -673,12 +673,10 @@ export class TransactionDetailsDialog {
     }
 
     if (pnl?.estimated_pnl_sol !== null && pnl?.estimated_pnl_sol !== undefined) {
-      const tone =
-        pnl.estimated_pnl_sol > 0 ? "positive" : pnl.estimated_pnl_sol < 0 ? "negative" : "";
       add(
         I18n.t("transactions-dialog-metric-estimated-pnl"),
         Utils.formatPnL(pnl.estimated_pnl_sol, { decimals: 6 }),
-        tone
+        Utils.signedTone(pnl.estimated_pnl_sol, 6)
       );
     }
 
@@ -687,7 +685,7 @@ export class TransactionDetailsDialog {
       add(
         I18n.t("transactions-dialog-metric-net-native-change"),
         Utils.formatPnL(change, { decimals: 6 }),
-        change > 0 ? "positive" : change < 0 ? "negative" : ""
+        Utils.signedTone(change, 6)
       );
     }
 
@@ -1124,7 +1122,7 @@ export class TransactionDetailsDialog {
           </div>
           <div class="ata-stat highlight">
             <span class="stat-label">${Utils.escapeHtml(I18n.t("transactions-dialog-ata-net-rent"))}</span>
-            <span class="stat-value ${analysis.net_rent_impact >= 0 ? "positive" : "negative"}">${renderTokenLogo(SOL_MINT, { size: "xs" })} ${Utils.formatSignedSol(analysis.net_rent_impact || 0, { decimals: 9 })}</span>
+            <span class="stat-value ${Utils.signedTone(analysis.net_rent_impact || 0, 9)}">${renderTokenLogo(SOL_MINT, { size: "xs" })} ${Utils.formatSignedSol(analysis.net_rent_impact || 0, { decimals: 9 })}</span>
           </div>
         </div>
       </div>

@@ -715,7 +715,7 @@ export function applyChartMixin(PositionDetailsDialog) {
         {
           label: I18n.t("positions-chart-pnl-at-bar"),
           value: Utils.formatPercentValue(pnlPct, { decimals: 2, signZero: true }),
-          cls: pnlPct >= 0 ? "positive" : "negative",
+          cls: Utils.signedTone(pnlPct, 2),
         }
       );
     }
@@ -746,7 +746,7 @@ export function applyChartMixin(PositionDetailsDialog) {
     }
     const pct = ((last.close - last.open) / last.open) * 100;
     chg.textContent = Utils.formatPercentValue(pct, { decimals: 2, signZero: true });
-    chg.className = `ohlcv-change ${pct >= 0 ? "positive" : "negative"}`;
+    chg.className = `ohlcv-change ${Utils.signedTone(pct, 2)}`;
   };
 
   /** Tear down the chart and its observers. */

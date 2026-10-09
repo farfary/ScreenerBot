@@ -138,7 +138,7 @@ function eventDescription(event, ctx) {
 function eventOutcome(event, ctx) {
   if (event.side === "exit" && event.realized_pnl != null) {
     const pnl = event.realized_pnl;
-    const tone = pnl > 0 ? "pdd-positive" : pnl < 0 ? "pdd-negative" : "";
+    const tone = ctx.toneClass(pnl);
     const pct =
       event.realized_pnl_percent != null
         ? ` (${Utils.formatPercentValue(event.realized_pnl_percent, { decimals: 2 })})`

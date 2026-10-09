@@ -35,6 +35,9 @@
   const Indicators = window.ChartIndicators || {};
   const Framing = window.ChartFraming;
 
+  /** Decimals of the tooltip's candle change; its tone follows the change as shown. */
+  const CHANGE_PERCENT_DECIMALS = 2;
+
   // Validate dependencies are loaded
   if (!CHART_THEMES || !Indicators || !Framing) {
     console.error(
@@ -795,8 +798,8 @@
 
       const refs = this.tooltipRefs;
       const delta = bar.close - bar.open;
-      const changeClass = delta >= 0 ? "positive" : "negative";
       const changePercent = bar.open ? (delta / bar.open) * 100 : null;
+      const changeClass = window.Utils.signedTone(changePercent, CHANGE_PERCENT_DECIMALS);
       const rangePercent = bar.low ? ((bar.high - bar.low) / bar.low) * 100 : null;
 
       refs.date.textContent = this._formatBarTime(bar.time);
@@ -1091,7 +1094,10 @@
 
     _formatSignedPercent(percent) {
       if (percent === null || !Number.isFinite(percent)) return "—";
-      return window.Utils.formatPercentValue(percent, { decimals: 2, signZero: true });
+      return window.Utils.formatPercentValue(percent, {
+        decimals: CHANGE_PERCENT_DECIMALS,
+        signZero: true,
+      });
     }
 
     _formatVolume(volume) {

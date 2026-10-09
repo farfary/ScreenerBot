@@ -497,5 +497,5 @@ function formatChange(change) {
 
 function getChangeClass(change) {
   if (change === undefined || change === null) return "";
-  return change >= 0 ? "positive" : "negative";
+  return Utils.signedTone(change, 2);
 }

@@ -28,6 +28,7 @@ import {
   formatCurrencyUSD,
   formatPercentValue,
   formatTimeAgo,
+  signedTone,
   withUsdSymbol,
 } from "../core/format.js";
 import { escapeHtml, resolveTokenLogoUrl, showToast } from "../core/utils.js";
@@ -457,9 +458,12 @@ function compactUsd(value) {
   return value === null ? "—" : withUsdSymbol(formatCompactFixed(value));
 }
 
+/** The `data-tone` of a 24h change, from its tone as shown by `formatPercentValue`. */
+const CHANGE_TONES = { positive: "up", negative: "down", neutral: "flat" };
+
 function rowHtml(row, index) {
   const change = row.price_change_h24;
-  const tone = change === null || change === 0 ? "flat" : change > 0 ? "up" : "down";
+  const tone = CHANGE_TONES[signedTone(change, 2)];
   const starred = state.favorites.has(row.mint);
   const starLabel = starred ? I18n.t("menu-favorite-remove") : I18n.t("menu-favorite-add");
   const age = row.created_at ? formatTimeAgo(row.created_at, { fallback: "" }) : "";

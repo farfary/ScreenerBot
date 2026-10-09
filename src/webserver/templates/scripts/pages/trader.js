@@ -508,7 +508,7 @@ function createLifecycle() {
       setValue(
         "max-drawdown",
         data.total_trades > 0 ? sol(data.max_drawdown_native) : "—",
-        data.max_drawdown_native > 0 ? "negative" : null
+        Utils.signedTone(data.max_drawdown_native, 4) === "positive" ? "negative" : null
       );
       setDetail("max-drawdown-detail", I18n.t("trader-stats-drawdown-basis"));
 
@@ -648,7 +648,7 @@ function createLifecycle() {
         const h = (Math.abs(d.net_pnl_native) / peak) * (mid - 1);
         const x = i * slot + (slot - barW) / 2;
         const y = d.net_pnl_native >= 0 ? mid - h : mid;
-        const cls = d.net_pnl_native >= 0 ? "positive" : "negative";
+        const cls = Utils.signedTone(d.net_pnl_native, 4);
         return `<rect class="daily-pnl-bar ${cls}" x="${x.toFixed(2)}" y="${y.toFixed(2)}" width="${barW.toFixed(2)}" height="${Math.max(h, 0.4).toFixed(2)}"></rect>`;
       })
       .join("");
@@ -701,9 +701,7 @@ function createLifecycle() {
       const tokenEl = $(`#${tokenId}`);
       if (valueEl) {
         valueEl.textContent = Utils.formatPercentValue(value, { decimals: 1, fallback: "—" });
-        valueEl.className = `stats-extreme-value${
-          Number.isFinite(value) && value !== 0 ? (value > 0 ? " positive" : " negative") : ""
-        }`;
+        valueEl.className = `stats-extreme-value ${Utils.signedTone(value, 1)}`;
       }
       if (tokenEl) tokenEl.textContent = token || "—";
     };
@@ -752,7 +750,7 @@ function createLifecycle() {
         const avgPct = e.avg_profit_pct || 0;
         const netSol = e.net_pnl_native || 0;
         const share = Math.round((count / totalCount) * 100);
-        const barClass = netSol >= 0 ? "positive" : "negative";
+        const barClass = Utils.signedTone(netSol, 4);
         return `
           <div class="exit-breakdown-row">
             <div class="exit-breakdown-head">
@@ -770,7 +768,7 @@ function createLifecycle() {
                   share: Utils.formatPercentValue(share, { decimals: 0, includeSign: false }),
                 })
               )}</span>
-              <span class="exit-breakdown-profit ${avgPct >= 0 ? "positive" : "negative"}">${Utils.escapeHtml(
+              <span class="exit-breakdown-profit ${Utils.signedTone(avgPct, 1)}">${Utils.escapeHtml(
                 I18n.t("trader-exit-average", {
                   value: Utils.formatPercentValue(avgPct, { decimals: 1 }),
                 })

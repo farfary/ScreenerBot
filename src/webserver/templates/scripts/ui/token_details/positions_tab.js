@@ -225,7 +225,7 @@ function renderPositionSummary(position) {
         <div class="position-headline">
           <div class="position-headline-item">
             <span>${escapeText(isClosed ? I18n.t("tokens-positions-realized-pnl") : I18n.t("tokens-positions-unrealized-pnl"))}</span>
-            <strong class="${toneClass(pnlPct ?? pnlSol)}">${fmtPnl(pnlSol, pnlPct)}</strong>
+            <strong class="${toneClass(pnlSol, pnlPct)}">${fmtPnl(pnlSol, pnlPct)}</strong>
           </div>
           <div class="position-headline-item">
             <span>${escapeText(I18n.t("tokens-positions-size"))}</span>
@@ -259,9 +259,15 @@ function renderPositionFact(label, value, modifier = "") {
   `;
 }
 
-function toneClass(value) {
-  if (value === null || value === undefined || Number.isNaN(Number(value))) return "";
-  return Number(value) >= 0 ? "positive" : "negative";
+/** Tone of the P&L `fmtPnl` prints: the percentage when there is one, else the SOL amount. */
+function toneClass(sol, pct) {
+  if (pct !== null && pct !== undefined && Number.isFinite(Number(pct))) {
+    return Utils.signedTone(pct, 2);
+  }
+  if (sol !== null && sol !== undefined && Number.isFinite(Number(sol))) {
+    return Utils.signedTone(sol, 4);
+  }
+  return "";
 }
 
 function pickPrice(...candidates) {

@@ -410,7 +410,7 @@ export function applyChartTabMixin(DialogClass) {
         decimals: 2,
         signZero: true,
       });
-      ohlcvChange.className = `ohlcv-change ${changePercent >= 0 ? "positive" : "negative"}`;
+      ohlcvChange.className = `ohlcv-change ${Utils.signedTone(changePercent, 2)}`;
     }
   };
 }

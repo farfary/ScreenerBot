@@ -76,11 +76,13 @@ export function usdCell(value) {
   return Utils.formatCurrencyUSD(value, { fallback: "—", trim: false });
 }
 
+const PERCENT_TONES = { positive: "value-positive", negative: "value-negative", neutral: "" };
+
 export function percentCell(value) {
   if (value === null || value === undefined) return "—";
   const num = Number(value);
   if (!Number.isFinite(num)) return "—";
-  const cls = num > 0 ? "value-positive" : num < 0 ? "value-negative" : "";
+  const cls = PERCENT_TONES[Utils.signedTone(num, 2)];
   const text = Utils.formatPercentValue(num, { includeSign: true, decimals: 2 });
   return `<span class="${cls}">${text}</span>`;
 }

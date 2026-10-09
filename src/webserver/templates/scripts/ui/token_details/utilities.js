@@ -52,17 +52,6 @@ export function applyUtilitiesMixin(DialogClass) {
   };
 
   /**
-   * Get CSS class for change value (positive/negative)
-   * @private
-   * @param {number} value - Change value
-   * @returns {string} CSS class name
-   */
-  proto._getChangeClass = function (value) {
-    if (value === null || value === undefined) return "";
-    return value >= 0 ? "positive" : "negative";
-  };
-
-  /**
    * Render a hint trigger for card headers
    * @private
    * @param {string} hintKey - Hint key identifier

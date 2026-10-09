@@ -6,7 +6,7 @@
 // theme owns them; nothing here draws a glow or background.
 
 import { formatDate, formatSignedSol, formatTimestamp } from "../../core/format.js";
-import { PNL_SOL_DECIMALS } from "./format.js";
+import { PNL_SOL_DECIMALS, toneClass } from "./format.js";
 
 const SERIES_CLASSES = [
   "copy-series-0",
@@ -32,7 +32,7 @@ export function sparkline(values, { width = 88, height = 22 } = {}) {
   const path = series
     .map((value, index) => `${x(index).toFixed(1)},${y(value).toFixed(1)}`)
     .join(" ");
-  const tone = points[points.length - 1] >= 0 ? "is-positive" : "is-negative";
+  const tone = toneClass(points[points.length - 1]);
   return `<svg class="copy-spark ${tone}" viewBox="0 0 ${width} ${height}" width="${width}" height="${height}" aria-hidden="true"><line class="copy-chart-zero" x1="0" x2="${width}" y1="${y(0).toFixed(1)}" y2="${y(0).toFixed(1)}"/><polyline points="${path}"/></svg>`;
 }
 
@@ -84,7 +84,7 @@ export function pnlCurve(points, { escapeHtml = String } = {}) {
       : [{ at: data[0].at, value: 0 }, ...data];
   const values = series.map((point) => point.value);
   const last = series[series.length - 1].value;
-  const tone = last >= 0 ? "is-positive" : "is-negative";
+  const tone = toneClass(last);
   return frame({
     lines: (x, y) => `<polyline class="copy-curve-line ${tone}" points="${path(series, x, y)}"/>`,
     min: Math.min(0, ...values),
