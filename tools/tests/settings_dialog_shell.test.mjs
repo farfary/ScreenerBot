@@ -25,6 +25,7 @@
  * - A field's status badge sits on its title's line, not stacked under the hint.
  * - The Data section sets both stored paths at one start edge inside their cards, and
  *   every button and input in it stands at one height.
+ * - A disabled Security action states in its row what it waits for.
  *
  * Run with `npm run test:js`.
  */
@@ -266,4 +267,30 @@ test("Startup badges sit on their title line and Data controls share one frame",
   );
   assert.equal(data.paths[0].start, data.paths[1].start, "both paths share one start edge");
   assert.deepEqual(data.heights, [32], "every Data control stands at one height");
+});
+
+test("a disabled Security action names what it waits for", async (t) => {
+  const browser = await chromium.launch({ headless: true });
+  t.after(() => browser.close());
+  const context = await browser.newContext({ viewport: { width: 1440, height: 900 } });
+  const api = createApiHandler([await loadIndex("home"), await loadIndex("shell")], "populated");
+  const host = await serveDashboard(context, { locale: "en", onApi: api.onApi });
+  t.after(() => host.close());
+  const page = await context.newPage();
+  page.setDefaultTimeout(15000);
+  await page.goto(`${host.origin}/home`);
+  await page.waitForSelector("body:not(.initialization-mode) main.content:not([data-loading])");
+  await page.locator("#settingsBtn").dispatchEvent("click");
+  await page.waitForSelector(".settings-dialog.active .settings-nav");
+  await page.locator('.settings-nav-item[data-tab="security"]').click();
+  await page.waitForFunction(
+    () => document.querySelector("#securityLockNowBtn")?.getClientRects().length > 0
+  );
+  const rows = await page.$$eval(".settings-content .settings-field", (fields) =>
+    fields
+      .filter((field) => field.querySelector(".settings-field-control button.btn:disabled"))
+      .map((field) => field.querySelector(".settings-field-info").textContent)
+  );
+  assert.ok(rows.length >= 2, "the fixture has no password, so actions wait for one");
+  for (const text of rows) assert.match(text, /first to use this/);
 });

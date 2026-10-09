@@ -72,6 +72,12 @@ function buildSecurityTab(status) {
   const autoLockSecs = status.auto_lock_timeout_secs || 0;
   const lockOnBlur = status.lock_on_blur || false;
   const totpEnabled = status.totp_enabled || false;
+  // A disabled action names what it waits for in its hint.
+  const lockNowHint = !hasPassword
+    ? "settings-security-needs-password"
+    : !isEnabled
+      ? "settings-security-needs-lockscreen"
+      : "settings-security-lock-now-hint";
 
   // Password type display name
   const typeName = Object.hasOwn(PASSWORD_TYPE_LABELS, passwordType)
@@ -174,7 +180,7 @@ function buildSecurityTab(status) {
           <div class="settings-field">
             <div class="settings-field-info">
               <label data-l10n-id="settings-security-lock-now-label"></label>
-              <span class="settings-field-hint" data-l10n-id="settings-security-lock-now-hint"></span>
+              <span class="settings-field-hint" data-l10n-id="${lockNowHint}"></span>
             </div>
             <div class="settings-field-control">
               <button class="btn btn-primary btn-sm" id="securityLockNowBtn" ${!hasPassword || !isEnabled ? "disabled" : ""}>
@@ -200,6 +206,7 @@ function buildSecurityTab(status) {
               <span class="settings-field-hint">
                 ${Utils.escapeHtml(totpEnabled ? I18n.t("settings-security-2fa-status-enabled") : I18n.t("settings-security-2fa-status-none"))}
               </span>
+              ${hasPassword ? "" : '<span class="settings-field-hint" data-l10n-id="settings-security-needs-password"></span>'}
             </div>
             <div class="settings-field-control">
               ${
