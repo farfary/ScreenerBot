@@ -50,7 +50,7 @@ export const views = [
       { selector: "#featured-row .featured-row-card.boosted", min: 2 },
     ],
     empty: [
-      { selector: "#featured-row .featured-row-empty-text", text: "No featured tokens" },
+      { selector: "#featured-row .featured-row-skeleton-caption", text: "No featured tokens" },
       { selector: "#calendarMonthTrades", text: "^0$" },
       { selector: "#positionsBest", text: "^—$" },
     ],

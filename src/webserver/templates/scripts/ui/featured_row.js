@@ -135,11 +135,11 @@ class FeaturedRow {
       if (tokens && tokens.length > 0) {
         this._renderTokens(tokens);
       } else {
-        this._showEmpty();
+        this._showSkeletonStrip();
       }
     } catch (e) {
       console.warn("[FeaturedRow] Failed to load:", e.message);
-      this._showEmpty();
+      this._showSkeletonStrip();
     }
   }
 
@@ -338,22 +338,23 @@ class FeaturedRow {
   }
 
   /**
-   * Show empty state with placeholder cards
+   * Show the idle skeleton strip: faded skeleton cards and a caption, kept in the
+   * one-line strip when there are no featured tokens to show.
    */
-  _showEmpty() {
+  _showSkeletonStrip() {
     const container = this.containerEl?.querySelector("#featured-row-tokens");
     if (container) {
       const placeholder = `
-        <div class="featured-row-card featured-row-card-placeholder">
+        <div class="featured-row-card featured-row-skeleton-card">
           <div class="featured-row-card-logo-placeholder">
             <i class="icon-coins"></i>
           </div>
           <span class="featured-row-card-name">—</span>
         </div>`;
       container.innerHTML = `
-        <div class="featured-row-empty">
-          <div class="featured-row-empty-cards">${placeholder.repeat(3)}</div>
-          <span class="featured-row-empty-text">${escapeHtml(I18n.t("tokens-featured-row-empty"))}</span>
+        <div class="featured-row-skeleton-strip">
+          <div class="featured-row-skeleton-cards">${placeholder.repeat(3)}</div>
+          <span class="featured-row-skeleton-caption">${escapeHtml(I18n.t("tokens-featured-row-empty"))}</span>
         </div>
       `;
     }

@@ -287,10 +287,10 @@
 }
 
 /* ============================================
-   EMPTY STATE + SKELETON (minimal, integrated)
+   SKELETON STRIP + LOADING SKELETON (minimal, integrated)
    ============================================ */
 
-.featured-row-empty {
+.featured-row-skeleton-strip {
   display: flex;
   align-items: center;
   gap: var(--spacing-sm);
@@ -298,12 +298,12 @@
   padding-inline-start: var(--spacing-xs);
 }
 
-.featured-row-empty-cards {
+.featured-row-skeleton-cards {
   display: flex;
   gap: var(--spacing-xs);
 }
 
-.featured-row-card-placeholder {
+.featured-row-skeleton-card {
   opacity: 0.35;
   cursor: default;
   pointer-events: none;
@@ -311,13 +311,13 @@
   border-color: var(--border-color);
 }
 
-.featured-row-card-placeholder:hover {
+.featured-row-skeleton-card:hover {
   transform: none;
   border-color: var(--border-color);
   background: transparent;
 }
 
-.featured-row-empty-text {
+.featured-row-skeleton-caption {
   font-family: var(--font-mono);
   font-size: 0.625rem;
   color: var(--text-secondary);
@@ -414,7 +414,7 @@
     font-size: 0.625rem;
   }
 
-  .featured-row-empty-text {
+  .featured-row-skeleton-caption {
     display: none;
   }
 }

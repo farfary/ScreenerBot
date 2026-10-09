@@ -38,6 +38,7 @@ const PRIVATE_STATES = new RegExp(
       "(?:loading|error|info|success)-state",
       "ta-empty-(?:state|tab)",
       "featured-(?:state|loading|error|empty)",
+      "featured-row-(?:empty[\\w-]*|card-placeholder)",
       "pdd-chart-empty",
       "links-empty-notice",
       "strategy-list-state",
