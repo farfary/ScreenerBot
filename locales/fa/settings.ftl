@@ -512,6 +512,11 @@ settings-account-open-dashboard = باز کردن داشبورد شما
 
 settings-navigation-title = تب‌های پیمایش
 settings-navigation-hint = برای تغییر ترتیب، موارد را بکشید. نمایش را با کلید تغییر دهید.
+settings-navigation-section-layout = چیدمان
+settings-navigation-overflow-label = زبانه‌هایی که جا نمی‌شوند
+settings-navigation-overflow-hint = ردیف زبانه‌ها را افقی پیمایش کنید، یا زبانه‌هایی را که جا نمی‌شوند در منوی «بیشتر» در انتهای آن جمع کنید.
+settings-navigation-overflow-scroll = پیمایش
+settings-navigation-overflow-menu = منوی «بیشتر»
 settings-navigation-note = تغییرات پس از ذخیره اعمال می‌شود. برای دیدن به‌روزرسانی‌ها در نوار پیمایش، صفحه را تازه کنید.
 settings-navigation-drag-handle =
     .title = برای تغییر ترتیب بکشید

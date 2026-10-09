@@ -61,6 +61,7 @@ shell-tabs-scroll-start =
 shell-tabs-scroll-end =
     .aria-label = और टैब दिखाएँ
     .title = और टैब दिखाएँ
+shell-nav-more = और
 shell-ticker-scroll-start =
     .aria-label = पिछले मेट्रिक्स दिखाएँ
     .title = पिछले मेट्रिक्स दिखाएँ

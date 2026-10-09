@@ -517,6 +517,11 @@ settings-account-open-dashboard = Abrir tu panel
 
 settings-navigation-title = Pestañas de navegación
 settings-navigation-hint = Arrastra los elementos para reordenarlos. Cambia la visibilidad con el interruptor.
+settings-navigation-section-layout = Diseño
+settings-navigation-overflow-label = Pestañas que no caben
+settings-navigation-overflow-hint = Desplaza la fila de pestañas lateralmente o agrupa las que no caben en un menú «Más» al final.
+settings-navigation-overflow-scroll = Desplazar
+settings-navigation-overflow-menu = Menú «Más»
 settings-navigation-note = Los cambios se aplican tras guardar. Actualiza la página para ver los cambios en la barra de navegación.
 settings-navigation-drag-handle =
     .title = Arrastra para reordenar

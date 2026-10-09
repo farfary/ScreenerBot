@@ -61,6 +61,7 @@ shell-tabs-scroll-start =
 shell-tabs-scroll-end =
     .aria-label = Daha fazla sekme göster
     .title = Daha fazla sekme göster
+shell-nav-more = Daha Fazla
 shell-ticker-scroll-start =
     .aria-label = Önceki metrikleri göster
     .title = Önceki metrikleri göster

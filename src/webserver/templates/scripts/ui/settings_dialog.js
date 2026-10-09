@@ -13,6 +13,7 @@ import { getCurrentPage } from "../core/router.js";
 import { apiErrorMessage } from "../core/request_manager.js";
 import { setInterval as setPollingInterval } from "../core/poller.js";
 import { enhanceAllSelects } from "./custom_select.js";
+import { setNavOverflowLayout } from "./nav_more_menu.js";
 import { playTabSwitch } from "../core/sounds.js";
 import { loadSecurityTab } from "./settings/security_tab.js";
 import { buildDataTab, attachDataHandlers } from "./settings/data_tab.js";
@@ -264,6 +265,7 @@ export class SettingsDialog {
         },
         navigation: {
           tabs: [],
+          overflow: "scroll",
         },
       },
     };
@@ -390,6 +392,8 @@ export class SettingsDialog {
   _applyNavigationSettings() {
     const navContainer = document.getElementById("navTabs");
     if (!navContainer) return;
+
+    setNavOverflowLayout(this.settings?.dashboard?.navigation?.overflow);
 
     const tabs = this.settings?.dashboard?.navigation?.tabs || [];
     const enabledTabs = tabs.filter((t) => t.enabled).sort((a, b) => a.order - b.order);
@@ -642,6 +646,7 @@ export class SettingsDialog {
         content.innerHTML = buildNavigationTab(this.settings);
         I18n.localizeTree(content);
         attachNavigationHandlers(this, content);
+        enhanceAllSelects(content);
         break;
       case "startup":
         content.innerHTML = this._buildStartupTab();

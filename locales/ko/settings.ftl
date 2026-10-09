@@ -507,6 +507,11 @@ settings-account-open-dashboard = 내 대시보드 열기
 
 settings-navigation-title = 내비게이션 탭
 settings-navigation-hint = 항목을 드래그하여 순서를 변경하세요. 스위치로 표시 여부를 전환합니다.
+settings-navigation-section-layout = 레이아웃
+settings-navigation-overflow-label = 들어가지 않는 탭
+settings-navigation-overflow-hint = 탭 줄을 옆으로 스크롤하거나, 들어가지 않는 탭을 끝의 더보기 메뉴에 모읍니다.
+settings-navigation-overflow-scroll = 스크롤
+settings-navigation-overflow-menu = 더보기 메뉴
 settings-navigation-note = 변경 사항은 저장 후 적용됩니다. 내비게이션 바의 변경 사항을 보려면 페이지를 새로고침하세요.
 settings-navigation-drag-handle =
     .title = 드래그하여 순서 변경

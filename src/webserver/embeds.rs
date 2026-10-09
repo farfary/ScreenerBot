@@ -374,6 +374,7 @@ pub const TRADE_ACTION_QUOTE_MANAGER_JS: &str =
     include_str!("templates/scripts/ui/trade_action/quote_manager.js");
 pub const TAB_BAR_UI: &str = include_str!("templates/scripts/ui/tab_bar.js");
 pub const DIALOG_TAB_BAR_UI: &str = include_str!("templates/scripts/ui/dialog_tab_bar.js");
+pub const NAV_MORE_MENU_UI: &str = include_str!("templates/scripts/ui/nav_more_menu.js");
 pub const ACTION_BAR_UI: &str = include_str!("templates/scripts/ui/action_bar.js");
 pub const EXPAND_TOGGLE_UI: &str = include_str!("templates/scripts/ui/expand_toggle.js");
 pub const TABLE_SETTINGS_DIALOG_UI: &str =

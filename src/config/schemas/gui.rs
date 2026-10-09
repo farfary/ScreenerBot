@@ -127,6 +127,27 @@ config_struct! {
     pub struct NavigationConfig {
         /// List of navigation tabs with order and visibility
         tabs: Vec<TabConfig> = default_tabs(),
+
+        /// How tabs that do not fit the row are shown: "scroll" (the row scrolls
+        /// sideways behind edge fades) or "menu" (they move into a More menu)
+        overflow: String = NAV_OVERFLOW_SCROLL.to_owned(),
+    }
+}
+
+/// Navigation overflow layout: the row scrolls sideways.
+pub const NAV_OVERFLOW_SCROLL: &str = "scroll";
+/// Navigation overflow layout: tabs that do not fit move into a More menu.
+pub const NAV_OVERFLOW_MENU: &str = "menu";
+
+impl NavigationConfig {
+    /// The overflow layout to render; any value other than "menu" falls back to the
+    /// default scrolling row.
+    pub fn overflow_layout(&self) -> &'static str {
+        if self.overflow == NAV_OVERFLOW_MENU {
+            NAV_OVERFLOW_MENU
+        } else {
+            NAV_OVERFLOW_SCROLL
+        }
     }
 }
 
@@ -396,6 +417,26 @@ mod tests {
         let serialized = toml::to_string(&config).expect("startup config should serialize");
         assert!(serialized.contains("explore_mode_enabled = true"));
         assert!(!serialized.contains("setup_skipped"));
+    }
+
+    #[test]
+    fn navigation_overflow_defaults_to_scroll_and_reads_only_menu_as_menu() {
+        let saved: NavigationConfig =
+            toml::from_str("tabs = []").expect("navigation without overflow should deserialize");
+        assert_eq!(saved.overflow, "scroll");
+        assert_eq!(saved.overflow_layout(), "scroll");
+
+        for (stored, layout) in [
+            ("menu", "menu"),
+            ("scroll", "scroll"),
+            ("dropdown", "scroll"),
+        ] {
+            let navigation = NavigationConfig {
+                overflow: stored.into(),
+                ..NavigationConfig::default()
+            };
+            assert_eq!(navigation.overflow_layout(), layout, "stored {stored:?}");
+        }
     }
 
     #[test]

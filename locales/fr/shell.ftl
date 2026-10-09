@@ -61,6 +61,7 @@ shell-tabs-scroll-start =
 shell-tabs-scroll-end =
     .aria-label = Afficher plus d’onglets
     .title = Afficher plus d’onglets
+shell-nav-more = Plus
 shell-ticker-scroll-start =
     .aria-label = Afficher les indicateurs précédents
     .title = Afficher les indicateurs précédents

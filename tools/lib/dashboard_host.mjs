@@ -175,6 +175,7 @@ export const renderShell = memoized((page, locale) => {
     "{{IS_GUI_MODE}}": "false",
     "{{ASSET_VERSION}}": "test",
     "{{TOKEN_LOGO_SHAPE}}": "circle",
+    "{{NAV_OVERFLOW}}": "scroll",
     "{{NEEDS_INITIALIZATION}}": "false",
     "{{SPLASH_SCREEN}}": embedded("SPLASH_PAGE"),
     "{{ONBOARDING_SCREEN}}": embedded("ONBOARDING_PAGE"),

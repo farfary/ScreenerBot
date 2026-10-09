@@ -532,6 +532,11 @@ settings-account-open-dashboard = افتح لوحة التحكم الخاصة ب
 
 settings-navigation-title = تبويبات التنقل
 settings-navigation-hint = اسحب العناصر لإعادة ترتيبها. بدّل الظهور بالمفتاح.
+settings-navigation-section-layout = التخطيط
+settings-navigation-overflow-label = علامات التبويب التي لا تتسع
+settings-navigation-overflow-hint = مرّر صف علامات التبويب أفقيًا، أو اجمع العلامات التي لا تتسع في قائمة «المزيد» في نهايته.
+settings-navigation-overflow-scroll = تمرير
+settings-navigation-overflow-menu = قائمة «المزيد»
 settings-navigation-note = تُطبَّق التغييرات بعد الحفظ. حدّث الصفحة لرؤية التغييرات في شريط التنقل.
 settings-navigation-drag-handle =
     .title = اسحب لإعادة الترتيب

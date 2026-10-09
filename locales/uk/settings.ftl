@@ -522,6 +522,11 @@ settings-account-open-dashboard = Відкрити вашу панель кер�
 
 settings-navigation-title = Вкладки навігації
 settings-navigation-hint = Перетягуйте елементи, щоб змінити порядок. Перемикач вмикає або вимикає видимість.
+settings-navigation-section-layout = Розташування
+settings-navigation-overflow-label = Вкладки, що не вміщуються
+settings-navigation-overflow-hint = Прокручувати ряд вкладок убік або збирати вкладки, що не вміщуються, у меню «Ще» в кінці.
+settings-navigation-overflow-scroll = Прокручування
+settings-navigation-overflow-menu = Меню «Ще»
 settings-navigation-note = Зміни застосовуються після збереження. Оновіть сторінку, щоб побачити зміни на панелі навігації.
 settings-navigation-drag-handle =
     .title = Перетягніть, щоб змінити порядок

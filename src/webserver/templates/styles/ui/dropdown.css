@@ -37,10 +37,16 @@
   background: rgb(255, 255, 255, 0.95);
 }
 
+/* Visible from the first frame of opening, so an item can take focus at once; the
+   fade keeps its timing and closing still holds visibility until the fade ends. */
 .dropdown-menu.open {
   opacity: 1;
   visibility: visible;
   transform: translateY(0) scale(1);
+  transition:
+    opacity var(--floating-duration) var(--floating-easing),
+    transform var(--floating-duration) var(--floating-easing),
+    visibility 0s;
 }
 
 .dropdown-menu[data-align="left"] {
@@ -115,6 +121,7 @@
   border-radius: var(--floating-item-radius);
   text-align: start;
   font-family: inherit;
+  text-decoration: none;
 }
 
 .dropdown-item:hover:not(.disabled) {
@@ -130,6 +137,12 @@
 
 .dropdown-item:active:not(.disabled) {
   background: var(--primary-alpha-20);
+}
+
+/* The entry for the page on screen, in a menu of pages. */
+.dropdown-item[aria-current="page"] {
+  color: var(--primary-color);
+  font-weight: 600;
 }
 
 .dropdown-item .icon {

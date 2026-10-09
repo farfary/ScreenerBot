@@ -65,6 +65,7 @@ shell-tabs-scroll-start =
 shell-tabs-scroll-end =
     .aria-label = Weitere Tabs anzeigen
     .title = Weitere Tabs anzeigen
+shell-nav-more = Mehr
 shell-ticker-scroll-start =
     .aria-label = Vorherige Kennzahlen anzeigen
     .title = Vorherige Kennzahlen anzeigen

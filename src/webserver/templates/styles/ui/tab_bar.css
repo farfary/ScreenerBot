@@ -39,12 +39,12 @@
    Main Tabs (First Row)
    ============================================================================ */
 
-/* A main tab (`.tab`, server-rendered into `.nav-tabs`) is styled by
-   `header_responsive.css` — see `.nav-tabs a`, which is the single source. The
-   padding/colour/border/hover/active block that used to live here was fully shadowed by
-   it (`.nav-tabs a` outranks `.tab`), so editing it changed nothing on screen. Only the
-   keyboard focus ring remains ours; `foundation.css` suppresses it for mouse input. */
-.tab:focus-visible {
+/* A main tab (`.tab`, server-rendered into `.nav-tabs`) and the More control beside it
+   are styled by `header_responsive.css` — see `.nav-tabs > a` and `.nav-more-toggle`,
+   which is the single source and outranks `.tab`. Only the keyboard focus ring is ours;
+   `foundation.css` suppresses it for mouse input. */
+.tab:focus-visible,
+.nav-more-toggle:focus-visible {
   outline: 2px solid var(--tab-bar-active-border);
   outline-offset: -2px;
   z-index: 1;
@@ -166,12 +166,14 @@
 
 /* stylelint-disable-next-line media-feature-name-value-no-unknown */
 @media (prefers-contrast: high) {
-  .nav-tabs a,
+  .nav-tabs > a,
+  .nav-more-toggle,
   .sub-tab {
     border: 1px solid currentcolor;
   }
 
-  .nav-tabs a.active,
+  .nav-tabs > a.active,
+  .nav-more-toggle.active,
   .sub-tab.active {
     background: var(--tab-bar-text-active);
     color: var(--tab-bar-bg-primary);
@@ -380,4 +382,18 @@
     opacity var(--transition-base),
     color var(--transition-fast),
     visibility 0s;
+}
+
+/* A strip whose row lays out its own overflow (the main navigation's More layout,
+   `ui/nav_more_menu.js`) is folded: it never scrolls, shows no fade or page button, and
+   lets a menu opened from the row drop below it. */
+.tab-scroll-wrapper.is-folded,
+.tab-scroll-wrapper.is-folded > .tab-scroll-area {
+  overflow: visible;
+}
+
+.tab-scroll-wrapper.is-folded::before,
+.tab-scroll-wrapper.is-folded::after,
+.tab-scroll-wrapper.is-folded > .tab-scroll-btn {
+  display: none;
 }

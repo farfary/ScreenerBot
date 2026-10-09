@@ -512,6 +512,11 @@ settings-account-open-dashboard = Panelinizi açın
 
 settings-navigation-title = Gezinme Sekmeleri
 settings-navigation-hint = Yeniden sıralamak için öğeleri sürükleyin. Görünürlüğü anahtarla değiştirin.
+settings-navigation-section-layout = Düzen
+settings-navigation-overflow-label = Sığmayan sekmeler
+settings-navigation-overflow-hint = Sekme satırını yana kaydırın veya sığmayan sekmeleri sonundaki Daha Fazla menüsünde toplayın.
+settings-navigation-overflow-scroll = Kaydır
+settings-navigation-overflow-menu = Daha Fazla menüsü
 settings-navigation-note = Değişiklikler kaydettikten sonra uygulanır. Gezinme çubuğundaki güncellemeleri görmek için sayfayı yenileyin.
 settings-navigation-drag-handle =
     .title = Yeniden sıralamak için sürükleyin

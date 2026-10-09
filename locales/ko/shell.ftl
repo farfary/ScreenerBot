@@ -68,6 +68,7 @@ shell-tabs-scroll-start =
 shell-tabs-scroll-end =
     .aria-label = 더 많은 탭 표시
     .title = 더 많은 탭 표시
+shell-nav-more = 더보기
 shell-ticker-scroll-start =
     .aria-label = 이전 지표 표시
     .title = 이전 지표 표시

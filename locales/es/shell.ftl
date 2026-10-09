@@ -68,6 +68,7 @@ shell-tabs-scroll-start =
 shell-tabs-scroll-end =
     .aria-label = Mostrar más pestañas
     .title = Mostrar más pestañas
+shell-nav-more = Más
 shell-ticker-scroll-start =
     .aria-label = Mostrar métricas anteriores
     .title = Mostrar métricas anteriores

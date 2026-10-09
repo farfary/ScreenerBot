@@ -475,6 +475,11 @@ settings-account-open-dashboard = Mở bảng điều khiển của bạn
 
 settings-navigation-title = Các tab điều hướng
 settings-navigation-hint = Kéo các mục để sắp xếp lại. Bật/tắt hiển thị bằng công tắc.
+settings-navigation-section-layout = Bố cục
+settings-navigation-overflow-label = Thẻ không vừa
+settings-navigation-overflow-hint = Cuộn hàng thẻ sang ngang, hoặc gom các thẻ không vừa vào menu Thêm ở cuối hàng.
+settings-navigation-overflow-scroll = Cuộn
+settings-navigation-overflow-menu = Menu Thêm
 settings-navigation-note = Thay đổi có hiệu lực sau khi lưu. Hãy làm mới trang để thấy cập nhật trên thanh điều hướng.
 settings-navigation-drag-handle =
     .title = Kéo để sắp xếp lại

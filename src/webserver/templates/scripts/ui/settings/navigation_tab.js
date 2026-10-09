@@ -73,8 +73,26 @@ function renderTabItems(tabs) {
  */
 export function buildNavigationTab(settings) {
   const tabs = settings?.dashboard?.navigation?.tabs || [];
+  const overflow = settings?.dashboard?.navigation?.overflow === "menu" ? "menu" : "scroll";
 
   return `
+    <div class="settings-section">
+      <h3 class="settings-section-title" data-l10n-id="settings-navigation-section-layout"></h3>
+      <div class="settings-group">
+        <div class="settings-field">
+          <div class="settings-field-info">
+            <label for="settingNavOverflow" data-l10n-id="settings-navigation-overflow-label"></label>
+            <span class="settings-field-hint" data-l10n-id="settings-navigation-overflow-hint"></span>
+          </div>
+          <div class="settings-field-control">
+            <select id="settingNavOverflow" class="settings-select" data-custom-select>
+              <option value="scroll" ${overflow === "scroll" ? "selected" : ""}>${Utils.escapeHtml(I18n.t("settings-navigation-overflow-scroll"))}</option>
+              <option value="menu" ${overflow === "menu" ? "selected" : ""}>${Utils.escapeHtml(I18n.t("settings-navigation-overflow-menu"))}</option>
+            </select>
+          </div>
+        </div>
+      </div>
+    </div>
     <div class="settings-section">
       <div class="settings-section-header">
         <div class="settings-section-header-left">
@@ -121,8 +139,13 @@ export function attachNavigationHandlers(dialog, content) {
   // Ensure navigation config exists
   if (!dialog.settings.dashboard) dialog.settings.dashboard = {};
   if (!dialog.settings.dashboard.navigation) {
-    dialog.settings.dashboard.navigation = { tabs: [] };
+    dialog.settings.dashboard.navigation = { tabs: [], overflow: "scroll" };
   }
+
+  content.querySelector("#settingNavOverflow")?.addEventListener("change", (event) => {
+    dialog.settings.dashboard.navigation.overflow = event.target.value;
+    dialog._checkForChanges();
+  });
 
   const getTabs = () => dialog.settings.dashboard.navigation.tabs;
   const setTabs = (tabs) => {

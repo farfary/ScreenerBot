@@ -86,17 +86,18 @@
     opacity var(--transition-fast);
 }
 
-.nav-tabs.has-indicator a.active::after {
+.nav-tabs.has-indicator > a.active::after,
+.nav-tabs.has-indicator .nav-more-toggle.active::after {
   display: none;
 }
 
 /* The ONE source of truth for a main tab. `tab_bar.css` owns `.sub-tab`; a main tab
-   is `.nav-tabs a` and nothing else styles it (a duplicate `.tab` block used to sit in
-   tab_bar.css, fully shadowed by this higher-specificity rule — editing it did
-   nothing). Every state below changes only paint properties (colour, background,
+   is a direct `a` of `.nav-tabs`, and the More control's toggle wears the same face so
+   it reads as one more entry of the row. Nothing else styles them. Every state below changes only paint properties (colour, background,
    opacity, transform), never geometry: the row is 36px and a tab that grows or
    re-weights on hover would shove its neighbours sideways. */
-.nav-tabs a {
+.nav-tabs > a,
+.nav-more-toggle {
   position: relative;
   display: flex;
   align-items: center;
@@ -120,7 +121,8 @@
 }
 
 /* The icon is quieter than its label until the tab is hovered or current. */
-.nav-tabs a i {
+.nav-tabs > a i,
+.nav-more-toggle i {
   font-size: 13px;
   opacity: 0.6;
   transition: opacity var(--transition-fast);
@@ -131,7 +133,8 @@
    glow, never a filled line. It spans the tab's FULL width and fades out within 4px, so
    only the sliver of row directly beneath the label is touched. Only opacity changes
    between states — the light brightens and dims, it never grows or moves. */
-.nav-tabs a::after {
+.nav-tabs > a::after,
+.nav-more-toggle::after {
   content: "";
   position: absolute;
   inset-inline: 0;
@@ -147,34 +150,65 @@
   transition: opacity var(--transition-fast);
 }
 
-.nav-tabs a:hover {
+.nav-tabs > a:hover,
+.nav-more-toggle:hover {
   background: var(--primary-alpha-5);
   color: var(--text-primary);
 }
 
-.nav-tabs a:hover i {
+.nav-tabs > a:hover i,
+.nav-more-toggle:hover i {
   opacity: 0.95;
 }
 
 /* Hover barely warms the edge, so the current tab stays the brightest thing in the row
    and hovering never looks like navigating. */
-.nav-tabs a:hover::after {
+.nav-tabs > a:hover::after,
+.nav-more-toggle:hover::after {
   opacity: 0.25;
 }
 
-.nav-tabs a.active {
+.nav-tabs > a.active,
+.nav-more-toggle.active {
   /* No wash across the tab and no glow on the label: the colour plus the light beneath it
      is the whole state. Anything more turns a 36px row into a light show. */
   color: var(--primary-color);
   background: var(--primary-alpha-5);
 }
 
-.nav-tabs a.active i {
+.nav-tabs > a.active i,
+.nav-more-toggle.active i {
   opacity: 1;
 }
 
-.nav-tabs a.active::after {
+.nav-tabs > a.active::after,
+.nav-more-toggle.active::after {
   opacity: 0.9;
+}
+
+/* A tab folded into the More menu leaves the row. */
+.nav-tabs > a[hidden],
+.nav-more[hidden] {
+  display: none;
+}
+
+/* The More-menu layout (`ui/nav_more_menu.js`, `<html data-nav-overflow="menu">`): the
+   tabs that do not fit are listed under the More control at the row's end. The strip
+   is folded meanwhile (its `is-folded` state in tab_bar.css), so nothing
+   scrolls and the list can drop below the row. */
+.nav-more {
+  position: relative;
+  display: flex;
+}
+
+.nav-more-toggle {
+  border: 0;
+  background: none;
+  font-family: inherit;
+}
+
+.nav-more-list {
+  min-width: 200px;
 }
 
 /* The ticker is a tab scroll strip (tab_bar.css), the same overflow treatment as the
@@ -533,15 +567,18 @@ button.ticker-segment:hover .ticker-icon {
 }
 
 @media (prefers-reduced-motion: reduce) {
-  .nav-tabs a,
-  .nav-tabs a i,
+  .nav-tabs > a,
+  .nav-more-toggle,
+  .nav-tabs > a i,
+  .nav-more-toggle i,
   button.ticker-segment,
   .modern-header .header-actions-items {
     transition: none;
   }
 
   /* The glow still appears, it just does not fade in or travel. */
-  .nav-tabs a::after {
+  .nav-tabs > a::after,
+  .nav-more-toggle::after {
     transition: none;
   }
 

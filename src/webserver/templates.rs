@@ -147,6 +147,13 @@ pub fn base_template(active_tab: &str, content: &str, locale: &LanguageIdentifie
     };
     html = html.replace("{{TOKEN_LOGO_SHAPE}}", token_logo_shape);
 
+    let nav_overflow = if crate::config::is_config_initialized() {
+        crate::config::with_config(|cfg| cfg.gui.dashboard.navigation.overflow_layout())
+    } else {
+        crate::config::schemas::NAV_OVERFLOW_SCROLL
+    };
+    html = html.replace("{{NAV_OVERFLOW}}", nav_overflow);
+
     // Inject initialization state for early DOM setup (prevents dashboard flash).
     // Explore Mode shows the dashboard immediately, so it does not "need init".
     let needs_initialization = !global::is_initialization_complete() && !global::is_explore_mode();

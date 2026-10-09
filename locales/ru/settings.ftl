@@ -522,6 +522,11 @@ settings-account-open-dashboard = Открыть ваш дашборд
 
 settings-navigation-title = Вкладки навигации
 settings-navigation-hint = Перетаскивайте элементы, чтобы изменить порядок. Видимость переключается тумблером.
+settings-navigation-section-layout = Расположение
+settings-navigation-overflow-label = Вкладки, которые не помещаются
+settings-navigation-overflow-hint = Прокручивать ряд вкладок вбок или собирать не поместившиеся вкладки в меню «Ещё» в конце.
+settings-navigation-overflow-scroll = Прокрутка
+settings-navigation-overflow-menu = Меню «Ещё»
 settings-navigation-note = Изменения применяются после сохранения. Обновите страницу, чтобы увидеть изменения в панели навигации.
 settings-navigation-drag-handle =
     .title = Перетащите, чтобы изменить порядок

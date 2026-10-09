@@ -507,6 +507,11 @@ settings-account-open-dashboard = Buka dasbor Anda
 
 settings-navigation-title = Tab Navigasi
 settings-navigation-hint = Seret item untuk mengurutkan ulang. Atur visibilitas dengan sakelar.
+settings-navigation-section-layout = Tata Letak
+settings-navigation-overflow-label = Tab yang Tidak Muat
+settings-navigation-overflow-hint = Gulir baris tab ke samping, atau kumpulkan tab yang tidak muat di menu Lainnya di ujungnya.
+settings-navigation-overflow-scroll = Gulir
+settings-navigation-overflow-menu = Menu Lainnya
 settings-navigation-note = Perubahan berlaku setelah disimpan. Segarkan halaman untuk melihat pembaruan di bilah navigasi.
 settings-navigation-drag-handle =
     .title = Seret untuk mengurutkan ulang

@@ -11,6 +11,8 @@ import { subscribeToBootstrap, whenInitialized } from "./bootstrap.js";
 import { createHeaderMetrics } from "./header_metrics.js";
 import { showSettingsDialog } from "../ui/settings_dialog.js";
 import { attachTabScrollStrip } from "../ui/tab_bar.js";
+import { attachNavMoreMenu } from "../ui/nav_more_menu.js";
+import { dirSign } from "./dom.js";
 import { SetupDialog } from "../ui/setup_dialog.js";
 import { playToggleOn, playToggleOff, playError } from "./sounds.js";
 // Side-effect import: registers the `screenerbot:open-token-details` window
@@ -431,12 +433,15 @@ function initRestartButton() {
 
 // The main navigation row and the metrics ticker are tab scroll strips: edge fades,
 // page buttons and wheel scrolling come from `attachTabScrollStrip`, the owner shared
-// with the sub-tab row.
+// with the sub-tab row. The navigation row can instead fold the tabs that do not fit
+// into a More menu (`attachNavMoreMenu`), chosen in Settings > Navigation.
 let navStrip = null;
 
 function initHeaderTabsScroll() {
   const headerRow = document.querySelector(".header-row-2");
   if (headerRow) navStrip = attachTabScrollStrip(headerRow);
+  const navTabs = document.getElementById("navTabs");
+  if (navTabs) attachNavMoreMenu(navTabs);
   const tickerRow = document.querySelector(".header-row-3");
   if (tickerRow) attachTabScrollStrip(tickerRow);
 }
@@ -444,6 +449,21 @@ function initHeaderTabsScroll() {
 // ============================================================================
 // HEADER TABS ACTIVE INDICATOR + KEYBOARD NAVIGATION
 // ============================================================================
+
+/**
+ * The row entry that marks the current page: its tab, or the More control while that
+ * tab is folded into the More menu.
+ */
+function currentNavEntry(navTabs) {
+  return navTabs.querySelector(":scope > a.tab.active:not([hidden]), .nav-more-toggle.active");
+}
+
+/** The focusable entries of the navigation row, in reading order. */
+function navRowEntries(navTabs) {
+  return [...navTabs.querySelectorAll(":scope > a.tab, .nav-more-toggle")].filter(
+    (entry) => !entry.closest("[hidden]")
+  );
+}
 
 /**
  * Drive the single underline that travels between main tabs.
@@ -479,7 +499,7 @@ function initNavTabsIndicator() {
 
   const update = () => {
     const bar = ensureIndicator();
-    const active = navTabs.querySelector("a.active");
+    const active = currentNavEntry(navTabs);
     if (!active) {
       bar.classList.remove("is-visible");
       return;
@@ -487,8 +507,12 @@ function initNavTabsIndicator() {
 
     // The glow spans the tab's FULL width (its own ends are faded by a mask in CSS), so
     // it is measured edge to edge — no inset.
-    navTabs.style.setProperty("--nav-indicator-x", `${active.offsetLeft}px`);
-    navTabs.style.setProperty("--nav-indicator-w", `${active.offsetWidth}px`);
+    // Measured against the row rather than `offsetLeft`: the More control's toggle sits
+    // inside its own wrapper.
+    const row = navTabs.getBoundingClientRect();
+    const box = active.getBoundingClientRect();
+    navTabs.style.setProperty("--nav-indicator-x", `${box.left - row.left}px`);
+    navTabs.style.setProperty("--nav-indicator-w", `${box.width}px`);
     bar.classList.add("is-visible");
 
     // A newly active tab is brought into the scrollable row's view; the scroll
@@ -512,7 +536,11 @@ function initNavTabsIndicator() {
     const ours = records.every((record) => record.target === indicator);
     if (!ours) update();
   });
-  observer.observe(navTabs, { childList: true, subtree: true, attributeFilter: ["class"] });
+  observer.observe(navTabs, {
+    childList: true,
+    subtree: true,
+    attributeFilter: ["class", "hidden"],
+  });
 
   // Tab widths follow the font and the row width, so re-measure on both.
   new ResizeObserver(() => update()).observe(navTabs);
@@ -522,9 +550,10 @@ function initNavTabsIndicator() {
 }
 
 /**
- * Arrow-key navigation across the main tabs. Focus only moves — the tab is followed on
- * Enter, like any link — so a keyboard user can survey the nav without triggering a
- * page change on every keypress.
+ * Arrow-key navigation across the main tabs and the More control. Focus only moves —
+ * the tab is followed on Enter, like any link — so a keyboard user can survey the nav
+ * without triggering a page change on every keypress. The arrows follow the reading
+ * direction: in a right-to-left locale ArrowLeft moves to the next entry.
  */
 function initNavTabsKeyboard() {
   const navTabs = document.getElementById("navTabs");
@@ -534,15 +563,17 @@ function initNavTabsKeyboard() {
     const keys = ["ArrowRight", "ArrowLeft", "Home", "End"];
     if (!keys.includes(event.key)) return;
 
-    const tabs = [...navTabs.querySelectorAll("a.tab")];
+    const tabs = navRowEntries(navTabs);
     const current = tabs.indexOf(document.activeElement);
     if (current === -1) return;
 
     let next;
     if (event.key === "Home") next = 0;
     else if (event.key === "End") next = tabs.length - 1;
-    else if (event.key === "ArrowRight") next = (current + 1) % tabs.length;
-    else next = (current - 1 + tabs.length) % tabs.length;
+    else {
+      const step = (event.key === "ArrowRight" ? 1 : -1) * dirSign();
+      next = (current + step + tabs.length) % tabs.length;
+    }
 
     event.preventDefault();
     tabs[next].focus();

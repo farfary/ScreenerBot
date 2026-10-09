@@ -512,6 +512,11 @@ settings-account-open-dashboard = Ihr Dashboard öffnen
 
 settings-navigation-title = Navigations-Tabs
 settings-navigation-hint = Zum Umsortieren Elemente ziehen. Die Sichtbarkeit lässt sich mit dem Schalter umschalten.
+settings-navigation-section-layout = Layout
+settings-navigation-overflow-label = Tabs, die nicht passen
+settings-navigation-overflow-hint = Die Tab-Leiste seitlich scrollen oder nicht passende Tabs in einem Menü „Mehr“ am Ende sammeln.
+settings-navigation-overflow-scroll = Scrollen
+settings-navigation-overflow-menu = Menü „Mehr“
 settings-navigation-note = Änderungen gelten nach dem Speichern. Laden Sie die Seite neu, um die Aktualisierungen in der Navigationsleiste zu sehen.
 settings-navigation-drag-handle =
     .title = Zum Umsortieren ziehen

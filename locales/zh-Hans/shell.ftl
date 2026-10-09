@@ -68,6 +68,7 @@ shell-tabs-scroll-start =
 shell-tabs-scroll-end =
     .aria-label = 显示更多标签
     .title = 显示更多标签
+shell-nav-more = 更多
 shell-ticker-scroll-start =
     .aria-label = 显示之前的指标
     .title = 显示之前的指标

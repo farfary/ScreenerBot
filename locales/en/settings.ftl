@@ -523,6 +523,11 @@ settings-account-open-dashboard = Open your dashboard
 
 settings-navigation-title = Navigation Tabs
 settings-navigation-hint = Drag items to reorder. Toggle visibility with the switch.
+settings-navigation-section-layout = Layout
+settings-navigation-overflow-label = Tabs That Do Not Fit
+settings-navigation-overflow-hint = Scroll the tab row sideways, or gather the tabs that do not fit under a More menu at its end.
+settings-navigation-overflow-scroll = Scroll
+settings-navigation-overflow-menu = More menu
 settings-navigation-note = Changes apply after saving. Refresh the page to see updates in the navigation bar.
 settings-navigation-drag-handle =
     .title = Drag to reorder

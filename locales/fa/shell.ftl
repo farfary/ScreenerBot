@@ -68,6 +68,7 @@ shell-tabs-scroll-start =
 shell-tabs-scroll-end =
     .aria-label = نمایش تب‌های بیشتر
     .title = نمایش تب‌های بیشتر
+shell-nav-more = بیشتر
 shell-ticker-scroll-start =
     .aria-label = نمایش معیارهای قبلی
     .title = نمایش معیارهای قبلی

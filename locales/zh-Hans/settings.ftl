@@ -507,6 +507,11 @@ settings-account-open-dashboard = 打开您的仪表盘
 
 settings-navigation-title = 导航标签
 settings-navigation-hint = 拖动项目以重新排序，使用开关切换可见性。
+settings-navigation-section-layout = 布局
+settings-navigation-overflow-label = 放不下的标签页
+settings-navigation-overflow-hint = 横向滚动标签行，或将放不下的标签页收进末尾的“更多”菜单。
+settings-navigation-overflow-scroll = 滚动
+settings-navigation-overflow-menu = “更多”菜单
 settings-navigation-note = 更改在保存后生效。请刷新页面以查看导航栏的更新。
 settings-navigation-drag-handle =
     .title = 拖动以调整顺序

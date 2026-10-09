@@ -68,6 +68,7 @@ shell-tabs-scroll-start =
 shell-tabs-scroll-end =
     .aria-label = Показати інші вкладки
     .title = Показати інші вкладки
+shell-nav-more = Ще
 shell-ticker-scroll-start =
     .aria-label = Показати попередні метрики
     .title = Показати попередні метрики

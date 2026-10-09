@@ -61,6 +61,7 @@ shell-tabs-scroll-start =
 shell-tabs-scroll-end =
     .aria-label = Hiện thêm tab
     .title = Hiện thêm tab
+shell-nav-more = Thêm
 shell-ticker-scroll-start =
     .aria-label = Hiện các chỉ số trước
     .title = Hiện các chỉ số trước

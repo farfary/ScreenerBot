@@ -68,6 +68,7 @@ shell-tabs-scroll-start =
 shell-tabs-scroll-end =
     .aria-label = عرض المزيد من التبويبات
     .title = عرض المزيد من التبويبات
+shell-nav-more = المزيد
 shell-ticker-scroll-start =
     .aria-label = عرض المقاييس السابقة
     .title = عرض المقاييس السابقة

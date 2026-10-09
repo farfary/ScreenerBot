@@ -68,6 +68,7 @@ shell-tabs-scroll-start =
 shell-tabs-scroll-end =
     .aria-label = 他のタブを表示
     .title = 他のタブを表示
+shell-nav-more = その他
 shell-ticker-scroll-start =
     .aria-label = 前の指標を表示
     .title = 前の指標を表示
