@@ -327,13 +327,7 @@
   border: 3px solid var(--border-color);
   border-top-color: var(--primary-color);
   border-radius: var(--radius-full);
-  animation: chart-spinner 1s linear infinite;
-}
-
-@keyframes chart-spinner {
-  to {
-    transform: rotate(360deg);
-  }
+  animation: spin 1s linear infinite;
 }
 
 .chart-loading-text {

@@ -626,7 +626,7 @@ body.trade-action-dialog-open {
   border: 2px solid transparent;
   border-top-color: #fff;
   border-radius: var(--radius-full);
-  animation: trade-spinner 0.8s linear infinite;
+  animation: spin 0.8s linear infinite;
 }
 
 .trade-action-btn-confirm.loading .btn-loader {
@@ -710,7 +710,7 @@ body.trade-action-dialog-open {
 }
 
 .trade-action-quote-refresh:active svg {
-  animation: trade-spinner 0.6s linear;
+  animation: spin 0.6s linear;
 }
 
 /* Quote States */
@@ -748,7 +748,7 @@ body.trade-action-dialog-open {
   border: 2px solid var(--border-color);
   border-top-color: var(--action-color);
   border-radius: var(--radius-full);
-  animation: trade-spinner 0.8s linear infinite;
+  animation: spin 0.8s linear infinite;
 }
 
 .trade-action-quote-section[data-state="error"] .trade-action-quote-error {
@@ -1082,12 +1082,6 @@ body.trade-action-dialog-open {
   40%,
   80% {
     transform: translateX(calc(var(--dir-sign) * 4px));
-  }
-}
-
-@keyframes trade-spinner {
-  to {
-    transform: rotate(360deg);
   }
 }
 
@@ -1500,7 +1494,7 @@ body.trade-action-dialog-open {
 }
 
 .trade-action-quote-section[data-refreshing="true"] .trade-action-quote-refresh svg {
-  animation: trade-spinner 0.8s linear infinite;
+  animation: spin 0.8s linear infinite;
 }
 
 @keyframes trade-quote-bar {

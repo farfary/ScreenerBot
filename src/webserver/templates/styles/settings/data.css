@@ -24,7 +24,7 @@
 }
 
 .data-stats-loading i {
-  animation: settings-spin 1s linear infinite;
+  animation: spin 1s linear infinite;
 }
 
 .data-total-bar {

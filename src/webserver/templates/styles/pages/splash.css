@@ -91,18 +91,12 @@
   border: 2px solid var(--border-color);
   border-top-color: var(--primary-color);
   border-radius: var(--radius-full);
-  animation: splash-spin 0.9s linear infinite;
+  animation: spin 0.9s linear infinite;
 }
 
 /* Nothing is starting any more — the message on screen is the final word. */
 .splash-screen.settled .splash-spinner {
   display: none;
-}
-
-@keyframes splash-spin {
-  to {
-    transform: rotate(360deg);
-  }
 }
 
 .splash-status {

@@ -334,7 +334,7 @@ html[data-input="keyboard"] .setup-screen [tabindex="-1"]:focus-visible {
   border: 2px solid var(--primary-alpha-20);
   border-top-color: currentcolor;
   border-radius: var(--radius-full);
-  animation: setup-status-spin 0.75s linear infinite;
+  animation: spin 0.75s linear infinite;
 }
 
 .setup-verification-item[data-state="success"] .setup-state-icon::before {
@@ -358,12 +358,6 @@ html[data-input="keyboard"] .setup-screen [tabindex="-1"]:focus-visible {
   line-height: 1.35;
   text-overflow: ellipsis;
   white-space: nowrap;
-}
-
-@keyframes setup-status-spin {
-  to {
-    transform: rotate(360deg);
-  }
 }
 
 .setup-complete {

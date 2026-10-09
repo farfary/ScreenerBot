@@ -90,7 +90,7 @@ body:has(.content.has-featured-row) .toast-container {
 }
 
 .toast[data-type="progress"] .toast__icon {
-  animation: toast-spin 1s linear infinite;
+  animation: spin 1s linear infinite;
 }
 
 .toast__body {
@@ -175,12 +175,6 @@ body:has(.content.has-featured-row) .toast-container {
   border-radius: var(--radius-full);
   background: var(--toast-accent);
   transition: width var(--transition-normal);
-}
-
-@keyframes toast-spin {
-  to {
-    transform: rotate(360deg);
-  }
 }
 
 @media (prefers-reduced-motion: reduce) {

@@ -909,17 +909,11 @@
   border: 2px solid currentcolor;
   border-top-color: transparent;
   color: var(--text-secondary);
-  animation: table-toolbar-spin 0.7s linear infinite;
+  animation: spin 0.7s linear infinite;
 }
 
 .table-toolbar-btn--primary.is-busy::after {
   color: #fff;
-}
-
-@keyframes table-toolbar-spin {
-  to {
-    transform: rotate(360deg);
-  }
 }
 
 @media (prefers-reduced-motion: reduce) {

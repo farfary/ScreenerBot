@@ -271,15 +271,5 @@
    ============================================ */
 
 .pool-selector-loading i.spin {
-  animation: pool-selector-spin 1s linear infinite;
-}
-
-@keyframes pool-selector-spin {
-  from {
-    transform: rotate(0deg);
-  }
-
-  to {
-    transform: rotate(360deg);
-  }
+  animation: spin 1s linear infinite;
 }

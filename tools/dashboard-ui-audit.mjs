@@ -430,6 +430,68 @@ if (
   errors.push("Natural token logos must preserve their canvas with --token-logo-fit: contain");
 }
 
+/* One rotation keyframe: `spin` in foundation.css. A spinner chooses its speed and
+   timing, never its own copy of the rotation. Every animation names a keyframe some
+   stylesheet declares; an undeclared name renders no motion at all. */
+const animationKeywords = new Set([
+  "none",
+  "initial",
+  "inherit",
+  "unset",
+  "revert",
+  "linear",
+  "ease",
+  "ease-in",
+  "ease-out",
+  "ease-in-out",
+  "step-start",
+  "step-end",
+  "infinite",
+  "normal",
+  "reverse",
+  "alternate",
+  "alternate-reverse",
+  "forwards",
+  "backwards",
+  "both",
+  "running",
+  "paused",
+]);
+const declaredKeyframes = new Set();
+const animationUses = [];
+for (const file of cssFiles) {
+  const css = await readFile(file, "utf8");
+  const path = relative(stylesRoot, file);
+  const lineOf = (index) => css.slice(0, index).split("\n").length;
+  for (const match of css.matchAll(/@keyframes\s+([\w-]+)\s*\{/g)) {
+    declaredKeyframes.add(match[1]);
+    const end = css.indexOf("\n}", match.index);
+    const body = css.slice(match.index, end < 0 ? undefined : end);
+    if (path !== "foundation.css" && /rotate\(\s*360deg\s*\)/.test(body)) {
+      errors.push(
+        `${path}:${lineOf(match.index)}: @keyframes ${match[1]} repeats the rotation; animate with spin from foundation.css`
+      );
+    }
+  }
+  for (const match of css.matchAll(/(?<![\w-])animation(?:-name)?\s*:\s*([^;}]+)/g)) {
+    if (/var\(/.test(match[1])) continue;
+    const value = match[1].replace(/!important/, "").replace(/[\w-]+\([^)]*\)/g, " ");
+    for (const layer of value.split(",")) {
+      const names = layer
+        .trim()
+        .split(/\s+/)
+        .filter((token) => token && !animationKeywords.has(token))
+        .filter((token) => !/^-?[\d.]+(?:m?s)?$/.test(token));
+      for (const name of names) animationUses.push({ path, line: lineOf(match.index), name });
+    }
+  }
+}
+for (const { path, line, name } of animationUses) {
+  if (!declaredKeyframes.has(name)) {
+    errors.push(`${path}:${line}: animation ${name} names no declared @keyframes`);
+  }
+}
+
 if (errors.length) {
   console.error("Dashboard UI contract violations:\n");
   errors.forEach((error) => console.error(`- ${error}`));

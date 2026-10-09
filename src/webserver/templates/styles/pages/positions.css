@@ -110,13 +110,7 @@
   border: 2px solid rgb(255, 255, 255, 0.25);
   border-top-color: currentcolor;
   border-radius: var(--radius-full);
-  animation: pos-state-spin 0.7s linear infinite;
-}
-
-@keyframes pos-state-spin {
-  to {
-    transform: rotate(360deg);
-  }
+  animation: spin 0.7s linear infinite;
 }
 
 /* In-flight buy */

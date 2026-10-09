@@ -154,13 +154,7 @@
   border: 2px solid var(--border-color);
   border-top-color: var(--accent, #58a6ff);
   border-radius: 50%;
-  animation: conn-overlay-spin 0.8s linear infinite;
-}
-
-@keyframes conn-overlay-spin {
-  to {
-    transform: rotate(360deg);
-  }
+  animation: spin 0.8s linear infinite;
 }
 
 .conn-overlay-text {
