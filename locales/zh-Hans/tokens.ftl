@@ -387,7 +387,6 @@ tokens-favorites-load-failed-toast = 无法加载收藏
 tokens-favorites-total = 收藏总数
 tokens-favorites-empty-title = 暂无收藏
     .message = 在任意列表中为代币加星标，即可将其保留在这里。
-tokens-favorites-empty-description = 使用搜索（{ $shortcut }）查找代币并添加到收藏。
 
 # Tokens page: OHLCV data view (scripts/pages/tokens/ohlcv.js)
 # Status ids come from /api/ohlcv/tokens; priority ids are Priority::as_str in src/ohlcvs/types.rs.

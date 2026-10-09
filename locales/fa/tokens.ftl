@@ -407,8 +407,6 @@ tokens-favorites-load-failed-toast = بارگیری علاقه‌مندی‌ها
 tokens-favorites-total = کل علاقه‌مندی‌ها
 tokens-favorites-empty-title = هنوز علاقه‌مندی‌ای نیست
     .message = برای نگه داشتن یک توکن در اینجا، در هر فهرستی به آن ستاره بدهید.
-# $shortcut is the key combination that opens the search dialog.
-tokens-favorites-empty-description = با جست‌وجو ({ $shortcut }) توکن‌ها را پیدا کنید و به علاقه‌مندی‌ها اضافه کنید.
 
 # Tokens page: OHLCV data view (scripts/pages/tokens/ohlcv.js)
 # Status ids come from /api/ohlcv/tokens; priority ids are Priority::as_str in src/ohlcvs/types.rs.

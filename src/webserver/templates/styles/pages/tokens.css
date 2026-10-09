@@ -319,22 +319,6 @@
   color: var(--text-secondary);
 }
 
-/* Favorites empty state */
-#favorites-empty-state {
-  margin-top: var(--spacing-xl);
-}
-
-#favorites-empty-state kbd {
-  display: inline-block;
-  padding: 2px 6px;
-  font-size: 0.75rem;
-  font-family: var(--font-mono);
-  background: var(--bg-tertiary);
-  border: 1px solid var(--border-color);
-  border-radius: var(--radius-sm);
-  color: var(--text-secondary);
-}
-
 /* Text muted helper */
 .text-muted {
   color: var(--text-muted);

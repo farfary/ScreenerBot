@@ -165,12 +165,7 @@ export const views = [
     name: "favorite tokens",
     click: [tab("favorites")],
     populated: [{ selector: "#favorites-table-container tr[data-row-id]", min: 3 }],
-    empty: [
-      {
-        selector: "#favorites-empty-state",
-        text: "No Favorites Yet",
-      },
-    ],
+    empty: [{ selector: "#favorites-table-container .dt-empty-state", text: "No Favorites Yet" }],
   },
   {
     name: "tokens with candle data",

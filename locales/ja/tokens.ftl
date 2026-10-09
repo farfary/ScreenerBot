@@ -356,7 +356,6 @@ tokens-favorites-load-failed-toast = お気に入りを読み込めませんで�
 tokens-favorites-total = お気に入り合計
 tokens-favorites-empty-title = お気に入りはまだありません
     .message = どのリストでもトークンにスターを付けると、ここに保持されます。
-tokens-favorites-empty-description = 検索（{ $shortcut }）でトークンを探して、お気に入りに追加しましょう。
 
 tokens-column-token = トークン
 tokens-column-status = ステータス

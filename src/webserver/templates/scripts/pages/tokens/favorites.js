@@ -62,15 +62,7 @@ export function createFavoritesModule(deps) {
   const updateFavoritesTable = () => {
     if (!deps.favoritesTable) return;
     const isEmpty = favoritesState.favorites.length === 0;
-    const emptyState = document.querySelector("#favorites-empty-state");
-
-    if (isEmpty) {
-      deps.favoritesTable.setData([], { preserveScroll: false });
-      if (emptyState) emptyState.style.display = "";
-    } else {
-      if (emptyState) emptyState.style.display = "none";
-      deps.favoritesTable.setData(favoritesState.favorites, { preserveScroll: true });
-    }
+    deps.favoritesTable.setData(favoritesState.favorites, { preserveScroll: !isEmpty });
     updateFavoritesToolbar();
   };
 
@@ -105,31 +97,6 @@ export function createFavoritesModule(deps) {
       // measurable before DataTable performs its first column-fit pass.
       favoritesContainer.style.display = "";
       rootEl.parentNode.insertBefore(favoritesContainer, rootEl.nextSibling);
-    }
-
-    // Create empty state element
-    let emptyState = document.querySelector("#favorites-empty-state");
-    if (!emptyState) {
-      emptyState = document.createElement("div");
-      emptyState.id = "favorites-empty-state";
-      emptyState.className = "empty-state";
-      emptyState.style.display = "none";
-      // The shortcut sits in its own <kbd>; the sentence keeps its own word order.
-      const shortcutMark = "\u0001";
-      const [beforeShortcut, afterShortcut = ""] = I18n.t("tokens-favorites-empty-description", {
-        shortcut: shortcutMark,
-      })
-        .replace(/[\u2068\u2069]/g, "")
-        .split(shortcutMark);
-      // l10n-ignore: keyboard key label, identical in every locale
-      emptyState.innerHTML = `
-        <div class="empty-state-icon"><i class="icon-star"></i></div>
-        <h3 class="empty-state-title">${Utils.escapeHtml(I18n.t("tokens-favorites-empty-title"))}</h3>
-        <p class="empty-state-description">
-          ${Utils.escapeHtml(beforeShortcut)}<kbd>⌘K</kbd>${Utils.escapeHtml(afterShortcut)}
-        </p>
-      `;
-      favoritesContainer.parentNode.insertBefore(emptyState, favoritesContainer.nextSibling);
     }
 
     // Reuse the parent page's exact column set (all/passed token list columns).

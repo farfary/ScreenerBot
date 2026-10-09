@@ -305,8 +305,10 @@ export function applyClientPaginationMixin(DataTable) {
     // Generate page buttons
     const pageButtons = this._generateClientPaginationButtons(currentPage, totalPages);
 
+    // A pager with nothing to page stays in place but is not drawn, so the empty
+    // state keeps the whole body and the bar returns where it was once rows arrive.
     return `
-      <div class="dt-client-pagination-bar">
+      <div class="dt-client-pagination-bar"${totalItems === 0 ? " hidden" : ""}>
         <div class="dt-client-pagination-info">
           <span class="dt-client-pagination-range">
             ${I18n.markup("table-pagination-range", { start: formatNumber(startItem, 0), end: formatNumber(endItem, 0), total: formatNumber(totalItems, 0) })}

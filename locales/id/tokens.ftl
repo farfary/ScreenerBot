@@ -356,7 +356,6 @@ tokens-favorites-load-failed-toast = Tidak dapat memuat favorit
 tokens-favorites-total = Total Favorit
 tokens-favorites-empty-title = Belum Ada Favorit
     .message = Beri bintang pada token di daftar mana pun untuk menyimpannya di sini.
-tokens-favorites-empty-description = Gunakan pencarian ({ $shortcut }) untuk menemukan token dan menambahkannya ke favorit Anda.
 
 tokens-column-token = Token
 tokens-column-status = Status

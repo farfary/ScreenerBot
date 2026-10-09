@@ -415,8 +415,6 @@ tokens-favorites-load-failed-toast = تعذّر تحميل المفضلة
 tokens-favorites-total = إجمالي المفضلة
 tokens-favorites-empty-title = لا توجد مفضلة بعد
     .message = ضع نجمة على رمز في أي قائمة لإبقائه هنا.
-# $shortcut is the key combination that opens the search dialog.
-tokens-favorites-empty-description = استخدم البحث ({ $shortcut }) للعثور على الرموز وإضافتها إلى المفضلة.
 
 # Tokens page: OHLCV data view (scripts/pages/tokens/ohlcv.js)
 # Status ids come from /api/ohlcv/tokens; priority ids are Priority::as_str in src/ohlcvs/types.rs.

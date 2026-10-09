@@ -387,7 +387,6 @@ tokens-favorites-load-failed-toast = 즐겨찾기를 불러올 수 없습니다
 tokens-favorites-total = 전체 즐겨찾기
 tokens-favorites-empty-title = 즐겨찾기가 아직 없습니다
     .message = 어느 목록에서든 토큰에 별표를 하면 여기에 보관됩니다.
-tokens-favorites-empty-description = 검색 단축키: { $shortcut }. 토큰을 찾아 즐겨찾기에 추가하세요.
 
 # Tokens page: OHLCV data view (scripts/pages/tokens/ohlcv.js)
 # Status ids come from /api/ohlcv/tokens; priority ids are Priority::as_str in src/ohlcvs/types.rs.

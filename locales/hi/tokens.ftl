@@ -354,7 +354,6 @@ tokens-favorites-load-failed-toast = पसंदीदा लोड नही�
 tokens-favorites-total = कुल पसंदीदा
 tokens-favorites-empty-title = अभी कोई पसंदीदा नहीं
     .message = किसी भी सूची में टोकन को स्टार करें ताकि वह यहाँ बना रहे।
-tokens-favorites-empty-description = टोकन खोजने और उन्हें अपने पसंदीदा में जोड़ने के लिए सर्च ({ $shortcut }) का उपयोग करें।
 
 tokens-column-token = टोकन
 tokens-column-status = स्थिति

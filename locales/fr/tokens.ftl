@@ -356,7 +356,6 @@ tokens-favorites-load-failed-toast = Impossible de charger les favoris
 tokens-favorites-total = Total des favoris
 tokens-favorites-empty-title = Aucun favori pour le moment
     .message = Ajoutez une étoile à un token dans n’importe quelle liste pour le garder ici.
-tokens-favorites-empty-description = Utilisez la recherche ({ $shortcut }) pour trouver des tokens et les ajouter à vos favoris.
 
 tokens-column-token = Token
 tokens-column-status = Statut

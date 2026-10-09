@@ -352,7 +352,6 @@ tokens-favorites-load-failed-toast = Không tải được danh sách yêu thíc
 tokens-favorites-total = Tổng số yêu thích
 tokens-favorites-empty-title = Chưa có mục yêu thích
     .message = Gắn sao cho một token trong bất kỳ danh sách nào để giữ nó tại đây.
-tokens-favorites-empty-description = Dùng tìm kiếm ({ $shortcut }) để tìm token và thêm vào danh sách yêu thích.
 
 tokens-column-token = Token
 tokens-column-status = Trạng thái

@@ -391,7 +391,6 @@ tokens-favorites-load-failed-toast = Não foi possível carregar os favoritos
 tokens-favorites-total = Total de favoritos
 tokens-favorites-empty-title = Nenhum favorito ainda
     .message = Marque um token com estrela em qualquer lista para mantê-lo aqui.
-tokens-favorites-empty-description = Use a busca ({ $shortcut }) para encontrar tokens e adicioná-los aos seus favoritos.
 
 # Tokens page: OHLCV data view (scripts/pages/tokens/ohlcv.js)
 # Status ids come from /api/ohlcv/tokens; priority ids are Priority::as_str in src/ohlcvs/types.rs.

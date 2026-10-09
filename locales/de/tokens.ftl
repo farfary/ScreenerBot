@@ -354,7 +354,6 @@ tokens-favorites-load-failed-toast = Favoriten konnten nicht geladen werden
 tokens-favorites-total = Favoriten gesamt
 tokens-favorites-empty-title = Noch keine Favoriten
     .message = Markiere einen Token in einer beliebigen Liste mit einem Stern, um ihn hier zu behalten.
-tokens-favorites-empty-description = Suchen Sie mit der Suche ({ $shortcut }) nach Tokens und fügen Sie sie Ihren Favoriten hinzu.
 
 tokens-column-token = Token
 tokens-column-status = Status

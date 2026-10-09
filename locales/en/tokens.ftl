@@ -407,8 +407,6 @@ tokens-favorites-load-failed-toast = Could not load favorites
 tokens-favorites-total = Total Favorites
 tokens-favorites-empty-title = No Favorites Yet
     .message = Star a token in any list to keep it here.
-# $shortcut is the key combination that opens the search dialog.
-tokens-favorites-empty-description = Use the search ({ $shortcut }) to find tokens and add them to your favorites.
 
 # Tokens page: OHLCV data view (scripts/pages/tokens/ohlcv.js)
 # Status ids come from /api/ohlcv/tokens; priority ids are Priority::as_str in src/ohlcvs/types.rs.

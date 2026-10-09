@@ -1,6 +1,14 @@
 /* Copyright (c) 2024-2026 ScreenerBot (screenerbot.io)
  * SPDX-License-Identifier: BUSL-1.1 */
 
+/* A pager with nothing to page carries `hidden` (both pagination modules set it when
+   the table has no rows), so the empty state keeps the whole body. The bar's own
+   `display: flex` would otherwise outrank the attribute. */
+.dt-client-pagination-bar[hidden],
+.dt-server-pagination-bar[hidden] {
+  display: none;
+}
+
 /* ==================== Client Pagination Bar ==================== */
 
 .dt-client-pagination-bar {

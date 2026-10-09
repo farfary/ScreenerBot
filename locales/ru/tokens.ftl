@@ -358,7 +358,6 @@ tokens-favorites-load-failed-toast = Не удалось загрузить из
 tokens-favorites-total = Всего в избранном
 tokens-favorites-empty-title = Избранного пока нет
     .message = Отметьте токен звездой в любом списке, чтобы он оставался здесь.
-tokens-favorites-empty-description = Найдите токены через поиск ({ $shortcut }) и добавьте их в избранное.
 
 tokens-column-token = Токен
 tokens-column-status = Статус

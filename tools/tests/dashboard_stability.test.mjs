@@ -12,6 +12,7 @@
  *
  * A page's `views` (in its fixture index) say what must render: tables with rows,
  * charts that draw a canvas, empty-state text, and dialogs that open and close.
+ * An empty table keeps its body, with its message centred and no pager under it.
  * A check carrying a `defect` description documents a dashboard fault that is
  * not fixed yet: it leaves the page's regular tests and runs alone as a todo test.
  *
@@ -347,6 +348,41 @@ async function assertStatesCentred(page, label) {
   assert.deepEqual(offsets, [], `${label}: table state messages off the visible centre`);
 }
 
+/**
+ * An empty table keeps its body: the empty message sits whole and vertically centred
+ * in the table's scroll area, and no pager is drawn under it. A sibling that takes
+ * the table's height, or a "0 of 0" pager, squeezes the body until the message is
+ * clipped or paints below the table.
+ */
+async function assertEmptyTablesKeepBody(page, label) {
+  const found = await page.evaluate(() => {
+    const problems = [];
+    const containers = [...document.querySelectorAll(".data-table-scroll-container")].filter(
+      (container) => container.offsetParent && container.querySelector(".dt-empty-state")
+    );
+    for (const container of containers) {
+      const name = container.closest("[id]")?.id ?? "table";
+      const box = container.getBoundingClientRect();
+      const top = box.top + container.clientTop;
+      const bottom = top + container.clientHeight;
+      const message = container.querySelector(".dt-empty-state").getBoundingClientRect();
+      if (message.top < top - 0.5 || message.bottom > bottom + 0.5) {
+        problems.push(`${name}: message clipped by a ${Math.round(container.clientHeight)}px body`);
+      }
+      const offset = Math.round(message.top + message.height / 2 - (top + bottom) / 2);
+      if (Math.abs(offset) > 4) problems.push(`${name}: message ${offset}px off the body centre`);
+      const pagers = [
+        ...container
+          .closest(".data-table-wrapper")
+          .querySelectorAll(".dt-client-pagination-bar, .dt-server-pagination-bar"),
+      ].filter((bar) => bar.getClientRects().length);
+      if (pagers.length) problems.push(`${name}: a pager is drawn with nothing to page`);
+    }
+    return problems;
+  });
+  assert.deepEqual(found, [], `${label}: empty tables`);
+}
+
 /** Render every view, then check the page does not scroll sideways. */
 async function assertViewsFit(page, views, label, alsoAssert) {
   for (const view of views) {
@@ -500,6 +536,7 @@ describe("dashboard stability", { concurrency: 4 }, () => {
         for (const view of views) {
           await assertEmpty(session.page, view);
           await assertStatesCentred(session.page, `${id} ${view.name}`);
+          await assertEmptyTablesKeepBody(session.page, `${id} ${view.name}`);
         }
         await finish(session);
       });
