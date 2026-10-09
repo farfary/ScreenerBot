@@ -77,7 +77,6 @@ export function renderPoolsTab(token, options = {}) {
     return counts;
   }, {});
   const summaryFacts = [
-    [I18n.t("tokens-pools-total"), count(pools.length)],
     [I18n.t("tokens-pools-liquidity"), Utils.formatCurrencyUSD(totalLiquidity)],
     [I18n.t("tokens-pools-volume-24h"), Utils.formatCurrencyUSD(totalVolume24h)],
     [
@@ -190,7 +189,6 @@ function buildPoolDetail(pool, options = {}) {
         ${renderAddressRow(addressLabels.pool, pool.pool_id, "account")}
         ${renderAddressRow(addressLabels.base, pool.base_mint, "token")}
         ${renderAddressRow(addressLabels.quote, pool.quote_mint, "token")}
-        ${renderAddressRow(addressLabels.paired, pool.paired_mint, "token")}
       </div>
 
       <div class="pool-reserves">
@@ -229,7 +227,6 @@ function poolAddressLabels() {
     pool: I18n.t("tokens-pools-address-pool"),
     base: I18n.t("tokens-pools-address-base"),
     quote: I18n.t("tokens-pools-address-quote"),
-    paired: I18n.t("tokens-pools-address-paired"),
   };
 }
 

@@ -205,7 +205,6 @@ tokens-pools-empty-title = No pools
 tokens-pools-empty-message = No liquidity pools have been detected for this token.
 tokens-pools-unknown = Unknown
 tokens-pools-unknown-dex = Unknown DEX
-tokens-pools-total = Total Pools
 tokens-pools-liquidity = Liquidity
 tokens-pools-volume-24h = 24h Volume
 tokens-pools-base-role = Base Role
@@ -228,7 +227,6 @@ tokens-pools-address-base = Base mint
     .title = Copy base mint
 tokens-pools-address-quote = Quote mint
     .title = Copy quote mint
-tokens-pools-address-paired = Paired mint
     .title = Copy paired mint
 
 # Token details dialog: links tab (ui/token_details/pools_links_tab.js)

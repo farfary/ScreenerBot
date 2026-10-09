@@ -190,7 +190,6 @@ tokens-pools-empty-title = 풀 없음
 tokens-pools-empty-message = 이 토큰에서 감지된 유동성 풀이 없습니다.
 tokens-pools-unknown = 알 수 없음
 tokens-pools-unknown-dex = 알 수 없는 DEX
-tokens-pools-total = 전체 풀
 tokens-pools-liquidity = 유동성
 tokens-pools-volume-24h = 24h 거래량
 tokens-pools-base-role = 기준 역할
@@ -213,7 +212,6 @@ tokens-pools-address-base = 기준 민트
     .title = 기준 민트 복사
 tokens-pools-address-quote = 견적 민트
     .title = 견적 민트 복사
-tokens-pools-address-paired = 페어 민트
     .title = 페어 민트 복사
 
 # Token details dialog: links tab (ui/token_details/pools_links_tab.js)

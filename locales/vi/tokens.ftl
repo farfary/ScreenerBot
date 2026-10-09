@@ -168,7 +168,6 @@ tokens-pools-empty-title = Không có pool
 tokens-pools-empty-message = Không phát hiện pool thanh khoản nào cho token này.
 tokens-pools-unknown = Không rõ
 tokens-pools-unknown-dex = DEX không rõ
-tokens-pools-total = Tổng số pool
 tokens-pools-liquidity = Thanh khoản
 tokens-pools-volume-24h = Khối lượng 24h
 tokens-pools-base-role = Vai trò base
@@ -191,7 +190,6 @@ tokens-pools-address-base = Mint base
     .title = Sao chép mint base
 tokens-pools-address-quote = Mint quote
     .title = Sao chép mint quote
-tokens-pools-address-paired = Mint cặp
     .title = Sao chép mint cặp
 
 tokens-links-empty = Không có website chính thức hoặc liên kết mạng xã hội nào cho token này.

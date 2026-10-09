@@ -213,7 +213,6 @@ tokens-pools-empty-title = لا توجد مجمعات سيولة
 tokens-pools-empty-message = لم يتم اكتشاف مجمعات سيولة لهذا الرمز.
 tokens-pools-unknown = غير معروف
 tokens-pools-unknown-dex = DEX غير معروف
-tokens-pools-total = إجمالي المجمعات
 tokens-pools-liquidity = السيولة
 tokens-pools-volume-24h = حجم التداول (24h)
 tokens-pools-base-role = دور الأساس
@@ -236,7 +235,6 @@ tokens-pools-address-base = إصدار الأساس
     .title = نسخ إصدار الأساس
 tokens-pools-address-quote = إصدار المقابل
     .title = نسخ إصدار المقابل
-tokens-pools-address-paired = الإصدار المقترن
     .title = نسخ الإصدار المقترن
 
 # Token details dialog: links tab (ui/token_details/pools_links_tab.js)

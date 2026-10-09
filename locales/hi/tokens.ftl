@@ -170,7 +170,6 @@ tokens-pools-empty-title = कोई पूल नहीं
 tokens-pools-empty-message = इस टोकन के लिए कोई लिक्विडिटी पूल नहीं मिला।
 tokens-pools-unknown = अज्ञात
 tokens-pools-unknown-dex = अज्ञात DEX
-tokens-pools-total = कुल पूल
 tokens-pools-liquidity = लिक्विडिटी
 tokens-pools-volume-24h = 24h वॉल्यूम
 tokens-pools-base-role = बेस रोल
@@ -193,7 +192,6 @@ tokens-pools-address-base = बेस मिंट
     .title = बेस मिंट कॉपी करें
 tokens-pools-address-quote = कोट मिंट
     .title = कोट मिंट कॉपी करें
-tokens-pools-address-paired = पेयर्ड मिंट
     .title = पेयर्ड मिंट कॉपी करें
 
 tokens-links-empty = इस टोकन के लिए कोई आधिकारिक वेबसाइट या सोशल लिंक उपलब्ध नहीं है।

@@ -205,7 +205,6 @@ tokens-pools-empty-title = بدون استخر
 tokens-pools-empty-message = هیچ استخر نقدینگی‌ای برای این توکن شناسایی نشده است.
 tokens-pools-unknown = نامشخص
 tokens-pools-unknown-dex = DEX نامشخص
-tokens-pools-total = کل استخرها
 tokens-pools-liquidity = نقدینگی
 tokens-pools-volume-24h = حجم 24h
 tokens-pools-base-role = نقش پایه
@@ -228,7 +227,6 @@ tokens-pools-address-base = مینت پایه
     .title = کپی مینت پایه
 tokens-pools-address-quote = مینت مظنه
     .title = کپی مینت مظنه
-tokens-pools-address-paired = مینت جفت
     .title = کپی مینت جفت
 
 # Token details dialog: links tab (ui/token_details/pools_links_tab.js)

@@ -194,7 +194,6 @@ tokens-pools-empty-title = Nenhum pool
 tokens-pools-empty-message = Nenhum pool de liquidez foi detectado para este token.
 tokens-pools-unknown = Desconhecido
 tokens-pools-unknown-dex = DEX desconhecida
-tokens-pools-total = Total de pools
 tokens-pools-liquidity = Liquidez
 tokens-pools-volume-24h = Volume 24h
 tokens-pools-base-role = Papel base
@@ -217,7 +216,6 @@ tokens-pools-address-base = Mint base
     .title = Copiar mint base
 tokens-pools-address-quote = Mint de cotação
     .title = Copiar mint de cotação
-tokens-pools-address-paired = Mint pareado
     .title = Copiar mint pareado
 
 # Token details dialog: links tab (ui/token_details/pools_links_tab.js)

@@ -174,7 +174,6 @@ tokens-pools-empty-title = Немає пулів
 tokens-pools-empty-message = Для цього токена не виявлено пулів ліквідності.
 tokens-pools-unknown = Невідомо
 tokens-pools-unknown-dex = Невідомий DEX
-tokens-pools-total = Усього пулів
 tokens-pools-liquidity = Ліквідність
 tokens-pools-volume-24h = Обсяг за 24 год
 tokens-pools-base-role = Базова роль
@@ -197,7 +196,6 @@ tokens-pools-address-base = Базовий мінт
     .title = Копіювати базовий мінт
 tokens-pools-address-quote = Котирувальний мінт
     .title = Копіювати котирувальний мінт
-tokens-pools-address-paired = Парний мінт
     .title = Копіювати парний мінт
 
 tokens-links-empty = Для цього токена немає офіційного вебсайту чи посилань на соцмережі.

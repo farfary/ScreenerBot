@@ -190,7 +190,6 @@ tokens-pools-empty-title = 无流动性池
 tokens-pools-empty-message = 未检测到此代币的流动性池。
 tokens-pools-unknown = 未知
 tokens-pools-unknown-dex = 未知 DEX
-tokens-pools-total = 流动性池总数
 tokens-pools-liquidity = 流动性
 tokens-pools-volume-24h = 24h 成交量
 tokens-pools-base-role = 基础代币角色
@@ -213,7 +212,6 @@ tokens-pools-address-base = 基础代币铸造地址
     .title = 复制基础代币铸造地址
 tokens-pools-address-quote = 计价代币铸造地址
     .title = 复制计价代币铸造地址
-tokens-pools-address-paired = 配对代币铸造地址
     .title = 复制配对代币铸造地址
 
 # Token details dialog: links tab (ui/token_details/pools_links_tab.js)

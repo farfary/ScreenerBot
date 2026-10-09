@@ -188,7 +188,6 @@ tokens-pools-empty-title = Havuz yok
 tokens-pools-empty-message = Bu token için likidite havuzu tespit edilmedi.
 tokens-pools-unknown = Bilinmiyor
 tokens-pools-unknown-dex = Bilinmeyen DEX
-tokens-pools-total = Toplam Havuz
 tokens-pools-liquidity = Likidite
 tokens-pools-volume-24h = 24sa Hacim
 tokens-pools-base-role = Baz Rolü
@@ -211,7 +210,6 @@ tokens-pools-address-base = Baz mint
     .title = Baz mint'i kopyala
 tokens-pools-address-quote = Kote mint
     .title = Kote mint'i kopyala
-tokens-pools-address-paired = Eşleşen mint
     .title = Eşleşen mint'i kopyala
 
 # Token details dialog: links tab (ui/token_details/pools_links_tab.js)

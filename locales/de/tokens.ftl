@@ -170,7 +170,6 @@ tokens-pools-empty-title = Keine Pools
 tokens-pools-empty-message = Für diesen Token wurden keine Liquiditätspools erkannt.
 tokens-pools-unknown = Unbekannt
 tokens-pools-unknown-dex = Unbekannte DEX
-tokens-pools-total = Pools gesamt
 tokens-pools-liquidity = Liquidität
 tokens-pools-volume-24h = 24-Std.-Volumen
 tokens-pools-base-role = Base-Rolle
@@ -193,7 +192,6 @@ tokens-pools-address-base = Base-Mint
     .title = Base-Mint kopieren
 tokens-pools-address-quote = Quote-Mint
     .title = Quote-Mint kopieren
-tokens-pools-address-paired = Gepaarter Mint
     .title = Gepaarten Mint kopieren
 
 tokens-links-empty = Für diesen Token sind keine offizielle Website und keine Social-Media-Links verfügbar.

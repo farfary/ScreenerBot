@@ -172,7 +172,6 @@ tokens-pools-empty-title = Tidak ada pool
 tokens-pools-empty-message = Tidak ada pool likuiditas yang terdeteksi untuk token ini.
 tokens-pools-unknown = Tidak Diketahui
 tokens-pools-unknown-dex = DEX Tidak Diketahui
-tokens-pools-total = Total Pool
 tokens-pools-liquidity = Likuiditas
 tokens-pools-volume-24h = Volume 24h
 tokens-pools-base-role = Peran Base
@@ -195,7 +194,6 @@ tokens-pools-address-base = Mint base
     .title = Salin mint base
 tokens-pools-address-quote = Mint quote
     .title = Salin mint quote
-tokens-pools-address-paired = Mint pasangan
     .title = Salin mint pasangan
 
 tokens-links-empty = Tidak ada website resmi atau tautan sosial untuk token ini.

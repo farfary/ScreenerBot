@@ -172,7 +172,6 @@ tokens-pools-empty-title = プールなし
 tokens-pools-empty-message = このトークンの流動性プールは検出されていません。
 tokens-pools-unknown = 不明
 tokens-pools-unknown-dex = 不明な DEX
-tokens-pools-total = プール合計
 tokens-pools-liquidity = 流動性
 tokens-pools-volume-24h = 24h 出来高
 tokens-pools-base-role = ベースの役割
@@ -195,7 +194,6 @@ tokens-pools-address-base = ベースミント
     .title = ベースミントをコピー
 tokens-pools-address-quote = クォートミント
     .title = クォートミントをコピー
-tokens-pools-address-paired = ペアのミント
     .title = ペアのミントをコピー
 
 tokens-links-empty = このトークンの公式ウェブサイトやソーシャルのリンクはありません。
