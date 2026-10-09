@@ -13,6 +13,7 @@ import * as Utils from "../core/utils.js";
 import * as AppState from "../core/app_state.js";
 import * as Hints from "../core/hints.js";
 import { enhanceAllSelects } from "../ui/custom_select.js";
+import { HintTrigger } from "../ui/hint_popover.js";
 import { gateControl, renderSetupGate, setupRequired } from "../ui/setup_gate.js";
 
 // Import tool modules
@@ -119,6 +120,16 @@ const TOOL_TITLE_LABELS = Object.freeze({
   "airdrop-checker": "tools-tool-airdrop-checker-title",
   "wallet-generator": "tools-tool-wallet-generator-title",
 });
+/** Hint registry path of each tool that has a help hint. */
+const TOOL_HINT_PATHS = Object.freeze({
+  "wallet-cleanup": "tools.walletCleanup",
+  "burn-tokens": "tools.burnTokens",
+  "wallet-generator": "tools.walletGenerator",
+  "buy-multi-wallets": "tools.multiBuy",
+  "sell-multi-wallets": "tools.multiSell",
+  "wallet-consolidation": "tools.walletConsolidation",
+});
+
 const TOOL_DESCRIPTION_LABELS = Object.freeze({
   "wallet-cleanup": "tools-tool-wallet-cleanup-description",
   "burn-tokens": "tools-tool-burn-tokens-description",
@@ -358,6 +369,7 @@ function selectTool(toolId, { historyMode = "push" } = {}) {
   if (hintFooter) hintFooter.hidden = true;
   if (titleEl) titleEl.textContent = I18n.label(TOOL_TITLE_LABELS, toolId);
   if (descEl) descEl.textContent = I18n.label(TOOL_DESCRIPTION_LABELS, toolId);
+  renderToolHint(toolId);
 
   // Render tool content
   const contentEl = $("#tools-content");
@@ -388,6 +400,16 @@ function selectTool(toolId, { historyMode = "push" } = {}) {
       `#${toolId}`
     );
   }
+}
+
+/** The tool's help hint, the shared trigger beside its title; a tool without one shows none. */
+function renderToolHint(toolId) {
+  const slot = $("#tool-hint");
+  if (!slot) return;
+  const path = TOOL_HINT_PATHS[toolId];
+  const hint = path ? Hints.getHint(path) : null;
+  slot.innerHTML = hint ? HintTrigger.render(hint, path, { size: "md" }) : "";
+  if (hint) HintTrigger.initAll();
 }
 
 function saveToolState(toolId) {
@@ -445,13 +467,6 @@ function createLifecycle() {
         on(nav, "click", toolClickHandler);
       }
 
-      // Set up help button handler
-      const helpBtn = $("#tool-help-btn");
-      if (helpBtn) {
-        helpBtn.dataset.tooltip = I18n.attr("tools-help-button", "aria-label");
-        on(helpBtn, "click", showToolHelp);
-      }
-
       // Load saved state or default
       const savedTool = loadToolState();
       selectTool(savedTool, { historyMode: "replace" });
@@ -505,46 +520,6 @@ function createLifecycle() {
       cleanupTradeWatcher();
     },
   };
-}
-
-/**
- * Show help/documentation for current tool using hint popover
- */
-function showToolHelp() {
-  if (!currentTool) return;
-
-  // Map tool IDs to hint paths
-  const hintPathMap = {
-    "wallet-cleanup": "tools.walletCleanup",
-    "burn-tokens": "tools.burnTokens",
-    "wallet-generator": "tools.walletGenerator",
-    "buy-multi-wallets": "tools.multiBuy",
-    "sell-multi-wallets": "tools.multiSell",
-    "wallet-consolidation": "tools.walletConsolidation",
-  };
-
-  const hintPath = hintPathMap[currentTool];
-  if (!hintPath) {
-    // Fallback for tools without hints yet
-    Utils.showToast(I18n.label(TOOL_DESCRIPTION_LABELS, currentTool), "info");
-    return;
-  }
-
-  const hint = Hints.getHint(hintPath);
-  if (!hint) {
-    Utils.showToast(I18n.t("tools-help-unavailable"), "info");
-    return;
-  }
-
-  // Find or create a trigger element for the popover
-  const helpBtn = $("#tool-help-btn");
-  if (helpBtn) {
-    // Simulate a click on the hint trigger by creating a temporary one
-    import("../ui/hint_popover.js").then(({ HintPopover }) => {
-      const popover = new HintPopover(hint, helpBtn);
-      popover.show();
-    });
-  }
 }
 
 // Register the page

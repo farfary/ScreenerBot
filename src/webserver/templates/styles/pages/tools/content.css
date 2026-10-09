@@ -76,26 +76,6 @@
   gap: var(--spacing-sm);
 }
 
-/* A bare glyph: colour is its only state. */
-.help-btn {
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  width: 36px;
-  height: 36px;
-  padding: 0;
-  border: none;
-  background: none;
-  color: var(--text-secondary);
-  font-size: 1.1rem;
-  cursor: pointer;
-  transition: color var(--transition-fast);
-}
-
-.help-btn:hover {
-  color: var(--primary-color);
-}
-
 /* =============================================================================
    Content Area - Full Width Utilization
    ============================================================================= */
