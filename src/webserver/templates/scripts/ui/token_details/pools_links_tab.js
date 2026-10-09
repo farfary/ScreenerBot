@@ -70,7 +70,6 @@ export function renderPoolsTab(token, options = {}) {
 
   const totalLiquidity = pools.reduce((sum, pool) => sum + (pool.liquidity_usd || 0), 0);
   const totalVolume24h = pools.reduce((sum, pool) => sum + (pool.volume_h24_usd || 0), 0);
-  const canonicalPool = pools.find((pool) => pool.is_canonical);
   const programCounts = pools.reduce((counts, pool) => {
     const program = pool.program || "";
     counts[program] = (counts[program] || 0) + 1;
@@ -88,21 +87,6 @@ export function renderPoolsTab(token, options = {}) {
       count(pools.filter((pool) => pool.token_role === "quote").length),
     ],
   ];
-
-  const canonicalSection = canonicalPool
-    ? `
-      <section class="pools-section">
-        <div class="pools-section-title">
-          <span><i class="icon-star" aria-hidden="true"></i>${esc(I18n.t("tokens-pools-canonical-title"))}</span>
-        </div>
-        <div class="pools-summary-rows">
-          ${renderPoolFact(I18n.t("tokens-pools-dex"), escapeHtml(canonicalPool.program ? venueLabel(canonicalPool.program) : I18n.t("tokens-pools-unknown")))}
-          ${renderPoolFact(I18n.t("tokens-pools-liquidity"), Utils.formatCurrencyUSD(canonicalPool.liquidity_usd))}
-          ${renderPoolFact(I18n.t("tokens-pools-volume-24h"), Utils.formatCurrencyUSD(canonicalPool.volume_h24_usd))}
-        </div>
-      </section>
-    `
-    : "";
 
   return `
     <div class="pools-container">
@@ -140,8 +124,6 @@ export function renderPoolsTab(token, options = {}) {
               .join("")}
           </div>
         </section>
-
-        ${canonicalSection}
       </div>
 
       <div class="pools-right-col">

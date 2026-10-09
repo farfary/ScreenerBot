@@ -155,14 +155,6 @@ function buildHeadlineMetrics(token) {
         <span class="overview-headline-label">${esc(I18n.t("tokens-overview-market-cap"))}</span>
         <span class="overview-headline-value">${token.market_cap ? Utils.formatCompactNumber(token.market_cap, { usd: true }) : token.fdv ? Utils.formatCompactNumber(token.fdv, { usd: true }) : "—"}</span>
       </div>
-      <div class="overview-headline-item">
-        <span class="overview-headline-label">${esc(I18n.t("tokens-overview-liquidity"))}</span>
-        <span class="overview-headline-value">${token.liquidity_usd ? Utils.formatCompactNumber(token.liquidity_usd, { usd: true }) : token.pool_reserves_native ? Utils.formatSol(token.pool_reserves_native, { decimals: 2 }) : "—"}</span>
-      </div>
-      <div class="overview-headline-item">
-        <span class="overview-headline-label">${esc(I18n.t("tokens-overview-volume-24h"))}</span>
-        <span class="overview-headline-value">${token.volume_24h ? Utils.formatCompactNumber(token.volume_24h, { usd: true }) : "—"}</span>
-      </div>
     </div>
   `;
 }

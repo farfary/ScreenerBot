@@ -7,6 +7,11 @@
  * rows (no lone cell beside an empty one), the pool count lives only in the All pools
  * heading, and a pool card never lists one address under two labels.
  *
+ * Market cap, liquidity and 24h volume are shown in the dialog header and in one
+ * section of a tab, never again: Overview names each at most once, and Pools states
+ * liquidity and volume once for the summary and once per pool card (no separate
+ * canonical-pool block repeating its card).
+ *
  * Run with `npm run test:js`.
  */
 
@@ -63,4 +68,43 @@ test("the Pools tab fills its summary grid and repeats no address", async (t) =>
     `${layout.facts} facts leave a lone cell in ${layout.columns} columns`
   );
   assert.deepEqual(layout.repeated, [], "a pool card lists one address under two labels");
+});
+
+test("Overview and Pools state market cap, liquidity and volume once", async (t) => {
+  const context = await browser.newContext({ viewport: { width: 1440, height: 900 } });
+  const api = createApiHandler([tokens, shell], "populated");
+  const host = await serveDashboard(context, { locale: "en", onApi: api.onApi });
+  t.after(async () => {
+    await context.close();
+    await host.close();
+  });
+  const page = await context.newPage();
+  await page.goto(`${host.origin}/tokens`);
+  await page.waitForSelector(READY);
+  await page.click("#tokens-root tr[data-row-id] .ti-row-cell__symbol");
+  const labels = (panel) =>
+    page.$$eval(`.token-details-dialog [data-tab-content="${panel}"] *`, (nodes) =>
+      nodes
+        .filter((node) => node.children.length === 0 && node.getClientRects().length > 0)
+        .map((node) => node.textContent.trim())
+    );
+  const count = (texts, label) => texts.filter((text) => text === label).length;
+
+  await page.waitForSelector(
+    '.token-details-dialog [data-tab-content="overview"] .overview-section'
+  );
+  const overview = await labels("overview");
+  for (const label of ["Market Cap", "Liquidity"]) {
+    assert.ok(
+      count(overview, label) <= 1,
+      `Overview names ${label} ${count(overview, label)} times`
+    );
+  }
+
+  await page.click('.token-details-dialog [data-dialog-tab="pools"]');
+  await page.waitForSelector(".token-details-dialog .pool-detail");
+  const cards = await page.locator(".token-details-dialog .pool-detail").count();
+  const pools = await labels("pools");
+  assert.equal(count(pools, "Liquidity"), cards + 1, "summary plus one per pool card");
+  assert.equal(count(pools, "24h Volume"), cards + 1, "summary plus one per pool card");
 });
