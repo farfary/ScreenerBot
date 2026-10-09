@@ -251,33 +251,37 @@
   color: var(--semantic-success-text);
 }
 
-.position-details-dialog .pdd-trade-btn.is-add:hover:not(:disabled) {
-  border-color: var(--success-color);
-  background: var(--success-alpha-10);
-}
-
 .position-details-dialog .pdd-trade-btn.is-sell {
   color: var(--semantic-warning-text);
-}
-
-.position-details-dialog .pdd-trade-btn.is-sell:hover:not(:disabled) {
-  border-color: var(--warning-color);
-  background: var(--warning-alpha-20);
 }
 
 .position-details-dialog .pdd-trade-btn.is-close {
   color: var(--semantic-error-text);
 }
 
-.position-details-dialog .pdd-trade-btn.is-close:hover:not(:disabled) {
-  border-color: var(--danger);
-  background: var(--danger-alpha-15);
-}
+/* The hover tile belongs to the labelled button only; below 1320px the action is an
+   icon-only control and stays a bare glyph. */
+@media (width > 1320px) {
+  .position-details-dialog .pdd-trade-btn.is-add:hover:not(:disabled) {
+    border-color: var(--success-color);
+    background: var(--success-alpha-10);
+  }
 
-.position-details-dialog .pdd-trade-btn.is-neutral:hover:not(:disabled) {
-  border-color: var(--text-muted);
-  background: var(--bg-card-hover);
-  color: var(--text-primary);
+  .position-details-dialog .pdd-trade-btn.is-sell:hover:not(:disabled) {
+    border-color: var(--warning-color);
+    background: var(--warning-alpha-20);
+  }
+
+  .position-details-dialog .pdd-trade-btn.is-close:hover:not(:disabled) {
+    border-color: var(--danger);
+    background: var(--danger-alpha-15);
+  }
+
+  .position-details-dialog .pdd-trade-btn.is-neutral:hover:not(:disabled) {
+    border-color: var(--text-muted);
+    background: var(--bg-card-hover);
+    color: var(--text-primary);
+  }
 }
 
 /* Status strip ------------------------------------------------------------- */
@@ -394,11 +398,19 @@
 
 /* Responsive --------------------------------------------------------------- */
 
-/* Labels go before the row structure changes: a zoomed desktop keeps one header row. */
+/* Labels go before the row structure changes: a zoomed desktop keeps one header row.
+   Without its label an action is an icon-only control, a bare glyph like the header
+   controls beside it. */
 @media (width <= 1320px) {
   .position-details-dialog .pdd-trade-btn {
     width: 32px;
     padding: 0;
+    border-color: transparent;
+    background: none;
+  }
+
+  .position-details-dialog .pdd-trade-btn.is-neutral:hover:not(:disabled) {
+    color: var(--text-primary);
   }
 
   .position-details-dialog .pdd-trade-btn span {

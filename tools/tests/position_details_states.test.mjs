@@ -14,6 +14,12 @@
  *   replaces it with the position once the request succeeds.
  * - The shared header cluster marks an active favourite by the glyph colour alone:
  *   no background, border, shadow or filter of its own.
+ * - At the narrowest desktop window, where the trade actions lose their labels, each
+ *   action is a bare glyph at rest and on hover.
+ * - The chart's hover card stays inside a chart area shorter than its natural height,
+ *   and the candles drawn are those of the selected timeframe.
+ * - Every value the dialog labels has a label (no raw id reaches the screen), and every
+ *   time on screen is to the minute.
  *
  * Run with `npm run test:js`.
  */
@@ -86,4 +92,97 @@ test("an active favourite is a bare glyph", () => {
       selector
     );
   }
+});
+
+test("the open position dialog at the narrowest desktop window", async (t) => {
+  const browser = await chromium.launch({ headless: true });
+  t.after(() => browser.close());
+  const context = await browser.newContext({ viewport: { width: 1200, height: 700 } });
+  const api = createApiHandler(
+    [await loadIndex("positions"), await loadIndex("shell")],
+    "populated"
+  );
+  const candleTimeframes = [];
+  const host = await serveDashboard(context, {
+    locale: "en",
+    onApi: (request) => {
+      if (/\/ohlcv$/.test(request.url.pathname)) {
+        candleTimeframes.push(request.url.searchParams.get("timeframe"));
+      }
+      return api.onApi(request);
+    },
+  });
+  t.after(() => host.close());
+  const page = await context.newPage();
+  page.setDefaultTimeout(15000);
+  const missingLabels = [];
+  page.on("console", (message) => {
+    if (message.text().includes("[I18n] No label for value")) missingLabels.push(message.text());
+  });
+  await page.goto(`${host.origin}/positions`);
+  await page.waitForSelector("body:not(.initialization-mode) main.content:not([data-loading])");
+  await page.locator(ROW_SYMBOL).first().click();
+  const dialog = page.locator(".position-details-dialog");
+  await dialog.locator(".pdd-act-milestone").first().waitFor();
+  const area = dialog.locator(".advanced-chart-area");
+  await page.waitForFunction(
+    () =>
+      !document.querySelector(".position-details-dialog #pddChartSection.is-empty") &&
+      document.querySelector(".position-details-dialog .advanced-chart-area canvas")
+  );
+
+  // Trade actions without labels are bare glyphs, at rest and on hover.
+  const actions = dialog.locator(".pdd-trade-btn");
+  assert.ok((await actions.count()) > 0, "the open position shows its trade actions");
+  for (let index = 0; index < (await actions.count()); index += 1) {
+    const action = actions.nth(index);
+    for (const phase of ["rest", "hover"]) {
+      if (phase === "hover") await action.hover();
+      const paint = await action.evaluate((element) => {
+        const style = getComputedStyle(element);
+        return {
+          label: getComputedStyle(element.querySelector("span")).display,
+          border: style.borderTopColor,
+          background: style.backgroundColor,
+        };
+      });
+      const name = `${await action.getAttribute("data-trade-action")} at ${phase}`;
+      assert.equal(paint.label, "none", `${name}: the label is hidden at 1200px`);
+      assert.equal(paint.border, "rgba(0, 0, 0, 0)", `${name}: no border`);
+      assert.equal(paint.background, "rgba(0, 0, 0, 0)", `${name}: no background`);
+    }
+  }
+
+  // The hover card stays inside the chart area and names the selected timeframe.
+  const box = await area.boundingBox();
+  await page.mouse.move(box.x + box.width / 2, box.y + box.height * 0.8);
+  const tooltip = dialog.locator(".advanced-chart-tooltip.visible");
+  await tooltip.waitFor();
+  const card = await tooltip.boundingBox();
+  assert.ok(
+    card.y >= box.y && card.y + card.height <= box.y + box.height + 0.5,
+    `the hover card (${card.y}-${card.y + card.height}) stays inside the chart area (${box.y}-${box.y + box.height})`
+  );
+  const selected = await dialog
+    .locator("#pddTimeframes .timeframe-btn.active")
+    .getAttribute("data-tf");
+  assert.equal(
+    (await tooltip.locator(".tooltip-interval").textContent()).trim().toLowerCase(),
+    selected,
+    "the candles drawn are the selected timeframe's"
+  );
+  assert.deepEqual(
+    [...new Set(candleTimeframes)],
+    [selected],
+    "candles are read for the selected timeframe only"
+  );
+
+  // No raw id and no seconds on screen.
+  assert.deepEqual(missingLabels, []);
+  assert.equal(
+    (await dialog.locator(".pdd-act-milestone strong").first().textContent()).trim(),
+    "Position open"
+  );
+  const text = await dialog.evaluate((element) => element.innerText);
+  assert.doesNotMatch(text, /\b\d{1,2}:\d{2}:\d{2}\b/, "times on screen are to the minute");
 });

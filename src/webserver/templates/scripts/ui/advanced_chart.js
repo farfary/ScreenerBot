@@ -868,13 +868,25 @@
     /**
      * Place the card beside the crosshair: flipped to the other side when it
      * would cross the right edge, vertically centred on the cursor, and always
-     * clamped inside the chart area so no edge can clip it.
+     * clamped inside the chart area so no edge can clip it. An area shorter than
+     * the card switches it to the wide layout (two label/value pairs per line);
+     * the layout is re-decided only when the area height changes, so a sweep
+     * across bars does not toggle it.
      */
     _positionTooltip(point) {
       const gap = 16;
       const inset = 8;
       const areaWidth = this.chartArea.clientWidth;
       const areaHeight = this.chartArea.clientHeight;
+      const fits = (cardHeight) => cardHeight <= areaHeight - 2 * inset;
+      const card = this.tooltipEl.classList;
+      if (card.contains("is-wide") && this._tooltipAreaHeight !== areaHeight) {
+        card.remove("is-wide");
+      }
+      if (!card.contains("is-wide") && !fits(this.tooltipEl.offsetHeight)) {
+        card.add("is-wide");
+      }
+      this._tooltipAreaHeight = areaHeight;
       const width = this.tooltipEl.offsetWidth;
       const height = this.tooltipEl.offsetHeight;
 

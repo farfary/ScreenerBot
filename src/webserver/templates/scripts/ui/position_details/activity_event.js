@@ -297,9 +297,11 @@ export function renderActivityCard(event, ctx) {
     ? I18n.label(EVENT_STATE_LABELS, event.state)
     : "";
   const expanded = ctx.expanded.has(activityEventKey(event));
+  // Minutes on the card like every other time in the dialog; the exact second in the title.
   const time = event.timestamp
-    ? Utils.formatTimestamp(event.timestamp)
+    ? Utils.formatTimestamp(event.timestamp, { includeSeconds: false })
     : I18n.t("positions-event-time-unavailable");
+  const exactTime = event.timestamp ? Utils.formatTimestamp(event.timestamp) : time;
   const relative = event.timestamp ? Utils.formatTimeAgo(event.timestamp) : "";
 
   return `
@@ -312,7 +314,7 @@ export function renderActivityCard(event, ctx) {
             ${stateLabel ? `<span class="pdd-act-state is-${event.state}">${esc(stateLabel)}</span>` : ""}
           </span>
           <span class="pdd-act-description">${esc(eventDescription(event, ctx))}</span>
-          <span class="pdd-act-event-time" title="${esc(time)}">${esc(time)}${relative ? ` · ${esc(relative)}` : ""}</span>
+          <span class="pdd-act-event-time" title="${esc(exactTime)}">${esc(time)}${relative ? ` · ${esc(relative)}` : ""}</span>
         </span>
         <span class="pdd-act-event-side">
           ${eventOutcome(event, ctx)}
