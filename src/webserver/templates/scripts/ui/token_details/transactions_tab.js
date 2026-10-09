@@ -261,12 +261,14 @@ export function applyTransactionsTabMixin(DialogClass) {
   };
 }
 
-/** The buy/sell/other colour class, from the shared type discriminant. */
+/**
+ * The buy/sell/other colour class, from the shared type discriminant. A plain swap is
+ * a buy when tokens arrived in the wallet and a sell when they left.
+ */
 function transactionKind(transaction) {
   const kind = typeKind(transaction.transaction_type || transaction.type);
-  const direction = (transaction.direction || "").toLowerCase();
-  if (kind === "buy" || (kind === "swap" && direction === "incoming")) return "buy";
-  if (kind === "sell" || (kind === "swap" && direction === "outgoing")) return "sell";
+  if (kind === "buy" || (kind === "swap" && transaction.direction === "TokensIn")) return "buy";
+  if (kind === "sell" || (kind === "swap" && transaction.direction === "TokensOut")) return "sell";
   return "other";
 }
 
