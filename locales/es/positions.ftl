@@ -44,14 +44,14 @@ positions-column-exit-time = Hora de salida
 positions-column-avg-entry = Entrada prom. ({ -sol })
 positions-column-avg-exit = Salida prom. ({ -sol })
 positions-column-current-price = Actual ({ -sol })
-positions-column-total-invested = Total invertido
-positions-column-proceeds = Ingresos
-positions-column-pnl = P&L
+positions-column-total-invested = Total invertido ({ -sol })
+positions-column-proceeds = Ingresos ({ -sol })
+positions-column-pnl = P&L ({ -sol })
 positions-column-pnl-percent = P&L %
 positions-column-size = Tamaño
 positions-column-dca = DCA
 positions-column-exits = Salidas
-positions-column-unrealized-pnl = P&L no realizado
+positions-column-unrealized-pnl = P&L no realizado ({ -sol })
 positions-column-unrealized-percent = No realizado %
 
 ## Cells

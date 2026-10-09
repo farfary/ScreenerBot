@@ -41,8 +41,8 @@ tokens-transactions-recent-title = المعاملات الأخيرة
 tokens-transactions-shown = المعروض: { $count }
 tokens-transactions-column-time = الوقت
 tokens-transactions-column-type = النوع
-tokens-transactions-column-price = السعر
-tokens-transactions-column-total = الإجمالي
+tokens-transactions-column-price = السعر ({ -sol })
+tokens-transactions-column-total = الإجمالي ({ -sol })
 tokens-transactions-chart-missing = مكتبة المخططات مفقودة
 tokens-transactions-view-solscan = عرض المعاملة على { -solscan }
 

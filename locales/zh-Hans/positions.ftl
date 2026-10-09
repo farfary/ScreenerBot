@@ -44,14 +44,14 @@ positions-column-exit-time = 出场时间
 positions-column-avg-entry = 入场均价（{ -sol }）
 positions-column-avg-exit = 出场均价（{ -sol }）
 positions-column-current-price = 当前（{ -sol }）
-positions-column-total-invested = 总投入
-positions-column-proceeds = 回收金额
-positions-column-pnl = 盈亏
+positions-column-total-invested = 总投入（{ -sol }）
+positions-column-proceeds = 回收金额（{ -sol }）
+positions-column-pnl = 盈亏（{ -sol }）
 positions-column-pnl-percent = 盈亏 %
 positions-column-size = 规模
 positions-column-dca = DCA
 positions-column-exits = 出场
-positions-column-unrealized-pnl = 未实现盈亏
+positions-column-unrealized-pnl = 未实现盈亏（{ -sol }）
 positions-column-unrealized-percent = 未实现 %
 
 ## Cells

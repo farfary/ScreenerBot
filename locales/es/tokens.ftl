@@ -30,8 +30,8 @@ tokens-transactions-recent-title = Transacciones recientes
 tokens-transactions-shown = { $count } mostradas
 tokens-transactions-column-time = Hora
 tokens-transactions-column-type = Tipo
-tokens-transactions-column-price = Precio
-tokens-transactions-column-total = Total
+tokens-transactions-column-price = Precio ({ -sol })
+tokens-transactions-column-total = Total ({ -sol })
 tokens-transactions-chart-missing = Falta la biblioteca de gráficos
 tokens-transactions-view-solscan = Ver transacción en { -solscan }
 

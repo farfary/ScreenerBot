@@ -13,8 +13,9 @@ import {
   priceSol,
   segmented,
   signedPct,
-  signedSol,
+  signedSolCell,
   sol,
+  solCell,
   taskName,
   toneClass,
 } from "./format.js";
@@ -151,11 +152,11 @@ export function createHoldings(page, { rerender, showActivityFor }) {
       .map((holding) => {
         const priced = holding.mark_price_native != null;
         const pnl = priced
-          ? `<span class="${toneClass(holding.unrealized_pnl_native)}">${esc(signedSol(holding.unrealized_pnl_native))}</span><small>${esc(signedPct(holding.unrealized_pnl_pct))}</small>`
+          ? `<span class="${toneClass(holding.unrealized_pnl_native)}">${esc(signedSolCell(holding.unrealized_pnl_native))}</span><small>${esc(signedPct(holding.unrealized_pnl_pct))}</small>`
           : `<span class="copy-warning-text">${esc(I18n.t("copy-holdings-no-pool-price"))}</span>`;
         return `<tr>
           <td>${tokenCell(holding.mint)}</td>
-          <td class="num">${esc(sol(holding.cost_basis_native))}</td>
+          <td class="num">${esc(solCell(holding.cost_basis_native))}</td>
           <td class="num">${esc(price(holding.entry_price_native))}</td>
           <td class="num">${esc(price(holding.mark_price_native))}</td>
           ${relativeCell(holding.peak_price_native, holding.entry_price_native)}
@@ -197,9 +198,9 @@ export function createHoldings(page, { rerender, showActivityFor }) {
       .map(
         (round) => `<tr>
           <td>${tokenCell(round.mint)}</td>
-          <td class="num">${esc(sol(round.invested_native))}</td>
-          <td class="num">${esc(sol(round.proceeds_native))}</td>
-          <td class="num copy-cell-stack"><span class="${toneClass(round.pnl_sol)}">${esc(signedSol(round.pnl_sol))}</span><small>${esc(signedPct(round.pnl_pct))}</small></td>
+          <td class="num">${esc(solCell(round.invested_native))}</td>
+          <td class="num">${esc(solCell(round.proceeds_native))}</td>
+          <td class="num copy-cell-stack"><span class="${toneClass(round.pnl_sol)}">${esc(signedSolCell(round.pnl_sol))}</span><small>${esc(signedPct(round.pnl_pct))}</small></td>
           <td>${esc(exitLabel(round.exit))}</td>
           <td class="num">${esc(duration(round.hold_seconds))}</td>
           <td>${esc(dateTime(round.closed_at))}</td>

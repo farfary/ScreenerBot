@@ -44,14 +44,14 @@ positions-column-exit-time = Час виходу
 positions-column-avg-entry = Сер. вхід ({ -sol })
 positions-column-avg-exit = Сер. вихід ({ -sol })
 positions-column-current-price = Поточна ({ -sol })
-positions-column-total-invested = Усього інвестовано
-positions-column-proceeds = Виручка
-positions-column-pnl = Прибуток/збиток
+positions-column-total-invested = Усього інвестовано ({ -sol })
+positions-column-proceeds = Виручка ({ -sol })
+positions-column-pnl = Прибуток/збиток ({ -sol })
 positions-column-pnl-percent = Прибуток/збиток %
 positions-column-size = Розмір
 positions-column-dca = DCA
 positions-column-exits = Виходи
-positions-column-unrealized-pnl = Нереалізований прибуток/збиток
+positions-column-unrealized-pnl = Нереалізований прибуток/збиток ({ -sol })
 positions-column-unrealized-percent = Нереалізований %
 
 ## Cells

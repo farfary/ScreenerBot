@@ -16,17 +16,20 @@
  * - A dollar column keeps one decimal count: its cells render compact amounts at
  *   fixed fraction digits ("$9.90M" beside "$12.48M"), never the trimmed
  *   free-standing form ("$9.9M").
+ * - A SOL column names its unit once, in the header ("P&L (SOL)"), and its cells
+ *   carry the digits alone.
  *
  * Run with `npm run test:js`.
  */
 
 import test from "node:test";
 import assert from "node:assert/strict";
-import { readFileSync } from "node:fs";
+import { readFileSync, readdirSync } from "node:fs";
 
 import {
   SCRIPTS_ROOT,
   STYLES_ROOT,
+  REPO_ROOT,
   columnBlocks,
   repoPath,
   rulesIn,
@@ -79,6 +82,48 @@ test("a dollar column keeps fixed compact fraction digits", () => {
     /formatCurrencyUSD\([^)]*trim:\s*false/,
     "usdCell keeps fixed fraction digits"
   );
+});
+
+/** Every English catalog message value by id. */
+function englishMessages() {
+  const dir = `${REPO_ROOT}/locales/en`;
+  const messages = new Map();
+  for (const name of readdirSync(dir).filter((file) => file.endsWith(".ftl"))) {
+    for (const match of readFileSync(`${dir}/${name}`, "utf8").matchAll(/^([a-z][\w-]*) = (.*)$/gm))
+      messages.set(match[1], match[2]);
+  }
+  return messages;
+}
+
+// A SOL formatter call that leaves the unit off: `suffix: ""` or `unit: false`.
+const SOL_CALL = /\b(formatSol|formatPnL|formatSignedSol|signedSol|sol)\(([^\n]*)/g;
+const BARE = /suffix:\s*""|unit:\s*false/;
+
+test("a SOL column names its unit in the header and leaves the cells bare", () => {
+  const messages = englishMessages();
+  const found = [];
+  const cellHelpers = new Map();
+  for (const file of consumers) {
+    const source = readFileSync(file, "utf8");
+    for (const helper of source.matchAll(/const (solCell|pnlCell) = \([^)]*\) => ([^\n]*)/g))
+      cellHelpers.set(`${repoPath(file)} ${helper[1]}`, helper[2]);
+    for (const block of columnBlocks(source)) {
+      if (!/\btype:\s*"sol"/.test(block.text)) continue;
+      const where = `${repoPath(file)}:${block.line} ${block.id}`;
+      const key = /label:\s*I18n\.t\("([^"]+)"\)/.exec(block.text)?.[1];
+      if (!key || !/\(\{ -sol \}\)$/.test(messages.get(key) ?? ""))
+        found.push(`${where}: header ${key ?? "(dynamic)"} does not end in "({ -sol })"`);
+      if (/\bwithSolUnit\(/.test(block.text)) found.push(`${where}: withSolUnit in a cell`);
+      for (const call of block.text.matchAll(SOL_CALL)) {
+        if (!BARE.test(call[2])) found.push(`${where}: ${call[1]}() keeps the unit`);
+      }
+    }
+  }
+  for (const [helper, body] of cellHelpers) {
+    if (!BARE.test(body)) found.push(`${helper} keeps the unit`);
+  }
+  assert.ok(cellHelpers.size > 0, "page SOL cell helpers not found");
+  assert.deepEqual(found, []);
 });
 
 test("no DataTable column aligns itself outside its type", () => {

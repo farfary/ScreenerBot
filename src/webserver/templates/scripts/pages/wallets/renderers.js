@@ -84,7 +84,8 @@ export function createWalletRenderers({
       label: I18n.t("wallets-holdings-col-value"),
       type: "sol",
       sortable: true,
-      render: (value) => (value != null ? Utils.formatSol(value, { decimals: 4 }) : "—"),
+      render: (value) =>
+        value != null ? Utils.formatSol(value, { decimals: 4, suffix: "" }) : "—",
     },
     {
       id: "is_token_2022",
@@ -124,7 +125,8 @@ export function createWalletRenderers({
       label: I18n.t("wallets-list-col-balance"),
       type: "sol",
       sortable: true,
-      render: (value) => (value != null ? Utils.formatSol(value, { decimals: 4 }) : "—"),
+      render: (value) =>
+        value != null ? Utils.formatSol(value, { decimals: 4, suffix: "" }) : "—",
     },
     {
       id: "wallet_type",

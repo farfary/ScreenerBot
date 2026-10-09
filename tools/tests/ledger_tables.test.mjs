@@ -109,6 +109,19 @@ async function assertPricesAligned(page, root, first, second) {
   assert.ok(compared > 0, `${first} and ${second} rows share a notation`);
 }
 
+/** Every SOL column names the unit in its header and leaves it off every cell. */
+async function assertSolUnitInHeader(page, root) {
+  const { headers, cells } = await page.$eval(root, (el) => ({
+    headers: [...el.querySelectorAll('thead th[data-type="sol"] .dt-header-label')].map((label) =>
+      label.textContent.replace(/[\u2066-\u2069]/g, "").trim()
+    ),
+    cells: [...el.querySelectorAll('tbody td[data-type="sol"]')].map((td) => td.textContent.trim()),
+  }));
+  assert.ok(headers.length > 0 && cells.length > 0, `${root} renders SOL columns`);
+  for (const header of headers) assert.match(header, /\(SOL\)$/, `header "${header}" names SOL`);
+  for (const cell of cells) assert.doesNotMatch(cell, /SOL/, `cell "${cell}" repeats the unit`);
+}
+
 /** Each badge in the Type, Direction and Status cells ends inside its own cell. */
 function badgeOverflows(page, root) {
   return page.$$eval(`${root} tbody tr[data-row-id]`, (rows) =>
@@ -132,6 +145,7 @@ test("Transactions keeps its columns on screen and states each fact once", async
   await page.waitForSelector(`${root} tbody tr[data-row-id]`);
 
   const columns = await columnsOnScreen(page, root);
+  await assertSolUnitInHeader(page, root);
   assertOnScreen(
     columns,
     columns.filter((column) => column.id !== "signature").map((column) => column.id),
@@ -209,6 +223,7 @@ test("Positions Open and Closed keep P&L on screen under one term", async (t) =>
   await page.waitForSelector(`${root} tbody tr[data-row-id]`);
   const open = await columnsOnScreen(page, root);
   assertOnScreen(open, ["unrealized_pnl", "unrealized_pnl_percent"], "Positions Open");
+  await assertSolUnitInHeader(page, root);
   await assertPricesAligned(page, root, "average_entry_price", "current_price");
 
   await page.click(tab("closed"));
@@ -216,6 +231,7 @@ test("Positions Open and Closed keep P&L on screen under one term", async (t) =>
   await page.waitForSelector(`${root} tbody tr[data-row-id]`);
   const closed = await columnsOnScreen(page, root);
   assertOnScreen(closed, ["pnl", "pnl_percent"], "Positions Closed");
+  await assertSolUnitInHeader(page, root);
   await assertPricesAligned(page, root, "average_entry_price", "average_exit_price");
 
   for (const column of [...open, ...closed]) {
@@ -255,6 +271,7 @@ test("Main Wallet states last use relatively, on one toolbar row, with unpadded 
     tds.map((td) => td.textContent.trim())
   );
   assert.ok(balances.length > 0, "token balances render");
+  await assertSolUnitInHeader(page, root);
   for (const balance of balances) {
     assert.doesNotMatch(balance, /\.\d*0$/, `balance "${balance}" pads no zeros`);
   }
@@ -293,6 +310,7 @@ test("Copy Trading Compare shows each mode whole and names curves as the table d
     "a paused task is in the fixture"
   );
   for (const mode of modes) assert.equal(mode.cut, false, `mode "${mode.text}" is cut`);
+  await assertSolUnitInHeader(page, root);
 
   const names = await page.$$eval(`${root} .ti-named-address-name`, (nodes) =>
     nodes.map((node) => node.textContent.trim())

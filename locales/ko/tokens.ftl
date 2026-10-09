@@ -40,8 +40,8 @@ tokens-transactions-recent-title = 최근 트랜잭션
 tokens-transactions-shown = { $count }개 표시
 tokens-transactions-column-time = 시간
 tokens-transactions-column-type = 유형
-tokens-transactions-column-price = 가격
-tokens-transactions-column-total = 합계
+tokens-transactions-column-price = 가격 ({ -sol })
+tokens-transactions-column-total = 합계 ({ -sol })
 tokens-transactions-chart-missing = 차트 라이브러리 없음
 tokens-transactions-view-solscan = { -solscan }에서 트랜잭션 보기
 

@@ -30,8 +30,8 @@ tokens-transactions-recent-title = Последние транзакции
 tokens-transactions-shown = Показано: { $count }
 tokens-transactions-column-time = Время
 tokens-transactions-column-type = Тип
-tokens-transactions-column-price = Цена
-tokens-transactions-column-total = Итого
+tokens-transactions-column-price = Цена ({ -sol })
+tokens-transactions-column-total = Итого ({ -sol })
 tokens-transactions-chart-missing = Библиотека графиков отсутствует
 tokens-transactions-view-solscan = Открыть транзакцию в { -solscan }
 

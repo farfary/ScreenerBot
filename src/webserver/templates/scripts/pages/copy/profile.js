@@ -10,7 +10,7 @@ import {
   modeLabel,
   pct,
   seconds,
-  signedSol,
+  signedSolCell,
   taskName,
   timeAgo,
   toneClass,
@@ -75,7 +75,7 @@ export function createProfile(page) {
           <td>${esc(task.enabled ? modeLabel(task.mode) : I18n.t("copy-mode-paused", { mode: modeLabel(task.mode) }))}</td>
           <td class="num">${task.rounds}</td>
           <td class="num">${esc(task.rounds ? pct(task.win_rate_pct, 0) : "—")}</td>
-          <td class="num ${toneClass(task.realized_pnl_native)}">${esc(signedSol(task.realized_pnl_native))}</td>
+          <td class="num ${toneClass(task.realized_pnl_native)}">${esc(signedSolCell(task.realized_pnl_native))}</td>
           <td class="num">${esc(seconds(task.arrival_median_ms))}</td>
         </tr>`
       )

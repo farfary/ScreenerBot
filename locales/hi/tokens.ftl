@@ -30,8 +30,8 @@ tokens-transactions-recent-title = हाल के ट्रांज़ैक�
 tokens-transactions-shown = दिखाए गए: { $count }
 tokens-transactions-column-time = समय
 tokens-transactions-column-type = प्रकार
-tokens-transactions-column-price = कीमत
-tokens-transactions-column-total = कुल
+tokens-transactions-column-price = कीमत ({ -sol })
+tokens-transactions-column-total = कुल ({ -sol })
 tokens-transactions-chart-missing = चार्ट लाइब्रेरी उपलब्ध नहीं है
 tokens-transactions-view-solscan = { -solscan } पर ट्रांज़ैक्शन देखें
 

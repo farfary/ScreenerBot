@@ -34,8 +34,8 @@ tokens-transactions-recent-title = 最近のトランザクション
 tokens-transactions-shown = { $count }件を表示
 tokens-transactions-column-time = 時刻
 tokens-transactions-column-type = 種類
-tokens-transactions-column-price = 価格
-tokens-transactions-column-total = 合計
+tokens-transactions-column-price = 価格（{ -sol }）
+tokens-transactions-column-total = 合計（{ -sol }）
 tokens-transactions-chart-missing = チャートライブラリがありません
 tokens-transactions-view-solscan = { -solscan } でトランザクションを表示
 

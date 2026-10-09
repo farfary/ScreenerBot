@@ -44,14 +44,14 @@ positions-column-exit-time = エグジット時刻
 positions-column-avg-entry = 平均エントリー（{ -sol }）
 positions-column-avg-exit = 平均エグジット（{ -sol }）
 positions-column-current-price = 現在（{ -sol }）
-positions-column-total-invested = 総投資額
-positions-column-proceeds = 売却代金
-positions-column-pnl = 損益
+positions-column-total-invested = 総投資額（{ -sol }）
+positions-column-proceeds = 売却代金（{ -sol }）
+positions-column-pnl = 損益（{ -sol }）
 positions-column-pnl-percent = 損益 %
 positions-column-size = サイズ
 positions-column-dca = DCA
 positions-column-exits = エグジット
-positions-column-unrealized-pnl = 含み損益
+positions-column-unrealized-pnl = 含み損益（{ -sol }）
 positions-column-unrealized-percent = 含み損益 %
 
 ## Cells

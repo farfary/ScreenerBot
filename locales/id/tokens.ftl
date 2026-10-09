@@ -34,8 +34,8 @@ tokens-transactions-recent-title = Transaksi terbaru
 tokens-transactions-shown = { $count } ditampilkan
 tokens-transactions-column-time = Waktu
 tokens-transactions-column-type = Jenis
-tokens-transactions-column-price = Harga
-tokens-transactions-column-total = Total
+tokens-transactions-column-price = Harga ({ -sol })
+tokens-transactions-column-total = Total ({ -sol })
 tokens-transactions-chart-missing = Pustaka grafik tidak ditemukan
 tokens-transactions-view-solscan = Lihat transaksi di { -solscan }
 

@@ -41,8 +41,8 @@ tokens-transactions-recent-title = تراکنش‌های اخیر
 tokens-transactions-shown = { $count } مورد نمایش داده شد
 tokens-transactions-column-time = زمان
 tokens-transactions-column-type = نوع
-tokens-transactions-column-price = قیمت
-tokens-transactions-column-total = مجموع
+tokens-transactions-column-price = قیمت ({ -sol })
+tokens-transactions-column-total = مجموع ({ -sol })
 tokens-transactions-chart-missing = کتابخانه نمودار موجود نیست
 tokens-transactions-view-solscan = مشاهده تراکنش در { -solscan }
 

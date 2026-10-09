@@ -8,7 +8,6 @@
  * Handles transaction history display and chart
  */
 import * as Utils from "../../core/utils.js";
-import { withSolUnit } from "../../core/format.js";
 import { requestManager } from "../../core/request_manager.js";
 import { renderTabState } from "./state_handling.js";
 import { typeKind, typeLabel, typeShortLabel } from "../transaction_type.js";
@@ -233,7 +232,7 @@ export function applyTransactionsTabMixin(DialogClass) {
           ? Utils.formatPriceSubscript(tx.price_sol, { trim: false })
           : "—";
         const amount = tx.amount_sol !== undefined ? tx.amount_sol : Math.abs(tx.native_delta || 0);
-        const total = withSolUnit(Utils.formatNumber(amount, { decimals: 2 }));
+        const total = Utils.formatSol(amount, { suffix: "" });
 
         const rowInner = `
           <span class="transaction-time">${this._escapeHtml(timeDisplay)}</span>

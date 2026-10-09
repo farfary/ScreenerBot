@@ -44,14 +44,14 @@ positions-column-exit-time = 청산 시각
 positions-column-avg-entry = 평균 진입가 ({ -sol })
 positions-column-avg-exit = 평균 청산가 ({ -sol })
 positions-column-current-price = 현재가 ({ -sol })
-positions-column-total-invested = 총 투자금
-positions-column-proceeds = 회수금
-positions-column-pnl = 손익
+positions-column-total-invested = 총 투자금 ({ -sol })
+positions-column-proceeds = 회수금 ({ -sol })
+positions-column-pnl = 손익 ({ -sol })
 positions-column-pnl-percent = 손익 %
 positions-column-size = 규모
 positions-column-dca = DCA
 positions-column-exits = 청산
-positions-column-unrealized-pnl = 미실현 손익
+positions-column-unrealized-pnl = 미실현 손익 ({ -sol })
 positions-column-unrealized-percent = 미실현 %
 
 ## Cells

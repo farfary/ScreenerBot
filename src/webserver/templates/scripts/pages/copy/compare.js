@@ -16,7 +16,7 @@ import {
   seconds,
   segmented,
   signedPct,
-  signedSol,
+  signedSolCell,
   taskName,
   toneClass,
 } from "./format.js";
@@ -96,7 +96,7 @@ export function createCompare(page) {
       label: I18n.t("copy-table-realized"),
       type: "sol",
       sortable: true,
-      render: (value) => `<span class="${toneClass(value)}">${esc(signedSol(value))}</span>`,
+      render: (value) => `<span class="${toneClass(value)}">${esc(signedSolCell(value))}</span>`,
     },
     {
       id: "profit_factor",

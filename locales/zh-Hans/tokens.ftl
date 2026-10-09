@@ -40,8 +40,8 @@ tokens-transactions-recent-title = 最近交易
 tokens-transactions-shown = 显示 { $count } 条
 tokens-transactions-column-time = 时间
 tokens-transactions-column-type = 类型
-tokens-transactions-column-price = 价格
-tokens-transactions-column-total = 总额
+tokens-transactions-column-price = 价格（{ -sol }）
+tokens-transactions-column-total = 总额（{ -sol }）
 tokens-transactions-chart-missing = 缺少图表库
 tokens-transactions-view-solscan = 在 { -solscan } 上查看交易
 

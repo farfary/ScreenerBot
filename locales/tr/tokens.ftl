@@ -36,8 +36,8 @@ tokens-transactions-recent-title = Son işlemler
 tokens-transactions-shown = Gösterilen: { $count }
 tokens-transactions-column-time = Zaman
 tokens-transactions-column-type = Tür
-tokens-transactions-column-price = Fiyat
-tokens-transactions-column-total = Toplam
+tokens-transactions-column-price = Fiyat ({ -sol })
+tokens-transactions-column-total = Toplam ({ -sol })
 tokens-transactions-chart-missing = Grafik kitaplığı eksik
 tokens-transactions-view-solscan = İşlemi { -solscan } üzerinde görüntüle
 

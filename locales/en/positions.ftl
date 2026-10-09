@@ -44,14 +44,14 @@ positions-column-exit-time = Exit Time
 positions-column-avg-entry = Avg Entry ({ -sol })
 positions-column-avg-exit = Avg Exit ({ -sol })
 positions-column-current-price = Current ({ -sol })
-positions-column-total-invested = Total Invested
-positions-column-proceeds = Proceeds
-positions-column-pnl = P&L
+positions-column-total-invested = Total Invested ({ -sol })
+positions-column-proceeds = Proceeds ({ -sol })
+positions-column-pnl = P&L ({ -sol })
 positions-column-pnl-percent = P&L %
 positions-column-size = Size
 positions-column-dca = DCA
 positions-column-exits = Exits
-positions-column-unrealized-pnl = Unrealized P&L
+positions-column-unrealized-pnl = Unrealized P&L ({ -sol })
 positions-column-unrealized-percent = Unrealized %
 
 ## Cells

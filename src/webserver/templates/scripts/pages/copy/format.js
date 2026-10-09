@@ -158,6 +158,11 @@ export function sol(value, decimals = 4) {
   return formatSol(value, { decimals, fallback: "—" });
 }
 
+/** A SOL amount in a table cell: the column header names the unit, so the cell does not. */
+export function solCell(value) {
+  return formatSol(value, { decimals: 4, fallback: "—", suffix: "" });
+}
+
 /** Sign glyph of a change: a typographic minus so it aligns with the plus. */
 const changeSign = (number) => (number > 0 ? "+" : number < 0 ? "−" : "");
 
@@ -166,6 +171,11 @@ export const PNL_SOL_DECIMALS = 4;
 
 export function signedSol(value) {
   return formatSignedSol(value, { decimals: PNL_SOL_DECIMALS, fallback: "—" });
+}
+
+/** A signed SOL P&L in a table cell, whose column header names the unit. */
+export function signedSolCell(value) {
+  return formatSignedSol(value, { decimals: PNL_SOL_DECIMALS, fallback: "—", unit: false });
 }
 
 export function signedPct(value, decimals = 1) {

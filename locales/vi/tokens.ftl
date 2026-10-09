@@ -30,8 +30,8 @@ tokens-transactions-recent-title = Giao dịch gần đây
 tokens-transactions-shown = Hiển thị { $count }
 tokens-transactions-column-time = Thời gian
 tokens-transactions-column-type = Loại
-tokens-transactions-column-price = Giá
-tokens-transactions-column-total = Tổng
+tokens-transactions-column-price = Giá ({ -sol })
+tokens-transactions-column-total = Tổng ({ -sol })
 tokens-transactions-chart-missing = Thiếu thư viện biểu đồ
 tokens-transactions-view-solscan = Xem giao dịch trên { -solscan }
 

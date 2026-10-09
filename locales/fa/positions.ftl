@@ -44,14 +44,14 @@ positions-column-exit-time = زمان خروج
 positions-column-avg-entry = میانگین ورود ({ -sol })
 positions-column-avg-exit = میانگین خروج ({ -sol })
 positions-column-current-price = فعلی ({ -sol })
-positions-column-total-invested = کل سرمایه‌گذاری
-positions-column-proceeds = عایدی
-positions-column-pnl = سود و زیان
+positions-column-total-invested = کل سرمایه‌گذاری ({ -sol })
+positions-column-proceeds = عایدی ({ -sol })
+positions-column-pnl = سود و زیان ({ -sol })
 positions-column-pnl-percent = سود و زیان %
 positions-column-size = حجم پوزیشن
 positions-column-dca = DCA
 positions-column-exits = خروج‌ها
-positions-column-unrealized-pnl = سود و زیان تحقق‌نیافته
+positions-column-unrealized-pnl = سود و زیان تحقق‌نیافته ({ -sol })
 positions-column-unrealized-percent = تحقق‌نیافته %
 
 ## Cells

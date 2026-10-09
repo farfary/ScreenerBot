@@ -44,14 +44,14 @@ positions-column-exit-time = وقت الخروج
 positions-column-avg-entry = متوسط الدخول ({ -sol })
 positions-column-avg-exit = متوسط الخروج ({ -sol })
 positions-column-current-price = الحالي ({ -sol })
-positions-column-total-invested = إجمالي الاستثمار
-positions-column-proceeds = العائدات
-positions-column-pnl = الربح والخسارة
+positions-column-total-invested = إجمالي الاستثمار ({ -sol })
+positions-column-proceeds = العائدات ({ -sol })
+positions-column-pnl = الربح والخسارة ({ -sol })
 positions-column-pnl-percent = الربح والخسارة %
 positions-column-size = الحجم
 positions-column-dca = DCA
 positions-column-exits = عمليات الخروج
-positions-column-unrealized-pnl = الربح والخسارة غير المحققة
+positions-column-unrealized-pnl = الربح والخسارة غير المحققة ({ -sol })
 positions-column-unrealized-percent = غير محقق %
 
 ## Cells
