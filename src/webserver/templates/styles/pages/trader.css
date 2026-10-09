@@ -78,7 +78,9 @@
 }
 
 .trader-tab-content > * {
-  animation: trader-tab-fade 0.3s ease-out;
+  --fade-rise: 0;
+
+  animation: fadeIn 0.3s ease-out;
 }
 
 /* Add spacing between sections, but not between action bar and first content */
@@ -88,16 +90,6 @@
 
 .trader-tab-content > * + *:not(.trader-action-bar + *) {
   margin-top: 1rem;
-}
-
-@keyframes trader-tab-fade {
-  from {
-    opacity: 0;
-  }
-
-  to {
-    opacity: 1;
-  }
 }
 
 /* ============================================================================

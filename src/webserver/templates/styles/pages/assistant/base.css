@@ -26,8 +26,10 @@
 }
 
 .assistant-panel-content.active {
+  --fade-rise: 8px;
+
   display: block;
-  animation: assistant-panel-fade 0.3s ease-out;
+  animation: fadeIn 0.3s ease-out;
 }
 
 /* Chat panel fills entire available space */
@@ -40,18 +42,6 @@
 #chat-panel.assistant-panel-content.active {
   display: flex;
   flex-direction: column;
-}
-
-@keyframes assistant-panel-fade {
-  from {
-    opacity: 0;
-    transform: translateY(8px);
-  }
-
-  to {
-    opacity: 1;
-    transform: translateY(0);
-  }
 }
 
 .assistant-panel-header {

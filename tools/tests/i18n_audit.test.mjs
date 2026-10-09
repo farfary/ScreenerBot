@@ -303,6 +303,8 @@ test("css flags a horizontal translation unless it uses --dir-sign, is -50% or i
   assert.equal(count(".a { transform: translateX(0) translateY(4px); }"), 0);
   assert.equal(count(".a { transform: translate(0, -50%); }"), 0);
   assert.equal(count(".a { transform: translateY(4px) rotate(90deg); }"), 0);
+  assert.equal(count(".a { translate: 0 var(--rise); }"), 0);
+  assert.equal(count(".a { translate: none; }"), 0);
   assert.equal(count(".a { /* rtl-ok: JS writes physical offset */ transform: translateX(4px); }"), 0);
   assert.equal(count(".a {\n  /* rtl-ok: JS writes physical offset */\n  transform: translateX(4px);\n}"), 0);
 });

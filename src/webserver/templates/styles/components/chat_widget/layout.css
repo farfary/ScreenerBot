@@ -357,6 +357,8 @@
 
   /* Welcome: shown until the first message */
   .chat-welcome {
+    --fade-rise: 0;
+
     display: flex;
     flex-direction: column;
     align-items: center;
@@ -366,17 +368,7 @@
     color: var(--text-muted);
     gap: var(--spacing-sm);
     padding: var(--spacing-xl);
-    animation: chat-welcome-enter 0.2s ease-out;
-  }
-
-  @keyframes chat-welcome-enter {
-    from {
-      opacity: 0;
-    }
-
-    to {
-      opacity: 1;
-    }
+    animation: fadeIn 0.2s ease-out;
   }
 
   .chat-welcome-kicker {

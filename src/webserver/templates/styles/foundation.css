@@ -818,6 +818,32 @@ select,
   }
 }
 
+/* The motion parameters below are registered as non-inherited, so a surface that sets
+   one for its own animation never changes the motion of an animated descendant. */
+@property --pulse-from {
+  syntax: "<number>";
+  inherits: false;
+  initial-value: 1;
+}
+
+@property --pulse-to {
+  syntax: "<number>";
+  inherits: false;
+  initial-value: 0.6;
+}
+
+@property --fade-from {
+  syntax: "<number>";
+  inherits: false;
+  initial-value: 0;
+}
+
+@property --fade-rise {
+  syntax: "<length>";
+  inherits: false;
+  initial-value: 4px;
+}
+
 /* Pulse animation for attention. A surface sets its own range with --pulse-from
    (rest opacity) and --pulse-to (mid-cycle opacity), and its own duration. */
 .pulse {
@@ -827,11 +853,11 @@ select,
 @keyframes pulse {
   0%,
   100% {
-    opacity: var(--pulse-from, 1);
+    opacity: var(--pulse-from);
   }
 
   50% {
-    opacity: var(--pulse-to, 0.6);
+    opacity: var(--pulse-to);
   }
 }
 
@@ -868,20 +894,23 @@ select,
   }
 }
 
-/* Fade in animation */
+/* Fade in animation. A surface sets its own start opacity with --fade-from and its
+   rise with --fade-rise (0 for a plain fade), and its own duration. The rise uses the
+   translate property, so it composes with the element's own transform and leaves
+   nothing behind once the animation ends. */
 .fade-in {
   animation: fadeIn 0.2s ease-out;
 }
 
 @keyframes fadeIn {
   from {
-    opacity: 0;
-    transform: translateY(4px);
+    opacity: var(--fade-from);
+    translate: 0 var(--fade-rise);
   }
 
   to {
     opacity: 1;
-    transform: translateY(0);
+    translate: none;
   }
 }
 

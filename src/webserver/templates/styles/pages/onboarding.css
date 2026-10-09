@@ -383,20 +383,11 @@
 }
 
 /* Stagger animation for feature cards */
-@keyframes slideFeatureEnter {
-  from {
-    opacity: 0;
-    transform: translateY(12px);
-  }
-
-  to {
-    opacity: 1;
-    transform: translateY(0);
-  }
-}
 
 .slide-feature-enter {
-  animation: slideFeatureEnter 0.4s cubic-bezier(0.4, 0, 0.2, 1) both;
+  --fade-rise: 12px;
+
+  animation: fadeIn 0.4s cubic-bezier(0.4, 0, 0.2, 1) both;
 }
 
 /* Narrow viewports: one feature column, and a footer that stacks its three

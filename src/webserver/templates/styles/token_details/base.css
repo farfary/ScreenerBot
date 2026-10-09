@@ -55,6 +55,8 @@
 
 /* Dialog container - full height by default */
 .token-details-dialog .dialog-container {
+  --fade-rise: 0;
+
   position: relative;
   margin-top: 0;
   margin-bottom: 24px;
@@ -69,18 +71,8 @@
   display: flex;
   flex-direction: column;
   overflow: hidden;
-  animation: dialog-fade-in 0.25s ease-out;
+  animation: fadeIn 0.25s ease-out;
   z-index: 2;
-}
-
-@keyframes dialog-fade-in {
-  0% {
-    opacity: 0;
-  }
-
-  100% {
-    opacity: 1;
-  }
 }
 
 /* =============================================================================

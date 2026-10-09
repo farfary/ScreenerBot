@@ -215,24 +215,14 @@
 
 /* Card Body - scoped to condition-card to avoid conflicts with other pages */
 .condition-card .card-body {
+  --fade-rise: -10px;
+
   padding: 1.25rem;
   background: linear-gradient(to bottom, rgb(0, 0, 0, 0.01), transparent);
   border-end-start-radius: var(--radius-lg);
   border-end-end-radius: var(--radius-lg);
   display: none;
-  animation: slide-down 0.3s ease;
-}
-
-@keyframes slide-down {
-  from {
-    opacity: 0;
-    transform: translateY(-10px);
-  }
-
-  to {
-    opacity: 1;
-    transform: translateY(0);
-  }
+  animation: fadeIn 0.3s ease;
 }
 
 .condition-card.expanded .card-body {

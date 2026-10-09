@@ -704,20 +704,10 @@ body.dt-column-resizing * {
  * options. Used e.g. by the positions page so a pending buy slides in and a
  * just-closed position fades out before moving to the Closed list.
  */
-@keyframes dt-row-enter-kf {
-  from {
-    opacity: 0;
-    transform: translateY(-4px);
-  }
-
-  to {
-    opacity: 1;
-    transform: none;
-  }
-}
-
 .data-table tbody tr.dt-row-enter {
-  animation: dt-row-enter-kf 0.34s ease both;
+  --fade-rise: -4px;
+
+  animation: fadeIn 0.34s ease both;
 }
 
 @keyframes dt-row-leave-kf {
@@ -907,6 +897,8 @@ body.dt-column-resizing * {
  * the DataTable, so only layout/appearance live here.
  */
 .dt-col-menu {
+  --fade-rise: -4px;
+
   position: fixed;
   z-index: var(--z-popover, 1000);
   min-width: 172px;
@@ -915,19 +907,7 @@ body.dt-column-resizing * {
   border: 1px solid var(--border-color);
   border-radius: var(--radius-lg);
   box-shadow: 0 12px 32px rgb(0, 0, 0, 0.28);
-  animation: dt-col-menu-in 0.12s ease;
-}
-
-@keyframes dt-col-menu-in {
-  from {
-    opacity: 0;
-    transform: translateY(-4px);
-  }
-
-  to {
-    opacity: 1;
-    transform: translateY(0);
-  }
+  animation: fadeIn 0.12s ease;
 }
 
 .dt-col-menu-item {

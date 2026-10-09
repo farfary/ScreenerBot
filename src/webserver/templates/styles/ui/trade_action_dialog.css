@@ -4,6 +4,8 @@
 /* Trade Action Dialog - Modern trading modal */
 
 .trade-action-dialog-overlay {
+  --fade-rise: 0;
+
   position: fixed;
   inset: 0;
   display: none;
@@ -13,7 +15,7 @@
   background: rgb(0, 0, 0, 0.6);
   backdrop-filter: blur(8px);
   z-index: var(--z-trade-dialog); /* Above token details dialog */
-  animation: trade-overlay-fade-in 200ms ease;
+  animation: fadeIn 200ms ease;
 }
 
 .trade-action-dialog-overlay.is-visible {
@@ -1046,16 +1048,6 @@ body.trade-action-dialog-open {
 
 /* Animations */
 
-@keyframes trade-overlay-fade-in {
-  from {
-    opacity: 0;
-  }
-
-  to {
-    opacity: 1;
-  }
-}
-
 @keyframes trade-dialog-slide-up {
   from {
     opacity: 0;
@@ -1138,6 +1130,8 @@ body.trade-action-dialog-open {
 
 /* Slippage Warning Dialog */
 .trade-slippage-warning-overlay {
+  --fade-rise: 0;
+
   position: fixed;
   inset: 0;
   display: flex;
@@ -1146,7 +1140,7 @@ body.trade-action-dialog-open {
   background: rgb(0, 0, 0, 0.7);
   backdrop-filter: blur(4px);
   z-index: var(--z-confirmation);
-  animation: trade-overlay-fade-in 150ms ease;
+  animation: fadeIn 150ms ease;
 }
 
 .trade-slippage-warning {

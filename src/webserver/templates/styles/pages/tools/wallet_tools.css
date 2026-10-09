@@ -539,6 +539,8 @@
 
 /* Confirmation Dialog */
 .burn-confirm-overlay {
+  --fade-rise: 0;
+
   position: fixed;
   inset: 0;
   display: flex;
@@ -547,17 +549,19 @@
   background: rgb(0 0 0 / 0.6);
   backdrop-filter: blur(4px);
   z-index: var(--z-dialog);
-  animation: wallet-tools-fade-in 0.15s ease;
+  animation: fadeIn 0.15s ease;
 }
 
 .burn-confirm-dialog {
+  --fade-rise: 20px;
+
   background: var(--bg-card);
   border: 1px solid var(--border-color);
   border-radius: var(--radius-lg);
   box-shadow: 0 20px 40px rgb(0 0 0 / 0.3);
   max-width: 420px;
   width: 90%;
-  animation: slideUp 0.2s ease;
+  animation: fadeIn 0.2s ease;
 }
 
 .burn-confirm-dialog.danger {
@@ -605,26 +609,4 @@
   border-top: 1px solid var(--border-color);
   background: var(--bg-secondary);
   border-radius: 0 0 var(--radius-lg) var(--radius-lg);
-}
-
-@keyframes wallet-tools-fade-in {
-  from {
-    opacity: 0;
-  }
-
-  to {
-    opacity: 1;
-  }
-}
-
-@keyframes slideUp {
-  from {
-    opacity: 0;
-    transform: translateY(20px);
-  }
-
-  to {
-    opacity: 1;
-    transform: translateY(0);
-  }
 }

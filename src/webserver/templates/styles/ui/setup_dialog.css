@@ -4,6 +4,8 @@
 /* Setup Dialog — wallet + RPC credential modal (preview-mode completion) */
 
 .setup-dialog-backdrop {
+  --fade-rise: 0;
+
   position: fixed;
   inset: 0;
   z-index: 10000;
@@ -13,17 +15,7 @@
   padding: 1.5rem;
   background: rgb(0, 0, 0, 0.55);
   backdrop-filter: blur(4px);
-  animation: setup-dialog-fade 0.18s ease;
-}
-
-@keyframes setup-dialog-fade {
-  from {
-    opacity: 0;
-  }
-
-  to {
-    opacity: 1;
-  }
+  animation: fadeIn 0.18s ease;
 }
 
 .setup-dialog {

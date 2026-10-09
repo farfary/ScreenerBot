@@ -83,7 +83,7 @@ function splitArguments(body) {
 
 /** True when a translation X component moves along the physical horizontal axis. */
 function physicalOffset(x) {
-  if (x === undefined || x === "") return false;
+  if (x === undefined || x === "" || x.trim() === "none") return false;
   if (x.includes("--dir-sign")) return false;
   const text = x.replace(/\s+/g, "");
   return text !== "-50%" && !ZERO_LENGTH.test(text);

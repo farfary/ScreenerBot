@@ -431,11 +431,13 @@ if (
 }
 
 /* The shared motions live in foundation.css: `spin` (rotation), `pulse` (an opacity
-   loop whose range a surface sets with --pulse-from/--pulse-to) and `shimmer` (an
-   inline sweep). A surface chooses duration and timing, never its own copy. Every
+   loop whose range a surface sets with --pulse-from/--pulse-to), `shimmer` (an inline
+   sweep) and `fadeIn` (an entrance whose start a surface sets with --fade-from and
+   --fade-rise). A surface chooses duration and timing, never its own copy. Every
    stylesheet ships in one combined sheet, so a keyframe name declared twice is one
    global animation whichever loads last. Every animation names a keyframe some
-   stylesheet declares; an undeclared name renders no motion at all. */
+   stylesheet declares; an undeclared name renders no motion at all. A keyframe that no
+   stylesheet or script names is dead. */
 
 /** The `{ ... }` block opening at `open`, brace-matched. */
 function blockAt(css, open) {
@@ -451,22 +453,59 @@ function blockAt(css, open) {
 function keyframeShape(body) {
   return body
     .replace(/\bfrom\b/g, "0%")
-    .replace(/\bto\b(?=\s*[,{])/g, "100%")
+    .replace(/\bto\b(?=\s*(?:[,{]|$))/g, "100%")
     .replace(/\s+/g, " ")
     .replace(/\s*([{};:,])\s*/g, "$1")
     .trim();
+}
+
+/** Each stop of a keyframe body ("0%", "100%", ...) mapped to its declaration block. */
+function keyframeStops(body) {
+  const frames = new Map();
+  for (const frame of body.matchAll(/([^{}]+)\{([^{}]*)\}/g)) {
+    for (const stop of frame[1].split(",")) frames.set(keyframeShape(stop), frame[2].trim());
+  }
+  return frames;
+}
+
+/** The declarations of one stop's block as a property -> value map. */
+function stopDeclarations(block) {
+  return new Map(
+    block
+      .split(";")
+      .map((declaration) => declaration.split(":").map((part) => part.trim()))
+      .filter(([property, value]) => property && value)
+  );
 }
 
 /** The pulse shape: opacity only, resting at 0% and 100% and turning at 50%. */
 function isPulseShape(body) {
   const declarations = [...body.matchAll(/([\w-]+)\s*:/g)].map((m) => m[1]);
   if (declarations.length === 0 || declarations.some((name) => name !== "opacity")) return false;
-  const frames = new Map();
-  for (const frame of body.matchAll(/([^{}]+)\{([^{}]*)\}/g)) {
-    for (const stop of frame[1].split(",")) frames.set(keyframeShape(stop), frame[2].trim());
-  }
+  const frames = keyframeStops(body);
   const stops = [...frames.keys()].sort().join(" ");
   return stops === "0% 100% 50%" && frames.get("0%") === frames.get("100%");
+}
+
+/** The fade-in shape: from a lower opacity to 1, optionally rising along the block axis. */
+function isFadeInShape(body) {
+  const frames = keyframeStops(body);
+  if ([...frames.keys()].sort().join(" ") !== "0% 100%") return false;
+  const start = stopDeclarations(frames.get("0%"));
+  const end = stopDeclarations(frames.get("100%"));
+  const rise = (value) => value === undefined || /^(translateY\([^)]*\)|0 [^ ]+|none)$/.test(value);
+  const onlyFadeProperties = (declarations) =>
+    [...declarations.keys()].every((property) =>
+      ["opacity", "transform", "translate"].includes(property)
+    );
+  return (
+    onlyFadeProperties(start) &&
+    onlyFadeProperties(end) &&
+    Number(start.get("opacity")) < 1 &&
+    end.get("opacity") === "1" &&
+    rise(start.get("transform") ?? start.get("translate")) &&
+    rise(end.get("transform") ?? end.get("translate"))
+  );
 }
 const animationKeywords = new Set([
   "none",
@@ -507,7 +546,6 @@ for (const file of cssFiles) {
     keyframes.push({ path, where, name, body, shape: keyframeShape(body) });
   }
   for (const match of css.matchAll(/(?<![\w-])animation(?:-name)?\s*:\s*([^;}]+)/g)) {
-    if (/var\(/.test(match[1])) continue;
     const value = match[1].replace(/!important/, "").replace(/[\w-]+\([^)]*\)/g, " ");
     for (const layer of value.split(",")) {
       const names = layer
@@ -544,6 +582,22 @@ for (const { path, where, name, body, shape } of keyframes) {
     errors.push(
       `${where}: @keyframes ${name} repeats the pulse; animate with pulse and set --pulse-from/--pulse-to`
     );
+  } else if (isFadeInShape(body)) {
+    errors.push(
+      `${where}: @keyframes ${name} repeats the fade-in; animate with fadeIn and set --fade-from/--fade-rise`
+    );
+  }
+}
+const animatedNames = new Set(animationUses.map(({ name }) => name));
+const scriptSources = await Promise.all(
+  (await walk(scriptsRoot))
+    .filter((file) => file.endsWith(".js"))
+    .map((file) => readFile(file, "utf8"))
+);
+for (const { where, name } of keyframes) {
+  const named = new RegExp(`(?<![\\w-])${name}(?![\\w-])`);
+  if (!animatedNames.has(name) && !scriptSources.some((source) => named.test(source))) {
+    errors.push(`${where}: @keyframes ${name} is never animated`);
   }
 }
 
