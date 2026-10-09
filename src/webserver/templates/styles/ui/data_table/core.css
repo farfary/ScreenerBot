@@ -11,10 +11,8 @@
 }
 
 /* Animated loading bar on the header's bottom edge (shared by full + subtle modes).
-   This is the single loading line — it lives where the sorted-column primary border
-   sits, so the two read as one cohesive line. A faint primary track tints the whole
-   edge during loading (so the sorted segment blends in) while a brighter gradient
-   sweeps across on top to signal activity. */
+   A faint primary track tints the whole edge during loading while a brighter
+   gradient sweeps across on top to signal activity. */
 .data-table-wrapper.is-loading .data-table thead::after,
 .data-table-wrapper.is-loading-subtle .data-table thead::after {
   content: "";
@@ -297,10 +295,10 @@
   color: var(--text-primary);
 }
 
+/* A sorted column says so with two marks only: the accent label and a small arrow.
+   It keeps the header's own surface and edge, so it weighs no more than its peers. */
 .data-table th.sorted {
-  background: var(--bg-hover);
   color: var(--primary-color);
-  border-bottom-color: var(--primary-color);
 }
 
 /* The sort indicator sits beside its label, on the label's side of the cell: after a
@@ -320,7 +318,8 @@
 }
 
 .dt-sort-icon {
-  font-size: 0.75rem;
+  display: inline-flex;
+  font-size: 0.6875rem;
   opacity: 0.4;
   transition: opacity var(--transition-base);
 }
@@ -865,12 +864,6 @@ body.dt-column-resizing * {
 
 .data-table :is(td, th).dt-col-under * {
   visibility: hidden;
-}
-
-/* The sorted header's highlight and underline would also show in that sliver. */
-.data-table th.dt-col-under {
-  background: var(--bg-secondary);
-  border-bottom-color: var(--border-color);
 }
 
 /* Pinned edge, shown once the table has scrolled horizontally. It starts as the

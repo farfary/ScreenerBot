@@ -149,12 +149,19 @@ import { TableToolbarView } from "./table_toolbar.js";
 
 /** Column types whose header and cells are end-aligned numeric values. */
 export const NUMERIC_COLUMN_TYPES = new Set(["number", "price", "percent", "sol", "currency"]);
+
 import { TableSettingsDialog } from "./table_settings_dialog.js";
 import { applyColumnManagementMixin } from "./data_table/column_management.js";
 import { applyClientPaginationMixin } from "./data_table/client_pagination.js";
 import { applyServerPaginationMixin } from "./data_table/server_pagination.js";
 import { applyEventHandlersMixin } from "./data_table/event_handlers.js";
 import { columnLayoutSignature, reconcileSavedLayout } from "./data_table/layout_state.js";
+
+/** The small arrow beside a sorted column's label; `aria-sort` carries the state. */
+function sortArrow(direction) {
+  const glyph = direction === "asc" ? "icon-arrow-up" : "icon-arrow-down";
+  return `<i class="${glyph}" aria-hidden="true"></i>`;
+}
 
 // Reload reasons that mean "give me the current rows" rather than "the query changed".
 // These coalesce with a load already in flight instead of cancelling it — see
@@ -943,12 +950,15 @@ export class DataTable {
         ${visibleColumns
           .map((col, index) => {
             const isSorted = this.state.sortColumn === col.id;
-            const sortIcon = isSorted ? (this.state.sortDirection === "asc" ? "▲" : "▼") : "";
+            const sortIcon = isSorted ? sortArrow(this.state.sortDirection) : "";
+            const ariaSort = isSorted
+              ? ` aria-sort="${this.state.sortDirection === "asc" ? "ascending" : "descending"}"`
+              : "";
             const sticky = this._stickyCellParts(index, floatingCount);
 
             return `
             <th
-              data-column-id="${col.id}"${this._columnTypeAttr(col)}
+              data-column-id="${col.id}"${this._columnTypeAttr(col)}${ariaSort}
               class="dt-header-column ${col.sortable ? "sortable" : ""} ${isSorted ? "sorted" : ""} ${sticky.classes}${this._underPinClass(col)}"${sticky.attr}
             >
               <div class="dt-header-content">
@@ -2527,7 +2537,7 @@ export class DataTable {
       // Update sort icon text (matches _renderHeader contract)
       const iconEl = th.querySelector(".dt-sort-icon");
       if (iconEl) {
-        iconEl.textContent = isSorted ? (sortDirection === "asc" ? "▲" : "▼") : "";
+        iconEl.innerHTML = isSorted ? sortArrow(sortDirection) : "";
       }
 
       // Update aria-sort attribute

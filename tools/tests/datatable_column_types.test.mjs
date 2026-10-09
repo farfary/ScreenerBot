@@ -180,3 +180,18 @@ test("the sort indicator sits beside its label on the label's side", () => {
   assert.match(endAligned(".dt-header-content")?.body ?? "", /justify-content:\s*flex-end/);
   assert.match(endAligned(".dt-sort-icon")?.body ?? "", /order:\s*-1/);
 });
+
+test("a sorted header is marked by an accent label and a small arrow only", async () => {
+  const offenders = [];
+  for (const file of (await walk(STYLES_ROOT)).filter((path) => path.endsWith(".css"))) {
+    for (const rule of rulesIn(readFileSync(file, "utf8"))) {
+      if (!/th\.sorted\b/.test(rule.selector) || /\.dt-sort-icon/.test(rule.selector)) continue;
+      if (/\b(?:background|border|box-shadow|text-decoration)[\w-]*\s*:/.test(rule.body))
+        offenders.push(`${repoPath(file)}: ${rule.selector}`);
+    }
+  }
+  assert.deepEqual(offenders, [], "sorted headers carry no tint, edge or underline");
+  const table = readFileSync(`${SCRIPTS_ROOT}/ui/data_table.js`, "utf8");
+  assert.doesNotMatch(table, /[▲▼]/, "the sort arrow is the small icon glyph");
+  assert.match(table, /function sortArrow\([^)]*\)[\s\S]*?icon-arrow-up[\s\S]*?icon-arrow-down/);
+});
