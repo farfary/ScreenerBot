@@ -1173,7 +1173,7 @@ function renderTaLiquidityTab() {
                       ${renderAddress(pool.address, { explorer: "account" })}
                     </div>
                   </td>
-                  <td class="liquidity">${Utils.formatSol(pool.liquidity_native, { suffix: "" })}</td>
+                  <td class="liquidity">${Utils.formatSol(pool.liquidity_native, { suffix: "", trim: false })}</td>
                   <td class="status">${pool.is_canonical ? '<span class="canonical-badge" data-l10n-id="tools-analyzer-pool-primary"></span>' : ""}</td>
                 </tr>
               `

@@ -443,14 +443,15 @@ function createLifecycle() {
           label: I18n.t("transactions-col-native-delta"),
           type: "sol",
           minWidth: 110,
-          render: (value) => Utils.formatPnL(value, { fallback: "—", unit: false }),
+          render: (value) => Utils.formatPnL(value, { fallback: "—", unit: false, trim: false }),
         },
         {
           id: "fee_sol",
           label: I18n.t("transactions-col-fees"),
           type: "sol",
           minWidth: 100,
-          render: (value) => Utils.formatSol(value, { decimals: 6, fallback: "—", suffix: "" }),
+          render: (value) =>
+            Utils.formatSol(value, { decimals: 6, fallback: "—", suffix: "", trim: false }),
         },
         {
           id: "token_mint",

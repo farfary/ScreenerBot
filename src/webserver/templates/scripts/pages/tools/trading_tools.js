@@ -462,8 +462,8 @@ async function loadTwActiveWatches() {
               <td>
                 <span class="tw-type-badge ${watch.watch_type}">${Utils.escapeHtml(I18n.label(WATCH_TYPE_LABELS, watch.watch_type))}</span>
               </td>
-              <td class="mono">${watch.trigger_amount_sol ? Utils.formatSol(watch.trigger_amount_sol, { suffix: "" }) : "—"}</td>
-              <td class="mono">${watch.action_amount_sol ? Utils.formatSol(watch.action_amount_sol, { suffix: "" }) : "—"}</td>
+              <td class="mono">${watch.trigger_amount_sol ? Utils.formatSol(watch.trigger_amount_sol, { suffix: "", trim: false }) : "—"}</td>
+              <td class="mono">${watch.action_amount_sol ? Utils.formatSol(watch.action_amount_sol, { suffix: "", trim: false }) : "—"}</td>
               <td class="mono">${formatNumber(watch.trigger_count || 0, 0)}</td>
               <td>
                 <button class="btn-icon danger tw-stop-btn" data-l10n-id="tools-trade-watcher-stop-watch">

@@ -236,8 +236,8 @@ function createLifecycle() {
   const entryPrice = (r) => r.average_entry_price || r.entry_price;
   const exitPrice = (r) => r.average_exit_price ?? r.exit_price;
   // SOL columns name the unit in their header, so the cells carry the digits only.
-  const solCell = (v) => Utils.formatSol(v, { decimals: 4, suffix: "" });
-  const pnlCell = (v) => Utils.formatPnL(v, { decimals: 4, unit: false });
+  const solCell = (v) => Utils.formatSol(v, { decimals: 4, suffix: "", trim: false });
+  const pnlCell = (v) => Utils.formatPnL(v, { decimals: 4, unit: false, trim: false });
   const percentCell = (v) => Utils.formatPercent(v, { style: "pnl", decimals: 2, fallback: "—" });
   const timeCell = (v) => Utils.formatTimeFromSeconds(v, { includeSeconds: false });
 

@@ -447,9 +447,7 @@ export class TransactionDetailsDialog {
 
     const metaFee = this.dialogEl?.querySelector("#metaFee span");
     if (metaFee) {
-      metaFee.textContent = tx.fee_sol
-        ? Utils.formatSol(tx.fee_sol, { decimals: 9, trim: true })
-        : "—";
+      metaFee.textContent = tx.fee_sol ? Utils.formatSol(tx.fee_sol, { decimals: 9 }) : "—";
     }
   }
 
@@ -607,7 +605,7 @@ export class TransactionDetailsDialog {
         <div class="tx-story-heading"><span>${Utils.escapeHtml(I18n.t("transactions-dialog-story-title"))}</span></div>
         <div class="tx-generic-result">
           <i class="${this._getTypeIcon(tx.transaction_type)}"></i>
-          <div><strong>${Utils.escapeHtml(this._getTypeLabel(tx.transaction_type))}</strong><span>${hasNetChange ? `${Utils.escapeHtml(I18n.t("transactions-dialog-net-wallet-change"))} ${Utils.formatPnL(netChange, { decimals: 6, trim: true })}` : Utils.escapeHtml(I18n.t("transactions-dialog-processed"))}</span></div>
+          <div><strong>${Utils.escapeHtml(this._getTypeLabel(tx.transaction_type))}</strong><span>${hasNetChange ? `${Utils.escapeHtml(I18n.t("transactions-dialog-net-wallet-change"))} ${Utils.formatPnL(netChange, { decimals: 6 })}` : Utils.escapeHtml(I18n.t("transactions-dialog-processed"))}</span></div>
         </div>
       </section>`;
   }
@@ -657,9 +655,9 @@ export class TransactionDetailsDialog {
           isSell
             ? I18n.t("transactions-dialog-metric-effective-received")
             : I18n.t("transactions-dialog-metric-effective-spent"),
-          Utils.formatSol(effective, { decimals: 6, trim: true }),
+          Utils.formatSol(effective, { decimals: 6 }),
           "",
-          Utils.formatSol(effective, { decimals: 9, trim: true })
+          Utils.formatSol(effective, { decimals: 9 })
         );
       }
     }
@@ -667,9 +665,9 @@ export class TransactionDetailsDialog {
     if (tx.fee_sol !== null && tx.fee_sol !== undefined) {
       add(
         I18n.t("transactions-dialog-metric-network-fee"),
-        Utils.formatSol(tx.fee_sol, { decimals: 6, trim: true }),
+        Utils.formatSol(tx.fee_sol, { decimals: 6 }),
         "",
-        Utils.formatSol(tx.fee_sol, { decimals: 9, trim: true })
+        Utils.formatSol(tx.fee_sol, { decimals: 9 })
       );
     }
 
@@ -678,7 +676,7 @@ export class TransactionDetailsDialog {
         pnl.estimated_pnl_sol > 0 ? "positive" : pnl.estimated_pnl_sol < 0 ? "negative" : "";
       add(
         I18n.t("transactions-dialog-metric-estimated-pnl"),
-        Utils.formatPnL(pnl.estimated_pnl_sol, { decimals: 6, trim: true }),
+        Utils.formatPnL(pnl.estimated_pnl_sol, { decimals: 6 }),
         tone
       );
     }
@@ -687,7 +685,7 @@ export class TransactionDetailsDialog {
       const change = Number(tx.sol_balance_change);
       add(
         I18n.t("transactions-dialog-metric-net-native-change"),
-        Utils.formatPnL(change, { decimals: 6, trim: true }),
+        Utils.formatPnL(change, { decimals: 6 }),
         change > 0 ? "positive" : change < 0 ? "negative" : ""
       );
     }
@@ -743,7 +741,7 @@ export class TransactionDetailsDialog {
       [
         I18n.t("transactions-dialog-tech-exact-fee"),
         tx.fee_sol !== null && tx.fee_sol !== undefined
-          ? Utils.formatSol(tx.fee_sol, { decimals: 9, trim: true })
+          ? Utils.formatSol(tx.fee_sol, { decimals: 9 })
           : "—",
       ],
       [
@@ -824,11 +822,11 @@ export class TransactionDetailsDialog {
         <div class="balance-summary">
           <div class="summary-item">
             <span class="summary-label">${Utils.escapeHtml(I18n.t("transactions-dialog-balances-net-native"))}</span>
-            <span class="summary-value ${Utils.signedTone(tx.sol_balance_change, 9)}">${renderTokenLogo(SOL_MINT, { size: "xs" })} ${Utils.formatPnL(tx.sol_balance_change, { decimals: 9, trim: true })}</span>
+            <span class="summary-value ${Utils.signedTone(tx.sol_balance_change, 9)}">${renderTokenLogo(SOL_MINT, { size: "xs" })} ${Utils.formatPnL(tx.sol_balance_change, { decimals: 9 })}</span>
           </div>
           <div class="summary-item">
             <span class="summary-label">${Utils.escapeHtml(I18n.t("transactions-dialog-balances-fee"))}</span>
-            <span class="summary-value ${Utils.signedTone(-Math.abs(tx.fee_sol), 9)}">${renderTokenLogo(SOL_MINT, { size: "xs" })} ${Utils.formatSignedSol(-Math.abs(tx.fee_sol), { decimals: 9, minDecimals: 0, sign: "negative" })}</span>
+            <span class="summary-value ${Utils.signedTone(-Math.abs(tx.fee_sol), 9)}">${renderTokenLogo(SOL_MINT, { size: "xs" })} ${Utils.formatSignedSol(-Math.abs(tx.fee_sol), { decimals: 9, sign: "negative" })}</span>
           </div>
         </div>
       </div>
@@ -841,9 +839,9 @@ export class TransactionDetailsDialog {
         (c) => `
       <tr>
         <td class="tx-address-cell">${renderAddress(c.account, { explorer: "account" })}</td>
-        <td class="numeric">${Utils.formatSol(c.pre_balance, { decimals: 9, suffix: "", trim: true })}</td>
-        <td class="numeric">${Utils.formatSol(c.post_balance, { decimals: 9, suffix: "", trim: true })}</td>
-        <td class="numeric ${Utils.signedTone(c.change, 9)}">${Utils.formatSignedSol(c.change, { decimals: 9, minDecimals: 0, unit: false })}</td>
+        <td class="numeric">${Utils.formatSol(c.pre_balance, { decimals: 9, suffix: "" })}</td>
+        <td class="numeric">${Utils.formatSol(c.post_balance, { decimals: 9, suffix: "" })}</td>
+        <td class="numeric ${Utils.signedTone(c.change, 9)}">${Utils.formatSignedSol(c.change, { decimals: 9, unit: false })}</td>
       </tr>
     `
       )
@@ -1104,15 +1102,15 @@ export class TransactionDetailsDialog {
           </div>
           <div class="ata-stat">
             <span class="stat-label">${Utils.escapeHtml(I18n.t("transactions-dialog-ata-rent-spent"))}</span>
-            <span class="stat-value ${Utils.signedTone(-Math.abs(analysis.total_rent_spent || 0), 9)}">${renderTokenLogo(SOL_MINT, { size: "xs" })} ${Utils.formatSignedSol(-Math.abs(analysis.total_rent_spent || 0), { decimals: 9, minDecimals: 0, sign: "negative" })}</span>
+            <span class="stat-value ${Utils.signedTone(-Math.abs(analysis.total_rent_spent || 0), 9)}">${renderTokenLogo(SOL_MINT, { size: "xs" })} ${Utils.formatSignedSol(-Math.abs(analysis.total_rent_spent || 0), { decimals: 9, sign: "negative" })}</span>
           </div>
           <div class="ata-stat">
             <span class="stat-label">${Utils.escapeHtml(I18n.t("transactions-dialog-ata-rent-recovered"))}</span>
-            <span class="stat-value positive">${renderTokenLogo(SOL_MINT, { size: "xs" })} ${Utils.formatSignedSol(analysis.total_rent_recovered || 0, { decimals: 9, minDecimals: 0 })}</span>
+            <span class="stat-value positive">${renderTokenLogo(SOL_MINT, { size: "xs" })} ${Utils.formatSignedSol(analysis.total_rent_recovered || 0, { decimals: 9 })}</span>
           </div>
           <div class="ata-stat highlight">
             <span class="stat-label">${Utils.escapeHtml(I18n.t("transactions-dialog-ata-net-rent"))}</span>
-            <span class="stat-value ${analysis.net_rent_impact >= 0 ? "positive" : "negative"}">${renderTokenLogo(SOL_MINT, { size: "xs" })} ${Utils.formatSignedSol(analysis.net_rent_impact || 0, { decimals: 9, minDecimals: 0 })}</span>
+            <span class="stat-value ${analysis.net_rent_impact >= 0 ? "positive" : "negative"}">${renderTokenLogo(SOL_MINT, { size: "xs" })} ${Utils.formatSignedSol(analysis.net_rent_impact || 0, { decimals: 9 })}</span>
           </div>
         </div>
       </div>
@@ -1128,7 +1126,7 @@ export class TransactionDetailsDialog {
         <td><span class="badge ${op.operation_type === "Creation" ? "info" : "warning"}">${Utils.escapeHtml(I18n.label(ATA_OPERATION_LABELS, op.operation_type))}</span></td>
         <td class="tx-address-cell">${renderAddress(op.account_address, { explorer: "account" })}</td>
         <td class="tx-token-cell">${renderTokenChip(mint, { size: "sm", showMint: true })}</td>
-        <td class="numeric">${Utils.formatSol(op.rent_amount || op.rent_cost_sol || 0, { decimals: 9, suffix: "", trim: true })}</td>
+        <td class="numeric">${Utils.formatSol(op.rent_amount || op.rent_cost_sol || 0, { decimals: 9, suffix: "" })}</td>
         <td>${op.is_wsol ? '<span class="badge secondary">WSOL</span>' : "—"}</td>
       </tr>
     `;

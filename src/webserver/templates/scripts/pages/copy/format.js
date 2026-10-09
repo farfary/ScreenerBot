@@ -160,7 +160,7 @@ export function sol(value, decimals = 4) {
 
 /** A SOL amount in a table cell: the column header names the unit, so the cell does not. */
 export function solCell(value) {
-  return formatSol(value, { decimals: 4, fallback: "—", suffix: "" });
+  return formatSol(value, { decimals: 4, fallback: "—", suffix: "", trim: false });
 }
 
 /** Sign glyph of a change: a typographic minus so it aligns with the plus. */
@@ -175,7 +175,12 @@ export function signedSol(value) {
 
 /** A signed SOL P&L in a table cell, whose column header names the unit. */
 export function signedSolCell(value) {
-  return formatSignedSol(value, { decimals: PNL_SOL_DECIMALS, fallback: "—", unit: false });
+  return formatSignedSol(value, {
+    decimals: PNL_SOL_DECIMALS,
+    minDecimals: PNL_SOL_DECIMALS,
+    fallback: "—",
+    unit: false,
+  });
 }
 
 export function signedPct(value, decimals = 1) {
@@ -198,7 +203,7 @@ export function settingFixed(value) {
 }
 
 export function settingSol(value) {
-  return formatSol(value, { decimals: 4, trim: true, fallback: "—" });
+  return formatSol(value, { decimals: 4, fallback: "—" });
 }
 
 export function settingPct(value) {

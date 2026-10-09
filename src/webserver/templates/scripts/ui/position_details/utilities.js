@@ -67,10 +67,8 @@ export function applyUtilitiesMixin(PositionDetailsDialog) {
       return unit ? withSolUnit(`${prefix}<0.00000001`) : `${prefix}<0.00000001`;
     }
     const decimals = abs === 0 || abs >= 0.01 ? 4 : abs >= 0.0001 ? 6 : 8;
-    // Zeros past the fourth decimal are noise: 0.005000 printed beside 0.0198 in one column.
     return Utils.formatSignedSol(num, {
       decimals,
-      minDecimals: 4,
       unit,
       sign: sign ? "always" : "negative",
     });

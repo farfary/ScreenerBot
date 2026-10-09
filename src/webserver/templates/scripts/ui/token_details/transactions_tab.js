@@ -232,7 +232,7 @@ export function applyTransactionsTabMixin(DialogClass) {
           ? Utils.formatPriceSubscript(tx.price_sol, { trim: false })
           : "—";
         const amount = tx.amount_sol !== undefined ? tx.amount_sol : Math.abs(tx.native_delta || 0);
-        const total = Utils.formatSol(amount, { suffix: "" });
+        const total = Utils.formatSol(amount, { suffix: "", trim: false });
 
         const rowInner = `
           <span class="transaction-time">${this._escapeHtml(timeDisplay)}</span>

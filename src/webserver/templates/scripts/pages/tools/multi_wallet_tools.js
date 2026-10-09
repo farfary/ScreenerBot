@@ -480,7 +480,7 @@ function updateMultiBuyProgress(status) {
       },
       {
         head: I18n.t("tools-multi-buy-column-spent"),
-        cell: (op) => Utils.formatSol(op.amount_sol, { suffix: "" }),
+        cell: (op) => Utils.formatSol(op.amount_sol, { suffix: "", trim: false }),
         mono: true,
       },
       {
@@ -864,7 +864,7 @@ async function handleMultiSellScan() {
               <td><input type="checkbox" class="ms-wallet-check" data-wallet-id="${w.wallet_id}" checked /></td>
               <td>${Utils.escapeHtml(w.wallet_name)}</td>
               <td class="mono">${Utils.formatNumber(w.token_balance)}</td>
-              <td class="mono">${Utils.formatSol(w.sol_balance, { suffix: "" })}</td>
+              <td class="mono">${Utils.formatSol(w.sol_balance, { suffix: "", trim: false })}</td>
               <td>${w.needs_native_topup ? `<span class="warning">${Utils.escapeHtml(I18n.t("format-yes"))}</span>` : `<span class="success">${Utils.escapeHtml(I18n.t("format-no"))}</span>`}</td>
             </tr>
           `
@@ -1066,7 +1066,7 @@ function updateMultiSellProgress(status) {
       },
       {
         head: I18n.t("tools-multi-sell-column-received"),
-        cell: (op) => Utils.formatSol(op.amount_sol, { suffix: "" }),
+        cell: (op) => Utils.formatSol(op.amount_sol, { suffix: "", trim: false }),
         mono: true,
       },
     ]);

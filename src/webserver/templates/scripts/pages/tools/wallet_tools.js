@@ -1261,7 +1261,7 @@ async function loadConsolidationData() {
             <tr data-address="${w.address}" class="${w.sol_balance === 0 && w.token_count === 0 ? "empty-wallet" : ""}">
               <td><input type="checkbox" class="wc-wallet-check" data-address="${w.address}" /></td>
               <td>${renderNamedAddress(w.name, w.address)}</td>
-              <td class="mono">${Utils.formatSol(w.sol_balance, { suffix: "" })}</td>
+              <td class="mono">${Utils.formatSol(w.sol_balance, { suffix: "", trim: false })}</td>
               <td class="mono">${w.token_count}</td>
               <td class="mono">${w.empty_atas}</td>
             </tr>

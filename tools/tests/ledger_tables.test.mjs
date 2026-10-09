@@ -109,17 +109,39 @@ async function assertPricesAligned(page, root, first, second) {
   assert.ok(compared > 0, `${first} and ${second} rows share a notation`);
 }
 
-/** Every SOL column names the unit in its header and leaves it off every cell. */
+/**
+ * Every SOL column names the unit in its header and leaves it off every cell, and
+ * keeps one fixed decimal count down the column, so amounts align on the point.
+ * Free-standing amounts drop padded zeros; a table cell never does.
+ */
 async function assertSolUnitInHeader(page, root) {
   const { headers, cells } = await page.$eval(root, (el) => ({
     headers: [...el.querySelectorAll('thead th[data-type="sol"] .dt-header-label')].map((label) =>
       label.textContent.replace(/[\u2066-\u2069]/g, "").trim()
     ),
-    cells: [...el.querySelectorAll('tbody td[data-type="sol"]')].map((td) => td.textContent.trim()),
+    cells: [...el.querySelectorAll('tbody td[data-type="sol"]')].map((td) => ({
+      column: td.dataset.columnId,
+      text: td.textContent.trim(),
+    })),
   }));
   assert.ok(headers.length > 0 && cells.length > 0, `${root} renders SOL columns`);
   for (const header of headers) assert.match(header, /\(SOL\)$/, `header "${header}" names SOL`);
-  for (const cell of cells) assert.doesNotMatch(cell, /SOL/, `cell "${cell}" repeats the unit`);
+  const decimals = new Map();
+  for (const { column, text } of cells) {
+    assert.doesNotMatch(text, /SOL/, `cell "${text}" repeats the unit`);
+    const digits = text.match(/\d(?:\.(\d+))?$/);
+    if (!digits) continue;
+    const count = digits[1]?.length ?? 0;
+    assert.equal(
+      decimals.get(column) ?? count,
+      count,
+      `${root} ${column} "${text}" keeps the column's decimals`
+    );
+    decimals.set(column, count);
+  }
+  for (const [column, count] of decimals) {
+    assert.ok(count > 0, `${root} ${column} keeps fixed decimals`);
+  }
 }
 
 /** Each badge in the Type, Direction and Status cells ends inside its own cell. */

@@ -59,10 +59,10 @@ test("a trade with no router yet still reports its step", () => {
 
 test("a refused route says which venue is being avoided and what it would have cost", () => {
   const live = action({ steps: [guardStep] });
-  assert.equal(costGuardNote(live), "avoiding HumidiFi · 0.0130 SOL");
+  assert.equal(costGuardNote(live), "avoiding HumidiFi · 0.013 SOL");
   assert.equal(
     stepMessage(live),
-    "Executing Swap via Jupiter · avoiding HumidiFi · 0.0130 SOL · 3/4"
+    "Executing Swap via Jupiter · avoiding HumidiFi · 0.013 SOL · 3/4"
   );
 });
 
@@ -71,13 +71,13 @@ test("the most recent refusal is the one shown", () => {
   const second = { metadata: { cost_guard: { venue: "VenueB", extra_lamports: 2_000_000 } } };
   assert.deepEqual(costGuardOf(action({ steps: [first, second] })), {
     venue: "VenueB",
-    sol: "0.0020 SOL",
+    sol: "0.002 SOL",
   });
 });
 
 test("a venue with no name still reports the cost, and a cost of zero is not reported", () => {
   const unnamed = { metadata: { cost_guard: { extra_lamports: 13045440 } } };
-  assert.equal(costGuardNote(action({ steps: [unnamed] })), "avoiding a venue · 0.0130 SOL");
+  assert.equal(costGuardNote(action({ steps: [unnamed] })), "avoiding a venue · 0.013 SOL");
 
   const zero = { metadata: { cost_guard: { venue: "HumidiFi", extra_lamports: 0 } } };
   assert.deepEqual(costGuardOf(action({ steps: [zero] })), { venue: "HumidiFi", sol: "" });
@@ -104,7 +104,7 @@ test("a finished trade reports its size, its router and anything it avoided", ()
   };
   assert.equal(
     outcomeMessage(done),
-    "0.005 SOL via Jupiter · avoided 0.0130 SOL in HumidiFi rent"
+    "0.005 SOL via Jupiter · avoided 0.013 SOL in HumidiFi rent"
   );
 
   const exit = { steps: [routerStep], metadata: { percentage: 100 } };

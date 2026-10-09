@@ -213,7 +213,7 @@ test("UiText arguments use the formatters", () => {
       /[\u2068\u2069]/g,
       ""
     );
-  assert.equal(render("sol", 1.5), "1.5000 SOL SOL");
+  assert.equal(render("sol", 1.5), "1.5 SOL SOL");
   assert.equal(render("usd", 1234.5), "$1.23K SOL");
   assert.equal(render("percent", 12.345), "12.35% SOL");
   assert.equal(render("time", FIXTURE.now), "Jun 15, 2025, 03:06:40 PM SOL");
@@ -275,7 +275,13 @@ test("surface formatter options: trimmed fixed text, extra decimals, zero sign a
   assert.equal(fmt.formatSol(0.05, { decimals: 4, trim: true }), "0.05 SOL");
   assert.equal(fmt.formatSol(2, { decimals: 4, trim: true }), "2 SOL");
   assert.equal(fmt.formatSol(0.00004, { decimals: 4, trim: true }), "0 SOL");
-  assert.equal(fmt.formatSol(0.05, { decimals: 4 }), "0.0500 SOL");
+  // A free-standing amount drops padded zeros; a table cell keeps its column's fixed count.
+  assert.equal(fmt.formatSol(0.05), "0.05 SOL");
+  assert.equal(fmt.formatSol(0.05, { decimals: 4, trim: false }), "0.0500 SOL");
+  assert.equal(fmt.formatSignedSol(0.25), "+0.25 SOL");
+  assert.equal(fmt.formatSignedSol(0.25, { minDecimals: 4, unit: false }), "+0.2500");
+  assert.match(fmt.formatPnL(-1.5), />-1\.5 SOL</);
+  assert.match(fmt.formatPnL(-1.5, { trim: false, unit: false }), />-1\.5000</);
   assert.equal(
     fmt.formatPercentValue(2, { decimals: 0, signZero: true, includeSign: true }),
     "+2%"

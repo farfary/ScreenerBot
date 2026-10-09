@@ -538,8 +538,11 @@ export function formatPercent(value, { style = "plain", decimals = 2, fallback =
   return text;
 }
 
-/** A SOL amount at `decimals`; `trim` drops trailing fraction zeros ("0.050" -> "0.05"). */
-export function formatSol(amount, { decimals = 4, fallback = HYPHEN, suffix, trim = false } = {}) {
+/**
+ * A SOL amount at up to `decimals`, without padded fraction zeros ("0.050" -> "0.05").
+ * A table cell passes `trim: false` so a column keeps one fixed decimal count.
+ */
+export function formatSol(amount, { decimals = 4, fallback = HYPHEN, suffix, trim = true } = {}) {
   const num = coerceNumber(amount);
   if (!Number.isFinite(num)) {
     return fallback;
@@ -625,12 +628,13 @@ export function countTone(value, tone) {
  * (`signPrefix`), attached to the digits before the unit, so it stays at the number's
  * start in right-to-left text. The sign follows the rounded digits: a value that rounds
  * to zero shows none. `sign`: "always" signs both directions, "negative" only losses.
- * `minDecimals` drops trailing fraction zeros down to that count ("0.005000" -> "0.005").
- * `unit: false` returns the signed digits alone.
+ * Trailing fraction zeros are dropped ("0.005000" -> "0.005"); a table cell passes
+ * `minDecimals: decimals` to keep the column's fixed count. `unit: false` returns the
+ * signed digits alone.
  */
 export function formatSignedSol(
   amount,
-  { decimals = 4, minDecimals = decimals, fallback = HYPHEN, unit: withUnit = true, sign = "always" } = {}
+  { decimals = 4, minDecimals = 0, fallback = HYPHEN, unit: withUnit = true, sign = "always" } = {}
 ) {
   const num = coerceNumber(amount);
   if (!Number.isFinite(num)) {
@@ -658,12 +662,13 @@ export function formatSignedNumber(
 }
 
 /**
- * A signed SOL amount in its tone span; `trim` drops trailing fraction zeros.
- * `unit: false` leaves the SOL term off, for a column whose header names the unit.
+ * A signed SOL amount in its tone span, without padded fraction zeros; a table cell
+ * passes `trim: false` to keep the column's fixed decimals. `unit: false` leaves the
+ * SOL term off, for a column whose header names the unit.
  */
 export function formatPnL(
   value,
-  { decimals = 4, fallback = HYPHEN, trim = false, unit = true } = {}
+  { decimals = 4, fallback = HYPHEN, trim = true, unit = true } = {}
 ) {
   const num = coerceNumber(value);
   if (!Number.isFinite(num)) {
