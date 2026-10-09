@@ -16,13 +16,16 @@ export const DIRECTION_LABELS = Object.freeze({
   Unknown: "transactions-direction-unknown",
 });
 
-const DIRECTION_STYLES = {
-  Incoming: { variant: "success", glyph: "↓ " },
-  Outgoing: { variant: "error", glyph: "↑ " },
-  Internal: { variant: "secondary", glyph: "⟲ " },
+// A direction is a neutral fact about the wallet, not an outcome: every direction
+// shares the neutral badge and differs only by its glyph, so a normal buy (SOL out)
+// never reads as an error beside its status.
+const DIRECTION_GLYPHS = {
+  Incoming: "↓ ",
+  Outgoing: "↑ ",
+  Internal: "⟲ ",
   // Only rows written before the wallet-relative direction landed can still be
   // Unknown; the reclassification sweep clears them.
-  Unknown: { variant: "secondary", glyph: "" },
+  Unknown: "",
 };
 
 export function directionLabel(direction) {
@@ -32,7 +35,6 @@ export function directionLabel(direction) {
 /** Badge markup for a direction; `empty` is returned when there is none. */
 export function directionBadge(direction, empty = "") {
   if (!direction) return empty;
-  const style = DIRECTION_STYLES[direction];
-  if (!style) return escapeHtml(direction);
-  return `<span class="badge ${style.variant}">${style.glyph}${escapeHtml(directionLabel(direction))}</span>`;
+  if (!Object.hasOwn(DIRECTION_GLYPHS, direction)) return escapeHtml(direction);
+  return `<span class="badge secondary">${DIRECTION_GLYPHS[direction]}${escapeHtml(directionLabel(direction))}</span>`;
 }

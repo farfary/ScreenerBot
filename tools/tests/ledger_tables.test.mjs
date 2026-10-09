@@ -15,7 +15,8 @@
  *
  * - Transactions: every column but the signature is on screen, the Time cell is one
  *   line, a failed row's Type is absent, Δ SOL carries no padded decimals and the
- *   toolbar has no separate estimate count.
+ *   toolbar has no separate estimate count. Direction is a neutral badge in every row,
+ *   so a normal buy never shows a red "Outgoing" beside a green status.
  * - Positions Open and Closed: both P&L columns are on screen and headed "P&L", and
  *   the two prices of a row show the same digits.
  * - A position origin tag is set apart from the name as an uppercase caption.
@@ -128,6 +129,7 @@ test("Transactions keeps its columns on screen and states each fact once", async
         type: cell("transaction_type").textContent.trim(),
         status: cell("status").textContent.trim(),
         delta: cell("native_delta").textContent.trim(),
+        direction: cell("direction").querySelector(".badge")?.className ?? null,
       };
     })
   );
@@ -135,6 +137,7 @@ test("Transactions keeps its columns on screen and states each fact once", async
   for (const cell of cells) {
     assert.equal(cell.timeWrap, "nowrap", "the Time cell never wraps");
     assert.doesNotMatch(cell.delta, /\d\.\d{5,}/, `Δ SOL "${cell.delta}" pads no decimals`);
+    assert.equal(cell.direction, "badge secondary", "Direction is a neutral badge");
     if (/failed/i.test(cell.status)) {
       assert.equal(cell.type, "—", "a failed row leaves its Type to the Status column");
     }
