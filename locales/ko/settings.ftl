@@ -44,11 +44,6 @@ settings-startup-auto-start-hint = 실행 시 트레이더를 자동으로 시�
 settings-startup-coming-soon = 출시 예정
 settings-startup-default-page-label = 기본 페이지
 settings-startup-default-page-hint = 앱을 열 때 표시할 페이지
-settings-startup-page-dashboard = 대시보드
-settings-startup-page-tokens = 토큰
-settings-startup-page-positions = 포지션
-settings-startup-page-wallet = 지갑
-settings-startup-page-config = 설정
 settings-startup-notifications-label = 백그라운드 알림 표시
 settings-startup-notifications-hint = 백그라운드 이벤트 알림을 표시합니다
 

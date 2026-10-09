@@ -54,7 +54,7 @@ use asset_serving::*;
 
 pub fn create_router(state: Arc<AppState>) -> Router {
     Router::new()
-        .route("/", get(home_page))
+        .route("/", get(startup_page))
         .route("/home", get(home_page))
         .route("/login", get(login_page))
         .route("/services", get(services_page))
@@ -86,6 +86,25 @@ pub fn create_router(state: Arc<AppState>) -> Router {
         .route("/assets/solana/{file}", get(get_solana_asset))
         .nest("/api", api_routes())
         .with_state(state)
+}
+
+/// Root handler: the configured startup page, rendered in place so the dashboard
+/// opens on it. Before setup completes the root stays Home, the page the
+/// initialization flow starts from.
+async fn startup_page(headers: HeaderMap) -> Html<String> {
+    let page = configured_startup_page();
+    let content = page_content(&page).unwrap_or_else(templates::home_content);
+    let locale = crate::i18n::resolve_request_locale(&headers);
+    Html(templates::base_template(&page, &content, &locale))
+}
+
+fn configured_startup_page() -> String {
+    let dashboard_ready = crate::config::is_config_initialized()
+        && (crate::global::is_initialization_complete() || crate::global::is_explore_mode());
+    if !dashboard_ready {
+        return crate::config::schemas::STARTUP_PAGE_HOME.to_owned();
+    }
+    crate::config::with_config(|cfg| cfg.gui.dashboard.startup_page().to_owned())
 }
 
 /// Home page handler
@@ -238,9 +257,9 @@ fn api_routes() -> Router<Arc<AppState>> {
         .route("/pages/{page}", get(get_page_content))
 }
 
-/// SPA page content handler - returns just the content HTML (not full template)
-async fn get_page_content(AxumPath(page): AxumPath<String>, headers: HeaderMap) -> Html<String> {
-    let content = match page.as_str() {
+/// Content markup of a routable dashboard page, by page id.
+fn page_content(page: &str) -> Option<String> {
+    let content = match page {
         "home" => templates::home_content(),
         "tokens" => templates::tokens_content(),
         "positions" => templates::positions_content(),
@@ -254,7 +273,16 @@ async fn get_page_content(AxumPath(page): AxumPath<String>, headers: HeaderMap) 
         "config" => templates::config_content(),
         "trader" => templates::trader_content(),
         "assistant" => templates::assistant_content(),
-        _ => {
+        _ => return None,
+    };
+    Some(content)
+}
+
+/// SPA page content handler - returns just the content HTML (not full template)
+async fn get_page_content(AxumPath(page): AxumPath<String>, headers: HeaderMap) -> Html<String> {
+    let content = match page_content(&page) {
+        Some(content) => content,
+        None => {
             // Escape page name to prevent XSS
             let escaped_page = page
                 .replace('<', "&lt;")

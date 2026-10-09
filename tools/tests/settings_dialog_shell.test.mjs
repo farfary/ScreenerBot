@@ -23,6 +23,7 @@
  *   scroll, each row's glyph bare, with the switch as the only visibility control and
  *   no note asking for a page refresh (saving rebuilds the navigation bar).
  * - A field's status badge sits on its title's line, not stacked under the hint.
+ * - Startup > Default Page offers exactly the navigation tabs, under their names.
  * - The Data section sets both stored paths at one start edge inside their cards, and
  *   every button and input in it stands at one height.
  * - A disabled Security action states in its row what it waits for.
@@ -246,6 +247,24 @@ test("Startup badges sit on their title line and Data controls share one frame",
       })
   );
   assert.ok(badges.length > 0 && badges.every(Boolean), "each badge shares its title's line");
+
+  // Default Page offers the visible navigation tabs under their navigation names, in
+  // navigation order; a saved id that is no tab (the fixture's "dashboard") selects
+  // Home, the page the server opens on.
+  const startupPages = await page.evaluate(() => ({
+    nav: [...document.querySelectorAll("nav .tab[data-page]")].map((tab) => ({
+      value: tab.dataset.page,
+      label: tab.textContent.trim(),
+    })),
+    options: [...document.querySelectorAll("#settingDefaultPage option")].map((option) => ({
+      value: option.value,
+      label: option.textContent.trim(),
+    })),
+    selected: document.querySelector("#settingDefaultPage").value,
+  }));
+  assert.ok(startupPages.nav.length > 8, "the fixture shows the navigation bar");
+  assert.deepEqual(startupPages.options, startupPages.nav);
+  assert.equal(startupPages.selected, "home");
 
   await page.locator('.settings-nav-item[data-tab="data"]').click();
   await page.waitForFunction(

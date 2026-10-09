@@ -44,11 +44,6 @@ settings-startup-auto-start-hint = 启动应用时自动启动交易引擎
 settings-startup-coming-soon = 即将推出
 settings-startup-default-page-label = 默认页面
 settings-startup-default-page-hint = 打开应用时显示的页面
-settings-startup-page-dashboard = 仪表盘
-settings-startup-page-tokens = 代币
-settings-startup-page-positions = 仓位
-settings-startup-page-wallet = 钱包
-settings-startup-page-config = 配置
 settings-startup-notifications-label = 显示后台通知
 settings-startup-notifications-hint = 为后台事件显示通知
 

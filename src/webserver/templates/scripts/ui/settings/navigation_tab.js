@@ -28,8 +28,25 @@ async function fetchDefaultTabs() {
 }
 
 /** Display name of a navigation tab, from its id. */
-function tabLabel(id) {
+export function tabLabel(id) {
   return I18n.t("nav-" + id); // l10n-dynamic: nav-
+}
+
+/**
+ * The Default Page choices: every visible navigation tab, in navigation order and
+ * under its navigation name. A saved page that is hidden or unknown selects Home,
+ * the page the server opens on in that case (`DashboardConfig::startup_page`).
+ */
+export function startupPageOptions(tabs, selected) {
+  const visible = (tabs || []).filter((tab) => tab.enabled).sort((a, b) => a.order - b.order);
+  const pages = visible.some((tab) => tab.id === "home") ? visible : [{ id: "home" }, ...visible];
+  const current = pages.some((tab) => tab.id === selected) ? selected : "home";
+  return pages
+    .map(
+      (tab) =>
+        `<option value="${Utils.escapeHtml(tab.id)}"${tab.id === current ? " selected" : ""}>${Utils.escapeHtml(tabLabel(tab.id))}</option>`
+    )
+    .join("");
 }
 
 /** Markup of the tab rows, sorted by their configured order. */

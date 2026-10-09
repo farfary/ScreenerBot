@@ -36,6 +36,28 @@ config_struct! {
     }
 }
 
+/// The page the dashboard opens on when no other startup page applies.
+pub const STARTUP_PAGE_HOME: &str = "home";
+
+impl DashboardConfig {
+    /// The page the dashboard opens on at `/`: the configured default page while it is
+    /// a visible navigation tab, otherwise Home, so a hidden or unknown page id never
+    /// opens a page the navigation does not show.
+    pub fn startup_page(&self) -> &str {
+        let page = self.startup.default_page.as_str();
+        let visible = self
+            .navigation
+            .tabs
+            .iter()
+            .any(|tab| tab.enabled && tab.id == page);
+        if visible {
+            page
+        } else {
+            STARTUP_PAGE_HOME
+        }
+    }
+}
+
 config_struct! {
     /// Lockscreen security settings
     pub struct LockscreenConfig {
@@ -106,8 +128,8 @@ config_struct! {
         /// Auto-start trader on application launch (disabled - for future use)
         auto_start_trader: bool = false,
 
-        /// Default page to show on startup
-        default_page: String = "dashboard".to_owned(),
+        /// Page id the dashboard opens on at `/` (a navigation tab id, e.g. "tokens")
+        default_page: String = STARTUP_PAGE_HOME.to_owned(),
 
         /// Show notifications for background events
         show_background_notifications: bool = true,
@@ -315,7 +337,10 @@ pub fn ensure_all_tabs_present(mut tabs: Vec<TabConfig>) -> Vec<TabConfig> {
 
 #[cfg(test)]
 mod tests {
-    use super::{ensure_all_tabs_present, NavigationConfig, StartupConfig, TabConfig};
+    use super::{
+        ensure_all_tabs_present, DashboardConfig, NavigationConfig, StartupConfig, TabConfig,
+        STARTUP_PAGE_HOME,
+    };
 
     fn tab(id: &str, order: u32, enabled: bool) -> TabConfig {
         TabConfig {
@@ -405,6 +430,37 @@ mod tests {
         let migrated =
             ensure_all_tabs_present(vec![tab("ai", 1, true), tab("assistant", 5, false)]);
         assert_eq!(migrated.iter().filter(|t| t.id == "assistant").count(), 1);
+    }
+
+    fn dashboard_opening_on(default_page: &str) -> DashboardConfig {
+        let mut dashboard = DashboardConfig::default();
+        dashboard.startup.default_page = default_page.to_owned();
+        dashboard
+    }
+
+    #[test]
+    fn startup_page_opens_a_visible_navigation_tab() {
+        assert_eq!(DashboardConfig::default().startup_page(), STARTUP_PAGE_HOME);
+        for tab in super::default_tabs() {
+            assert_eq!(dashboard_opening_on(&tab.id).startup_page(), tab.id);
+        }
+    }
+
+    #[test]
+    fn startup_page_falls_back_to_home_for_a_hidden_or_unknown_page() {
+        let mut hidden = dashboard_opening_on("tokens");
+        for tab in &mut hidden.navigation.tabs {
+            if tab.id == "tokens" {
+                tab.enabled = false;
+            }
+        }
+        assert_eq!(hidden.startup_page(), STARTUP_PAGE_HOME);
+        for unknown in ["dashboard", "wallet", "", "login", "initialization"] {
+            assert_eq!(
+                dashboard_opening_on(unknown).startup_page(),
+                STARTUP_PAGE_HOME
+            );
+        }
     }
 
     #[test]

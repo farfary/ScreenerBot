@@ -31,7 +31,12 @@ import {
   loadAgentConnectionsTab,
   teardownAgentConnectionsTab,
 } from "./settings/agent_connections_tab.js";
-import { buildNavigationTab, attachNavigationHandlers } from "./settings/navigation_tab.js";
+import {
+  buildNavigationTab,
+  attachNavigationHandlers,
+  startupPageOptions,
+  tabLabel,
+} from "./settings/navigation_tab.js";
 import { buildLicensesTab, attachLicensesHandlers } from "./settings/licenses_tab.js";
 import { loadTelegramTab } from "./settings/telegram_tab.js";
 import {
@@ -260,7 +265,7 @@ export class SettingsDialog {
         },
         startup: {
           auto_start_trader: false,
-          default_page: "dashboard",
+          default_page: "home",
           show_background_notifications: true,
         },
         navigation: {
@@ -405,7 +410,7 @@ export class SettingsDialog {
     const tabsHTML = enabledTabs
       .map((tab) => {
         const activeClass = tab.id === currentPage ? " active" : "";
-        return `<a href="#" data-page="${tab.id}" class="tab${activeClass}"><i class="${tab.icon}"></i> <span>${I18n.t("nav-" + tab.id)}</span></a>`; // l10n-dynamic: nav-
+        return `<a href="#" data-page="${tab.id}" class="tab${activeClass}"><i class="${tab.icon}"></i> <span>${Utils.escapeHtml(tabLabel(tab.id))}</span></a>`;
       })
       .join("\n        ");
 
@@ -734,11 +739,7 @@ export class SettingsDialog {
             </div>
             <div class="settings-field-control">
               <select id="settingDefaultPage" class="settings-select" data-custom-select>
-                <option value="dashboard" ${startup.default_page === "dashboard" || !startup.default_page ? "selected" : ""}>${Utils.escapeHtml(I18n.t("settings-startup-page-dashboard"))}</option>
-                <option value="tokens" ${startup.default_page === "tokens" ? "selected" : ""}>${Utils.escapeHtml(I18n.t("settings-startup-page-tokens"))}</option>
-                <option value="positions" ${startup.default_page === "positions" ? "selected" : ""}>${Utils.escapeHtml(I18n.t("settings-startup-page-positions"))}</option>
-                <option value="wallet" ${startup.default_page === "wallet" ? "selected" : ""}>${Utils.escapeHtml(I18n.t("settings-startup-page-wallet"))}</option>
-                <option value="config" ${startup.default_page === "config" ? "selected" : ""}>${Utils.escapeHtml(I18n.t("settings-startup-page-config"))}</option>
+                ${startupPageOptions(this.settings?.dashboard?.navigation?.tabs, startup.default_page)}
               </select>
             </div>
           </div>

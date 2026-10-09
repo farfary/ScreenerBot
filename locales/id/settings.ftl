@@ -44,11 +44,6 @@ settings-startup-auto-start-hint = Jalankan trader otomatis saat aplikasi dibuka
 settings-startup-coming-soon = Segera Hadir
 settings-startup-default-page-label = Halaman Default
 settings-startup-default-page-hint = Halaman yang ditampilkan saat membuka aplikasi
-settings-startup-page-dashboard = Dasbor
-settings-startup-page-tokens = Token
-settings-startup-page-positions = Posisi
-settings-startup-page-wallet = Dompet
-settings-startup-page-config = Konfigurasi
 settings-startup-notifications-label = Tampilkan Notifikasi Latar Belakang
 settings-startup-notifications-hint = Tampilkan notifikasi untuk peristiwa di latar belakang
 

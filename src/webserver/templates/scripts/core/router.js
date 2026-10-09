@@ -502,20 +502,17 @@ export function initRouter() {
     });
   }
 
-  // Detect initial page with priority: URL → server-rendered active tab → stored preference → home
+  // Detect initial page with priority: URL → server-rendered active tab → stored
+  // preference → home. `/` is server-rendered as the configured startup page
+  // (Settings > Startup > Default Page), so the active tab already carries it.
   const pathPage = getPageFromPath();
   const serverActiveTab = document.querySelector("nav .tab.active")?.getAttribute("data-page");
   const storedPage = AppState.load("lastTab", null);
   const isStoredPageValid = storedPage
     ? Boolean(document.querySelector(`nav .tab[data-page="${storedPage}"]`))
     : false;
-  const isElectron = Boolean(window.electronAPI?.isElectron);
   const initialPage =
-    pathPage ||
-    (isElectron && isStoredPageValid ? storedPage : null) ||
-    serverActiveTab ||
-    (isStoredPageValid ? storedPage : null) ||
-    "home";
+    pathPage || serverActiveTab || (isStoredPageValid ? storedPage : null) || "home";
 
   _state.currentPage = initialPage;
   setActiveTab(initialPage);
@@ -529,8 +526,8 @@ export function initRouter() {
     `.page-container[data-page="${initialPage}"]`
   );
   if (mainContent && serverActiveTab && serverActiveTab !== initialPage) {
-    // `/` is server-rendered as Home. Electron may restore another persisted
-    // page, so never relabel Home's markup as that page; fetch the real partial.
+    // The URL names another page than the server rendered; never relabel the
+    // rendered markup as that page, fetch the real partial.
     mainContent.replaceChildren();
     loadPage(initialPage, { historyMode: "replace" });
   } else if (existingContainer) {

@@ -38,11 +38,6 @@ settings-startup-auto-start-hint = Tự động bật Trader khi mở ứng dụ
 settings-startup-coming-soon = Sắp ra mắt
 settings-startup-default-page-label = Trang mặc định
 settings-startup-default-page-hint = Trang hiển thị khi mở ứng dụng
-settings-startup-page-dashboard = Bảng điều khiển
-settings-startup-page-tokens = Token
-settings-startup-page-positions = Vị thế
-settings-startup-page-wallet = Ví
-settings-startup-page-config = Cấu hình
 settings-startup-notifications-label = Hiện thông báo nền
 settings-startup-notifications-hint = Hiển thị thông báo cho các sự kiện chạy nền
 

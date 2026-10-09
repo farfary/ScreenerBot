@@ -54,11 +54,6 @@ settings-startup-auto-start-hint = تشغيل المتداول الآلي تلق
 settings-startup-coming-soon = قريبًا
 settings-startup-default-page-label = الصفحة الافتراضية
 settings-startup-default-page-hint = الصفحة التي تظهر عند فتح التطبيق
-settings-startup-page-dashboard = لوحة التحكم
-settings-startup-page-tokens = الرموز
-settings-startup-page-positions = المراكز
-settings-startup-page-wallet = المحفظة
-settings-startup-page-config = الإعدادات
 settings-startup-notifications-label = إظهار إشعارات الخلفية
 settings-startup-notifications-hint = عرض إشعارات لأحداث الخلفية
 

@@ -46,11 +46,6 @@ settings-startup-auto-start-hint = معامله‌گر خودکار هنگام �
 settings-startup-coming-soon = به‌زودی
 settings-startup-default-page-label = صفحه پیش‌فرض
 settings-startup-default-page-hint = صفحه‌ای که هنگام باز کردن برنامه نمایش داده می‌شود
-settings-startup-page-dashboard = داشبورد
-settings-startup-page-tokens = توکن‌ها
-settings-startup-page-positions = پوزیشن‌ها
-settings-startup-page-wallet = کیف پول
-settings-startup-page-config = پیکربندی
 settings-startup-notifications-label = نمایش اعلان‌های پس‌زمینه
 settings-startup-notifications-hint = نمایش اعلان برای رویدادهای پس‌زمینه
 

@@ -44,11 +44,6 @@ settings-startup-auto-start-hint = 起動時にトレーダーを自動的に開
 settings-startup-coming-soon = 近日公開
 settings-startup-default-page-label = デフォルトのページ
 settings-startup-default-page-hint = アプリを開いたときに表示するページ
-settings-startup-page-dashboard = ダッシュボード
-settings-startup-page-tokens = トークン
-settings-startup-page-positions = ポジション
-settings-startup-page-wallet = ウォレット
-settings-startup-page-config = 設定
 settings-startup-notifications-label = バックグラウンド通知を表示
 settings-startup-notifications-hint = バックグラウンドのイベントを通知します
 

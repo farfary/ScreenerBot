@@ -48,11 +48,6 @@ settings-startup-auto-start-hint = Automatically start trader on launch
 settings-startup-coming-soon = Coming Soon
 settings-startup-default-page-label = Default Page
 settings-startup-default-page-hint = Page to show when opening the app
-settings-startup-page-dashboard = Dashboard
-settings-startup-page-tokens = Tokens
-settings-startup-page-positions = Positions
-settings-startup-page-wallet = Wallet
-settings-startup-page-config = Config
 settings-startup-notifications-label = Show Background Notifications
 settings-startup-notifications-hint = Display notifications for background events
 

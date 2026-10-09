@@ -46,11 +46,6 @@ settings-startup-auto-start-hint = Uygulama açıldığında trader'ı otomatik 
 settings-startup-coming-soon = Yakında
 settings-startup-default-page-label = Varsayılan Sayfa
 settings-startup-default-page-hint = Uygulama açıldığında gösterilecek sayfa
-settings-startup-page-dashboard = Panel
-settings-startup-page-tokens = Tokenlar
-settings-startup-page-positions = Pozisyonlar
-settings-startup-page-wallet = Cüzdan
-settings-startup-page-config = Yapılandırma
 settings-startup-notifications-label = Arka Plan Bildirimlerini Göster
 settings-startup-notifications-hint = Arka plandaki olaylar için bildirim göster
 

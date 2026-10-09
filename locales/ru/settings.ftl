@@ -50,11 +50,6 @@ settings-startup-auto-start-hint = Автоматически запускать
 settings-startup-coming-soon = Скоро
 settings-startup-default-page-label = Страница по умолчанию
 settings-startup-default-page-hint = Страница, которая открывается при запуске приложения
-settings-startup-page-dashboard = Дашборд
-settings-startup-page-tokens = Токены
-settings-startup-page-positions = Позиции
-settings-startup-page-wallet = Кошелёк
-settings-startup-page-config = Конфигурация
 settings-startup-notifications-label = Показывать фоновые уведомления
 settings-startup-notifications-hint = Отображать уведомления о фоновых событиях
 

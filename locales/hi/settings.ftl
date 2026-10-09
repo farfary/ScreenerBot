@@ -42,11 +42,6 @@ settings-startup-auto-start-hint = लॉन्च होते ही ट्र
 settings-startup-coming-soon = जल्द आ रहा है
 settings-startup-default-page-label = डिफ़ॉल्ट पेज
 settings-startup-default-page-hint = ऐप खोलने पर दिखने वाला पेज
-settings-startup-page-dashboard = डैशबोर्ड
-settings-startup-page-tokens = टोकन
-settings-startup-page-positions = पोज़िशन
-settings-startup-page-wallet = वॉलेट
-settings-startup-page-config = कॉन्फ़िग
 settings-startup-notifications-label = बैकग्राउंड नोटिफ़िकेशन दिखाएँ
 settings-startup-notifications-hint = बैकग्राउंड इवेंट के नोटिफ़िकेशन दिखाएँ
 
