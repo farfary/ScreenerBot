@@ -17,6 +17,8 @@
  *   line, a failed row's Type is absent, Δ SOL carries no padded decimals and the
  *   toolbar has no separate estimate count. Direction is a neutral badge in every row
  *   that names what moved, so a buy reads "Tokens in" beside its negative Δ SOL.
+ *   In every locale each badge fits its cell, and every column but the signature is
+ *   on screen apart from the locales still listed as too wide.
  * - Positions Open and Closed: both P&L columns are on screen and headed "P&L", and
  *   the two prices of a row show the same digits.
  * - A position origin tag is set apart from the name as an uppercase caption.
@@ -30,6 +32,8 @@
 
 import test, { after } from "node:test";
 import assert from "node:assert/strict";
+
+import { readdirSync, statSync } from "node:fs";
 
 import { chromium } from "playwright";
 
@@ -230,14 +234,39 @@ test("Transactions keeps its columns on screen and states each fact once", async
   assert.ok(!summary.includes("tx-estimate"), "no separate estimate count");
 });
 
-test("Transactions never paints a label under the next column in a long locale", async (t) => {
-  const page = await openPage(t, "transactions", "de");
-  const root = "#transactions-root";
-  await page.waitForSelector(`${root} tbody tr[data-row-id]`);
-  // Each label column is at least as wide as its widest badge; when the columns
-  // need more than the screen, the table scrolls instead of overlapping.
-  assert.deepEqual(await badgeOverflows(page, root), [], "every badge fits its cell");
-});
+// Locales whose Transactions labels still push a column past the 1200px window; their
+// labels are next to shorten. The list only shrinks.
+const TRANSACTIONS_WIDE_LOCALES = new Set(["es", "fr", "pt-BR", "ru", "tr", "uk"]);
+const LOCALES_ROOT = new URL("../../locales/", import.meta.url).pathname;
+const LOCALES = readdirSync(LOCALES_ROOT).filter((name) =>
+  statSync(`${LOCALES_ROOT}${name}`).isDirectory()
+);
+
+for (const locale of LOCALES) {
+  test(`Transactions fits its labels and columns at 1200px (${locale})`, async (t) => {
+    const page = await openPage(t, "transactions", locale);
+    const root = "#transactions-root";
+    await page.waitForSelector(`${root} tbody tr[data-row-id]`);
+    // Each label column is at least as wide as its widest badge; when the columns
+    // need more than the screen, the table scrolls instead of overlapping.
+    assert.deepEqual(await badgeOverflows(page, root), [], "every badge fits its cell");
+    if (TRANSACTIONS_WIDE_LOCALES.has(locale)) return;
+    const offScreen = await page.$eval(root, (el) => {
+      const viewport = el.querySelector(".data-table-scroll-container").getBoundingClientRect();
+      const rtl = getComputedStyle(el).direction === "rtl";
+      return [...el.querySelectorAll("thead th[data-column-id]")]
+        .filter((th) => th.offsetParent !== null && th.dataset.columnId !== "signature")
+        .filter((th) => {
+          const box = th.getBoundingClientRect();
+          return rtl
+            ? Math.round(box.left) < Math.round(viewport.left)
+            : Math.round(box.right) > Math.round(viewport.right);
+        })
+        .map((th) => th.dataset.columnId);
+    });
+    assert.deepEqual(offScreen, [], "every column but the signature is on screen");
+  });
+}
 
 test("Positions Open and Closed keep P&L on screen under one term", async (t) => {
   const page = await openPage(t, "positions");
