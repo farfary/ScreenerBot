@@ -291,6 +291,10 @@ class ContextMenuManager {
         this._buildExplorerMenu(items, context);
         break;
 
+      case "column-order":
+        this._buildColumnOrderMenu(items, context);
+        break;
+
       case "link":
         this._buildLinkMenu(items, context);
         break;

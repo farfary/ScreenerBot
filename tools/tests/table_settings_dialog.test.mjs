@@ -8,6 +8,10 @@
  * second gutter, inset from the Visibility and Ordering cards and the column list
  * around it, and the dialog drew its own undersized close glyph.
  *
+ * Each column row carries a drag handle, a bare pin glyph and one menu holding the
+ * four moves, instead of five boxed buttons; the menu disables the moves the row's
+ * position rules out, and a pinned column is listed under "Pinned".
+ *
  * Run with `npm run test:js`.
  */
 
@@ -60,3 +64,66 @@ for (const locale of ["en", "fa"]) {
     assert.equal(layout.close, "modal-close");
   });
 }
+
+test("a column row has a drag handle, a pin and one move menu", async (t) => {
+  const context = await browser.newContext({ viewport: { width: 1440, height: 900 } });
+  const api = createApiHandler([tokens, shell], "populated");
+  const host = await serveDashboard(context, { locale: "en", onApi: api.onApi });
+  t.after(async () => {
+    await context.close();
+    await host.close();
+  });
+  const page = await context.newPage();
+  await page.goto(`${host.origin}/tokens`);
+  await page.waitForSelector(READY);
+  await page.click("#tokens-root .dt-btn-columns");
+  await page.waitForSelector(".table-settings-dialog .table-settings-column-item");
+
+  const rows = await page.$$eval(".table-settings-dialog .table-settings-column-item", (items) =>
+    items.map((item) => ({
+      handles: item.querySelectorAll(".table-settings-drag-handle").length,
+      buttons: [...item.querySelectorAll("button")].map((button) => button.dataset.role),
+      bare: [...item.querySelectorAll("button")].every((button) =>
+        button.classList.contains("btn-icon")
+      ),
+    }))
+  );
+  for (const row of rows) {
+    assert.equal(row.handles, 1);
+    assert.deepEqual(row.buttons, ["floating-toggle", "order-menu"]);
+    assert.ok(row.bare, "row controls are bare icon buttons");
+  }
+
+  const UNPINNED = ".table-settings-dialog .table-settings-column-item:not(.is-pinned)";
+  const order = () => page.$$eval(UNPINNED, (items) => items.map((item) => item.dataset.columnId));
+  const before = await order();
+  const first = page.locator(UNPINNED).first();
+  await first.locator('[data-role="order-menu"]').click();
+  await page.waitForSelector(".context-menu.visible");
+  const entries = await page.$$eval(".context-menu.visible .context-menu-item", (items) =>
+    items.map((item) => ({
+      label: item.textContent.trim(),
+      disabled: item.classList.contains("disabled"),
+    }))
+  );
+  assert.deepEqual(entries, [
+    { label: "Move to top", disabled: true },
+    { label: "Move up", disabled: true },
+    { label: "Move down", disabled: false },
+    { label: "Move to bottom", disabled: false },
+  ]);
+  await page.click('.context-menu.visible .context-menu-item:has-text("Move down")');
+  await page.waitForFunction(
+    ([selector, id]) => document.querySelector(selector)?.dataset.columnId !== id,
+    [UNPINNED, before[0]]
+  );
+  const after = await order();
+  assert.deepEqual(after.slice(0, 2), [before[1], before[0]], "Move down swaps the first two");
+  assert.ok(await page.locator(".table-settings-dialog").isVisible(), "the dialog stays open");
+
+  await page.locator(UNPINNED).nth(2).locator('[data-role="floating-toggle"]').click();
+  const heading = await page
+    .locator(".table-settings-dialog .table-settings-group-heading")
+    .first();
+  assert.equal((await heading.textContent()).trim(), "Pinned");
+});

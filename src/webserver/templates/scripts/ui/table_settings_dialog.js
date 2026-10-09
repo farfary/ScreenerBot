@@ -9,16 +9,15 @@
  * - Quick visibility controls (show/hide all, invert)
  * - Ordering shortcuts (reset, alphabetical)
  * - Per-column visibility toggles
- * - Reordering via move buttons (top / up / down / bottom)
+ * - Reordering by drag, or from each row's menu (top / up / down / bottom)
  * - Apply / Cancel workflow
  * - Reset to defaults
  * - Keyboard accessible
  */
 
-import { on, off } from "../core/dom.js";
+import { on, off, dirSign } from "../core/dom.js";
 import * as Utils from "../core/utils.js";
-
-const ORDER_ACTIONS = ["move-top", "move-up", "move-down", "move-bottom"];
+import { getContextMenu } from "./context_menu.js";
 
 function canFloatColumn(column) {
   if (!column) {
@@ -419,12 +418,15 @@ export class TableSettingsDialog {
       const isPinned = floatingSet.has(column.id);
       const pinDisabledAttr = canFloat ? "" : " disabled";
 
-      // Move buttons enable/disable based on position within the column's GROUP.
+      // The row menu offers only the moves its position within its GROUP allows.
       const pos = groupPosition.get(column.id) || { index: 0, length: 1 };
-      const moveTopDisabled = pos.index === 0;
-      const moveUpDisabled = pos.index === 0;
-      const moveDownDisabled = pos.index === pos.length - 1;
-      const moveBottomDisabled = pos.index === pos.length - 1;
+      const canMoveUp = pos.index > 0;
+      const canMoveDown = pos.index < pos.length - 1;
+      const menuDisabled = isFiltered || (!canMoveUp && !canMoveDown);
+      const pinLabel = Utils.escapeHtml(
+        isPinned ? I18n.t("table-settings-unpin-column") : I18n.t("table-settings-pin-column")
+      );
+      const menuLabel = Utils.escapeHtml(I18n.t("table-settings-move-column"));
 
       return `
         <div class="table-settings-column-item${isPinned ? " is-pinned" : ""}" draggable="${!isFiltered}" data-column-id="${columnId}" role="listitem">
@@ -435,30 +437,12 @@ export class TableSettingsDialog {
             <span class="column-name">${Utils.escapeHtml(column.label)}${visibilityLabel}</span>
           </label>
           <div class="table-settings-column-actions" aria-label="${Utils.escapeHtml(I18n.t("table-settings-column-controls"))}">
-            <button type="button" class="table-settings-btn-pin${isPinned ? " is-active" : ""}" data-role="floating-toggle" data-column-id="${columnId}"${pinDisabledAttr} aria-pressed="${isPinned ? "true" : "false"}" title="${isPinned ? Utils.escapeHtml(I18n.t("table-column-unpin")) : Utils.escapeHtml(I18n.t("table-column-pin"))}">
-              <i class="icon ${isPinned ? "icon-pin-off" : "icon-pin"}" aria-hidden="true"></i>
-              <span class="sr-only">${isPinned ? Utils.escapeHtml(I18n.t("table-settings-unpin-column")) : Utils.escapeHtml(I18n.t("table-settings-pin-column"))}</span>
+            <button type="button" class="btn-icon btn-icon-sm table-settings-pin${isPinned ? " is-active" : ""}" data-role="floating-toggle" data-column-id="${columnId}"${pinDisabledAttr} aria-pressed="${isPinned ? "true" : "false"}" title="${pinLabel}" aria-label="${pinLabel}">
+              <i class="${isPinned ? "icon-pin-off" : "icon-pin"}" aria-hidden="true"></i>
             </button>
-            <div class="table-settings-move-group" role="group" aria-label="${Utils.escapeHtml(I18n.t("table-settings-move-vertical-group"))}">
-              <button type="button" class="table-settings-btn-move" data-action="move-up" data-column-id="${columnId}" ${moveUpDisabled || isFiltered ? "disabled" : ""} title="${Utils.escapeHtml(I18n.t("table-settings-move-up"))}">
-                <span class="icon" aria-hidden="true">↑</span>
-                <span class="sr-only">${Utils.escapeHtml(I18n.t("table-settings-move-up"))}</span>
-              </button>
-              <button type="button" class="table-settings-btn-move" data-action="move-down" data-column-id="${columnId}" ${moveDownDisabled || isFiltered ? "disabled" : ""} title="${Utils.escapeHtml(I18n.t("table-settings-move-down"))}">
-                <span class="icon" aria-hidden="true">↓</span>
-                <span class="sr-only">${Utils.escapeHtml(I18n.t("table-settings-move-down"))}</span>
-              </button>
-            </div>
-            <div class="table-settings-move-group" role="group" aria-label="${Utils.escapeHtml(I18n.t("table-settings-move-extremes-group"))}">
-              <button type="button" class="table-settings-btn-move" data-action="move-top" data-column-id="${columnId}" ${moveTopDisabled || isFiltered ? "disabled" : ""} title="${Utils.escapeHtml(I18n.t("table-settings-move-top"))}">
-                <span class="icon" aria-hidden="true">⇡</span>
-                <span class="sr-only">${Utils.escapeHtml(I18n.t("table-settings-move-top"))}</span>
-              </button>
-              <button type="button" class="table-settings-btn-move" data-action="move-bottom" data-column-id="${columnId}" ${moveBottomDisabled || isFiltered ? "disabled" : ""} title="${Utils.escapeHtml(I18n.t("table-settings-move-bottom"))}">
-                <span class="icon" aria-hidden="true">⇣</span>
-                <span class="sr-only">${Utils.escapeHtml(I18n.t("table-settings-move-bottom"))}</span>
-              </button>
-            </div>
+            <button type="button" class="btn-icon btn-icon-sm table-settings-column-menu" data-role="order-menu" data-column-id="${columnId}" data-can-move-up="${canMoveUp}" data-can-move-down="${canMoveDown}"${menuDisabled ? " disabled" : ""} aria-haspopup="menu" title="${menuLabel}" aria-label="${menuLabel}">
+              <i class="icon-ellipsis-vertical" aria-hidden="true"></i>
+            </button>
           </div>
         </div>
       `;
@@ -553,7 +537,7 @@ export class TableSettingsDialog {
     });
 
     const pinButtons = this.columnListEl.querySelectorAll(
-      '.table-settings-btn-pin[data-role="floating-toggle"]'
+      '[data-role="floating-toggle"]'
     );
     pinButtons.forEach((button) => {
       const columnId = button.dataset.columnId;
@@ -567,16 +551,9 @@ export class TableSettingsDialog {
       this._columnListeners.push({ element: button, event: "click", handler });
     });
 
-    const buttons = this.columnListEl.querySelectorAll(".table-settings-btn-move");
-    buttons.forEach((button) => {
-      const action = button.dataset.action;
-      const columnId = button.dataset.columnId;
-      if (!action || !columnId || !ORDER_ACTIONS.includes(action)) {
-        return;
-      }
-      const handler = () => {
-        this._reorderColumn(columnId, action);
-      };
+    const menuButtons = this.columnListEl.querySelectorAll('[data-role="order-menu"]');
+    menuButtons.forEach((button) => {
+      const handler = () => this._openOrderMenu(button);
       on(button, "click", handler);
       this._columnListeners.push({ element: button, event: "click", handler });
     });
@@ -642,6 +619,23 @@ export class TableSettingsDialog {
         { element: item, event: "dragend", handler: dragEndHandler }
       );
     });
+  }
+
+  /** Drop the row's move menu from its control, offering only the moves its position allows. */
+  _openOrderMenu(button) {
+    const rect = button.getBoundingClientRect();
+    void getContextMenu().show(
+      dirSign() === 1 ? rect.right : rect.left,
+      rect.bottom + 4,
+      {
+        type: "column-order",
+        element: button,
+        canMoveUp: button.dataset.canMoveUp === "true",
+        canMoveDown: button.dataset.canMoveDown === "true",
+        onMove: (action) => this._reorderColumn(button.dataset.columnId, action),
+      },
+      { endAnchored: true }
+    );
   }
 
   _reorderColumn(columnId, action) {

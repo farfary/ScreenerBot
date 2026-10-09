@@ -324,6 +324,29 @@
     };
 
     // =========================================================================
+    // Column Order Menu Builder
+    // =========================================================================
+
+    /**
+     * The moves of one column within its group in the table settings dialog;
+     * `context.onMove` receives the move action id.
+     */
+    manager._buildColumnOrderMenu = function (items, context) {
+      const move = (action, label, icon, enabled) =>
+        items.push({
+          type: "item",
+          label,
+          icon,
+          disabled: !enabled,
+          action: () => context.onMove(action),
+        });
+      move("move-top", I18n.t("table-settings-move-top"), "arrow-up-to-line", context.canMoveUp);
+      move("move-up", I18n.t("table-settings-move-up"), "arrow-up", context.canMoveUp);
+      move("move-down", I18n.t("table-settings-move-down"), "arrow-down", context.canMoveDown);
+      move("move-bottom", I18n.t("table-settings-move-bottom"), "arrow-down-to-line", context.canMoveDown);
+    };
+
+    // =========================================================================
     // Transaction Menu Builder
     // =========================================================================
 
