@@ -89,7 +89,6 @@ updates-detail-installed-version = Installed version
 updates-detail-system = System
 updates-detail-last-checked = Last checked
 updates-detail-never = Never
-updates-detail-available-version = Available version
 updates-detail-download-size = Download size
 
 updates-version-installed = Installed

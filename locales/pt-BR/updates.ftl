@@ -89,7 +89,6 @@ updates-detail-installed-version = Versão instalada
 updates-detail-system = Sistema
 updates-detail-last-checked = Última verificação
 updates-detail-never = Nunca
-updates-detail-available-version = Versão disponível
 updates-detail-download-size = Tamanho do download
 
 updates-version-installed = Instalada

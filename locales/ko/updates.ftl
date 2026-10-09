@@ -89,7 +89,6 @@ updates-detail-installed-version = 설치된 버전
 updates-detail-system = 시스템
 updates-detail-last-checked = 마지막 확인
 updates-detail-never = 없음
-updates-detail-available-version = 사용 가능한 버전
 updates-detail-download-size = 다운로드 크기
 
 updates-version-installed = 설치됨

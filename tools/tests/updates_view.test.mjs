@@ -1,10 +1,12 @@
 // Copyright (c) 2024-2026 ScreenerBot (screenerbot.io)
 // SPDX-License-Identifier: BUSL-1.1
 //
-// Tests for the updates view - release-note parsing and escaping, history expansion and status rendering.
+// Tests for the updates view - release-note parsing and escaping, history expansion, status
+// rendering (the installed version shown once), and the shared tab row.
 
 import test from "node:test";
 import assert from "node:assert/strict";
+import { readFileSync } from "node:fs";
 import "./fixtures/i18n_en.mjs";
 
 import {
@@ -224,4 +226,38 @@ test("blocked reason and check error render from backend text", () => {
     },
   });
   assert.match(failed.html, /HTTP 503/);
+});
+
+test("the installed version is shown once in every status", () => {
+  const update = { version: "0.2.4", kind: "core", core: { size: 24 } };
+  const phases = [
+    ["idle", null],
+    ["up_to_date", null],
+    ["checking", null],
+    ["check_failed", null],
+    ["applied", null],
+    ["available", update],
+    ["downloading", update],
+    ["ready_to_apply", update],
+  ];
+  for (const [phase, availableUpdate] of phases) {
+    const { html } = view.renderStatus({
+      phase,
+      currentVersion: phase === "applied" ? "0.2.4" : "0.2.3",
+      platform: "macOS arm64",
+      available_update: availableUpdate,
+      download_progress: {},
+    });
+    const installed = phase === "applied" ? "0.2.4" : "0.2.3";
+    const text = visible(html).replace(/<[^>]+>/g, " ");
+    assert.equal(text.split(installed).length - 1, 1, `${phase}: v${installed} shown once`);
+  }
+});
+
+test("Updates uses the shared dialog tab row without overrides", () => {
+  const css = readFileSync(
+    new URL("../../src/webserver/templates/styles/settings/updates.css", import.meta.url),
+    "utf8"
+  );
+  assert.doesNotMatch(css, /details-tab/);
 });

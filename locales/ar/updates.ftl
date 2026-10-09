@@ -89,7 +89,6 @@ updates-detail-installed-version = الإصدار المثبّت
 updates-detail-system = النظام
 updates-detail-last-checked = آخر تحقق
 updates-detail-never = أبدًا
-updates-detail-available-version = الإصدار المتاح
 updates-detail-download-size = حجم التنزيل
 
 updates-version-installed = مثبّت

@@ -74,7 +74,6 @@ updates-detail-installed-version = Versi terpasang
 updates-detail-system = Sistem
 updates-detail-last-checked = Terakhir diperiksa
 updates-detail-never = Belum pernah
-updates-detail-available-version = Versi tersedia
 updates-detail-download-size = Ukuran unduhan
 
 updates-version-installed = Terpasang

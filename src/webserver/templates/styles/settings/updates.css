@@ -10,14 +10,6 @@
   min-width: 0;
 }
 
-.updates > .details-tab-row {
-  background: transparent;
-}
-
-.updates > .details-tab-row .details-tab-list {
-  padding-inline: 0;
-}
-
 .updates-panel[hidden] {
   display: none;
 }
@@ -85,11 +77,6 @@
   gap: var(--spacing-md);
   max-width: 460px;
   padding-block: var(--spacing-sm);
-}
-
-.updates-version-flow--single {
-  grid-template-columns: minmax(120px, 1fr);
-  max-width: 220px;
 }
 
 .updates-version-flow > i {

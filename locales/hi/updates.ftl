@@ -71,7 +71,6 @@ updates-detail-installed-version = इंस्टॉल किया संस�
 updates-detail-system = सिस्टम
 updates-detail-last-checked = अंतिम जांच
 updates-detail-never = कभी नहीं
-updates-detail-available-version = उपलब्ध संस्करण
 updates-detail-download-size = डाउनलोड साइज़
 
 updates-version-installed = इंस्टॉल है

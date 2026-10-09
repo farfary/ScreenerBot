@@ -89,7 +89,6 @@ updates-detail-installed-version = インストール済みのバージョン
 updates-detail-system = システム
 updates-detail-last-checked = 最終確認
 updates-detail-never = なし
-updates-detail-available-version = 利用可能なバージョン
 updates-detail-download-size = ダウンロードサイズ
 
 updates-version-installed = インストール済み

@@ -71,7 +71,6 @@ updates-detail-installed-version = Yüklü sürüm
 updates-detail-system = Sistem
 updates-detail-last-checked = Son denetim
 updates-detail-never = Hiç
-updates-detail-available-version = Mevcut sürüm
 updates-detail-download-size = İndirme boyutu
 
 updates-version-installed = Yüklü

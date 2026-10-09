@@ -89,7 +89,6 @@ updates-detail-installed-version = 已安装版本
 updates-detail-system = 系统
 updates-detail-last-checked = 上次检查
 updates-detail-never = 从未
-updates-detail-available-version = 可用版本
 updates-detail-download-size = 下载大小
 
 updates-version-installed = 已安装

@@ -71,7 +71,6 @@ updates-detail-installed-version = Phiên bản đã cài
 updates-detail-system = Hệ thống
 updates-detail-last-checked = Kiểm tra lần cuối
 updates-detail-never = Chưa bao giờ
-updates-detail-available-version = Phiên bản có sẵn
 updates-detail-download-size = Dung lượng tải xuống
 
 updates-version-installed = Đã cài

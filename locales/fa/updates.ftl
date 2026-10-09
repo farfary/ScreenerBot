@@ -89,7 +89,6 @@ updates-detail-installed-version = نسخه نصب‌شده
 updates-detail-system = سیستم
 updates-detail-last-checked = آخرین بررسی
 updates-detail-never = هرگز
-updates-detail-available-version = نسخه در دسترس
 updates-detail-download-size = حجم دانلود
 
 updates-version-installed = نصب‌شده

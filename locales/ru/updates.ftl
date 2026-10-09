@@ -71,7 +71,6 @@ updates-detail-installed-version = Установленная версия
 updates-detail-system = Система
 updates-detail-last-checked = Последняя проверка
 updates-detail-never = Никогда
-updates-detail-available-version = Доступная версия
 updates-detail-download-size = Размер загрузки
 
 updates-version-installed = Установлена

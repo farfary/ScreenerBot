@@ -28,6 +28,12 @@ const PREFERENCE_ORDER = [
 
 const CATEGORY_ORDER = ["checking", "installing", "notifications"];
 
+// Phases whose status line already names the installed build (the idle and
+// up-to-date details, the "Updated to" headline). The installed version is shown
+// once per view: in that line, in the version flow while an update is pending, or
+// otherwise in the details list.
+const PHASES_NAMING_INSTALLED = new Set(["idle", "up_to_date", "applied"]);
+
 // Ids are the serialized `UpdateKind` values (src/version/types.rs).
 const UPDATE_KIND_LABELS = Object.freeze({
   core: "updates-kind-core",
@@ -139,8 +145,11 @@ export function createUpdatesView(Utils) {
   }
 
   function detailRows(state, update) {
-    const rows = [
-      [I18n.t("updates-detail-installed-version"), versionText(state.currentVersion)],
+    const rows = [];
+    if (!update && !PHASES_NAMING_INSTALLED.has(state.phase)) {
+      rows.push([I18n.t("updates-detail-installed-version"), versionText(state.currentVersion)]);
+    }
+    rows.push(
       [I18n.t("updates-detail-system"), state.platform || I18n.t("format-unknown")],
       [
         I18n.t("updates-detail-last-checked"),
@@ -148,11 +157,10 @@ export function createUpdatesView(Utils) {
           fallback: I18n.t("updates-detail-never"),
           includeSeconds: false,
         }),
-      ],
-    ];
+      ]
+    );
 
     if (update) {
-      rows.push([I18n.t("updates-detail-available-version"), versionText(update.version)]);
       rows.push([I18n.t("updates-detail-download-size"), updateSize(update)]);
     }
 
@@ -171,17 +179,9 @@ export function createUpdatesView(Utils) {
     `;
   }
 
+  /** Installed to available, shown only while an update is pending. */
   function renderVersions(current, update) {
-    if (!update) {
-      return `
-        <div class="updates-version-flow updates-version-flow--single">
-          <div class="updates-version-point">
-            <span>${escape(I18n.t("updates-version-installed"))}</span>
-            <strong>${escape(versionText(current))}</strong>
-          </div>
-        </div>
-      `;
-    }
+    if (!update) return "";
 
     return `
       <div class="updates-version-flow">
