@@ -450,6 +450,8 @@ function createLifecycle() {
           label: I18n.t("transactions-col-fees"),
           type: "sol",
           minWidth: 100,
+          // The one exception to significant-digit SOL figures: network fees sit near
+          // 0.000005, so the column keeps 6 fixed decimals and never reads as zero.
           render: (value) =>
             Utils.formatSol(value, { decimals: 6, fallback: "—", suffix: "", trim: false }),
         },

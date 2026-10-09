@@ -48,7 +48,7 @@ transactions-direction-outgoing = Ausgehend
 transactions-status-pending = Ausstehend
 transactions-status-confirmed = Bestätigt
 transactions-status-finalized = Finalisiert
-transactions-status-failed = Fehler
+transactions-status-failed = Fehlgeschlagen
 transactions-status-success = Erfolgreich
 transactions-status-unknown = Unbekannt
 
