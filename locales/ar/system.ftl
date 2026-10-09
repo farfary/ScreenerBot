@@ -114,7 +114,6 @@ system-config-chip-visible = { $visible } من { $fields }
 
 ## Config page: field rows
 
-system-config-field-unit = الوحدة: { $unit }
 system-config-field-default = الافتراضي: { $value }
 system-config-field-reset = إعادة إلى الافتراضي
 system-config-array-invalid-title = مدخل مصفوفة غير صالح

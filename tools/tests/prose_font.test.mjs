@@ -14,8 +14,7 @@
  * - `components/form_controls.css`: the base text input, textarea and select rules
  *   use the UI face, and a data face only reaches number, date and time inputs and
  *   inputs marked as left-to-right islands (`dir="ltr"`: addresses, mints, keys).
- * - A number field's unit is a word in the UI face when it stays beside the field and
- *   takes the data face only inside the field's box.
+ * - A number field's unit sits inside the field's box, in the value's data face.
  * - The shared prose surfaces (select trigger, menu and search, table search and
  *   menus, row action items, every table cell, the strategy condition summary, the
  *   position header's sub-lines) declare the UI face. A table cell reaches a data
@@ -55,12 +54,12 @@ test("a data face reaches only number, date, time and left-to-right inputs", () 
   assert.deepEqual(found, []);
 });
 
-test("a unit word beside a number field is in the UI face", () => {
+test("a number-field unit is in the data face, inside the field", () => {
   const rules = rulesOf("components/form_controls.css");
-  const face = (subject) =>
-    fontOf(rules.find(({ selector, body }) => selector === subject && fontOf(body))?.body ?? "");
-  assert.equal(face(".input-unit"), "var(--font-sans)");
-  assert.equal(face(".number-field-suffix > .input-unit"), "var(--font-data)");
+  const faces = rules
+    .filter(({ selector, body }) => /\.input-unit\b/.test(selector) && fontOf(body))
+    .map(({ selector, body }) => [selector, fontOf(body)]);
+  assert.deepEqual(faces, [[".input-unit", "var(--font-data)"]]);
 });
 
 test("shared prose surfaces declare the UI face", () => {

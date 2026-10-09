@@ -776,21 +776,19 @@ export function createFilteringRenderers({ state, $: _$, Utils, requestManager: 
   function renderRowControl(row, source) {
     if (row.kind === "range") {
       const [min, max] = row.fields;
-      const unit = row.unit
-        ? `<span class="config-field-range-unit">${Utils.escapeHtml(row.unit)}</span>`
-        : "";
+      // Each bound is a number of the parameter's unit, so each carries it inside.
+      const unit = row.unit ? `<span class="input-unit">${Utils.escapeHtml(row.unit)}</span>` : "";
       return `
         <div class="config-field-range">
           <span class="config-field-bound">
             <span class="config-field-bound-label">${Utils.escapeHtml(I18n.t("filtering-field-min"))}</span>
-            ${renderNumberInput(min, source, I18n.attr("filtering-field-min-aria", "aria-label", { label: row.label }))}
+            ${renderNumberInput(min, source, I18n.attr("filtering-field-min-aria", "aria-label", { label: row.label }))}${unit}
           </span>
           <span class="config-field-range-sep" aria-hidden="true">–</span>
           <span class="config-field-bound">
             <span class="config-field-bound-label">${Utils.escapeHtml(I18n.t("filtering-field-max"))}</span>
-            ${renderNumberInput(max, source, I18n.attr("filtering-field-max-aria", "aria-label", { label: row.label }))}
+            ${renderNumberInput(max, source, I18n.attr("filtering-field-max-aria", "aria-label", { label: row.label }))}${unit}
           </span>
-          ${unit}
         </div>`;
     }
 
@@ -799,8 +797,7 @@ export function createFilteringRenderers({ state, $: _$, Utils, requestManager: 
       return renderBooleanInput(field, source);
     }
     // The unit is written straight after the input; `ui/number_field.js` builds
-    // the shell around both and decides whether the suffix belongs inside the
-    // field's box or beside it.
+    // the shell around both and carries the unit inside the field's box.
     if (row.unit) {
       return `${renderNumberInput(field, source)}<span class="input-unit">${Utils.escapeHtml(row.unit)}</span>`;
     }

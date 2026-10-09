@@ -168,7 +168,7 @@ test("preferences use metadata and include the check interval", () => {
   assert.match(html, /Check for Updates/);
   assert.match(html, /data-pref="check_interval_hours"/);
   assert.match(html, /min="1"/);
-  assert.match(html, />hours</);
+  assert.match(html, />h</);
 });
 
 test("status exposes one phase-appropriate primary action", () => {

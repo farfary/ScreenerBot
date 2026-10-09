@@ -77,7 +77,6 @@ system-config-chip-visible = { $visible } von { $fields }
 
 ## Config page: field rows
 
-system-config-field-unit = Einheit: { $unit }
 system-config-field-default = Standard: { $value }
 system-config-field-reset = Auf Standard zurücksetzen
 system-config-array-invalid-title = Ungültiger Array-Eintrag

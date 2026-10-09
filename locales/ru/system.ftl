@@ -81,7 +81,6 @@ system-config-fields-count =
 system-config-chip-pending = { $fields } · ожидают: { $pending }
 system-config-chip-visible = { $visible } из { $fields }
 
-system-config-field-unit = Единица: { $unit }
 system-config-field-default = По умолчанию: { $value }
 system-config-field-reset = Сбросить к значению по умолчанию
 system-config-array-invalid-title = Недопустимый элемент массива

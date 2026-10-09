@@ -79,7 +79,6 @@ system-config-chip-visible = { $fields } 중 { $visible }
 
 ## Config page: field rows
 
-system-config-field-unit = 단위: { $unit }
 system-config-field-default = 기본값: { $value }
 system-config-field-reset = 기본값으로 초기화
 system-config-array-invalid-title = 잘못된 배열 항목

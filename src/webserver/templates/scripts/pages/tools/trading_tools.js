@@ -87,17 +87,17 @@ function renderTradeWatcherTool(container, actionsContainer) {
             <div class="form-row" id="tw-trigger-row">
               <div class="form-group">
                 <label for="tw-trigger-amount" data-l10n-id="tools-trade-watcher-trigger-label"></label>
-                <input type="number" id="tw-trigger-amount" placeholder="0.1" min="0.001" step="0.001" value="0.1" />
+                <input type="number" id="tw-trigger-amount" placeholder="0.1" min="0.001" step="0.001" value="0.1" /><span class="input-unit" data-l10n-id="tools-unit-native"></span>
                 <small class="form-hint" data-l10n-id="tools-trade-watcher-trigger-hint"></small>
               </div>
               <div class="form-group">
                 <label for="tw-action-amount" data-l10n-id="tools-trade-watcher-action-amount-label"></label>
-                <input type="number" id="tw-action-amount" placeholder="0.1" min="0.001" step="0.001" value="0.1" />
+                <input type="number" id="tw-action-amount" placeholder="0.1" min="0.001" step="0.001" value="0.1" /><span class="input-unit" data-l10n-id="tools-unit-native"></span>
                 <small class="form-hint" data-l10n-id="tools-trade-watcher-action-amount-hint"></small>
               </div>
               <div class="form-group">
                 <label for="tw-slippage" data-l10n-id="tools-trade-watcher-slippage-label"></label>
-                <input type="number" id="tw-slippage" placeholder="5" min="0.5" max="50" step="0.5" value="5" />
+                <input type="number" id="tw-slippage" placeholder="5" min="0.5" max="50" step="0.5" value="5" /><span class="input-unit">%</span>
                 <small class="form-hint" data-l10n-id="tools-trade-watcher-slippage-hint"></small>
               </div>
             </div>

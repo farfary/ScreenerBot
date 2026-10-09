@@ -330,18 +330,6 @@
   font-size: 0.75rem;
 }
 
-/* The unit belongs to the parameter, not to each bound, so a range row prints it
-   once at the end of the track. Single-value rows carry it inside the input
-   (`.number-field`, form_controls.css), and both read as the same muted suffix
-   next to a number. */
-.config-field-range .config-field-range-unit {
-  flex-shrink: 0;
-  font-family: var(--font-data);
-  font-size: 0.75rem;
-  font-weight: 500;
-  color: var(--text-muted);
-}
-
 /* A row whose group or source master switch is off: muted, but fully editable —
    the value is still what the rule will use the moment the switch goes back on.
    Never `pointer-events: none`, which blocks the mouse while leaving the field

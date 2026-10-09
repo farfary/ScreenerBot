@@ -64,7 +64,6 @@ system-config-fields-count =
 system-config-chip-pending = { $fields } · bekleyen { $pending }
 system-config-chip-visible = { $visible } / { $fields }
 
-system-config-field-unit = Birim: { $unit }
 system-config-field-default = Varsayılan: { $value }
 system-config-field-reset = Varsayılana sıfırla
 system-config-array-invalid-title = Geçersiz dizi girdisi

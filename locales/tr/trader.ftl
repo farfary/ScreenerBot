@@ -288,7 +288,7 @@ trader-timing-close-cooldown = Pozisyon kapatma bekleme süresi
 trader-timing-close-cooldown-hint = Aynı tokenı yeniden açmadan önce beklenecek dakika
 trader-timing-concurrency = Giriş kontrolü eşzamanlılığı
 trader-timing-concurrency-hint = Aynı anda kontrol edilecek token sayısı (yüksek = daha hızlı ama daha fazla CPU)
-trader-timing-unit-minutes = dakika
+trader-timing-unit-minutes = dk
 trader-timing-unit-tokens = token
 trader-timing-intervals = İzleyici aralıkları
 trader-timing-intervals-badge = Salt okunur

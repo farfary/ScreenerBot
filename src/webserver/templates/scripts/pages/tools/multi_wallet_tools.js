@@ -133,7 +133,7 @@ function renderBuyMultiWalletsTool(container, actionsContainer) {
               </div>
               <div class="form-group">
                 <label for="mb-sol-buffer" data-l10n-id="tools-multi-buy-buffer-label"></label>
-                <input type="number" id="mb-sol-buffer" value="0.015" min="0.005" step="0.005" />
+                <input type="number" id="mb-sol-buffer" value="0.015" min="0.005" step="0.005" /><span class="input-unit" data-l10n-id="tools-unit-native"></span>
                 <small data-l10n-id="tools-multi-buy-buffer-hint"></small>
               </div>
             </div>
@@ -151,17 +151,17 @@ function renderBuyMultiWalletsTool(container, actionsContainer) {
             <div class="form-row">
               <div class="form-group">
                 <label for="mb-min-sol" data-l10n-id="tools-multi-buy-min-label"></label>
-                <input type="number" id="mb-min-sol" value="0.01" min="0.001" step="0.01" />
+                <input type="number" id="mb-min-sol" value="0.01" min="0.001" step="0.01" /><span class="input-unit" data-l10n-id="tools-unit-native"></span>
                 <small data-l10n-id="tools-multi-buy-min-hint"></small>
               </div>
               <div class="form-group">
                 <label for="mb-max-sol" data-l10n-id="tools-multi-buy-max-label"></label>
-                <input type="number" id="mb-max-sol" value="0.05" min="0.001" step="0.01" />
+                <input type="number" id="mb-max-sol" value="0.05" min="0.001" step="0.01" /><span class="input-unit" data-l10n-id="tools-unit-native"></span>
                 <small data-l10n-id="tools-multi-buy-max-hint"></small>
               </div>
               <div class="form-group">
                 <label for="mb-total-limit" data-l10n-id="tools-multi-buy-limit-label"></label>
-                <input type="number" id="mb-total-limit" placeholder="—" min="0" step="0.1" />
+                <input type="number" id="mb-total-limit" placeholder="—" min="0" step="0.1" /><span class="input-unit" data-l10n-id="tools-unit-native"></span>
                 <small data-l10n-id="tools-multi-buy-limit-hint"></small>
               </div>
             </div>
@@ -179,11 +179,11 @@ function renderBuyMultiWalletsTool(container, actionsContainer) {
             <div class="form-row">
               <div class="form-group">
                 <label for="mb-delay-min" data-l10n-id="tools-multi-delay-min-label"></label>
-                <input type="number" id="mb-delay-min" value="1000" min="500" step="100" />
+                <input type="number" id="mb-delay-min" value="1000" min="500" step="100" /><span class="input-unit" data-l10n-id="tools-unit-ms"></span>
               </div>
               <div class="form-group">
                 <label for="mb-delay-max" data-l10n-id="tools-multi-delay-max-label"></label>
-                <input type="number" id="mb-delay-max" value="2000" min="500" step="100" />
+                <input type="number" id="mb-delay-max" value="2000" min="500" step="100" /><span class="input-unit" data-l10n-id="tools-unit-ms"></span>
               </div>
               <div class="form-group">
                 <label for="mb-concurrency" data-l10n-id="tools-multi-concurrency-label"></label>
@@ -197,7 +197,7 @@ function renderBuyMultiWalletsTool(container, actionsContainer) {
             <div class="form-row">
               <div class="form-group">
                 <label for="mb-slippage" data-l10n-id="tools-multi-slippage-label"></label>
-                <input type="number" id="mb-slippage" value="5" min="0.5" max="50" step="0.5" />
+                <input type="number" id="mb-slippage" value="5" min="0.5" max="50" step="0.5" /><span class="input-unit">%</span>
               </div>
               <div class="form-group">
                 <label for="mb-router" data-l10n-id="tools-multi-router-label"></label>
@@ -640,12 +640,12 @@ function renderSellMultiWalletsTool(container, actionsContainer) {
             <div class="form-row">
               <div class="form-group">
                 <label for="ms-sell-percent" data-l10n-id="tools-multi-sell-percent-label"></label>
-                <input type="number" id="ms-sell-percent" value="100" min="1" max="100" step="1" />
+                <input type="number" id="ms-sell-percent" value="100" min="1" max="100" step="1" /><span class="input-unit">%</span>
                 <small data-l10n-id="tools-multi-sell-percent-hint"></small>
               </div>
               <div class="form-group">
                 <label for="ms-min-sol-fee" data-l10n-id="tools-multi-sell-min-fee-label"></label>
-                <input type="number" id="ms-min-sol-fee" value="0.01" min="0.005" step="0.005" />
+                <input type="number" id="ms-min-sol-fee" value="0.01" min="0.005" step="0.005" /><span class="input-unit" data-l10n-id="tools-unit-native"></span>
                 <small data-l10n-id="tools-multi-sell-min-fee-hint"></small>
               </div>
             </div>
@@ -695,11 +695,11 @@ function renderSellMultiWalletsTool(container, actionsContainer) {
             <div class="form-row">
               <div class="form-group">
                 <label for="ms-delay-min" data-l10n-id="tools-multi-delay-min-label"></label>
-                <input type="number" id="ms-delay-min" value="1000" min="500" step="100" />
+                <input type="number" id="ms-delay-min" value="1000" min="500" step="100" /><span class="input-unit" data-l10n-id="tools-unit-ms"></span>
               </div>
               <div class="form-group">
                 <label for="ms-delay-max" data-l10n-id="tools-multi-delay-max-label"></label>
-                <input type="number" id="ms-delay-max" value="2000" min="500" step="100" />
+                <input type="number" id="ms-delay-max" value="2000" min="500" step="100" /><span class="input-unit" data-l10n-id="tools-unit-ms"></span>
               </div>
               <div class="form-group">
                 <label for="ms-concurrency" data-l10n-id="tools-multi-concurrency-label"></label>
@@ -713,7 +713,7 @@ function renderSellMultiWalletsTool(container, actionsContainer) {
             <div class="form-row">
               <div class="form-group">
                 <label for="ms-slippage" data-l10n-id="tools-multi-slippage-label"></label>
-                <input type="number" id="ms-slippage" value="5" min="0.5" max="50" step="0.5" />
+                <input type="number" id="ms-slippage" value="5" min="0.5" max="50" step="0.5" /><span class="input-unit">%</span>
               </div>
               <div class="form-group">
                 <label for="ms-router" data-l10n-id="tools-multi-router-label"></label>

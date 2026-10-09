@@ -288,7 +288,7 @@ trader-timing-close-cooldown = पोज़िशन बंद होने क�
 trader-timing-close-cooldown-hint = उसी टोकन को दोबारा खोलने से पहले कितने मिनट रुकना है
 trader-timing-concurrency = एंट्री जांच समवर्तिता
 trader-timing-concurrency-hint = एक साथ जांचे जाने वाले टोकन की संख्या (ज़्यादा = तेज़ पर ज़्यादा CPU)
-trader-timing-unit-minutes = मिनट
+trader-timing-unit-minutes = मि
 trader-timing-unit-tokens = टोकन
 trader-timing-intervals = मॉनिटर अंतराल
 trader-timing-intervals-badge = केवल पढ़ने योग्य

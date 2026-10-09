@@ -74,7 +74,6 @@ system-config-fields-count =
 system-config-chip-pending = { $fields } · { $pending } en attente
 system-config-chip-visible = { $visible } sur { $fields }
 
-system-config-field-unit = Unité : { $unit }
 system-config-field-default = Par défaut : { $value }
 system-config-field-reset = Rétablir la valeur par défaut
 system-config-array-invalid-title = Entrée de tableau invalide

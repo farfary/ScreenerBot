@@ -60,7 +60,6 @@ system-config-fields-count =
 system-config-chip-pending = { $fields } · { $pending } đang chờ
 system-config-chip-visible = { $visible }/{ $fields }
 
-system-config-field-unit = Đơn vị: { $unit }
 system-config-field-default = Mặc định: { $value }
 system-config-field-reset = Đặt lại về mặc định
 system-config-array-invalid-title = Mục mảng không hợp lệ

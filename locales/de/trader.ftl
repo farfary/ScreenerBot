@@ -296,8 +296,8 @@ trader-timing-close-cooldown = Abkühlzeit nach Positionsschluss
 trader-timing-close-cooldown-hint = Minuten Wartezeit, bevor derselbe Token erneut eröffnet wird
 trader-timing-concurrency = Parallelität der Einstiegsprüfung
 trader-timing-concurrency-hint = Anzahl der Token, die gleichzeitig geprüft werden (höher = schneller, aber mehr CPU)
-trader-timing-unit-minutes = Minuten
-trader-timing-unit-tokens = Token
+trader-timing-unit-minutes = Min.
+trader-timing-unit-tokens = Tokens
 trader-timing-intervals = Monitor-Intervalle
 trader-timing-intervals-badge = Nur lesbar
 trader-timing-intervals-hint = Im Code konfiguriert (in der Oberfläche nicht änderbar)

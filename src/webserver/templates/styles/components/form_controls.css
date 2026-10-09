@@ -896,11 +896,12 @@ input[type="radio"]:disabled {
    `ui/number_field.js` wraps EVERY number input in the dashboard in
    `.number-field`, so a number reads and behaves the same on every page. Markup
    writes the input and, when the value has one, an `.input-unit` right after it —
-   no wrapper class of its own; the enhancer builds the shell and pulls a short
-   suffix into the box (a word-length one stays in the page's own row).
+   no wrapper class of its own; the enhancer builds the shell and pulls the unit
+   into the box. Every unit sits inside, in its short form ("%", "SOL", "s",
+   "min", "h", a short count label).
 
-   The shell holds two things inside the field's own box, at its inline end: a
-   symbol-length unit suffix and our stepper. The room they need is reserved by
+   The shell holds two things inside the field's own box, at its inline end: the
+   unit suffix and our stepper. The room they need is reserved by
    the shell's gutter, which the enhancer applies as an INLINE declaration
    pointing back at `--number-field-gutter`. It has to be inline: any page rule
    that sets the `padding` shorthand on its own inputs (`.input-large`,
@@ -908,7 +909,7 @@ input[type="radio"]:disabled {
    outranks a stylesheet reserve and erases it — which is how a right-aligned
    "50" ended up printed on top of its own "USD" suffix. The measurements
    themselves stay here; JavaScript passes no numbers of its own except the
-   unit's length in characters. */
+   unit's length in display columns. */
 
 .number-field {
   --number-field-spin-width: 18px;
@@ -936,11 +937,10 @@ input[type="radio"]:disabled {
   min-width: 0;
 }
 
-/* One character of the input's own data font per unit character, plus the gap
-   to the stepper. Slightly generous — the suffix renders a size smaller — and
-   generous is the safe direction: it can only leave air, never overlap. Only a
-   suffix that sits INSIDE the box is reserved for — a word-length unit stays
-   outside the shell and takes its own room (see UNIT_INSIDE_MAX_CHARS). */
+/* One character of the input's own data font per unit column (two for an East
+   Asian wide character), plus the gap to the stepper. Slightly generous — the
+   suffix renders a size smaller — and generous is the safe direction: it can
+   only leave air, never overlap. */
 .number-field:has(.number-field-suffix > .input-unit) {
   --number-field-unit-space: calc(var(--number-field-unit-len, 3) * 1ch + 6px);
 }
@@ -957,19 +957,14 @@ input[type="radio"]:disabled {
   pointer-events: none;
 }
 
-/* A word-length unit ("minutes", "tokens") stays beside the field and reads as a word in
-   the UI face; a symbol-length unit inside the box takes the value's data face. */
+/* The unit inside the box takes the value's data face, a size smaller and muted. */
 .input-unit {
-  font-family: var(--font-sans);
+  font-family: var(--font-data);
   font-size: 0.8125rem;
   font-weight: 500;
   color: var(--text-muted);
   white-space: nowrap;
   user-select: none;
-}
-
-.number-field-suffix > .input-unit {
-  font-family: var(--font-data);
 }
 
 /* Stepper: bare chevrons, never a tile or ring behind them. Idle they stay out

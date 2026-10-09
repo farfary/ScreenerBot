@@ -100,7 +100,6 @@ system-config-chip-visible = { $visible } із { $fields }
 
 ## Config page: field rows
 
-system-config-field-unit = Одиниця: { $unit }
 system-config-field-default = Типове: { $value }
 system-config-field-reset = Скинути до типового
 system-config-array-invalid-title = Недійсний елемент масиву

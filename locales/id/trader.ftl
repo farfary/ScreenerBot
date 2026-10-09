@@ -279,7 +279,7 @@ trader-timing-close-cooldown = Cooldown Penutupan Posisi
 trader-timing-close-cooldown-hint = Menit menunggu sebelum membuka kembali token yang sama
 trader-timing-concurrency = Konkurensi Pemeriksaan Entry
 trader-timing-concurrency-hint = Jumlah token yang diperiksa bersamaan (makin tinggi = makin cepat tetapi lebih banyak CPU)
-trader-timing-unit-minutes = menit
+trader-timing-unit-minutes = mnt
 trader-timing-unit-tokens = token
 trader-timing-intervals = Interval Monitor
 trader-timing-intervals-badge = Hanya baca

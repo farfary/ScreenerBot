@@ -210,7 +210,7 @@ function renderHolderWatchContent(container, actionsContainer, config) {
             <div class="hw-form-group">
               <label for="hw-interval" data-l10n-id="tools-holder-watch-interval-label"></label>
               <input type="number" id="hw-interval" class="form-input" 
-                value="${config.check_interval_secs || 60}" min="10" max="3600" step="10">
+                value="${config.check_interval_secs || 60}" min="10" max="3600" step="10"><span class="input-unit" data-l10n-id="tools-unit-seconds"></span>
               <span class="hint" data-l10n-id="tools-holder-watch-interval-hint"></span>
             </div>
             <div class="hw-form-group">
@@ -248,7 +248,7 @@ function renderHolderWatchContent(container, actionsContainer, config) {
             <div class="hw-form-group">
               <label for="hw-drop-percent" data-l10n-id="tools-holder-watch-drop-percent-label"></label>
               <input type="number" id="hw-drop-percent" class="form-input" 
-                value="${config.holder_drop_percent || 10.0}" min="1" max="100" step="0.5">
+                value="${config.holder_drop_percent || 10.0}" min="1" max="100" step="0.5"><span class="input-unit">%</span>
               <span class="hint" data-l10n-id="tools-holder-watch-drop-percent-hint"></span>
             </div>
           </div>

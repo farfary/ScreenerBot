@@ -65,7 +65,7 @@ strategies-value-candles =
 
 strategies-unit-percent = %
 strategies-unit-native = { -sol }
-strategies-unit-hours = घंटे
+strategies-unit-hours = घं
 strategies-unit-multiplier = ×
 
 strategies-catalog-search =

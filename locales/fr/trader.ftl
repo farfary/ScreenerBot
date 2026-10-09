@@ -299,7 +299,7 @@ trader-timing-close-cooldown = Délai après clôture de position
 trader-timing-close-cooldown-hint = Minutes d'attente avant de rouvrir le même token
 trader-timing-concurrency = Concurrence des vérifications d'entrée
 trader-timing-concurrency-hint = Nombre de tokens vérifiés simultanément (plus élevé = plus rapide mais plus de CPU)
-trader-timing-unit-minutes = minutes
+trader-timing-unit-minutes = min
 trader-timing-unit-tokens = tokens
 trader-timing-intervals = Intervalles des moniteurs
 trader-timing-intervals-badge = Lecture seule

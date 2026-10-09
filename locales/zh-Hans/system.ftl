@@ -79,7 +79,6 @@ system-config-chip-visible = { $visible } / { $fields }
 
 ## Config page: field rows
 
-system-config-field-unit = 单位：{ $unit }
 system-config-field-default = 默认值：{ $value }
 system-config-field-reset = 重置为默认值
 system-config-array-invalid-title = 数组条目无效

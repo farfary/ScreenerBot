@@ -89,7 +89,7 @@ strategies-value-candles =
 # Text written beside a numeric input.
 strategies-unit-percent = %
 strategies-unit-native = { -sol }
-strategies-unit-hours = س
+strategies-unit-hours = ساعة
 strategies-unit-multiplier = ×
 
 ## Condition catalog

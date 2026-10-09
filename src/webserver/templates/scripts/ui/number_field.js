@@ -6,8 +6,10 @@
  * Numeric field enhancer.
  *
  * Every `<input type="number">` in the dashboard is a `.number-field`: our own
- * stepper instead of the browser's spin buttons, and any `.input-unit` written
- * next to the input adopted into the field's box over a reserved gutter.
+ * stepper instead of the browser's spin buttons, and the `.input-unit` written
+ * next to the input adopted into the field's box over a reserved gutter. Every
+ * unit sits inside its field, in its short form ("%", "SOL", "s", "min", "h",
+ * a short count label); the unit text owns the brevity, not this module.
  *
  * It is installed once, document-wide (see `installGlobalNumberFieldEnhancer`),
  * for the same reason the select enhancer is: pages render their markup as HTML
@@ -16,20 +18,17 @@
  *
  * The design — sizes, colours, the gutter — belongs to
  * `styles/components/form_controls.css`. This module contributes exactly one
- * number to layout: the unit's length in characters.
+ * number to layout: the unit's length in display columns.
  */
 
 const STEP_REPEAT_DELAY_MS = 400;
 const STEP_REPEAT_INTERVAL_MS = 60;
 
-/**
- * A suffix this short is a symbol — "%", "SOL", "USD", "ms" — and belongs inside
- * the field, right after the value it qualifies. A longer one is a word
- * ("seconds", "positions", "tokens") and stays where the page put it, beside the
- * field: inside a compact field it would leave the value a few pixels to live
- * in. Both are the same `.input-unit`, so the two read as one idea.
- */
-const UNIT_INSIDE_MAX_CHARS = 3;
+/** A Han, kana or Hangul character takes two columns of a monospace face. */
+const WIDE_CHARACTER = /[\p{Script=Han}\p{Script=Hiragana}\p{Script=Katakana}\p{Script=Hangul}]/u;
+
+/** The suffix inside a field's box; the gutter is reserved from its length. */
+const UNIT_SELECTOR = ".number-field-suffix > .input-unit";
 
 /**
  * Every number input that is not enhanced yet and has not opted out.
@@ -96,6 +95,29 @@ function stepInput(input, direction) {
   input.dispatchEvent(new Event("change", { bubbles: true }));
 }
 
+/**
+ * Display columns a unit takes in the data face: one per character, two per
+ * East Asian wide character, so a unit in any locale reserves its own width.
+ */
+export function unitColumns(text) {
+  let columns = 0;
+  for (const character of String(text ?? "").trim()) {
+    columns += WIDE_CHARACTER.test(character) ? 2 : 1;
+  }
+  return columns;
+}
+
+/**
+ * Reserve the gutter for a unit's current text. Pages fill a unit after the
+ * field is built (localized text, a unit read from config metadata), so the
+ * reserve follows the text rather than being fixed at enhancement.
+ */
+function syncUnitSpace(unit) {
+  const shell = unit.closest(".number-field");
+  if (!shell) return;
+  shell.style.setProperty("--number-field-unit-len", String(unitColumns(unit.textContent)));
+}
+
 function buildSuffix(document_, unit) {
   const suffix = document_.createElement("span");
   suffix.className = "number-field-suffix";
@@ -133,17 +155,15 @@ export function enhanceNumberField(input) {
   input.dataset.numberField = "true";
 
   const sibling = input.nextElementSibling;
-  const label = sibling && sibling.classList.contains("input-unit") ? sibling : null;
-  const unitLength = label ? label.textContent.trim().length : 0;
-  const inside = unitLength > 0 && unitLength <= UNIT_INSIDE_MAX_CHARS;
+  const unit = sibling && sibling.classList.contains("input-unit") ? sibling : null;
 
   const shell = document_.createElement("span");
   shell.className = "number-field";
   input.replaceWith(shell);
   shell.appendChild(input);
 
-  if (inside) shell.style.setProperty("--number-field-unit-len", String(unitLength));
-  shell.appendChild(buildSuffix(document_, inside ? label : null));
+  shell.appendChild(buildSuffix(document_, unit));
+  if (unit) syncUnitSpace(unit);
 
   // Inline, so no page rule setting the `padding` shorthand can drop the gutter
   // and let the value run under the suffix. The width itself stays in CSS.
@@ -193,9 +213,12 @@ export function installGlobalNumberFieldEnhancer() {
   }
 
   // Scoped to the added subtrees, so it stays cheap while live tables repaint.
+  // A unit whose text changes in place re-reserves its gutter.
   const observer = new MutationObserver((mutations) => {
     for (const mutation of mutations) {
       if (!mutation.addedNodes || mutation.addedNodes.length === 0) continue;
+      const unit = mutation.target.closest?.(UNIT_SELECTOR);
+      if (unit) syncUnitSpace(unit);
       mutation.addedNodes.forEach(enhanceWithin);
     }
   });

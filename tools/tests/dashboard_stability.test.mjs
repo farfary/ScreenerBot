@@ -191,10 +191,44 @@ async function assertDialogs(page, view) {
     await opened
       .waitFor({ state: "visible" })
       .catch(() => assert.fail(`${trigger}: ${dialog} did not open`));
+    await assertUnitsInside(page, dialog);
     if (close) await page.locator(close).first().click();
     else await page.keyboard.press("Escape");
     await opened.waitFor({ state: "hidden" }).catch(() => assert.fail(`${dialog}: did not close`));
   }
+}
+
+/**
+ * Every number-field unit sits inside its field, after the value, with room left for the
+ * value itself; a unit outside a field or running past its edge is the defect.
+ */
+async function assertUnitsInside(page, label) {
+  const found = await page.evaluate(() => {
+    const problems = [];
+    for (const unit of document.querySelectorAll(".input-unit")) {
+      if (!unit.getClientRects().length) continue;
+      const name = unit.textContent.trim();
+      const shell = unit.closest(".number-field");
+      if (!unit.parentElement?.matches(".number-field-suffix") || !shell) {
+        problems.push(`"${name}" sits outside its field`);
+        continue;
+      }
+      const input = shell.querySelector('input[type="number"]');
+      const box = shell.getBoundingClientRect();
+      const mark = unit.getBoundingClientRect();
+      if (mark.left < box.left - 0.5 || mark.right > box.right + 0.5) {
+        problems.push(`"${name}" runs out of its field`);
+      }
+      const style = getComputedStyle(input);
+      const room =
+        input.clientWidth -
+        parseFloat(style.paddingInlineStart) -
+        parseFloat(style.paddingInlineEnd);
+      if (room < 24) problems.push(`"${name}" leaves the value ${Math.round(room)}px`);
+    }
+    return problems;
+  });
+  assert.deepEqual(found, [], `${label}: number-field units`);
 }
 
 /** Horizontal overflow of the page itself, as a scroll bar would show it. */
@@ -373,6 +407,7 @@ describe("dashboard stability", { concurrency: 4 }, () => {
           await assertPopulated(session.page, view);
           await assertHeadersFit(session.page, `${id} ${view.name}`);
           await assertPinnedEdgeClean(session.page, `${id} ${view.name}`);
+          await assertUnitsInside(session.page, `${id} ${view.name}`);
         }
         if (id === "positions") {
           // A new column set opens at its start edge, not at the previous view's offset.
@@ -469,7 +504,10 @@ describe("dashboard stability", { concurrency: 4 }, () => {
           document.documentElement.lang,
         ]);
         assert.deepEqual([dir, lang], ["rtl", RTL_LOCALE]);
-        await assertViewsFit(page, views, RTL_LOCALE, assertValuesInOrder);
+        await assertViewsFit(page, views, RTL_LOCALE, async (current, label) => {
+          await assertValuesInOrder(current, label);
+          await assertUnitsInside(current, label);
+        });
         await finish(session);
       });
 

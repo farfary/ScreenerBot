@@ -360,7 +360,7 @@ trader-timing-close-cooldown = Cooldown após fechar posição
 trader-timing-close-cooldown-hint = Minutos de espera antes de reabrir o mesmo token
 trader-timing-concurrency = Simultaneidade da checagem de entrada
 trader-timing-concurrency-hint = Número de tokens verificados ao mesmo tempo (maior = mais rápido, porém mais CPU)
-trader-timing-unit-minutes = minutos
+trader-timing-unit-minutes = min
 trader-timing-unit-tokens = tokens
 trader-timing-intervals = Intervalos dos monitores
 trader-timing-intervals-badge = Somente leitura

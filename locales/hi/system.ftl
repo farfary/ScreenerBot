@@ -67,7 +67,6 @@ system-config-fields-count =
 system-config-chip-pending = { $fields } · { $pending } लंबित
 system-config-chip-visible = { $fields } में से { $visible }
 
-system-config-field-unit = इकाई: { $unit }
 system-config-field-default = डिफ़ॉल्ट: { $value }
 system-config-field-reset = डिफ़ॉल्ट पर रीसेट करें
 system-config-array-invalid-title = अमान्य ऐरे प्रविष्टि

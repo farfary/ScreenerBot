@@ -341,7 +341,7 @@ export function createAutomationTab({ state, _eventCleanups, addTrackedListener 
           </div>
           <div class="form-group form-group-half">
             <label data-l10n-id="assistant-automation-field-timeout"></label>
-            <input type="number" id="auto-timeout" value="120" min="30" max="600">
+            <input type="number" id="auto-timeout" value="120" min="30" max="600"><span class="input-unit" data-l10n-id="assistant-automation-unit-seconds"></span>
           </div>
         </div>
         <div class="form-group">
@@ -578,7 +578,7 @@ export function createAutomationTab({ state, _eventCleanups, addTrackedListener 
           </div>
           <div class="form-group form-group-half">
             <label data-l10n-id="assistant-automation-field-timeout"></label>
-            <input type="number" id="edit-auto-timeout" value="${task.timeout_seconds || 120}" min="30" max="600">
+            <input type="number" id="edit-auto-timeout" value="${task.timeout_seconds || 120}" min="30" max="600"><span class="input-unit" data-l10n-id="assistant-automation-unit-seconds"></span>
           </div>
         </div>
         <div class="form-group">

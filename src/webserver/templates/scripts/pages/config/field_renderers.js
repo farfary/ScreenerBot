@@ -9,6 +9,7 @@
 
 import { create, on } from "../../core/dom.js";
 import * as Utils from "../../core/utils.js";
+import { enhanceNumberField } from "../../ui/number_field.js";
 import {
   parseArrayInput,
   describeInvalidArrayEntries,
@@ -169,7 +170,7 @@ export function toggleCategory(path, defaultOpen = false) {
  *
  *   name (+ impact chip)
  *   one description line
- *   one reference strip: config key · unit · default
+ *   one reference strip: config key · default
  *
  * The catalog's `hint` attribute already falls back to the field's doc comment,
  * so the description is a single line.
@@ -200,10 +201,6 @@ export function buildFieldLabelHtml({ label, pathLabel, metadata = {}, defaultVa
   }
 
   const meta = [`<span class="config-field-key">${Utils.escapeHtml(pathLabel)}</span>`];
-  const unit = fieldUnit(metadata.key);
-  if (unit) {
-    meta.push(`<span>${Utils.escapeHtml(I18n.t("system-config-field-unit", { unit }))}</span>`);
-  }
   if (defaultValue !== null && defaultValue !== undefined) {
     const defaultText = Utils.escapeHtml(
       I18n.t("system-config-field-default", {
@@ -480,7 +477,14 @@ export const FIELD_RENDERERS = {
         event.stopPropagation();
       }
     });
-    return input;
+    const unit = fieldUnit(metadata.key);
+    if (!unit) return input;
+    // The unit rides inside the field: the shell is built here, around the input
+    // and its unit, so the row receives the finished control.
+    document
+      .createDocumentFragment()
+      .append(input, create("span", { className: "input-unit", textContent: unit }));
+    return enhanceNumberField(input);
   },
   integer(options) {
     const component = FIELD_RENDERERS.number({

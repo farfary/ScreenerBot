@@ -64,7 +64,6 @@ system-config-fields-count =
 system-config-chip-pending = { $fields } · { $pending } tertunda
 system-config-chip-visible = { $visible } dari { $fields }
 
-system-config-field-unit = Satuan: { $unit }
 system-config-field-default = Default: { $value }
 system-config-field-reset = Reset ke default
 system-config-array-invalid-title = Entri array tidak valid

@@ -93,7 +93,6 @@ system-config-chip-visible = { $visible } de { $fields }
 
 ## Config page: field rows
 
-system-config-field-unit = Unidad: { $unit }
 system-config-field-default = Predeterminado: { $value }
 system-config-field-reset = Restablecer al valor predeterminado
 system-config-array-invalid-title = Entrada de arreglo no válida

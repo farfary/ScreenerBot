@@ -79,7 +79,6 @@ system-config-chip-visible = { $fields }中 { $visible }件
 
 ## Config page: field rows
 
-system-config-field-unit = 単位: { $unit }
 system-config-field-default = デフォルト: { $value }
 system-config-field-reset = デフォルトに戻す
 system-config-array-invalid-title = 配列の項目が無効です

@@ -206,10 +206,11 @@
 }
 
 /* The numeric shell is the flex item here, so it — not the input — carries the
-   row's share of the width and the compact cap. */
+   row's share of the width and the compact cap. The cap grows by the unit's own
+   reserve, so a field with a unit keeps the value room of one without. */
 .input-group-enhanced .number-field {
   flex: 1;
-  max-width: 120px;
+  max-width: calc(120px + var(--number-field-unit-space));
 }
 
 .input-large {
