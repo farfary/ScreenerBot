@@ -288,14 +288,26 @@
       }
     }
 
-    _createMainSeries() {
-      const priceFormatOptions = {
+    /**
+     * The main series price format. Its `minMove` is the last significant digit the axis
+     * shows for the highest price in view: the scale steps by whole multiples of it, so
+     * two adjacent ticks never format to the same label.
+     */
+    _priceFormat() {
+      const top = (this.data || []).reduce(
+        (highest, bar) => Math.max(highest, Math.abs(Number(bar.high ?? bar.close)) || 0),
+        0
+      );
+      return {
         type: "custom",
         formatter: (price) => this._formatPrice(price),
-        minMove: 0.000000001,
+        minMove: window.Utils.priceResolution(top) ?? 0.000000001,
       };
+    }
+
+    _createMainSeries() {
       const common = {
-        priceFormat: priceFormatOptions,
+        priceFormat: this._priceFormat(),
         autoscaleInfoProvider: (base) => this._autoscaleInfo(base),
       };
 
@@ -522,6 +534,7 @@
       }
 
       // Set main series data
+      this.mainSeries.applyOptions({ priceFormat: this._priceFormat() });
       if (this.options.chartType === "line" || this.options.chartType === "area") {
         this.mainSeries.setData(this.data.map((d) => ({ time: d.time, value: d.close })));
       } else {

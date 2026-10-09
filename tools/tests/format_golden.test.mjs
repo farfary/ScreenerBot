@@ -557,6 +557,26 @@ test("every trade price keeps the four significant digits of the Positions colum
   assert.deepEqual(trimmed, []);
 });
 
+test("price axis ticks a resolution apart never share a label", () => {
+  const { fmt } = load("en-u-nu-latn");
+  for (const top of [0.012345, 0.0105, 0.00009871, 1.234e-7, 22.6796, 1234.5]) {
+    // The scale places ticks on whole multiples of its step.
+    const step = fmt.priceResolution(top);
+    const highest = Math.round(top / step);
+    let previous = null;
+    for (let k = 0; k < 40; k += 1) {
+      const label = fmt.formatPriceSubscript((highest - k) * step, { trim: false });
+      assert.notEqual(label, previous, `${top}: ticks ${step} apart repeat "${label}"`);
+      previous = label;
+    }
+  }
+  const chart = fs.readFileSync(
+    new URL("templates/scripts/ui/advanced_chart.js", WEBSERVER),
+    "utf8"
+  );
+  assert.match(chart, /minMove: window\.Utils\.priceResolution\(/, "the chart axis steps by it");
+});
+
 test("a price column keeps one significant-digit count across both notations", () => {
   const { fmt } = load("en-u-nu-latn");
   const column = { trim: false };

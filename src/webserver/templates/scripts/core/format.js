@@ -428,6 +428,19 @@ export function formatPriceSubscript(
   return `${sign}0${decimalSeparator()}0${subscript}${digits}`;
 }
 
+/**
+ * One unit of the last significant digit `formatPriceSubscript` shows for `price`
+ * (0.01234 -> 0.00001). A price axis steps by at least this much, so two adjacent ticks
+ * never format to the same label. Null for a price that is not finite or not above zero.
+ */
+export function priceResolution(price, { precision = PRICE_SIGNIFICANT_DIGITS } = {}) {
+  const num = Math.abs(coerceNumber(price));
+  if (!Number.isFinite(num) || num === 0) return null;
+  const exponent = Number(num.toExponential(Math.max(0, precision - 1)).split("e")[1]);
+  // Parsed from its decimal form: 10 ** -5 is 0.000009999999999999999 in binary.
+  return Number(`1e${exponent - (precision - 1)}`);
+}
+
 export function formatPriceSol(price, { fallback, decimals = 12 } = {}) {
   const num = coerceNumber(price);
   if (!Number.isFinite(num)) {
