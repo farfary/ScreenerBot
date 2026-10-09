@@ -74,10 +74,10 @@ function buildSecurityTab(status) {
   const totpEnabled = status.totp_enabled || false;
   // A disabled action names what it waits for in its hint.
   const lockNowHint = !hasPassword
-    ? "settings-security-needs-password"
+    ? `<span class="settings-field-hint" data-l10n-id="settings-security-needs-password"></span>`
     : !isEnabled
-      ? "settings-security-needs-lockscreen"
-      : "settings-security-lock-now-hint";
+      ? `<span class="settings-field-hint" data-l10n-id="settings-security-needs-lockscreen"></span>`
+      : `<span class="settings-field-hint" data-l10n-id="settings-security-lock-now-hint"></span>`;
 
   // Password type display name
   const typeName = Object.hasOwn(PASSWORD_TYPE_LABELS, passwordType)
@@ -180,7 +180,7 @@ function buildSecurityTab(status) {
           <div class="settings-field">
             <div class="settings-field-info">
               <label data-l10n-id="settings-security-lock-now-label"></label>
-              <span class="settings-field-hint" data-l10n-id="${lockNowHint}"></span>
+              ${lockNowHint}
             </div>
             <div class="settings-field-control">
               <button class="btn btn-primary btn-sm" id="securityLockNowBtn" ${!hasPassword || !isEnabled ? "disabled" : ""}>

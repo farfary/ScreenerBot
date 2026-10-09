@@ -41,6 +41,7 @@ const WORDMARKS = new Set([
   "splash-brand",
   "onboarding-brand",
   "lockscreen-brand",
+  "settings-about-brand",
 ]);
 /** Brand-face selectors that are not a wordmark class. Shrink only. */
 const ALLOWED_SELECTORS = new Set([".header h1"]);

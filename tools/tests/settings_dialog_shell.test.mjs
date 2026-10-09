@@ -432,11 +432,11 @@ test("Licenses names start-align and the About title is the wordmark", async (t)
 
   await page.locator('.settings-nav-item[data-tab="about"]').click();
   await page.waitForFunction(
-    () => document.querySelector(".settings-about-name")?.getClientRects().length > 0
+    () => document.querySelector(".settings-about-brand")?.getClientRects().length > 0
   );
   const brand = await page.evaluate(() =>
     [
-      getComputedStyle(document.querySelector(".settings-about-name")).fontFamily,
+      getComputedStyle(document.querySelector(".settings-about-brand")).fontFamily,
       getComputedStyle(document.documentElement).getPropertyValue("--font-brand"),
     ].map((family) => family.replace(/["']/g, "").trim())
   );

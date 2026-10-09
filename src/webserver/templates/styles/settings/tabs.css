@@ -22,7 +22,7 @@
 
 /* The product title is the wordmark: the brand face with the header wordmark's
    weight, tracking and capitals. */
-.settings-about-name {
+.settings-about-brand {
   margin: 0 0 4px;
   font-family: var(--font-brand);
   font-size: 1.5rem;
@@ -455,8 +455,7 @@
 
   .settings-nav-list {
     flex-direction: row;
-    overflow-x: auto;
-    overflow-y: hidden;
+    overflow: auto hidden;
     padding: 0;
   }
 

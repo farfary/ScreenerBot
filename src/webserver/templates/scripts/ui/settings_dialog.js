@@ -830,7 +830,7 @@ export class SettingsDialog {
     return `
       <div class="settings-about">
         <span class="brand-mark settings-about-logo" aria-hidden="true"></span>
-        <h2 class="settings-about-name" translate="no">ScreenerBot</h2>
+        <h2 class="settings-about-brand" data-l10n-id="shell-brand-name" translate="no"></h2>
         <p class="settings-about-tagline" data-l10n-id="settings-about-tagline"></p>
         <div class="settings-about-version">
           <span translate="no">v${version}</span>
