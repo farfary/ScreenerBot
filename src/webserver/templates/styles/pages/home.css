@@ -440,6 +440,12 @@
   white-space: nowrap;
 }
 
+/* A pipeline cell is a third of the sidebar; its label wraps rather than run into the next cell. */
+.pipeline-metric span {
+  white-space: normal;
+  overflow-wrap: anywhere;
+}
+
 .hero-stat-value {
   min-width: 0;
   color: var(--text-primary);
@@ -609,6 +615,7 @@
 .pipeline-metric {
   display: flex;
   flex-direction: column;
+  justify-content: space-between;
   gap: 0.3rem;
   min-width: 0;
   padding: 0.65rem 1rem;

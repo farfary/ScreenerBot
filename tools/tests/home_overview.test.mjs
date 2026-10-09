@@ -10,6 +10,7 @@
  * - Every calendar day that shows a figure is hoverable, and its popover names the
  *   figure; a past day without trades is classed as such, never as empty.
  * - The day-change percent has one precision in the header Worth card and the hero.
+ * - Every pipeline label fits inside its own cell at every desktop width and locale.
  *
  * Run with `npm run test:js`.
  */
@@ -30,10 +31,10 @@ const browser = await chromium.launch({ headless: true });
 after(() => browser.close());
 const [home, shell] = await Promise.all([loadIndex("home"), loadIndex("shell")]);
 
-async function openHome(t, width) {
+async function openHome(t, width, locale = "en") {
   const context = await browser.newContext({ viewport: { width, height: 900 } });
   const api = createApiHandler([home, shell], "populated");
-  const host = await serveDashboard(context, { locale: "en", onApi: api.onApi });
+  const host = await serveDashboard(context, { locale, onApi: api.onApi });
   t.after(async () => {
     await context.close();
     await host.close();
@@ -108,3 +109,27 @@ test("the day-change percent has one precision in the header and the hero", asyn
   assert.ok(decimals(hero) > 0, `hero percent "${hero}" carries decimals`);
   assert.equal(decimals(hero), decimals(header), `hero "${hero}" and header "${header}"`);
 });
+
+for (const locale of ["en", "de"]) {
+  test(`every pipeline label fits inside its cell (${locale})`, async (t) => {
+    const page = await openHome(t, 1024, locale);
+    for (const width of [1024, 1328, 1440, 1920]) {
+      await page.setViewportSize({ width, height: 900 });
+      const overflowing = await page.$$eval(".pipeline-metric", (cells) =>
+        cells
+          .map((cell) => {
+            const label = cell.querySelector("span");
+            const box = cell.getBoundingClientRect();
+            const text = label.getBoundingClientRect();
+            const fits =
+              label.scrollWidth <= label.clientWidth &&
+              text.left >= box.left - 0.5 &&
+              text.right <= box.right + 0.5;
+            return fits ? null : `${label.textContent} (${label.scrollWidth}/${label.clientWidth})`;
+          })
+          .filter(Boolean)
+      );
+      assert.deepEqual(overflowing, [], `${width}px: a pipeline label overflows its cell`);
+    }
+  });
+}
