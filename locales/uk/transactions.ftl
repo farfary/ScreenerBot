@@ -35,8 +35,10 @@ transactions-filter-program = Виклики програм
 
 # Wallet-relative direction. Ids come from TransactionDirection in src/transactions/types.rs
 # (ui/transaction_direction.js).
-transactions-direction-incoming = Вхідна
-transactions-direction-outgoing = Вихідна
+transactions-direction-tokens-in = Токени надійшли
+transactions-direction-tokens-out = Токени вийшли
+transactions-direction-sol-in = { -sol } надійшли
+transactions-direction-sol-out = { -sol } вийшли
 transactions-direction-internal = Внутрішня
 transactions-direction-unknown = Не класифіковано
 

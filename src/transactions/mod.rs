@@ -38,6 +38,8 @@ pub mod database;
 pub mod debug;
 mod debug_helpers;
 pub mod deltas;
+#[cfg(test)]
+mod direction_tests;
 mod error;
 #[cfg(test)]
 mod label_tests;

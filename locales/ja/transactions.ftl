@@ -35,8 +35,10 @@ transactions-filter-program = プログラム呼び出し
 
 # Wallet-relative direction. Ids come from TransactionDirection in src/transactions/types.rs
 # (ui/transaction_direction.js).
-transactions-direction-incoming = 入金
-transactions-direction-outgoing = 出金
+transactions-direction-tokens-in = トークン入金
+transactions-direction-tokens-out = トークン出金
+transactions-direction-sol-in = { -sol } 入金
+transactions-direction-sol-out = { -sol } 出金
 transactions-direction-internal = 内部
 transactions-direction-unknown = 未分類
 

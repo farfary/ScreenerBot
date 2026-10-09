@@ -48,7 +48,7 @@
       "record_fee_native": 0.000105,
       "slot": 318001061,
       "block_time": 1791201600,
-      "direction": "Incoming",
+      "direction": "TokensIn",
       "transaction_type": {
         "id": "transactions-type-with-detail",
         "args": {
@@ -101,7 +101,7 @@
       "record_fee_native": 0.000105,
       "slot": 318001066,
       "block_time": 1791207000,
-      "direction": "Outgoing",
+      "direction": "TokensOut",
       "transaction_type": {
         "id": "transactions-type-with-detail",
         "args": {

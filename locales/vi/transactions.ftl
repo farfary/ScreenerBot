@@ -28,8 +28,10 @@ transactions-filter-ata = Phí rent & tài khoản
 transactions-filter-liquidity = Thanh khoản
 transactions-filter-program = Lệnh gọi chương trình
 
-transactions-direction-incoming = Đến
-transactions-direction-outgoing = Đi
+transactions-direction-tokens-in = Token vào
+transactions-direction-tokens-out = Token ra
+transactions-direction-sol-in = { -sol } vào
+transactions-direction-sol-out = { -sol } ra
 transactions-direction-internal = Nội bộ
 transactions-direction-unknown = Chưa phân loại
 

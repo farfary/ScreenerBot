@@ -14,7 +14,7 @@ use tabled::Tabled;
 pub use super::subject::Subject;
 
 // Analysis cache versioning (bump when snapshot schema changes)
-pub const ANALYSIS_CACHE_VERSION: u32 = 3;
+pub const ANALYSIS_CACHE_VERSION: u32 = 4;
 
 /// Deferred retry record for signatures that timed out/dropped
 /// Used for both manager-level retries and service-level deferred queue
@@ -423,8 +423,10 @@ impl TransactionType {
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub enum TransactionDirection {
-    Incoming,
-    Outgoing,
+    TokensIn,
+    TokensOut,
+    SolIn,
+    SolOut,
     Internal,
     Unknown,
 }
@@ -436,35 +438,54 @@ impl Default for TransactionDirection {
 }
 
 impl TransactionDirection {
-    /// Direction as the wallet experienced it.
+    /// Direction as the wallet experienced it, naming what moved.
     ///
-    /// Direction is a property of the SUBJECT wallet, not of the swap leg: a sell is
-    /// outgoing because tokens left, an ATA close is incoming because rent came back,
-    /// and a transaction that only cost a fee is internal. Deriving it from the
-    /// classifier's swap direction alone is what left every transfer, every rent
-    /// reclaim and every failed attempt reading `Unknown`.
+    /// Direction is a property of the SUBJECT wallet, not of the swap leg, and it
+    /// names its subject: a buy is `TokensIn` (tokens arrived while SOL left), a sell
+    /// `TokensOut`, an ATA close `SolIn` (rent came back), and a transaction that only
+    /// cost a fee is internal. An unnamed "incoming" beside a negative SOL delta read
+    /// as a contradiction. Deriving it from the classifier's swap direction alone is
+    /// what left every transfer, every rent reclaim and every failed attempt reading
+    /// `Unknown`.
     pub fn from_wallet_flow(lamport_delta_excluding_fee: i64, token_delta_raw: i128) -> Self {
         if token_delta_raw > 0 {
-            return Self::Incoming;
+            return Self::TokensIn;
         }
         if token_delta_raw < 0 {
-            return Self::Outgoing;
+            return Self::TokensOut;
         }
         if lamport_delta_excluding_fee > 0 {
-            return Self::Incoming;
+            return Self::SolIn;
         }
         if lamport_delta_excluding_fee < 0 {
-            return Self::Outgoing;
+            return Self::SolOut;
         }
         Self::Internal
     }
 
+    /// The persisted id, also the value of the API `direction` field and filter.
     pub fn as_str(&self) -> &'static str {
         match self {
-            Self::Incoming => "Incoming",
-            Self::Outgoing => "Outgoing",
+            Self::TokensIn => "TokensIn",
+            Self::TokensOut => "TokensOut",
+            Self::SolIn => "SolIn",
+            Self::SolOut => "SolOut",
             Self::Internal => "Internal",
             Self::Unknown => "Unknown",
+        }
+    }
+
+    /// Reads a persisted id. Ids written before the direction named its subject
+    /// (`Incoming`, `Outgoing`) cannot say what moved; they read as `Unknown` until
+    /// the reclassification sweep re-derives the row from its raw transaction.
+    pub fn from_stored(value: &str) -> Self {
+        match value {
+            "TokensIn" => Self::TokensIn,
+            "TokensOut" => Self::TokensOut,
+            "SolIn" => Self::SolIn,
+            "SolOut" => Self::SolOut,
+            "Internal" => Self::Internal,
+            _ => Self::Unknown,
         }
     }
 }

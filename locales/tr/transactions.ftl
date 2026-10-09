@@ -28,8 +28,10 @@ transactions-filter-ata = Kira ve hesaplar
 transactions-filter-liquidity = Likidite
 transactions-filter-program = Program çağrıları
 
-transactions-direction-incoming = Gelen
-transactions-direction-outgoing = Giden
+transactions-direction-tokens-in = Token girişi
+transactions-direction-tokens-out = Token çıkışı
+transactions-direction-sol-in = { -sol } girişi
+transactions-direction-sol-out = { -sol } çıkışı
 transactions-direction-internal = Dahili
 transactions-direction-unknown = Sınıflandırılmamış
 

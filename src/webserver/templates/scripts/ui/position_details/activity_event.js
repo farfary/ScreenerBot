@@ -10,7 +10,7 @@
  */
 import * as Utils from "../../core/utils.js";
 import { withSolUnit } from "../../core/format.js";
-import { directionLabel } from "../transaction_direction.js";
+import { directionFlow, directionLabel } from "../transaction_direction.js";
 import { renderAddress, renderSignature } from "../token_identity.js";
 import { TRANSACTION_STATUS_LABELS } from "../transaction_status.js";
 
@@ -125,8 +125,8 @@ function eventDescription(event, ctx) {
     case "sell":
       return I18n.t("positions-event-wallet-sold", args);
     case "transfer":
-      if (event.direction === "Incoming") return I18n.t("positions-event-received", args);
-      if (event.direction === "Outgoing") return I18n.t("positions-event-sent", args);
+      if (directionFlow(event.direction) === "in") return I18n.t("positions-event-received", args);
+      if (directionFlow(event.direction) === "out") return I18n.t("positions-event-sent", args);
       return I18n.t("positions-event-transferred", args);
     case "ata":
       return I18n.t("positions-event-ata");

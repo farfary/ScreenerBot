@@ -28,8 +28,10 @@ transactions-filter-ata = रेंट और अकाउंट
 transactions-filter-liquidity = लिक्विडिटी
 transactions-filter-program = प्रोग्राम कॉल
 
-transactions-direction-incoming = आवक
-transactions-direction-outgoing = जावक
+transactions-direction-tokens-in = टोकन आवक
+transactions-direction-tokens-out = टोकन जावक
+transactions-direction-sol-in = { -sol } आवक
+transactions-direction-sol-out = { -sol } जावक
 transactions-direction-internal = आंतरिक
 transactions-direction-unknown = अवर्गीकृत
 

@@ -28,8 +28,10 @@ transactions-filter-ata = Рента и аккаунты
 transactions-filter-liquidity = Ликвидность
 transactions-filter-program = Вызовы программ
 
-transactions-direction-incoming = Входящая
-transactions-direction-outgoing = Исходящая
+transactions-direction-tokens-in = Токены пришли
+transactions-direction-tokens-out = Токены ушли
+transactions-direction-sol-in = { -sol } пришли
+transactions-direction-sol-out = { -sol } ушли
 transactions-direction-internal = Внутренняя
 transactions-direction-unknown = Не классифицировано
 

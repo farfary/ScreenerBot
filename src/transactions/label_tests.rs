@@ -13,8 +13,10 @@ use crate::chains::solana::transactions::program_ids::*;
 /// `DIRECTION_LABELS` (ui/transaction_direction.js).
 fn direction_key(direction: &TransactionDirection) -> &'static str {
     match direction {
-        TransactionDirection::Incoming => "transactions-direction-incoming",
-        TransactionDirection::Outgoing => "transactions-direction-outgoing",
+        TransactionDirection::TokensIn => "transactions-direction-tokens-in",
+        TransactionDirection::TokensOut => "transactions-direction-tokens-out",
+        TransactionDirection::SolIn => "transactions-direction-sol-in",
+        TransactionDirection::SolOut => "transactions-direction-sol-out",
         TransactionDirection::Internal => "transactions-direction-internal",
         TransactionDirection::Unknown => "transactions-direction-unknown",
     }
@@ -47,8 +49,10 @@ fn assert_in_catalog(key: &str) {
 #[test]
 fn direction_labels_exist_in_the_catalog() {
     for direction in [
-        TransactionDirection::Incoming,
-        TransactionDirection::Outgoing,
+        TransactionDirection::TokensIn,
+        TransactionDirection::TokensOut,
+        TransactionDirection::SolIn,
+        TransactionDirection::SolOut,
         TransactionDirection::Internal,
         TransactionDirection::Unknown,
     ] {

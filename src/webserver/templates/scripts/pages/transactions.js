@@ -12,7 +12,11 @@ import { DataTable } from "../ui/data_table.js";
 import { requestManager } from "../core/request_manager.js";
 import { TransactionDetailsDialog } from "../ui/transaction_details_dialog.js";
 import { TYPE_FILTER_OPTIONS, typeKind, typeLabel, typeVariant } from "../ui/transaction_type.js";
-import { directionBadge, directionLabel } from "../ui/transaction_direction.js";
+import {
+  DIRECTION_FILTER_VALUES,
+  directionBadge,
+  directionLabel,
+} from "../ui/transaction_direction.js";
 import { listStatusBadge, statusLabel } from "../ui/transaction_status.js";
 import {
   renderSignature,
@@ -589,9 +593,10 @@ function createLifecycle() {
               autoApply: false,
               options: [
                 { value: "all", label: I18n.t("transactions-filter-all-directions") },
-                { value: "Incoming", label: directionLabel("Incoming") },
-                { value: "Outgoing", label: directionLabel("Outgoing") },
-                { value: "Internal", label: directionLabel("Internal") },
+                ...DIRECTION_FILTER_VALUES.map((value) => ({
+                  value,
+                  label: directionLabel(value),
+                })),
               ],
               onChange: (value, el, options) => {
                 state.filters.direction = value || "all";
@@ -656,7 +661,9 @@ function createLifecycle() {
       if (serverState.filters.type) {
         state.filters.type = serverState.filters.type;
       }
-      if (serverState.filters.direction) {
+      // A saved direction the filter no longer offers (an id from before the
+      // direction named its subject) falls back to every direction.
+      if (DIRECTION_FILTER_VALUES.includes(serverState.filters.direction)) {
         state.filters.direction = serverState.filters.direction;
       }
       if (serverState.filters.status) {

@@ -4,7 +4,7 @@
 //! Joining an event's record half to its on-chain half.
 
 use crate::chains::adapter;
-use crate::transactions::{TokenTransfer, Transaction, TransactionDirection, TransactionStatus};
+use crate::transactions::{TokenTransfer, Transaction, TransactionStatus};
 
 use super::super::types::{ActivityEvent, TransactionTokenTransferSummary};
 use super::drafts::Draft;
@@ -72,7 +72,7 @@ pub(super) fn merge_position_event(
         slot: tx.and_then(|tx| tx.slot),
         block_time: tx.and_then(|tx| tx.block_time),
         fee_sol: tx.and_then(transaction_fee_sol),
-        direction: tx.map(|tx| describe_direction(&tx.direction)),
+        direction: tx.map(|tx| tx.direction.as_str().to_owned()),
         transaction_type: tx.map(|tx| tx.transaction_type.ui_text()),
         router: tx.and_then(|tx| tx.token_swap_info.as_ref().map(|info| info.router.clone())),
         sol_change: tx.map(|tx| tx.native_balance_change),
@@ -201,14 +201,5 @@ fn describe_status(status: &TransactionStatus) -> String {
         TransactionStatus::Confirmed => "Confirmed".to_owned(),
         TransactionStatus::Finalized => "Finalized".to_owned(),
         TransactionStatus::Failed(err) => format!("Failed: {err}"),
-    }
-}
-
-fn describe_direction(direction: &TransactionDirection) -> String {
-    match direction {
-        TransactionDirection::Incoming => "Incoming".to_owned(),
-        TransactionDirection::Outgoing => "Outgoing".to_owned(),
-        TransactionDirection::Internal => "Internal".to_owned(),
-        TransactionDirection::Unknown => "Unknown".to_owned(),
     }
 }

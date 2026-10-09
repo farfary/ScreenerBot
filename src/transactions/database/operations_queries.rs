@@ -596,12 +596,10 @@ impl TransactionDatabase {
                     .unwrap_or(TransactionType::Unknown);
 
                 let direction_str: Option<String> = row.get(13)?;
-                let direction = match direction_str.as_deref() {
-                    Some("Incoming") => TransactionDirection::Incoming,
-                    Some("Outgoing") => TransactionDirection::Outgoing,
-                    Some("Internal") => TransactionDirection::Internal,
-                    _ => TransactionDirection::Unknown,
-                };
+                let direction = direction_str
+                    .as_deref()
+                    .map(TransactionDirection::from_stored)
+                    .unwrap_or(TransactionDirection::Unknown);
 
                 let native_balance_change_json: Option<String> = row.get(14)?;
                 let native_balance_changes: Vec<SolBalanceChange> = native_balance_change_json

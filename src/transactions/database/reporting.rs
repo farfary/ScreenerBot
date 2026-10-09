@@ -179,7 +179,13 @@ impl TransactionDatabase {
                 // `type_kind` -- the stable discriminant -- not the serialized
                 // payload, which no consumer of a list row can read.
                 let transaction_type: Option<String> = row.get(7)?;
-                let direction: Option<String> = row.get(8)?;
+                // Through the enum, so an id written before the direction named its
+                // subject reads as `Unknown` here exactly as it does in the detail view.
+                let direction: Option<String> = row.get::<_, Option<String>>(8)?.map(|stored| {
+                    TransactionDirection::from_stored(&stored)
+                        .as_str()
+                        .to_owned()
+                });
                 let token_swap_info_json: Option<String> = row.get(9)?;
                 let token_transfers_json: Option<String> = row.get(10)?;
                 let ata_operations_json: Option<String> = row.get(11)?;
@@ -508,8 +514,10 @@ fn canonical_direction(value: &str) -> Option<String> {
 
     let lowered = trimmed.to_ascii_lowercase();
     let normalized = match lowered.as_str() {
-        "incoming" => "Incoming",
-        "outgoing" => "Outgoing",
+        "tokensin" => "TokensIn",
+        "tokensout" => "TokensOut",
+        "solin" => "SolIn",
+        "solout" => "SolOut",
         "internal" => "Internal",
         "unknown" => "Unknown",
         _ => return Some(trimmed.to_string()),
@@ -630,7 +638,7 @@ mod tests {
             recovered_sol: 0.00203928,
             token_mint: "DezXAZ8z7PnrnRJjz3wXBoRgixCa6xjnB7YaB1pPB263".to_owned(),
         };
-        transaction.direction = TransactionDirection::Incoming;
+        transaction.direction = TransactionDirection::SolIn;
         transaction.native_balance_change = 0.00203428;
         transaction.raw_transaction_data = Some(json!({ "signature": transaction.signature }));
 
@@ -665,7 +673,7 @@ mod tests {
             )
             .expect("query processed row");
         assert_eq!(kind, "ata_close");
-        assert_eq!(direction, "Incoming");
+        assert_eq!(direction, "SolIn");
         assert!((native_delta - 0.00203428).abs() < 1e-12);
     }
 
@@ -688,7 +696,7 @@ mod tests {
         transaction.instructions_count = 2;
         transaction.accounts_count = 3;
         transaction.transaction_type = TransactionType::Transfer;
-        transaction.direction = TransactionDirection::Outgoing;
+        transaction.direction = TransactionDirection::SolOut;
         transaction.native_balance_change = -0.25;
         transaction.native_balance_changes = vec![SolBalanceChange {
             account: "wallet".to_owned(),
@@ -752,12 +760,12 @@ mod tests {
     fn type_filters_match_modern_and_legacy_variants() {
         let row_swap = sample_row(
             Some("SwapSolToToken { .. }"),
-            Some("Outgoing"),
+            Some("TokensIn"),
             true,
             None,
             0.0,
         );
-        let row_buy = sample_row(Some("Buy"), Some("Outgoing"), true, None, 0.0);
+        let row_buy = sample_row(Some("Buy"), Some("TokensIn"), true, None, 0.0);
 
         let filters = TransactionListFilters {
             types: vec!["buy".to_owned()],
@@ -776,7 +784,7 @@ mod tests {
 
         let failed_row = sample_row(
             Some("SwapTokenToSol { .. }"),
-            Some("Outgoing"),
+            Some("Internal"),
             false,
             None,
             0.0,
@@ -789,10 +797,10 @@ mod tests {
 
     #[test]
     fn direction_filter_is_case_insensitive() {
-        let row = sample_row(Some("Transfer"), Some("Incoming"), true, None, 0.0);
+        let row = sample_row(Some("Transfer"), Some("SolIn"), true, None, 0.0);
 
         let filters = TransactionListFilters {
-            direction: Some("incoming".to_owned()),
+            direction: Some("solin".to_owned()),
             ..Default::default()
         };
 
@@ -801,7 +809,7 @@ mod tests {
 
     #[test]
     fn router_filter_handles_case_insensitive_search() {
-        let row = sample_row(Some("Swap"), Some("Outgoing"), true, Some("Raydium"), 0.0);
+        let row = sample_row(Some("Swap"), Some("TokensOut"), true, Some("Raydium"), 0.0);
 
         let filters = TransactionListFilters {
             router: Some("ray".to_owned()),

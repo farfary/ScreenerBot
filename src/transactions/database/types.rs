@@ -32,7 +32,7 @@ pub struct TransactionListFilters {
     /// Only confirmed/finalized transactions
     pub only_confirmed: Option<bool>,
 
-    /// Filter by direction: "Incoming", "Outgoing", "Internal", "Unknown"
+    /// Filter by direction: a `TransactionDirection` id ("TokensIn", "SolOut", ...)
     pub direction: Option<String>,
 
     /// Filter by status: "Pending", "Confirmed", "Finalized", "Failed"

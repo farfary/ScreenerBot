@@ -30,8 +30,10 @@ transactions-filter-ata = Miete und Konten
 transactions-filter-liquidity = Liquidität
 transactions-filter-program = Programmaufrufe
 
-transactions-direction-incoming = Eingehend
-transactions-direction-outgoing = Ausgehend
+transactions-direction-tokens-in = Token eingehend
+transactions-direction-tokens-out = Token ausgehend
+transactions-direction-sol-in = { -sol } eingehend
+transactions-direction-sol-out = { -sol } ausgehend
 transactions-direction-internal = Intern
 transactions-direction-unknown = Nicht klassifiziert
 

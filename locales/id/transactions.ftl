@@ -31,8 +31,10 @@ transactions-filter-ata = Rent & akun
 transactions-filter-liquidity = Likuiditas
 transactions-filter-program = Panggilan program
 
-transactions-direction-incoming = Masuk
-transactions-direction-outgoing = Keluar
+transactions-direction-tokens-in = Token masuk
+transactions-direction-tokens-out = Token keluar
+transactions-direction-sol-in = { -sol } masuk
+transactions-direction-sol-out = { -sol } keluar
 transactions-direction-internal = Internal
 transactions-direction-unknown = Tidak terklasifikasi
 

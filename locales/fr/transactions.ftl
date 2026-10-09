@@ -28,8 +28,10 @@ transactions-filter-ata = Rent et comptes
 transactions-filter-liquidity = Liquidité
 transactions-filter-program = Appels de programme
 
-transactions-direction-incoming = Entrante
-transactions-direction-outgoing = Sortante
+transactions-direction-tokens-in = Tokens entrants
+transactions-direction-tokens-out = Tokens sortants
+transactions-direction-sol-in = { -sol } entrant
+transactions-direction-sol-out = { -sol } sortant
 transactions-direction-internal = Interne
 transactions-direction-unknown = Non classée
 
