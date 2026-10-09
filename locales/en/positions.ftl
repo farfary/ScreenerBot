@@ -46,12 +46,12 @@ positions-column-avg-exit = Avg Exit ({ -sol })
 positions-column-current-price = Current ({ -sol })
 positions-column-total-invested = Total Invested
 positions-column-proceeds = Proceeds
-positions-column-pnl = PnL
-positions-column-pnl-percent = PnL %
+positions-column-pnl = P&L
+positions-column-pnl-percent = P&L %
 positions-column-size = Size
 positions-column-dca = DCA
 positions-column-exits = Exits
-positions-column-unrealized-pnl = Unrealized PnL
+positions-column-unrealized-pnl = Unrealized P&L
 positions-column-unrealized-percent = Unrealized %
 
 ## Cells

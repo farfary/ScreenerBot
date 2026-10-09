@@ -50,7 +50,6 @@ transactions-search =
 transactions-load-failed = İşlemler yenilenemedi
 transactions-setup-gate-title = İşlemler bir cüzdan gerektirir
 transactions-summary-total = Toplam
-transactions-summary-estimate = Tahmin
 transactions-summary-success = Başarılı
 transactions-summary-failed = Başarısız
 transactions-filter-wallet = Cüzdan

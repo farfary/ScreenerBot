@@ -35,12 +35,12 @@ positions-column-avg-exit = औसत एग्ज़िट ({ -sol })
 positions-column-current-price = वर्तमान ({ -sol })
 positions-column-total-invested = कुल निवेश
 positions-column-proceeds = प्राप्ति
-positions-column-pnl = PnL
-positions-column-pnl-percent = PnL %
+positions-column-pnl = P&L
+positions-column-pnl-percent = P&L %
 positions-column-size = साइज़
 positions-column-dca = DCA
 positions-column-exits = एग्ज़िट
-positions-column-unrealized-pnl = अवास्तविक PnL
+positions-column-unrealized-pnl = अवास्तविक P&L
 positions-column-unrealized-percent = अवास्तविक %
 
 positions-unknown-basis = इस वॉलेट के इतिहास में कॉस्ट बेसिस नहीं है (एयरड्रॉप, USD-कोटेड फ़िल, या बिना SOL लेग वाला स्वैप)

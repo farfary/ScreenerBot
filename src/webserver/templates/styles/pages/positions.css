@@ -16,11 +16,15 @@
   overflow: hidden;
 }
 
+/* An origin or holding tag after the token name. Set as an uppercase caption, the
+   same treatment as the Copy Trading mode tag, so it never reads as part of the name. */
 .position-origin-label {
   flex-shrink: 0;
   color: var(--text-muted);
   font-size: 0.62rem;
   font-weight: 600;
+  letter-spacing: 0.05em;
+  text-transform: uppercase;
 }
 
 .position-origin-copy {

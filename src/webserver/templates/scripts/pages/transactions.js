@@ -7,10 +7,11 @@ import { registerPage } from "../core/lifecycle.js";
 import { Poller } from "../core/poller.js";
 import { $ } from "../core/dom.js";
 import * as Utils from "../core/utils.js";
+import { withApprox } from "../core/format.js";
 import { DataTable } from "../ui/data_table.js";
 import { requestManager } from "../core/request_manager.js";
 import { TransactionDetailsDialog } from "../ui/transaction_details_dialog.js";
-import { TYPE_FILTER_OPTIONS, typeLabel, typeVariant } from "../ui/transaction_type.js";
+import { TYPE_FILTER_OPTIONS, typeKind, typeLabel, typeVariant } from "../ui/transaction_type.js";
 import { directionBadge, directionLabel } from "../ui/transaction_direction.js";
 import { listStatusBadge, statusLabel } from "../ui/transaction_status.js";
 import {
@@ -29,8 +30,12 @@ const DEFAULT_FILTERS = {
   status: "all",
 };
 
+/**
+ * A failed transaction carries the type "failed" because its effects were never applied,
+ * and the Status column already states the failure, so the Type cell stays absent.
+ */
 function formatTypeBadge(value) {
-  if (!value) return "—";
+  if (!value || typeKind(value) === "failed") return "—";
   return `<span class="badge ${typeVariant(value)}">${Utils.escapeHtml(typeLabel(value))}</span>`;
 }
 
@@ -99,14 +104,15 @@ function createLifecycle() {
       return;
     }
 
-    // Prefer exact totals from summary; fall back to estimate if unavailable
+    // The exact summary total; until it arrives, the list's row estimate marked approximate.
     const totalFromSummary = state.summary?.total;
-    const totalEstimate =
-      state.totalEstimate === null || state.totalEstimate === undefined
-        ? null
-        : state.totalEstimate;
-    const totalValue =
-      typeof totalFromSummary === "number" ? totalFromSummary : (totalEstimate ?? null);
+    const totalEstimate = state.totalEstimate ?? null;
+    let totalText = "—";
+    if (typeof totalFromSummary === "number") {
+      totalText = Utils.formatNumber(totalFromSummary, { decimals: 0 });
+    } else if (totalEstimate !== null) {
+      totalText = withApprox(Utils.formatNumber(totalEstimate, { decimals: 0 }));
+    }
 
     const successCountGlobal =
       typeof state.summary?.success_count === "number" ? state.summary.success_count : null;
@@ -117,12 +123,7 @@ function createLifecycle() {
       {
         id: "tx-total",
         label: I18n.t("transactions-summary-total"),
-        value: totalValue === null ? "—" : Utils.formatNumber(totalValue, { decimals: 0 }),
-      },
-      {
-        id: "tx-estimate",
-        label: I18n.t("transactions-summary-estimate"),
-        value: totalEstimate === null ? "—" : Utils.formatNumber(totalEstimate, { decimals: 0 }),
+        value: totalText,
       },
       {
         id: "tx-success",
@@ -131,18 +132,14 @@ function createLifecycle() {
           successCountGlobal === null
             ? "—"
             : Utils.formatNumber(successCountGlobal, { decimals: 0 }),
-        variant:
-          typeof successCountGlobal === "number" && successCountGlobal > 0
-            ? "success"
-            : "secondary",
+        variant: Utils.countTone(successCountGlobal, "success") || "secondary",
       },
       {
         id: "tx-failed",
         label: I18n.t("transactions-summary-failed"),
         value:
           failedCountGlobal === null ? "—" : Utils.formatNumber(failedCountGlobal, { decimals: 0 }),
-        variant:
-          typeof failedCountGlobal === "number" && failedCountGlobal > 0 ? "warning" : "success",
+        variant: Utils.countTone(failedCountGlobal, "warning") || "secondary",
       },
     ]);
   };
@@ -397,46 +394,46 @@ function createLifecycle() {
         {
           id: "timestamp",
           label: I18n.t("transactions-col-time"),
-          minWidth: 160,
+          minWidth: 130,
           floating: true,
-          render: (value) => Utils.formatTimestamp(value, { fallback: "—" }),
-        },
-        {
-          id: "signature",
-          label: I18n.t("transactions-col-signature"),
-          minWidth: 170,
-          render: (value) => renderSignature(value),
+          wrap: false,
+          render: (value) =>
+            Utils.formatTimestamp(value, {
+              includeYear: false,
+              includeSeconds: false,
+              fallback: "—",
+            }),
         },
         {
           id: "transaction_type",
           label: I18n.t("transactions-col-type"),
-          minWidth: 150,
+          minWidth: 90,
           render: (value) => formatTypeBadge(value),
         },
         {
           id: "direction",
           label: I18n.t("transactions-col-direction"),
-          minWidth: 130,
+          minWidth: 110,
           render: (value) => directionBadge(value, "—"),
         },
         {
           id: "status",
           label: I18n.t("transactions-col-status"),
-          minWidth: 120,
+          minWidth: 100,
           render: (value, row) => formatStatusBadge(value, row?.success),
         },
         {
           id: "native_delta",
           label: I18n.t("transactions-col-native-delta"),
           type: "sol",
-          minWidth: 140,
-          render: (value) => Utils.formatPnL(value, { decimals: 6, fallback: "—" }),
+          minWidth: 110,
+          render: (value) => Utils.formatPnL(value, { fallback: "—" }),
         },
         {
           id: "fee_sol",
           label: I18n.t("transactions-col-fees"),
           type: "sol",
-          minWidth: 130,
+          minWidth: 100,
           render: (value) => Utils.formatSol(value, { decimals: 6, fallback: "—" }),
         },
         {
@@ -449,7 +446,7 @@ function createLifecycle() {
         {
           id: "router",
           label: I18n.t("transactions-col-router"),
-          minWidth: 140,
+          minWidth: 90,
           render: (value) =>
             value === null || value === undefined ? "—" : Utils.escapeHtml(venueLabel(value)),
         },
@@ -457,11 +454,17 @@ function createLifecycle() {
           id: "instructions_count",
           label: I18n.t("transactions-col-instructions"),
           type: "number",
-          minWidth: 90,
+          minWidth: 64,
           // Every transaction has at least one instruction; 0 is a row stored before the
           // count was recorded, so it reads as unknown.
           render: (value) =>
             Utils.formatNumber(value > 0 ? value : null, { decimals: 0, fallback: "—" }),
+        },
+        {
+          id: "signature",
+          label: I18n.t("transactions-col-signature"),
+          minWidth: 130,
+          render: (value) => renderSignature(value),
         },
       ];
 
@@ -500,7 +503,6 @@ function createLifecycle() {
           },
           summary: [
             { id: "tx-total", label: I18n.t("transactions-summary-total"), value: "—" },
-            { id: "tx-estimate", label: I18n.t("transactions-summary-estimate"), value: "—" },
             {
               id: "tx-success",
               label: I18n.t("transactions-summary-success"),
@@ -511,7 +513,7 @@ function createLifecycle() {
               id: "tx-failed",
               label: I18n.t("transactions-summary-failed"),
               value: "—",
-              variant: "success",
+              variant: "secondary",
             },
           ],
           controls: [

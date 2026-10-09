@@ -60,8 +60,8 @@ tokens-positions-section-range = टारगेट और रेंज
 tokens-positions-section-market = मार्केट और होल्डिंग
 tokens-positions-kicker = पोज़िशन
 tokens-positions-fallback-symbol = टोकन
-tokens-positions-realized-pnl = वास्तविक PnL
-tokens-positions-unrealized-pnl = अवास्तविक PnL
+tokens-positions-realized-pnl = वास्तविक P&L
+tokens-positions-unrealized-pnl = अवास्तविक P&L
 tokens-positions-size = साइज़
 
 tokens-security-analysis-pending = { -rugcheck } विश्लेषण जारी है...

@@ -50,7 +50,6 @@ transactions-search =
 transactions-load-failed = ट्रांज़ैक्शन रीफ़्रेश नहीं हो सके
 transactions-setup-gate-title = लेन-देन के लिए वॉलेट ज़रूरी है
 transactions-summary-total = कुल
-transactions-summary-estimate = अनुमान
 transactions-summary-success = सफल
 transactions-summary-failed = विफल
 transactions-filter-wallet = वॉलेट

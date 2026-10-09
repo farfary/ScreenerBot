@@ -50,7 +50,6 @@ transactions-search =
 transactions-load-failed = Impossible d'actualiser les transactions
 transactions-setup-gate-title = Les transactions nécessitent un portefeuille
 transactions-summary-total = Total
-transactions-summary-estimate = Estimation
 transactions-summary-success = Réussies
 transactions-summary-failed = Échecs
 transactions-filter-wallet = Portefeuille

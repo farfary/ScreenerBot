@@ -481,3 +481,21 @@ test("every formatUptime caller names a style the formatter implements", () => {
   }
   assert.deepEqual(unknown, []);
 });
+
+test("every formatTimestamp caller passes only options the formatter implements", () => {
+  const OPTIONS = new Set(["fallback", "includeSeconds", "includeYear", "includeDate"]);
+  const scripts = new URL("templates/scripts/", WEBSERVER);
+  const files = fs
+    .readdirSync(scripts, { recursive: true })
+    .filter((name) => name.endsWith(".js") || name.endsWith(".mjs"));
+  const unknown = [];
+  for (const name of files) {
+    const source = fs.readFileSync(new URL(name, scripts), "utf8");
+    for (const match of source.matchAll(/formatTimestamp\([^;{)]*,\s*\{([^}]*)\}/g)) {
+      for (const key of match[1].matchAll(/(\w+)\s*:/g)) {
+        if (!OPTIONS.has(key[1])) unknown.push(`${name}: ${key[1]}`);
+      }
+    }
+  }
+  assert.deepEqual(unknown, []);
+});

@@ -62,7 +62,6 @@ transactions-search =
 transactions-load-failed = トランザクションを更新できませんでした
 transactions-setup-gate-title = 取引にはウォレットが必要です
 transactions-summary-total = 合計
-transactions-summary-estimate = 推定
 transactions-summary-success = 成功
 transactions-summary-failed = 失敗
 transactions-filter-wallet = ウォレット

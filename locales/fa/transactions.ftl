@@ -62,7 +62,6 @@ transactions-search =
 transactions-load-failed = به‌روزرسانی تراکنش‌ها ممکن نشد
 transactions-setup-gate-title = تراکنش‌ها به کیف پول نیاز دارند
 transactions-summary-total = مجموع
-transactions-summary-estimate = برآورد
 transactions-summary-success = موفق
 transactions-summary-failed = ناموفق
 transactions-filter-wallet = کیف پول

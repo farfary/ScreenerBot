@@ -1,0 +1,175 @@
+// Copyright (c) 2024-2026 ScreenerBot (screenerbot.io)
+// SPDX-License-Identifier: BUSL-1.1
+//
+
+/**
+ * Guard: the Transactions, Positions and Main Wallet tables read correctly at the
+ * 1200px window floor.
+ *
+ * At 1200px the Transactions Router and Instr. columns and the Positions P&L columns
+ * sat off-screen behind wide minimums; the Time cell wrapped into "Oct 7, 2026," over
+ * "03:15:00 AM"; a failed transaction printed FAILED under both Type and Status; Δ SOL
+ * padded six decimals; a bare "Estimate" count sat beside the total; the position
+ * origin tag ran into the token name; and the Main Wallet chip printed an absolute
+ * timestamp because it passed an option the timestamp formatter does not have.
+ *
+ * - Transactions: every column but the signature is on screen, the Time cell is one
+ *   line, a failed row's Type is absent, Δ SOL carries no padded decimals and the
+ *   toolbar has no separate estimate count.
+ * - Positions Open and Closed: both P&L columns are on screen and headed "P&L".
+ * - A position origin tag is set apart from the name as an uppercase caption.
+ * - Main Wallet: "Last used" is relative, the toolbar stays on one row and a token
+ *   balance carries no padded zeros.
+ *
+ * Run with `npm run test:js`.
+ */
+
+import test, { after } from "node:test";
+import assert from "node:assert/strict";
+
+import { chromium } from "playwright";
+
+import { serveDashboard } from "../lib/dashboard_host.mjs";
+import { createApiHandler, loadIndex } from "../lib/dashboard_fixtures.mjs";
+
+const READY = "body:not(.initialization-mode) main.content:not([data-loading])";
+const tab = (id) => `#subTabsContainer [data-tab-id="${id}"]`;
+
+const browser = await chromium.launch({ headless: true });
+after(() => browser.close());
+
+const shell = await loadIndex("shell");
+
+async function openPage(t, name) {
+  const context = await browser.newContext({ viewport: { width: 1200, height: 800 } });
+  const api = createApiHandler([await loadIndex(name), shell], "populated");
+  const host = await serveDashboard(context, { locale: "en", onApi: api.onApi });
+  t.after(async () => {
+    await context.close();
+    await host.close();
+  });
+  const page = await context.newPage();
+  page.setDefaultTimeout(15000);
+  await page.goto(`${host.origin}/${name}`);
+  await page.waitForSelector(READY);
+  return page;
+}
+
+/** Each visible column's header text and whether its right edge is inside the table viewport. */
+function columnsOnScreen(page, root) {
+  return page.$eval(root, (el) => {
+    const viewport = el.querySelector(".data-table-scroll-container").getBoundingClientRect();
+    return [...el.querySelectorAll("thead th[data-column-id]")]
+      .filter((th) => th.offsetParent !== null)
+      .map((th) => ({
+        id: th.dataset.columnId,
+        label: th.textContent.trim(),
+        visible: Math.round(th.getBoundingClientRect().right) <= Math.round(viewport.right),
+      }));
+  });
+}
+
+function assertOnScreen(columns, ids, where) {
+  for (const id of ids) {
+    const column = columns.find((entry) => entry.id === id);
+    assert.ok(column, `${where}: ${id} renders`);
+    assert.ok(column.visible, `${where}: ${id} is on screen at 1200px`);
+  }
+}
+
+test("Transactions keeps its columns on screen and states each fact once", async (t) => {
+  const page = await openPage(t, "transactions");
+  const root = "#transactions-root";
+  await page.waitForSelector(`${root} tbody tr[data-row-id]`);
+
+  const columns = await columnsOnScreen(page, root);
+  assertOnScreen(
+    columns,
+    columns.filter((column) => column.id !== "signature").map((column) => column.id),
+    "Transactions"
+  );
+
+  const cells = await page.$$eval(`${root} tbody tr[data-row-id]`, (rows) =>
+    rows.map((row) => {
+      const cell = (id) => row.querySelector(`td[data-column-id="${id}"]`);
+      return {
+        timeWrap: getComputedStyle(cell("timestamp")).whiteSpace,
+        type: cell("transaction_type").textContent.trim(),
+        status: cell("status").textContent.trim(),
+        delta: cell("native_delta").textContent.trim(),
+      };
+    })
+  );
+  assert.ok(cells.length > 0, "transaction rows render");
+  for (const cell of cells) {
+    assert.equal(cell.timeWrap, "nowrap", "the Time cell never wraps");
+    assert.doesNotMatch(cell.delta, /\d\.\d{5,}/, `Δ SOL "${cell.delta}" pads no decimals`);
+    if (/failed/i.test(cell.status)) {
+      assert.equal(cell.type, "—", "a failed row leaves its Type to the Status column");
+    }
+  }
+  assert.ok(
+    cells.some((cell) => /failed/i.test(cell.status)),
+    "the fixture carries a failed row"
+  );
+  const summary = await page.$$eval(`${root} [data-summary-id]`, (chips) =>
+    chips.map((chip) => chip.dataset.summaryId)
+  );
+  assert.ok(summary.includes("tx-total"), "the toolbar states the total");
+  assert.ok(!summary.includes("tx-estimate"), "no separate estimate count");
+});
+
+test("Positions Open and Closed keep P&L on screen under one term", async (t) => {
+  const page = await openPage(t, "positions");
+  const root = "#positions-root";
+  await page.waitForSelector(`${root} tbody tr[data-row-id]`);
+  const open = await columnsOnScreen(page, root);
+  assertOnScreen(open, ["unrealized_pnl", "unrealized_pnl_percent"], "Positions Open");
+
+  await page.click(tab("closed"));
+  await page.waitForSelector(`${root} th[data-column-id="pnl"]`);
+  await page.waitForSelector(`${root} tbody tr[data-row-id]`);
+  const closed = await columnsOnScreen(page, root);
+  assertOnScreen(closed, ["pnl", "pnl_percent"], "Positions Closed");
+
+  for (const column of [...open, ...closed]) {
+    assert.doesNotMatch(column.label, /PnL/i, `${column.id} spells P&L`);
+  }
+});
+
+test("a position origin tag reads as a tag, not as part of the name", async (t) => {
+  const page = await openPage(t, "positions");
+  const tag = page.locator("#positions-root .position-origin-label").first();
+  await tag.waitFor();
+  const style = await tag.evaluate((el) => {
+    const own = getComputedStyle(el);
+    return { transform: own.textTransform, spacing: own.letterSpacing };
+  });
+  assert.equal(style.transform, "uppercase");
+  assert.notEqual(style.spacing, "normal");
+});
+
+test("Main Wallet states last use relatively, on one toolbar row, with unpadded balances", async (t) => {
+  const page = await openPage(t, "wallets");
+  const root = "#tokens-datatable-root";
+  await page.waitForSelector(`${root} tbody tr[data-row-id]`);
+
+  const chip = await page.locator(`${root} [data-summary-id="wt-last-used"]`).textContent();
+  assert.doesNotMatch(chip, /\b20\d\d\b/, "Last used carries no absolute year");
+  assert.match(chip, /ago|now/i, "Last used is relative");
+
+  const tops = await page.$eval(`${root} .table-toolbar`, (bar) =>
+    [".table-toolbar-identity", ".table-toolbar-search", ".table-toolbar__actions"].map((sel) =>
+      Math.round(bar.querySelector(sel).getBoundingClientRect().top)
+    )
+  );
+  assert.ok(Math.max(...tops) - Math.min(...tops) < 16, `toolbar stays on one row (${tops})`);
+
+  const balances = await page.$$eval(`${root} td[data-column-id="ui_amount"]`, (tds) =>
+    tds.map((td) => td.textContent.trim())
+  );
+  assert.ok(balances.length > 0, "token balances render");
+  for (const balance of balances) {
+    assert.doesNotMatch(balance, /\.\d*0$/, `balance "${balance}" pads no zeros`);
+  }
+});

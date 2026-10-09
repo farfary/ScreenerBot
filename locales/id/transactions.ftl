@@ -53,7 +53,6 @@ transactions-search =
 transactions-load-failed = Tidak dapat menyegarkan transaksi
 transactions-setup-gate-title = Transaksi memerlukan dompet
 transactions-summary-total = Total
-transactions-summary-estimate = Perkiraan
 transactions-summary-success = Berhasil
 transactions-summary-failed = Gagal
 transactions-filter-wallet = Dompet

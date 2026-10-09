@@ -74,7 +74,9 @@ export function createWalletRenderers({
       label: I18n.t("wallets-holdings-col-balance"),
       type: "number",
       sortable: true,
-      render: (value) => (value != null ? Utils.formatNumber(value, { decimals: 4 }) : "—"),
+      // The token's own precision, without padding a whole or short amount with zeros.
+      render: (value, row) =>
+        Utils.formatNumber(value, { decimals: 0, maxDecimals: row?.decimals ?? 9, fallback: "—" }),
     },
     {
       id: "value_sol",
@@ -134,7 +136,8 @@ export function createWalletRenderers({
       id: "created_at",
       label: I18n.t("wallets-list-col-created"),
       sortable: true,
-      render: (value) => (value ? Utils.formatTimestamp(value, { variant: "short" }) : "—"),
+      render: (value) =>
+        Utils.formatTimestamp(value, { includeYear: false, includeSeconds: false, fallback: "—" }),
     },
   ];
 
@@ -263,7 +266,7 @@ export function createWalletRenderers({
       {
         id: "wt-last-used",
         value: wallet?.last_used_at
-          ? Utils.formatTimestamp(wallet.last_used_at, { variant: "relative" })
+          ? Utils.formatTimeAgo(wallet.last_used_at)
           : I18n.t("wallets-holdings-never"),
       },
     ]);

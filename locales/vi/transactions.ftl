@@ -50,7 +50,6 @@ transactions-search =
 transactions-load-failed = Không thể làm mới giao dịch
 transactions-setup-gate-title = Giao dịch cần có ví
 transactions-summary-total = Tổng
-transactions-summary-estimate = Ước tính
 transactions-summary-success = Thành công
 transactions-summary-failed = Thất bại
 transactions-filter-wallet = Ví

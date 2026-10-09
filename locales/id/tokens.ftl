@@ -64,8 +64,8 @@ tokens-positions-section-range = Target & rentang
 tokens-positions-section-market = Pasar & kepemilikan
 tokens-positions-kicker = Posisi
 tokens-positions-fallback-symbol = Token
-tokens-positions-realized-pnl = PnL Terealisasi
-tokens-positions-unrealized-pnl = PnL Belum Terealisasi
+tokens-positions-realized-pnl = P&L Terealisasi
+tokens-positions-unrealized-pnl = P&L Belum Terealisasi
 tokens-positions-size = Ukuran
 
 tokens-security-analysis-pending = Analisis { -rugcheck } sedang berlangsung...

@@ -62,7 +62,6 @@ transactions-search =
 transactions-load-failed = 无法刷新交易
 transactions-setup-gate-title = 交易记录需要先连接钱包
 transactions-summary-total = 总计
-transactions-summary-estimate = 估算
 transactions-summary-success = 成功
 transactions-summary-failed = 失败
 transactions-filter-wallet = 钱包

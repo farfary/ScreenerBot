@@ -75,8 +75,8 @@ tokens-positions-section-range = Targets & range
 tokens-positions-section-market = Market & holdings
 tokens-positions-kicker = Position
 tokens-positions-fallback-symbol = Token
-tokens-positions-realized-pnl = Realized PnL
-tokens-positions-unrealized-pnl = Unrealized PnL
+tokens-positions-realized-pnl = Realized P&L
+tokens-positions-unrealized-pnl = Unrealized P&L
 tokens-positions-size = Size
 
 # Token details dialog: security tab (ui/token_details/security_tab.js)

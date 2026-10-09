@@ -62,7 +62,6 @@ transactions-search =
 transactions-load-failed = Не вдалося оновити транзакції
 transactions-setup-gate-title = Для транзакцій потрібен гаманець
 transactions-summary-total = Усього
-transactions-summary-estimate = Оцінка
 transactions-summary-success = Успішні
 transactions-summary-failed = Невдалі
 transactions-filter-wallet = Гаманець

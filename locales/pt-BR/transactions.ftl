@@ -62,7 +62,6 @@ transactions-search =
 transactions-load-failed = Não foi possível atualizar as transações
 transactions-setup-gate-title = As transações exigem uma carteira
 transactions-summary-total = Total
-transactions-summary-estimate = Estimativa
 transactions-summary-success = Sucesso
 transactions-summary-failed = Falhas
 transactions-filter-wallet = Carteira

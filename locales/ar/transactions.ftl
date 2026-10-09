@@ -62,7 +62,6 @@ transactions-search =
 transactions-load-failed = تعذّر تحديث المعاملات
 transactions-setup-gate-title = المعاملات تتطلب محفظة
 transactions-summary-total = الإجمالي
-transactions-summary-estimate = تقدير
 transactions-summary-success = الناجحة
 transactions-summary-failed = الفاشلة
 transactions-filter-wallet = المحفظة

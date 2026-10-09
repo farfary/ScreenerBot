@@ -50,7 +50,6 @@ transactions-search =
 transactions-load-failed = Не удалось обновить транзакции
 transactions-setup-gate-title = Для транзакций нужен кошелёк
 transactions-summary-total = Всего
-transactions-summary-estimate = Оценка
 transactions-summary-success = Успешно
 transactions-summary-failed = Ошибка
 transactions-filter-wallet = Кошелёк
