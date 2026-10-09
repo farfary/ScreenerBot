@@ -197,9 +197,9 @@ assistant-chat-group-yesterday = Hier
 assistant-chat-group-week = 7 derniers jours
 assistant-chat-group-older = Plus ancien
 
-assistant-chat-empty-kicker = Assistant
-assistant-chat-empty-title = Comment puis-je vous aider aujourd'hui ?
-assistant-chat-empty-subtitle = Passez en revue votre portefeuille, étudiez un token ou comprenez l'activité de trading récente.
+assistant-chat-welcome-kicker = Assistant
+assistant-chat-welcome-title = Comment puis-je vous aider aujourd'hui ?
+assistant-chat-welcome-subtitle = Passez en revue votre portefeuille, étudiez un token ou comprenez l'activité de trading récente.
 assistant-chat-prompt-positions-label = Passer en revue les positions ouvertes
 assistant-chat-prompt-positions-text = Quel est le solde actuel de mon portefeuille et quelles sont mes positions ouvertes ?
 assistant-chat-prompt-token-label = Analyser un token

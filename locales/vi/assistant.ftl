@@ -197,9 +197,9 @@ assistant-chat-group-yesterday = Hôm qua
 assistant-chat-group-week = 7 ngày trước
 assistant-chat-group-older = Cũ hơn
 
-assistant-chat-empty-kicker = Trợ lý
-assistant-chat-empty-title = Hôm nay tôi có thể giúp gì cho bạn?
-assistant-chat-empty-subtitle = Xem lại danh mục, tìm hiểu một token hoặc nắm bắt hoạt động giao dịch gần đây.
+assistant-chat-welcome-kicker = Trợ lý
+assistant-chat-welcome-title = Hôm nay tôi có thể giúp gì cho bạn?
+assistant-chat-welcome-subtitle = Xem lại danh mục, tìm hiểu một token hoặc nắm bắt hoạt động giao dịch gần đây.
 assistant-chat-prompt-positions-label = Xem các vị thế đang mở
 assistant-chat-prompt-positions-text = Số dư ví hiện tại và các vị thế đang mở của tôi là gì?
 assistant-chat-prompt-token-label = Phân tích một token

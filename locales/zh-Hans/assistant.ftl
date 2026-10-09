@@ -200,9 +200,9 @@ assistant-chat-group-yesterday = 昨天
 assistant-chat-group-week = 过去 7 天
 assistant-chat-group-older = 更早
 
-assistant-chat-empty-kicker = 助手
-assistant-chat-empty-title = 今天有什么可以帮您？
-assistant-chat-empty-subtitle = 查看您的投资组合、研究某个代币，或了解近期的交易活动。
+assistant-chat-welcome-kicker = 助手
+assistant-chat-welcome-title = 今天有什么可以帮您？
+assistant-chat-welcome-subtitle = 查看您的投资组合、研究某个代币，或了解近期的交易活动。
 assistant-chat-prompt-positions-label = 查看持仓中的仓位
 assistant-chat-prompt-positions-text = 我当前的钱包余额和持仓中的仓位是什么？
 assistant-chat-prompt-token-label = 分析代币

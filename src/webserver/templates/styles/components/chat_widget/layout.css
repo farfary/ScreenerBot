@@ -355,8 +355,8 @@
 
   /* Scrollbar styling - inherits from global scrollbar-chat pattern */
 
-  /* Empty State */
-  .chat-empty-state {
+  /* Welcome: shown until the first message */
+  .chat-welcome {
     display: flex;
     flex-direction: column;
     align-items: center;
@@ -366,10 +366,10 @@
     color: var(--text-muted);
     gap: var(--spacing-sm);
     padding: var(--spacing-xl);
-    animation: empty-state-enter 0.2s ease-out;
+    animation: chat-welcome-enter 0.2s ease-out;
   }
 
-  @keyframes empty-state-enter {
+  @keyframes chat-welcome-enter {
     from {
       opacity: 0;
     }
@@ -379,7 +379,7 @@
     }
   }
 
-  .empty-state-kicker {
+  .chat-welcome-kicker {
     display: flex;
     align-items: center;
     justify-content: center;
@@ -392,19 +392,19 @@
     margin-bottom: var(--spacing-xs);
   }
 
-  .empty-state-kicker i {
+  .chat-welcome-kicker i {
     font-size: 16px;
     line-height: 1;
   }
 
-  .chat-empty-state h3 {
+  .chat-welcome h3 {
     margin: 0;
     font-size: 1.5rem;
     font-weight: 600;
     color: var(--text-primary);
   }
 
-  .empty-state-subtitle {
+  .chat-welcome-subtitle {
     margin: 0;
     font-size: 0.9375rem;
     max-width: 480px;
@@ -542,7 +542,7 @@
   @media (prefers-reduced-motion: reduce) {
     .chat-sessions-sidebar,
     .chat-sessions-scrim,
-    .chat-empty-state {
+    .chat-welcome {
       transition: none;
       animation: none;
     }

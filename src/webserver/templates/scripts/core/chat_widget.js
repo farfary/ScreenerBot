@@ -159,10 +159,10 @@ export class ChatWidget {
           </div>
 
           <div class="chat-messages cw-chat-messages" aria-live="polite" aria-atomic="false">
-            <div class="chat-empty-state cw-empty-state">
-              <div class="empty-state-kicker"><i class="icon-bot-message-square"></i><span data-l10n-id="assistant-chat-empty-kicker"></span></div>
-              <h3 data-l10n-id="assistant-chat-empty-title"></h3>
-              <p class="empty-state-subtitle" data-l10n-id="assistant-chat-empty-subtitle"></p>
+            <div class="chat-welcome cw-welcome">
+              <div class="chat-welcome-kicker"><i class="icon-bot-message-square"></i><span data-l10n-id="assistant-chat-welcome-kicker"></span></div>
+              <h3 data-l10n-id="assistant-chat-welcome-title"></h3>
+              <p class="chat-welcome-subtitle" data-l10n-id="assistant-chat-welcome-subtitle"></p>
               <div class="quick-prompts">${quickPromptsHtml}</div>
             </div>
           </div>
@@ -850,15 +850,15 @@ export class ChatWidget {
     const container = this.$(".cw-chat-messages");
     if (!container) return;
 
-    const emptyState = container.querySelector(".chat-empty-state");
+    const welcome = container.querySelector(".chat-welcome");
 
     if (this.state.messages.length === 0) {
-      if (emptyState) emptyState.style.display = "flex";
+      if (welcome) welcome.style.display = "flex";
       container.querySelectorAll(".message").forEach((el) => el.remove());
       return;
     }
 
-    if (emptyState) emptyState.style.display = "none";
+    if (welcome) welcome.style.display = "none";
 
     const existing = container.querySelectorAll(".message");
     const existingCount = existing.length;
@@ -876,8 +876,8 @@ export class ChatWidget {
       this._scrollToBottom();
     } else if (newCount < existingCount) {
       container.innerHTML = "";
-      if (emptyState) container.appendChild(emptyState);
-      emptyState.style.display = "none";
+      if (welcome) container.appendChild(welcome);
+      welcome.style.display = "none";
       container.insertAdjacentHTML(
         "beforeend",
         this.state.messages.map((m) => this._renderMessage(m)).join("")
@@ -891,15 +891,15 @@ export class ChatWidget {
     const container = this.$(".cw-chat-messages");
     if (!container) return;
 
-    const emptyState = container.querySelector(".chat-empty-state");
+    const welcome = container.querySelector(".chat-welcome");
 
     if (this.state.messages.length === 0) {
       container.querySelectorAll(".message").forEach((el) => el.remove());
-      if (emptyState) emptyState.style.display = "flex";
+      if (welcome) welcome.style.display = "flex";
       return;
     }
 
-    if (emptyState) emptyState.style.display = "none";
+    if (welcome) welcome.style.display = "none";
 
     container.querySelectorAll(".message").forEach((el) => el.remove());
     container.insertAdjacentHTML(
@@ -1274,9 +1274,9 @@ export class ChatWidget {
   }
 
   _showChatInterface() {
-    const emptyState = this.$(".cw-empty-state");
-    if (emptyState && this.state.messages.length === 0 && !this.state.currentSession) {
-      emptyState.style.display = "flex";
+    const welcome = this.$(".cw-welcome");
+    if (welcome && this.state.messages.length === 0 && !this.state.currentSession) {
+      welcome.style.display = "flex";
     }
   }
 

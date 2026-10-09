@@ -204,9 +204,9 @@ assistant-chat-group-week = 지난 7일
 assistant-chat-group-older = 이전
 
 # chat_widget.js: empty state and quick prompts.
-assistant-chat-empty-kicker = 어시스턴트
-assistant-chat-empty-title = 무엇을 도와드릴까요?
-assistant-chat-empty-subtitle = 포트폴리오를 점검하고, 토큰을 조사하고, 최근 거래 활동을 파악하세요.
+assistant-chat-welcome-kicker = 어시스턴트
+assistant-chat-welcome-title = 무엇을 도와드릴까요?
+assistant-chat-welcome-subtitle = 포트폴리오를 점검하고, 토큰을 조사하고, 최근 거래 활동을 파악하세요.
 assistant-chat-prompt-positions-label = 보유 포지션 점검
 assistant-chat-prompt-positions-text = 현재 지갑 잔액과 보유 포지션을 알려주세요.
 assistant-chat-prompt-token-label = 토큰 분석

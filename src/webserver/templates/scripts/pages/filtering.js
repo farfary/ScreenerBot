@@ -18,6 +18,7 @@ import { $ } from "../core/dom.js";
 import * as Utils from "../core/utils.js";
 import * as AppState from "../core/app_state.js";
 import { TabBar, TabBarManager } from "../ui/tab_bar.js";
+import { renderStateView } from "../ui/state_view.js";
 import { renderTokenLogo } from "../ui/token_identity.js";
 import {
   buildFilterTabs,
@@ -1182,8 +1183,11 @@ window.filteringPage = {
         const emptyText = searchQuery
           ? I18n.t("filtering-explorer-empty-filtered")
           : I18n.t("filtering-explorer-empty");
-        wrapper.innerHTML = `
-          <div class="explorer-empty-state">${esc(emptyText)}</div>`;
+        wrapper.innerHTML = renderStateView({
+          icon: searchQuery ? "icon-search-x" : "icon-inbox",
+          message: emptyText,
+          compact: true,
+        });
         // Update pagination
         const pagination = container.querySelector(".pagination-controls");
         if (pagination) {

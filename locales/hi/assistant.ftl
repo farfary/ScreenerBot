@@ -197,9 +197,9 @@ assistant-chat-group-yesterday = कल
 assistant-chat-group-week = पिछले 7 दिन
 assistant-chat-group-older = पुरानी
 
-assistant-chat-empty-kicker = असिस्टेंट
-assistant-chat-empty-title = आज मैं आपकी कैसे मदद करूँ?
-assistant-chat-empty-subtitle = अपना पोर्टफ़ोलियो देखें, किसी टोकन की जाँच करें या हाल की ट्रेडिंग गतिविधि समझें।
+assistant-chat-welcome-kicker = असिस्टेंट
+assistant-chat-welcome-title = आज मैं आपकी कैसे मदद करूँ?
+assistant-chat-welcome-subtitle = अपना पोर्टफ़ोलियो देखें, किसी टोकन की जाँच करें या हाल की ट्रेडिंग गतिविधि समझें।
 assistant-chat-prompt-positions-label = खुली पोज़िशन देखें
 assistant-chat-prompt-positions-text = मेरा मौजूदा वॉलेट बैलेंस और खुली पोज़िशन क्या हैं?
 assistant-chat-prompt-token-label = टोकन का विश्लेषण करें

@@ -10,6 +10,7 @@
  */
 
 import { impactLabel } from "../config/field_text.js";
+import { renderStateView } from "../../ui/state_view.js";
 import { renderTokenLogo } from "../../ui/token_identity.js";
 import {
   buildConfigGroups,
@@ -584,7 +585,11 @@ export function createFilteringRenderers({ state, $: _$, Utils, requestManager: 
           `
             )
             .join("")}
-          <div class="tree-empty-state" id="explorer-tree-empty" style="display: none">${Utils.escapeHtml(I18n.t("filtering-explorer-no-match"))}</div>
+          <div id="explorer-tree-empty" style="display: none">${renderStateView({
+            icon: "icon-search-x",
+            message: I18n.t("filtering-explorer-no-match"),
+            compact: true,
+          })}</div>
         </div>
       </div>
       <div class="explorer-content">

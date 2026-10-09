@@ -200,9 +200,9 @@ assistant-chat-group-yesterday = 昨日
 assistant-chat-group-week = 過去7日間
 assistant-chat-group-older = それ以前
 
-assistant-chat-empty-kicker = アシスタント
-assistant-chat-empty-title = 今日はどのようなご用件ですか？
-assistant-chat-empty-subtitle = ポートフォリオの確認、トークンの調査、最近の取引状況の把握をお手伝いします。
+assistant-chat-welcome-kicker = アシスタント
+assistant-chat-welcome-title = 今日はどのようなご用件ですか？
+assistant-chat-welcome-subtitle = ポートフォリオの確認、トークンの調査、最近の取引状況の把握をお手伝いします。
 assistant-chat-prompt-positions-label = オープンポジションを確認
 assistant-chat-prompt-positions-text = 現在のウォレット残高とオープンポジションを教えてください。
 assistant-chat-prompt-token-label = トークンを分析

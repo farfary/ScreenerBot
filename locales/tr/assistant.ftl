@@ -202,9 +202,9 @@ assistant-chat-group-older = Daha Eski
 
 # chat_widget.js: empty state and quick prompts. The prompt texts are sent as the
 # user's message.
-assistant-chat-empty-kicker = Asistan
-assistant-chat-empty-title = Bugün size nasıl yardımcı olabilirim?
-assistant-chat-empty-subtitle = Portföyünüzü gözden geçirin, bir tokenı inceleyin veya son işlem etkinliğini anlayın.
+assistant-chat-welcome-kicker = Asistan
+assistant-chat-welcome-title = Bugün size nasıl yardımcı olabilirim?
+assistant-chat-welcome-subtitle = Portföyünüzü gözden geçirin, bir tokenı inceleyin veya son işlem etkinliğini anlayın.
 assistant-chat-prompt-positions-label = Açık pozisyonları gözden geçir
 assistant-chat-prompt-positions-text = Güncel cüzdan bakiyem ve açık pozisyonlarım neler?
 assistant-chat-prompt-token-label = Bir tokenı analiz et

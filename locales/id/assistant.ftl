@@ -200,9 +200,9 @@ assistant-chat-group-yesterday = Kemarin
 assistant-chat-group-week = 7 Hari Terakhir
 assistant-chat-group-older = Lebih Lama
 
-assistant-chat-empty-kicker = Asisten
-assistant-chat-empty-title = Ada yang bisa saya bantu hari ini?
-assistant-chat-empty-subtitle = Tinjau portofolio Anda, selidiki token, atau pahami aktivitas trading terbaru.
+assistant-chat-welcome-kicker = Asisten
+assistant-chat-welcome-title = Ada yang bisa saya bantu hari ini?
+assistant-chat-welcome-subtitle = Tinjau portofolio Anda, selidiki token, atau pahami aktivitas trading terbaru.
 assistant-chat-prompt-positions-label = Tinjau posisi terbuka
 assistant-chat-prompt-positions-text = Berapa saldo dompet saya saat ini dan apa saja posisi terbuka saya?
 assistant-chat-prompt-token-label = Analisis token

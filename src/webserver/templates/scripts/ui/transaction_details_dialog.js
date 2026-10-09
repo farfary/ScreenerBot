@@ -809,7 +809,7 @@ export class TransactionDetailsDialog {
             <span class="tx-panel-title">${renderTokenLogo(SOL_MINT, { size: "xs" })} ${Utils.escapeHtml(I18n.t("transactions-dialog-balances-native-title"))}</span>
             <span class="tx-panel-count">${solChanges.length}</span>
           </div>
-          ${solChanges.length > 0 ? this._buildSolChangesTable(solChanges) : `<div class="empty-message">${Utils.escapeHtml(I18n.t("transactions-dialog-balances-native-empty"))}</div>`}
+          ${solChanges.length > 0 ? this._buildSolChangesTable(solChanges) : renderStateView({ icon: "icon-arrow-left-right", message: I18n.t("transactions-dialog-balances-native-empty"), compact: true })}
         </div>
 
         <div class="balance-section">
@@ -817,7 +817,7 @@ export class TransactionDetailsDialog {
             <span class="tx-panel-title"><i class="icon-coins"></i> ${Utils.escapeHtml(I18n.t("transactions-dialog-balances-token-title"))}</span>
             <span class="tx-panel-count">${tokenChanges.length}</span>
           </div>
-          ${tokenChanges.length > 0 ? this._buildTokenChangesTable(tokenChanges) : `<div class="empty-message">${Utils.escapeHtml(I18n.t("transactions-dialog-balances-token-empty"))}</div>`}
+          ${tokenChanges.length > 0 ? this._buildTokenChangesTable(tokenChanges) : renderStateView({ icon: "icon-arrow-left-right", message: I18n.t("transactions-dialog-balances-token-empty"), compact: true })}
         </div>
 
         <div class="balance-summary">
@@ -1033,7 +1033,11 @@ export class TransactionDetailsDialog {
       : logs;
 
     if (filteredLogs.length === 0) {
-      return `<div class="empty-message">${Utils.escapeHtml(I18n.t("transactions-dialog-logs-no-match"))}</div>`;
+      return renderStateView({
+        icon: "icon-search-x",
+        message: I18n.t("transactions-dialog-logs-no-match"),
+        compact: true,
+      });
     }
 
     return filteredLogs

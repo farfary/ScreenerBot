@@ -197,9 +197,9 @@ assistant-chat-group-yesterday = Учора
 assistant-chat-group-week = Попередні 7 днів
 assistant-chat-group-older = Раніше
 
-assistant-chat-empty-kicker = Асистент
-assistant-chat-empty-title = Чим я можу вам допомогти сьогодні?
-assistant-chat-empty-subtitle = Перегляньте портфель, дослідіть токен або розберіться з нещодавньою торговою активністю.
+assistant-chat-welcome-kicker = Асистент
+assistant-chat-welcome-title = Чим я можу вам допомогти сьогодні?
+assistant-chat-welcome-subtitle = Перегляньте портфель, дослідіть токен або розберіться з нещодавньою торговою активністю.
 assistant-chat-prompt-positions-label = Переглянути відкриті позиції
 assistant-chat-prompt-positions-text = Який мій поточний баланс гаманця та які в мене відкриті позиції?
 assistant-chat-prompt-token-label = Проаналізувати токен

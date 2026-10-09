@@ -210,9 +210,9 @@ assistant-chat-group-older = Older
 
 # chat_widget.js: empty state and quick prompts. The prompt texts are sent as the
 # user's message.
-assistant-chat-empty-kicker = Assistant
-assistant-chat-empty-title = How can I help you today?
-assistant-chat-empty-subtitle = Review your portfolio, investigate a token, or understand recent trading activity.
+assistant-chat-welcome-kicker = Assistant
+assistant-chat-welcome-title = How can I help you today?
+assistant-chat-welcome-subtitle = Review your portfolio, investigate a token, or understand recent trading activity.
 assistant-chat-prompt-positions-label = Review open positions
 assistant-chat-prompt-positions-text = What's my current wallet balance and open positions?
 assistant-chat-prompt-token-label = Analyze a token

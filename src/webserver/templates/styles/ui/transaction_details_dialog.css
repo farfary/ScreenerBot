@@ -295,7 +295,7 @@
   display: block;
 }
 
-/* Loading & Empty States */
+/* Loading State */
 .transaction-details-dialog .loading-spinner {
   display: flex;
   align-items: center;
@@ -303,13 +303,6 @@
   height: 200px;
   color: var(--text-secondary);
   font-size: 0.9rem;
-}
-
-.transaction-details-dialog .empty-message {
-  padding: 24px;
-  text-align: center;
-  color: var(--text-secondary);
-  font-size: 0.85rem;
 }
 
 /* =============================================================================

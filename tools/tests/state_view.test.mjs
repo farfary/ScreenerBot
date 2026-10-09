@@ -32,7 +32,7 @@ const PRIVATE_STATES = new RegExp(
       "renderTabState",
       "dt-empty[\\w-]*",
       "notification-empty",
-      "empty-state(?:-icon|-title|-description|-action|-content)?",
+      "(?:chat-)?empty-state(?:-icon|-title|-description|-action|-content|-kicker|-subtitle)?",
       "empty-icon",
       "empty-text",
       "(?:loading|error|info|success)-state",
@@ -41,6 +41,8 @@ const PRIVATE_STATES = new RegExp(
       "pdd-chart-empty",
       "links-empty-notice",
       "strategy-list-state",
+      "(?:explorer|tree)-empty-state",
+      "empty-message",
     ].join("|") +
     ")(?![\\w-])"
 );
@@ -52,17 +54,6 @@ const PRIVATE_STATES = new RegExp(
  */
 const GLYPH_FIRST_EMPTY_STATE =
   /class="([^"]*empty[^"]*)"[^>]*>\s*(?:<[a-z]+[^>]*>\s*)?<(?:i|span) class="[^"]*icon/g;
-
-/**
- * Files that still build an empty state of their own instead of the shared state view.
- * This list only shrinks: each file leaves it once its states render through
- * `renderStateView`.
- */
-const PRIVATE_EMPTY_STATE_FILES = [
-  // The chat welcome: a kicker line (its glyph inline with the kicker), a title, a
-  // subtitle and the quick-prompt buttons, shown until the first message.
-  "src/webserver/templates/scripts/core/chat_widget.js",
-];
 
 test("no dashboard source spells a private state block", async () => {
   const found = [];
@@ -79,17 +70,14 @@ test("no dashboard source spells a private state block", async () => {
   assert.deepEqual(found, []);
 });
 
-test("an empty state with a glyph is the shared state view, outside the shrinking list", async () => {
+test("an empty state with a glyph is the shared state view", async () => {
   const found = new Set();
   for (const { path, source } of await loadMarkupSources()) {
     for (const [, classes] of source.matchAll(GLYPH_FIRST_EMPTY_STATE)) {
       if (!/(?<![\w-])state-view(?![\w-])/.test(classes)) found.add(path);
     }
   }
-  const unlisted = [...found].filter((path) => !PRIVATE_EMPTY_STATE_FILES.includes(path));
-  const cleared = PRIVATE_EMPTY_STATE_FILES.filter((path) => !found.has(path));
-  assert.deepEqual(unlisted, [], "a new private empty state: render it with renderStateView");
-  assert.deepEqual(cleared, [], "these files no longer need their entry: remove it");
+  assert.deepEqual([...found], [], "a private empty state: render it with renderStateView");
 });
 
 test("a failed Settings load renders the shared error state", async (t) => {
