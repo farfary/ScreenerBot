@@ -18,6 +18,8 @@
  * - A strategy card shows its state only through its toggle, and no chip repeats its lane.
  * - An example figure (a SOL price or a percent) never ends its fraction in a zero, so
  *   one strip does not mix "+10%" with "+32.0%" or print "1.0000 SOL".
+ * - A config card never draws more columns than it has field groups, so two lists
+ *   (How DCA Works, Risk Warnings) share the width instead of leaving a third empty.
  *
  * Run with `npm run test:js`.
  */
@@ -144,4 +146,35 @@ test("a strategy card states its state once, through its named toggle", async ()
       `${card.name}: no chip repeats the lane`
     );
   }
+});
+
+test("a config card draws no more columns than it has field groups", async () => {
+  const empty = [];
+  for (const id of TABS) {
+    await page.click(`#subTabsContainer [data-tab-id="${id}"]`);
+    await page.locator(`#${id}-tab`).waitFor();
+    empty.push(
+      ...(await page.$$eval(
+        `#${id}-tab .config-card`,
+        (cards, tab) =>
+          cards
+            .filter((card) => card.getClientRects().length > 0)
+            .map((card) => ({
+              card,
+              columns: getComputedStyle(card)
+                .gridTemplateColumns.split(" ")
+                .filter((track) => parseFloat(track) > 0).length,
+              groups: card.querySelectorAll(":scope > .config-group:not(.config-group-full)")
+                .length,
+            }))
+            .filter(({ columns, groups }) => groups > 0 && columns > groups)
+            .map(
+              ({ card, columns, groups }) =>
+                `${tab}: ${card.querySelector("h3")?.textContent.trim()} (${groups} groups, ${columns} columns)`
+            ),
+        id
+      ))
+    );
+  }
+  assert.deepEqual(empty, []);
 });

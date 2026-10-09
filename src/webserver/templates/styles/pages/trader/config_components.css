@@ -12,8 +12,13 @@
 
 /* Unified Card Container — responsive grid so config items use the available
    width (multiple per row on wide screens, auto-collapsing to fewer/one column
-   on narrow screens) instead of one item per row wasting horizontal space. */
+   on narrow screens) instead of one item per row wasting horizontal space.
+   The header spans every track, so auto-fit never collapses an empty one: a card
+   with one or two field groups caps its column count instead, through a track
+   minimum of its share of the width. */
 .config-card {
+  --config-card-columns: 99;
+
   background: var(--card-bg);
   border-radius: var(--radius-lg);
   padding: 1.25rem;
@@ -21,9 +26,37 @@
   box-shadow: 0 2px 8px var(--shadow-sm);
   transition: box-shadow var(--transition-base);
   display: grid;
-  grid-template-columns: repeat(auto-fit, minmax(min(100%, 340px), 1fr));
+  grid-template-columns: repeat(
+    auto-fit,
+    minmax(
+      max(
+        min(100%, 340px),
+        calc((100% - (var(--config-card-columns) - 1) * 1.25rem) / var(--config-card-columns))
+      ),
+      1fr
+    )
+  );
   gap: 1rem 1.25rem;
   align-items: start;
+}
+
+/* :where() keeps both counts at one specificity, so the later, smaller cap wins. */
+.config-card:not(
+  :has(
+    > :where(.config-group:not(.config-group-full))
+      ~ :where(.config-group:not(.config-group-full))
+      ~ :where(.config-group:not(.config-group-full))
+  )
+) {
+  --config-card-columns: 2;
+}
+
+.config-card:not(
+  :has(
+    > :where(.config-group:not(.config-group-full)) ~ :where(.config-group:not(.config-group-full))
+  )
+) {
+  --config-card-columns: 1;
 }
 
 .config-card:hover {
@@ -479,4 +512,3 @@
   align-items: center;
   gap: 0.5rem;
 }
-
