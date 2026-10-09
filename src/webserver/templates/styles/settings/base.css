@@ -303,9 +303,13 @@
   line-height: 1.5;
 }
 
+/* A settings list is a two-column grid so every select in it takes one width: the
+   fields holding a select share the list's control column (subgrid), sized by its
+   widest select, and each select fills that column. Every other row spans both
+   columns, where it adds nothing to the control column's width. */
 .settings-group {
-  display: flex;
-  flex-direction: column;
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
   background: var(--bg-secondary);
   border: 1px solid var(--border-color);
   border-radius: var(--radius-xl);
@@ -320,6 +324,15 @@
   padding: 16px 20px;
   background: var(--bg-secondary);
   transition: background var(--transition-base);
+}
+
+.settings-group > * {
+  grid-column: 1 / -1;
+}
+
+.settings-field:has(> .settings-field-control > :is(select, .custom-select)) {
+  display: grid;
+  grid-template-columns: subgrid;
 }
 
 .settings-field:not(:last-child) {

@@ -544,6 +544,10 @@
     padding: 16px;
   }
 
+  .settings-group {
+    grid-template-columns: minmax(0, 1fr);
+  }
+
   .settings-field {
     flex-direction: column;
     align-items: flex-start;
