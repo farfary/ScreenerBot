@@ -138,8 +138,8 @@ copy-field-per-token-cap = حد الرمز الواحد
 copy-field-total-budget = الميزانية الإجمالية
 copy-field-slippage = الانزلاق السعري
 copy-rules-wallet-sells-only = عمليات بيع المحفظة فقط
-copy-filter-copy-setting-required = إعداد النسخ (مطلوب)
-copy-filter-copy-setting-not-required = إعداد النسخ (غير مطلوب)
+copy-filter-copy-setting-required = إعداد نسخ التداول (مطلوب)
+copy-filter-copy-setting-not-required = إعداد نسخ التداول (غير مطلوب)
 copy-count-closed-rounds =
     { $count ->
         [zero] { $count } جولة مغلقة

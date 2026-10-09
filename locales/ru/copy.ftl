@@ -136,8 +136,8 @@ copy-field-per-token-cap = Лимит на токен
 copy-field-total-budget = Общий бюджет
 copy-field-slippage = Проскальзывание
 copy-rules-wallet-sells-only = Только продажи кошелька
-copy-filter-copy-setting-required = Настройка копирования (обязательно)
-copy-filter-copy-setting-not-required = Настройка копирования (не обязательно)
+copy-filter-copy-setting-required = Настройка копитрейдинга (обязательно)
+copy-filter-copy-setting-not-required = Настройка копитрейдинга (не обязательно)
 copy-count-closed-rounds =
     { $count ->
         [one] { $count } закрытый раунд

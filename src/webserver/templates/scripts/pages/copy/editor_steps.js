@@ -11,9 +11,9 @@ import {
   SOLANA_ADDRESS_RE,
   exitModeLabel,
   modeLabel,
-  pct,
   segmented,
-  sol,
+  settingPct,
+  settingSol,
   taskName,
 } from "./format.js";
 import {
@@ -176,15 +176,15 @@ export function costPreview(draft) {
   const examples = [0.1, 1, 5]
     .map(
       (target) =>
-        `<li>${I18n.markup("copy-editor-preview-example", { target: sol(target, 1), copy: sol(copyFor(target), 3) })}</li>`
+        `<li>${I18n.markup("copy-editor-preview-example", { target: settingSol(target), copy: settingSol(copyFor(target)) })}</li>`
     )
     .join("");
   const unit = draft.sizing.kind === "fixed" ? Math.min(amount, cap) : cap;
   const perTokenCopies = Math.max(1, Math.floor(perToken / unit));
   const budgetCopies = Math.floor(budget / unit);
   const perTokenText = draft.buy_once_per_token
-    ? I18n.t("copy-editor-preview-once", { size: sol(unit, 3) })
-    : I18n.t("copy-editor-preview-token-cap", { count: perTokenCopies, size: sol(unit, 3) });
+    ? I18n.t("copy-editor-preview-once", { size: settingSol(unit) })
+    : I18n.t("copy-editor-preview-token-cap", { count: perTokenCopies, size: settingSol(unit) });
   const summary =
     draft.sizing.kind === "fixed"
       ? I18n.t("copy-editor-preview-summary-exact", { perToken: perTokenText, count: budgetCopies })
@@ -212,7 +212,7 @@ function sizingStep({ draft, defaults }, esc) {
     copySize
   )}</div>
     <div class="copy-fields">
-      ${numberInput(esc, { attr: "data-field", name: "sizing_amount", label: fixedKind ? I18n.t("copy-editor-amount-fixed") : I18n.t("copy-editor-amount-ratio"), unit: fixedKind ? solUnit : "%", value: valueAttr(fixedKind ? draft.sizing.sol : draft.sizing.pct), min: fixedKind ? minSol : 0, required: true, help: fixedKind ? I18n.t("copy-editor-amount-help-fixed", { minimum: sol(minSol, 3) }) : I18n.t("copy-editor-amount-help-ratio") })}
+      ${numberInput(esc, { attr: "data-field", name: "sizing_amount", label: fixedKind ? I18n.t("copy-editor-amount-fixed") : I18n.t("copy-editor-amount-ratio"), unit: fixedKind ? solUnit : "%", value: valueAttr(fixedKind ? draft.sizing.sol : draft.sizing.pct), min: fixedKind ? minSol : 0, required: true, help: fixedKind ? I18n.t("copy-editor-amount-help-fixed", { minimum: settingSol(minSol) }) : I18n.t("copy-editor-amount-help-ratio") })}
       ${numberInput(esc, { attr: "data-field", name: "max_native_per_trade", label: I18n.t("copy-field-per-trade-cap"), unit: solUnit, value: valueAttr(draft.max_native_per_trade), min: minSol, required: true, help: I18n.t("copy-editor-help-trade-cap") })}
       ${numberInput(esc, { attr: "data-field", name: "max_native_per_token", label: I18n.t("copy-field-per-token-cap"), unit: solUnit, value: valueAttr(draft.max_native_per_token), min: minSol, required: true, help: I18n.t("copy-editor-help-token-cap") })}
       ${numberInput(esc, { attr: "data-field", name: "total_budget_native", label: I18n.t("copy-field-total-budget"), unit: solUnit, value: valueAttr(draft.total_budget_native), min: minSol, required: true, help: I18n.t("copy-editor-help-budget") })}
@@ -256,15 +256,12 @@ function ruleCard(rule, { draft, defaults }, esc) {
   const overrides = draft.exit_policy_overrides[rule.group];
   const inherited = defaults?.trader_defaults;
   const state = overrides.enabled === null ? "inherit" : overrides.enabled ? "on" : "off";
-  const inheritLabel = inherited
-    ? I18n.t("copy-editor-inherit-value", {
-        value: inherited[rule.group]?.enabled ? I18n.t("copy-rule-on") : I18n.t("copy-rule-off"),
-      })
-    : I18n.t("copy-editor-rule-inherit");
+  // The inherited switch state is spelled out in the note under the choice, so the
+  // segment never repeats "On" or "Off" beside the explicit ones.
   const seg = segmented(
     `rule-${rule.group}`,
     [
-      { id: "inherit", label: inheritLabel },
+      { id: "inherit", label: I18n.t("copy-editor-rule-inherit") },
       { id: "on", label: I18n.t("copy-rule-on") },
       { id: "off", label: I18n.t("copy-rule-off") },
     ],
@@ -411,33 +408,42 @@ export function collect(body, draft) {
 
 const positive = (value) => Number.isFinite(value) && value > 0;
 
-/** The first problem with a step, in the server's own terms, or null. */
+/**
+ * The first problem with a step, in the server's own terms, as `{ message, field }`:
+ * `field` names the input that holds the problem (its `data-field` or `data-rule-field`),
+ * or is null when no single input does. Null when the step is valid.
+ */
 export function validate(id, draft, { mode, defaults }) {
+  const problem = (message, field = null) => ({ message, field });
   if (id === "wallet") {
     if (mode !== "edit" && !SOLANA_ADDRESS_RE.test(draft.target_address || "")) {
-      return I18n.t("copy-editor-error-address");
+      return problem(I18n.t("copy-editor-error-address"), "target_address");
     }
   } else if (id === "sizing") {
     const amount = draft.sizing.kind === "fixed" ? draft.sizing.sol : draft.sizing.pct;
-    if (
-      ![
-        amount,
-        draft.max_native_per_trade,
-        draft.max_native_per_token,
-        draft.total_budget_native,
-      ].every(positive)
-    ) {
-      return I18n.t("copy-editor-error-sizing");
-    }
+    const required = [
+      ["sizing_amount", amount],
+      ["max_native_per_trade", draft.max_native_per_trade],
+      ["max_native_per_token", draft.max_native_per_token],
+      ["total_budget_native", draft.total_budget_native],
+    ];
+    const missing = required.find(([, value]) => !positive(value));
+    if (missing) return problem(I18n.t("copy-editor-error-sizing"), missing[0]);
     const minSol = defaults?.min_trade_size_native ?? 0;
     if (draft.sizing.kind === "fixed" && draft.sizing.sol < minSol)
-      return I18n.t("copy-editor-error-min-copy", { minimum: sol(minSol, 3) });
+      return problem(
+        I18n.t("copy-editor-error-min-copy", { minimum: settingSol(minSol) }),
+        "sizing_amount"
+      );
     if (draft.max_native_per_trade < minSol)
-      return I18n.t("copy-editor-error-min-cap", { minimum: sol(minSol, 3) });
+      return problem(
+        I18n.t("copy-editor-error-min-cap", { minimum: settingSol(minSol) }),
+        "max_native_per_trade"
+      );
     if (draft.max_native_per_trade > draft.max_native_per_token)
-      return I18n.t("copy-editor-error-trade-cap");
+      return problem(I18n.t("copy-editor-error-trade-cap"), "max_native_per_trade");
     if (draft.max_native_per_token > draft.total_budget_native)
-      return I18n.t("copy-editor-error-token-cap");
+      return problem(I18n.t("copy-editor-error-token-cap"), "max_native_per_token");
     const minSlippage = defaults?.min_slippage_pct ?? 0;
     const maxSlippage = defaults?.max_slippage_pct ?? Infinity;
     if (
@@ -445,17 +451,26 @@ export function validate(id, draft, { mode, defaults }) {
       draft.slippage_pct < minSlippage ||
       draft.slippage_pct > maxSlippage
     ) {
-      return I18n.t("copy-editor-error-slippage", {
-        min: pct(minSlippage, 1),
-        max: pct(maxSlippage, 0),
-      });
+      return problem(
+        I18n.t("copy-editor-error-slippage", {
+          min: settingPct(minSlippage),
+          max: settingPct(maxSlippage),
+        }),
+        "slippage_pct"
+      );
     }
   } else if (id === "entry") {
-    const { min_target_trade_native: min, max_target_trade_native: max } = draft;
-    if ([min, max].some((value) => value !== null && !(Number.isFinite(value) && value >= 0))) {
-      return I18n.t("copy-editor-error-target-limits");
-    }
-    if (min !== null && max !== null && min > max) return I18n.t("copy-editor-error-target-order");
+    const limits = [
+      ["min_target_trade_native", draft.min_target_trade_native],
+      ["max_target_trade_native", draft.max_target_trade_native],
+    ];
+    const invalid = limits.find(
+      ([, value]) => value !== null && !(Number.isFinite(value) && value >= 0)
+    );
+    if (invalid) return problem(I18n.t("copy-editor-error-target-limits"), invalid[0]);
+    const [[, min], [, max]] = limits;
+    if (min !== null && max !== null && min > max)
+      return problem(I18n.t("copy-editor-error-target-order"), "min_target_trade_native");
   } else if (id === "exits") {
     return validateOverrides(draft.exit_policy_overrides);
   }

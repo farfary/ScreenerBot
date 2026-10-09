@@ -211,9 +211,28 @@ export function createEditor(page) {
     start("wallet");
   }
 
-  function setError(text) {
+  /**
+   * Show a problem on the error line above the footer. A step problem (`{ message,
+   * field }` from `validate`) also marks the input that holds it invalid and focuses
+   * it; a server error is a plain message.
+   */
+  function setError(problem) {
     const node = $("#copy-editor-error");
-    if (node) node.textContent = text || "";
+    const message = typeof problem === "string" ? problem : problem?.message;
+    if (node) node.textContent = message || "";
+    const stepNode = body();
+    stepNode?.querySelectorAll('[aria-invalid="true"]').forEach((input) => {
+      input.removeAttribute("aria-invalid");
+      input.removeAttribute("aria-describedby");
+    });
+    const field = problem?.field;
+    if (!field || !stepNode) return;
+    const name = CSS.escape(field);
+    const input = stepNode.querySelector(`[data-field="${name}"], [data-rule-field="${name}"]`);
+    if (!input) return;
+    input.setAttribute("aria-invalid", "true");
+    input.setAttribute("aria-describedby", "copy-editor-error");
+    input.focus();
   }
 
   function render() {
@@ -324,7 +343,12 @@ export function createEditor(page) {
     render();
   }
 
-  function onInput() {
+  function onInput(event) {
+    // An input the user corrects is no longer marked as the problem.
+    if (event.target.getAttribute("aria-invalid") === "true") {
+      event.target.removeAttribute("aria-invalid");
+      event.target.removeAttribute("aria-describedby");
+    }
     if (!draft) return;
     const id = STEPS[step].id;
     if (!["wallet", "sizing", "exits"].includes(id)) return;

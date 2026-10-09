@@ -127,8 +127,8 @@ copy-field-per-token-cap = 单代币上限
 copy-field-total-budget = 总预算
 copy-field-slippage = 滑点
 copy-rules-wallet-sells-only = 仅钱包卖出
-copy-filter-copy-setting-required = 跟单设置（必须通过）
-copy-filter-copy-setting-not-required = 跟单设置（无需通过）
+copy-filter-copy-setting-required = 跟单交易设置（必须通过）
+copy-filter-copy-setting-not-required = 跟单交易设置（无需通过）
 copy-count-closed-rounds =
     { $count ->
        *[other] { $count } 个已平仓轮次

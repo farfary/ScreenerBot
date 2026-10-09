@@ -127,8 +127,8 @@ copy-field-per-token-cap = Batas per token
 copy-field-total-budget = Total anggaran
 copy-field-slippage = Slippage
 copy-rules-wallet-sells-only = Hanya penjualan dompet
-copy-filter-copy-setting-required = Pengaturan salin (wajib)
-copy-filter-copy-setting-not-required = Pengaturan salin (tidak wajib)
+copy-filter-copy-setting-required = Pengaturan Copy Trading (wajib)
+copy-filter-copy-setting-not-required = Pengaturan Copy Trading (tidak wajib)
 copy-count-closed-rounds =
     { $count ->
        *[other] { $count } putaran tertutup

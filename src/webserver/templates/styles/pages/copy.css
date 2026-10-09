@@ -400,8 +400,8 @@
   padding: 4px 10px;
   border-radius: var(--radius-sm);
   color: var(--text-secondary);
-  font-family: var(--font-data);
-  font-size: 0.7rem;
+  font-family: var(--font-sans);
+  font-size: 0.75rem;
   font-weight: 600;
   cursor: pointer;
   transition:
@@ -421,9 +421,16 @@
   color: var(--text-primary);
 }
 
+/* The chosen segment reads at a glance: the accent colour on its tint, as the trade
+   dialog's slippage presets mark theirs. */
 .copy-seg-btn.is-active {
-  background: var(--bg-secondary);
-  color: var(--text-primary);
+  background: var(--primary-alpha-10);
+  color: var(--primary-color);
+}
+
+.copy-seg-btn:has(> input:focus-visible) {
+  outline: 2px solid var(--primary-color);
+  outline-offset: -2px;
 }
 
 .copy-page .is-positive {

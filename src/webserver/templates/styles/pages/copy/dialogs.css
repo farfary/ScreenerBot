@@ -4,10 +4,14 @@
 /* Copy Trading dialogs: the stepped editor, the live-arming gate, global settings
    and the wallet profile. */
 
-/* One height for every step, so the step bar and the footer never move. */
+/* The editor is as tall as its step, up to the window, and hangs from a fixed top edge
+   so the step bar stays put while a step grows or shrinks; a step taller than the
+   window scrolls inside the body. */
 .copy-dialog .copy-editor-panel {
   max-width: 780px;
-  height: min(720px, 90vh);
+  max-height: 85vh;
+  align-self: flex-start;
+  margin-block-start: 5vh;
 }
 
 .copy-dialog .copy-arm-panel {
@@ -106,10 +110,15 @@
   border-top: 1px solid var(--border-color);
 }
 
+/* A problem takes its own line above the buttons, which stay on one row. */
 .copy-dialog-error {
-  margin-inline-end: auto;
+  flex: 1 0 100%;
   font-size: var(--font-size-xs);
   color: var(--error-color);
+}
+
+.copy-dialog-error:empty {
+  display: none;
 }
 
 .copy-dialog-hint {

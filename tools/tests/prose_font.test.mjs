@@ -14,10 +14,11 @@
  * - `components/form_controls.css`: the base text input, textarea and select rules
  *   use the UI face, and a data face only reaches number, date and time inputs and
  *   inputs marked as left-to-right islands (`dir="ltr"`: addresses, mints, keys).
+ *   Their placeholders are words and stay in the UI face.
  * - A number field's unit sits inside the field's box, in the value's data face.
  * - The shared prose surfaces (select trigger, menu and search, table search and
  *   menus, row action items, every table cell, the strategy condition summary, the
- *   position header's sub-lines) declare the UI face. A table cell reaches a data
+ *   position header's sub-lines, the Copy Trading segmented choices) declare the UI face. A table cell reaches a data
  *   face only through its numeric column type or a machine-value class.
  *
  * Run with `npm run test:js`.
@@ -54,6 +55,23 @@ test("a data face reaches only number, date, time and left-to-right inputs", () 
   assert.deepEqual(found, []);
 });
 
+test("a left-to-right field's placeholder is words, in the UI face", () => {
+  const rules = rulesOf("components/form_controls.css");
+  const faces = ['input[dir="ltr"]::placeholder', 'textarea[dir="ltr"]::placeholder'].map(
+    (subject) => [
+      subject,
+      rules
+        .filter(({ selector }) => selector === subject)
+        .map(({ body }) => fontOf(body))
+        .find(Boolean) ?? "none",
+    ]
+  );
+  assert.deepEqual(
+    faces.filter(([, font]) => font !== "var(--font-sans)"),
+    []
+  );
+});
+
 test("a number-field unit is in the data face, inside the field", () => {
   const rules = rulesOf("components/form_controls.css");
   const faces = rules
@@ -70,6 +88,7 @@ test("shared prose surfaces declare the UI face", () => {
     "ui/data_table/core.css": [".data-table td"],
     "pages/strategies/condition_cards.css": [".summary-content"],
     "ui/position_details/header.css": [".position-details-dialog .header-metric-sub"],
+    "pages/copy.css": [".copy-seg-btn"],
   };
   const found = [];
   for (const [path, selectors] of Object.entries(owners)) {

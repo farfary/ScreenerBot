@@ -128,8 +128,8 @@ copy-field-per-token-cap = प्रति-टोकन सीमा
 copy-field-total-budget = कुल बजट
 copy-field-slippage = स्लिपेज
 copy-rules-wallet-sells-only = केवल वॉलेट के सेल
-copy-filter-copy-setting-required = कॉपी सेटिंग (ज़रूरी)
-copy-filter-copy-setting-not-required = कॉपी सेटिंग (ज़रूरी नहीं)
+copy-filter-copy-setting-required = कॉपी ट्रेडिंग सेटिंग (ज़रूरी)
+copy-filter-copy-setting-not-required = कॉपी ट्रेडिंग सेटिंग (ज़रूरी नहीं)
 copy-count-closed-rounds =
     { $count ->
         [one] { $count } बंद राउंड

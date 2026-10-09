@@ -126,8 +126,8 @@ copy-field-per-token-cap = Token başına üst sınır
 copy-field-total-budget = Toplam bütçe
 copy-field-slippage = Kayma
 copy-rules-wallet-sells-only = Yalnızca cüzdan satışları
-copy-filter-copy-setting-required = Kopya ayarı (gerekli)
-copy-filter-copy-setting-not-required = Kopya ayarı (gerekli değil)
+copy-filter-copy-setting-required = Kopya İşlem ayarı (gerekli)
+copy-filter-copy-setting-not-required = Kopya İşlem ayarı (gerekli değil)
 copy-count-closed-rounds =
     { $count ->
         [one] { $count } kapanmış tur

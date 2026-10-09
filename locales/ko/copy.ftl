@@ -129,8 +129,8 @@ copy-field-per-token-cap = 토큰당 한도
 copy-field-total-budget = 총 예산
 copy-field-slippage = 슬리피지
 copy-rules-wallet-sells-only = 지갑 매도만
-copy-filter-copy-setting-required = 카피 설정 (필수)
-copy-filter-copy-setting-not-required = 카피 설정 (필수 아님)
+copy-filter-copy-setting-required = 카피 트레이딩 설정 (필수)
+copy-filter-copy-setting-not-required = 카피 트레이딩 설정 (필수 아님)
 copy-count-closed-rounds =
     { $count ->
        *[other] 종료된 라운드 { $count }개

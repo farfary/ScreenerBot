@@ -3,23 +3,30 @@
 //
 // The Rules tab and the editor's review: every field with the value that applies
 // and where it comes from (a task override or the inherited Trader default).
-import { definitionRows, exitModeLabel, fixed, modeLabel, pct, sol } from "./format.js";
+import {
+  definitionRows,
+  exitModeLabel,
+  modeLabel,
+  settingFixed,
+  settingPct,
+  settingSol,
+} from "./format.js";
 import { RULES, exitWarnings, fieldText, isOverridden } from "./policy.js";
 
 function sizeText(task) {
   if (task.sizing?.kind === "ratio_of_target") {
-    return I18n.t("copy-rules-size-ratio", { pct: pct(task.sizing.pct, 1) });
+    return I18n.t("copy-rules-size-ratio", { pct: settingPct(task.sizing.pct) });
   }
-  return I18n.t("copy-rules-size-fixed", { amount: sol(task.sizing?.sol, 3) });
+  return I18n.t("copy-rules-size-fixed", { amount: settingSol(task.sizing?.sol) });
 }
 
 function targetRange(task) {
   const min = task.min_target_trade_native;
   const max = task.max_target_trade_native;
   if (min == null && max == null) return I18n.t("copy-rules-target-any");
-  if (max == null) return I18n.t("copy-rules-target-min", { amount: sol(min, 3) });
-  if (min == null) return I18n.t("copy-rules-target-max", { amount: sol(max, 3) });
-  return I18n.t("copy-rules-target-between", { min: fixed(min, 3), max: fixed(max, 3) });
+  if (max == null) return I18n.t("copy-rules-target-min", { amount: settingSol(min) });
+  if (min == null) return I18n.t("copy-rules-target-max", { amount: settingSol(max) });
+  return I18n.t("copy-rules-target-between", { min: settingFixed(min), max: settingFixed(max) });
 }
 
 function warningList(warnings, esc) {
@@ -63,9 +70,9 @@ export function rulesHtml(context, esc) {
   const { task, effective, managesExits, requireFilter, globalRequireFilter, feePct } = context;
   const budgetNote = Number.isFinite(Number(task.spent_native))
     ? I18n.t("copy-rules-budget-note", {
-        spent: fixed(task.spent_native, 3),
+        spent: settingFixed(task.spent_native),
         mode: modeLabel(task.mode),
-        remaining: fixed(task.remaining_budget_native, 3),
+        remaining: settingFixed(task.remaining_budget_native),
       })
     : "";
   const perToken = Number(task.max_native_per_token);
@@ -73,18 +80,18 @@ export function rulesHtml(context, esc) {
   const sizing = definitionRows(
     [
       [I18n.t("copy-rules-copy-size"), sizeText(task)],
-      [I18n.t("copy-field-per-trade-cap"), sol(perTrade, 3)],
+      [I18n.t("copy-field-per-trade-cap"), settingSol(perTrade)],
       [
         I18n.t("copy-field-per-token-cap"),
-        sol(perToken, 3),
+        settingSol(perToken),
         perTrade > 0
           ? I18n.t("copy-rules-token-copies", {
               count: Math.max(1, Math.floor(perToken / perTrade)),
             })
           : "",
       ],
-      [I18n.t("copy-field-total-budget"), sol(task.total_budget_native, 3), budgetNote],
-      [I18n.t("copy-field-slippage"), pct(task.slippage_pct, 1)],
+      [I18n.t("copy-field-total-budget"), settingSol(task.total_budget_native), budgetNote],
+      [I18n.t("copy-field-slippage"), settingPct(task.slippage_pct)],
     ],
     esc
   );

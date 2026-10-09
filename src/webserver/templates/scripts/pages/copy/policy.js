@@ -3,7 +3,7 @@
 //
 // The four exit rules as the editor and the Rules tab present them: field specs,
 // the policy a task runs under after its overrides, presets, and validation.
-import { duration, finite, pct, signedPct } from "./format.js";
+import { duration, finite, settingPct, settingSignedPct } from "./format.js";
 
 const status = {
   key: "enabled",
@@ -28,7 +28,7 @@ export const RULES = [
           return I18n.t("copy-rule-stop-loss-threshold");
         },
         unit: "%",
-        text: (v) => signedPct(-Number(v), 1),
+        text: (v) => settingSignedPct(-Number(v)),
       },
       {
         key: "min_hold_seconds",
@@ -56,7 +56,7 @@ export const RULES = [
           return I18n.t("copy-rule-partial-size");
         },
         unit: "%",
-        text: (v) => pct(v, 0),
+        text: (v) => settingPct(v),
       },
     ],
   },
@@ -73,7 +73,7 @@ export const RULES = [
           return I18n.t("copy-rule-trailing-activation");
         },
         unit: "%",
-        text: (v) => signedPct(v, 1),
+        text: (v) => settingSignedPct(v),
       },
       {
         key: "distance_pct",
@@ -81,7 +81,7 @@ export const RULES = [
           return I18n.t("copy-rule-trailing-distance");
         },
         unit: "%",
-        text: (v) => pct(v, 1),
+        text: (v) => settingPct(v),
       },
     ],
   },
@@ -98,7 +98,7 @@ export const RULES = [
           return I18n.t("copy-rule-take-profit-target");
         },
         unit: "%",
-        text: (v) => signedPct(v, 1),
+        text: (v) => settingSignedPct(v),
       },
     ],
   },
@@ -126,7 +126,7 @@ export const RULES = [
           return I18n.t("copy-rule-time-threshold");
         },
         unit: "%",
-        text: (v) => signedPct(v, 1),
+        text: (v) => settingSignedPct(v),
       },
     ],
   },
@@ -270,28 +270,36 @@ const inRange = (value, max, exclusive) =>
   (Number.isFinite(value) && value > 0 && (exclusive ? value < max : value <= max));
 
 /** The server's own override limits, checked before a save. */
+/**
+ * The first invalid exit override as `{ message, field }`, where `field` is the
+ * `data-rule-field` name of the input that holds it, or null when every override is valid.
+ */
 export function validateOverrides(overrides) {
   const { stop_loss: stop, trailing, roi, time } = overrides;
-  if (!inRange(stop.threshold_pct, 100)) return I18n.t("copy-validate-stop-loss");
+  const problem = (message, field) => ({ message, field });
+  if (!inRange(stop.threshold_pct, 100))
+    return problem(I18n.t("copy-validate-stop-loss"), "stop_loss.threshold_pct");
   if (!inRange(stop.partial_exit_default_pct, 100, true))
-    return I18n.t("copy-validate-partial-size");
+    return problem(I18n.t("copy-validate-partial-size"), "stop_loss.partial_exit_default_pct");
   if (
     stop.min_hold_seconds !== null &&
     !(Number.isInteger(stop.min_hold_seconds) && stop.min_hold_seconds >= 0)
   ) {
-    return I18n.t("copy-validate-min-hold");
+    return problem(I18n.t("copy-validate-min-hold"), "stop_loss.min_hold_seconds");
   }
-  if (!inRange(trailing.activation_pct, 100)) return I18n.t("copy-validate-trailing-activation");
-  if (!inRange(trailing.distance_pct, 100)) return I18n.t("copy-validate-trailing-distance");
+  if (!inRange(trailing.activation_pct, 100))
+    return problem(I18n.t("copy-validate-trailing-activation"), "trailing.activation_pct");
+  if (!inRange(trailing.distance_pct, 100))
+    return problem(I18n.t("copy-validate-trailing-distance"), "trailing.distance_pct");
   if (roi.target_profit_pct !== null && !(roi.target_profit_pct > 0))
-    return I18n.t("copy-validate-take-profit");
+    return problem(I18n.t("copy-validate-take-profit"), "roi.target_profit_pct");
   if (time.duration_seconds !== null && !(time.duration_seconds > 0))
-    return I18n.t("copy-validate-time-duration");
+    return problem(I18n.t("copy-validate-time-duration"), "time.duration_seconds");
   if (
     time.loss_threshold_pct !== null &&
     !(Number.isFinite(time.loss_threshold_pct) && time.loss_threshold_pct <= 0)
   ) {
-    return I18n.t("copy-validate-time-threshold");
+    return problem(I18n.t("copy-validate-time-threshold"), "time.loss_threshold_pct");
   }
   return null;
 }
@@ -320,7 +328,7 @@ export function exitWarnings(policy, exitMode, { slippagePct = null, feePct = nu
     warnings.push(
       I18n.t("copy-warning-stop-delay", {
         hold: duration(stop.min_hold_seconds),
-        threshold: signedPct(-Number(stop.threshold_pct), 1),
+        threshold: settingSignedPct(-Number(stop.threshold_pct)),
       })
     );
   }
@@ -332,9 +340,9 @@ export function exitWarnings(policy, exitMode, { slippagePct = null, feePct = nu
     if (Number(roi.target_profit_pct) <= sellCost) {
       warnings.push(
         I18n.t("copy-warning-take-profit-cost", {
-          target: signedPct(roi.target_profit_pct, 1),
-          slippage: pct(slippage, 1),
-          fee: pct(fee, 1),
+          target: settingSignedPct(roi.target_profit_pct),
+          slippage: settingPct(slippage),
+          fee: settingPct(fee),
         })
       );
     }

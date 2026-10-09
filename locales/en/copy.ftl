@@ -147,8 +147,8 @@ copy-field-per-token-cap = Per-Token Cap
 copy-field-total-budget = Total Budget
 copy-field-slippage = Slippage
 copy-rules-wallet-sells-only = Wallet sells only
-copy-filter-copy-setting-required = Copy setting (required)
-copy-filter-copy-setting-not-required = Copy setting (not required)
+copy-filter-copy-setting-required = Copy Trading setting (required)
+copy-filter-copy-setting-not-required = Copy Trading setting (not required)
 copy-count-closed-rounds =
     { $count ->
         [one] { $count } closed round

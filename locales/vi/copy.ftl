@@ -123,8 +123,8 @@ copy-field-per-token-cap = Giới hạn mỗi token
 copy-field-total-budget = Tổng ngân sách
 copy-field-slippage = Trượt giá
 copy-rules-wallet-sells-only = Chỉ theo lệnh bán của ví
-copy-filter-copy-setting-required = Cài đặt copy (bắt buộc)
-copy-filter-copy-setting-not-required = Cài đặt copy (không bắt buộc)
+copy-filter-copy-setting-required = Cài đặt Copy trading (bắt buộc)
+copy-filter-copy-setting-not-required = Cài đặt Copy trading (không bắt buộc)
 copy-count-closed-rounds =
     { $count ->
        *[other] { $count } vòng đã đóng

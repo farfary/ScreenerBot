@@ -130,8 +130,8 @@ copy-field-per-token-cap = سقف هر توکن
 copy-field-total-budget = کل بودجه
 copy-field-slippage = اسلیپیج
 copy-rules-wallet-sells-only = فقط فروش‌های کیف پول
-copy-filter-copy-setting-required = تنظیم کپی (الزامی)
-copy-filter-copy-setting-not-required = تنظیم کپی (غیرالزامی)
+copy-filter-copy-setting-required = تنظیم کپی‌تریدینگ (الزامی)
+copy-filter-copy-setting-not-required = تنظیم کپی‌تریدینگ (غیرالزامی)
 copy-count-closed-rounds =
     { $count ->
         [one] { $count } دور بسته

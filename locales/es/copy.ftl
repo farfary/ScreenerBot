@@ -133,8 +133,8 @@ copy-field-per-token-cap = Límite por token
 copy-field-total-budget = Presupuesto total
 copy-field-slippage = Deslizamiento
 copy-rules-wallet-sells-only = Solo ventas de la billetera
-copy-filter-copy-setting-required = Ajuste de copia (obligatorio)
-copy-filter-copy-setting-not-required = Ajuste de copia (no obligatorio)
+copy-filter-copy-setting-required = Ajuste de Copy Trading (obligatorio)
+copy-filter-copy-setting-not-required = Ajuste de Copy Trading (no obligatorio)
 copy-count-closed-rounds =
     { $count ->
         [one] { $count } ronda cerrada

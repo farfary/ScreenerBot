@@ -176,6 +176,29 @@ export function pct(value, decimals = 1) {
 }
 
 /**
+ * A configured amount or percentage (a cap, a budget, a rule threshold) as the user set
+ * it: at most the field's precision, with no padded fraction zeros ("0.05 SOL", "2%").
+ * Measured figures (P&L, balances, table columns) keep the fixed-decimal formatters.
+ */
+export function settingFixed(value) {
+  return formatFixed(value, { decimals: 4, trim: true, fallback: "—" });
+}
+
+export function settingSol(value) {
+  return formatSol(value, { decimals: 4, trim: true, fallback: "—" });
+}
+
+export function settingPct(value) {
+  return formatPercentValue(value, { decimals: 2, plus: "", trim: true, fallback: "—" });
+}
+
+export function settingSignedPct(value) {
+  const number = finite(value);
+  if (number === null) return "—";
+  return `${changeSign(number)}${formatPercentValue(Math.abs(number), { decimals: 2, includeSign: false, trim: true })}`;
+}
+
+/**
  * Unrealized P&L covers priced holdings only: with none priced there is no
  * figure, and a partial one says what it leaves out.
  */

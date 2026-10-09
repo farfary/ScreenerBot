@@ -30,8 +30,8 @@ const workspace = JSON.parse(
 );
 const STOP = RULES.find((rule) => rule.group === "stop_loss");
 
-/** Every percentage a text names, unsigned. */
-const percents = (text) => [...plain(text).matchAll(/(\d+(?:\.\d+)?)%/g)].map((m) => m[1]);
+/** Every percentage a text names, unsigned, as numbers. */
+const percents = (text) => [...plain(text).matchAll(/(\d+(?:\.\d+)?)%/g)].map((m) => Number(m[1]));
 
 test("a stored threshold under an inherited switch shows in the card and the warning alike", () => {
   const { trader_defaults: traderDefaults, exit_policy_overrides: overrides } = workspace;
@@ -44,10 +44,10 @@ test("a stored threshold under an inherited switch shows in the card and the war
   assert.notEqual(overrides.stop_loss.threshold_pct, traderDefaults.stop_loss.threshold_pct);
 
   const note = plain(inheritNote(STOP, traderDefaults, overrides));
-  const resolved = Number(overrides.stop_loss.threshold_pct).toFixed(1);
+  const resolved = Number(overrides.stop_loss.threshold_pct);
   assert.ok(percents(note).includes(resolved), `the card names ${resolved}%: ${note}`);
   assert.ok(
-    !percents(note).includes(Number(traderDefaults.stop_loss.threshold_pct).toFixed(1)),
+    !percents(note).includes(Number(traderDefaults.stop_loss.threshold_pct)),
     `the card does not name the Trader default: ${note}`
   );
   assert.match(note, /this task's values/);
@@ -57,7 +57,7 @@ test("a stored threshold under an inherited switch shows in the card and the war
     .filter((text) => /stop/i.test(text));
   for (const text of warnings) {
     assert.ok(
-      !percents(text).includes(Number(traderDefaults.stop_loss.threshold_pct).toFixed(1)),
+      !percents(text).includes(Number(traderDefaults.stop_loss.threshold_pct)),
       `the warning does not name the Trader default: ${text}`
     );
   }
@@ -67,5 +67,5 @@ test("a rule with no stored values follows the Trader's own summary", () => {
   const traderDefaults = { stop_loss: { enabled: true, threshold_pct: 40, min_hold_seconds: 120 } };
   const note = plain(inheritNote(STOP, traderDefaults, { stop_loss: { enabled: null } }));
   assert.match(note, /^Follows the Trader: /);
-  assert.ok(percents(note).includes("40.0"), note);
+  assert.ok(percents(note).includes(40), note);
 });

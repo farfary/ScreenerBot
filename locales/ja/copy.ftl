@@ -127,8 +127,8 @@ copy-field-per-token-cap = トークンごとの上限
 copy-field-total-budget = 総予算
 copy-field-slippage = スリッページ
 copy-rules-wallet-sells-only = ウォレットの売却のみ
-copy-filter-copy-setting-required = コピー設定（必須）
-copy-filter-copy-setting-not-required = コピー設定（必須ではない）
+copy-filter-copy-setting-required = コピートレード設定（必須）
+copy-filter-copy-setting-not-required = コピートレード設定（必須ではない）
 copy-count-closed-rounds =
     { $count ->
        *[other] クローズ済みラウンド { $count }件

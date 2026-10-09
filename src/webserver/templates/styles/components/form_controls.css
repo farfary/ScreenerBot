@@ -221,14 +221,23 @@ input::placeholder {
   opacity: 0.7;
 }
 
+/* A placeholder is words even where the value is a machine string set in the data face. */
+input[dir="ltr"]::placeholder,
+textarea[dir="ltr"]::placeholder {
+  font-family: var(--font-sans);
+}
+
 /* Error state */
 input.input-error,
 input[aria-invalid="true"] {
   border-color: var(--input-border-error);
 }
 
+/* Focus keeps the invalid edge: declared after the focus rules at the same weight, so a
+   field the user is sent back to still reads as the one in error. */
 input.input-error:focus,
 input[aria-invalid="true"]:focus {
+  border-color: var(--input-border-error);
   box-shadow: 0 0 0 var(--input-focus-ring-width) var(--danger-alpha-10);
 }
 
