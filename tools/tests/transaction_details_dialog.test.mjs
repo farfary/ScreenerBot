@@ -6,7 +6,8 @@
  * Guard: the transaction details dialog states amounts and counts the way it lists them.
  * Every amount drops trailing fraction zeros, numeric column headers align with their values,
  * each counted tab shows the number of entries its panel lists, glyphs stand bare, and every
- * panel heading uses one label size.
+ * panel heading uses one label size. The header opens the explorers from one control
+ * whose menu names each explorer.
  *
  * Run with `npm run test:js`.
  */
@@ -161,4 +162,33 @@ test("glyphs stand bare and panel headings share one label size", async (t) => {
       `${tab} panel headings differ from the ${overviewLabel} section label`
     );
   }
+});
+
+test("the header opens explorers from one control with a named menu", async (t) => {
+  const page = await openDialog(t);
+  const header = `${DIALOG} .dialog-header-actions`;
+  assert.equal(await page.locator(`${header} a[href]`).count(), 0, "no bare explorer links");
+  const control = page.locator(`${header} .explorer-menu-btn`);
+  assert.equal(await control.count(), 1, "one explorer control");
+  assert.equal(await control.getAttribute("aria-haspopup"), "menu");
+  assert.ok((await control.getAttribute("aria-label")).length > 0, "the control is named");
+
+  await control.click();
+  await page.waitForSelector(".context-menu.visible");
+  const items = await page.$$eval(".context-menu.visible .context-menu-item", (nodes) =>
+    nodes.map((node) =>
+      node.textContent
+        .replace(/[\u2066-\u2069]/g, "")
+        .trim()
+        .replace(/\s+/g, " ")
+    )
+  );
+  assert.deepEqual(items, ["View on Solscan", "View on Solana FM"]);
+
+  const menu = await page.$eval(
+    ".context-menu.visible",
+    (node) => node.getBoundingClientRect().right
+  );
+  const box = await control.boundingBox();
+  assert.ok(Math.abs(menu - (box.x + box.width)) < 2, "the menu drops from the control's end edge");
 });

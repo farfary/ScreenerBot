@@ -130,6 +130,17 @@
       window.open(urls[explorer] || urls.solscan, "_blank");
     };
 
+    /**
+     * Open a transaction on a block explorer
+     */
+    manager._openTransactionExplorer = function (signature, explorer) {
+      const urls = {
+        solscan: `https://solscan.io/tx/${signature}`,
+        solanafm: `https://solana.fm/tx/${signature}`,
+      };
+      window.open(urls[explorer] || urls.solscan, "_blank");
+    };
+
     // =========================================================================
     // Favorites Management
     // =========================================================================

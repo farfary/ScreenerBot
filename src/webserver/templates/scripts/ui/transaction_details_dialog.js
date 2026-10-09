@@ -15,6 +15,7 @@ import { typeIcon, typeLabel } from "./transaction_type.js";
 import { directionBadge } from "./transaction_direction.js";
 import { statusBadge } from "./transaction_status.js";
 import { venueLabel } from "./venue.js";
+import { explorerMenuButton, openExplorerMenu } from "./context_menu.js";
 import {
   getIdentity,
   isSolMint,
@@ -239,12 +240,7 @@ export class TransactionDetailsDialog {
                 <button class="dialog-header-action" id="copySignatureBtn" data-l10n-id="transactions-dialog-copy-signature">
                   <i class="icon-copy"></i>
                 </button>
-                <a href="https://solscan.io/tx/${Utils.escapeHtml(tx.signature)}" target="_blank" class="dialog-header-action" title="${Utils.escapeHtml(I18n.t("links-view-solscan"))}">
-                  <i class="icon-external-link"></i>
-                </a>
-                <a href="https://solana.fm/tx/${Utils.escapeHtml(tx.signature)}" target="_blank" class="dialog-header-action" title="${Utils.escapeHtml(I18n.t("links-view-solana-fm"))}">
-                  <i class="icon-external-link"></i>
-                </a>
+                ${explorerMenuButton()}
               </div>
               <button class="dialog-close" type="button" data-l10n-id="transactions-dialog-close">
                 <i class="icon-x"></i>
@@ -481,6 +477,12 @@ export class TransactionDetailsDialog {
         Utils.notifyCopied(I18n.t("common-copied-signature"));
       });
     }
+
+    this.dialogEl
+      .querySelector(".explorer-menu-btn")
+      ?.addEventListener("click", (event) =>
+        openExplorerMenu(event.currentTarget, { signature: this.transactionData.signature })
+      );
 
     this._dialogTabBar = new DialogTabBar({
       root: this.dialogEl,

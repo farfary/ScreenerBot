@@ -16,6 +16,7 @@ import * as Hints from "../core/hints.js";
 import { DialogTabBar, renderDialogTabRow } from "./dialog_tab_bar.js";
 import { HintTrigger } from "./hint_popover.js";
 import { showImageLightbox } from "./image_lightbox.js";
+import { explorerMenuButton, openExplorerMenu } from "./context_menu.js";
 import {
   renderOverviewTab,
   renderOverviewLeft,
@@ -977,9 +978,7 @@ export class TokenDetailsDialog {
                 <button class="dialog-header-action" id="copyMintBtn" title="${esc(I18n.attr("links-copy-mint", "title"))}" aria-label="${esc(I18n.attr("links-copy-mint", "aria-label"))}" type="button">
                   <i class="icon-copy"></i>
                 </button>
-                <a href="https://solscan.io/token/${this._escapeHtml(this.tokenData.mint)}" target="_blank" rel="noopener noreferrer" class="dialog-header-action" title="${esc(I18n.t("links-view-solscan"))}" aria-label="${esc(I18n.t("links-view-solscan"))}">
-                  <i class="icon-external-link"></i>
-                </a>
+                ${explorerMenuButton()}
               </div>`
               }
               <button class="dialog-close" type="button" title="${esc(I18n.attr("tokens-dialog-close", "title"))}" aria-label="${esc(I18n.attr("tokens-dialog-close", "aria-label"))}">
@@ -1205,6 +1204,14 @@ export class TokenDetailsDialog {
         Utils.copyToClipboard(token.mint);
         Utils.notifyCopied(I18n.t("positions-details-mint-label"));
       });
+    }
+
+    const explorerBtn = this.dialogEl.querySelector(".explorer-menu-btn");
+    if (explorerBtn && !explorerBtn._hasListener) {
+      explorerBtn._hasListener = true;
+      explorerBtn.addEventListener("click", () =>
+        openExplorerMenu(explorerBtn, { mint: this.tokenData.mint })
+      );
     }
 
     // Setup favorite button

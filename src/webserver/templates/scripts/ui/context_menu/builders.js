@@ -297,6 +297,33 @@
     };
 
     // =========================================================================
+    // Explorer Menu Builder
+    // =========================================================================
+
+    /**
+     * The block explorers for a transaction (`context.signature`) or a token
+     * (`context.mint`): the whole explorer menu of a dialog header, and the head of
+     * the transaction row menu.
+     */
+    manager._buildExplorerMenu = function (items, context) {
+      const open = context.signature
+        ? (explorer) => this._openTransactionExplorer(context.signature, explorer)
+        : (explorer) => this._openExplorer(context.mint, explorer);
+      items.push({
+        type: "item",
+        label: I18n.t("links-view-solscan"),
+        icon: "externalLink",
+        action: () => open("solscan"),
+      });
+      items.push({
+        type: "item",
+        label: I18n.t("links-view-solana-fm"),
+        icon: "globe",
+        action: () => open("solanafm"),
+      });
+    };
+
+    // =========================================================================
     // Transaction Menu Builder
     // =========================================================================
 
@@ -304,19 +331,7 @@
      * Build menu items for transaction context
      */
     manager._buildTransactionMenu = function (items, context) {
-      items.push({
-        type: "item",
-        label: I18n.t("links-view-solscan"),
-        icon: "externalLink",
-        action: () => window.open(`https://solscan.io/tx/${context.signature}`, "_blank"),
-      });
-
-      items.push({
-        type: "item",
-        label: I18n.t("links-view-solana-fm"),
-        icon: "globe",
-        action: () => window.open(`https://solana.fm/tx/${context.signature}`, "_blank"),
-      });
+      this._buildExplorerMenu(items, context);
 
       items.push({ type: "separator" });
 

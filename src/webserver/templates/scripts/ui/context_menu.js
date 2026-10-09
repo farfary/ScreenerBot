@@ -18,7 +18,7 @@
 
 import { dirSign } from "../core/dom.js";
 import { pushEscapeHandler } from "../core/escape_stack.js";
-import { showToast, notifyCopied, notifyCopyFailed } from "../core/utils.js";
+import { escapeHtml, showToast, notifyCopied, notifyCopyFailed } from "../core/utils.js";
 import { POSITION_MANAGEMENT_LABELS } from "./position_management.js";
 
 // Icon mapping to Lucide font classes
@@ -287,6 +287,10 @@ class ContextMenuManager {
         this._buildTransactionMenu(items, context);
         break;
 
+      case "explorer":
+        this._buildExplorerMenu(items, context);
+        break;
+
       case "link":
         this._buildLinkMenu(items, context);
         break;
@@ -330,9 +334,10 @@ class ContextMenuManager {
   }
 
   /**
-   * Show context menu at position
+   * Show context menu at position. `endAnchored` places the menu's inline-end edge
+   * at `x`, for a menu dropped from a control at the end of a header.
    */
-  async show(x, y, context) {
+  async show(x, y, context, { endAnchored = false } = {}) {
     // Prevent concurrent show() calls - critical for preventing hangs
     if (this.isShowing || this.isTransitioning) {
       return;
@@ -368,7 +373,7 @@ class ContextMenuManager {
       this._buildFlatItems();
 
       this._createMenuElement();
-      this._positionMenu(x, y);
+      this._positionMenu(x, y, endAnchored);
       // The menu is the topmost overlay while it is open: Escape closes it and
       // leaves the dialog it was opened from (search, token details) in place.
       this._releaseEscape = pushEscapeHandler(() => this.hide());
@@ -785,24 +790,27 @@ class ContextMenuManager {
   /**
    * Position menu to fit within viewport
    */
-  _positionMenu(x, y) {
+  _positionMenu(x, y, endAnchored = false) {
     // Need to render first to get dimensions
     this.menuEl.style.visibility = "hidden";
     this.menuEl.style.left = "0";
     this.menuEl.style.top = "0";
 
-    const rect = this.menuEl.getBoundingClientRect();
+    // Layout size, not the bounding box: the closed menu is scaled down for its
+    // entry animation, and a scaled width misplaces an end-anchored menu.
+    const rect = { width: this.menuEl.offsetWidth, height: this.menuEl.offsetHeight };
     const viewportWidth = window.innerWidth;
     const viewportHeight = window.innerHeight;
     const padding = 8;
 
-    let finalX = x;
+    const endInLtr = endAnchored && dirSign() === 1;
+    let finalX = endInLtr ? x - rect.width : x;
     let finalY = y;
-    let originX = "left";
+    let originX = endInLtr ? "right" : "left";
     let originY = "top";
 
     // Adjust horizontal position — flip to the left of the cursor near the right edge.
-    if (x + rect.width > viewportWidth - padding) {
+    if (!endInLtr && x + rect.width > viewportWidth - padding) {
       finalX = x - rect.width;
       originX = "right";
     }
@@ -1007,6 +1015,27 @@ if (document.readyState === "loading") {
   getContextMenu();
 }
 
+/** The one dialog-header control that opens the explorer menu. */
+function explorerMenuButton() {
+  const label = escapeHtml(I18n.t("links-explorer-open"));
+  return `<button class="dialog-header-action explorer-menu-btn" type="button" aria-haspopup="menu" title="${label}" aria-label="${label}"><i class="icon-external-link" aria-hidden="true"></i></button>`;
+}
+
+/**
+ * Drop the explorer menu (Solscan, SolanaFM) from a header control. `target` names
+ * what to open: `{ signature }` for a transaction or `{ mint }` for a token.
+ */
+function openExplorerMenu(anchor, target) {
+  const rect = anchor.getBoundingClientRect();
+  const end = dirSign() === 1 ? rect.right : rect.left;
+  void getContextMenu().show(
+    end,
+    rect.bottom + 4,
+    { type: "explorer", ...target, element: anchor },
+    { endAnchored: true }
+  );
+}
+
 // Export for external use
-export { getContextMenu, ContextMenuManager };
+export { getContextMenu, ContextMenuManager, explorerMenuButton, openExplorerMenu };
 export default getContextMenu();
