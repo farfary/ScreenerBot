@@ -11,6 +11,8 @@
  *   figure; a past day without trades is classed as such, never as empty.
  * - The day-change percent has one precision in the header Worth card and the hero.
  * - Every pipeline label fits inside its own cell at every desktop width and locale.
+ * - Today's P&L in the header bot card and ticker takes the shared SOL precision (4
+ *   decimals, like the Home hero), not a precision of its own.
  *
  * Run with `npm run test:js`.
  */
@@ -18,10 +20,12 @@
 import test, { after } from "node:test";
 import assert from "node:assert/strict";
 
+import { readFileSync } from "node:fs";
+
 import { chromium } from "playwright";
 
 import { serveDashboard } from "../lib/dashboard_host.mjs";
-import { createApiHandler, loadIndex } from "../lib/dashboard_fixtures.mjs";
+import { createApiHandler, FIXTURES_ROOT, loadIndex } from "../lib/dashboard_fixtures.mjs";
 
 const READY = "body:not(.initialization-mode) main.content:not([data-loading])";
 // Inside the fixture month, so past, today and future days all render.
@@ -31,10 +35,16 @@ const browser = await chromium.launch({ headless: true });
 after(() => browser.close());
 const [home, shell] = await Promise.all([loadIndex("home"), loadIndex("shell")]);
 
-async function openHome(t, width, locale = "en") {
+async function openHome(t, width, locale = "en", answers = {}) {
   const context = await browser.newContext({ viewport: { width, height: 900 } });
   const api = createApiHandler([home, shell], "populated");
-  const host = await serveDashboard(context, { locale, onApi: api.onApi });
+  const host = await serveDashboard(context, {
+    locale,
+    onApi: (request) => {
+      const body = answers[request.url.pathname];
+      return body ? { body } : api.onApi(request);
+    },
+  });
   t.after(async () => {
     await context.close();
     await host.close();
@@ -133,3 +143,20 @@ for (const locale of ["en", "de"]) {
     }
   });
 }
+
+test("today's P&L in the header takes the shared SOL precision", async (t) => {
+  const header = JSON.parse(readFileSync(`${FIXTURES_ROOT}/shell/header_metrics.json`, "utf8"));
+  header.trader.today_pnl_native = 0.01234;
+  const page = await openHome(t, 1440, "en", {
+    "/api/header/metrics": JSON.stringify(header),
+  });
+  const text = (selector) =>
+    page
+      .waitForFunction((css) => {
+        const shown = globalThis.document.querySelector(css)?.textContent ?? "";
+        return /\d/.test(shown) && shown.replace(/[\u2066-\u2069]/g, "").trim();
+      }, selector)
+      .then((handle) => handle.jsonValue());
+  assert.equal(await text("#botPnL .pnl-num"), "+0.0123");
+  assert.match(await text("#tickerTodayPnL"), /^\+0\.0123 SOL /);
+});

@@ -84,8 +84,8 @@ function updateBotCard(trader, state) {
     return;
   }
 
-  pnl.innerHTML = `<span class="pnl-num">${formatSignedSol(value, { decimals: 3, unit: false })}</span><span class="pnl-unit"> SOL</span>`;
-  setValueClass(pnl, value, 3);
+  pnl.innerHTML = `<span class="pnl-num">${formatSignedSol(value, { unit: false })}</span><span class="pnl-unit"> SOL</span>`;
+  setValueClass(pnl, value);
 }
 
 // The card headlines the wallet's full WORTH (cash + every token held), which is the
@@ -246,8 +246,8 @@ function updateTicker(metrics) {
     const pnl = finiteNumber(metrics.trader?.today_pnl_native);
     const percent = finiteNumber(metrics.trader?.today_pnl_percent);
     if (Number.isFinite(pnl) && Number.isFinite(percent)) {
-      todayPnl.textContent = `${formatSignedSol(pnl, { decimals: 3 })} (${formatPercentValue(percent, { decimals: 1 })})`;
-      setValueClass(todayPnl, pnl, 3);
+      todayPnl.textContent = `${formatSignedSol(pnl)} (${formatPercentValue(percent, { decimals: 1 })})`;
+      setValueClass(todayPnl, pnl);
     } else {
       todayPnl.textContent = "—";
       todayPnl.classList.remove("positive", "negative", "neutral");
