@@ -178,9 +178,6 @@ assistant-history-cached = 캐시됨
 
 # chat_widget.js: sessions sidebar and header.
 assistant-chat-sessions-title = 세션
-assistant-chat-sidebar-new =
-    .title = 새 채팅
-    .aria-label = 새 채팅 세션 만들기
 assistant-chat-search =
     .placeholder = 채팅 검색...
     .aria-label = 채팅 세션 검색
@@ -201,7 +198,6 @@ assistant-chat-close =
 assistant-chat-title-new = 새 채팅
 assistant-chat-sessions-empty = 채팅 세션이 아직 없습니다
 assistant-chat-sessions-empty-search = 일치하는 채팅이 없습니다
-assistant-chat-sessions-new = 새 채팅
 assistant-chat-group-today = 오늘
 assistant-chat-group-yesterday = 어제
 assistant-chat-group-week = 지난 7일

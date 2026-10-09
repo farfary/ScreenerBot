@@ -175,9 +175,6 @@ assistant-history-page = Halaman { $page } dari { $total }
 assistant-history-cached = cache
 
 assistant-chat-sessions-title = Sesi
-assistant-chat-sidebar-new =
-    .title = Chat Baru
-    .aria-label = Buat sesi chat baru
 assistant-chat-search =
     .placeholder = Cari chat...
     .aria-label = Cari sesi chat
@@ -198,7 +195,6 @@ assistant-chat-close =
 assistant-chat-title-new = Chat Baru
 assistant-chat-sessions-empty = Belum ada sesi chat
 assistant-chat-sessions-empty-search = Tidak ada chat yang cocok
-assistant-chat-sessions-new = Chat Baru
 assistant-chat-group-today = Hari Ini
 assistant-chat-group-yesterday = Kemarin
 assistant-chat-group-week = 7 Hari Terakhir

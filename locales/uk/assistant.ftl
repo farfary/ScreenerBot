@@ -172,9 +172,6 @@ assistant-history-page = Сторінка { $page } з { $total }
 assistant-history-cached = із кешу
 
 assistant-chat-sessions-title = Сесії
-assistant-chat-sidebar-new =
-    .title = Новий чат
-    .aria-label = Створити нову сесію чату
 assistant-chat-search =
     .placeholder = Пошук чатів...
     .aria-label = Пошук сесій чату
@@ -195,7 +192,6 @@ assistant-chat-close =
 assistant-chat-title-new = Новий чат
 assistant-chat-sessions-empty = Сесій чату ще немає
 assistant-chat-sessions-empty-search = Відповідних чатів немає
-assistant-chat-sessions-new = Новий чат
 assistant-chat-group-today = Сьогодні
 assistant-chat-group-yesterday = Учора
 assistant-chat-group-week = Попередні 7 днів

@@ -183,9 +183,6 @@ assistant-history-cached = cached
 
 # chat_widget.js: sessions sidebar and header.
 assistant-chat-sessions-title = Sessions
-assistant-chat-sidebar-new =
-    .title = New Chat
-    .aria-label = Create new chat session
 assistant-chat-search =
     .placeholder = Search chats...
     .aria-label = Search chat sessions
@@ -206,7 +203,6 @@ assistant-chat-close =
 assistant-chat-title-new = New Chat
 assistant-chat-sessions-empty = No chat sessions yet
 assistant-chat-sessions-empty-search = No matching chats
-assistant-chat-sessions-new = New Chat
 assistant-chat-group-today = Today
 assistant-chat-group-yesterday = Yesterday
 assistant-chat-group-week = Previous 7 Days

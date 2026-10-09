@@ -131,7 +131,9 @@ export const views = [
       { selector: "#chat-panel .session-item", min: 3 },
       { selector: "#chat-panel .cw-chat-messages .message", min: 4 },
     ],
-    empty: [{ selector: "#chat-panel .sessions-empty", text: "No chat sessions yet" }],
+    empty: [
+      { selector: "#chat-panel .cw-sessions-list .empty-state", text: "No chat sessions yet" },
+    ],
   },
   {
     name: "overview",

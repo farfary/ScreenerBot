@@ -183,9 +183,6 @@ assistant-history-cached = ذخیره‌شده در کش
 
 # chat_widget.js: sessions sidebar and header.
 assistant-chat-sessions-title = گفتگوها
-assistant-chat-sidebar-new =
-    .title = گفتگوی جدید
-    .aria-label = ایجاد گفتگوی جدید
 assistant-chat-search =
     .placeholder = جست‌وجوی گفتگوها...
     .aria-label = جست‌وجوی گفتگوها
@@ -206,7 +203,6 @@ assistant-chat-close =
 assistant-chat-title-new = گفتگوی جدید
 assistant-chat-sessions-empty = هنوز گفتگویی وجود ندارد
 assistant-chat-sessions-empty-search = گفتگوی مطابقی پیدا نشد
-assistant-chat-sessions-new = گفتگوی جدید
 assistant-chat-group-today = امروز
 assistant-chat-group-yesterday = دیروز
 assistant-chat-group-week = 7 روز گذشته

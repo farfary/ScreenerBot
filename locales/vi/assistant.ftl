@@ -172,9 +172,6 @@ assistant-history-page = Trang { $page } / { $total }
 assistant-history-cached = đã lưu đệm
 
 assistant-chat-sessions-title = Phiên
-assistant-chat-sidebar-new =
-    .title = Cuộc trò chuyện mới
-    .aria-label = Tạo phiên trò chuyện mới
 assistant-chat-search =
     .placeholder = Tìm cuộc trò chuyện...
     .aria-label = Tìm phiên trò chuyện
@@ -195,7 +192,6 @@ assistant-chat-close =
 assistant-chat-title-new = Cuộc trò chuyện mới
 assistant-chat-sessions-empty = Chưa có phiên trò chuyện nào
 assistant-chat-sessions-empty-search = Không có cuộc trò chuyện phù hợp
-assistant-chat-sessions-new = Cuộc trò chuyện mới
 assistant-chat-group-today = Hôm nay
 assistant-chat-group-yesterday = Hôm qua
 assistant-chat-group-week = 7 ngày trước

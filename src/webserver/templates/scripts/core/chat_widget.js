@@ -131,9 +131,6 @@ export class ChatWidget {
         <div class="chat-sessions-sidebar">
           <div class="sessions-header">
             <h3 data-l10n-id="assistant-chat-sessions-title"></h3>
-            <button class="new-session-btn" type="button" data-l10n-id="assistant-chat-sidebar-new">
-              <i class="icon-plus"></i>
-            </button>
           </div>
           <div class="sessions-search">
             <i class="icon-search"></i>
@@ -147,16 +144,16 @@ export class ChatWidget {
           <div class="chat-header">
             <span class="chat-title cw-chat-title" data-l10n-id="assistant-chat-title-new"></span>
             <div class="chat-actions">
-              <button class="chat-action-btn cw-sessions-toggle" type="button" data-l10n-id="assistant-chat-history-open" aria-expanded="false">
+              <button class="btn-icon cw-sessions-toggle" type="button" data-l10n-id="assistant-chat-history-open" aria-expanded="false">
                 <i class="icon-panel-left"></i>
               </button>
-              <button class="chat-action-btn cw-new-session-btn" type="button" data-l10n-id="assistant-chat-header-new">
+              <button class="btn-icon cw-new-session-btn" type="button" data-l10n-id="assistant-chat-header-new">
                 <i class="icon-plus"></i>
               </button>
-              <button class="chat-action-btn cw-delete-btn" type="button" data-l10n-id="assistant-chat-delete">
+              <button class="btn-icon cw-delete-btn" type="button" disabled data-l10n-id="assistant-chat-delete">
                 <i class="icon-trash"></i>
               </button>
-              ${this.opts.onClose ? '<button class="chat-action-btn cw-close-btn" type="button" data-l10n-id="assistant-chat-close"><i class="icon-x"></i></button>' : ""}
+              ${this.opts.onClose ? '<button class="btn-icon cw-close-btn" type="button" data-l10n-id="assistant-chat-close"><i class="icon-x"></i></button>' : ""}
             </div>
           </div>
 
@@ -218,7 +215,6 @@ export class ChatWidget {
 
   _setupHandlers() {
     // New session button
-    this._on(this.$(".new-session-btn"), "click", () => this.createSession());
     this._on(this.$(".cw-new-session-btn"), "click", () => this.createSession());
     this._on(this.$(".cw-sessions-toggle"), "click", () => {
       const container = this.$(".chat-container");
@@ -792,16 +788,15 @@ export class ChatWidget {
     );
 
     if (sessions.length === 0) {
+      const message = searchQuery
+        ? I18n.t("assistant-chat-sessions-empty-search")
+        : I18n.t("assistant-chat-sessions-empty");
       container.innerHTML = `
-        <div class="sessions-empty">
-          <i class="icon-message-square"></i>
-          <p>${searchQuery ? Utils.escapeHtml(I18n.t("assistant-chat-sessions-empty-search")) : Utils.escapeHtml(I18n.t("assistant-chat-sessions-empty"))}</p>
-          ${!searchQuery ? `<button class="btn btn-sm cw-empty-new-session"><i class="icon-plus"></i> ${Utils.escapeHtml(I18n.t("assistant-chat-sessions-new"))}</button>` : ""}
+        <div class="empty-state compact">
+          <i class="empty-state-icon icon-message-square" aria-hidden="true"></i>
+          <p class="empty-state-description">${Utils.escapeHtml(message)}</p>
         </div>`;
       this._prevSessionsJson = "";
-      // Wire up the empty-state new-session button
-      const btn = container.querySelector(".cw-empty-new-session");
-      if (btn) btn.onclick = () => this.createSession();
       return;
     }
 

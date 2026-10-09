@@ -66,7 +66,7 @@
 }
 
 /* Sessions List */
-.sessions-list {
+.telegram-sessions-list {
   display: flex;
   flex-direction: column;
   gap: var(--spacing-sm);
@@ -77,7 +77,7 @@
   min-height: 60px;
 }
 
-.sessions-empty {
+.telegram-sessions-empty {
   display: flex;
   align-items: center;
   justify-content: center;
@@ -88,7 +88,7 @@
 }
 
 /* Session Item */
-.session-item {
+.telegram-session-item {
   display: flex;
   align-items: center;
   justify-content: space-between;
@@ -100,12 +100,12 @@
   transition: all var(--transition-fast);
 }
 
-.session-item:hover {
+.telegram-session-item:hover {
   background: var(--bg-card-hover);
   border-color: var(--text-secondary);
 }
 
-.session-info {
+.telegram-session-info {
   display: flex;
   flex-direction: column;
   gap: 2px;
@@ -113,18 +113,18 @@
   min-width: 0;
 }
 
-.session-user {
+.telegram-session-user {
   font-size: 0.85rem;
   font-weight: 600;
   color: var(--text-primary);
 }
 
-.session-time {
+.telegram-session-time {
   font-size: 0.75rem;
   color: var(--text-secondary);
 }
 
-.session-revoke-btn {
+.telegram-session-revoke-btn {
   flex-shrink: 0;
 }
 

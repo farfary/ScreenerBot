@@ -183,9 +183,6 @@ assistant-history-cached = مخزّن مؤقتًا
 
 # chat_widget.js: sessions sidebar and header.
 assistant-chat-sessions-title = الجلسات
-assistant-chat-sidebar-new =
-    .title = محادثة جديدة
-    .aria-label = إنشاء جلسة محادثة جديدة
 assistant-chat-search =
     .placeholder = البحث في المحادثات...
     .aria-label = البحث في جلسات المحادثة
@@ -206,7 +203,6 @@ assistant-chat-close =
 assistant-chat-title-new = محادثة جديدة
 assistant-chat-sessions-empty = لا توجد جلسات محادثة بعد
 assistant-chat-sessions-empty-search = لا توجد محادثات مطابقة
-assistant-chat-sessions-new = محادثة جديدة
 assistant-chat-group-today = اليوم
 assistant-chat-group-yesterday = أمس
 assistant-chat-group-week = آخر 7 أيام

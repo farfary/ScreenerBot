@@ -175,9 +175,6 @@ assistant-history-page = 第 { $page } 页，共 { $total } 页
 assistant-history-cached = 已缓存
 
 assistant-chat-sessions-title = 会话
-assistant-chat-sidebar-new =
-    .title = 新对话
-    .aria-label = 创建新的对话会话
 assistant-chat-search =
     .placeholder = 搜索对话…
     .aria-label = 搜索对话会话
@@ -198,7 +195,6 @@ assistant-chat-close =
 assistant-chat-title-new = 新对话
 assistant-chat-sessions-empty = 尚无对话会话
 assistant-chat-sessions-empty-search = 没有匹配的对话
-assistant-chat-sessions-new = 新对话
 assistant-chat-group-today = 今天
 assistant-chat-group-yesterday = 昨天
 assistant-chat-group-week = 过去 7 天

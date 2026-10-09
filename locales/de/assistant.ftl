@@ -172,9 +172,6 @@ assistant-history-page = Seite { $page } von { $total }
 assistant-history-cached = im Cache
 
 assistant-chat-sessions-title = Sitzungen
-assistant-chat-sidebar-new =
-    .title = Neuer Chat
-    .aria-label = Neue Chat-Sitzung erstellen
 assistant-chat-search =
     .placeholder = Chats durchsuchen...
     .aria-label = Chat-Sitzungen durchsuchen
@@ -195,7 +192,6 @@ assistant-chat-close =
 assistant-chat-title-new = Neuer Chat
 assistant-chat-sessions-empty = Noch keine Chat-Sitzungen
 assistant-chat-sessions-empty-search = Keine passenden Chats
-assistant-chat-sessions-new = Neuer Chat
 assistant-chat-group-today = Heute
 assistant-chat-group-yesterday = Gestern
 assistant-chat-group-week = Letzte 7 Tage

@@ -175,9 +175,6 @@ assistant-history-page = { $page } / { $total } ページ
 assistant-history-cached = キャッシュ済み
 
 assistant-chat-sessions-title = セッション
-assistant-chat-sidebar-new =
-    .title = 新規チャット
-    .aria-label = 新しいチャットセッションを作成
 assistant-chat-search =
     .placeholder = チャットを検索...
     .aria-label = チャットセッションを検索
@@ -198,7 +195,6 @@ assistant-chat-close =
 assistant-chat-title-new = 新規チャット
 assistant-chat-sessions-empty = チャットセッションはまだありません
 assistant-chat-sessions-empty-search = 一致するチャットがありません
-assistant-chat-sessions-new = 新規チャット
 assistant-chat-group-today = 今日
 assistant-chat-group-yesterday = 昨日
 assistant-chat-group-week = 過去7日間

@@ -172,9 +172,6 @@ assistant-history-page = Страница { $page } из { $total }
 assistant-history-cached = из кэша
 
 assistant-chat-sessions-title = Сеансы
-assistant-chat-sidebar-new =
-    .title = Новый чат
-    .aria-label = Создать новый сеанс чата
 assistant-chat-search =
     .placeholder = Поиск по чатам...
     .aria-label = Поиск по сеансам чата
@@ -195,7 +192,6 @@ assistant-chat-close =
 assistant-chat-title-new = Новый чат
 assistant-chat-sessions-empty = Сеансов чата пока нет
 assistant-chat-sessions-empty-search = Подходящих чатов нет
-assistant-chat-sessions-new = Новый чат
 assistant-chat-group-today = Сегодня
 assistant-chat-group-yesterday = Вчера
 assistant-chat-group-week = Предыдущие 7 дней

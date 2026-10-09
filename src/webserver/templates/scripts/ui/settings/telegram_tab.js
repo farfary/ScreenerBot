@@ -87,19 +87,19 @@ function buildTelegramTab(settings) {
       ? (settings.sessions || [])
           .map(
             (s) => `
-      <div class="session-item" data-session-id="${s.user_id}">
-        <div class="session-info">
-          <span class="session-user">${Utils.escapeHtml(s.username || I18n.t("settings-telegram-unknown"))}</span>
-          <span class="session-time">${Utils.escapeHtml(I18n.t("settings-telegram-session-active", { duration: Utils.formatDuration(s.created_at_secs * 1000) }))}</span>
+      <div class="telegram-session-item" data-session-id="${s.user_id}">
+        <div class="telegram-session-info">
+          <span class="telegram-session-user">${Utils.escapeHtml(s.username || I18n.t("settings-telegram-unknown"))}</span>
+          <span class="telegram-session-time">${Utils.escapeHtml(I18n.t("settings-telegram-session-active", { duration: Utils.formatDuration(s.created_at_secs * 1000) }))}</span>
         </div>
-        <button class="btn btn-danger btn-sm session-revoke-btn" data-session-id="${s.user_id}">
+        <button class="btn btn-danger btn-sm telegram-session-revoke-btn" data-session-id="${s.user_id}">
           <i class="icon-x"></i> <span data-l10n-id="settings-telegram-session-revoke"></span>
         </button>
       </div>
     `
           )
           .join("")
-      : '<div class="sessions-empty" data-l10n-id="settings-telegram-sessions-empty"></div>';
+      : '<div class="telegram-sessions-empty" data-l10n-id="settings-telegram-sessions-empty"></div>';
 
   return `
     <!-- Connection Section -->
@@ -282,7 +282,7 @@ function buildTelegramTab(settings) {
         <i class="icon-users"></i>
         <span data-l10n-id="settings-telegram-sessions-title"></span>
       </h3>
-      <div id="tgSessionsList" class="sessions-list">
+      <div id="tgSessionsList" class="telegram-sessions-list">
         ${sessionsHtml}
       </div>
     </div>
@@ -715,7 +715,7 @@ function attachTelegramHandlers(dialog, content, settings) {
   }
 
   // Session revoke buttons
-  content.querySelectorAll(".session-revoke-btn").forEach((btn) => {
+  content.querySelectorAll(".telegram-session-revoke-btn").forEach((btn) => {
     btn.addEventListener("click", async () => {
       const sessionId = btn.dataset.sessionId;
       try {

@@ -175,9 +175,6 @@ assistant-history-cached = önbellekte
 
 # chat_widget.js: sessions sidebar and header.
 assistant-chat-sessions-title = Oturumlar
-assistant-chat-sidebar-new =
-    .title = Yeni Sohbet
-    .aria-label = Yeni sohbet oturumu oluştur
 assistant-chat-search =
     .placeholder = Sohbet ara...
     .aria-label = Sohbet oturumlarında ara
@@ -198,7 +195,6 @@ assistant-chat-close =
 assistant-chat-title-new = Yeni Sohbet
 assistant-chat-sessions-empty = Henüz sohbet oturumu yok
 assistant-chat-sessions-empty-search = Eşleşen sohbet yok
-assistant-chat-sessions-new = Yeni Sohbet
 assistant-chat-group-today = Bugün
 assistant-chat-group-yesterday = Dün
 assistant-chat-group-week = Önceki 7 Gün

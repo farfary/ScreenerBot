@@ -84,40 +84,14 @@
     background: var(--bg-secondary);
   }
 
+  /* The title row matches the chat header's 32px icon-button row, so the two header
+     borders meet in one line. */
   .sessions-header h3 {
     margin: 0;
+    line-height: 32px;
     font-size: 1rem;
     font-weight: 600;
     color: var(--text-primary);
-  }
-
-  .new-session-btn {
-    width: 32px;
-    height: 32px;
-    min-height: 32px;
-    border-radius: var(--radius-sm);
-    border: 1px solid var(--border-color);
-    background: var(--bg-primary);
-    color: var(--text-secondary);
-    cursor: pointer;
-    display: inline-flex;
-    align-items: center;
-    justify-content: center;
-    transition:
-      background-color 0.15s ease,
-      color 0.15s ease,
-      border-color 0.15s ease;
-  }
-
-  .new-session-btn:hover {
-    background: var(--primary-alpha-10);
-    border-color: var(--primary-color);
-    color: var(--primary-color);
-  }
-
-  .new-session-btn i {
-    font-size: 16px;
-    line-height: 1;
   }
 
   /* Sessions Search */
@@ -293,30 +267,6 @@
     margin-bottom: var(--spacing-xs);
   }
 
-  /* Sessions Empty State */
-  .sessions-empty {
-    display: flex;
-    flex-direction: column;
-    align-items: center;
-    justify-content: center;
-    padding: var(--spacing-xl);
-    color: var(--text-muted);
-    text-align: center;
-    min-height: 200px;
-  }
-
-  .sessions-empty i {
-    font-size: 32px;
-    line-height: 1;
-    margin-bottom: var(--spacing-sm);
-    opacity: 0.5;
-  }
-
-  .sessions-empty p {
-    font-size: 0.875rem;
-    margin: 0 0 var(--spacing-md) 0;
-  }
-
   /* Session Preview */
   .session-preview {
     font-size: 0.75rem;
@@ -371,33 +321,6 @@
     gap: var(--spacing-sm);
   }
 
-  .chat-action-btn {
-    width: 32px;
-    height: 32px;
-    min-height: 32px;
-    border-radius: var(--radius-sm);
-    border: none;
-    background: transparent;
-    color: var(--text-secondary);
-    cursor: pointer;
-    display: inline-flex;
-    align-items: center;
-    justify-content: center;
-    transition:
-      background-color var(--transition-fast),
-      color var(--transition-fast);
-  }
-
-  .chat-action-btn:hover {
-    background: var(--hover-bg);
-    color: var(--text-primary);
-  }
-
-  .chat-action-btn i {
-    font-size: 16px;
-    line-height: 1;
-  }
-
   .cw-sessions-toggle {
     display: none;
   }
@@ -407,10 +330,21 @@
   }
 
   /* Messages Area */
+  /* Scroll shadows: the two covers scroll with the content and the two shadows stay at
+     the edges, so a shadow shows only on an edge with more content beyond it. A short
+     panel otherwise cut the suggestion list at the composer with no sign it scrolls. */
   .chat-messages {
     flex: 1;
     min-height: 0;
     overflow: hidden auto;
+    background:
+      linear-gradient(var(--bg-primary) 30%, transparent) top / 100% 40px no-repeat local,
+      linear-gradient(transparent, var(--bg-primary) 70%) bottom / 100% 40px no-repeat local,
+      radial-gradient(farthest-side at 50% 0, var(--shadow-md), transparent) top / 100% 12px
+        no-repeat scroll,
+      radial-gradient(farthest-side at 50% 100%, var(--shadow-md), transparent) bottom / 100% 12px
+        no-repeat scroll,
+      var(--bg-primary);
     padding: var(--spacing-lg) var(--spacing-xl);
     display: flex;
     flex-direction: column;

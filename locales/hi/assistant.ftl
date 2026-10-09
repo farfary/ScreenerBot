@@ -172,9 +172,6 @@ assistant-history-page = पेज { $page } / { $total }
 assistant-history-cached = कैश्ड
 
 assistant-chat-sessions-title = सेशन
-assistant-chat-sidebar-new =
-    .title = नई चैट
-    .aria-label = नया चैट सेशन बनाएँ
 assistant-chat-search =
     .placeholder = चैट खोजें...
     .aria-label = चैट सेशन खोजें
@@ -195,7 +192,6 @@ assistant-chat-close =
 assistant-chat-title-new = नई चैट
 assistant-chat-sessions-empty = अभी तक कोई चैट सेशन नहीं है
 assistant-chat-sessions-empty-search = कोई मिलती-जुलती चैट नहीं मिली
-assistant-chat-sessions-new = नई चैट
 assistant-chat-group-today = आज
 assistant-chat-group-yesterday = कल
 assistant-chat-group-week = पिछले 7 दिन
