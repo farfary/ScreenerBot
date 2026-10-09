@@ -170,8 +170,6 @@ trader-example-profit = +%{ $value } kâr
 
 trader-stop-loss-title = Zarar durdur
 trader-stop-loss-subtitle = Bir pozisyonun zararı eşiğinizi aştığında otomatik olarak çıkın
-trader-stop-loss-threshold-badge = Zarar limiti
-trader-stop-loss-hold-badge = İsteğe bağlı gecikme
 trader-stop-loss-impact = Girişten %{ $threshold } düşünce çık
 trader-stop-loss-hold-immediate = Anında
 trader-stop-loss-hold-delay = Gecikme: { $span }
@@ -183,8 +181,6 @@ trader-stop-loss-note = <strong>Not:</strong> Zarar durdur, erken çıkarak daha
 
 trader-trailing-title = İz süren stop
 trader-trailing-subtitle = Fiyat yükselirken onu takip ederek kârı otomatik olarak koruyun
-trader-trailing-activation-badge = Ne zaman başlar
-trader-trailing-distance-badge = Güvenlik payı
 trader-trailing-activation-impact = +%{ $value } kârda izlemeye başlar
 trader-trailing-distance-impact = Tepeden -%{ $value } düşüşte çıkar
 trader-trailing-activation = Etkinleşme
@@ -195,7 +191,6 @@ trader-trailing-summary-avoided = Tepeden kaçınılan zarar: <strong>{ $value }
 
 trader-roi-title = Kâr al
 trader-roi-subtitle = Kâr hedefinize ulaştığında pozisyonun tamamından otomatik olarak çıkın
-trader-roi-target-badge = Tek hedef
 trader-roi-impact = +%{ $target } kârda çık
 trader-roi-example-title = Örnek senaryo
 trader-roi-initial-buy = İlk alım
@@ -206,8 +201,6 @@ trader-roi-summary = Kilitlenen kâr: <strong>+%{ $target }</strong>
 
 trader-time-title = Zamana dayalı çıkış
 trader-time-subtitle = Zarar eşiği aşılırsa, azami tutma süresinden sonra pozisyonlardan otomatik olarak çıkın
-trader-time-hold-badge = Zaman tetikleyici
-trader-time-loss-badge = Zarar kapısı
 trader-time-unit-seconds = saniye
 trader-time-unit-minutes = dakika
 trader-time-unit-hours = saat
@@ -258,13 +251,11 @@ trader-strategy-load-failed = Stratejiler yüklenemedi
 trader-strategy-empty = Tanımlı strateji yok
 trader-strategy-no-description = Açıklama girilmemiş.
 trader-strategy-unnamed = Adsız strateji
-trader-strategy-type-unknown = Strateji
 trader-strategy-priority-auto = Otomatik
 trader-strategy-priority = Öncelik { $priority }
 
 trader-dca-title = DCA (maliyet ortalaması)
 trader-dca-subtitle = Ortalama giriş fiyatınızı düşürmek için zarardaki pozisyonlara otomatik olarak ekleme yapın
-trader-dca-threshold-badge = Giriş tetikleyici
 trader-dca-example-title = DCA örneği
 trader-dca-example = 0,01 { -sol } ilk giriş → DCA #1: 0,005 { -sol } @ -%10 → DCA #2: 0,005 { -sol } @ %10 daha
 trader-dca-info-title = DCA strateji bilgisi
@@ -280,8 +271,6 @@ trader-dca-risk-cooldown = <strong>Bekleme süresi:</strong> Ardı ardına DCA g
 
 trader-sizing-title = Pozisyon boyutlandırma
 trader-sizing-subtitle = Pozisyon başına ne kadar yatırım yapılacağını belirleyin
-trader-sizing-positions-badge = Risk kontrolü
-trader-sizing-trade-size-badge = Pozisyon başına
 trader-timing-title = Zamanlama ve bekleme süreleri
 trader-timing-subtitle = İşlemler arasındaki zamanlamayı belirleyin
 trader-timing-close-cooldown = Pozisyon kapatma bekleme süresi
@@ -292,5 +281,5 @@ trader-timing-unit-minutes = dk
 trader-timing-unit-tokens = token
 trader-timing-intervals = İzleyici aralıkları
 trader-timing-intervals-badge = Salt okunur
-trader-timing-intervals-hint = Kodda yapılandırılır (arayüzden düzenlenemez)
+trader-timing-intervals-hint = Uygulama tarafından belirlenir ve değiştirilemez
 trader-timing-intervals-value = <strong>Giriş izleyici:</strong> 30sn | <strong>Çıkış izleyici:</strong> 5sn

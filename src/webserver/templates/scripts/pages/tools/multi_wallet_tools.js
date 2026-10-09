@@ -144,7 +144,7 @@ function renderBuyMultiWalletsTool(container, actionsContainer) {
       <!-- Amount Settings -->
       <div class="tool-section">
         <div class="section-header">
-          <h3><i class="icon-dollar-sign"></i> <span data-l10n-id="tools-multi-buy-amounts-title"></span></h3>
+          <h3><i class="icon-coins"></i> <span data-l10n-id="tools-multi-buy-amounts-title"></span></h3>
         </div>
         <div class="section-content">
           <form class="tool-form">

@@ -198,8 +198,6 @@ trader-example-profit = 수익 +{ $value }%
 
 trader-stop-loss-title = 손절
 trader-stop-loss-subtitle = 손실이 설정한 임계값을 넘으면 포지션을 자동으로 청산합니다
-trader-stop-loss-threshold-badge = 손실 한도
-trader-stop-loss-hold-badge = 선택적 지연
 # $threshold is the threshold as typed.
 trader-stop-loss-impact = 진입가 대비 { $threshold }% 하락 시 청산
 trader-stop-loss-hold-immediate = 즉시
@@ -216,8 +214,6 @@ trader-stop-loss-note = <strong>참고:</strong> 손절은 조기에 청산하�
 
 trader-trailing-title = 트레일링 스톱
 trader-trailing-subtitle = 가격이 오르는 동안 따라가며 수익을 자동으로 보호합니다
-trader-trailing-activation-badge = 시작 시점
-trader-trailing-distance-badge = 안전 마진
 # $value is the activation percentage as typed.
 trader-trailing-activation-impact = 수익 +{ $value }%에서 추적 시작
 # $value is the trail distance percentage as typed.
@@ -234,7 +230,6 @@ trader-trailing-summary-avoided = 고점 대비 손실 <strong>{ $value }</stron
 
 trader-roi-title = 익절
 trader-roi-subtitle = 수익이 목표에 도달하면 포지션 전체를 자동으로 청산합니다
-trader-roi-target-badge = 단일 목표
 # $target is the target percentage as typed.
 trader-roi-impact = 수익 +{ $target }%에서 청산
 trader-roi-example-title = 예시 시나리오
@@ -249,8 +244,6 @@ trader-roi-summary = 수익 <strong>+{ $target }%</strong> 확정
 
 trader-time-title = 시간 기반 청산
 trader-time-subtitle = 최대 보유 시간이 지난 뒤 손실이 임계값을 넘으면 포지션을 자동으로 청산합니다
-trader-time-hold-badge = 시간 조건
-trader-time-loss-badge = 손실 조건
 trader-time-unit-seconds = 초
 trader-time-unit-minutes = 분
 trader-time-unit-hours = 시간
@@ -303,7 +296,6 @@ trader-strategy-load-failed = 전략을 불러오지 못했습니다
 trader-strategy-empty = 정의된 전략이 없습니다
 trader-strategy-no-description = 설명이 없습니다.
 trader-strategy-unnamed = 이름 없는 전략
-trader-strategy-type-unknown = 전략
 trader-strategy-priority-auto = 자동
 trader-strategy-priority = 우선순위 { $priority }
 
@@ -311,7 +303,6 @@ trader-strategy-priority = 우선순위 { $priority }
 
 trader-dca-title = 분할 매수 (DCA)
 trader-dca-subtitle = 손실 중인 포지션에 자동으로 추가 매수하여 평균 진입가를 낮춥니다
-trader-dca-threshold-badge = 진입 조건
 trader-dca-example-title = DCA 예시
 trader-dca-example = 초기 0.01 { -sol } → DCA #1: 0.005 { -sol } @ -10% → DCA #2: 0.005 { -sol } @ 추가 -10%
 trader-dca-info-title = DCA 전략 정보
@@ -329,8 +320,6 @@ trader-dca-risk-cooldown = <strong>쿨다운:</strong> 쿨다운을 사용하여
 
 trader-sizing-title = 포지션 규모
 trader-sizing-subtitle = 포지션당 투자 금액을 조절합니다
-trader-sizing-positions-badge = 위험 관리
-trader-sizing-trade-size-badge = 포지션당
 trader-timing-title = 타이밍 및 쿨다운
 trader-timing-subtitle = 작업 간 타이밍을 조절합니다
 trader-timing-close-cooldown = 포지션 종료 쿨다운
@@ -341,5 +330,5 @@ trader-timing-unit-minutes = 분
 trader-timing-unit-tokens = 개
 trader-timing-intervals = 모니터 간격
 trader-timing-intervals-badge = 읽기 전용
-trader-timing-intervals-hint = 코드에서 설정됨 (UI에서 편집 불가)
+trader-timing-intervals-hint = 앱에서 고정되며 변경할 수 없습니다
 trader-timing-intervals-value = <strong>진입 모니터:</strong> 30s | <strong>청산 모니터:</strong> 5s

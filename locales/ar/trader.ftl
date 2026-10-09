@@ -233,8 +233,6 @@ trader-example-profit = ربح +{ $value }%
 
 trader-stop-loss-title = وقف الخسارة
 trader-stop-loss-subtitle = الخروج تلقائيًا من المركز عندما تتجاوز خسارته الحد الذي تحدده
-trader-stop-loss-threshold-badge = حد الخسارة
-trader-stop-loss-hold-badge = تأخير اختياري
 # $threshold is the threshold as typed.
 trader-stop-loss-impact = الخروج عند الهبوط بنسبة { $threshold }% عن الدخول
 trader-stop-loss-hold-immediate = فوري
@@ -251,8 +249,6 @@ trader-stop-loss-note = <strong>ملاحظة:</strong> يحميك وقف الخ�
 
 trader-trailing-title = وقف متحرك
 trader-trailing-subtitle = حماية الأرباح تلقائيًا بتتبع السعر أثناء ارتفاعه
-trader-trailing-activation-badge = متى يبدأ
-trader-trailing-distance-badge = هامش الأمان
 # $value is the activation percentage as typed.
 trader-trailing-activation-impact = يبدأ التتبع عند ربح +{ $value }%
 # $value is the trail distance percentage as typed.
@@ -270,7 +266,6 @@ trader-trailing-summary-avoided = تم تفادي خسارة <strong>{ $value }<
 
 trader-roi-title = جني الأرباح
 trader-roi-subtitle = الخروج تلقائيًا من المركز بالكامل عندما يبلغ الربح هدفك
-trader-roi-target-badge = هدف واحد
 # $target is the target percentage as typed.
 trader-roi-impact = الخروج عند ربح +{ $target }%
 trader-roi-example-title = سيناريو توضيحي
@@ -285,8 +280,6 @@ trader-roi-summary = تم تثبيت ربح <strong>+{ $target }%</strong>
 
 trader-time-title = الخروج الزمني
 trader-time-subtitle = الخروج تلقائيًا من المراكز بعد أقصى مدة احتفاظ إذا تجاوزت الخسارة الحد
-trader-time-hold-badge = المشغّل الزمني
-trader-time-loss-badge = بوابة الخسارة
 trader-time-unit-seconds = ثوانٍ
 trader-time-unit-minutes = دقائق
 trader-time-unit-hours = ساعات
@@ -359,7 +352,6 @@ trader-strategy-load-failed = تعذّر تحميل الاستراتيجيات
 trader-strategy-empty = لا توجد استراتيجيات معرّفة
 trader-strategy-no-description = لا يوجد وصف.
 trader-strategy-unnamed = استراتيجية بلا اسم
-trader-strategy-type-unknown = استراتيجية
 trader-strategy-priority-auto = تلقائي
 trader-strategy-priority = الأولوية { $priority }
 
@@ -367,7 +359,6 @@ trader-strategy-priority = الأولوية { $priority }
 
 trader-dca-title = متوسط التكلفة (DCA)
 trader-dca-subtitle = الإضافة تلقائيًا إلى المراكز الخاسرة لخفض متوسط سعر الدخول
-trader-dca-threshold-badge = مشغّل الدخول
 trader-dca-example-title = مثال DCA
 trader-dca-example = 0.01 { -sol } مبدئيًا ← DCA #1: 0.005 { -sol } @ -10% ← DCA #2: 0.005 { -sol } @ -10% إضافية
 trader-dca-info-title = معلومات استراتيجية DCA
@@ -385,8 +376,6 @@ trader-dca-risk-cooldown = <strong>فترة التهدئة:</strong> استخد�
 
 trader-sizing-title = حجم المركز
 trader-sizing-subtitle = التحكم بمقدار الاستثمار في كل مركز
-trader-sizing-positions-badge = التحكم بالمخاطر
-trader-sizing-trade-size-badge = لكل مركز
 trader-timing-title = التوقيت وفترات التهدئة
 trader-timing-subtitle = التحكم بالتوقيت بين العمليات
 trader-timing-close-cooldown = فترة تهدئة إغلاق المركز
@@ -397,5 +386,5 @@ trader-timing-unit-minutes = دقيقة
 trader-timing-unit-tokens = رمز
 trader-timing-intervals = فترات المراقبة
 trader-timing-intervals-badge = للقراءة فقط
-trader-timing-intervals-hint = مضبوطة في الشيفرة (غير قابلة للتعديل من الواجهة)
+trader-timing-intervals-hint = يضبطها التطبيق ولا يمكن تغييرها
 trader-timing-intervals-value = <strong>مراقب الدخول:</strong> 30s | <strong>مراقب الخروج:</strong> 5s

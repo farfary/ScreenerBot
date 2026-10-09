@@ -186,11 +186,6 @@
   color: var(--primary);
 }
 
-.config-badge-warning {
-  background: var(--warning-alpha-10);
-  color: var(--warning);
-}
-
 .config-hint {
   margin: 0 0 0.625rem;
   font-size: 0.6875rem;
@@ -230,11 +225,13 @@
   box-shadow: 0 0 0 3px var(--primary-alpha-10);
 }
 
+/* A list of amounts reads as figures: the data face comes from `dir="ltr"` on the input
+   (form_controls.css) and the weight matches the number fields beside it. */
 .input-text-compact {
   width: 100%;
   padding: 0.5rem 0.75rem;
   font-size: 0.875rem;
-  font-weight: 500;
+  font-weight: 600;
   border: 2px solid var(--border-color);
   border-radius: var(--radius-md);
   background: var(--background-secondary);
@@ -306,36 +303,28 @@
   min-width: 75px;
 }
 
+/* A step glyph is bare: its colour names the step. */
 .step-icon {
-  width: 28px;
-  height: 28px;
-  border-radius: var(--radius-full);
   display: flex;
   align-items: center;
   justify-content: center;
-  font-size: 12px;
-  box-shadow: 0 2px 6px rgb(0, 0, 0, 0.1);
-  transition: all var(--transition-normal);
+  font-size: 1.125rem;
 }
 
 .step-icon-entry {
-  background: linear-gradient(135deg, var(--primary), var(--primary-hover));
-  color: white;
+  color: var(--primary);
 }
 
 .step-icon-activation {
-  background: linear-gradient(135deg, var(--warning), var(--warning-color-dark));
-  color: white;
+  color: var(--warning);
 }
 
 .step-icon-peak {
-  background: linear-gradient(135deg, var(--success), var(--success-hover));
-  color: white;
+  color: var(--success);
 }
 
 .step-icon-exit {
-  background: linear-gradient(135deg, var(--danger), var(--danger-hover));
-  color: white;
+  color: var(--danger);
 }
 
 .step-content {
@@ -380,6 +369,8 @@
   flex-wrap: wrap;
 }
 
+/* A summary line is body text on a tinted callout: the tone colours its icon and its
+   emphasised figure, never the sentence, so the line never reads as a link. */
 .summary-item {
   flex: 1;
   min-width: 180px;
@@ -398,28 +389,28 @@
 
 .summary-item-success {
   background: var(--success-alpha-10);
-  color: var(--success);
+  color: var(--text-primary);
 }
 
-.summary-item-success strong {
+.summary-item-success :is(i, strong) {
   color: var(--success);
 }
 
 .summary-item-info {
   background: var(--primary-alpha-10);
-  color: var(--primary);
+  color: var(--text-primary);
 }
 
-.summary-item-info strong {
+.summary-item-info :is(i, strong) {
   color: var(--primary);
 }
 
 .summary-item-warning {
   background: var(--warning-alpha-10);
-  color: var(--warning);
+  color: var(--text-primary);
 }
 
-.summary-item-warning strong {
+.summary-item-warning :is(i, strong) {
   color: var(--warning);
 }
 

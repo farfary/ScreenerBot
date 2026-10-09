@@ -527,27 +527,6 @@
   align-items: start;
 }
 
-.strategy-control-name-row {
-  display: flex;
-  align-items: center;
-  gap: 0.5rem;
-  min-width: 0;
-}
-
-.strategy-control-status-dot {
-  width: 8px;
-  height: 8px;
-  background: var(--text-muted);
-  border-radius: 50%;
-  box-shadow: 0 0 0 4px rgb(139, 148, 158, 0.08);
-  flex-shrink: 0;
-}
-
-.strategy-control-item.is-enabled .strategy-control-status-dot {
-  background: var(--success-color);
-  box-shadow: 0 0 0 4px var(--success-alpha-10);
-}
-
 .strategy-control-name {
   overflow: hidden;
   margin: 0;
@@ -596,25 +575,8 @@
   font-size: 0.75rem;
 }
 
-.strategy-control-chip.is-entry {
-  color: var(--primary-color);
-  background: var(--primary-alpha-10);
-  border-color: var(--primary-alpha-20);
-}
-
-.strategy-control-chip.is-exit {
-  color: var(--warning-color);
-  background: var(--warning-alpha-10);
-  border-color: var(--warning-alpha-20);
-}
-
 .strategy-control-item .toggle {
   margin-top: 0.1rem;
-}
-
-/* Reserve the state word's width so ENABLED -> DISABLED cannot shift the row. */
-.strategy-control-item .toggle-state {
-  min-width: 3.5rem;
 }
 
 .strategy-list-state {

@@ -205,8 +205,6 @@ trader-example-profit = +{ $value }% profit
 
 trader-stop-loss-title = Stop Loss
 trader-stop-loss-subtitle = Automatically exit a position when its loss exceeds your threshold
-trader-stop-loss-threshold-badge = Loss limit
-trader-stop-loss-hold-badge = Optional delay
 # $threshold is the threshold as typed.
 trader-stop-loss-impact = Exit when down { $threshold }% from entry
 trader-stop-loss-hold-immediate = Immediate
@@ -223,8 +221,6 @@ trader-stop-loss-note = <strong>Note:</strong> Stop loss protects against larger
 
 trader-trailing-title = Trailing Stop
 trader-trailing-subtitle = Automatically protect profits by trailing the price as it rises
-trader-trailing-activation-badge = When to start
-trader-trailing-distance-badge = Safety margin
 # $value is the activation percentage as typed.
 trader-trailing-activation-impact = Starts trailing at +{ $value }% profit
 # $value is the trail distance percentage as typed.
@@ -242,7 +238,6 @@ trader-trailing-summary-avoided = Avoided <strong>{ $value }</strong> loss from 
 
 trader-roi-title = Take Profit
 trader-roi-subtitle = Automatically exit the entire position when profit reaches your target
-trader-roi-target-badge = Single target
 # $target is the target percentage as typed.
 trader-roi-impact = Exit at +{ $target }% profit
 trader-roi-example-title = Example Scenario
@@ -257,8 +252,6 @@ trader-roi-summary = Locked in <strong>+{ $target }%</strong> profit
 
 trader-time-title = Time-Based Exit
 trader-time-subtitle = Automatically exit positions after a maximum hold time if loss exceeds the threshold
-trader-time-hold-badge = Time trigger
-trader-time-loss-badge = Loss gate
 trader-time-unit-seconds = seconds
 trader-time-unit-minutes = minutes
 trader-time-unit-hours = hours
@@ -315,7 +308,6 @@ trader-strategy-load-failed = Could not load strategies
 trader-strategy-empty = No strategies defined
 trader-strategy-no-description = No description provided.
 trader-strategy-unnamed = Unnamed strategy
-trader-strategy-type-unknown = Strategy
 trader-strategy-priority-auto = Auto
 trader-strategy-priority = Priority { $priority }
 
@@ -323,7 +315,6 @@ trader-strategy-priority = Priority { $priority }
 
 trader-dca-title = Dollar-Cost Averaging
 trader-dca-subtitle = Automatically add to losing positions to lower your average entry price
-trader-dca-threshold-badge = Entry trigger
 trader-dca-example-title = DCA Example
 trader-dca-example = 0.01 { -sol } initial → DCA #1: 0.005 { -sol } @ -10% → DCA #2: 0.005 { -sol } @ -10% more
 trader-dca-info-title = DCA Strategy Info
@@ -341,8 +332,6 @@ trader-dca-risk-cooldown = <strong>Cooldown:</strong> Use cooldown to avoid rapi
 
 trader-sizing-title = Position Sizing
 trader-sizing-subtitle = Control how much to invest per position
-trader-sizing-positions-badge = Risk control
-trader-sizing-trade-size-badge = Per position
 trader-timing-title = Timing & Cooldowns
 trader-timing-subtitle = Control timing between operations
 trader-timing-close-cooldown = Position Close Cooldown
@@ -353,5 +342,5 @@ trader-timing-unit-minutes = min
 trader-timing-unit-tokens = tokens
 trader-timing-intervals = Monitor Intervals
 trader-timing-intervals-badge = Read-only
-trader-timing-intervals-hint = Configured in code (not editable via UI)
+trader-timing-intervals-hint = Set by the app and cannot be changed
 trader-timing-intervals-value = <strong>Entry Monitor:</strong> 30s | <strong>Exit Monitor:</strong> 5s

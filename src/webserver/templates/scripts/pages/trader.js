@@ -11,7 +11,6 @@ import * as Utils from "../core/utils.js";
 import { TabBar, TabBarManager } from "../ui/tab_bar.js";
 import { ConfirmationDialog } from "../ui/confirmation_dialog.js";
 import { closeReasonText } from "../ui/trade_reason.js";
-import { STRATEGY_TYPE_LABELS } from "../ui/strategy_type.js";
 import { requestManager } from "../core/request_manager.js";
 import { createTraderConfigCards } from "./trader/config_cards.js";
 import { playToggleOn, playToggleOff, playError } from "../core/sounds.js";
@@ -53,7 +52,7 @@ function buildSubTabs() {
     tab("trailing-stop", "icon-trending-up", I18n.t("trader-tab-trailing-stop")),
     tab("roi", "icon-target", I18n.t("trader-tab-roi")),
     tab("time-rules", "icon-timer", I18n.t("trader-tab-time-rules")),
-    tab("dca", "icon-dollar-sign", I18n.t("trader-tab-dca")),
+    tab("dca", "icon-coins", I18n.t("trader-tab-dca")),
     tab("general-settings", "icon-settings", I18n.t("trader-tab-settings")),
   ];
 }
@@ -880,13 +879,9 @@ function createLifecycle() {
 
     container.innerHTML = strategies
       .map((strategy) => {
-        const strategyType = String(strategy.strategy_type || "").toUpperCase();
-        const isEntry = strategyType === "ENTRY";
-        const typeClass = isEntry ? "is-entry" : "is-exit";
+        // The toggle is the card's one state signal, and the lane title already names
+        // the strategy type, so the card carries neither a state word nor a type chip.
         const statusClass = strategy.enabled ? "is-enabled" : "is-disabled";
-        const statusLabel = Utils.escapeHtml(
-          strategy.enabled ? I18n.t("common-state-enabled") : I18n.t("common-state-disabled")
-        );
         const description = Utils.escapeHtml(
           strategy.description || I18n.t("trader-strategy-no-description")
         );
@@ -902,37 +897,25 @@ function createLifecycle() {
         const strategyName = Utils.escapeHtml(
           strategy.name ? String(strategy.name) : I18n.t("trader-strategy-unnamed")
         );
-        const typeLabel = Utils.escapeHtml(
-          strategyType
-            ? I18n.label(STRATEGY_TYPE_LABELS, strategyType)
-            : I18n.t("trader-strategy-type-unknown")
-        );
 
         return `
         <div class="strategy-control-item ${statusClass}">
           <div class="strategy-control-item-header">
             <div class="strategy-control-main">
-              <div class="strategy-control-name-row">
-                <span class="strategy-control-status-dot" aria-hidden="true"></span>
-                <h4 class="strategy-control-name">${strategyName}</h4>
-              </div>
+              <h4 class="strategy-control-name">${strategyName}</h4>
               <p class="strategy-control-description">${description}</p>
             </div>
             <label class="toggle">
               <input 
                 type="checkbox" 
                 data-strategy-id="${strategyId}"
+                aria-label="${strategyName}"
                 ${strategy.enabled ? "checked" : ""}
               />
               <span class="toggle-track"></span>
-              <span class="toggle-state">${statusLabel}</span>
             </label>
           </div>
           <div class="strategy-control-meta">
-            <span class="strategy-control-chip ${typeClass}">
-              <i class="${isEntry ? "icon-target" : "icon-log-out"}"></i>
-              ${typeLabel}
-            </span>
             <span class="strategy-control-chip">
               <i class="icon-list-ordered"></i>
               ${priority}

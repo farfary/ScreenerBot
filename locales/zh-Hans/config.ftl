@@ -435,7 +435,7 @@ config-filtering-rugcheck-lp-lock-enabled = 启用 LP 锁定检查
     .hint = 检查流动性池的锁定比例
 config-filtering-rugcheck-lp-providers-enabled = 启用 LP 提供者检查
     .hint = LP 提供者数量过滤的总开关
-config-filtering-rugcheck-max-creator-balance-pct = 创建者最大持仓 %
+config-filtering-rugcheck-max-creator-balance-pct = 创建者最大持仓
     .hint = 创建者最多可持有的比例 %
     .unit = %
 config-filtering-rugcheck-max-graph-insiders = 最大关联图内部人数
@@ -444,19 +444,19 @@ config-filtering-rugcheck-max-graph-insiders = 最大关联图内部人数
 config-filtering-rugcheck-max-insider-holders-in-top-10 = 前 10 持有者中最大内部人数
     .hint = 前 10 名持有者中允许的内部人钱包最大数量
     .unit = 人
-config-filtering-rugcheck-max-insider-total-pct = 内部人合计最大持仓 %
+config-filtering-rugcheck-max-insider-total-pct = 内部人合计最大持仓
     .hint = 所有内部人钱包合计持有的最大比例 %
     .unit = %
 config-filtering-rugcheck-max-risk-score = 最大风险评分
     .hint = 越低越安全。可接受的最大风险评分（0 = 最安全，100000+ = 风险最高）
     .unit = 分
-config-filtering-rugcheck-max-top-3-holders-pct = 前 3 持有者最大合计 %
+config-filtering-rugcheck-max-top-3-holders-pct = 前 3 持有者最大合计
     .hint = 前 3 名持有者的合计上限（60% 允许合理的集中度）
     .unit = %
-config-filtering-rugcheck-max-top-holder-pct = 第一大持有者最大 %
+config-filtering-rugcheck-max-top-holder-pct = 第一大持有者最大
     .hint = 40% = 第一大持有者最多持有 40% 的供应量（大多数新代币持仓较为集中）
     .unit = %
-config-filtering-rugcheck-max-transfer-fee-pct = 最大转账手续费 %
+config-filtering-rugcheck-max-transfer-fee-pct = 最大转账手续费
     .hint = 可接受的最大转账手续费比例（建议 5%）
     .unit = %
 config-filtering-rugcheck-min-lp-providers = 最小 LP 提供者数
@@ -808,18 +808,18 @@ config-positions-loss-blacklist-copy-origins = 拉黑跟单亏损
     .hint = 允许亏损的跟单仓位将代币全局加入黑名单
 config-positions-loss-blacklist-enabled = 启用亏损拉黑
     .hint = 自动将造成重大亏损的代币加入黑名单
-config-positions-loss-blacklist-threshold-pct = 亏损拉黑阈值 %
+config-positions-loss-blacklist-threshold-pct = 亏损拉黑阈值
     .hint = 亏损超过此 % 的代币加入黑名单（-15 = 下跌 15% 以上即拉黑）
     .unit = %
-config-positions-partial-exit-default-pct = 默认部分出场 %
+config-positions-partial-exit-default-pct = 默认部分出场
     .hint = 部分出场时默认卖出的百分比
     .unit = %
 config-positions-partial-exit-enabled = 启用部分出场
     .hint = 允许卖出仓位的一部分，而不是全有或全无
-config-positions-partial-exit-max-pct = 最大部分出场 %
+config-positions-partial-exit-max-pct = 最大部分出场
     .hint = 部分出场允许的最大百分比
     .unit = %
-config-positions-partial-exit-min-pct = 最小部分出场 %
+config-positions-partial-exit-min-pct = 最小部分出场
     .hint = 部分出场允许的最小百分比
     .unit = %
 config-positions-position-open-cooldown-secs = 开仓冷却时间
@@ -828,10 +828,10 @@ config-positions-position-open-cooldown-secs = 开仓冷却时间
 config-positions-profit-extra-needed-sol = 盈利额外缓冲
     .hint = 盈利计算所需的额外 SOL（优先费）
     .unit = SOL
-config-positions-trailing-stop-activation-pct = 追踪止损启动 %
+config-positions-trailing-stop-activation-pct = 追踪止损启动
     .hint = 盈利达到此 % 后启动追踪止损（10 = 在 +10% 时启动）
     .unit = %
-config-positions-trailing-stop-distance-pct = 追踪止损距离 %
+config-positions-trailing-stop-distance-pct = 追踪止损距离
     .hint = 在峰值下方追踪的距离（5 = 价格较峰值下跌 5% 时出场）
     .unit = %
 config-positions-trailing-stop-enabled = 启用追踪止损
@@ -1065,10 +1065,10 @@ config-trader-dca-enabled = 启用 DCA
 config-trader-dca-max-count = DCA 最大次数
     .hint = 每个仓位额外 DCA 入场的最大次数
     .unit = 次
-config-trader-dca-size-percentage = DCA 规模 %
+config-trader-dca-size-percentage = DCA 规模
     .hint = 每次 DCA 入场占初始仓位规模的 %
     .unit = %
-config-trader-dca-threshold-pct = DCA 触发阈值 %
+config-trader-dca-threshold-pct = DCA 触发阈值
     .hint = 仓位下跌达到此 % 时执行 DCA 入场（-10 = 在 -10% 时 DCA）
     .unit = %
 config-trader-enabled = 已启用
@@ -1079,7 +1079,7 @@ config-trader-entry-check-concurrency = 入场检查并发数
 config-trader-entry-monitor-enabled = 启用入场监控
     .hint = 启用对新入场机会的扫描
 config-trader-entry-sizes = 入场规模
-    .hint = 手动交易的预设 SOL 数量 [0.005, 0.01, 0.02, 0.05]
+    .hint = 手动交易的预设 SOL 数量
     .placeholder = 每行输入一个值
 config-trader-exit-monitor-enabled = 启用出场监控
     .hint = 启用对持仓中仓位的出场监控（关闭时请谨慎）
@@ -1094,14 +1094,14 @@ config-trader-loss-limit-sol = 亏损限额
     .hint = 周期内允许的最大已实现亏损
     .unit = SOL
 config-trader-max-open-positions = 最大持仓仓位数
-    .hint = 同时持仓的最大仓位数（保守建议 2-5）
+    .hint = 同时持仓的最大仓位数
     .unit = 个
 config-trader-position-close-cooldown-minutes = 平仓冷却时间
     .hint = 重新买入同一代币前需等待的分钟数
     .unit = 分钟
 config-trader-roi-exit-enabled = 启用 ROI 出场
     .hint = 达到盈利目标时自动出场
-config-trader-roi-target-percent = ROI 目标 %
+config-trader-roi-target-percent = ROI 目标
     .hint = 盈利达到此 % 时出场（20 = 在 +20% 时出场）
     .unit = %
 config-trader-sell-concurrency = 卖出并发数
@@ -1129,20 +1129,20 @@ config-trader-stop-loss-enabled = 启用止损
 config-trader-stop-loss-min-hold-seconds = 最短持仓时间
     .hint = 止损可触发前至少持仓的秒数（0 = 立即）
     .unit = 秒
-config-trader-stop-loss-threshold-pct = 止损阈值 %
+config-trader-stop-loss-threshold-pct = 止损阈值
     .hint = 亏损超过此 % 时出场（50 = 在 -50% 时出场）
     .unit = %
 config-trader-time-override-duration = 时间覆盖时长
     .hint = 强制出场前的时长（168 小时 = 7 天、30 分钟等）
 config-trader-time-override-enabled = 启用时间覆盖
     .hint = 对亏损状态下持仓过久的仓位自动出场
-config-trader-time-override-loss-threshold-percent = 时间覆盖亏损 %
+config-trader-time-override-loss-threshold-percent = 时间覆盖亏损
     .hint = 触发时间覆盖的亏损 %（-40 = 下跌 40% 时出场）
     .unit = %
 config-trader-time-override-unit = 时间覆盖单位
     .hint = 时间单位：seconds、minutes、hours、days
 config-trader-trade-size-sol = 交易规模
-    .hint = 每个仓位的 SOL 数量（测试时建议 0.005-0.01）
+    .hint = 每个仓位的 SOL 数量
     .unit = SOL
 
 ## updates

@@ -178,8 +178,6 @@ trader-example-profit = +{ $value } % Gewinn
 
 trader-stop-loss-title = Stop-Loss
 trader-stop-loss-subtitle = Position automatisch verlassen, wenn der Verlust Ihre Schwelle überschreitet
-trader-stop-loss-threshold-badge = Verlustlimit
-trader-stop-loss-hold-badge = Optionale Verzögerung
 trader-stop-loss-impact = Ausstieg bei { $threshold } % Minus gegenüber dem Einstieg
 trader-stop-loss-hold-immediate = Sofort
 trader-stop-loss-hold-delay = { $span } Verzögerung
@@ -191,8 +189,6 @@ trader-stop-loss-note = <strong>Hinweis:</strong> Der Stop-Loss schützt durch f
 
 trader-trailing-title = Trailing-Stop
 trader-trailing-subtitle = Gewinne automatisch sichern, indem der Stop dem steigenden Preis folgt
-trader-trailing-activation-badge = Startzeitpunkt
-trader-trailing-distance-badge = Sicherheitsabstand
 trader-trailing-activation-impact = Beginnt bei +{ $value } % Gewinn nachzuziehen
 trader-trailing-distance-impact = Ausstieg bei -{ $value } % vom Hoch
 trader-trailing-activation = Aktivierung
@@ -203,7 +199,6 @@ trader-trailing-summary-avoided = <strong>{ $value }</strong> Verlust vom Hoch v
 
 trader-roi-title = Take Profit
 trader-roi-subtitle = Die gesamte Position automatisch verlassen, wenn der Gewinn Ihr Ziel erreicht
-trader-roi-target-badge = Einzelziel
 trader-roi-impact = Ausstieg bei +{ $target } % Gewinn
 trader-roi-example-title = Beispielszenario
 trader-roi-initial-buy = Erstkauf
@@ -214,8 +209,6 @@ trader-roi-summary = <strong>+{ $target } %</strong> Gewinn gesichert
 
 trader-time-title = Zeitbasierter Ausstieg
 trader-time-subtitle = Positionen nach einer maximalen Haltedauer automatisch verlassen, wenn der Verlust die Schwelle überschreitet
-trader-time-hold-badge = Zeitauslöser
-trader-time-loss-badge = Verlustschwelle
 trader-time-unit-seconds = Sekunden
 trader-time-unit-minutes = Minuten
 trader-time-unit-hours = Stunden
@@ -266,13 +259,11 @@ trader-strategy-load-failed = Strategien konnten nicht geladen werden
 trader-strategy-empty = Keine Strategien definiert
 trader-strategy-no-description = Keine Beschreibung vorhanden.
 trader-strategy-unnamed = Unbenannte Strategie
-trader-strategy-type-unknown = Strategie
 trader-strategy-priority-auto = Auto
 trader-strategy-priority = Priorität { $priority }
 
 trader-dca-title = Durchschnittskosten-Strategie (DCA)
 trader-dca-subtitle = Verlustpositionen automatisch aufstocken, um den durchschnittlichen Einstiegspreis zu senken
-trader-dca-threshold-badge = Einstiegsauslöser
 trader-dca-example-title = DCA-Beispiel
 trader-dca-example = 0,01 { -sol } Anfang → DCA #1: 0,005 { -sol } @ -10 % → DCA #2: 0,005 { -sol } @ weitere -10 %
 trader-dca-info-title = Infos zur DCA-Strategie
@@ -288,8 +279,6 @@ trader-dca-risk-cooldown = <strong>Abkühlzeit:</strong> Nutzen Sie die Abkühlz
 
 trader-sizing-title = Positionsgröße
 trader-sizing-subtitle = Steuern, wie viel pro Position investiert wird
-trader-sizing-positions-badge = Risikosteuerung
-trader-sizing-trade-size-badge = Pro Position
 trader-timing-title = Timing und Abkühlzeiten
 trader-timing-subtitle = Zeitabstände zwischen Vorgängen steuern
 trader-timing-close-cooldown = Abkühlzeit nach Positionsschluss
@@ -300,5 +289,5 @@ trader-timing-unit-minutes = Min.
 trader-timing-unit-tokens = Tokens
 trader-timing-intervals = Monitor-Intervalle
 trader-timing-intervals-badge = Nur lesbar
-trader-timing-intervals-hint = Im Code konfiguriert (in der Oberfläche nicht änderbar)
+trader-timing-intervals-hint = Von der App festgelegt und nicht änderbar
 trader-timing-intervals-value = <strong>Einstiegsmonitor:</strong> 30s | <strong>Ausstiegsmonitor:</strong> 5s

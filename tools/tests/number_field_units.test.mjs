@@ -11,7 +11,8 @@
  *
  * - Every config field's `.unit` attribute, and every message a page writes as a field
  *   unit, is at most `MAX_COLUMNS` display columns in every locale.
- * - A config field label never carries a unit in parentheses ("Timeout (seconds)").
+ * - A config field label never carries a unit in parentheses ("Timeout (seconds)"), and
+ *   never repeats its field's unit of measure as a word ("Stop Loss Threshold %").
  * - `unitColumns` counts an East Asian wide character as two columns.
  *
  * The rendered placement is checked on every page by `dashboard_stability.test.mjs`.
@@ -107,6 +108,26 @@ test("a config field label never carries a unit in parentheses", () => {
       const note = /[（(]([^()（）]*)[)）]\s*$/.exec(label)?.[1].trim();
       // A parenthesised window ("Min TX (1h)") qualifies the label; a unit belongs in the field.
       if (note && (units.has(note) || note.includes("-sol"))) {
+        repeated.push(`${locale} ${key}: ${label}`);
+      }
+    }
+  }
+  assert.deepEqual(repeated, []);
+});
+
+// Units of measure a label must not repeat. An asset ("SOL balance") or a counted thing
+// ("Max Pools") names what the value is, so a label may still say it.
+const MEASURES = new Set(["%", "USD", "$", "ms", "s", "min", "h"]);
+
+test("a config field label never repeats the measure its field shows", () => {
+  const repeated = [];
+  for (const [locale, entries] of all) {
+    for (const [key, label] of entries) {
+      if (!key.startsWith("config-") || key.includes(".")) continue;
+      const unit = entries.get(`${key}.unit`)?.trim();
+      if (!MEASURES.has(unit)) continue;
+      const words = label.trim().split(/\s+/);
+      if (words[0] === unit || words.at(-1) === unit || (unit === "%" && label.includes("%"))) {
         repeated.push(`${locale} ${key}: ${label}`);
       }
     }

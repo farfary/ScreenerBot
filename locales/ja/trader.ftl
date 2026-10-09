@@ -198,8 +198,6 @@ trader-example-profit = +{ $value }% の利益
 
 trader-stop-loss-title = 損切り
 trader-stop-loss-subtitle = 損失がしきい値を超えたときにポジションを自動でエグジットします
-trader-stop-loss-threshold-badge = 損失上限
-trader-stop-loss-hold-badge = 任意の遅延
 # $threshold is the threshold as typed.
 trader-stop-loss-impact = エントリーから { $threshold }% 下落したらエグジット
 trader-stop-loss-hold-immediate = 即時
@@ -216,8 +214,6 @@ trader-stop-loss-note = <strong>注意:</strong> 損切りは早めにエグジ�
 
 trader-trailing-title = トレーリングストップ
 trader-trailing-subtitle = 価格の上昇に追従して、利益を自動で守ります
-trader-trailing-activation-badge = 開始タイミング
-trader-trailing-distance-badge = 安全マージン
 # $value is the activation percentage as typed.
 trader-trailing-activation-impact = +{ $value }% の利益で追従を開始
 # $value is the trail distance percentage as typed.
@@ -235,7 +231,6 @@ trader-trailing-summary-avoided = 高値からの損失 <strong>{ $value }</stro
 
 trader-roi-title = 利確
 trader-roi-subtitle = 利益が目標に達したときにポジション全体を自動でエグジットします
-trader-roi-target-badge = 単一目標
 # $target is the target percentage as typed.
 trader-roi-impact = +{ $target }% の利益でエグジット
 trader-roi-example-title = シナリオ例
@@ -250,8 +245,6 @@ trader-roi-summary = <strong>+{ $target }%</strong> の利益を確保
 
 trader-time-title = 時間ベースのエグジット
 trader-time-subtitle = 損失がしきい値を超えている場合、最大保有時間の経過後にポジションを自動でエグジットします
-trader-time-hold-badge = 時間トリガー
-trader-time-loss-badge = 損失条件
 trader-time-unit-seconds = 秒
 trader-time-unit-minutes = 分
 trader-time-unit-hours = 時間
@@ -304,7 +297,6 @@ trader-strategy-load-failed = ストラテジーを読み込めませんでし�
 trader-strategy-empty = ストラテジーが定義されていません
 trader-strategy-no-description = 説明がありません。
 trader-strategy-unnamed = 名称未設定のストラテジー
-trader-strategy-type-unknown = ストラテジー
 trader-strategy-priority-auto = 自動
 trader-strategy-priority = 優先度 { $priority }
 
@@ -312,7 +304,6 @@ trader-strategy-priority = 優先度 { $priority }
 
 trader-dca-title = ドルコスト平均法
 trader-dca-subtitle = 含み損のポジションに自動で追加購入し、平均エントリー価格を下げます
-trader-dca-threshold-badge = エントリートリガー
 trader-dca-example-title = DCA の例
 trader-dca-example = 初回 0.01 { -sol } → DCA #1: 0.005 { -sol } @ -10% → DCA #2: さらに -10% で 0.005 { -sol }
 trader-dca-info-title = DCA ストラテジー情報
@@ -330,8 +321,6 @@ trader-dca-risk-cooldown = <strong>クールダウン:</strong> クールダウ�
 
 trader-sizing-title = ポジションサイズ
 trader-sizing-subtitle = 1ポジションあたりの投資額を管理します
-trader-sizing-positions-badge = リスク管理
-trader-sizing-trade-size-badge = ポジションごと
 trader-timing-title = タイミングとクールダウン
 trader-timing-subtitle = 各処理の間隔を管理します
 trader-timing-close-cooldown = ポジションクローズ後のクールダウン
@@ -342,5 +331,5 @@ trader-timing-unit-minutes = 分
 trader-timing-unit-tokens = 銘柄
 trader-timing-intervals = モニター間隔
 trader-timing-intervals-badge = 読み取り専用
-trader-timing-intervals-hint = コード内で設定されています（UI からは編集できません）
+trader-timing-intervals-hint = アプリで固定されており、変更できません
 trader-timing-intervals-value = <strong>エントリーモニター:</strong> 30秒 | <strong>エグジットモニター:</strong> 5秒

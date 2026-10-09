@@ -163,8 +163,6 @@ trader-example-profit = Lãi +{ $value }%
 
 trader-stop-loss-title = Stop loss
 trader-stop-loss-subtitle = Tự động thoát vị thế khi mức lỗ vượt ngưỡng của bạn
-trader-stop-loss-threshold-badge = Giới hạn lỗ
-trader-stop-loss-hold-badge = Độ trễ tùy chọn
 trader-stop-loss-impact = Thoát khi giảm { $threshold }% so với giá vào
 trader-stop-loss-hold-immediate = Ngay lập tức
 trader-stop-loss-hold-delay = Trễ { $span }
@@ -176,8 +174,6 @@ trader-stop-loss-note = <strong>Lưu ý:</strong> Stop loss bảo vệ bạn kh�
 
 trader-trailing-title = Trailing stop
 trader-trailing-subtitle = Tự động bảo vệ lợi nhuận bằng cách bám theo giá khi giá tăng
-trader-trailing-activation-badge = Thời điểm bắt đầu
-trader-trailing-distance-badge = Biên an toàn
 trader-trailing-activation-impact = Bắt đầu bám theo khi lãi +{ $value }%
 trader-trailing-distance-impact = Thoát khi giảm -{ $value }% so với đỉnh
 trader-trailing-activation = Kích hoạt
@@ -188,7 +184,6 @@ trader-trailing-summary-avoided = Đã tránh <strong>{ $value }</strong> lỗ t
 
 trader-roi-title = Take profit
 trader-roi-subtitle = Tự động thoát toàn bộ vị thế khi lợi nhuận đạt mục tiêu của bạn
-trader-roi-target-badge = Một mục tiêu
 trader-roi-impact = Thoát khi lãi +{ $target }%
 trader-roi-example-title = Kịch bản ví dụ
 trader-roi-initial-buy = Lần mua đầu
@@ -199,8 +194,6 @@ trader-roi-summary = Đã chốt lãi <strong>+{ $target }%</strong>
 
 trader-time-title = Thoát lệnh theo thời gian
 trader-time-subtitle = Tự động thoát vị thế sau thời gian nắm giữ tối đa nếu mức lỗ vượt ngưỡng
-trader-time-hold-badge = Kích hoạt theo thời gian
-trader-time-loss-badge = Cổng lỗ
 trader-time-unit-seconds = giây
 trader-time-unit-minutes = phút
 trader-time-unit-hours = giờ
@@ -247,13 +240,11 @@ trader-strategy-load-failed = Không thể tải chiến lược
 trader-strategy-empty = Chưa có chiến lược nào
 trader-strategy-no-description = Chưa có mô tả.
 trader-strategy-unnamed = Chiến lược chưa đặt tên
-trader-strategy-type-unknown = Chiến lược
 trader-strategy-priority-auto = Tự động
 trader-strategy-priority = Ưu tiên { $priority }
 
 trader-dca-title = DCA (trung bình giá)
 trader-dca-subtitle = Tự động thêm vào các vị thế đang lỗ để hạ giá vào trung bình
-trader-dca-threshold-badge = Điều kiện vào lệnh
 trader-dca-example-title = Ví dụ DCA
 trader-dca-example = 0.01 { -sol } ban đầu → DCA #1: 0.005 { -sol } @ -10% → DCA #2: 0.005 { -sol } @ thêm -10%
 trader-dca-info-title = Thông tin chiến lược DCA
@@ -269,8 +260,6 @@ trader-dca-risk-cooldown = <strong>Thời gian chờ:</strong> Dùng thời gian
 
 trader-sizing-title = Quy mô vị thế
 trader-sizing-subtitle = Kiểm soát số tiền đầu tư cho mỗi vị thế
-trader-sizing-positions-badge = Kiểm soát rủi ro
-trader-sizing-trade-size-badge = Mỗi vị thế
 trader-timing-title = Thời gian & thời gian chờ
 trader-timing-subtitle = Kiểm soát khoảng thời gian giữa các thao tác
 trader-timing-close-cooldown = Thời gian chờ sau khi đóng vị thế
@@ -281,5 +270,5 @@ trader-timing-unit-minutes = phút
 trader-timing-unit-tokens = token
 trader-timing-intervals = Chu kỳ giám sát
 trader-timing-intervals-badge = Chỉ đọc
-trader-timing-intervals-hint = Được cấu hình trong mã (không chỉnh được qua giao diện)
+trader-timing-intervals-hint = Do ứng dụng cố định, không thể thay đổi
 trader-timing-intervals-value = <strong>Giám sát vào lệnh:</strong> 30 giây | <strong>Giám sát thoát lệnh:</strong> 5 giây

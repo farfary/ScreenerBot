@@ -165,8 +165,6 @@ trader-example-profit = +{ $value }% untung
 
 trader-stop-loss-title = Stop Loss
 trader-stop-loss-subtitle = Exit otomatis dari posisi saat kerugiannya melebihi ambang Anda
-trader-stop-loss-threshold-badge = Batas kerugian
-trader-stop-loss-hold-badge = Jeda opsional
 trader-stop-loss-impact = Exit saat turun { $threshold }% dari entry
 trader-stop-loss-hold-immediate = Segera
 trader-stop-loss-hold-delay = Jeda { $span }
@@ -178,8 +176,6 @@ trader-stop-loss-note = <strong>Catatan:</strong> Stop loss melindungi dari keru
 
 trader-trailing-title = Trailing Stop
 trader-trailing-subtitle = Lindungi keuntungan secara otomatis dengan mengikuti harga saat naik
-trader-trailing-activation-badge = Kapan dimulai
-trader-trailing-distance-badge = Margin aman
 trader-trailing-activation-impact = Mulai mengikuti pada untung +{ $value }%
 trader-trailing-distance-impact = Exit pada -{ $value }% dari puncak
 trader-trailing-activation = Aktivasi
@@ -190,7 +186,6 @@ trader-trailing-summary-avoided = Menghindari rugi <strong>{ $value }</strong> d
 
 trader-roi-title = Take Profit
 trader-roi-subtitle = Exit seluruh posisi secara otomatis saat untung mencapai target Anda
-trader-roi-target-badge = Target tunggal
 trader-roi-impact = Exit pada untung +{ $target }%
 trader-roi-example-title = Skenario Contoh
 trader-roi-initial-buy = Pembelian awal
@@ -201,8 +196,6 @@ trader-roi-summary = Mengunci untung <strong>+{ $target }%</strong>
 
 trader-time-title = Exit Berbasis Waktu
 trader-time-subtitle = Exit posisi secara otomatis setelah durasi hold maksimum jika kerugian melebihi ambang
-trader-time-hold-badge = Pemicu waktu
-trader-time-loss-badge = Gerbang kerugian
 trader-time-unit-seconds = detik
 trader-time-unit-minutes = menit
 trader-time-unit-hours = jam
@@ -249,13 +242,11 @@ trader-strategy-load-failed = Tidak dapat memuat strategi
 trader-strategy-empty = Belum ada strategi yang ditentukan
 trader-strategy-no-description = Tidak ada deskripsi.
 trader-strategy-unnamed = Strategi tanpa nama
-trader-strategy-type-unknown = Strategi
 trader-strategy-priority-auto = Otomatis
 trader-strategy-priority = Prioritas { $priority }
 
 trader-dca-title = Dollar-Cost Averaging
 trader-dca-subtitle = Tambah otomatis ke posisi yang rugi untuk menurunkan harga entry rata-rata Anda
-trader-dca-threshold-badge = Pemicu entry
 trader-dca-example-title = Contoh DCA
 trader-dca-example = 0.01 { -sol } awal → DCA #1: 0.005 { -sol } @ -10% → DCA #2: 0.005 { -sol } @ -10% lagi
 trader-dca-info-title = Info Strategi DCA
@@ -271,8 +262,6 @@ trader-dca-risk-cooldown = <strong>Cooldown:</strong> Gunakan cooldown untuk men
 
 trader-sizing-title = Ukuran Posisi
 trader-sizing-subtitle = Atur berapa banyak yang diinvestasikan per posisi
-trader-sizing-positions-badge = Kontrol risiko
-trader-sizing-trade-size-badge = Per posisi
 trader-timing-title = Waktu & Cooldown
 trader-timing-subtitle = Atur jeda waktu antar operasi
 trader-timing-close-cooldown = Cooldown Penutupan Posisi
@@ -283,5 +272,5 @@ trader-timing-unit-minutes = mnt
 trader-timing-unit-tokens = token
 trader-timing-intervals = Interval Monitor
 trader-timing-intervals-badge = Hanya baca
-trader-timing-intervals-hint = Dikonfigurasi di kode (tidak dapat diubah lewat UI)
+trader-timing-intervals-hint = Ditetapkan oleh aplikasi dan tidak dapat diubah
 trader-timing-intervals-value = <strong>Monitor Entry:</strong> 30 dtk | <strong>Monitor Exit:</strong> 5 dtk

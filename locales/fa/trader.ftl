@@ -205,8 +205,6 @@ trader-example-profit = +{ $value }% سود
 
 trader-stop-loss-title = حد ضرر
 trader-stop-loss-subtitle = خروج خودکار از پوزیشن وقتی ضرر آن از آستانه شما فراتر رود
-trader-stop-loss-threshold-badge = محدودیت ضرر
-trader-stop-loss-hold-badge = تأخیر اختیاری
 # $threshold is the threshold as typed.
 trader-stop-loss-impact = خروج در صورت افت { $threshold }% از قیمت ورود
 trader-stop-loss-hold-immediate = فوری
@@ -223,8 +221,6 @@ trader-stop-loss-note = <strong>نکته:</strong> حد ضرر با خروج ز�
 
 trader-trailing-title = حد ضرر متحرک
 trader-trailing-subtitle = محافظت خودکار از سود با دنبال کردن قیمت هنگام صعود
-trader-trailing-activation-badge = زمان شروع
-trader-trailing-distance-badge = حاشیه ایمنی
 # $value is the activation percentage as typed.
 trader-trailing-activation-impact = دنبال کردن از +{ $value }% سود شروع می‌شود
 # $value is the trail distance percentage as typed.
@@ -242,7 +238,6 @@ trader-trailing-summary-avoided = از <strong>{ $value }</strong> ضرر نسب
 
 trader-roi-title = حد سود
 trader-roi-subtitle = خروج خودکار از کل پوزیشن وقتی سود به هدف شما برسد
-trader-roi-target-badge = هدف واحد
 # $target is the target percentage as typed.
 trader-roi-impact = خروج در +{ $target }% سود
 trader-roi-example-title = سناریوی نمونه
@@ -257,8 +252,6 @@ trader-roi-summary = <strong>+{ $target }%</strong> سود قفل شد
 
 trader-time-title = خروج زمان‌محور
 trader-time-subtitle = خروج خودکار از پوزیشن‌ها پس از حداکثر مدت نگهداری، در صورتی که ضرر از آستانه فراتر رفته باشد
-trader-time-hold-badge = شرط زمانی
-trader-time-loss-badge = شرط ضرر
 trader-time-unit-seconds = ثانیه
 trader-time-unit-minutes = دقیقه
 trader-time-unit-hours = ساعت
@@ -315,7 +308,6 @@ trader-strategy-load-failed = بارگذاری استراتژی‌ها ممکن 
 trader-strategy-empty = استراتژی‌ای تعریف نشده است
 trader-strategy-no-description = توضیحی ارائه نشده است.
 trader-strategy-unnamed = استراتژی بدون نام
-trader-strategy-type-unknown = استراتژی
 trader-strategy-priority-auto = خودکار
 trader-strategy-priority = اولویت { $priority }
 
@@ -323,7 +315,6 @@ trader-strategy-priority = اولویت { $priority }
 
 trader-dca-title = میانگین‌گیری قیمت
 trader-dca-subtitle = افزودن خودکار به پوزیشن‌های زیان‌ده برای کاهش میانگین قیمت ورود
-trader-dca-threshold-badge = شرط ورود
 trader-dca-example-title = نمونه DCA
 trader-dca-example = ورود اولیه 0.01 { -sol } ← DCA شماره 1: 0.005 { -sol } در -10% ← DCA شماره 2: 0.005 { -sol } در 10% افت بیشتر
 trader-dca-info-title = اطلاعات استراتژی DCA
@@ -341,8 +332,6 @@ trader-dca-risk-cooldown = <strong>زمان انتظار:</strong> برای جل
 
 trader-sizing-title = اندازه پوزیشن
 trader-sizing-subtitle = میزان سرمایه‌گذاری در هر پوزیشن را کنترل کنید
-trader-sizing-positions-badge = کنترل ریسک
-trader-sizing-trade-size-badge = برای هر پوزیشن
 trader-timing-title = زمان‌بندی و زمان انتظار
 trader-timing-subtitle = زمان‌بندی میان عملیات را کنترل کنید
 trader-timing-close-cooldown = زمان انتظار پس از بستن پوزیشن
@@ -353,5 +342,5 @@ trader-timing-unit-minutes = دقیقه
 trader-timing-unit-tokens = توکن
 trader-timing-intervals = فاصله‌های پایش
 trader-timing-intervals-badge = فقط خواندنی
-trader-timing-intervals-hint = در کد تنظیم شده است (از طریق رابط کاربری قابل ویرایش نیست)
+trader-timing-intervals-hint = توسط برنامه تعیین می‌شوند و قابل تغییر نیستند
 trader-timing-intervals-value = <strong>پایش ورود:</strong> 30 ثانیه | <strong>پایش خروج:</strong> 5 ثانیه

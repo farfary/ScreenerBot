@@ -373,7 +373,7 @@ function renderBurnTokenList() {
 
   const categoryIcons = {
     open_position: "icon-lock",
-    has_value: "icon-dollar-sign",
+    has_value: "icon-coins",
     closed_position: "icon-archive",
     zero_liquidity: "icon-trash-2",
   };

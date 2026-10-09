@@ -170,8 +170,6 @@ trader-example-profit = +{ $value }% प्रॉफ़िट
 
 trader-stop-loss-title = स्टॉप लॉस
 trader-stop-loss-subtitle = नुकसान आपकी सीमा से ज़्यादा होते ही पोज़िशन से अपने आप एग्ज़िट करें
-trader-stop-loss-threshold-badge = लॉस लिमिट
-trader-stop-loss-hold-badge = वैकल्पिक देरी
 trader-stop-loss-impact = एंट्री से { $threshold }% नीचे होने पर एग्ज़िट
 trader-stop-loss-hold-immediate = तुरंत
 trader-stop-loss-hold-delay = { $span } देरी
@@ -183,8 +181,6 @@ trader-stop-loss-note = <strong>नोट:</strong> स्टॉप लॉस �
 
 trader-trailing-title = ट्रेलिंग स्टॉप
 trader-trailing-subtitle = प्राइस बढ़ने के साथ उसका पीछा करके प्रॉफ़िट अपने आप सुरक्षित करें
-trader-trailing-activation-badge = कब शुरू करें
-trader-trailing-distance-badge = सुरक्षा मार्जिन
 trader-trailing-activation-impact = +{ $value }% प्रॉफ़िट पर ट्रेलिंग शुरू होती है
 trader-trailing-distance-impact = पीक से -{ $value }% पर एग्ज़िट
 trader-trailing-activation = सक्रियण
@@ -195,7 +191,6 @@ trader-trailing-summary-avoided = पीक से <strong>{ $value }</strong> �
 
 trader-roi-title = टेक प्रॉफ़िट
 trader-roi-subtitle = प्रॉफ़िट आपके टारगेट तक पहुंचते ही पूरी पोज़िशन से अपने आप एग्ज़िट करें
-trader-roi-target-badge = एकल टारगेट
 trader-roi-impact = +{ $target }% प्रॉफ़िट पर एग्ज़िट
 trader-roi-example-title = उदाहरण परिदृश्य
 trader-roi-initial-buy = शुरुआती खरीद
@@ -206,8 +201,6 @@ trader-roi-summary = <strong>+{ $target }%</strong> प्रॉफ़िट ल
 
 trader-time-title = समय-आधारित एग्ज़िट
 trader-time-subtitle = नुकसान सीमा से ज़्यादा हो तो अधिकतम होल्ड समय के बाद पोज़िशन से अपने आप एग्ज़िट करें
-trader-time-hold-badge = समय ट्रिगर
-trader-time-loss-badge = लॉस गेट
 trader-time-unit-seconds = सेकंड
 trader-time-unit-minutes = मिनट
 trader-time-unit-hours = घंटे
@@ -258,13 +251,11 @@ trader-strategy-load-failed = स्ट्रैटेजी लोड नही
 trader-strategy-empty = कोई स्ट्रैटेजी परिभाषित नहीं
 trader-strategy-no-description = कोई विवरण नहीं दिया गया।
 trader-strategy-unnamed = बिना नाम की स्ट्रैटेजी
-trader-strategy-type-unknown = स्ट्रैटेजी
 trader-strategy-priority-auto = ऑटो
 trader-strategy-priority = प्राथमिकता { $priority }
 
 trader-dca-title = डॉलर-कॉस्ट एवरेजिंग
 trader-dca-subtitle = औसत एंट्री प्राइस घटाने के लिए घाटे वाली पोज़िशन में अपने आप ऐड करें
-trader-dca-threshold-badge = एंट्री ट्रिगर
 trader-dca-example-title = DCA उदाहरण
 trader-dca-example = 0.01 { -sol } शुरुआती → DCA #1: 0.005 { -sol } @ -10% → DCA #2: 0.005 { -sol } @ और -10%
 trader-dca-info-title = DCA स्ट्रैटेजी जानकारी
@@ -280,8 +271,6 @@ trader-dca-risk-cooldown = <strong>कूलडाउन:</strong> लगात�
 
 trader-sizing-title = पोज़िशन साइज़िंग
 trader-sizing-subtitle = तय करें कि प्रति पोज़िशन कितना निवेश करना है
-trader-sizing-positions-badge = जोखिम नियंत्रण
-trader-sizing-trade-size-badge = प्रति पोज़िशन
 trader-timing-title = टाइमिंग और कूलडाउन
 trader-timing-subtitle = ऑपरेशनों के बीच का समय नियंत्रित करें
 trader-timing-close-cooldown = पोज़िशन बंद होने के बाद कूलडाउन
@@ -292,5 +281,5 @@ trader-timing-unit-minutes = मि
 trader-timing-unit-tokens = टोकन
 trader-timing-intervals = मॉनिटर अंतराल
 trader-timing-intervals-badge = केवल पढ़ने योग्य
-trader-timing-intervals-hint = कोड में कॉन्फ़िगर है (UI से बदला नहीं जा सकता)
+trader-timing-intervals-hint = ऐप द्वारा तय, इन्हें बदला नहीं जा सकता
 trader-timing-intervals-value = <strong>एंट्री मॉनिटर:</strong> 30s | <strong>एग्ज़िट मॉनिटर:</strong> 5s

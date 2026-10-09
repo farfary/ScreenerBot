@@ -198,8 +198,6 @@ trader-example-profit = 盈利 +{ $value }%
 
 trader-stop-loss-title = 止损
 trader-stop-loss-subtitle = 当仓位亏损超过您设定的阈值时自动出场
-trader-stop-loss-threshold-badge = 亏损限额
-trader-stop-loss-hold-badge = 可选延迟
 # $threshold is the threshold as typed.
 trader-stop-loss-impact = 较入场价下跌 { $threshold }% 时出场
 trader-stop-loss-hold-immediate = 立即
@@ -216,8 +214,6 @@ trader-stop-loss-note = <strong>注意：</strong>止损通过提前出场来防
 
 trader-trailing-title = 追踪止损
 trader-trailing-subtitle = 价格上涨时跟随价格自动保护利润
-trader-trailing-activation-badge = 启动时机
-trader-trailing-distance-badge = 安全边际
 # $value is the activation percentage as typed.
 trader-trailing-activation-impact = 盈利达到 +{ $value }% 时开始追踪
 # $value is the trail distance percentage as typed.
@@ -235,7 +231,6 @@ trader-trailing-summary-avoided = 避免了较峰值 <strong>{ $value }</strong>
 
 trader-roi-title = 止盈
 trader-roi-subtitle = 当利润达到目标时自动全部出场
-trader-roi-target-badge = 单一目标
 # $target is the target percentage as typed.
 trader-roi-impact = 盈利 +{ $target }% 时出场
 trader-roi-example-title = 示例场景
@@ -250,8 +245,6 @@ trader-roi-summary = 已锁定 <strong>+{ $target }%</strong> 的利润
 
 trader-time-title = 按时间出场
 trader-time-subtitle = 超过最长持仓时间且亏损超过阈值时自动出场
-trader-time-hold-badge = 时间触发
-trader-time-loss-badge = 亏损条件
 trader-time-unit-seconds = 秒
 trader-time-unit-minutes = 分钟
 trader-time-unit-hours = 小时
@@ -304,7 +297,6 @@ trader-strategy-load-failed = 无法加载策略
 trader-strategy-empty = 尚未定义策略
 trader-strategy-no-description = 暂无描述。
 trader-strategy-unnamed = 未命名策略
-trader-strategy-type-unknown = 策略
 trader-strategy-priority-auto = 自动
 trader-strategy-priority = 优先级 { $priority }
 
@@ -312,7 +304,6 @@ trader-strategy-priority = 优先级 { $priority }
 
 trader-dca-title = 定投加仓（DCA）
 trader-dca-subtitle = 对亏损仓位自动加仓，以降低入场均价
-trader-dca-threshold-badge = 入场触发
 trader-dca-example-title = DCA 示例
 trader-dca-example = 初始 0.01 { -sol } → DCA #1：0.005 { -sol } @ -10% → DCA #2：0.005 { -sol } @ 再跌 -10%
 trader-dca-info-title = DCA 策略说明
@@ -330,8 +321,6 @@ trader-dca-risk-cooldown = <strong>冷却时间：</strong>使用冷却时间避
 
 trader-sizing-title = 仓位规模
 trader-sizing-subtitle = 控制每个仓位的投入金额
-trader-sizing-positions-badge = 风险控制
-trader-sizing-trade-size-badge = 每个仓位
 trader-timing-title = 时间与冷却
 trader-timing-subtitle = 控制操作之间的时间间隔
 trader-timing-close-cooldown = 平仓冷却时间
@@ -342,5 +331,5 @@ trader-timing-unit-minutes = 分钟
 trader-timing-unit-tokens = 个
 trader-timing-intervals = 监控间隔
 trader-timing-intervals-badge = 只读
-trader-timing-intervals-hint = 在代码中配置（无法通过界面编辑）
+trader-timing-intervals-hint = 由应用固定，无法更改
 trader-timing-intervals-value = <strong>入场监控：</strong>30 秒 | <strong>出场监控：</strong>5 秒

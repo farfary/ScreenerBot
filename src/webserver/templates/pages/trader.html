@@ -320,10 +320,6 @@
                 <i class="icon-trending-down"></i>
                 <span data-l10n-id="config-trader-stop-loss-threshold-pct"></span>
               </label>
-              <span
-                class="config-badge config-badge-warning"
-                data-l10n-id="trader-stop-loss-threshold-badge"
-              ></span>
             </div>
             <p class="config-hint"></p>
             <div class="input-group-enhanced">
@@ -371,10 +367,6 @@
                 <i class="icon-clock"></i>
                 <span data-l10n-id="config-trader-stop-loss-min-hold-seconds"></span>
               </label>
-              <span
-                class="config-badge config-badge-info"
-                data-l10n-id="trader-stop-loss-hold-badge"
-              ></span>
             </div>
             <p class="config-hint"></p>
             <div class="input-group-enhanced">
@@ -497,10 +489,6 @@
                 <i class="icon-trending-up"></i>
                 <span data-l10n-id="config-positions-trailing-stop-activation-pct"></span>
               </label>
-              <span
-                class="config-badge config-badge-info"
-                data-l10n-id="trader-trailing-activation-badge"
-              ></span>
             </div>
             <p class="config-hint"></p>
             <div class="input-group-enhanced">
@@ -533,10 +521,6 @@
                 <i class="icon-arrow-down"></i>
                 <span data-l10n-id="config-positions-trailing-stop-distance-pct"></span>
               </label>
-              <span
-                class="config-badge config-badge-warning"
-                data-l10n-id="trader-trailing-distance-badge"
-              ></span>
             </div>
             <p class="config-hint"></p>
             <div class="input-group-enhanced">
@@ -697,10 +681,6 @@
                 <i class="icon-trending-up"></i>
                 <span data-l10n-id="config-trader-roi-target-percent"></span>
               </label>
-              <span
-                class="config-badge config-badge-info"
-                data-l10n-id="trader-roi-target-badge"
-              ></span>
             </div>
             <p class="config-hint"></p>
             <div class="input-group-enhanced">
@@ -819,10 +799,6 @@
                 <i class="icon-clock"></i>
                 <span data-l10n-id="config-trader-time-override-duration"></span>
               </label>
-              <span
-                class="config-badge config-badge-warning"
-                data-l10n-id="trader-time-hold-badge"
-              ></span>
             </div>
             <p class="config-hint"></p>
             <div class="input-group-enhanced">
@@ -859,10 +835,6 @@
                 <i class="icon-trending-down"></i>
                 <span data-l10n-id="config-trader-time-override-loss-threshold-percent"></span>
               </label>
-              <span
-                class="config-badge config-badge-info"
-                data-l10n-id="trader-time-loss-badge"
-              ></span>
             </div>
             <p class="config-hint"></p>
             <div class="input-group-enhanced">
@@ -1031,7 +1003,7 @@
           <div class="card-header">
             <div class="card-header-text">
               <h3>
-                <i class="icon-dollar-sign"></i> <span data-l10n-id="trader-dca-title"></span>
+                <i class="icon-coins"></i> <span data-l10n-id="trader-dca-title"></span>
               </h3>
               <p class="card-subtitle" data-l10n-id="trader-dca-subtitle"></p>
             </div>
@@ -1047,10 +1019,6 @@
                 <i class="icon-trending-down"></i>
                 <span data-l10n-id="config-trader-dca-threshold-pct"></span>
               </label>
-              <span
-                class="config-badge config-badge-warning"
-                data-l10n-id="trader-dca-threshold-badge"
-              ></span>
             </div>
             <p class="config-hint"></p>
             <div class="input-group-enhanced">
@@ -1170,7 +1138,7 @@
                   <span data-l10n-id="trader-dca-how-trigger" data-l10n-markup></span>
                 </div>
                 <div class="summary-item summary-item-info">
-                  <i class="icon-dollar-sign"></i>
+                  <i class="icon-coins"></i>
                   <span data-l10n-id="trader-dca-how-action" data-l10n-markup></span>
                 </div>
                 <div class="summary-item summary-item-info">
@@ -1226,10 +1194,6 @@
                 <i class="icon-layers"></i>
                 <span data-l10n-id="config-trader-max-open-positions"></span>
               </label>
-              <span
-                class="config-badge config-badge-info"
-                data-l10n-id="trader-sizing-positions-badge"
-              ></span>
             </div>
             <p class="config-hint"></p>
             <div class="input-group-enhanced">
@@ -1249,13 +1213,9 @@
           <div class="config-group">
             <div class="config-label-row">
               <label for="trade-size" class="config-label">
-                <i class="icon-dollar-sign"></i>
+                <i class="icon-coins"></i>
                 <span data-l10n-id="config-trader-trade-size-sol"></span>
               </label>
-              <span
-                class="config-badge config-badge-warning"
-                data-l10n-id="trader-sizing-trade-size-badge"
-              ></span>
             </div>
             <p class="config-hint"></p>
             <div class="input-group-enhanced">
@@ -1283,6 +1243,8 @@
             <input
               type="text"
               id="entry-sizes"
+              dir="ltr"
+              inputmode="decimal"
               placeholder="0.005, 0.01, 0.02, 0.05"
               value="0.005, 0.01, 0.02, 0.05"
               class="input-text-compact"

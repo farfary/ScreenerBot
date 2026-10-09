@@ -212,8 +212,6 @@ trader-example-profit = +{ $value }% de ganancia
 
 trader-stop-loss-title = Stop loss
 trader-stop-loss-subtitle = Sale automáticamente de una posición cuando su pérdida supera tu umbral
-trader-stop-loss-threshold-badge = Límite de pérdida
-trader-stop-loss-hold-badge = Retraso opcional
 # $threshold is the threshold as typed.
 trader-stop-loss-impact = Sale cuando baja { $threshold }% desde la entrada
 trader-stop-loss-hold-immediate = Inmediato
@@ -230,8 +228,6 @@ trader-stop-loss-note = <strong>Nota:</strong> el stop loss protege de pérdidas
 
 trader-trailing-title = Trailing stop
 trader-trailing-subtitle = Protege automáticamente las ganancias siguiendo el precio mientras sube
-trader-trailing-activation-badge = Cuándo empezar
-trader-trailing-distance-badge = Margen de seguridad
 # $value is the activation percentage as typed.
 trader-trailing-activation-impact = Empieza a seguir con +{ $value }% de ganancia
 # $value is the trail distance percentage as typed.
@@ -249,7 +245,6 @@ trader-trailing-summary-avoided = Pérdida evitada de <strong>{ $value }</strong
 
 trader-roi-title = Take profit
 trader-roi-subtitle = Sale automáticamente de toda la posición cuando la ganancia alcanza tu objetivo
-trader-roi-target-badge = Objetivo único
 # $target is the target percentage as typed.
 trader-roi-impact = Sale con +{ $target }% de ganancia
 trader-roi-example-title = Escenario de ejemplo
@@ -264,8 +259,6 @@ trader-roi-summary = Ganancia asegurada de <strong>+{ $target }%</strong>
 
 trader-time-title = Salida por tiempo
 trader-time-subtitle = Sale automáticamente de las posiciones tras un tiempo máximo de tenencia si la pérdida supera el umbral
-trader-time-hold-badge = Disparador de tiempo
-trader-time-loss-badge = Filtro de pérdida
 trader-time-unit-seconds = segundos
 trader-time-unit-minutes = minutos
 trader-time-unit-hours = horas
@@ -326,7 +319,6 @@ trader-strategy-load-failed = No se pudieron cargar las estrategias
 trader-strategy-empty = No hay estrategias definidas
 trader-strategy-no-description = Sin descripción.
 trader-strategy-unnamed = Estrategia sin nombre
-trader-strategy-type-unknown = Estrategia
 trader-strategy-priority-auto = Auto
 trader-strategy-priority = Prioridad { $priority }
 
@@ -334,7 +326,6 @@ trader-strategy-priority = Prioridad { $priority }
 
 trader-dca-title = Promedio de costo en dólares
 trader-dca-subtitle = Añade automáticamente a posiciones en pérdida para reducir tu precio de entrada promedio
-trader-dca-threshold-badge = Disparador de entrada
 trader-dca-example-title = Ejemplo de DCA
 trader-dca-example = 0.01 { -sol } inicial → DCA #1: 0.005 { -sol } @ -10% → DCA #2: 0.005 { -sol } @ -10% más
 trader-dca-info-title = Información de la estrategia DCA
@@ -352,8 +343,6 @@ trader-dca-risk-cooldown = <strong>Enfriamiento:</strong> usa el enfriamiento pa
 
 trader-sizing-title = Tamaño de posición
 trader-sizing-subtitle = Controla cuánto invertir por posición
-trader-sizing-positions-badge = Control de riesgo
-trader-sizing-trade-size-badge = Por posición
 trader-timing-title = Tiempos y enfriamientos
 trader-timing-subtitle = Controla el tiempo entre operaciones
 trader-timing-close-cooldown = Enfriamiento tras cerrar posición
@@ -364,5 +353,5 @@ trader-timing-unit-minutes = min
 trader-timing-unit-tokens = tokens
 trader-timing-intervals = Intervalos de monitores
 trader-timing-intervals-badge = Solo lectura
-trader-timing-intervals-hint = Configurado en el código (no editable desde la interfaz)
+trader-timing-intervals-hint = Los fija la aplicación y no se pueden cambiar
 trader-timing-intervals-value = <strong>Monitor de entradas:</strong> 30s | <strong>Monitor de salidas:</strong> 5s

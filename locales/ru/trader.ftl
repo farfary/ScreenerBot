@@ -184,8 +184,6 @@ trader-example-profit = +{ $value }% прибыли
 
 trader-stop-loss-title = Стоп-лосс
 trader-stop-loss-subtitle = Автоматически выходить из позиции, когда убыток превышает ваш порог
-trader-stop-loss-threshold-badge = Лимит убытков
-trader-stop-loss-hold-badge = Необязательная задержка
 trader-stop-loss-impact = Выход при падении на { $threshold }% от входа
 trader-stop-loss-hold-immediate = Сразу
 trader-stop-loss-hold-delay = задержка { $span }
@@ -197,8 +195,6 @@ trader-stop-loss-note = <strong>Примечание:</strong> стоп-лосс
 
 trader-trailing-title = Трейлинг-стоп
 trader-trailing-subtitle = Автоматически защищать прибыль, следуя за ценой по мере её роста
-trader-trailing-activation-badge = Когда включать
-trader-trailing-distance-badge = Запас прочности
 trader-trailing-activation-impact = Слежение начинается при +{ $value }% прибыли
 trader-trailing-distance-impact = Выход при -{ $value }% от пика
 trader-trailing-activation = Активация
@@ -209,7 +205,6 @@ trader-trailing-summary-avoided = Избегнут убыток от пика: <
 
 trader-roi-title = Тейк-профит
 trader-roi-subtitle = Автоматически выходить из всей позиции, когда прибыль достигает цели
-trader-roi-target-badge = Одна цель
 trader-roi-impact = Выход при +{ $target }% прибыли
 trader-roi-example-title = Пример сценария
 trader-roi-initial-buy = Первая покупка
@@ -220,8 +215,6 @@ trader-roi-summary = Зафиксирована прибыль <strong>+{ $targe
 
 trader-time-title = Выход по времени
 trader-time-subtitle = Автоматически выходить из позиций по истечении максимального времени удержания, если убыток превышает порог
-trader-time-hold-badge = Триггер по времени
-trader-time-loss-badge = Условие по убытку
 trader-time-unit-seconds = секунды
 trader-time-unit-minutes = минуты
 trader-time-unit-hours = часы
@@ -280,13 +273,11 @@ trader-strategy-load-failed = Не удалось загрузить страт�
 trader-strategy-empty = Стратегии не заданы
 trader-strategy-no-description = Описание не указано.
 trader-strategy-unnamed = Стратегия без названия
-trader-strategy-type-unknown = Стратегия
 trader-strategy-priority-auto = Авто
 trader-strategy-priority = Приоритет { $priority }
 
 trader-dca-title = Усреднение (DCA)
 trader-dca-subtitle = Автоматически докупать убыточные позиции, чтобы снизить среднюю цену входа
-trader-dca-threshold-badge = Триггер входа
 trader-dca-example-title = Пример DCA
 trader-dca-example = 0.01 { -sol } начальная → DCA №1: 0.005 { -sol } при -10% → DCA №2: 0.005 { -sol } ещё при -10%
 trader-dca-info-title = О стратегии DCA
@@ -302,8 +293,6 @@ trader-dca-risk-cooldown = <strong>Пауза:</strong> используйте �
 
 trader-sizing-title = Размер позиции
 trader-sizing-subtitle = Сколько вкладывать в одну позицию
-trader-sizing-positions-badge = Контроль риска
-trader-sizing-trade-size-badge = На позицию
 trader-timing-title = Тайминг и паузы
 trader-timing-subtitle = Управление временем между операциями
 trader-timing-close-cooldown = Пауза после закрытия позиции
@@ -314,5 +303,5 @@ trader-timing-unit-minutes = мин
 trader-timing-unit-tokens = токенов
 trader-timing-intervals = Интервалы мониторинга
 trader-timing-intervals-badge = Только чтение
-trader-timing-intervals-hint = Задаются в коде (через интерфейс не меняются)
+trader-timing-intervals-hint = Задаются приложением и не меняются
 trader-timing-intervals-value = <strong>Мониторинг входов:</strong> 30 с | <strong>Мониторинг выходов:</strong> 5 с
