@@ -540,15 +540,23 @@ export function formatPercent(value, { style = "plain", decimals = 2, fallback =
 
 /**
  * A SOL amount at up to `decimals`, without padded fraction zeros ("0.050" -> "0.05").
- * A table cell passes `trim: false` so a column keeps one fixed decimal count.
+ * A table cell passes `trim: false` so a column keeps one fixed decimal count. With
+ * `subscript`, a non-zero amount too small for `decimals` takes the price notation
+ * (5.29e-9 -> "0.0₈5290") instead of reading as zero.
  */
-export function formatSol(amount, { decimals = 4, fallback = HYPHEN, suffix, trim = true } = {}) {
+export function formatSol(
+  amount,
+  { decimals = 4, fallback = HYPHEN, suffix, trim = true, subscript = false } = {}
+) {
   const num = coerceNumber(amount);
   if (!Number.isFinite(num)) {
     return fallback;
   }
   const digits = num.toFixed(decimals);
-  const formatted = localizeDecimal(trim ? trimZeros(digits) : digits);
+  const belowResolution = subscript && num !== 0 && Number(digits) === 0;
+  const formatted = belowResolution
+    ? formatPriceSubscript(num, { trim })
+    : localizeDecimal(trim ? trimZeros(digits) : digits);
   if (suffix === undefined) {
     return displayed(I18n.t("format-native-amount", { amount: formatted }));
   }

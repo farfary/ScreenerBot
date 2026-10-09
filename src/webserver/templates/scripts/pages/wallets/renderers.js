@@ -85,7 +85,9 @@ export function createWalletRenderers({
       type: "sol",
       sortable: true,
       render: (value) =>
-        value != null ? Utils.formatSol(value, { decimals: 4, suffix: "", trim: false }) : "—",
+        value != null
+          ? Utils.formatSol(value, { decimals: 4, suffix: "", trim: false, subscript: true })
+          : "—",
     },
     {
       id: "is_token_2022",
@@ -126,7 +128,9 @@ export function createWalletRenderers({
       type: "sol",
       sortable: true,
       render: (value) =>
-        value != null ? Utils.formatSol(value, { decimals: 4, suffix: "", trim: false }) : "—",
+        value != null
+          ? Utils.formatSol(value, { decimals: 4, suffix: "", trim: false, subscript: true })
+          : "—",
     },
     {
       id: "wallet_type",
