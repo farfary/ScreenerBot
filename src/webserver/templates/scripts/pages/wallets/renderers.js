@@ -114,7 +114,6 @@ export function createWalletRenderers({
       id: "wallet",
       label: I18n.t("wallets-list-col-name"),
       sortable: true,
-      className: "wallet-name-cell",
       minWidth: addressFloorWidth() + 24,
       render: (value, row) => renderNamedAddress(row.name, row.address),
     },
@@ -260,7 +259,11 @@ export function createWalletRenderers({
     tokenTable.updateToolbarSummary([
       {
         id: "wt-sol-balance",
-        value: wallet?.balance != null ? Utils.formatSol(wallet.balance, { decimals: 4 }) : "—",
+        // The chip label names the asset, so the value carries no unit.
+        value:
+          wallet?.balance != null
+            ? Utils.formatSol(wallet.balance, { decimals: 4, suffix: "" })
+            : "—",
       },
       { id: "wt-tokens-count", value: String(tokens.length) },
       {
