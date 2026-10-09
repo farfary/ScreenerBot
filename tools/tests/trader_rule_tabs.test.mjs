@@ -20,6 +20,9 @@
  *   one strip does not mix "+10%" with "+32.0%" or print "1.0000 SOL".
  * - A config card never draws more columns than it has field groups, so two lists
  *   (How DCA Works, Risk Warnings) share the width instead of leaving a third empty.
+ * - A field's control (a number input or a switch such as Allow Partial Exit) sits
+ *   under its hint in the control row, never in the title row beside the label, so a
+ *   switch field leaves no empty track under its hint.
  *
  * Run with `npm run test:js`.
  */
@@ -177,4 +180,38 @@ test("a config card draws no more columns than it has field groups", async () =>
     );
   }
   assert.deepEqual(empty, []);
+});
+
+test("every field control sits under its hint, never in the title row", async () => {
+  const misplaced = [];
+  for (const id of TABS) {
+    await page.click(`#subTabsContainer [data-tab-id="${id}"]`);
+    await page.locator(`#${id}-tab`).waitFor();
+    misplaced.push(
+      ...(await page.$$eval(
+        `#${id}-tab .config-card > .config-group:not(.config-group-full)`,
+        (groups, tab) =>
+          groups
+            .filter((group) => group.getClientRects().length > 0)
+            .flatMap((group) => {
+              const hint = group.querySelector(":scope > .config-hint");
+              const name = group.querySelector(".config-label")?.textContent.trim();
+              const inRow = group.querySelectorAll(".config-label-row :is(input, select)").length;
+              const control = group.querySelector(
+                ":scope > :is(.toggle, .input-group-enhanced, select, textarea)"
+              );
+              const issues = [];
+              if (inRow) issues.push(`${tab}: ${name} has a control in its title row`);
+              if (hint && control) {
+                const below =
+                  control.getBoundingClientRect().top >= hint.getBoundingClientRect().bottom - 1;
+                if (!below) issues.push(`${tab}: ${name} control is not under its hint`);
+              }
+              return issues;
+            }),
+        id
+      ))
+    );
+  }
+  assert.deepEqual(misplaced, []);
 });

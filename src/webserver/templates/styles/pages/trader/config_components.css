@@ -93,6 +93,12 @@
   align-self: stretch;
 }
 
+/* A switch field puts its switch in the control row under the hint, where a
+   number field puts its input, so the column has no empty control track. */
+.config-card > .config-group:not(.config-group-full) > .toggle {
+  justify-self: start;
+}
+
 .config-card > .config-group-full {
   margin: 0;
 }
