@@ -677,39 +677,59 @@ impl OhlcvDatabase {
         Ok(())
     }
 
-    /// Whether a deep-history timeframe holds its kept depth or the Data Server's whole
-    /// history. Always false for a timeframe outside `DEEP_HISTORY_TIMEFRAMES`.
-    pub fn is_deep_history_complete(&self, mint: &str, timeframe: Timeframe) -> OhlcvResult<bool> {
-        if !DEEP_HISTORY_TIMEFRAMES.contains(&timeframe) {
-            return Ok(false);
-        }
+    /// The deep-history timeframes of `mint` still to be paged, in `DEEP_HISTORY_TIMEFRAMES`
+    /// order, from one read: those never found complete, and those found complete before
+    /// `recheck_before` (unix secs), whose completion is re-checked. A token without a monitor
+    /// row has every timeframe open.
+    pub fn deep_history_open(
+        &self,
+        mint: &str,
+        recheck_before: i64,
+    ) -> OhlcvResult<Vec<Timeframe>> {
         let conn = self.conn()?;
-        let query = format!(
-            "SELECT {} FROM ohlcv_monitor_config WHERE chain_id = ?1 AND mint = ?2",
-            deep_history_column(timeframe)
-        );
-        let result: i32 = conn
-            .query_row(&query, params![self.chain_id(), mint], |row| row.get(0))
+        let columns = DEEP_HISTORY_TIMEFRAMES
+            .iter()
+            .map(|tf| deep_history_column(*tf))
+            .collect::<Vec<_>>()
+            .join(", ");
+        let query =
+            format!("SELECT {columns} FROM ohlcv_monitor_config WHERE chain_id = ?1 AND mint = ?2");
+        let completed_at: Option<Vec<i64>> = conn
+            .query_row(&query, params![self.chain_id(), mint], |row| {
+                (0..DEEP_HISTORY_TIMEFRAMES.len())
+                    .map(|index| row.get::<_, i64>(index))
+                    .collect()
+            })
             .optional()
-            .map_err(|e| OhlcvError::DatabaseError(format!("Query failed: {e}")))?
-            .unwrap_or_default();
-        Ok(result == 1)
+            .map_err(|e| OhlcvError::DatabaseError(format!("Query failed: {e}")))?;
+        Ok(DEEP_HISTORY_TIMEFRAMES
+            .iter()
+            .enumerate()
+            .filter(|(index, _)| {
+                let completed_at = completed_at.as_ref().map_or(0, |row| row[*index]);
+                completed_at == 0 || completed_at < recheck_before
+            })
+            .map(|(_, timeframe)| *timeframe)
+            .collect())
     }
 
-    /// Mark a deep-history timeframe complete on `pool_address`, refused like
+    /// Mark a deep-history timeframe complete on `pool_address` as of `completed_at` (unix
+    /// secs, positive): the column holds the completion time, `0` while open. Refused like
     /// [`Self::mark_backfill_complete`]. A series move clears it (`apply_series_plan`).
     pub fn mark_deep_history_complete(
         &self,
         mint: &str,
         pool_address: &str,
         timeframe: Timeframe,
+        completed_at: i64,
     ) -> OhlcvResult<()> {
         if !DEEP_HISTORY_TIMEFRAMES.contains(&timeframe) {
             return Err(OhlcvError::InvalidTimeframe(timeframe.as_str().to_string()));
         }
         let query = format!(
-            "UPDATE ohlcv_monitor_config SET {} = 1, updated_at = CURRENT_TIMESTAMP WHERE chain_id = ?1 AND mint = ?2",
-            deep_history_column(timeframe)
+            "UPDATE ohlcv_monitor_config SET {} = {}, updated_at = CURRENT_TIMESTAMP WHERE chain_id = ?1 AND mint = ?2",
+            deep_history_column(timeframe),
+            completed_at.max(1)
         );
         self.write_series_flags(mint, pool_address, &query)
     }
@@ -1239,48 +1259,54 @@ mod tests {
         write_series(&db, &pools, "old").unwrap();
         let mark_all = |mint: &str, pool: &str| {
             for tf in DEEP_HISTORY_TIMEFRAMES {
-                db.mark_deep_history_complete(mint, pool, tf).unwrap();
+                db.mark_deep_history_complete(mint, pool, tf, Utc::now().timestamp())
+                    .unwrap();
             }
         };
         mark_all("mint", "old");
         mark_all("other-mint", "any");
+        let complete =
+            |mint: &str, tf: Timeframe| !db.deep_history_open(mint, 0).unwrap().contains(&tf);
         for tf in DEEP_HISTORY_TIMEFRAMES {
-            assert!(db.is_deep_history_complete("mint", tf).unwrap(), "{tf:?}");
+            assert!(complete("mint", tf), "{tf:?}");
         }
+        // A completion is re-checked once it is older than the re-check point.
+        let now = Utc::now().timestamp();
+        assert!(db
+            .deep_history_open("mint", now - 3_600)
+            .unwrap()
+            .is_empty());
+        assert_eq!(
+            db.deep_history_open("mint", now + 3_600).unwrap(),
+            DEEP_HISTORY_TIMEFRAMES.to_vec()
+        );
         // A timeframe kept at its backfill page has no deep history to page.
         assert!(!db
-            .is_deep_history_complete("mint", Timeframe::Minute1)
-            .unwrap());
+            .deep_history_open("mint", i64::MAX)
+            .unwrap()
+            .contains(&Timeframe::Minute1));
         assert!(matches!(
-            db.mark_deep_history_complete("mint", "old", Timeframe::Minute1),
+            db.mark_deep_history_complete("mint", "old", Timeframe::Minute1, 1),
             Err(OhlcvError::InvalidTimeframe(_))
         ));
 
         // The series move clears every deep flag of the token, in the same write.
         write_series(&db, &pools, "new").unwrap();
         for tf in DEEP_HISTORY_TIMEFRAMES {
-            assert!(!db.is_deep_history_complete("mint", tf).unwrap(), "{tf:?}");
-            assert!(
-                db.is_deep_history_complete("other-mint", tf).unwrap(),
-                "{tf:?}"
-            );
+            assert!(!complete("mint", tf), "{tf:?}");
+            assert!(complete("other-mint", tf), "{tf:?}");
         }
         // A pass still running for the previous pool cannot mark the new one complete.
         assert!(matches!(
-            db.mark_deep_history_complete("mint", "old", Timeframe::Day1),
+            db.mark_deep_history_complete("mint", "old", Timeframe::Day1, 1),
             Err(OhlcvError::SeriesPoolMoved { .. })
         ));
-        assert!(!db
-            .is_deep_history_complete("mint", Timeframe::Day1)
-            .unwrap());
+        assert!(!complete("mint", Timeframe::Day1));
 
         // Clearing the candle cache clears every token's deep flags with the candles.
         db.clear_all_ohlcv_data().unwrap();
         for tf in DEEP_HISTORY_TIMEFRAMES {
-            assert!(
-                !db.is_deep_history_complete("other-mint", tf).unwrap(),
-                "{tf:?}"
-            );
+            assert!(!complete("other-mint", tf), "{tf:?}");
         }
         close_db(db, path);
     }

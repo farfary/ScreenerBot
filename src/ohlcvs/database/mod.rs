@@ -499,8 +499,9 @@ pub(super) fn ensure_series_pool(
     }
 }
 
-/// The `ohlcv_monitor_config` column flagging that a deep-history timeframe holds its kept
-/// depth or the Data Server's whole history (see `Timeframe::max_history_candles`).
+/// The `ohlcv_monitor_config` column holding when a deep-history timeframe was last found to
+/// hold its kept depth or the Data Server's whole history (unix secs, `0` while open; see
+/// `Timeframe::max_history_candles`).
 pub(super) fn deep_history_column(timeframe: Timeframe) -> String {
     format!("deep_{}_complete", timeframe.as_str())
 }

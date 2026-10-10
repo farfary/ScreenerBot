@@ -65,8 +65,25 @@ struct StatefulOhlcv {
     pool: Option<String>,
 }
 
-/// Whether a Data Server OHLCV state announces a refresh in progress. Unknown
-/// states read as `ready`.
+impl StatefulOhlcv {
+    /// The page this body answers. `None` for `unavailable`: the server could not read its own
+    /// storage, so the body says nothing about the series, not even that it is empty.
+    fn into_response(self) -> Option<FetchResponse> {
+        if self.state == "unavailable" {
+            return None;
+        }
+        Some(FetchResponse {
+            server_refreshing: server_state_is_refreshing(&self.state),
+            candles: self.candles,
+            source: Some(CandleSource::DataServer),
+            series_pool: self.pool.filter(|pool| !pool.is_empty()),
+        })
+    }
+}
+
+/// Whether a Data Server OHLCV state announces a refresh in progress, or for a `before` page
+/// that the server's own history has not reached that far yet (`pending`). Unknown states
+/// read as `ready`.
 fn server_state_is_refreshing(state: &str) -> bool {
     matches!(state, "refreshing" | "pending")
 }
@@ -356,8 +373,8 @@ impl OhlcvFetcher {
     }
 
     /// Try the ScreenerBot data service. `None` on anything at all — switched
-    /// off, signed out, refused, missed or timed out — so the caller falls back
-    /// to the providers. The reason is published once by `data_server::access`.
+    /// off, signed out, refused, missed, timed out or `unavailable` — so the caller
+    /// falls back to the providers. The reason is published once by `data_server::access`.
     /// `before` (unix secs, exclusive) asks for the newest `limit` stored candles
     /// strictly older than it instead of the newest candles ending now.
     pub(super) async fn fetch_from_screenerbot_server(
@@ -383,19 +400,14 @@ impl OhlcvFetcher {
         if let Some(before) = before {
             query.push(("before", before.to_string()));
         }
-        let body = crate::data_server::get_json::<StatefulOhlcv>(
+        crate::data_server::get_json::<StatefulOhlcv>(
             crate::data_server::Surface::Ohlcv,
             self.chain,
             "/v1/ohlcv",
             &query,
         )
-        .await?;
-        Some(FetchResponse {
-            server_refreshing: server_state_is_refreshing(&body.state),
-            candles: body.candles,
-            source: Some(CandleSource::DataServer),
-            series_pool: body.pool.filter(|pool| !pool.is_empty()),
-        })
+        .await?
+        .into_response()
     }
 
     /// Fetch one timeframe with multi-source fallback: the Data Server, then, for a
@@ -944,5 +956,23 @@ mod tests {
         let with_pool: StatefulOhlcv =
             serde_json::from_str(r#"{"candles":[],"state":"ready","pool":"server-pool"}"#).unwrap();
         assert_eq!(with_pool.pool.as_deref(), Some("server-pool"));
+    }
+
+    #[test]
+    fn an_unavailable_body_is_no_answer_and_an_empty_one_is_a_ready_page() {
+        let body = |json: &str| serde_json::from_str::<StatefulOhlcv>(json).unwrap();
+        assert!(body(r#"{"candles":[],"state":"unavailable"}"#)
+            .into_response()
+            .is_none());
+        let empty = body(r#"{"candles":[],"state":"empty","pool":""}"#)
+            .into_response()
+            .expect("an empty page is an answer");
+        assert!(empty.candles.is_empty() && !empty.server_refreshing);
+        assert_eq!(empty.series_pool, None);
+        let pending = body(r#"{"candles":[],"state":"pending","pool":"p"}"#)
+            .into_response()
+            .expect("a pending page is an answer");
+        assert!(pending.server_refreshing);
+        assert_eq!(pending.series_pool.as_deref(), Some("p"));
     }
 }

@@ -8,6 +8,7 @@ use crate::events::{record_ohlcv_event, Severity};
 use crate::logger::{self, LogTag};
 use crate::ohlcvs::cache::OhlcvCache;
 use crate::ohlcvs::database::{OhlcvDatabase, SeriesPoolPlan, SeriesPoolReset};
+use crate::ohlcvs::monitor::data_server_usable;
 use crate::ohlcvs::types::{OhlcvError, OhlcvResult, PoolConfig, PoolMetadata};
 use crate::tokens::pools;
 use crate::tokens::types::{TokenPoolInfo, TokenPoolsSnapshot};
@@ -18,9 +19,9 @@ use std::collections::{HashMap, HashSet};
 use std::sync::{Arc, Mutex};
 use std::time::{Duration, Instant};
 
-/// Without a data server series pool, a native pool replaces the current series
-/// pool only at this multiple of its liquidity. The data server applies the same
-/// factor before it moves a stored series, so both sides switch on one rule.
+/// While the Data Server is unusable, a native pool replaces the current series pool only at
+/// this multiple of its liquidity. The Data Server applies the same factor before it moves a
+/// stored series, so both sides switch on one rule.
 const SERIES_POOL_SWITCH_FACTOR: f64 = 2.0;
 
 /// How long a pool the series was handed away from (see `plan_failure_handover`) stays out of
@@ -82,9 +83,21 @@ impl PoolManager {
     /// Count a failed fetch of `pool_address`. The count and the handover decision are one
     /// write transaction: only a default that just went unhealthy and never produced a candle
     /// hands the series over (`plan_failure_handover`); a default that holds candles keeps the
-    /// series and is retried on its backoff (`fetch_due`).
+    /// series and is retried on its backoff (`fetch_due`). While the Data Server is usable it
+    /// alone moves the series, so no failure hands it over.
     pub async fn mark_failure(&self, mint: &str, pool_address: &str) -> OhlcvResult<()> {
-        let failover = with_config(|cfg| cfg.ohlcv.pool_failover_enabled);
+        self.count_failure(mint, pool_address, data_server_usable())
+            .await
+    }
+
+    /// [`Self::mark_failure`] with the Data Server's usability given.
+    async fn count_failure(
+        &self,
+        mint: &str,
+        pool_address: &str,
+        server_usable: bool,
+    ) -> OhlcvResult<()> {
+        let failover = !server_usable && with_config(|cfg| cfg.ohlcv.pool_failover_enabled);
         let write = self
             .db
             .mark_pool_failure(mint, pool_address, |pools, holds_candles| {
@@ -159,8 +172,9 @@ impl PoolManager {
     ///
     /// The default (series) pool is the data server's canonical pool whenever the
     /// snapshot names one, whatever its quote. Otherwise the current default is
-    /// kept unless a native pool holds `SERIES_POOL_SWITCH_FACTOR` times its
-    /// liquidity. The pools, the single default and, when the series pool changes,
+    /// kept: while the Data Server is usable it alone moves the series, and while it is
+    /// unusable only a native pool with `SERIES_POOL_SWITCH_FACTOR` times its
+    /// liquidity replaces it. The pools, the single default and, when the series pool changes,
     /// the reset of the other pools' rows and the token's backfill flags are one
     /// write (`OhlcvDatabase::write_series_pools`).
     pub async fn discover_pools(&self, mint: &str) -> OhlcvResult<Vec<PoolConfig>> {
@@ -220,16 +234,19 @@ impl PoolManager {
             }
         };
 
-        self.register_snapshot_pools(mint, &snapshot).await
+        self.register_snapshot_pools(mint, &snapshot, data_server_usable())
+            .await
     }
 
-    /// Register the pools of `snapshot` for `mint` (see [`Self::discover_pools`]). The plan is
-    /// made from the pool rows read inside the write transaction, so a handover or a count
-    /// committed meanwhile is never overwritten; the hot cache is invalidated after the commit.
+    /// Register the pools of `snapshot` for `mint` (see [`Self::discover_pools`]), with
+    /// `server_usable` saying whether the Data Server is usable. The plan is made from the pool
+    /// rows read inside the write transaction, so a handover, an adoption or a count committed
+    /// meanwhile is never overwritten; the hot cache is invalidated after the commit.
     async fn register_snapshot_pools(
         &self,
         mint: &str,
         snapshot: &TokenPoolsSnapshot,
+        server_usable: bool,
     ) -> OhlcvResult<Vec<PoolConfig>> {
         let server_series = snapshot.series_pool_address.as_deref().filter(|address| {
             snapshot
@@ -258,7 +275,13 @@ impl PoolManager {
                 })
                 .collect();
             let previous_default = registered.iter().find(|p| p.is_default);
-            plan_series_pools(merged, server_series, previous_default, &cooling)
+            plan_series_pools(
+                merged,
+                server_series,
+                previous_default,
+                &cooling,
+                server_usable,
+            )
         })?;
 
         let Some(write) = write else {
@@ -354,6 +377,25 @@ impl PoolManager {
         };
         self.series_moved(mint, server_pool, &reset, true).await?;
         Ok(true)
+    }
+
+    /// The pool a fetched page belongs to: `pool_address`, or the Data Server's series pool
+    /// when the page names another one, which first becomes the token's default
+    /// (`Self::adopt_server_series`). Every writer of a Data Server page resolves its pool
+    /// here before it stores anything.
+    pub async fn page_series_pool<'a>(
+        &self,
+        mint: &str,
+        pool_address: &'a str,
+        series_pool: Option<&'a str>,
+    ) -> OhlcvResult<&'a str> {
+        match series_pool {
+            Some(server_pool) if server_pool != pool_address => {
+                self.adopt_server_series(mint, server_pool).await?;
+                Ok(server_pool)
+            }
+            _ => Ok(pool_address),
+        }
     }
 
     /// Follow up a committed series move onto `current`: invalidate the hot candle cache, so
@@ -456,12 +498,14 @@ impl PoolManager {
 /// of its pools (the data server serves them in SOL). Without a data server series pool, a
 /// stored default the snapshot omits stays registered and stays the default: a provider-only
 /// list is no evidence that the pool is gone. Pools in `cooling` are not chosen as the series
-/// unless one is the current default. `None` when the snapshot has no pool.
+/// unless one is the current default. With `server_usable`, only the data server's pool moves a
+/// current default (see `select_series_default`). `None` when the snapshot has no pool.
 fn plan_series_pools(
     snapshot_pools: Vec<PoolConfig>,
     server_series: Option<&str>,
     previous_default: Option<&PoolConfig>,
     cooling: &HashSet<String>,
+    server_usable: bool,
 ) -> Option<SeriesPoolPlan> {
     if snapshot_pools.is_empty() {
         return None;
@@ -487,8 +531,8 @@ fn plan_series_pools(
         .filter(|p| previous == Some(p.address.as_str()) || !cooling.contains(&p.address))
         .cloned()
         .collect();
-    let series = select_series_default(server_series, previous, &eligible)
-        .or_else(|| select_series_default(server_series, previous, &pools))?;
+    let series = select_series_default(server_series, previous, &eligible, server_usable)
+        .or_else(|| select_series_default(server_series, previous, &pools, server_usable))?;
     for pool in &mut pools {
         pool.is_default = pool.address == series;
     }
@@ -498,7 +542,8 @@ fn plan_series_pools(
 /// The plan that makes `server_pool` the series pool over the `registered` rows, or `None`
 /// when it already is the one default. A pool the token has not registered is added with an
 /// unknown quote, so only the Data Server serves it. The current default and the native pools
-/// stay registered under `plan_series_pools`; no cooldown applies to the server's own pool.
+/// stay registered under `plan_series_pools`; no cooldown applies to the server's own pool, and
+/// a pool registered with no known liquidity is the series all the same.
 fn plan_server_series(registered: &[PoolConfig], server_pool: &str) -> Option<SeriesPoolPlan> {
     let defaults: Vec<&str> = registered
         .iter()
@@ -519,6 +564,7 @@ fn plan_server_series(registered: &[PoolConfig], server_pool: &str) -> Option<Se
         Some(server_pool),
         registered.iter().find(|p| p.is_default),
         &HashSet::new(),
+        true,
     )
 }
 
@@ -541,7 +587,7 @@ fn plan_failure_handover(
         .filter(|p| p.address != failed && p.is_healthy())
         .cloned()
         .collect();
-    let series = select_series_default(None, None, &healthy)?;
+    let series = select_series_default(None, None, &healthy, false)?;
     let pools = pools
         .iter()
         .map(|p| PoolConfig {
@@ -553,13 +599,15 @@ fn plan_failure_handover(
 }
 
 /// The default (series) pool among the registered `candidates`: the data server's
-/// pool when it is registered; else the current default, replaced only by a native
-/// pool with `SERIES_POOL_SWITCH_FACTOR` times its liquidity; else the deepest
-/// native pool, else the deepest pool.
+/// pool when it is registered; else the current default, which only the data server moves
+/// while it is usable (`server_usable`) and otherwise only a native pool with
+/// `SERIES_POOL_SWITCH_FACTOR` times its liquidity replaces; else the deepest native pool,
+/// else the deepest pool.
 fn select_series_default(
     server_series: Option<&str>,
     current_default: Option<&str>,
     candidates: &[PoolConfig],
+    server_usable: bool,
 ) -> Option<String> {
     if let Some(server) = server_series {
         if candidates.iter().any(|c| c.address == server) {
@@ -579,6 +627,7 @@ fn select_series_default(
     let current =
         current_default.and_then(|address| candidates.iter().find(|c| c.address == address));
     let chosen = match (current, deepest(true)) {
+        (Some(current), _) if server_usable => current,
         (Some(current), Some(native))
             if native.address != current.address
                 && pool_liquidity(native)
@@ -617,7 +666,7 @@ mod tests {
     fn the_data_server_pool_is_the_default_even_when_usd_quoted() {
         let candidates = [pool("sol", 900_000.0, true), pool("usdc", 100_000.0, false)];
         assert_eq!(
-            select_series_default(Some("usdc"), Some("sol"), &candidates).as_deref(),
+            select_series_default(Some("usdc"), Some("sol"), &candidates, false).as_deref(),
             Some("usdc")
         );
     }
@@ -627,12 +676,12 @@ mod tests {
         // The pools swapped depth order, but neither holds twice the other's liquidity.
         let candidates = [pool("a", 150_000.0, true), pool("b", 100_000.0, true)];
         assert_eq!(
-            select_series_default(None, Some("b"), &candidates).as_deref(),
+            select_series_default(None, Some("b"), &candidates, false).as_deref(),
             Some("b")
         );
         // A server pool that is not registered is no server pool.
         assert_eq!(
-            select_series_default(Some("gone"), Some("b"), &candidates).as_deref(),
+            select_series_default(Some("gone"), Some("b"), &candidates, false).as_deref(),
             Some("b")
         );
     }
@@ -641,13 +690,13 @@ mod tests {
     fn a_native_pool_at_the_switch_factor_replaces_the_current_default() {
         let candidates = [pool("a", 200_000.0, true), pool("b", 100_000.0, true)];
         assert_eq!(
-            select_series_default(None, Some("b"), &candidates).as_deref(),
+            select_series_default(None, Some("b"), &candidates, false).as_deref(),
             Some("a")
         );
         // A USD default yields only to a native pool at the factor.
         let candidates = [pool("sol", 150_000.0, true), pool("usdc", 100_000.0, false)];
         assert_eq!(
-            select_series_default(None, Some("usdc"), &candidates).as_deref(),
+            select_series_default(None, Some("usdc"), &candidates, false).as_deref(),
             Some("usdc")
         );
     }
@@ -656,7 +705,7 @@ mod tests {
     fn without_a_default_the_deepest_native_pool_wins_then_the_deepest_pool() {
         let candidates = [pool("usdc", 900_000.0, false), pool("sol", 100_000.0, true)];
         assert_eq!(
-            select_series_default(None, None, &candidates).as_deref(),
+            select_series_default(None, None, &candidates, false).as_deref(),
             Some("sol")
         );
         let candidates = [
@@ -664,10 +713,10 @@ mod tests {
             pool("usdt", 100_000.0, false),
         ];
         assert_eq!(
-            select_series_default(None, Some("gone"), &candidates).as_deref(),
+            select_series_default(None, Some("gone"), &candidates, false).as_deref(),
             Some("usdc")
         );
-        assert_eq!(select_series_default(None, None, &[]), None);
+        assert_eq!(select_series_default(None, None, &[], false), None);
     }
 
     /// Plan `pools` with `previous` as the stored default: the snapshot's row of that address,
@@ -687,7 +736,8 @@ mod tests {
                 .unwrap_or_else(|| pool(address, 200_000.0, false))
         });
         let cooling: HashSet<String> = cooling.iter().map(|a| a.to_string()).collect();
-        let plan = plan_series_pools(pools, server, previous.as_ref(), &cooling).expect("a plan");
+        let plan =
+            plan_series_pools(pools, server, previous.as_ref(), &cooling, false).expect("a plan");
         assert_eq!(plan.pools.iter().filter(|p| p.is_default).count(), 1);
         assert!(plan
             .pools
@@ -762,7 +812,9 @@ mod tests {
             (names(&["sol", "usdc"]), "usdc".to_string())
         );
         let stored = pool("usdc", 900.0, false);
-        assert!(plan_series_pools(Vec::new(), None, Some(&stored), &HashSet::new()).is_none());
+        assert!(
+            plan_series_pools(Vec::new(), None, Some(&stored), &HashSet::new(), false).is_none()
+        );
     }
 
     #[test]
@@ -847,7 +899,17 @@ mod tests {
             }
         }
 
+        /// Discovery while the Data Server is unusable.
         async fn discover(&self, server: Option<&str>, pools: &[(&str, f64, bool)]) -> String {
+            self.discover_with(server, pools, false).await
+        }
+
+        async fn discover_with(
+            &self,
+            server: Option<&str>,
+            pools: &[(&str, f64, bool)],
+            server_usable: bool,
+        ) -> String {
             let snapshot = TokenPoolsSnapshot {
                 mint: "mint".to_string(),
                 pools: pools
@@ -865,7 +927,7 @@ mod tests {
             };
             let returned = self
                 .manager
-                .register_snapshot_pools("mint", &snapshot)
+                .register_snapshot_pools("mint", &snapshot, server_usable)
                 .await
                 .unwrap();
             let series = self.series();
@@ -1109,5 +1171,48 @@ mod tests {
         assert!(h.stored("deep").is_native_pair);
         h.count_reset();
         assert_eq!(h.resets, 2);
+    }
+
+    /// While the Data Server is usable it alone moves the series. A pool it named, registered
+    /// with no known liquidity and without a candle yet, survives discoveries without a server
+    /// pool next to a native pool far past the switch factor, failures past the handover limit
+    /// and repeated reports of itself, with no reset at all.
+    #[tokio::test]
+    async fn while_the_data_server_is_usable_only_it_moves_the_series_pool() {
+        let mut h = Harness::open("server-authority");
+        let limit = with_config(|cfg| cfg.ohlcv.max_pool_failures);
+        assert_eq!(h.discover_with(None, &POOLS, true).await, "deep");
+        assert!(h
+            .manager
+            .adopt_server_series("mint", "server")
+            .await
+            .unwrap());
+        assert_eq!(h.stored("server").liquidity, 0.0);
+        h.count_reset();
+        h.resets = 0;
+
+        for liquidity in [600.0, 3_000.0, 1e9] {
+            let pools = [("native", liquidity, true), ("deep", 300.0, true)];
+            assert_eq!(h.discover_with(None, &pools, true).await, "server");
+            h.count_reset();
+            for _ in 0..limit {
+                h.manager
+                    .count_failure("mint", "server", true)
+                    .await
+                    .unwrap();
+            }
+            assert_eq!(h.series(), "server");
+            h.count_reset();
+            assert!(!h
+                .manager
+                .adopt_server_series("mint", "server")
+                .await
+                .unwrap());
+            h.count_reset();
+        }
+        assert_eq!(h.resets, 0);
+
+        // Once the Data Server is unusable, the local rule applies again.
+        assert_eq!(h.discover(None, &[("native", 600.0, true)]).await, "native");
     }
 }

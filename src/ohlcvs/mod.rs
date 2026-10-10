@@ -17,8 +17,8 @@ mod service_api;
 mod types;
 
 pub use types::{
-    Candle, MonitorStats, MonitorTelemetrySnapshot, OhlcvError, OhlcvMetrics, OhlcvResult,
-    OhlcvStatus, OhlcvTimeframeStatus, PoolConfig, PoolMetadata, Priority, Timeframe,
+    Candle, ChartTail, MonitorStats, MonitorTelemetrySnapshot, OhlcvError, OhlcvMetrics,
+    OhlcvResult, OhlcvStatus, OhlcvTimeframeStatus, PoolConfig, PoolMetadata, Priority, Timeframe,
     TimeframeBundle, TokenOhlcvConfig, BUNDLE_CANDLE_COUNT,
 };
 
@@ -29,7 +29,7 @@ pub use service::OhlcvService;
 pub use service_api::{
     add_token_monitoring, build_timeframe_bundle, clear_all_ohlcv_data, delete_inactive_tokens,
     delete_token_data, get_all_tokens_with_status, get_available_pools, get_chart_ohlcv,
-    get_data_gaps, get_database_stats, get_metrics, get_mints_with_data, get_monitor_stats,
-    get_ohlcv_data, get_status, get_timeframe_bundle, has_data, record_activity,
+    get_chart_tail, get_data_gaps, get_database_stats, get_metrics, get_mints_with_data,
+    get_monitor_stats, get_ohlcv_data, get_status, get_timeframe_bundle, has_data, record_activity,
     remove_token_monitoring, request_refresh, store_bundle, update_token_priority,
 };

@@ -13,23 +13,6 @@ use super::OhlcvDatabase;
 impl OhlcvDatabase {
     // ==================== Cleanup ====================
 
-    /// Historical OHLCV candle data is preserved forever.
-    ///
-    /// This function intentionally does NOT delete candle data. Historical data is valuable for:
-    /// - Chart gap visualization (users can see where data was missing)
-    /// - Historical analysis and backtesting
-    /// - GeckoTerminal can backfill gaps on demand when needed
-    ///
-    /// The `retention_days` parameter is kept for backward compatibility but is ignored.
-    /// For database size management, use `cleanup_filled_gaps()` instead which removes
-    /// filled gap tracking records that are no longer needed.
-    #[allow(unused_variables)]
-    pub fn cleanup_old_data(&self, retention_days: i64) -> OhlcvResult<usize> {
-        // Intentional no-op: OHLCV candle data is preserved forever
-        // Gap visualization is preferred over automatic data deletion
-        Ok(0)
-    }
-
     /// Cleanup old filled gap records to manage database size.
     ///
     /// Gap records that are marked as filled (successfully backfilled) and older than

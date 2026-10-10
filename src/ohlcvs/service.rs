@@ -13,8 +13,8 @@ use crate::ohlcvs::gaps::GapManager;
 use crate::ohlcvs::manager::PoolManager;
 use crate::ohlcvs::monitor::{data_server_usable, OhlcvMonitor};
 use crate::ohlcvs::types::{
-    Candle, OhlcvError, OhlcvResult, OhlcvStatus, OhlcvTimeframeStatus, Timeframe, TimeframeBundle,
-    BUNDLE_CANDLE_COUNT,
+    Candle, ChartTail, OhlcvError, OhlcvResult, OhlcvStatus, OhlcvTimeframeStatus, Timeframe,
+    TimeframeBundle, BUNDLE_CANDLE_COUNT,
 };
 use crate::paths::{chain_db_path, DbKind};
 use chrono::Utc;
@@ -30,8 +30,8 @@ const BUNDLE_CACHE_MAX_SIZE: usize = 150;
 const PARALLEL_FETCH_LIMIT: usize = 10;
 const BUNDLE_REFRESH_INTERVAL_SECONDS: u64 = 5;
 
-/// Longest a chart read waits for a read-through of its timeframe (pool discovery plus one
-/// Data Server request, which the server bounds to 3.5 s on a cold series).
+/// Longest a chart read waits for a read-through of its timeframe (pool discovery, one Data
+/// Server request, which the server bounds to 3.5 s on a cold series, and the store).
 const CHART_READ_THROUGH_DEADLINE: Duration = Duration::from_secs(5);
 
 /// One OHLCV runtime per enabled chain, built on first use.
@@ -77,6 +77,7 @@ impl OhlcvServiceImpl {
             Arc::clone(&db),
             Arc::clone(&fetcher),
             Arc::clone(&cache),
+            Arc::clone(&pool_manager),
         ));
         let monitor = Arc::new(OhlcvMonitor::new(
             Arc::clone(&db),
@@ -144,7 +145,8 @@ impl OhlcvServiceImpl {
 
     /// The newest `limit` candles (`0` for all) of a viewed chart timeframe. A timeframe
     /// without native candles is read through from the Data Server first
-    /// (`OhlcvMonitor::read_through_timeframe`), bounded by `CHART_READ_THROUGH_DEADLINE`.
+    /// (`OhlcvMonitor::read_through_timeframe`), bounded by `CHART_READ_THROUGH_DEADLINE`
+    /// (see `chart_candles`).
     pub(super) async fn get_chart_ohlcv(
         &self,
         mint: &str,
@@ -168,44 +170,120 @@ impl OhlcvServiceImpl {
                     .await
             }
         });
-        self.chart_candles(mint, timeframe, limit, data_server)
-            .await
+        self.chart_candles(
+            mint,
+            timeframe,
+            limit,
+            data_server,
+            CHART_READ_THROUGH_DEADLINE,
+        )
+        .await
     }
 
     /// `get_chart_ohlcv` over a Data Server fetch, `None` when the Data Server is unusable:
-    /// then the 1m aggregate is the only coarse series there is.
+    /// then the 1m aggregate is the only coarse series there is. With it usable, the
+    /// read-through runs as a task of its own under the deadline `wait` from now, and the
+    /// route waits for the task no longer than that deadline, so the discovery wait, the
+    /// fetch, the store and a blocked database write together never hold the chart past it;
+    /// past it the chart is answered from what is stored. The answer follows
+    /// `native_chart_candles`.
     async fn chart_candles<F, Fut>(
         &self,
         mint: &str,
         timeframe: Timeframe,
         limit: usize,
         data_server: Option<F>,
+        wait: Duration,
     ) -> OhlcvResult<Vec<Candle>>
     where
-        F: FnOnce(String, usize) -> Fut,
-        Fut: std::future::Future<Output = Option<FetchResponse>>,
+        F: FnOnce(String, usize) -> Fut + Send + 'static,
+        Fut: std::future::Future<Output = Option<FetchResponse>> + Send + 'static,
     {
         let Some(fetch) = data_server else {
             return self
                 .read_stored(mint, timeframe, None, limit, None, None, true)
                 .await;
         };
-        let deadline = tokio::time::Instant::now() + CHART_READ_THROUGH_DEADLINE;
-        if let Err(e) = self
-            .monitor
-            .read_through_timeframe(mint, timeframe, deadline, fetch)
-            .await
-        {
+        let deadline = tokio::time::Instant::now() + wait;
+        let monitor = Arc::clone(&self.monitor);
+        let mint_owned = mint.to_string();
+        let read_through = tokio::spawn(async move {
+            monitor
+                .read_through_timeframe(&mint_owned, timeframe, deadline, fetch)
+                .await
+        });
+        let failure = match tokio::time::timeout_at(deadline, read_through).await {
+            Ok(Ok(Ok(_))) => None,
+            Ok(Ok(Err(e))) => Some(e.to_string()),
+            Ok(Err(e)) => Some(format!("task ended: {e}")),
+            Err(_) => Some("deadline passed, answering the stored candles".to_string()),
+        };
+        if let Some(failure) = failure {
             logger::debug(
                 LogTag::Ohlcv,
                 &format!(
-                    "Read-through failed for mint={} timeframe={}: {}",
-                    mint, timeframe, e
+                    "Read-through for mint={} timeframe={}: {}",
+                    mint, timeframe, failure
                 ),
             );
         }
-        self.read_stored(mint, timeframe, None, limit, None, None, false)
+        self.native_chart_candles(mint, timeframe, limit).await
+    }
+
+    /// The stored candles of a viewed chart timeframe while the Data Server is usable. A
+    /// coarse timeframe without native candles answers none, so the chart shows it is still
+    /// collecting: the monitor's live-edge aggregate rows are no series of their own, and a
+    /// coarse timeframe is aggregated from 1m only while the Data Server is unusable.
+    async fn native_chart_candles(
+        &self,
+        mint: &str,
+        timeframe: Timeframe,
+        limit: usize,
+    ) -> OhlcvResult<Vec<Candle>> {
+        let pool = self
+            .pool_manager
+            .series_pool(mint)
+            .await?
+            .ok_or_else(|| OhlcvError::PoolNotFound(mint.to_string()))?
+            .address;
+        if timeframe != Timeframe::Minute1 {
+            let db = Arc::clone(&self.db);
+            let mint_owned = mint.to_string();
+            let pool_owned = pool.clone();
+            let native_newest = tokio::task::spawn_blocking(move || {
+                db.get_latest_native_timestamp(&mint_owned, &pool_owned, timeframe)
+            })
             .await
+            .map_err(|e| OhlcvError::DatabaseError(format!("Task join error: {e}")))??;
+            if native_newest.is_none() {
+                return Ok(Vec::new());
+            }
+        }
+        self.read_stored(mint, timeframe, Some(&pool), limit, None, None, false)
+            .await
+    }
+
+    /// The stored tail of a viewed chart timeframe from `since` (unix secs, inclusive), read
+    /// from storage only by the rules of `get_chart_ohlcv`, with the series pool and the size
+    /// and first bucket of the whole stored series. A chart holding the series merges the tail and reloads in full
+    /// when the pool or the size shows the series changed behind it (a pool move, deep history,
+    /// a filled gap).
+    pub(super) async fn get_chart_tail(
+        &self,
+        mint: &str,
+        timeframe: Timeframe,
+        since: i64,
+    ) -> OhlcvResult<ChartTail> {
+        let Some(pool) = self.pool_manager.series_pool(mint).await? else {
+            return Ok(ChartTail::default());
+        };
+        let series = if data_server_usable() {
+            self.native_chart_candles(mint, timeframe, 0).await?
+        } else {
+            self.read_stored(mint, timeframe, Some(&pool.address), 0, None, None, true)
+                .await?
+        };
+        Ok(ChartTail::from_series(Some(pool.address), series, since))
     }
 
     /// Stored candles of one timeframe from the hot cache or the database, on `pool_address`
@@ -835,6 +913,8 @@ mod tests {
     use std::sync::atomic::{AtomicUsize, Ordering};
 
     const DAY: i64 = 86_400;
+    /// The chart wait of the tests that expect the read-through to finish.
+    const WAIT: Duration = CHART_READ_THROUGH_DEADLINE;
 
     struct Harness {
         service: Arc<OhlcvServiceImpl>,
@@ -903,16 +983,17 @@ mod tests {
     #[tokio::test]
     async fn a_cold_timeframe_is_served_from_the_data_server_not_aggregated() {
         let h = Harness::open("read-through");
-        let calls = AtomicUsize::new(0);
-        let fetch = |pool: String, _limit: usize| {
-            calls.fetch_add(1, Ordering::SeqCst);
+        let calls = Arc::new(AtomicUsize::new(0));
+        let counted = Arc::clone(&calls);
+        let fetch = move |pool: String, _limit: usize| {
+            counted.fetch_add(1, Ordering::SeqCst);
             assert_eq!(pool, "pool");
             async { Some(server_page()) }
         };
 
         let candles = h
             .service
-            .chart_candles("mint", Timeframe::Day1, 0, Some(fetch))
+            .chart_candles("mint", Timeframe::Day1, 0, Some(fetch), WAIT)
             .await
             .unwrap();
 
@@ -934,7 +1015,7 @@ mod tests {
 
         let candles = h
             .service
-            .chart_candles("mint", Timeframe::Day1, 0, unusable)
+            .chart_candles("mint", Timeframe::Day1, 0, unusable, WAIT)
             .await
             .unwrap();
 
@@ -962,7 +1043,7 @@ mod tests {
                     Some(server_page())
                 };
                 service
-                    .chart_candles("mint", Timeframe::Day1, 0, Some(fetch))
+                    .chart_candles("mint", Timeframe::Day1, 0, Some(fetch), WAIT)
                     .await
                     .unwrap()
             }
@@ -975,5 +1056,97 @@ mod tests {
         for candles in answers {
             assert_eq!(timestamps(&candles), timestamps(&server_days()));
         }
+    }
+
+    /// The chart wait bounds the whole read-through: a read-through that blocks its thread
+    /// past the wait (a slow fetch or a held database write) leaves the chart answered on
+    /// time from what is stored.
+    #[tokio::test(flavor = "multi_thread", worker_threads = 2)]
+    async fn a_read_through_slower_than_the_wait_answers_the_stored_candles() {
+        let h = Harness::open("deadline");
+        let fetch = |_pool: String, _limit: usize| async {
+            std::thread::sleep(Duration::from_millis(400));
+            Some(server_page())
+        };
+
+        let started = Instant::now();
+        let candles = h
+            .service
+            .chart_candles(
+                "mint",
+                Timeframe::Day1,
+                0,
+                Some(fetch),
+                Duration::from_millis(50),
+            )
+            .await
+            .unwrap();
+
+        assert!(started.elapsed() < Duration::from_millis(300));
+        assert!(candles.is_empty());
+        // The blocked task finishes before the harness removes its database.
+        tokio::time::sleep(Duration::from_millis(600)).await;
+    }
+
+    /// While the Data Server is usable, a coarse timeframe it does not answer shows no
+    /// candles rather than the monitor's live-edge aggregate rows.
+    #[tokio::test]
+    async fn a_usable_data_server_miss_never_serves_aggregate_rows() {
+        let h = Harness::open("native-only");
+        let today = Utc::now().timestamp() / DAY * DAY;
+        h.service
+            .db
+            .insert_candles_batch(
+                "mint",
+                "pool",
+                Timeframe::Day1,
+                &[Candle::new(today, 1.0, 1.0, 1.0, 1.0, 5.0)],
+                OhlcvDatabase::AGGREGATE_SOURCE,
+            )
+            .unwrap();
+        let unanswered: Option<fn(String, usize) -> std::future::Ready<Option<FetchResponse>>> =
+            Some(|_, _| std::future::ready(None));
+
+        let candles = h
+            .service
+            .chart_candles("mint", Timeframe::Day1, 0, unanswered, WAIT)
+            .await
+            .unwrap();
+
+        assert!(candles.is_empty());
+        let minutes = h
+            .service
+            .chart_candles("mint", Timeframe::Minute1, 0, unanswered, WAIT)
+            .await
+            .unwrap();
+        assert_eq!(minutes.len(), 5);
+    }
+
+    /// The chart tail is cut from the stored series with its pool and full size.
+    #[tokio::test]
+    async fn a_chart_tail_is_cut_from_the_stored_series() {
+        let h = Harness::open("tail");
+        let series = h
+            .service
+            .read_stored("mint", Timeframe::Minute1, None, 0, None, None, false)
+            .await
+            .unwrap();
+
+        let tail = h
+            .service
+            .get_chart_tail("mint", Timeframe::Minute1, series[3].timestamp)
+            .await
+            .unwrap();
+
+        assert_eq!(tail.pool.as_deref(), Some("pool"));
+        assert_eq!(tail.count, 5);
+        assert_eq!(tail.first, Some(series[0].timestamp));
+        assert_eq!(timestamps(&tail.candles), timestamps(&series[3..]));
+        let unknown = h
+            .service
+            .get_chart_tail("other", Timeframe::Minute1, 0)
+            .await
+            .unwrap();
+        assert!(unknown.pool.is_none() && unknown.candles.is_empty());
     }
 }

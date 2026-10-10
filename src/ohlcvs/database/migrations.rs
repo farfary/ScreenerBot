@@ -253,7 +253,10 @@ mod tests {
             assert!(
                 table_has_column(&conn, "ohlcv_monitor_config", &deep_history_column(tf)).unwrap()
             );
-            assert!(!db.is_deep_history_complete("mint", tf).unwrap(), "{tf:?}");
+            assert!(
+                db.deep_history_open("mint", 0).unwrap().contains(&tf),
+                "{tf:?}"
+            );
         }
         assert!(db.is_backfill_complete("mint", Timeframe::Hour1).unwrap());
         assert_eq!(

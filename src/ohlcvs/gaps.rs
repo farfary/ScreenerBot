@@ -9,9 +9,10 @@ use crate::events::{record_ohlcv_event, Severity};
 use crate::ohlcvs::aggregator::OhlcvAggregator;
 use crate::ohlcvs::cache::OhlcvCache;
 use crate::ohlcvs::database::{GapRecord, OhlcvDatabase};
-use crate::ohlcvs::fetcher::{OhlcvFetcher, MAX_CANDLES_PER_REQUEST};
+use crate::ohlcvs::fetcher::{FetchResponse, OhlcvFetcher, MAX_CANDLES_PER_REQUEST};
+use crate::ohlcvs::manager::PoolManager;
 use crate::ohlcvs::monitor::CATCH_UP_MARGIN;
-use crate::ohlcvs::types::{Candle, OhlcvResult, Timeframe};
+use crate::ohlcvs::types::{Candle, OhlcvError, OhlcvResult, Timeframe};
 use chrono::Utc;
 use serde_json::json;
 use std::sync::Arc;
@@ -298,11 +299,22 @@ pub struct GapManager {
     db: Arc<OhlcvDatabase>,
     fetcher: Arc<OhlcvFetcher>,
     cache: Arc<OhlcvCache>,
+    pool_manager: Arc<PoolManager>,
 }
 
 impl GapManager {
-    pub fn new(db: Arc<OhlcvDatabase>, fetcher: Arc<OhlcvFetcher>, cache: Arc<OhlcvCache>) -> Self {
-        Self { db, fetcher, cache }
+    pub fn new(
+        db: Arc<OhlcvDatabase>,
+        fetcher: Arc<OhlcvFetcher>,
+        cache: Arc<OhlcvCache>,
+        pool_manager: Arc<PoolManager>,
+    ) -> Self {
+        Self {
+            db,
+            fetcher,
+            cache,
+            pool_manager,
+        }
     }
 
     /// Detect gaps in stored data for a token
@@ -476,8 +488,8 @@ impl GapManager {
     }
 
     /// Fill one span through `fetch_multi_source` for the span's own timeframe
-    /// (Data Server first). A failed request is recorded as an attempt and
-    /// returned as the error.
+    /// (Data Server first) and store the answer (`store_span_answer`). A failed
+    /// request is recorded as an attempt and returned as the error.
     pub async fn fill_span(
         &self,
         mint: &str,
@@ -514,6 +526,34 @@ impl GapManager {
                 return Err(e);
             }
         };
+
+        self.store_span_answer(mint, pool_address, span, request, response)
+            .await
+    }
+
+    /// Store the answer to `request` for `span` (`apply_answer`) and record the outcome. A Data
+    /// Server page naming another series pool than `pool_address` moves the default
+    /// (`PoolManager::page_series_pool`) and fills nothing: the span is a hole in the previous
+    /// pool's series, whose rows the move removed. That answer returns
+    /// `OhlcvError::SeriesPoolMoved`.
+    async fn store_span_answer(
+        &self,
+        mint: &str,
+        pool_address: &str,
+        span: &GapSpan,
+        request: GapRequest,
+        response: FetchResponse,
+    ) -> OhlcvResult<GapFill> {
+        let page_pool = self
+            .pool_manager
+            .page_series_pool(mint, pool_address, response.series_pool.as_deref())
+            .await?;
+        if page_pool != pool_address {
+            return Err(OhlcvError::SeriesPoolMoved {
+                mint: mint.to_string(),
+                pool: pool_address.to_string(),
+            });
+        }
 
         let fill = apply_answer(
             &self.db,
@@ -954,6 +994,76 @@ mod tests {
             vec![T0 + 15 * MIN, T0 + 18 * MIN]
         );
 
+        drop(db);
+        let _ = std::fs::remove_file(path);
+    }
+
+    /// A span answer the Data Server served from another series pool moves the default and
+    /// fills nothing, under either pool; an answer from the requested pool fills the span.
+    #[tokio::test]
+    async fn a_span_answer_from_another_series_pool_moves_the_default_and_fills_nothing() {
+        use crate::ohlcvs::database::SeriesPoolPlan;
+        use crate::ohlcvs::fetcher::CandleSource;
+        use crate::ohlcvs::types::PoolConfig;
+        crate::config::utils::install_default_config();
+        let (db, cache, path) = open_store("series-pool");
+        let (db, cache) = (Arc::new(db), Arc::new(cache));
+        db.write_series_pools("mint", |_| {
+            Some(SeriesPoolPlan {
+                pools: vec![
+                    PoolConfig::new("pool".to_string(), "dex".to_string(), 300.0),
+                    PoolConfig::new("server".to_string(), "dex".to_string(), 100.0),
+                ],
+                series: "pool".to_string(),
+            })
+        })
+        .unwrap();
+        let pool_manager = Arc::new(PoolManager::new(Arc::clone(&db), Arc::clone(&cache)));
+        let gaps = GapManager::new(
+            Arc::clone(&db),
+            Arc::new(OhlcvFetcher::new(ChainId::Solana)),
+            Arc::clone(&cache),
+            pool_manager,
+        );
+        let m1 = Timeframe::Minute1;
+        db.insert_gap("mint", "pool", m1, T0 + 10 * MIN, T0 + 20 * MIN)
+            .unwrap();
+        let gap = group_spans(
+            db.get_open_gaps("mint", "pool", 0, MAX_GAP_ATTEMPTS)
+                .unwrap(),
+        )
+        .remove(0);
+        let request = plan_request(&gap, NOW);
+        let page = |series_pool: &str| FetchResponse {
+            candles: (10..=20).map(|m| candle(T0 + m * MIN, 1.0)).collect(),
+            server_refreshing: false,
+            source: Some(CandleSource::DataServer),
+            series_pool: Some(series_pool.to_string()),
+        };
+        let stored = |pool: &str| {
+            db.get_candles("mint", Some(pool), m1, None, None, None)
+                .unwrap()
+                .len()
+        };
+
+        let fill = gaps
+            .store_span_answer("mint", "pool", &gap, request, page("pool"))
+            .await
+            .unwrap();
+        assert_eq!(fill.outcome, GapOutcome::Resolved { candles: 11 });
+        assert_eq!(stored("pool"), 11);
+
+        let moved = gaps
+            .store_span_answer("mint", "pool", &gap, request, page("server"))
+            .await;
+        assert!(matches!(moved, Err(OhlcvError::SeriesPoolMoved { .. })));
+        let default =
+            PoolConfig::series_pool(&db.get_pools("mint").unwrap()).map(|p| p.address.clone());
+        assert_eq!(default.as_deref(), Some("server"));
+        assert_eq!(stored("pool"), 0);
+        assert_eq!(stored("server"), 0);
+
+        drop(gaps);
         drop(db);
         let _ = std::fs::remove_file(path);
     }

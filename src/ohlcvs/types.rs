@@ -754,10 +754,43 @@ pub struct OhlcvStatus {
     pub timeframes: Vec<OhlcvTimeframeStatus>,
 }
 
+/// The stored tail of one chart timeframe: the candles from a bucket on, with the series
+/// pool and the size of the whole stored series they were cut from. A chart that holds the
+/// series merges the tail; a changed pool or size means the series changed behind the tail.
+#[derive(Debug, Clone, Default)]
+pub struct ChartTail {
+    /// The series pool the candles belong to; `None` while the token has none.
+    pub pool: Option<String>,
+    /// Candles in the whole stored series, tail included.
+    pub count: usize,
+    /// Oldest bucket of the stored series (unix secs); `None` while it is empty.
+    pub first: Option<i64>,
+    /// Candles whose bucket starts at or after the requested bucket, oldest first.
+    pub candles: Vec<Candle>,
+}
+
+impl ChartTail {
+    /// The tail of `series` (oldest first) from bucket `since` on, stored under `pool`.
+    pub fn from_series(pool: Option<String>, series: Vec<Candle>, since: i64) -> Self {
+        let count = series.len();
+        let first = series.first().map(|candle| candle.timestamp);
+        let candles = series
+            .into_iter()
+            .filter(|candle| candle.timestamp >= since)
+            .collect();
+        Self {
+            pool,
+            count,
+            first,
+            candles,
+        }
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::{
-        Duration, PoolConfig, Priority, Timeframe, DEEP_HISTORY_TIMEFRAMES,
+        Candle, ChartTail, Duration, PoolConfig, Priority, Timeframe, DEEP_HISTORY_TIMEFRAMES,
         UNHEALTHY_POOL_RETRY_BASE, UNHEALTHY_POOL_RETRY_MAX,
     };
 
@@ -781,6 +814,25 @@ mod tests {
         assert_eq!(days(Timeframe::Hour4), 730);
         assert_eq!(days(Timeframe::Hour12), 730);
         assert_eq!(days(Timeframe::Day1), 3_650);
+    }
+
+    /// A tail keeps the size and the first bucket of the whole series and only the buckets
+    /// from `since` on, the `since` bucket included.
+    #[test]
+    fn a_chart_tail_counts_the_series_and_keeps_the_buckets_from_since() {
+        let series: Vec<Candle> = [60, 120, 180, 240]
+            .into_iter()
+            .map(|ts| Candle::new(ts, 1.0, 1.0, 1.0, 1.0, 1.0))
+            .collect();
+        let tail = ChartTail::from_series(Some("pool".to_string()), series.clone(), 180);
+        assert_eq!(tail.pool.as_deref(), Some("pool"));
+        assert_eq!(tail.count, 4);
+        assert_eq!(tail.first, Some(60));
+        let kept: Vec<i64> = tail.candles.iter().map(|c| c.timestamp).collect();
+        assert_eq!(kept, vec![180, 240]);
+        let past_the_edge = ChartTail::from_series(Some("pool".to_string()), series, 300);
+        assert_eq!(past_the_edge.count, 4);
+        assert!(past_the_edge.candles.is_empty());
     }
 
     /// Catalog key of the label for each monitoring priority. The match is

@@ -12,8 +12,8 @@ use super::monitor::GAP_SUMMARY_LIMIT;
 use super::priorities::ActivityType;
 use super::service::{built_service, get_or_init_service, OhlcvServiceImpl};
 use super::types::{
-    Candle, MonitorStats, MonitorTelemetrySnapshot, OhlcvError, OhlcvMetrics, OhlcvResult,
-    OhlcvStatus, PoolMetadata, Priority, Timeframe, TimeframeBundle,
+    Candle, ChartTail, MonitorStats, MonitorTelemetrySnapshot, OhlcvError, OhlcvMetrics,
+    OhlcvResult, OhlcvStatus, PoolMetadata, Priority, Timeframe, TimeframeBundle,
 };
 use crate::chains::{AssetId, ChainId, ChainScope};
 use std::collections::HashSet;
@@ -56,6 +56,19 @@ pub async fn get_chart_ohlcv(
     let service = get_or_init_service(chain).await?;
 
     service.get_chart_ohlcv(mint, timeframe, limit).await
+}
+
+/// The stored tail of a timeframe a chart is viewing, from bucket `since` (unix secs) on,
+/// read from storage only. See `ChartTail` for how a chart merges it.
+pub async fn get_chart_tail(
+    chain: ChainId,
+    mint: &str,
+    timeframe: Timeframe,
+    since: i64,
+) -> OhlcvResult<ChartTail> {
+    let service = get_or_init_service(chain).await?;
+
+    service.get_chart_tail(mint, timeframe, since).await
 }
 
 /// List available pools for a token that have OHLCV data.
