@@ -583,7 +583,12 @@ impl TransactionDatabase {
                 step: format!("create {table}__v7"),
                 detail: e.to_string(),
             })?;
-            let source_columns = super::column_names::live_column_list(tx, table, legacy_columns)?;
+            let source_columns = crate::database::schema::renames::live_column_list(
+                tx,
+                &super::column_names::RENAMES,
+                table,
+                legacy_columns,
+            )?;
             tx.execute(
                 &format!("INSERT INTO {table}__v7 ({columns}) SELECT 'solana', {source_columns} FROM {table}"),
                 [],

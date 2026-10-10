@@ -179,8 +179,69 @@ fn a_table_with_both_column_names_refuses_and_keeps_storage() {
         .unwrap();
     let before = schema(&Connection::open(&path).unwrap());
 
-    assert!(CopyDatabase::open(&path, ChainId::Solana).is_err());
+    let error = CopyDatabase::open(&path, ChainId::Solana)
+        .err()
+        .expect("both names refuse the open");
+    assert!(
+        matches!(
+            &error,
+            screenerbot::trader::Error::Database(
+                screenerbot::errors::DatabaseError::SchemaConflict { store, object }
+            ) if store == "copy_trading.db" && object == "copy_spend.spent_sol and copy_spend.spent_native"
+        ),
+        "{error:?}"
+    );
     assert_eq!(schema(&Connection::open(&path).unwrap()), before);
+}
+
+/// An older build re-adds `peak_price_sol` to a migrated store and writes only that
+/// name. The next open keeps every peak either build wrote, the canonical one where both
+/// did, and drops the legacy column; a further open writes nothing.
+#[test]
+fn paper_peaks_from_both_builds_merge_on_open() {
+    let dir = tempfile::tempdir().unwrap();
+    let path = dir.path().join("copy_trading.db");
+    released(&path);
+    drop(CopyDatabase::open(&path, ChainId::Solana).unwrap());
+    Connection::open(&path)
+        .unwrap()
+        .execute_batch(
+            "ALTER TABLE copy_paper_positions ADD COLUMN peak_price_sol REAL;
+             INSERT INTO copy_paper_positions (task_id, mint, opened_at, updated_at, peak_price_sol) \
+             VALUES (7, 'legacy', '2026-01-03T00:00:00Z', '2026-01-03T00:00:00Z', 0.02);
+             INSERT INTO copy_paper_positions (task_id, mint, opened_at, updated_at, peak_price_native, peak_price_sol) \
+             VALUES (7, 'both', '2026-01-03T00:00:00Z', '2026-01-03T00:00:00Z', 0.03, 0.01);
+             INSERT INTO copy_paper_positions (task_id, mint, opened_at, updated_at) \
+             VALUES (7, 'neither', '2026-01-03T00:00:00Z', '2026-01-03T00:00:00Z');",
+        )
+        .unwrap();
+
+    drop(CopyDatabase::open(&path, ChainId::Solana).unwrap());
+
+    let conn = Connection::open(&path).unwrap();
+    assert!(!columns(&conn, "copy_paper_positions")
+        .iter()
+        .any(|name| name == "peak_price_sol"));
+    let peaks: Vec<(String, Option<f64>)> = conn
+        .prepare("SELECT mint, peak_price_native FROM copy_paper_positions ORDER BY mint")
+        .unwrap()
+        .query_map([], |row| Ok((row.get(0)?, row.get(1)?)))
+        .unwrap()
+        .collect::<Result<_, _>>()
+        .unwrap();
+    assert_eq!(
+        peaks,
+        vec![
+            ("both".to_owned(), Some(0.03)),
+            ("legacy".to_owned(), Some(0.02)),
+            ("mint".to_owned(), Some(0.0075)),
+            ("neither".to_owned(), None),
+        ]
+    );
+    let merged = schema(&conn);
+    drop(conn);
+    drop(CopyDatabase::open(&path, ChainId::Solana).unwrap());
+    assert_eq!(schema(&Connection::open(&path).unwrap()), merged);
 }
 
 #[test]

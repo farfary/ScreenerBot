@@ -21,32 +21,83 @@ pub enum DatabaseError {
     /// the upgrade did not start.
     #[error("could not back up {store} before its upgrade: {message}")]
     Backup { store: String, message: String },
+    /// The store file is damaged (`SQLITE_CORRUPT`).
+    #[error("database file is damaged (op={operation}): {message}")]
+    Corrupt { operation: String, message: String },
+    /// The file is not an SQLite database (`SQLITE_NOTADB`).
+    #[error("file is not a database (op={operation}): {message}")]
+    NotADatabase { operation: String, message: String },
+    /// The disk holding the store is full (`SQLITE_FULL`).
+    #[error("disk is full (op={operation}): {message}")]
+    DiskFull { operation: String, message: String },
+    /// The store or its directory cannot be written (`SQLITE_READONLY`, `SQLITE_PERM`).
+    #[error("database is read-only (op={operation}): {message}")]
+    ReadOnly { operation: String, message: String },
+    /// The store file cannot be opened (`SQLITE_CANTOPEN`).
+    #[error("database cannot be opened (op={operation}): {message}")]
+    CannotOpen { operation: String, message: String },
+    /// The operating system reported an I/O failure (`SQLITE_IOERR`).
+    #[error("database I/O failure (op={operation}): {message}")]
+    Io { operation: String, message: String },
+    /// A renamed table or column exists under both its legacy and its canonical name,
+    /// and no merge rule covers it, so the open was refused before any write.
+    #[error("{store} holds both {object}")]
+    SchemaConflict { store: String, object: String },
 }
 
 impl DatabaseError {
     /// Maps a captured rusqlite failure onto the database vocabulary by its SQLite result
-    /// code. Lock contention is the only retryable class; every other failure is a query
-    /// error.
+    /// code: lock contention, damage, a file that is not a database, a full disk, a
+    /// read-only or unopenable file and an I/O failure each keep their class; every other
+    /// failure is a query error.
     pub fn classify_sqlite_failure(operation: &str, error: rusqlite::Error) -> Self {
+        let operation = operation.to_owned();
+        let message = error.to_string();
         match error.sqlite_error_code() {
             Some(rusqlite::ErrorCode::DatabaseBusy | rusqlite::ErrorCode::DatabaseLocked) => {
-                DatabaseError::Busy {
-                    operation: operation.to_owned(),
-                    message: error.to_string(),
-                }
+                DatabaseError::Busy { operation, message }
             }
-            _ => DatabaseError::Query {
-                operation: operation.to_owned(),
-                message: error.to_string(),
-            },
+            Some(rusqlite::ErrorCode::DatabaseCorrupt) => {
+                DatabaseError::Corrupt { operation, message }
+            }
+            Some(rusqlite::ErrorCode::NotADatabase) => {
+                DatabaseError::NotADatabase { operation, message }
+            }
+            Some(rusqlite::ErrorCode::DiskFull) => DatabaseError::DiskFull { operation, message },
+            Some(rusqlite::ErrorCode::ReadOnly | rusqlite::ErrorCode::PermissionDenied) => {
+                DatabaseError::ReadOnly { operation, message }
+            }
+            Some(rusqlite::ErrorCode::CannotOpen) => {
+                DatabaseError::CannotOpen { operation, message }
+            }
+            Some(rusqlite::ErrorCode::SystemIoFailure) => DatabaseError::Io { operation, message },
+            _ => DatabaseError::Query { operation, message },
         }
+    }
+
+    /// Whether the failure lies in the store's surroundings (a lock, permissions, the
+    /// disk, the operating system or the connection pool) rather than in its content.
+    /// Such a failure never justifies moving or rebuilding the store file.
+    pub fn is_environment_failure(&self) -> bool {
+        matches!(
+            self,
+            DatabaseError::Connection { .. }
+                | DatabaseError::Busy { .. }
+                | DatabaseError::DiskFull { .. }
+                | DatabaseError::ReadOnly { .. }
+                | DatabaseError::CannotOpen { .. }
+                | DatabaseError::Io { .. }
+        )
     }
 }
 
 impl From<rusqlite::Error> for DatabaseError {
+    /// A failure converted without naming its operation keeps its storage class; only the
+    /// unclassified remainder stays a generic SQLite error.
     fn from(err: rusqlite::Error) -> Self {
-        DatabaseError::Sqlite {
-            message: err.to_string(),
+        match DatabaseError::classify_sqlite_failure("sqlite statement", err) {
+            DatabaseError::Query { message, .. } => DatabaseError::Sqlite { message },
+            classified => classified,
         }
     }
 }
@@ -111,5 +162,119 @@ mod tests {
         assert!(!query.is_retryable());
 
         let _ = std::fs::remove_file(&path);
+    }
+
+    fn sqlite_failure(code: std::os::raw::c_int) -> rusqlite::Error {
+        rusqlite::Error::SqliteFailure(rusqlite::ffi::Error::new(code), None)
+    }
+
+    /// Every storage-level result code keeps its class through both the named
+    /// classification and the plain conversion, and only environment classes are
+    /// reported as environment failures.
+    #[test]
+    fn storage_result_codes_keep_their_class() {
+        type Expect = fn(&DatabaseError) -> bool;
+        let cases: [(std::os::raw::c_int, Expect, bool); 9] = [
+            (
+                rusqlite::ffi::SQLITE_BUSY,
+                |e| matches!(e, DatabaseError::Busy { .. }),
+                true,
+            ),
+            (
+                rusqlite::ffi::SQLITE_LOCKED,
+                |e| matches!(e, DatabaseError::Busy { .. }),
+                true,
+            ),
+            (
+                rusqlite::ffi::SQLITE_CORRUPT,
+                |e| matches!(e, DatabaseError::Corrupt { .. }),
+                false,
+            ),
+            (
+                rusqlite::ffi::SQLITE_NOTADB,
+                |e| matches!(e, DatabaseError::NotADatabase { .. }),
+                false,
+            ),
+            (
+                rusqlite::ffi::SQLITE_FULL,
+                |e| matches!(e, DatabaseError::DiskFull { .. }),
+                true,
+            ),
+            (
+                rusqlite::ffi::SQLITE_READONLY,
+                |e| matches!(e, DatabaseError::ReadOnly { .. }),
+                true,
+            ),
+            (
+                rusqlite::ffi::SQLITE_PERM,
+                |e| matches!(e, DatabaseError::ReadOnly { .. }),
+                true,
+            ),
+            (
+                rusqlite::ffi::SQLITE_CANTOPEN,
+                |e| matches!(e, DatabaseError::CannotOpen { .. }),
+                true,
+            ),
+            (
+                rusqlite::ffi::SQLITE_IOERR,
+                |e| matches!(e, DatabaseError::Io { .. }),
+                true,
+            ),
+        ];
+        for (code, expect, environment) in cases {
+            let named = DatabaseError::classify_sqlite_failure("probe", sqlite_failure(code));
+            assert!(expect(&named), "code {code} classified as {named:?}");
+            assert_eq!(named.is_environment_failure(), environment, "{named:?}");
+            let converted = DatabaseError::from(sqlite_failure(code));
+            assert!(expect(&converted), "code {code} converted to {converted:?}");
+        }
+
+        let constraint = DatabaseError::from(sqlite_failure(rusqlite::ffi::SQLITE_CONSTRAINT));
+        assert!(
+            matches!(constraint, DatabaseError::Sqlite { .. }),
+            "{constraint:?}"
+        );
+        assert!(!constraint.is_environment_failure());
+        let conflict = DatabaseError::SchemaConflict {
+            store: "ohlcvs.db".to_owned(),
+            object: "t.a and t.b".to_owned(),
+        };
+        assert!(!conflict.is_environment_failure());
+    }
+
+    /// A file that is not SQLite fails its first read as `NotADatabase`, and a store
+    /// opened read-only fails its first write as `ReadOnly`.
+    #[test]
+    fn real_files_classify_as_not_a_database_and_read_only() {
+        let dir = tempfile::tempdir().expect("create temp dir");
+        let garbage = dir.path().join("garbage.db");
+        std::fs::write(&garbage, vec![0x5a_u8; 8192]).expect("write garbage file");
+        let connection = Connection::open(&garbage).expect("open garbage file");
+        let failure = connection
+            .query_row("SELECT COUNT(*) FROM sqlite_master", [], |row| {
+                row.get::<_, i64>(0)
+            })
+            .expect_err("garbage must not read as a database");
+        let classified = DatabaseError::classify_sqlite_failure("read schema", failure);
+        assert!(
+            matches!(classified, DatabaseError::NotADatabase { .. }),
+            "{classified:?}"
+        );
+
+        let store = dir.path().join("store.db");
+        Connection::open(&store)
+            .and_then(|c| c.execute_batch("CREATE TABLE t (k INTEGER)"))
+            .expect("create store");
+        let read_only =
+            Connection::open_with_flags(&store, rusqlite::OpenFlags::SQLITE_OPEN_READ_ONLY)
+                .expect("open read-only");
+        let failure = read_only
+            .execute("INSERT INTO t (k) VALUES (1)", [])
+            .expect_err("a read-only connection must not write");
+        let classified = DatabaseError::classify_sqlite_failure("write", failure);
+        assert!(
+            matches!(classified, DatabaseError::ReadOnly { .. }),
+            "{classified:?}"
+        );
     }
 }

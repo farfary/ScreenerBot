@@ -40,11 +40,13 @@ impl Service for WalletService {
     async fn initialize(&mut self) -> crate::Result<()> {
         crate::wallet::initialize_wallet_database()
             .await
-            .map_err(|e| {
-                crate::Error::Service(ServiceError::Initialize {
+            .map_err(|e| match e {
+                // A store failure stays typed so startup can name the store.
+                e @ crate::wallets::Error::Database(_) => crate::Error::Wallets(e),
+                e => crate::Error::Service(ServiceError::Initialize {
                     service: self.name().to_owned(),
                     message: e.to_string(),
-                })
+                }),
             })
     }
 

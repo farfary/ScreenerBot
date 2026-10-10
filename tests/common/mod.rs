@@ -30,6 +30,7 @@
 #![allow(dead_code)] // each test binary compiles only the part of this module it uses.
 
 pub mod pool_cases;
+pub mod released_reopen;
 pub mod solana_pools;
 
 use chrono::{DateTime, Duration, Utc};

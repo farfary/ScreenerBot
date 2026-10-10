@@ -55,6 +55,15 @@ pub enum Error {
 /// Result alias for the process run loop.
 pub type Result<T> = std::result::Result<T, Error>;
 
+impl Error {
+    /// The boot failure of a configuration that could not be loaded.
+    pub fn config_load(error: crate::config::Error) -> Self {
+        Error::Core {
+            source: Box::new(crate::Error::Config(error)),
+        }
+    }
+}
+
 impl ErrorClass for Error {
     fn is_retryable(&self) -> bool {
         match self {
@@ -219,6 +228,61 @@ mod tests {
                     detail: "refused".to_owned(),
                 }),
                 "tools.db",
+            ),
+        ];
+        for (source, database) in cases {
+            let cause = source.to_string();
+            let startup = StartupError::from(core(source));
+            assert_eq!(startup.code, StartupErrorCode::StorageUpgrade, "{cause}");
+            let detail = startup.detail.render_source_plain();
+            assert!(detail.contains(database), "{detail}");
+            assert!(detail.contains(&cause), "{detail}");
+        }
+    }
+
+    #[test]
+    fn an_unparsable_configuration_is_a_config_invalid_boot_failure() {
+        let startup = StartupError::from(Error::config_load(crate::config::Error::ParseFailed {
+            detail: "expected `=` at line 3".to_owned(),
+        }));
+        assert_eq!(startup.code, StartupErrorCode::ConfigInvalid);
+        let detail = startup.detail.render_source_plain();
+        assert!(detail.contains("expected `=` at line 3"), "{detail}");
+    }
+
+    /// A store holding both names of a renamed object reaches the storage-upgrade
+    /// screen naming that store, whichever service opened it.
+    #[test]
+    fn schema_conflicts_name_their_store_from_every_service_path() {
+        let conflict = |store: &str| crate::errors::DatabaseError::SchemaConflict {
+            store: store.to_owned(),
+            object: "t.a and t.b".to_owned(),
+        };
+        let cases = [
+            (crate::Error::Database(conflict("ohlcvs.db")), "ohlcvs.db"),
+            (
+                crate::Error::Pools(crate::pools::Error::Database(conflict("pools.db"))),
+                "pools.db",
+            ),
+            (
+                crate::Error::Wallets(crate::wallets::Error::Database(conflict("wallet.db"))),
+                "wallet.db",
+            ),
+            (
+                crate::Error::Trader(crate::trader::Error::Database(conflict("copy_trading.db"))),
+                "copy_trading.db",
+            ),
+            (
+                crate::Error::Transactions(crate::transactions::Error::Database(conflict(
+                    "transactions.db",
+                ))),
+                "transactions.db",
+            ),
+            (
+                crate::Error::Positions(crate::positions::Error::Database(conflict(
+                    "positions.db",
+                ))),
+                "positions.db",
             ),
         ];
         for (source, database) in cases {

@@ -28,6 +28,9 @@ pub use analytics::{
     apply_paper_book, arrival_distance_ms, build_task_stats, latency_should_pause,
     summarize_arrival_distances,
 };
+/// Rename declarations, reached by the schema owner's cross-store guard.
+#[cfg(test)]
+pub(crate) use database::column_names;
 pub use database::{ActivityQuery, CopyDatabase, TargetObservations};
 pub use exits::{
     execute_copy_sell_with, paper_sell_outcome, prepare_copy_sell, proportional_exit_percentage,

@@ -9,7 +9,7 @@
 
 // Sub-modules
 mod blacklist;
-mod column_names;
+pub(crate) mod column_names;
 mod global;
 mod migrations;
 mod operations;

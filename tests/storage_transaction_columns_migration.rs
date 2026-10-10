@@ -238,9 +238,10 @@ fn transaction_store_with_both_names_refuses_to_open() {
         String::from_utf8_lossy(&output.stderr)
     );
     assert!(
-        text.contains(
-            "both processed_transactions.fee_sol and processed_transactions.fee_native exist"
-        ),
+        text.contains("SchemaConflict")
+            && text.contains("transactions.db")
+            && text
+                .contains("processed_transactions.fee_sol and processed_transactions.fee_native"),
         "unexpected failure: {text}"
     );
 
@@ -254,6 +255,59 @@ fn transaction_store_with_both_names_refuses_to_open() {
         )
         .unwrap(),
         "7"
+    );
+}
+
+/// An older build re-adds `fee_sol` (`DEFAULT 0`) and `sol_delta` to a migrated store
+/// and writes only those names. The next open keeps every fee and delta either build
+/// wrote and drops the legacy columns; a further open writes nothing.
+#[test]
+fn fees_and_deltas_from_both_builds_merge_on_open() {
+    if std::env::var_os(CHILD).is_some() {
+        return;
+    }
+    let dir = data_dir();
+    boot(dir.path());
+    open(dir.path())
+        .execute_batch(
+            "ALTER TABLE processed_transactions ADD COLUMN fee_sol REAL NOT NULL DEFAULT 0;
+             ALTER TABLE processed_transactions ADD COLUMN sol_delta REAL;
+             INSERT INTO raw_transactions (signature, wallet_address, timestamp, status, success, fee_raw)
+             VALUES ('SIG_CANONICAL', 'wallet-a', '2026-01-01T00:00:00Z', 'Finalized', 1, 10000),
+                    ('SIG_LEGACY', 'wallet-a', '2026-01-01T00:00:01Z', 'Finalized', 1, 7000);
+             INSERT INTO processed_transactions (signature, wallet_address, transaction_type, type_kind, direction, fee_native, native_delta)
+             VALUES ('SIG_CANONICAL', 'wallet-a', '\"Unknown\"', 'unknown', 'Outgoing', 0.00001, -1.5);
+             INSERT INTO processed_transactions (signature, wallet_address, transaction_type, type_kind, direction, fee_sol, sol_delta)
+             VALUES ('SIG_LEGACY', 'wallet-a', '\"Unknown\"', 'unknown', 'Incoming', 0.000007, 2.5);",
+        )
+        .unwrap();
+
+    boot(dir.path());
+
+    let conn = open(dir.path());
+    assert_canonical_names(&conn);
+    let rows: Vec<(String, f64, Option<f64>)> = conn
+        .prepare("SELECT signature, fee_native, native_delta FROM processed_transactions ORDER BY signature")
+        .unwrap()
+        .query_map([], |r| Ok((r.get(0)?, r.get(1)?, r.get(2)?)))
+        .unwrap()
+        .collect::<rusqlite::Result<_>>()
+        .unwrap();
+    assert_eq!(
+        rows,
+        vec![
+            ("SIG_CANONICAL".to_owned(), 0.00001, Some(-1.5)),
+            ("SIG_LEGACY".to_owned(), 0.000007, Some(2.5)),
+        ]
+    );
+    let merged = schema(&conn);
+    drop(conn);
+
+    boot(dir.path());
+    assert_eq!(
+        schema(&open(dir.path())),
+        merged,
+        "a further open changed the schema"
     );
 }
 

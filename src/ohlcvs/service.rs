@@ -4,6 +4,7 @@
 //! OHLCV service — public API for querying candle data with cache and database fallback.
 
 use crate::chains::{ChainId, ChainScope, PerChain};
+use crate::database::{catalog, recovery};
 use crate::logger::{self, LogTag};
 use crate::ohlcvs::aggregator::OhlcvAggregator;
 use crate::ohlcvs::cache::OhlcvCache;
@@ -16,7 +17,6 @@ use crate::ohlcvs::types::{
     Candle, ChartTail, OhlcvError, OhlcvResult, OhlcvStatus, OhlcvTimeframeStatus, Timeframe,
     TimeframeBundle, BUNDLE_CANDLE_COUNT,
 };
-use crate::paths::{chain_db_path, DbKind};
 use chrono::Utc;
 use std::collections::{HashMap, HashSet};
 use std::sync::Arc;
@@ -59,12 +59,14 @@ pub(super) struct OhlcvServiceImpl {
 }
 
 impl OhlcvServiceImpl {
-    fn new(chain: ChainId) -> OhlcvResult<Self> {
-        let db = Arc::new(OhlcvDatabase::new(
-            chain_db_path(DbKind::Ohlcvs, chain),
-            chain,
-        )?);
-        Ok(Self::with_database(db))
+    /// Open `chain`'s store, rebuilding it when its file or schema is unusable.
+    async fn new(chain: ChainId) -> OhlcvResult<Self> {
+        let path = catalog::OHLCVS.path(chain);
+        let db = recovery::open_cache_store(&catalog::OHLCVS, &path, || async {
+            OhlcvDatabase::new(&path, chain)
+        })
+        .await?;
+        Ok(Self::with_database(Arc::new(db)))
     }
 
     /// The runtime of the chain `db` belongs to, over that database.
@@ -819,7 +821,7 @@ pub(super) async fn get_or_init_service(chain: ChainId) -> OhlcvResult<Arc<Ohlcv
                 &format!("INIT: Initializing {chain} OHLCV runtime"),
             );
 
-            let service_impl = OhlcvServiceImpl::new(chain)?;
+            let service_impl = OhlcvServiceImpl::new(chain).await?;
 
             logger::info(
                 LogTag::Ohlcv,

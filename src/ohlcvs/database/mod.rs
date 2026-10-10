@@ -4,7 +4,7 @@
 //! OHLCV database — SQLite persistence for candlestick data and gap tracking.
 
 mod candles;
-mod column_names;
+pub(crate) mod column_names;
 mod config;
 mod data_version;
 mod gaps;
@@ -17,7 +17,8 @@ pub use types::{
     SeriesPoolReset, SeriesPoolWrite, StoredBucket, TimeframeSummary,
 };
 
-use crate::database::WriteTransaction;
+use crate::database::{schema, WriteTransaction};
+use crate::errors::DatabaseError;
 use crate::ohlcvs::types::{
     OhlcvError, OhlcvResult, PoolConfig, Timeframe, DEEP_HISTORY_TIMEFRAMES,
 };
@@ -51,7 +52,7 @@ impl OhlcvDatabase {
             .idle_timeout(None)
             .max_lifetime(None)
             .build(manager)
-            .map_err(|e| OhlcvError::DatabaseError(format!("Failed to open database: {e}")))?;
+            .map_err(DatabaseError::from)?;
 
         let db = Self { pool, chain };
 
@@ -72,7 +73,7 @@ impl OhlcvDatabase {
     pub(crate) fn conn(&self) -> OhlcvResult<PooledConnection<SqliteConnectionManager>> {
         self.pool
             .get()
-            .map_err(|e| OhlcvError::DatabaseError(format!("Failed to get connection: {e}")))
+            .map_err(|e| OhlcvError::Database(DatabaseError::from(e)))
     }
 
     /// Table creation, every migration, the column renames, the index pass and
@@ -81,8 +82,11 @@ impl OhlcvDatabase {
     fn create_tables(&self) -> OhlcvResult<()> {
         let mut conn = self.conn()?;
         let tx = conn.write_tx().map_err(|e| {
-            OhlcvError::DatabaseError(format!("Failed to begin OHLCV schema initialization: {e}"))
+            DatabaseError::classify_sqlite_failure("begin OHLCV schema initialization", e)
         })?;
+        // First, before any historical step can read a store holding both names of a
+        // renamed column as a legacy shape.
+        schema::renames::reconcile(&tx, &column_names::RENAMES)?;
 
         tx.execute_batch(
             r#"
@@ -171,7 +175,7 @@ impl OhlcvDatabase {
             );
             "#,
         )
-        .map_err(|e| OhlcvError::DatabaseError(format!("Failed to create tables: {e}")))?;
+        .map_err(|e| DatabaseError::classify_sqlite_failure("create OHLCV tables", e))?;
 
         // Migration: add the pair column to pre-existing ohlcv_pools tables (CREATE
         // IF NOT EXISTS above won't add a column to a table that already exists).
@@ -192,7 +196,7 @@ impl OhlcvDatabase {
         migrate_chain_scope(&tx)?;
         // Unit-neutral column names come after the chain-scope rebuild, so that
         // rebuild reads the historical shape it was written for.
-        column_names::rename_unit_neutral_columns(&tx)?;
+        schema::renames::rename(&tx, &column_names::RENAMES)?;
         // After the chain-scope rebuild, which recreates the monitor table in its
         // historical shape.
         add_deep_history_columns(&tx)?;
@@ -200,7 +204,10 @@ impl OhlcvDatabase {
         data_version::ensure_data_version(&tx, self.chain_id())?;
 
         tx.commit().map_err(|e| {
-            OhlcvError::DatabaseError(format!("Failed to commit OHLCV schema initialization: {e}"))
+            OhlcvError::Database(DatabaseError::classify_sqlite_failure(
+                "commit OHLCV schema initialization",
+                e,
+            ))
         })
     }
 

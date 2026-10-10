@@ -600,6 +600,9 @@ impl Default for OhlcvMetrics {
 #[derive(Debug, Clone)]
 pub enum OhlcvError {
     DatabaseError(String),
+    /// A classified storage failure of the OHLCV store, kept typed so startup and
+    /// recovery can tell a schema conflict or a damaged file from a transient failure.
+    Database(crate::errors::DatabaseError),
     ApiError(String),
     RateLimitExceeded,
     PoolNotFound(String),
@@ -624,10 +627,26 @@ impl From<crate::chains::Error> for OhlcvError {
     }
 }
 
+impl From<crate::errors::DatabaseError> for OhlcvError {
+    fn from(error: crate::errors::DatabaseError) -> Self {
+        OhlcvError::Database(error)
+    }
+}
+
+impl crate::database::recovery::StoreOpenError for OhlcvError {
+    fn database_error(&self) -> Option<&crate::errors::DatabaseError> {
+        match self {
+            OhlcvError::Database(error) => Some(error),
+            _ => None,
+        }
+    }
+}
+
 impl fmt::Display for OhlcvError {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         match self {
             OhlcvError::DatabaseError(e) => write!(f, "Database error: {e}"),
+            OhlcvError::Database(e) => write!(f, "Database error: {e}"),
             OhlcvError::ApiError(e) => write!(f, "API error: {e}"),
             OhlcvError::RateLimitExceeded => write!(f, "Rate limit exceeded"),
             OhlcvError::PoolNotFound(pool) => write!(f, "Pool not found: {pool}"),

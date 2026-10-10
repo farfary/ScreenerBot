@@ -3,7 +3,7 @@
 
 //! SQLite persistence layer for position management with connection pooling.
 mod booking;
-mod column_names;
+pub(crate) mod column_names;
 mod convenience;
 mod global;
 mod open_round;

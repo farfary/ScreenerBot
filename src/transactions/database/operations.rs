@@ -160,6 +160,9 @@ impl TransactionDatabase {
             step: "begin schema initialization".to_owned(),
             detail: e.to_string(),
         })?;
+        // First, before any historical step can read a store holding both names of a
+        // renamed column as a legacy shape.
+        crate::database::schema::renames::reconcile(&tx, &super::column_names::RENAMES)?;
 
         // Create all tables
         let tables = [
@@ -199,7 +202,7 @@ impl TransactionDatabase {
 
         // Unit-neutral column names come after every versioned rebuild, so each of
         // those reads the historical shape it was written for.
-        super::column_names::rename_unit_neutral_columns(&tx)?;
+        crate::database::schema::renames::rename(&tx, &super::column_names::RENAMES)?;
 
         // Chain-aware bootstrap state and queries are valid only after every legacy
         // transaction table, including bootstrap_state, has been rebuilt to v7.

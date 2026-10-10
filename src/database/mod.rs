@@ -7,8 +7,10 @@
 // `with_init()` to ensure PRAGMAs survive connection pool recycling.
 
 pub mod backup;
+pub mod catalog;
 pub mod configure;
 pub mod maintenance;
+pub mod recovery;
 pub mod schema;
 pub mod transaction;
 

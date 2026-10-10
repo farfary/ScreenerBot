@@ -61,6 +61,15 @@ pub enum Error {
 /// Result alias for the pools module.
 pub type Result<T> = std::result::Result<T, Error>;
 
+impl crate::database::recovery::StoreOpenError for Error {
+    fn database_error(&self) -> Option<&DatabaseError> {
+        match self {
+            Error::Database(error) => Some(error),
+            _ => None,
+        }
+    }
+}
+
 impl ErrorClass for Error {
     fn is_retryable(&self) -> bool {
         match self {

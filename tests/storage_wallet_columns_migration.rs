@@ -200,11 +200,11 @@ fn wallet_monitor_with_both_names_refuses_to_open() {
     for (conflict, expected) in [
         (
             "CREATE TABLE native_flow_cache (signature TEXT PRIMARY KEY, native_delta REAL NOT NULL DEFAULT 0)",
-            "both sol_flow_cache and native_flow_cache exist",
+            "sol_flow_cache and native_flow_cache",
         ),
         (
             "ALTER TABLE wallet_snapshots ADD COLUMN native_balance REAL",
-            "both wallet_snapshots.sol_balance and wallet_snapshots.native_balance exist",
+            "wallet_snapshots.sol_balance and wallet_snapshots.native_balance",
         ),
     ] {
         let dir = tempfile::tempdir().unwrap();
@@ -223,10 +223,102 @@ fn wallet_monitor_with_both_names_refuses_to_open() {
             String::from_utf8_lossy(&output.stdout),
             String::from_utf8_lossy(&output.stderr)
         );
-        assert!(text.contains(expected), "unexpected failure: {text}");
+        assert!(
+            text.contains("SchemaConflict") && text.contains("wallet.db") && text.contains(expected),
+            "unexpected failure: {text}"
+        );
 
         let monitor = open(dir.path(), "wallet.db");
         assert_eq!(schema(&monitor), before, "refused open changed the schema");
+    }
+}
+
+/// A released build reopening a renamed store re-adds `total_equity_sol` and re-creates
+/// `sol_flow_cache` in whichever shape it knows; each writer's rows then sit under the
+/// name it used, and the next open folds them into the canonical names.
+#[test]
+fn flows_and_equity_from_both_builds_merge_on_open() {
+    if std::env::var_os(CHILD).is_some() {
+        return;
+    }
+    for legacy_flow_table in [
+        "CREATE TABLE IF NOT EXISTS sol_flow_cache (chain_id TEXT NOT NULL DEFAULT 'solana', wallet_address TEXT NOT NULL DEFAULT '', signature TEXT NOT NULL, timestamp TEXT NOT NULL, sol_delta REAL NOT NULL DEFAULT 0, created_at TEXT NOT NULL DEFAULT (datetime('now')), PRIMARY KEY (chain_id, wallet_address, signature)); CREATE INDEX IF NOT EXISTS idx_flow_cache_chain_wallet_timestamp ON sol_flow_cache(chain_id, wallet_address, timestamp DESC);",
+        "CREATE TABLE IF NOT EXISTS sol_flow_cache (signature TEXT PRIMARY KEY, timestamp TEXT NOT NULL, sol_delta REAL NOT NULL DEFAULT 0, created_at TEXT NOT NULL DEFAULT (datetime('now')));",
+    ] {
+        let dir = tempfile::tempdir().unwrap();
+        std::fs::create_dir_all(dir.path().join("data")).unwrap();
+        seed_main_wallet(dir.path());
+        boot(dir.path());
+
+        let monitor = open(dir.path(), "wallet.db");
+        monitor
+            .execute_batch(
+                "INSERT INTO wallet_snapshots (id, wallet_address, snapshot_time, native_balance, native_balance_raw, total_equity_native) VALUES (1, 'address', '2025-01-01T00:00:00+00:00', 1.0, 1000000000, 4.5);
+                 INSERT INTO native_flow_cache (wallet_address, signature, timestamp, native_delta) VALUES ('address', 'shared', '2025-01-01', -1.0);
+                 INSERT OR REPLACE INTO wallet_metadata (key, value) VALUES ('current_wallet', 'address');
+                 ALTER TABLE wallet_snapshots ADD COLUMN total_equity_sol REAL;",
+            )
+            .unwrap();
+        monitor.execute_batch(legacy_flow_table).unwrap();
+        monitor
+            .execute_batch(
+                "INSERT INTO wallet_snapshots (id, wallet_address, snapshot_time, native_balance, native_balance_raw, total_equity_sol) VALUES (2, 'address', '2025-01-02T00:00:00+00:00', 2.0, 2000000000, 7.5);
+                 INSERT INTO sol_flow_cache (signature, timestamp, sol_delta) VALUES ('shared', '2025-01-01', -9.0);
+                 INSERT INTO sol_flow_cache (signature, timestamp, sol_delta) VALUES ('legacy', '2025-01-02', 2.25);",
+            )
+            .unwrap();
+        drop(monitor);
+
+        boot(dir.path());
+        let monitor = open(dir.path(), "wallet.db");
+        assert_canonical_names(&monitor);
+        let equity: Vec<(i64, Option<f64>)> = monitor
+            .prepare("SELECT id, total_equity_native FROM wallet_snapshots ORDER BY id")
+            .unwrap()
+            .query_map([], |r| Ok((r.get(0)?, r.get(1)?)))
+            .unwrap()
+            .collect::<rusqlite::Result<_>>()
+            .unwrap();
+        assert_eq!(equity, vec![(1, Some(4.5)), (2, Some(7.5))]);
+        let flows: Vec<(String, String, f64)> = monitor
+            .prepare("SELECT wallet_address, signature, native_delta FROM native_flow_cache WHERE chain_id = 'solana' ORDER BY signature, wallet_address")
+            .unwrap()
+            .query_map([], |r| Ok((r.get(0)?, r.get(1)?, r.get(2)?)))
+            .unwrap()
+            .collect::<rusqlite::Result<_>>()
+            .unwrap();
+        let flow = |address: &str, signature: &str, delta: f64| {
+            (address.to_owned(), signature.to_owned(), delta)
+        };
+        // The keyed shape keeps its rows under the empty address its writer stored, so the
+        // shared signature is a distinct key; the pre-chain shape takes the recorded wallet
+        // and the canonical row wins the shared key.
+        let expected = if legacy_flow_table.contains("chain_id") {
+            vec![
+                flow("", "legacy", 2.25),
+                flow("", "shared", -9.0),
+                flow("address", "shared", -1.0),
+            ]
+        } else {
+            vec![flow("address", "legacy", 2.25), flow("address", "shared", -1.0)]
+        };
+        assert_eq!(flows, expected);
+        assert_eq!(
+            monitor
+                .query_row(
+                    "SELECT tbl_name FROM sqlite_master WHERE type = 'index' AND name = 'idx_flow_cache_chain_wallet_timestamp'",
+                    [],
+                    |r| r.get::<_, String>(0),
+                )
+                .unwrap(),
+            "native_flow_cache"
+        );
+        let first = schema(&monitor);
+        drop(monitor);
+
+        boot(dir.path());
+        let monitor = open(dir.path(), "wallet.db");
+        assert_eq!(schema(&monitor), first, "a further open changed the schema");
     }
 }
 

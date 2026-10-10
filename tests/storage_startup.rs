@@ -13,6 +13,9 @@ use screenerbot::chains::ChainId;
 use screenerbot::paths::{chain_db_path, DbKind};
 
 const CHILD_ENV: &str = "SCREENERBOT_STORAGE_STARTUP_CHILD";
+const CACHE_CHILD_ENV: &str = "SCREENERBOT_CACHE_RECOVERY_CHILD";
+/// The cache stores whose owners open through the recovery path.
+const RECOVERED_CACHE_FILES: &[&str] = &["ohlcvs.db", "pools.db", "rpc_stats.db"];
 const DATABASE_FILES: &[&str] = &[
     "actions.db",
     "agent_control.db",
@@ -101,19 +104,188 @@ fn real_stores_survive_two_fresh_process_launches_on_a_clone() {
     assert_two_launches_keep_every_store(clone.path());
 }
 
-fn assert_two_launches_keep_every_store(directory: &std::path::Path) {
+/// A released build reopening the stores between two launches re-creates the legacy names
+/// it knows and writes under them. The next launch folds every such object into its
+/// canonical name, keeps the canonical indexes and every row-level check clean, and a
+/// further launch changes nothing.
+#[test]
+fn startup_storage_matrix_survives_a_released_build_between_launches() {
+    if std::env::var_os(CHILD_ENV).is_some() {
+        return;
+    }
+    let directory = tempfile::tempdir().expect("create isolated startup-storage directory");
+    let data = directory.path().join("data");
+    launch_startup_stores(directory.path(), 1);
+
+    let mut indexes = Vec::new();
+    for reopen in common::released_reopen::RELEASED_REOPENS {
+        let connection = Connection::open(data.join(reopen.file)).expect("open launched store");
+        indexes.push(index_names(&connection));
+        reopen.apply(&connection);
+    }
+
+    launch_startup_stores(directory.path(), 2);
+    let mut schemas = Vec::new();
+    for (reopen, before) in common::released_reopen::RELEASED_REOPENS
+        .iter()
+        .zip(indexes)
+    {
+        let connection = Connection::open(data.join(reopen.file)).expect("open folded store");
+        reopen.assert_legacy_objects_gone(&connection);
+        reopen.assert_merged(&connection);
+        assert_eq!(
+            index_names(&connection),
+            before,
+            "{} lost or gained an index",
+            reopen.file
+        );
+        schemas.push(schema(&connection));
+    }
+    assert_every_store_is_clean(directory.path(), "2");
+
+    launch_startup_stores(directory.path(), 3);
+    for (reopen, before) in common::released_reopen::RELEASED_REOPENS
+        .iter()
+        .zip(schemas)
+    {
+        let connection = Connection::open(data.join(reopen.file)).expect("open relaunched store");
+        assert_eq!(
+            schema(&connection),
+            before,
+            "{} changed on a further launch",
+            reopen.file
+        );
+    }
+}
+
+/// A cache store whose file is not a database moves whole into the quarantine directory
+/// with a manifest, and its owner opens a rebuilt store in its place; the next launch
+/// opens the rebuilt store without quarantining it again.
+#[test]
+fn unreadable_cache_stores_are_quarantined_and_rebuilt() {
+    if std::env::var_os(CACHE_CHILD_ENV).is_some() {
+        open_cache_stores_through_recovery();
+        return;
+    }
+    let directory = tempfile::tempdir().expect("create isolated cache-recovery directory");
+    let data = directory.path().join("data");
+    std::fs::create_dir_all(&data).expect("create data directory");
+    let damaged = b"this file holds no SQLite header".repeat(128);
+    for file in RECOVERED_CACHE_FILES {
+        std::fs::write(data.join(file), &damaged).expect("write damaged cache store");
+    }
+
     for launch in 1..=2 {
         let status = Command::new(std::env::current_exe().expect("test executable"))
             .arg("--exact")
-            .arg("startup_storage_matrix_survives_two_fresh_process_launches")
+            .arg("unreadable_cache_stores_are_quarantined_and_rebuilt")
             .arg("--nocapture")
-            .env(CHILD_ENV, "1")
-            .env("SCREENERBOT_DATA_DIR", directory)
+            .env(CACHE_CHILD_ENV, "1")
+            .env("SCREENERBOT_DATA_DIR", directory.path())
             .status()
-            .expect("run isolated startup-storage child");
-        assert!(status.success(), "startup-storage launch {launch} failed");
+            .expect("run isolated cache-recovery child");
+        assert!(status.success(), "cache-recovery launch {launch} failed");
     }
 
+    let quarantine = data.join("quarantine");
+    for file in RECOVERED_CACHE_FILES {
+        let stem = file.trim_end_matches(".db");
+        let moved: Vec<std::path::PathBuf> = std::fs::read_dir(&quarantine)
+            .expect("list quarantine directory")
+            .map(|entry| entry.expect("quarantine entry").path())
+            .filter(|path| {
+                path.file_name()
+                    .and_then(|name| name.to_str())
+                    .and_then(|name| name.strip_prefix(stem))
+                    .is_some_and(|rest| rest.starts_with('-') && rest[1..].starts_with("20"))
+            })
+            .collect();
+        assert_eq!(
+            moved.len(),
+            1,
+            "{file} was quarantined {} times",
+            moved.len()
+        );
+        assert_eq!(
+            std::fs::read(moved[0].join(file)).expect("read quarantined store"),
+            damaged,
+            "{file} changed on its way into quarantine"
+        );
+        let manifest: serde_json::Value = serde_json::from_slice(
+            &std::fs::read(moved[0].join("manifest.json")).expect("read quarantine manifest"),
+        )
+        .expect("decode quarantine manifest");
+        assert_eq!(manifest["store"], stem);
+        assert_eq!(manifest["class"], "cache");
+        assert!(
+            manifest["reason"]
+                .as_str()
+                .is_some_and(|reason| !reason.is_empty()),
+            "{file} manifest names no reason"
+        );
+
+        let rebuilt = Connection::open(data.join(file)).expect("open rebuilt store");
+        assert_eq!(
+            rebuilt
+                .query_row("PRAGMA integrity_check", [], |row| row.get::<_, String>(0))
+                .expect("run integrity check"),
+            "ok",
+            "rebuilt {file} failed its integrity check"
+        );
+        assert!(
+            rebuilt
+                .query_row(
+                    "SELECT COUNT(*) FROM sqlite_master WHERE type = 'table'",
+                    [],
+                    |row| { row.get::<_, i64>(0) }
+                )
+                .expect("count rebuilt tables")
+                > 0,
+            "{file} was not rebuilt"
+        );
+    }
+}
+
+fn assert_two_launches_keep_every_store(directory: &std::path::Path) {
+    for launch in 1..=2 {
+        launch_startup_stores(directory, launch);
+    }
+    assert_every_store_is_clean(directory, "2");
+}
+
+fn launch_startup_stores(directory: &std::path::Path, launch: usize) {
+    let status = Command::new(std::env::current_exe().expect("test executable"))
+        .arg("--exact")
+        .arg("startup_storage_matrix_survives_two_fresh_process_launches")
+        .arg("--nocapture")
+        .env(CHILD_ENV, "1")
+        .env("SCREENERBOT_DATA_DIR", directory)
+        .status()
+        .expect("run isolated startup-storage child");
+    assert!(status.success(), "startup-storage launch {launch} failed");
+}
+
+fn index_names(connection: &Connection) -> BTreeSet<String> {
+    connection
+        .prepare("SELECT name FROM sqlite_master WHERE type = 'index' AND sql IS NOT NULL")
+        .expect("prepare index listing")
+        .query_map([], |row| row.get(0))
+        .expect("list indexes")
+        .collect::<rusqlite::Result<_>>()
+        .expect("read indexes")
+}
+
+fn schema(connection: &Connection) -> Vec<(String, String, Option<String>)> {
+    connection
+        .prepare("SELECT type, name, sql FROM sqlite_master ORDER BY type, name")
+        .expect("prepare schema listing")
+        .query_map([], |row| Ok((row.get(0)?, row.get(1)?, row.get(2)?)))
+        .expect("list schema")
+        .collect::<rusqlite::Result<_>>()
+        .expect("read schema")
+}
+
+fn assert_every_store_is_clean(directory: &std::path::Path, launches: &str) {
     for database in DATABASE_FILES {
         let path = directory.join("data").join(database);
         assert!(
@@ -129,7 +301,7 @@ fn assert_two_launches_keep_every_store(directory: &std::path::Path) {
             )
             .expect("preserve startup-storage sentinel across relaunch");
         assert_eq!(
-            sentinel, "2",
+            sentinel, launches,
             "startup-storage sentinel was not preserved for {database}"
         );
         assert_eq!(
@@ -243,4 +415,26 @@ fn initialize_startup_stores() {
             )
             .expect("advance startup-storage sentinel");
     }
+}
+
+fn open_cache_stores_through_recovery() {
+    screenerbot::paths::ensure_all_directories().expect("create cache-recovery directories");
+    screenerbot::config::load_config().expect("load isolated configuration");
+    let runtime = tokio::runtime::Builder::new_multi_thread()
+        .enable_all()
+        .build()
+        .expect("create multi-thread runtime");
+    runtime.block_on(async {
+        screenerbot::ohlcvs::OhlcvService::initialize(screenerbot::chains::ChainScope::One(
+            ChainId::Solana,
+        ))
+        .await
+        .expect("open OHLCV store through recovery");
+        screenerbot::pools::database::initialize_database(ChainId::Solana)
+            .await
+            .expect("open pools store through recovery");
+        screenerbot::rpc::StatsManager::new(true)
+            .await
+            .expect("open RPC statistics store through recovery");
+    });
 }

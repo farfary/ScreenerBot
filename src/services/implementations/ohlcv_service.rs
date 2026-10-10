@@ -39,11 +39,13 @@ impl Service for OhlcvService {
     async fn initialize(&mut self) -> crate::Result<()> {
         crate::ohlcvs::OhlcvService::initialize(ChainScope::All)
             .await
-            .map_err(|e| {
-                crate::Error::Service(crate::errors::ServiceError::Initialize {
+            .map_err(|e| match e {
+                // A store failure stays typed so startup can name the store.
+                crate::ohlcvs::OhlcvError::Database(error) => crate::Error::Database(error),
+                e => crate::Error::Service(crate::errors::ServiceError::Initialize {
                     service: "ohlcv".to_owned(),
                     message: format!("Failed to initialize OHLCV service: {e}"),
-                })
+                }),
             })?;
         Ok(())
     }

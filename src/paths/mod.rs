@@ -107,6 +107,18 @@ pub fn get_backups_directory() -> PathBuf {
     get_data_directory().join(BACKUPS_DIRECTORY_NAME)
 }
 
+/// Name of the directory beside the stores that holds stores moved aside after a
+/// failed open.
+pub const QUARANTINE_DIRECTORY_NAME: &str = "quarantine";
+
+/// Returns the quarantine directory path.
+///
+/// Holds each store that could not be opened, with its `-wal` and `-shm`, in a
+/// directory of its own; nothing in it is deleted automatically.
+pub fn get_quarantine_directory() -> PathBuf {
+    get_data_directory().join(QUARANTINE_DIRECTORY_NAME)
+}
+
 /// Returns the logs directory path.
 ///
 /// Contains daily log files with automatic rotation.

@@ -17,7 +17,7 @@ use crate::{chains::ChainId, database};
 
 use super::types::*;
 
-mod column_names;
+pub(crate) mod column_names;
 mod dashboard_metrics;
 mod flow_cache;
 mod metrics;
@@ -179,8 +179,10 @@ impl WalletDatabase {
             detail: e.to_string(),
         })?;
 
-        // Unit-neutral names first, so every later step reads the canonical shape.
-        column_names::rename_unit_neutral_columns(&tx)?;
+        // Reconcile and the unit-neutral renames first, so every later step reads the
+        // canonical shape.
+        database::schema::renames::reconcile(&tx, &column_names::RENAMES)?;
+        database::schema::renames::rename(&tx, &column_names::RENAMES)?;
 
         // Create all tables
         tx.execute(SCHEMA_WALLET_SNAPSHOTS, [])

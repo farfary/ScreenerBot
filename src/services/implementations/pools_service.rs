@@ -41,11 +41,13 @@ impl Service for PoolsService {
         // pricing driver through the chain runtime.
         crate::pools::initialize_pool_components()
             .await
-            .map_err(|e| {
-                crate::Error::Service(crate::errors::ServiceError::Initialize {
+            .map_err(|e| match e {
+                // A store failure stays typed so startup can name the store.
+                e @ crate::pools::Error::Database(_) => crate::Error::Pools(e),
+                e => crate::Error::Service(crate::errors::ServiceError::Initialize {
                     service: "pools".to_owned(),
                     message: format!("Failed to initialize pool components: {e}"),
-                })
+                }),
             })?;
 
         logger::info(LogTag::PoolService, "Pool components initialized");

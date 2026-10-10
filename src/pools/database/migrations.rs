@@ -4,7 +4,7 @@
 //! Pools database schema migrations — legacy-to-chain-scoped upgrade run by
 //! `operations::PoolsDatabase::initialize`.
 
-use crate::database::WriteTransaction;
+use crate::database::{schema, WriteTransaction};
 use crate::errors::DatabaseError;
 use crate::pools::Error;
 use rusqlite::{Connection, OptionalExtension};
@@ -14,15 +14,13 @@ const POOLS_SCHEMA_VERSION: i64 = 1;
 fn table_has_column(conn: &Connection, table: &str, column: &str) -> Result<bool, Error> {
     let mut stmt = conn
         .prepare(&format!("PRAGMA table_info({table})"))
-        .map_err(|e| DatabaseError::Query {
-            operation: format!("inspect {table} schema"),
-            message: e.to_string(),
+        .map_err(|e| {
+            DatabaseError::classify_sqlite_failure(&format!("inspect {table} schema"), e)
         })?;
     let columns = stmt
         .query_map([], |row| row.get::<_, String>(1))
-        .map_err(|e| DatabaseError::Query {
-            operation: format!("inspect {table} columns"),
-            message: e.to_string(),
+        .map_err(|e| {
+            DatabaseError::classify_sqlite_failure(&format!("inspect {table} columns"), e)
         })?;
     let has_column = columns.filter_map(Result::ok).any(|name| name == column);
     Ok(has_column)
@@ -40,15 +38,16 @@ fn verify_migrated_row_count(
 ) -> Result<(), Error> {
     let old_count: i64 = tx
         .query_row(&format!("SELECT COUNT(*) FROM {old}"), [], |row| row.get(0))
-        .map_err(|e| DatabaseError::Query {
-            operation: format!("read {old} row count for migration validation"),
-            message: e.to_string(),
+        .map_err(|e| {
+            DatabaseError::classify_sqlite_failure(
+                &format!("read {old} row count for migration validation"),
+                e,
+            )
         })?;
     let new_count: i64 = tx
         .query_row(&format!("SELECT COUNT(*) FROM {new}"), [], |row| row.get(0))
-        .map_err(|e| DatabaseError::Query {
-            operation: format!("validate migrated {new} row count"),
-            message: e.to_string(),
+        .map_err(|e| {
+            DatabaseError::classify_sqlite_failure(&format!("validate migrated {new} row count"), e)
         })?;
     if old_count != new_count {
         return Err(Error::MigrationIntegrity {
@@ -63,10 +62,12 @@ fn verify_migrated_row_count(
 /// and the version stamp commit together: a refused or failed open leaves the
 /// stored schema exactly as it was.
 pub(super) fn migrate_schema(conn: &mut Connection) -> Result<(), Error> {
-    let tx = conn.write_tx().map_err(|e| DatabaseError::Query {
-        operation: "start pools schema migration".to_owned(),
-        message: e.to_string(),
-    })?;
+    let tx = conn
+        .write_tx()
+        .map_err(|e| DatabaseError::classify_sqlite_failure("start pools schema migration", e))?;
+    // First, before any historical step can read a store holding both names of a
+    // renamed column as a legacy shape.
+    schema::renames::reconcile(&tx, &super::column_names::RENAMES)?;
     tx.execute_batch(
         "CREATE TABLE IF NOT EXISTS price_history (
             id INTEGER PRIMARY KEY AUTOINCREMENT, mint TEXT NOT NULL, pool_address TEXT NOT NULL,
@@ -84,7 +85,7 @@ pub(super) fn migrate_schema(conn: &mut Connection) -> Result<(), Error> {
             error_count INTEGER DEFAULT 1, first_failed_at INTEGER NOT NULL, last_failed_at INTEGER NOT NULL, added_at INTEGER NOT NULL
         );",
     )
-    .map_err(|e| DatabaseError::Query { operation: "create legacy pools tables for migration".to_owned(), message: e.to_string() })?;
+    .map_err(|e| DatabaseError::classify_sqlite_failure("create legacy pools tables for migration", e))?;
 
     // `user_version` gates the structural column check below: once it records
     // the current schema version, every later boot skips straight past this
@@ -94,10 +95,7 @@ pub(super) fn migrate_schema(conn: &mut Connection) -> Result<(), Error> {
     // so a DB whose version was never bumped is migrated correctly regardless.
     let schema_version: i64 = tx
         .query_row("PRAGMA user_version", [], |row| row.get(0))
-        .map_err(|e| DatabaseError::Query {
-            operation: "read pools schema version".to_owned(),
-            message: e.to_string(),
-        })?;
+        .map_err(|e| DatabaseError::classify_sqlite_failure("read pools schema version", e))?;
 
     if schema_version < POOLS_SCHEMA_VERSION {
         let price_history_has_chain = table_has_column(&tx, "price_history", "chain_id")?;
@@ -148,9 +146,8 @@ pub(super) fn migrate_schema(conn: &mut Connection) -> Result<(), Error> {
                 PRIMARY KEY(chain_id, pool_id)
             );",
             )
-            .map_err(|e| DatabaseError::Query {
-                operation: "create chain-aware pools tables".to_owned(),
-                message: e.to_string(),
+            .map_err(|e| {
+                DatabaseError::classify_sqlite_failure("create chain-aware pools tables", e)
             })?;
 
             if price_history_has_chain {
@@ -162,7 +159,7 @@ pub(super) fn migrate_schema(conn: &mut Connection) -> Result<(), Error> {
                 [],
             )
         }
-        .map_err(|e| DatabaseError::Query { operation: "migrate price history".to_owned(), message: e.to_string() })?;
+        .map_err(|e| DatabaseError::classify_sqlite_failure("migrate price history", e))?;
             if accounts_has_chain {
             tx.execute("INSERT INTO blacklist_accounts_new SELECT * FROM blacklist_accounts", [])
         } else {
@@ -172,7 +169,7 @@ pub(super) fn migrate_schema(conn: &mut Connection) -> Result<(), Error> {
                 [],
             )
         }
-        .map_err(|e| DatabaseError::Query { operation: "migrate account blacklist".to_owned(), message: e.to_string() })?;
+        .map_err(|e| DatabaseError::classify_sqlite_failure("migrate account blacklist", e))?;
             if pools_has_chain {
             tx.execute("INSERT INTO blacklist_pools_new SELECT * FROM blacklist_pools", [])
         } else {
@@ -182,7 +179,7 @@ pub(super) fn migrate_schema(conn: &mut Connection) -> Result<(), Error> {
                 [],
             )
         }
-        .map_err(|e| DatabaseError::Query { operation: "migrate pool blacklist".to_owned(), message: e.to_string() })?;
+        .map_err(|e| DatabaseError::classify_sqlite_failure("migrate pool blacklist", e))?;
 
             for (old, new) in [
                 ("price_history", "price_history_new"),
@@ -200,16 +197,15 @@ pub(super) fn migrate_schema(conn: &mut Connection) -> Result<(), Error> {
              ALTER TABLE blacklist_accounts_new RENAME TO blacklist_accounts;
              ALTER TABLE blacklist_pools_new RENAME TO blacklist_pools;",
             )
-            .map_err(|e| DatabaseError::Query {
-                operation: "replace legacy pools tables".to_owned(),
-                message: e.to_string(),
+            .map_err(|e| {
+                DatabaseError::classify_sqlite_failure("replace legacy pools tables", e)
             })?;
         }
     }
 
     // Unit-neutral column names come after the chain-scope rebuild, so that
     // rebuild reads the historical shape it was written for.
-    super::column_names::rename_unit_neutral_columns(&tx)?;
+    schema::renames::rename(&tx, &super::column_names::RENAMES)?;
 
     tx.execute_batch(
         "CREATE INDEX IF NOT EXISTS idx_price_history_chain_mint_timestamp ON price_history(chain_id, mint, timestamp_unix DESC);
@@ -219,14 +215,11 @@ pub(super) fn migrate_schema(conn: &mut Connection) -> Result<(), Error> {
          CREATE INDEX IF NOT EXISTS idx_blacklist_accounts_chain_token ON blacklist_accounts(chain_id, token_mint);
          CREATE INDEX IF NOT EXISTS idx_blacklist_pools_chain_token ON blacklist_pools(chain_id, token_mint);",
     )
-    .map_err(|e| DatabaseError::Query { operation: "create chain-aware pools indexes".to_owned(), message: e.to_string() })?;
+    .map_err(|e| DatabaseError::classify_sqlite_failure("create chain-aware pools indexes", e))?;
     let foreign_key_violation: Option<String> = tx
         .query_row("PRAGMA foreign_key_check", [], |row| row.get(0))
         .optional()
-        .map_err(|e| DatabaseError::Query {
-            operation: "validate pools foreign keys".to_owned(),
-            message: e.to_string(),
-        })?;
+        .map_err(|e| DatabaseError::classify_sqlite_failure("validate pools foreign keys", e))?;
     if let Some(table) = foreign_key_violation {
         return Err(Error::MigrationIntegrity {
             table,
@@ -234,14 +227,9 @@ pub(super) fn migrate_schema(conn: &mut Connection) -> Result<(), Error> {
         });
     }
     tx.pragma_update(None, "user_version", POOLS_SCHEMA_VERSION)
-        .map_err(|e| DatabaseError::Query {
-            operation: "record pools schema version".to_owned(),
-            message: e.to_string(),
-        })?;
-    tx.commit().map_err(|e| DatabaseError::Query {
-        operation: "commit pools schema migration".to_owned(),
-        message: e.to_string(),
-    })?;
+        .map_err(|e| DatabaseError::classify_sqlite_failure("record pools schema version", e))?;
+    tx.commit()
+        .map_err(|e| DatabaseError::classify_sqlite_failure("commit pools schema migration", e))?;
     Ok(())
 }
 

@@ -22,7 +22,7 @@ use super::types::{
 #[path = "database/claims.rs"]
 mod claims;
 #[path = "database/column_names.rs"]
-mod column_names;
+pub(crate) mod column_names;
 #[path = "database/ledger.rs"]
 mod ledger;
 #[path = "database/maintenance.rs"]
@@ -117,6 +117,9 @@ impl CopyDatabase {
         let transaction = connection
             .write_tx()
             .map_err(crate::errors::DatabaseError::from)?;
+        // First, before any historical step can read a store holding both names of a
+        // renamed column as a legacy shape.
+        crate::database::schema::renames::reconcile(&transaction, &column_names::RENAMES)?;
         transaction
             .execute_batch(SCHEMA)
             .map_err(crate::errors::DatabaseError::from)?;

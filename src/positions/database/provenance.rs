@@ -5,9 +5,10 @@
 
 use rusqlite::{params, Connection};
 
+use crate::database::schema::table_has_column;
 use crate::positions::{Error, Result};
 
-use super::column_names::{add_missing_columns, has_column};
+use super::operations::add_missing_columns;
 
 /// Provenance columns, oldest first; added to tables created before provenance.
 const PROVENANCE_COLUMNS: &[(&str, &str)] = &[
@@ -45,7 +46,11 @@ const PROVENANCE_COLUMNS: &[(&str, &str)] = &[
 /// provenance from the legacy `manual_management` flag while that column exists.
 /// Returns the columns added. Runs inside the caller's transaction.
 pub(super) fn migrate_position_provenance(conn: &Connection) -> Result<Vec<&'static str>> {
-    let legacy_manual = has_column(conn, "positions", "manual_management")?;
+    let legacy_manual = table_has_column(conn, "positions", "manual_management").map_err(|e| {
+        Error::SchemaMigration {
+            detail: format!("failed to inspect positions schema: {e}"),
+        }
+    })?;
     let added = add_missing_columns(conn, "positions", PROVENANCE_COLUMNS)?;
 
     if legacy_manual {
@@ -88,7 +93,9 @@ const POSITION_CHILD_TABLES: &[&str] = &[
 /// the caller's transaction with foreign keys off, so it deletes the twin's child rows
 /// itself.
 pub(super) fn merge_ledger_duplicates(conn: &Connection) -> Result<u64> {
-    if !has_column(conn, "positions", "round_key")? {
+    if !table_has_column(conn, "positions", "round_key").map_err(|e| Error::SchemaMigration {
+        detail: format!("failed to inspect positions schema: {e}"),
+    })? {
         return Ok(0);
     }
 

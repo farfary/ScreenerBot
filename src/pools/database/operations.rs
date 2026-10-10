@@ -89,18 +89,12 @@ impl PoolsDatabase {
             .idle_timeout(None)
             .max_lifetime(None)
             .build(manager)
-            .map_err(|e| DatabaseError::Query {
-                operation: "open pools database".to_owned(),
-                message: e.to_string(),
-            })?;
+            .map_err(DatabaseError::from)?;
 
         // Migrate the schema on one checkout before the writer task or any
         // other reader exists.
         {
-            let mut conn = pool.get().map_err(|e| DatabaseError::Query {
-                operation: "open pools database".to_owned(),
-                message: e.to_string(),
-            })?;
+            let mut conn = pool.get().map_err(DatabaseError::from)?;
             migrate_schema(&mut conn)?;
         }
 
@@ -125,10 +119,7 @@ impl PoolsDatabase {
         // their pool.
         let pool_policy = PoolBlacklistPolicy::from_config();
 
-        let conn = pool.get().map_err(|e| DatabaseError::Query {
-            operation: "load pool blacklist".to_owned(),
-            message: e.to_string(),
-        })?;
+        let conn = pool.get().map_err(DatabaseError::from)?;
 
         // Accounts
         let account_keys = match conn

@@ -219,7 +219,27 @@ impl From<tokio::time::error::Elapsed> for Error {
     }
 }
 
+impl crate::database::recovery::StoreOpenError for Error {
+    fn database_error(&self) -> Option<&DatabaseError> {
+        Error::database_error(self)
+    }
+}
+
 impl Error {
+    /// The classified storage failure this error carries, directly or inside the
+    /// error of a store-owning domain.
+    pub fn database_error(&self) -> Option<&DatabaseError> {
+        match self {
+            Error::Database(error)
+            | Error::Positions(crate::positions::Error::Database(error))
+            | Error::Transactions(crate::transactions::Error::Database(error))
+            | Error::Trader(crate::trader::Error::Database(error))
+            | Error::Wallets(crate::wallets::Error::Database(error))
+            | Error::Pools(crate::pools::Error::Database(error)) => Some(error),
+            _ => None,
+        }
+    }
+
     /// The store files whose upgrade refused, when this error is such a refusal. These
     /// opens run in one transaction, or only add tables, so the store is unchanged.
     pub fn storage_upgrade_database(&self) -> Option<String> {
@@ -227,6 +247,9 @@ impl Error {
             DatabaseError::Backup { store, .. } => Some(store.clone()),
             _ => None,
         };
+        if let Some(DatabaseError::SchemaConflict { store, .. }) = self.database_error() {
+            return Some(store.clone());
+        }
         match self {
             Error::Positions(
                 crate::positions::Error::SchemaMigration { .. }

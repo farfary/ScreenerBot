@@ -10,13 +10,13 @@ use rusqlite::{params, Connection, OptionalExtension};
 use std::sync::atomic::Ordering;
 
 use crate::database::backup::back_up_before_upgrade;
+use crate::database::schema::{self, table_has_column};
 use crate::database::{self, WriteTransaction};
 use crate::errors::DatabaseError;
 use crate::logger::{self, LogTag};
 use crate::positions::types::{Position, PositionManagement, PositionOrigin};
 use crate::positions::{Error, Result};
 
-use super::column_names::{add_missing_columns, rename_unit_neutral_columns};
 use super::open_round::{install_open_round_index, query_open_round_id, OPEN_ROUND_INDEX_NAME};
 use super::provenance::{merge_ledger_duplicates, migrate_position_provenance};
 use super::raw_migration::{canonicalize_amount_tables, migrate_pending_partial_exit_amounts};
@@ -154,6 +154,10 @@ impl PositionsDatabase {
             StoredSchema::Recorded(stored) if stored == self.schema_version => None,
             StoredSchema::Recorded(stored) => Some(Some(stored.to_string())),
         };
+        // First of the open's steps, after the read-only version check so a newer
+        // store is still refused as too new. No renamed object here has a merge rule,
+        // so reconcile only refuses and writes nothing ahead of the backup.
+        schema::renames::reconcile(&tx, &super::column_names::RENAMES)?;
         if let Some(from) = upgrade_from {
             let backup =
                 back_up_before_upgrade(std::path::Path::new(&self.database_path), from.as_deref())?;
@@ -192,7 +196,7 @@ impl PositionsDatabase {
             summary.push(format!("added positions columns {}", added.join(", ")));
         }
 
-        match rename_unit_neutral_columns(&tx)? {
+        match schema::renames::rename(&tx, &super::column_names::RENAMES)? {
             0 => {}
             renamed => summary.push(format!("renamed {renamed} unit columns")),
         }
@@ -1046,6 +1050,30 @@ pub(super) fn write_position_row(
             chain,
         ],
     )
+}
+
+/// Add each `(column, ALTER TABLE ...)` the table does not have yet and return the
+/// columns added. A column already present is left as it is; an ALTER that fails
+/// refuses the open.
+pub(super) fn add_missing_columns(
+    conn: &Connection,
+    table: &str,
+    columns: &[(&'static str, &str)],
+) -> Result<Vec<&'static str>> {
+    let mut added = Vec::new();
+    for (column, sql) in columns {
+        let present =
+            table_has_column(conn, table, column).map_err(|e| Error::SchemaMigration {
+                detail: format!("failed to inspect {table} schema: {e}"),
+            })?;
+        if !present {
+            conn.execute(sql, []).map_err(|e| Error::SchemaMigration {
+                detail: format!("failed to add {table}.{column}: {e}"),
+            })?;
+            added.push(*column);
+        }
+    }
+    Ok(added)
 }
 
 #[cfg(test)]

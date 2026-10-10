@@ -8,6 +8,7 @@ use super::super::types::{PoolBlacklistPolicy, PriceResult, PRICE_HISTORY_MAX_EN
 use super::operations::PoolsDatabase;
 use super::types::{BlacklistedAccountRecord, BlacklistedPoolRecord, PoolFailureOutcome};
 use crate::chains::{ChainId, PerChain};
+use crate::database::{catalog, recovery};
 use crate::pools::Error;
 
 use arc_swap::ArcSwapOption;
@@ -37,10 +38,16 @@ pub(crate) fn database(chain: ChainId) -> Option<Arc<PoolsDatabase>> {
     DATABASES.get(chain).load_full()
 }
 
-/// Open `chain`'s pools database and install it into that chain's slot.
+/// Open `chain`'s pools database, rebuilding it when its file or schema is unusable,
+/// and install it into that chain's slot.
 pub async fn initialize_database(chain: ChainId) -> Result<(), Error> {
-    let mut db = PoolsDatabase::new(chain);
-    db.initialize().await?;
+    let path = catalog::POOLS.path(chain);
+    let db = recovery::open_cache_store(&catalog::POOLS, &path, || async {
+        let mut db = PoolsDatabase::new(chain);
+        db.initialize().await?;
+        Ok::<_, Error>(db)
+    })
+    .await?;
     install_database(Arc::new(db));
     Ok(())
 }

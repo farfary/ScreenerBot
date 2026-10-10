@@ -237,7 +237,7 @@ pub(super) fn migrate(connection: &Transaction<'_>) -> crate::trader::Result<()>
     migrate_mode_scoped_spend(connection)?;
     // Unit-neutral column names come last, so every step above reads the
     // historical shape it was written for.
-    super::column_names::rename_unit_neutral_columns(connection)?;
+    crate::database::schema::renames::rename(connection, &super::column_names::RENAMES)?;
     Ok(())
 }
 

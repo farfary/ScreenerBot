@@ -155,16 +155,31 @@ impl ErrorClass for DatabaseError {
             DatabaseError::Sqlite { .. } => Severity::Critical,
             DatabaseError::Query { .. } => Severity::Error,
             DatabaseError::Busy { .. } => Severity::Warning,
-            DatabaseError::Backup { .. } => Severity::Critical,
+            DatabaseError::Backup { .. }
+            | DatabaseError::Corrupt { .. }
+            | DatabaseError::NotADatabase { .. }
+            | DatabaseError::DiskFull { .. } => Severity::Critical,
+            DatabaseError::ReadOnly { .. }
+            | DatabaseError::CannotOpen { .. }
+            | DatabaseError::Io { .. }
+            | DatabaseError::SchemaConflict { .. } => Severity::Error,
         }
     }
 
     fn http_status(&self) -> u16 {
         match self {
-            DatabaseError::Connection { .. } | DatabaseError::Busy { .. } => 503,
+            DatabaseError::Connection { .. }
+            | DatabaseError::Busy { .. }
+            | DatabaseError::DiskFull { .. }
+            | DatabaseError::ReadOnly { .. }
+            | DatabaseError::CannotOpen { .. }
+            | DatabaseError::Io { .. } => 503,
             DatabaseError::Sqlite { .. }
             | DatabaseError::Query { .. }
-            | DatabaseError::Backup { .. } => 500,
+            | DatabaseError::Backup { .. }
+            | DatabaseError::Corrupt { .. }
+            | DatabaseError::NotADatabase { .. }
+            | DatabaseError::SchemaConflict { .. } => 500,
         }
     }
 }

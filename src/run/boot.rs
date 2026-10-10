@@ -51,13 +51,13 @@ pub async fn boot() {
         "Logger initialized, attempting to load config...",
     );
 
-    // Load configuration
+    // Load configuration. A file that cannot be read or parsed is a failed boot: the
+    // structured error reaches the terminal, the log file and the GUI shell, and the
+    // non-zero exit tells the shell the core did not start.
     if let Err(e) = load_config() {
-        logger::error(
-            LogTag::System,
-            &format!("Failed to load configuration: {e}"),
-        );
-        return;
+        crate::errors::StartupError::from(super::Error::config_load(e)).emit();
+        logger::flush();
+        std::process::exit(1);
     }
     logger::info(LogTag::System, "Configuration loaded successfully");
 

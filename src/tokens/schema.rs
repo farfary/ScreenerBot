@@ -11,7 +11,7 @@
 //! - _at: Suffix for all timestamps (consistent)
 
 use super::migrations;
-use crate::database;
+use crate::database::{self, schema};
 use crate::errors::DatabaseError;
 use crate::logger::{self, LogTag};
 use crate::tokens::Error;
@@ -405,9 +405,10 @@ pub fn initialize_schema(conn: &Connection) -> Result<(), Error> {
         }
     })?;
 
-    // Unit-neutral column names come first, so the chain rebuild copies and
-    // every later step reads the canonical names.
-    super::column_names::rename_unit_neutral_columns(&tx)?;
+    // Reconcile and the unit-neutral renames come first, so the chain rebuild copies
+    // and every later step reads the canonical names.
+    schema::renames::reconcile(&tx, &super::column_names::RENAMES)?;
+    schema::renames::rename(&tx, &super::column_names::RENAMES)?;
 
     // The chain rebuild copies every token table row-by-row. On a mature
     // database that is minutes of silent work between "starting" and the next
