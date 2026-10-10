@@ -1435,6 +1435,7 @@ fn a_ledger_close_of_a_bot_position_at_a_loss_past_the_limit_pauses_entries() {
                 cfg.trader.loss_limit_auto_resume = true;
             });
             reset_loss_limit_state();
+            common::start_events().await;
 
             let mut position = common::test_position(1.0, 1.0);
             position.id = None;
@@ -1486,6 +1487,11 @@ fn a_ledger_close_of_a_bot_position_at_a_loss_past_the_limit_pauses_entries() {
             assert!(
                 is_entry_blocked_by_loss_limit(),
                 "a loss past the limit closed by the ledger does not pause entries"
+            );
+            assert_eq!(
+                common::position_events("closed_externally").await,
+                1,
+                "the ledger's close is announced once"
             );
         },
     );
@@ -2725,13 +2731,13 @@ async fn book_dust_merged_rows() -> (i64, i64) {
     (closed, open)
 }
 
-/// The plan a sync makes from storage for the dust-merged round of the test mint.
-async fn plan_from_storage() -> screenerbot::positions::ledger::SyncPlan {
+/// The plan a sync makes from storage for `rounds` of the test mint.
+async fn plan_from_storage(rounds: &[LedgerRound]) -> screenerbot::positions::ledger::SyncPlan {
     let legs = db::get_trader_swap_legs().await.expect("read booked legs");
     let booked_before: HashSet<String> = legs.iter().map(|leg| leg.signature.clone()).collect();
     let existing = db::load_all_positions().await.expect("load positions");
     plan_position_writes(
-        &[dust_merged_round(common::TEST_MINT)],
+        rounds,
         &existing,
         &metadata(common::TEST_MINT, false),
         &TraderLegs::from_rows(legs),
@@ -2765,7 +2771,7 @@ fn a_sync_charges_the_open_row_only_its_share_of_a_shared_round_in_storage() {
                 .expect("open row stored");
 
             assert_eq!(
-                apply_plan(plan_from_storage().await).await,
+                apply_plan(plan_from_storage(&[dust_merged_round(common::TEST_MINT)]).await).await,
                 AppliedPlan {
                     inserted: 0,
                     updated: 1,
@@ -2806,7 +2812,7 @@ fn a_record_booked_on_another_row_after_planning_holds_back_the_write() {
                 .await
                 .expect("initialise positions database");
             let (closed_id, open_id) = book_dust_merged_rows().await;
-            let plan = plan_from_storage().await;
+            let plan = plan_from_storage(&[dust_merged_round(common::TEST_MINT)]).await;
             assert_eq!(plan.updates.len(), 1, "the round claims the open row");
 
             // The closed row's dust is sold by a late bot sale after the history was read:
@@ -2920,6 +2926,573 @@ fn a_non_shared_round_writes_while_another_row_of_the_mint_is_unverified() {
                 .expect("read closed row")
                 .expect("closed row stored");
             assert_eq!(stored.round_key.as_deref(), Some(round_key.as_str()));
+        },
+    );
+}
+
+// =============================================================================
+// A BOT ROW FOLLOWS THE ROUND OF ITS LATEST LEG
+// =============================================================================
+
+/// The bot's buy `b1` of 1.0 token for 1.0 SOL, all of it sold `s1` for 0.8 SOL in another
+/// wallet app: the wallet emptied, so the round closed.
+fn sold_out_round(mint: &str) -> LedgerRound {
+    let mut bought = open_round(mint, &format!("b1:{mint}"));
+    bought.entry_signature = Some("b1".to_owned());
+    bought.invested_native = 1.0;
+    bought.remaining_basis_native = 1.0;
+    bought.average_entry_price_native = Some(1.0);
+    bought.events = vec![acquisition("b1", LedgerEventKind::Entry, 1.0, 1.0)];
+    sold_outside(bought, "s1", 0.8)
+}
+
+/// The next round of the mint: the bot's DCA `d1` of 0.5 tokens for 0.5 SOL into the empty
+/// wallet, seen after everything in the round before it.
+fn dca_round(mint: &str) -> LedgerRound {
+    let mut bought = open_round(mint, &format!("d1:{mint}"));
+    bought.opened_at = Some(1_600_003_000);
+    bought.entry_signature = Some("d1".to_owned());
+    bought.balance_raw = 500_000;
+    bought.total_acquired_raw = 500_000;
+    bought.invested_native = 0.5;
+    bought.remaining_basis_native = 0.5;
+    bought.average_entry_price_native = Some(1.0);
+    bought.events = vec![LedgerEvent {
+        block_time: Some(1_600_003_000),
+        ..acquisition("d1", LedgerEventKind::Entry, 0.5, 0.5)
+    }];
+    bought
+}
+
+/// The bot's open row: entry `b1`, 1_000_000 raw for 1.0 SOL, and DCA `d1`, 500_000 raw for
+/// 0.5 SOL, as booked before the sale made in another wallet app reached it.
+fn following_row(round_key: Option<&str>) -> Position {
+    let mut row = bot_position(&sold_out_round(MINT));
+    row.id = Some(1);
+    row.entry_transaction_signature = Some("b1".to_owned());
+    row.token_amount = Some(raw(1_500_000));
+    row.remaining_token_amount = Some(raw(1_500_000));
+    row.total_exited_amount = raw(0);
+    row.total_size_native = 1.5;
+    row.entry_size_native = 1.0;
+    row.average_entry_price = 1.0;
+    row.dca_count = 1;
+    row.partial_exit_count = 0;
+    row.round_key = round_key.map(str::to_owned);
+    row
+}
+
+/// The open row's booked legs: its entry `b1` and its DCA `d1`.
+fn following_legs() -> HashMap<i64, TraderLegs> {
+    HashMap::from([(
+        1i64,
+        TraderLegs {
+            entry_signatures: HashSet::from(["b1".to_owned(), "d1".to_owned()]),
+            exit_signatures: HashSet::new(),
+            booked_invested_native: 1.5,
+            booked_acquired: raw(1_500_000),
+        },
+    )])
+}
+
+/// The bot's buy `b1` of 1.0 token for 1.0 SOL and its full exit `x1` for 1.2 SOL.
+fn exited_round(mint: &str) -> LedgerRound {
+    let mut exited = round(mint, &format!("b1:{mint}"));
+    exited.entry_signature = Some("b1".to_owned());
+    exited.exit_signature = Some("x1".to_owned());
+    exited.invested_native = 1.0;
+    exited.realized_proceeds_native = 1.2;
+    exited.realized_cost_native = 1.0;
+    exited.average_entry_price_native = Some(1.0);
+    exited.average_exit_price_native = Some(1.2);
+    exited.realized_pnl_native = Some(0.2);
+    exited.events = vec![
+        acquisition("b1", LedgerEventKind::Entry, 1.0, 1.0),
+        disposal("x1", LedgerEventKind::Exit, 1.0, 1.2),
+    ];
+    exited
+}
+
+/// The row after its full exit `x1` and the late DCA `d1` that reopened it: the closing sale
+/// counts as a partial exit, and the row still carries the key of the round it closed.
+fn reopened_row() -> Position {
+    let mut row = following_row(Some(&format!("b1:{MINT}")));
+    row.remaining_token_amount = Some(raw(500_000));
+    row.total_exited_amount = raw(1_000_000);
+    row.partial_exit_count = 1;
+    row.native_received = Some(1.2);
+    row
+}
+
+/// The reopened row's booked legs: entry `b1`, exit `x1`, DCA `d1`.
+fn reopened_legs() -> HashMap<i64, TraderLegs> {
+    let mut legs = following_legs();
+    legs.get_mut(&1)
+        .expect("row legs")
+        .exit_signatures
+        .insert("x1".to_owned());
+    legs
+}
+
+/// The rows, legs and rounds of an open row whose holding spans two rounds.
+type SpanningCase = (Vec<LedgerRound>, Vec<Position>, HashMap<i64, TraderLegs>);
+
+/// The bot's DCA after a sale of everything in another wallet app.
+fn dca_after_outside_sell_all(round_key: Option<&str>) -> SpanningCase {
+    (
+        vec![sold_out_round(MINT), dca_round(MINT)],
+        vec![following_row(round_key)],
+        following_legs(),
+    )
+}
+
+/// The late DCA that reopened the row after its full exit.
+fn late_dca_after_full_exit() -> SpanningCase {
+    (
+        vec![exited_round(MINT), dca_round(MINT)],
+        vec![reopened_row()],
+        reopened_legs(),
+    )
+}
+
+/// The bot's DCA after a sale of everything in another wallet app, then the DCA's round sold
+/// `s2` for 0.4 SOL in another wallet app too.
+fn dca_round_sold_outside() -> SpanningCase {
+    let mut row = following_row(Some(&format!("b1:{MINT}")));
+    row.entry_fee_raw = Some(5_000);
+    row.exit_fee_raw = Some(5_000);
+    (
+        vec![
+            sold_out_round(MINT),
+            sold_outside(dca_round(MINT), "s2", 0.4),
+        ],
+        vec![row],
+        following_legs(),
+    )
+}
+
+fn plan_case(case: &SpanningCase) -> screenerbot::positions::ledger::SyncPlan {
+    let (rounds, rows, legs) = case;
+    plan_position_writes(
+        rounds,
+        rows,
+        &metadata(MINT, false),
+        legs,
+        &no_busy(),
+        now(),
+    )
+}
+
+#[test]
+fn a_bot_buy_after_an_outside_sell_all_follows_the_new_round() {
+    // Keyed by the earlier round, or adoptable by its entry signature there: either way the
+    // earlier round neither closes the row nor leaves the DCA's round to a twin.
+    let earlier_key = format!("b1:{MINT}");
+    for round_key in [Some(earlier_key.as_str()), None] {
+        let plan = plan_case(&dca_after_outside_sell_all(round_key));
+
+        assert!(plan.round_key_releases.is_empty(), "key: {round_key:?}");
+        let followed = only_update(&plan);
+        assert_eq!(followed.id, Some(1));
+        assert!(
+            followed.exit_time.is_none(),
+            "the row was closed against the earlier round, key: {round_key:?}"
+        );
+        assert_eq!(followed.round_key, Some(format!("d1:{MINT}")));
+        assert_eq!(followed.remaining_token_amount, Some(raw(500_000)));
+        assert_eq!(followed.total_exited_amount, raw(1_000_000));
+        assert_eq!(followed.token_amount, Some(raw(1_500_000)));
+        assert!((followed.total_size_native - 1.5).abs() < 1e-12);
+        assert_eq!(followed.native_received, None);
+        assert_eq!(followed.pnl, None);
+        assert_eq!(followed.closed_reason, None);
+    }
+}
+
+#[test]
+fn a_late_dca_after_a_full_exit_keeps_the_reopened_row_on_its_new_round() {
+    let case = late_dca_after_full_exit();
+    let plan = plan_case(&case);
+
+    let followed = only_update(&plan);
+    assert_eq!(followed.id, Some(1));
+    assert_eq!(followed.round_key, Some(format!("d1:{MINT}")));
+    assert_eq!(
+        books(followed),
+        books(&case.1[0]),
+        "the earlier round resized or closed the reopened row"
+    );
+    assert!(plan.round_key_releases.is_empty());
+}
+
+#[test]
+fn a_closed_round_holding_only_a_bot_row_s_legs_is_never_imported() {
+    // The reopened row closed again by the bot's own sale `x2` of the DCA's tokens: both
+    // rounds are closed and every leg in them is booked on the row.
+    let (_, mut rows, mut legs) = late_dca_after_full_exit();
+    let row = &mut rows[0];
+    row.exit_time = Some(Utc.timestamp_opt(1_600_003_500, 0).unwrap());
+    row.exit_transaction_signature = Some("x2".to_owned());
+    row.transaction_exit_verified = true;
+    row.closed_reason = Some("exit_verified".to_owned());
+    row.remaining_token_amount = Some(raw(0));
+    row.total_exited_amount = raw(1_500_000);
+    let closed = row.clone();
+    legs.get_mut(&1)
+        .expect("row legs")
+        .exit_signatures
+        .insert("x2".to_owned());
+    // The DCA's round, closed by the bot's sale `x2` of 0.5 tokens for 0.6 SOL.
+    let rounds = vec![exited_round(MINT), sold_outside(dca_round(MINT), "x2", 0.6)];
+
+    let plan = plan_case(&(rounds, rows, legs));
+
+    assert!(plan.inserts.is_empty(), "{:?}", plan.inserts);
+    for update in &plan.updates {
+        assert_eq!(books(&update.position), books(&closed));
+    }
+}
+
+#[test]
+fn an_outside_close_of_the_new_round_books_the_earlier_round_s_outside_proceeds_once() {
+    let case = dca_round_sold_outside();
+    let plan = plan_case(&case);
+
+    let sold = only_update(&plan);
+    assert_eq!(sold.id, Some(1));
+    assert!(sold.exit_time.is_some(), "the outside sale closes the row");
+    assert_eq!(sold.closed_reason.as_deref(), Some("closed_externally"));
+    assert_eq!(sold.remaining_token_amount, Some(raw(0)));
+    assert_eq!(sold.total_exited_amount, raw(1_500_000));
+    let received = sold.native_received.expect("proceeds booked");
+    assert!(
+        (received - 1.2).abs() < 1e-12,
+        "both outside sales are the row's: {received}"
+    );
+    let exit_price = sold.exit_price.expect("exit price");
+    assert!((exit_price - 0.8).abs() < 1e-9, "{exit_price}");
+    let fees = screenerbot::positions::calculate_position_total_fees(sold);
+    assert!(fees > 0.0);
+    let expected = received - sold.total_size_native - fees;
+    let pnl = sold.pnl.expect("pnl");
+    assert!((pnl - expected).abs() < 1e-12, "{pnl} != {expected}");
+
+    let (rounds, _, legs) = case;
+    let again = plan_case(&(rounds, vec![sold.clone()], legs));
+    assert!(again.is_empty(), "{:?} {:?}", again.updates, again.inserts);
+}
+
+#[test]
+fn a_row_reopened_after_a_ledger_close_is_never_charged_the_earlier_sale_twice() {
+    // The ledger closed the row against the outside sale `s1`, and the late DCA `d1` reopened
+    // it: `s1` counts as a partial exit the row has no record of, and its 0.8 SOL is booked.
+    let mut row = following_row(Some(&format!("b1:{MINT}")));
+    row.remaining_token_amount = Some(raw(500_000));
+    row.total_exited_amount = raw(1_000_000);
+    row.partial_exit_count = 1;
+    row.native_received = Some(0.8);
+
+    let held = plan_case(&(
+        vec![sold_out_round(MINT), dca_round(MINT)],
+        vec![row.clone()],
+        following_legs(),
+    ));
+    let followed = only_update(&held);
+    assert_eq!(followed.round_key, Some(format!("d1:{MINT}")));
+    assert_eq!(
+        books(followed),
+        books(&row),
+        "the row was not left as booked"
+    );
+
+    let sold = plan_case(&(
+        vec![
+            sold_out_round(MINT),
+            sold_outside(dca_round(MINT), "s2", 0.4),
+        ],
+        vec![row],
+        following_legs(),
+    ));
+    let closed = only_update(&sold);
+    assert!(
+        closed.exit_time.is_some(),
+        "the outside sale closes the row"
+    );
+    assert_eq!(
+        closed.native_received,
+        Some(0.8),
+        "a sale was counted twice"
+    );
+    assert_eq!(closed.pnl, None);
+    assert!(!closed.history_complete);
+}
+
+#[test]
+fn reconciling_a_row_across_rounds_twice_plans_no_second_write() {
+    for case in [
+        dca_after_outside_sell_all(Some(&format!("b1:{MINT}"))),
+        late_dca_after_full_exit(),
+        dca_round_sold_outside(),
+    ] {
+        let first = plan_case(&case);
+        let settled = only_update(&first).clone();
+        let (rounds, _, legs) = case;
+
+        let second = plan_case(&(rounds, vec![settled], legs));
+        assert!(
+            second.is_empty(),
+            "{:?} {:?}",
+            second.updates,
+            second.inserts
+        );
+    }
+}
+
+#[test]
+fn a_late_dca_after_a_full_exit_follows_its_round_in_storage_without_a_loss() {
+    common::run_isolated(
+        "a_late_dca_after_a_full_exit_follows_its_round_in_storage_without_a_loss",
+        || async {
+            use screenerbot::trader::safety::loss_limit::{
+                get_loss_limit_status, is_entry_blocked_by_loss_limit, reset_loss_limit_state,
+            };
+            let _dir = common::isolated_env();
+            let _cfg = common::config_guard();
+            screenerbot::paths::ensure_all_directories().expect("create data directories");
+            common::configure_own_wallet();
+            common::seed_decimals(common::TEST_MINT, 6);
+            screenerbot::positions::initialize_positions_database()
+                .await
+                .expect("initialise positions database");
+            common::set_config(|cfg| {
+                cfg.trader.loss_limit_enabled = true;
+                cfg.trader.loss_limit_sol = 0.5;
+                cfg.trader.loss_limit_period_hours = 24;
+                cfg.trader.loss_limit_auto_resume = true;
+            });
+            reset_loss_limit_state();
+            // The late DCA that reopens the row takes a trading slot back.
+            state::init_global_position_semaphore(1);
+
+            let id = store_unverified("b1").await;
+            apply_transition(PositionTransition::EntryVerified {
+                position_id: id,
+                effective_entry_price: 1.0,
+                token_amount_units: RawAmount::new(1_000_000),
+                fee_raw: 5_000,
+                native_size: 1.0,
+                held_after: None,
+            })
+            .await
+            .expect("the entry commits");
+            apply_transition(PositionTransition::ExitVerified {
+                position_id: id,
+                effective_exit_price: 1.2,
+                native_received: 1.2,
+                fee_raw: 5_000,
+                exit_time: Utc::now(),
+                exit_signature: "x1".to_owned(),
+                exit_amount: RawAmount::new(1_000_000),
+                held_after: None,
+            })
+            .await
+            .expect("the full exit commits");
+            let exited = exited_round(common::TEST_MINT);
+            assert_eq!(
+                apply_plan(plan_from_storage(std::slice::from_ref(&exited)).await)
+                    .await
+                    .updated,
+                1,
+                "the round keys the closed row"
+            );
+
+            apply_transition(PositionTransition::DcaVerified {
+                position_id: id,
+                tokens_bought: RawAmount::new(500_000),
+                native_spent: 1.0,
+                effective_price: 2.0,
+                fee_raw: 5_000,
+                dca_time: Utc::now(),
+                dca_signature: "d1".to_owned(),
+                held_after: Some(RawAmount::new(500_000)),
+            })
+            .await
+            .expect("the late DCA commits");
+            let reopened = db::get_position_by_id(id)
+                .await
+                .expect("read stored position")
+                .expect("position stored");
+            assert!(reopened.exit_time.is_none(), "the late DCA reopens the row");
+
+            let plan = plan_from_storage(&[exited, dca_round(common::TEST_MINT)]).await;
+            assert_eq!(
+                apply_plan(plan).await,
+                AppliedPlan {
+                    inserted: 0,
+                    updated: 1,
+                    skipped: 0,
+                }
+            );
+
+            let stored = db::get_position_by_id(id)
+                .await
+                .expect("read stored position")
+                .expect("position stored");
+            let live = state::get_position_by_id(id)
+                .await
+                .expect("position in memory");
+            for position in [&stored, &live] {
+                assert!(position.exit_time.is_none(), "the ledger closed the row");
+                assert_eq!(
+                    position.round_key,
+                    Some(format!("d1:{}", common::TEST_MINT))
+                );
+                assert_eq!(position.remaining_token_amount, Some(raw(500_000)));
+                assert_eq!(position.pnl, None);
+            }
+            let rows_of_mint = db::load_all_positions()
+                .await
+                .expect("load positions")
+                .into_iter()
+                .filter(|position| position.mint == common::TEST_MINT)
+                .count();
+            assert_eq!(rows_of_mint, 1, "the DCA's round was imported as a twin");
+            assert_eq!(get_loss_limit_status().cumulative_loss_native, 0.0);
+            assert!(!is_entry_blocked_by_loss_limit());
+        },
+    );
+}
+
+// =============================================================================
+// A CLOSE IS ANNOUNCED BY THE WRITE THAT MADE IT
+// =============================================================================
+
+#[test]
+fn a_key_stamp_on_a_position_the_bot_closed_announces_no_close() {
+    common::run_isolated(
+        "a_key_stamp_on_a_position_the_bot_closed_announces_no_close",
+        || async {
+            let _dir = common::isolated_env();
+            let _cfg = common::config_guard();
+            screenerbot::paths::ensure_all_directories().expect("create data directories");
+            common::configure_own_wallet();
+            common::seed_decimals(common::TEST_MINT, 6);
+            screenerbot::positions::initialize_positions_database()
+                .await
+                .expect("initialise positions database");
+            common::start_events().await;
+
+            // A position that bought `a1` and sold all of it `x1`.
+            let closed_id = store_unverified("a1").await;
+            apply_transition(PositionTransition::EntryVerified {
+                position_id: closed_id,
+                effective_entry_price: 1.0,
+                token_amount_units: RawAmount::new(1_000_000),
+                fee_raw: 5_000,
+                native_size: 1.0,
+                held_after: None,
+            })
+            .await
+            .expect("the entry commits");
+            apply_transition(PositionTransition::ExitVerified {
+                position_id: closed_id,
+                effective_exit_price: 1.2,
+                native_received: 1.2,
+                fee_raw: 5_000,
+                exit_time: Utc::now(),
+                exit_signature: "x1".to_owned(),
+                exit_amount: RawAmount::new(1_000_000),
+                held_after: None,
+            })
+            .await
+            .expect("the exit commits");
+
+            let round_key = format!("a1:{}", common::TEST_MINT);
+            let mut round = round(common::TEST_MINT, &round_key);
+            round.entry_signature = Some("a1".to_owned());
+            round.exit_signature = Some("x1".to_owned());
+            round.events = vec![
+                acquisition("a1", LedgerEventKind::Entry, 1.0, 1.0),
+                disposal("x1", LedgerEventKind::Exit, 1.0, 1.2),
+            ];
+
+            assert_eq!(
+                apply_plan(plan_from_storage(std::slice::from_ref(&round)).await)
+                    .await
+                    .updated,
+                1,
+                "the round keys the closed row"
+            );
+            let stored = db::get_position_by_id(closed_id)
+                .await
+                .expect("read closed row")
+                .expect("closed row stored");
+            assert_eq!(stored.round_key.as_deref(), Some(round_key.as_str()));
+            assert_eq!(common::position_events("closed_externally").await, 0);
+        },
+    );
+}
+
+#[test]
+fn an_archived_position_the_ledger_shrinks_announces_no_close() {
+    common::run_isolated(
+        "an_archived_position_the_ledger_shrinks_announces_no_close",
+        || async {
+            let _dir = common::isolated_env();
+            let _cfg = common::config_guard();
+            screenerbot::paths::ensure_all_directories().expect("create data directories");
+            common::configure_own_wallet();
+            common::seed_decimals(common::TEST_MINT, 6);
+            screenerbot::positions::initialize_positions_database()
+                .await
+                .expect("initialise positions database");
+            common::start_events().await;
+
+            let id = store_unverified("a1").await;
+            apply_transition(PositionTransition::EntryVerified {
+                position_id: id,
+                effective_entry_price: 1.0,
+                token_amount_units: RawAmount::new(1_000_000),
+                fee_raw: 5_000,
+                native_size: 1.0,
+                held_after: None,
+            })
+            .await
+            .expect("the entry commits");
+            assert!(db::set_position_archived_db(id, true)
+                .await
+                .expect("archive the row"));
+            assert!(state::set_position_archived_in_memory(id, true).await);
+
+            // 0.4 tokens of the holding were sold for 0.3 SOL in another wallet app.
+            let mut round = open_round(common::TEST_MINT, &format!("a1:{}", common::TEST_MINT));
+            round.entry_signature = Some("a1".to_owned());
+            round.invested_native = 1.0;
+            round.average_entry_price_native = Some(1.0);
+            round.balance_raw = 600_000;
+            round.total_disposed_raw = 400_000;
+            round.exit_count = 1;
+            round.realized_proceeds_native = 0.3;
+            round.events = vec![
+                acquisition("a1", LedgerEventKind::Entry, 1.0, 1.0),
+                disposal("s", LedgerEventKind::PartialExit, 0.4, 0.3),
+            ];
+
+            assert_eq!(
+                apply_plan(plan_from_storage(std::slice::from_ref(&round)).await)
+                    .await
+                    .updated,
+                1,
+                "the round shrinks the archived row"
+            );
+            let stored = db::get_position_by_id(id)
+                .await
+                .expect("read stored position")
+                .expect("position stored");
+            assert!(stored.exit_time.is_none(), "the row stays open");
+            assert!(stored.archived);
+            assert_eq!(stored.remaining_token_amount, Some(raw(600_000)));
+            assert_eq!(common::position_events("closed_externally").await, 0);
         },
     );
 }

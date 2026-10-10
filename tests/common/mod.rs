@@ -283,6 +283,24 @@ pub fn configure_own_wallet() -> String {
     address
 }
 
+/// Turns event recording on and starts the events store.
+pub async fn start_events() {
+    set_config(|cfg| cfg.events.enabled = true);
+    screenerbot::paths::ensure_all_directories().expect("create data directories");
+    screenerbot::events::init().await.expect("start events");
+}
+
+/// The position events of the test mint with `subtype`, once the events writer flushed.
+pub async fn position_events(subtype: &str) -> usize {
+    tokio::time::sleep(std::time::Duration::from_millis(2_500)).await;
+    screenerbot::events::by_mint(TEST_MINT, 500)
+        .await
+        .expect("read events")
+        .iter()
+        .filter(|event| event.subtype.as_deref() == Some(subtype))
+        .count()
+}
+
 // ==================== FIXTURES ====================
 
 /// A mint that is guaranteed not to exist on chain, so nothing can be fetched for it.

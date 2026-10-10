@@ -22,12 +22,13 @@
 //!    and holds the same mint — the trader's own row for the very swap this round was
 //!    reduced from. Claiming it is called ADOPTION, and it happens at most once per row.
 //!
-//! A mint has one open position, and every buy of its round is booked onto it. A round
-//! either step matched to a CLOSED row therefore belongs to the mint's open row instead
-//! when that row's own entry is one of the round's acquisitions: a position written off
-//! while its entry was in flight, whose late entry was handed to the open row, shares the
-//! open row's round and must not hold it. The closed row stays as it is settled, and gives
-//! up the round key so the open row can carry it.
+//! A mint has one open position, and every buy of its round is booked onto it. An open bot
+//! row belongs to its home round, the latest round holding one of its own legs, and no
+//! other round claims it. A round either step matched to a CLOSED row therefore belongs to
+//! the open row homed there instead: a position written off while its entry was in flight,
+//! whose late entry was handed to the open row, shares the open row's round and must not
+//! hold it. The closed row stays as it is settled, and gives up the round key so the open
+//! row can carry it.
 //!
 //! # Ownership boundary
 //!
@@ -198,13 +199,19 @@ impl RoundAttribution {
             .any(|event| self.booked_elsewhere.contains(&event.signature))
     }
 
+    /// True when the row is charged only a part of `round`: earlier rounds hold some of its
+    /// legs, or another position of the mint booked one of the round's signatures.
+    fn charges_part(&self, round: &LedgerRound, earlier: &[LedgerRound]) -> bool {
+        !earlier.is_empty() || self.shares(round)
+    }
+
     /// True when `signature` is one of this row's own: a booked leg or its entry.
     fn is_own(&self, signature: &str) -> bool {
         self.own.booked(signature) || self.own_entry_signature.as_deref() == Some(signature)
     }
 }
 
-/// A row's part of a round it shares with another position of its mint.
+/// A row's part of the rounds holding its legs, when it is charged only a part.
 #[derive(Debug, Clone)]
 struct RoundShare {
     /// The row's booked acquisitions plus every outside acquisition of its part, raw.
@@ -221,6 +228,8 @@ struct RoundShare {
     basis_known: bool,
     /// What the outside disposals of the part received, when every one was priced in SOL.
     outside_proceeds: Option<OutsideProceeds>,
+    /// Every round of the part reconciles with the balances observed.
+    history_complete: bool,
 }
 
 /// SOL received for whole tokens sold outside the bot.
@@ -230,22 +239,27 @@ struct OutsideProceeds {
     tokens: f64,
 }
 
-/// The row's part of a shared `round`: the events from its first own event to the end of
-/// the round. `None` when the round is not shared, the row's records do not cover its
-/// entry, every DCA and every partial exit, or none of the round's events is the row's own.
+/// The row's part of `round`, its home round, and of the `earlier` rounds holding its legs.
+/// In a round another position of the mint booked part of, the part runs from the row's
+/// first own event to the end of that round; in any other round of the span it is the whole
+/// round. `None` when the row is not charged a part, the row's records do not cover its
+/// entry, every DCA and every partial exit, or a shared round holds none of the row's own
+/// events.
 ///
-/// The row's own legs come from its records. An event the row booked is skipped, and an
-/// event another position booked belongs to that position; every other event of the part
-/// happened outside the bot and is the row's. A leg the row booked without a record would
-/// be counted as outside, so a row missing one has no part that can be told apart.
-fn round_share(round: &LedgerRound, attribution: &RoundAttribution) -> Option<RoundShare> {
-    if !attribution.shares(round) || !attribution.records_complete {
+/// The row's own legs come from its records and are counted once, whatever the number of
+/// rounds they lie in. An event the row booked is skipped, and an event another position
+/// booked belongs to that position; every other event of the part happened outside the bot
+/// and is the row's. A leg the row booked without a record would be counted as outside, so
+/// a row missing one has no part that can be told apart. What the row holds is the home
+/// round's balance: the earlier rounds ended at zero.
+fn round_share(
+    round: &LedgerRound,
+    earlier: &[LedgerRound],
+    attribution: &RoundAttribution,
+) -> Option<RoundShare> {
+    if !attribution.charges_part(round, earlier) || !attribution.records_complete {
         return None;
     }
-    let start = round
-        .events
-        .iter()
-        .position(|event| attribution.is_own(&event.signature))?;
 
     let own = &attribution.own;
     let mut acquired = own.booked_acquired;
@@ -256,52 +270,69 @@ fn round_share(round: &LedgerRound, attribution: &RoundAttribution) -> Option<Ro
     let mut disposed = RawAmount::ZERO;
     let mut proceeds_native = 0.0;
     let mut disposals_priced = true;
+    let mut basis_complete = true;
+    let mut history_complete = true;
+    let mut exits_priced = true;
 
-    let outside = round.events[start..].iter().filter(|event| {
-        !attribution.is_own(&event.signature)
-            && !attribution.booked_elsewhere.contains(&event.signature)
-    });
-    for event in outside {
-        let sol = event
-            .quote
-            .filter(|quote| quote.asset == QuoteAsset::Sol)
-            .map(|quote| quote.amount);
-        match event.kind {
-            LedgerEventKind::Entry | LedgerEventKind::Add | LedgerEventKind::Receive => {
-                has_outside_acquisition = true;
-                acquired = acquired
-                    .checked_add(event.amount_raw)
-                    .unwrap_or(RawAmount::MAX);
-                if event.kind == LedgerEventKind::Receive {
-                    outside_acquisitions_priced = false;
-                    continue;
+    for part_round in earlier.iter().chain(std::iter::once(round)) {
+        let start = if attribution.shares(part_round) {
+            part_round
+                .events
+                .iter()
+                .position(|event| attribution.is_own(&event.signature))?
+        } else {
+            0
+        };
+        basis_complete &= part_round.basis_complete;
+        history_complete &= part_round.history_complete;
+        exits_priced &=
+            part_round.exit_count == 0 || part_round.average_exit_price_native.is_some();
+
+        let outside = part_round.events[start..].iter().filter(|event| {
+            !attribution.is_own(&event.signature)
+                && !attribution.booked_elsewhere.contains(&event.signature)
+        });
+        for event in outside {
+            let sol = event
+                .quote
+                .filter(|quote| quote.asset == QuoteAsset::Sol)
+                .map(|quote| quote.amount);
+            match event.kind {
+                LedgerEventKind::Entry | LedgerEventKind::Add | LedgerEventKind::Receive => {
+                    has_outside_acquisition = true;
+                    acquired = acquired
+                        .checked_add(event.amount_raw)
+                        .unwrap_or(RawAmount::MAX);
+                    if event.kind == LedgerEventKind::Receive {
+                        outside_acquisitions_priced = false;
+                        continue;
+                    }
+                    entries = entries.saturating_add(1);
+                    match sol {
+                        Some(sol) => invested_native += sol,
+                        None => outside_acquisitions_priced = false,
+                    }
                 }
-                entries = entries.saturating_add(1);
-                match sol {
-                    Some(sol) => invested_native += sol,
-                    None => outside_acquisitions_priced = false,
+                LedgerEventKind::PartialExit | LedgerEventKind::Exit => {
+                    disposed = disposed
+                        .checked_add(event.amount_raw)
+                        .unwrap_or(RawAmount::MAX);
+                    match sol {
+                        Some(sol) => proceeds_native += sol,
+                        None => disposals_priced = false,
+                    }
                 }
+                LedgerEventKind::Send => disposals_priced = false,
             }
-            LedgerEventKind::PartialExit | LedgerEventKind::Exit => {
-                disposed = disposed
-                    .checked_add(event.amount_raw)
-                    .unwrap_or(RawAmount::MAX);
-                match sol {
-                    Some(sol) => proceeds_native += sol,
-                    None => disposals_priced = false,
-                }
-            }
-            LedgerEventKind::Send => disposals_priced = false,
         }
     }
 
     let disposed_tokens = disposed.to_whole_units(round.decimals);
     let outside_proceeds =
-        (round.average_exit_price_native.is_some() && disposals_priced && disposed_tokens > DUST)
-            .then_some(OutsideProceeds {
-                native: proceeds_native,
-                tokens: disposed_tokens,
-            });
+        (exits_priced && disposals_priced && disposed_tokens > DUST).then_some(OutsideProceeds {
+            native: proceeds_native,
+            tokens: disposed_tokens,
+        });
 
     Some(RoundShare {
         acquired,
@@ -313,8 +344,9 @@ fn round_share(round: &LedgerRound, attribution: &RoundAttribution) -> Option<Ro
             acquired,
         ),
         has_outside_acquisition,
-        basis_known: round.basis_complete && outside_acquisitions_priced,
+        basis_known: basis_complete && outside_acquisitions_priced,
         outside_proceeds,
+        history_complete,
     })
 }
 
@@ -343,15 +375,19 @@ pub struct SyncPlan {
     booked_before: Option<HashSet<String>>,
 }
 
-/// A rewrite of an existing row, with the round and metadata it was derived from.
+/// A rewrite of an existing row, with the rounds and metadata it was derived from.
 ///
 /// `position` is the rewrite as planned against the rows read for the plan. The write
-/// re-derives it from the same round on the row read inside its own transaction, so a
+/// re-derives it from the same rounds on the row read inside its own transaction, so a
 /// booking committed after the plan was made is kept instead of overwritten.
 #[derive(Debug, Clone)]
 pub struct PlannedUpdate {
     pub position: Position,
     round: LedgerRound,
+    /// The earlier rounds holding this row's own legs, whose outside events are part of
+    /// what it is charged. Empty for a wallet-derived row, a closed row, and a row whose
+    /// legs lie in no earlier round.
+    earlier: Vec<LedgerRound>,
     meta: RoundMetadata,
 }
 
@@ -408,6 +444,14 @@ pub struct AppliedPlan {
 /// swap whose row or pending state is not recorded yet). A matched row for one of them is
 /// neither reconciled nor duplicated, and an unmatched round of one creates no row — the
 /// trader's own bookkeeping lands first and the next sync sees a settled position.
+///
+/// An open bot row is reconciled on its home round: the latest round, an open one first,
+/// holding one of its own legs (see [`row_homes`]). A row whose holding spans rounds (the
+/// wallet emptied between its first buy and a later DCA) is never matched by an earlier
+/// round, by key or by entry signature; the earlier rounds holding its legs add their
+/// outside events to its part instead, and its key moves to the home round with its own
+/// write. A closed round whose events include a bot row's own leg imports no row: those
+/// legs are booked on their row, and a wallet-derived copy would be its twin.
 pub fn plan_position_writes(
     rounds: &[LedgerRound],
     existing: &[Position],
@@ -453,43 +497,76 @@ pub fn plan_position_writes(
         candidates.sort_by_key(|position| (position.entry_time, position.id));
     }
 
+    let homes = row_homes(rounds, existing, trader_legs);
     let mut claimed: HashSet<i64> = HashSet::new();
     let mut plan = SyncPlan {
         now,
         ..SyncPlan::default()
     };
 
-    for round in rounds {
+    for (index, round) in rounds.iter().enumerate() {
         let meta = metadata.get(&round.mint).cloned().unwrap_or_default();
+        let belongs_here = |row: &Position| !homes.elsewhere(row, index);
         let matched = by_round_key
             .get(round.round_key.as_str())
             .copied()
-            .or_else(|| adopt_row(round, &adoptable, &mut claimed));
+            .filter(|row| belongs_here(row))
+            .or_else(|| adopt_row(round, &adoptable, &mut claimed, belongs_here));
         if let Some(id) = matched.and_then(|row| row.id) {
             claimed.insert(id);
         }
-        let open_row = matched
-            .filter(|row| row.exit_time.is_some())
-            .and_then(|_| open_row_of_round(round, existing, &claimed));
-        let current = match open_row {
-            Some(open_row) => {
-                if let Some(id) = open_row.id {
+        let home_row = homes.home_row(index, &claimed);
+        let mut key_release = None;
+        let current = match (matched, home_row) {
+            (Some(row), home_row) if row.exit_time.is_none() => {
+                if let Some(home_row) = home_row {
+                    let id = |row: &Position| row.id.map_or("?".to_owned(), |id| id.to_string());
+                    logger::warning(
+                        LogTag::Positions,
+                        &format!(
+                            "Ledger reconcile for {}: round {} matched open position {} while open position {} holds its latest legs; position {} is not reconciled this sync",
+                            short_mint(&round.mint),
+                            round.round_key,
+                            id(row),
+                            id(home_row),
+                            id(home_row)
+                        ),
+                    );
+                }
+                row
+            }
+            (Some(closed), Some(home_row)) => {
+                if let Some(id) = home_row.id {
                     claimed.insert(id);
                 }
-                open_row
-            }
-            None => match matched {
-                Some(row) => row,
-                // A bot swap of the mint in flight may be this round's own buy, whose row
-                // is saved once the swap returns; a row imported now would be its twin.
-                None if busy_mints.contains(&round.mint) => continue,
-                None => {
-                    plan.inserts.push(build_position(round, &meta, None, now));
-                    continue;
+                if closed.round_key.as_deref() == Some(round.round_key.as_str()) {
+                    key_release = closed.id.map(|position_id| RoundKeyRelease {
+                        position_id,
+                        round_key: round.round_key.clone(),
+                    });
                 }
-            },
+                home_row
+            }
+            (Some(closed), None) => closed,
+            (None, Some(home_row)) => {
+                if let Some(id) = home_row.id {
+                    claimed.insert(id);
+                }
+                home_row
+            }
+            // A closed round whose bot legs are booked on their row: a row imported now
+            // would be its twin.
+            (None, None) if !round.is_open && homes.holds_bot_leg(index) => continue,
+            // A bot swap of the mint in flight may be this round's own buy, whose row is
+            // saved once the swap returns; a row imported now would be its twin.
+            (None, None) if busy_mints.contains(&round.mint) => continue,
+            (None, None) => {
+                plan.inserts.push(build_position(round, &meta, None, now));
+                continue;
+            }
         };
 
+        let earlier = homes.earlier(current, index, rounds);
         let attribution = (!current.is_wallet_derived()).then(|| {
             let mint_positions = by_mint
                 .get(current.mint.as_str())
@@ -497,31 +574,147 @@ pub fn plan_position_writes(
                 .unwrap_or_default();
             planned_attribution(current, mint_positions, trader_legs)
         });
-        let Some(position) =
-            rewrite_row(current, round, &meta, attribution.as_ref(), busy_mints, now)
-        else {
+        let Some(position) = rewrite_row(
+            current,
+            round,
+            &earlier,
+            &meta,
+            attribution.as_ref(),
+            busy_mints,
+            now,
+        ) else {
             continue;
         };
-        if open_row.is_some() {
-            if let Some(closed) =
-                matched.filter(|row| row.round_key.as_deref() == Some(round.round_key.as_str()))
-            {
-                if let Some(position_id) = closed.id {
-                    plan.round_key_releases.push(RoundKeyRelease {
-                        position_id,
-                        round_key: round.round_key.clone(),
-                    });
-                }
-            }
-        }
+        plan.round_key_releases.extend(key_release);
         plan.updates.push(PlannedUpdate {
             position,
             round: round.clone(),
+            earlier,
             meta,
         });
     }
 
     plan
+}
+
+/// Where the own legs of each bot row lie among the rounds of one plan.
+#[derive(Debug, Default)]
+struct RowHomes<'a> {
+    /// The home round of each open bot row whose legs lie in a round of the plan.
+    home: HashMap<i64, usize>,
+    /// The rounds holding one of each bot row's own legs, ascending, each once.
+    span: HashMap<i64, Vec<usize>>,
+    /// The open bot rows homed at each round.
+    homed: HashMap<usize, Vec<&'a Position>>,
+    /// The rounds holding an own leg of any bot row.
+    with_bot_leg: HashSet<usize>,
+}
+
+impl<'a> RowHomes<'a> {
+    /// True when `row` is an open bot row whose home is a round other than `index`.
+    fn elsewhere(&self, row: &Position, index: usize) -> bool {
+        row.id
+            .and_then(|id| self.home.get(&id))
+            .is_some_and(|home| *home != index)
+    }
+
+    /// The open row homed at round `index` that no round claimed yet. Where several are,
+    /// the choice is the one every open-row lookup makes
+    /// (`positions::state::get_open_round_by_mint`).
+    fn home_row(&self, index: usize, claimed: &HashSet<i64>) -> Option<&'a Position> {
+        crate::positions::state::choose_open_round(
+            self.homed
+                .get(&index)
+                .into_iter()
+                .flatten()
+                .copied()
+                .filter(|row| row.id.is_some_and(|id| !claimed.contains(&id))),
+        )
+    }
+
+    /// True when round `index` holds an own leg of a bot row.
+    fn holds_bot_leg(&self, index: usize) -> bool {
+        self.with_bot_leg.contains(&index)
+    }
+
+    /// The rounds before `index` holding the own legs of `row`, an open bot row with a
+    /// home; empty for any other row.
+    fn earlier(&self, row: &Position, index: usize, rounds: &[LedgerRound]) -> Vec<LedgerRound> {
+        let Some(id) = row.id.filter(|id| self.home.contains_key(id)) else {
+            return Vec::new();
+        };
+        self.span
+            .get(&id)
+            .into_iter()
+            .flatten()
+            .filter(|span_index| **span_index < index)
+            .map(|span_index| rounds[*span_index].clone())
+            .collect()
+    }
+}
+
+/// Locate every bot row's own legs among `rounds`, and the home round of each open one.
+///
+/// A row's own legs are its booked entries and exits and its entry signature; never its
+/// exit signature, which on a row the ledger closed is a sale made outside the bot. Only
+/// round events count, and only in rounds of the row's mint. The home of an open row is
+/// the round of its span that is open, else the one seen last, else the later one: the
+/// round its holding lives in now. An open row whose legs lie in no round has no home and
+/// is matched by key or entry signature.
+fn row_homes<'a>(
+    rounds: &[LedgerRound],
+    existing: &'a [Position],
+    trader_legs: &HashMap<i64, TraderLegs>,
+) -> RowHomes<'a> {
+    let mut by_signature: HashMap<&str, Vec<&'a Position>> = HashMap::new();
+    for row in existing.iter().filter(|row| !row.is_wallet_derived()) {
+        let Some(id) = row.id else { continue };
+        let legs = trader_legs.get(&id);
+        let mut own: HashSet<&str> = legs
+            .into_iter()
+            .flat_map(|legs| legs.entry_signatures.iter().chain(&legs.exit_signatures))
+            .map(String::as_str)
+            .collect();
+        own.extend(row.entry_transaction_signature.as_deref());
+        for signature in own {
+            by_signature.entry(signature).or_default().push(row);
+        }
+    }
+
+    let mut homes = RowHomes::default();
+    for (index, round) in rounds.iter().enumerate() {
+        for event in &round.events {
+            let Some(rows) = by_signature.get(event.signature.as_str()) else {
+                continue;
+            };
+            for row in rows.iter().filter(|row| row.mint == round.mint) {
+                let Some(id) = row.id else { continue };
+                homes.with_bot_leg.insert(index);
+                let span = homes.span.entry(id).or_default();
+                if span.last() != Some(&index) {
+                    span.push(index);
+                }
+            }
+        }
+    }
+
+    for row in existing
+        .iter()
+        .filter(|row| !row.is_wallet_derived() && row.exit_time.is_none())
+    {
+        let Some(id) = row.id else { continue };
+        let Some(home) = homes.span.get(&id).and_then(|span| {
+            span.iter().copied().max_by_key(|index| {
+                let round = &rounds[*index];
+                (round.is_open, round.last_seen_at(), *index)
+            })
+        }) else {
+            continue;
+        };
+        homes.home.insert(id, home);
+        homes.homed.entry(home).or_default().push(row);
+    }
+    homes
 }
 
 /// The attribution of bot row `row` against `mint_positions`, every row of its mint read for
@@ -547,26 +740,6 @@ fn planned_attribution(
     RoundAttribution::new(row, &mint_rows, trader_legs, held_elsewhere)
 }
 
-/// The open row of `round`'s mint whose own entry is one of the round's acquisitions and
-/// that no other round claimed: the row the round belongs to when it matched a closed row.
-/// Where a store still holds several, the choice is the one every open-row lookup makes
-/// (`positions::state::get_open_round_by_mint`).
-fn open_row_of_round<'a>(
-    round: &LedgerRound,
-    existing: &'a [Position],
-    claimed: &HashSet<i64>,
-) -> Option<&'a Position> {
-    let acquisitions = acquisition_signatures(round);
-    crate::positions::state::choose_open_round(existing.iter().filter(|row| {
-        row.mint == round.mint
-            && row.id.is_some_and(|id| !claimed.contains(&id))
-            && row
-                .entry_transaction_signature
-                .as_deref()
-                .is_some_and(|signature| acquisitions.contains(&signature))
-    }))
-}
-
 /// The round's acquisition signatures, its entry first, each once.
 fn acquisition_signatures(round: &LedgerRound) -> Vec<&str> {
     let mut signatures: Vec<&str> = Vec::new();
@@ -586,11 +759,13 @@ fn acquisition_signatures(round: &LedgerRound) -> Vec<&str> {
 ///
 /// A row the bot executed is reconciled against the chain, never rewritten, and left
 /// alone while the trader has work in flight on it; it needs its `attribution`, and is left
-/// as it is without one. A wallet-derived row is rebuilt from the round. Either way, a
-/// rewrite that changes nothing is not written.
+/// as it is without one, and is charged the outside events of the `earlier` rounds holding
+/// its legs. A wallet-derived row is rebuilt from the round. Either way, a rewrite that
+/// changes nothing is not written.
 fn rewrite_row(
     current: &Position,
     round: &LedgerRound,
+    earlier: &[LedgerRound],
     meta: &RoundMetadata,
     attribution: Option<&RoundAttribution>,
     busy_mints: &HashSet<String>,
@@ -603,7 +778,7 @@ fn rewrite_row(
     if is_busy(current, busy_mints) {
         return None;
     }
-    let fresh = reconcile_owned_position(current, round, meta, attribution?, now);
+    let fresh = reconcile_owned_position(current, round, earlier, meta, attribution?, now);
     differs_owned(current, &fresh).then_some(fresh)
 }
 
@@ -630,11 +805,13 @@ fn is_busy(position: &Position, busy_mints: &HashSet<String>) -> bool {
 /// swap's signature belongs to both sides.
 ///
 /// A row is claimed at most once per plan, so two rounds of the same mint (the user
-/// bought, sold, and bought again) can never collapse onto the same row.
+/// bought, sold, and bought again) can never collapse onto the same row. A candidate
+/// `accepts` refuses is skipped and stays unclaimed for the round it belongs to.
 fn adopt_row<'a>(
     round: &LedgerRound,
     adoptable: &HashMap<(&str, &str), Vec<&'a Position>>,
     claimed: &mut HashSet<i64>,
+    accepts: impl Fn(&Position) -> bool,
 ) -> Option<&'a Position> {
     for signature in acquisition_signatures(round) {
         let Some(candidates) = adoptable.get(&(round.mint.as_str(), signature)) else {
@@ -642,7 +819,8 @@ fn adopt_row<'a>(
         };
         for candidate in candidates {
             let Some(id) = candidate.id else { continue };
-            if claimed.insert(id) {
+            if !claimed.contains(&id) && accepts(candidate) {
+                claimed.insert(id);
                 return Some(candidate);
             }
         }
@@ -783,19 +961,27 @@ fn build_position(
 /// wallet app belongs to the same round as the bot's own buy, and the row follows the
 /// holding up as well as down (see [`adopt_external_growth`]).
 ///
-/// When another position of the mint booked part of the round (a closed position whose
-/// round never returned to zero, with the open position bought into the same holding), the
-/// row is charged only its own part (see [`round_share`]): its booked legs, plus the
-/// outside events after its first own event. A row whose part cannot be located, whose
-/// records miss its entry, a DCA or a partial exit, or whose records do not cover what it
-/// holds, keeps its sizes and basis as booked, and a close of its round books no proceeds.
+/// `round` is the row's home round: the latest round holding one of its own legs. The key
+/// it stamps moves the row onto it, so a row whose holding spans rounds follows the round of
+/// its latest leg.
+///
+/// The row is charged only its own part (see [`round_share`]) when another position of the
+/// mint booked part of the round (a closed position whose round never returned to zero,
+/// with the open position bought into the same holding), or when `earlier` rounds hold some
+/// of its legs (the wallet emptied between its first buy and a later DCA): its booked legs,
+/// plus the outside events of every round of the part. A row whose part cannot be located,
+/// whose records miss its entry, a DCA or a partial exit, or whose records do not cover
+/// what it holds, keeps its sizes and basis as booked, and a close of its round books no
+/// proceeds.
 ///
 /// A round closed by a sale outside the bot closes the row. Its proceeds are the round's
-/// when the row owns the whole round, and the row's own booked proceeds plus its part's
-/// outside sales when it shares it; P&L is the realized P&L of the row as closed.
+/// when the row owns the whole round alone, and the row's own booked proceeds plus its
+/// part's outside sales when it is charged a part; P&L is the realized P&L of the row as
+/// closed.
 fn reconcile_owned_position(
     existing: &Position,
     round: &LedgerRound,
+    earlier: &[LedgerRound],
     meta: &RoundMetadata,
     attribution: &RoundAttribution,
     now: DateTime<Utc>,
@@ -810,9 +996,9 @@ fn reconcile_owned_position(
     }
 
     let claimed_remaining = existing.remaining_token_amount.unwrap_or_default();
-    let close_proceeds = if attribution.shares(round) {
-        let Some(share) =
-            round_share(round, attribution).filter(|share| share.acquired >= claimed_remaining)
+    let close_proceeds = if attribution.charges_part(round, earlier) {
+        let Some(share) = round_share(round, earlier, attribution)
+            .filter(|share| share.acquired >= claimed_remaining)
         else {
             // The row's legs are not all recorded, or its records do not cover what it
             // holds: what it owns of the round is unknown.
@@ -821,7 +1007,7 @@ fn reconcile_owned_position(
             }
             return close_owned_position(position, existing, round, CloseProceeds::Unknown, now);
         };
-        if share.has_outside_acquisition && share.held > claimed_remaining && round.history_complete
+        if share.has_outside_acquisition && share.held > claimed_remaining && share.history_complete
         {
             adopt_external_growth(
                 &mut position,
@@ -842,7 +1028,11 @@ fn reconcile_owned_position(
             shrink_to(&mut position, existing, claimed_remaining, share.held);
             return position;
         }
-        CloseProceeds::Outside(share.outside_proceeds)
+        if share.history_complete {
+            CloseProceeds::Outside(share.outside_proceeds)
+        } else {
+            CloseProceeds::Unknown
+        }
     } else {
         let observed_remaining = RawAmount::new(round.balance_raw);
         if observed_remaining > claimed_remaining && round.history_complete {
@@ -905,7 +1095,7 @@ fn shrink_to(
 enum CloseProceeds {
     /// The row owns the whole round: the round's proceeds.
     Round,
-    /// The row shares the round: its own booked proceeds plus these outside sales, when
+    /// The row is charged a part: its own booked proceeds plus these outside sales, when
     /// they were all priced.
     Outside(Option<OutsideProceeds>),
     /// What the row owns of the round is unknown: no proceeds.
@@ -1355,7 +1545,7 @@ pub async fn apply_plan(plan: SyncPlan) -> AppliedPlan {
                 if booked_before
                     .is_some_and(|seen| legs.iter().any(|leg| !seen.contains(&leg.signature)))
                 {
-                    return Ok(Booking::Skip(()));
+                    return Ok(Booking::Skip(false));
                 }
                 let mut attribution = RoundAttribution::new(
                     row,
@@ -1363,9 +1553,9 @@ pub async fn apply_plan(plan: SyncPlan) -> AppliedPlan {
                     &TraderLegs::from_rows(legs),
                     RawAmount::ZERO,
                 );
-                // Only a shared round charges the row against what the mint's other open
+                // Only a row charged a part is charged against what the mint's other open
                 // positions hold, and that read fails while one of them is unverified.
-                if attribution.shares(&update.round) {
+                if attribution.charges_part(&update.round, &update.earlier) {
                     attribution.held_elsewhere = reads.other_open_held(&row.mint)?;
                 }
                 Some(attribution)
@@ -1374,26 +1564,30 @@ pub async fn apply_plan(plan: SyncPlan) -> AppliedPlan {
                 match rewrite_row(
                     row,
                     &update.round,
+                    &update.earlier,
                     &update.meta,
                     attribution.as_ref(),
                     &busy_mints,
                     plan.now,
                 ) {
                     Some(fresh) => {
+                        // Decided on the row read in this transaction: a row the trader
+                        // closed after the plan was made is not closed by this write.
+                        let closed_now = row.exit_time.is_none() && fresh.exit_time.is_some();
                         *row = fresh;
                         Booking::Write {
                             record: None,
-                            outcome: (),
+                            outcome: closed_now,
                         }
                     }
-                    None => Booking::Skip(()),
+                    None => Booking::Skip(false),
                 },
             )
         })
         .await;
-        let position = match committed {
-            Ok(Committed::Written { row, .. }) => row,
-            Ok(Committed::Skipped(()) | Committed::Deleted { .. }) => {
+        let (position, closed_now) = match committed {
+            Ok(Committed::Written { row, outcome }) => (row, outcome),
+            Ok(Committed::Skipped(_) | Committed::Deleted { .. }) => {
                 applied.skipped += 1;
                 continue;
             }
@@ -1408,13 +1602,10 @@ pub async fn apply_plan(plan: SyncPlan) -> AppliedPlan {
         applied.updated += 1;
         wrote_a_bot_row |= !position.is_wallet_derived();
 
-        let closed_a_bot_position =
-            !position.is_wallet_derived() && !crate::positions::state::is_position_open(&position);
-
-        // A bot position the ledger just closed still holds the trading slot it took
-        // when it opened. Releasing it is idempotent, so a row that was already closed
-        // (or never held one) costs nothing.
-        if closed_a_bot_position {
+        // A bot position this write closed still holds the trading slot it took when it
+        // opened, so the slot is released here. An archived row holds none, and a row that
+        // was already closed is not announced again.
+        if closed_now && !position.is_wallet_derived() {
             crate::positions::state::release_position_slot(id).await;
             logger::info(
                 LogTag::Positions,

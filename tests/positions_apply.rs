@@ -2160,24 +2160,6 @@ async fn assert_acquired_balances(id: i64, acquired: u128) {
     }
 }
 
-/// Turns event recording on and starts the events store.
-async fn start_events() {
-    common::set_config(|cfg| cfg.events.enabled = true);
-    screenerbot::paths::ensure_all_directories().expect("create data directories");
-    screenerbot::events::init().await.expect("start events");
-}
-
-/// The position events of the test mint with `subtype`, once the events writer flushed.
-async fn position_events(subtype: &str) -> usize {
-    tokio::time::sleep(std::time::Duration::from_millis(2_500)).await;
-    screenerbot::events::by_mint(common::TEST_MINT, 500)
-        .await
-        .expect("read events")
-        .iter()
-        .filter(|event| event.subtype.as_deref() == Some(subtype))
-        .count()
-}
-
 #[test]
 fn a_sell_verified_after_a_force_close_books_its_proceeds_and_restates_the_loss() {
     common::run_isolated(
@@ -2186,7 +2168,7 @@ fn a_sell_verified_after_a_force_close_books_its_proceeds_and_restates_the_loss(
             let _dir = common::isolated_env();
             let _cfg = common::config_guard();
             enable_loss_limit();
-            start_events().await;
+            common::start_events().await;
             let id = written_off(|position| {
                 position.exit_transaction_signature = Some(CLOSE_SIGNATURE.to_owned());
             })
@@ -2214,7 +2196,7 @@ fn a_sell_verified_after_a_force_close_books_its_proceeds_and_restates_the_loss(
                 booked.pnl
             );
             assert_eq!(recorded_loss(), 0.0, "the loss is restated away");
-            assert_eq!(position_events("fill_after_force_close").await, 1);
+            assert_eq!(common::position_events("fill_after_force_close").await, 1);
         },
     );
 }
@@ -2406,7 +2388,7 @@ fn an_unverified_entry_of_another_position_never_stalls_a_close() {
         || async {
             let _dir = common::isolated_env();
             let _cfg = common::config_guard();
-            start_events().await;
+            common::start_events().await;
             let id = open_position(|_| {}).await;
             let blocking = store_legacy_duplicate(|position| {
                 position.archived = true;
@@ -2466,8 +2448,11 @@ fn an_unverified_entry_of_another_position_never_stalls_a_close() {
             .expect("the close is booked");
             let booked = in_storage(id).await;
             assert!(booked.transaction_exit_verified && booked.exit_time.is_some());
-            assert_eq!(position_events("exit_residual_unattributed").await, 1);
-            assert_eq!(position_events("exit_residual_detected").await, 0);
+            assert_eq!(
+                common::position_events("exit_residual_unattributed").await,
+                1
+            );
+            assert_eq!(common::position_events("exit_residual_detected").await, 0);
         },
     );
 }
@@ -2586,7 +2571,7 @@ fn a_dca_after_a_write_off_with_tokens_held_reopens_the_position() {
             let _dir = common::isolated_env();
             let _cfg = common::config_guard();
             enable_loss_limit();
-            start_events().await;
+            common::start_events().await;
             let id = written_off(|position| {
                 position.exit_transaction_signature = Some(CLOSE_SIGNATURE.to_owned());
                 position.management = PositionManagement::UserOnly;
@@ -2635,8 +2620,8 @@ fn a_dca_after_a_write_off_with_tokens_held_reopens_the_position() {
             );
             assert_eq!(recorded_loss(), 0.0, "an open position realizes no loss");
             assert_eq!(entry_records(id).await, 1);
-            assert_eq!(position_events("fill_after_force_close").await, 1);
-            assert_eq!(position_events("dca_verified").await, 1);
+            assert_eq!(common::position_events("fill_after_force_close").await, 1);
+            assert_eq!(common::position_events("dca_verified").await, 1);
         },
     );
 }
@@ -3908,7 +3893,7 @@ fn a_late_fill_after_a_new_buy_adds_to_the_open_position() {
         || async {
             let _dir = common::isolated_env();
             let _cfg = common::config_guard();
-            start_events().await;
+            common::start_events().await;
             let closed = written_off(|_| {}).await;
             let open = store_position(|_| {}).await;
             assert!(state::try_consume_global_position_permit());
@@ -3955,7 +3940,7 @@ fn a_late_fill_after_a_new_buy_adds_to_the_open_position() {
             );
             assert_eq!(entry_records(open).await, 1);
             assert_eq!(open_rows_of_mint(), 1);
-            assert_eq!(position_events("late_fill_handed_over").await, 1);
+            assert_eq!(common::position_events("late_fill_handed_over").await, 1);
             assert!(
                 !state::try_consume_global_position_permit(),
                 "the open position did not take its trading slot back"
