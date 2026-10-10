@@ -21,7 +21,7 @@ import assert from "node:assert/strict";
 
 import { chromium } from "playwright";
 
-import { serveDashboard } from "../lib/dashboard_host.mjs";
+import { serveDashboard, PAGE_READY } from "../lib/dashboard_host.mjs";
 import { createApiHandler, loadIndex } from "../lib/dashboard_fixtures.mjs";
 
 const browser = await chromium.launch({ headless: true });
@@ -61,7 +61,7 @@ test("the wizard marks the invalid field and keeps its footer on one row", async
   const page = await context.newPage();
   page.setDefaultTimeout(15000);
   await page.goto(`${host.origin}/copy`);
-  await page.waitForSelector("body:not(.initialization-mode) main.content:not([data-loading])");
+  await page.waitForSelector(PAGE_READY);
   await page.locator("#copy-add").click();
   await page.waitForSelector("#copy-editor:not(.hidden) [data-field='target_address']");
 

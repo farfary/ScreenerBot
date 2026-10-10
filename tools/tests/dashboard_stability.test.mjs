@@ -30,7 +30,7 @@ import { availableParallelism } from "node:os";
 
 import { chromium } from "playwright";
 
-import { PAGE_IDS, serveDashboard } from "../lib/dashboard_host.mjs";
+import { PAGE_IDS, serveDashboard, PAGE_READY } from "../lib/dashboard_host.mjs";
 import { createApiHandler, loadIndex } from "../lib/dashboard_fixtures.mjs";
 
 const PAGES = (process.env.DASHBOARD_PAGES?.split(",") ?? PAGE_IDS).filter((id) =>
@@ -112,7 +112,7 @@ async function open(
       response.status() >= 400 && problems.push(`HTTP ${response.status()}: ${response.url()}`)
   );
   await page.goto(`${host.origin}/${id}?theme=${theme}`);
-  await page.waitForSelector("body:not(.initialization-mode) main.content:not([data-loading])");
+  await page.waitForSelector(PAGE_READY);
   return { page, context, problems, api, host };
 }
 

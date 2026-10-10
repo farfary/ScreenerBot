@@ -17,10 +17,8 @@ import assert from "node:assert/strict";
 
 import { chromium } from "playwright";
 
-import { serveDashboard, PAGE_IDS } from "../lib/dashboard_host.mjs";
+import { serveDashboard, PAGE_IDS, PAGE_READY } from "../lib/dashboard_host.mjs";
 import { createApiHandler, loadIndex } from "../lib/dashboard_fixtures.mjs";
-
-const READY = "body:not(.initialization-mode) main.content:not([data-loading])";
 
 const browser = await chromium.launch({ headless: true });
 after(() => browser.close());
@@ -44,7 +42,7 @@ for (const startupPage of ["home", "positions", "transactions"]) {
     const page = await context.newPage();
     page.setDefaultTimeout(15000);
     await page.goto(`${host.origin}/`);
-    await page.waitForSelector(READY);
+    await page.waitForSelector(PAGE_READY);
     await page.waitForSelector(`main.content .page-container[data-page="${startupPage}"]`);
 
     const opened = await page.evaluate(() => ({

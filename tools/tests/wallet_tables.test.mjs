@@ -21,10 +21,9 @@ import { readFileSync } from "node:fs";
 
 import { chromium } from "playwright";
 
-import { serveDashboard } from "../lib/dashboard_host.mjs";
+import { serveDashboard, PAGE_READY } from "../lib/dashboard_host.mjs";
 import { createApiHandler, FIXTURES_ROOT, loadIndex } from "../lib/dashboard_fixtures.mjs";
 
-const READY = "body:not(.initialization-mode) main.content:not([data-loading])";
 const LIST_TABS = ["secondaries", "archive", "watched"];
 
 const browser = await chromium.launch({ headless: true });
@@ -47,7 +46,7 @@ async function openWallets(t, answers = {}) {
   });
   const page = await context.newPage();
   await page.goto(`${host.origin}/wallets`);
-  await page.waitForSelector(READY);
+  await page.waitForSelector(PAGE_READY);
   return page;
 }
 

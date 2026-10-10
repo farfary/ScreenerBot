@@ -21,7 +21,7 @@ import assert from "node:assert/strict";
 import { chromium } from "playwright";
 
 import { loadMarkupSources, loadStylesheets } from "../lib/dashboard_ui.mjs";
-import { serveDashboard } from "../lib/dashboard_host.mjs";
+import { serveDashboard, PAGE_READY } from "../lib/dashboard_host.mjs";
 import { createApiHandler, loadIndex } from "../lib/dashboard_fixtures.mjs";
 
 const PRIVATE_STATES = new RegExp(
@@ -95,7 +95,7 @@ test("a failed Settings load renders the shared error state", async (t) => {
   const page = await context.newPage();
   page.setDefaultTimeout(15000);
   await page.goto(`${host.origin}/home`);
-  await page.waitForSelector("body:not(.initialization-mode) main.content:not([data-loading])");
+  await page.waitForSelector(PAGE_READY);
   await page.locator("#settingsBtn").dispatchEvent("click");
   await page.waitForSelector(".settings-dialog.active .settings-nav");
 

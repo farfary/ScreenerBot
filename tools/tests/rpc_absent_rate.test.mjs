@@ -25,7 +25,7 @@ import { readFileSync } from "node:fs";
 
 import { chromium } from "playwright";
 
-import { serveDashboard } from "../lib/dashboard_host.mjs";
+import { serveDashboard, PAGE_READY } from "../lib/dashboard_host.mjs";
 import { createApiHandler, FIXTURES_ROOT, loadIndex } from "../lib/dashboard_fixtures.mjs";
 
 const fixture = (name) => JSON.parse(readFileSync(`${FIXTURES_ROOT}/shell/${name}`, "utf8"));
@@ -62,7 +62,7 @@ async function open(t, { headerRpc, statusRpc }) {
   const page = await context.newPage();
   page.setDefaultTimeout(15000);
   await page.goto(`${host.origin}/home`);
-  await page.waitForSelector("body:not(.initialization-mode) main.content:not([data-loading])");
+  await page.waitForSelector(PAGE_READY);
   return page;
 }
 

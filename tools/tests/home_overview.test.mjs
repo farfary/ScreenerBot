@@ -24,10 +24,9 @@ import { readFileSync } from "node:fs";
 
 import { chromium } from "playwright";
 
-import { serveDashboard } from "../lib/dashboard_host.mjs";
+import { serveDashboard, PAGE_READY } from "../lib/dashboard_host.mjs";
 import { createApiHandler, FIXTURES_ROOT, loadIndex } from "../lib/dashboard_fixtures.mjs";
 
-const READY = "body:not(.initialization-mode) main.content:not([data-loading])";
 // Inside the fixture month, so past, today and future days all render.
 const FIXED_NOW = new Date("2026-10-15T12:00:00Z");
 
@@ -52,7 +51,7 @@ async function openHome(t, width, locale = "en", answers = {}) {
   const page = await context.newPage();
   await page.clock.setFixedTime(FIXED_NOW);
   await page.goto(`${host.origin}/`);
-  await page.waitForSelector(READY);
+  await page.waitForSelector(PAGE_READY);
   await page.waitForSelector(".home-dashboard.loaded");
   return page;
 }

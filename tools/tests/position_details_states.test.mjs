@@ -31,7 +31,7 @@ import { readFileSync } from "node:fs";
 import { chromium } from "playwright";
 
 import { STYLES_ROOT, rulesIn } from "../lib/dashboard_ui.mjs";
-import { serveDashboard } from "../lib/dashboard_host.mjs";
+import { serveDashboard, PAGE_READY } from "../lib/dashboard_host.mjs";
 import { createApiHandler, loadIndex } from "../lib/dashboard_fixtures.mjs";
 
 const ROW_SYMBOL = "#positions-root tr[data-row-id] .ti-row-cell__symbol";
@@ -62,7 +62,7 @@ test("a failed details load offers Retry and recovers", async (t) => {
   const page = await context.newPage();
   page.setDefaultTimeout(15000);
   await page.goto(`${host.origin}/positions`);
-  await page.waitForSelector("body:not(.initialization-mode) main.content:not([data-loading])");
+  await page.waitForSelector(PAGE_READY);
   await page.locator(ROW_SYMBOL).first().click();
 
   const state = page.locator(`${BODY_STATE}:not([hidden]) .state-view-error`);
@@ -120,7 +120,7 @@ test("the open position dialog at the narrowest desktop window", async (t) => {
     if (message.text().includes("[I18n] No label for value")) missingLabels.push(message.text());
   });
   await page.goto(`${host.origin}/positions`);
-  await page.waitForSelector("body:not(.initialization-mode) main.content:not([data-loading])");
+  await page.waitForSelector(PAGE_READY);
   await page.locator(ROW_SYMBOL).first().click();
   const dialog = page.locator(".position-details-dialog");
   await dialog.locator(".pdd-act-milestone").first().waitFor();

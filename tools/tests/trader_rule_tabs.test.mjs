@@ -32,10 +32,9 @@ import assert from "node:assert/strict";
 
 import { chromium } from "playwright";
 
-import { serveDashboard } from "../lib/dashboard_host.mjs";
+import { serveDashboard, PAGE_READY } from "../lib/dashboard_host.mjs";
 import { createApiHandler, loadIndex } from "../lib/dashboard_fixtures.mjs";
 
-const READY = "body:not(.initialization-mode) main.content:not([data-loading])";
 const TABS = ["stop-loss", "trailing-stop", "roi", "time-rules", "dca", "general-settings"];
 
 const browser = await chromium.launch({ headless: true });
@@ -51,7 +50,7 @@ after(async () => {
 const page = await context.newPage();
 page.setDefaultTimeout(15000);
 await page.goto(`${host.origin}/trader`);
-await page.waitForSelector(READY);
+await page.waitForSelector(PAGE_READY);
 
 for (const id of TABS) {
   test(`the ${id} tab draws bare step glyphs, plain fields and body-text summaries`, async () => {

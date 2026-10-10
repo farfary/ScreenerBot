@@ -21,10 +21,8 @@ import assert from "node:assert/strict";
 
 import { chromium } from "playwright";
 
-import { serveDashboard } from "../lib/dashboard_host.mjs";
+import { serveDashboard, PAGE_READY } from "../lib/dashboard_host.mjs";
 import { createApiHandler, loadIndex } from "../lib/dashboard_fixtures.mjs";
-
-const READY = "body:not(.initialization-mode) main.content:not([data-loading])";
 
 const browser = await chromium.launch({ headless: true });
 after(() => browser.close());
@@ -38,7 +36,7 @@ async function disabledSave(pageName, open, selector) {
   try {
     const page = await context.newPage();
     await page.goto(`${host.origin}/${pageName}`);
-    await page.waitForSelector(READY);
+    await page.waitForSelector(PAGE_READY);
     await open(page);
     await page.waitForSelector(`${selector}:disabled`);
     return await page.$eval(selector, (button) => {

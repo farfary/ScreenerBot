@@ -226,6 +226,14 @@ function beginPageTransition(mainContent, navigationId) {
 
 function finishPageTransition(mainContent) {
   mainContent.removeAttribute("data-loading");
+}
+
+// The page is displayed before it activates, and its event handlers, sub-tab bar
+// and action bar exist only once activation resolves. The viewport stays
+// `aria-busy` until then, for the server-rendered first page and every navigation.
+// A navigation still in flight owns the busy state and clears it itself.
+function finishPageActivation(mainContent) {
+  if (_state.pendingPage !== null) return;
   mainContent.removeAttribute("aria-busy");
 }
 
@@ -340,6 +348,7 @@ export async function loadPage(pageName, { historyMode = "push" } = {}) {
     if (!isCurrentNavigation()) return;
 
     _state.pendingPage = null;
+    finishPageActivation(mainContent);
     AppState.save("lastTab", pageName);
     console.log("[Router] New page loaded and cached:", pageName);
   } catch (error) {
@@ -508,6 +517,8 @@ export function initRouter() {
         await PageLifecycleRegistry.activate(initialPage);
       } catch (err) {
         console.warn(`[Router] No module for cached page ${initialPage}:`, err.message);
+      } finally {
+        finishPageActivation(mainContent);
       }
     })();
   } else if (
@@ -539,6 +550,8 @@ export function initRouter() {
         await PageLifecycleRegistry.activate(initialPage);
       } catch (err) {
         console.warn(`[Router] No module for initial page ${initialPage}:`, err.message);
+      } finally {
+        finishPageActivation(mainContent);
       }
     })();
   } else {

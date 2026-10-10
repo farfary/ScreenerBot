@@ -19,10 +19,9 @@ import { readFileSync } from "node:fs";
 
 import { chromium } from "playwright";
 
-import { serveDashboard } from "../lib/dashboard_host.mjs";
+import { serveDashboard, PAGE_READY } from "../lib/dashboard_host.mjs";
 import { FIXTURES_ROOT, createApiHandler, loadIndex } from "../lib/dashboard_fixtures.mjs";
 
-const READY = "body:not(.initialization-mode) main.content:not([data-loading])";
 const WIDTHS = [1200, 1440];
 const LOCALES = ["en", "fa"];
 
@@ -56,7 +55,7 @@ for (const locale of LOCALES) {
       try {
         const page = await context.newPage();
         await page.goto(`${host.origin}/tokens`);
-        await page.waitForSelector(READY);
+        await page.waitForSelector(PAGE_READY);
         await page.waitForSelector(".featured-row-tokens .featured-row-card");
         // One step along the row shows both arrows around a full scroller.
         await page.click(".featured-row-arrow-end");

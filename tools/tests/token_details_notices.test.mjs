@@ -23,10 +23,9 @@ import assert from "node:assert/strict";
 
 import { chromium } from "playwright";
 
-import { serveDashboard } from "../lib/dashboard_host.mjs";
+import { serveDashboard, PAGE_READY } from "../lib/dashboard_host.mjs";
 import { createApiHandler, loadIndex } from "../lib/dashboard_fixtures.mjs";
 
-const READY = "body:not(.initialization-mode) main.content:not([data-loading])";
 const DIALOG = ".token-details-dialog";
 // Long enough for the grace window and the chart poll's back-off on an empty chart.
 const SETTLE_MS = 40_000;
@@ -72,7 +71,7 @@ async function openEmptyChartDialog(t, sourceStatus) {
   const page = await context.newPage();
   await page.clock.install();
   await page.goto(`${host.origin}/tokens`);
-  await page.waitForSelector(READY);
+  await page.waitForSelector(PAGE_READY);
   await page.click("#tokens-root tr[data-row-id] .ti-row-cell__symbol");
   await page.waitForSelector(`${DIALOG} [data-dialog-tab="overview"]`);
   return page;

@@ -27,6 +27,15 @@ import { REPO_ROOT, TEMPLATES_ROOT } from "./dashboard_ui.mjs";
 import { formatMessage, localeDirection, localizeTemplate } from "../html/l10n_transform.mjs";
 import { readServerOnlyDomains, SOURCE_LOCALE } from "../i18n/catalogs.mjs";
 
+/**
+ * Matches once the shell has booted and the router has displayed AND activated the
+ * current page. `data-loading` clears when the page is displayed; `aria-busy` clears
+ * only after the page's lifecycle has bound its handlers and built its sub-tab and
+ * action bars, so a test that waits for this can measure or click the page.
+ */
+export const PAGE_READY =
+  "body:not(.initialization-mode) main.content:not([data-loading]):not([aria-busy])";
+
 /** Port the shell placeholder reports; a session serves on its own port. */
 const SHELL_PORT = "8080";
 

@@ -19,10 +19,9 @@ import assert from "node:assert/strict";
 
 import { chromium } from "playwright";
 
-import { serveDashboard } from "../lib/dashboard_host.mjs";
+import { serveDashboard, PAGE_READY } from "../lib/dashboard_host.mjs";
 import { createApiHandler, loadIndex } from "../lib/dashboard_fixtures.mjs";
 
-const READY = "body:not(.initialization-mode) main.content:not([data-loading])";
 const WIDTHS = [1100, 1280, 1328, 1440, 1920];
 const LOCALES = ["en", "de", "fa"];
 // Each metric with the stats that render its longest values: the widest win/loss
@@ -66,7 +65,7 @@ for (const metric of METRICS) {
           const page = await context.newPage();
           page.setDefaultTimeout(15000);
           await page.goto(`${host.origin}/trader`);
-          await page.waitForSelector(READY);
+          await page.waitForSelector(PAGE_READY);
           await page.waitForFunction(
             (selector) => /\d/.test(document.querySelector(selector)?.textContent ?? ""),
             metric.selector

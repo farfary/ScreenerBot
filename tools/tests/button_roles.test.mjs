@@ -23,7 +23,7 @@ import assert from "node:assert/strict";
 
 import { chromium } from "playwright";
 
-import { serveDashboard } from "../lib/dashboard_host.mjs";
+import { serveDashboard, PAGE_READY } from "../lib/dashboard_host.mjs";
 import { createApiHandler, loadIndex } from "../lib/dashboard_fixtures.mjs";
 import { loadStylesheets } from "../lib/dashboard_ui.mjs";
 
@@ -33,7 +33,6 @@ const UNUSED_RULES = new Set([
   "pages/trader.css .form-actions .btn.primary",
 ]);
 
-const READY = "body:not(.initialization-mode) main.content:not([data-loading])";
 const tab = (id) => `#subTabsContainer [data-tab-id="${id}"]`;
 
 const browser = await chromium.launch({ headless: true });
@@ -52,7 +51,7 @@ async function openPage(t, name) {
   const page = await context.newPage();
   page.setDefaultTimeout(15000);
   await page.goto(`${host.origin}/${name}`);
-  await page.waitForSelector(READY);
+  await page.waitForSelector(PAGE_READY);
   return page;
 }
 

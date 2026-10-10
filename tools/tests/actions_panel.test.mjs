@@ -25,10 +25,8 @@ import { readFileSync } from "node:fs";
 
 import { chromium } from "playwright";
 
-import { serveDashboard } from "../lib/dashboard_host.mjs";
+import { serveDashboard, PAGE_READY } from "../lib/dashboard_host.mjs";
 import { createApiHandler, FIXTURES_ROOT, loadIndex } from "../lib/dashboard_fixtures.mjs";
-
-const READY = "body:not(.initialization-mode) main.content:not([data-loading])";
 
 const browser = await chromium.launch({ headless: true });
 after(() => browser.close());
@@ -43,7 +41,7 @@ after(async () => {
 const page = await context.newPage();
 page.setDefaultTimeout(15000);
 await page.goto(`${host.origin}/home`);
-await page.waitForSelector(READY);
+await page.waitForSelector(PAGE_READY);
 await page.click("#notificationBtn");
 await page.waitForSelector('#notificationDrawer[data-state="open"] .notification-item');
 
@@ -104,7 +102,7 @@ test("every tab with a count above zero lists its actions, dismissed ones includ
   });
   const panel = await dismissedContext.newPage();
   await panel.goto(`${dismissedHost.origin}/home`);
-  await panel.waitForSelector(READY);
+  await panel.waitForSelector(PAGE_READY);
   await panel.click("#notificationBtn");
   await panel.waitForSelector('#notificationDrawer[data-state="open"]');
 
@@ -143,7 +141,7 @@ test("an empty tab shows the shared state view with its glyph on the message's r
   });
   const panel = await emptyContext.newPage();
   await panel.goto(`${emptyHost.origin}/home`);
-  await panel.waitForSelector(READY);
+  await panel.waitForSelector(PAGE_READY);
   // The list holds a static empty view until the open tab's history read re-renders it;
   // measuring before that render reads a node the render detaches.
   const rendered = panel.waitForResponse((response) =>

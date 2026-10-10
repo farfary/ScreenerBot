@@ -27,7 +27,7 @@ import { readFileSync } from "node:fs";
 import { chromium } from "playwright";
 
 import { STYLES_ROOT, rulesIn } from "../lib/dashboard_ui.mjs";
-import { serveDashboard } from "../lib/dashboard_host.mjs";
+import { serveDashboard, PAGE_READY } from "../lib/dashboard_host.mjs";
 import { createApiHandler, loadIndex } from "../lib/dashboard_fixtures.mjs";
 
 const DIALOG = ".events-dialog-overlay.is-visible";
@@ -42,7 +42,7 @@ test("the event dialog has one shared close and a standard Copy button", async (
   const page = await context.newPage();
   page.setDefaultTimeout(15000);
   await page.goto(`${host.origin}/events`);
-  await page.waitForSelector("body:not(.initialization-mode) main.content:not([data-loading])");
+  await page.waitForSelector(PAGE_READY);
   await page.locator("#events-root tbody tr[data-row-id]").first().click();
   await page.waitForSelector(DIALOG);
 

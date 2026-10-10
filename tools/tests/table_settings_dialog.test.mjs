@@ -20,10 +20,8 @@ import assert from "node:assert/strict";
 
 import { chromium } from "playwright";
 
-import { serveDashboard } from "../lib/dashboard_host.mjs";
+import { serveDashboard, PAGE_READY } from "../lib/dashboard_host.mjs";
 import { createApiHandler, loadIndex } from "../lib/dashboard_fixtures.mjs";
-
-const READY = "body:not(.initialization-mode) main.content:not([data-loading])";
 
 const browser = await chromium.launch({ headless: true });
 after(() => browser.close());
@@ -40,7 +38,7 @@ for (const locale of ["en", "fa"]) {
     });
     const page = await context.newPage();
     await page.goto(`${host.origin}/tokens`);
-    await page.waitForSelector(READY);
+    await page.waitForSelector(PAGE_READY);
     await page.click("#tokens-root .dt-btn-columns");
     await page.waitForSelector(".table-settings-dialog .table-settings-column-item");
 
@@ -75,7 +73,7 @@ test("a column row has a drag handle, a pin and one move menu", async (t) => {
   });
   const page = await context.newPage();
   await page.goto(`${host.origin}/tokens`);
-  await page.waitForSelector(READY);
+  await page.waitForSelector(PAGE_READY);
   await page.click("#tokens-root .dt-btn-columns");
   await page.waitForSelector(".table-settings-dialog .table-settings-column-item");
 

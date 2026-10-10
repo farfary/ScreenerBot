@@ -25,11 +25,10 @@ import { readFileSync } from "node:fs";
 
 import { chromium } from "playwright";
 
-import { serveDashboard } from "../lib/dashboard_host.mjs";
+import { serveDashboard, PAGE_READY } from "../lib/dashboard_host.mjs";
 import { createApiHandler, loadIndex } from "../lib/dashboard_fixtures.mjs";
 import { SCRIPTS_ROOT, walk } from "../lib/dashboard_ui.mjs";
 
-const READY = "body:not(.initialization-mode) main.content:not([data-loading])";
 const tab = (id) => `#subTabsContainer [data-tab-id="${id}"]`;
 
 const browser = await chromium.launch({ headless: true });
@@ -48,7 +47,7 @@ async function openPage(t, name, variant = "populated") {
   const page = await context.newPage();
   page.setDefaultTimeout(15000);
   await page.goto(`${host.origin}/${name}`);
-  await page.waitForSelector(READY);
+  await page.waitForSelector(PAGE_READY);
   return page;
 }
 

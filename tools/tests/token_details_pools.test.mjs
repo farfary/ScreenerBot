@@ -20,10 +20,8 @@ import assert from "node:assert/strict";
 
 import { chromium } from "playwright";
 
-import { serveDashboard } from "../lib/dashboard_host.mjs";
+import { serveDashboard, PAGE_READY } from "../lib/dashboard_host.mjs";
 import { createApiHandler, loadIndex } from "../lib/dashboard_fixtures.mjs";
-
-const READY = "body:not(.initialization-mode) main.content:not([data-loading])";
 
 const browser = await chromium.launch({ headless: true });
 after(() => browser.close());
@@ -39,7 +37,7 @@ test("the Pools tab fills its summary grid and repeats no address", async (t) =>
   });
   const page = await context.newPage();
   await page.goto(`${host.origin}/tokens`);
-  await page.waitForSelector(READY);
+  await page.waitForSelector(PAGE_READY);
   await page.click("#tokens-root tr[data-row-id] .ti-row-cell__symbol");
   await page.click('.token-details-dialog [data-dialog-tab="pools"]');
   await page.waitForSelector(".token-details-dialog .pools-summary-grid .pools-summary-fact");
@@ -80,7 +78,7 @@ test("Overview and Pools state market cap, liquidity and volume once", async (t)
   });
   const page = await context.newPage();
   await page.goto(`${host.origin}/tokens`);
-  await page.waitForSelector(READY);
+  await page.waitForSelector(PAGE_READY);
   await page.click("#tokens-root tr[data-row-id] .ti-row-cell__symbol");
   const labels = (panel) =>
     page.$$eval(`.token-details-dialog [data-tab-content="${panel}"] *`, (nodes) =>

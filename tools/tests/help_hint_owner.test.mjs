@@ -18,13 +18,12 @@ import assert from "node:assert/strict";
 import { chromium } from "playwright";
 
 import { loadMarkupSources } from "../lib/dashboard_ui.mjs";
-import { serveDashboard } from "../lib/dashboard_host.mjs";
+import { serveDashboard, PAGE_READY } from "../lib/dashboard_host.mjs";
 import { createApiHandler, loadIndex } from "../lib/dashboard_fixtures.mjs";
 
 const OWNER = "scripts/ui/hint_popover.js";
 const HELP_GLYPH =
   /icon-(?:circle-question-mark|circle-help|help-circle|badge-question-mark)\b|help-btn\b/;
-const READY = "body:not(.initialization-mode) main.content:not([data-loading])";
 
 test("only the hint owner draws a help glyph", async () => {
   const found = [];
@@ -46,7 +45,7 @@ test("the Tools header shows the shared help trigger beside the title", async (t
   t.after(() => host.close());
   const page = await context.newPage();
   await page.goto(`${host.origin}/tools`);
-  await page.waitForSelector(READY);
+  await page.waitForSelector(PAGE_READY);
   await page.click('#tools-nav .nav-item[data-tool="wallet-cleanup"]');
 
   const trigger = page.locator(".tool-title-row #tool-hint .hint-trigger");

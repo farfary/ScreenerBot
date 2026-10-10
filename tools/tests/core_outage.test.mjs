@@ -17,10 +17,9 @@ import assert from "node:assert/strict";
 
 import { chromium } from "playwright";
 
-import { serveDashboard } from "../lib/dashboard_host.mjs";
+import { serveDashboard, PAGE_READY } from "../lib/dashboard_host.mjs";
 import { createApiHandler, loadIndex } from "../lib/dashboard_fixtures.mjs";
 
-const READY = "body:not(.initialization-mode) main.content:not([data-loading])";
 const OVERLAY = ".conn-overlay.is-visible";
 const ISOLATES = /[⁦-⁩]/g;
 
@@ -63,7 +62,7 @@ test("an unreachable core blanks the live figures and keeps one outage card", as
   const page = await context.newPage();
   page.setDefaultTimeout(20000);
   await page.goto(`${host.origin}/trader`);
-  await page.waitForSelector(READY);
+  await page.waitForSelector(PAGE_READY);
   await page.waitForFunction(
     () =>
       document.querySelector("#tickerServicesLine")?.textContent.includes("Healthy") &&
@@ -99,7 +98,9 @@ test("an unreachable core blanks the live figures and keeps one outage card", as
 
   await context.unroute(`${host.origin}/api/**`, outage);
   await page.waitForFunction(() => !document.querySelector(".conn-overlay.is-visible"));
-  await page.waitForSelector(`${READY} #page-positions, ${READY} [data-page="positions"]`);
+  await page.waitForSelector(
+    `${PAGE_READY} #page-positions, ${PAGE_READY} [data-page="positions"]`
+  );
   await page.waitForFunction(
     () =>
       document.querySelector("#tickerServicesLine")?.textContent.includes("Healthy") &&

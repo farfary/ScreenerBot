@@ -44,7 +44,7 @@ import assert from "node:assert/strict";
 
 import { chromium } from "playwright";
 
-import { serveDashboard } from "../lib/dashboard_host.mjs";
+import { serveDashboard, PAGE_READY } from "../lib/dashboard_host.mjs";
 import { createApiHandler, loadIndex } from "../lib/dashboard_fixtures.mjs";
 
 test("Settings sections share one steady frame in a short window", async (t) => {
@@ -57,7 +57,7 @@ test("Settings sections share one steady frame in a short window", async (t) => 
   const page = await context.newPage();
   page.setDefaultTimeout(15000);
   await page.goto(`${host.origin}/home`);
-  await page.waitForSelector("body:not(.initialization-mode) main.content:not([data-loading])");
+  await page.waitForSelector(PAGE_READY);
   // At this width the header action sits in the overflow menu.
   await page.locator("#settingsBtn").dispatchEvent("click");
   await page.waitForSelector(".settings-dialog.active .settings-nav");
@@ -127,7 +127,7 @@ test("every select in one settings list has one width", async (t) => {
   const page = await context.newPage();
   page.setDefaultTimeout(15000);
   await page.goto(`${host.origin}/home`);
-  await page.waitForSelector("body:not(.initialization-mode) main.content:not([data-loading])");
+  await page.waitForSelector(PAGE_READY);
   await page.locator("#settingsBtn").dispatchEvent("click");
   await page.waitForSelector(".settings-dialog.active .settings-nav");
 
@@ -180,7 +180,7 @@ test("the Navigation list shows every row with bare glyphs and one visibility co
   const page = await context.newPage();
   page.setDefaultTimeout(15000);
   await page.goto(`${host.origin}/home`);
-  await page.waitForSelector("body:not(.initialization-mode) main.content:not([data-loading])");
+  await page.waitForSelector(PAGE_READY);
   await page.locator("#settingsBtn").dispatchEvent("click");
   await page.waitForSelector(".settings-dialog.active .settings-nav");
   await page.locator('.settings-nav-item[data-tab="navigation"]').click();
@@ -258,7 +258,7 @@ test("Startup badges sit on their title line and Data controls share one frame",
   const page = await context.newPage();
   page.setDefaultTimeout(15000);
   await page.goto(`${host.origin}/home`);
-  await page.waitForSelector("body:not(.initialization-mode) main.content:not([data-loading])");
+  await page.waitForSelector(PAGE_READY);
   await page.locator("#settingsBtn").dispatchEvent("click");
   await page.waitForSelector(".settings-dialog.active .settings-nav");
 
@@ -336,7 +336,7 @@ test("a disabled Security action names what it waits for", async (t) => {
   const page = await context.newPage();
   page.setDefaultTimeout(15000);
   await page.goto(`${host.origin}/home`);
-  await page.waitForSelector("body:not(.initialization-mode) main.content:not([data-loading])");
+  await page.waitForSelector(PAGE_READY);
   await page.locator("#settingsBtn").dispatchEvent("click");
   await page.waitForSelector(".settings-dialog.active .settings-nav");
   await page.locator('.settings-nav-item[data-tab="security"]').click();
@@ -362,7 +362,7 @@ test("every Settings boolean is a switch, every title has its glyph and is said 
   const page = await context.newPage();
   page.setDefaultTimeout(15000);
   await page.goto(`${host.origin}/home`);
-  await page.waitForSelector("body:not(.initialization-mode) main.content:not([data-loading])");
+  await page.waitForSelector(PAGE_READY);
   await page.locator("#settingsBtn").dispatchEvent("click");
   await page.waitForSelector(".settings-dialog.active .settings-nav");
   const tabs = await page.$$eval(".settings-nav-item[data-tab]", (items) =>
@@ -472,7 +472,7 @@ test("Licenses names start-align and the About title is the wordmark", async (t)
   const page = await context.newPage();
   page.setDefaultTimeout(15000);
   await page.goto(`${host.origin}/home`);
-  await page.waitForSelector("body:not(.initialization-mode) main.content:not([data-loading])");
+  await page.waitForSelector(PAGE_READY);
   await page.locator("#settingsBtn").dispatchEvent("click");
   await page.waitForSelector(".settings-dialog.active .settings-nav");
   await page.locator('.settings-nav-item[data-tab="licenses"]').click();
