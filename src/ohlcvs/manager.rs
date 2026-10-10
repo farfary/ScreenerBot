@@ -3,61 +3,56 @@
 
 //! OHLCV manager — coordinates candle fetching, caching, and priority management.
 
+use crate::config::with_config;
 use crate::events::{record_ohlcv_event, Severity};
 use crate::logger::{self, LogTag};
 use crate::ohlcvs::cache::OhlcvCache;
-use crate::ohlcvs::database::{OhlcvDatabase, SeriesPoolReset};
+use crate::ohlcvs::database::{OhlcvDatabase, SeriesPoolPlan, SeriesPoolReset};
 use crate::ohlcvs::types::{OhlcvError, OhlcvResult, PoolConfig, PoolMetadata};
 use crate::tokens::pools;
 use crate::tokens::types::{TokenPoolInfo, TokenPoolsSnapshot};
 use crate::tokens::{fetch_token_pools_immediate, get_token_pools_snapshot_allow_stale};
 use serde_json::json;
 use std::cmp::Ordering;
-use std::collections::HashMap;
-use std::sync::Arc;
+use std::collections::{HashMap, HashSet};
+use std::sync::{Arc, Mutex};
+use std::time::{Duration, Instant};
 
 /// Without a data server series pool, a native pool replaces the current series
 /// pool only at this multiple of its liquidity. The data server applies the same
 /// factor before it moves a stored series, so both sides switch on one rule.
 const SERIES_POOL_SWITCH_FACTOR: f64 = 2.0;
 
+/// How long a pool the series was handed away from (see `plan_failure_handover`) stays out of
+/// the series choice, so discovery does not move the series back onto it on the evidence its
+/// failures already outweighed. The cooldown lives in memory: an app start begins without it.
+const SERIES_HANDOVER_COOLDOWN: Duration = Duration::from_secs(6 * 60 * 60);
+
+/// A pool of a mint: `(mint, pool address)`.
+type PoolKey = (String, String);
+
+fn pool_key(mint: &str, pool_address: &str) -> PoolKey {
+    (mint.to_string(), pool_address.to_string())
+}
+
 pub struct PoolManager {
     db: Arc<OhlcvDatabase>,
     cache: Arc<OhlcvCache>,
+    /// When each unhealthy pool may be fetched again in this run (see `fetch_due`).
+    retry_at: Mutex<HashMap<PoolKey, Instant>>,
+    /// Until when each pool the series was handed away from stays out of the series choice
+    /// (see `SERIES_HANDOVER_COOLDOWN`).
+    cooling_until: Mutex<HashMap<PoolKey, Instant>>,
 }
 
 impl PoolManager {
     pub fn new(db: Arc<OhlcvDatabase>, cache: Arc<OhlcvCache>) -> Self {
-        Self { db, cache }
-    }
-
-    /// Register a pool for a token
-    pub async fn register_pool(
-        &self,
-        mint: &str,
-        pool_address: &str,
-        dex: &str,
-        liquidity: f64,
-    ) -> OhlcvResult<()> {
-        let pool = PoolConfig::new(pool_address.to_string(), dex.to_string(), liquidity);
-        self.db.upsert_pool(mint, &pool)?;
-
-        // INFO: Record pool registration
-        record_ohlcv_event(
-            "pool_registered",
-            Severity::Info,
-            Some(mint),
-            Some(pool_address),
-            json!({
-                "mint": mint,
-                "pool_address": pool_address,
-                "dex": dex,
-                "liquidity": liquidity,
-            }),
-        )
-        .await;
-
-        Ok(())
+        Self {
+            db,
+            cache,
+            retry_at: Mutex::new(HashMap::new()),
+            cooling_until: Mutex::new(HashMap::new()),
+        }
     }
 
     /// Get all pools for a token
@@ -65,15 +60,53 @@ impl PoolManager {
         self.db.get_pools(mint)
     }
 
-    /// Get the default pool for a token
+    /// The token's series pool from its stored pool rows (see [`PoolConfig::series_pool`]).
     pub async fn series_pool(&self, mint: &str) -> OhlcvResult<Option<PoolConfig>> {
         let pools = self.db.get_pools(mint)?;
         Ok(PoolConfig::series_pool(&pools).cloned())
     }
 
-    /// Mark a pool as failed
+    /// Whether `pool` of `mint` may be fetched now: a healthy pool always, an unhealthy one once
+    /// its [`PoolConfig::fetch_retry_delay`] has passed since its last failure in this run. A
+    /// success resets the pool's count, so the bounded retry is what heals an unhealthy pool.
+    pub fn fetch_due(&self, mint: &str, pool: &PoolConfig) -> bool {
+        pool.is_healthy()
+            || self
+                .retry_at
+                .lock()
+                .ok()
+                .and_then(|retry_at| retry_at.get(&pool_key(mint, &pool.address)).copied())
+                .is_none_or(|at| Instant::now() >= at)
+    }
+
+    /// Count a failed fetch of `pool_address`. The count and the handover decision are one
+    /// write transaction: only a default that just went unhealthy and never produced a candle
+    /// hands the series over (`plan_failure_handover`); a default that holds candles keeps the
+    /// series and is retried on its backoff (`fetch_due`).
     pub async fn mark_failure(&self, mint: &str, pool_address: &str) -> OhlcvResult<()> {
-        self.db.mark_pool_failure(mint, pool_address)?;
+        let failover = with_config(|cfg| cfg.ohlcv.pool_failover_enabled);
+        let write = self
+            .db
+            .mark_pool_failure(mint, pool_address, |pools, holds_candles| {
+                let now = Instant::now();
+                let delay = pools
+                    .iter()
+                    .find(|p| p.address == pool_address)
+                    .and_then(PoolConfig::fetch_retry_delay);
+                if let (Some(delay), Ok(mut retry_at)) = (delay, self.retry_at.lock()) {
+                    retry_at.insert(pool_key(mint, pool_address), now + delay);
+                }
+                let plan = failover
+                    .then(|| plan_failure_handover(pools, pool_address, holds_candles))
+                    .flatten()?;
+                // Recorded inside the transaction, so a discovery that runs right after the
+                // commit already sees the cooldown.
+                if let Ok(mut cooling_until) = self.cooling_until.lock() {
+                    cooling_until
+                        .insert(pool_key(mint, pool_address), now + SERIES_HANDOVER_COOLDOWN);
+                }
+                Some(plan)
+            })?;
 
         // WARN: Record pool failure
         record_ohlcv_event(
@@ -88,22 +121,10 @@ impl PoolManager {
         )
         .await;
 
-        // A default that just went unhealthy hands the series to the healthy pool the
-        // discovery rule would pick, through the same write that resets the token's rows and
-        // backfill flags. With no healthy pool left the default stays and the token resolves
-        // no series pool until discovery restores one.
-        let pools = self.db.get_pools(mint)?;
-        let default_failed = pools
-            .iter()
-            .any(|p| p.is_default && p.address == pool_address && !p.is_healthy());
-        if default_failed {
-            let healthy: Vec<PoolConfig> =
-                pools.iter().filter(|p| p.is_healthy()).cloned().collect();
-            if let Some(next) = select_series_default(None, None, &healthy) {
-                let write = self.db.write_series_pools(mint, &pools, &next)?;
-                if let Some(reset) = write.reset {
-                    self.series_moved(mint, &next, &reset, false).await?;
-                }
+        if let Some(write) = write {
+            if let Some(reset) = &write.reset {
+                self.series_moved(mint, &write.plan.series, reset, false)
+                    .await?;
             }
         }
 
@@ -112,7 +133,25 @@ impl PoolManager {
 
     /// Mark a pool as successful
     pub async fn mark_success(&self, mint: &str, pool_address: &str) -> OhlcvResult<()> {
+        if let Ok(mut retry_at) = self.retry_at.lock() {
+            retry_at.remove(&pool_key(mint, pool_address));
+        }
         self.db.mark_pool_success(mint, pool_address)
+    }
+
+    /// The pools of `mint` still in their handover cooldown. Expired entries of every mint are
+    /// dropped on the way.
+    fn cooling_pools(&self, mint: &str) -> HashSet<String> {
+        let Ok(mut cooling_until) = self.cooling_until.lock() else {
+            return HashSet::new();
+        };
+        let now = Instant::now();
+        cooling_until.retain(|_, until| now < *until);
+        cooling_until
+            .keys()
+            .filter(|(key_mint, _)| key_mint == mint)
+            .map(|(_, address)| address.clone())
+            .collect()
     }
 
     /// Discover and register pools for a token using centralized token snapshots.
@@ -184,9 +223,9 @@ impl PoolManager {
         self.register_snapshot_pools(mint, &snapshot).await
     }
 
-    /// Register the pools of `snapshot` for `mint` (see [`Self::discover_pools`]): the
-    /// planned pools, their single default and, when the series moves, the reset of the
-    /// token's rows and flags are one write; the hot cache is invalidated after it commits.
+    /// Register the pools of `snapshot` for `mint` (see [`Self::discover_pools`]). The plan is
+    /// made from the pool rows read inside the write transaction, so a handover or a count
+    /// committed meanwhile is never overwritten; the hot cache is invalidated after the commit.
     async fn register_snapshot_pools(
         &self,
         mint: &str,
@@ -199,23 +238,30 @@ impl PoolManager {
                 .any(|pool| pool.pool_address == *address)
         });
 
-        let existing_pools = self.db.get_pools(mint)?;
-        let previous_default = existing_pools
-            .iter()
-            .find(|p| p.is_default)
-            .map(|p| p.address.clone());
-        let mut existing_map: HashMap<String, PoolConfig> = existing_pools
-            .into_iter()
-            .map(|cfg| (cfg.address.clone(), cfg))
-            .collect();
-        let merged: Vec<PoolConfig> = snapshot
-            .pools
-            .iter()
-            .map(|pool| Self::merge_pool_info(pool, existing_map.remove(&pool.pool_address)))
-            .collect();
+        let write = self.db.write_series_pools(mint, |registered| {
+            let cooling = self.cooling_pools(mint);
+            let stored: HashMap<&str, &PoolConfig> = registered
+                .iter()
+                .map(|cfg| (cfg.address.as_str(), cfg))
+                .collect();
+            let merged: Vec<PoolConfig> = snapshot
+                .pools
+                .iter()
+                .map(|pool| {
+                    Self::merge_pool_info(
+                        pool,
+                        stored
+                            .get(pool.pool_address.as_str())
+                            .map(|&cfg| cfg.clone()),
+                        cooling.contains(&pool.pool_address),
+                    )
+                })
+                .collect();
+            let previous_default = registered.iter().find(|p| p.is_default);
+            plan_series_pools(merged, server_series, previous_default, &cooling)
+        })?;
 
-        let Some(plan) = plan_series_pools(merged, server_series, previous_default.as_deref())
-        else {
+        let Some(write) = write else {
             record_ohlcv_event(
                 "pool_discovery_empty",
                 Severity::Warn,
@@ -230,6 +276,7 @@ impl PoolManager {
                 mint
             )));
         };
+        let plan = &write.plan;
 
         if !plan.pools.iter().any(|p| p.is_native_pair) {
             logger::debug(
@@ -242,10 +289,6 @@ impl PoolManager {
                 ),
             );
         }
-
-        let write = self
-            .db
-            .write_series_pools(mint, &plan.pools, &plan.series)?;
 
         if !write.removed_pools.is_empty() {
             let preview: Vec<&str> = write
@@ -293,7 +336,7 @@ impl PoolManager {
         )
         .await;
 
-        Ok(plan.pools)
+        Ok(write.plan.pools)
     }
 
     /// Follow up a committed series move onto `current`: invalidate the hot candle cache, so
@@ -334,7 +377,13 @@ impl PoolManager {
         Ok(())
     }
 
-    fn merge_pool_info(pool: &TokenPoolInfo, existing: Option<PoolConfig>) -> PoolConfig {
+    /// Merge a snapshot pool into its stored row. A pool in its handover cooldown (`cooling`)
+    /// keeps its failure count.
+    fn merge_pool_info(
+        pool: &TokenPoolInfo,
+        existing: Option<PoolConfig>,
+        cooling: bool,
+    ) -> PoolConfig {
         let dex_label = pools::extract_dex_label(pool);
         let liquidity = pools::extract_pool_liquidity(pool);
 
@@ -366,7 +415,9 @@ impl PoolManager {
         // and is valid — stale failure counts from a previous session (or from
         // transient API errors) should not permanently block OHLCV fetching.
         // If the API is still failing, the count will build up again naturally.
-        if was_existing && !config.is_healthy() {
+        // A pool the series was just handed away from keeps its count until its
+        // cooldown ends, so discovery does not move the series straight back.
+        if was_existing && !cooling && !config.is_healthy() {
             config.failure_count = 0;
         }
 
@@ -378,48 +429,6 @@ impl PoolManager {
         let pools = self.get_pools(mint).await?;
         Ok(pools.iter().map(PoolMetadata::from).collect())
     }
-
-    /// Health check all pools for a token
-    pub async fn check_pool_health(&self, mint: &str) -> OhlcvResult<Vec<(String, bool)>> {
-        let pools = self.get_pools(mint).await?;
-        Ok(pools
-            .into_iter()
-            .map(|p| {
-                let address = p.address.clone();
-                (address, p.is_healthy())
-            })
-            .collect())
-    }
-
-    /// Reset failure count for a pool (for manual recovery)
-    pub async fn reset_pool_failures(&self, mint: &str, pool_address: &str) -> OhlcvResult<()> {
-        self.db.mark_pool_success(mint, pool_address)
-    }
-
-    /// Get pool statistics
-    pub async fn get_pool_stats(&self, mint: &str) -> OhlcvResult<PoolStats> {
-        let pools = self.get_pools(mint).await?;
-
-        let total_pools = pools.len();
-        let healthy_pools = pools.iter().filter(|p| p.is_healthy()).count();
-        let total_liquidity: f64 = pools.iter().map(|p| p.liquidity).sum();
-        let has_default = pools.iter().any(|p| p.is_default);
-
-        Ok(PoolStats {
-            total_pools,
-            healthy_pools,
-            total_liquidity,
-            has_default,
-        })
-    }
-}
-
-/// The pools a snapshot registers for a token and its series pool among them.
-#[derive(Debug)]
-struct SeriesPoolPlan {
-    /// Every pool to keep registered, exactly one of them `is_default`.
-    pools: Vec<PoolConfig>,
-    series: String,
 }
 
 /// Plan a token's registered pools from its snapshot pools (merged with their stored rows).
@@ -427,12 +436,20 @@ struct SeriesPoolPlan {
 /// A token with a native pool registers its native pools, the data server's series pool and
 /// the current default while the snapshot still lists it; every other pool is dropped, so no
 /// unregistered pool can keep a stale default. A token without a native pool registers all
-/// of its pools (the data server serves them in SOL). `None` when the snapshot has no pool.
+/// of its pools (the data server serves them in SOL). Without a data server series pool, a
+/// stored default the snapshot omits stays registered and stays the default: a provider-only
+/// list is no evidence that the pool is gone. Pools in `cooling` are not chosen as the series
+/// unless one is the current default. `None` when the snapshot has no pool.
 fn plan_series_pools(
     snapshot_pools: Vec<PoolConfig>,
     server_series: Option<&str>,
-    previous_default: Option<&str>,
+    previous_default: Option<&PoolConfig>,
+    cooling: &HashSet<String>,
 ) -> Option<SeriesPoolPlan> {
+    if snapshot_pools.is_empty() {
+        return None;
+    }
+    let previous = previous_default.map(|p| p.address.as_str());
     let has_native = snapshot_pools.iter().any(|p| p.is_native_pair);
     let mut pools: Vec<PoolConfig> = snapshot_pools
         .into_iter()
@@ -440,13 +457,54 @@ fn plan_series_pools(
             !has_native
                 || p.is_native_pair
                 || server_series == Some(p.address.as_str())
-                || previous_default == Some(p.address.as_str())
+                || previous == Some(p.address.as_str())
         })
         .collect();
-    let series = select_series_default(server_series, previous_default, &pools)?;
+    if let (None, Some(stored)) = (server_series, previous_default) {
+        if !pools.iter().any(|p| p.address == stored.address) {
+            pools.push(stored.clone());
+        }
+    }
+    let eligible: Vec<PoolConfig> = pools
+        .iter()
+        .filter(|p| previous == Some(p.address.as_str()) || !cooling.contains(&p.address))
+        .cloned()
+        .collect();
+    let series = select_series_default(server_series, previous, &eligible)
+        .or_else(|| select_series_default(server_series, previous, &pools))?;
     for pool in &mut pools {
         pool.is_default = pool.address == series;
     }
+    Some(SeriesPoolPlan { pools, series })
+}
+
+/// The series handover after a failed fetch of `failed`: a default that is now unhealthy and
+/// never produced a candle (no successful fetch, no stored candle) hands the series to the
+/// healthy pool the discovery rule picks. A default that holds candles never moves on fetch
+/// failures, since a move deletes its rows; it keeps the series and is retried on its backoff.
+/// `None` when nothing moves.
+fn plan_failure_handover(
+    pools: &[PoolConfig],
+    failed: &str,
+    holds_candles: bool,
+) -> Option<SeriesPoolPlan> {
+    let default = pools.iter().find(|p| p.is_default && p.address == failed)?;
+    if default.is_healthy() || holds_candles || default.last_successful_fetch.is_some() {
+        return None;
+    }
+    let healthy: Vec<PoolConfig> = pools
+        .iter()
+        .filter(|p| p.address != failed && p.is_healthy())
+        .cloned()
+        .collect();
+    let series = select_series_default(None, None, &healthy)?;
+    let pools = pools
+        .iter()
+        .map(|p| PoolConfig {
+            is_default: p.address == series,
+            ..p.clone()
+        })
+        .collect();
     Some(SeriesPoolPlan { pools, series })
 }
 
@@ -497,14 +555,6 @@ fn pool_liquidity(config: &PoolConfig) -> f64 {
     } else {
         0.0
     }
-}
-
-#[derive(Debug, Clone)]
-pub struct PoolStats {
-    pub total_pools: usize,
-    pub healthy_pools: usize,
-    pub total_liquidity: f64,
-    pub has_default: bool,
 }
 
 #[cfg(test)]
@@ -576,12 +626,24 @@ mod tests {
         assert_eq!(select_series_default(None, None, &[]), None);
     }
 
-    fn plan(
+    /// Plan `pools` with `previous` as the stored default: the snapshot's row of that address,
+    /// or a USD row the snapshot omits.
+    fn plan_cooling(
         pools: Vec<PoolConfig>,
         server: Option<&str>,
         previous: Option<&str>,
+        cooling: &[&str],
     ) -> (Vec<String>, String) {
-        let plan = plan_series_pools(pools, server, previous).expect("a plan");
+        let previous = previous.map(|address| PoolConfig {
+            is_default: true,
+            ..pools
+                .iter()
+                .find(|p| p.address == address)
+                .cloned()
+                .unwrap_or_else(|| pool(address, 200_000.0, false))
+        });
+        let cooling: HashSet<String> = cooling.iter().map(|a| a.to_string()).collect();
+        let plan = plan_series_pools(pools, server, previous.as_ref(), &cooling).expect("a plan");
         assert_eq!(plan.pools.iter().filter(|p| p.is_default).count(), 1);
         assert!(plan
             .pools
@@ -590,6 +652,14 @@ mod tests {
         let mut addresses: Vec<String> = plan.pools.into_iter().map(|p| p.address).collect();
         addresses.sort();
         (addresses, plan.series)
+    }
+
+    fn plan(
+        pools: Vec<PoolConfig>,
+        server: Option<&str>,
+        previous: Option<&str>,
+    ) -> (Vec<String>, String) {
+        plan_cooling(pools, server, previous, &[])
     }
 
     fn names(addresses: &[&str]) -> Vec<String> {
@@ -615,9 +685,15 @@ mod tests {
             plan(snapshot(), None, Some("usdc")),
             (names(&["sol", "usdc"]), "usdc".to_string())
         );
-        // A default the snapshot no longer lists is dropped with every other non-native pool.
+        // A server-less refresh that omits the stored default keeps it registered and the
+        // default; every other non-native pool is dropped.
         assert_eq!(
             plan(snapshot(), None, Some("gone")),
+            (names(&["gone", "sol"]), "gone".to_string())
+        );
+        // A server-backed snapshot that omits the stored default drops it.
+        assert_eq!(
+            plan(snapshot(), Some("sol"), Some("gone")),
             (names(&["sol"]), "sol".to_string())
         );
     }
@@ -641,26 +717,90 @@ mod tests {
             plan(with_sol, None, Some("usdc")),
             (names(&["sol", "usdc"]), "usdc".to_string())
         );
-        assert!(plan_series_pools(Vec::new(), None, Some("usdc")).is_none());
+        let stored = pool("usdc", 900.0, false);
+        assert!(plan_series_pools(Vec::new(), None, Some(&stored), &HashSet::new()).is_none());
+    }
+
+    #[test]
+    fn a_cooling_pool_is_never_chosen_unless_it_is_the_current_default() {
+        let snapshot = || vec![pool("deep", 300.0, true), pool("shallow", 100.0, true)];
+        // Neither the server's choice nor the switch factor moves the series onto it.
+        for server in [Some("deep"), None] {
+            assert_eq!(
+                plan_cooling(snapshot(), server, Some("shallow"), &["deep"]),
+                (names(&["deep", "shallow"]), "shallow".to_string())
+            );
+        }
+        // A current default is never excluded, and a token with no other pool still gets one.
+        assert_eq!(
+            plan_cooling(snapshot(), None, Some("deep"), &["deep"]).1,
+            "deep"
+        );
+        assert_eq!(
+            plan_cooling(vec![pool("deep", 300.0, true)], None, None, &["deep"]).1,
+            "deep"
+        );
+    }
+
+    #[test]
+    fn only_an_unhealthy_default_that_never_produced_a_candle_hands_the_series_over() {
+        crate::config::utils::install_default_config();
+        let limit = with_config(|cfg| cfg.ohlcv.max_pool_failures);
+        let pools = |failures: u32, succeeded: bool| {
+            let mut default = pool("deep", 300.0, true);
+            default.is_default = true;
+            default.failure_count = failures;
+            default.last_successful_fetch = succeeded.then(chrono::Utc::now);
+            vec![
+                default,
+                pool("shallow", 100.0, true),
+                pool("usdc", 900.0, false),
+            ]
+        };
+        let handover = |pools: &[PoolConfig], failed: &str, holds_candles: bool| {
+            plan_failure_handover(pools, failed, holds_candles).map(|plan| plan.series)
+        };
+
+        assert_eq!(
+            handover(&pools(limit, false), "deep", false).as_deref(),
+            Some("shallow")
+        );
+        assert_eq!(handover(&pools(limit - 1, false), "deep", false), None);
+        assert_eq!(handover(&pools(limit, false), "deep", true), None);
+        assert_eq!(handover(&pools(limit, true), "deep", false), None);
+        assert_eq!(handover(&pools(limit, false), "shallow", false), None);
+        let plan = plan_failure_handover(&pools(limit, false), "deep", false).unwrap();
+        assert_eq!(plan.pools.len(), 3);
+        assert_eq!(plan.pools.iter().filter(|p| p.is_default).count(), 1);
     }
 
     struct Harness {
         manager: PoolManager,
         db: Arc<OhlcvDatabase>,
         path: std::path::PathBuf,
+        /// Series resets observed so far (see `Harness::count_reset`).
+        resets: usize,
     }
 
     impl Harness {
         fn open(label: &str) -> Self {
+            crate::config::utils::install_default_config();
             let path = std::env::temp_dir().join(format!(
                 "screenerbot-ohlcv-manager-{label}-{}.db",
                 std::process::id()
             ));
             let _ = std::fs::remove_file(&path);
             let db = Arc::new(OhlcvDatabase::new(&path, ChainId::Solana).unwrap());
+            db.upsert_monitor_config(&TokenOhlcvConfig::new("mint".to_string(), Priority::High))
+                .unwrap();
             let cache = Arc::new(OhlcvCache::new(ChainId::Solana));
             let manager = PoolManager::new(Arc::clone(&db), cache);
-            Self { manager, db, path }
+            Self {
+                manager,
+                db,
+                path,
+                resets: 0,
+            }
         }
 
         async fn discover(&self, server: Option<&str>, pools: &[(&str, f64, bool)]) -> String {
@@ -684,14 +824,40 @@ mod tests {
                 .register_snapshot_pools("mint", &snapshot)
                 .await
                 .unwrap();
-            let stored = self.db.get_pools("mint").unwrap();
-            assert_eq!(stored.iter().filter(|p| p.is_default).count(), 1);
-            let series = PoolConfig::series_pool(&stored).unwrap().address.clone();
+            let series = self.series();
             assert_eq!(
                 PoolConfig::series_pool(&returned).map(|p| p.address.as_str()),
                 Some(series.as_str())
             );
             series
+        }
+
+        /// The one stored default.
+        fn series(&self) -> String {
+            let stored = self.db.get_pools("mint").unwrap();
+            assert_eq!(stored.iter().filter(|p| p.is_default).count(), 1);
+            PoolConfig::series_pool(&stored).unwrap().address.clone()
+        }
+
+        async fn fail(&self, pool: &str, times: u32) {
+            for _ in 0..times {
+                self.manager.mark_failure("mint", pool).await.unwrap();
+            }
+        }
+
+        /// Count a reset since the last call: a reset clears the backfill flags, which are
+        /// marked complete again on the current series.
+        fn count_reset(&mut self) {
+            if !self
+                .db
+                .is_backfill_complete("mint", Timeframe::Hour1)
+                .unwrap()
+            {
+                self.resets += 1;
+            }
+            self.db
+                .mark_all_backfills_complete("mint", &self.series())
+                .unwrap();
         }
 
         fn seed(&self, pool: &str) {
@@ -712,6 +878,15 @@ mod tests {
                 .unwrap()
                 .is_some()
         }
+
+        fn stored(&self, pool: &str) -> PoolConfig {
+            self.db
+                .get_pools("mint")
+                .unwrap()
+                .into_iter()
+                .find(|p| p.address == pool)
+                .expect("a registered pool")
+        }
     }
 
     impl Drop for Harness {
@@ -720,50 +895,127 @@ mod tests {
         }
     }
 
+    const POOLS: [(&str, f64, bool); 2] = [("deep", 300.0, true), ("shallow", 100.0, true)];
+
     #[tokio::test]
     async fn a_server_less_discovery_keeps_a_usd_series_pool_and_one_default() {
-        let h = Harness::open("usd-sticky");
-        h.db.upsert_monitor_config(&TokenOhlcvConfig::new("mint".to_string(), Priority::High))
-            .unwrap();
+        let mut h = Harness::open("usd-sticky");
         let pools = [("sol", 300.0, true), ("usdc", 200.0, false)];
         assert_eq!(h.discover(Some("usdc"), &pools).await, "usdc");
         h.seed("usdc");
-        h.db.mark_all_backfills_complete("mint", "usdc").unwrap();
+        h.count_reset();
+        h.resets = 0;
 
         // The server does not answer: the USD default stays the only default and keeps its rows.
         assert_eq!(h.discover(None, &pools).await, "usdc");
         assert!(h.rows("usdc"));
-        assert!(h.db.is_backfill_complete("mint", Timeframe::Hour1).unwrap());
+        h.count_reset();
+        // A provider-only snapshot that omits the USD pool keeps it as the series.
+        assert_eq!(h.discover(None, &[("sol", 300.0, true)]).await, "usdc");
+        assert!(h.rows("usdc"));
+        h.count_reset();
+        assert_eq!(h.resets, 0);
 
         // The server moves the series: one write moves the default and resets the token.
         assert_eq!(h.discover(Some("sol"), &pools).await, "sol");
         assert!(!h.rows("usdc"));
-        assert!(!h.db.is_backfill_complete("mint", Timeframe::Hour1).unwrap());
+        h.count_reset();
+        assert_eq!(h.resets, 1);
+    }
+
+    /// Failures and rediscoveries in sequence, with and without a data server pool: a default
+    /// that holds candles never moves and keeps its rows.
+    #[tokio::test]
+    async fn fetch_failures_and_rediscovery_never_move_a_default_that_holds_candles() {
+        for server in [None, Some("deep")] {
+            let mut h = Harness::open(&format!("failures-seeded-{}", server.is_some()));
+            let limit = with_config(|cfg| cfg.ohlcv.max_pool_failures);
+            assert_eq!(h.discover(server, &POOLS).await, "deep");
+            h.seed("deep");
+            h.count_reset();
+            h.resets = 0;
+
+            for _ in 0..2 {
+                h.fail("deep", limit).await;
+                // Unhealthy, still the series, its stored candles still read.
+                assert!(!h.stored("deep").is_healthy());
+                assert_eq!(h.series(), "deep");
+                assert!(h.rows("deep"));
+                h.count_reset();
+                assert_eq!(h.discover(server, &POOLS).await, "deep");
+                assert!(h.rows("deep"));
+                h.count_reset();
+            }
+            assert_eq!(h.resets, 0, "server={server:?}");
+        }
+    }
+
+    /// A default that never produced a candle hands the series over once; rediscovery does not
+    /// move it back while the handed-away pool cools down, and does once the cooldown ends.
+    #[tokio::test]
+    async fn a_handover_and_rediscovery_reset_the_series_at_most_once_per_cooldown() {
+        for server in [None, Some("deep")] {
+            let mut h = Harness::open(&format!("failures-handover-{}", server.is_some()));
+            let limit = with_config(|cfg| cfg.ohlcv.max_pool_failures);
+            assert_eq!(h.discover(server, &POOLS).await, "deep");
+            h.count_reset();
+            h.resets = 0;
+
+            h.fail("deep", limit).await;
+            assert_eq!(h.series(), "shallow");
+            h.count_reset();
+            assert_eq!(h.resets, 1, "server={server:?}");
+            h.seed("shallow");
+
+            for _ in 0..2 {
+                assert_eq!(h.discover(server, &POOLS).await, "shallow");
+                assert!(h.rows("shallow"));
+                assert!(!h.stored("deep").is_healthy());
+                h.count_reset();
+                h.fail("deep", limit).await;
+                assert_eq!(h.series(), "shallow");
+                h.count_reset();
+            }
+            assert_eq!(h.resets, 1, "server={server:?}");
+
+            // The cooldown ends: the pool is eligible again with a fresh count.
+            h.manager
+                .cooling_until
+                .lock()
+                .unwrap()
+                .insert(pool_key("mint", "deep"), Instant::now());
+            assert_eq!(h.discover(server, &POOLS).await, "deep");
+            assert!(h.stored("deep").is_healthy());
+        }
     }
 
     #[tokio::test]
-    async fn a_failing_default_hands_the_series_over_through_the_reset() {
-        let h = Harness::open("failure-handover");
-        h.db.upsert_monitor_config(&TokenOhlcvConfig::new("mint".to_string(), Priority::High))
-            .unwrap();
-        let pools = [("deep", 300.0, true), ("shallow", 100.0, true)];
-        assert_eq!(h.discover(None, &pools).await, "deep");
+    async fn an_unhealthy_default_is_fetched_again_after_its_backoff_and_heals_on_success() {
+        let h = Harness::open("failure-backoff");
+        let limit = with_config(|cfg| cfg.ohlcv.max_pool_failures);
+        assert_eq!(h.discover(None, &POOLS).await, "deep");
         h.seed("deep");
-        h.db.mark_all_backfills_complete("mint", "deep").unwrap();
 
-        for _ in 0..5 {
-            h.manager.mark_failure("mint", "deep").await.unwrap();
-        }
+        h.fail("deep", limit - 1).await;
+        assert!(h.manager.fetch_due("mint", &h.stored("deep")));
+        h.fail("deep", 1).await;
+        let deep = h.stored("deep");
+        assert!(!h.manager.fetch_due("mint", &deep));
 
-        let stored = h.db.get_pools("mint").unwrap();
-        assert_eq!(stored.iter().filter(|p| p.is_default).count(), 1);
-        assert_eq!(
-            PoolConfig::series_pool(&stored).map(|p| p.address.as_str()),
-            Some("shallow")
-        );
-        assert!(!h.rows("deep"));
-        for tf in Timeframe::all() {
-            assert!(!h.db.is_backfill_complete("mint", tf).unwrap(), "{tf:?}");
-        }
+        let retry_at = h.manager.retry_at.lock().unwrap()[&pool_key("mint", "deep")];
+        let delay = deep
+            .fetch_retry_delay()
+            .expect("an unhealthy pool backs off");
+        assert!(retry_at > Instant::now() && retry_at <= Instant::now() + delay);
+        h.manager
+            .retry_at
+            .lock()
+            .unwrap()
+            .insert(pool_key("mint", "deep"), Instant::now());
+        assert!(h.manager.fetch_due("mint", &deep));
+
+        h.manager.mark_success("mint", "deep").await.unwrap();
+        assert!(h.stored("deep").is_healthy());
+        assert_eq!(h.series(), "deep");
     }
 }

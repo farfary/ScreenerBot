@@ -681,6 +681,7 @@ impl OhlcvDatabase {
 #[cfg(test)]
 mod tests {
     use super::super::migrations::test_path;
+    use super::super::{SeriesPoolPlan, SeriesPoolWrite};
     use super::*;
     use crate::chains::ChainId;
     use crate::ohlcvs::types::{PoolConfig, Priority, TokenOhlcvConfig};
@@ -1081,6 +1082,21 @@ mod tests {
         close_db(db, path);
     }
 
+    /// Write `pools` with `series` as the default, planned regardless of the stored rows.
+    fn write_series(
+        db: &OhlcvDatabase,
+        pools: &[PoolConfig],
+        series: &str,
+    ) -> OhlcvResult<SeriesPoolWrite> {
+        db.write_series_pools("mint", |_| {
+            Some(SeriesPoolPlan {
+                pools: pools.to_vec(),
+                series: series.to_string(),
+            })
+        })
+        .map(|write| write.expect("a planned write"))
+    }
+
     fn registered(address: &str, liquidity: f64) -> PoolConfig {
         PoolConfig::new(address.to_string(), "dex".to_string(), liquidity)
     }
@@ -1119,7 +1135,7 @@ mod tests {
         }
         let pools = [registered("old", 2.0), registered("new", 1.0)];
 
-        let first = db.write_series_pools("mint", &pools, "new").unwrap();
+        let first = write_series(&db, &pools, "new").unwrap();
         let reset = first.reset.expect("a first default is a series move");
         assert_eq!(reset.previous_pool, None);
         assert_eq!((reset.candles_deleted, reset.gaps_deleted), (1, 1));
@@ -1132,12 +1148,12 @@ mod tests {
         assert!(has_rows(&db, "other-mint", "old"));
 
         db.mark_all_backfills_complete("mint", "new").unwrap();
-        let unchanged = db.write_series_pools("mint", &pools, "new").unwrap();
+        let unchanged = write_series(&db, &pools, "new").unwrap();
         assert!(unchanged.reset.is_none());
         assert!(db.is_backfill_complete("mint", Timeframe::Hour1).unwrap());
         assert!(has_rows(&db, "mint", "new"));
 
-        let moved = db.write_series_pools("mint", &pools, "old").unwrap();
+        let moved = write_series(&db, &pools, "old").unwrap();
         let reset = moved.reset.expect("the default moved");
         assert_eq!(reset.previous_pool.as_deref(), Some("new"));
         assert!(!has_rows(&db, "mint", "new"));
@@ -1155,15 +1171,15 @@ mod tests {
     #[test]
     fn a_pool_left_out_of_the_set_is_deleted_with_its_rows_and_never_stays_a_default() {
         let (db, path) = open_db("series-pool-removed");
-        db.write_series_pools("mint", &[registered("usd", 5.0)], "usd")
-            .unwrap();
+        write_series(&db, &[registered("usd", 5.0)], "usd").unwrap();
         seed_rows(&db, "mint", "usd");
 
-        let write = db
-            .write_series_pools("mint", &[registered("sol", 1.0)], "sol")
-            .unwrap();
+        let write = write_series(&db, &[registered("sol", 1.0)], "sol").unwrap();
 
         assert_eq!(write.removed_pools, vec!["usd".to_string()]);
+        // The reset counts the rows deleted with the removed pool.
+        let reset = write.reset.expect("the default moved");
+        assert_eq!((reset.candles_deleted, reset.gaps_deleted), (1, 1));
         assert!(!has_rows(&db, "mint", "usd"));
         assert!(db
             .get_open_gaps("mint", "usd", 0, u32::MAX)
@@ -1173,7 +1189,7 @@ mod tests {
         assert_eq!(stored.len(), 1);
         assert!(stored[0].is_default && stored[0].address == "sol");
         assert!(matches!(
-            db.write_series_pools("mint", &[registered("sol", 1.0)], "absent"),
+            write_series(&db, &[registered("sol", 1.0)], "absent"),
             Err(OhlcvError::PoolNotFound(_))
         ));
         close_db(db, path);
@@ -1185,11 +1201,11 @@ mod tests {
         db.upsert_monitor_config(&TokenOhlcvConfig::new("mint".to_string(), Priority::High))
             .unwrap();
         let pools = [registered("old", 2.0), registered("new", 1.0)];
-        db.write_series_pools("mint", &pools, "old").unwrap();
+        write_series(&db, &pools, "old").unwrap();
         seed_rows(&db, "mint", "old");
 
         // The move commits while a backfill of the previous pool is still in flight.
-        db.write_series_pools("mint", &pools, "new").unwrap();
+        write_series(&db, &pools, "new").unwrap();
 
         let refused = |result: OhlcvResult<()>| matches!(result, Err(OhlcvError::SeriesPoolMoved { ref pool, .. }) if pool == "old");
         assert!(refused(
@@ -1227,6 +1243,125 @@ mod tests {
         db.mark_backfill_complete("mint", "new", Timeframe::Hour1)
             .unwrap();
         assert!(db.is_backfill_complete("mint", Timeframe::Hour1).unwrap());
+        close_db(db, path);
+    }
+
+    fn failure_count(db: &OhlcvDatabase, pool: &str) -> u32 {
+        db.get_pools("mint")
+            .unwrap()
+            .into_iter()
+            .find(|p| p.address == pool)
+            .expect("a registered pool")
+            .failure_count
+    }
+
+    #[test]
+    fn a_declined_plan_writes_nothing() {
+        let (db, path) = open_db("series-pool-declined");
+        write_series(&db, &[registered("a", 2.0), registered("b", 1.0)], "a").unwrap();
+        let mut seen = Vec::new();
+        let write = db
+            .write_series_pools("mint", |rows| {
+                seen = rows
+                    .iter()
+                    .map(|p| (p.address.clone(), p.is_default))
+                    .collect();
+                None
+            })
+            .unwrap();
+        assert!(write.is_none());
+        assert_eq!(
+            seen,
+            vec![("a".to_string(), true), ("b".to_string(), false)]
+        );
+        assert_eq!(db.get_pools("mint").unwrap().len(), 2);
+        close_db(db, path);
+    }
+
+    #[test]
+    fn a_failure_count_and_its_handover_commit_in_one_transaction() {
+        let (db, path) = open_db("series-pool-failure");
+        db.upsert_monitor_config(&TokenOhlcvConfig::new("mint".to_string(), Priority::High))
+            .unwrap();
+        let pools = [registered("a", 2.0), registered("b", 1.0)];
+        write_series(&db, &pools, "a").unwrap();
+        db.mark_all_backfills_complete("mint", "a").unwrap();
+
+        // The planner sees the count it is deciding on and whether the pool holds candles.
+        let declined = db
+            .mark_pool_failure("mint", "a", |rows, holds_candles| {
+                assert!(!holds_candles);
+                assert_eq!(
+                    rows.iter()
+                        .find(|p| p.address == "a")
+                        .unwrap()
+                        .failure_count,
+                    1
+                );
+                None
+            })
+            .unwrap();
+        assert!(declined.is_none());
+        assert_eq!(failure_count(&db, "a"), 1);
+        assert!(db.is_backfill_complete("mint", Timeframe::Hour1).unwrap());
+
+        seed_rows(&db, "mint", "a");
+        let moved = db
+            .mark_pool_failure("mint", "a", |rows, holds_candles| {
+                assert!(holds_candles);
+                Some(SeriesPoolPlan {
+                    pools: rows.to_vec(),
+                    series: "b".to_string(),
+                })
+            })
+            .unwrap()
+            .expect("a planned handover");
+        assert!(moved.reset.is_some());
+        assert_eq!(failure_count(&db, "a"), 2);
+        assert!(!has_rows(&db, "mint", "a"));
+        assert!(!db.is_backfill_complete("mint", Timeframe::Hour1).unwrap());
+        let stored = db.get_pools("mint").unwrap();
+        assert_eq!(
+            PoolConfig::series_pool(&stored).map(|p| p.address.as_str()),
+            Some("b")
+        );
+        close_db(db, path);
+    }
+
+    /// Failure counts and discovery writes racing on two threads: every write plans from the
+    /// rows inside its own transaction, so no count is lost and no registered pool is dropped.
+    #[test]
+    fn concurrent_failure_counts_and_series_writes_lose_no_update() {
+        const ROUNDS: u32 = 40;
+        let (db, path) = open_db("series-pool-race");
+        write_series(&db, &[registered("a", 2.0), registered("b", 1.0)], "a").unwrap();
+
+        std::thread::scope(|scope| {
+            scope.spawn(|| {
+                for _ in 0..ROUNDS {
+                    db.mark_pool_failure("mint", "b", |_, _| None).unwrap();
+                }
+            });
+            scope.spawn(|| {
+                for _ in 0..ROUNDS {
+                    db.write_series_pools("mint", |rows| {
+                        Some(SeriesPoolPlan {
+                            pools: rows.to_vec(),
+                            series: "a".to_string(),
+                        })
+                    })
+                    .unwrap();
+                }
+            });
+        });
+
+        assert_eq!(failure_count(&db, "b"), ROUNDS);
+        let stored = db.get_pools("mint").unwrap();
+        assert_eq!(stored.len(), 2);
+        assert_eq!(
+            PoolConfig::series_pool(&stored).map(|p| p.address.as_str()),
+            Some("a")
+        );
         close_db(db, path);
     }
 }

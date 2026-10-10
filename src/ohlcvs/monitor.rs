@@ -551,7 +551,9 @@ pub struct OhlcvMonitor {
     shutdown_signal: Arc<RwLock<bool>>,
     backfill_in_progress: Arc<Mutex<HashSet<String>>>,
     discovery_in_progress: Arc<Mutex<HashSet<String>>>,
-    native_series: Arc<Mutex<HashMap<(String, Timeframe), NativeSeriesState>>>,
+    /// Per-series refresh state keyed by `(mint, pool, timeframe)`, so a series move starts
+    /// the new pool from a clean state.
+    native_series: Arc<Mutex<HashMap<(String, String, Timeframe), NativeSeriesState>>>,
     telemetry: Arc<RwLock<MonitorTelemetry>>,
 }
 
@@ -634,7 +636,6 @@ impl OhlcvMonitor {
         };
 
         let has_stored_pools = !pools.is_empty();
-        config.pools = pools;
 
         // Store in database
         self.db.upsert_monitor_config(&config)?;
@@ -660,7 +661,7 @@ impl OhlcvMonitor {
         // timeframes — that previously hammered GeckoTerminal far past its limit
         // and produced bursts of "Rate limit exceeded" warnings for the same
         // mint+timeframe within the same second.
-        if let Some(pool) = config.series_pool() {
+        if let Some(pool) = PoolConfig::series_pool(&pools) {
             if self.try_start_backfill(&mint) {
                 let runner = self.clone();
                 let mint_owned = mint.clone();
@@ -728,7 +729,7 @@ impl OhlcvMonitor {
         }
 
         if let Ok(mut series) = self.native_series.lock() {
-            series.retain(|(series_mint, _), _| series_mint != mint);
+            series.retain(|(series_mint, _, _), _| series_mint != mint);
         }
 
         Ok(())
@@ -897,12 +898,7 @@ impl OhlcvMonitor {
 
         let mut active = self.active_tokens.write().await;
         for config in configs {
-            // Load pools for each token
-            let pools = self.pool_manager.get_pools(&config.mint).await?;
-            let mut full_config = config;
-            full_config.pools = pools;
-
-            active.insert(full_config.mint.clone(), full_config);
+            active.insert(config.mint.clone(), config);
         }
 
         Ok(())
@@ -991,7 +987,7 @@ impl OhlcvMonitor {
                     Err(OhlcvError::PoolNotFound(_)) => {
                         logger::warning(
                             LogTag::Ohlcv,
-                            &format!("No healthy pools available for {mint}; deferring"),
+                            &format!("No series pool for {mint}; deferring"),
                         );
                         record_ohlcv_event(
                             "pool_unavailable",
@@ -1000,7 +996,7 @@ impl OhlcvMonitor {
                             None,
                             crate::events::with_text(
                                 json!({
-                                  "reason": "pool_health",
+                                  "reason": "no_series_pool",
                                 }),
                                 &UiText::new(ids::EVENTS_OHLCV_POOL_UNAVAILABLE)
                                     .arg("mint", UiArg::Text(mint.to_string())),
@@ -1034,6 +1030,11 @@ impl OhlcvMonitor {
                             ),
                         );
                         sleep(Duration::from_secs(2)).await;
+                    }
+                    Err(e @ OhlcvError::SeriesPoolMoved { .. }) => {
+                        // A fetch that raced a series move: the write guard refused its rows
+                        // and the next cycle fetches the new series pool.
+                        logger::debug(LogTag::Ohlcv, &format!("Skipped write for {mint}: {e}"));
                     }
                     Err(e) => {
                         let (kind, severity) = classify_ohlcv_error(&e);
@@ -1093,28 +1094,31 @@ impl OhlcvMonitor {
 
     async fn fetch_token_data(&self, mint: &str) -> OhlcvResult<()> {
         // Check if we should try pool discovery (using backoff logic)
-        let (has_pools, should_retry_discovery) = {
+        let should_retry_discovery = {
             let active = self.active_tokens.read().await;
-            let config = active
+            active
                 .get(mint)
-                .ok_or_else(|| OhlcvError::NotFound(mint.to_string()))?;
-            let has = config.series_pool().is_some();
-            let should_retry = !has && config.should_retry_pool_discovery();
-            (has, should_retry)
+                .ok_or_else(|| OhlcvError::NotFound(mint.to_string()))?
+                .should_retry_pool_discovery()
         };
 
+        // The series pool comes from the stored pool rows — the same source and rule the chart
+        // and status read — so a default moved by discovery or a failure handover is the pool
+        // written, and a token with a default never takes the pool-less feed path.
+        let mut series = self.pool_manager.series_pool(mint).await?;
+
         // If no pools and backoff period has elapsed, try to discover them
-        if !has_pools && should_retry_discovery {
+        if series.is_none() && should_retry_discovery {
             match self.pool_manager.discover_pools(mint).await {
                 Ok(discovered) if !discovered.is_empty() => {
                     let first_pool_address = discovered.first().map(|p| p.address.clone());
+                    series = PoolConfig::series_pool(&discovered).cloned();
 
-                    // Success! Update config with discovered pools and reset failure counter
+                    // Success! Reset the discovery failure counter
                     let updated_config = {
                         let mut active = self.active_tokens.write().await;
                         active.get_mut(mint).map(|config| {
                             let previous_failures = config.consecutive_pool_failures;
-                            config.pools = discovered.clone();
                             config.mark_pool_discovery_success();
                             (previous_failures, config.clone())
                         })
@@ -1209,7 +1213,7 @@ impl OhlcvMonitor {
                     )));
                 }
             }
-        } else if !has_pools {
+        } else if series.is_none() {
             // In backoff period — try the chain's candle feeds (no pool needed)
             let feeds = self.fetcher.candle_feeds();
             if !feeds.is_empty() {
@@ -1229,13 +1233,18 @@ impl OhlcvMonitor {
                 .priority
         };
 
-        // Resolve the pool from the stored pool rows — the same source and rule the chart and
-        // status read — so a default the pool manager moved after failures is the pool written.
-        let pool = self
-            .pool_manager
-            .series_pool(mint)
-            .await?
-            .ok_or_else(|| OhlcvError::PoolNotFound(mint.to_string()))?;
+        let pool = series.ok_or_else(|| OhlcvError::PoolNotFound(mint.to_string()))?;
+        // An unhealthy series pool is retried on its backoff, so a success can heal it.
+        if !self.pool_manager.fetch_due(mint, &pool) {
+            logger::debug(
+                LogTag::Ohlcv,
+                &format!(
+                    "Skipping fetch for mint={} pool={}: backing off after {} failures",
+                    mint, pool.address, pool.failure_count
+                ),
+            );
+            return Ok(());
+        }
         let (pool_address, pool_is_native) = (pool.address, pool.is_native_pair);
 
         // Fetch 1-minute data (base timeframe) with multi-source fallback, sized to
@@ -1262,7 +1271,7 @@ impl OhlcvMonitor {
             Ok(response) => {
                 let fetched_newest = newest_storable_bucket(&response.candles, Timeframe::Minute1);
                 let now = Utc::now().timestamp();
-                self.update_native_series(mint, Timeframe::Minute1, |state| {
+                self.update_native_series(mint, &pool_address, Timeframe::Minute1, |state| {
                     state.record_page(
                         now,
                         minute_newest,
@@ -1432,7 +1441,7 @@ impl OhlcvMonitor {
             }
             Err(e) => {
                 let now = Utc::now().timestamp();
-                self.update_native_series(mint, Timeframe::Minute1, |state| {
+                self.update_native_series(mint, &pool_address, Timeframe::Minute1, |state| {
                     state.record_failure(now)
                 });
                 if !matches!(e, OhlcvError::RateLimitExceeded) {
@@ -2050,6 +2059,9 @@ impl OhlcvMonitor {
         let Some(pool) = self.pool_manager.series_pool(mint).await? else {
             return Ok(());
         };
+        if !self.pool_manager.fetch_due(mint, &pool) {
+            return Ok(());
+        }
         let spans =
             self.gap_manager
                 .due_spans(mint, &pool.address, Utc::now().timestamp(), *budget)?;
@@ -2380,17 +2392,29 @@ impl OhlcvMonitor {
         for timeframe in timeframes {
             // A series move during the backfill resets the token onto another pool; the
             // backfill of this pool stops instead of fetching rows the write guard refuses.
-            let still_series = self
+            let Some(series) = self
                 .pool_manager
                 .series_pool(mint)
                 .await?
-                .is_some_and(|pool| pool.address == pool_address);
-            if !still_series {
+                .filter(|pool| pool.address == pool_address)
+            else {
                 logger::debug(
                     LogTag::Ohlcv,
                     &format!(
                         "Stopping backfill for mint={} pool={}: no longer the series pool",
                         mint, pool_address
+                    ),
+                );
+                return Ok(total_fetched);
+            };
+            // An unhealthy series pool is fetched only on its backoff; the monitor's retry
+            // heals it and the next backfill resumes.
+            if !self.pool_manager.fetch_due(mint, &series) {
+                logger::debug(
+                    LogTag::Ohlcv,
+                    &format!(
+                        "Pausing backfill for mint={} pool={}: backing off after {} failures",
+                        mint, pool_address, series.failure_count
                     ),
                 );
                 return Ok(total_fetched);
@@ -2421,7 +2445,9 @@ impl OhlcvMonitor {
 
             // An incomplete timeframe is re-requested at most once per retry delay,
             // which is also the spacing the no-newer rule needs.
-            let last_fetch_at = self.native_series_state(mint, timeframe).last_fetch_at;
+            let last_fetch_at = self
+                .native_series_state(mint, pool_address, timeframe)
+                .last_fetch_at;
             if last_fetch_at.is_some_and(|at| Utc::now().timestamp() - at < NATIVE_RETRY_DELAY_SECS)
             {
                 continue;
@@ -2545,7 +2571,7 @@ impl OhlcvMonitor {
                     continue;
                 }
             };
-            let state = self.native_series_state(mint, timeframe);
+            let state = self.native_series_state(mint, pool_address, timeframe);
             if native_refresh_due(&state, newest, now, timeframe, priority)
                 || fallback_refresh_due(&state, now, data_server_usable)
                 || self.settle_due(mint, pool_address, timeframe, &state, newest, now)
@@ -2658,7 +2684,9 @@ impl OhlcvMonitor {
             Ok(response) => response,
             Err(e) => {
                 let now = Utc::now().timestamp();
-                self.update_native_series(mint, timeframe, |state| state.record_failure(now));
+                self.update_native_series(mint, pool_address, timeframe, |state| {
+                    state.record_failure(now)
+                });
                 return Err(e);
             }
         };
@@ -2683,7 +2711,7 @@ impl OhlcvMonitor {
 
         let fetched_newest = newest_storable_bucket(&response.candles, timeframe);
         let now = Utc::now().timestamp();
-        self.update_native_series(mint, timeframe, |state| {
+        self.update_native_series(mint, pool_address, timeframe, |state| {
             state.record_page(
                 now,
                 stored_newest,
@@ -2752,30 +2780,42 @@ impl OhlcvMonitor {
         let newest = self
             .db
             .get_latest_native_timestamp(mint, pool_address, timeframe)?;
-        let caught_up = self.native_series_state(mint, timeframe).is_caught_up(
-            newest,
-            Utc::now().timestamp(),
-            timeframe,
-        );
+        let caught_up = self
+            .native_series_state(mint, pool_address, timeframe)
+            .is_caught_up(newest, Utc::now().timestamp(), timeframe);
         Ok((newest, caught_up))
     }
 
-    fn native_series_state(&self, mint: &str, timeframe: Timeframe) -> NativeSeriesState {
+    fn native_series_state(
+        &self,
+        mint: &str,
+        pool_address: &str,
+        timeframe: Timeframe,
+    ) -> NativeSeriesState {
         self.native_series
             .lock()
             .ok()
-            .and_then(|series| series.get(&(mint.to_string(), timeframe)).cloned())
+            .and_then(|series| {
+                series
+                    .get(&(mint.to_string(), pool_address.to_string(), timeframe))
+                    .cloned()
+            })
             .unwrap_or_default()
     }
 
     fn update_native_series(
         &self,
         mint: &str,
+        pool_address: &str,
         timeframe: Timeframe,
         update: impl FnOnce(&mut NativeSeriesState),
     ) {
         if let Ok(mut series) = self.native_series.lock() {
-            update(series.entry((mint.to_string(), timeframe)).or_default());
+            update(
+                series
+                    .entry((mint.to_string(), pool_address.to_string(), timeframe))
+                    .or_default(),
+            );
         }
     }
 
@@ -3534,6 +3574,7 @@ mod tests {
     #[tokio::test]
     async fn an_explicit_refresh_rediscovers_only_without_pools_or_a_fresh_snapshot() {
         use crate::chains::ChainId;
+        use crate::ohlcvs::database::SeriesPoolPlan;
         let _ = crate::config::utils::CONFIG
             .get_or_init(|| std::sync::RwLock::new(crate::config::Config::default()));
         let path = std::env::temp_dir().join(format!(
@@ -3559,10 +3600,12 @@ mod tests {
         ));
         assert!(monitor.pool_rediscovery_due("mint", true).await.unwrap());
         assert!(monitor.pool_rediscovery_due("mint", false).await.unwrap());
-        db.upsert_pool(
-            "mint",
-            &PoolConfig::new("pool".to_string(), "dex".to_string(), 1.0),
-        )
+        db.write_series_pools("mint", |_| {
+            Some(SeriesPoolPlan {
+                pools: vec![PoolConfig::new("pool".to_string(), "dex".to_string(), 1.0)],
+                series: "pool".to_string(),
+            })
+        })
         .unwrap();
         assert!(!monitor.pool_rediscovery_due("mint", true).await.unwrap());
         assert!(monitor.pool_rediscovery_due("mint", false).await.unwrap());

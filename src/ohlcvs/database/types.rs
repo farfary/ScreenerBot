@@ -3,7 +3,7 @@
 
 //! OHLCV database types — row structs for SQLite serialization.
 
-use crate::ohlcvs::types::Timeframe;
+use crate::ohlcvs::types::{PoolConfig, Timeframe};
 
 /// An unfilled gap row of one pool, with its retry bookkeeping.
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -82,9 +82,21 @@ pub struct ClearAllResult {
     pub tokens_reset: usize,
 }
 
+/// A token's pools to register and the one series (default) pool among them, planned from the
+/// pool rows read inside the write transaction that applies it.
+#[derive(Debug, Clone)]
+pub struct SeriesPoolPlan {
+    /// Every pool to keep registered; registered pools missing from it are deleted.
+    pub pools: Vec<PoolConfig>,
+    /// The address of the series pool, one of `pools`.
+    pub series: String,
+}
+
 /// Result of writing a token's registered pools (`OhlcvDatabase::write_series_pools`).
-#[derive(Debug, Clone, Default)]
+#[derive(Debug, Clone)]
 pub struct SeriesPoolWrite {
+    /// The plan that was written.
+    pub plan: SeriesPoolPlan,
     /// Registered pools that were not in the new set, deleted with their candles and gaps.
     pub removed_pools: Vec<String>,
     /// Set when the series pool moved and the token's series was reset.
@@ -97,7 +109,9 @@ pub struct SeriesPoolWrite {
 pub struct SeriesPoolReset {
     /// The series pool before the move; `None` when the token had no default pool.
     pub previous_pool: Option<String>,
+    /// Candle rows deleted by the write, removed pools included.
     pub candles_deleted: usize,
+    /// Gap rows deleted by the write, removed pools included.
     pub gaps_deleted: usize,
 }
 

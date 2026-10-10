@@ -13,8 +13,8 @@ mod migrations;
 pub mod types;
 
 pub use types::{
-    ClearAllResult, DatabaseStats, DeleteResult, GapRecord, OhlcvTokenStatus, SeriesPoolReset,
-    SeriesPoolWrite, StoredBucket, TimeframeSummary,
+    ClearAllResult, DatabaseStats, DeleteResult, GapRecord, OhlcvTokenStatus, SeriesPoolPlan,
+    SeriesPoolReset, SeriesPoolWrite, StoredBucket, TimeframeSummary,
 };
 
 use crate::database::WriteTransaction;
@@ -211,181 +211,73 @@ impl OhlcvDatabase {
 
     // ==================== Pool Management ====================
 
-    pub fn upsert_pool(&self, mint: &str, pool: &PoolConfig) -> OhlcvResult<()> {
-        let conn = self.conn()?;
-        upsert_pool_row(&conn, self.chain_id(), mint, pool, pool.is_default)
-            .map_err(|e| OhlcvError::DatabaseError(format!("Failed to upsert pool: {e}")))?;
-        Ok(())
-    }
-
-    /// Replace a token's registered pools with `pools`, `series_pool` the one default, in one
-    /// write transaction. Registered pools missing from `pools` are deleted with their candles
-    /// and gaps. When the default was anything but `series_pool` alone (moved, missing, or
-    /// duplicated), every candle and gap row of the token's other pools is deleted and every
-    /// backfill flag is reset in the same transaction: the flags are per token while candles
-    /// are per pool, so flags left complete would describe a pool the series no longer reads.
+    /// Plan and write a token's registered pools in one write transaction. `plan` receives the
+    /// pool rows read inside that transaction, so no write committed between a read and this
+    /// write is overwritten; `None` from it writes nothing. Registered pools missing from the
+    /// plan are deleted with their candles and gaps. When the default was anything but the
+    /// plan's series pool alone (moved, missing, or duplicated), every candle and gap row of the
+    /// token's other pools is deleted and every backfill flag is reset in the same transaction:
+    /// the flags are per token while candles are per pool, so flags left complete would describe
+    /// a pool the series no longer reads.
     pub fn write_series_pools(
         &self,
         mint: &str,
-        pools: &[PoolConfig],
-        series_pool: &str,
-    ) -> OhlcvResult<SeriesPoolWrite> {
-        if !pools.iter().any(|p| p.address == series_pool) {
-            return Err(OhlcvError::PoolNotFound(series_pool.to_string()));
-        }
+        plan: impl FnOnce(&[PoolConfig]) -> Option<SeriesPoolPlan>,
+    ) -> OhlcvResult<Option<SeriesPoolWrite>> {
         let chain_id = self.chain_id();
-        let db_err = |e: rusqlite::Error| {
-            OhlcvError::DatabaseError(format!("Failed to write series pools: {e}"))
+        let mut conn = self.conn()?;
+        let tx = conn.write_tx().map_err(series_write_err)?;
+        let registered = read_pool_rows(&tx, chain_id, mint).map_err(series_write_err)?;
+        let Some(plan) = plan(&registered) else {
+            return Ok(None);
         };
+        let write = apply_series_plan(&tx, chain_id, mint, &registered, plan)?;
+        tx.commit().map_err(series_write_err)?;
+        Ok(Some(write))
+    }
 
+    /// Count one failed fetch of `pool_address` and, in the same write transaction, apply the
+    /// series handover `handover` plans from the counted pool rows. `handover` also receives
+    /// whether the failed pool holds stored candles. The count commits whether or not a
+    /// handover is planned.
+    pub fn mark_pool_failure(
+        &self,
+        mint: &str,
+        pool_address: &str,
+        handover: impl FnOnce(&[PoolConfig], bool) -> Option<SeriesPoolPlan>,
+    ) -> OhlcvResult<Option<SeriesPoolWrite>> {
+        let chain_id = self.chain_id();
+        let db_err =
+            |e: rusqlite::Error| OhlcvError::DatabaseError(format!("Failed to mark failure: {e}"));
         let mut conn = self.conn()?;
         let tx = conn.write_tx().map_err(db_err)?;
-
-        let registered: Vec<(String, bool)> = {
-            let mut stmt = tx
-                .prepare(
-                    "SELECT pool_address, is_default FROM ohlcv_pools
-                     WHERE chain_id = ?1 AND mint = ?2 ORDER BY liquidity DESC",
-                )
-                .map_err(db_err)?;
-            let rows = stmt
-                .query_map(params![chain_id, mint], |row| {
-                    Ok((row.get::<_, String>(0)?, row.get::<_, i32>(1)? != 0))
-                })
-                .map_err(db_err)?
-                .collect::<SqliteResult<Vec<_>>>()
-                .map_err(db_err)?;
-            rows
-        };
-        let previous_defaults: Vec<&str> = registered
-            .iter()
-            .filter(|(_, is_default)| *is_default)
-            .map(|(address, _)| address.as_str())
-            .collect();
-        let series_moved = previous_defaults.as_slice() != [series_pool];
-        let previous_pool = previous_defaults.first().map(|address| address.to_string());
-
-        let mut removed_pools = Vec::new();
-        for (address, _) in &registered {
-            if pools.iter().any(|p| &p.address == address) {
-                continue;
-            }
-            for table in ["ohlcv_pools", "ohlcv_candles", "ohlcv_gaps"] {
-                tx.execute(
-                    &format!(
-                        "DELETE FROM {table} WHERE chain_id = ?1 AND mint = ?2 AND pool_address = ?3"
-                    ),
-                    params![chain_id, mint, address],
-                )
-                .map_err(db_err)?;
-            }
-            removed_pools.push(address.clone());
-        }
-
         tx.execute(
-            "UPDATE ohlcv_pools SET is_default = 0 WHERE chain_id = ?1 AND mint = ?2",
-            params![chain_id, mint],
+            "UPDATE ohlcv_pools SET failure_count = failure_count + 1
+             WHERE chain_id = ?1 AND mint = ?2 AND pool_address = ?3",
+            params![chain_id, mint, pool_address],
         )
         .map_err(db_err)?;
-        for pool in pools {
-            upsert_pool_row(&tx, chain_id, mint, pool, pool.address == series_pool)
-                .map_err(db_err)?;
-        }
-
-        let reset = if series_moved {
-            let candles_deleted = tx
-                .execute(
-                    "DELETE FROM ohlcv_candles WHERE chain_id = ?1 AND mint = ?2 AND pool_address != ?3",
-                    params![chain_id, mint, series_pool],
-                )
-                .map_err(db_err)?;
-            let gaps_deleted = tx
-                .execute(
-                    "DELETE FROM ohlcv_gaps WHERE chain_id = ?1 AND mint = ?2 AND pool_address != ?3",
-                    params![chain_id, mint, series_pool],
-                )
-                .map_err(db_err)?;
-            tx.execute(
-                "UPDATE ohlcv_monitor_config SET
-                    backfill_1m_complete = 0,
-                    backfill_5m_complete = 0,
-                    backfill_15m_complete = 0,
-                    backfill_1h_complete = 0,
-                    backfill_4h_complete = 0,
-                    backfill_12h_complete = 0,
-                    backfill_1d_complete = 0,
-                    backfill_started_at = NULL,
-                    backfill_completed_at = NULL,
-                    updated_at = CURRENT_TIMESTAMP
-                 WHERE chain_id = ?1 AND mint = ?2",
-                params![chain_id, mint],
+        let holds_candles: bool = tx
+            .query_row(
+                "SELECT EXISTS (SELECT 1 FROM ohlcv_candles
+                     WHERE chain_id = ?1 AND mint = ?2 AND pool_address = ?3)",
+                params![chain_id, mint, pool_address],
+                |row| row.get(0),
             )
             .map_err(db_err)?;
-            Some(SeriesPoolReset {
-                previous_pool,
-                candles_deleted,
-                gaps_deleted,
-            })
-        } else {
-            None
+        let registered = read_pool_rows(&tx, chain_id, mint).map_err(db_err)?;
+        let write = match handover(&registered, holds_candles) {
+            Some(plan) => Some(apply_series_plan(&tx, chain_id, mint, &registered, plan)?),
+            None => None,
         };
-
         tx.commit().map_err(db_err)?;
-        Ok(SeriesPoolWrite {
-            removed_pools,
-            reset,
-        })
+        Ok(write)
     }
 
     pub fn get_pools(&self, mint: &str) -> OhlcvResult<Vec<PoolConfig>> {
         let conn = self.conn()?;
-
-        let mut stmt = conn
-            .prepare(
-                "SELECT pool_address, dex, liquidity, is_default, last_success, failure_count, is_native_pair
-                 FROM ohlcv_pools
-                 WHERE chain_id = ?1 AND mint = ?2
-                 ORDER BY liquidity DESC",
-            )
-            .map_err(|e| OhlcvError::DatabaseError(format!("Failed to prepare statement: {e}")))?;
-
-        let pools = stmt
-            .query_map(params![self.chain_id(), mint], |row| {
-                let last_success_str: Option<String> = row.get(4)?;
-                let last_success = last_success_str.and_then(|s| {
-                    DateTime::parse_from_rfc3339(&s)
-                        .ok()
-                        .map(|dt| dt.with_timezone(&Utc))
-                });
-
-                Ok(PoolConfig {
-                    address: row.get(0)?,
-                    dex: row.get(1)?,
-                    liquidity: row.get(2)?,
-                    is_default: row.get::<_, i32>(3)? != 0,
-                    last_successful_fetch: last_success,
-                    failure_count: row.get(5)?,
-                    is_native_pair: row.get::<_, i32>(6)? != 0,
-                })
-            })
-            .map_err(|e| OhlcvError::DatabaseError(format!("Query failed: {e}")))?
-            .collect::<SqliteResult<Vec<_>>>()
-            .map_err(|e| OhlcvError::DatabaseError(format!("Failed to collect results: {e}")))?;
-
-        Ok(pools)
-    }
-
-    pub fn mark_pool_failure(&self, mint: &str, pool_address: &str) -> OhlcvResult<()> {
-        let conn = self.conn()?;
-
-        conn
-            .execute(
-                "UPDATE ohlcv_pools SET failure_count = failure_count + 1 WHERE chain_id = ?1 AND mint = ?2 AND pool_address = ?3",
-                params![self.chain_id(), mint, pool_address]
-            )
-            .map_err(|e| OhlcvError::DatabaseError(format!("Failed to mark failure: {e}")))?;
-
-        Ok(())
+        read_pool_rows(&conn, self.chain_id(), mint)
+            .map_err(|e| OhlcvError::DatabaseError(format!("Failed to read pools: {e}")))
     }
 
     pub fn mark_pool_success(&self, mint: &str, pool_address: &str) -> OhlcvResult<()> {
@@ -400,6 +292,143 @@ impl OhlcvDatabase {
 
         Ok(())
     }
+}
+
+fn series_write_err(e: rusqlite::Error) -> OhlcvError {
+    OhlcvError::DatabaseError(format!("Failed to write series pools: {e}"))
+}
+
+/// A token's registered pool rows, deepest first.
+fn read_pool_rows(conn: &Connection, chain_id: &str, mint: &str) -> SqliteResult<Vec<PoolConfig>> {
+    let mut stmt = conn.prepare(
+        "SELECT pool_address, dex, liquidity, is_default, last_success, failure_count, is_native_pair
+         FROM ohlcv_pools
+         WHERE chain_id = ?1 AND mint = ?2
+         ORDER BY liquidity DESC",
+    )?;
+    let rows = stmt
+        .query_map(params![chain_id, mint], |row| {
+            let last_success_str: Option<String> = row.get(4)?;
+            let last_success = last_success_str.and_then(|s| {
+                DateTime::parse_from_rfc3339(&s)
+                    .ok()
+                    .map(|dt| dt.with_timezone(&Utc))
+            });
+
+            Ok(PoolConfig {
+                address: row.get(0)?,
+                dex: row.get(1)?,
+                liquidity: row.get(2)?,
+                is_default: row.get::<_, i32>(3)? != 0,
+                last_successful_fetch: last_success,
+                failure_count: row.get(5)?,
+                is_native_pair: row.get::<_, i32>(6)? != 0,
+            })
+        })?
+        .collect::<SqliteResult<Vec<_>>>()?;
+    Ok(rows)
+}
+
+/// Apply `plan` over the `registered` rows read in the same transaction `tx`
+/// (see `OhlcvDatabase::write_series_pools`).
+fn apply_series_plan(
+    tx: &Connection,
+    chain_id: &str,
+    mint: &str,
+    registered: &[PoolConfig],
+    plan: SeriesPoolPlan,
+) -> OhlcvResult<SeriesPoolWrite> {
+    if !plan.pools.iter().any(|p| p.address == plan.series) {
+        return Err(OhlcvError::PoolNotFound(plan.series));
+    }
+    let series_pool = plan.series.as_str();
+    let previous_defaults: Vec<&str> = registered
+        .iter()
+        .filter(|p| p.is_default)
+        .map(|p| p.address.as_str())
+        .collect();
+    let series_moved = previous_defaults.as_slice() != [series_pool];
+    let previous_pool = previous_defaults.first().map(|address| address.to_string());
+
+    let mut removed_pools = Vec::new();
+    let (mut candles_deleted, mut gaps_deleted) = (0, 0);
+    for registered_pool in registered {
+        let address = &registered_pool.address;
+        if plan.pools.iter().any(|p| &p.address == address) {
+            continue;
+        }
+        let mut deleted = [0; 3];
+        for (count, table) in deleted
+            .iter_mut()
+            .zip(["ohlcv_pools", "ohlcv_candles", "ohlcv_gaps"])
+        {
+            *count = tx
+                .execute(
+                    &format!(
+                        "DELETE FROM {table} WHERE chain_id = ?1 AND mint = ?2 AND pool_address = ?3"
+                    ),
+                    params![chain_id, mint, address],
+                )
+                .map_err(series_write_err)?;
+        }
+        candles_deleted += deleted[1];
+        gaps_deleted += deleted[2];
+        removed_pools.push(address.clone());
+    }
+
+    tx.execute(
+        "UPDATE ohlcv_pools SET is_default = 0 WHERE chain_id = ?1 AND mint = ?2",
+        params![chain_id, mint],
+    )
+    .map_err(series_write_err)?;
+    for pool in &plan.pools {
+        upsert_pool_row(tx, chain_id, mint, pool, pool.address == series_pool)
+            .map_err(series_write_err)?;
+    }
+
+    let reset = if series_moved {
+        candles_deleted += tx
+            .execute(
+                "DELETE FROM ohlcv_candles WHERE chain_id = ?1 AND mint = ?2 AND pool_address != ?3",
+                params![chain_id, mint, series_pool],
+            )
+            .map_err(series_write_err)?;
+        gaps_deleted += tx
+            .execute(
+                "DELETE FROM ohlcv_gaps WHERE chain_id = ?1 AND mint = ?2 AND pool_address != ?3",
+                params![chain_id, mint, series_pool],
+            )
+            .map_err(series_write_err)?;
+        tx.execute(
+            "UPDATE ohlcv_monitor_config SET
+                backfill_1m_complete = 0,
+                backfill_5m_complete = 0,
+                backfill_15m_complete = 0,
+                backfill_1h_complete = 0,
+                backfill_4h_complete = 0,
+                backfill_12h_complete = 0,
+                backfill_1d_complete = 0,
+                backfill_started_at = NULL,
+                backfill_completed_at = NULL,
+                updated_at = CURRENT_TIMESTAMP
+             WHERE chain_id = ?1 AND mint = ?2",
+            params![chain_id, mint],
+        )
+        .map_err(series_write_err)?;
+        Some(SeriesPoolReset {
+            previous_pool,
+            candles_deleted,
+            gaps_deleted,
+        })
+    } else {
+        None
+    };
+
+    Ok(SeriesPoolWrite {
+        plan,
+        removed_pools,
+        reset,
+    })
 }
 
 fn upsert_pool_row(

@@ -754,8 +754,6 @@ impl OhlcvFetcher {
     }
 }
 
-/// The candle feeds that can serve a request. A feed serves only the newest
-/// candles, so a `before` request has none.
 /// The candle feeds a fetch may fall back to after the Data Server, or `None` when every
 /// fallback is skipped. Only the data server converts a non-native pool's candles to SOL.
 /// GeckoTerminal answers in the pool's quote token (`currency=token`) and a candle feed
@@ -770,6 +768,8 @@ fn fallback_feeds(
     pool_is_native.then(|| feeds_serving(feeds(), before))
 }
 
+/// The candle feeds that can serve a request. A feed serves only the newest
+/// candles, so a `before` request has none.
 fn feeds_serving(feeds: Vec<CandleFeed>, before: Option<i64>) -> Vec<CandleFeed> {
     if before.is_some() {
         Vec::new()

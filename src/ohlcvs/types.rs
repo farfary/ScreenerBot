@@ -3,10 +3,16 @@
 
 //! OHLCV data types — candles, timeframes, priorities, and fetch configuration.
 
+use crate::config::with_config;
 use chrono::{DateTime, Utc};
 use serde::{Deserialize, Serialize};
 use std::fmt;
 use std::time::Duration;
+
+/// First pause between fetches of an unhealthy pool (see `PoolConfig::fetch_retry_delay`).
+pub const UNHEALTHY_POOL_RETRY_BASE: Duration = Duration::from_secs(60);
+/// Longest pause between fetches of an unhealthy pool.
+pub const UNHEALTHY_POOL_RETRY_MAX: Duration = Duration::from_secs(30 * 60);
 
 /// Supported timeframes for OHLCV data
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Serialize, Deserialize)]
@@ -303,26 +309,38 @@ impl PoolConfig {
         }
     }
 
-    pub fn mark_success(&mut self) {
-        self.last_successful_fetch = Some(Utc::now());
-        self.failure_count = 0;
-    }
-
-    pub fn mark_failure(&mut self) {
-        self.failure_count += 1;
-    }
-
+    /// Whether the pool's fetches succeed: fewer than `ohlcv.max_pool_failures` consecutive
+    /// failures. An unhealthy series pool stays the series; it is fetched on the backoff of
+    /// [`Self::fetch_retry_delay`] until a success resets its count.
     pub fn is_healthy(&self) -> bool {
-        self.failure_count < 5
+        self.failure_count < with_config(|cfg| cfg.ohlcv.max_pool_failures)
     }
 
-    /// The ONE pool a token's candle series lives on: the default pool, while it is healthy.
-    /// Every writer (monitor fetch, backfill) and every reader (chart, status) resolves
-    /// through this. There is no fallback to another pool: the series moves only through
-    /// `OhlcvDatabase::write_series_pools`, which resets the token's rows and backfill flags
-    /// with the move, so the flags always describe the pool read here.
+    /// The pause between fetches of an unhealthy pool, doubling with each failure past the
+    /// health limit from `UNHEALTHY_POOL_RETRY_BASE` up to `UNHEALTHY_POOL_RETRY_MAX`; `None`
+    /// for a healthy pool, which is fetched on its normal cadence.
+    pub fn fetch_retry_delay(&self) -> Option<Duration> {
+        if self.is_healthy() {
+            return None;
+        }
+        let past_limit = self
+            .failure_count
+            .saturating_sub(with_config(|cfg| cfg.ohlcv.max_pool_failures));
+        let delay = UNHEALTHY_POOL_RETRY_BASE
+            .checked_mul(1u32.checked_shl(past_limit).unwrap_or(u32::MAX))
+            .unwrap_or(UNHEALTHY_POOL_RETRY_MAX);
+        Some(delay.min(UNHEALTHY_POOL_RETRY_MAX))
+    }
+
+    /// The ONE pool a token's candle series lives on: the default pool, whatever its fetch
+    /// health. Every writer (monitor fetch, backfill) and every reader (chart, status)
+    /// resolves through this, so stored candles stay readable while their pool's fetches
+    /// fail. There is no fallback to another pool: the series moves only through
+    /// `OhlcvDatabase::write_series_pools` or the failure handover of
+    /// `OhlcvDatabase::mark_pool_failure`, which reset the token's rows and backfill flags with
+    /// the move, so the flags always describe the pool read here.
     pub fn series_pool(pools: &[PoolConfig]) -> Option<&PoolConfig> {
-        pools.iter().find(|p| p.is_default && p.is_healthy())
+        pools.iter().find(|p| p.is_default)
     }
 }
 
@@ -376,7 +394,6 @@ impl fmt::Display for Priority {
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct TokenOhlcvConfig {
     pub mint: String,
-    pub pools: Vec<PoolConfig>,
     pub priority: Priority,
     pub last_activity: DateTime<Utc>,
     #[serde(skip_serializing_if = "Option::is_none")]
@@ -393,7 +410,6 @@ impl TokenOhlcvConfig {
     pub fn new(mint: String, priority: Priority) -> Self {
         Self {
             mint,
-            pools: Vec::new(),
             priority,
             last_activity: Utc::now(),
             last_fetch: None,
@@ -407,11 +423,6 @@ impl TokenOhlcvConfig {
 
     pub fn mark_fetch(&mut self) {
         self.last_fetch = Some(Utc::now());
-    }
-
-    /// See [`PoolConfig::series_pool`].
-    pub fn series_pool(&self) -> Option<&PoolConfig> {
-        PoolConfig::series_pool(&self.pools)
     }
 
     pub fn mark_activity(&mut self) {
@@ -719,7 +730,9 @@ pub struct OhlcvStatus {
 
 #[cfg(test)]
 mod tests {
-    use super::{PoolConfig, Priority};
+    use super::{
+        Duration, PoolConfig, Priority, UNHEALTHY_POOL_RETRY_BASE, UNHEALTHY_POOL_RETRY_MAX,
+    };
 
     /// Catalog key of the label for each monitoring priority. The match is
     /// exhaustive, so a new variant fails to compile until it is mapped here and
@@ -765,20 +778,42 @@ mod tests {
     }
 
     #[test]
-    fn the_series_pool_is_the_healthy_default_and_never_another_pool() {
+    fn the_series_pool_is_the_default_whatever_its_health_and_never_another_pool() {
+        crate::config::utils::install_default_config();
         // A shallow default wins over a deeper pool.
         let pools = [
             pool("deep", 61_364.0, false, 0),
             pool("default", 476.0, true, 0),
         ];
         assert_eq!(resolved(&pools), Some("default"));
-        // An unhealthy default resolves to no pool rather than to an unreset fallback.
+        // A default whose fetches fail still carries the series: its stored candles stay
+        // readable and no unreset pool stands in for it.
         let pools = [
-            pool("default", 90_000.0, true, 5),
+            pool("default", 90_000.0, true, 50),
             pool("deep", 20_000.0, false, 0),
         ];
-        assert_eq!(resolved(&pools), None);
+        assert!(!pools[0].is_healthy());
+        assert_eq!(resolved(&pools), Some("default"));
         assert_eq!(resolved(&[pool("other", 1.0, false, 0)]), None);
         assert_eq!(resolved(&[]), None);
+    }
+
+    #[test]
+    fn an_unhealthy_pool_is_retried_on_a_doubling_bounded_backoff() {
+        crate::config::utils::install_default_config();
+        let limit = crate::config::with_config(|cfg| cfg.ohlcv.max_pool_failures);
+        let delay = |failures: u32| pool("p", 1.0, true, failures).fetch_retry_delay();
+        assert_eq!(delay(0), None);
+        assert_eq!(delay(limit - 1), None);
+        assert_eq!(delay(limit), Some(UNHEALTHY_POOL_RETRY_BASE));
+        assert_eq!(delay(limit + 1), Some(UNHEALTHY_POOL_RETRY_BASE * 2));
+        let mut previous = Duration::ZERO;
+        for failures in limit..limit + 64 {
+            let current = delay(failures).expect("an unhealthy pool has a retry delay");
+            assert!(current >= previous && current <= UNHEALTHY_POOL_RETRY_MAX);
+            previous = current;
+        }
+        assert_eq!(previous, UNHEALTHY_POOL_RETRY_MAX);
+        assert_eq!(delay(u32::MAX), Some(UNHEALTHY_POOL_RETRY_MAX));
     }
 }
