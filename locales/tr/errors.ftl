@@ -55,6 +55,8 @@ errors-system-paths-init-failed = Uygulama klasörleri oluşturulamadı
 errors-system-open-data-failed = Veri klasörü açılamadı
 errors-system-url-empty = URL boş olamaz
 errors-system-open-url-failed = URL açılamadı
+errors-system-storage-measure-failed = Depolama ölçülemedi
+errors-system-storage-cleanup-running = Bir depolama temizliği zaten çalışıyor
 
 # Initialization
 errors-initialization-required = Bu uç noktaya erişmeden önce bot kurulumu gerekli. Lütfen kurulumu web arayüzünden tamamlayın.

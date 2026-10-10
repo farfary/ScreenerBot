@@ -674,25 +674,15 @@ config-maintenance-actions-retention-days = نگهداری اقدامات
 config-maintenance-events-retention-days = نگهداری رویدادها
     .hint = تاریخچه رویدادها چند روز نگه داشته شود (0 = برای همیشه)
     .unit = روز
-config-maintenance-maintenance-window-start = شروع بازه نگهداری
-    .hint = زمان شروع نگهداری سنگین (HH:MM به وقت محلی). خالی = هر زمان.
-config-maintenance-ohlcv-retention-days = نگهداری OHLCV
-    .hint = داده کندل OHLCV چند روز نگه داشته شود (0 = برای همیشه)
-    .unit = روز
 config-maintenance-rpc-stats-retention-hours = نگهداری آمار RPC
     .hint = آمار RPC چند ساعت نگه داشته شود (0 = برای همیشه)
     .unit = ساعت
-config-maintenance-skip-during-active-trades = صرف‌نظر در حین معاملات فعال
-    .hint = تا زمانی که پوزیشن‌ها باز هستند، نگهداری سنگین (VACUUM) به تعویق می‌افتد
 config-maintenance-stale-token-days = حد توکن‌های کهنه
     .hint = توکن‌هایی که به‌روزرسانی داده بازارشان قدیمی‌تر از این مقدار است برای صرفه‌جویی در حافظه از فیلترینگ کنار گذاشته می‌شوند. 0 = همه لحاظ شوند. با 7 روز، معمولاً تعداد توکن‌ها حدود 90% کم می‌شود.
     .unit = روز
-config-maintenance-vacuum-interval-secs = فاصله VACUUM
-    .hint = هر چند وقت یک‌بار VACUUM در SQLite اجرا شود (فضای دیسک را بازپس می‌گیرد، عملیات سنگین)
-    .unit = ثانیه
-config-maintenance-wal-checkpoint-interval-secs = فاصله چک‌پوینت WAL
-    .hint = هر چند وقت یک‌بار چک‌پوینت WAL در SQLite اجرا شود (لاگ نوشتن‌مقدم را تجمیع می‌کند)
-    .unit = ثانیه
+config-maintenance-storage-limit-mb = محدودیت فضای ذخیره‌سازی
+    .hint = فضای دیسکی که داده‌های { -brand } پیش از پاک‌سازی داده‌های بازار قابل بازسازی می‌توانند استفاده کنند. 0 = خودکار: تا 5 گیگابایت، و کمتر روی دیسک کوچک یا تقریباً پر.
+    .unit = مگابایت
 
 ## monitoring
 
@@ -1288,7 +1278,6 @@ config-category-copy-trading = کپی‌تریدینگ
 config-category-core-trading = معاملات اصلی
 config-category-creator-checks = بررسی‌های سازنده
 config-category-data-sources = منابع داده
-config-category-database = پایگاه داده
 config-category-dca = DCA
 config-category-debug = دیباگ
 config-category-discovery = کشف
@@ -1341,7 +1330,6 @@ config-category-router = روتر
 config-category-routers = روترها
 config-category-routing = مسیریابی
 config-category-safety = ایمنی
-config-category-scheduling = زمان‌بندی
 config-category-security-flags = پرچم‌های امنیتی
 config-category-slippage = اسلیپیج
 config-category-source-control = کنترل منبع

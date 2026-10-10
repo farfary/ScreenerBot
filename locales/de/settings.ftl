@@ -521,20 +521,42 @@ settings-navigation-reset = Navigation auf Standard zurückgesetzt
 
 ## data_tab.js
 
-settings-data-storage-title = Datenbankspeicher
-settings-data-storage-description = Übersicht aller Datenbanken, die Ihre Trading-Daten, Positionen und Verlaufsdaten speichern.
-settings-data-stats-loading = Datenbankstatistiken werden geladen...
-settings-data-stats-load-failed = Datenbankstatistiken konnten nicht geladen werden
-settings-data-total-storage = Gesamter Datenbankspeicher
-settings-data-db-tokens = Tokens
-settings-data-db-transactions = Transaktionen
-settings-data-db-positions = Positionen
-settings-data-db-events = Ereignisse
-settings-data-db-ohlcv = OHLCV
-settings-data-db-wallet = Wallet
-settings-data-db-pools = Pools
-settings-data-db-strategies = Strategien
-settings-data-db-actions = Aktionen
+settings-data-usage-title = Speicher
+settings-data-usage-description = Speicherplatz, den die Daten von { -brand } belegen, nach Art. Wiederherstellbare Marktdaten werden automatisch bereinigt, damit das Speicherlimit eingehalten wird; Wallet-Schlüssel, Handelsdaten und Einstellungen werden nie entfernt.
+settings-data-usage-loading = Speicher wird gemessen...
+settings-data-usage-load-failed = Speicher konnte nicht gemessen werden
+settings-data-usage-total = Belegt
+settings-data-usage-of-limit = { $used } von { $limit }
+settings-data-usage-free-disk = Frei auf dem Datenträger
+settings-data-usage-free-disk-value = { $free } von { $total }
+settings-data-usage-free-disk-unknown = Unbekannt
+settings-data-category-wallet-keys = Wallet-Schlüssel
+settings-data-category-trading-records = Handelsdaten
+settings-data-category-wallet-history = Wallet-Verlauf
+settings-data-category-market-data = Marktdaten
+settings-data-category-settings = Einstellungen
+settings-data-category-recovery-copies = Wiederherstellungskopien
+settings-data-category-updates = Updates
+settings-data-category-logs = Protokolle
+settings-data-category-leftovers = Restdateien
+settings-data-last-cleanup-label = Letzte Bereinigung
+settings-data-last-cleanup-never = Noch nicht ausgeführt
+settings-data-last-cleanup-value = { $when }, { $freed } freigegeben
+settings-data-last-cleanup-failures-label = Bereinigungsprobleme
+settings-data-last-cleanup-failures =
+    { $count ->
+        [one] { $count } Schritt fehlgeschlagen; er wird beim nächsten Durchlauf wiederholt
+       *[other] { $count } Schritte fehlgeschlagen; sie werden beim nächsten Durchlauf wiederholt
+    }
+settings-data-limit-label = Speicherlimit
+settings-data-limit-hint = Speicherplatz, den die Daten von { -brand } belegen dürfen, bevor wiederherstellbare Marktdaten bereinigt werden. Automatisch passt sich an diesen Datenträger an, bis zu 5 GB.
+settings-data-limit-automatic = Automatisch ({ $size })
+settings-data-limit-save-failed = Das Speicherlimit konnte nicht gespeichert werden
+settings-data-cleanup-now-label = Jetzt bereinigen
+settings-data-cleanup-now-hint = Alte Protokolle und Downloads löschen, nicht mehr genutzte Marktdaten entfernen und die Datenbanken verdichten. Offene Positionen sowie gehaltene und beobachtete Tokens bleiben immer unberührt.
+settings-data-cleanup-now-action = Bereinigen
+settings-data-cleanup-now-running = Wird bereinigt...
+settings-data-cleanup-now-failed = Die Bereinigung konnte nicht gestartet werden
 settings-data-directory-label = Datenverzeichnis
 settings-data-directory-copied = Datenverzeichnis
 settings-data-config-path-copied = Konfigurationspfad
@@ -563,25 +585,6 @@ settings-data-unknown-error = Unbekannter Fehler
 
 settings-data-cleanup-title = Datenbereinigung
 settings-data-cleanup-description = Geben Sie Speicherplatz frei, indem Sie alte oder ungenutzte Daten entfernen. Diese Aktionen können nicht rückgängig gemacht werden.
-settings-data-ohlcv-cleanup-label = OHLCV-Datenbereinigung
-settings-data-ohlcv-cleanup-hint = Kerzendaten von Tokens entfernen, die für die angegebene Zeit nicht aktiv waren.
-settings-data-cleanup-hours-unit = Std.
-settings-data-cleanup-ohlcv = OHLCV bereinigen
-settings-data-cleanup-running = Wird bereinigt...
-settings-data-cleanup-hours-invalid = Ungültiger Stundenwert
-settings-data-cleanup-confirm-title = OHLCV-Daten löschen
-settings-data-cleanup-confirm-message =
-    OHLCV-Daten von Tokens löschen, die seit mehr als { $hours ->
-        [one] { $hours } Stunde
-       *[other] { $hours } Stunden
-    } inaktiv sind?
-settings-data-cleanup-done =
-    { $count ->
-        [one] { $count } inaktiver Token bereinigt
-       *[other] { $count } inaktive Tokens bereinigt
-    }
-settings-data-cleanup-failed = Bereinigung fehlgeschlagen
-settings-data-cleanup-failed-detail = Bereinigung fehlgeschlagen: { $message }
 
 settings-data-cache-clear-label = Gesamten OHLCV-Cache leeren
 settings-data-cache-clear-hint = Löscht alle zwischengespeicherten Kerzendaten und lädt jeden überwachten Token von Grund auf neu. Nutzen Sie dies, wenn Charts fehlerhaft aussehen oder nach einer Änderung der Datenlogik.

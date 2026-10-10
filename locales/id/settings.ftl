@@ -516,20 +516,41 @@ settings-navigation-reset = Navigasi dikembalikan ke default
 
 ## data_tab.js
 
-settings-data-storage-title = Penyimpanan Database
-settings-data-storage-description = Ringkasan semua database yang menyimpan data trading, posisi, dan informasi historis Anda.
-settings-data-stats-loading = Memuat statistik database...
-settings-data-stats-load-failed = Gagal memuat statistik database
-settings-data-total-storage = Total Penyimpanan Database
-settings-data-db-tokens = Token
-settings-data-db-transactions = Transaksi
-settings-data-db-positions = Posisi
-settings-data-db-events = Peristiwa
-settings-data-db-ohlcv = OHLCV
-settings-data-db-wallet = Dompet
-settings-data-db-pools = Pool
-settings-data-db-strategies = Strategi
-settings-data-db-actions = Aksi
+settings-data-usage-title = Penyimpanan
+settings-data-usage-description = Ruang disk yang dipakai data { -brand }, menurut jenisnya. Data pasar yang dapat dibangun ulang dibersihkan otomatis agar tetap dalam batas penyimpanan; kunci dompet, catatan trading, dan pengaturan tidak pernah dihapus.
+settings-data-usage-loading = Mengukur penyimpanan...
+settings-data-usage-load-failed = Tidak dapat mengukur penyimpanan
+settings-data-usage-total = Terpakai
+settings-data-usage-of-limit = { $used } dari { $limit }
+settings-data-usage-free-disk = Kosong di Disk
+settings-data-usage-free-disk-value = { $free } dari { $total }
+settings-data-usage-free-disk-unknown = Tidak diketahui
+settings-data-category-wallet-keys = Kunci Dompet
+settings-data-category-trading-records = Catatan Trading
+settings-data-category-wallet-history = Riwayat Dompet
+settings-data-category-market-data = Data Pasar
+settings-data-category-settings = Pengaturan
+settings-data-category-recovery-copies = Salinan Pemulihan
+settings-data-category-updates = Pembaruan
+settings-data-category-logs = Log
+settings-data-category-leftovers = File Sisa
+settings-data-last-cleanup-label = Pembersihan Terakhir
+settings-data-last-cleanup-never = Belum dijalankan
+settings-data-last-cleanup-value = { $when }, { $freed } dibebaskan
+settings-data-last-cleanup-failures-label = Masalah Pembersihan
+settings-data-last-cleanup-failures =
+    { $count ->
+       *[other] { $count } langkah gagal; langkah ini dicoba lagi pada putaran berikutnya
+    }
+settings-data-limit-label = Batas Penyimpanan
+settings-data-limit-hint = Ruang disk yang boleh dipakai data { -brand } sebelum data pasar yang dapat dibangun ulang dibersihkan. Otomatis menyesuaikan dengan disk ini, hingga 5 GB.
+settings-data-limit-automatic = Otomatis ({ $size })
+settings-data-limit-save-failed = Tidak dapat menyimpan batas penyimpanan
+settings-data-cleanup-now-label = Bersihkan Sekarang
+settings-data-cleanup-now-hint = Menghapus log dan unduhan lama, membuang data pasar yang tidak lagi dipakai, dan memadatkan database. Posisi terbuka serta token yang dimiliki dan dipantau tidak pernah disentuh.
+settings-data-cleanup-now-action = Bersihkan
+settings-data-cleanup-now-running = Membersihkan...
+settings-data-cleanup-now-failed = Tidak dapat memulai pembersihan
 settings-data-directory-label = Direktori Data
 settings-data-directory-copied = Direktori data
 settings-data-config-path-copied = Path konfigurasi
@@ -558,23 +579,6 @@ settings-data-unknown-error = Kesalahan tidak dikenal
 
 settings-data-cleanup-title = Pembersihan Data
 settings-data-cleanup-description = Bebaskan ruang disk dengan menghapus data lama atau tidak terpakai. Aksi ini tidak dapat dibatalkan.
-settings-data-ohlcv-cleanup-label = Pembersihan Data OHLCV
-settings-data-ohlcv-cleanup-hint = Hapus data candlestick untuk token yang tidak aktif selama waktu yang ditentukan.
-settings-data-cleanup-hours-unit = jam
-settings-data-cleanup-ohlcv = Bersihkan OHLCV
-settings-data-cleanup-running = Membersihkan...
-settings-data-cleanup-hours-invalid = Nilai jam tidak valid
-settings-data-cleanup-confirm-title = Hapus Data OHLCV
-settings-data-cleanup-confirm-message =
-    Hapus data OHLCV untuk token yang tidak aktif lebih dari { $hours ->
-       *[other] { $hours } jam
-    }?
-settings-data-cleanup-done =
-    Membersihkan { $count ->
-       *[other] { $count } token tidak aktif
-    }
-settings-data-cleanup-failed = Pembersihan gagal
-settings-data-cleanup-failed-detail = Pembersihan gagal: { $message }
 
 settings-data-cache-clear-label = Hapus Semua Cache OHLCV
 settings-data-cache-clear-hint = Hapus semua data candlestick yang di-cache dan ambil ulang semua token yang dipantau dari awal. Gunakan jika grafik terlihat salah atau setelah pembaruan logika data.

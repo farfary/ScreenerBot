@@ -51,6 +51,8 @@ errors-system-paths-init-failed = アプリケーションのディレクトリ�
 errors-system-open-data-failed = データフォルダを開けませんでした
 errors-system-url-empty = URL を空にすることはできません
 errors-system-open-url-failed = URL を開けませんでした
+errors-system-storage-measure-failed = ストレージを計測できませんでした
+errors-system-storage-cleanup-running = ストレージのクリーンアップはすでに実行中です
 
 errors-initialization-required = このエンドポイントにアクセスするには、ボットの初期化が必要です。Web インターフェースで初期化を完了してください。
 errors-initialization-explore-unavailable = Explore モードではウォレットが接続されていません。ウォレットとコピートレードを使うにはセットアップを完了してください。

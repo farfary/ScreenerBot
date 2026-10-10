@@ -18,6 +18,23 @@ const CHILD_ENV: &str = "SCREENERBOT_STORAGE_STARTUP_CHILD";
 const CACHE_CHILD_ENV: &str = "SCREENERBOT_CACHE_RECOVERY_CHILD";
 /// The cache stores whose owners open through the recovery path.
 const RECOVERED_CACHE_FILES: &[&str] = &["ohlcvs.db", "pools.db", "rpc_stats.db"];
+/// Tables whose rows are still pruned on their owner's own schedule and therefore carry
+/// no catalog retention rule. The list only shrinks.
+const OWNER_PRUNED_TABLES: &[(&str, &str)] = &[
+    ("actions", "action_steps"),
+    ("actions", "actions"),
+    ("ai", "ai_decision_history"),
+    ("ai_chat", "ai_task_runs"),
+    ("events", "events"),
+    ("pools", "price_history"),
+    ("rpc_stats", "calls"),
+    ("rpc_stats", "minute_buckets"),
+    ("tokens", "rejection_history"),
+    ("tokens", "rejection_stats"),
+    ("tools", "ata_failed_cache"),
+    ("wallet", "wallet_dashboard_metrics"),
+    ("wallet", "wallet_snapshots"),
+];
 
 /// The Solana file name of every catalog store: the startup matrix covers exactly the
 /// stores the catalog declares.
@@ -256,6 +273,65 @@ fn assert_two_launches_keep_every_store(directory: &std::path::Path) {
         launch_startup_stores(directory, launch);
     }
     assert_every_store_is_clean(directory, "2");
+    assert_every_table_has_a_retention_rule(directory);
+}
+
+/// Every table a store creates has exactly one retention rule in the catalog, or is
+/// still pruned by its owner, so a new table cannot grow without a rule. A rule never
+/// names a table its store does not create.
+fn assert_every_table_has_a_retention_rule(directory: &std::path::Path) {
+    let mut problems = Vec::new();
+    let mut seen = BTreeSet::new();
+    for store in STORES {
+        let file = store
+            .path(ChainId::Solana)
+            .file_name()
+            .expect("catalog store file name")
+            .to_owned();
+        let connection =
+            Connection::open(directory.join("data").join(file)).expect("open launched store");
+        let tables: BTreeSet<String> = connection
+            .prepare(
+                "SELECT name FROM sqlite_master WHERE type = 'table' \
+                 AND name NOT LIKE 'sqlite_%' AND name != '__startup_storage_test_sentinel'",
+            )
+            .expect("prepare table listing")
+            .query_map([], |row| row.get(0))
+            .expect("list tables")
+            .collect::<rusqlite::Result<_>>()
+            .expect("read tables");
+        for table in &tables {
+            seen.insert((store.id, table.clone()));
+            let declared = store.retention.rule(table).is_some();
+            let owner_pruned = OWNER_PRUNED_TABLES.contains(&(store.id, table.as_str()));
+            if declared == owner_pruned {
+                problems.push(format!(
+                    "{}.{table}: declared {declared}, owner-pruned {owner_pruned}",
+                    store.id
+                ));
+            }
+        }
+        for rule in store.retention.tables {
+            if !tables.contains(rule.table()) {
+                problems.push(format!(
+                    "{}.{}: rule names a table the store does not create",
+                    store.id,
+                    rule.table()
+                ));
+            }
+        }
+    }
+    for (store, table) in OWNER_PRUNED_TABLES {
+        if !seen.contains(&(*store, (*table).to_owned())) {
+            problems.push(format!(
+                "{store}.{table}: listed as owner-pruned but not created"
+            ));
+        }
+    }
+    assert!(
+        problems.is_empty(),
+        "tables without exactly one retention rule: {problems:#?}"
+    );
 }
 
 fn launch_startup_stores(directory: &std::path::Path, launch: usize) {
@@ -398,6 +474,8 @@ fn initialize_startup_stores() {
     .expect("initialize tokens database");
     screenerbot::trader::copy::CopyDatabase::new(ChainId::Solana)
         .expect("initialize copy-trading database");
+    screenerbot::wallets::watch::WatchDatabase::new(ChainId::Solana)
+        .expect("initialize wallet-watch tables");
     screenerbot::tools::init_tools_db().expect("initialize tools database");
     screenerbot::llm_analysis::init_analysis_database().expect("initialize analysis database");
     screenerbot::assistant::init_chat_db().expect("initialize chat database");

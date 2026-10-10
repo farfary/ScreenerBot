@@ -48,6 +48,8 @@ errors-system-paths-init-failed = एप्लिकेशन डायरेक
 errors-system-open-data-failed = डेटा फ़ोल्डर नहीं खुल सका
 errors-system-url-empty = URL खाली नहीं हो सकता
 errors-system-open-url-failed = URL नहीं खुल सका
+errors-system-storage-measure-failed = स्टोरेज मापा नहीं जा सका
+errors-system-storage-cleanup-running = स्टोरेज की सफ़ाई पहले से चल रही है
 
 errors-initialization-required = इस एंडपॉइंट तक पहुँचने से पहले बॉट का इनिशियलाइज़ेशन आवश्यक है। कृपया वेब इंटरफ़ेस से इनिशियलाइज़ेशन प्रक्रिया पूरी करें।
 errors-initialization-explore-unavailable = एक्सप्लोर मोड में कोई वॉलेट कनेक्ट नहीं है। वॉलेट और कॉपी ट्रेडिंग इस्तेमाल करने के लिए सेटअप पूरा करें।

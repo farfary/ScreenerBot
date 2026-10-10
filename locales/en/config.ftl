@@ -677,25 +677,15 @@ config-maintenance-actions-retention-days = Actions Retention
 config-maintenance-events-retention-days = Events Retention
     .hint = How many days to keep event history (0 = keep forever)
     .unit = d
-config-maintenance-maintenance-window-start = Maintenance Window Start
-    .hint = Start time for heavy maintenance (HH:MM local time). Empty = anytime.
-config-maintenance-ohlcv-retention-days = OHLCV Retention
-    .hint = How many days to keep OHLCV candle data (0 = keep forever)
-    .unit = d
 config-maintenance-rpc-stats-retention-hours = RPC Stats Retention
     .hint = How many hours to keep RPC statistics (0 = keep forever)
     .unit = h
-config-maintenance-skip-during-active-trades = Skip During Active Trades
-    .hint = Postpone heavy maintenance (VACUUM) while positions are open
 config-maintenance-stale-token-days = Stale Token Cutoff
     .hint = Tokens without market data updates older than this are excluded from filtering to save memory. 0 = include all. At 7 days, typically reduces token count by ~90%.
     .unit = d
-config-maintenance-vacuum-interval-secs = VACUUM Interval
-    .hint = How often to run SQLite VACUUM (reclaims disk space, heavy operation)
-    .unit = s
-config-maintenance-wal-checkpoint-interval-secs = WAL Checkpoint Interval
-    .hint = How often to run SQLite WAL checkpoint (consolidates write-ahead log)
-    .unit = s
+config-maintenance-storage-limit-mb = Storage Limit
+    .hint = Disk space { -brand } data may use before rebuildable market data is cleaned up. 0 = automatic: up to 5 GB, less on a small or nearly full disk.
+    .unit = MB
 
 ## monitoring
 
@@ -1291,7 +1281,6 @@ config-category-copy-trading = Copy Trading
 config-category-core-trading = Core Trading
 config-category-creator-checks = Creator Checks
 config-category-data-sources = Data Sources
-config-category-database = Database
 config-category-dca = DCA
 config-category-debug = Debug
 config-category-discovery = Discovery
@@ -1344,7 +1333,6 @@ config-category-router = Router
 config-category-routers = Routers
 config-category-routing = Routing
 config-category-safety = Safety
-config-category-scheduling = Scheduling
 config-category-security-flags = Security Flags
 config-category-slippage = Slippage
 config-category-source-control = Source Control

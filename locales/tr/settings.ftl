@@ -521,20 +521,42 @@ settings-navigation-reset = Gezinme varsayılanlara sıfırlandı
 
 ## data_tab.js
 
-settings-data-storage-title = Veritabanı Depolaması
-settings-data-storage-description = İşlem verilerinizi, pozisyonlarınızı ve geçmiş bilgilerinizi depolayan tüm veritabanlarına genel bakış.
-settings-data-stats-loading = Veritabanı istatistikleri yükleniyor...
-settings-data-stats-load-failed = Veritabanı istatistikleri yüklenemedi
-settings-data-total-storage = Toplam Veritabanı Depolaması
-settings-data-db-tokens = Tokenlar
-settings-data-db-transactions = İşlemler
-settings-data-db-positions = Pozisyonlar
-settings-data-db-events = Olaylar
-settings-data-db-ohlcv = OHLCV
-settings-data-db-wallet = Cüzdan
-settings-data-db-pools = Havuzlar
-settings-data-db-strategies = Stratejiler
-settings-data-db-actions = Eylemler
+settings-data-usage-title = Depolama
+settings-data-usage-description = { -brand } verilerinin türe göre kapladığı disk alanı. Yeniden oluşturulabilen piyasa verileri depolama sınırı içinde kalmak için otomatik olarak temizlenir; cüzdan anahtarları, işlem kayıtları ve ayarlar asla silinmez.
+settings-data-usage-loading = Depolama ölçülüyor...
+settings-data-usage-load-failed = Depolama ölçülemedi
+settings-data-usage-total = Kullanılan
+settings-data-usage-of-limit = { $used } / { $limit }
+settings-data-usage-free-disk = Diskte Boş
+settings-data-usage-free-disk-value = { $free } / { $total }
+settings-data-usage-free-disk-unknown = Bilinmiyor
+settings-data-category-wallet-keys = Cüzdan Anahtarları
+settings-data-category-trading-records = İşlem Kayıtları
+settings-data-category-wallet-history = Cüzdan Geçmişi
+settings-data-category-market-data = Piyasa Verileri
+settings-data-category-settings = Ayarlar
+settings-data-category-recovery-copies = Kurtarma Kopyaları
+settings-data-category-updates = Güncellemeler
+settings-data-category-logs = Günlükler
+settings-data-category-leftovers = Artık Dosyalar
+settings-data-last-cleanup-label = Son Temizlik
+settings-data-last-cleanup-never = Henüz çalıştırılmadı
+settings-data-last-cleanup-value = { $when }, { $freed } boşaltıldı
+settings-data-last-cleanup-failures-label = Temizlik Sorunları
+settings-data-last-cleanup-failures =
+    { $count ->
+        [one] { $count } adım başarısız oldu; bir sonraki geçişte yeniden denenir
+       *[other] { $count } adım başarısız oldu; bir sonraki geçişte yeniden denenir
+    }
+settings-data-limit-label = Depolama Sınırı
+settings-data-limit-hint = Yeniden oluşturulabilen piyasa verileri temizlenmeden önce { -brand } verilerinin kullanabileceği disk alanı. Otomatik, en fazla 5 GB olmak üzere bu diske uyum sağlar.
+settings-data-limit-automatic = Otomatik ({ $size })
+settings-data-limit-save-failed = Depolama sınırı kaydedilemedi
+settings-data-cleanup-now-label = Şimdi Temizle
+settings-data-cleanup-now-hint = Eski günlükleri ve indirmeleri siler, artık kullanılmayan piyasa verilerini kaldırır ve veritabanlarını sıkıştırır. Açık pozisyonlara, tutulan ve izlenen tokenlara asla dokunulmaz.
+settings-data-cleanup-now-action = Temizle
+settings-data-cleanup-now-running = Temizleniyor...
+settings-data-cleanup-now-failed = Temizlik başlatılamadı
 settings-data-directory-label = Veri Dizini
 settings-data-directory-copied = Veri dizini
 settings-data-config-path-copied = Yapılandırma yolu
@@ -563,25 +585,6 @@ settings-data-unknown-error = Bilinmeyen hata
 
 settings-data-cleanup-title = Veri Temizliği
 settings-data-cleanup-description = Eski veya kullanılmayan verileri kaldırarak disk alanı açın. Bu işlemler geri alınamaz.
-settings-data-ohlcv-cleanup-label = OHLCV Veri Temizliği
-settings-data-ohlcv-cleanup-hint = Belirtilen süredir etkin olmayan tokenların mum verilerini kaldırın.
-settings-data-cleanup-hours-unit = sa
-settings-data-cleanup-ohlcv = OHLCV'yi Temizle
-settings-data-cleanup-running = Temizleniyor...
-settings-data-cleanup-hours-invalid = Geçersiz saat değeri
-settings-data-cleanup-confirm-title = OHLCV Verilerini Sil
-settings-data-cleanup-confirm-message =
-    { $hours ->
-        [one] { $hours } saatten
-       *[other] { $hours } saatten
-    } uzun süredir etkin olmayan tokenların OHLCV verileri silinsin mi?
-settings-data-cleanup-done =
-    { $count ->
-        [one] { $count } etkin olmayan token temizlendi
-       *[other] { $count } etkin olmayan token temizlendi
-    }
-settings-data-cleanup-failed = Temizlik başarısız oldu
-settings-data-cleanup-failed-detail = Temizlik başarısız oldu: { $message }
 
 settings-data-cache-clear-label = Tüm OHLCV Önbelleğini Temizle
 settings-data-cache-clear-hint = Önbelleğe alınmış tüm mum verilerini silin ve izlenen her tokenı baştan yeniden alın. Grafikler hatalı görünüyorsa veya bir veri mantığı güncellemesinden sonra kullanın.

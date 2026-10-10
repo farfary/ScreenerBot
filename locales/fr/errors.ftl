@@ -55,6 +55,8 @@ errors-system-paths-init-failed = Impossible de créer les dossiers de l'applica
 errors-system-open-data-failed = Impossible d'ouvrir le dossier de données
 errors-system-url-empty = L'URL ne peut pas être vide
 errors-system-open-url-failed = Impossible d'ouvrir l'URL
+errors-system-storage-measure-failed = Impossible de mesurer le stockage
+errors-system-storage-cleanup-running = Un nettoyage du stockage est déjà en cours
 
 # Initialization
 errors-initialization-required = L'initialisation du bot est requise avant d'accéder à cet endpoint. Veuillez terminer l'initialisation via l'interface web.

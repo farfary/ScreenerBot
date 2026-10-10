@@ -1,7 +1,7 @@
 // Copyright (c) 2024-2026 ScreenerBot (screenerbot.io)
 // SPDX-License-Identifier: BUSL-1.1
 
-//! Failures of storage housekeeping: measuring the data directory, deleting a file a retention rule selected, and checkpointing or compacting an open store.
+//! Failures of storage housekeeping: measuring the data directory, deleting a file a retention rule selected, evicting rebuildable rows, and checkpointing or compacting an open store.
 
 use super::DatabaseError;
 
@@ -24,6 +24,9 @@ pub enum StorageError {
         #[source]
         source: DatabaseError,
     },
+    /// A planned eviction names a unit its store does not hold.
+    #[error("{store} cannot evict {unit}")]
+    Eviction { store: String, unit: String },
     /// A blocking housekeeping step ended without a result.
     #[error("{operation} did not complete: {message}")]
     Interrupted { operation: String, message: String },

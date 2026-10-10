@@ -41,6 +41,7 @@ mod service_targets;
 mod source_registry;
 mod types;
 
+pub use database::WatchDatabase;
 pub use error::WatchRuntimeError;
 pub use poller::{cadence_secs, needs_gap_fill, CatchUpState, CompletedCatchUp, PAGE_SIZE};
 pub use service::subscribe_activity;
@@ -58,8 +59,6 @@ use crate::errors::InternalError;
 use crate::transactions::types::Subject;
 use crate::wallets::Error;
 use crate::{chains::active_chain, config::with_config};
-
-use database::WatchDatabase;
 
 /// The global watch database instance, set once by `start()`.
 static GLOBAL_WATCH_DB: OnceLock<WatchDatabase> = OnceLock::new();

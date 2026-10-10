@@ -674,25 +674,15 @@ config-maintenance-actions-retention-days = Aufbewahrung von Aktionen
 config-maintenance-events-retention-days = Aufbewahrung von Ereignissen
     .hint = Wie viele Tage der Ereignisverlauf aufbewahrt wird (0 = für immer)
     .unit = T.
-config-maintenance-maintenance-window-start = Beginn des Wartungsfensters
-    .hint = Startzeit für aufwendige Wartung (HH:MM Ortszeit). Leer = jederzeit.
-config-maintenance-ohlcv-retention-days = Aufbewahrung von OHLCV
-    .hint = Wie viele Tage OHLCV-Kerzendaten aufbewahrt werden (0 = für immer)
-    .unit = T.
 config-maintenance-rpc-stats-retention-hours = Aufbewahrung von RPC-Statistiken
     .hint = Wie viele Stunden RPC-Statistiken aufbewahrt werden (0 = für immer)
     .unit = Std.
-config-maintenance-skip-during-active-trades = Bei aktiven Trades überspringen
-    .hint = Aufwendige Wartung (VACUUM) verschieben, solange Positionen offen sind
 config-maintenance-stale-token-days = Grenze für veraltete Tokens
     .hint = Tokens, deren Marktdaten länger nicht aktualisiert wurden, werden zur Speicherersparnis von der Filterung ausgeschlossen. 0 = alle einbeziehen. Bei 7 Tagen sinkt die Token-Anzahl typischerweise um ca. 90 %.
     .unit = T.
-config-maintenance-vacuum-interval-secs = VACUUM-Intervall
-    .hint = Wie oft SQLite VACUUM ausgeführt wird (gibt Speicherplatz frei, aufwendiger Vorgang)
-    .unit = s
-config-maintenance-wal-checkpoint-interval-secs = WAL-Checkpoint-Intervall
-    .hint = Wie oft der SQLite-WAL-Checkpoint ausgeführt wird (konsolidiert das Write-Ahead-Log)
-    .unit = s
+config-maintenance-storage-limit-mb = Speicherlimit
+    .hint = Speicherplatz, den die Daten von { -brand } belegen dürfen, bevor wiederherstellbare Marktdaten bereinigt werden. 0 = automatisch: bis zu 5 GB, weniger auf einem kleinen oder fast vollen Datenträger.
+    .unit = MB
 
 ## monitoring
 
@@ -1288,7 +1278,6 @@ config-category-copy-trading = Copy-Trading
 config-category-core-trading = Kern-Trading
 config-category-creator-checks = Creator-Prüfungen
 config-category-data-sources = Datenquellen
-config-category-database = Datenbank
 config-category-dca = DCA
 config-category-debug = Debug
 config-category-discovery = Erkennung
@@ -1341,7 +1330,6 @@ config-category-router = Router
 config-category-routers = Router
 config-category-routing = Routing
 config-category-safety = Sicherheit
-config-category-scheduling = Planung
 config-category-security-flags = Sicherheits-Flags
 config-category-slippage = Slippage
 config-category-source-control = Quellensteuerung

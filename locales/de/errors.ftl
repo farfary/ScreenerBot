@@ -48,6 +48,8 @@ errors-system-paths-init-failed = Die Anwendungsverzeichnisse konnten nicht erst
 errors-system-open-data-failed = Der Datenordner konnte nicht geöffnet werden
 errors-system-url-empty = Die URL darf nicht leer sein
 errors-system-open-url-failed = Die URL konnte nicht geöffnet werden
+errors-system-storage-measure-failed = Speicher konnte nicht gemessen werden
+errors-system-storage-cleanup-running = Eine Speicherbereinigung läuft bereits
 
 errors-initialization-required = Vor dem Zugriff auf diesen Endpunkt ist die Initialisierung des Bots erforderlich. Bitte schließen Sie die Initialisierung über die Weboberfläche ab.
 errors-initialization-explore-unavailable = Im Explore Mode ist keine Wallet verbunden. Schließen Sie die Einrichtung ab, um Wallets und Copy-Trading zu nutzen.

@@ -58,6 +58,8 @@ errors-system-paths-init-failed = 애플리케이션 디렉터리를 만들 수 
 errors-system-open-data-failed = 데이터 폴더를 열 수 없습니다
 errors-system-url-empty = URL은 비워 둘 수 없습니다
 errors-system-open-url-failed = URL을 열 수 없습니다
+errors-system-storage-measure-failed = 저장 공간을 측정할 수 없습니다
+errors-system-storage-cleanup-running = 저장 공간 정리가 이미 실행 중입니다
 
 # Initialization
 errors-initialization-required = 이 엔드포인트에 접근하려면 봇 초기화가 필요합니다. 웹 인터페이스에서 초기화 과정을 완료하세요.

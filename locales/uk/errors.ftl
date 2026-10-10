@@ -48,6 +48,8 @@ errors-system-paths-init-failed = Не вдалося створити ката�
 errors-system-open-data-failed = Не вдалося відкрити теку даних
 errors-system-url-empty = URL не може бути порожнім
 errors-system-open-url-failed = Не вдалося відкрити URL
+errors-system-storage-measure-failed = Не вдалося виміряти сховище
+errors-system-storage-cleanup-running = Очищення сховища вже виконується
 
 errors-initialization-required = Перед доступом до цієї кінцевої точки потрібна ініціалізація бота. Завершіть процес ініціалізації у вебінтерфейсі.
 errors-initialization-explore-unavailable = У режимі огляду гаманець не підключено. Завершіть налаштування, щоб користуватися гаманцями та копітрейдингом.

@@ -48,6 +48,8 @@ errors-system-paths-init-failed = No se pudieron crear los directorios de la apl
 errors-system-open-data-failed = No se pudo abrir la carpeta de datos
 errors-system-url-empty = La URL no puede estar vacía
 errors-system-open-url-failed = No se pudo abrir la URL
+errors-system-storage-measure-failed = No se pudo medir el almacenamiento
+errors-system-storage-cleanup-running = Ya hay una limpieza del almacenamiento en curso
 
 errors-initialization-required = Se requiere la inicialización del bot antes de acceder a este endpoint. Completa el proceso de inicialización desde la interfaz web.
 errors-initialization-explore-unavailable = El Modo Explorar no tiene una billetera conectada. Completa la configuración para usar billeteras y copy trading.

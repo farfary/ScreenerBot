@@ -71,8 +71,6 @@ pub enum ConfigCategory {
     CreatorChecks,
     #[serde(rename = "data-sources")]
     DataSources,
-    #[serde(rename = "database")]
-    Database,
     #[serde(rename = "dca")]
     Dca,
     #[serde(rename = "debug")]
@@ -177,8 +175,6 @@ pub enum ConfigCategory {
     Routing,
     #[serde(rename = "safety")]
     Safety,
-    #[serde(rename = "scheduling")]
-    Scheduling,
     #[serde(rename = "security-flags")]
     SecurityFlags,
     #[serde(rename = "slippage")]
@@ -223,7 +219,7 @@ pub enum ConfigCategory {
 
 impl ConfigCategory {
     /// Every category, in declaration order.
-    pub const ALL: [ConfigCategory; 94] = [
+    pub const ALL: [ConfigCategory; 92] = [
         ConfigCategory::Activity,
         ConfigCategory::Age,
         ConfigCategory::Api,
@@ -244,7 +240,6 @@ impl ConfigCategory {
         ConfigCategory::CoreTrading,
         ConfigCategory::CreatorChecks,
         ConfigCategory::DataSources,
-        ConfigCategory::Database,
         ConfigCategory::Dca,
         ConfigCategory::Debug,
         ConfigCategory::Discovery,
@@ -297,7 +292,6 @@ impl ConfigCategory {
         ConfigCategory::Routers,
         ConfigCategory::Routing,
         ConfigCategory::Safety,
-        ConfigCategory::Scheduling,
         ConfigCategory::SecurityFlags,
         ConfigCategory::Slippage,
         ConfigCategory::SourceControl,
@@ -343,7 +337,6 @@ impl ConfigCategory {
             ConfigCategory::CoreTrading => "core-trading",
             ConfigCategory::CreatorChecks => "creator-checks",
             ConfigCategory::DataSources => "data-sources",
-            ConfigCategory::Database => "database",
             ConfigCategory::Dca => "dca",
             ConfigCategory::Debug => "debug",
             ConfigCategory::Discovery => "discovery",
@@ -396,7 +389,6 @@ impl ConfigCategory {
             ConfigCategory::Routers => "routers",
             ConfigCategory::Routing => "routing",
             ConfigCategory::Safety => "safety",
-            ConfigCategory::Scheduling => "scheduling",
             ConfigCategory::SecurityFlags => "security-flags",
             ConfigCategory::Slippage => "slippage",
             ConfigCategory::SourceControl => "source-control",
@@ -455,7 +447,6 @@ impl ConfigCategory {
             | ConfigCategory::CopyTrading
             | ConfigCategory::CreatorChecks
             | ConfigCategory::DataSources
-            | ConfigCategory::Database
             | ConfigCategory::Discovery
             | ConfigCategory::Exit
             | ConfigCategory::Fallback
@@ -490,7 +481,6 @@ impl ConfigCategory {
             | ConfigCategory::Routers
             | ConfigCategory::Routing
             | ConfigCategory::Safety
-            | ConfigCategory::Scheduling
             | ConfigCategory::SecurityFlags
             | ConfigCategory::Sources
             | ConfigCategory::StopLoss

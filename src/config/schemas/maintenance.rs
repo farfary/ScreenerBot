@@ -1,7 +1,7 @@
 // Copyright (c) 2024-2026 ScreenerBot (screenerbot.io)
 // SPDX-License-Identifier: BUSL-1.1
 
-//! Database maintenance, cleanup, and retention policy configuration.
+//! Data retention configuration: how long history is kept and how much disk the app's data may use.
 
 use crate::config::metadata::{ConfigCategory, ConfigImpact};
 use crate::config_struct;
@@ -12,10 +12,10 @@ use crate::field_metadata;
 // ============================================================================
 
 config_struct! {
-    /// Automatic maintenance and data retention configuration.
+    /// Data retention configuration.
     ///
-    /// Controls how long historical data is kept and when heavy
-    /// maintenance operations (VACUUM, WAL checkpoint) run.
+    /// `storage_limit_mb` is the budget storage housekeeping holds the app's data to;
+    /// zero adapts it to the disk.
     pub struct MaintenanceConfig {
         #[metadata(field_metadata! {
             impact: ConfigImpact::Medium,
@@ -42,14 +42,6 @@ config_struct! {
         rpc_stats_retention_hours: u64 = 72,
 
         #[metadata(field_metadata! {
-            impact: ConfigImpact::Medium,
-            category: ConfigCategory::Retention,
-            min: 0.0,
-            step: 1.0,
-        })]
-        ohlcv_retention_days: u32 = 90,
-
-        #[metadata(field_metadata! {
             impact: ConfigImpact::High,
             category: ConfigCategory::Optimization,
             min: 0.0,
@@ -58,31 +50,11 @@ config_struct! {
         stale_token_days: u32 = 7,
 
         #[metadata(field_metadata! {
-            impact: ConfigImpact::Low,
-            category: ConfigCategory::Database,
-            min: 300.0,
-            step: 300.0,
-        })]
-        wal_checkpoint_interval_secs: u64 = 3600,
-
-        #[metadata(field_metadata! {
-            impact: ConfigImpact::Low,
-            category: ConfigCategory::Database,
-            min: 3600.0,
-            step: 3600.0,
-        })]
-        vacuum_interval_secs: u64 = 86400,
-
-        #[metadata(field_metadata! {
-            impact: ConfigImpact::Low,
-            category: ConfigCategory::Scheduling,
-        })]
-        maintenance_window_start: String = String::new(),
-
-        #[metadata(field_metadata! {
             impact: ConfigImpact::Medium,
-            category: ConfigCategory::Scheduling,
+            category: ConfigCategory::Retention,
+            min: 0.0,
+            step: 1024.0,
         })]
-        skip_during_active_trades: bool = true,
+        storage_limit_mb: u64 = 0,
     }
 }

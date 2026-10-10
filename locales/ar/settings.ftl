@@ -541,20 +541,46 @@ settings-navigation-reset = تمت إعادة التنقل إلى الافترا
 
 ## data_tab.js
 
-settings-data-storage-title = تخزين قواعد البيانات
-settings-data-storage-description = نظرة عامة على جميع قواعد البيانات التي تخزّن بيانات تداولك ومراكزك ومعلوماتك التاريخية.
-settings-data-stats-loading = جارٍ تحميل إحصاءات قواعد البيانات...
-settings-data-stats-load-failed = فشل تحميل إحصاءات قواعد البيانات
-settings-data-total-storage = إجمالي تخزين قواعد البيانات
-settings-data-db-tokens = الرموز
-settings-data-db-transactions = المعاملات
-settings-data-db-positions = المراكز
-settings-data-db-events = الأحداث
-settings-data-db-ohlcv = OHLCV
-settings-data-db-wallet = المحفظة
-settings-data-db-pools = المجمعات
-settings-data-db-strategies = الاستراتيجيات
-settings-data-db-actions = الإجراءات
+settings-data-usage-title = التخزين
+settings-data-usage-description = مساحة القرص التي تشغلها بيانات { -brand } حسب النوع. تُنظَّف بيانات السوق القابلة لإعادة البناء تلقائيًا للبقاء ضمن حد التخزين؛ ولا تُحذف أبدًا مفاتيح المحفظة وسجلات التداول والإعدادات.
+settings-data-usage-loading = جارٍ قياس التخزين...
+settings-data-usage-load-failed = تعذّر قياس التخزين
+settings-data-usage-total = المستخدم
+settings-data-usage-of-limit = { $used } من { $limit }
+settings-data-usage-free-disk = المساحة الحرة على القرص
+settings-data-usage-free-disk-value = { $free } من { $total }
+settings-data-usage-free-disk-unknown = غير معروف
+settings-data-category-wallet-keys = مفاتيح المحفظة
+settings-data-category-trading-records = سجلات التداول
+settings-data-category-wallet-history = سجل المحفظة
+settings-data-category-market-data = بيانات السوق
+settings-data-category-settings = الإعدادات
+settings-data-category-recovery-copies = نسخ الاسترداد
+settings-data-category-updates = التحديثات
+settings-data-category-logs = السجلات
+settings-data-category-leftovers = ملفات متبقية
+settings-data-last-cleanup-label = آخر تنظيف
+settings-data-last-cleanup-never = لم يُشغَّل بعد
+settings-data-last-cleanup-value = { $when }، تم تحرير { $freed }
+settings-data-last-cleanup-failures-label = مشكلات التنظيف
+settings-data-last-cleanup-failures =
+    { $count ->
+        [zero] لم تفشل أي خطوة
+        [one] فشلت خطوة واحدة ({ $count })؛ ستُعاد في الجولة التالية
+        [two] فشلت خطوتان ({ $count })؛ ستُعادان في الجولة التالية
+        [few] فشلت { $count } خطوات؛ ستُعاد في الجولة التالية
+        [many] فشلت { $count } خطوة؛ ستُعاد في الجولة التالية
+       *[other] فشلت { $count } خطوة؛ ستُعاد في الجولة التالية
+    }
+settings-data-limit-label = حد التخزين
+settings-data-limit-hint = مساحة القرص التي يمكن أن تشغلها بيانات { -brand } قبل تنظيف بيانات السوق القابلة لإعادة البناء. يتكيف الوضع التلقائي مع هذا القرص، حتى 5 GB.
+settings-data-limit-automatic = تلقائي ({ $size })
+settings-data-limit-save-failed = تعذّر حفظ حد التخزين
+settings-data-cleanup-now-label = التنظيف الآن
+settings-data-cleanup-now-hint = يحذف السجلات والتنزيلات القديمة، ويزيل بيانات السوق التي لم تعد مستخدمة، ويضغط قواعد البيانات. لا تُمس أبدًا المراكز المفتوحة والرموز المحتفظ بها والمراقبة.
+settings-data-cleanup-now-action = تنظيف
+settings-data-cleanup-now-running = جارٍ التنظيف...
+settings-data-cleanup-now-failed = تعذّر بدء التنظيف
 settings-data-directory-label = مجلد البيانات
 settings-data-directory-copied = مجلد البيانات
 settings-data-config-path-copied = مسار الإعدادات
@@ -583,33 +609,6 @@ settings-data-unknown-error = خطأ غير معروف
 
 settings-data-cleanup-title = تنظيف البيانات
 settings-data-cleanup-description = حرّر مساحة القرص بإزالة البيانات القديمة أو غير المستخدمة. لا يمكن التراجع عن هذه الإجراءات.
-settings-data-ohlcv-cleanup-label = تنظيف بيانات OHLCV
-settings-data-ohlcv-cleanup-hint = إزالة بيانات الشموع للرموز التي لم تنشط خلال المدة المحددة.
-settings-data-cleanup-hours-unit = ساعة
-settings-data-cleanup-ohlcv = تنظيف OHLCV
-settings-data-cleanup-running = جارٍ التنظيف...
-settings-data-cleanup-hours-invalid = قيمة الساعات غير صالحة
-settings-data-cleanup-confirm-title = حذف بيانات OHLCV
-settings-data-cleanup-confirm-message =
-    { $hours ->
-        [zero] هل تريد حذف بيانات OHLCV للرموز غير النشطة لأكثر من { $hours } ساعة؟
-        [one] هل تريد حذف بيانات OHLCV للرموز غير النشطة لأكثر من ساعة واحدة ({ $hours })؟
-        [two] هل تريد حذف بيانات OHLCV للرموز غير النشطة لأكثر من { $hours } ساعتين؟
-        [few] هل تريد حذف بيانات OHLCV للرموز غير النشطة لأكثر من { $hours } ساعات؟
-        [many] هل تريد حذف بيانات OHLCV للرموز غير النشطة لأكثر من { $hours } ساعة؟
-       *[other] هل تريد حذف بيانات OHLCV للرموز غير النشطة لأكثر من { $hours } ساعة؟
-    }
-settings-data-cleanup-done =
-    { $count ->
-        [zero] تم تنظيف { $count } رمز غير نشط
-        [one] تم تنظيف رمز غير نشط ({ $count })
-        [two] تم تنظيف رمزين غير نشطين ({ $count })
-        [few] تم تنظيف { $count } رموز غير نشطة
-        [many] تم تنظيف { $count } رمزًا غير نشط
-       *[other] تم تنظيف { $count } رمز غير نشط
-    }
-settings-data-cleanup-failed = فشل التنظيف
-settings-data-cleanup-failed-detail = فشل التنظيف: { $message }
 
 settings-data-cache-clear-label = مسح كل ذاكرة OHLCV المؤقتة
 settings-data-cache-clear-hint = امسح كل بيانات الشموع المخزنة مؤقتًا وأعد جلب كل رمز مراقَب من البداية. استخدمه إذا بدت المخططات خاطئة أو بعد تحديث منطق البيانات.

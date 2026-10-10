@@ -13,7 +13,7 @@ use crate::version::retention::keeps_download;
 
 use super::families::{family, FAMILIES, PARTIAL_DOWNLOAD_IDLE_LIMIT};
 use super::types::{
-    Action, Category, Disk, FamilyId, FileEntry, Keep, Plan, PlanInput, StoreUsage, Tier,
+    Action, Category, Disk, FamilyId, FileEntry, Keep, Limit, Plan, PlanInput, StoreUsage, Tier,
 };
 
 const MIB: u64 = 1024 * 1024;
@@ -42,20 +42,28 @@ pub const COMPACT_MIN_FREE_PERCENT: u64 = 10;
 /// The categories whose families step down their ladders under pressure, in order.
 const ESCALATION_ORDER: [Category; 2] = [Category::Updates, Category::Logs];
 
-/// The budget for `usage` on `disk`: the smallest of the fixed maximum, a share of
-/// the disk and a share of the room left to the app, never below the fixed minimum.
-/// Deleting moves bytes from usage to free space, so a pass never moves its own
-/// budget.
-pub fn budget(usage: u64, disk: Option<Disk>) -> u64 {
-    let Some(disk) = disk else {
-        return BUDGET_MAX_BYTES;
+/// The budget for `usage` on `disk`. An automatic limit is the smallest of the fixed
+/// maximum, a share of the disk and a share of the room left to the app; a fixed
+/// limit replaces the maximum and the disk share. Both are capped by the room share
+/// and never fall below the fixed minimum. Deleting moves bytes from usage to free
+/// space, so a pass never moves its own budget.
+pub fn budget(usage: u64, disk: Option<Disk>, limit: Limit) -> u64 {
+    let ceiling = match limit {
+        Limit::Automatic => BUDGET_MAX_BYTES,
+        Limit::Fixed(bytes) => bytes,
     };
-    let disk_share = disk.total.saturating_mul(BUDGET_DISK_PERCENT) / 100;
+    let Some(disk) = disk else {
+        return ceiling.max(BUDGET_MIN_BYTES);
+    };
+    let disk_share = match limit {
+        Limit::Automatic => disk.total.saturating_mul(BUDGET_DISK_PERCENT) / 100,
+        Limit::Fixed(_) => u64::MAX,
+    };
     let room_share = usage
         .saturating_add(disk.free)
         .saturating_mul(BUDGET_ROOM_PERCENT)
         / 100;
-    BUDGET_MAX_BYTES
+    ceiling
         .min(disk_share)
         .min(room_share)
         .max(BUDGET_MIN_BYTES)
@@ -249,7 +257,7 @@ pub fn plan(input: &PlanInput) -> Plan {
     let usage = input.entries.iter().map(|entry| entry.bytes).sum::<u64>()
         + input.stores.iter().map(|store| store.bytes).sum::<u64>();
     let free = input.disk.map(|disk| disk.free);
-    let limit = budget(usage, input.disk);
+    let limit = budget(usage, input.disk, input.limit);
     let tier = disk_tier(free).max(budget_tier(usage, limit));
     let fits = |freed: u64| {
         usage.saturating_sub(freed) <= limit
@@ -281,27 +289,57 @@ pub fn plan(input: &PlanInput) -> Plan {
         })
         .collect();
     let mut freed = selection.freed;
+    // Free pages inside a store are space compaction returns without evicting
+    // anything, and the pages an eviction frees stay in its store until compaction
+    // runs, so eviction stops once usage fits with them counted.
+    let reclaimable: u64 = input.stores.iter().map(StoreUsage::free_bytes).sum();
 
-    if !fits(freed) {
+    if !fits(freed.saturating_add(reclaimable)) {
         let mut evictable: Vec<_> = input
             .evictables
             .iter()
             .filter(|unit| unit.protection.is_none())
             .collect();
-        evictable.sort_by(|a, b| a.last_used.cmp(&b.last_used).then(a.id.cmp(&b.id)));
+        evictable.sort_by(|a, b| {
+            a.last_used
+                .cmp(&b.last_used)
+                .then(a.path.cmp(&b.path))
+                .then(a.bytes.cmp(&b.bytes))
+        });
         for unit in evictable {
-            if fits(freed) {
+            if fits(freed.saturating_add(reclaimable)) {
                 break;
             }
             freed += unit.bytes;
             actions.push(Action::Evict {
-                id: unit.id.clone(),
+                store: unit.store,
+                path: unit.path.clone(),
+                unit: unit.unit.clone(),
                 bytes: unit.bytes,
             });
         }
     }
 
-    actions.extend(store_actions(&input.stores, input.compaction_due));
+    let mut operations = store_actions(&input.stores, input.compaction_due);
+    for store in &input.stores {
+        let evicted = actions
+            .iter()
+            .any(|action| matches!(action, Action::Evict { path, .. } if *path == store.path));
+        let reclaimed = operations
+            .iter()
+            .any(|action| matches!(action, Action::Reclaim { path, .. } if *path == store.path));
+        if evicted
+            && !reclaimed
+            && store.spec.compaction == Compaction::Incremental
+            && store.incremental
+        {
+            operations.push(Action::Reclaim {
+                store: store.spec.id,
+                path: store.path.clone(),
+            });
+        }
+    }
+    actions.extend(operations);
     let projected_usage = usage.saturating_sub(freed);
     Plan {
         limit,
@@ -309,6 +347,7 @@ pub fn plan(input: &PlanInput) -> Plan {
         projected_usage,
         tier,
         shortfall: projected_usage.saturating_sub(limit),
+        fits: fits(freed.saturating_add(reclaimable)),
         actions,
     }
 }

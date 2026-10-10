@@ -516,20 +516,41 @@ settings-navigation-reset = 내비게이션이 기본값으로 초기화되었�
 
 ## data_tab.js
 
-settings-data-storage-title = 데이터베이스 저장소
-settings-data-storage-description = 거래 데이터, 포지션, 과거 정보를 저장하는 모든 데이터베이스의 개요입니다.
-settings-data-stats-loading = 데이터베이스 통계 불러오는 중...
-settings-data-stats-load-failed = 데이터베이스 통계를 불러오지 못했습니다
-settings-data-total-storage = 전체 데이터베이스 저장 용량
-settings-data-db-tokens = 토큰
-settings-data-db-transactions = 트랜잭션
-settings-data-db-positions = 포지션
-settings-data-db-events = 이벤트
-settings-data-db-ohlcv = OHLCV
-settings-data-db-wallet = 지갑
-settings-data-db-pools = 풀
-settings-data-db-strategies = 전략
-settings-data-db-actions = 작업
+settings-data-usage-title = 저장 공간
+settings-data-usage-description = { -brand } 데이터가 차지하는 디스크 공간을 종류별로 보여 줍니다. 다시 만들 수 있는 시장 데이터는 저장 공간 한도 안에 머물도록 자동으로 정리되며, 지갑 키, 거래 기록과 설정은 절대 삭제되지 않습니다.
+settings-data-usage-loading = 저장 공간 측정 중...
+settings-data-usage-load-failed = 저장 공간을 측정할 수 없습니다
+settings-data-usage-total = 사용량
+settings-data-usage-of-limit = { $used } / { $limit }
+settings-data-usage-free-disk = 디스크 여유 공간
+settings-data-usage-free-disk-value = { $free } / { $total }
+settings-data-usage-free-disk-unknown = 알 수 없음
+settings-data-category-wallet-keys = 지갑 키
+settings-data-category-trading-records = 거래 기록
+settings-data-category-wallet-history = 지갑 내역
+settings-data-category-market-data = 시장 데이터
+settings-data-category-settings = 설정
+settings-data-category-recovery-copies = 복구용 사본
+settings-data-category-updates = 업데이트
+settings-data-category-logs = 로그
+settings-data-category-leftovers = 남은 파일
+settings-data-last-cleanup-label = 마지막 정리
+settings-data-last-cleanup-never = 아직 실행되지 않음
+settings-data-last-cleanup-value = { $when }, { $freed } 확보
+settings-data-last-cleanup-failures-label = 정리 문제
+settings-data-last-cleanup-failures =
+    { $count ->
+       *[other] { $count }개 단계가 실패했습니다. 다음 실행 때 다시 시도합니다
+    }
+settings-data-limit-label = 저장 공간 한도
+settings-data-limit-hint = 다시 만들 수 있는 시장 데이터를 정리하기 전까지 { -brand } 데이터가 사용할 수 있는 디스크 공간입니다. 자동은 이 디스크에 맞춰 최대 5 GB까지 조정됩니다.
+settings-data-limit-automatic = 자동 ({ $size })
+settings-data-limit-save-failed = 저장 공간 한도를 저장할 수 없습니다
+settings-data-cleanup-now-label = 지금 정리
+settings-data-cleanup-now-hint = 오래된 로그와 다운로드를 삭제하고, 더 이상 쓰지 않는 시장 데이터를 제거하며, 데이터베이스를 압축합니다. 열린 포지션과 보유 중이거나 관심 목록에 있는 토큰은 절대 건드리지 않습니다.
+settings-data-cleanup-now-action = 정리
+settings-data-cleanup-now-running = 정리 중...
+settings-data-cleanup-now-failed = 정리를 시작할 수 없습니다
 settings-data-directory-label = 데이터 디렉터리
 settings-data-directory-copied = 데이터 디렉터리
 settings-data-config-path-copied = 설정 경로
@@ -558,23 +579,6 @@ settings-data-unknown-error = 알 수 없는 오류
 
 settings-data-cleanup-title = 데이터 정리
 settings-data-cleanup-description = 오래되었거나 사용하지 않는 데이터를 삭제하여 디스크 공간을 확보합니다. 이 작업은 되돌릴 수 없습니다.
-settings-data-ohlcv-cleanup-label = OHLCV 데이터 정리
-settings-data-ohlcv-cleanup-hint = 지정한 시간 동안 활동이 없던 토큰의 캔들스틱 데이터를 삭제합니다.
-settings-data-cleanup-hours-unit = 시간
-settings-data-cleanup-ohlcv = OHLCV 정리
-settings-data-cleanup-running = 정리 중...
-settings-data-cleanup-hours-invalid = 시간 값이 올바르지 않습니다
-settings-data-cleanup-confirm-title = OHLCV 데이터 삭제
-settings-data-cleanup-confirm-message =
-    { $hours ->
-       *[other] { $hours }시간 넘게 비활성 상태인 토큰의 OHLCV 데이터를 삭제하시겠습니까?
-    }
-settings-data-cleanup-done =
-    { $count ->
-       *[other] 비활성 토큰 { $count }개를 정리했습니다
-    }
-settings-data-cleanup-failed = 정리에 실패했습니다
-settings-data-cleanup-failed-detail = 정리에 실패했습니다: { $message }
 
 settings-data-cache-clear-label = 모든 OHLCV 캐시 삭제
 settings-data-cache-clear-hint = 캐시된 모든 캔들스틱 데이터를 삭제하고 모니터링 중인 모든 토큰을 처음부터 다시 가져옵니다. 차트가 이상하거나 데이터 로직 업데이트 후에 사용하세요.

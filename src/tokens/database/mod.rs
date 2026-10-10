@@ -26,8 +26,12 @@ mod metadata;
 mod pool_data;
 mod priority;
 mod rejections;
+pub mod retention;
 mod security;
 mod tracking;
+
+#[cfg(test)]
+mod retention_tests;
 
 use crate::errors::DatabaseError;
 use arc_swap::ArcSwapOption;

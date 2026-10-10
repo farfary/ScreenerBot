@@ -30,7 +30,6 @@ fn visibility_mapping_is_pinned() {
         (ConfigCategory::CoreTrading, "primary"),
         (ConfigCategory::CreatorChecks, "secondary"),
         (ConfigCategory::DataSources, "secondary"),
-        (ConfigCategory::Database, "secondary"),
         (ConfigCategory::Dca, "primary"),
         (ConfigCategory::Debug, "technical"),
         (ConfigCategory::Discovery, "secondary"),
@@ -83,7 +82,6 @@ fn visibility_mapping_is_pinned() {
         (ConfigCategory::Routers, "secondary"),
         (ConfigCategory::Routing, "secondary"),
         (ConfigCategory::Safety, "secondary"),
-        (ConfigCategory::Scheduling, "secondary"),
         (ConfigCategory::SecurityFlags, "secondary"),
         (ConfigCategory::Slippage, "primary"),
         (ConfigCategory::SourceControl, "primary"),
@@ -122,9 +120,9 @@ fn category_ids_are_unique_kebab_case() {
                     .split('-')
                     .all(|part| !part.is_empty()
                         && part.chars().all(|c| c.is_ascii_lowercase() || c.is_ascii_digit())),
-            "uid=501(farhad) gid=20(staff) groups=20(staff),12(everyone),61(localaccounts),79(_appserverusr),80(admin),81(_appserveradm),98(_lpadmin),701(com.apple.sharepoint.group.1),704(com.apple.sharepoint.group.4),33(_appstore),100(_lpoperator),204(_developer),250(_analyticsusers),395(com.apple.access_ftp),398(com.apple.access_screensharing),399(com.apple.access_ssh),400(com.apple.access_remote_ae),703(com.apple.sharepoint.group.3) is not kebab-case"
+            "{id} is not kebab-case"
         );
-        assert!(seen.insert(id), "duplicate category id uid=501(farhad) gid=20(staff) groups=20(staff),12(everyone),61(localaccounts),79(_appserverusr),80(admin),81(_appserveradm),98(_lpadmin),701(com.apple.sharepoint.group.1),704(com.apple.sharepoint.group.4),33(_appstore),100(_lpoperator),204(_developer),250(_analyticsusers),395(com.apple.access_ftp),398(com.apple.access_screensharing),399(com.apple.access_ssh),400(com.apple.access_remote_ae),703(com.apple.sharepoint.group.3)");
+        assert!(seen.insert(id), "duplicate category id {id}");
         let serialized = serde_json::to_value(category).unwrap();
         assert_eq!(serialized, serde_json::Value::String(id.to_string()));
     }

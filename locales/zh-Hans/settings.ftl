@@ -516,20 +516,41 @@ settings-navigation-reset = 导航已恢复默认
 
 ## data_tab.js
 
-settings-data-storage-title = 数据库存储
-settings-data-storage-description = 存储您的交易数据、仓位和历史信息的所有数据库概览。
-settings-data-stats-loading = 正在加载数据库统计…
-settings-data-stats-load-failed = 加载数据库统计失败
-settings-data-total-storage = 数据库总存储
-settings-data-db-tokens = 代币
-settings-data-db-transactions = 交易
-settings-data-db-positions = 仓位
-settings-data-db-events = 事件
-settings-data-db-ohlcv = OHLCV
-settings-data-db-wallet = 钱包
-settings-data-db-pools = 流动性池
-settings-data-db-strategies = 策略
-settings-data-db-actions = 操作
+settings-data-usage-title = 存储
+settings-data-usage-description = { -brand } 数据按类别占用的磁盘空间。可重建的市场数据会自动清理，以保持在存储上限内；钱包密钥、交易记录和设置永远不会被删除。
+settings-data-usage-loading = 正在测量存储…
+settings-data-usage-load-failed = 无法测量存储
+settings-data-usage-total = 已用
+settings-data-usage-of-limit = { $used } / { $limit }
+settings-data-usage-free-disk = 磁盘可用空间
+settings-data-usage-free-disk-value = { $free } / { $total }
+settings-data-usage-free-disk-unknown = 未知
+settings-data-category-wallet-keys = 钱包密钥
+settings-data-category-trading-records = 交易记录
+settings-data-category-wallet-history = 钱包历史
+settings-data-category-market-data = 市场数据
+settings-data-category-settings = 设置
+settings-data-category-recovery-copies = 恢复副本
+settings-data-category-updates = 更新
+settings-data-category-logs = 日志
+settings-data-category-leftovers = 残留文件
+settings-data-last-cleanup-label = 上次清理
+settings-data-last-cleanup-never = 尚未运行
+settings-data-last-cleanup-value = { $when }，释放 { $freed }
+settings-data-last-cleanup-failures-label = 清理问题
+settings-data-last-cleanup-failures =
+    { $count ->
+       *[other] { $count } 个步骤失败；将在下一轮重试
+    }
+settings-data-limit-label = 存储上限
+settings-data-limit-hint = 在清理可重建的市场数据之前，{ -brand } 数据可使用的磁盘空间。自动模式会根据此磁盘调整，最多 5 GB。
+settings-data-limit-automatic = 自动（{ $size }）
+settings-data-limit-save-failed = 无法保存存储上限
+settings-data-cleanup-now-label = 立即清理
+settings-data-cleanup-now-hint = 删除旧日志和下载文件，移除不再使用的市场数据，并压缩数据库。未平仓仓位、持有和关注的代币永远不会被触及。
+settings-data-cleanup-now-action = 清理
+settings-data-cleanup-now-running = 正在清理…
+settings-data-cleanup-now-failed = 无法开始清理
 settings-data-directory-label = 数据目录
 settings-data-directory-copied = 数据目录
 settings-data-config-path-copied = 配置路径
@@ -558,23 +579,6 @@ settings-data-unknown-error = 未知错误
 
 settings-data-cleanup-title = 数据清理
 settings-data-cleanup-description = 删除旧数据或未使用的数据以释放磁盘空间。这些操作无法撤销。
-settings-data-ohlcv-cleanup-label = OHLCV 数据清理
-settings-data-ohlcv-cleanup-hint = 删除在指定时间内未活跃的代币的 K 线数据。
-settings-data-cleanup-hours-unit = 小时
-settings-data-cleanup-ohlcv = 清理 OHLCV
-settings-data-cleanup-running = 正在清理…
-settings-data-cleanup-hours-invalid = 小时数无效
-settings-data-cleanup-confirm-title = 删除 OHLCV 数据
-settings-data-cleanup-confirm-message =
-    删除超过 { $hours -> 
-       *[other] { $hours } 小时
-    }未活跃的代币的 OHLCV 数据？
-settings-data-cleanup-done =
-    { $count ->
-       *[other] 已清理 { $count } 个未活跃代币
-    }
-settings-data-cleanup-failed = 清理失败
-settings-data-cleanup-failed-detail = 清理失败：{ $message }
 
 settings-data-cache-clear-label = 清除所有 OHLCV 缓存
 settings-data-cache-clear-hint = 清除所有缓存的 K 线数据，并从头重新获取每个受监控的代币。当图表异常或数据逻辑更新后使用。

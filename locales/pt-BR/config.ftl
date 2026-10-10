@@ -652,25 +652,15 @@ config-maintenance-actions-retention-days = Retenção de ações
 config-maintenance-events-retention-days = Retenção de eventos
     .hint = Por quantos dias manter o histórico de eventos (0 = manter para sempre)
     .unit = d
-config-maintenance-maintenance-window-start = Início da janela de manutenção
-    .hint = Horário de início da manutenção pesada (HH:MM, horário local). Vazio = a qualquer momento.
-config-maintenance-ohlcv-retention-days = Retenção de OHLCV
-    .hint = Por quantos dias manter os dados de candles OHLCV (0 = manter para sempre)
-    .unit = d
 config-maintenance-rpc-stats-retention-hours = Retenção de estatísticas de RPC
     .hint = Por quantas horas manter as estatísticas de RPC (0 = manter para sempre)
     .unit = h
-config-maintenance-skip-during-active-trades = Pular durante trades ativos
-    .hint = Adia a manutenção pesada (VACUUM) enquanto houver posições abertas
 config-maintenance-stale-token-days = Limite de tokens obsoletos
     .hint = Tokens sem atualização de dados de mercado além deste prazo são excluídos da filtragem para economizar memória. 0 = incluir todos. Com 7 dias, geralmente reduz a quantidade de tokens em ~90%.
     .unit = d
-config-maintenance-vacuum-interval-secs = Intervalo do VACUUM
-    .hint = Com que frequência executar o VACUUM do SQLite (recupera espaço em disco, operação pesada)
-    .unit = s
-config-maintenance-wal-checkpoint-interval-secs = Intervalo do checkpoint do WAL
-    .hint = Com que frequência executar o checkpoint do WAL do SQLite (consolida o log de escrita antecipada)
-    .unit = s
+config-maintenance-storage-limit-mb = Limite de armazenamento
+    .hint = Espaço em disco que os dados do { -brand } podem usar antes que os dados de mercado reconstruíveis sejam limpos. 0 = automático: até 5 GB, menos em um disco pequeno ou quase cheio.
+    .unit = MB
 
 config-network-proxy = URL do proxy
     .hint = ex.: socks5://127.0.0.1:1080 ou http://127.0.0.1:8080 — deixe vazio para detecção automática
@@ -1230,7 +1220,6 @@ config-category-copy-trading = Copy Trading
 config-category-core-trading = Trading principal
 config-category-creator-checks = Verificações do criador
 config-category-data-sources = Fontes de dados
-config-category-database = Banco de dados
 config-category-dca = DCA
 config-category-debug = Debug
 config-category-discovery = Descoberta
@@ -1283,7 +1272,6 @@ config-category-router = Roteador
 config-category-routers = Roteadores
 config-category-routing = Roteamento
 config-category-safety = Segurança
-config-category-scheduling = Agendamento
 config-category-security-flags = Sinalizações de segurança
 config-category-slippage = Slippage
 config-category-source-control = Controle de fontes

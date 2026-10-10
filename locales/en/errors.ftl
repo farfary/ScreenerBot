@@ -60,6 +60,8 @@ errors-system-paths-init-failed = Could not create the application directories
 errors-system-open-data-failed = Could not open the data folder
 errors-system-url-empty = URL cannot be empty
 errors-system-open-url-failed = Could not open the URL
+errors-system-storage-measure-failed = Could not measure storage
+errors-system-storage-cleanup-running = A storage cleanup is already running
 
 # Initialization
 errors-initialization-required = Bot initialization is required before accessing this endpoint. Please complete the initialization process through the web interface.

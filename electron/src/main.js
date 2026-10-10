@@ -3,7 +3,7 @@
 //
 // Electron main process - windows, tray, backend lifecycle and IPC.
 
-const { app, BrowserWindow, ipcMain, shell, Tray, Menu, dialog, nativeImage } = require('electron');
+const { app, BrowserWindow, ipcMain, shell, session, Tray, Menu, dialog, nativeImage } = require('electron');
 const path = require('path');
 const { spawn } = require('child_process');
 const http = require('http');
@@ -16,6 +16,7 @@ const coreResolver = require('./core_resolver');
 const { createLocalizer } = require('./l10n');
 const { createLineDecoder, shouldRollbackStagedCore } = require('./backend_launch');
 const upgradeBackups = require('./upgrade_backups');
+const { clearShellCaches } = require('./shell_cache');
 
 // ============================================================================
 // EPIPE PROTECTION - Prevent crashes when stdout/stderr pipes break
@@ -1622,6 +1623,10 @@ async function initialize() {
   console.log('[Electron] Initializing application...');
   console.log('[Electron] Packaged:', app.isPackaged);
   console.log('[Electron] Process arch:', process.arch);
+
+  // Before any page loads: the core this launch starts may not be the one that
+  // served the cached assets.
+  await clearShellCaches(session.defaultSession);
   
   // Create system tray (Windows/Linux only)
   createTray();

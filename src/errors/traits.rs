@@ -193,7 +193,7 @@ impl ErrorClass for StorageError {
             StorageError::Measure { .. }
             | StorageError::Delete { .. }
             | StorageError::Interrupted { .. } => true,
-            StorageError::OutsideRoot { .. } => false,
+            StorageError::OutsideRoot { .. } | StorageError::Eviction { .. } => false,
         }
     }
 
@@ -210,6 +210,7 @@ impl ErrorClass for StorageError {
             StorageError::Measure { .. }
             | StorageError::Delete { .. }
             | StorageError::OutsideRoot { .. }
+            | StorageError::Eviction { .. }
             | StorageError::Interrupted { .. } => Severity::Warning,
         }
     }
@@ -220,6 +221,7 @@ impl ErrorClass for StorageError {
             StorageError::Measure { .. }
             | StorageError::Delete { .. }
             | StorageError::OutsideRoot { .. }
+            | StorageError::Eviction { .. }
             | StorageError::Interrupted { .. } => 500,
         }
     }

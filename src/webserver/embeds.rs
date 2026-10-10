@@ -462,6 +462,8 @@ pub const ACCOUNT_PANEL_UI: &str = include_str!("templates/scripts/ui/account/pa
 pub const SETTINGS_ACCOUNT_TAB_UI: &str =
     include_str!("templates/scripts/ui/settings/account_tab.js");
 pub const SETTINGS_DATA_TAB_UI: &str = include_str!("templates/scripts/ui/settings/data_tab.js");
+pub const SETTINGS_STORAGE_VIEW_UI: &str =
+    include_str!("templates/scripts/ui/settings/storage_view.js");
 pub const SETTINGS_UPDATES_TAB_UI: &str =
     include_str!("templates/scripts/ui/settings/updates_tab.js");
 pub const SETTINGS_UPDATES_VIEW_UI: &str =

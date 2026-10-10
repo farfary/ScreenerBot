@@ -521,20 +521,42 @@ settings-navigation-reset = پیمایش به حالت پیش‌فرض بازن�
 
 ## data_tab.js
 
-settings-data-storage-title = ذخیره‌سازی پایگاه داده
-settings-data-storage-description = نمای کلی همه پایگاه‌های داده‌ای که داده‌های معاملاتی، پوزیشن‌ها و اطلاعات تاریخی شما را نگه می‌دارند.
-settings-data-stats-loading = در حال بارگذاری آمار پایگاه داده...
-settings-data-stats-load-failed = بارگذاری آمار پایگاه داده ناموفق بود
-settings-data-total-storage = کل فضای پایگاه داده
-settings-data-db-tokens = توکن‌ها
-settings-data-db-transactions = تراکنش‌ها
-settings-data-db-positions = پوزیشن‌ها
-settings-data-db-events = رویدادها
-settings-data-db-ohlcv = OHLCV
-settings-data-db-wallet = کیف پول
-settings-data-db-pools = استخرها
-settings-data-db-strategies = استراتژی‌ها
-settings-data-db-actions = اقدام‌ها
+settings-data-usage-title = فضای ذخیره‌سازی
+settings-data-usage-description = فضای دیسکی که داده‌های { -brand } به تفکیک نوع اشغال می‌کنند. داده‌های بازار قابل‌بازسازی به‌طور خودکار پاک‌سازی می‌شوند تا در محدوده فضای ذخیره‌سازی بمانند؛ کلیدهای کیف پول، سوابق معاملات و تنظیمات هرگز حذف نمی‌شوند.
+settings-data-usage-loading = در حال اندازه‌گیری فضای ذخیره‌سازی...
+settings-data-usage-load-failed = اندازه‌گیری فضای ذخیره‌سازی ممکن نشد
+settings-data-usage-total = استفاده‌شده
+settings-data-usage-of-limit = { $used } از { $limit }
+settings-data-usage-free-disk = فضای آزاد دیسک
+settings-data-usage-free-disk-value = { $free } از { $total }
+settings-data-usage-free-disk-unknown = نامشخص
+settings-data-category-wallet-keys = کلیدهای کیف پول
+settings-data-category-trading-records = سوابق معاملات
+settings-data-category-wallet-history = تاریخچه کیف پول
+settings-data-category-market-data = داده‌های بازار
+settings-data-category-settings = تنظیمات
+settings-data-category-recovery-copies = نسخه‌های بازیابی
+settings-data-category-updates = به‌روزرسانی‌ها
+settings-data-category-logs = لاگ‌ها
+settings-data-category-leftovers = فایل‌های باقی‌مانده
+settings-data-last-cleanup-label = آخرین پاک‌سازی
+settings-data-last-cleanup-never = هنوز اجرا نشده
+settings-data-last-cleanup-value = { $when }، { $freed } آزاد شد
+settings-data-last-cleanup-failures-label = مشکلات پاک‌سازی
+settings-data-last-cleanup-failures =
+    { $count ->
+        [one] { $count } مرحله ناموفق بود؛ در دور بعد دوباره امتحان می‌شود
+       *[other] { $count } مرحله ناموفق بود؛ در دور بعد دوباره امتحان می‌شوند
+    }
+settings-data-limit-label = محدودیت فضای ذخیره‌سازی
+settings-data-limit-hint = فضای دیسکی که داده‌های { -brand } می‌توانند پیش از پاک‌سازی داده‌های بازار قابل‌بازسازی اشغال کنند. حالت خودکار خود را با این دیسک تطبیق می‌دهد، تا سقف 5 GB.
+settings-data-limit-automatic = خودکار ({ $size })
+settings-data-limit-save-failed = ذخیره محدودیت فضای ذخیره‌سازی ممکن نشد
+settings-data-cleanup-now-label = پاک‌سازی همین حالا
+settings-data-cleanup-now-hint = لاگ‌ها و دانلودهای قدیمی را حذف می‌کند، داده‌های بازاری را که دیگر استفاده نمی‌شوند پاک می‌کند و پایگاه‌های داده را فشرده می‌کند. به پوزیشن‌های باز و توکن‌های نگه‌داشته‌شده و تحت نظر هرگز دست زده نمی‌شود.
+settings-data-cleanup-now-action = پاک‌سازی
+settings-data-cleanup-now-running = در حال پاک‌سازی...
+settings-data-cleanup-now-failed = شروع پاک‌سازی ممکن نشد
 settings-data-directory-label = پوشه داده
 settings-data-directory-copied = پوشه داده
 settings-data-config-path-copied = مسیر پیکربندی
@@ -563,25 +585,6 @@ settings-data-unknown-error = خطای ناشناخته
 
 settings-data-cleanup-title = پاک‌سازی داده
 settings-data-cleanup-description = با حذف داده‌های قدیمی یا بلااستفاده، فضای دیسک آزاد کنید. این اقدام‌ها قابل بازگشت نیستند.
-settings-data-ohlcv-cleanup-label = پاک‌سازی داده OHLCV
-settings-data-ohlcv-cleanup-hint = داده‌های کندل توکن‌هایی را که در بازه مشخص‌شده فعال نبوده‌اند حذف کنید.
-settings-data-cleanup-hours-unit = ساعت
-settings-data-cleanup-ohlcv = پاک‌سازی OHLCV
-settings-data-cleanup-running = در حال پاک‌سازی...
-settings-data-cleanup-hours-invalid = مقدار ساعت نامعتبر است
-settings-data-cleanup-confirm-title = حذف داده OHLCV
-settings-data-cleanup-confirm-message =
-    داده OHLCV توکن‌هایی که بیش از { $hours ->
-        [one] { $hours } ساعت
-       *[other] { $hours } ساعت
-    } غیرفعال بوده‌اند حذف شود؟
-settings-data-cleanup-done =
-    پاک‌سازی شد: { $count ->
-        [one] { $count } توکن غیرفعال
-       *[other] { $count } توکن غیرفعال
-    }
-settings-data-cleanup-failed = پاک‌سازی ناموفق بود
-settings-data-cleanup-failed-detail = پاک‌سازی ناموفق بود: { $message }
 
 settings-data-cache-clear-label = پاک‌کردن همه کش OHLCV
 settings-data-cache-clear-hint = همه داده‌های کندل کش‌شده را پاک می‌کند و هر توکن پایش‌شده را از ابتدا دوباره دریافت می‌کند. اگر نمودارها نادرست به نظر می‌رسند یا پس از به‌روزرسانی منطق داده، از آن استفاده کنید.

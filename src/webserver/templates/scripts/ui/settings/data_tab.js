@@ -3,7 +3,7 @@
 //
 
 /**
- * Data Tab Module - Database stats, config management, data cleanup
+ * Data Tab Module - storage usage and limit, config management, data cleanup
  * Extracted from settings_dialog.js
  */
 import * as Utils from "../../core/utils.js";
@@ -12,37 +12,70 @@ import { formatSizeAt } from "../../core/format.js";
 import { ConfirmationDialog } from "../confirmation_dialog.js";
 import { renderStateView } from "../state_view.js";
 import { apiErrorMessage } from "../../core/request_manager.js";
+import { createStorageView } from "./storage_view.js";
 
-/** Database id -> label key, keyed by `DatabaseId` (webserver/routes/system/types.rs). */
-const DATABASE_LABELS = Object.freeze({
-  tokens: "settings-data-db-tokens",
-  transactions: "settings-data-db-transactions",
-  positions: "settings-data-db-positions",
-  events: "settings-data-db-events",
-  ohlcv: "settings-data-db-ohlcv",
-  wallet: "settings-data-db-wallet",
-  pools: "settings-data-db-pools",
-  strategies: "settings-data-db-strategies",
-  actions: "settings-data-db-actions",
+/** How often the report is read again while a cleanup pass runs. */
+const CLEANUP_POLL_MS = 2000;
+
+const storageView = createStorageView({
+  escapeHtml: Utils.escapeHtml,
+  formatBytes: Utils.formatBytes,
+  formatTimeAgo: Utils.formatTimeAgo,
+  formatSizeAt,
 });
+
+/** The open tab's requests and poll timer; null while the tab is closed. */
+let storageSession = null;
+
+/** Stop the open tab's requests and its cleanup poll. */
+export function teardownDataTab() {
+  if (!storageSession) return;
+  storageSession.controller.abort();
+  clearTimeout(storageSession.timer);
+  storageSession = null;
+}
 
 /**
  * Build Data tab HTML
  */
 export function buildDataTab() {
   return `
-      <!-- Database Overview Section -->
+      <!-- Storage Section -->
       <div class="settings-section">
         <h3 class="settings-section-title">
-          <i class="icon-database"></i>
-          <span data-l10n-id="settings-data-storage-title"></span>
+          <i class="icon-hard-drive"></i>
+          <span data-l10n-id="settings-data-usage-title"></span>
         </h3>
-        <p class="settings-section-description" data-l10n-id="settings-data-storage-description"></p>
+        <p class="settings-section-description" data-l10n-id="settings-data-usage-description"></p>
 
         <div class="settings-group">
           <div class="data-overview-card" id="dataOverviewCard">
-            <div class="data-stats-loading"><i class="icon-loader"></i> <span data-l10n-id="settings-data-stats-loading"></span></div>
+            <div class="data-stats-loading"><i class="icon-loader"></i> <span data-l10n-id="settings-data-usage-loading"></span></div>
           </div>
+
+          <div class="settings-field">
+            <div class="settings-field-info">
+              <label for="storageLimitSelect" data-l10n-id="settings-data-limit-label"></label>
+              <span class="settings-field-hint" data-l10n-id="settings-data-limit-hint"></span>
+            </div>
+            <div class="settings-field-control">
+              <select id="storageLimitSelect" class="settings-select" data-custom-select disabled></select>
+            </div>
+          </div>
+
+          <div class="settings-field">
+            <div class="settings-field-info">
+              <label data-l10n-id="settings-data-cleanup-now-label"></label>
+              <span class="settings-field-hint" data-l10n-id="settings-data-cleanup-now-hint"></span>
+            </div>
+            <div class="settings-field-control">
+              <button id="storageCleanupBtn" class="btn btn-secondary btn-sm">
+                <i class="icon-brush-cleaning"></i>
+                <span data-l10n-id="settings-data-cleanup-now-action"></span>
+              </button>
+            </div>
+          </div>
+
           <div class="config-info-box">
             <div class="config-info-item">
               <span class="config-info-label" data-l10n-id="settings-data-directory-label"></span>
@@ -95,21 +128,6 @@ export function buildDataTab() {
         <p class="settings-section-description" data-l10n-id="settings-data-cleanup-description"></p>
 
         <div class="settings-group">
-          <div class="settings-field">
-            <div class="settings-field-info">
-              <label data-l10n-id="settings-data-ohlcv-cleanup-label"></label>
-              <span class="settings-field-hint" data-l10n-id="settings-data-ohlcv-cleanup-hint"></span>
-            </div>
-            <div class="settings-field-control data-action-group">
-              <input type="number" id="cleanupHours" class="settings-input small input-sm" value="24" min="1" max="720" />
-              <span class="input-unit" data-l10n-id="settings-data-cleanup-hours-unit"></span>
-              <button id="cleanupOhlcvBtn" class="btn btn-warning btn-sm">
-                <i class="icon-trash-2"></i>
-                <span data-l10n-id="settings-data-cleanup-ohlcv"></span>
-              </button>
-            </div>
-          </div>
-
           <div class="settings-field">
             <div class="settings-field-info">
               <label data-l10n-id="settings-data-cache-clear-label"></label>
@@ -183,8 +201,11 @@ function bindPathRow(content, selector, path, label) {
  * Attach handlers for Data tab
  */
 export function attachDataHandlers(dialog, content, pathsInfo) {
-  // Load data overview
-  loadDataOverview(content);
+  teardownDataTab();
+  const session = { controller: new AbortController(), timer: null, content };
+  storageSession = session;
+  void loadStorage(session);
+  attachStorageHandlers(session);
 
   /* Both locations are click-to-copy rows of the same component. This tab is
      their only home: About used to print the data directory a second time,
@@ -222,59 +243,6 @@ export function attachDataHandlers(dialog, content, pathsInfo) {
     resetBtn.addEventListener("click", () => resetConfig());
   }
 
-  // OHLCV cleanup button
-  const cleanupBtn = content.querySelector("#cleanupOhlcvBtn");
-  const hoursInput = content.querySelector("#cleanupHours");
-
-  if (cleanupBtn && hoursInput) {
-    cleanupBtn.addEventListener("click", async () => {
-      const hours = parseInt(hoursInput.value, 10);
-      if (isNaN(hours) || hours < 1) {
-        Utils.showToast(I18n.t("settings-data-cleanup-hours-invalid"), "error");
-        return;
-      }
-
-      const confirmResult = await ConfirmationDialog.show({
-        title: I18n.t("settings-data-cleanup-confirm-title"),
-        message: I18n.t("settings-data-cleanup-confirm-message", { hours }),
-        confirmLabel: I18n.t("common-action-delete"),
-        cancelLabel: I18n.t("common-action-cancel"),
-        variant: "danger",
-      });
-      if (!confirmResult.confirmed) return;
-
-      cleanupBtn.disabled = true;
-      setIconLabel(cleanupBtn, "icon-loader spin", I18n.t("settings-data-cleanup-running"));
-
-      try {
-        const response = await fetch("/api/ohlcv/cleanup", {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ inactive_hours: hours }),
-        });
-
-        if (response.ok) {
-          const data = await response.json();
-          Utils.showToast(
-            I18n.t("settings-data-cleanup-done", { count: data.deleted_count }),
-            "success"
-          );
-          loadDataOverview(content);
-        } else {
-          Utils.showToast(I18n.t("settings-data-cleanup-failed"), "error");
-        }
-      } catch (err) {
-        Utils.showToast(
-          I18n.t("settings-data-cleanup-failed-detail", { message: err.message }),
-          "error"
-        );
-      } finally {
-        cleanupBtn.disabled = false;
-        setIconLabel(cleanupBtn, "icon-trash-2", I18n.t("settings-data-cleanup-ohlcv"));
-      }
-    });
-  }
-
   // Clear all OHLCV cache button
   const clearOhlcvBtn = content.querySelector("#clearOhlcvCacheBtn");
   if (clearOhlcvBtn) {
@@ -302,7 +270,7 @@ export function attachDataHandlers(dialog, content, pathsInfo) {
             }),
             "success"
           );
-          loadDataOverview(content);
+          void loadStorage(storageSession);
         } else {
           Utils.showToast(I18n.t("settings-data-cache-clear-failed"), "error");
         }
@@ -376,61 +344,137 @@ export function attachDataHandlers(dialog, content, pathsInfo) {
 }
 
 /**
- * Load comprehensive data overview
+ * Read the storage report and render it, then keep reading it while a cleanup
+ * pass runs. A closed tab, or a tab opened again since, stops the chain.
  */
-async function loadDataOverview(content) {
-  const card = content.querySelector("#dataOverviewCard");
+async function loadStorage(session) {
+  if (!session || storageSession !== session) return;
+  const card = session.content.querySelector("#dataOverviewCard");
   if (!card) return;
 
+  let report;
   try {
-    const response = await fetch("/api/system/data-stats");
-    if (!response.ok) throw new Error(I18n.t("settings-data-stats-load-failed"));
-
-    const data = await response.json();
-    const maxSize = Math.max(...data.databases.map((db) => db.size_bytes), 1);
-
-    const dbItemsHtml = data.databases
-      .filter((db) => db.exists)
-      .map((db) => {
-        const percentage = (db.size_bytes / maxSize) * 100;
-        const sizeDisplay =
-          db.size_mb >= 1
-            ? formatSizeAt(db.size_mb, { unit: "mb", decimals: 1 })
-            : formatSizeAt(db.size_bytes / 1024, { unit: "kb", decimals: 0 });
-        return `
-            <div class="data-db-item">
-              <span class="data-db-name">${Utils.escapeHtml(I18n.label(DATABASE_LABELS, db.id))}</span>
-              <div class="data-db-bar-container">
-                <div class="data-db-bar" style="width: ${percentage}%"></div>
-              </div>
-              <span class="data-db-size">${sizeDisplay}</span>
-            </div>
-          `;
-      })
-      .join("");
-
-    card.innerHTML = `
-        <div class="data-total-bar">
-          <span class="data-total-label">${Utils.escapeHtml(I18n.t("settings-data-total-storage"))}</span>
-          <span class="data-total-value">${formatSizeAt(data.total_size_mb, { unit: "mb", decimals: 1 })}</span>
-        </div>
-        <div class="data-db-list">
-          ${dbItemsHtml}
-        </div>
-      `;
-
-    // Update config path display
-    const pathDisplay = content.querySelector("#configPathDisplay");
-    if (pathDisplay && data.config_path) {
-      pathDisplay.textContent = data.config_path;
-      pathDisplay.dir = "ltr";
-      pathDisplay.title = data.config_path;
-    }
-  } catch {
+    const response = await fetch("/api/system/storage", { signal: session.controller.signal });
+    if (!response.ok) throw new Error(I18n.t("settings-data-usage-load-failed"));
+    report = await response.json();
+  } catch (err) {
+    if (err.name === "AbortError" || storageSession !== session) return;
     card.innerHTML = renderStateView({
       kind: "error",
       icon: "icon-triangle-alert",
-      title: I18n.t("settings-data-stats-load-failed"),
+      title: I18n.t("settings-data-usage-load-failed"),
+    });
+    return;
+  }
+  if (storageSession !== session) return;
+
+  card.innerHTML = storageView.overviewHtml(report);
+  renderLimit(session, report);
+  const cleanupBtn = session.content.querySelector("#storageCleanupBtn");
+  if (cleanupBtn) {
+    cleanupBtn.disabled = report.running;
+    setIconLabel(
+      cleanupBtn,
+      report.running ? "icon-loader spin" : "icon-brush-cleaning",
+      report.running
+        ? I18n.t("settings-data-cleanup-now-running")
+        : I18n.t("settings-data-cleanup-now-action")
+    );
+  }
+
+  clearTimeout(session.timer);
+  if (report.running) {
+    session.timer = setTimeout(() => void loadStorage(session), CLEANUP_POLL_MS);
+  }
+}
+
+/** Fill the limit select from the report, unless a save is in flight. */
+function renderLimit(session, report) {
+  const select = session.content.querySelector("#storageLimitSelect");
+  if (!select || select.dataset.saving === "true") return;
+  const options = storageView.limitOptions(report);
+  select.replaceChildren(
+    ...options.map((option) => {
+      const element = document.createElement("option");
+      element.value = option.value;
+      element.textContent = option.label;
+      element.selected = option.selected;
+      return element;
+    })
+  );
+  select.dataset.savedValue = String(report.limit_megabytes);
+  select.disabled = false;
+}
+
+function attachStorageHandlers(session) {
+  const select = session.content.querySelector("#storageLimitSelect");
+  if (select) {
+    select.addEventListener("change", async () => {
+      const megabytes = Number(select.value);
+      if (!Number.isInteger(megabytes) || megabytes < 0) {
+        select.value = select.dataset.savedValue;
+        return;
+      }
+      select.dataset.saving = "true";
+      select.disabled = true;
+      let saved = false;
+      try {
+        const response = await fetch("/api/config/maintenance", {
+          method: "PATCH",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ storage_limit_mb: megabytes }),
+          signal: session.controller.signal,
+        });
+        const body = await response.json().catch(() => ({}));
+        if (!response.ok || body.success === false) {
+          throw new Error(apiErrorMessage(body, I18n.t("settings-data-unknown-error")));
+        }
+        saved = true;
+      } catch (err) {
+        if (err.name === "AbortError") return;
+        Utils.showToast({
+          key: "settings:storage-limit",
+          type: "error",
+          title: I18n.t("settings-data-limit-save-failed"),
+          message: err.message,
+        });
+      }
+      if (storageSession !== session) return;
+      if (!saved) select.value = select.dataset.savedValue;
+      delete select.dataset.saving;
+      select.disabled = false;
+      void loadStorage(session);
+    });
+  }
+
+  const cleanupBtn = session.content.querySelector("#storageCleanupBtn");
+  if (cleanupBtn) {
+    cleanupBtn.addEventListener("click", async () => {
+      cleanupBtn.disabled = true;
+      setIconLabel(cleanupBtn, "icon-loader spin", I18n.t("settings-data-cleanup-now-running"));
+      try {
+        const response = await fetch("/api/system/storage/cleanup", {
+          method: "POST",
+          signal: session.controller.signal,
+        });
+        if (!response.ok) {
+          const body = await response.json().catch(() => ({}));
+          Utils.showToast({
+            key: "settings:storage-cleanup",
+            type: response.status === 409 ? "info" : "error",
+            title: apiErrorMessage(body, I18n.t("settings-data-cleanup-now-failed")),
+          });
+        }
+      } catch (err) {
+        if (err.name === "AbortError") return;
+        Utils.showToast({
+          key: "settings:storage-cleanup",
+          type: "error",
+          title: I18n.t("settings-data-cleanup-now-failed"),
+          message: err.message,
+        });
+      }
+      void loadStorage(session);
     });
   }
 }

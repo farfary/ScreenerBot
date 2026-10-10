@@ -532,21 +532,43 @@ settings-navigation-reset = Navigation reset to defaults
 
 ## data_tab.js
 
-settings-data-storage-title = Database Storage
-settings-data-storage-description = Overview of all databases storing your trading data, positions, and historical information.
-settings-data-stats-loading = Loading database statistics...
-settings-data-stats-load-failed = Failed to load database statistics
-settings-data-total-storage = Total Database Storage
-# Name of each database in the storage overview, keyed by the route's database id.
-settings-data-db-tokens = Tokens
-settings-data-db-transactions = Transactions
-settings-data-db-positions = Positions
-settings-data-db-events = Events
-settings-data-db-ohlcv = OHLCV
-settings-data-db-wallet = Wallet
-settings-data-db-pools = Pools
-settings-data-db-strategies = Strategies
-settings-data-db-actions = Actions
+# Storage overview: usage by category, keyed by storage::types::Category, against the storage limit.
+settings-data-usage-title = Storage
+settings-data-usage-description = Disk space { -brand } data takes, by kind. Rebuildable market data is cleaned up automatically to stay within the storage limit; wallet keys, trading records and settings are never removed.
+settings-data-usage-loading = Measuring storage...
+settings-data-usage-load-failed = Could not measure storage
+settings-data-usage-total = Used
+settings-data-usage-of-limit = { $used } of { $limit }
+settings-data-usage-free-disk = Free on disk
+settings-data-usage-free-disk-value = { $free } of { $total }
+settings-data-usage-free-disk-unknown = Unknown
+settings-data-category-wallet-keys = Wallet keys
+settings-data-category-trading-records = Trading records
+settings-data-category-wallet-history = Wallet history
+settings-data-category-market-data = Market data
+settings-data-category-settings = Settings
+settings-data-category-recovery-copies = Recovery copies
+settings-data-category-updates = Updates
+settings-data-category-logs = Logs
+settings-data-category-leftovers = Leftover files
+settings-data-last-cleanup-label = Last cleanup
+settings-data-last-cleanup-never = Not run yet
+settings-data-last-cleanup-value = { $when }, { $freed } freed
+settings-data-last-cleanup-failures-label = Cleanup problems
+settings-data-last-cleanup-failures =
+    { $count ->
+        [one] { $count } step failed; it is retried on the next pass
+       *[other] { $count } steps failed; they are retried on the next pass
+    }
+settings-data-limit-label = Storage Limit
+settings-data-limit-hint = Disk space { -brand } data may use before rebuildable market data is cleaned up. Automatic adapts to this disk, up to 5 GB.
+settings-data-limit-automatic = Automatic ({ $size })
+settings-data-limit-save-failed = Could not save the storage limit
+settings-data-cleanup-now-label = Clean Up Now
+settings-data-cleanup-now-hint = Delete old logs and downloads, remove market data no longer in use, and compact the databases. Open positions, held and watched tokens are never touched.
+settings-data-cleanup-now-action = Clean Up
+settings-data-cleanup-now-running = Cleaning up...
+settings-data-cleanup-now-failed = Could not start the cleanup
 settings-data-directory-label = Data Directory
 settings-data-directory-copied = Data directory
 settings-data-config-path-copied = Config path
@@ -576,25 +598,6 @@ settings-data-unknown-error = Unknown error
 
 settings-data-cleanup-title = Data Cleanup
 settings-data-cleanup-description = Free up disk space by removing old or unused data. These actions cannot be undone.
-settings-data-ohlcv-cleanup-label = OHLCV Data Cleanup
-settings-data-ohlcv-cleanup-hint = Remove candlestick data for tokens that haven't been active for the specified time.
-settings-data-cleanup-hours-unit = h
-settings-data-cleanup-ohlcv = Cleanup OHLCV
-settings-data-cleanup-running = Cleaning...
-settings-data-cleanup-hours-invalid = Invalid hours value
-settings-data-cleanup-confirm-title = Delete OHLCV Data
-settings-data-cleanup-confirm-message =
-    Delete OHLCV data for tokens inactive for more than { $hours ->
-        [one] { $hours } hour
-       *[other] { $hours } hours
-    }?
-settings-data-cleanup-done =
-    Cleaned up { $count ->
-        [one] { $count } inactive token
-       *[other] { $count } inactive tokens
-    }
-settings-data-cleanup-failed = Cleanup failed
-settings-data-cleanup-failed-detail = Cleanup failed: { $message }
 
 settings-data-cache-clear-label = Clear All OHLCV Cache
 settings-data-cache-clear-hint = Wipe all cached candlestick data and re-fetch every monitored token from scratch. Use if charts look wrong or after a data logic update.

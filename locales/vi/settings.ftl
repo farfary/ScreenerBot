@@ -482,20 +482,41 @@ settings-navigation-drag-handle =
 settings-navigation-defaults-failed = Không thể tải điều hướng mặc định
 settings-navigation-reset = Đã đặt lại điều hướng về mặc định
 
-settings-data-storage-title = Lưu trữ cơ sở dữ liệu
-settings-data-storage-description = Tổng quan về tất cả cơ sở dữ liệu lưu dữ liệu giao dịch, vị thế và thông tin lịch sử của bạn.
-settings-data-stats-loading = Đang tải thống kê cơ sở dữ liệu...
-settings-data-stats-load-failed = Không thể tải thống kê cơ sở dữ liệu
-settings-data-total-storage = Tổng dung lượng cơ sở dữ liệu
-settings-data-db-tokens = Token
-settings-data-db-transactions = Giao dịch
-settings-data-db-positions = Vị thế
-settings-data-db-events = Sự kiện
-settings-data-db-ohlcv = OHLCV
-settings-data-db-wallet = Ví
-settings-data-db-pools = Pool
-settings-data-db-strategies = Chiến lược
-settings-data-db-actions = Hành động
+settings-data-usage-title = Lưu trữ
+settings-data-usage-description = Dung lượng đĩa mà dữ liệu { -brand } chiếm, theo loại. Dữ liệu thị trường có thể dựng lại được tự động dọn để nằm trong giới hạn lưu trữ; khóa ví, hồ sơ giao dịch và cài đặt không bao giờ bị xóa.
+settings-data-usage-loading = Đang đo dung lượng lưu trữ...
+settings-data-usage-load-failed = Không đo được dung lượng lưu trữ
+settings-data-usage-total = Đã dùng
+settings-data-usage-of-limit = { $used } / { $limit }
+settings-data-usage-free-disk = Còn trống trên đĩa
+settings-data-usage-free-disk-value = { $free } / { $total }
+settings-data-usage-free-disk-unknown = Không rõ
+settings-data-category-wallet-keys = Khóa ví
+settings-data-category-trading-records = Hồ sơ giao dịch
+settings-data-category-wallet-history = Lịch sử ví
+settings-data-category-market-data = Dữ liệu thị trường
+settings-data-category-settings = Cài đặt
+settings-data-category-recovery-copies = Bản sao khôi phục
+settings-data-category-updates = Bản cập nhật
+settings-data-category-logs = Nhật ký
+settings-data-category-leftovers = Tệp còn sót
+settings-data-last-cleanup-label = Lần dọn gần nhất
+settings-data-last-cleanup-never = Chưa chạy
+settings-data-last-cleanup-value = { $when }, đã giải phóng { $freed }
+settings-data-last-cleanup-failures-label = Sự cố khi dọn
+settings-data-last-cleanup-failures =
+    { $count ->
+       *[other] { $count } bước thất bại; sẽ được thử lại ở lượt tiếp theo
+    }
+settings-data-limit-label = Giới hạn lưu trữ
+settings-data-limit-hint = Dung lượng đĩa mà dữ liệu { -brand } được dùng trước khi dữ liệu thị trường có thể dựng lại bị dọn. Tự động sẽ điều chỉnh theo đĩa này, tối đa 5 GB.
+settings-data-limit-automatic = Tự động ({ $size })
+settings-data-limit-save-failed = Không lưu được giới hạn lưu trữ
+settings-data-cleanup-now-label = Dọn ngay
+settings-data-cleanup-now-hint = Xóa nhật ký và tệp tải xuống cũ, loại bỏ dữ liệu thị trường không còn dùng và nén các cơ sở dữ liệu. Vị thế đang mở, token đang nắm giữ và đang theo dõi không bao giờ bị động đến.
+settings-data-cleanup-now-action = Dọn
+settings-data-cleanup-now-running = Đang dọn...
+settings-data-cleanup-now-failed = Không bắt đầu được việc dọn dẹp
 settings-data-directory-label = Thư mục dữ liệu
 settings-data-directory-copied = Thư mục dữ liệu
 settings-data-config-path-copied = Đường dẫn cấu hình
@@ -524,23 +545,6 @@ settings-data-unknown-error = Lỗi không xác định
 
 settings-data-cleanup-title = Dọn dẹp dữ liệu
 settings-data-cleanup-description = Giải phóng dung lượng đĩa bằng cách xóa dữ liệu cũ hoặc không dùng. Các thao tác này không thể hoàn tác.
-settings-data-ohlcv-cleanup-label = Dọn dữ liệu OHLCV
-settings-data-ohlcv-cleanup-hint = Xóa dữ liệu nến của các token không hoạt động trong khoảng thời gian đã chỉ định.
-settings-data-cleanup-hours-unit = giờ
-settings-data-cleanup-ohlcv = Dọn OHLCV
-settings-data-cleanup-running = Đang dọn...
-settings-data-cleanup-hours-invalid = Giá trị giờ không hợp lệ
-settings-data-cleanup-confirm-title = Xóa dữ liệu OHLCV
-settings-data-cleanup-confirm-message =
-    Xóa dữ liệu OHLCV của các token không hoạt động quá { $hours ->
-       *[other] { $hours } giờ
-    }?
-settings-data-cleanup-done =
-    Đã dọn { $count ->
-       *[other] { $count } token không hoạt động
-    }
-settings-data-cleanup-failed = Dọn dẹp thất bại
-settings-data-cleanup-failed-detail = Dọn dẹp thất bại: { $message }
 
 settings-data-cache-clear-label = Xóa toàn bộ bộ nhớ đệm OHLCV
 settings-data-cache-clear-hint = Xóa toàn bộ dữ liệu nến đã lưu đệm và lấy lại từ đầu cho mọi token đang theo dõi. Dùng khi biểu đồ có vẻ sai hoặc sau khi cập nhật logic dữ liệu.

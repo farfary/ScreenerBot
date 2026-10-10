@@ -516,20 +516,41 @@ settings-navigation-reset = ナビゲーションをデフォルトに戻しま�
 
 ## data_tab.js
 
-settings-data-storage-title = データベースストレージ
-settings-data-storage-description = 取引データ、ポジション、履歴情報を保存しているすべてのデータベースの概要です。
-settings-data-stats-loading = データベース統計を読み込み中...
-settings-data-stats-load-failed = データベース統計の読み込みに失敗しました
-settings-data-total-storage = データベースの合計容量
-settings-data-db-tokens = トークン
-settings-data-db-transactions = トランザクション
-settings-data-db-positions = ポジション
-settings-data-db-events = イベント
-settings-data-db-ohlcv = OHLCV
-settings-data-db-wallet = ウォレット
-settings-data-db-pools = プール
-settings-data-db-strategies = ストラテジー
-settings-data-db-actions = アクション
+settings-data-usage-title = ストレージ
+settings-data-usage-description = { -brand } のデータが使用しているディスク容量を種類別に表示します。再構築できる市場データはストレージ上限内に収まるよう自動でクリーンアップされます。ウォレットの鍵、取引記録、設定は削除されません。
+settings-data-usage-loading = ストレージを計測中...
+settings-data-usage-load-failed = ストレージを計測できませんでした
+settings-data-usage-total = 使用量
+settings-data-usage-of-limit = { $used } / { $limit }
+settings-data-usage-free-disk = ディスクの空き容量
+settings-data-usage-free-disk-value = { $free } / { $total }
+settings-data-usage-free-disk-unknown = 不明
+settings-data-category-wallet-keys = ウォレットの鍵
+settings-data-category-trading-records = 取引記録
+settings-data-category-wallet-history = ウォレット履歴
+settings-data-category-market-data = 市場データ
+settings-data-category-settings = 設定
+settings-data-category-recovery-copies = 復旧用コピー
+settings-data-category-updates = アップデート
+settings-data-category-logs = ログ
+settings-data-category-leftovers = 残存ファイル
+settings-data-last-cleanup-label = 前回のクリーンアップ
+settings-data-last-cleanup-never = 未実行
+settings-data-last-cleanup-value = { $when }、{ $freed } を解放
+settings-data-last-cleanup-failures-label = クリーンアップの問題
+settings-data-last-cleanup-failures =
+    { $count ->
+       *[other] { $count } 件の処理が失敗しました。次回の実行時に再試行されます
+    }
+settings-data-limit-label = ストレージ上限
+settings-data-limit-hint = 再構築できる市場データをクリーンアップする前に { -brand } のデータが使用できるディスク容量です。自動の場合はこのディスクに合わせて最大 5 GB まで調整されます。
+settings-data-limit-automatic = 自動 ({ $size })
+settings-data-limit-save-failed = ストレージ上限を保存できませんでした
+settings-data-cleanup-now-label = 今すぐクリーンアップ
+settings-data-cleanup-now-hint = 古いログとダウンロードを削除し、使われなくなった市場データを取り除いて、データベースを圧縮します。保有中のポジション、保有・ウォッチ中のトークンには一切触れません。
+settings-data-cleanup-now-action = クリーンアップ
+settings-data-cleanup-now-running = クリーンアップ中...
+settings-data-cleanup-now-failed = クリーンアップを開始できませんでした
 settings-data-directory-label = データディレクトリ
 settings-data-directory-copied = データディレクトリ
 settings-data-config-path-copied = 設定ファイルのパス
@@ -558,23 +579,6 @@ settings-data-unknown-error = 不明なエラー
 
 settings-data-cleanup-title = データのクリーンアップ
 settings-data-cleanup-description = 古いデータや不要なデータを削除してディスク容量を確保します。この操作は元に戻せません。
-settings-data-ohlcv-cleanup-label = OHLCV データのクリーンアップ
-settings-data-ohlcv-cleanup-hint = 指定した時間、アクティブでないトークンのローソク足データを削除します。
-settings-data-cleanup-hours-unit = 時間
-settings-data-cleanup-ohlcv = OHLCV をクリーンアップ
-settings-data-cleanup-running = クリーンアップ中...
-settings-data-cleanup-hours-invalid = 時間の値が無効です
-settings-data-cleanup-confirm-title = OHLCV データを削除
-settings-data-cleanup-confirm-message =
-    { $hours ->
-       *[other] { $hours }時間以上アクティブでないトークンの OHLCV データを削除しますか？
-    }
-settings-data-cleanup-done =
-    { $count ->
-       *[other] 非アクティブなトークン { $count }件をクリーンアップしました
-    }
-settings-data-cleanup-failed = クリーンアップに失敗しました
-settings-data-cleanup-failed-detail = クリーンアップに失敗しました: { $message }
 
 settings-data-cache-clear-label = すべての OHLCV キャッシュを消去
 settings-data-cache-clear-hint = キャッシュされたローソク足データをすべて消去し、監視中のすべてのトークンを最初から再取得します。チャートの表示がおかしい場合や、データ処理の更新後に使用してください。

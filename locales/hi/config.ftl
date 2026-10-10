@@ -654,25 +654,15 @@ config-maintenance-actions-retention-days = एक्शन रिटेंश�
 config-maintenance-events-retention-days = इवेंट रिटेंशन
     .hint = इवेंट हिस्ट्री कितने दिन रखी जाए (0 = हमेशा रखें)
     .unit = दिन
-config-maintenance-maintenance-window-start = मेंटेनेंस विंडो शुरू
-    .hint = भारी मेंटेनेंस का शुरुआती समय (HH:MM स्थानीय समय)। खाली = कभी भी।
-config-maintenance-ohlcv-retention-days = OHLCV रिटेंशन
-    .hint = OHLCV कैंडल डेटा कितने दिन रखा जाए (0 = हमेशा रखें)
-    .unit = दिन
 config-maintenance-rpc-stats-retention-hours = RPC आँकड़े रिटेंशन
     .hint = RPC आँकड़े कितने घंटे रखे जाएँ (0 = हमेशा रखें)
     .unit = घं
-config-maintenance-skip-during-active-trades = सक्रिय ट्रेड के दौरान छोड़ें
-    .hint = पोज़िशन खुली होने पर भारी मेंटेनेंस (VACUUM) टालें
 config-maintenance-stale-token-days = पुराने टोकन की कटऑफ़
     .hint = जिन टोकन का मार्केट डेटा इससे ज़्यादा समय से अपडेट नहीं हुआ, उन्हें मेमोरी बचाने के लिए फ़िल्टरिंग से बाहर रखा जाता है। 0 = सभी शामिल। 7 दिन पर टोकन संख्या आमतौर पर ~90% घट जाती है।
     .unit = दिन
-config-maintenance-vacuum-interval-secs = VACUUM अंतराल
-    .hint = SQLite VACUUM कितनी बार चले (डिस्क स्पेस वापस पाता है, भारी ऑपरेशन)
-    .unit = से
-config-maintenance-wal-checkpoint-interval-secs = WAL चेकपॉइंट अंतराल
-    .hint = SQLite WAL चेकपॉइंट कितनी बार चले (write-ahead log को समेकित करता है)
-    .unit = से
+config-maintenance-storage-limit-mb = स्टोरेज सीमा
+    .hint = वह डिस्क स्थान जिसे { -brand } का डेटा उपयोग कर सकता है, इससे पहले कि दोबारा बनाए जा सकने वाले बाज़ार डेटा को साफ़ किया जाए। 0 = स्वचालित: 5 GB तक, छोटी या लगभग भरी डिस्क पर कम।
+    .unit = MB
 
 config-network-proxy = प्रॉक्सी URL
     .hint = जैसे socks5://127.0.0.1:1080 या http://127.0.0.1:8080 — अपने आप पहचान के लिए खाली छोड़ें
@@ -1232,7 +1222,6 @@ config-category-copy-trading = कॉपी ट्रेडिंग
 config-category-core-trading = मुख्य ट्रेडिंग
 config-category-creator-checks = क्रिएटर जाँच
 config-category-data-sources = डेटा स्रोत
-config-category-database = डेटाबेस
 config-category-dca = DCA
 config-category-debug = डीबग
 config-category-discovery = डिस्कवरी
@@ -1285,7 +1274,6 @@ config-category-router = राउटर
 config-category-routers = राउटर
 config-category-routing = रूटिंग
 config-category-safety = सुरक्षा
-config-category-scheduling = शेड्यूलिंग
 config-category-security-flags = सिक्योरिटी फ़्लैग
 config-category-slippage = स्लिपेज
 config-category-source-control = स्रोत नियंत्रण

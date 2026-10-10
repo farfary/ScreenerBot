@@ -295,12 +295,8 @@
     "events_retention_days": 30,
     "actions_retention_days": 30,
     "rpc_stats_retention_hours": 72,
-    "ohlcv_retention_days": 90,
     "stale_token_days": 7,
-    "wal_checkpoint_interval_secs": 3600,
-    "vacuum_interval_secs": 86400,
-    "maintenance_window_start": "",
-    "skip_during_active_trades": true
+    "storage_limit_mb": 0
   },
   "updates": {
     "auto_check": true,

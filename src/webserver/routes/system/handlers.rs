@@ -4,6 +4,7 @@
 //! System route handlers — endpoint implementations for system info and control.
 
 use super::types::*;
+use crate::errors::ErrorClass as _;
 use crate::i18n::ids;
 use crate::logger::{self, LogTag};
 use crate::paths;
@@ -18,6 +19,7 @@ use crate::{
     services::{get_service_manager, startup},
     wallet,
 };
+use axum::http::StatusCode;
 use axum::response::IntoResponse as _;
 use axum::{extract::State, response::Response, Json};
 use chrono::Utc;
@@ -240,61 +242,36 @@ pub(super) async fn open_url(Json(request): Json<OpenUrlRequest>) -> Response {
     }
 }
 
-/// GET /api/system/data-stats — Get statistics for all databases and data files
-pub(super) async fn get_data_stats() -> Response {
-    let mut databases = Vec::new();
-    let mut total_size: u64 = 0;
-
-    // Helper to get file size
-    fn get_file_stats(id: DatabaseId, path: std::path::PathBuf) -> DatabaseStats {
-        let (size_bytes, exists) = std::fs::metadata(&path)
-            .map(|m| (m.len(), true))
-            .unwrap_or((0, false));
-        DatabaseStats {
-            id,
-            path: path.display().to_string(),
-            size_bytes,
-            size_mb: size_bytes as f64 / 1_048_576.0,
-            exists,
-        }
+/// GET /api/system/storage — the app's storage by category against its limit, the
+/// free space of the data disk and the last housekeeping pass.
+pub(super) async fn get_storage() -> Response {
+    match crate::storage::report().await {
+        Ok(report) => success_response(report),
+        Err(err) => ApiError::new(
+            ApiErrorCode::for_status(err.http_status()),
+            ids::ERRORS_SYSTEM_STORAGE_MEASURE_FAILED,
+        )
+        .details(err.to_string())
+        .into_response(),
     }
+}
 
-    // Collect all database stats
-    let db_configs = [
-        (DatabaseId::Tokens, crate::chains::get_tokens_db_path()),
-        (DatabaseId::Transactions, paths::get_transactions_db_path()),
-        (DatabaseId::Positions, paths::get_positions_db_path()),
-        (DatabaseId::Events, paths::get_events_db_path()),
-        (DatabaseId::Ohlcv, crate::chains::get_ohlcvs_db_path()),
-        (DatabaseId::Wallet, paths::get_wallet_db_path()),
-        (DatabaseId::Pools, crate::chains::get_pools_db_path()),
-        (DatabaseId::Strategies, paths::get_strategies_db_path()),
-        (DatabaseId::Actions, paths::get_actions_db_path()),
-    ];
-
-    for (id, path) in db_configs {
-        let stats = get_file_stats(id, path);
-        total_size += stats.size_bytes;
-        databases.push(stats);
+/// POST /api/system/storage/cleanup — start a housekeeping pass now. Answers 202
+/// once the pass has started, or 409 while one is already running; the pass deletes
+/// only what the storage engine's own rules select.
+pub(super) async fn start_storage_cleanup() -> Response {
+    match crate::storage::request_cleanup() {
+        crate::storage::CleanupRequest::Started => (
+            StatusCode::ACCEPTED,
+            success_response(StorageCleanupResponse { started: true }),
+        )
+            .into_response(),
+        crate::storage::CleanupRequest::AlreadyRunning => ApiError::new(
+            ApiErrorCode::Conflict,
+            ids::ERRORS_SYSTEM_STORAGE_CLEANUP_RUNNING,
+        )
+        .into_response(),
     }
-
-    // Sort by size descending
-    databases.sort_by(|a, b| b.size_bytes.cmp(&a.size_bytes));
-
-    // Get config file size
-    let config_path = paths::get_config_path();
-    let config_size_bytes = std::fs::metadata(&config_path)
-        .map(|m| m.len())
-        .unwrap_or_default();
-
-    success_response(DataStatsResponse {
-        databases,
-        total_size_mb: total_size as f64 / 1_048_576.0,
-        config_path: config_path.display().to_string(),
-        config_size_bytes,
-        data_directory: paths::get_data_directory().display().to_string(),
-        timestamp: Utc::now().to_rfc3339(),
-    })
 }
 
 /// POST /api/system/client-ready — the dashboard frontend signals that it has

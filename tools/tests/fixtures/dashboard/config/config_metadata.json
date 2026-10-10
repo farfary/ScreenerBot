@@ -2438,24 +2438,6 @@
         "step": 1,
         "default": 30
       },
-      "maintenance_window_start": {
-        "type": "string",
-        "key": "config-maintenance-maintenance-window-start",
-        "impact": "low",
-        "category": "scheduling",
-        "visibility": "secondary",
-        "default": ""
-      },
-      "ohlcv_retention_days": {
-        "type": "integer",
-        "key": "config-maintenance-ohlcv-retention-days",
-        "impact": "medium",
-        "category": "retention",
-        "visibility": "technical",
-        "min": 0,
-        "step": 1,
-        "default": 90
-      },
       "rpc_stats_retention_hours": {
         "type": "integer",
         "key": "config-maintenance-rpc-stats-retention-hours",
@@ -2465,14 +2447,6 @@
         "min": 0,
         "step": 1,
         "default": 72
-      },
-      "skip_during_active_trades": {
-        "type": "boolean",
-        "key": "config-maintenance-skip-during-active-trades",
-        "impact": "medium",
-        "category": "scheduling",
-        "visibility": "secondary",
-        "default": true
       },
       "stale_token_days": {
         "type": "integer",
@@ -2484,25 +2458,15 @@
         "step": 1,
         "default": 7
       },
-      "vacuum_interval_secs": {
+      "storage_limit_mb": {
         "type": "integer",
-        "key": "config-maintenance-vacuum-interval-secs",
-        "impact": "low",
-        "category": "database",
-        "visibility": "secondary",
-        "min": 3600,
-        "step": 3600,
-        "default": 86400
-      },
-      "wal_checkpoint_interval_secs": {
-        "type": "integer",
-        "key": "config-maintenance-wal-checkpoint-interval-secs",
-        "impact": "low",
-        "category": "database",
-        "visibility": "secondary",
-        "min": 300,
-        "step": 300,
-        "default": 3600
+        "key": "config-maintenance-storage-limit-mb",
+        "impact": "medium",
+        "category": "retention",
+        "visibility": "technical",
+        "min": 0,
+        "step": 1024,
+        "default": 0
       }
     },
     "monitoring": {},

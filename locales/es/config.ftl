@@ -674,25 +674,15 @@ config-maintenance-actions-retention-days = Retención de acciones
 config-maintenance-events-retention-days = Retención de eventos
     .hint = Cuántos días se conserva el historial de eventos (0 = conservar siempre)
     .unit = d
-config-maintenance-maintenance-window-start = Inicio de la ventana de mantenimiento
-    .hint = Hora de inicio del mantenimiento pesado (HH:MM, hora local). Vacío = en cualquier momento.
-config-maintenance-ohlcv-retention-days = Retención de OHLCV
-    .hint = Cuántos días se conservan los datos de velas OHLCV (0 = conservar siempre)
-    .unit = d
 config-maintenance-rpc-stats-retention-hours = Retención de estadísticas RPC
     .hint = Cuántas horas se conservan las estadísticas RPC (0 = conservar siempre)
     .unit = h
-config-maintenance-skip-during-active-trades = Omitir durante operaciones activas
-    .hint = Aplaza el mantenimiento pesado (VACUUM) mientras haya posiciones abiertas
 config-maintenance-stale-token-days = Límite de tokens obsoletos
     .hint = Los tokens sin actualizaciones de datos de mercado más antiguas que este valor se excluyen del filtrado para ahorrar memoria. 0 = incluir todos. Con 7 días, suele reducir el número de tokens en un ~90 %.
     .unit = d
-config-maintenance-vacuum-interval-secs = Intervalo de VACUUM
-    .hint = Con qué frecuencia se ejecuta VACUUM de SQLite (recupera espacio en disco, operación pesada)
-    .unit = s
-config-maintenance-wal-checkpoint-interval-secs = Intervalo de checkpoint de WAL
-    .hint = Con qué frecuencia se ejecuta el checkpoint de WAL de SQLite (consolida el registro de escritura anticipada)
-    .unit = s
+config-maintenance-storage-limit-mb = Límite de almacenamiento
+    .hint = Espacio en disco que pueden ocupar los datos de { -brand } antes de limpiar los datos de mercado reconstruibles. 0 = automático: hasta 5 GB, menos en un disco pequeño o casi lleno.
+    .unit = MB
 
 ## monitoring
 
@@ -1288,7 +1278,6 @@ config-category-copy-trading = Copy Trading
 config-category-core-trading = Trading principal
 config-category-creator-checks = Comprobaciones del creador
 config-category-data-sources = Fuentes de datos
-config-category-database = Base de datos
 config-category-dca = DCA
 config-category-debug = Depuración
 config-category-discovery = Descubrimiento
@@ -1341,7 +1330,6 @@ config-category-router = Enrutador
 config-category-routers = Enrutadores
 config-category-routing = Enrutamiento
 config-category-safety = Seguridad
-config-category-scheduling = Programación
 config-category-security-flags = Indicadores de seguridad
 config-category-slippage = Deslizamiento
 config-category-source-control = Control de fuentes

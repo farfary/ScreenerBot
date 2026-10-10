@@ -674,25 +674,15 @@ config-maintenance-actions-retention-days = 操作记录保留时间
 config-maintenance-events-retention-days = 事件记录保留时间
     .hint = 事件历史的保留天数（0 = 永久保留）
     .unit = 天
-config-maintenance-maintenance-window-start = 维护窗口开始时间
-    .hint = 重度维护的开始时间（HH:MM，本地时间）。留空 = 任意时间。
-config-maintenance-ohlcv-retention-days = OHLCV 保留时间
-    .hint = OHLCV K 线数据的保留天数（0 = 永久保留）
-    .unit = 天
 config-maintenance-rpc-stats-retention-hours = RPC 统计保留时间
     .hint = RPC 统计数据的保留小时数（0 = 永久保留）
     .unit = 小时
-config-maintenance-skip-during-active-trades = 有活跃交易时跳过
-    .hint = 有仓位持仓中时，推迟重度维护（VACUUM）
 config-maintenance-stale-token-days = 过期代币截止时间
     .hint = 市场数据更新时间早于此值的代币将被排除在过滤之外以节省内存。0 = 全部包含。设为 7 天时，通常可将代币数量减少约 90%。
     .unit = 天
-config-maintenance-vacuum-interval-secs = VACUUM 间隔
-    .hint = 运行 SQLite VACUUM 的频率（回收磁盘空间，属于重度操作）
-    .unit = 秒
-config-maintenance-wal-checkpoint-interval-secs = WAL 检查点间隔
-    .hint = 运行 SQLite WAL 检查点的频率（合并预写日志）
-    .unit = 秒
+config-maintenance-storage-limit-mb = 存储上限
+    .hint = 在清理可重建的市场数据之前，{ -brand } 数据可使用的磁盘空间。0 = 自动：最多 5 GB，磁盘较小或接近已满时更少。
+    .unit = MB
 
 ## monitoring
 
@@ -1288,7 +1278,6 @@ config-category-copy-trading = 跟单交易
 config-category-core-trading = 核心交易
 config-category-creator-checks = 创建者检查
 config-category-data-sources = 数据源
-config-category-database = 数据库
 config-category-dca = DCA
 config-category-debug = 调试
 config-category-discovery = 发现
@@ -1341,7 +1330,6 @@ config-category-router = 路由
 config-category-routers = 路由
 config-category-routing = 路由
 config-category-safety = 安全
-config-category-scheduling = 调度
 config-category-security-flags = 安全标记
 config-category-slippage = 滑点
 config-category-source-control = 数据源控制

@@ -25,6 +25,7 @@ pub use types::{
 /// Rename declarations, reached by the schema owner's cross-store guard.
 #[cfg(test)]
 pub(crate) use database::column_names;
+pub use database::retention;
 pub use database::{ClearAllResult, DatabaseStats, DeleteResult, OhlcvTokenStatus};
 pub use feeds::{CandleFeed, CandleFeedFn};
 pub use priorities::ActivityType;

@@ -531,20 +531,44 @@ settings-navigation-reset = Навигация сброшена к значен�
 
 ## data_tab.js
 
-settings-data-storage-title = Хранилище баз данных
-settings-data-storage-description = Обзор всех баз данных, в которых хранятся ваши торговые данные, позиции и история.
-settings-data-stats-loading = Загрузка статистики баз данных...
-settings-data-stats-load-failed = Не удалось загрузить статистику баз данных
-settings-data-total-storage = Общий объём баз данных
-settings-data-db-tokens = Токены
-settings-data-db-transactions = Транзакции
-settings-data-db-positions = Позиции
-settings-data-db-events = События
-settings-data-db-ohlcv = OHLCV
-settings-data-db-wallet = Кошелёк
-settings-data-db-pools = Пулы
-settings-data-db-strategies = Стратегии
-settings-data-db-actions = Действия
+settings-data-usage-title = Хранилище
+settings-data-usage-description = Место на диске, которое занимают данные { -brand }, по видам. Восстанавливаемые рыночные данные очищаются автоматически, чтобы не превышать лимит хранилища; ключи кошелька, торговые записи и настройки никогда не удаляются.
+settings-data-usage-loading = Измерение хранилища...
+settings-data-usage-load-failed = Не удалось измерить хранилище
+settings-data-usage-total = Занято
+settings-data-usage-of-limit = { $used } из { $limit }
+settings-data-usage-free-disk = Свободно на диске
+settings-data-usage-free-disk-value = { $free } из { $total }
+settings-data-usage-free-disk-unknown = Неизвестно
+settings-data-category-wallet-keys = Ключи кошелька
+settings-data-category-trading-records = Торговые записи
+settings-data-category-wallet-history = История кошелька
+settings-data-category-market-data = Рыночные данные
+settings-data-category-settings = Настройки
+settings-data-category-recovery-copies = Резервные копии
+settings-data-category-updates = Обновления
+settings-data-category-logs = Журналы
+settings-data-category-leftovers = Оставшиеся файлы
+settings-data-last-cleanup-label = Последняя очистка
+settings-data-last-cleanup-never = Ещё не выполнялась
+settings-data-last-cleanup-value = { $when }, освобождено { $freed }
+settings-data-last-cleanup-failures-label = Проблемы очистки
+settings-data-last-cleanup-failures =
+    { $count ->
+        [one] Не выполнен { $count } шаг; он будет повторён при следующем проходе
+        [few] Не выполнено { $count } шага; они будут повторены при следующем проходе
+        [many] Не выполнено { $count } шагов; они будут повторены при следующем проходе
+       *[other] Не выполнено { $count } шага; они будут повторены при следующем проходе
+    }
+settings-data-limit-label = Лимит хранилища
+settings-data-limit-hint = Место на диске, которое могут занимать данные { -brand }, прежде чем восстанавливаемые рыночные данные будут очищены. Автоматический режим подстраивается под этот диск, до 5 ГБ.
+settings-data-limit-automatic = Автоматически ({ $size })
+settings-data-limit-save-failed = Не удалось сохранить лимит хранилища
+settings-data-cleanup-now-label = Очистить сейчас
+settings-data-cleanup-now-hint = Удаляет старые журналы и загрузки, неиспользуемые рыночные данные и сжимает базы данных. Открытые позиции, удерживаемые и отслеживаемые токены никогда не затрагиваются.
+settings-data-cleanup-now-action = Очистить
+settings-data-cleanup-now-running = Очистка...
+settings-data-cleanup-now-failed = Не удалось запустить очистку
 settings-data-directory-label = Каталог данных
 settings-data-directory-copied = Каталог данных
 settings-data-config-path-copied = Путь к конфигурации
@@ -573,29 +597,6 @@ settings-data-unknown-error = Неизвестная ошибка
 
 settings-data-cleanup-title = Очистка данных
 settings-data-cleanup-description = Освободите место на диске, удалив старые или неиспользуемые данные. Эти действия нельзя отменить.
-settings-data-ohlcv-cleanup-label = Очистка данных OHLCV
-settings-data-ohlcv-cleanup-hint = Удалить данные свечей для токенов, которые не были активны заданное время.
-settings-data-cleanup-hours-unit = ч
-settings-data-cleanup-ohlcv = Очистить OHLCV
-settings-data-cleanup-running = Очистка...
-settings-data-cleanup-hours-invalid = Недопустимое значение часов
-settings-data-cleanup-confirm-title = Удаление данных OHLCV
-settings-data-cleanup-confirm-message =
-    Удалить данные OHLCV токенов, неактивных более { $hours ->
-        [one] { $hours } часа
-        [few] { $hours } часов
-        [many] { $hours } часов
-       *[other] { $hours } часа
-    }?
-settings-data-cleanup-done =
-    Очищено: { $count ->
-        [one] { $count } неактивный токен
-        [few] { $count } неактивных токена
-        [many] { $count } неактивных токенов
-       *[other] { $count } неактивного токена
-    }
-settings-data-cleanup-failed = Очистка не удалась
-settings-data-cleanup-failed-detail = Очистка не удалась: { $message }
 
 settings-data-cache-clear-label = Очистить весь кэш OHLCV
 settings-data-cache-clear-hint = Удалить все кэшированные данные свечей и заново загрузить их для каждого отслеживаемого токена. Используйте, если графики выглядят неверно или после обновления логики данных.

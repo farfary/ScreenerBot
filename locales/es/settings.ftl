@@ -526,20 +526,43 @@ settings-navigation-reset = Navegación restablecida a los valores predeterminad
 
 ## data_tab.js
 
-settings-data-storage-title = Almacenamiento de bases de datos
-settings-data-storage-description = Resumen de todas las bases de datos que guardan tus datos de trading, posiciones e información histórica.
-settings-data-stats-loading = Cargando estadísticas de las bases de datos...
-settings-data-stats-load-failed = No se pudieron cargar las estadísticas de las bases de datos
-settings-data-total-storage = Almacenamiento total de bases de datos
-settings-data-db-tokens = Tokens
-settings-data-db-transactions = Transacciones
-settings-data-db-positions = Posiciones
-settings-data-db-events = Eventos
-settings-data-db-ohlcv = OHLCV
-settings-data-db-wallet = Billetera
-settings-data-db-pools = Pools
-settings-data-db-strategies = Estrategias
-settings-data-db-actions = Acciones
+settings-data-usage-title = Almacenamiento
+settings-data-usage-description = Espacio en disco que ocupan los datos de { -brand }, por tipo. Los datos de mercado reconstruibles se limpian automáticamente para no superar el límite de almacenamiento; las claves de la billetera, los registros de trading y los ajustes nunca se eliminan.
+settings-data-usage-loading = Midiendo el almacenamiento...
+settings-data-usage-load-failed = No se pudo medir el almacenamiento
+settings-data-usage-total = En uso
+settings-data-usage-of-limit = { $used } de { $limit }
+settings-data-usage-free-disk = Libre en el disco
+settings-data-usage-free-disk-value = { $free } de { $total }
+settings-data-usage-free-disk-unknown = Desconocido
+settings-data-category-wallet-keys = Claves de la billetera
+settings-data-category-trading-records = Registros de trading
+settings-data-category-wallet-history = Historial de la billetera
+settings-data-category-market-data = Datos de mercado
+settings-data-category-settings = Ajustes
+settings-data-category-recovery-copies = Copias de recuperación
+settings-data-category-updates = Actualizaciones
+settings-data-category-logs = Registros
+settings-data-category-leftovers = Archivos sobrantes
+settings-data-last-cleanup-label = Última limpieza
+settings-data-last-cleanup-never = Aún no se ha ejecutado
+settings-data-last-cleanup-value = { $when }, { $freed } liberados
+settings-data-last-cleanup-failures-label = Problemas de limpieza
+settings-data-last-cleanup-failures =
+    { $count ->
+        [one] Falló { $count } paso; se reintenta en la próxima pasada
+        [many] Fallaron { $count } pasos; se reintentan en la próxima pasada
+       *[other] Fallaron { $count } pasos; se reintentan en la próxima pasada
+    }
+settings-data-limit-label = Límite de almacenamiento
+settings-data-limit-hint = Espacio en disco que pueden ocupar los datos de { -brand } antes de limpiar los datos de mercado reconstruibles. Automático se adapta a este disco, hasta 5 GB.
+settings-data-limit-automatic = Automático ({ $size })
+settings-data-limit-save-failed = No se pudo guardar el límite de almacenamiento
+settings-data-cleanup-now-label = Limpiar ahora
+settings-data-cleanup-now-hint = Elimina registros y descargas antiguos, borra los datos de mercado que ya no se usan y compacta las bases de datos. Las posiciones abiertas y los tokens en cartera o vigilados nunca se tocan.
+settings-data-cleanup-now-action = Limpiar
+settings-data-cleanup-now-running = Limpiando...
+settings-data-cleanup-now-failed = No se pudo iniciar la limpieza
 settings-data-directory-label = Directorio de datos
 settings-data-directory-copied = Directorio de datos
 settings-data-config-path-copied = Ruta de configuración
@@ -568,27 +591,6 @@ settings-data-unknown-error = Error desconocido
 
 settings-data-cleanup-title = Limpieza de datos
 settings-data-cleanup-description = Libera espacio en disco eliminando datos antiguos o sin uso. Estas acciones no se pueden deshacer.
-settings-data-ohlcv-cleanup-label = Limpieza de datos OHLCV
-settings-data-ohlcv-cleanup-hint = Elimina los datos de velas de los tokens que no han estado activos durante el tiempo indicado.
-settings-data-cleanup-hours-unit = h
-settings-data-cleanup-ohlcv = Limpiar OHLCV
-settings-data-cleanup-running = Limpiando...
-settings-data-cleanup-hours-invalid = Valor de horas no válido
-settings-data-cleanup-confirm-title = Eliminar datos OHLCV
-settings-data-cleanup-confirm-message =
-    ¿Eliminar los datos OHLCV de los tokens inactivos durante más de { $hours ->
-        [one] { $hours } hora
-        [many] { $hours } horas
-       *[other] { $hours } horas
-    }?
-settings-data-cleanup-done =
-    { $count ->
-        [one] Se limpió { $count } token inactivo
-        [many] Se limpiaron { $count } tokens inactivos
-       *[other] Se limpiaron { $count } tokens inactivos
-    }
-settings-data-cleanup-failed = Falló la limpieza
-settings-data-cleanup-failed-detail = Falló la limpieza: { $message }
 
 settings-data-cache-clear-label = Vaciar toda la caché OHLCV
 settings-data-cache-clear-hint = Borra todos los datos de velas en caché y vuelve a obtener desde cero cada token monitorizado. Úsalo si los gráficos se ven mal o tras una actualización de la lógica de datos.

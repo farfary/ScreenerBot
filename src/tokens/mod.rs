@@ -33,6 +33,7 @@ mod migrations;
 pub mod pool_data;
 pub use pool_data as pools;
 pub mod priorities;
+pub mod retention;
 pub mod schema;
 pub mod search;
 pub mod security;

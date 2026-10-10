@@ -48,6 +48,8 @@ errors-system-paths-init-failed = Не удалось создать папки 
 errors-system-open-data-failed = Не удалось открыть папку данных
 errors-system-url-empty = URL не может быть пустым
 errors-system-open-url-failed = Не удалось открыть URL
+errors-system-storage-measure-failed = Не удалось измерить хранилище
+errors-system-storage-cleanup-running = Очистка хранилища уже выполняется
 
 errors-initialization-required = Перед обращением к этому эндпоинту необходимо инициализировать бота. Завершите инициализацию через веб-интерфейс.
 errors-initialization-explore-unavailable = В режиме обзора кошелёк не подключён. Завершите настройку, чтобы пользоваться кошельками и копи-трейдингом.

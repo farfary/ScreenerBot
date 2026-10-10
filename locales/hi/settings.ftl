@@ -489,20 +489,42 @@ settings-navigation-drag-handle =
 settings-navigation-defaults-failed = डिफ़ॉल्ट नेविगेशन लोड नहीं हो सका
 settings-navigation-reset = नेविगेशन डिफ़ॉल्ट पर रीसेट हुआ
 
-settings-data-storage-title = डेटाबेस स्टोरेज
-settings-data-storage-description = आपके ट्रेडिंग डेटा, पोज़िशन और ऐतिहासिक जानकारी को रखने वाले सभी डेटाबेस का अवलोकन।
-settings-data-stats-loading = डेटाबेस आँकड़े लोड हो रहे हैं...
-settings-data-stats-load-failed = डेटाबेस आँकड़े लोड करना विफल
-settings-data-total-storage = कुल डेटाबेस स्टोरेज
-settings-data-db-tokens = टोकन
-settings-data-db-transactions = ट्रांज़ैक्शन
-settings-data-db-positions = पोज़िशन
-settings-data-db-events = इवेंट्स
-settings-data-db-ohlcv = OHLCV
-settings-data-db-wallet = वॉलेट
-settings-data-db-pools = पूल
-settings-data-db-strategies = स्ट्रैटेजी
-settings-data-db-actions = कार्रवाइयां
+settings-data-usage-title = स्टोरेज
+settings-data-usage-description = { -brand } का डेटा प्रकार के अनुसार डिस्क पर जितनी जगह लेता है। दोबारा बनाया जा सकने वाला मार्केट डेटा स्टोरेज सीमा में रहने के लिए अपने आप साफ़ होता है; वॉलेट कुंजियाँ, ट्रेडिंग रिकॉर्ड और सेटिंग्स कभी नहीं हटाई जातीं।
+settings-data-usage-loading = स्टोरेज मापा जा रहा है...
+settings-data-usage-load-failed = स्टोरेज मापा नहीं जा सका
+settings-data-usage-total = उपयोग में
+settings-data-usage-of-limit = { $limit } में से { $used }
+settings-data-usage-free-disk = डिस्क पर खाली
+settings-data-usage-free-disk-value = { $total } में से { $free }
+settings-data-usage-free-disk-unknown = अज्ञात
+settings-data-category-wallet-keys = वॉलेट कुंजियाँ
+settings-data-category-trading-records = ट्रेडिंग रिकॉर्ड
+settings-data-category-wallet-history = वॉलेट इतिहास
+settings-data-category-market-data = मार्केट डेटा
+settings-data-category-settings = सेटिंग्स
+settings-data-category-recovery-copies = रिकवरी कॉपियाँ
+settings-data-category-updates = अपडेट
+settings-data-category-logs = लॉग
+settings-data-category-leftovers = बची हुई फ़ाइलें
+settings-data-last-cleanup-label = पिछली सफ़ाई
+settings-data-last-cleanup-never = अभी तक नहीं चली
+settings-data-last-cleanup-value = { $when }, { $freed } खाली हुआ
+settings-data-last-cleanup-failures-label = सफ़ाई की समस्याएँ
+settings-data-last-cleanup-failures =
+    { $count ->
+        [one] { $count } चरण विफल रहा; अगले दौर में फिर से कोशिश होगी
+       *[other] { $count } चरण विफल रहे; अगले दौर में फिर से कोशिश होगी
+    }
+settings-data-limit-label = स्टोरेज सीमा
+settings-data-limit-hint = दोबारा बनाया जा सकने वाला मार्केट डेटा साफ़ होने से पहले { -brand } का डेटा डिस्क पर जितनी जगह ले सकता है। स्वचालित इस डिस्क के अनुसार ढलता है, अधिकतम 5 GB तक।
+settings-data-limit-automatic = स्वचालित ({ $size })
+settings-data-limit-save-failed = स्टोरेज सीमा सहेजी नहीं जा सकी
+settings-data-cleanup-now-label = अभी साफ़ करें
+settings-data-cleanup-now-hint = पुराने लॉग और डाउनलोड हटाता है, अब उपयोग में न रहने वाला मार्केट डेटा हटाता है और डेटाबेस को संकुचित करता है। खुली पोज़िशन, होल्ड किए और देखे जा रहे टोकन को कभी नहीं छुआ जाता।
+settings-data-cleanup-now-action = साफ़ करें
+settings-data-cleanup-now-running = साफ़ हो रहा है...
+settings-data-cleanup-now-failed = सफ़ाई शुरू नहीं हो सकी
 settings-data-directory-label = डेटा डायरेक्टरी
 settings-data-directory-copied = डेटा डायरेक्टरी
 settings-data-config-path-copied = कॉन्फ़िग पथ
@@ -531,25 +553,6 @@ settings-data-unknown-error = अज्ञात त्रुटि
 
 settings-data-cleanup-title = डेटा क्लीनअप
 settings-data-cleanup-description = पुराना या अनुपयोगी डेटा हटाकर डिस्क स्पेस खाली करें। ये कार्रवाइयाँ पूर्ववत नहीं की जा सकतीं।
-settings-data-ohlcv-cleanup-label = OHLCV डेटा क्लीनअप
-settings-data-ohlcv-cleanup-hint = जो टोकन तय समय से सक्रिय नहीं रहे, उनका कैंडलस्टिक डेटा हटाएँ।
-settings-data-cleanup-hours-unit = घं
-settings-data-cleanup-ohlcv = OHLCV क्लीनअप
-settings-data-cleanup-running = साफ़ हो रहा है...
-settings-data-cleanup-hours-invalid = घंटों का मान अमान्य है
-settings-data-cleanup-confirm-title = OHLCV डेटा हटाएँ
-settings-data-cleanup-confirm-message =
-    { $hours ->
-        [one] { $hours } घंटे
-       *[other] { $hours } घंटे
-    } से अधिक समय से निष्क्रिय टोकन का OHLCV डेटा हटाएँ?
-settings-data-cleanup-done =
-    साफ़ किए गए निष्क्रिय टोकन: { $count ->
-        [one] { $count }
-       *[other] { $count }
-    }
-settings-data-cleanup-failed = क्लीनअप विफल
-settings-data-cleanup-failed-detail = क्लीनअप विफल: { $message }
 
 settings-data-cache-clear-label = पूरा OHLCV कैश साफ़ करें
 settings-data-cache-clear-hint = सारा कैश किया कैंडलस्टिक डेटा मिटाएँ और हर मॉनिटर किए गए टोकन को शुरू से दोबारा लाएँ। चार्ट गलत दिखें या डेटा लॉजिक अपडेट के बाद इस्तेमाल करें।

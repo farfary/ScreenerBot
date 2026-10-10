@@ -674,25 +674,15 @@ config-maintenance-actions-retention-days = 작업 기록 보관
 config-maintenance-events-retention-days = 이벤트 보관
     .hint = 이벤트 기록을 보관하는 일수 (0 = 영구 보관)
     .unit = 일
-config-maintenance-maintenance-window-start = 유지보수 시간대 시작
-    .hint = 무거운 유지보수의 시작 시각 (HH:MM, 현지 시간). 비워 두면 아무 때나 실행합니다.
-config-maintenance-ohlcv-retention-days = OHLCV 보관
-    .hint = OHLCV 캔들 데이터를 보관하는 일수 (0 = 영구 보관)
-    .unit = 일
 config-maintenance-rpc-stats-retention-hours = RPC 통계 보관
     .hint = RPC 통계를 보관하는 시간 (0 = 영구 보관)
     .unit = 시간
-config-maintenance-skip-during-active-trades = 거래 진행 중 건너뛰기
-    .hint = 포지션이 열려 있는 동안 무거운 유지보수(VACUUM)를 미룹니다
 config-maintenance-stale-token-days = 오래된 토큰 기준
     .hint = 시장 데이터 업데이트가 이 기간보다 오래된 토큰은 메모리 절약을 위해 필터링에서 제외됩니다. 0 = 모두 포함. 7일로 설정하면 보통 토큰 수가 약 90% 줄어듭니다.
     .unit = 일
-config-maintenance-vacuum-interval-secs = VACUUM 주기
-    .hint = SQLite VACUUM을 실행하는 주기 (디스크 공간 회수, 무거운 작업)
-    .unit = 초
-config-maintenance-wal-checkpoint-interval-secs = WAL 체크포인트 주기
-    .hint = SQLite WAL 체크포인트를 실행하는 주기 (write-ahead 로그 통합)
-    .unit = 초
+config-maintenance-storage-limit-mb = 저장 공간 한도
+    .hint = 다시 만들 수 있는 시장 데이터를 정리하기 전까지 { -brand } 데이터가 사용할 수 있는 디스크 공간입니다. 0 = 자동: 최대 5GB, 작거나 거의 가득 찬 디스크에서는 더 적게.
+    .unit = MB
 
 ## monitoring
 
@@ -1288,7 +1278,6 @@ config-category-copy-trading = 카피 트레이딩
 config-category-core-trading = 핵심 거래
 config-category-creator-checks = 생성자 확인
 config-category-data-sources = 데이터 소스
-config-category-database = 데이터베이스
 config-category-dca = DCA
 config-category-debug = 디버그
 config-category-discovery = 탐색
@@ -1341,7 +1330,6 @@ config-category-router = 라우터
 config-category-routers = 라우터
 config-category-routing = 라우팅
 config-category-safety = 안전
-config-category-scheduling = 스케줄링
 config-category-security-flags = 보안 플래그
 config-category-slippage = 슬리피지
 config-category-source-control = 소스 제어

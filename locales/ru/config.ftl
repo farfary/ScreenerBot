@@ -674,25 +674,15 @@ config-maintenance-actions-retention-days = Срок хранения дейст
 config-maintenance-events-retention-days = Срок хранения событий
     .hint = Сколько дней хранить историю событий (0 — хранить бессрочно)
     .unit = дн.
-config-maintenance-maintenance-window-start = Начало окна обслуживания
-    .hint = Время начала тяжёлого обслуживания (ЧЧ:ММ по местному времени). Пусто — в любое время.
-config-maintenance-ohlcv-retention-days = Срок хранения OHLCV
-    .hint = Сколько дней хранить данные свечей OHLCV (0 — хранить бессрочно)
-    .unit = дн.
 config-maintenance-rpc-stats-retention-hours = Срок хранения статистики RPC
     .hint = Сколько часов хранить статистику RPC (0 — хранить бессрочно)
     .unit = ч
-config-maintenance-skip-during-active-trades = Пропускать при активных сделках
-    .hint = Откладывать тяжёлое обслуживание (VACUUM), пока открыты позиции
 config-maintenance-stale-token-days = Порог устаревания токена
     .hint = Токены, у которых рыночные данные не обновлялись дольше этого срока, исключаются из фильтрации для экономии памяти. 0 — включать все. При значении 7 дней число токенов обычно сокращается примерно на 90%.
     .unit = дн.
-config-maintenance-vacuum-interval-secs = Интервал VACUUM
-    .hint = Как часто выполнять SQLite VACUUM (освобождает место на диске, тяжёлая операция)
-    .unit = с
-config-maintenance-wal-checkpoint-interval-secs = Интервал контрольной точки WAL
-    .hint = Как часто выполнять контрольную точку SQLite WAL (объединяет журнал упреждающей записи)
-    .unit = с
+config-maintenance-storage-limit-mb = Лимит хранилища
+    .hint = Место на диске, которое могут занимать данные { -brand }, прежде чем восстановимые рыночные данные будут очищены. 0 = автоматически: до 5 ГБ, меньше на маленьком или почти заполненном диске.
+    .unit = МБ
 
 ## monitoring
 
@@ -1288,7 +1278,6 @@ config-category-copy-trading = Копитрейдинг
 config-category-core-trading = Основная торговля
 config-category-creator-checks = Проверки создателя
 config-category-data-sources = Источники данных
-config-category-database = База данных
 config-category-dca = DCA
 config-category-debug = Отладка
 config-category-discovery = Обнаружение
@@ -1341,7 +1330,6 @@ config-category-router = Роутер
 config-category-routers = Роутеры
 config-category-routing = Маршрутизация
 config-category-safety = Безопасность
-config-category-scheduling = Планирование
 config-category-security-flags = Флаги безопасности
 config-category-slippage = Проскальзывание
 config-category-source-control = Управление источниками

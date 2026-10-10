@@ -674,25 +674,15 @@ config-maintenance-actions-retention-days = İşlem Geçmişi Saklama
 config-maintenance-events-retention-days = Olay Geçmişi Saklama
     .hint = Olay geçmişinin kaç gün saklanacağı (0 = süresiz sakla)
     .unit = gün
-config-maintenance-maintenance-window-start = Bakım Penceresi Başlangıcı
-    .hint = Ağır bakım için başlangıç saati (SS:DD yerel saat). Boş = her zaman.
-config-maintenance-ohlcv-retention-days = OHLCV Saklama
-    .hint = OHLCV mum verilerinin kaç gün saklanacağı (0 = süresiz sakla)
-    .unit = gün
 config-maintenance-rpc-stats-retention-hours = RPC İstatistikleri Saklama
     .hint = RPC istatistiklerinin kaç saat saklanacağı (0 = süresiz sakla)
     .unit = sa
-config-maintenance-skip-during-active-trades = Etkin İşlemler Sırasında Atla
-    .hint = Pozisyonlar açıkken ağır bakımı (VACUUM) erteleyin
 config-maintenance-stale-token-days = Eski Token Eşiği
     .hint = Piyasa verisi güncellemesi bundan eski olan tokenlar bellek tasarrufu için filtrelemenin dışında bırakılır. 0 = tümünü dahil et. 7 günde token sayısı genellikle yaklaşık %90 azalır.
     .unit = gün
-config-maintenance-vacuum-interval-secs = VACUUM Aralığı
-    .hint = SQLite VACUUM'un ne sıklıkla çalışacağı (disk alanını geri kazanır, ağır bir işlem)
-    .unit = sn
-config-maintenance-wal-checkpoint-interval-secs = WAL Checkpoint Aralığı
-    .hint = SQLite WAL checkpoint'in ne sıklıkla çalışacağı (write-ahead log'u birleştirir)
-    .unit = sn
+config-maintenance-storage-limit-mb = Depolama Sınırı
+    .hint = { -brand } verilerinin, yeniden oluşturulabilir piyasa verileri temizlenmeden önce kullanabileceği disk alanı. 0 = otomatik: en fazla 5 GB, küçük veya neredeyse dolu bir diskte daha az.
+    .unit = MB
 
 ## monitoring
 
@@ -1288,7 +1278,6 @@ config-category-copy-trading = Kopya İşlem
 config-category-core-trading = Temel İşlem
 config-category-creator-checks = Oluşturan Kontrolleri
 config-category-data-sources = Veri Kaynakları
-config-category-database = Veritabanı
 config-category-dca = DCA
 config-category-debug = Hata Ayıklama
 config-category-discovery = Keşif
@@ -1341,7 +1330,6 @@ config-category-router = Yönlendirici
 config-category-routers = Yönlendiriciler
 config-category-routing = Yönlendirme
 config-category-safety = Güvenlik
-config-category-scheduling = Zamanlama
 config-category-security-flags = Güvenlik Bayrakları
 config-category-slippage = Kayma
 config-category-source-control = Kaynak Kontrolü

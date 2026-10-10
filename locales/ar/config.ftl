@@ -674,25 +674,15 @@ config-maintenance-actions-retention-days = مدة الاحتفاظ بالإجر
 config-maintenance-events-retention-days = مدة الاحتفاظ بالأحداث
     .hint = عدد الأيام التي يُحتفظ فيها بسجل الأحداث (0 = الاحتفاظ دائمًا)
     .unit = يوم
-config-maintenance-maintenance-window-start = بداية نافذة الصيانة
-    .hint = وقت بدء الصيانة الثقيلة (HH:MM بالتوقيت المحلي). فارغ = في أي وقت.
-config-maintenance-ohlcv-retention-days = مدة الاحتفاظ ببيانات OHLCV
-    .hint = عدد الأيام التي يُحتفظ فيها ببيانات شموع OHLCV (0 = الاحتفاظ دائمًا)
-    .unit = يوم
 config-maintenance-rpc-stats-retention-hours = مدة الاحتفاظ بإحصاءات RPC
     .hint = عدد الساعات التي يُحتفظ فيها بإحصاءات RPC (0 = الاحتفاظ دائمًا)
     .unit = ساعة
-config-maintenance-skip-during-active-trades = التخطي أثناء الصفقات النشطة
-    .hint = تأجيل الصيانة الثقيلة (VACUUM) ما دامت هناك مراكز مفتوحة
 config-maintenance-stale-token-days = حد الرموز القديمة
     .hint = الرموز التي لم تُحدَّث بيانات سوقها منذ مدة أطول من هذه تُستبعد من الترشيح لتوفير الذاكرة. 0 = تضمين الجميع. عند 7 أيام يقلل ذلك عادةً عدد الرموز بنحو 90%.
     .unit = يوم
-config-maintenance-vacuum-interval-secs = فترة VACUUM
-    .hint = عدد مرات تشغيل VACUUM في SQLite (يستعيد مساحة القرص، وهي عملية ثقيلة)
-    .unit = ثانية
-config-maintenance-wal-checkpoint-interval-secs = فترة نقطة تحقق WAL
-    .hint = عدد مرات تشغيل نقطة تحقق WAL في SQLite (تدمج سجل الكتابة المسبقة)
-    .unit = ثانية
+config-maintenance-storage-limit-mb = حد التخزين
+    .hint = مساحة القرص التي يمكن لبيانات { -brand } استخدامها قبل تنظيف بيانات السوق القابلة لإعادة البناء. 0 = تلقائي: حتى 5 غيغابايت، وأقل على قرص صغير أو شبه ممتلئ.
+    .unit = ميغابايت
 
 ## network
 
@@ -1282,7 +1272,6 @@ config-category-copy-trading = نسخ التداول
 config-category-core-trading = التداول الأساسي
 config-category-creator-checks = فحوصات المنشئ
 config-category-data-sources = مصادر البيانات
-config-category-database = قاعدة البيانات
 config-category-dca = DCA
 config-category-debug = التصحيح
 config-category-discovery = الاكتشاف
@@ -1335,7 +1324,6 @@ config-category-router = الموجّه
 config-category-routers = الموجّهات
 config-category-routing = التوجيه
 config-category-safety = السلامة
-config-category-scheduling = الجدولة
 config-category-security-flags = أعلام الأمان
 config-category-slippage = الانزلاق السعري
 config-category-source-control = التحكم بالمصادر

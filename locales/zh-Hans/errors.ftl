@@ -58,6 +58,8 @@ errors-system-paths-init-failed = 无法创建应用程序目录
 errors-system-open-data-failed = 无法打开数据文件夹
 errors-system-url-empty = URL 不能为空
 errors-system-open-url-failed = 无法打开该 URL
+errors-system-storage-measure-failed = 无法测量存储
+errors-system-storage-cleanup-running = 存储清理已在运行
 
 # Initialization
 errors-initialization-required = 访问此接口前需要先完成机器人初始化。请通过网页界面完成初始化流程。

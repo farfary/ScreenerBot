@@ -9,7 +9,8 @@ use std::time::{Duration, SystemTime};
 
 use super::plan::{budget, budget_tier, disk_tier, plan, BUDGET_MAX_BYTES, BUDGET_MIN_BYTES};
 use super::types::{
-    Action, Disk, Evictable, FamilyId, FileEntry, PlanInput, Protection, StoreUsage, Tier,
+    Action, Disk, Evictable, EvictionUnit, FamilyId, FileEntry, Limit, PlanInput, Protection,
+    StoreUsage, Tier,
 };
 use crate::database::catalog::{self, StoreSpec};
 use crate::version::retention::{DownloadFacts, PendingDownload};
@@ -61,6 +62,7 @@ fn input(entries: Vec<FileEntry>, disk: Option<Disk>) -> PlanInput {
         stores: Vec::new(),
         evictables: Vec::new(),
         disk,
+        limit: Limit::Automatic,
         now: now(),
         active_log: Some(PathBuf::from("/logs/screenerbot_active.log")),
         downloads: DownloadFacts {
@@ -145,23 +147,29 @@ fn install() -> Vec<FileEntry> {
 
 #[test]
 fn the_budget_adapts_to_the_disk() {
-    assert_eq!(budget(0, None), BUDGET_MAX_BYTES);
-    assert_eq!(budget(GIB, roomy_disk()), BUDGET_MAX_BYTES);
+    assert_eq!(budget(0, None, Limit::Automatic), BUDGET_MAX_BYTES);
+    assert_eq!(
+        budget(GIB, roomy_disk(), Limit::Automatic),
+        BUDGET_MAX_BYTES
+    );
     let small = Disk {
         free: 100 * GIB,
         total: 20 * GIB,
     };
-    assert_eq!(budget(GIB, Some(small)), 2 * GIB);
+    assert_eq!(budget(GIB, Some(small), Limit::Automatic), 2 * GIB);
     let nearly_full = Disk {
         free: 2 * GIB,
         total: 500 * GIB,
     };
-    assert_eq!(budget(2 * GIB, Some(nearly_full)), GIB);
+    assert_eq!(budget(2 * GIB, Some(nearly_full), Limit::Automatic), GIB);
     let full = Disk {
         free: 0,
         total: 500 * GIB,
     };
-    assert_eq!(budget(100 * MIB, Some(full)), BUDGET_MIN_BYTES);
+    assert_eq!(
+        budget(100 * MIB, Some(full), Limit::Automatic),
+        BUDGET_MIN_BYTES
+    );
 }
 
 #[test]
@@ -174,7 +182,10 @@ fn deleting_never_moves_the_budget() {
         free: 4 * GIB,
         total: 500 * GIB,
     };
-    assert_eq!(budget(2 * GIB, Some(disk)), budget(GIB, Some(after)));
+    assert_eq!(
+        budget(2 * GIB, Some(disk), Limit::Automatic),
+        budget(GIB, Some(after), Limit::Automatic)
+    );
 }
 
 #[test]
@@ -338,13 +349,31 @@ fn symbolic_links_and_non_empty_directories_are_never_selected() {
     assert!(deleted(&plan(&input(vec![link, full_dir, legacy_dir], disk))).is_empty());
 }
 
-fn evictable(id: &str, age: Duration, protection: Option<Protection>) -> Evictable {
+fn evictable(mint: &str, age: Duration, protection: Option<Protection>) -> Evictable {
     Evictable {
-        id: id.to_owned(),
+        store: catalog::OHLCVS.id,
+        path: PathBuf::from("/data/ohlcvs.db"),
+        unit: EvictionUnit::ChartHistory {
+            mint: mint.to_owned(),
+            last_activity: String::new(),
+        },
         bytes: GIB,
         last_used: now() - age,
         protection,
     }
+}
+
+fn evicted(plan: &super::types::Plan) -> Vec<&str> {
+    plan.actions
+        .iter()
+        .filter_map(|action| match action {
+            Action::Evict {
+                unit: EvictionUnit::ChartHistory { mint, .. },
+                ..
+            } => Some(mint.as_str()),
+            _ => None,
+        })
+        .collect()
 }
 
 #[test]
@@ -360,16 +389,9 @@ fn eviction_takes_the_least_recently_used_unprotected_data_first() {
         evictable("recent", HOUR, None),
     ];
     let plan = plan(&input);
-    let evicted: Vec<&str> = plan
-        .actions
-        .iter()
-        .filter_map(|action| match action {
-            Action::Evict { id, .. } => Some(id.as_str()),
-            _ => None,
-        })
-        .collect();
-    assert_eq!(evicted, ["oldest", "older"]);
+    assert_eq!(evicted(&plan), ["oldest", "older"]);
     assert_eq!(plan.shortfall, 0);
+    assert!(plan.fits);
 }
 
 #[test]
@@ -382,11 +404,67 @@ fn protected_data_is_never_evicted_even_when_usage_stays_over_budget() {
         evictable("viewed", HOUR, Some(Protection::RecentlyViewed)),
     ];
     let plan = plan(&input);
-    assert!(!plan
-        .actions
-        .iter()
-        .any(|action| matches!(action, Action::Evict { .. })));
+    assert!(evicted(&plan).is_empty());
     assert!(plan.shortfall > 0);
+    assert!(!plan.fits);
+}
+
+#[test]
+fn free_pages_inside_the_stores_count_before_anything_is_evicted() {
+    let mut fragmented = store(&catalog::OHLCVS, 7 * GIB);
+    fragmented.freelist_pages = fragmented.page_count / 2;
+    let mut input = input(Vec::new(), roomy_disk());
+    input.stores = vec![fragmented];
+    input.evictables = vec![evictable("oldest", HOUR * 600, None)];
+    let plan = plan(&input);
+    assert!(evicted(&plan).is_empty());
+    assert!(plan.fits);
+}
+
+#[test]
+fn an_eviction_is_followed_by_reclaiming_its_store() {
+    let mut input = input(Vec::new(), roomy_disk());
+    input.stores = vec![store(&catalog::OHLCVS, 6 * GIB)];
+    input.evictables = vec![evictable("oldest", HOUR * 600, None)];
+    let plan = plan(&input);
+    let position = |wanted: fn(&Action) -> bool| plan.actions.iter().position(wanted);
+    let eviction = position(|action| matches!(action, Action::Evict { .. }));
+    let reclaim = position(|action| {
+        matches!(
+            action,
+            Action::Reclaim {
+                store: "ohlcvs",
+                ..
+            }
+        )
+    });
+    assert!(eviction.is_some() && reclaim.is_some());
+    assert!(eviction < reclaim);
+    assert_eq!(rewrites(&plan), [("reclaim", "ohlcvs")]);
+}
+
+#[test]
+fn a_fixed_limit_replaces_the_automatic_one_but_still_fits_the_disk() {
+    assert_eq!(budget(GIB, roomy_disk(), Limit::Fixed(20 * GIB)), 20 * GIB);
+    assert_eq!(budget(GIB, roomy_disk(), Limit::Fixed(GIB)), GIB);
+    assert_eq!(budget(GIB, None, Limit::Fixed(MIB)), BUDGET_MIN_BYTES);
+    let nearly_full = Disk {
+        free: 2 * GIB,
+        total: 500 * GIB,
+    };
+    assert_eq!(
+        budget(2 * GIB, Some(nearly_full), Limit::Fixed(20 * GIB)),
+        GIB
+    );
+    assert_eq!(Limit::from_megabytes(0), Limit::Automatic);
+    assert_eq!(Limit::from_megabytes(2048), Limit::Fixed(2 * GIB));
+
+    let mut input = input(Vec::new(), roomy_disk());
+    input.stores = vec![store(&catalog::OHLCVS, 3 * GIB)];
+    input.evictables = vec![evictable("oldest", HOUR * 600, None)];
+    assert!(evicted(&plan(&input)).is_empty());
+    input.limit = Limit::Fixed(2 * GIB);
+    assert_eq!(evicted(&plan(&input)), ["oldest"]);
 }
 
 fn rewrites(plan: &super::types::Plan) -> Vec<(&'static str, &'static str)> {

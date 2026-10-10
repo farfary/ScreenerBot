@@ -55,53 +55,9 @@ pub struct OpenPathResponse {
     pub path: String,
 }
 
-/// Stable id of each database in the storage overview. The dashboard labels it
-/// through `DATABASE_LABELS` (ui/settings/data_tab.js).
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize)]
-#[serde(rename_all = "snake_case")]
-pub enum DatabaseId {
-    Tokens,
-    Transactions,
-    Positions,
-    Events,
-    Ohlcv,
-    Wallet,
-    Pools,
-    Strategies,
-    Actions,
-}
-
-impl DatabaseId {
-    pub const ALL: [DatabaseId; 9] = [
-        DatabaseId::Tokens,
-        DatabaseId::Transactions,
-        DatabaseId::Positions,
-        DatabaseId::Events,
-        DatabaseId::Ohlcv,
-        DatabaseId::Wallet,
-        DatabaseId::Pools,
-        DatabaseId::Strategies,
-        DatabaseId::Actions,
-    ];
-}
-
 #[derive(Debug, Serialize)]
-pub struct DatabaseStats {
-    pub id: DatabaseId,
-    pub path: String,
-    pub size_bytes: u64,
-    pub size_mb: f64,
-    pub exists: bool,
-}
-
-#[derive(Debug, Serialize)]
-pub struct DataStatsResponse {
-    pub databases: Vec<DatabaseStats>,
-    pub total_size_mb: f64,
-    pub config_path: String,
-    pub config_size_bytes: u64,
-    pub data_directory: String,
-    pub timestamp: String,
+pub struct StorageCleanupResponse {
+    pub started: bool,
 }
 
 #[derive(Debug, serde::Deserialize)]
@@ -133,39 +89,4 @@ pub struct ClientReadyResponse {
     /// True only for the first report after boot (the one that was logged).
     pub first_report: bool,
     pub uptime_seconds: u64,
-}
-
-#[cfg(test)]
-mod tests {
-    use super::DatabaseId;
-
-    /// Catalog key of each database label. The match is exhaustive, so a new
-    /// variant fails to compile until it is mapped here and in
-    /// `DATABASE_LABELS` (ui/settings/data_tab.js).
-    fn database_key(id: DatabaseId) -> &'static str {
-        match id {
-            DatabaseId::Tokens => "settings-data-db-tokens",
-            DatabaseId::Transactions => "settings-data-db-transactions",
-            DatabaseId::Positions => "settings-data-db-positions",
-            DatabaseId::Events => "settings-data-db-events",
-            DatabaseId::Ohlcv => "settings-data-db-ohlcv",
-            DatabaseId::Wallet => "settings-data-db-wallet",
-            DatabaseId::Pools => "settings-data-db-pools",
-            DatabaseId::Strategies => "settings-data-db-strategies",
-            DatabaseId::Actions => "settings-data-db-actions",
-        }
-    }
-
-    #[test]
-    fn database_labels_exist_in_the_catalog() {
-        for id in DatabaseId::ALL {
-            let key = database_key(id);
-            assert_ne!(crate::i18n::format_en(key, None), key, "missing {key}");
-            assert_eq!(
-                serde_json::to_value(id).unwrap(),
-                key.trim_start_matches("settings-data-db-"),
-                "{id:?} serializes to the id its label is keyed by"
-            );
-        }
-    }
 }

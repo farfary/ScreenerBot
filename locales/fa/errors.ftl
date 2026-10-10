@@ -60,6 +60,8 @@ errors-system-paths-init-failed = ساخت پوشه‌های برنامه ممک
 errors-system-open-data-failed = باز کردن پوشه داده ممکن نشد
 errors-system-url-empty = URL نمی‌تواند خالی باشد
 errors-system-open-url-failed = باز کردن URL ممکن نشد
+errors-system-storage-measure-failed = اندازه‌گیری فضای ذخیره‌سازی ممکن نشد
+errors-system-storage-cleanup-running = یک پاک‌سازی فضای ذخیره‌سازی از قبل در حال اجراست
 
 # Initialization
 errors-initialization-required = پیش از دسترسی به این اندپوینت، راه‌اندازی اولیه ربات لازم است. فرایند راه‌اندازی را از طریق رابط وب کامل کنید.

@@ -16,7 +16,7 @@ import { enhanceAllSelects } from "./custom_select.js";
 import { setNavOverflowLayout } from "./nav_more_menu.js";
 import { playTabSwitch } from "../core/sounds.js";
 import { loadSecurityTab } from "./settings/security_tab.js";
-import { buildDataTab, attachDataHandlers } from "./settings/data_tab.js";
+import { buildDataTab, attachDataHandlers, teardownDataTab } from "./settings/data_tab.js";
 import {
   buildUpdatesTab,
   attachUpdatesHandlers,
@@ -190,6 +190,8 @@ export class SettingsDialog {
 
     // The Updates tab polls only while a download or install is in flight.
     teardownUpdatesTab();
+    // The Data tab polls only while a storage cleanup is running.
+    teardownDataTab();
 
     // Stop discovery poller if active
     if (this._discoveryPoller) {
@@ -616,6 +618,9 @@ export class SettingsDialog {
     if (this.currentTab === "updates") {
       teardownUpdatesTab();
     }
+    if (this.currentTab === "data") {
+      teardownDataTab();
+    }
 
     // Update nav buttons
     this.dialogEl.querySelectorAll(".settings-nav-item").forEach((btn) => {
@@ -670,6 +675,7 @@ export class SettingsDialog {
         content.innerHTML = buildDataTab();
         I18n.localizeTree(content);
         attachDataHandlers(this, content, this.pathsInfo);
+        enhanceAllSelects(content);
         break;
       case "security":
         loadSecurityTab(this, content);

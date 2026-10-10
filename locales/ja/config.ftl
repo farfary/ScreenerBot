@@ -674,25 +674,15 @@ config-maintenance-actions-retention-days = アクションの保持期間
 config-maintenance-events-retention-days = イベントの保持期間
     .hint = イベント履歴を保持する日数（0 = 無期限）
     .unit = 日
-config-maintenance-maintenance-window-start = メンテナンス時間帯の開始
-    .hint = 負荷の高いメンテナンスの開始時刻（HH:MM、現地時間）。空欄 = いつでも。
-config-maintenance-ohlcv-retention-days = OHLCV の保持期間
-    .hint = OHLCV ローソク足データを保持する日数（0 = 無期限）
-    .unit = 日
 config-maintenance-rpc-stats-retention-hours = RPC 統計の保持期間
     .hint = RPC 統計を保持する時間数（0 = 無期限）
     .unit = 時間
-config-maintenance-skip-during-active-trades = 取引中はスキップ
-    .hint = ポジションがオープン中は、負荷の高いメンテナンス（VACUUM）を延期します
 config-maintenance-stale-token-days = 古いトークンのカットオフ
     .hint = 市場データの更新がこの日数より古いトークンは、メモリ節約のためフィルタリングから除外されます。0 = すべて含める。7 日の場合、通常トークン数が約 90% 減ります。
     .unit = 日
-config-maintenance-vacuum-interval-secs = VACUUM の間隔
-    .hint = SQLite の VACUUM を実行する頻度（ディスク容量を回収する負荷の高い処理）
-    .unit = 秒
-config-maintenance-wal-checkpoint-interval-secs = WAL チェックポイントの間隔
-    .hint = SQLite の WAL チェックポイントを実行する頻度（先行書き込みログを統合）
-    .unit = 秒
+config-maintenance-storage-limit-mb = ストレージ上限
+    .hint = 再構築可能な市場データを整理する前に { -brand } のデータが使用できるディスク容量。0 = 自動：最大 5 GB、小さいディスクや空きの少ないディスクではそれ以下。
+    .unit = MB
 
 ## monitoring
 
@@ -1288,7 +1278,6 @@ config-category-copy-trading = コピートレード
 config-category-core-trading = コアトレーディング
 config-category-creator-checks = クリエイターチェック
 config-category-data-sources = データソース
-config-category-database = データベース
 config-category-dca = DCA
 config-category-debug = デバッグ
 config-category-discovery = ディスカバリー
@@ -1341,7 +1330,6 @@ config-category-router = ルーター
 config-category-routers = ルーター
 config-category-routing = ルーティング
 config-category-safety = 安全性
-config-category-scheduling = スケジューリング
 config-category-security-flags = セキュリティフラグ
 config-category-slippage = スリッページ
 config-category-source-control = ソース制御

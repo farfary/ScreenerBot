@@ -51,6 +51,8 @@ errors-system-paths-init-failed = Não foi possível criar os diretórios do apl
 errors-system-open-data-failed = Não foi possível abrir a pasta de dados
 errors-system-url-empty = A URL não pode estar vazia
 errors-system-open-url-failed = Não foi possível abrir a URL
+errors-system-storage-measure-failed = Não foi possível medir o armazenamento
+errors-system-storage-cleanup-running = Uma limpeza do armazenamento já está em andamento
 
 errors-initialization-required = É necessário inicializar o bot antes de acessar este endpoint. Conclua o processo de inicialização pela interface web.
 errors-initialization-explore-unavailable = O Modo Explorar não tem carteira conectada. Conclua a configuração para usar carteiras e copy trading.

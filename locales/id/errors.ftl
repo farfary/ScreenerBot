@@ -51,6 +51,8 @@ errors-system-paths-init-failed = Tidak dapat membuat direktori aplikasi
 errors-system-open-data-failed = Tidak dapat membuka folder data
 errors-system-url-empty = URL tidak boleh kosong
 errors-system-open-url-failed = Tidak dapat membuka URL
+errors-system-storage-measure-failed = Tidak dapat mengukur penyimpanan
+errors-system-storage-cleanup-running = Pembersihan penyimpanan sedang berjalan
 
 errors-initialization-required = Inisialisasi bot diperlukan sebelum mengakses endpoint ini. Selesaikan proses inisialisasi melalui antarmuka web.
 errors-initialization-explore-unavailable = Mode Jelajah tidak memiliki dompet yang terhubung. Selesaikan penyiapan untuk memakai dompet dan copy trading.

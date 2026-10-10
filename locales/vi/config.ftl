@@ -652,25 +652,15 @@ config-maintenance-actions-retention-days = Thời gian lưu hành động
 config-maintenance-events-retention-days = Thời gian lưu sự kiện
     .hint = Số ngày lưu lịch sử sự kiện (0 = lưu mãi)
     .unit = ngày
-config-maintenance-maintenance-window-start = Bắt đầu khung bảo trì
-    .hint = Giờ bắt đầu bảo trì nặng (HH:MM giờ địa phương). Để trống = bất cứ lúc nào.
-config-maintenance-ohlcv-retention-days = Thời gian lưu OHLCV
-    .hint = Số ngày lưu dữ liệu nến OHLCV (0 = lưu mãi)
-    .unit = ngày
 config-maintenance-rpc-stats-retention-hours = Thời gian lưu thống kê RPC
     .hint = Số giờ lưu thống kê RPC (0 = lưu mãi)
     .unit = giờ
-config-maintenance-skip-during-active-trades = Bỏ qua khi đang có giao dịch
-    .hint = Hoãn bảo trì nặng (VACUUM) khi còn vị thế đang mở
 config-maintenance-stale-token-days = Ngưỡng token cũ
     .hint = Token không có cập nhật dữ liệu thị trường quá thời gian này sẽ bị loại khỏi bộ lọc để tiết kiệm bộ nhớ. 0 = giữ tất cả. Ở mức 7 ngày, thường giảm khoảng 90% số token.
     .unit = ngày
-config-maintenance-vacuum-interval-secs = Chu kỳ VACUUM
-    .hint = Tần suất chạy SQLite VACUUM (thu hồi dung lượng đĩa, thao tác nặng)
-    .unit = giây
-config-maintenance-wal-checkpoint-interval-secs = Chu kỳ WAL checkpoint
-    .hint = Tần suất chạy SQLite WAL checkpoint (gộp nhật ký ghi trước)
-    .unit = giây
+config-maintenance-storage-limit-mb = Giới hạn lưu trữ
+    .hint = Dung lượng đĩa mà dữ liệu { -brand } được dùng trước khi dữ liệu thị trường có thể dựng lại bị dọn dẹp. 0 = tự động: tối đa 5 GB, ít hơn trên ổ đĩa nhỏ hoặc gần đầy.
+    .unit = MB
 
 config-network-proxy = URL proxy
     .hint = ví dụ: socks5://127.0.0.1:1080 hoặc http://127.0.0.1:8080 — để trống để tự động phát hiện
@@ -1230,7 +1220,6 @@ config-category-copy-trading = Copy trading
 config-category-core-trading = Giao dịch cốt lõi
 config-category-creator-checks = Kiểm tra người tạo
 config-category-data-sources = Nguồn dữ liệu
-config-category-database = Cơ sở dữ liệu
 config-category-dca = DCA
 config-category-debug = Gỡ lỗi
 config-category-discovery = Khám phá
@@ -1283,7 +1272,6 @@ config-category-router = Router
 config-category-routers = Router
 config-category-routing = Định tuyến
 config-category-safety = An toàn
-config-category-scheduling = Lập lịch
 config-category-security-flags = Cờ bảo mật
 config-category-slippage = Trượt giá
 config-category-source-control = Điều khiển nguồn

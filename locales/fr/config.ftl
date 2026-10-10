@@ -677,25 +677,15 @@ config-maintenance-actions-retention-days = Conservation des actions
 config-maintenance-events-retention-days = Conservation des événements
     .hint = Nombre de jours de conservation de l'historique des événements (0 = conserver indéfiniment)
     .unit = j
-config-maintenance-maintenance-window-start = Début de la fenêtre de maintenance
-    .hint = Heure de début de la maintenance lourde (HH:MM, heure locale). Vide = à tout moment.
-config-maintenance-ohlcv-retention-days = Conservation OHLCV
-    .hint = Nombre de jours de conservation des bougies OHLCV (0 = conserver indéfiniment)
-    .unit = j
 config-maintenance-rpc-stats-retention-hours = Conservation des stats RPC
     .hint = Nombre d'heures de conservation des statistiques RPC (0 = conserver indéfiniment)
     .unit = h
-config-maintenance-skip-during-active-trades = Ignorer pendant les trades actifs
-    .hint = Reporte la maintenance lourde (VACUUM) tant que des positions sont ouvertes
 config-maintenance-stale-token-days = Seuil des tokens obsolètes
     .hint = Les tokens dont les données de marché n'ont pas été mises à jour depuis plus longtemps que cette durée sont exclus du filtrage pour économiser la mémoire. 0 = tout inclure. À 7 jours, cela réduit généralement le nombre de tokens d'environ 90 %.
     .unit = j
-config-maintenance-vacuum-interval-secs = Intervalle VACUUM
-    .hint = Fréquence d'exécution de VACUUM sur SQLite (libère de l'espace disque, opération lourde)
-    .unit = s
-config-maintenance-wal-checkpoint-interval-secs = Intervalle de checkpoint WAL
-    .hint = Fréquence d'exécution du checkpoint WAL de SQLite (consolide le journal d'écriture anticipée)
-    .unit = s
+config-maintenance-storage-limit-mb = Limite de stockage
+    .hint = Espace disque que les données de { -brand } peuvent occuper avant le nettoyage des données de marché reconstructibles. 0 = automatique : jusqu'à 5 Go, moins sur un disque petit ou presque plein.
+    .unit = Mo
 
 ## monitoring
 
@@ -1291,7 +1281,6 @@ config-category-copy-trading = Copy trading
 config-category-core-trading = Trading principal
 config-category-creator-checks = Contrôles du créateur
 config-category-data-sources = Sources de données
-config-category-database = Base de données
 config-category-dca = DCA
 config-category-debug = Débogage
 config-category-discovery = Découverte
@@ -1344,7 +1333,6 @@ config-category-router = Routeur
 config-category-routers = Routeurs
 config-category-routing = Routage
 config-category-safety = Sécurité
-config-category-scheduling = Planification
 config-category-security-flags = Indicateurs de sécurité
 config-category-slippage = Slippage
 config-category-source-control = Contrôle des sources

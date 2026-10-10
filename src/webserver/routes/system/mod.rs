@@ -1,7 +1,7 @@
 // Copyright (c) 2024-2026 ScreenerBot (screenerbot.io)
 // SPDX-License-Identifier: BUSL-1.1
 
-//! System route — serves system information (version, uptime, resource usage).
+//! System route — serves system information (version, uptime, resource usage) and the storage report.
 
 mod handlers;
 pub mod types;
@@ -23,6 +23,7 @@ pub fn routes() -> Router<Arc<AppState>> {
         .route("/paths", get(handlers::get_paths))
         .route("/paths/open-data", post(handlers::open_data_directory))
         .route("/open-url", post(handlers::open_url))
-        .route("/data-stats", get(handlers::get_data_stats))
+        .route("/storage", get(handlers::get_storage))
+        .route("/storage/cleanup", post(handlers::start_storage_cleanup))
         .route("/client-ready", post(handlers::client_ready))
 }

@@ -674,25 +674,15 @@ config-maintenance-actions-retention-days = Зберігання дій
 config-maintenance-events-retention-days = Зберігання подій
     .hint = Скільки днів зберігати історію подій (0 = зберігати завжди)
     .unit = дн.
-config-maintenance-maintenance-window-start = Початок вікна обслуговування
-    .hint = Час початку важкого обслуговування (ГГ:ХХ за місцевим часом). Порожньо = будь-коли.
-config-maintenance-ohlcv-retention-days = Зберігання OHLCV
-    .hint = Скільки днів зберігати дані свічок OHLCV (0 = зберігати завжди)
-    .unit = дн.
 config-maintenance-rpc-stats-retention-hours = Зберігання статистики RPC
     .hint = Скільки годин зберігати статистику RPC (0 = зберігати завжди)
     .unit = год
-config-maintenance-skip-during-active-trades = Пропускати під час активних угод
-    .hint = Відкладати важке обслуговування (VACUUM), поки відкриті позиції
 config-maintenance-stale-token-days = Відсікання застарілих токенів
     .hint = Токени, ринкові дані яких не оновлювалися довше за це значення, виключаються з фільтрації для економії пам’яті. 0 = включати всі. За 7 днів кількість токенів зазвичай зменшується приблизно на 90%.
     .unit = дн.
-config-maintenance-vacuum-interval-secs = Інтервал VACUUM
-    .hint = Як часто виконувати SQLite VACUUM (звільняє місце на диску, важка операція)
-    .unit = с
-config-maintenance-wal-checkpoint-interval-secs = Інтервал контрольної точки WAL
-    .hint = Як часто виконувати контрольну точку SQLite WAL (консолідує журнал упереджувального запису)
-    .unit = с
+config-maintenance-storage-limit-mb = Ліміт сховища
+    .hint = Місце на диску, яке можуть займати дані { -brand }, перш ніж відновлювані ринкові дані буде очищено. 0 = автоматично: до 5 ГБ, менше на малому або майже заповненому диску.
+    .unit = МБ
 
 ## monitoring
 
@@ -1288,7 +1278,6 @@ config-category-copy-trading = Копітрейдинг
 config-category-core-trading = Основна торгівля
 config-category-creator-checks = Перевірки творця
 config-category-data-sources = Джерела даних
-config-category-database = База даних
 config-category-dca = DCA
 config-category-debug = Налагодження
 config-category-discovery = Виявлення
@@ -1341,7 +1330,6 @@ config-category-router = Маршрутизатор
 config-category-routers = Маршрутизатори
 config-category-routing = Маршрутизація
 config-category-safety = Безпека
-config-category-scheduling = Планування
 config-category-security-flags = Прапорці безпеки
 config-category-slippage = Проковзування
 config-category-source-control = Керування джерелами

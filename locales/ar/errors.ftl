@@ -60,6 +60,8 @@ errors-system-paths-init-failed = تعذّر إنشاء مجلدات التطب�
 errors-system-open-data-failed = تعذّر فتح مجلد البيانات
 errors-system-url-empty = لا يمكن أن يكون عنوان URL فارغًا
 errors-system-open-url-failed = تعذّر فتح عنوان URL
+errors-system-storage-measure-failed = تعذّر قياس التخزين
+errors-system-storage-cleanup-running = يجري تنظيف التخزين بالفعل
 
 # Initialization
 errors-initialization-required = تهيئة البوت مطلوبة قبل الوصول إلى نقطة الاتصال هذه. يرجى إكمال عملية التهيئة عبر واجهة الويب.

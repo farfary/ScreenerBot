@@ -87,7 +87,7 @@ test("a failed Settings load renders the shared error state", async (t) => {
   const context = await browser.newContext({ viewport: { width: 1440, height: 900 } });
   const api = createApiHandler([await loadIndex("home"), await loadIndex("shell")], "populated");
   const onApi = (request) =>
-    request.url.pathname === "/api/system/data-stats"
+    request.url.pathname === "/api/system/storage"
       ? { status: 500, body: JSON.stringify({ error: "unavailable" }) }
       : api.onApi(request);
   const host = await serveDashboard(context, { locale: "en", onApi });
@@ -105,7 +105,7 @@ test("a failed Settings load renders the shared error state", async (t) => {
   assert.equal(await failed.getAttribute("role"), "alert");
   assert.equal(
     (await failed.locator(".state-view-title").textContent()).trim(),
-    "Failed to load database statistics"
+    "Could not measure storage"
   );
   assert.equal(await failed.locator(".state-view-icon").count(), 1);
   const [icon, title] = await Promise.all([

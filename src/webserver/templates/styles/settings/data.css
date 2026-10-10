@@ -2,7 +2,7 @@
  * SPDX-License-Identifier: BUSL-1.1 */
 
 /* =============================================================================
-   DATA TAB - Database Overview and Config Management
+   DATA TAB - Storage Overview and Config Management
    ============================================================================= */
 
 /* The storage overview and the data directory share one card, the same shape as
@@ -35,19 +35,6 @@
   background: linear-gradient(135deg, var(--primary-alpha-10), var(--primary-alpha-5));
   border-radius: var(--radius-lg);
   margin-bottom: 16px;
-  position: relative;
-  overflow: hidden;
-}
-
-.data-total-bar::before {
-  content: "";
-  position: absolute;
-  top: 0;
-  inset-inline-start: 0;
-  width: 100%;
-  height: 100%;
-  background: linear-gradient(var(--to-inline-end), transparent, rgb(255, 255, 255, 0.08), transparent);
-  animation: shimmer 3s infinite;
 }
 
 .data-total-label {
@@ -108,6 +95,35 @@
   text-align: end;
 }
 
+/* Free disk space and the last cleanup, under the category bars. */
+.data-facts {
+  display: grid;
+  gap: 6px;
+  margin-top: 16px;
+}
+
+.data-fact {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 12px;
+  font-size: 0.8rem;
+}
+
+.data-fact-label {
+  color: var(--text-muted);
+}
+
+.data-fact-value {
+  font-family: var(--font-data);
+  color: var(--text-secondary);
+  text-align: end;
+}
+
+.data-fact-value.warning {
+  color: var(--warning-color);
+}
+
 /* Config Management */
 .config-actions-row {
   display: flex;
@@ -155,17 +171,3 @@
   color: var(--link-color);
   border-color: var(--primary-alpha-20);
 }
-
-/* Data Cleanup */
-.data-action-group {
-  display: flex;
-  align-items: center;
-  gap: 8px;
-}
-
-/* A compact number: the numeric shell is what gets sized, so its stepper stays
-   at the field's own edge (components/form_controls.css). */
-.number-field:has(> .settings-input.small) {
-  width: 70px;
-}
-

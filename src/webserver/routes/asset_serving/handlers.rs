@@ -282,6 +282,7 @@ pub async fn get_ui_script(Path(file): Path<String>) -> Response {
         "settings/security_tab.js" => Some(embeds::SETTINGS_SECURITY_TAB_UI),
         "settings/account_tab.js" => Some(embeds::SETTINGS_ACCOUNT_TAB_UI),
         "settings/data_tab.js" => Some(embeds::SETTINGS_DATA_TAB_UI),
+        "settings/storage_view.js" => Some(embeds::SETTINGS_STORAGE_VIEW_UI),
         "settings/updates_tab.js" => Some(embeds::SETTINGS_UPDATES_TAB_UI),
         "settings/updates_view.js" => Some(embeds::SETTINGS_UPDATES_VIEW_UI),
         "settings/update_status.js" => Some(embeds::SETTINGS_UPDATE_STATUS_UI),

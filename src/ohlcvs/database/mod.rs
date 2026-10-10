@@ -10,7 +10,11 @@ mod data_version;
 mod gaps;
 mod maintenance;
 mod migrations;
+pub mod retention;
 pub mod types;
+
+#[cfg(test)]
+mod retention_tests;
 
 pub use types::{
     ClearAllResult, DatabaseStats, DeleteResult, GapRecord, OhlcvTokenStatus, SeriesPoolPlan,

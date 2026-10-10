@@ -674,25 +674,15 @@ config-maintenance-actions-retention-days = Retensi Aksi
 config-maintenance-events-retention-days = Retensi Peristiwa
     .hint = Berapa hari riwayat peristiwa disimpan (0 = simpan selamanya)
     .unit = hr
-config-maintenance-maintenance-window-start = Awal Jendela Pemeliharaan
-    .hint = Waktu mulai pemeliharaan berat (HH:MM waktu lokal). Kosong = kapan saja.
-config-maintenance-ohlcv-retention-days = Retensi OHLCV
-    .hint = Berapa hari data candle OHLCV disimpan (0 = simpan selamanya)
-    .unit = hr
 config-maintenance-rpc-stats-retention-hours = Retensi Statistik RPC
     .hint = Berapa jam statistik RPC disimpan (0 = simpan selamanya)
     .unit = jam
-config-maintenance-skip-during-active-trades = Lewati Saat Trade Aktif
-    .hint = Tunda pemeliharaan berat (VACUUM) selama ada posisi terbuka
 config-maintenance-stale-token-days = Batas Token Usang
     .hint = Token tanpa pembaruan data pasar yang lebih lama dari ini dikecualikan dari pemfilteran untuk menghemat memori. 0 = sertakan semua. Pada 7 hari, biasanya mengurangi jumlah token sekitar 90%.
     .unit = hr
-config-maintenance-vacuum-interval-secs = Interval VACUUM
-    .hint = Seberapa sering menjalankan SQLite VACUUM (mengambil kembali ruang disk, operasi berat)
-    .unit = dtk
-config-maintenance-wal-checkpoint-interval-secs = Interval Checkpoint WAL
-    .hint = Seberapa sering menjalankan checkpoint WAL SQLite (mengonsolidasi write-ahead log)
-    .unit = dtk
+config-maintenance-storage-limit-mb = Batas Penyimpanan
+    .hint = Ruang disk yang boleh dipakai data { -brand } sebelum data pasar yang dapat dibangun ulang dibersihkan. 0 = otomatis: hingga 5 GB, lebih sedikit pada disk kecil atau hampir penuh.
+    .unit = MB
 
 ## monitoring
 
@@ -1288,7 +1278,6 @@ config-category-copy-trading = Copy Trading
 config-category-core-trading = Trading Inti
 config-category-creator-checks = Pemeriksaan Kreator
 config-category-data-sources = Sumber Data
-config-category-database = Database
 config-category-dca = DCA
 config-category-debug = Debug
 config-category-discovery = Penemuan
@@ -1341,7 +1330,6 @@ config-category-router = Router
 config-category-routers = Router
 config-category-routing = Routing
 config-category-safety = Keselamatan
-config-category-scheduling = Penjadwalan
 config-category-security-flags = Flag Keamanan
 config-category-slippage = Slippage
 config-category-source-control = Kontrol Sumber
