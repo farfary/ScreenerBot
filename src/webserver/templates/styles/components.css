@@ -842,19 +842,24 @@
    split across two lines it reads as two numbers. Its card's content box is a
    size container, so 100cqi is the width the grid track gives the value, and the
    font is that width over the glyph count the script sets in
-   `--metric-value-chars` (the data font advances 0.6em per glyph; 0.61 absorbs
-   rounding), between a 10px floor (a German "+150,0 % / -45,2 %" in the
-   narrowest stats track) and the card's value size. */
+   `--metric-value-chars`, between a 10px floor (a German "+150,0 % / -45,2 %" in
+   the narrowest stats track) and the card's value size. The data font advances
+   0.6em per glyph. A renderer without subpixel text positioning (Chromium on
+   Linux) hints at a whole-pixel size and snaps every advance to a whole pixel,
+   which makes a glyph up to 0.8px wider (0.6 x 0.5px size rounding plus 0.5px
+   advance rounding), so each glyph reserves 0.8px before the font is sized. */
 .metric-content:has(> .metric-value-fit) {
   container-type: inline-size;
 }
 
 .metric-value-fit {
+  --metric-value-glyphs: var(--metric-value-chars, 12);
+
   overflow-wrap: normal;
   white-space: nowrap;
   font-size: clamp(
     0.625rem,
-    100cqi / (var(--metric-value-chars, 12) * 0.61),
+    (100cqi - var(--metric-value-glyphs) * 0.8px) / (var(--metric-value-glyphs) * 0.6),
     var(--font-size-lg)
   );
 }
