@@ -2301,7 +2301,6 @@ const UNMANAGED_TRANSACTION_SITES: &[(&str, usize)] = &[
     ("assistant/scheduled/database.rs", 2),
     ("events/database/mod.rs", 1),
     ("llm_analysis/database.rs", 1),
-    ("ohlcvs/database/candles.rs", 1),
     ("pools/database/writer.rs", 1),
     ("transactions/database/operations_queries.rs", 1),
     ("wallets/database/wallet_queries.rs", 2),

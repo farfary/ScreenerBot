@@ -231,13 +231,19 @@ impl OhlcvDatabase {
     ) -> OhlcvResult<Option<SeriesPoolWrite>> {
         let chain_id = self.chain_id();
         let mut conn = self.conn()?;
-        let tx = conn.write_tx().map_err(series_write_err)?;
-        let registered = read_pool_rows(&tx, chain_id, mint).map_err(series_write_err)?;
+        let tx = conn.write_tx().map_err(|e| {
+            OhlcvError::DatabaseError(format!("Failed to begin the series pool write: {e}"))
+        })?;
+        let registered = read_pool_rows(&tx, chain_id, mint).map_err(|e| {
+            OhlcvError::DatabaseError(format!("Failed to read pools for the series write: {e}"))
+        })?;
         let Some(plan) = plan(&registered) else {
             return Ok(None);
         };
         let write = apply_series_plan(&tx, chain_id, mint, &registered, plan)?;
-        tx.commit().map_err(series_write_err)?;
+        tx.commit().map_err(|e| {
+            OhlcvError::DatabaseError(format!("Failed to commit the series pool write: {e}"))
+        })?;
         Ok(Some(write))
     }
 
@@ -297,10 +303,6 @@ impl OhlcvDatabase {
 
         Ok(())
     }
-}
-
-fn series_write_err(e: rusqlite::Error) -> OhlcvError {
-    OhlcvError::DatabaseError(format!("Failed to write series pools: {e}"))
 }
 
 /// A token's registered pool rows, deepest first.
@@ -374,7 +376,11 @@ fn apply_series_plan(
                     ),
                     params![chain_id, mint, address],
                 )
-                .map_err(series_write_err)?;
+                .map_err(|e| {
+                    OhlcvError::DatabaseError(format!(
+                        "Failed to delete unlisted pool rows from {table}: {e}"
+                    ))
+                })?;
         }
         candles_deleted += deleted[1];
         gaps_deleted += deleted[2];
@@ -385,10 +391,11 @@ fn apply_series_plan(
         "UPDATE ohlcv_pools SET is_default = 0 WHERE chain_id = ?1 AND mint = ?2",
         params![chain_id, mint],
     )
-    .map_err(series_write_err)?;
+    .map_err(|e| OhlcvError::DatabaseError(format!("Failed to clear the default pool: {e}")))?;
     for pool in &plan.pools {
-        upsert_pool_row(tx, chain_id, mint, pool, pool.address == series_pool)
-            .map_err(series_write_err)?;
+        upsert_pool_row(tx, chain_id, mint, pool, pool.address == series_pool).map_err(|e| {
+            OhlcvError::DatabaseError(format!("Failed to upsert a series pool: {e}"))
+        })?;
     }
 
     let reset = if series_moved {
@@ -397,13 +404,17 @@ fn apply_series_plan(
                 "DELETE FROM ohlcv_candles WHERE chain_id = ?1 AND mint = ?2 AND pool_address != ?3",
                 params![chain_id, mint, series_pool],
             )
-            .map_err(series_write_err)?;
+            .map_err(|e| {
+                OhlcvError::DatabaseError(format!("Failed to delete other pools' candles: {e}"))
+            })?;
         gaps_deleted += tx
             .execute(
                 "DELETE FROM ohlcv_gaps WHERE chain_id = ?1 AND mint = ?2 AND pool_address != ?3",
                 params![chain_id, mint, series_pool],
             )
-            .map_err(series_write_err)?;
+            .map_err(|e| {
+                OhlcvError::DatabaseError(format!("Failed to delete other pools' gaps: {e}"))
+            })?;
         tx.execute(
             &format!(
                 "UPDATE ohlcv_monitor_config SET
@@ -423,7 +434,9 @@ fn apply_series_plan(
             ),
             params![chain_id, mint],
         )
-        .map_err(series_write_err)?;
+        .map_err(|e| {
+            OhlcvError::DatabaseError(format!("Failed to reset the backfill flags: {e}"))
+        })?;
         Some(SeriesPoolReset {
             previous_pool,
             candles_deleted,
