@@ -159,16 +159,15 @@ pub fn parse_config_document(raw: &str) -> Result<ParsedConfig> {
     let table: toml::Table = toml::from_str(raw).map_err(|e| Error::ParseFailed {
         detail: e.to_string(),
     })?;
-    let mut document = serde_json::to_value(&table).map_err(|e| Error::ParseFailed {
-        detail: e.to_string(),
-    })?;
+    let mut document = toml::Value::Table(table);
 
     // Documents without a legacy section take the typed TOML parse, which
     // keeps line numbers in its error messages.
     let (mut config, relocated) = if super::has_legacy_chain_sections(&document) {
         let relocated = super::relocate_legacy_chain_sections(&mut document)?;
-        let config =
-            serde_json::from_value::<Config>(document).map_err(|e| Error::ParseFailed {
+        let config = document
+            .try_into::<Config>()
+            .map_err(|e| Error::ParseFailed {
                 detail: e.to_string(),
             })?;
         (config, relocated)

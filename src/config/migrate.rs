@@ -409,11 +409,104 @@ const CHAIN_RELOCATIONS: &[Relocation] = &[
     },
 ];
 
+/// An untyped config document the chain relocation rewrites: the TOML file at
+/// load, and a JSON import at the config route. The file is relocated as TOML
+/// because JSON has no `inf` or `nan`; a float holding one would not survive a
+/// round trip through JSON and the typed parse would refuse the file.
+pub(crate) trait ConfigTree: Clone + Sized {
+    type Table: IntoIterator<Item = (String, Self)>;
+
+    fn table(&self) -> Option<&Self::Table>;
+    fn table_mut(&mut self) -> Option<&mut Self::Table>;
+    fn into_table(self) -> Option<Self::Table>;
+    fn empty_table() -> Self;
+    fn get<'a>(table: &'a Self::Table, key: &str) -> Option<&'a Self>;
+    fn get_mut<'a>(table: &'a mut Self::Table, key: &str) -> Option<&'a mut Self>;
+    fn remove(table: &mut Self::Table, key: &str) -> Option<Self>;
+    fn insert(table: &mut Self::Table, key: String, value: Self);
+    /// The child at `key`, inserting an empty table when it is absent.
+    fn child<'a>(table: &'a mut Self::Table, key: &str) -> &'a mut Self;
+}
+
+impl ConfigTree for toml::Value {
+    type Table = toml::Table;
+
+    fn table(&self) -> Option<&toml::Table> {
+        self.as_table()
+    }
+    fn table_mut(&mut self) -> Option<&mut toml::Table> {
+        self.as_table_mut()
+    }
+    fn into_table(self) -> Option<toml::Table> {
+        match self {
+            toml::Value::Table(table) => Some(table),
+            _ => None,
+        }
+    }
+    fn empty_table() -> Self {
+        toml::Value::Table(toml::Table::new())
+    }
+    fn get<'a>(table: &'a toml::Table, key: &str) -> Option<&'a Self> {
+        table.get(key)
+    }
+    fn get_mut<'a>(table: &'a mut toml::Table, key: &str) -> Option<&'a mut Self> {
+        table.get_mut(key)
+    }
+    fn remove(table: &mut toml::Table, key: &str) -> Option<Self> {
+        table.remove(key)
+    }
+    fn insert(table: &mut toml::Table, key: String, value: Self) {
+        table.insert(key, value);
+    }
+    fn child<'a>(table: &'a mut toml::Table, key: &str) -> &'a mut Self {
+        table
+            .entry(key.to_owned())
+            .or_insert_with(Self::empty_table)
+    }
+}
+
+impl ConfigTree for Value {
+    type Table = Map<String, Value>;
+
+    fn table(&self) -> Option<&Map<String, Value>> {
+        self.as_object()
+    }
+    fn table_mut(&mut self) -> Option<&mut Map<String, Value>> {
+        self.as_object_mut()
+    }
+    fn into_table(self) -> Option<Map<String, Value>> {
+        match self {
+            Value::Object(table) => Some(table),
+            _ => None,
+        }
+    }
+    fn empty_table() -> Self {
+        Value::Object(Map::new())
+    }
+    fn get<'a>(table: &'a Map<String, Value>, key: &str) -> Option<&'a Self> {
+        table.get(key)
+    }
+    fn get_mut<'a>(table: &'a mut Map<String, Value>, key: &str) -> Option<&'a mut Self> {
+        table.get_mut(key)
+    }
+    fn remove(table: &mut Map<String, Value>, key: &str) -> Option<Self> {
+        table.remove(key)
+    }
+    fn insert(table: &mut Map<String, Value>, key: String, value: Self) {
+        table.insert(key, value);
+    }
+    fn child<'a>(table: &'a mut Map<String, Value>, key: &str) -> &'a mut Self {
+        table
+            .entry(key.to_owned())
+            .or_insert_with(Self::empty_table)
+    }
+}
+
 /// The node at `path`, or `None` when a segment is absent or a parent on the
 /// way is not a table.
-fn node_at<'a>(doc: &'a Value, path: &[&str]) -> Option<&'a Value> {
+fn node_at<'a, T: ConfigTree>(doc: &'a T, path: &[&str]) -> Option<&'a T> {
     path.iter()
-        .try_fold(doc, |node, segment| node.as_object()?.get(*segment))
+        .try_fold(doc, |node, segment| T::get(node.table()?, segment))
 }
 
 /// `path` written the way the config file names a table, e.g. `[chains.solana]`.
@@ -423,7 +516,7 @@ fn table_name(path: &[&str]) -> String {
 
 /// True when the document still carries a section that moved under
 /// `[chains.<id>]` or `[trader.slippage]`.
-pub(crate) fn has_legacy_chain_sections(doc: &Value) -> bool {
+pub(crate) fn has_legacy_chain_sections<T: ConfigTree>(doc: &T) -> bool {
     CHAIN_RELOCATIONS
         .iter()
         .any(|relocation| node_at(doc, relocation.from).is_some())
@@ -434,7 +527,7 @@ pub(crate) fn has_legacy_chain_sections(doc: &Value) -> bool {
 /// what the destination lacks. Returns `true` when anything moved or was
 /// dropped. Fails without modifying `doc` when a legacy subtree or a
 /// destination table has the wrong shape.
-pub(crate) fn relocate_legacy_chain_sections(doc: &mut Value) -> Result<bool> {
+pub(crate) fn relocate_legacy_chain_sections<T: ConfigTree>(doc: &mut T) -> Result<bool> {
     let mut working = doc.clone();
     let mut changed = false;
     for relocation in CHAIN_RELOCATIONS {
@@ -442,14 +535,14 @@ pub(crate) fn relocate_legacy_chain_sections(doc: &mut Value) -> Result<bool> {
             continue;
         };
         let source = table_name(relocation.from);
-        let Value::Object(legacy) = legacy else {
+        let Some(legacy) = legacy.into_table() else {
             return Err(Error::ParseFailed {
                 detail: format!("legacy {source} must be a table"),
             });
         };
         if let Some(to) = relocation.to {
             let destination = table_at(&mut working, to, &source)?;
-            merge_missing_leaves(destination, legacy);
+            merge_missing_leaves::<T>(destination, legacy);
         }
         changed = true;
     }
@@ -460,22 +553,22 @@ pub(crate) fn relocate_legacy_chain_sections(doc: &mut Value) -> Result<bool> {
 }
 
 /// Remove and return the node at `path`; `None` when it is absent.
-fn take_node(doc: &mut Value, path: &[&str]) -> Option<Value> {
+fn take_node<T: ConfigTree>(doc: &mut T, path: &[&str]) -> Option<T> {
     let (last, parents) = path.split_last()?;
     let mut node = doc;
     for segment in parents {
-        node = node.as_object_mut()?.get_mut(*segment)?;
+        node = T::get_mut(node.table_mut()?, segment)?;
     }
-    node.as_object_mut()?.remove(*last)
+    T::remove(node.table_mut()?, last)
 }
 
 /// The table at `path`, creating every missing table on the way. A node on the
 /// way that exists but is not a table refuses the relocation of `source`.
-fn table_at<'a>(
-    doc: &'a mut Value,
+fn table_at<'a, T: ConfigTree>(
+    doc: &'a mut T,
     path: &[&str],
     source: &str,
-) -> Result<&'a mut Map<String, Value>> {
+) -> Result<&'a mut T::Table> {
     let refused = |depth: usize| Error::ParseFailed {
         detail: if depth == 0 {
             format!("the config document must be a table to receive legacy {source}")
@@ -488,30 +581,25 @@ fn table_at<'a>(
     };
     let mut node = doc;
     for (depth, segment) in path.iter().enumerate() {
-        node = node
-            .as_object_mut()
-            .ok_or_else(|| refused(depth))?
-            .entry((*segment).to_owned())
-            .or_insert_with(|| Value::Object(Map::new()));
+        node = T::child(node.table_mut().ok_or_else(|| refused(depth))?, segment);
     }
-    node.as_object_mut().ok_or_else(|| refused(path.len()))
+    node.table_mut().ok_or_else(|| refused(path.len()))
 }
 
 /// Fill `destination` from `legacy`: tables merge key by key, recursively; a
 /// key the destination already holds keeps the destination's value; any
 /// other key takes the legacy value. Arrays are leaves.
-fn merge_missing_leaves(destination: &mut Map<String, Value>, legacy: Map<String, Value>) {
+fn merge_missing_leaves<T: ConfigTree>(destination: &mut T::Table, legacy: T::Table) {
     for (key, legacy_value) in legacy {
-        match destination.get_mut(&key) {
-            Some(Value::Object(existing)) => {
-                if let Value::Object(legacy_table) = legacy_value {
-                    merge_missing_leaves(existing, legacy_table);
+        match T::get_mut(destination, &key) {
+            Some(existing) => {
+                if let (Some(existing), Some(legacy_table)) =
+                    (existing.table_mut(), legacy_value.into_table())
+                {
+                    merge_missing_leaves::<T>(existing, legacy_table);
                 }
             }
-            Some(_) => {}
-            None => {
-                destination.insert(key, legacy_value);
-            }
+            None => T::insert(destination, key, legacy_value),
         }
     }
 }
@@ -987,6 +1075,66 @@ api_key = "sk-ant-secret"
         let second = parse(&serialized);
         assert!(!second.migrated);
         assert_eq!(json(&second.config), json(&first.config));
+    }
+
+    #[test]
+    fn legacy_layout_keeps_non_finite_floats_in_moved_and_unmoved_sections() {
+        let parsed = parse(
+            r#"
+[rpc]
+max_retries = 4
+
+[swaps.direct]
+max_price_impact_pct = inf
+
+[swaps.cost_guard]
+max_extra_cost_pct = nan
+
+[telegram]
+significant_pnl_threshold = -inf
+"#,
+        );
+        assert!(parsed.migrated);
+        let config = &parsed.config;
+        assert_eq!(config.chains.solana.rpc.max_retries, 4);
+        assert_eq!(
+            config.chains.solana.swaps.direct.max_price_impact_pct,
+            f64::INFINITY
+        );
+        assert!(config
+            .chains
+            .solana
+            .swaps
+            .cost_guard
+            .max_extra_cost_pct
+            .is_nan());
+        assert_eq!(config.telegram.significant_pnl_threshold, f64::NEG_INFINITY);
+
+        let serialized = toml::to_string(config).expect("serialize");
+        let second = parse(&serialized);
+        assert!(!second.migrated);
+        assert_eq!(
+            second
+                .config
+                .chains
+                .solana
+                .swaps
+                .direct
+                .max_price_impact_pct,
+            f64::INFINITY
+        );
+        assert!(second
+            .config
+            .chains
+            .solana
+            .swaps
+            .cost_guard
+            .max_extra_cost_pct
+            .is_nan());
+        assert_eq!(
+            second.config.telegram.significant_pnl_threshold,
+            f64::NEG_INFINITY
+        );
     }
 
     #[test]
