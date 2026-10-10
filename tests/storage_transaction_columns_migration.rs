@@ -1,7 +1,8 @@
 // Copyright (c) 2024-2026 ScreenerBot (screenerbot.io)
 // SPDX-License-Identifier: BUSL-1.1
 
-//! Unit-neutral transaction column names through the production initializer.
+//! Unit-neutral transaction column names through the production initializer,
+//! upgrading the complete v0.2.13 store with a row in every table.
 //!
 //! Each open runs in a child process: `paths::get_data_directory()` memoises its
 //! base directory per process, so every fixture needs its own process to open its
@@ -15,54 +16,7 @@ use std::process::{Command, Output};
 
 const CHILD: &str = "SCREENERBOT_TRANSACTION_COLUMNS_CHILD";
 
-const LEGACY_SUBJECT_DELTAS: &str = include_str!("fixtures/v0.2.13-subject-deltas.sql");
-
-const LEGACY_RAW_TRANSACTIONS: &str = "
-CREATE TABLE raw_transactions (
-    chain_id TEXT NOT NULL DEFAULT 'solana',
-    signature TEXT NOT NULL,
-    wallet_address TEXT NOT NULL,
-    slot INTEGER,
-    block_time INTEGER,
-    timestamp TEXT NOT NULL,
-    status TEXT NOT NULL,
-    success BOOLEAN NOT NULL DEFAULT false,
-    error_message TEXT,
-    fee_lamports INTEGER,
-    compute_units_consumed INTEGER,
-    instructions_count INTEGER NOT NULL DEFAULT 0,
-    accounts_count INTEGER NOT NULL DEFAULT 0,
-    raw_transaction_data TEXT,
-    created_at TEXT NOT NULL DEFAULT (datetime('now')),
-    updated_at TEXT NOT NULL DEFAULT (datetime('now')),
-    PRIMARY KEY (chain_id, signature, wallet_address)
-);";
-
-const LEGACY_PROCESSED_TRANSACTIONS: &str = "
-CREATE TABLE processed_transactions (
-    chain_id TEXT NOT NULL DEFAULT 'solana',
-    signature TEXT NOT NULL,
-    wallet_address TEXT NOT NULL,
-    transaction_type TEXT NOT NULL,
-    type_kind TEXT NOT NULL DEFAULT 'unknown',
-    direction TEXT NOT NULL,
-    sol_balance_change TEXT,
-    token_balance_changes TEXT,
-    token_swap_info TEXT,
-    swap_pnl_info TEXT,
-    ata_operations TEXT,
-    token_transfers TEXT,
-    instruction_info TEXT,
-    analysis_duration_ms INTEGER,
-    cached_analysis TEXT,
-    analysis_version INTEGER NOT NULL DEFAULT 2,
-    fee_sol REAL NOT NULL DEFAULT 0,
-    sol_delta REAL,
-    processed_at TEXT NOT NULL DEFAULT (datetime('now')),
-    updated_at TEXT NOT NULL DEFAULT (datetime('now')),
-    PRIMARY KEY (chain_id, signature, wallet_address),
-    FOREIGN KEY (chain_id, signature, wallet_address) REFERENCES raw_transactions(chain_id, signature, wallet_address) ON DELETE CASCADE
-);";
+const LEGACY_SCHEMA: &str = include_str!("fixtures/v0.2.13-transactions.sql");
 
 const RENAMED: [(&str, &str, &str); 5] = [
     ("raw_transactions", "fee_lamports", "fee_raw"),
@@ -126,12 +80,18 @@ fn seed_legacy(dir: &Path) {
     let conn = common::seed_store(
         &database_path(dir),
         screenerbot::database::TRANSACTIONS_DB,
-        LEGACY_SUBJECT_DELTAS,
+        LEGACY_SCHEMA,
     );
-    conn.execute_batch(LEGACY_RAW_TRANSACTIONS).unwrap();
-    conn.execute_batch(LEGACY_PROCESSED_TRANSACTIONS).unwrap();
     conn.execute_batch(
         "INSERT INTO db_metadata (key, value) VALUES ('schema_version', '7');
+         INSERT INTO known_signatures (signature, wallet_address, status, added_at)
+         VALUES ('SIG_SENTINEL', 'wallet-a', 'known', '2026-01-01T00:00:01Z');
+         INSERT INTO pending_transactions (signature, wallet_address, added_at, last_checked_at, check_count)
+         VALUES ('SIG_PENDING', 'wallet-a', '2026-01-01T00:00:02Z', '2026-01-01T00:00:03Z', 4);
+         INSERT INTO deferred_retries (signature, wallet_address, next_retry_at, remaining_attempts, current_delay_secs, last_error)
+         VALUES ('SIG_RETRY', 'wallet-a', '2026-01-01T00:05:00Z', 2, 120, 'indexing delay');
+         INSERT INTO bootstrap_state (id, backfill_before_cursor, full_history_completed)
+         VALUES (1, 'SIG_CURSOR', 1);
          INSERT INTO raw_transactions (signature, wallet_address, timestamp, status, success, fee_lamports)
          VALUES ('SIG_SENTINEL', 'wallet-a', '2026-01-01T00:00:00Z', 'Finalized', 1, 5000);
          INSERT INTO processed_transactions (signature, wallet_address, transaction_type, type_kind, direction, sol_balance_change, fee_sol, sol_delta)
@@ -173,6 +133,32 @@ fn assert_canonical_names(conn: &Connection) {
     );
 }
 
+/// The v0.2.13 tracking rows the rename leaves untouched: every one is still
+/// there with its values, and the stored schema version is current.
+fn assert_tracking_rows_survive(conn: &Connection) {
+    let text = |sql: &str| conn.query_row(sql, [], |r| r.get::<_, String>(0)).unwrap();
+    assert_eq!(
+        text("SELECT chain_id || '|' || wallet_address || '|' || status || '|' || added_at FROM known_signatures WHERE signature = 'SIG_SENTINEL'"),
+        "solana|wallet-a|known|2026-01-01T00:00:01Z"
+    );
+    assert_eq!(
+        text("SELECT chain_id || '|' || wallet_address || '|' || added_at || '|' || last_checked_at || '|' || check_count FROM pending_transactions WHERE signature = 'SIG_PENDING'"),
+        "solana|wallet-a|2026-01-01T00:00:02Z|2026-01-01T00:00:03Z|4"
+    );
+    assert_eq!(
+        text("SELECT chain_id || '|' || wallet_address || '|' || next_retry_at || '|' || remaining_attempts || '|' || current_delay_secs || '|' || last_error FROM deferred_retries WHERE signature = 'SIG_RETRY'"),
+        "solana|wallet-a|2026-01-01T00:05:00Z|2|120|indexing delay"
+    );
+    assert_eq!(
+        text("SELECT chain_id || '|' || backfill_before_cursor || '|' || full_history_completed FROM bootstrap_state WHERE id = 1"),
+        "solana|SIG_CURSOR|1"
+    );
+    assert_eq!(
+        text("SELECT value FROM db_metadata WHERE key = 'schema_version'"),
+        "8"
+    );
+}
+
 #[test]
 fn legacy_transaction_columns_migrate_to_unit_neutral_names() {
     if std::env::var_os(CHILD).is_some() {
@@ -184,6 +170,7 @@ fn legacy_transaction_columns_migrate_to_unit_neutral_names() {
     boot(dir.path());
     let conn = open(dir.path());
     assert_canonical_names(&conn);
+    assert_tracking_rows_survive(&conn);
     assert_eq!(
         conn.query_row(
             "SELECT fee_raw FROM raw_transactions WHERE signature = 'SIG_SENTINEL'",
@@ -218,6 +205,7 @@ fn legacy_transaction_columns_migrate_to_unit_neutral_names() {
     let conn = open(dir.path());
     assert_eq!(schema(&conn), first, "second open changed the schema");
     assert_canonical_names(&conn);
+    assert_tracking_rows_survive(&conn);
     assert_eq!(
         conn.query_row(
             "SELECT COUNT(*), SUM(native_delta) FROM processed_transactions",

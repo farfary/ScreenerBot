@@ -9,7 +9,7 @@ use rusqlite::{params, Connection};
 use screenerbot::chains::ChainId;
 use screenerbot::transactions::TransactionDatabase;
 
-const LEGACY_SCHEMA: &str = include_str!("fixtures/v0.2.13-subject-deltas.sql");
+const LEGACY_SCHEMA: &str = include_str!("fixtures/v0.2.13-transactions.sql");
 
 fn replace_subject_table(conn: &mut Connection, table_ddl: &str) {
     let tx = conn.transaction().unwrap();
