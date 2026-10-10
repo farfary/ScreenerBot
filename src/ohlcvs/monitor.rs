@@ -2673,10 +2673,11 @@ impl OhlcvMonitor {
     /// re-checked after `DEEP_HISTORY_RECHECK_SECS`, when it holds that cap, when the server
     /// answers an empty page it is not still filling (the series has no older history it
     /// knows of), or when a page adds nothing older. Sequential and paced by
-    /// `inter_fetch_delay`, at most `DEEP_HISTORY_PAGES_PER_PASS` pages per pass. The pass
-    /// stops, leaving the timeframe open and backing off the token's passes
-    /// (`record_deep_history_miss`), when the Data Server does not answer or answers a page it
-    /// is still filling (`pending` or `refreshing`). It stops for good when the series pool
+    /// `inter_fetch_delay`, at most `DEEP_HISTORY_PAGES_PER_PASS` pages per pass. A page the
+    /// Data Server is still filling (`pending` or `refreshing`) leaves that timeframe open and
+    /// the pass moves on to the next one, so a slow fine timeframe never holds back the coarser
+    /// ones; the token's passes back off (`record_deep_history_miss`) when such a pass stored
+    /// nothing, or at once when the Data Server does not answer. It stops for good when the series pool
     /// moves: a page reporting another pool moves the default
     /// (`PoolManager::page_series_pool`) and is not stored, and a write for a pool that is no
     /// longer the default is refused. Returns rows inserted or changed.
@@ -2693,6 +2694,8 @@ impl OhlcvMonitor {
     {
         let mut pages = 0;
         let mut changed_total = 0;
+        let mut still_filling = false;
+        let mut paged = false;
         let open = self
             .db
             .deep_history_open(mint, Utc::now().timestamp() - DEEP_HISTORY_RECHECK_SECS)?;
@@ -2713,7 +2716,7 @@ impl OhlcvMonitor {
                     break;
                 };
                 if pages == DEEP_HISTORY_PAGES_PER_PASS {
-                    return Ok(changed_total);
+                    return Ok(self.finish_deep_pass(mint, still_filling, paged, changed_total));
                 }
                 let still_series = self
                     .pool_manager
@@ -2767,10 +2770,10 @@ impl OhlcvMonitor {
                             timeframe.as_str()
                         ),
                     );
-                    self.record_deep_history_miss(mint);
-                    return Ok(changed_total);
+                    still_filling = true;
+                    break;
                 }
-                self.clear_deep_history_misses(mint);
+                paged = true;
 
                 let (stored, deeper) = self.db.get_series_depth(mint, pool_address, timeframe)?;
                 logger::debug(
@@ -2793,7 +2796,25 @@ impl OhlcvMonitor {
                 }
             }
         }
-        Ok(changed_total)
+        Ok(self.finish_deep_pass(mint, still_filling, paged, changed_total))
+    }
+
+    /// Settle the token's deep-history backoff after a pass: a pass that stored a page the Data
+    /// Server had finished (`paged`) clears it, and one that only met timeframes the server is
+    /// still filling backs off. Returns `changed`.
+    fn finish_deep_pass(
+        &self,
+        mint: &str,
+        still_filling: bool,
+        paged: bool,
+        changed: usize,
+    ) -> usize {
+        if paged {
+            self.clear_deep_history_misses(mint);
+        } else if still_filling {
+            self.record_deep_history_miss(mint);
+        }
+        changed
     }
 
     /// Mark a deep-history timeframe complete on `pool_address`. Returns false, writing
@@ -4676,6 +4697,56 @@ mod tests {
             .deep_history_open("mint", Utc::now().timestamp() - DEEP_HISTORY_RECHECK_SECS)
             .unwrap()
             .contains(&Timeframe::Hour12));
+    }
+
+    /// A timeframe the Data Server is still filling leaves the pass free to page the next one,
+    /// and a pass that paged history keeps the token due.
+    #[tokio::test]
+    async fn a_filling_timeframe_never_holds_back_the_next_one() {
+        let h = deep_history_monitor("per-timeframe", 10);
+        let newest = Utc::now().timestamp() / 3_600 * 3_600;
+        let hourly: Vec<Candle> = (1..=10)
+            .rev()
+            .map(|n| Candle::new(newest - n * 3_600, 1.0, 2.0, 0.5, 1.5, 3.0))
+            .collect();
+        h.db.insert_candles_batch(
+            "mint",
+            "pool",
+            Timeframe::Hour1,
+            &hourly,
+            OhlcvDatabase::NATIVE_SOURCE,
+        )
+        .unwrap();
+        h.db.mark_backfill_complete("mint", "pool", Timeframe::Hour1)
+            .unwrap();
+        let requests = DeepRequests::default();
+        let recorded = Arc::clone(&requests);
+        let server = move |pool: String, timeframe: Timeframe, limit: usize, before: i64| {
+            recorded
+                .lock()
+                .unwrap()
+                .push((pool, timeframe, limit, before));
+            let mut page = if timeframe == Timeframe::Hour12 {
+                server_page(half_days_before(before, limit.min(10)), "pool")
+            } else {
+                server_page(Vec::new(), "pool")
+            };
+            page.server_refreshing = timeframe == Timeframe::Hour1;
+            std::future::ready(Some(page))
+        };
+
+        let stored = h
+            .monitor
+            .deepen_history("mint", "pool", Priority::Critical, server)
+            .await
+            .unwrap();
+
+        let asked: Vec<Timeframe> = requests.lock().unwrap().iter().map(|r| r.1).collect();
+        assert!(asked.contains(&Timeframe::Hour1));
+        assert!(asked.contains(&Timeframe::Hour12));
+        assert!(stored > 0);
+        assert!(!deep_complete(&h.db, Timeframe::Hour1));
+        assert!(h.monitor.deep_history_due("mint").unwrap());
     }
 
     #[tokio::test]
