@@ -4,6 +4,14 @@ updates-defer-needs-installer = Этот выпуск также обновля�
 
 updates-check-failed = { $cause }
 
+## Why an update download stopped. `cause` is the technical error.
+
+updates-download-error-unreachable = Не удалось связаться с серверами обновлений. Следующая попытка продолжит загрузку.
+updates-download-error-unverified = Загруженное обновление не прошло проверку и было удалено.
+updates-download-error-interrupted = Обновление прервано, потому что { -brand } перезапустился.
+updates-download-error-missing = Загруженный файл обновления больше недоступен.
+updates-download-error-other = { $cause }
+
 updates-download-started = Загрузка обновления v{ $version }...
 updates-apply-started = Установка обновления. { -brand } перезапустится и переподключится автоматически.
 updates-install-opened = Проверенный установщик обновления открыт. Завершите работу установщика операционной системы.

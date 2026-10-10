@@ -11,6 +11,14 @@ updates-defer-needs-installer = Esta versão também atualiza a interface deskto
 
 updates-check-failed = { $cause }
 
+## Why an update download stopped. `cause` is the technical error.
+
+updates-download-error-unreachable = Não foi possível acessar os servidores de atualização. A próxima tentativa retoma o download.
+updates-download-error-unverified = A atualização baixada não passou na verificação e foi removida.
+updates-download-error-interrupted = A atualização foi interrompida porque o { -brand } reiniciou.
+updates-download-error-missing = O arquivo de atualização baixado não está mais disponível.
+updates-download-error-other = { $cause }
+
 ## Progress and outcome of update actions
 
 updates-download-started = Baixando a atualização v{ $version }...

@@ -7,6 +7,14 @@ updates-defer-needs-installer = Rilis ini juga memperbarui shell desktop, sehing
 
 updates-check-failed = { $cause }
 
+## Why an update download stopped. `cause` is the technical error.
+
+updates-download-error-unreachable = Server pembaruan tidak dapat dijangkau. Percobaan berikutnya melanjutkan unduhan.
+updates-download-error-unverified = Pembaruan yang diunduh tidak lolos verifikasi dan telah dihapus.
+updates-download-error-interrupted = Pembaruan terhenti karena { -brand } dimulai ulang.
+updates-download-error-missing = File pembaruan yang diunduh sudah tidak tersedia.
+updates-download-error-other = { $cause }
+
 updates-download-started = Mengunduh pembaruan v{ $version }...
 updates-apply-started = Memasang pembaruan. { -brand } dimulai ulang dan terhubung kembali secara otomatis.
 updates-install-opened = Installer pembaruan terverifikasi dibuka. Selesaikan installer sistem operasi.

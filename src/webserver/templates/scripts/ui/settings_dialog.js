@@ -973,7 +973,7 @@ export async function checkAndShowUpdateDialog() {
     // update that installs itself must not steal the screen on every launch.
     const needsAttention = state.requires_user_action;
     const attentionKey = needsAttention
-      ? `${state.available_update?.version || "unknown"}:${state.phase}:${state.download_progress?.error || ""}`
+      ? `${state.available_update?.version || "unknown"}:${state.phase}:${state.download_progress?.error?.id || ""}`
       : null;
     if (attentionKey && attentionKey !== lastSurfacedUpdateKey) {
       lastSurfacedUpdateKey = attentionKey;

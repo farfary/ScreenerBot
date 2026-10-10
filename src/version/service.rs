@@ -13,6 +13,9 @@ use std::time::Duration;
 
 /// How long after boot the first check runs, so it never competes with startup.
 const FIRST_CHECK_DELAY_SECS: u64 = 30;
+/// How long a failed check waits before it is repeated. Without it every running
+/// installation asks the release service once a minute for as long as it is down.
+const CHECK_RETRY_SECS: u64 = 15 * 60;
 /// How often the loop re-evaluates. The check interval itself comes from config
 /// and is compared against the last successful check, so changing it in settings
 /// takes effect within a minute instead of at the next long tick.
@@ -69,10 +72,7 @@ async fn run_cycle(announced: &mut Option<(String, UpdateStage)>, launch_check_p
         return;
     }
 
-    let due = *launch_check_pending
-        || state.last_check.is_none_or(|last| {
-            (Utc::now() - last).num_seconds() as u64 >= policy.check_interval_secs
-        });
+    let due = *launch_check_pending || check_due(&state, policy.check_interval_secs, Utc::now());
     let state = if due {
         *launch_check_pending = false;
         if let Err(error) = super::check_for_update().await {
@@ -97,7 +97,7 @@ async fn run_cycle(announced: &mut Option<(String, UpdateStage)>, launch_check_p
         )
         .await;
         if policy.auto_download
-            && state.phase == UpdatePhase::Available
+            && download_wanted(&state, Utc::now())
             && super::self_install_supported(update.kind)
         {
             if let Err(error) = super::start_download(update.clone()).await {
@@ -163,6 +163,34 @@ async fn run_cycle(announced: &mut Option<(String, UpdateStage)>, launch_check_p
             policy.notify_telegram,
         )
         .await;
+    }
+}
+
+/// Whether the interval since the last successful check has run out, holding a
+/// check that just failed back for [`CHECK_RETRY_SECS`].
+fn check_due(state: &UpdateState, interval_secs: u64, now: chrono::DateTime<Utc>) -> bool {
+    let seconds_since = |at: chrono::DateTime<Utc>| (now - at).num_seconds().max(0) as u64;
+    let failed_recently = state.check_error.is_some()
+        && state
+            .last_check_attempt
+            .is_some_and(|attempt| seconds_since(attempt) < CHECK_RETRY_SECS.min(interval_secs));
+    !failed_recently
+        && state
+            .last_check
+            .is_none_or(|last| seconds_since(last) >= interval_secs)
+}
+
+/// Whether the service starts the download of the available update: a fresh
+/// one, or one that failed for a reason a later attempt can overcome once its
+/// retry time has come. The kept partial file makes that repeat a resume.
+fn download_wanted(state: &UpdateState, now: chrono::DateTime<Utc>) -> bool {
+    match state.phase {
+        UpdatePhase::Available => true,
+        UpdatePhase::Failed => state
+            .download_progress
+            .retry_at
+            .is_some_and(|retry_at| retry_at <= now),
+        _ => false,
     }
 }
 
@@ -292,5 +320,54 @@ mod tests {
         assert!(decide(UpdateKind::Core, true, true, 0, false).is_ready());
         assert!(!decide(UpdateKind::Core, true, true, 1, false).is_ready());
         assert!(!decide(UpdateKind::Full, true, true, 0, false).is_ready());
+    }
+
+    #[test]
+    fn a_failed_check_waits_before_it_is_repeated() {
+        let now = Utc::now();
+        let interval = 6 * 3600;
+        let mut state = UpdateState {
+            last_check: Some(now - chrono::Duration::hours(7)),
+            last_check_attempt: Some(now - chrono::Duration::minutes(1)),
+            check_error: Some(check_failed_text("HTTP 503".to_owned())),
+            ..UpdateState::default()
+        };
+        assert!(!check_due(&state, interval, now));
+
+        state.last_check_attempt = Some(now - chrono::Duration::minutes(16));
+        assert!(check_due(&state, interval, now));
+
+        // A short configured interval is never stretched by the back-off.
+        state.last_check_attempt = Some(now - chrono::Duration::minutes(6));
+        assert!(check_due(&state, 300, now));
+
+        state.check_error = None;
+        state.last_check = Some(now - chrono::Duration::hours(1));
+        assert!(!check_due(&state, interval, now));
+        state.last_check = None;
+        assert!(check_due(&state, interval, now));
+    }
+
+    #[test]
+    fn only_a_transient_download_failure_is_repeated_and_only_when_due() {
+        let now = Utc::now();
+        let mut state = UpdateState {
+            phase: UpdatePhase::Available,
+            ..UpdateState::default()
+        };
+        assert!(download_wanted(&state, now));
+
+        state.phase = UpdatePhase::Failed;
+        assert!(
+            !download_wanted(&state, now),
+            "no retry time: the user decides"
+        );
+        state.download_progress.retry_at = Some(now + chrono::Duration::minutes(5));
+        assert!(!download_wanted(&state, now));
+        state.download_progress.retry_at = Some(now - chrono::Duration::seconds(1));
+        assert!(download_wanted(&state, now));
+
+        state.phase = UpdatePhase::ReadyToInstall;
+        assert!(!download_wanted(&state, now));
     }
 }

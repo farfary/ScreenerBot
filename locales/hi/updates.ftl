@@ -4,6 +4,14 @@ updates-defer-needs-installer = इस रिलीज़ में डेस्
 
 updates-check-failed = { $cause }
 
+## Why an update download stopped. `cause` is the technical error.
+
+updates-download-error-unreachable = अपडेट सर्वर से संपर्क नहीं हो सका। अगला प्रयास डाउनलोड वहीं से जारी रखेगा।
+updates-download-error-unverified = डाउनलोड किया गया अपडेट सत्यापन में विफल रहा और हटा दिया गया।
+updates-download-error-interrupted = { -brand } के पुनः आरंभ होने से अपडेट रुक गया।
+updates-download-error-missing = डाउनलोड की गई अपडेट फ़ाइल अब उपलब्ध नहीं है।
+updates-download-error-other = { $cause }
+
 updates-download-started = अपडेट v{ $version } डाउनलोड हो रहा है...
 updates-apply-started = अपडेट इंस्टॉल हो रहा है। { -brand } अपने आप रीस्टार्ट होकर दोबारा कनेक्ट होगा।
 updates-install-opened = सत्यापित अपडेट इंस्टॉलर खुल गया। ऑपरेटिंग-सिस्टम का इंस्टॉलर पूरा करें।

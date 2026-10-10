@@ -618,10 +618,13 @@ jobs:
       # was built with, and of the digests of its core artifacts. Without it a
       # client can never prove the shell is unchanged, so it falls back to the
       # full installer — which is why this is generated from the build's own
-      # outputs rather than written by hand.
+      # outputs rather than written by hand. `files` records every other asset:
+      # read from GitHub, it is what lets the app accept an installer served by
+      # screenerbot.io without asking GitHub's rate-limited REST API.
       - name: Build update manifest
         run: |
           node -e "
+            const crypto = require('crypto');
             const fs = require('fs');
             const path = require('path');
             const version = process.argv[1].replace(/^v/, '');
@@ -632,7 +635,18 @@ jobs:
               const { platform, ...artifact } = meta;
               core[platform] = artifact;
             }
-            const manifest = { schema: 1, version, shellRevision, core };
+            const files = {};
+            for (const name of fs.readdirSync('release').sort()) {
+              if (name.endsWith('-core.gz')) continue;
+              const bytes = fs.readFileSync(path.join('release', name));
+              const sha256 = crypto.createHash('sha256').update(bytes).digest('hex');
+              files[name] = { size: bytes.length, sha256 };
+            }
+            if (Object.keys(files).length !== 14) {
+              console.error(\`Expected 14 installer assets, found \${Object.keys(files).length}\`);
+              process.exit(1);
+            }
+            const manifest = { schema: 1, version, shellRevision, core, files };
             const name = \`ScreenerBot-v\${version}-update-manifest.json\`;
             fs.writeFileSync(path.join('release', name), JSON.stringify(manifest, null, 2) + '\n');
             console.log(JSON.stringify(manifest, null, 2));

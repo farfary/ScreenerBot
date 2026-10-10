@@ -11,6 +11,14 @@ updates-defer-needs-installer = 이 릴리스는 데스크톱 셸도 업데이�
 
 updates-check-failed = { $cause }
 
+## Why an update download stopped. `cause` is the technical error.
+
+updates-download-error-unreachable = 업데이트 서버에 연결할 수 없습니다. 다음 시도에서 다운로드를 이어서 진행합니다.
+updates-download-error-unverified = 다운로드한 업데이트가 검증을 통과하지 못해 삭제되었습니다.
+updates-download-error-interrupted = { -brand }이(가) 다시 시작되어 업데이트가 중단되었습니다.
+updates-download-error-missing = 다운로드한 업데이트 파일을 더 이상 사용할 수 없습니다.
+updates-download-error-other = { $cause }
+
 ## Progress and outcome of update actions
 
 updates-download-started = 업데이트 v{ $version } 다운로드 중...

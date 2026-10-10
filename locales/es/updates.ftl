@@ -11,6 +11,14 @@ updates-defer-needs-installer = Esta versión también actualiza el shell de esc
 
 updates-check-failed = { $cause }
 
+## Why an update download stopped. `cause` is the technical error.
+
+updates-download-error-unreachable = No se pudo conectar con los servidores de actualización. El siguiente intento reanuda la descarga.
+updates-download-error-unverified = La actualización descargada no superó la verificación y se eliminó.
+updates-download-error-interrupted = La actualización se interrumpió porque { -brand } se reinició.
+updates-download-error-missing = El archivo de actualización descargado ya no está disponible.
+updates-download-error-other = { $cause }
+
 ## Progress and outcome of update actions
 
 updates-download-started = Descargando la actualización v{ $version }...

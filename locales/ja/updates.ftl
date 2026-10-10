@@ -11,6 +11,14 @@ updates-defer-needs-installer = このリリースではデスクトップシェ
 
 updates-check-failed = { $cause }
 
+## Why an update download stopped. `cause` is the technical error.
+
+updates-download-error-unreachable = 更新サーバーに接続できませんでした。次回の試行でダウンロードを再開します。
+updates-download-error-unverified = ダウンロードした更新は検証に失敗したため削除されました。
+updates-download-error-interrupted = { -brand } が再起動したため、更新が中断されました。
+updates-download-error-missing = ダウンロードした更新ファイルは利用できなくなりました。
+updates-download-error-other = { $cause }
+
 ## Progress and outcome of update actions
 
 updates-download-started = アップデート v{ $version } をダウンロード中...

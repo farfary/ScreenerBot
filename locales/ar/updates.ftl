@@ -11,6 +11,14 @@ updates-defer-needs-installer = يحدّث هذا الإصدار أيضًا غل
 
 updates-check-failed = { $cause }
 
+## Why an update download stopped. `cause` is the technical error.
+
+updates-download-error-unreachable = تعذّر الوصول إلى خوادم التحديث. ستستأنف المحاولة التالية التنزيل.
+updates-download-error-unverified = لم يجتز التحديث الذي تم تنزيله التحقق وتمت إزالته.
+updates-download-error-interrupted = توقف التحديث لأن { -brand } أُعيد تشغيله.
+updates-download-error-missing = لم يعد ملف التحديث الذي تم تنزيله متاحًا.
+updates-download-error-other = { $cause }
+
 ## Progress and outcome of update actions
 
 updates-download-started = جارٍ تنزيل التحديث v{ $version }...

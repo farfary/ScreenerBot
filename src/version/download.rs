@@ -10,6 +10,7 @@ use super::{
     DOWNLOAD_TIMEOUT_SECS, MAX_UPDATE_BYTES,
 };
 use crate::errors::ErrorClass;
+use crate::i18n::{ids, UiText};
 use crate::logger::{self, LogTag};
 use futures_util::StreamExt;
 use std::path::{Path, PathBuf};
@@ -123,37 +124,24 @@ async fn run_core_download(update: &UpdateInfo, core: &CoreArtifact) -> Result<(
     let archive_path = download_dir.join(&core.filename);
     let partial_path = download_dir.join(format!("{}.part", core.filename));
     let client = build_update_client()?;
-    let release = manifest::fetch_release_for(&client, &update.version).await?;
-    let asset = release
-        .asset(&core.filename)
-        .ok_or_else(|| Error::DigestMismatch {
-            detail: format!("GitHub release does not contain {}", core.filename),
-        })?;
-    manifest::verify_release_asset(&release, &core.filename, core.size, &core.sha256)?;
-    let source_url = resolve_download_url(&asset.browser_download_url)?;
+    // Core payloads are published on GitHub only. The planned artifact came from
+    // a manifest that matched the website attestation, so GitHub's bytes hashing
+    // to it is the second party.
+    let source_url = manifest::github_asset_url(&update.version, &core.filename)?;
 
     let already_staged = file_matches(&archive_path, core.size, &core.sha256).await?;
     if !already_staged {
-        stream_to_file(
+        download_verified(
             &client,
-            source_url,
+            &[source_url],
             &partial_path,
             core.size,
-            |downloaded| record_progress(downloaded, core.size),
+            &core.sha256,
+            &mut |downloaded| record_progress(downloaded, core.size),
+            &mut mark_verifying,
+            TransferPolicy::default(),
         )
         .await?;
-
-        mutate_state(|state| state.phase = UpdatePhase::Verifying).await;
-        let actual = calculate_sha256_async(partial_path.clone()).await?;
-        if actual != core.sha256 {
-            let _ = tokio::fs::remove_file(&partial_path).await;
-            return Err(Error::DigestMismatch {
-                detail: format!(
-                    "core archive checksum expected {}, got {actual}",
-                    core.sha256
-                ),
-            });
-        }
         if archive_path.exists() {
             tokio::fs::remove_file(&archive_path)
                 .await
@@ -183,6 +171,7 @@ async fn run_core_download(update: &UpdateInfo, core: &CoreArtifact) -> Result<(
         state.download_progress.downloading = false;
         state.download_progress.completed = true;
         state.download_progress.error = None;
+        state.download_progress.retry_at = None;
         state.download_progress.bytes_downloaded = core.size;
         state.download_progress.total_bytes = core.size;
         state.download_progress.progress_percent = 100.0;
@@ -208,41 +197,43 @@ async fn run_installer_download_inner(
     partial_path: &Path,
     final_path: &Path,
 ) -> Result<()> {
-    let client = build_update_client()?;
-    let release = manifest::fetch_release_for(&client, &update.version).await?;
-    manifest::verify_release_asset(
-        &release,
-        &update.filename,
-        update.file_size,
-        &update.checksum,
-    )?;
-
+    // Only this function renames a partial into place, after the checks below,
+    // so a file already there with the website digest was verified when written.
     if file_matches(final_path, update.file_size, &update.checksum).await? {
         record_installer_ready(update, final_path).await;
         return Ok(());
     }
 
-    let download_url = resolve_download_url(&update.download_url)?;
-    stream_to_file(
+    let client = build_update_client()?;
+    let attested = match update.manifest_checksum.as_deref() {
+        Some(digest) => match manifest::fetch_manifest(&client, &update.version, digest).await {
+            Ok(attested) => Some(attested),
+            Err(error @ Error::DigestMismatch { .. }) => return Err(error),
+            Err(error) => {
+                logger::warning(
+                    LogTag::System,
+                    &format!(
+                        "Update manifest for v{} is unavailable ({error}); the installer is read from GitHub",
+                        update.version
+                    ),
+                );
+                None
+            }
+        },
+        None => None,
+    };
+    let sources = installer_sources(update, attested.as_ref())?;
+    download_verified(
         &client,
-        download_url,
+        &sources,
         partial_path,
         update.file_size,
-        |downloaded| record_progress(downloaded, update.file_size),
+        &update.checksum,
+        &mut |downloaded| record_progress(downloaded, update.file_size),
+        &mut mark_verifying,
+        TransferPolicy::default(),
     )
     .await?;
-
-    mutate_state(|state| state.phase = UpdatePhase::Verifying).await;
-    let actual_checksum = calculate_sha256_async(partial_path.to_owned()).await?;
-    if actual_checksum != update.checksum {
-        let _ = tokio::fs::remove_file(partial_path).await;
-        return Err(Error::DigestMismatch {
-            detail: format!(
-                "staged file checksum expected {}, got {actual_checksum}",
-                update.checksum
-            ),
-        });
-    }
 
     if final_path.exists() {
         tokio::fs::remove_file(final_path)
@@ -256,32 +247,96 @@ async fn run_installer_download_inner(
     Ok(())
 }
 
+/// The hosts an installer may be read from, in order.
+///
+/// screenerbot.io serves installers, but its checksum is a single party. It is
+/// used only when GitHub's copy of the manifest names the same size and digest,
+/// with GitHub's own copy as the fallback; otherwise the installer is read from
+/// GitHub alone, whose bytes must then hash to the website digest. A GitHub
+/// manifest naming different bytes stops the update.
+fn installer_sources(
+    update: &UpdateInfo,
+    attested: Option<&manifest::AttestedManifest>,
+) -> Result<Vec<reqwest::Url>> {
+    let github = manifest::github_asset_url(&update.version, &update.filename)?;
+    let Some(published) =
+        attested.and_then(|manifest| manifest.github_installer_digest(&update.filename))
+    else {
+        return Ok(vec![github]);
+    };
+    if published.size != update.file_size || published.sha256 != update.checksum {
+        return Err(Error::DigestMismatch {
+            detail: format!(
+                "GitHub manifest digest for {} differs from the website",
+                update.filename
+            ),
+        });
+    }
+    Ok(vec![resolve_download_url(&update.download_url)?, github])
+}
+
 // ============================================================================
 // Transport
 // ============================================================================
 
-/// Stream one allowlisted URL to `destination`, enforcing the authenticated size
-/// on every chunk so a hostile server cannot fill the disk.
-async fn stream_to_file<F, Fut>(
+/// Read an artifact from the first source that delivers the expected bytes.
+///
+/// Each source is streamed into `partial_path` and hashed before the next is
+/// tried, so a host that is unreachable or serves a corrupt copy hands over to
+/// the next one. Bytes that miss `expected_sha256` are deleted, never resumed.
+#[allow(clippy::too_many_arguments)]
+async fn download_verified<F, Fut, V, VFut>(
     client: &reqwest::Client,
-    url: reqwest::Url,
-    destination: &Path,
+    sources: &[reqwest::Url],
+    partial_path: &Path,
     expected_size: u64,
-    mut on_progress: F,
+    expected_sha256: &str,
+    on_progress: &mut F,
+    on_verify: &mut V,
+    policy: TransferPolicy,
 ) -> Result<()>
 where
     F: FnMut(u64) -> Fut,
     Fut: std::future::Future<Output = ()>,
+    V: FnMut() -> VFut,
+    VFut: std::future::Future<Output = ()>,
 {
-    stream_to_file_with_policy(
-        client,
-        url,
-        destination,
-        expected_size,
-        &mut on_progress,
-        TransferPolicy::default(),
-    )
-    .await
+    let mut last_error = None;
+    for source in sources {
+        let streamed = stream_to_file_with_policy(
+            client,
+            source.clone(),
+            partial_path,
+            expected_size,
+            on_progress,
+            policy,
+        )
+        .await;
+        let error = match streamed {
+            Ok(()) => {
+                on_verify().await;
+                let actual = calculate_sha256_async(partial_path.to_owned()).await?;
+                if actual == expected_sha256 {
+                    return Ok(());
+                }
+                let _ = tokio::fs::remove_file(partial_path).await;
+                Error::DigestMismatch {
+                    detail: format!("{source} served SHA-256 {actual}, expected {expected_sha256}"),
+                }
+            }
+            Err(error) => error,
+        };
+        logger::warning(
+            LogTag::System,
+            &format!("Update download from {source} failed: {error}"),
+        );
+        last_error = Some(error);
+    }
+    Err(last_error.unwrap_or(Error::NoUpdateAvailable))
+}
+
+async fn mark_verifying() {
+    mutate_state(|state| state.phase = UpdatePhase::Verifying).await;
 }
 
 async fn stream_to_file_with_policy<F, Fut>(
@@ -683,12 +738,10 @@ pub(super) fn is_allowed_update_url(url: &reqwest::Url) -> bool {
     if url.scheme() != "https" || !url.username().is_empty() || url.password().is_some() {
         return false;
     }
-    matches!(
-        url.host_str(),
-        Some("screenerbot.io" | "api.github.com" | "github.com")
-    ) || url
-        .host_str()
-        .is_some_and(|host| host.ends_with(".githubusercontent.com"))
+    matches!(url.host_str(), Some("screenerbot.io" | "github.com"))
+        || url
+            .host_str()
+            .is_some_and(|host| host.ends_with(".githubusercontent.com"))
 }
 
 pub(super) fn validate_final_url(url: &reqwest::Url) -> Result<()> {
@@ -738,6 +791,7 @@ async fn record_installer_ready(update: &UpdateInfo, path: &Path) {
         state.download_progress.downloading = false;
         state.download_progress.completed = true;
         state.download_progress.error = None;
+        state.download_progress.retry_at = None;
         state.download_progress.bytes_downloaded = update.file_size;
         state.download_progress.total_bytes = update.file_size;
         state.download_progress.progress_percent = 100.0;
@@ -748,13 +802,35 @@ async fn record_installer_ready(update: &UpdateInfo, path: &Path) {
     .await;
 }
 
+/// How long the update service waits before it repeats a download that failed
+/// for a reason a later attempt can overcome. The partial file is kept, so the
+/// repeat resumes instead of starting over.
+pub(super) const DOWNLOAD_RETRY_DELAY: chrono::Duration = chrono::Duration::minutes(15);
+
+/// What the dashboard says about a download that stopped.
+fn download_failure_text(error: &Error) -> UiText {
+    if manifest::is_transient_failure(error) {
+        UiText::new(ids::UPDATES_DOWNLOAD_ERROR_UNREACHABLE)
+    } else if matches!(
+        error,
+        Error::DigestMismatch { .. } | Error::DownloadSizeMismatch { .. }
+    ) {
+        UiText::new(ids::UPDATES_DOWNLOAD_ERROR_UNVERIFIED)
+    } else {
+        download_failed_text(error.to_string())
+    }
+}
+
 async fn record_download_failure(update: &UpdateInfo, error: &Error, retained_bytes: Option<u64>) {
+    let retry_at =
+        manifest::is_transient_failure(error).then(|| chrono::Utc::now() + DOWNLOAD_RETRY_DELAY);
     mutate_state(|state| {
         if state.download_progress.version.as_deref() == Some(update.version.as_str()) {
             state.phase = UpdatePhase::Failed;
             state.download_progress.downloading = false;
             state.download_progress.completed = false;
-            state.download_progress.error = Some(error.to_string());
+            state.download_progress.error = Some(download_failure_text(error));
+            state.download_progress.retry_at = retry_at;
             state.download_progress.downloaded_path = None;
             if let Some(retained) = retained_bytes {
                 state.download_progress.bytes_downloaded = retained;
@@ -867,6 +943,84 @@ mod tests {
             core: None,
             shell_revision: None,
         }
+    }
+
+    fn attested(
+        origin: manifest::ManifestOrigin,
+        size: u64,
+        sha256: &str,
+    ) -> manifest::AttestedManifest {
+        let candidate = update();
+        let mut files = std::collections::BTreeMap::new();
+        files.insert(
+            candidate.filename.clone(),
+            ReleaseFile {
+                size,
+                sha256: sha256.to_owned(),
+            },
+        );
+        manifest::AttestedManifest {
+            manifest: UpdateManifest {
+                schema: 1,
+                version: candidate.version,
+                shell_revision: "a1b2c3d4".to_owned(),
+                core: Default::default(),
+                files,
+            },
+            origin,
+        }
+    }
+
+    #[test]
+    fn the_website_serves_an_installer_only_when_github_vouches_for_it() {
+        let candidate = update();
+        let github = "https://github.com/farfary/ScreenerBot/releases/download/v0.1.122/ScreenerBot-v0.1.122-Linux-x64-headless.tar.gz";
+
+        let vouched = attested(manifest::ManifestOrigin::GitHub, 4, &"a".repeat(64));
+        let sources = installer_sources(&candidate, Some(&vouched)).unwrap();
+        assert_eq!(sources.len(), 2);
+        assert_eq!(sources[0].host_str(), Some("screenerbot.io"));
+        assert_eq!(sources[1].as_str(), github);
+
+        // The mirror's copy of the manifest is the website vouching for itself.
+        let mirrored = attested(manifest::ManifestOrigin::Mirror, 4, &"a".repeat(64));
+        let sources = installer_sources(&candidate, Some(&mirrored)).unwrap();
+        assert_eq!(
+            sources.iter().map(|url| url.as_str()).collect::<Vec<_>>(),
+            [github]
+        );
+        let sources = installer_sources(&candidate, None).unwrap();
+        assert_eq!(
+            sources.iter().map(|url| url.as_str()).collect::<Vec<_>>(),
+            [github]
+        );
+
+        let disagreeing = attested(manifest::ManifestOrigin::GitHub, 4, &"b".repeat(64));
+        assert!(matches!(
+            installer_sources(&candidate, Some(&disagreeing)),
+            Err(Error::DigestMismatch { .. })
+        ));
+        let resized = attested(manifest::ManifestOrigin::GitHub, 5, &"a".repeat(64));
+        assert!(installer_sources(&candidate, Some(&resized)).is_err());
+    }
+
+    #[test]
+    fn a_stopped_download_is_described_by_its_cause() {
+        let unreachable =
+            download_failure_text(&Error::Network(crate::errors::NetworkError::HttpStatus {
+                endpoint: "https://github.com/x".to_owned(),
+                status: 403,
+                body: None,
+            }));
+        assert_eq!(unreachable.id, "updates-download-error-unreachable");
+        let unverified = download_failure_text(&Error::DigestMismatch {
+            detail: String::new(),
+        });
+        assert_eq!(unverified.id, "updates-download-error-unverified");
+        let other = download_failure_text(&Error::UnsupportedInstall {
+            detail: "no adapter".to_owned(),
+        });
+        assert_eq!(other.id, "updates-download-error-other");
     }
 
     #[test]
@@ -1065,6 +1219,61 @@ mod tests {
             base_delay: Duration::ZERO,
             validate_urls: false,
         }
+    }
+
+    #[tokio::test]
+    async fn a_corrupt_copy_on_one_host_falls_back_to_the_next() {
+        let body = b"a complete update artifact".to_vec();
+        let corrupt = b"a tampered update artifact".to_vec();
+        assert_eq!(body.len(), corrupt.len());
+        let (mirror, _) = spawn_transfer_server(corrupt, None, false, false).await;
+        let (github, _) = spawn_transfer_server(body.clone(), None, false, false).await;
+        let directory = tempfile::tempdir().unwrap();
+        let destination = directory.path().join("artifact.part");
+        let mut verified = 0;
+
+        download_verified(
+            &reqwest::Client::new(),
+            &[mirror, github],
+            &destination,
+            body.len() as u64,
+            &sha256_bytes(&body),
+            &mut |_| async {},
+            &mut || {
+                verified += 1;
+                async {}
+            },
+            test_policy(1),
+        )
+        .await
+        .unwrap();
+
+        assert_eq!(tokio::fs::read(&destination).await.unwrap(), body);
+        assert_eq!(verified, 2);
+    }
+
+    #[tokio::test]
+    async fn bytes_no_host_can_vouch_for_are_never_kept() {
+        let corrupt = b"a tampered update artifact".to_vec();
+        let (url, _) = spawn_transfer_server(corrupt.clone(), None, false, false).await;
+        let directory = tempfile::tempdir().unwrap();
+        let destination = directory.path().join("artifact.part");
+
+        let error = download_verified(
+            &reqwest::Client::new(),
+            &[url],
+            &destination,
+            corrupt.len() as u64,
+            &"a".repeat(64),
+            &mut |_| async {},
+            &mut || async {},
+            test_policy(1),
+        )
+        .await
+        .unwrap_err();
+
+        assert!(matches!(error, Error::DigestMismatch { .. }));
+        assert!(!destination.exists());
     }
 
     #[tokio::test]

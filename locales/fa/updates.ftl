@@ -11,6 +11,14 @@ updates-defer-needs-installer = این نسخه پوسته دسکتاپ را ه�
 
 updates-check-failed = { $cause }
 
+## Why an update download stopped. `cause` is the technical error.
+
+updates-download-error-unreachable = دسترسی به سرورهای به‌روزرسانی ممکن نشد. تلاش بعدی دانلود را از همان‌جا ادامه می‌دهد.
+updates-download-error-unverified = به‌روزرسانی دانلودشده از بررسی عبور نکرد و حذف شد.
+updates-download-error-interrupted = به‌روزرسانی متوقف شد چون { -brand } دوباره راه‌اندازی شد.
+updates-download-error-missing = فایل به‌روزرسانی دانلودشده دیگر در دسترس نیست.
+updates-download-error-other = { $cause }
+
 ## Progress and outcome of update actions
 
 updates-download-started = در حال دانلود به‌روزرسانی v{ $version }...

@@ -11,7 +11,7 @@
 
 use super::download::{file_matches, get_download_dir};
 use super::types::*;
-use super::{manifest, mutate_state, mutate_state_with_result, Error, Result};
+use super::{mutate_state, mutate_state_with_result, Error, Result};
 use std::path::{Path, PathBuf};
 
 /// Verify the staged installer one last time and hand it to the system.
@@ -30,7 +30,7 @@ pub async fn prepare_install() -> Result<String> {
     let result = verify_and_open_installer(&update, &path).await;
     if let Err(error) = result {
         let version = update.version.clone();
-        let message = error.to_string();
+        let message = download_failed_text(error.to_string());
         mutate_state(|state| {
             if state.phase == UpdatePhase::Applying
                 && state
@@ -96,15 +96,8 @@ async fn verify_and_open_installer(update: &UpdateInfo, path: &Path) -> Result<(
         });
     }
 
-    let client = super::download::build_update_client()?;
-    let release = manifest::fetch_release_for(&client, &update.version).await?;
-    manifest::verify_release_asset(
-        &release,
-        &update.filename,
-        update.file_size,
-        &update.checksum,
-    )?;
-
+    // Both parties were checked when the download was accepted; what remains
+    // is proving the file on disk is still those bytes.
     open_installer(path)
 }
 

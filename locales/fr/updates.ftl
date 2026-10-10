@@ -4,6 +4,14 @@ updates-defer-needs-installer = Cette version met aussi à jour le shell de bure
 
 updates-check-failed = { $cause }
 
+## Why an update download stopped. `cause` is the technical error.
+
+updates-download-error-unreachable = Les serveurs de mise à jour sont injoignables. La prochaine tentative reprend le téléchargement.
+updates-download-error-unverified = La mise à jour téléchargée n'a pas passé la vérification et a été supprimée.
+updates-download-error-interrupted = La mise à jour a été interrompue par le redémarrage de { -brand }.
+updates-download-error-missing = Le fichier de mise à jour téléchargé n'est plus disponible.
+updates-download-error-other = { $cause }
+
 updates-download-started = Téléchargement de la mise à jour v{ $version }...
 updates-apply-started = Installation de la mise à jour. { -brand } redémarre et se reconnecte automatiquement.
 updates-install-opened = Programme d'installation vérifié ouvert. Terminez l'installation dans le programme du système d'exploitation.

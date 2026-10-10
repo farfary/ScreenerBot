@@ -228,6 +228,33 @@ test("blocked reason and check error render from backend text", () => {
   assert.match(failed.html, /HTTP 503/);
 });
 
+test("a stopped download explains itself from backend text, never a raw error", () => {
+  const update = { version: "0.2.4", kind: "full", file_size: 24 };
+  const unreachable = view.renderStatus({
+    phase: "failed",
+    currentVersion: "0.2.3",
+    platform: "macOS arm64",
+    available_update: update,
+    download_progress: { error: { id: "updates-download-error-unreachable" } },
+  });
+  assert.match(unreachable.html, /The update servers could not be reached\./);
+  assert.doesNotMatch(unreachable.html, /object Object/);
+
+  const legacy = view.renderStatus({
+    phase: "failed",
+    currentVersion: "0.2.3",
+    platform: "macOS arm64",
+    available_update: update,
+    download_progress: {
+      error: {
+        id: "updates-download-error-other",
+        args: { cause: { type: "text", value: "disk full" } },
+      },
+    },
+  });
+  assert.match(visible(legacy.html), /disk full/);
+});
+
 test("the installed version is shown once in every status", () => {
   const update = { version: "0.2.4", kind: "core", core: { size: 24 } };
   const phases = [

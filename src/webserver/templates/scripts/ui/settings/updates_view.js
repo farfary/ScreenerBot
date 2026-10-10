@@ -288,7 +288,7 @@ export function createUpdatesView(Utils) {
         tone = "success";
         break;
       case "failed":
-        detail = progress.error || detail;
+        detail = I18n.text(progress.error) || detail;
         icon = "icon-circle-x";
         tone = "error";
         actions = [button("updatesRetry", I18n.t("updates-action-try-again"), "icon-refresh-cw")];

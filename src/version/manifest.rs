@@ -1,196 +1,175 @@
 // Copyright (c) 2024-2026 ScreenerBot (screenerbot.io)
 // SPDX-License-Identifier: BUSL-1.1
 
-//! The GitHub release record: asset digests and the per-release update manifest.
+//! The release update manifest: where it is read from and what it must prove.
 //!
-//! screenerbot.io decides *which* version is offered; this module reads what
-//! that version actually consists of. Both halves have to agree before a byte is
-//! written to disk, so a compromise of either one alone cannot ship a binary.
+//! screenerbot.io decides *which* version is offered and attests the digest of
+//! its manifest; the manifest names every artifact of that version. Release
+//! assets are read from GitHub's download host, never from its REST API, whose
+//! unauthenticated quota (60 requests an hour per address) is exhausted by
+//! shared networks and failed updates outright.
 
 use super::types::*;
-use super::{Error, Result, GITHUB_RELEASES_API_URL, MAX_UPDATE_BYTES, VERSION};
-use serde::Deserialize;
+use super::{
+    Error, Result, GITHUB_RELEASE_DOWNLOAD_URL, MAX_UPDATE_BYTES, RELEASE_MIRROR_URL, VERSION,
+};
+use crate::errors::ErrorClass;
+use crate::logger::{self, LogTag};
 use std::time::Duration;
 
-/// Cap the manifest read. It is a few hundred bytes of JSON; anything larger is
-/// a wrong or hostile asset, not a manifest.
+/// Cap the manifest read. It is a few kilobytes of JSON; anything larger is a
+/// wrong or hostile asset, not a manifest.
 const MAX_MANIFEST_BYTES: u64 = 256 * 1024;
-const MAX_RELEASE_METADATA_BYTES: u64 = 2 * 1024 * 1024;
-const MANIFEST_SUFFIX: &str = "-update-manifest.json";
 
-#[derive(Debug, Clone, Deserialize)]
-pub(super) struct GithubRelease {
-    #[serde(default)]
-    pub assets: Vec<GithubAsset>,
+/// Which host supplied a manifest whose bytes matched the website attestation.
+///
+/// Only GitHub's copy is a second party. The screenerbot.io mirror serves the
+/// same bytes, but then the website alone vouches for every digest inside it.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub(super) enum ManifestOrigin {
+    GitHub,
+    Mirror,
 }
 
-#[derive(Debug, Clone, Deserialize)]
-pub(super) struct GithubAsset {
-    pub name: String,
-    pub digest: Option<String>,
-    pub size: u64,
-    #[serde(default)]
-    pub browser_download_url: String,
+#[derive(Debug, Clone)]
+pub(super) struct AttestedManifest {
+    pub manifest: UpdateManifest,
+    pub origin: ManifestOrigin,
 }
 
-impl GithubRelease {
-    pub(super) fn asset(&self, name: &str) -> Option<&GithubAsset> {
-        self.assets.iter().find(|asset| asset.name == name)
-    }
-
-    /// The release's update manifest asset, located by suffix so the version
-    /// prefix never has to be reconstructed.
-    pub(super) fn manifest_asset(&self) -> Option<&GithubAsset> {
-        self.assets
-            .iter()
-            .find(|asset| asset.name.ends_with(MANIFEST_SUFFIX))
+impl AttestedManifest {
+    /// The installer digest GitHub's manifest publishes for `filename`, when the
+    /// manifest was read from GitHub and names that file.
+    pub(super) fn github_installer_digest(&self, filename: &str) -> Option<&ReleaseFile> {
+        if self.origin != ManifestOrigin::GitHub {
+            return None;
+        }
+        self.manifest.files.get(filename)
     }
 }
 
-impl GithubAsset {
-    /// The SHA-256 GitHub computed for this asset, lowercased, when it reports one.
-    pub(super) fn sha256(&self) -> Option<String> {
-        self.digest
-            .as_deref()
-            .and_then(|digest| digest.strip_prefix("sha256:"))
-            .map(str::to_ascii_lowercase)
-    }
+fn manifest_filename(version: &str) -> String {
+    format!("ScreenerBot-v{version}-update-manifest.json")
 }
 
-/// Fetch the release record for a version from the GitHub API.
-pub(super) async fn fetch_release(
-    client: &reqwest::Client,
-    github_api: &str,
-    version: &str,
-) -> Result<GithubRelease> {
-    super::download::retry_update_operation("GitHub release metadata", || {
-        fetch_release_once(client, github_api, version)
-    })
-    .await
-}
-
-async fn fetch_release_once(
-    client: &reqwest::Client,
-    github_api: &str,
-    version: &str,
-) -> Result<GithubRelease> {
-    let url = format!("{github_api}/releases/tags/v{version}");
-    let response = client
-        .get(&url)
-        .header("Accept", "application/vnd.github+json")
-        .header("X-GitHub-Api-Version", "2022-11-28")
-        .header("User-Agent", format!("ScreenerBot/{VERSION}"))
-        .timeout(Duration::from_secs(15))
-        .send()
-        .await
-        .map_err(|error| {
-            Error::Network(crate::errors::NetworkError::RequestFailed {
-                endpoint: url.clone(),
-                detail: error.to_string(),
-            })
-        })?;
-    if !response.status().is_success() {
-        return Err(Error::Network(crate::errors::NetworkError::HttpStatus {
-            endpoint: url,
-            status: response.status().as_u16(),
-            body: None,
-        }));
-    }
-    let body =
-        super::download::read_limited_body(response, MAX_RELEASE_METADATA_BYTES, &url).await?;
-    serde_json::from_slice(&body).map_err(|error| {
-        Error::Data(crate::errors::DataError::ParseError {
-            data_type: "GitHub release metadata".to_owned(),
-            error: error.to_string(),
-        })
+fn asset_url(directory: &str, version: &str, filename: &str) -> Result<reqwest::Url> {
+    super::checker::validate_release_filename(filename, version)?;
+    let url = format!("{directory}/{filename}");
+    reqwest::Url::parse(&url).map_err(|error| Error::InvalidUpdateUrl {
+        url,
+        reason: error.to_string(),
     })
 }
 
-pub(super) async fn fetch_release_for(
-    client: &reqwest::Client,
-    version: &str,
-) -> Result<GithubRelease> {
-    fetch_release(client, GITHUB_RELEASES_API_URL, version).await
+/// A release asset on GitHub's download host, which redirects to its CDN.
+pub(super) fn github_asset_url(version: &str, filename: &str) -> Result<reqwest::Url> {
+    asset_url(
+        &format!("{GITHUB_RELEASE_DOWNLOAD_URL}/v{version}"),
+        version,
+        filename,
+    )
 }
 
-/// Verify that an installer asset the website advertised is byte-identical to
-/// the asset GitHub published for the same release.
-pub(super) fn verify_release_asset(
-    release: &GithubRelease,
-    filename: &str,
-    file_size: u64,
-    checksum: &str,
-) -> Result<()> {
-    let asset = release
-        .asset(filename)
-        .ok_or_else(|| Error::DigestMismatch {
-            detail: format!("GitHub release does not contain {filename}"),
-        })?;
-    if asset.size != file_size {
-        return Err(Error::DigestMismatch {
-            detail: format!(
-                "GitHub asset size {} differs from website size {file_size}",
-                asset.size
-            ),
-        });
-    }
-    if asset.sha256().as_deref() != Some(checksum.to_ascii_lowercase().as_str()) {
-        return Err(Error::DigestMismatch {
-            detail: "GitHub asset checksum differs from website checksum".to_owned(),
-        });
-    }
-    Ok(())
+/// The same asset as published under screenerbot.io's static release directory.
+fn mirror_asset_url(version: &str, filename: &str) -> Result<reqwest::Url> {
+    asset_url(
+        &format!("{RELEASE_MIRROR_URL}/{version}"),
+        version,
+        filename,
+    )
 }
 
-/// Download the release's update manifest and prove it is the asset GitHub
-/// published, then validate every field the updater will act on.
+/// Read the release's update manifest, GitHub first and the screenerbot.io
+/// mirror second, and accept only bytes that hash to the website attestation.
+///
+/// A host that cannot be reached hands over to the next one. A body that does
+/// not match the attestation is terminal: GitHub and the website disagreeing
+/// about a release is never resolved by asking a third time.
 pub(super) async fn fetch_manifest(
     client: &reqwest::Client,
-    release: &GithubRelease,
     version: &str,
     website_digest: &str,
-) -> Result<UpdateManifest> {
-    let asset = release
-        .manifest_asset()
-        .ok_or_else(|| Error::DigestMismatch {
-            detail: format!("release v{version} publishes no update manifest"),
-        })?;
-    if asset.size == 0 || asset.size > MAX_MANIFEST_BYTES {
-        return Err(Error::Data(crate::errors::DataError::ValidationError {
-            field: "update manifest size".to_owned(),
-            value: asset.size.to_string(),
-            reason: format!("must be between 1 and {MAX_MANIFEST_BYTES} bytes"),
-        }));
-    }
-    let expected_digest = asset.sha256().ok_or_else(|| Error::DigestMismatch {
-        detail: "GitHub reports no digest for the update manifest".to_owned(),
-    })?;
-    verify_manifest_attestation(&expected_digest, website_digest)?;
-
-    let body = super::download::retry_update_operation("Update manifest download", || {
-        fetch_manifest_body(client, asset)
-    })
-    .await?;
-    if super::download::sha256_bytes(&body) != expected_digest {
-        return Err(Error::DigestMismatch {
-            detail: "update manifest does not match its GitHub digest".to_owned(),
-        });
-    }
-
-    parse_manifest(&body, version)
+) -> Result<AttestedManifest> {
+    let filename = manifest_filename(version);
+    let sources = [
+        (
+            ManifestOrigin::GitHub,
+            github_asset_url(version, &filename)?,
+        ),
+        (
+            ManifestOrigin::Mirror,
+            mirror_asset_url(version, &filename)?,
+        ),
+    ];
+    fetch_manifest_from(client, &sources, version, website_digest, true).await
 }
 
-fn verify_manifest_attestation(github_digest: &str, website_digest: &str) -> Result<()> {
-    if github_digest != website_digest {
-        return Err(Error::DigestMismatch {
-            detail: "GitHub update-manifest digest differs from website attestation".to_owned(),
-        });
+async fn fetch_manifest_from(
+    client: &reqwest::Client,
+    sources: &[(ManifestOrigin, reqwest::Url)],
+    version: &str,
+    website_digest: &str,
+    check_url_allowlist: bool,
+) -> Result<AttestedManifest> {
+    let mut last_error = None;
+    for (origin, url) in sources {
+        let body = super::download::retry_update_operation("Update manifest download", || {
+            fetch_manifest_body(client, url.clone(), check_url_allowlist)
+        })
+        .await;
+        match body {
+            Ok(body) => {
+                if super::download::sha256_bytes(&body) != website_digest {
+                    return Err(Error::DigestMismatch {
+                        detail: format!(
+                            "update manifest from {url} differs from the website attestation"
+                        ),
+                    });
+                }
+                let manifest = parse_manifest(&body, version)?;
+                return Ok(AttestedManifest {
+                    manifest,
+                    origin: *origin,
+                });
+            }
+            Err(error) => {
+                logger::warning(
+                    LogTag::System,
+                    &format!("Update manifest unavailable from {url}: {error}"),
+                );
+                // Report the failure a later attempt could overcome, if any host had one.
+                if last_error
+                    .as_ref()
+                    .is_none_or(|kept| !is_transient_failure(kept))
+                {
+                    last_error = Some(error);
+                }
+            }
+        }
     }
-    Ok(())
+    Err(last_error.unwrap_or(Error::NoUpdateAvailable))
 }
 
-async fn fetch_manifest_body(client: &reqwest::Client, asset: &GithubAsset) -> Result<Vec<u8>> {
-    let url = super::download::resolve_download_url(&asset.browser_download_url)?;
+/// Whether a failure says nothing about the release itself, so the decision it
+/// feeds should wait for a later attempt instead of settling now. A refused or
+/// throttled request (GitHub answers 403 when its quota is spent) is transient;
+/// an asset that does not exist is not.
+pub(super) fn is_transient_failure(error: &Error) -> bool {
+    match error {
+        Error::Network(crate::errors::NetworkError::HttpStatus { status, .. }) => {
+            !matches!(status, 404 | 410)
+        }
+        Error::Network(_) => true,
+        other => other.is_retryable(),
+    }
+}
+
+async fn fetch_manifest_body(
+    client: &reqwest::Client,
+    url: reqwest::Url,
+    check_url_allowlist: bool,
+) -> Result<Vec<u8>> {
+    let endpoint = url.to_string();
     let response = client
         .get(url)
         .header("User-Agent", format!("ScreenerBot/{VERSION}"))
@@ -199,7 +178,7 @@ async fn fetch_manifest_body(client: &reqwest::Client, asset: &GithubAsset) -> R
         .await
         .map_err(|error| {
             Error::Network(crate::errors::NetworkError::RequestFailed {
-                endpoint: asset.browser_download_url.clone(),
+                endpoint: endpoint.clone(),
                 detail: error.to_string(),
             })
         })?;
@@ -210,26 +189,10 @@ async fn fetch_manifest_body(client: &reqwest::Client, asset: &GithubAsset) -> R
             body: None,
         }));
     }
-    super::download::validate_final_url(response.url())?;
-
-    if let Some(actual) = response.content_length() {
-        if actual != asset.size {
-            return Err(Error::DownloadSizeMismatch {
-                expected: asset.size,
-                actual,
-            });
-        }
+    if check_url_allowlist {
+        super::download::validate_final_url(response.url())?;
     }
-    let body =
-        super::download::read_limited_body(response, asset.size, &asset.browser_download_url)
-            .await?;
-    if body.len() as u64 != asset.size {
-        return Err(Error::DownloadSizeMismatch {
-            expected: asset.size,
-            actual: body.len() as u64,
-        });
-    }
-    Ok(body)
+    super::download::read_limited_body(response, MAX_MANIFEST_BYTES, &endpoint).await
 }
 
 /// Parse and validate a manifest body against the version it must describe.
@@ -257,9 +220,15 @@ pub(super) fn parse_manifest(body: &[u8], version: &str) -> Result<UpdateManifes
     for (platform, artifact) in &manifest.core {
         validate_core_artifact(platform, artifact, version)?;
     }
+    for (filename, file) in &manifest.files {
+        validate_release_file(filename, file, version)?;
+    }
     for artifact in manifest.core.values_mut() {
         artifact.sha256.make_ascii_lowercase();
         artifact.binary_sha256.make_ascii_lowercase();
+    }
+    for file in manifest.files.values_mut() {
+        file.sha256.make_ascii_lowercase();
     }
     Ok(manifest)
 }
@@ -277,6 +246,19 @@ fn validate_shell_revision(revision: &str) -> Result<()> {
             reason: "must be a lowercase hex digest of 8 to 64 characters".to_owned(),
         }))
     }
+}
+
+fn validate_release_file(filename: &str, file: &ReleaseFile, version: &str) -> Result<()> {
+    super::checker::validate_release_filename(filename, version)?;
+    super::checker::validate_checksum(&file.sha256)?;
+    if file.size == 0 || file.size > MAX_UPDATE_BYTES {
+        return Err(Error::Data(crate::errors::DataError::ValidationError {
+            field: "manifest.files.size".to_owned(),
+            value: file.size.to_string(),
+            reason: format!("must be between 1 and {MAX_UPDATE_BYTES} bytes"),
+        }));
+    }
+    Ok(())
 }
 
 fn validate_core_artifact(platform: &str, artifact: &CoreArtifact, version: &str) -> Result<()> {
@@ -393,68 +375,189 @@ mod tests {
     }
 
     #[test]
-    fn release_assets_must_match_name_size_and_digest() {
-        let release = GithubRelease {
-            assets: vec![GithubAsset {
-                name: "ScreenerBot-v0.2.2-macOS-arm64.dmg".to_owned(),
-                digest: Some(format!("sha256:{}", "a".repeat(64))),
+    fn release_file_digests_are_validated_and_canonicalized() {
+        let mut value: serde_json::Value =
+            serde_json::from_slice(&manifest_json("0.2.2", "a1b2c3d4e5f6")).unwrap();
+        value["files"] = serde_json::json!({
+            "ScreenerBot-v0.2.2-macOS-arm64.dmg": { "size": 42, "sha256": "C".repeat(64) }
+        });
+        let manifest = parse_manifest(&serde_json::to_vec(&value).unwrap(), "0.2.2").unwrap();
+        assert_eq!(
+            manifest.files["ScreenerBot-v0.2.2-macOS-arm64.dmg"],
+            ReleaseFile {
                 size: 42,
-                browser_download_url: String::new(),
-            }],
-        };
-        assert!(verify_release_asset(
-            &release,
-            "ScreenerBot-v0.2.2-macOS-arm64.dmg",
-            42,
-            &"a".repeat(64)
-        )
-        .is_ok());
-        assert!(verify_release_asset(
-            &release,
-            "ScreenerBot-v0.2.2-macOS-arm64.dmg",
-            43,
-            &"a".repeat(64)
-        )
-        .is_err());
-        assert!(verify_release_asset(
-            &release,
-            "ScreenerBot-v0.2.2-macOS-arm64.dmg",
-            42,
-            &"b".repeat(64)
-        )
-        .is_err());
-        assert!(verify_release_asset(&release, "other.dmg", 42, &"a".repeat(64)).is_err());
+                sha256: "c".repeat(64)
+            }
+        );
+
+        for files in [
+            serde_json::json!({ "../evil.dmg": { "size": 42, "sha256": "c".repeat(64) } }),
+            serde_json::json!({ "ScreenerBot-v0.2.3-macOS-arm64.dmg": { "size": 42, "sha256": "c".repeat(64) } }),
+            serde_json::json!({ "ScreenerBot-v0.2.2-macOS-arm64.dmg": { "size": 0, "sha256": "c".repeat(64) } }),
+            serde_json::json!({ "ScreenerBot-v0.2.2-macOS-arm64.dmg": { "size": 42, "sha256": "bad" } }),
+        ] {
+            value["files"] = files;
+            assert!(parse_manifest(&serde_json::to_vec(&value).unwrap(), "0.2.2").is_err());
+        }
     }
 
     #[test]
-    fn manifest_asset_is_found_by_suffix() {
-        let release = GithubRelease {
-            assets: vec![
-                GithubAsset {
-                    name: "ScreenerBot-v0.2.2-macOS-arm64.dmg".to_owned(),
-                    digest: None,
-                    size: 1,
-                    browser_download_url: String::new(),
-                },
-                GithubAsset {
-                    name: "ScreenerBot-v0.2.2-update-manifest.json".to_owned(),
-                    digest: Some(format!("sha256:{}", "c".repeat(64))),
-                    size: 300,
-                    browser_download_url: String::new(),
-                },
+    fn a_manifest_without_release_files_still_parses() {
+        // Releases before the manifest listed installers keep a usable core map.
+        let manifest = parse_manifest(&manifest_json("0.2.2", "a1b2c3d4e5f6"), "0.2.2").unwrap();
+        assert!(manifest.files.is_empty());
+    }
+
+    #[test]
+    fn only_a_manifest_read_from_github_attests_an_installer() {
+        let mut manifest =
+            parse_manifest(&manifest_json("0.2.2", "a1b2c3d4e5f6"), "0.2.2").unwrap();
+        let filename = "ScreenerBot-v0.2.2-macOS-arm64.dmg";
+        manifest.files.insert(
+            filename.to_owned(),
+            ReleaseFile {
+                size: 42,
+                sha256: "c".repeat(64),
+            },
+        );
+        let github = AttestedManifest {
+            manifest: manifest.clone(),
+            origin: ManifestOrigin::GitHub,
+        };
+        let mirror = AttestedManifest {
+            manifest,
+            origin: ManifestOrigin::Mirror,
+        };
+        assert_eq!(github.github_installer_digest(filename).unwrap().size, 42);
+        assert!(github.github_installer_digest("other.dmg").is_none());
+        assert!(mirror.github_installer_digest(filename).is_none());
+    }
+
+    #[test]
+    fn release_assets_come_from_download_hosts_never_the_rest_api() {
+        let filename = "ScreenerBot-v0.2.2-update-manifest.json";
+        let github = github_asset_url("0.2.2", filename).unwrap();
+        assert_eq!(
+            github.as_str(),
+            "https://github.com/farfary/ScreenerBot/releases/download/v0.2.2/ScreenerBot-v0.2.2-update-manifest.json"
+        );
+        let mirror = mirror_asset_url("0.2.2", filename).unwrap();
+        assert_eq!(
+            mirror.as_str(),
+            "https://screenerbot.io/releases/0.2.2/ScreenerBot-v0.2.2-update-manifest.json"
+        );
+        for url in [&github, &mirror] {
+            assert!(super::super::download::is_allowed_update_url(url));
+        }
+        assert!(github_asset_url("0.2.2", "../ScreenerBot-v0.2.2-x.dmg").is_err());
+        assert!(github_asset_url("0.2.2", "ScreenerBot-v0.2.3-x.dmg").is_err());
+        let api = reqwest::Url::parse("https://api.github.com/repos/farfary/ScreenerBot").unwrap();
+        assert!(!super::super::download::is_allowed_update_url(&api));
+    }
+
+    #[test]
+    fn refused_or_throttled_hosts_are_transient_and_missing_assets_are_not() {
+        let status = |status| {
+            Error::Network(crate::errors::NetworkError::HttpStatus {
+                endpoint: "https://github.com/x".to_owned(),
+                status,
+                body: None,
+            })
+        };
+        assert!(is_transient_failure(&status(403)));
+        assert!(is_transient_failure(&status(429)));
+        assert!(is_transient_failure(&status(502)));
+        assert!(!is_transient_failure(&status(404)));
+        assert!(!is_transient_failure(&Error::DigestMismatch {
+            detail: String::new()
+        }));
+        assert!(is_transient_failure(&Error::Network(
+            crate::errors::NetworkError::RequestFailed {
+                endpoint: "https://github.com/x".to_owned(),
+                detail: "connection reset".to_owned(),
+            }
+        )));
+    }
+
+    /// Serve one canned HTTP response per connection, in order.
+    async fn serve(responses: Vec<(u16, Vec<u8>)>) -> reqwest::Url {
+        use tokio::io::{AsyncReadExt, AsyncWriteExt};
+        let listener = tokio::net::TcpListener::bind("127.0.0.1:0").await.unwrap();
+        let address = listener.local_addr().unwrap();
+        tokio::spawn(async move {
+            for (status, body) in responses {
+                let (mut socket, _) = listener.accept().await.unwrap();
+                let mut request = [0_u8; 2048];
+                let _ = socket.read(&mut request).await.unwrap();
+                let head = format!(
+                    "HTTP/1.1 {status} X\r\nContent-Length: {}\r\nConnection: close\r\n\r\n",
+                    body.len()
+                );
+                socket.write_all(head.as_bytes()).await.unwrap();
+                socket.write_all(&body).await.unwrap();
+            }
+        });
+        format!("http://{address}/manifest.json").parse().unwrap()
+    }
+
+    #[tokio::test]
+    async fn a_refused_github_read_falls_back_to_the_mirror() {
+        let body = manifest_json("0.2.2", "a1b2c3d4e5f6");
+        let digest = super::super::download::sha256_bytes(&body);
+        let github = serve(vec![(403, Vec::new())]).await;
+        let mirror = serve(vec![(200, body)]).await;
+        let attested = fetch_manifest_from(
+            &reqwest::Client::new(),
+            &[
+                (ManifestOrigin::GitHub, github),
+                (ManifestOrigin::Mirror, mirror),
             ],
-        };
-        let asset = release.manifest_asset().unwrap();
-        assert_eq!(asset.sha256().unwrap(), "c".repeat(64));
+            "0.2.2",
+            &digest,
+            false,
+        )
+        .await
+        .unwrap();
+        assert_eq!(attested.origin, ManifestOrigin::Mirror);
+        assert_eq!(attested.manifest.shell_revision, "a1b2c3d4e5f6");
     }
 
-    #[test]
-    fn manifest_requires_independent_website_and_github_digests_to_agree() {
-        let digest = "a".repeat(64);
-        assert!(verify_manifest_attestation(&digest, &digest).is_ok());
-        assert!(matches!(
-            verify_manifest_attestation(&digest, &"b".repeat(64)),
-            Err(Error::DigestMismatch { .. })
-        ));
+    #[tokio::test]
+    async fn a_manifest_that_contradicts_the_website_stops_the_update() {
+        let body = manifest_json("0.2.2", "a1b2c3d4e5f6");
+        let github = serve(vec![(200, body.clone())]).await;
+        let mirror = serve(vec![(200, body)]).await;
+        let error = fetch_manifest_from(
+            &reqwest::Client::new(),
+            &[
+                (ManifestOrigin::GitHub, github),
+                (ManifestOrigin::Mirror, mirror),
+            ],
+            "0.2.2",
+            &"d".repeat(64),
+            false,
+        )
+        .await
+        .unwrap_err();
+        assert!(matches!(error, Error::DigestMismatch { .. }));
+    }
+
+    #[tokio::test]
+    async fn every_host_failing_reports_the_failure_worth_retrying() {
+        let github = serve(vec![(403, Vec::new())]).await;
+        let mirror = serve(vec![(404, Vec::new())]).await;
+        let error = fetch_manifest_from(
+            &reqwest::Client::new(),
+            &[
+                (ManifestOrigin::GitHub, github),
+                (ManifestOrigin::Mirror, mirror),
+            ],
+            "0.2.2",
+            &"d".repeat(64),
+            false,
+        )
+        .await
+        .unwrap_err();
+        assert!(is_transient_failure(&error));
     }
 }

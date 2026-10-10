@@ -49,11 +49,16 @@ async fn check_for_update_from(
         request_update(&client, server_url, current_version, platform)
     })
     .await;
+    let result = match result {
+        Ok(CheckOutcome::Update(update)) => plan_components(*update)
+            .await
+            .map(|update| CheckOutcome::Update(Box::new(update))),
+        other => other,
+    };
     match result {
         Ok(CheckOutcome::Update(update)) => {
-            let update = plan_components(*update).await;
-            record_check_success(Some(update.clone()), None).await;
-            Ok(Some(update))
+            record_check_success(Some((*update).clone()), None).await;
+            Ok(Some(*update))
         }
         Ok(CheckOutcome::UpToDate(release)) => {
             record_check_success(None, release).await;
@@ -90,11 +95,16 @@ fn begin_check(state: &mut UpdateState) -> Result<UpdatePhase> {
 /// unreadable one, no core artifact for this machine, or a shell revision this
 /// process cannot even know (headless, development run) — resolves to
 /// [`UpdateKind::Full`], which is always correct, just larger.
-async fn plan_components(mut update: UpdateInfo) -> UpdateInfo {
+///
+/// A manifest no host could serve right now is not such a doubt: settling on
+/// the full installer would turn a silent core update into one the user must
+/// install by hand until the next scheduled check. That failure fails the check
+/// instead, which keeps the previous state and is retried.
+async fn plan_components(mut update: UpdateInfo) -> Result<UpdateInfo> {
     update.kind = UpdateKind::Full;
 
     let Some(local_revision) = local_shell_revision() else {
-        return update;
+        return Ok(update);
     };
     if super::core_install::is_core_quarantined(&update.version) {
         logger::warning(
@@ -104,7 +114,7 @@ async fn plan_components(mut update: UpdateInfo) -> UpdateInfo {
                 update.version
             ),
         );
-        return update;
+        return Ok(update);
     }
     let client = match super::download::build_update_client() {
         Ok(client) => client,
@@ -113,7 +123,7 @@ async fn plan_components(mut update: UpdateInfo) -> UpdateInfo {
                 LogTag::System,
                 &format!("Update planning could not build a client: {error}"),
             );
-            return update;
+            return Ok(update);
         }
     };
 
@@ -125,17 +135,13 @@ async fn plan_components(mut update: UpdateInfo) -> UpdateInfo {
                 update.version
             ),
         );
-        return update;
+        return Ok(update);
     };
 
-    let manifest = match manifest::fetch_release_for(&client, &update.version).await {
-        Ok(release) => {
-            manifest::fetch_manifest(&client, &release, &update.version, manifest_checksum).await
-        }
-        Err(error) => Err(error),
-    };
-    let manifest = match manifest {
-        Ok(manifest) => manifest,
+    let manifest = match manifest::fetch_manifest(&client, &update.version, manifest_checksum).await
+    {
+        Ok(attested) => attested.manifest,
+        Err(error) if manifest::is_transient_failure(&error) => return Err(error),
         Err(error) => {
             logger::info(
                 LogTag::System,
@@ -144,7 +150,7 @@ async fn plan_components(mut update: UpdateInfo) -> UpdateInfo {
                     update.version
                 ),
             );
-            return update;
+            return Ok(update);
         }
     };
 
@@ -157,7 +163,7 @@ async fn plan_components(mut update: UpdateInfo) -> UpdateInfo {
                 update.version, local_revision, manifest.shell_revision
             ),
         );
-        return update;
+        return Ok(update);
     }
 
     let Some(core) = manifest.core.get(core_platform_key()).cloned() else {
@@ -169,7 +175,7 @@ async fn plan_components(mut update: UpdateInfo) -> UpdateInfo {
                 core_platform_key()
             ),
         );
-        return update;
+        return Ok(update);
     };
 
     logger::info(
@@ -183,7 +189,7 @@ async fn plan_components(mut update: UpdateInfo) -> UpdateInfo {
     );
     update.core = Some(core);
     update.kind = UpdateKind::Core;
-    update
+    Ok(update)
 }
 
 async fn request_update(

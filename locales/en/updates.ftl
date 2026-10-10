@@ -11,6 +11,14 @@ updates-defer-needs-installer = This release also updates the desktop shell, so 
 
 updates-check-failed = { $cause }
 
+## Why an update download stopped. `cause` is the technical error.
+
+updates-download-error-unreachable = The update servers could not be reached. The next attempt resumes the download.
+updates-download-error-unverified = The downloaded update did not pass verification and was removed.
+updates-download-error-interrupted = The update stopped because { -brand } restarted.
+updates-download-error-missing = The downloaded update file is no longer available.
+updates-download-error-other = { $cause }
+
 ## Progress and outcome of update actions
 
 updates-download-started = Downloading update v{ $version }...

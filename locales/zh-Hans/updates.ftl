@@ -11,6 +11,14 @@ updates-defer-needs-installer = 此版本还会更新桌面外壳，因此需要
 
 updates-check-failed = { $cause }
 
+## Why an update download stopped. `cause` is the technical error.
+
+updates-download-error-unreachable = 无法连接到更新服务器。下次尝试将继续下载。
+updates-download-error-unverified = 下载的更新未通过校验，已被删除。
+updates-download-error-interrupted = 由于 { -brand } 已重新启动，更新被中断。
+updates-download-error-missing = 下载的更新文件已不可用。
+updates-download-error-other = { $cause }
+
 ## Progress and outcome of update actions
 
 updates-download-started = 正在下载更新 v{ $version }...

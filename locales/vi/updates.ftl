@@ -4,6 +4,14 @@ updates-defer-needs-installer = Bản phát hành này cũng cập nhật lớp 
 
 updates-check-failed = { $cause }
 
+## Why an update download stopped. `cause` is the technical error.
+
+updates-download-error-unreachable = Không thể kết nối tới máy chủ cập nhật. Lần thử tiếp theo sẽ tiếp tục tải xuống.
+updates-download-error-unverified = Bản cập nhật đã tải xuống không vượt qua bước xác minh và đã bị xóa.
+updates-download-error-interrupted = Bản cập nhật bị gián đoạn vì { -brand } đã khởi động lại.
+updates-download-error-missing = Tệp cập nhật đã tải xuống không còn khả dụng.
+updates-download-error-other = { $cause }
+
 updates-download-started = Đang tải bản cập nhật v{ $version }...
 updates-apply-started = Đang cài đặt bản cập nhật. { -brand } sẽ tự khởi động lại và kết nối lại.
 updates-install-opened = Đã mở trình cài đặt cập nhật đã xác minh. Hãy hoàn tất trình cài đặt của hệ điều hành.

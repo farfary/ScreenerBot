@@ -4,6 +4,14 @@ updates-defer-needs-installer = Bu sürüm masaüstü kabuğunu da güncellediğ
 
 updates-check-failed = { $cause }
 
+## Why an update download stopped. `cause` is the technical error.
+
+updates-download-error-unreachable = Güncelleme sunucularına ulaşılamadı. Sonraki deneme indirmeyi kaldığı yerden sürdürür.
+updates-download-error-unverified = İndirilen güncelleme doğrulamayı geçemedi ve kaldırıldı.
+updates-download-error-interrupted = { -brand } yeniden başladığı için güncelleme yarıda kaldı.
+updates-download-error-missing = İndirilen güncelleme dosyası artık mevcut değil.
+updates-download-error-other = { $cause }
+
 updates-download-started = v{ $version } güncellemesi indiriliyor...
 updates-apply-started = Güncelleme yükleniyor. { -brand } otomatik olarak yeniden başlar ve yeniden bağlanır.
 updates-install-opened = Doğrulanmış güncelleme yükleyicisi açıldı. İşletim sistemi yükleyicisini tamamlayın.

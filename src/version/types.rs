@@ -85,6 +85,17 @@ pub struct UpdateManifest {
     pub shell_revision: String,
     #[serde(default)]
     pub core: std::collections::BTreeMap<String, CoreArtifact>,
+    /// Every other asset of the release by filename. Read from GitHub, it is the
+    /// second party for an installer that screenerbot.io serves.
+    #[serde(default)]
+    pub files: std::collections::BTreeMap<String, ReleaseFile>,
+}
+
+/// Size and SHA-256 of one release asset, as recorded in the update manifest.
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
+pub struct ReleaseFile {
+    pub size: u64,
+    pub sha256: String,
 }
 
 /// Information about an available update
@@ -239,7 +250,11 @@ pub struct DownloadProgress {
     pub bytes_downloaded: u64,
     pub total_bytes: u64,
     pub progress_percent: f32,
-    pub error: Option<String>,
+    #[serde(deserialize_with = "deserialize_download_error")]
+    pub error: Option<UiText>,
+    /// When the update service tries a download again by itself. Set only for a
+    /// failure a later attempt can overcome; the partial file is kept for it.
+    pub retry_at: Option<DateTime<Utc>>,
     pub completed: bool,
     pub downloaded_path: Option<String>,
 }
@@ -271,10 +286,19 @@ pub fn check_failed_text(cause: String) -> UiText {
     UiText::new(ids::UPDATES_CHECK_FAILED).arg("cause", UiArg::Text(cause))
 }
 
-/// Reads `check_error` from either shape. Builds before this field carried
-/// catalog text persisted the error as a plain string; that string becomes the
-/// `cause` of the check-failed message so stored state still loads.
-fn deserialize_check_error<'de, D>(deserializer: D) -> Result<Option<UiText>, D::Error>
+/// Text for a download that stopped for a reason with no message of its own;
+/// `cause` is the technical error.
+pub fn download_failed_text(cause: String) -> UiText {
+    UiText::new(ids::UPDATES_DOWNLOAD_ERROR_OTHER).arg("cause", UiArg::Text(cause))
+}
+
+/// Reads persisted error text from either shape. Builds before these fields
+/// carried catalog text persisted the error as a plain string; that string
+/// becomes the `cause` of `legacy` so stored state still loads.
+fn deserialize_stored_text<'de, D>(
+    deserializer: D,
+    legacy: fn(String) -> UiText,
+) -> Result<Option<UiText>, D::Error>
 where
     D: Deserializer<'de>,
 {
@@ -288,9 +312,23 @@ where
     Ok(
         Option::<Stored>::deserialize(deserializer)?.map(|stored| match stored {
             Stored::Text(text) => text,
-            Stored::Legacy(cause) => check_failed_text(cause),
+            Stored::Legacy(cause) => legacy(cause),
         }),
     )
+}
+
+fn deserialize_check_error<'de, D>(deserializer: D) -> Result<Option<UiText>, D::Error>
+where
+    D: Deserializer<'de>,
+{
+    deserialize_stored_text(deserializer, check_failed_text)
+}
+
+fn deserialize_download_error<'de, D>(deserializer: D) -> Result<Option<UiText>, D::Error>
+where
+    D: Deserializer<'de>,
+{
+    deserialize_stored_text(deserializer, download_failed_text)
 }
 
 /// Update state
@@ -502,5 +540,23 @@ mod tests {
         assert!(missing.check_error.is_none());
         let null: UpdateState = serde_json::from_str(r#"{"check_error":null}"#).unwrap();
         assert!(null.check_error.is_none());
+    }
+
+    #[test]
+    fn a_plain_string_download_error_from_an_older_build_still_loads() {
+        let loaded: UpdateState = serde_json::from_str(
+            r#"{"phase":"failed","download_progress":{"version":"0.2.14","error":"returned HTTP 403"}}"#,
+        )
+        .unwrap();
+        let text = loaded
+            .download_progress
+            .error
+            .expect("legacy error is kept");
+        assert_eq!(text.id, "updates-download-error-other");
+        assert_eq!(text.render_plain(&source()), "returned HTTP 403");
+        assert!(loaded.download_progress.retry_at.is_none());
+
+        let missing: DownloadProgress = serde_json::from_str("{}").unwrap();
+        assert!(missing.error.is_none());
     }
 }

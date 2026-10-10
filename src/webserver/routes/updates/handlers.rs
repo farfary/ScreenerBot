@@ -164,7 +164,11 @@ fn needs_user_action(state: &version::UpdateState, blocked: bool, auto_download:
     match state.phase {
         version::UpdatePhase::Available => !auto_download,
         version::UpdatePhase::ReadyToApply => blocked,
-        version::UpdatePhase::ReadyToInstall | version::UpdatePhase::Failed => true,
+        version::UpdatePhase::ReadyToInstall => true,
+        // A download the service repeats by itself is not the operator's to retry.
+        version::UpdatePhase::Failed => {
+            !(auto_download && state.download_progress.retry_at.is_some())
+        }
         _ => false,
     }
 }
@@ -288,5 +292,10 @@ mod tests {
             false,
             true
         ));
+
+        let mut retrying = state(version::UpdatePhase::Failed);
+        retrying.download_progress.retry_at = Some(chrono::Utc::now());
+        assert!(!needs_user_action(&retrying, false, true));
+        assert!(needs_user_action(&retrying, false, false));
     }
 }

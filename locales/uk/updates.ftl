@@ -11,6 +11,14 @@ updates-defer-needs-installer = Цей випуск також оновлює о
 
 updates-check-failed = { $cause }
 
+## Why an update download stopped. `cause` is the technical error.
+
+updates-download-error-unreachable = Не вдалося з'єднатися із серверами оновлень. Наступна спроба продовжить завантаження.
+updates-download-error-unverified = Завантажене оновлення не пройшло перевірку й було видалене.
+updates-download-error-interrupted = Оновлення перервано, тому що { -brand } перезапустився.
+updates-download-error-missing = Завантажений файл оновлення більше недоступний.
+updates-download-error-other = { $cause }
+
 ## Progress and outcome of update actions
 
 updates-download-started = Завантаження оновлення v{ $version }...

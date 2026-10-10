@@ -14,15 +14,17 @@
 //!
 //! screenerbot.io answers "what is the latest published version"; the GitHub
 //! release for that version is the artifact record. Its `…-update-manifest.json`
-//! asset names the shell revision the release was built with plus the per-platform
-//! core artifacts. When the manifest's shell revision equals the revision of the
+//! asset names the shell revision the release was built with, the per-platform
+//! core artifacts and the digest of every installer. When the manifest's shell revision equals the revision of the
 //! shell that launched this process, nothing about Electron changed and the
 //! update is a [`UpdateKind::Core`] — a few tens of megabytes instead of a whole
 //! Chromium bundle, applied with a backend restart and no OS dialog at all.
 //!
-//! Every artifact is bound three ways before it is used: the size and SHA-256
-//! that screenerbot.io published, the digest GitHub reports for the same asset,
-//! and — for a core update — the decompressed binary digest recorded in the
+//! Every artifact is bound by two independent parties before it is used. The
+//! website attests the manifest's digest; GitHub hosts the manifest and the core
+//! payloads; an installer served by screenerbot.io must carry the digest that
+//! GitHub's copy of the manifest names, or else it is read from GitHub itself.
+//! A core update is also bound to the decompressed binary digest in the
 //! manifest, which the desktop shell re-verifies before every launch.
 
 mod checker;
@@ -51,7 +53,11 @@ use tokio::sync::{OnceCell, RwLock};
 
 pub const VERSION: &str = env!("CARGO_PKG_VERSION");
 const UPDATE_SERVER_URL: &str = "https://screenerbot.io/api";
-const GITHUB_RELEASES_API_URL: &str = "https://api.github.com/repos/farfary/ScreenerBot";
+/// Release assets are read from GitHub's download host, never its REST API.
+const GITHUB_RELEASE_DOWNLOAD_URL: &str =
+    "https://github.com/farfary/ScreenerBot/releases/download";
+/// screenerbot.io's static copy of each hosted release asset.
+const RELEASE_MIRROR_URL: &str = "https://screenerbot.io/releases";
 const DOWNLOAD_TIMEOUT_SECS: u64 = 30 * 60;
 const MAX_UPDATE_BYTES: u64 = 2 * 1024 * 1024 * 1024;
 
@@ -118,8 +124,9 @@ fn normalize_loaded_state(state: &mut UpdateState, staged_version: Option<&str>)
         state.phase = UpdatePhase::Failed;
         state.download_progress.downloading = false;
         state.download_progress.completed = false;
-        state.download_progress.error =
-            Some("Update was interrupted by an application restart".to_owned());
+        state.download_progress.error = Some(crate::i18n::UiText::new(
+            crate::i18n::ids::UPDATES_DOWNLOAD_ERROR_INTERRUPTED,
+        ));
     }
 
     if state.phase == UpdatePhase::ReadyToApply {
@@ -145,8 +152,9 @@ fn normalize_loaded_state(state: &mut UpdateState, staged_version: Option<&str>)
         if !installer_exists {
             state.phase = UpdatePhase::Failed;
             state.download_progress.completed = false;
-            state.download_progress.error =
-                Some("Downloaded update file is no longer available".to_owned());
+            state.download_progress.error = Some(crate::i18n::UiText::new(
+                crate::i18n::ids::UPDATES_DOWNLOAD_ERROR_MISSING,
+            ));
             state.download_progress.downloaded_path = None;
         }
     }

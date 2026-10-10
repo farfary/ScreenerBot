@@ -10,6 +10,14 @@ updates-defer-needs-installer = Diese Version aktualisiert auch die Desktop-Shel
 
 updates-check-failed = { $cause }
 
+## Why an update download stopped. `cause` is the technical error.
+
+updates-download-error-unreachable = Die Update-Server waren nicht erreichbar. Der nächste Versuch setzt den Download fort.
+updates-download-error-unverified = Das heruntergeladene Update hat die Prüfung nicht bestanden und wurde entfernt.
+updates-download-error-interrupted = Das Update wurde unterbrochen, weil { -brand } neu gestartet wurde.
+updates-download-error-missing = Die heruntergeladene Update-Datei ist nicht mehr verfügbar.
+updates-download-error-other = { $cause }
+
 ## Progress and outcome of update actions
 
 updates-download-started = Update v{ $version } wird heruntergeladen...
