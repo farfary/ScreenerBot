@@ -139,7 +139,6 @@ events-subtype-pool-discovery-empty = कोई पूल नहीं मिल
 events-subtype-pool-discovery-error = पूल खोज त्रुटि
 events-subtype-pool-discovery-failed = पूल खोज विफल
 events-subtype-pool-failure = पूल विफलता
-events-subtype-pool-registered = पूल पंजीकृत
 events-subtype-pool-unavailable = पूल उपलब्ध नहीं
 events-subtype-process-token-error = टोकन प्रसंस्करण त्रुटि
 events-subtype-rate-limit-hit = अनुरोध सीमा पूरी हुई

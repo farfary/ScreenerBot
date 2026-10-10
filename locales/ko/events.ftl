@@ -145,7 +145,6 @@ events-subtype-pool-discovery-empty = 풀을 찾지 못함
 events-subtype-pool-discovery-error = 풀 탐색 오류
 events-subtype-pool-discovery-failed = 풀 탐색 실패
 events-subtype-pool-failure = 풀 장애
-events-subtype-pool-registered = 풀 등록됨
 events-subtype-pool-unavailable = 풀 사용 불가
 events-subtype-process-token-error = 토큰 처리 오류
 events-subtype-rate-limit-hit = 요청 한도 도달

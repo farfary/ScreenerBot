@@ -145,7 +145,6 @@ events-subtype-pool-discovery-empty = 未找到流动性池
 events-subtype-pool-discovery-error = 流动性池发现出错
 events-subtype-pool-discovery-failed = 流动性池发现失败
 events-subtype-pool-failure = 流动性池故障
-events-subtype-pool-registered = 流动性池已登记
 events-subtype-pool-unavailable = 流动性池不可用
 events-subtype-process-token-error = 代币处理出错
 events-subtype-rate-limit-hit = 已达请求上限

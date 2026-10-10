@@ -178,7 +178,6 @@ export const EVENT_SUBTYPE_LABELS = Object.freeze({
   pool_discovery_error: "events-subtype-pool-discovery-error",
   pool_discovery_failed: "events-subtype-pool-discovery-failed",
   pool_failure: "events-subtype-pool-failure",
-  pool_registered: "events-subtype-pool-registered",
   pool_unavailable: "events-subtype-pool-unavailable",
   process_token_error: "events-subtype-process-token-error",
   rate_limit_hit: "events-subtype-rate-limit-hit",

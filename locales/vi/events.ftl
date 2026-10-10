@@ -139,7 +139,6 @@ events-subtype-pool-discovery-empty = Không tìm thấy pool
 events-subtype-pool-discovery-error = Lỗi tìm pool
 events-subtype-pool-discovery-failed = Tìm pool thất bại
 events-subtype-pool-failure = Lỗi pool
-events-subtype-pool-registered = Đã đăng ký pool
 events-subtype-pool-unavailable = Pool không khả dụng
 events-subtype-process-token-error = Lỗi xử lý token
 events-subtype-rate-limit-hit = Đã chạm giới hạn yêu cầu

@@ -139,7 +139,6 @@ events-subtype-pool-discovery-empty = Havuz bulunamadı
 events-subtype-pool-discovery-error = Havuz keşfi hatası
 events-subtype-pool-discovery-failed = Havuz keşfi başarısız
 events-subtype-pool-failure = Havuz arızası
-events-subtype-pool-registered = Havuz kaydedildi
 events-subtype-pool-unavailable = Havuz kullanılamıyor
 events-subtype-process-token-error = Token işleme hatası
 events-subtype-rate-limit-hit = İstek sınırına ulaşıldı

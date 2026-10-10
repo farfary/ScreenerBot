@@ -145,7 +145,6 @@ events-subtype-pool-discovery-empty = استخری پیدا نشد
 events-subtype-pool-discovery-error = خطای کشف استخر
 events-subtype-pool-discovery-failed = کشف استخر ناموفق بود
 events-subtype-pool-failure = خرابی استخر
-events-subtype-pool-registered = استخر ثبت شد
 events-subtype-pool-unavailable = استخر در دسترس نیست
 events-subtype-process-token-error = خطای پردازش توکن
 events-subtype-rate-limit-hit = به سقف درخواست رسید

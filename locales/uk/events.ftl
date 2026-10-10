@@ -145,7 +145,6 @@ events-subtype-pool-discovery-empty = Пулів не знайдено
 events-subtype-pool-discovery-error = Помилка пошуку пулів
 events-subtype-pool-discovery-failed = Пошук пулів не вдався
 events-subtype-pool-failure = Збій пулу
-events-subtype-pool-registered = Пул зареєстровано
 events-subtype-pool-unavailable = Пул недоступний
 events-subtype-process-token-error = Помилка обробки токена
 events-subtype-rate-limit-hit = Досягнуто ліміту запитів

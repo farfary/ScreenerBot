@@ -145,7 +145,6 @@ events-subtype-pool-discovery-empty = لم يُعثر على مجمعات
 events-subtype-pool-discovery-error = خطأ في اكتشاف المجمعات
 events-subtype-pool-discovery-failed = فشل اكتشاف المجمعات
 events-subtype-pool-failure = عطل في المجمع
-events-subtype-pool-registered = سُجّل المجمع
 events-subtype-pool-unavailable = المجمع غير متاح
 events-subtype-process-token-error = خطأ في معالجة الرمز
 events-subtype-rate-limit-hit = بلغ حد الطلبات

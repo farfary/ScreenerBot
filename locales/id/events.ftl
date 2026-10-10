@@ -142,7 +142,6 @@ events-subtype-pool-discovery-empty = Tidak ada pool ditemukan
 events-subtype-pool-discovery-error = Kesalahan pencarian pool
 events-subtype-pool-discovery-failed = Pencarian pool gagal
 events-subtype-pool-failure = Kegagalan pool
-events-subtype-pool-registered = Pool terdaftar
 events-subtype-pool-unavailable = Pool tidak tersedia
 events-subtype-process-token-error = Kesalahan memproses token
 events-subtype-rate-limit-hit = Batas permintaan tercapai

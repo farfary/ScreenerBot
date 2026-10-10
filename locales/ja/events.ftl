@@ -145,7 +145,6 @@ events-subtype-pool-discovery-empty = プールが見つかりません
 events-subtype-pool-discovery-error = プール探索エラー
 events-subtype-pool-discovery-failed = プール探索失敗
 events-subtype-pool-failure = プール障害
-events-subtype-pool-registered = プール登録
 events-subtype-pool-unavailable = プール利用不可
 events-subtype-process-token-error = トークン処理エラー
 events-subtype-rate-limit-hit = レート制限に到達

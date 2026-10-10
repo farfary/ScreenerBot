@@ -145,7 +145,6 @@ events-subtype-pool-discovery-empty = Nenhum pool encontrado
 events-subtype-pool-discovery-error = Erro na busca de pools
 events-subtype-pool-discovery-failed = Busca de pools falhou
 events-subtype-pool-failure = Falha do pool
-events-subtype-pool-registered = Pool registrado
 events-subtype-pool-unavailable = Pool indisponível
 events-subtype-process-token-error = Erro ao processar o token
 events-subtype-rate-limit-hit = Limite de requisições atingido
