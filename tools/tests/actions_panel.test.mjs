@@ -144,7 +144,16 @@ test("an empty tab shows the shared state view with its glyph on the message's r
   const panel = await emptyContext.newPage();
   await panel.goto(`${emptyHost.origin}/home`);
   await panel.waitForSelector(READY);
+  // The list holds a static empty view until the open tab's history read re-renders it;
+  // measuring before that render reads a node the render detaches.
+  const rendered = panel.waitForResponse((response) =>
+    response.url().includes("/api/actions/history")
+  );
   await panel.click("#notificationBtn");
+  await rendered;
+  await panel.waitForFunction(
+    () => getComputedStyle(document.getElementById("notificationLoading")).display === "none"
+  );
   const state = panel.locator("#notificationList > .state-view-empty");
   await state.waitFor();
   assert.equal((await state.locator(".state-view-message").textContent()).trim(), "No actions");
