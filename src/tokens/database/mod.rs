@@ -104,37 +104,14 @@ pub struct TokenBlacklistRecord {
 }
 
 impl TokenDatabase {
-    /// Create new database instance
+    /// Open `chain`'s token store at `path`.
     pub fn new(path: &str, chain: ChainId) -> TokenResult<Self> {
-        let manager = SqliteConnectionManager::file(path).with_init(|conn| {
-            crate::database::configure_connection(conn, crate::database::TOKENS_DB)
-        });
-
-        let pool = Pool::builder()
-            .max_size(8)
-            .idle_timeout(None)
-            .max_lifetime(None)
-            .build(manager)
-            .map_err(|e| {
-                Error::Database(DatabaseError::Query {
-                    operation: "Failed to create database pool".to_owned(),
-                    message: e.to_string(),
-                })
-            })?;
-
-        let db = Self { pool, chain };
-
-        // Initialize schema
-        let conn = db.conn()?;
-        crate::tokens::schema::initialize_schema(&conn)?;
-        drop(conn);
-        crate::database::handles::register(
+        let pool = crate::database::open::pool_at(
             &crate::database::catalog::TOKENS,
             std::path::Path::new(path),
-            &db.pool,
-        );
-
-        Ok(db)
+            vec![chain],
+        )?;
+        Ok(Self { pool, chain })
     }
 
     /// Check out a connection from the pool.

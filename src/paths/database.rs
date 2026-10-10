@@ -60,9 +60,14 @@ pub fn get_ai_db_path() -> PathBuf {
 }
 
 /// Returns the agent-control database path (durable client pairings, the
-/// external-agent approval queue and the agent-control audit log).
+/// external-agent approval queue and the agent-control audit log). A non-empty
+/// `SCREENERBOT_AGENT_CONTROL_DB` names an isolated store in its place, so tests
+/// never touch an installation's database.
 pub fn get_agent_control_db_path() -> PathBuf {
-    get_data_directory().join("agent_control.db")
+    std::env::var_os("SCREENERBOT_AGENT_CONTROL_DB")
+        .filter(|path| !path.is_empty())
+        .map(PathBuf::from)
+        .unwrap_or_else(|| get_data_directory().join("agent_control.db"))
 }
 
 /// Returns the legacy-named Assistant chat database path.

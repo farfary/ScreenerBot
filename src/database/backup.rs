@@ -1,12 +1,14 @@
 // Copyright (c) 2024-2026 ScreenerBot (screenerbot.io)
 // SPDX-License-Identifier: BUSL-1.1
 
-//! The copy of a store taken before an upgrade rebuilds it: the latest copy per store, with a manifest naming the core version that took it so the desktop shell can restore it when it rolls that core back.
+//! Every backup-API copy of a store: the copy taken before an upgrade rebuilds it, with a manifest naming the core version that took it so the desktop shell can restore it when it rolls that core back, and the periodic snapshots of ledger and vault stores.
+
+pub mod snapshot;
 
 use std::fs;
 use std::path::{Path, PathBuf};
 
-use rusqlite::backup::Backup;
+use rusqlite::backup::{Backup, StepResult};
 use rusqlite::{Connection, OpenFlags};
 use serde::{Deserialize, Serialize};
 
@@ -70,34 +72,12 @@ pub fn back_up_before_upgrade(
     fs::create_dir_all(directory)
         .map_err(|e| failed(format!("create {}: {e}", directory.display())))?;
 
-    let partial = backup_path.with_extension("db.partial");
-    remove_if_present(&partial).map_err(|e| failed(format!("clear {}: {e}", partial.display())))?;
-    {
-        // SQLite refuses a backup from a connection holding a write transaction, so a
-        // read-only connection copies the committed state the upgrade starts from.
-        let source = Connection::open_with_flags(store_path, OpenFlags::SQLITE_OPEN_READ_ONLY)
-            .map_err(|e| failed(format!("open {} to copy it: {e}", store_path.display())))?;
-        let mut destination = Connection::open(&partial)
-            .map_err(|e| failed(format!("open {}: {e}", partial.display())))?;
-        Backup::new(&source, &mut destination)
-            .and_then(|backup| backup.run_to_completion(4096, std::time::Duration::ZERO, None))
-            .map_err(|e| failed(format!("copy pages: {e}")))?;
-        // A single self-contained file: no WAL or shared-memory sidecars to restore.
-        destination
-            .pragma_update(None, "journal_mode", "DELETE")
-            .map_err(|e| failed(format!("finish {}: {e}", partial.display())))?;
-    }
-    let check = Connection::open_with_flags(&partial, OpenFlags::SQLITE_OPEN_READ_ONLY)
-        .and_then(|copy| copy.query_row("PRAGMA quick_check", [], |row| row.get::<_, String>(0)))
-        .map_err(|e| failed(format!("check {}: {e}", partial.display())))?;
-    if check != "ok" {
-        return Err(failed(format!("the copy failed its check: {check}")));
-    }
-
+    let partial = copy_to_partial(store_path, &backup_path, &store)?;
     remove_if_present(&manifest_path)
         .map_err(|e| failed(format!("remove {}: {e}", manifest_path.display())))?;
     fs::rename(&partial, &backup_path)
         .map_err(|e| failed(format!("move into {}: {e}", backup_path.display())))?;
+
     let manifest = UpgradeBackupManifest {
         store: store.clone(),
         core_version: env!("CARGO_PKG_VERSION").to_owned(),
@@ -111,6 +91,66 @@ pub fn back_up_before_upgrade(
         .and_then(|()| fs::rename(&manifest_partial, &manifest_path))
         .map_err(|e| failed(format!("write {}: {e}", manifest_path.display())))?;
     Ok(backup_path)
+}
+
+/// Copy the committed state of the store at `source` into `destination` through the
+/// SQLite backup API, so pages still in the source's write-ahead log are included. The
+/// copy is written beside `destination` as a partial file, made self-contained (no WAL
+/// or shared-memory sidecars), checked with `quick_check` and only then renamed into
+/// place, so `destination` is either the previous file or a complete, checked copy.
+pub fn copy_store(source: &Path, destination: &Path, store: &str) -> Result<(), DatabaseError> {
+    let partial = copy_to_partial(source, destination, store)?;
+    fs::rename(&partial, destination).map_err(|e| DatabaseError::Backup {
+        store: store.to_owned(),
+        message: format!("move into {}: {e}", destination.display()),
+    })
+}
+
+/// The checked copy of [`copy_store`], left as a partial file beside `destination`.
+fn copy_to_partial(
+    source: &Path,
+    destination: &Path,
+    store: &str,
+) -> Result<PathBuf, DatabaseError> {
+    let failed = |message: String| DatabaseError::Backup {
+        store: store.to_owned(),
+        message,
+    };
+    let partial = destination.with_extension("db.partial");
+    remove_if_present(&partial).map_err(|e| failed(format!("clear {}: {e}", partial.display())))?;
+    {
+        // SQLite refuses a backup from a connection holding a write transaction, so a
+        // read-only connection copies the committed state.
+        let source = Connection::open_with_flags(source, OpenFlags::SQLITE_OPEN_READ_ONLY)
+            .map_err(|e| failed(format!("open {} to copy it: {e}", source.display())))?;
+        let mut copy = Connection::open(&partial)
+            .map_err(|e| failed(format!("open {}: {e}", partial.display())))?;
+        // One step reads every page under one read snapshot, so a concurrent writer
+        // never restarts the copy.
+        let step = Backup::new(&source, &mut copy)
+            .and_then(|backup| backup.step(-1))
+            .map_err(|e| failed(format!("copy pages: {e}")))?;
+        if step != StepResult::Done {
+            return Err(failed(format!(
+                "copy pages: the source was locked ({step:?})"
+            )));
+        }
+        copy.pragma_update(None, "journal_mode", "DELETE")
+            .map_err(|e| failed(format!("finish {}: {e}", partial.display())))?;
+    }
+    let check =
+        quick_check(&partial).map_err(|e| failed(format!("check {}: {e}", partial.display())))?;
+    if check != "ok" {
+        return Err(failed(format!("the copy failed its check: {check}")));
+    }
+    Ok(partial)
+}
+
+/// The first line of `PRAGMA quick_check` on the file at `path`, opened read-only:
+/// `ok` for a sound file.
+pub fn quick_check(path: &Path) -> rusqlite::Result<String> {
+    Connection::open_with_flags(path, OpenFlags::SQLITE_OPEN_READ_ONLY)
+        .and_then(|copy| copy.query_row("PRAGMA quick_check", [], |row| row.get::<_, String>(0)))
 }
 
 fn remove_if_present(path: &Path) -> std::io::Result<()> {

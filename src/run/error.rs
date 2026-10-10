@@ -182,51 +182,62 @@ mod tests {
     }
 
     /// Every typed upgrade refusal reaches the storage-upgrade screen with the store
-    /// it belongs to and the refusal itself, not only the lifecycle wrapper.
+    /// it belongs to and the refusal itself, not only the lifecycle wrapper. A failed
+    /// schema step reaches the opener as a store-named migration refusal, whichever
+    /// domain step raised it.
     #[test]
     fn upgrade_refusals_name_their_store_and_cause() {
+        use crate::errors::DatabaseError;
         let cases = [
             (
-                crate::Error::Positions(crate::positions::Error::SchemaMigration {
-                    detail: "unrecognized column positions.flag".to_owned(),
-                }),
-                "positions.db",
-            ),
-            (
-                crate::Error::Positions(crate::positions::Error::SchemaTooNew {
-                    stored: 7,
-                    supported: 6,
-                }),
-                "positions.db",
-            ),
-            (
                 crate::Error::Positions(crate::positions::Error::Database(
-                    crate::errors::DatabaseError::Backup {
+                    DatabaseError::Migration {
                         store: "positions.db".to_owned(),
-                        message: "disk full".to_owned(),
+                        detail: "unrecognized column positions.flag".to_owned(),
                     },
                 )),
                 "positions.db",
             ),
             (
-                crate::Error::Transactions(crate::transactions::Error::Migration {
-                    step: "rename".to_owned(),
-                    detail: "refused".to_owned(),
-                }),
+                crate::Error::Positions(crate::positions::Error::Database(
+                    DatabaseError::StoreTooNew {
+                        store: "positions.db".to_owned(),
+                        version: 9,
+                        min_reader_version: 9,
+                        supported_version: 7,
+                        written_by: "0.3.0".to_owned(),
+                    },
+                )),
+                "positions.db",
+            ),
+            (
+                crate::Error::Positions(crate::positions::Error::Database(DatabaseError::Backup {
+                    store: "positions.db".to_owned(),
+                    message: "disk full".to_owned(),
+                })),
+                "positions.db",
+            ),
+            (
+                crate::Error::Transactions(crate::transactions::Error::Database(
+                    DatabaseError::Migration {
+                        store: "transactions.db".to_owned(),
+                        detail: "rename refused".to_owned(),
+                    },
+                )),
                 "transactions.db",
             ),
             (
-                crate::Error::Wallets(crate::wallets::Error::Migration {
-                    step: "rebuild tables".to_owned(),
-                    detail: "refused".to_owned(),
-                }),
-                "wallets.db, wallet.db",
+                crate::Error::Wallets(crate::wallets::Error::Database(DatabaseError::Migration {
+                    store: "wallets.db".to_owned(),
+                    detail: "rebuild tables refused".to_owned(),
+                })),
+                "wallets.db",
             ),
             (
-                crate::Error::Tools(crate::tools::Error::Migration {
-                    step: "create table".to_owned(),
-                    detail: "refused".to_owned(),
-                }),
+                crate::Error::Tools(crate::tools::Error::Database(DatabaseError::Migration {
+                    store: "tools.db".to_owned(),
+                    detail: "create table refused".to_owned(),
+                })),
                 "tools.db",
             ),
         ];

@@ -4,11 +4,13 @@
 //! OHLCV schema migrations — the chain-scope upgrade and the additive monitor
 //! columns, run by `OhlcvDatabase::create_tables`.
 
+use crate::errors::DatabaseError;
 use rusqlite::{params, Connection};
 
 use crate::ohlcvs::types::{OhlcvError, OhlcvResult, DEEP_HISTORY_TIMEFRAMES};
 
-use super::{deep_history_column, table_has_column};
+use super::deep_history_column;
+use crate::database::schema::ddl::has_column;
 
 const CHAIN_SCOPE_MIGRATION: &str = "20260821_chain_scope";
 
@@ -22,22 +24,30 @@ pub(super) fn migrate_chain_scope(conn: &Connection) -> OhlcvResult<()> {
             |row| row.get::<_, i64>(0),
         )
         .map_err(|e| {
-            OhlcvError::DatabaseError(format!("Failed to inspect OHLCV migrations: {e}"))
+            OhlcvError::Database(DatabaseError::classify_sqlite_failure(
+                "inspect OHLCV migrations",
+                e,
+            ))
         })? != 0;
     if applied {
         return Ok(());
     }
 
-    let pools_scoped = table_has_column(conn, "ohlcv_pools", "chain_id")?;
-    let candles_scoped = table_has_column(conn, "ohlcv_candles", "chain_id")?;
-    let gaps_scoped = table_has_column(conn, "ohlcv_gaps", "chain_id")?;
-    let config_scoped = table_has_column(conn, "ohlcv_monitor_config", "chain_id")?;
+    let pools_scoped = has_column(conn, "ohlcv_pools", "chain_id")?;
+    let candles_scoped = has_column(conn, "ohlcv_candles", "chain_id")?;
+    let gaps_scoped = has_column(conn, "ohlcv_gaps", "chain_id")?;
+    let config_scoped = has_column(conn, "ohlcv_monitor_config", "chain_id")?;
     if pools_scoped && candles_scoped && gaps_scoped && config_scoped {
         conn.execute(
             "INSERT INTO schema_migrations (migration_id) VALUES (?1)",
             params![CHAIN_SCOPE_MIGRATION],
         )
-        .map_err(|e| OhlcvError::DatabaseError(format!("Failed to record OHLCV migration: {e}")))?;
+        .map_err(|e| {
+            OhlcvError::Database(DatabaseError::classify_sqlite_failure(
+                "record OHLCV migration",
+                e,
+            ))
+        })?;
         return Ok(());
     }
 
@@ -54,7 +64,12 @@ pub(super) fn migrate_chain_scope(conn: &Connection) -> OhlcvResult<()> {
     })
     .into_iter()
     .collect::<Result<Vec<_>, _>>()
-    .map_err(|e| OhlcvError::DatabaseError(format!("Failed to count legacy OHLCV rows: {e}")))?
+    .map_err(|e| {
+        OhlcvError::Database(DatabaseError::classify_sqlite_failure(
+            "count legacy OHLCV rows",
+            e,
+        ))
+    })?
     .try_into()
     .expect("fixed OHLCV migration table list");
 
@@ -76,7 +91,7 @@ pub(super) fn migrate_chain_scope(conn: &Connection) -> OhlcvResult<()> {
         CREATE INDEX idx_candles_lookup ON ohlcv_candles(chain_id, mint, timeframe, timestamp DESC); CREATE INDEX idx_candles_pool_lookup ON ohlcv_candles(chain_id, pool_address, timeframe, timestamp DESC); CREATE INDEX idx_candles_cleanup ON ohlcv_candles(fetched_at);
         CREATE INDEX idx_gaps_unfilled ON ohlcv_gaps(chain_id, filled, mint, timeframe); CREATE INDEX idx_gaps_retry ON ohlcv_gaps(chain_id, filled, attempts, last_attempt);
         CREATE INDEX idx_monitor_active ON ohlcv_monitor_config(chain_id, is_active, priority); CREATE INDEX idx_monitor_backfill ON ohlcv_monitor_config(chain_id, is_active, backfill_1d_complete);
-    "#).map_err(|e| OhlcvError::DatabaseError(format!("Failed to migrate OHLCV tables: {e}")))?;
+    "#).map_err(|e| OhlcvError::Database(DatabaseError::classify_sqlite_failure("migrate OHLCV tables", e)))?;
     for (table, expected) in [
         "ohlcv_pools",
         "ohlcv_candles",
@@ -93,39 +108,60 @@ pub(super) fn migrate_chain_scope(conn: &Connection) -> OhlcvResult<()> {
                 |row| row.get(0),
             )
             .map_err(|e| {
-                OhlcvError::DatabaseError(format!("Failed to verify migrated {table}: {e}"))
+                OhlcvError::Database(DatabaseError::classify_sqlite_failure(
+                    &format!("verify migrated {table}"),
+                    e,
+                ))
             })?;
         if actual != expected {
-            return Err(OhlcvError::DatabaseError(format!(
-                "OHLCV migration row count mismatch for {table}: expected {expected}, got {actual}"
-            )));
+            return Err(OhlcvError::Database(DatabaseError::Migration {
+                store: "ohlcvs.db".to_owned(),
+                detail: format!(
+                    "row count mismatch for {table}: expected {expected}, got {actual}"
+                ),
+            }));
         }
     }
     {
         let mut fk = conn.prepare("PRAGMA foreign_key_check").map_err(|e| {
-            OhlcvError::DatabaseError(format!("Failed to verify OHLCV foreign keys: {e}"))
+            OhlcvError::Database(DatabaseError::classify_sqlite_failure(
+                "verify OHLCV foreign keys",
+                e,
+            ))
         })?;
         if fk
             .query([])
             .map_err(|e| {
-                OhlcvError::DatabaseError(format!("Failed to run OHLCV foreign key check: {e}"))
+                OhlcvError::Database(DatabaseError::classify_sqlite_failure(
+                    "run OHLCV foreign key check",
+                    e,
+                ))
             })?
             .next()
             .map_err(|e| {
-                OhlcvError::DatabaseError(format!("Failed to read OHLCV foreign key check: {e}"))
+                OhlcvError::Database(DatabaseError::classify_sqlite_failure(
+                    "read OHLCV foreign key check",
+                    e,
+                ))
             })?
             .is_some()
         {
-            return Err(OhlcvError::DatabaseError(
-                "OHLCV foreign key check failed after migration".to_owned(),
-            ));
+            return Err(OhlcvError::Database(DatabaseError::Migration {
+                store: "ohlcvs.db".to_owned(),
+                detail: "foreign key check failed after the chain-scope migration".to_owned(),
+            }));
         }
     }
     conn.execute(
         "INSERT INTO schema_migrations (migration_id) VALUES (?1)",
         params![CHAIN_SCOPE_MIGRATION],
     )
-    .map_err(|e| OhlcvError::DatabaseError(format!("Failed to record OHLCV migration: {e}")))?;
+    .map_err(|e| {
+        OhlcvError::Database(DatabaseError::classify_sqlite_failure(
+            "record OHLCV migration",
+            e,
+        ))
+    })?;
     Ok(())
 }
 
@@ -135,7 +171,7 @@ pub(super) fn migrate_chain_scope(conn: &Connection) -> OhlcvResult<()> {
 pub(super) fn add_deep_history_columns(conn: &Connection) -> OhlcvResult<()> {
     for timeframe in DEEP_HISTORY_TIMEFRAMES {
         let column = deep_history_column(timeframe);
-        if table_has_column(conn, "ohlcv_monitor_config", &column)? {
+        if has_column(conn, "ohlcv_monitor_config", &column)? {
             continue;
         }
         conn.execute(
@@ -145,7 +181,10 @@ pub(super) fn add_deep_history_columns(conn: &Connection) -> OhlcvResult<()> {
             [],
         )
         .map_err(|e| {
-            OhlcvError::DatabaseError(format!("Failed to add ohlcv_monitor_config.{column}: {e}"))
+            OhlcvError::Database(DatabaseError::classify_sqlite_failure(
+                &format!("add ohlcv_monitor_config.{column}"),
+                e,
+            ))
         })?;
     }
     Ok(())
@@ -163,7 +202,7 @@ pub(super) fn create_chain_indexes(conn: &Connection) -> OhlcvResult<()> {
          CREATE INDEX IF NOT EXISTS idx_monitor_active ON ohlcv_monitor_config(chain_id, is_active, priority);
          CREATE INDEX IF NOT EXISTS idx_monitor_backfill ON ohlcv_monitor_config(chain_id, is_active, backfill_1d_complete);",
     )
-    .map_err(|e| OhlcvError::DatabaseError(format!("Failed to create OHLCV indexes: {e}")))
+    .map_err(|e| OhlcvError::Database(DatabaseError::classify_sqlite_failure("create OHLCV indexes", e)))
 }
 
 #[cfg(test)]
@@ -250,9 +289,7 @@ mod tests {
         let db = OhlcvDatabase::new(&path, ChainId::Solana).unwrap();
         let conn = db.conn().unwrap();
         for tf in DEEP_HISTORY_TIMEFRAMES {
-            assert!(
-                table_has_column(&conn, "ohlcv_monitor_config", &deep_history_column(tf)).unwrap()
-            );
+            assert!(has_column(&conn, "ohlcv_monitor_config", &deep_history_column(tf)).unwrap());
             assert!(
                 db.deep_history_open("mint", 0).unwrap().contains(&tf),
                 "{tf:?}"

@@ -4,8 +4,7 @@
 //! Events database module.
 //!
 //! High-performance SQLite database for persistent event storage.
-//! Fresh schema (no migrations), split read/write pools, batched writes,
-//! and keyset-optimized queries.
+//! Split read/write pools, batched writes, and keyset-optimized queries.
 //!
 //! Submodules:
 //! - `pagination`: Keyset cursor-based pagination and filtered counting
@@ -13,6 +12,7 @@
 mod pagination;
 
 use crate::database;
+use crate::database::schema::{ddl, SchemaContext, StoreSchema};
 use crate::errors::{DataError, DatabaseError};
 use crate::events::types::{Event, EventCategory, Severity};
 use crate::events::{Error, Result};
@@ -20,19 +20,57 @@ use crate::logger::{self, LogTag};
 use chrono::{DateTime, Utc};
 use r2d2::{Pool, PooledConnection};
 use r2d2_sqlite::SqliteConnectionManager;
-use rusqlite::params;
+use rusqlite::{params, Transaction};
 use std::collections::HashMap;
-use std::time::Duration;
 
-// =============================================================================
-// CONSTANTS
-// =============================================================================
+/// The events store's schema.
+pub(crate) const SCHEMA: StoreSchema = StoreSchema {
+    version: 1,
+    min_reader_version: 1,
+    baseline: 1,
+    renames: None,
+    step: create_schema,
+    legacy_stamp: None,
+};
 
-/// Connection pool configuration
-const WRITE_POOL_MAX_SIZE: u32 = 2;
-const READ_POOL_MAX_SIZE: u32 = 4;
-const POOL_MIN_IDLE: u32 = 1;
-const CONNECTION_TIMEOUT_MS: u64 = 30_000;
+fn create_schema(
+    tx: &Transaction<'_>,
+    _: &SchemaContext,
+) -> std::result::Result<(), DatabaseError> {
+    ddl::run(
+        tx,
+        "create events table",
+        "CREATE TABLE IF NOT EXISTS events (
+            id              INTEGER PRIMARY KEY AUTOINCREMENT,
+            event_time      TEXT    NOT NULL,
+            category        TEXT    NOT NULL,
+            subtype         TEXT,
+            severity        TEXT    NOT NULL,
+            mint            TEXT,
+            reference_id    TEXT,
+            message_short   TEXT,
+            json_payload    TEXT    NOT NULL,
+            created_at      TEXT    NOT NULL DEFAULT (datetime('now')),
+            chain_id        TEXT    NOT NULL DEFAULT 'solana'
+        )",
+    )?;
+    // Chain scope: the shared file gains a chain column. Historical rows are Solana's by
+    // construction, so the migration backfills 'solana'.
+    ddl::add_column(tx, "events", "chain_id", "TEXT NOT NULL DEFAULT 'solana'")?;
+    // Keyset and composite indexes serve pagination and the filters.
+    ddl::run_batch(
+        tx,
+        "create events indexes",
+        "CREATE INDEX IF NOT EXISTS idx_events_category_time ON events(category, event_time DESC);
+         CREATE INDEX IF NOT EXISTS idx_events_reference_id ON events(reference_id);
+         CREATE INDEX IF NOT EXISTS idx_events_mint ON events(mint);
+         CREATE INDEX IF NOT EXISTS idx_events_severity_time ON events(severity, event_time DESC);
+         CREATE INDEX IF NOT EXISTS idx_events_created_at ON events(created_at);
+         CREATE INDEX IF NOT EXISTS idx_events_id_desc ON events(id DESC);
+         CREATE INDEX IF NOT EXISTS idx_events_category_severity_id ON events(category, severity, id DESC);
+         CREATE INDEX IF NOT EXISTS idx_events_mint_id ON events(mint, id DESC);",
+    )
+}
 
 // =============================================================================
 // DATABASE STRUCTURE
@@ -46,214 +84,21 @@ pub struct EventsDatabase {
 }
 
 impl EventsDatabase {
-    /// Create new EventsDatabase with connection pooling
+    /// Open the events store with its writer and reader pools.
     pub async fn new() -> Result<Self> {
         let database_path = crate::paths::get_events_db_path();
-        let database_path_str = database_path.to_string_lossy().to_string();
-
-        // Configure connection managers with centralized PRAGMAs
-        let write_manager = SqliteConnectionManager::file(&database_path)
-            .with_init(|c| database::configure_connection(c, database::EVENTS_WRITE_DB));
-        let read_manager = SqliteConnectionManager::file(&database_path)
-            .with_init(|c| database::configure_connection(c, database::EVENTS_READ_DB));
-
-        // Create write pool
-        let write_pool = Pool::builder()
-            .max_size(WRITE_POOL_MAX_SIZE)
-            .min_idle(Some(POOL_MIN_IDLE))
-            .connection_timeout(Duration::from_millis(CONNECTION_TIMEOUT_MS))
-            .idle_timeout(None) // SQLite: keep connections alive (WAL stability)
-            .max_lifetime(None) // SQLite: no connection recycling
-            .build(write_manager)
-            .map_err(|e| {
-                Error::Database(DatabaseError::Connection {
-                    message: e.to_string(),
-                })
-            })?;
-
-        // Create read pool
-        let read_pool = Pool::builder()
-            .max_size(READ_POOL_MAX_SIZE)
-            .min_idle(Some(POOL_MIN_IDLE))
-            .connection_timeout(Duration::from_millis(CONNECTION_TIMEOUT_MS))
-            .idle_timeout(None) // SQLite: keep connections alive (WAL stability)
-            .max_lifetime(None) // SQLite: no connection recycling
-            .build(read_manager)
-            .map_err(|e| {
-                Error::Database(DatabaseError::Connection {
-                    message: e.to_string(),
-                })
-            })?;
-
-        let mut db = EventsDatabase {
-            write_pool,
-            read_pool,
-            database_path: database_path_str.clone(),
-        };
-
-        // Initialize database schema
-        db.initialize_schema().await?;
-        database::handles::register(&database::catalog::EVENTS, &database_path, &db.write_pool);
-
+        let write_pool = database::open::store(&database::catalog::EVENTS)?;
+        let read_pool = database::open::reader(&database::catalog::EVENTS, &database_path)?;
+        let database_path = database_path.to_string_lossy().to_string();
         logger::info(
             LogTag::System,
-            &format!("Events database initialized at {database_path_str}"),
+            &format!("Events database initialized at {database_path}"),
         );
-
-        Ok(db)
-    }
-
-    /// Initialize database schema with all tables and indexes
-    async fn initialize_schema(&mut self) -> Result<()> {
-        // Use a write connection for initialization
-        let conn = self.get_write_connection()?;
-
-        // Create main events table (fresh schema)
-        conn.execute(
-            "CREATE TABLE IF NOT EXISTS events (
-                id              INTEGER PRIMARY KEY AUTOINCREMENT,
-                event_time      TEXT    NOT NULL,
-                category        TEXT    NOT NULL,
-                subtype         TEXT,
-                severity        TEXT    NOT NULL,
-                mint            TEXT,
-                reference_id    TEXT,
-                message_short   TEXT,
-                json_payload    TEXT    NOT NULL,
-                created_at      TEXT    NOT NULL DEFAULT (datetime('now')),
-                chain_id        TEXT    NOT NULL DEFAULT 'solana'
-            )",
-            [],
-        )
-        .map_err(|e| {
-            Error::Database(DatabaseError::Query {
-                operation: "create events table".to_owned(),
-                message: e.to_string(),
-            })
-        })?;
-
-        // Chain scope: the shared file gains a chain column. Historical rows
-        // are Solana's by construction, so the migration backfills 'solana';
-        // gated on the live schema, never a version stamp.
-        let has_chain_id = database::schema::table_has_column(&conn, "events", "chain_id")
-            .map_err(|e| {
-                Error::Database(DatabaseError::Query {
-                    operation: "inspect events schema for chain_id".to_owned(),
-                    message: e.to_string(),
-                })
-            })?;
-        if !has_chain_id {
-            conn.execute(
-                "ALTER TABLE events ADD COLUMN chain_id TEXT NOT NULL DEFAULT 'solana'",
-                [],
-            )
-            .map_err(|e| {
-                Error::Database(DatabaseError::Query {
-                    operation: "add events chain_id column".to_owned(),
-                    message: e.to_string(),
-                })
-            })?;
-        }
-
-        // Create optimized indexes
-        conn.execute(
-            "CREATE INDEX IF NOT EXISTS idx_events_category_time 
-             ON events(category, event_time DESC)",
-            [],
-        )
-        .map_err(|e| {
-            Error::Database(DatabaseError::Query {
-                operation: "create events category-time index".to_owned(),
-                message: e.to_string(),
-            })
-        })?;
-
-        conn.execute(
-            "CREATE INDEX IF NOT EXISTS idx_events_reference_id 
-             ON events(reference_id)",
-            [],
-        )
-        .map_err(|e| {
-            Error::Database(DatabaseError::Query {
-                operation: "create events reference id index".to_owned(),
-                message: e.to_string(),
-            })
-        })?;
-
-        conn.execute(
-            "CREATE INDEX IF NOT EXISTS idx_events_mint 
-             ON events(mint)",
-            [],
-        )
-        .map_err(|e| {
-            Error::Database(DatabaseError::Query {
-                operation: "create events mint index".to_owned(),
-                message: e.to_string(),
-            })
-        })?;
-
-        conn.execute(
-            "CREATE INDEX IF NOT EXISTS idx_events_severity_time 
-             ON events(severity, event_time DESC)",
-            [],
-        )
-        .map_err(|e| {
-            Error::Database(DatabaseError::Query {
-                operation: "create events severity-time index".to_owned(),
-                message: e.to_string(),
-            })
-        })?;
-
-        conn.execute(
-            "CREATE INDEX IF NOT EXISTS idx_events_created_at 
-             ON events(created_at)",
-            [],
-        )
-        .map_err(|e| {
-            Error::Database(DatabaseError::Query {
-                operation: "create events created at index".to_owned(),
-                message: e.to_string(),
-            })
-        })?;
-
-        // Keyset and composite indexes for pagination and filters
-        conn.execute(
-            "CREATE INDEX IF NOT EXISTS idx_events_id_desc 
-             ON events(id DESC)",
-            [],
-        )
-        .map_err(|e| {
-            Error::Database(DatabaseError::Query {
-                operation: "create events id descending index".to_owned(),
-                message: e.to_string(),
-            })
-        })?;
-
-        conn.execute(
-            "CREATE INDEX IF NOT EXISTS idx_events_category_severity_id 
-             ON events(category, severity, id DESC)",
-            [],
-        )
-        .map_err(|e| {
-            Error::Database(DatabaseError::Query {
-                operation: "create events category severity id index".to_owned(),
-                message: e.to_string(),
-            })
-        })?;
-
-        conn.execute(
-            "CREATE INDEX IF NOT EXISTS idx_events_mint_id 
-             ON events(mint, id DESC)",
-            [],
-        )
-        .map_err(|e| {
-            Error::Database(DatabaseError::Query {
-                operation: "create events mint id index".to_owned(),
-                message: e.to_string(),
-            })
-        })?;
-
-        Ok(())
+        Ok(EventsDatabase {
+            write_pool,
+            read_pool,
+            database_path,
+        })
     }
 
     /// Get write connection from pool

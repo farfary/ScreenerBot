@@ -39,6 +39,7 @@ pub use bootstrap::BootstrapState;
 
 // Re-export main database struct
 pub use operations::TransactionDatabase;
+pub(crate) use schema::SCHEMA;
 
 // Re-export global instance functions
 pub use global::{get_transaction_database, init_transaction_database};

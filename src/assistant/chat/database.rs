@@ -10,22 +10,15 @@
 
 use crate::assistant::error::{Error, Result};
 use crate::database;
-use crate::errors::{DatabaseError, InternalError, IoError};
-use crate::logger::{self, LogTag};
+use crate::database::schema::{ddl, SchemaContext, StoreSchema};
+use crate::errors::DatabaseError;
 use r2d2::Pool;
 use r2d2_sqlite::SqliteConnectionManager;
+use rusqlite::Transaction;
 use serde::{Deserialize, Serialize};
-use std::sync::Arc;
-use std::sync::OnceLock;
 
 // Re-export all query operations so callers can use `database::create_session(...)` etc.
 pub use super::database_queries::*;
-
-// =============================================================================
-// GLOBAL CONNECTION POOL
-// =============================================================================
-
-static GLOBAL_CHAT_POOL: OnceLock<Arc<Pool<SqliteConnectionManager>>> = OnceLock::new();
 
 // =============================================================================
 // DATA STRUCTURES
@@ -66,71 +59,44 @@ pub struct ToolExecution {
 }
 
 // =============================================================================
-// DATABASE INITIALIZATION
+// SCHEMA STEP AND CONNECTIONS
 // =============================================================================
 
-/// Initialize chat database with connection pooling
-pub fn init_chat_db() -> Result<Pool<SqliteConnectionManager>> {
-    let db_path = crate::paths::get_ai_chat_db_path();
-    let db_path_str = db_path.to_string_lossy().to_string();
+/// The schema of `ai_chat.db`: chat sessions and the scheduled assistant tasks.
+pub(crate) const SCHEMA: StoreSchema = StoreSchema {
+    version: 1,
+    min_reader_version: 1,
+    baseline: 1,
+    renames: None,
+    step,
+    legacy_stamp: None,
+};
 
-    // Ensure data directory exists
-    if let Some(parent) = db_path.parent() {
-        std::fs::create_dir_all(parent).map_err(|e| Error::Io(IoError::from(e)))?;
-    }
-
-    // Create connection manager with centralized configuration
-    let manager = SqliteConnectionManager::file(&db_path)
-        .with_init(|c| database::configure_connection(c, database::AI_CHAT_DB));
-
-    // Create connection pool
-    let pool = Pool::builder()
-        .max_size(3)
-        .idle_timeout(None) // SQLite: keep connections alive (WAL stability)
-        .max_lifetime(None) // SQLite: no connection recycling
-        .build(manager)
-        .map_err(|e| {
-            Error::Database(DatabaseError::Connection {
-                message: format!("build the Assistant chat database connection pool: {e}"),
-            })
-        })?;
-
-    // Initialize schema using a connection from the pool
-    {
-        let conn = pool.get().map_err(|e| {
-            Error::Database(DatabaseError::Connection {
-                message: format!("acquire ai-chat database connection: {e}"),
-            })
-        })?;
-        initialize_schema(&conn)?;
-    }
-    database::handles::register(&database::catalog::AI_CHAT, &db_path, &pool);
-
-    logger::info(
-        LogTag::System,
-        &format!("Assistant chat database initialized at {db_path_str}"),
-    );
-
-    // Store in global
-    let pool_arc = Arc::new(pool);
-    GLOBAL_CHAT_POOL.set(pool_arc.clone()).map_err(|_| {
-        Error::Internal(InternalError::InvariantViolation {
-            message: "global chat pool already initialized".to_owned(),
-        })
-    })?;
-
-    Ok(Arc::try_unwrap(pool_arc).unwrap_or_else(|arc| (*arc).clone()))
+/// Open the chat store.
+pub fn init_chat_db() -> Result<()> {
+    database::open::store(&database::catalog::AI_CHAT)?;
+    Ok(())
 }
 
-/// Get global chat database pool
-pub fn get_chat_pool() -> Option<Arc<Pool<SqliteConnectionManager>>> {
-    GLOBAL_CHAT_POOL.get().cloned()
+/// The chat store's pool, `None` while the store is unavailable.
+pub fn get_chat_pool() -> Option<Pool<SqliteConnectionManager>> {
+    database::open::store(&database::catalog::AI_CHAT).ok()
 }
 
-/// Initialize database schema
-fn initialize_schema(conn: &rusqlite::Connection) -> Result<()> {
-    // Chat sessions table
-    conn.execute(
+fn step(tx: &Transaction<'_>, _: &SchemaContext) -> std::result::Result<(), DatabaseError> {
+    create_schema(tx).map_err(|error| match error {
+        Error::Database(error) => error,
+        other => DatabaseError::Migration {
+            store: "ai_chat.db".to_owned(),
+            detail: other.to_string(),
+        },
+    })
+}
+
+fn create_schema(tx: &Transaction<'_>) -> Result<()> {
+    ddl::run(
+        tx,
+        "create chat_sessions table",
         "CREATE TABLE IF NOT EXISTS chat_sessions (
             id INTEGER PRIMARY KEY AUTOINCREMENT,
             title TEXT NOT NULL,
@@ -138,17 +104,10 @@ fn initialize_schema(conn: &rusqlite::Connection) -> Result<()> {
             created_at TEXT NOT NULL,
             updated_at TEXT NOT NULL
         )",
-        [],
-    )
-    .map_err(|e| {
-        Error::Database(DatabaseError::Query {
-            operation: "create chat_sessions table".to_owned(),
-            message: e.to_string(),
-        })
-    })?;
-
-    // Chat messages table
-    conn.execute(
+    )?;
+    ddl::run(
+        tx,
+        "create chat_messages table",
         "CREATE TABLE IF NOT EXISTS chat_messages (
             id INTEGER PRIMARY KEY AUTOINCREMENT,
             session_id INTEGER NOT NULL,
@@ -158,17 +117,10 @@ fn initialize_schema(conn: &rusqlite::Connection) -> Result<()> {
             created_at TEXT NOT NULL,
             FOREIGN KEY (session_id) REFERENCES chat_sessions(id) ON DELETE CASCADE
         )",
-        [],
-    )
-    .map_err(|e| {
-        Error::Database(DatabaseError::Query {
-            operation: "create chat_messages table".to_owned(),
-            message: e.to_string(),
-        })
-    })?;
-
-    // Tool executions table
-    conn.execute(
+    )?;
+    ddl::run(
+        tx,
+        "create tool_executions table",
         "CREATE TABLE IF NOT EXISTS tool_executions (
             id INTEGER PRIMARY KEY AUTOINCREMENT,
             message_id INTEGER NOT NULL,
@@ -179,58 +131,30 @@ fn initialize_schema(conn: &rusqlite::Connection) -> Result<()> {
             created_at TEXT NOT NULL,
             FOREIGN KEY (message_id) REFERENCES chat_messages(id) ON DELETE CASCADE
         )",
-        [],
-    )
-    .map_err(|e| {
-        Error::Database(DatabaseError::Query {
-            operation: "create tool_executions table".to_owned(),
-            message: e.to_string(),
-        })
-    })?;
-
-    // Indexes for better query performance
-    conn.execute(
+    )?;
+    ddl::run(
+        tx,
+        "create idx_messages_session index",
         "CREATE INDEX IF NOT EXISTS idx_messages_session ON chat_messages(session_id, created_at)",
-        [],
-    )
-    .map_err(|e| {
-        Error::Database(DatabaseError::Query {
-            operation: "create idx_messages_session index".to_owned(),
-            message: e.to_string(),
-        })
-    })?;
-
-    conn.execute(
+    )?;
+    ddl::run(
+        tx,
+        "create idx_executions_message index",
         "CREATE INDEX IF NOT EXISTS idx_executions_message ON tool_executions(message_id)",
-        [],
-    )
-    .map_err(|e| {
-        Error::Database(DatabaseError::Query {
-            operation: "create idx_executions_message index".to_owned(),
-            message: e.to_string(),
-        })
-    })?;
-
-    conn.execute(
+    )?;
+    ddl::run(
+        tx,
+        "create idx_sessions_updated index",
         "CREATE INDEX IF NOT EXISTS idx_sessions_updated ON chat_sessions(updated_at DESC)",
-        [],
-    )
-    .map_err(|e| {
-        Error::Database(DatabaseError::Query {
-            operation: "create idx_sessions_updated index".to_owned(),
-            message: e.to_string(),
-        })
-    })?;
-
-    // Add is_hidden column if not exists (for scheduled task sessions)
-    let _ = conn.execute(
-        "ALTER TABLE chat_sessions ADD COLUMN is_hidden INTEGER NOT NULL DEFAULT 0",
-        [],
-    );
-
-    // Initialize scheduled tasks tables
-    crate::assistant::scheduled::database::initialize_scheduled_tables(conn)?;
-
+    )?;
+    // Scheduled task sessions are hidden from the session list.
+    ddl::add_column(
+        tx,
+        "chat_sessions",
+        "is_hidden",
+        "INTEGER NOT NULL DEFAULT 0",
+    )?;
+    crate::assistant::scheduled::database::initialize_scheduled_tables(tx)?;
     Ok(())
 }
 
@@ -243,7 +167,12 @@ pub(super) fn test_pool() -> Pool<SqliteConnectionManager> {
         .max_lifetime(None)
         .build(manager)
         .expect("chat test pool");
-    initialize_schema(&pool.get().expect("chat test connection")).expect("chat test schema");
+    database::open::upgrade_connection(
+        &mut pool.get().expect("chat test connection"),
+        &database::catalog::AI_CHAT,
+        vec![crate::chains::ChainId::Solana],
+    )
+    .expect("chat test schema");
     pool
 }
 
@@ -256,16 +185,9 @@ pub fn with_chat_db<F, T>(f: F) -> Result<T>
 where
     F: FnOnce(&rusqlite::Connection) -> Result<T>,
 {
-    let pool = get_chat_pool().ok_or_else(|| {
-        Error::Internal(InternalError::InvariantViolation {
-            message: "chat database pool not initialized".to_owned(),
-        })
-    })?;
-    let conn = pool.get().map_err(|e| {
-        Error::Database(DatabaseError::Connection {
-            message: format!("acquire ai-chat database connection: {e}"),
-        })
-    })?;
+    let conn = database::open::store(&database::catalog::AI_CHAT)?
+        .get()
+        .map_err(DatabaseError::from)?;
     f(&*conn)
 }
 

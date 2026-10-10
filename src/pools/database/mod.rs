@@ -28,7 +28,7 @@ pub use global::{
     is_account_blacklisted, is_pool_blacklisted, list_blacklisted_accounts, list_blacklisted_pools,
     load_historical_data_for_token, queue_price_for_storage,
 };
-pub(crate) use global::{database, install_database};
+pub(crate) use migrations::SCHEMA;
 
 // Re-export PoolsDatabase for advanced usage
 pub use operations::PoolsDatabase;

@@ -43,6 +43,21 @@ pub enum DatabaseError {
     /// and no merge rule covers it, so the open was refused before any write.
     #[error("{store} holds both {object}")]
     SchemaConflict { store: String, object: String },
+    /// The store was last written by a newer core whose schema this core cannot read:
+    /// its recorded oldest compatible reader is newer than the version this core
+    /// supports. The open was refused before any write.
+    #[error("{store} is at schema version {version} written by {written_by}; it needs a reader of version {min_reader_version} or newer and this core supports {supported_version}")]
+    StoreTooNew {
+        store: String,
+        version: i64,
+        min_reader_version: i64,
+        supported_version: i64,
+        written_by: String,
+    },
+    /// A schema step of the store's open failed for a reason of the store's own content.
+    /// The open's transaction rolled back, so the store is unchanged.
+    #[error("{store} schema step failed: {detail}")]
+    Migration { store: String, detail: String },
 }
 
 impl DatabaseError {

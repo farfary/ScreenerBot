@@ -6,12 +6,11 @@
 use chrono::{DateTime, NaiveDateTime, Utc};
 use r2d2::{Pool, PooledConnection};
 use r2d2_sqlite::SqliteConnectionManager;
-use rusqlite::{params, Connection, OptionalExtension};
-use std::sync::atomic::Ordering;
+use rusqlite::{params, Connection, OptionalExtension, Transaction};
 
-use crate::database::backup::back_up_before_upgrade;
-use crate::database::schema::{self, table_has_column};
-use crate::database::{self, WriteTransaction};
+use crate::chains::ChainId;
+use crate::database::schema::{self, table_has_column, LegacyStamp, SchemaContext, StoreSchema};
+use crate::database::{self, catalog, WriteTransaction};
 use crate::errors::DatabaseError;
 use crate::logger::{self, LogTag};
 use crate::positions::types::{Position, PositionManagement, PositionOrigin};
@@ -22,300 +21,142 @@ use super::provenance::{merge_ledger_duplicates, migrate_position_provenance};
 use super::raw_migration::{canonicalize_amount_tables, migrate_pending_partial_exit_amounts};
 use super::types::*;
 
-/// What a store recorded about its schema before an open.
-enum StoredSchema {
-    /// No positions table: the open creates the store.
-    NewFile,
-    /// Positions storage from a release that recorded no schema version.
-    Unrecorded,
-    Recorded(u32),
+/// The schema of `positions.db`. Older cores read `position_metadata.schema_version`.
+pub(crate) const SCHEMA: StoreSchema = StoreSchema {
+    version: POSITIONS_SCHEMA_VERSION as i64,
+    min_reader_version: POSITIONS_SCHEMA_VERSION as i64,
+    baseline: POSITIONS_SCHEMA_VERSION as i64,
+    renames: Some(&super::column_names::RENAMES),
+    step,
+    legacy_stamp: Some(LegacyStamp {
+        table: "position_metadata",
+        key: "schema_version",
+        version: POSITIONS_SCHEMA_VERSION as i64,
+    }),
+};
+
+fn step(tx: &Transaction<'_>, context: &SchemaContext) -> std::result::Result<(), DatabaseError> {
+    let summary = create_schema(tx, &context.chains).map_err(|error| match error {
+        Error::Database(error) => error,
+        other => DatabaseError::Migration {
+            store: "positions.db".to_owned(),
+            detail: other.to_string(),
+        },
+    })?;
+    if !summary.is_empty() {
+        logger::info(
+            LogTag::Positions,
+            &format!("Positions database upgraded: {}", summary.join("; ")),
+        );
+    }
+    Ok(())
 }
 
-impl PositionsDatabase {
-    /// Create new PositionsDatabase with connection pooling
-    pub async fn new(chain: crate::chains::ChainId) -> Result<Self> {
-        let database_path = crate::paths::get_positions_db_path();
-        Self::new_with_path(database_path, chain).await
-    }
+/// Brings the store to the current schema and returns what each step changed: tables,
+/// historical columns, unit-neutral names, the canonical amount tables, ledger merges,
+/// indexes and the data migrations, in dependency order. Foreign keys are off because a
+/// rebuilt root table is dropped before its replacement takes its name; the rebuild
+/// checks them before commit.
+fn create_schema(tx: &Transaction<'_>, chains: &[ChainId]) -> Result<Vec<String>> {
+    let mut summary = Vec::new();
 
-    /// Open a positions database at an explicit path and initialize its complete schema.
-    async fn new_with_path(
-        database_path: impl AsRef<std::path::Path>,
-        chain: crate::chains::ChainId,
-    ) -> Result<Self> {
-        let database_path = database_path.as_ref();
-        let database_path_str = database_path.to_string_lossy().to_string();
-
-        // Only log detailed initialization on first database creation
-        let is_first_init = !POSITIONS_DB_INITIALIZED.load(Ordering::Relaxed);
-        if is_first_init {
-            logger::info(
-                LogTag::Positions,
-                &format!("Initializing positions database at: {database_path_str}"),
-            );
-        }
-
-        // Configure connection manager with centralized PRAGMAs
-        let manager = SqliteConnectionManager::file(database_path)
-            .with_init(|c| database::configure_connection(c, database::POSITIONS_DB));
-
-        // Create connection pool
-        let pool = Pool::builder()
-            .max_size(5)
-            .min_idle(Some(1))
-            .idle_timeout(None) // SQLite: keep connections alive (WAL stability)
-            .max_lifetime(None) // SQLite: no connection recycling
-            .build(manager)
-            .map_err(|e| DatabaseError::Connection {
-                message: format!("failed to create positions connection pool: {e}"),
-            })?;
-
-        let mut db = PositionsDatabase {
-            pool,
-            database_path: database_path_str.clone(),
-            schema_version: POSITIONS_SCHEMA_VERSION,
-            chain,
-        };
-
-        // Initialize database schema
-        db.initialize_schema(is_first_init).await?;
-        database::handles::register(&database::catalog::POSITIONS, database_path, &db.pool);
-
-        if is_first_init {
-            logger::info(
-                LogTag::Positions,
-                "Positions database initialized successfully",
-            );
-            POSITIONS_DB_INITIALIZED.store(true, Ordering::Relaxed);
-        }
-
-        Ok(db)
-    }
-
-    /// Bring the store to the current schema in one IMMEDIATE transaction: tables,
-    /// historical columns, unit-neutral names, the canonical amount tables, ledger
-    /// merges, indexes, the schema version and the data migrations either all commit or
-    /// none do, so a refused open leaves the file as it was. Foreign keys are off for
-    /// the transaction because a rebuilt root table is dropped before its replacement
-    /// takes its name; the rebuild checks them before commit.
-    async fn initialize_schema(&mut self, log_initialization: bool) -> Result<()> {
-        let mut conn = self.get_connection()?;
-        let pragma = |e: rusqlite::Error| Error::SchemaMigration {
-            detail: format!("failed to set positions foreign keys: {e}"),
-        };
-        let foreign_keys: bool = conn
-            .pragma_query_value(None, "foreign_keys", |row| row.get(0))
-            .map_err(pragma)?;
-        conn.pragma_update(None, "foreign_keys", false)
-            .map_err(pragma)?;
-        let result = self.initialize_schema_in_transaction(&mut conn, log_initialization);
-        let restored = conn
-            .pragma_update(None, "foreign_keys", foreign_keys)
-            .map_err(pragma);
-        let summary = result?;
-        restored?;
-        if log_initialization || !summary.is_empty() {
-            logger::info(
-                LogTag::Positions,
-                &if summary.is_empty() {
-                    "Positions database schema is current".to_owned()
-                } else {
-                    format!("Positions database upgraded: {}", summary.join("; "))
-                },
-            );
-        }
-        Ok(())
-    }
-
-    /// The steps of [`Self::initialize_schema`], in dependency order, and what each
-    /// changed.
-    fn initialize_schema_in_transaction(
-        &self,
-        conn: &mut Connection,
-        log_initialization: bool,
-    ) -> Result<Vec<String>> {
-        let tx = conn.write_tx().map_err(|e| Error::SchemaMigration {
-            detail: format!("failed to begin positions schema transaction: {e}"),
+    for (table, ddl) in [
+        ("positions", SCHEMA_POSITIONS),
+        ("position_states", SCHEMA_POSITION_STATES),
+        ("position_exits", SCHEMA_POSITION_EXITS),
+        ("position_entries", SCHEMA_POSITION_ENTRIES),
+        ("position_tracking", SCHEMA_POSITION_TRACKING),
+        ("position_metadata", SCHEMA_POSITION_METADATA),
+        ("token_snapshots", SCHEMA_TOKEN_SNAPSHOTS),
+    ] {
+        tx.execute(ddl, []).map_err(|e| Error::SchemaMigration {
+            detail: format!("failed to create {table} table: {e}"),
         })?;
-        let mut summary = Vec::new();
+    }
 
-        // Nothing has been written yet: a newer store is refused unchanged, and the
-        // backup is the store as this upgrade found it.
-        let stored_schema = self.stored_schema(&tx)?;
-        let version_current = matches!(stored_schema, StoredSchema::Recorded(stored) if stored == self.schema_version);
-        let upgrade_from = match stored_schema {
-            StoredSchema::NewFile => None,
-            StoredSchema::Unrecorded => Some(None),
-            StoredSchema::Recorded(stored) if stored > self.schema_version => {
-                return Err(Error::SchemaTooNew {
-                    stored,
-                    supported: self.schema_version,
-                });
-            }
-            StoredSchema::Recorded(stored) if stored == self.schema_version => None,
-            StoredSchema::Recorded(stored) => Some(Some(stored.to_string())),
-        };
-        // First of the open's steps, after the read-only version check so a newer
-        // store is still refused as too new. No renamed object here has a merge rule,
-        // so reconcile only refuses and writes nothing ahead of the backup.
-        schema::renames::reconcile(&tx, &super::column_names::RENAMES)?;
-        if let Some(from) = upgrade_from {
-            let backup =
-                back_up_before_upgrade(std::path::Path::new(&self.database_path), from.as_deref())?;
-            summary.push(format!("backed up to {}", backup.display()));
-        }
+    // Historical columns are appended in the order releases introduced them;
+    // provenance backfills from columns the earlier steps guarantee.
+    let mut added = add_missing_columns(tx, "positions", POSITIONS_PNL_COLUMNS)?;
+    added.extend(add_missing_columns(
+        tx,
+        "positions",
+        POSITIONS_ARCHIVE_COLUMNS,
+    )?);
+    added.extend(migrate_position_provenance(tx)?);
+    added.extend(add_missing_columns(
+        tx,
+        "positions",
+        POSITIONS_CHAIN_COLUMNS,
+    )?);
+    if !added.is_empty() {
+        summary.push(format!("added positions columns {}", added.join(", ")));
+    }
 
-        for (table, ddl) in [
-            ("positions", SCHEMA_POSITIONS),
-            ("position_states", SCHEMA_POSITION_STATES),
-            ("position_exits", SCHEMA_POSITION_EXITS),
-            ("position_entries", SCHEMA_POSITION_ENTRIES),
-            ("position_tracking", SCHEMA_POSITION_TRACKING),
-            ("position_metadata", SCHEMA_POSITION_METADATA),
-            ("token_snapshots", SCHEMA_TOKEN_SNAPSHOTS),
-        ] {
-            tx.execute(ddl, []).map_err(|e| Error::SchemaMigration {
-                detail: format!("failed to create {table} table: {e}"),
-            })?;
-        }
+    match schema::renames::rename(tx, &super::column_names::RENAMES)? {
+        0 => {}
+        renamed => summary.push(format!("renamed {renamed} unit columns")),
+    }
 
-        // Historical columns are appended in the order releases introduced them;
-        // provenance backfills from columns the earlier steps guarantee.
-        let mut added = add_missing_columns(&tx, "positions", POSITIONS_PNL_COLUMNS)?;
-        added.extend(add_missing_columns(
-            &tx,
-            "positions",
-            POSITIONS_ARCHIVE_COLUMNS,
-        )?);
-        added.extend(migrate_position_provenance(&tx)?);
-        added.extend(add_missing_columns(
-            &tx,
-            "positions",
-            POSITIONS_CHAIN_COLUMNS,
-        )?);
-        if !added.is_empty() {
-            summary.push(format!("added positions columns {}", added.join(", ")));
-        }
+    let canonicalized = canonicalize_amount_tables(tx)?;
+    if !canonicalized.dropped_indexes.is_empty() {
+        summary.push(format!(
+            "dropped indexes {}",
+            canonicalized.dropped_indexes.join(", ")
+        ));
+    }
+    if !canonicalized.rebuilt.is_empty() {
+        summary.push(format!(
+            "rebuilt {} in canonical form",
+            canonicalized.rebuilt.join(", ")
+        ));
+    }
 
-        match schema::renames::rename(&tx, &super::column_names::RENAMES)? {
-            0 => {}
-            renamed => summary.push(format!("renamed {renamed} unit columns")),
-        }
+    if migrate_pending_partial_exit_amounts(tx)? {
+        summary.push("converted pending partial-exit amounts".to_owned());
+    }
 
-        let canonicalized = canonicalize_amount_tables(&tx)?;
-        if !canonicalized.dropped_indexes.is_empty() {
-            summary.push(format!(
-                "dropped indexes {}",
-                canonicalized.dropped_indexes.join(", ")
-            ));
-        }
-        if !canonicalized.rebuilt.is_empty() {
-            summary.push(format!(
-                "rebuilt {} in canonical form",
-                canonicalized.rebuilt.join(", ")
-            ));
-        }
-
-        if migrate_pending_partial_exit_amounts(&tx)? {
-            summary.push("converted pending partial-exit amounts".to_owned());
-        }
-
-        match merge_ledger_duplicates(&tx)? {
-            0 => {}
-            merged => logger::warning(
-                LogTag::Positions,
-                &format!(
-                    "Merged {merged} duplicate wallet-history rows into the positions they belong to"
-                ),
+    match merge_ledger_duplicates(tx)? {
+        0 => {}
+        merged => logger::warning(
+            LogTag::Positions,
+            &format!(
+                "Merged {merged} duplicate wallet-history rows into the positions they belong to"
             ),
-        }
+        ),
+    }
 
-        for index_sql in POSITIONS_INDEXES {
-            tx.execute(index_sql, [])
-                .map_err(|e| Error::SchemaMigration {
-                    detail: format!("failed to create positions index: {e}"),
-                })?;
-        }
-        for duplicate in install_open_round_index(&tx)? {
-            logger::error(
-                LogTag::Positions,
-                &format!(
-                    "Positions {:?} of mint {} (chain {}, wallet {}) are all open: a mint has one open position, so the index {OPEN_ROUND_INDEX_NAME} is installed once all but one of them are closed; their books are left unchanged",
-                    duplicate.position_ids,
-                    duplicate.mint,
-                    duplicate.chain_id,
-                    duplicate.wallet_address
-                ),
-            );
-        }
-
-        // A store already at this version keeps its row untouched, so reopening it
-        // writes nothing.
-        if !version_current {
-            tx.execute(
-                "INSERT OR REPLACE INTO position_metadata (key, value) VALUES ('schema_version', ?1)",
-                params![self.schema_version.to_string()],
-            )
+    for index_sql in POSITIONS_INDEXES {
+        tx.execute(index_sql, [])
             .map_err(|e| Error::SchemaMigration {
-                detail: format!("failed to set positions schema version: {e}"),
+                detail: format!("failed to create positions index: {e}"),
             })?;
-        }
-
-        self.run_data_migrations(&tx, log_initialization)?;
-
-        tx.commit().map_err(|e| Error::SchemaMigration {
-            detail: format!("failed to commit positions schema: {e}"),
-        })?;
-        Ok(summary)
+    }
+    for duplicate in install_open_round_index(tx)? {
+        logger::error(
+            LogTag::Positions,
+            &format!(
+                "Positions {:?} of mint {} (chain {}, wallet {}) are all open: a mint has one open position, so the index {OPEN_ROUND_INDEX_NAME} is installed once all but one of them are closed; their books are left unchanged",
+                duplicate.position_ids,
+                duplicate.mint,
+                duplicate.chain_id,
+                duplicate.wallet_address
+            ),
+        );
     }
 
-    /// The schema version the store recorded before this open.
-    fn stored_schema(&self, conn: &Connection) -> Result<StoredSchema> {
-        let inspect = |e: rusqlite::Error| Error::SchemaMigration {
-            detail: format!("failed to inspect the stored positions schema version: {e}"),
-        };
-        let table_exists = |name: &str| -> Result<bool> {
-            conn.query_row(
-                "SELECT EXISTS (SELECT 1 FROM sqlite_master WHERE type = 'table' AND name = ?1)",
-                [name],
-                |row| row.get(0),
-            )
-            .map_err(inspect)
-        };
-        if !table_exists("positions")? {
-            return Ok(StoredSchema::NewFile);
-        }
-        if !table_exists("position_metadata")? {
-            return Ok(StoredSchema::Unrecorded);
-        }
-        let stored: Option<String> = conn
-            .query_row(
-                "SELECT value FROM position_metadata WHERE key = 'schema_version'",
-                [],
-                |row| row.get(0),
-            )
-            .optional()
-            .map_err(inspect)?;
-        match stored {
-            None => Ok(StoredSchema::Unrecorded),
-            Some(value) => {
-                value
-                    .parse()
-                    .map(StoredSchema::Recorded)
-                    .map_err(|_| Error::SchemaMigration {
-                        detail: format!("unreadable stored positions schema version {value:?}"),
-                    })
-            }
-        }
+    for chain in chains {
+        run_data_migrations(tx, *chain, &mut summary)?;
     }
+    Ok(summary)
+}
 
-    /// Data migrations for rows written by earlier releases; a failure refuses the open
-    /// with the schema transaction.
-    fn run_data_migrations(&self, conn: &Connection, log: bool) -> Result<()> {
-        // Open positions from before partial exits and DCA carry no remaining amount.
-        let updated_count = conn
-            .execute(
-                r#"
+/// Data migrations for rows written by earlier releases; a failure refuses the open
+/// with the schema transaction.
+fn run_data_migrations(conn: &Connection, chain: ChainId, summary: &mut Vec<String>) -> Result<()> {
+    // Open positions from before partial exits and DCA carry no remaining amount.
+    let updated_count = conn
+        .execute(
+            r#"
       UPDATE positions
       SET
         remaining_token_amount = token_amount,
@@ -326,41 +167,67 @@ impl PositionsDatabase {
        AND chain_id = ?1
        AND position_type = 'buy'
       "#,
-                params![self.chain.as_str()],
-            )
-            .map_err(|e| Error::SchemaMigration {
-                detail: format!("failed to initialize remaining position amounts: {e}"),
-            })?;
-        if updated_count > 0 && log {
-            logger::warning(
-                LogTag::Positions,
-                &format!(
-                    "Migrated {updated_count} existing open positions with partial sell/DCA fields"
-                ),
-            );
-        }
+            params![chain.as_str()],
+        )
+        .map_err(|e| Error::SchemaMigration {
+            detail: format!("failed to initialize remaining position amounts: {e}"),
+        })?;
+    if updated_count > 0 {
+        summary.push(format!(
+            "set remaining amounts of {updated_count} open {} positions",
+            chain.as_str()
+        ));
+    }
 
-        // State timestamps written by SQLite's datetime('now') become RFC3339.
-        let rows = conn
-            .execute(
-                r#"
+    // State timestamps written by SQLite's datetime('now') become RFC3339.
+    let rows = conn
+        .execute(
+            r#"
       UPDATE position_states
       SET changed_at = strftime('%Y-%m-%dT%H:%M:%SZ', datetime(changed_at))
       WHERE changed_at NOT LIKE '%T%'
       "#,
-                [],
-            )
-            .map_err(|e| Error::SchemaMigration {
-                detail: format!("failed to normalize position state timestamps: {e}"),
-            })?;
-        if rows > 0 && log {
-            logger::info(
-                LogTag::Positions,
-                &format!("Normalized {rows} legacy position state timestamps to RFC3339"),
-            );
-        }
+            [],
+        )
+        .map_err(|e| Error::SchemaMigration {
+            detail: format!("failed to normalize position state timestamps: {e}"),
+        })?;
+    if rows > 0 {
+        summary.push(format!("normalized {rows} position state timestamps"));
+    }
 
-        Ok(())
+    Ok(())
+}
+
+impl PositionsDatabase {
+    /// The positions database of `chain`, opened by the storage phase.
+    pub async fn new(chain: ChainId) -> Result<Self> {
+        let pool = database::open::store(&catalog::POSITIONS)?;
+        Ok(Self::with_pool(pool, catalog::POSITIONS.path(chain), chain))
+    }
+
+    /// Open a positions database at an explicit path, upgrading its schema.
+    #[cfg(test)]
+    async fn new_with_path(
+        database_path: impl AsRef<std::path::Path>,
+        chain: ChainId,
+    ) -> Result<Self> {
+        let path = database_path.as_ref().to_path_buf();
+        let pool = database::open::pool_at(&catalog::POSITIONS, &path, vec![chain])?;
+        Ok(Self::with_pool(pool, path, chain))
+    }
+
+    fn with_pool(
+        pool: Pool<SqliteConnectionManager>,
+        path: std::path::PathBuf,
+        chain: ChainId,
+    ) -> Self {
+        PositionsDatabase {
+            pool,
+            database_path: path.to_string_lossy().into_owned(),
+            schema_version: POSITIONS_SCHEMA_VERSION,
+            chain,
+        }
     }
 
     /// The chain whose positions this store holds.
@@ -1088,12 +955,26 @@ mod tests {
     use super::super::booking::Booking;
     use super::super::open_round::OPEN_ROUND_INDEX_NAME;
     use super::{PositionsDatabase, POSITIONS_INDEXES, POSITIONS_SCHEMA_VERSION};
+    use crate::database::{catalog, open};
+
+    /// Runs the store's whole open on the test database's file, as the storage phase
+    /// does.
+    async fn upgrade(database: &PositionsDatabase) -> crate::positions::Result<()> {
+        open::pool_at(
+            &catalog::POSITIONS,
+            std::path::Path::new(&database.database_path),
+            vec![database.chain],
+        )?;
+        Ok(())
+    }
 
     fn test_database() -> (PositionsDatabase, tempfile::TempDir) {
         let directory = tempfile::tempdir().unwrap();
         let path = directory.path().join("positions.db");
         let manager = SqliteConnectionManager::file(&path);
-        let pool = Pool::builder().max_size(1).build(manager).unwrap();
+        // No connection is made before the store opener runs: an empty file left by an
+        // eager pool is a store that is not a database.
+        let pool = Pool::builder().max_size(1).build_unchecked(manager);
         (
             PositionsDatabase {
                 pool,
@@ -1229,7 +1110,7 @@ mod tests {
 
     #[tokio::test]
     async fn full_schema_initialization_leaves_duplicate_open_rows_untouched_until_one_closes() {
-        let (mut database, _directory) = test_database();
+        let (database, _directory) = test_database();
         {
             let legacy = database.get_connection().unwrap();
             legacy
@@ -1253,9 +1134,9 @@ mod tests {
             }
         }
 
-        database.initialize_schema(false).await.unwrap();
+        upgrade(&database).await.unwrap();
         let initialized = store_contents(&database.get_connection().unwrap());
-        database.initialize_schema(false).await.unwrap();
+        upgrade(&database).await.unwrap();
 
         let connection = database.get_connection().unwrap();
         assert!(
@@ -1291,8 +1172,8 @@ mod tests {
             )
             .unwrap();
         drop(connection);
-        database.initialize_schema(false).await.unwrap();
-        database.initialize_schema(false).await.unwrap();
+        upgrade(&database).await.unwrap();
+        upgrade(&database).await.unwrap();
 
         let connection = database.get_connection().unwrap();
         assert_current_schema(&connection);
@@ -1305,8 +1186,8 @@ mod tests {
 
     #[tokio::test]
     async fn a_booking_that_unarchives_its_row_clears_the_stored_archive_flag() {
-        let (mut database, _directory) = test_database();
-        database.initialize_schema(false).await.unwrap();
+        let (database, _directory) = test_database();
+        upgrade(&database).await.unwrap();
         database.get_connection().unwrap().execute(
             "INSERT INTO positions (id, chain_id, wallet_address, mint, symbol, name, entry_price, entry_time, position_type, entry_size_native, total_size_native, price_highest, price_lowest, archived, archived_at, origin_kind, management) VALUES (41, 'solana', 'wallet', 'mint', 'SYM', 'Token', 0.5, '2026-01-01T00:00:00Z', 'buy', 1.0, 1.0, 0.5, 0.5, 1, '2026-01-02T00:00:00Z', 'manual', 'user_only')",
             [],
@@ -1370,7 +1251,7 @@ mod tests {
 
     #[tokio::test]
     async fn full_schema_initialization_preserves_released_provenance_and_is_idempotent() {
-        let (mut database, _directory) = test_database();
+        let (database, _directory) = test_database();
         {
             let legacy = database.get_connection().unwrap();
             legacy
@@ -1392,8 +1273,8 @@ mod tests {
                 .unwrap();
         }
 
-        database.initialize_schema(false).await.unwrap();
-        database.initialize_schema(false).await.unwrap();
+        upgrade(&database).await.unwrap();
+        upgrade(&database).await.unwrap();
 
         let connection = database.get_connection().unwrap();
         assert_current_schema(&connection);
@@ -1466,7 +1347,7 @@ mod tests {
 
     #[tokio::test]
     async fn appended_legacy_columns_are_rebuilt_by_name_keeping_rows_children_and_sequences() {
-        let (mut database, _directory) = test_database();
+        let (database, _directory) = test_database();
         {
             let legacy = database.get_connection().unwrap();
             legacy.execute_batch(&appended_column_storage()).unwrap();
@@ -1482,14 +1363,14 @@ mod tests {
         }
         let before = sequences(&database.get_connection().unwrap());
 
-        database.initialize_schema(false).await.unwrap();
+        upgrade(&database).await.unwrap();
         let upgraded = table_sql(&database.get_connection().unwrap());
         let backups = std::path::Path::new(&database.database_path)
             .parent()
             .unwrap()
             .join("backups");
         let manifest = std::fs::read(backups.join("upgrade-positions.json")).unwrap();
-        database.initialize_schema(false).await.unwrap();
+        upgrade(&database).await.unwrap();
         assert_eq!(
             std::fs::read(backups.join("upgrade-positions.json")).unwrap(),
             manifest,
@@ -1516,8 +1397,7 @@ mod tests {
             "second open changed the schema"
         );
         let (fresh, _fresh_directory) = test_database();
-        let mut fresh = fresh;
-        fresh.initialize_schema(false).await.unwrap();
+        upgrade(&fresh).await.unwrap();
         assert_eq!(upgraded, table_sql(&fresh.get_connection().unwrap()));
         assert_eq!(sequences(&connection), before);
         assert_eq!(
@@ -1549,7 +1429,7 @@ mod tests {
 
     #[tokio::test]
     async fn a_refused_upgrade_leaves_every_earlier_step_uncommitted() {
-        let (mut database, _directory) = test_database();
+        let (database, _directory) = test_database();
         let legacy = appended_column_storage().replacen(
             "  manual_management BOOLEAN NOT NULL DEFAULT 0,\n",
             "  manual_management BOOLEAN NOT NULL DEFAULT 0,\n  unrecognized_flag INTEGER,\n",
@@ -1562,7 +1442,7 @@ mod tests {
             .unwrap();
         let before = table_sql(&database.get_connection().unwrap());
 
-        let error = database.initialize_schema(false).await.unwrap_err();
+        let error = upgrade(&database).await.unwrap_err();
 
         assert!(
             error
@@ -1583,40 +1463,56 @@ mod tests {
             .unwrap()
     }
 
-    /// A store written by a newer build is refused before anything is written, and
-    /// its recorded version is never lowered.
+    /// A store whose ledger names a version this build cannot read is refused before
+    /// anything is written, and neither its ledger nor its legacy stamp is lowered.
     #[tokio::test]
     async fn a_newer_store_is_refused_unchanged() {
-        let (mut database, _directory) = test_database();
-        database.initialize_schema(false).await.unwrap();
-        let newer = POSITIONS_SCHEMA_VERSION + 1;
+        let (database, _directory) = test_database();
+        upgrade(&database).await.unwrap();
+        let newer = i64::from(POSITIONS_SCHEMA_VERSION) + 1;
         database
             .get_connection()
             .unwrap()
             .execute(
-                "UPDATE position_metadata SET value = ?1 WHERE key = 'schema_version'",
-                [newer.to_string()],
+                "UPDATE store_schema SET version = ?1, min_reader_version = ?1 WHERE id = 1",
+                [newer],
             )
             .unwrap();
         let before = table_sql(&database.get_connection().unwrap());
 
-        let error = database.initialize_schema(false).await.unwrap_err();
+        let error = upgrade(&database).await.unwrap_err();
 
         assert!(
-            matches!(error, crate::positions::Error::SchemaTooNew { stored, supported } if stored == newer && supported == POSITIONS_SCHEMA_VERSION),
+            matches!(
+                &error,
+                crate::positions::Error::Database(crate::errors::DatabaseError::StoreTooNew {
+                    version,
+                    supported_version,
+                    ..
+                }) if *version == newer && *supported_version == i64::from(POSITIONS_SCHEMA_VERSION)
+            ),
             "{error}"
         );
         let connection = database.get_connection().unwrap();
         assert_eq!(table_sql(&connection), before);
-        assert_eq!(stored_version(&connection), newer.to_string());
+        assert_eq!(
+            stored_version(&connection),
+            POSITIONS_SCHEMA_VERSION.to_string()
+        );
+        let ledger: i64 = connection
+            .query_row("SELECT version FROM store_schema WHERE id = 1", [], |row| {
+                row.get(0)
+            })
+            .unwrap();
+        assert_eq!(ledger, newer);
     }
 
     /// A store at an older recorded version is backed up with that version and then
     /// raised to this build's.
     #[tokio::test]
     async fn an_older_store_is_backed_up_and_raised_to_the_current_version() {
-        let (mut database, _directory) = test_database();
-        database.initialize_schema(false).await.unwrap();
+        let (database, _directory) = test_database();
+        upgrade(&database).await.unwrap();
         let older = POSITIONS_SCHEMA_VERSION - 1;
         database
             .get_connection()
@@ -1627,7 +1523,7 @@ mod tests {
             )
             .unwrap();
 
-        database.initialize_schema(false).await.unwrap();
+        upgrade(&database).await.unwrap();
 
         assert_eq!(
             stored_version(&database.get_connection().unwrap()),
@@ -1644,8 +1540,8 @@ mod tests {
 
     #[tokio::test]
     async fn wide_position_amounts_round_trip_through_the_row_codec_and_writer() {
-        let (mut database, _directory) = test_database();
-        database.initialize_schema(false).await.unwrap();
+        let (database, _directory) = test_database();
+        upgrade(&database).await.unwrap();
         database.get_connection().unwrap().execute(
             "INSERT INTO positions (id, chain_id, wallet_address, mint, symbol, name, entry_price, entry_time, position_type, entry_size_native, total_size_native, price_highest, price_lowest, token_amount, remaining_token_amount, total_exited_amount, origin_kind, management) VALUES (41, 'solana', 'wallet', 'mint', 'SYM', 'Token', 0.5, '2026-01-01T00:00:00Z', 'buy', 1.0, 1.0, 0.5, 0.5, '340282366920938463463374607431768211455', '18446744073709551616', '18446744073709551617', 'manual', 'user_only')",
             [],

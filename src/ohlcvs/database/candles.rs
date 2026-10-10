@@ -5,6 +5,7 @@
 //! tracking.
 
 use crate::database::WriteTransaction;
+use crate::errors::DatabaseError;
 use crate::ohlcvs::types::{Candle, OhlcvError, OhlcvResult, Timeframe, DEEP_HISTORY_TIMEFRAMES};
 use chrono::Utc;
 use rusqlite::{params, OptionalExtension};
@@ -51,7 +52,7 @@ impl OhlcvDatabase {
             .prepare(
                 "SELECT MIN(timestamp), MAX(timestamp) FROM ohlcv_candles WHERE chain_id = ?1 AND mint = ?2 AND pool_address = ?3 AND timeframe = ?4",
             )
-            .map_err(|e| OhlcvError::DatabaseError(format!("Failed to prepare: {e}")))?;
+            .map_err(|e| OhlcvError::Database(DatabaseError::classify_sqlite_failure("prepare", e)))?;
 
         let bounds = stmt
             .query_row(
@@ -63,7 +64,9 @@ impl OhlcvDatabase {
                 },
             )
             .optional()
-            .map_err(|e| OhlcvError::DatabaseError(format!("Query failed: {e}")))?;
+            .map_err(|e| {
+                OhlcvError::Database(DatabaseError::classify_sqlite_failure("query failed", e))
+            })?;
 
         Ok(bounds.and_then(|(min_ts, max_ts)| match (min_ts, max_ts) {
             (Some(min_val), Some(max_val)) => Some((min_val, max_val)),
@@ -86,7 +89,7 @@ impl OhlcvDatabase {
                 params![self.chain_id(), mint, pool_address, timeframe.as_str()],
                 |row| Ok((row.get(0)?, row.get(1)?)),
             )
-            .map_err(|e| OhlcvError::DatabaseError(format!("Query failed: {e}")))?;
+            .map_err(|e| OhlcvError::Database(DatabaseError::classify_sqlite_failure("query failed", e)))?;
         Ok((usize::try_from(count).unwrap_or_default(), earliest))
     }
 
@@ -281,9 +284,12 @@ impl OhlcvDatabase {
 
         let mut conn = self.conn()?;
 
-        let tx = conn
-            .write_tx()
-            .map_err(|e| OhlcvError::DatabaseError(format!("Transaction failed: {e}")))?;
+        let tx = conn.write_tx().map_err(|e| {
+            OhlcvError::Database(DatabaseError::classify_sqlite_failure(
+                "transaction failed",
+                e,
+            ))
+        })?;
         ensure_series_pool(&tx, self.chain_id(), mint, pool_address)?;
 
         // Snap every timestamp to the canonical UTC-anchored bucket for this
@@ -316,8 +322,9 @@ impl OhlcvDatabase {
             }
         }
 
-        tx.commit()
-            .map_err(|e| OhlcvError::DatabaseError(format!("Commit failed: {e}")))?;
+        tx.commit().map_err(|e| {
+            OhlcvError::Database(DatabaseError::classify_sqlite_failure("commit failed", e))
+        })?;
 
         Ok(changed)
     }
@@ -349,7 +356,9 @@ impl OhlcvDatabase {
             |row| row.get(0),
         )
         .optional()
-        .map_err(|e| OhlcvError::DatabaseError(format!("Query failed: {e}")))
+        .map_err(|e| {
+            OhlcvError::Database(DatabaseError::classify_sqlite_failure("query failed", e))
+        })
     }
 
     /// The stored row of the bucket starting at `timestamp` for one pool and
@@ -383,7 +392,9 @@ impl OhlcvDatabase {
             },
         )
         .optional()
-        .map_err(|e| OhlcvError::DatabaseError(format!("Query failed: {e}")))
+        .map_err(|e| {
+            OhlcvError::Database(DatabaseError::classify_sqlite_failure("query failed", e))
+        })
     }
 
     /// Get candles for specific timeframe
@@ -450,9 +461,9 @@ impl OhlcvDatabase {
             format!("{query} ORDER BY timestamp ASC")
         };
 
-        let mut stmt = conn
-            .prepare(&final_query)
-            .map_err(|e| OhlcvError::DatabaseError(format!("Prepare failed: {e}")))?;
+        let mut stmt = conn.prepare(&final_query).map_err(|e| {
+            OhlcvError::Database(DatabaseError::classify_sqlite_failure("prepare failed", e))
+        })?;
 
         let param_refs: Vec<&dyn rusqlite::ToSql> = params_vec.iter().map(|p| p.as_ref()).collect();
 
@@ -467,11 +478,13 @@ impl OhlcvDatabase {
                     volume: row.get(5)?,
                 })
             })
-            .map_err(|e| OhlcvError::DatabaseError(format!("Query failed: {e}")))?;
+            .map_err(|e| {
+                OhlcvError::Database(DatabaseError::classify_sqlite_failure("query failed", e))
+            })?;
 
-        candles
-            .collect::<Result<Vec<_>, _>>()
-            .map_err(|e| OhlcvError::DatabaseError(format!("Collect failed: {e}")))
+        candles.collect::<Result<Vec<_>, _>>().map_err(|e| {
+            OhlcvError::Database(DatabaseError::classify_sqlite_failure("collect failed", e))
+        })
     }
 
     /// Per-timeframe candle count and latest timestamp for a token ON A SINGLE
@@ -494,7 +507,7 @@ impl OhlcvDatabase {
                  WHERE chain_id = ?1 AND mint = ?2 AND pool_address = ?3
                  GROUP BY timeframe",
             )
-            .map_err(|e| OhlcvError::DatabaseError(format!("Prepare failed: {e}")))?;
+            .map_err(|e| OhlcvError::Database(DatabaseError::classify_sqlite_failure("prepare failed", e)))?;
 
         let rows = stmt
             .query_map(params![self.chain_id(), mint, pool_address], |row| {
@@ -505,10 +518,13 @@ impl OhlcvDatabase {
                     latest: row.get(3)?,
                 })
             })
-            .map_err(|e| OhlcvError::DatabaseError(format!("Query failed: {e}")))?;
+            .map_err(|e| {
+                OhlcvError::Database(DatabaseError::classify_sqlite_failure("query failed", e))
+            })?;
 
-        rows.collect::<Result<Vec<_>, _>>()
-            .map_err(|e| OhlcvError::DatabaseError(format!("Collect failed: {e}")))
+        rows.collect::<Result<Vec<_>, _>>().map_err(|e| {
+            OhlcvError::Database(DatabaseError::classify_sqlite_failure("collect failed", e))
+        })
     }
 
     /// Per-timeframe count of candles on one pool whose bucket overlaps `[from, to]` (unix
@@ -530,7 +546,9 @@ impl OhlcvDatabase {
                  WHERE chain_id = ?1 AND mint = ?2 AND pool_address = ?3 AND timeframe = ?4
                    AND timestamp > ?5 AND timestamp <= ?6",
             )
-            .map_err(|e| OhlcvError::DatabaseError(format!("Prepare failed: {e}")))?;
+            .map_err(|e| {
+                OhlcvError::Database(DatabaseError::classify_sqlite_failure("prepare failed", e))
+            })?;
 
         Timeframe::all()
             .into_iter()
@@ -548,7 +566,9 @@ impl OhlcvDatabase {
                     |row| row.get::<_, i64>(0),
                 )
                 .map(|count| (tf.as_str().to_string(), count))
-                .map_err(|e| OhlcvError::DatabaseError(format!("Query failed: {e}")))
+                .map_err(|e| {
+                    OhlcvError::Database(DatabaseError::classify_sqlite_failure("query failed", e))
+                })
             })
             .collect()
     }
@@ -570,18 +590,23 @@ impl OhlcvDatabase {
                  WHERE chain_id = ?1 AND mint = ?2 AND pool_address = ?3
                  GROUP BY timeframe",
             )
-            .map_err(|e| OhlcvError::DatabaseError(format!("Prepare failed: {e}")))?;
+            .map_err(|e| {
+                OhlcvError::Database(DatabaseError::classify_sqlite_failure("prepare failed", e))
+            })?;
 
         let rows = stmt
             .query_map(params![self.chain_id(), mint, pool_address], |row| {
                 Ok((row.get::<_, String>(0)?, row.get::<_, Option<i64>>(1)?))
             })
-            .map_err(|e| OhlcvError::DatabaseError(format!("Query failed: {e}")))?;
+            .map_err(|e| {
+                OhlcvError::Database(DatabaseError::classify_sqlite_failure("query failed", e))
+            })?;
 
         let mut out = Vec::new();
         for row in rows {
-            let (tf, last): (String, Option<i64>) =
-                row.map_err(|e| OhlcvError::DatabaseError(format!("Row failed: {e}")))?;
+            let (tf, last): (String, Option<i64>) = row.map_err(|e| {
+                OhlcvError::Database(DatabaseError::classify_sqlite_failure("row failed", e))
+            })?;
             if let Some(ts) = last {
                 out.push((tf, ts));
             }
@@ -620,7 +645,9 @@ impl OhlcvDatabase {
         let result: i32 = conn
             .query_row(&query, params![self.chain_id(), mint], |row| row.get(0))
             .optional()
-            .map_err(|e| OhlcvError::DatabaseError(format!("Query failed: {e}")))?
+            .map_err(|e| {
+                OhlcvError::Database(DatabaseError::classify_sqlite_failure("query failed", e))
+            })?
             .unwrap_or_default();
 
         Ok(result == 1)
@@ -649,14 +676,20 @@ impl OhlcvDatabase {
     /// that first refuses a pool that is no longer the token's series pool.
     fn write_series_flags(&self, mint: &str, pool_address: &str, query: &str) -> OhlcvResult<()> {
         let mut conn = self.conn()?;
-        let tx = conn
-            .write_tx()
-            .map_err(|e| OhlcvError::DatabaseError(format!("Transaction failed: {e}")))?;
+        let tx = conn.write_tx().map_err(|e| {
+            OhlcvError::Database(DatabaseError::classify_sqlite_failure(
+                "transaction failed",
+                e,
+            ))
+        })?;
         ensure_series_pool(&tx, self.chain_id(), mint, pool_address)?;
         tx.execute(query, params![self.chain_id(), mint])
-            .map_err(|e| OhlcvError::DatabaseError(format!("Update failed: {e}")))?;
-        tx.commit()
-            .map_err(|e| OhlcvError::DatabaseError(format!("Commit failed: {e}")))
+            .map_err(|e| {
+                OhlcvError::Database(DatabaseError::classify_sqlite_failure("update failed", e))
+            })?;
+        tx.commit().map_err(|e| {
+            OhlcvError::Database(DatabaseError::classify_sqlite_failure("commit failed", e))
+        })
     }
 
     /// Mark backfill as incomplete for timeframe. The token is no longer fully
@@ -672,7 +705,9 @@ impl OhlcvDatabase {
         );
 
         conn.execute(&query, params![self.chain_id(), mint])
-            .map_err(|e| OhlcvError::DatabaseError(format!("Update failed: {e}")))?;
+            .map_err(|e| {
+                OhlcvError::Database(DatabaseError::classify_sqlite_failure("update failed", e))
+            })?;
 
         Ok(())
     }
@@ -701,7 +736,9 @@ impl OhlcvDatabase {
                     .collect()
             })
             .optional()
-            .map_err(|e| OhlcvError::DatabaseError(format!("Query failed: {e}")))?;
+            .map_err(|e| {
+                OhlcvError::Database(DatabaseError::classify_sqlite_failure("query failed", e))
+            })?;
         Ok(DEEP_HISTORY_TIMEFRAMES
             .iter()
             .enumerate()

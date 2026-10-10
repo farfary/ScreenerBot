@@ -137,7 +137,7 @@ fn safe_truncate(s: &str, max_chars: usize) -> &str {
 
 /// Execute a scheduled task with timeout handling
 async fn execute_scheduled_task(
-    pool: &Arc<r2d2::Pool<r2d2_sqlite::SqliteConnectionManager>>,
+    pool: &r2d2::Pool<r2d2_sqlite::SqliteConnectionManager>,
     task: &scheduled_db::ScheduledTask,
     timeout_secs: u64,
 ) -> crate::Result<()> {
@@ -378,7 +378,7 @@ async fn send_task_notification(
 
 /// Public function for triggering task execution from API
 pub async fn execute_task_public(
-    pool: &Arc<r2d2::Pool<r2d2_sqlite::SqliteConnectionManager>>,
+    pool: &r2d2::Pool<r2d2_sqlite::SqliteConnectionManager>,
     task: &scheduled_db::ScheduledTask,
     timeout_secs: u64,
 ) -> crate::Result<()> {

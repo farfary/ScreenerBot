@@ -26,6 +26,7 @@
 use rusqlite::Connection;
 
 use super::database::WatchDatabase;
+use crate::database::schema::ddl;
 use crate::wallets::Error;
 
 impl WatchDatabase {
@@ -35,7 +36,7 @@ impl WatchDatabase {
             ("high_activity_approved", "INTEGER NOT NULL DEFAULT 0"),
             ("disable_reason_json", "TEXT"),
         ] {
-            if !Self::column_exists(tx, "watch_targets", column)? {
+            if !ddl::has_column(tx, "watch_targets", column)? {
                 tx.execute(
                     &format!("ALTER TABLE watch_targets ADD COLUMN {column} {declaration}"),
                     [],
@@ -117,7 +118,7 @@ impl WatchDatabase {
     /// still the wrong key — both must rebuild, so the copy reads a literal in
     /// the first case and the (default-backfilled) column in the second.
     fn chain_source_expr(conn: &Connection, table: &'static str) -> Result<&'static str, Error> {
-        Ok(if Self::column_exists(conn, table, "chain_id")? {
+        Ok(if ddl::has_column(conn, table, "chain_id")? {
             "COALESCE(NULLIF(chain_id, ''), 'solana')"
         } else {
             "'solana'"
@@ -159,17 +160,17 @@ impl WatchDatabase {
         .map_err(|e| migration_step("create watch_targets__chain", e))?;
 
         let chain_expr = Self::chain_source_expr(tx, "watch_targets")?;
-        let budget_expr = if Self::column_exists(tx, "watch_targets", "page_budget")? {
+        let budget_expr = if ddl::has_column(tx, "watch_targets", "page_budget")? {
             "page_budget"
         } else {
             "5"
         };
-        let reason_expr = if Self::column_exists(tx, "watch_targets", "disable_reason_json")? {
+        let reason_expr = if ddl::has_column(tx, "watch_targets", "disable_reason_json")? {
             "disable_reason_json"
         } else {
             "NULL"
         };
-        let approval_expr = if Self::column_exists(tx, "watch_targets", "high_activity_approved")? {
+        let approval_expr = if ddl::has_column(tx, "watch_targets", "high_activity_approved")? {
             "high_activity_approved"
         } else {
             "0"

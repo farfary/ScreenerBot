@@ -28,7 +28,7 @@
 //! composition root (`crate::run::services`) before this service can start.
 //! ```
 
-mod database;
+pub(crate) mod database;
 mod dedupe;
 mod error;
 mod migrations;

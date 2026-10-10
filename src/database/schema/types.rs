@@ -108,3 +108,62 @@ pub enum ColumnReconcile {
     /// unknown provenance and the open is refused.
     Refuse,
 }
+
+/// What a store's schema step may know about the open it runs in.
+#[derive(Debug, Clone)]
+pub struct SchemaContext {
+    /// The chains whose rows the store holds: the store's own chain for a chain-scoped
+    /// file, every enabled chain for a shared one.
+    pub chains: Vec<crate::chains::ChainId>,
+}
+
+impl SchemaContext {
+    /// The chain of a chain-scoped store's file.
+    pub fn chain(
+        &self,
+        store: &str,
+    ) -> Result<crate::chains::ChainId, crate::errors::DatabaseError> {
+        match self.chains.as_slice() {
+            [chain] => Ok(*chain),
+            chains => Err(crate::errors::DatabaseError::Migration {
+                store: store.to_owned(),
+                detail: format!("a chain-scoped store opened for {} chains", chains.len()),
+            }),
+        }
+    }
+}
+
+/// A store's schema step: creates and migrates its schema inside the open's IMMEDIATE
+/// transaction. It receives only the transaction, so every statement of one open
+/// commits or rolls back together.
+pub type SchemaStep =
+    fn(&rusqlite::Transaction<'_>, &SchemaContext) -> Result<(), crate::errors::DatabaseError>;
+
+/// The schema a core supports for one store and the step that brings a store to it.
+#[derive(Debug, Clone, Copy)]
+pub struct StoreSchema {
+    /// The store version this core writes. Raised with every schema change.
+    pub version: i64,
+    /// The oldest store version whose code still reads and writes this schema
+    /// correctly. Raised to `version` by a breaking change: a rename, a drop, a type
+    /// change, a NOT NULL column without a default or a changed meaning.
+    pub min_reader_version: i64,
+    /// The version the store held when the ledger was adopted. A breaking change to a
+    /// ledger store above it is one no core without the ledger can read.
+    pub baseline: i64,
+    /// The store's renamed objects, reconciled before the step runs.
+    pub renames: Option<&'static StoreRenames>,
+    pub step: SchemaStep,
+    /// The version row older cores read in place of the ledger.
+    pub legacy_stamp: Option<LegacyStamp>,
+}
+
+/// A `key`/`value` row in `table` holding the schema version older cores read. The
+/// engine owns it: it never lowers it, raises it to `version` after the step and
+/// copies the store before an open that raises it.
+#[derive(Debug, Clone, Copy)]
+pub struct LegacyStamp {
+    pub table: &'static str,
+    pub key: &'static str,
+    pub version: i64,
+}

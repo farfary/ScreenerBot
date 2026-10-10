@@ -15,6 +15,7 @@ use super::failure::ActionFailure;
 use super::types::{Action, ActionState, ActionStep, ActionType, StepStatus};
 use crate::actions::{Error, Result};
 use crate::database;
+use crate::database::schema::{ddl, SchemaContext, StoreSchema};
 use crate::database::WriteTransaction;
 use crate::errors::{DataError, DatabaseError, InternalError};
 use crate::logger::{self, LogTag};
@@ -22,19 +23,82 @@ use crate::utils::get_wallet_address;
 use chrono::{DateTime, Utc};
 use r2d2::{Pool, PooledConnection};
 use r2d2_sqlite::SqliteConnectionManager;
-use rusqlite::{params, Connection};
+use rusqlite::{params, Connection, Transaction};
 use serde::{Deserialize, Serialize};
-use std::time::Duration;
 
-// =============================================================================
-// CONSTANTS
-// =============================================================================
+/// The actions store's schema.
+pub(crate) const SCHEMA: StoreSchema = StoreSchema {
+    version: 1,
+    min_reader_version: 1,
+    baseline: 1,
+    renames: None,
+    step: create_schema,
+    legacy_stamp: None,
+};
 
-/// Connection pool configuration
-const WRITE_POOL_MAX_SIZE: u32 = 2;
-const READ_POOL_MAX_SIZE: u32 = 4;
-const POOL_MIN_IDLE: u32 = 1;
-const CONNECTION_TIMEOUT_MS: u64 = 30_000;
+fn create_schema(
+    tx: &Transaction<'_>,
+    _: &SchemaContext,
+) -> std::result::Result<(), DatabaseError> {
+    ddl::run(
+        tx,
+        "create actions table",
+        "CREATE TABLE IF NOT EXISTS actions (
+            id TEXT PRIMARY KEY,
+            action_type TEXT NOT NULL,
+            entity_id TEXT NOT NULL,
+            wallet_address TEXT NOT NULL,
+            state TEXT NOT NULL,
+            state_data TEXT,
+            started_at TEXT NOT NULL,
+            completed_at TEXT,
+            duration_ms INTEGER,
+            read_at TEXT,
+            dismissed_at TEXT,
+            metadata TEXT NOT NULL,
+            created_at TEXT NOT NULL,
+            updated_at TEXT NOT NULL,
+            chain_id TEXT NOT NULL DEFAULT 'solana'
+        )",
+    )?;
+    // Chain scope: the shared file gains a chain column. Historical rows are Solana's by
+    // construction, so the migration backfills 'solana'.
+    ddl::add_column(tx, "actions", "chain_id", "TEXT NOT NULL DEFAULT 'solana'")?;
+    ddl::run(
+        tx,
+        "create action steps table",
+        "CREATE TABLE IF NOT EXISTS action_steps (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            action_id TEXT NOT NULL,
+            step_index INTEGER NOT NULL,
+            step_id TEXT NOT NULL,
+            name TEXT NOT NULL,
+            status TEXT NOT NULL,
+            started_at TEXT,
+            completed_at TEXT,
+            duration_ms INTEGER,
+            error TEXT,
+            metadata TEXT,
+            FOREIGN KEY (action_id) REFERENCES actions(id),
+            UNIQUE(action_id, step_index)
+        )",
+    )?;
+    ddl::add_column(tx, "actions", "read_at", "TEXT")?;
+    ddl::add_column(tx, "actions", "dismissed_at", "TEXT")?;
+    ddl::run_batch(
+        tx,
+        "create actions indexes",
+        "CREATE INDEX IF NOT EXISTS idx_actions_action_type ON actions(action_type);
+         CREATE INDEX IF NOT EXISTS idx_actions_entity_id ON actions(entity_id);
+         CREATE INDEX IF NOT EXISTS idx_actions_state ON actions(state);
+         CREATE INDEX IF NOT EXISTS idx_actions_started_at ON actions(started_at DESC);
+         CREATE INDEX IF NOT EXISTS idx_actions_wallet_address ON actions(wallet_address);
+         CREATE INDEX IF NOT EXISTS idx_actions_completed_at ON actions(completed_at DESC) WHERE completed_at IS NOT NULL;
+         CREATE INDEX IF NOT EXISTS idx_actions_read_at ON actions(read_at);
+         CREATE INDEX IF NOT EXISTS idx_actions_dismissed_at ON actions(dismissed_at);
+         CREATE INDEX IF NOT EXISTS idx_action_steps_action_id ON action_steps(action_id);",
+    )
+}
 
 // =============================================================================
 // DATABASE STRUCTURE
@@ -48,307 +112,21 @@ pub struct ActionsDatabase {
 }
 
 impl ActionsDatabase {
-    /// Create new ActionsDatabase with connection pooling
+    /// Open the actions store with its writer and reader pools.
     pub async fn new() -> Result<Self> {
         let database_path = crate::paths::get_actions_db_path();
-        let database_path_str = database_path.to_string_lossy().to_string();
-
-        // Configure connection managers with centralized PRAGMAs
-        let write_manager = SqliteConnectionManager::file(&database_path)
-            .with_init(|c| database::configure_connection(c, database::ACTIONS_WRITE_DB));
-        let read_manager = SqliteConnectionManager::file(&database_path)
-            .with_init(|c| database::configure_connection(c, database::ACTIONS_READ_DB));
-
-        // Create write pool
-        let write_pool = Pool::builder()
-            .max_size(WRITE_POOL_MAX_SIZE)
-            .min_idle(Some(POOL_MIN_IDLE))
-            .connection_timeout(Duration::from_millis(CONNECTION_TIMEOUT_MS))
-            .idle_timeout(None) // SQLite: keep connections alive (WAL stability)
-            .max_lifetime(None) // SQLite: no connection recycling
-            .build(write_manager)
-            .map_err(|e| {
-                Error::Database(DatabaseError::Query {
-                    operation: "create actions write pool".to_owned(),
-                    message: e.to_string(),
-                })
-            })?;
-
-        // Create read pool
-        let read_pool = Pool::builder()
-            .max_size(READ_POOL_MAX_SIZE)
-            .min_idle(Some(POOL_MIN_IDLE))
-            .connection_timeout(Duration::from_millis(CONNECTION_TIMEOUT_MS))
-            .idle_timeout(None) // SQLite: keep connections alive (WAL stability)
-            .max_lifetime(None) // SQLite: no connection recycling
-            .build(read_manager)
-            .map_err(|e| {
-                Error::Database(DatabaseError::Query {
-                    operation: "create actions read pool".to_owned(),
-                    message: e.to_string(),
-                })
-            })?;
-
-        let mut db = ActionsDatabase {
+        let write_pool = database::open::store(&database::catalog::ACTIONS)?;
+        let read_pool = database::open::reader(&database::catalog::ACTIONS, &database_path)?;
+        let database_path = database_path.to_string_lossy().to_string();
+        logger::info(
+            LogTag::System,
+            &format!("Actions database initialized at {database_path}"),
+        );
+        Ok(ActionsDatabase {
             write_pool,
             read_pool,
-            database_path: database_path_str.clone(),
-        };
-
-        // Initialize database schema
-        db.initialize_schema().await?;
-        database::handles::register(&database::catalog::ACTIONS, &database_path, &db.write_pool);
-
-        logger::info(
-            LogTag::System,
-            &format!("Actions database initialized at {database_path_str}"),
-        );
-
-        Ok(db)
-    }
-
-    /// Initialize database schema with all tables and indexes
-    async fn initialize_schema(&mut self) -> Result<()> {
-        let conn = self.get_write_connection()?;
-
-        // Create main actions table
-        conn.execute(
-            r#"
-            CREATE TABLE IF NOT EXISTS actions (
-                id TEXT PRIMARY KEY,
-                action_type TEXT NOT NULL,
-                entity_id TEXT NOT NULL,
-                wallet_address TEXT NOT NULL,
-                state TEXT NOT NULL,
-                state_data TEXT,
-                started_at TEXT NOT NULL,
-                completed_at TEXT,
-                duration_ms INTEGER,
-                read_at TEXT,
-                dismissed_at TEXT,
-                metadata TEXT NOT NULL,
-                created_at TEXT NOT NULL,
-                updated_at TEXT NOT NULL,
-                chain_id TEXT NOT NULL DEFAULT 'solana'
-            )
-            "#,
-            [],
-        )
-        .map_err(|e| {
-            Error::Database(DatabaseError::Query {
-                operation: "create actions table".to_owned(),
-                message: e.to_string(),
-            })
-        })?;
-
-        // Chain scope: the shared file gains a chain column. Historical rows
-        // are Solana's by construction, so the migration backfills 'solana';
-        // gated on the live schema, never a version stamp.
-        let has_chain_id = database::schema::table_has_column(&conn, "actions", "chain_id")
-            .map_err(|e| {
-                Error::Database(DatabaseError::Query {
-                    operation: "inspect actions schema for chain_id".to_owned(),
-                    message: e.to_string(),
-                })
-            })?;
-        if !has_chain_id {
-            conn.execute(
-                "ALTER TABLE actions ADD COLUMN chain_id TEXT NOT NULL DEFAULT 'solana'",
-                [],
-            )
-            .map_err(|e| {
-                Error::Database(DatabaseError::Query {
-                    operation: "add actions chain_id column".to_owned(),
-                    message: e.to_string(),
-                })
-            })?;
-        }
-
-        // Create action steps table
-        conn.execute(
-            r#"
-            CREATE TABLE IF NOT EXISTS action_steps (
-                id INTEGER PRIMARY KEY AUTOINCREMENT,
-                action_id TEXT NOT NULL,
-                step_index INTEGER NOT NULL,
-                step_id TEXT NOT NULL,
-                name TEXT NOT NULL,
-                status TEXT NOT NULL,
-                started_at TEXT,
-                completed_at TEXT,
-                duration_ms INTEGER,
-                error TEXT,
-                metadata TEXT,
-                FOREIGN KEY (action_id) REFERENCES actions(id),
-                UNIQUE(action_id, step_index)
-            )
-            "#,
-            [],
-        )
-        .map_err(|e| {
-            Error::Database(DatabaseError::Query {
-                operation: "create action steps table".to_owned(),
-                message: e.to_string(),
-            })
-        })?;
-
-        // Create indexes for performance
-        conn.execute(
-            "CREATE INDEX IF NOT EXISTS idx_actions_action_type ON actions(action_type)",
-            [],
-        )
-        .map_err(|e| {
-            Error::Database(DatabaseError::Query {
-                operation: "create action type index".to_owned(),
-                message: e.to_string(),
-            })
-        })?;
-
-        conn.execute(
-            "CREATE INDEX IF NOT EXISTS idx_actions_entity_id ON actions(entity_id)",
-            [],
-        )
-        .map_err(|e| {
-            Error::Database(DatabaseError::Query {
-                operation: "create action entity id index".to_owned(),
-                message: e.to_string(),
-            })
-        })?;
-
-        conn.execute(
-            "CREATE INDEX IF NOT EXISTS idx_actions_state ON actions(state)",
-            [],
-        )
-        .map_err(|e| {
-            Error::Database(DatabaseError::Query {
-                operation: "create action state index".to_owned(),
-                message: e.to_string(),
-            })
-        })?;
-
-        conn.execute(
-            "CREATE INDEX IF NOT EXISTS idx_actions_started_at ON actions(started_at DESC)",
-            [],
-        )
-        .map_err(|e| {
-            Error::Database(DatabaseError::Query {
-                operation: "create action started at index".to_owned(),
-                message: e.to_string(),
-            })
-        })?;
-
-        conn.execute(
-            "CREATE INDEX IF NOT EXISTS idx_actions_wallet_address ON actions(wallet_address)",
-            [],
-        )
-        .map_err(|e| {
-            Error::Database(DatabaseError::Query {
-                operation: "create action wallet address index".to_owned(),
-                message: e.to_string(),
-            })
-        })?;
-
-        conn.execute(
-            "CREATE INDEX IF NOT EXISTS idx_actions_completed_at ON actions(completed_at DESC) WHERE completed_at IS NOT NULL",
-            [],
-        )
-        .map_err(|e| Error::Database(DatabaseError::Query {
-            operation: "create action completed at index".to_owned(),
-            message: e.to_string(),
-        }))?;
-
-        self.ensure_actions_column(&conn, "read_at", "TEXT")?;
-        self.ensure_actions_column(&conn, "dismissed_at", "TEXT")?;
-
-        conn.execute(
-            "CREATE INDEX IF NOT EXISTS idx_actions_read_at ON actions(read_at)",
-            [],
-        )
-        .map_err(|e| {
-            Error::Database(DatabaseError::Query {
-                operation: "create action read at index".to_owned(),
-                message: e.to_string(),
-            })
-        })?;
-
-        conn.execute(
-            "CREATE INDEX IF NOT EXISTS idx_actions_dismissed_at ON actions(dismissed_at)",
-            [],
-        )
-        .map_err(|e| {
-            Error::Database(DatabaseError::Query {
-                operation: "create action dismissed at index".to_owned(),
-                message: e.to_string(),
-            })
-        })?;
-
-        conn.execute(
-            "CREATE INDEX IF NOT EXISTS idx_action_steps_action_id ON action_steps(action_id)",
-            [],
-        )
-        .map_err(|e| {
-            Error::Database(DatabaseError::Query {
-                operation: "create action steps index".to_owned(),
-                message: e.to_string(),
-            })
-        })?;
-
-        logger::info(LogTag::System, "Actions database schema initialized");
-
-        Ok(())
-    }
-
-    fn ensure_actions_column(
-        &self,
-        conn: &Connection,
-        column_name: &str,
-        column_type: &str,
-    ) -> Result<()> {
-        let mut stmt = conn.prepare("PRAGMA table_info(actions)").map_err(|e| {
-            Error::Database(DatabaseError::Query {
-                operation: "inspect actions schema".to_owned(),
-                message: e.to_string(),
-            })
-        })?;
-
-        let columns = stmt
-            .query_map([], |row| row.get::<_, String>(1))
-            .map_err(|e| {
-                Error::Database(DatabaseError::Query {
-                    operation: "read actions schema".to_owned(),
-                    message: e.to_string(),
-                })
-            })?;
-
-        for column in columns {
-            let column = column.map_err(|e| {
-                Error::Database(DatabaseError::Query {
-                    operation: "read actions schema row".to_owned(),
-                    message: e.to_string(),
-                })
-            })?;
-            if column == column_name {
-                return Ok(());
-            }
-        }
-
-        conn.execute(
-            &format!("ALTER TABLE actions ADD COLUMN {column_name} {column_type}"),
-            [],
-        )
-        .map_err(|e| {
-            Error::Database(DatabaseError::Query {
-                operation: format!("add actions.{column_name}"),
-                message: e.to_string(),
-            })
-        })?;
-
-        logger::info(
-            LogTag::System,
-            &format!("Added actions.{column_name} column"),
-        );
-
-        Ok(())
+            database_path,
+        })
     }
 
     /// Get a write connection from the pool

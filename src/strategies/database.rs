@@ -4,18 +4,14 @@
 //! Strategy database — persistence for custom strategy templates.
 
 use crate::database;
+use crate::database::schema::{ddl, SchemaContext, StoreSchema};
 use crate::errors::{DatabaseError, Error};
 use crate::logger::{self, LogTag};
 use crate::strategies::types::{EvaluationResult, Strategy, StrategyPerformance, StrategyType};
 use chrono::{DateTime, Utc};
-use r2d2::{Pool, PooledConnection};
+use r2d2::PooledConnection;
 use r2d2_sqlite::SqliteConnectionManager;
-use rusqlite::{params, OptionalExtension};
-use std::sync::atomic::{AtomicBool, Ordering};
-use std::sync::LazyLock;
-
-// Static flag to track if database has been initialized
-static STRATEGIES_DB_INITIALIZED: LazyLock<AtomicBool> = LazyLock::new(|| AtomicBool::new(false));
+use rusqlite::{params, OptionalExtension, Transaction};
 
 // Database schema version
 const STRATEGIES_SCHEMA_VERSION: u32 = 1;
@@ -122,88 +118,81 @@ CREATE TABLE IF NOT EXISTS schema_version (
 "#;
 
 // =============================================================================
-// CONNECTION POOL
+// SCHEMA STEP AND CONNECTIONS
 // =============================================================================
 
-static DB_POOL: LazyLock<Pool<SqliteConnectionManager>> = LazyLock::new(|| {
-    let db_path = crate::paths::get_strategies_db_path();
-    let manager = SqliteConnectionManager::file(&db_path)
-        .with_init(|c| database::configure_connection(c, database::STRATEGIES_DB));
-    let pool = Pool::builder()
-        .max_size(3)
-        .idle_timeout(None) // SQLite: keep connections alive (WAL stability)
-        .max_lifetime(None) // SQLite: no connection recycling
-        .build(manager)
-        .expect("Failed to create strategies database pool");
-    database::handles::register(&database::catalog::STRATEGIES, &db_path, &pool);
-    pool
-});
+/// The schema of `strategies.db`.
+pub(crate) const SCHEMA: StoreSchema = StoreSchema {
+    version: STRATEGIES_SCHEMA_VERSION as i64,
+    min_reader_version: STRATEGIES_SCHEMA_VERSION as i64,
+    baseline: STRATEGIES_SCHEMA_VERSION as i64,
+    renames: None,
+    step: create_schema,
+    legacy_stamp: None,
+};
 
-/// Get a connection from the pool
-fn get_connection() -> crate::Result<PooledConnection<SqliteConnectionManager>> {
-    DB_POOL.get().map_err(Into::into)
-}
-
-// =============================================================================
-// INITIALIZATION
-// =============================================================================
-
-/// Initialize the strategies database with all schemas
-pub fn init_strategies_db() -> crate::Result<()> {
-    if STRATEGIES_DB_INITIALIZED.load(Ordering::Relaxed) {
-        return Ok(());
-    }
-
-    let conn = get_connection()?;
-
-    // Create version table first
-    conn.execute_batch(SCHEMA_VERSION_TABLE)?;
-
-    // Check current schema version
-    let current_version: Option<u32> = conn
+fn create_schema(tx: &Transaction<'_>, _: &SchemaContext) -> Result<(), DatabaseError> {
+    ddl::run_batch(
+        tx,
+        "create strategies schema_version table",
+        SCHEMA_VERSION_TABLE,
+    )?;
+    let current_version: Option<u32> = tx
         .query_row(
             "SELECT version FROM schema_version ORDER BY version DESC LIMIT 1",
             [],
             |row| row.get(0),
         )
-        .optional()?;
+        .optional()
+        .map_err(|e| DatabaseError::classify_sqlite_failure("read strategies schema version", e))?;
 
     if current_version.unwrap_or(0) < STRATEGIES_SCHEMA_VERSION {
-        // Create all tables
-        conn.execute_batch(SCHEMA_STRATEGIES)?;
-        conn.execute_batch(SCHEMA_STRATEGY_PERFORMANCE)?;
-        conn.execute_batch(SCHEMA_STRATEGY_ASSIGNMENTS)?;
-        conn.execute_batch(SCHEMA_STRATEGY_TEMPLATES)?;
-        conn.execute_batch(SCHEMA_STRATEGY_BACKTESTS)?;
-
-        // Update version
-        conn.execute(
+        for (operation, sql) in [
+            ("create strategies table", SCHEMA_STRATEGIES),
+            (
+                "create strategy_performance table",
+                SCHEMA_STRATEGY_PERFORMANCE,
+            ),
+            (
+                "create strategy_assignments table",
+                SCHEMA_STRATEGY_ASSIGNMENTS,
+            ),
+            ("create strategy_templates table", SCHEMA_STRATEGY_TEMPLATES),
+            ("create strategy_backtests table", SCHEMA_STRATEGY_BACKTESTS),
+        ] {
+            ddl::run_batch(tx, operation, sql)?;
+        }
+        tx.execute(
             "INSERT INTO schema_version (version, applied_at) VALUES (?1, ?2)",
             params![STRATEGIES_SCHEMA_VERSION, Utc::now().to_rfc3339()],
-        )?;
-
-        logger::info(
-            LogTag::System,
-            &format!(
-                "Strategies database initialized with schema version {}",
-                STRATEGIES_SCHEMA_VERSION
-            ),
-        );
+        )
+        .map_err(|e| {
+            DatabaseError::classify_sqlite_failure("record strategies schema version", e)
+        })?;
     }
 
-    // Chain scope: `strategy_performance` gains a chain column. The check is
-    // deliberately OUTSIDE the version-stamp branch above — a v0.2.13 database
-    // already records version 1, and a stamp must never decide whether a
-    // structural migration runs. Historical rows are Solana's by
-    // construction, so the migration backfills 'solana'.
-    if !database::schema::table_has_column(&conn, "strategy_performance", "chain_id")? {
-        conn.execute(
-            "ALTER TABLE strategy_performance ADD COLUMN chain_id TEXT NOT NULL DEFAULT 'solana'",
-            [],
-        )?;
-    }
+    // Chain scope: `strategy_performance` gains a chain column, checked whatever the
+    // version stamp says: a store from v0.2.13 already records version 1. Historical
+    // rows are Solana's by construction, so the migration backfills 'solana'.
+    ddl::add_column(
+        tx,
+        "strategy_performance",
+        "chain_id",
+        "TEXT NOT NULL DEFAULT 'solana'",
+    )?;
+    Ok(())
+}
 
-    STRATEGIES_DB_INITIALIZED.store(true, Ordering::Relaxed);
+/// Get a connection from the strategies store's pool.
+fn get_connection() -> crate::Result<PooledConnection<SqliteConnectionManager>> {
+    database::open::store(&database::catalog::STRATEGIES)?
+        .get()
+        .map_err(Into::into)
+}
+
+/// Open the strategies store.
+pub fn init_strategies_db() -> crate::Result<()> {
+    database::open::store(&database::catalog::STRATEGIES)?;
     Ok(())
 }
 

@@ -7,8 +7,10 @@
 //! them. A stale version therefore wipes that chain's candle/gap rows only.
 //! The historical singleton row (`id = 1`) is migrated losslessly onto Solana.
 
-use super::{table_has_column, wipe_candle_data};
+use super::wipe_candle_data;
 use crate::chains::ChainId;
+use crate::database::schema::ddl::has_column;
+use crate::errors::DatabaseError;
 use crate::ohlcvs::types::{OhlcvError, OhlcvResult};
 use rusqlite::{params, Connection, OptionalExtension};
 
@@ -60,7 +62,10 @@ const CREATE_CHAIN_VERSIONS: &str = "CREATE TABLE IF NOT EXISTS ohlcv_data_versi
 pub(super) fn ensure_data_version(conn: &Connection, chain_id: &str) -> OhlcvResult<()> {
     migrate_global_data_version_table(conn)?;
     conn.execute_batch(CREATE_CHAIN_VERSIONS).map_err(|e| {
-        OhlcvError::DatabaseError(format!("Failed to initialize OHLCV data version: {e}"))
+        OhlcvError::Database(DatabaseError::classify_sqlite_failure(
+            "initialize OHLCV data version",
+            e,
+        ))
     })?;
 
     let stored = conn
@@ -71,7 +76,10 @@ pub(super) fn ensure_data_version(conn: &Connection, chain_id: &str) -> OhlcvRes
         )
         .optional()
         .map_err(|e| {
-            OhlcvError::DatabaseError(format!("Failed to read OHLCV data version: {e}"))
+            OhlcvError::Database(DatabaseError::classify_sqlite_failure(
+                "read OHLCV data version",
+                e,
+            ))
         })?;
     if stored == Some(OHLCV_DATA_VERSION) {
         return Ok(());
@@ -84,14 +92,23 @@ pub(super) fn ensure_data_version(conn: &Connection, chain_id: &str) -> OhlcvRes
         return Ok(());
     }
 
-    wipe_candle_data(conn, chain_id)
-        .map_err(|e| OhlcvError::DatabaseError(format!("Failed to wipe candle data: {e}")))?;
+    wipe_candle_data(conn, chain_id).map_err(|e| {
+        OhlcvError::Database(DatabaseError::classify_sqlite_failure(
+            "wipe candle data",
+            e,
+        ))
+    })?;
     conn.execute(
         "INSERT INTO ohlcv_data_versions (chain_id, version) VALUES (?1, ?2)
              ON CONFLICT(chain_id) DO UPDATE SET version = excluded.version",
         params![chain_id, OHLCV_DATA_VERSION],
     )
-    .map_err(|e| OhlcvError::DatabaseError(format!("Failed to update OHLCV data version: {e}")))?;
+    .map_err(|e| {
+        OhlcvError::Database(DatabaseError::classify_sqlite_failure(
+            "update OHLCV data version",
+            e,
+        ))
+    })?;
     Ok(())
 }
 
@@ -99,7 +116,10 @@ fn inherit_solana_user_version(conn: &Connection) -> OhlcvResult<bool> {
     let legacy_version: i64 = conn
         .query_row("PRAGMA user_version", [], |row| row.get(0))
         .map_err(|e| {
-            OhlcvError::DatabaseError(format!("Failed to read legacy OHLCV data version: {e}"))
+            OhlcvError::Database(DatabaseError::classify_sqlite_failure(
+                "read legacy OHLCV data version",
+                e,
+            ))
         })?;
     if legacy_version != OHLCV_DATA_VERSION {
         return Ok(false);
@@ -108,7 +128,12 @@ fn inherit_solana_user_version(conn: &Connection) -> OhlcvResult<bool> {
         "INSERT INTO ohlcv_data_versions (chain_id, version) VALUES (?1, ?2)",
         params![ChainId::Solana.as_str(), legacy_version],
     )
-    .map_err(|e| OhlcvError::DatabaseError(format!("Failed to seed OHLCV data version: {e}")))?;
+    .map_err(|e| {
+        OhlcvError::Database(DatabaseError::classify_sqlite_failure(
+            "seed OHLCV data version",
+            e,
+        ))
+    })?;
     Ok(true)
 }
 
@@ -120,10 +145,10 @@ fn migrate_global_data_version_table(conn: &Connection) -> OhlcvResult<()> {
             |row| row.get::<_, i64>(0),
         )
         .map_err(|e| {
-            OhlcvError::DatabaseError(format!("Failed to inspect OHLCV data version table: {e}"))
+            OhlcvError::Database(DatabaseError::classify_sqlite_failure("inspect OHLCV data version table", e))
         })?
         != 0;
-    if !exists || table_has_column(conn, "ohlcv_data_versions", "chain_id")? {
+    if !exists || has_column(conn, "ohlcv_data_versions", "chain_id")? {
         return Ok(());
     }
 
@@ -138,7 +163,10 @@ fn migrate_global_data_version_table(conn: &Connection) -> OhlcvResult<()> {
              DROP TABLE ohlcv_data_versions_legacy_global;",
     )
     .map_err(|e| {
-        OhlcvError::DatabaseError(format!("Failed to migrate OHLCV data-version table: {e}"))
+        OhlcvError::Database(DatabaseError::classify_sqlite_failure(
+            "migrate OHLCV data-version table",
+            e,
+        ))
     })?;
     Ok(())
 }
@@ -226,7 +254,7 @@ mod tests {
             let conn = db.conn().unwrap();
             replace_with_global_version(&conn, OHLCV_DATA_VERSION);
             assert!(
-                !table_has_column(&conn, "ohlcv_data_versions", "chain_id").unwrap(),
+                !has_column(&conn, "ohlcv_data_versions", "chain_id").unwrap(),
                 "fixture must use the legacy global id = 1 table"
             );
         }

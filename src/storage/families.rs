@@ -6,7 +6,7 @@
 use std::path::Path;
 use std::time::Duration;
 
-use crate::database::backup::UPGRADE_BACKUP_PREFIX;
+use crate::database::backup::{snapshot::SNAPSHOTS_DIRECTORY_NAME, UPGRADE_BACKUP_PREFIX};
 use crate::database::catalog::{StoreSpec, STORES};
 use crate::paths;
 use crate::version::retention::{DownloadRetention, PARTIAL_SUFFIX, RELEASE_ASSET_PREFIX};
@@ -120,6 +120,13 @@ pub const FAMILIES: &[FamilySpec] = &[
         category: Category::RecoveryCopies,
         roots: &[paths::get_backups_directory],
         matcher: Matcher::Prefix(UPGRADE_BACKUP_PREFIX),
+        ladder: KEEP_FOREVER,
+    },
+    FamilySpec {
+        id: FamilyId::StoreSnapshots,
+        category: Category::RecoveryCopies,
+        roots: &[paths::get_backups_directory],
+        matcher: Matcher::Names(&[SNAPSHOTS_DIRECTORY_NAME]),
         ladder: KEEP_FOREVER,
     },
     FamilySpec {

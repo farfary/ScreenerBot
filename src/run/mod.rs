@@ -112,6 +112,23 @@ async fn run_bot_internal(_process_lock: ProcessLock) -> Result<()> {
     let config_path = crate::paths::get_config_path();
     let config_exists = config_path.exists();
 
+    // 5. The storage phase, under the process lock and before any service reads a
+    // store: the one-shot wallet data reset (the GUI's "Reset wallet data & restart"
+    // and `--clean-wallet-data`) moves the wallet-scoped stores to quarantine, then
+    // every store opens, recovering as its class allows. It never fails startup: a
+    // store left unavailable is in the health registry and its owner gets the error.
+    let reset_wallet_data = crate::arguments::is_clean_wallet_data_enabled();
+    if let Err(error) = tokio::task::spawn_blocking(move || {
+        if reset_wallet_data {
+            crate::database::open::reset_wallet_stores();
+        }
+        crate::database::open::open_all()
+    })
+    .await
+    {
+        logger::error(LogTag::System, &format!("Storage phase stopped: {error}"));
+    }
+
     // Dashboard-owned persistence is independent of wallet/RPC setup. Routes
     // for actions, analysis instructions, and Assistant chat exist in every dashboard mode.
     bootstrap::initialize_dashboard_persistence().await?;

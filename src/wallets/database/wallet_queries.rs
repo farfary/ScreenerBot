@@ -55,8 +55,10 @@ impl WalletsDatabase {
                 Error::Database(DatabaseError::from(e))
             }
         })?;
+        let id = conn.last_insert_rowid();
+        Self::snapshot_after_key_change(&conn);
 
-        Ok(conn.last_insert_rowid())
+        Ok(id)
     }
 
     /// Get a wallet by ID
@@ -224,6 +226,7 @@ impl WalletsDatabase {
         }
 
         conn.execute("COMMIT", []).map_err(DatabaseError::from)?;
+        Self::snapshot_after_key_change(&conn);
 
         Ok(())
     }
@@ -394,6 +397,7 @@ impl WalletsDatabase {
             params![self.chain.as_str(), id],
         )
         .map_err(DatabaseError::from)?;
+        Self::snapshot_after_key_change(&conn);
 
         Ok(())
     }

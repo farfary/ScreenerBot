@@ -5,7 +5,7 @@
 
 mod analytics;
 pub mod control;
-mod database;
+pub(crate) mod database;
 mod exits;
 mod guards;
 mod insights;

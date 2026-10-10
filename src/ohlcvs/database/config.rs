@@ -3,6 +3,7 @@
 
 //! Monitor configuration — upsert, query, and list token monitoring configs.
 
+use crate::errors::DatabaseError;
 use crate::ohlcvs::types::{OhlcvError, OhlcvResult, Priority, TokenOhlcvConfig};
 use chrono::{DateTime, Utc};
 use rusqlite::{params, OptionalExtension, Result as SqliteResult};
@@ -42,7 +43,7 @@ impl OhlcvDatabase {
                     config.consecutive_pool_failures
                 ]
             )
-            .map_err(|e| OhlcvError::DatabaseError(format!("Failed to upsert config: {e}")))?;
+            .map_err(|e| OhlcvError::Database(DatabaseError::classify_sqlite_failure("upsert config", e)))?;
 
         Ok(())
     }
@@ -87,7 +88,7 @@ impl OhlcvDatabase {
                 }
             )
             .optional()
-            .map_err(|e| OhlcvError::DatabaseError(format!("Query failed: {e}")))?;
+            .map_err(|e| OhlcvError::Database(DatabaseError::classify_sqlite_failure("query failed", e)))?;
 
         Ok(config)
     }
@@ -101,7 +102,7 @@ impl OhlcvDatabase {
                  FROM ohlcv_monitor_config WHERE chain_id = ?1 AND is_active = 1
                  ORDER BY priority DESC"
             )
-            .map_err(|e| OhlcvError::DatabaseError(format!("Failed to prepare: {e}")))?;
+            .map_err(|e| OhlcvError::Database(DatabaseError::classify_sqlite_failure("prepare", e)))?;
 
         let configs = stmt
             .query_map(params![self.chain_id()], |row| {
@@ -133,9 +134,13 @@ impl OhlcvDatabase {
 
                 Ok(config)
             })
-            .map_err(|e| OhlcvError::DatabaseError(format!("Query failed: {e}")))?
+            .map_err(|e| {
+                OhlcvError::Database(DatabaseError::classify_sqlite_failure("query failed", e))
+            })?
             .collect::<SqliteResult<Vec<_>>>()
-            .map_err(|e| OhlcvError::DatabaseError(format!("Failed to collect: {e}")))?;
+            .map_err(|e| {
+                OhlcvError::Database(DatabaseError::classify_sqlite_failure("collect", e))
+            })?;
 
         Ok(configs)
     }

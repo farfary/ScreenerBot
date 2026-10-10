@@ -9,21 +9,18 @@
 //! structural, not a target. Cursors let a restart resume paging from the last
 //! signature already seen instead of re-reading a page on every boot (§6.2).
 //!
-//! A separate `r2d2` pool from `WalletsDatabase`'s (which owns `wallets` /
-//! `token_balances` in the same physical file) -- SQLite's WAL mode supports
-//! multiple pools against one file, and the codebase already relies on exactly that
-//! for `events.db` (`EVENTS_WRITE_DB` / `EVENTS_READ_DB`, both opened by
-//! `events::database::mod`). Every method wraps its rusqlite work in
+//! The tables share the wallets store's pool with `WalletsDatabase`, and their schema
+//! is part of that store's step. Every method wraps its rusqlite work in
 //! `spawn_blocking`, matching the async-wrapper pattern in `tokens/database/
 //! async_api.rs`.
 
 use chrono::{DateTime, Utc};
 use r2d2::{Pool, PooledConnection};
 use r2d2_sqlite::SqliteConnectionManager;
-use rusqlite::{params, OptionalExtension};
+use rusqlite::{params, OptionalExtension, Transaction};
 
-use crate::errors::{DatabaseError, InternalError, IoError};
-use crate::paths::get_wallets_db_path;
+use crate::database::schema::ddl;
+use crate::errors::{DatabaseError, InternalError};
 use crate::wallets::Error;
 use crate::{chains::ChainId, database};
 
@@ -67,107 +64,48 @@ pub struct WatchDatabase {
     pub(super) chain: ChainId,
 }
 
+/// Creates `watch_targets` and `watch_cursors` and brings a store written before chain
+/// identity onto the chain-scoped keys the queries in this module name. `CREATE TABLE IF
+/// NOT EXISTS` is a no-op on an existing table and `ALTER TABLE ADD COLUMN` cannot
+/// change a key, so only a rebuild can: see `migrations`. Part of the `wallets.db`
+/// schema step.
+pub(crate) fn create_schema(tx: &Transaction<'_>) -> Result<(), Error> {
+    ddl::run(tx, "create watch_targets table", SCHEMA_WATCH_TARGETS)?;
+    ddl::run(tx, "create watch_cursors table", SCHEMA_WATCH_CURSORS)?;
+    WatchDatabase::rebuild_watch_targets(tx)?;
+    WatchDatabase::rebuild_watch_cursors(tx)?;
+    WatchDatabase::ensure_target_control_columns(tx)?;
+    for index_sql in INDEXES {
+        ddl::run(tx, "create watch index", index_sql)?;
+    }
+    Ok(())
+}
+
 impl WatchDatabase {
-    /// Create or open the database at its real location and ensure its schema exists.
+    /// The watched wallets of `chain`, in the wallets store opened by the storage phase.
     pub fn new(chain: ChainId) -> Result<Self, Error> {
-        Self::open(get_wallets_db_path(), chain)
+        let pool = database::open::store(&database::catalog::WALLETS)?;
+        Ok(Self { pool, chain })
     }
 
-    /// Create or open the database at an explicit path. Test-only: unit tests must
-    /// never resolve through `get_wallets_db_path()` / `paths::get_data_directory()`,
-    /// whose base directory memoises in a process-wide `LazyLock` -- the first test in
-    /// the binary to touch it would pin that directory for every other test co-located
-    /// in the same `cargo test --lib` run, which is exactly the hazard `TransactionDatabase::
-    /// new_with_path` exists to avoid for the same reason. See `tests/common/mod.rs`'s
-    /// `real_data_dir` doc for the same footgun from the integration-test side.
+    /// Opens the wallets store at an explicit path. Test-only: unit tests must never
+    /// resolve through `paths::get_data_directory()`, whose base directory memoises in a
+    /// process-wide `LazyLock` -- the first test in the binary to touch it would pin
+    /// that directory for every other test co-located in the same `cargo test --lib`
+    /// run. See `tests/common/mod.rs`'s `real_data_dir` doc for the same footgun from
+    /// the integration-test side.
     #[cfg(test)]
     pub(crate) fn new_with_path<P: AsRef<std::path::Path>>(
         path: P,
         chain: ChainId,
     ) -> Result<Self, Error> {
-        Self::open(path.as_ref().to_path_buf(), chain)
-    }
-
-    fn open(db_path: std::path::PathBuf, chain: ChainId) -> Result<Self, Error> {
-        if let Some(parent) = db_path.parent() {
-            std::fs::create_dir_all(parent).map_err(IoError::from)?;
-        }
-
-        let manager = SqliteConnectionManager::file(&db_path)
-            .with_init(|c| database::configure_connection(c, database::WALLETS_DB));
-        let pool = Pool::builder()
-            .max_size(3)
-            .idle_timeout(None) // SQLite: keep connections alive (WAL stability)
-            .max_lifetime(None) // SQLite: no connection recycling
-            .build(manager)
-            .map_err(DatabaseError::from)?;
-
-        let db = Self { pool, chain };
-        db.initialize_sync()?;
-        database::handles::register(&database::catalog::WALLETS, &db_path, &db.pool);
-        Ok(db)
-    }
-
-    /// Whether a live table already declares a column. `PRAGMA table_info` is the
-    /// only honest answer — a schema version stamp cannot know what an older
-    /// build actually wrote.
-    pub(super) fn column_exists(
-        conn: &rusqlite::Connection,
-        table: &'static str,
-        column: &str,
-    ) -> Result<bool, Error> {
-        let mut statement = conn
-            .prepare(&format!("PRAGMA table_info({table})"))
-            .map_err(|e| Error::SchemaInspect {
-                table,
-                detail: e.to_string(),
-            })?;
-        let mut columns = statement
-            .query_map([], |row| row.get::<_, String>(1))
-            .map_err(|e| Error::SchemaInspect {
-                table,
-                detail: e.to_string(),
-            })?;
-        columns.try_fold(false, |found, name| {
-            let name = name.map_err(|e| Error::SchemaInspect {
-                table,
-                detail: e.to_string(),
-            })?;
-            Ok(found || name == column)
-        })
+        let pool =
+            database::open::pool_at(&database::catalog::WALLETS, path.as_ref(), vec![chain])?;
+        Ok(Self { pool, chain })
     }
 
     pub(super) fn conn(&self) -> Result<PooledConnection<SqliteConnectionManager>, Error> {
         self.pool.get().map_err(|e| DatabaseError::from(e).into())
-    }
-
-    fn initialize_sync(&self) -> Result<(), Error> {
-        let conn = self.conn()?;
-        conn.execute(SCHEMA_WATCH_TARGETS, [])
-            .map_err(DatabaseError::from)?;
-        conn.execute(SCHEMA_WATCH_CURSORS, [])
-            .map_err(DatabaseError::from)?;
-        // Bring a database written before chain identity onto the chain-scoped
-        // keys the queries in this module name. `CREATE TABLE IF NOT EXISTS` is
-        // a no-op on an existing table, and `ALTER TABLE ADD COLUMN` cannot
-        // change a key, so only a rebuild can: see `migrations`. Both steps are
-        // gated on the live schema and run before anything names the column.
-        let mut conn = conn;
-        let tx = conn.write_tx().map_err(|e| Error::Migration {
-            step: "begin".to_owned(),
-            detail: e.to_string(),
-        })?;
-        Self::rebuild_watch_targets(&tx)?;
-        Self::rebuild_watch_cursors(&tx)?;
-        Self::ensure_target_control_columns(&tx)?;
-        tx.commit().map_err(|e| Error::Migration {
-            step: "commit".to_owned(),
-            detail: e.to_string(),
-        })?;
-        for index_sql in INDEXES {
-            conn.execute(index_sql, []).map_err(DatabaseError::from)?;
-        }
-        Ok(())
     }
 
     // =========================================================================

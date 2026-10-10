@@ -221,28 +221,31 @@ mod amount_tests {
         SCHEMA_WALLET_SNAPSHOTS, WALLET_INDEXES,
     };
     use crate::wallets::balance_monitor::types::{NftBalance, SnapshotTokenBalance};
-    use r2d2::Pool;
-    use r2d2_sqlite::SqliteConnectionManager;
     use rusqlite::Connection;
 
     async fn open(path: &std::path::Path) -> WalletDatabase {
-        let manager = SqliteConnectionManager::file(path).with_init(|conn| {
-            crate::database::configure_connection(conn, crate::database::WALLET_MONITOR_DB)
-        });
-        let mut db = WalletDatabase {
-            pool: Pool::builder()
-                .max_size(1)
-                .idle_timeout(None)
-                .max_lifetime(None)
-                .build(manager)
-                .unwrap(),
+        let pool = crate::database::open::pool_at(
+            &crate::database::catalog::WALLET,
+            path,
+            vec![ChainId::Solana],
+        )
+        .unwrap();
+        WalletDatabase {
+            pool,
             database_path: path.to_string_lossy().into_owned(),
             schema_version: super::super::schema::WALLET_SCHEMA_VERSION,
             chain: ChainId::Solana,
             subject: "wallet000".to_owned(),
-        };
-        db.initialize_schema().await.unwrap();
-        db
+        }
+    }
+
+    /// Runs the store's whole open-time upgrade on `path` in one transaction.
+    fn upgrade(path: &std::path::Path) -> Result<(), crate::errors::DatabaseError> {
+        crate::database::open::upgrade_connection(
+            &mut Connection::open(path).unwrap(),
+            &crate::database::catalog::WALLET,
+            vec![ChainId::Solana],
+        )
     }
 
     fn fixture(path: &std::path::Path, token_schema: &str) {
@@ -421,14 +424,7 @@ mod amount_tests {
             let path = dir.path().join("wallet.db");
             fixture(&path, &schema);
             let before = Connection::open(&path).unwrap().query_row("SELECT sql FROM sqlite_master WHERE name = 'token_balances'", [], |row| row.get::<_, String>(0)).unwrap();
-            let manager = SqliteConnectionManager::file(&path)
-                .with_init(|conn| crate::database::configure_connection(conn, crate::database::WALLET_MONITOR_DB));
-            let mut db = WalletDatabase {
-                pool: Pool::builder().max_size(1).build(manager).unwrap(),
-                database_path: path.to_string_lossy().into_owned(), schema_version: super::super::schema::WALLET_SCHEMA_VERSION,
-                chain: ChainId::Solana, subject: "wallet000".to_owned(),
-            };
-            assert!(db.initialize_schema().await.is_err());
+            assert!(upgrade(&path).is_err());
             let conn = Connection::open(&path).unwrap();
             assert_eq!(conn.query_row("SELECT sql FROM sqlite_master WHERE name = 'token_balances'", [], |row| row.get::<_, String>(0)).unwrap(), before);
             assert_eq!(conn.query_row("SELECT COUNT(*) FROM token_balances", [], |row| row.get::<_, i64>(0)).unwrap(), 4);
@@ -491,14 +487,7 @@ mod amount_tests {
             let before = conn.query_row("SELECT sql FROM sqlite_master WHERE name = 'token_balances'", [], |row| row.get::<_, String>(0)).unwrap();
             let before_value = conn.query_row("SELECT typeof(balance), quote(balance) FROM token_balances WHERE mint = 'mint0'", [], |row| Ok((row.get::<_, String>(0)?, row.get::<_, String>(1)?))).unwrap();
             drop(conn);
-            let manager = SqliteConnectionManager::file(&path)
-                .with_init(|conn| crate::database::configure_connection(conn, crate::database::WALLET_MONITOR_DB));
-            let mut db = WalletDatabase {
-                pool: Pool::builder().max_size(1).build(manager).unwrap(),
-                database_path: path.to_string_lossy().into_owned(), schema_version: super::super::schema::WALLET_SCHEMA_VERSION,
-                chain: ChainId::Solana, subject: "wallet000".to_owned(),
-            };
-            assert!(db.initialize_schema().await.is_err());
+            assert!(upgrade(&path).is_err());
             let conn = Connection::open(&path).unwrap();
             assert_eq!(conn.query_row("SELECT sql FROM sqlite_master WHERE name = 'token_balances'", [], |row| row.get::<_, String>(0)).unwrap(), before);
             assert_eq!(conn.query_row("SELECT typeof(balance), quote(balance) FROM token_balances WHERE mint = 'mint0'", [], |row| Ok((row.get::<_, String>(0)?, row.get::<_, String>(1)?))).unwrap(), before_value);

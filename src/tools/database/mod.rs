@@ -26,6 +26,7 @@ pub use types::{
 
 // Re-export initialization
 pub use schema::init_tools_db;
+pub(crate) use schema::SCHEMA;
 
 // Re-export ATA cache operations
 pub use ata_cache::{

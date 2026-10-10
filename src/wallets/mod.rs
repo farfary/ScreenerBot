@@ -42,10 +42,9 @@
 
 pub mod balance_monitor;
 pub mod bulk;
-mod database;
+pub(crate) mod database;
 mod error;
 mod manager;
-pub mod recovery;
 mod types;
 pub mod validation;
 pub mod watch;

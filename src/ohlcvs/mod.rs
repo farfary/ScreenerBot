@@ -4,7 +4,7 @@
 //! OHLCV candlestick data — fetching, caching, and gap filling for price charts.
 mod aggregator;
 mod cache;
-mod database;
+pub(crate) mod database;
 mod feeds;
 mod fetcher;
 mod gaps;

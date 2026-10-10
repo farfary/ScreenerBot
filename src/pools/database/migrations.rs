@@ -4,26 +4,37 @@
 //! Pools database schema migrations — legacy-to-chain-scoped upgrade run by
 //! `operations::PoolsDatabase::initialize`.
 
-use crate::database::{schema, WriteTransaction};
+use crate::database::schema::{self, SchemaContext, StoreSchema};
 use crate::errors::DatabaseError;
 use crate::pools::Error;
-use rusqlite::{Connection, OptionalExtension};
+use rusqlite::{OptionalExtension, Transaction};
 
 const POOLS_SCHEMA_VERSION: i64 = 1;
 
-fn table_has_column(conn: &Connection, table: &str, column: &str) -> Result<bool, Error> {
-    let mut stmt = conn
-        .prepare(&format!("PRAGMA table_info({table})"))
-        .map_err(|e| {
-            DatabaseError::classify_sqlite_failure(&format!("inspect {table} schema"), e)
-        })?;
-    let columns = stmt
-        .query_map([], |row| row.get::<_, String>(1))
-        .map_err(|e| {
-            DatabaseError::classify_sqlite_failure(&format!("inspect {table} columns"), e)
-        })?;
-    let has_column = columns.filter_map(Result::ok).any(|name| name == column);
-    Ok(has_column)
+/// The pools store's schema.
+pub(crate) const SCHEMA: StoreSchema = StoreSchema {
+    version: 1,
+    min_reader_version: 1,
+    baseline: 1,
+    renames: Some(&super::column_names::RENAMES),
+    step,
+    legacy_stamp: None,
+};
+
+fn step(tx: &Transaction<'_>, _: &SchemaContext) -> Result<(), DatabaseError> {
+    migrate_schema(tx).map_err(|error| match error {
+        Error::Database(error) => error,
+        other => DatabaseError::Migration {
+            store: "pools.db".to_owned(),
+            detail: other.to_string(),
+        },
+    })
+}
+
+fn table_has_column(tx: &Transaction<'_>, table: &str, column: &str) -> Result<bool, Error> {
+    schema::table_has_column(tx, table, column).map_err(|e| {
+        DatabaseError::classify_sqlite_failure(&format!("inspect {table} schema"), e).into()
+    })
 }
 
 /// Compares row counts between a legacy table and its migrated replacement inside
@@ -58,16 +69,9 @@ fn verify_migrated_row_count(
     Ok(())
 }
 
-/// Table creation, the chain-scope rebuild, the column renames, the index pass
-/// and the version stamp commit together: a refused or failed open leaves the
-/// stored schema exactly as it was.
-pub(super) fn migrate_schema(conn: &mut Connection) -> Result<(), Error> {
-    let tx = conn
-        .write_tx()
-        .map_err(|e| DatabaseError::classify_sqlite_failure("start pools schema migration", e))?;
-    // First, before any historical step can read a store holding both names of a
-    // renamed column as a legacy shape.
-    schema::renames::reconcile(&tx, &super::column_names::RENAMES)?;
+/// Table creation, the chain-scope rebuild, the column renames, the index pass and the
+/// version stamp, run inside the open's transaction.
+fn migrate_schema(tx: &Transaction<'_>) -> Result<(), Error> {
     tx.execute_batch(
         "CREATE TABLE IF NOT EXISTS price_history (
             id INTEGER PRIMARY KEY AUTOINCREMENT, mint TEXT NOT NULL, pool_address TEXT NOT NULL,
@@ -98,9 +102,9 @@ pub(super) fn migrate_schema(conn: &mut Connection) -> Result<(), Error> {
         .map_err(|e| DatabaseError::classify_sqlite_failure("read pools schema version", e))?;
 
     if schema_version < POOLS_SCHEMA_VERSION {
-        let price_history_has_chain = table_has_column(&tx, "price_history", "chain_id")?;
-        let accounts_has_chain = table_has_column(&tx, "blacklist_accounts", "chain_id")?;
-        let pools_has_chain = table_has_column(&tx, "blacklist_pools", "chain_id")?;
+        let price_history_has_chain = table_has_column(tx, "price_history", "chain_id")?;
+        let accounts_has_chain = table_has_column(tx, "blacklist_accounts", "chain_id")?;
+        let pools_has_chain = table_has_column(tx, "blacklist_pools", "chain_id")?;
 
         if !price_history_has_chain || !accounts_has_chain || !pools_has_chain {
             tx.execute_batch(
@@ -186,7 +190,7 @@ pub(super) fn migrate_schema(conn: &mut Connection) -> Result<(), Error> {
                 ("blacklist_accounts", "blacklist_accounts_new"),
                 ("blacklist_pools", "blacklist_pools_new"),
             ] {
-                verify_migrated_row_count(&tx, old, new)?;
+                verify_migrated_row_count(tx, old, new)?;
             }
 
             tx.execute_batch(
@@ -205,7 +209,7 @@ pub(super) fn migrate_schema(conn: &mut Connection) -> Result<(), Error> {
 
     // Unit-neutral column names come after the chain-scope rebuild, so that
     // rebuild reads the historical shape it was written for.
-    schema::renames::rename(&tx, &super::column_names::RENAMES)?;
+    schema::renames::rename(tx, &super::column_names::RENAMES)?;
 
     tx.execute_batch(
         "CREATE INDEX IF NOT EXISTS idx_price_history_chain_mint_timestamp ON price_history(chain_id, mint, timestamp_unix DESC);
@@ -228,23 +232,14 @@ pub(super) fn migrate_schema(conn: &mut Connection) -> Result<(), Error> {
     }
     tx.pragma_update(None, "user_version", POOLS_SCHEMA_VERSION)
         .map_err(|e| DatabaseError::classify_sqlite_failure("record pools schema version", e))?;
-    tx.commit()
-        .map_err(|e| DatabaseError::classify_sqlite_failure("commit pools schema migration", e))?;
     Ok(())
-}
-
-#[cfg(test)]
-pub(super) fn legacy_connection() -> Connection {
-    let conn = Connection::open_in_memory().expect("open test database");
-    seed_legacy_schema(&conn);
-    conn
 }
 
 /// Seed the pre-migration single-chain schema plus one row per table. The
 /// fixture the pools migration tests migrate from; pooled test databases
 /// seed the same rows through this helper onto a file-backed checkout.
 #[cfg(test)]
-pub(super) fn seed_legacy_schema(conn: &Connection) {
+pub(super) fn seed_legacy_schema(conn: &rusqlite::Connection) {
     conn.execute_batch(
         "CREATE TABLE price_history (
             id INTEGER PRIMARY KEY AUTOINCREMENT, mint TEXT NOT NULL, pool_address TEXT NOT NULL,
@@ -271,12 +266,19 @@ pub(super) fn seed_legacy_schema(conn: &Connection) {
 mod tests {
     use super::*;
     use crate::chains::ChainId;
+    use crate::database::{catalog, open};
+    use rusqlite::Connection;
 
     #[test]
     fn legacy_schema_migrates_to_solana_without_losing_rows_and_is_idempotent() {
-        let mut conn = legacy_connection();
-        migrate_schema(&mut conn).expect("migrate legacy pools database");
-        migrate_schema(&mut conn).expect("repeat pools migration");
+        let dir = tempfile::tempdir().expect("create test directory");
+        let path = dir.path().join("pools.db");
+        seed_legacy_schema(&Connection::open(&path).expect("create legacy store"));
+        for _ in 0..2 {
+            open::pool_at(&catalog::POOLS, &path, vec![ChainId::Solana])
+                .expect("open legacy pools store");
+        }
+        let conn = Connection::open(&path).expect("reopen migrated store");
 
         for table in ["price_history", "blacklist_accounts", "blacklist_pools"] {
             let count: i64 = conn

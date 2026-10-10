@@ -7,89 +7,41 @@
 //! history, and the built-in instruction templates.
 
 use crate::database;
-use crate::errors::{DatabaseError, InternalError};
+use crate::database::schema::{ddl, SchemaContext, StoreSchema};
+use crate::errors::DatabaseError;
 use crate::i18n::ids;
 use crate::llm_analysis::error::{Error, Result};
-use crate::logger::{self, LogTag};
-use rusqlite::{params, Connection, OptionalExtension};
-use std::sync::OnceLock;
-use std::sync::{Arc, Mutex};
+use rusqlite::{params, Connection, OptionalExtension, Transaction};
 
 pub use crate::llm_analysis::types::{DecisionRecord, Instruction, InstructionTemplate};
 
 // =============================================================================
-// GLOBAL DATABASE INSTANCE
+// SCHEMA STEP AND CONNECTIONS
 // =============================================================================
 
-static GLOBAL_ANALYSIS_DB: OnceLock<Arc<Mutex<Connection>>> = OnceLock::new();
+/// The schema of `ai.db`.
+pub(crate) const SCHEMA: StoreSchema = StoreSchema {
+    version: 1,
+    min_reader_version: 1,
+    baseline: 1,
+    renames: None,
+    step: create_schema,
+    legacy_stamp: None,
+};
 
-// =============================================================================
-// DATABASE INITIALIZATION
-// =============================================================================
-
-/// Initialize the analysis database with schema
-pub fn init_analysis_database() -> Result<Connection> {
-    let db_path = crate::paths::get_ai_db_path();
-    let db_path_str = db_path.to_string_lossy().to_string();
-
-    let conn = Connection::open(&db_path).map_err(|e| {
-        Error::Database(DatabaseError::Connection {
-            message: format!("open the analysis database at {db_path_str}: {e}"),
-        })
-    })?;
-
-    // Apply centralized PRAGMA configuration
-    database::configure_connection(&conn, database::AI_DB).map_err(|e| {
-        Error::Database(DatabaseError::Query {
-            operation: "configure analysis database connection".to_owned(),
-            message: e.to_string(),
-        })
-    })?;
-
-    // Create schema
-    initialize_schema(&conn)?;
-
-    logger::info(
-        LogTag::System,
-        &format!("analysis database initialized at {db_path_str}"),
-    );
-
-    // Store in global
-    GLOBAL_ANALYSIS_DB
-        .set(Arc::new(Mutex::new(conn)))
-        .map_err(|_| {
-            Error::Internal(InternalError::InvariantViolation {
-                message: "global analysis database already initialized".to_owned(),
-            })
-        })?;
-
-    // Return a new connection for immediate use
-    let new_conn = Connection::open(&db_path).map_err(|e| {
-        Error::Database(DatabaseError::Connection {
-            message: format!("open a second analysis database connection at {db_path_str}: {e}"),
-        })
-    })?;
-
-    // Apply centralized PRAGMA configuration to new connection
-    database::configure_connection(&new_conn, database::AI_DB).map_err(|e| {
-        Error::Database(DatabaseError::Query {
-            operation: "configure new analysis database connection".to_owned(),
-            message: e.to_string(),
-        })
-    })?;
-
-    Ok(new_conn)
+/// Open the analysis store.
+pub fn init_analysis_database() -> Result<()> {
+    database::open::store(&database::catalog::AI)?;
+    Ok(())
 }
 
-/// Get global analysis database connection
-pub fn get_analysis_database() -> Option<Arc<Mutex<Connection>>> {
-    GLOBAL_ANALYSIS_DB.get().cloned()
-}
-
-/// Initialize database schema
-fn initialize_schema(conn: &Connection) -> Result<()> {
-    // User instructions table
-    conn.execute(
+fn create_schema(
+    tx: &Transaction<'_>,
+    _: &SchemaContext,
+) -> std::result::Result<(), DatabaseError> {
+    ddl::run(
+        tx,
+        "create ai_instructions table",
         "CREATE TABLE IF NOT EXISTS ai_instructions (
             id INTEGER PRIMARY KEY AUTOINCREMENT,
             name TEXT NOT NULL,
@@ -100,17 +52,10 @@ fn initialize_schema(conn: &Connection) -> Result<()> {
             created_at TEXT NOT NULL,
             updated_at TEXT NOT NULL
         )",
-        [],
-    )
-    .map_err(|e| {
-        Error::Database(DatabaseError::Query {
-            operation: "create ai_instructions table".to_owned(),
-            message: e.to_string(),
-        })
-    })?;
-
-    // Decision history table
-    conn.execute(
+    )?;
+    ddl::run(
+        tx,
+        "create ai_decision_history table",
         "CREATE TABLE IF NOT EXISTS ai_decision_history (
             id INTEGER PRIMARY KEY AUTOINCREMENT,
             mint TEXT NOT NULL,
@@ -127,62 +72,26 @@ fn initialize_schema(conn: &Connection) -> Result<()> {
             created_at TEXT NOT NULL,
             chain_id TEXT NOT NULL DEFAULT 'solana'
         )",
-        [],
-    )
-    .map_err(|e| {
-        Error::Database(DatabaseError::Query {
-            operation: "create ai_decision_history table".to_owned(),
-            message: e.to_string(),
-        })
-    })?;
-
-    // Chain scope: the shared file gains a chain column. Historical rows are
-    // Solana's by construction, so the migration backfills 'solana'; gated on
-    // the live schema, never a version stamp.
-    let has_chain_id =
-        crate::database::schema::table_has_column(conn, "ai_decision_history", "chain_id")
-            .map_err(|e| {
-                Error::Database(DatabaseError::Query {
-                    operation: "inspect ai_decision_history schema for chain_id".to_owned(),
-                    message: e.to_string(),
-                })
-            })?;
-    if !has_chain_id {
-        conn.execute(
-            "ALTER TABLE ai_decision_history ADD COLUMN chain_id TEXT NOT NULL DEFAULT 'solana'",
-            [],
-        )
-        .map_err(|e| {
-            Error::Database(DatabaseError::Query {
-                operation: "add ai_decision_history chain_id column".to_owned(),
-                message: e.to_string(),
-            })
-        })?;
-    }
-
-    // Indexes for decision history
-    conn.execute(
+    )?;
+    // Chain scope: the shared file gains a chain column. Historical rows are Solana's
+    // by construction, so the migration backfills 'solana'; gated on the live schema,
+    // never a version stamp.
+    ddl::add_column(
+        tx,
+        "ai_decision_history",
+        "chain_id",
+        "TEXT NOT NULL DEFAULT 'solana'",
+    )?;
+    ddl::run(
+        tx,
+        "create idx_decisions_mint index",
         "CREATE INDEX IF NOT EXISTS idx_decisions_mint ON ai_decision_history(mint)",
-        [],
-    )
-    .map_err(|e| {
-        Error::Database(DatabaseError::Query {
-            operation: "create idx_decisions_mint index".to_owned(),
-            message: e.to_string(),
-        })
-    })?;
-
-    conn.execute(
+    )?;
+    ddl::run(
+        tx,
+        "create idx_decisions_created index",
         "CREATE INDEX IF NOT EXISTS idx_decisions_created ON ai_decision_history(created_at DESC)",
-        [],
-    )
-    .map_err(|e| {
-        Error::Database(DatabaseError::Query {
-            operation: "create idx_decisions_created index".to_owned(),
-            message: e.to_string(),
-        })
-    })?;
-
+    )?;
     Ok(())
 }
 
@@ -749,19 +658,14 @@ pub fn get_builtin_templates() -> Vec<InstructionTemplate> {
 // HELPER FUNCTIONS
 // =============================================================================
 
-/// Get a connection from the global database
+/// Run `f` on a pooled connection of the analysis store.
 pub fn with_analysis_db<F, T>(f: F) -> Result<T>
 where
     F: FnOnce(&Connection) -> Result<T>,
 {
-    let db = get_analysis_database().ok_or(Error::Internal(InternalError::InvariantViolation {
-        message: "analysis database not initialized".to_owned(),
-    }))?;
-    let conn = db.lock().map_err(|e| {
-        Error::Internal(InternalError::InvariantViolation {
-            message: format!("analysis database lock poisoned: {e}"),
-        })
-    })?;
+    let conn = database::open::store(&database::catalog::AI)?
+        .get()
+        .map_err(DatabaseError::from)?;
     f(&conn)
 }
 
@@ -802,8 +706,13 @@ mod tests {
     #[test]
     fn test_instruction_crud() {
         // Create in-memory database
-        let conn = Connection::open_in_memory().unwrap();
-        initialize_schema(&conn).unwrap();
+        let mut conn = Connection::open_in_memory().unwrap();
+        database::open::upgrade_connection(
+            &mut conn,
+            &database::catalog::AI,
+            vec![crate::chains::ChainId::Solana],
+        )
+        .unwrap();
 
         // Create instruction
         let id =
@@ -848,8 +757,13 @@ mod tests {
 
     #[test]
     fn test_decision_record() {
-        let conn = Connection::open_in_memory().unwrap();
-        initialize_schema(&conn).unwrap();
+        let mut conn = Connection::open_in_memory().unwrap();
+        database::open::upgrade_connection(
+            &mut conn,
+            &database::catalog::AI,
+            vec![crate::chains::ChainId::Solana],
+        )
+        .unwrap();
 
         let record = DecisionRecord {
             id: 0, // Will be set by database

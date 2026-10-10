@@ -19,7 +19,6 @@ pub(super) fn invalid_config(error: &Error) -> ApiError {
         Error::Database(_)
         | Error::Wallets(_)
         | Error::RowDecode { .. }
-        | Error::Migration { .. }
         | Error::MainWalletUnavailable { .. }
         | Error::Search { .. }
         | Error::AtaCache { .. }

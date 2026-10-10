@@ -17,6 +17,7 @@
 //! on a non-empty table; SQLite rejects that shape. Additive steps must be
 //! nullable or carry a `DEFAULT`.
 
+use crate::database::schema::ddl;
 use crate::errors::DatabaseError;
 use crate::tokens::Error;
 use rusqlite::{Connection, OptionalExtension};
@@ -68,7 +69,7 @@ pub(super) fn table_needs_chain_rebuild(conn: &Connection) -> Result<bool, Error
     if !exists {
         return Ok(false);
     }
-    Ok(!table_columns(conn, "tokens")?
+    Ok(!ddl::column_names(conn, "tokens")?
         .iter()
         .any(|column| column == "chain_id"))
 }
@@ -214,10 +215,10 @@ pub(super) fn migrate_legacy_schema(transaction: &Connection) -> Result<(), Erro
 /// unchanged, so repeated initialization is idempotent.
 pub(super) fn apply_additive_migrations(transaction: &Connection) -> Result<(), Error> {
     for step in ADDITIVE_COLUMNS {
-        if !table_exists(&transaction, step.table)? {
+        if !ddl::has_table(&transaction, step.table)? {
             continue;
         }
-        if table_columns(&transaction, step.table)?
+        if ddl::column_names(&transaction, step.table)?
             .iter()
             .any(|column| column == step.column)
         {
@@ -294,41 +295,4 @@ fn copy_legacy_rows(transaction: &Connection, table: &str) -> Result<(), Error> 
             message: error.to_string(),
         })?;
     Ok(())
-}
-
-fn table_columns(conn: &Connection, table: &str) -> Result<Vec<String>, Error> {
-    let mut statement = conn
-        .prepare(&format!("PRAGMA table_info({table})"))
-        .map_err(|error| DatabaseError::Query {
-            operation: format!("Failed to inspect {table} columns"),
-            message: error.to_string(),
-        })?;
-    let columns = statement
-        .query_map([], |row| row.get::<_, String>(1))
-        .map_err(|error| DatabaseError::Query {
-            operation: format!("Failed to read {table} columns"),
-            message: error.to_string(),
-        })?
-        .collect::<Result<Vec<_>, _>>()
-        .map_err(|error| DatabaseError::Query {
-            operation: format!("Failed to decode {table} columns"),
-            message: error.to_string(),
-        })?;
-    Ok(columns)
-}
-
-fn table_exists(conn: &Connection, table: &str) -> Result<bool, Error> {
-    conn.query_row(
-        "SELECT 1 FROM sqlite_master WHERE type = 'table' AND name = ?1",
-        [table],
-        |_| Ok(()),
-    )
-    .optional()
-    .map_err(|error| {
-        Error::from(DatabaseError::Query {
-            operation: format!("inspect table {table}"),
-            message: error.to_string(),
-        })
-    })
-    .map(|row| row.is_some())
 }

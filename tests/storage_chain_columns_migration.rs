@@ -48,14 +48,16 @@ const CHAIN_SCOPED_TABLES: &[(&str, &str)] = &[
 /// strategy/tool definition and schema-version tables are chain-neutral by
 /// design; the ATA tables belong to Solana-only tools (they move under
 /// `chains/solana` in a later unit); `action_steps` rows inherit their
-/// action's chain; `ai_instructions` are user-authored configuration.
+/// action's chain; `ai_instructions` are user-authored configuration;
+/// `store_schema` is the per-file schema ledger every store carries.
 const TABLES_WITHOUT_CHAIN_SCOPE: &[(&str, &[&str])] = &[
-    ("events.db", &[]),
-    ("rpc_stats.db", &[]),
+    ("events.db", &["store_schema"]),
+    ("rpc_stats.db", &["store_schema"]),
     (
         "strategies.db",
         &[
             "schema_version",
+            "store_schema",
             "strategies",
             "strategy_assignments",
             "strategy_backtests",
@@ -70,11 +72,12 @@ const TABLES_WITHOUT_CHAIN_SCOPE: &[(&str, &[&str])] = &[
             "ata_sessions",
             "mw_wallet_ops",
             "schema_version",
+            "store_schema",
             "tool_favorites",
         ],
     ),
-    ("actions.db", &["action_steps"]),
-    ("ai.db", &["ai_instructions"]),
+    ("actions.db", &["action_steps", "store_schema"]),
+    ("ai.db", &["ai_instructions", "store_schema"]),
 ];
 
 fn seed_fixture(directory: &std::path::Path, database: &str, config: DbConfig, fixture: &str) {

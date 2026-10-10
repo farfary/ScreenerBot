@@ -219,12 +219,6 @@ impl From<tokio::time::error::Elapsed> for Error {
     }
 }
 
-impl crate::database::recovery::StoreOpenError for Error {
-    fn database_error(&self) -> Option<&DatabaseError> {
-        Error::database_error(self)
-    }
-}
-
 impl Error {
     /// The classified storage failure this error carries, directly or inside the
     /// error of a store-owning domain.
@@ -235,37 +229,20 @@ impl Error {
             | Error::Transactions(crate::transactions::Error::Database(error))
             | Error::Trader(crate::trader::Error::Database(error))
             | Error::Wallets(crate::wallets::Error::Database(error))
-            | Error::Pools(crate::pools::Error::Database(error)) => Some(error),
+            | Error::Pools(crate::pools::Error::Database(error))
+            | Error::Tools(crate::tools::Error::Database(error)) => Some(error),
             _ => None,
         }
     }
 
-    /// The store files whose upgrade refused, when this error is such a refusal. These
-    /// opens run in one transaction, or only add tables, so the store is unchanged.
+    /// The store whose open refused its upgrade, when this error is such a refusal: a
+    /// store's whole upgrade runs in one transaction, so the refused store is unchanged.
     pub fn storage_upgrade_database(&self) -> Option<String> {
-        let backup = |error: &DatabaseError| match error {
-            DatabaseError::Backup { store, .. } => Some(store.clone()),
-            _ => None,
-        };
-        if let Some(DatabaseError::SchemaConflict { store, .. }) = self.database_error() {
-            return Some(store.clone());
-        }
-        match self {
-            Error::Positions(
-                crate::positions::Error::SchemaMigration { .. }
-                | crate::positions::Error::SchemaTooNew { .. },
-            ) => Some("positions.db".to_owned()),
-            Error::Positions(crate::positions::Error::Database(error)) | Error::Database(error) => {
-                backup(error)
-            }
-            Error::Transactions(crate::transactions::Error::Migration { .. }) => {
-                Some("transactions.db".to_owned())
-            }
-            // Wallet records and the balance history share the wallets error vocabulary.
-            Error::Wallets(crate::wallets::Error::Migration { .. }) => {
-                Some("wallets.db, wallet.db".to_owned())
-            }
-            Error::Tools(crate::tools::Error::Migration { .. }) => Some("tools.db".to_owned()),
+        match self.database_error()? {
+            DatabaseError::SchemaConflict { store, .. }
+            | DatabaseError::StoreTooNew { store, .. }
+            | DatabaseError::Migration { store, .. }
+            | DatabaseError::Backup { store, .. } => Some(store.clone()),
             _ => None,
         }
     }

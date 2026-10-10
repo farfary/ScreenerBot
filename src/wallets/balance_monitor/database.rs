@@ -6,14 +6,16 @@
 use chrono::{DateTime, Utc};
 use r2d2::{Pool, PooledConnection};
 use r2d2_sqlite::SqliteConnectionManager;
-use rusqlite::{params, Connection, OptionalExtension};
+use rusqlite::{params, Connection, OptionalExtension, Transaction};
 use std::sync::LazyLock;
 use tokio::sync::Mutex;
 
+use crate::chains::ChainId;
+use crate::database::schema::{ddl, SchemaContext, StoreSchema};
+use crate::database::{self, catalog};
 use crate::errors::DatabaseError;
 use crate::logger::{self, LogTag};
 use crate::wallets::Error;
-use crate::{chains::ChainId, database};
 
 use super::types::*;
 
@@ -24,7 +26,6 @@ mod metrics;
 mod schema;
 mod snapshots;
 
-use crate::database::WriteTransaction;
 use schema::{
     DASHBOARD_METRICS_INDEXES, FLOW_CACHE_INDEXES, LEGACY_TOKEN_BALANCES_SCHEMA,
     SCHEMA_NATIVE_FLOW_CACHE, SCHEMA_NFT_BALANCES, SCHEMA_TOKEN_BALANCES,
@@ -81,50 +82,45 @@ pub struct WalletDatabase {
     /// current when the main wallet changes.
     subject: String,
 }
+/// The schema of the wallet-monitor store.
+pub(crate) const SCHEMA: StoreSchema = StoreSchema {
+    version: WALLET_SCHEMA_VERSION as i64,
+    min_reader_version: WALLET_SCHEMA_VERSION as i64,
+    baseline: WALLET_SCHEMA_VERSION as i64,
+    renames: Some(&column_names::RENAMES),
+    step,
+    legacy_stamp: None,
+};
+
+fn step(tx: &Transaction<'_>, _: &SchemaContext) -> Result<(), DatabaseError> {
+    WalletDatabase::create_schema(tx).map_err(|error| match error {
+        Error::Database(error) => error,
+        other => DatabaseError::Migration {
+            store: "wallet.db".to_owned(),
+            detail: other.to_string(),
+        },
+    })
+}
+
 impl WalletDatabase {
-    /// Create new WalletDatabase with connection pooling
+    /// The wallet-monitor database of `chain`, opened by the storage phase, scoped to
+    /// the configured wallet.
     pub async fn new(chain: ChainId) -> Result<Self, Error> {
-        let database_path = crate::paths::get_wallet_db_path();
-        let database_path_str = database_path.to_string_lossy().to_string();
-
-        logger::debug(
-            LogTag::Wallet,
-            &format!("Initializing wallet database at: {database_path_str}"),
-        );
-
-        // Configure connection manager with centralized PRAGMAs
-        let manager = SqliteConnectionManager::file(&database_path)
-            .with_init(|c| database::configure_connection(c, database::WALLET_MONITOR_DB));
-
-        // Create connection pool
-        let pool = Pool::builder()
-            .max_size(3)
-            .min_idle(Some(1))
-            .idle_timeout(None) // SQLite: keep connections alive (WAL stability)
-            .max_lifetime(None) // SQLite: no connection recycling
-            .build(manager)
-            .map_err(DatabaseError::from)?;
-
+        let pool = database::open::store(&catalog::WALLET)?;
         let subject = crate::chains::solana::accounts::configured_address_async()
             .await
             .map_err(|e| Error::Dependency {
                 dependency: "accounts",
                 detail: e.to_string(),
             })?;
-
-        let mut db = WalletDatabase {
+        let db = WalletDatabase {
             pool,
-            database_path: database_path_str.clone(),
+            database_path: catalog::WALLET.path(chain).to_string_lossy().to_string(),
             schema_version: WALLET_SCHEMA_VERSION,
             chain,
             subject,
         };
-
-        // Initialize database schema
-        db.initialize_schema().await?;
-        database::handles::register(&database::catalog::WALLET, &database_path, &db.pool);
-
-        logger::debug(LogTag::Wallet, "Wallet database initialized successfully");
+        db.record_current_wallet()?;
         Ok(db)
     }
 
@@ -144,122 +140,68 @@ impl WalletDatabase {
         Ok(())
     }
 
-    /// Initialize database schema with all tables and indexes
-    async fn initialize_schema(&mut self) -> Result<(), Error> {
-        let mut conn = self.get_connection()?;
-        self.apply_schema(&mut conn)?;
-
-        logger::debug(
-            LogTag::Wallet,
-            "Wallet database schema initialized with all tables and indexes",
-        );
-
+    /// Records the subject as the wallet this chain's rows describe.
+    fn record_current_wallet(&self) -> Result<(), Error> {
+        self.get_connection()?
+            .execute(
+                "INSERT OR REPLACE INTO wallet_metadata (key, value) VALUES (?1, ?2)",
+                params![
+                    format!("current_wallet:{}", self.chain.as_str()),
+                    self.subject
+                ],
+            )
+            .map_err(|e| DatabaseError::classify_sqlite_failure("record current wallet", e))?;
         Ok(())
     }
 
-    /// Run every schema step of the open in one write transaction.
-    ///
-    /// `foreign_keys` cannot be toggled inside a transaction, so it is disabled
-    /// here (outside any transaction) and unconditionally restored after the
-    /// transaction ends, on every exit path. The table rebuilds drop parent
-    /// tables, which must not cascade into their children. A failed step leaves
-    /// the transaction uncommitted, so it rolls back on drop and the stored
-    /// schema stays exactly as it was.
-    fn apply_schema(&self, conn: &mut Connection) -> Result<(), Error> {
-        conn.pragma_update(None, "foreign_keys", 0)
-            .map_err(DatabaseError::from)?;
-        let result = self.migrate_schema(conn);
-        conn.pragma_update(None, "foreign_keys", 1)
-            .map_err(DatabaseError::from)?;
-        result
-    }
+    /// Creates and migrates every table. The unit-neutral renames have already run,
+    /// so every step reads the canonical shape; foreign keys are off, so the table
+    /// rebuilds never cascade into child rows.
+    fn create_schema(tx: &Transaction<'_>) -> Result<(), Error> {
+        database::schema::renames::rename(tx, &column_names::RENAMES)?;
 
-    fn migrate_schema(&self, conn: &mut Connection) -> Result<(), Error> {
-        let tx = conn.write_tx().map_err(|e| Error::Migration {
-            step: "begin".to_owned(),
-            detail: e.to_string(),
-        })?;
+        ddl::run(tx, "create wallet_snapshots", SCHEMA_WALLET_SNAPSHOTS)?;
+        ddl::run(tx, "create token_balances", SCHEMA_TOKEN_BALANCES)?;
+        Self::migrate_token_balances(tx)?;
+        ddl::run(tx, "create nft_balances", SCHEMA_NFT_BALANCES)?;
+        ddl::run(tx, "create wallet_metadata", SCHEMA_WALLET_METADATA)?;
+        ddl::run(tx, "create native_flow_cache", SCHEMA_NATIVE_FLOW_CACHE)?;
+        ddl::run(
+            tx,
+            "create wallet_dashboard_metrics",
+            SCHEMA_WALLET_DASHBOARD_METRICS,
+        )?;
 
-        // Reconcile and the unit-neutral renames first, so every later step reads the
-        // canonical shape.
-        database::schema::renames::reconcile(&tx, &column_names::RENAMES)?;
-        database::schema::renames::rename(&tx, &column_names::RENAMES)?;
-
-        // Create all tables
-        tx.execute(SCHEMA_WALLET_SNAPSHOTS, [])
-            .map_err(DatabaseError::from)?;
-
-        tx.execute(SCHEMA_TOKEN_BALANCES, [])
-            .map_err(DatabaseError::from)?;
-        self.migrate_token_balances(&tx)?;
-
-        tx.execute(SCHEMA_NFT_BALANCES, [])
-            .map_err(DatabaseError::from)?;
-
-        tx.execute(SCHEMA_WALLET_METADATA, [])
-            .map_err(DatabaseError::from)?;
-
-        // Flow cache tables
-        tx.execute(SCHEMA_NATIVE_FLOW_CACHE, [])
-            .map_err(DatabaseError::from)?;
-
-        tx.execute(SCHEMA_WALLET_DASHBOARD_METRICS, [])
-            .map_err(DatabaseError::from)?;
-
-        // Migrate existing schema if needed (add missing columns)
-        tx.execute(
-            "ALTER TABLE wallet_snapshots ADD COLUMN total_nfts_count INTEGER NOT NULL DEFAULT 0",
-            [],
-        )
-        .ok(); // Ignore error if column already exists
-
+        ddl::add_column(
+            tx,
+            "wallet_snapshots",
+            "total_nfts_count",
+            "INTEGER NOT NULL DEFAULT 0",
+        )?;
         // Schema v4. Nullable on purpose: rows written before worth was tracked have
         // no honest equity to backfill (we would have to value yesterday's holdings at
         // today's prices), so they read back as their SOL balance via COALESCE.
-        tx.execute(
-            "ALTER TABLE wallet_snapshots ADD COLUMN total_equity_native REAL",
-            [],
-        )
-        .ok(); // Ignore error if column already exists
+        ddl::add_column(tx, "wallet_snapshots", "total_equity_native", "REAL")?;
 
-        self.migrate_chain_identity(&tx)?;
+        Self::migrate_chain_identity(tx)?;
 
-        // Create all indexes
-        for index_sql in WALLET_INDEXES {
-            tx.execute(index_sql, []).map_err(DatabaseError::from)?;
-        }
-        for index_sql in FLOW_CACHE_INDEXES {
-            tx.execute(index_sql, []).map_err(DatabaseError::from)?;
+        for index_sql in WALLET_INDEXES
+            .iter()
+            .chain(FLOW_CACHE_INDEXES)
+            .chain(DASHBOARD_METRICS_INDEXES)
+        {
+            ddl::run(tx, "create wallet-monitor index", index_sql)?;
         }
 
-        for index_sql in DASHBOARD_METRICS_INDEXES {
-            tx.execute(index_sql, []).map_err(DatabaseError::from)?;
-        }
-
-        // Set schema version
         tx.execute(
             "INSERT OR REPLACE INTO wallet_metadata (key, value) VALUES ('schema_version', ?1)",
-            params![self.schema_version.to_string()],
+            params![WALLET_SCHEMA_VERSION.to_string()],
         )
-        .map_err(DatabaseError::from)?;
-
-        // Store current wallet address in metadata
-        tx.execute(
-            "INSERT OR REPLACE INTO wallet_metadata (key, value) VALUES (?1, ?2)",
-            params![
-                format!("current_wallet:{}", self.chain.as_str()),
-                self.subject
-            ],
-        )
-        .map_err(DatabaseError::from)?;
-
-        tx.commit().map_err(|e| Error::Migration {
-            step: "commit".to_owned(),
-            detail: e.to_string(),
-        })
+        .map_err(|e| DatabaseError::classify_sqlite_failure("stamp wallet-monitor schema", e))?;
+        Ok(())
     }
 
-    fn migrate_token_balances(&self, conn: &Connection) -> Result<(), Error> {
+    fn migrate_token_balances(conn: &Connection) -> Result<(), Error> {
         let stored: String = conn
             .query_row(
                 "SELECT sql FROM sqlite_master WHERE type = 'table' AND name = 'token_balances'",
@@ -394,24 +336,11 @@ impl WalletDatabase {
     /// Rebuild the pre-chain-identity wallet-monitor tables to the
     /// `(chain_id, wallet_address, ...)` shape.
     ///
-    /// Runs inside the opener's transaction with `foreign_keys` off (see
-    /// `apply_schema`), after the unit-neutral renames, so the rebuild reads and
+    /// Runs inside the open's transaction with `foreign_keys` off, after the
+    /// unit-neutral renames, so the rebuild reads and
     /// writes the canonical column and table names.
-    fn migrate_chain_identity(&self, conn: &Connection) -> Result<(), Error> {
-        let has_chain: bool = conn
-            .prepare("PRAGMA table_info(wallet_snapshots)")
-            .map_err(|e| Error::SchemaInspect {
-                table: "wallet_snapshots",
-                detail: e.to_string(),
-            })?
-            .query_map([], |row| row.get::<_, String>(1))
-            .map_err(|e| Error::SchemaInspect {
-                table: "wallet_snapshots",
-                detail: e.to_string(),
-            })?
-            .filter_map(std::result::Result::ok)
-            .any(|column| column == "chain_id");
-        if has_chain {
+    fn migrate_chain_identity(conn: &Connection) -> Result<(), Error> {
+        if ddl::has_column(conn, "wallet_snapshots", "chain_id")? {
             return Ok(());
         }
 
@@ -765,28 +694,16 @@ mod migration_tests {
         conn
     }
 
-    fn unmigrated_db() -> WalletDatabase {
-        WalletDatabase {
-            pool: Pool::builder()
-                .max_size(1)
-                .build(SqliteConnectionManager::memory())
-                .expect("build unused pool for migration helper"),
-            database_path: ":memory:".to_owned(),
-            schema_version: WALLET_SCHEMA_VERSION,
-            chain: ChainId::Solana,
-            subject: "MAIN_WALLET_ADDR".to_owned(),
-        }
+    fn upgrade(conn: &mut Connection) -> Result<(), DatabaseError> {
+        crate::database::open::upgrade_connection(conn, &catalog::WALLET, vec![ChainId::Solana])
     }
 
     #[test]
     fn legacy_wallet_monitor_tables_migrate_to_chain_scoped_schema_losslessly_and_idempotently() {
         let mut conn = legacy_connection();
-        let db = unmigrated_db();
 
-        db.apply_schema(&mut conn)
-            .expect("migrate legacy wallet-monitor database");
-        db.apply_schema(&mut conn)
-            .expect("repeat wallet-monitor chain migration");
+        upgrade(&mut conn).expect("migrate legacy wallet-monitor database");
+        upgrade(&mut conn).expect("repeat wallet-monitor chain migration");
 
         for (table, expected) in [
             ("wallet_snapshots", 1),
@@ -830,30 +747,21 @@ mod migration_tests {
     /// A migration that fails partway (here: the rebuild's very first `CREATE
     /// TABLE` collides with a pre-existing `wallet_snapshots__chain_v1`, a
     /// deterministic and reproducible way to fail before any row is copied)
-    /// must leave the connection exactly as it found it: autocommit restored,
-    /// `foreign_keys` back on, and the original legacy data untouched. This is
-    /// the exception-safety the pragma/transaction guard in
-    /// `apply_schema` exists for.
+    /// must leave the connection exactly as it found it: autocommit restored and
+    /// the original legacy data untouched, because every step of the open runs in
+    /// one transaction.
     #[test]
     fn failed_wallet_monitor_chain_migration_leaves_connection_clean_and_data_intact() {
         let mut conn = legacy_connection();
         conn.execute_batch("CREATE TABLE wallet_snapshots__chain_v1 (poison INTEGER);")
             .expect("seed a colliding table to force the migration to fail");
-        let db = unmigrated_db();
 
-        let result = db.apply_schema(&mut conn);
+        let result = upgrade(&mut conn);
         assert!(result.is_err(), "colliding table must fail the migration");
 
         assert!(
             conn.is_autocommit(),
             "a failed migration must not leave the connection mid-transaction"
-        );
-        let foreign_keys_on: i64 = conn
-            .query_row("PRAGMA foreign_keys", [], |row| row.get(0))
-            .expect("read foreign_keys pragma");
-        assert_eq!(
-            foreign_keys_on, 1,
-            "a failed migration must restore foreign_keys = ON"
         );
 
         // Original legacy data must be exactly as it was -- the migration never
@@ -888,10 +796,8 @@ mod migration_tests {
         // (retryable) and idempotent from a clean connection state.
         conn.execute_batch("DROP TABLE wallet_snapshots__chain_v1;")
             .expect("remove colliding table");
-        db.apply_schema(&mut conn)
-            .expect("migration succeeds once the collision is gone");
-        db.apply_schema(&mut conn)
-            .expect("second migration call remains a no-op");
+        upgrade(&mut conn).expect("migration succeeds once the collision is gone");
+        upgrade(&mut conn).expect("second migration call remains a no-op");
         assert!(conn.is_autocommit());
     }
 }

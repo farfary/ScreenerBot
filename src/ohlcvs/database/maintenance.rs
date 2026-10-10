@@ -3,6 +3,8 @@
 
 //! Cleanup, metrics, and data management — housekeeping and statistics queries.
 
+use crate::database::WriteTransaction;
+use crate::errors::DatabaseError;
 use crate::ohlcvs::types::{OhlcvError, OhlcvResult};
 use chrono::{Duration, Utc};
 use rusqlite::{params, params_from_iter, Result as SqliteResult};
@@ -30,7 +32,12 @@ impl OhlcvDatabase {
                 "DELETE FROM ohlcv_gaps WHERE chain_id = ?1 AND filled = 1 AND created_at < ?2",
                 params![self.chain_id(), cutoff],
             )
-            .map_err(|e| OhlcvError::DatabaseError(format!("Gap cleanup failed: {e}")))?;
+            .map_err(|e| {
+                OhlcvError::Database(DatabaseError::classify_sqlite_failure(
+                    "gap cleanup failed",
+                    e,
+                ))
+            })?;
 
         Ok(deleted)
     }
@@ -46,7 +53,9 @@ impl OhlcvDatabase {
                 params![self.chain_id()],
                 |row| row.get(0),
             )
-            .map_err(|e| OhlcvError::DatabaseError(format!("Query failed: {e}")))?;
+            .map_err(|e| {
+                OhlcvError::Database(DatabaseError::classify_sqlite_failure("query failed", e))
+            })?;
 
         Ok(count as usize)
     }
@@ -60,7 +69,7 @@ impl OhlcvDatabase {
                 params![self.chain_id(), mint],
                 |row| row.get(0),
             )
-            .map_err(|e| OhlcvError::DatabaseError(format!("Query failed: {e}")))?;
+            .map_err(|e| OhlcvError::Database(DatabaseError::classify_sqlite_failure("query failed", e)))?;
 
         Ok(exists != 0)
     }
@@ -82,9 +91,12 @@ impl OhlcvDatabase {
                 placeholders
             );
 
-            let mut stmt = conn
-                .prepare(&query)
-                .map_err(|e| OhlcvError::DatabaseError(format!("Query prep failed: {e}")))?;
+            let mut stmt = conn.prepare(&query).map_err(|e| {
+                OhlcvError::Database(DatabaseError::classify_sqlite_failure(
+                    "query prep failed",
+                    e,
+                ))
+            })?;
 
             let chain_id = self.chain_id().to_owned();
             let params: Vec<&dyn rusqlite::ToSql> =
@@ -96,11 +108,17 @@ impl OhlcvDatabase {
                 .query_map(params_from_iter(params.iter().copied()), |row| {
                     row.get::<_, String>(0)
                 })
-                .map_err(|e| OhlcvError::DatabaseError(format!("Query failed: {e}")))?;
+                .map_err(|e| {
+                    OhlcvError::Database(DatabaseError::classify_sqlite_failure("query failed", e))
+                })?;
 
             for row in rows {
-                let mint =
-                    row.map_err(|e| OhlcvError::DatabaseError(format!("Row parse failed: {e}")))?;
+                let mint = row.map_err(|e| {
+                    OhlcvError::Database(DatabaseError::classify_sqlite_failure(
+                        "row parse failed",
+                        e,
+                    ))
+                })?;
                 result.insert(mint);
             }
         }
@@ -117,7 +135,9 @@ impl OhlcvDatabase {
                 params![self.chain_id()],
                 |row| row.get(0),
             )
-            .map_err(|e| OhlcvError::DatabaseError(format!("Query failed: {e}")))?;
+            .map_err(|e| {
+                OhlcvError::Database(DatabaseError::classify_sqlite_failure("query failed", e))
+            })?;
 
         Ok(count as usize)
     }
@@ -131,7 +151,7 @@ impl OhlcvDatabase {
                 params![self.chain_id()],
                 |row| row.get(0),
             )
-            .map_err(|e| OhlcvError::DatabaseError(format!("Query failed: {e}")))?;
+            .map_err(|e| OhlcvError::Database(DatabaseError::classify_sqlite_failure("query failed", e)))?;
 
         Ok(count as usize)
     }
@@ -145,7 +165,9 @@ impl OhlcvDatabase {
                 params![self.chain_id(), filled as i32],
                 |row| row.get(0),
             )
-            .map_err(|e| OhlcvError::DatabaseError(format!("Query failed: {e}")))?;
+            .map_err(|e| {
+                OhlcvError::Database(DatabaseError::classify_sqlite_failure("query failed", e))
+            })?;
 
         Ok(count as usize)
     }
@@ -204,7 +226,9 @@ impl OhlcvDatabase {
             ORDER BY m.is_active DESC, m.priority DESC, m.last_activity DESC
             "#,
             )
-            .map_err(|e| OhlcvError::DatabaseError(format!("Failed to prepare: {e}")))?;
+            .map_err(|e| {
+                OhlcvError::Database(DatabaseError::classify_sqlite_failure("prepare", e))
+            })?;
 
         let tokens = stmt
             .query_map(params![self.chain_id()], |row| {
@@ -234,9 +258,13 @@ impl OhlcvDatabase {
                     pool_count: row.get(21)?,
                 })
             })
-            .map_err(|e| OhlcvError::DatabaseError(format!("Query failed: {e}")))?
+            .map_err(|e| {
+                OhlcvError::Database(DatabaseError::classify_sqlite_failure("query failed", e))
+            })?
             .collect::<SqliteResult<Vec<_>>>()
-            .map_err(|e| OhlcvError::DatabaseError(format!("Failed to collect: {e}")))?;
+            .map_err(|e| {
+                OhlcvError::Database(DatabaseError::classify_sqlite_failure("collect", e))
+            })?;
 
         Ok(tokens)
     }
@@ -250,28 +278,48 @@ impl OhlcvDatabase {
                 "DELETE FROM ohlcv_candles WHERE chain_id = ?1 AND mint = ?2",
                 params![self.chain_id(), mint],
             )
-            .map_err(|e| OhlcvError::DatabaseError(format!("Delete candles failed: {e}")))?;
+            .map_err(|e| {
+                OhlcvError::Database(DatabaseError::classify_sqlite_failure(
+                    "delete candles failed",
+                    e,
+                ))
+            })?;
 
         let gaps_deleted: usize = conn
             .execute(
                 "DELETE FROM ohlcv_gaps WHERE chain_id = ?1 AND mint = ?2",
                 params![self.chain_id(), mint],
             )
-            .map_err(|e| OhlcvError::DatabaseError(format!("Delete gaps failed: {e}")))?;
+            .map_err(|e| {
+                OhlcvError::Database(DatabaseError::classify_sqlite_failure(
+                    "delete gaps failed",
+                    e,
+                ))
+            })?;
 
         let pools_deleted: usize = conn
             .execute(
                 "DELETE FROM ohlcv_pools WHERE chain_id = ?1 AND mint = ?2",
                 params![self.chain_id(), mint],
             )
-            .map_err(|e| OhlcvError::DatabaseError(format!("Delete pools failed: {e}")))?;
+            .map_err(|e| {
+                OhlcvError::Database(DatabaseError::classify_sqlite_failure(
+                    "delete pools failed",
+                    e,
+                ))
+            })?;
 
         let config_deleted: usize = conn
             .execute(
                 "DELETE FROM ohlcv_monitor_config WHERE chain_id = ?1 AND mint = ?2",
                 params![self.chain_id(), mint],
             )
-            .map_err(|e| OhlcvError::DatabaseError(format!("Delete config failed: {e}")))?;
+            .map_err(|e| {
+                OhlcvError::Database(DatabaseError::classify_sqlite_failure(
+                    "delete config failed",
+                    e,
+                ))
+            })?;
 
         Ok(DeleteResult {
             candles_deleted,
@@ -283,51 +331,45 @@ impl OhlcvDatabase {
 
     /// Delete OHLCV data for tokens that have been inactive for a specified duration
     pub fn delete_inactive_tokens(&self, inactive_hours: i64) -> OhlcvResult<Vec<String>> {
-        let conn = self.conn()?;
-
-        let cutoff = Utc::now() - Duration::hours(inactive_hours);
-        let cutoff_str = cutoff.to_rfc3339();
-
-        // Find tokens to delete
-        let mut stmt = conn
-            .prepare(
-                "SELECT mint FROM ohlcv_monitor_config 
-                 WHERE chain_id = ?1 AND is_active = 0 AND last_activity < ?2",
-            )
-            .map_err(|e| OhlcvError::DatabaseError(format!("Prepare failed: {e}")))?;
-
-        let mints: Vec<String> = stmt
-            .query_map(params![self.chain_id(), cutoff_str], |row| row.get(0))
-            .map_err(|e| OhlcvError::DatabaseError(format!("Query failed: {e}")))?
-            .collect::<SqliteResult<Vec<_>>>()
-            .map_err(|e| OhlcvError::DatabaseError(format!("Collect failed: {e}")))?;
-
-        drop(stmt);
-
-        // Delete each token's data
+        let cutoff = (Utc::now() - Duration::hours(inactive_hours)).to_rfc3339();
+        let failed = |operation: &str| {
+            let operation = operation.to_owned();
+            move |e| OhlcvError::Database(DatabaseError::classify_sqlite_failure(&operation, e))
+        };
+        let mut conn = self.conn()?;
+        let tx = conn
+            .write_tx()
+            .map_err(failed("begin the inactive token deletion"))?;
+        let mints: Vec<String> = {
+            let mut stmt = tx
+                .prepare(
+                    "SELECT mint FROM ohlcv_monitor_config
+                     WHERE chain_id = ?1 AND is_active = 0 AND last_activity < ?2",
+                )
+                .map_err(failed("select inactive tokens"))?;
+            let rows = stmt
+                .query_map(params![self.chain_id(), cutoff], |row| row.get(0))
+                .map_err(failed("select inactive tokens"))?
+                .collect::<SqliteResult<Vec<_>>>()
+                .map_err(failed("read inactive tokens"))?;
+            rows
+        };
         for mint in &mints {
-            conn.execute(
-                "DELETE FROM ohlcv_candles WHERE chain_id = ?1 AND mint = ?2",
-                params![self.chain_id(), mint],
-            )
-            .ok();
-            conn.execute(
-                "DELETE FROM ohlcv_gaps WHERE chain_id = ?1 AND mint = ?2",
-                params![self.chain_id(), mint],
-            )
-            .ok();
-            conn.execute(
-                "DELETE FROM ohlcv_pools WHERE chain_id = ?1 AND mint = ?2",
-                params![self.chain_id(), mint],
-            )
-            .ok();
-            conn.execute(
-                "DELETE FROM ohlcv_monitor_config WHERE chain_id = ?1 AND mint = ?2",
-                params![self.chain_id(), mint],
-            )
-            .ok();
+            for table in [
+                "ohlcv_candles",
+                "ohlcv_gaps",
+                "ohlcv_pools",
+                "ohlcv_monitor_config",
+            ] {
+                tx.execute(
+                    &format!("DELETE FROM {table} WHERE chain_id = ?1 AND mint = ?2"),
+                    params![self.chain_id(), mint],
+                )
+                .map_err(failed(&format!("delete an inactive token from {table}")))?;
+            }
         }
-
+        tx.commit()
+            .map_err(failed("commit the inactive token deletion"))?;
         Ok(mints)
     }
 

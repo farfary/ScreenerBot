@@ -162,7 +162,9 @@ impl ErrorClass for DatabaseError {
             DatabaseError::ReadOnly { .. }
             | DatabaseError::CannotOpen { .. }
             | DatabaseError::Io { .. }
-            | DatabaseError::SchemaConflict { .. } => Severity::Error,
+            | DatabaseError::SchemaConflict { .. }
+            | DatabaseError::StoreTooNew { .. }
+            | DatabaseError::Migration { .. } => Severity::Error,
         }
     }
 
@@ -179,7 +181,9 @@ impl ErrorClass for DatabaseError {
             | DatabaseError::Backup { .. }
             | DatabaseError::Corrupt { .. }
             | DatabaseError::NotADatabase { .. }
-            | DatabaseError::SchemaConflict { .. } => 500,
+            | DatabaseError::SchemaConflict { .. }
+            | DatabaseError::StoreTooNew { .. }
+            | DatabaseError::Migration { .. } => 500,
         }
     }
 }

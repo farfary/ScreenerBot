@@ -46,6 +46,9 @@ fn isolated(test: &str, body: impl FnOnce()) {
         .arg("--nocapture")
         .env(CHILD_ENV, "1")
         .env("SCREENERBOT_DATA_DIR", base.path())
+        // A store override set by another test of this process would place that store
+        // outside the isolated data directory.
+        .env_remove("SCREENERBOT_AGENT_CONTROL_DB")
         .env("TMPDIR", &temporary)
         .status()
         .unwrap();
@@ -96,7 +99,12 @@ fn one_pass_keeps_what_must_stay_and_a_second_pass_deletes_nothing() {
                 paths::get_quarantine_directory()
                     .join("tokens-20261010T000000Z")
                     .join("tokens.db"),
-                paths::get_wallet_reset_directory("20261010-000000").join("positions.db"),
+                paths::get_backups_directory()
+                    .join(format!(
+                        "{}20261010-000000",
+                        paths::WALLET_RESET_DIRECTORY_PREFIX
+                    ))
+                    .join("positions.db"),
                 paths::get_base_directory()
                     .join("analysis-exports")
                     .join("report.csv"),

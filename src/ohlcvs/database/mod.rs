@@ -21,7 +21,8 @@ pub use types::{
     SeriesPoolReset, SeriesPoolWrite, StoredBucket, TimeframeSummary,
 };
 
-use crate::database::{schema, WriteTransaction};
+use crate::database::schema::{self, ddl, SchemaContext, StoreSchema};
+use crate::database::WriteTransaction;
 use crate::errors::DatabaseError;
 use crate::ohlcvs::types::{
     OhlcvError, OhlcvResult, PoolConfig, Timeframe, DEEP_HISTORY_TIMEFRAMES,
@@ -30,10 +31,154 @@ use crate::{chains::ChainId, database};
 use chrono::{DateTime, Utc};
 use r2d2::{Pool, PooledConnection};
 use r2d2_sqlite::SqliteConnectionManager;
-use rusqlite::{params, Connection, Result as SqliteResult};
+use rusqlite::{params, Connection, Result as SqliteResult, Transaction};
 use std::path::Path;
 
 use migrations::{add_deep_history_columns, create_chain_indexes, migrate_chain_scope};
+
+/// The OHLCV store's schema.
+pub(crate) const SCHEMA: StoreSchema = StoreSchema {
+    version: 1,
+    min_reader_version: 1,
+    baseline: 1,
+    renames: Some(&column_names::RENAMES),
+    step,
+    legacy_stamp: None,
+};
+
+/// Table creation, every migration, the column renames, the index pass and the
+/// data-version check, run inside the open's transaction.
+fn step(tx: &Transaction<'_>, context: &SchemaContext) -> Result<(), DatabaseError> {
+    let chain = context.chain("ohlcvs.db")?;
+    create_tables(tx, chain).map_err(|error| match error {
+        OhlcvError::Database(error) => error,
+        other => DatabaseError::Migration {
+            store: "ohlcvs.db".to_owned(),
+            detail: other.to_string(),
+        },
+    })
+}
+
+fn create_tables(tx: &Transaction<'_>, chain: ChainId) -> OhlcvResult<()> {
+    tx.execute_batch(
+        r#"
+        CREATE TABLE IF NOT EXISTS schema_migrations (
+            migration_id TEXT PRIMARY KEY,
+            applied_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP
+        );
+
+        -- Pool configurations
+        CREATE TABLE IF NOT EXISTS ohlcv_pools (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            chain_id TEXT NOT NULL,
+            mint TEXT NOT NULL,
+            pool_address TEXT NOT NULL,
+            dex TEXT NOT NULL,
+            liquidity REAL NOT NULL DEFAULT 0.0,
+            is_default INTEGER NOT NULL DEFAULT 0,
+            is_native_pair INTEGER NOT NULL DEFAULT 1,
+            last_success TEXT,
+            failure_count INTEGER NOT NULL DEFAULT 0,
+            created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
+            UNIQUE(chain_id, mint, pool_address)
+        );
+
+        -- UNIFIED CANDLES TABLE (stores ALL native timeframes from API)
+        -- Replaces ohlcv_1m and ohlcv_aggregated with single storage
+        CREATE TABLE IF NOT EXISTS ohlcv_candles (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            chain_id TEXT NOT NULL,
+            mint TEXT NOT NULL,
+            pool_address TEXT NOT NULL,
+            timeframe TEXT NOT NULL,
+            timestamp INTEGER NOT NULL,
+            open REAL NOT NULL,
+            high REAL NOT NULL,
+            low REAL NOT NULL,
+            close REAL NOT NULL,
+            volume REAL NOT NULL,
+            source TEXT NOT NULL DEFAULT 'api',
+            fetched_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
+            UNIQUE(chain_id, mint, pool_address, timeframe, timestamp)
+        );
+
+        -- Gap tracking (per timeframe)
+        CREATE TABLE IF NOT EXISTS ohlcv_gaps (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            chain_id TEXT NOT NULL,
+            mint TEXT NOT NULL,
+            pool_address TEXT NOT NULL,
+            timeframe TEXT NOT NULL,
+            start_timestamp INTEGER NOT NULL,
+            end_timestamp INTEGER NOT NULL,
+            attempts INTEGER NOT NULL DEFAULT 0,
+            last_attempt TEXT,
+            filled INTEGER NOT NULL DEFAULT 0,
+            error_message TEXT,
+            created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
+            UNIQUE(chain_id, mint, pool_address, timeframe, start_timestamp, end_timestamp)
+        );
+
+        -- Token monitoring configuration (with backfill tracking)
+        CREATE TABLE IF NOT EXISTS ohlcv_monitor_config (
+            chain_id TEXT NOT NULL,
+            mint TEXT NOT NULL,
+            priority TEXT NOT NULL,
+            fetch_interval_seconds INTEGER NOT NULL DEFAULT 60,
+            source TEXT NOT NULL DEFAULT 'manual',
+            is_active INTEGER NOT NULL DEFAULT 1,
+            backfill_1m_complete INTEGER NOT NULL DEFAULT 0,
+            backfill_5m_complete INTEGER NOT NULL DEFAULT 0,
+            backfill_15m_complete INTEGER NOT NULL DEFAULT 0,
+            backfill_1h_complete INTEGER NOT NULL DEFAULT 0,
+            backfill_4h_complete INTEGER NOT NULL DEFAULT 0,
+            backfill_12h_complete INTEGER NOT NULL DEFAULT 0,
+            backfill_1d_complete INTEGER NOT NULL DEFAULT 0,
+            backfill_started_at TEXT,
+            backfill_completed_at TEXT,
+            last_fetch TEXT,
+            last_activity TEXT NOT NULL,
+            consecutive_empty_fetches INTEGER NOT NULL DEFAULT 0,
+            last_pool_discovery_attempt INTEGER,
+            consecutive_pool_failures INTEGER NOT NULL DEFAULT 0,
+            created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
+            updated_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
+            PRIMARY KEY (chain_id, mint)
+        );
+        "#,
+    )
+    .map_err(|e| DatabaseError::classify_sqlite_failure("create OHLCV tables", e))?;
+
+    // Migration: add the pair column to pre-existing ohlcv_pools tables (CREATE
+    // IF NOT EXISTS above won't add a column to a table that already exists).
+    // Either name counts as present; a table missing both gets the legacy name,
+    // which the chain-scope rebuild below copies and the renames then rename.
+    if !ddl::has_column(tx, "ohlcv_pools", "is_sol_pair")?
+        && !ddl::has_column(tx, "ohlcv_pools", "is_native_pair")?
+    {
+        tx.execute(
+            "ALTER TABLE ohlcv_pools ADD COLUMN is_sol_pair INTEGER NOT NULL DEFAULT 1",
+            [],
+        )
+        .map_err(|e| {
+            OhlcvError::Database(DatabaseError::classify_sqlite_failure(
+                "add OHLCV pool pair column",
+                e,
+            ))
+        })?;
+    }
+
+    migrate_chain_scope(tx)?;
+    // Unit-neutral column names come after the chain-scope rebuild, so that
+    // rebuild reads the historical shape it was written for.
+    schema::renames::rename(tx, &column_names::RENAMES)?;
+    // After the chain-scope rebuild, which recreates the monitor table in its
+    // historical shape.
+    add_deep_history_columns(tx)?;
+    create_chain_indexes(tx)?;
+    data_version::ensure_data_version(tx, chain.as_str())?;
+    Ok(())
+}
 
 /// OHLCV store: an r2d2 pool over the chain-scoped SQLite file, matching
 /// every other database in the bot (the shared-store rule). The database is
@@ -46,24 +191,10 @@ pub struct OhlcvDatabase {
 }
 
 impl OhlcvDatabase {
-    /// Initialize the database and create tables
+    /// Open `chain`'s store at `path`.
     pub fn new<P: AsRef<Path>>(path: P, chain: ChainId) -> OhlcvResult<Self> {
-        let path = path.as_ref();
-        let manager = SqliteConnectionManager::file(path)
-            .with_init(|conn| database::configure_connection(conn, database::OHLCVS_DB));
-
-        let pool = Pool::builder()
-            .max_size(4)
-            .idle_timeout(None)
-            .max_lifetime(None)
-            .build(manager)
-            .map_err(DatabaseError::from)?;
-
-        let db = Self { pool, chain };
-
-        db.create_tables()?;
-        database::handles::register(&database::catalog::OHLCVS, path, &db.pool);
-        Ok(db)
+        let pool = database::open::pool_at(&database::catalog::OHLCVS, path.as_ref(), vec![chain])?;
+        Ok(Self { pool, chain })
     }
 
     pub(crate) const fn chain(&self) -> ChainId {
@@ -82,149 +213,18 @@ impl OhlcvDatabase {
             .map_err(|e| OhlcvError::Database(DatabaseError::from(e)))
     }
 
-    /// Table creation, every migration, the column renames, the index pass and
-    /// the data-version check commit together: a refused or failed open leaves
-    /// the stored schema exactly as it was.
-    fn create_tables(&self) -> OhlcvResult<()> {
-        let mut conn = self.conn()?;
-        let tx = conn.write_tx().map_err(|e| {
-            DatabaseError::classify_sqlite_failure("begin OHLCV schema initialization", e)
-        })?;
-        // First, before any historical step can read a store holding both names of a
-        // renamed column as a legacy shape.
-        schema::renames::reconcile(&tx, &column_names::RENAMES)?;
-
-        tx.execute_batch(
-            r#"
-            CREATE TABLE IF NOT EXISTS schema_migrations (
-                migration_id TEXT PRIMARY KEY,
-                applied_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP
-            );
-
-            -- Pool configurations
-            CREATE TABLE IF NOT EXISTS ohlcv_pools (
-                id INTEGER PRIMARY KEY AUTOINCREMENT,
-                chain_id TEXT NOT NULL,
-                mint TEXT NOT NULL,
-                pool_address TEXT NOT NULL,
-                dex TEXT NOT NULL,
-                liquidity REAL NOT NULL DEFAULT 0.0,
-                is_default INTEGER NOT NULL DEFAULT 0,
-                is_native_pair INTEGER NOT NULL DEFAULT 1,
-                last_success TEXT,
-                failure_count INTEGER NOT NULL DEFAULT 0,
-                created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
-                UNIQUE(chain_id, mint, pool_address)
-            );
-
-            -- UNIFIED CANDLES TABLE (stores ALL native timeframes from API)
-            -- Replaces ohlcv_1m and ohlcv_aggregated with single storage
-            CREATE TABLE IF NOT EXISTS ohlcv_candles (
-                id INTEGER PRIMARY KEY AUTOINCREMENT,
-                chain_id TEXT NOT NULL,
-                mint TEXT NOT NULL,
-                pool_address TEXT NOT NULL,
-                timeframe TEXT NOT NULL,
-                timestamp INTEGER NOT NULL,
-                open REAL NOT NULL,
-                high REAL NOT NULL,
-                low REAL NOT NULL,
-                close REAL NOT NULL,
-                volume REAL NOT NULL,
-                source TEXT NOT NULL DEFAULT 'api',
-                fetched_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
-                UNIQUE(chain_id, mint, pool_address, timeframe, timestamp)
-            );
-
-            -- Gap tracking (per timeframe)
-            CREATE TABLE IF NOT EXISTS ohlcv_gaps (
-                id INTEGER PRIMARY KEY AUTOINCREMENT,
-                chain_id TEXT NOT NULL,
-                mint TEXT NOT NULL,
-                pool_address TEXT NOT NULL,
-                timeframe TEXT NOT NULL,
-                start_timestamp INTEGER NOT NULL,
-                end_timestamp INTEGER NOT NULL,
-                attempts INTEGER NOT NULL DEFAULT 0,
-                last_attempt TEXT,
-                filled INTEGER NOT NULL DEFAULT 0,
-                error_message TEXT,
-                created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
-                UNIQUE(chain_id, mint, pool_address, timeframe, start_timestamp, end_timestamp)
-            );
-
-            -- Token monitoring configuration (with backfill tracking)
-            CREATE TABLE IF NOT EXISTS ohlcv_monitor_config (
-                chain_id TEXT NOT NULL,
-                mint TEXT NOT NULL,
-                priority TEXT NOT NULL,
-                fetch_interval_seconds INTEGER NOT NULL DEFAULT 60,
-                source TEXT NOT NULL DEFAULT 'manual',
-                is_active INTEGER NOT NULL DEFAULT 1,
-                backfill_1m_complete INTEGER NOT NULL DEFAULT 0,
-                backfill_5m_complete INTEGER NOT NULL DEFAULT 0,
-                backfill_15m_complete INTEGER NOT NULL DEFAULT 0,
-                backfill_1h_complete INTEGER NOT NULL DEFAULT 0,
-                backfill_4h_complete INTEGER NOT NULL DEFAULT 0,
-                backfill_12h_complete INTEGER NOT NULL DEFAULT 0,
-                backfill_1d_complete INTEGER NOT NULL DEFAULT 0,
-                backfill_started_at TEXT,
-                backfill_completed_at TEXT,
-                last_fetch TEXT,
-                last_activity TEXT NOT NULL,
-                consecutive_empty_fetches INTEGER NOT NULL DEFAULT 0,
-                last_pool_discovery_attempt INTEGER,
-                consecutive_pool_failures INTEGER NOT NULL DEFAULT 0,
-                created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
-                updated_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
-                PRIMARY KEY (chain_id, mint)
-            );
-            "#,
-        )
-        .map_err(|e| DatabaseError::classify_sqlite_failure("create OHLCV tables", e))?;
-
-        // Migration: add the pair column to pre-existing ohlcv_pools tables (CREATE
-        // IF NOT EXISTS above won't add a column to a table that already exists).
-        // Either name counts as present; a table missing both gets the legacy name,
-        // which the chain-scope rebuild below copies and the renames then rename.
-        if !table_has_column(&tx, "ohlcv_pools", "is_sol_pair")?
-            && !table_has_column(&tx, "ohlcv_pools", "is_native_pair")?
-        {
-            tx.execute(
-                "ALTER TABLE ohlcv_pools ADD COLUMN is_sol_pair INTEGER NOT NULL DEFAULT 1",
-                [],
-            )
-            .map_err(|e| {
-                OhlcvError::DatabaseError(format!("Failed to add OHLCV pool pair column: {e}"))
-            })?;
-        }
-
-        migrate_chain_scope(&tx)?;
-        // Unit-neutral column names come after the chain-scope rebuild, so that
-        // rebuild reads the historical shape it was written for.
-        schema::renames::rename(&tx, &column_names::RENAMES)?;
-        // After the chain-scope rebuild, which recreates the monitor table in its
-        // historical shape.
-        add_deep_history_columns(&tx)?;
-        create_chain_indexes(&tx)?;
-        data_version::ensure_data_version(&tx, self.chain_id())?;
-
-        tx.commit().map_err(|e| {
-            OhlcvError::Database(DatabaseError::classify_sqlite_failure(
-                "commit OHLCV schema initialization",
-                e,
-            ))
-        })
-    }
-
     /// Clear ALL cached OHLCV candles and gaps and reset every token's backfill
     /// progress so monitored tokens re-fetch from scratch. Pools and the
     /// monitoring list are preserved. Backs both the manual "Clear OHLCV Cache"
     /// action and the automatic data-version wipe.
     pub fn clear_all_ohlcv_data(&self) -> OhlcvResult<ClearAllResult> {
         let conn = self.conn()?;
-        wipe_candle_data(&conn, self.chain_id())
-            .map_err(|e| OhlcvError::DatabaseError(format!("Failed to clear OHLCV data: {e}")))
+        wipe_candle_data(&conn, self.chain_id()).map_err(|e| {
+            OhlcvError::Database(DatabaseError::classify_sqlite_failure(
+                "clear OHLCV data",
+                e,
+            ))
+        })
     }
 
     // ==================== Pool Management ====================
@@ -245,17 +245,26 @@ impl OhlcvDatabase {
         let chain_id = self.chain_id();
         let mut conn = self.conn()?;
         let tx = conn.write_tx().map_err(|e| {
-            OhlcvError::DatabaseError(format!("Failed to begin the series pool write: {e}"))
+            OhlcvError::Database(DatabaseError::classify_sqlite_failure(
+                "begin the series pool write",
+                e,
+            ))
         })?;
         let registered = read_pool_rows(&tx, chain_id, mint).map_err(|e| {
-            OhlcvError::DatabaseError(format!("Failed to read pools for the series write: {e}"))
+            OhlcvError::Database(DatabaseError::classify_sqlite_failure(
+                "read pools for the series write",
+                e,
+            ))
         })?;
         let Some(plan) = plan(&registered) else {
             return Ok(None);
         };
         let write = apply_series_plan(&tx, chain_id, mint, &registered, plan)?;
         tx.commit().map_err(|e| {
-            OhlcvError::DatabaseError(format!("Failed to commit the series pool write: {e}"))
+            OhlcvError::Database(DatabaseError::classify_sqlite_failure(
+                "commit the series pool write",
+                e,
+            ))
         })?;
         Ok(Some(write))
     }
@@ -271,8 +280,9 @@ impl OhlcvDatabase {
         handover: impl FnOnce(&[PoolConfig], bool) -> Option<SeriesPoolPlan>,
     ) -> OhlcvResult<Option<SeriesPoolWrite>> {
         let chain_id = self.chain_id();
-        let db_err =
-            |e: rusqlite::Error| OhlcvError::DatabaseError(format!("Failed to mark failure: {e}"));
+        let db_err = |e: rusqlite::Error| {
+            OhlcvError::Database(DatabaseError::classify_sqlite_failure("mark failure", e))
+        };
         let mut conn = self.conn()?;
         let tx = conn.write_tx().map_err(db_err)?;
         tx.execute(
@@ -300,8 +310,9 @@ impl OhlcvDatabase {
 
     pub fn get_pools(&self, mint: &str) -> OhlcvResult<Vec<PoolConfig>> {
         let conn = self.conn()?;
-        read_pool_rows(&conn, self.chain_id(), mint)
-            .map_err(|e| OhlcvError::DatabaseError(format!("Failed to read pools: {e}")))
+        read_pool_rows(&conn, self.chain_id(), mint).map_err(|e| {
+            OhlcvError::Database(DatabaseError::classify_sqlite_failure("read pools", e))
+        })
     }
 
     pub fn mark_pool_success(&self, mint: &str, pool_address: &str) -> OhlcvResult<()> {
@@ -312,7 +323,7 @@ impl OhlcvDatabase {
                 "UPDATE ohlcv_pools SET failure_count = 0, last_success = ?1 WHERE chain_id = ?2 AND mint = ?3 AND pool_address = ?4",
                 params![Utc::now().to_rfc3339(), self.chain_id(), mint, pool_address]
             )
-            .map_err(|e| OhlcvError::DatabaseError(format!("Failed to mark success: {e}")))?;
+            .map_err(|e| OhlcvError::Database(DatabaseError::classify_sqlite_failure("mark success", e)))?;
 
         Ok(())
     }
@@ -390,9 +401,7 @@ fn apply_series_plan(
                     params![chain_id, mint, address],
                 )
                 .map_err(|e| {
-                    OhlcvError::DatabaseError(format!(
-                        "Failed to delete unlisted pool rows from {table}: {e}"
-                    ))
+                    OhlcvError::Database(DatabaseError::classify_sqlite_failure(&format!("delete unlisted pool rows from {table}"), e))
                 })?;
         }
         candles_deleted += deleted[1];
@@ -404,10 +413,18 @@ fn apply_series_plan(
         "UPDATE ohlcv_pools SET is_default = 0 WHERE chain_id = ?1 AND mint = ?2",
         params![chain_id, mint],
     )
-    .map_err(|e| OhlcvError::DatabaseError(format!("Failed to clear the default pool: {e}")))?;
+    .map_err(|e| {
+        OhlcvError::Database(DatabaseError::classify_sqlite_failure(
+            "clear the default pool",
+            e,
+        ))
+    })?;
     for pool in &plan.pools {
         upsert_pool_row(tx, chain_id, mint, pool, pool.address == series_pool).map_err(|e| {
-            OhlcvError::DatabaseError(format!("Failed to upsert a series pool: {e}"))
+            OhlcvError::Database(DatabaseError::classify_sqlite_failure(
+                "upsert a series pool",
+                e,
+            ))
         })?;
     }
 
@@ -418,7 +435,7 @@ fn apply_series_plan(
                 params![chain_id, mint, series_pool],
             )
             .map_err(|e| {
-                OhlcvError::DatabaseError(format!("Failed to delete other pools' candles: {e}"))
+                OhlcvError::Database(DatabaseError::classify_sqlite_failure("delete other pools' candles", e))
             })?;
         gaps_deleted += tx
             .execute(
@@ -426,7 +443,10 @@ fn apply_series_plan(
                 params![chain_id, mint, series_pool],
             )
             .map_err(|e| {
-                OhlcvError::DatabaseError(format!("Failed to delete other pools' gaps: {e}"))
+                OhlcvError::Database(DatabaseError::classify_sqlite_failure(
+                    "delete other pools' gaps",
+                    e,
+                ))
             })?;
         tx.execute(
             &format!(
@@ -448,7 +468,10 @@ fn apply_series_plan(
             params![chain_id, mint],
         )
         .map_err(|e| {
-            OhlcvError::DatabaseError(format!("Failed to reset the backfill flags: {e}"))
+            OhlcvError::Database(DatabaseError::classify_sqlite_failure(
+                "reset the backfill flags",
+                e,
+            ))
         })?;
         Some(SeriesPoolReset {
             previous_pool,
@@ -514,7 +537,12 @@ pub(super) fn ensure_series_pool(
             params![chain_id, mint, pool_address],
             |row| row.get(0),
         )
-        .map_err(|e| OhlcvError::DatabaseError(format!("Series pool check failed: {e}")))?;
+        .map_err(|e| {
+            OhlcvError::Database(DatabaseError::classify_sqlite_failure(
+                "series pool check failed",
+                e,
+            ))
+        })?;
     if writable {
         Ok(())
     } else {
@@ -539,18 +567,6 @@ fn deep_history_reset() -> String {
         .map(|tf| format!("{} = 0", deep_history_column(*tf)))
         .collect::<Vec<_>>()
         .join(", ")
-}
-
-pub(super) fn table_has_column(conn: &Connection, table: &str, column: &str) -> OhlcvResult<bool> {
-    let mut stmt = conn
-        .prepare(&format!("PRAGMA table_info({table})"))
-        .map_err(|e| OhlcvError::DatabaseError(format!("Failed to inspect {table}: {e}")))?;
-    let columns = stmt
-        .query_map([], |row| row.get::<_, String>(1))
-        .map_err(|e| OhlcvError::DatabaseError(format!("Failed to inspect {table}: {e}")))?
-        .collect::<SqliteResult<Vec<_>>>()
-        .map_err(|e| OhlcvError::DatabaseError(format!("Failed to inspect {table}: {e}")))?;
-    Ok(columns.iter().any(|name| name == column))
 }
 
 /// Delete all candles + gaps and reset every monitor row's backfill progress so

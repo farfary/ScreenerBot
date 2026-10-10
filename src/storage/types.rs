@@ -122,6 +122,7 @@ pub enum FamilyId {
     StagedCores,
     Quarantine,
     UpgradeBackups,
+    StoreSnapshots,
     WalletResetBackups,
     LatestLog,
     Downloads,

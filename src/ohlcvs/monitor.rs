@@ -3491,9 +3491,8 @@ impl Clone for OhlcvMonitor {
 
 fn classify_ohlcv_error(error: &OhlcvError) -> (&'static str, Severity) {
     match error {
-        OhlcvError::DatabaseError(_) | OhlcvError::Database(_) => {
-            ("database_error", Severity::Error)
-        }
+        OhlcvError::Database(_) => ("database_error", Severity::Error),
+        OhlcvError::Internal(_) => ("internal_error", Severity::Error),
         OhlcvError::ApiError(_) => ("api_error", Severity::Error),
         OhlcvError::RateLimitExceeded => ("rate_limit", Severity::Warn),
         OhlcvError::PoolNotFound(_) => ("pool_not_found", Severity::Warn),

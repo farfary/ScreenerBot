@@ -21,8 +21,6 @@ pub enum Error {
         column: &'static str,
         detail: String,
     },
-    #[error("tools schema migration step {step} failed: {detail}")]
-    Migration { step: String, detail: String },
     /// A tool config (sizing, multi-wallet, watched-token) fails its own
     /// validation rules (no fitting variant above: this is a request-shape
     /// rejection on caller-supplied config, not a session or database cause).
@@ -59,7 +57,6 @@ impl ErrorClass for Error {
             Error::Database(e) => e.is_retryable(),
             Error::Wallets(e) => e.is_retryable(),
             Error::RowDecode { .. } => false,
-            Error::Migration { .. } => false,
             Error::InvalidConfig { .. } => false,
             Error::MainWalletUnavailable { .. } => true,
             Error::Search { .. } => true,
@@ -85,7 +82,6 @@ impl ErrorClass for Error {
             Error::Database(e) => e.severity(),
             Error::Wallets(e) => e.severity(),
             Error::RowDecode { .. } => Severity::Critical,
-            Error::Migration { .. } => Severity::Critical,
             Error::InvalidConfig { .. } => Severity::Warning,
             Error::MainWalletUnavailable { .. } => Severity::Warning,
             Error::Search { .. } => Severity::Warning,
@@ -99,7 +95,6 @@ impl ErrorClass for Error {
             Error::Database(e) => e.http_status(),
             Error::Wallets(e) => e.http_status(),
             Error::RowDecode { .. } => 500,
-            Error::Migration { .. } => 500,
             Error::InvalidConfig { .. } => 400,
             Error::MainWalletUnavailable { .. } => 503,
             Error::Search { .. } => 503,

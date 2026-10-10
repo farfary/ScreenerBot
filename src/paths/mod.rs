@@ -119,13 +119,9 @@ pub fn get_quarantine_directory() -> PathBuf {
     get_data_directory().join(QUARANTINE_DIRECTORY_NAME)
 }
 
-/// Name prefix of each wallet data reset's backup directory.
+/// Name prefix of the backup directories earlier releases' wallet data reset wrote
+/// into the backups directory.
 pub const WALLET_RESET_DIRECTORY_PREFIX: &str = "wallet-reset-";
-
-/// Returns the backup directory of the wallet data reset stamped `stamp`.
-pub fn get_wallet_reset_directory(stamp: &str) -> PathBuf {
-    get_backups_directory().join(format!("{WALLET_RESET_DIRECTORY_PREFIX}{stamp}"))
-}
 
 /// Returns the logs directory path.
 ///

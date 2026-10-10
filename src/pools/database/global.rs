@@ -8,7 +8,6 @@ use super::super::types::{PoolBlacklistPolicy, PriceResult, PRICE_HISTORY_MAX_EN
 use super::operations::PoolsDatabase;
 use super::types::{BlacklistedAccountRecord, BlacklistedPoolRecord, PoolFailureOutcome};
 use crate::chains::{ChainId, PerChain};
-use crate::database::{catalog, recovery};
 use crate::pools::Error;
 
 use arc_swap::ArcSwapOption;
@@ -28,26 +27,20 @@ fn empty_database_slot(_chain: ChainId) -> ArcSwapOption<PoolsDatabase> {
 }
 
 /// Install an opened database into its own chain's slot (`db.chain()`).
-pub(crate) fn install_database(db: Arc<PoolsDatabase>) {
+fn install_database(db: Arc<PoolsDatabase>) {
     DATABASES.get(db.chain()).store(Some(db));
 }
 
 /// The installed pools database for `chain`; `None` before the pools service
 /// has opened it, and for a chain that is not enabled.
-pub(crate) fn database(chain: ChainId) -> Option<Arc<PoolsDatabase>> {
+fn database(chain: ChainId) -> Option<Arc<PoolsDatabase>> {
     DATABASES.get(chain).load_full()
 }
 
-/// Open `chain`'s pools database, rebuilding it when its file or schema is unusable,
-/// and install it into that chain's slot.
+/// Open `chain`'s pools database and install it into that chain's slot.
 pub async fn initialize_database(chain: ChainId) -> Result<(), Error> {
-    let path = catalog::POOLS.path(chain);
-    let db = recovery::open_cache_store(&catalog::POOLS, &path, || async {
-        let mut db = PoolsDatabase::new(chain);
-        db.initialize().await?;
-        Ok::<_, Error>(db)
-    })
-    .await?;
+    let mut db = PoolsDatabase::new(chain);
+    db.initialize().await?;
     install_database(Arc::new(db));
     Ok(())
 }

@@ -11,11 +11,11 @@
 //! - _at: Suffix for all timestamps (consistent)
 
 use super::migrations;
-use crate::database::{self, schema};
+use crate::database::schema::{self, SchemaContext, StoreSchema};
 use crate::errors::DatabaseError;
 use crate::logger::{self, LogTag};
 use crate::tokens::Error;
-use rusqlite::{Connection, OptionalExtension, Transaction, TransactionBehavior};
+use rusqlite::{Connection, OptionalExtension, Transaction};
 
 /// Current tokens.db schema version recorded in `PRAGMA user_version`.
 /// Additive column repair inspects on-disk columns and does not trust this
@@ -381,46 +381,49 @@ pub const CREATE_INDEXES: &[&str] = &[
     "CREATE INDEX IF NOT EXISTS idx_token_media_next_fetch ON token_media(chain_id, media_next_fetch_at)",
 ];
 
-/// Initialize database schema.
+/// The token store's schema.
+pub(crate) const SCHEMA: StoreSchema = StoreSchema {
+    version: SCHEMA_VERSION,
+    min_reader_version: SCHEMA_VERSION,
+    baseline: SCHEMA_VERSION,
+    renames: Some(&super::column_names::RENAMES),
+    step,
+    legacy_stamp: None,
+};
+
+fn step(tx: &Transaction<'_>, _: &SchemaContext) -> Result<(), DatabaseError> {
+    create_schema(tx).map_err(|error| match error {
+        Error::Database(error) => error,
+        other => DatabaseError::Migration {
+            store: "tokens.db".to_owned(),
+            detail: other.to_string(),
+        },
+    })
+}
+
+/// Bring the store to the current schema inside the open's transaction.
 ///
 /// Fresh table/index creation is separate from upgrades. The column renames,
 /// the chain-identity rebuild and the additive column steps each inspect
 /// on-disk shape before touching anything: `user_version` is recorded after
 /// success, never used as the only signal that a required structural change is
-/// already present. Every step and the version stamp commit together, so a
-/// refused or failed open leaves the stored schema exactly as it was.
-pub fn initialize_schema(conn: &Connection) -> Result<(), Error> {
-    // Apply centralized PRAGMA configuration
-    database::configure_connection(conn, database::TOKENS_DB).map_err(|e| {
-        DatabaseError::Query {
-            operation: "configure connection".to_owned(),
-            message: e.to_string(),
-        }
-    })?;
-
-    let tx = Transaction::new_unchecked(conn, TransactionBehavior::Immediate).map_err(|e| {
-        DatabaseError::Query {
-            operation: "begin tokens schema initialization".to_owned(),
-            message: e.to_string(),
-        }
-    })?;
-
-    // Reconcile and the unit-neutral renames come first, so the chain rebuild copies
-    // and every later step reads the canonical names.
-    schema::renames::reconcile(&tx, &super::column_names::RENAMES)?;
-    schema::renames::rename(&tx, &super::column_names::RENAMES)?;
+/// already present.
+fn create_schema(tx: &Transaction<'_>) -> Result<(), Error> {
+    // The unit-neutral renames come first, so the chain rebuild copies and every later
+    // step reads the canonical names.
+    schema::renames::rename(tx, &super::column_names::RENAMES)?;
 
     // The chain rebuild copies every token table row-by-row. On a mature
     // database that is minutes of silent work between "starting" and the next
     // log line, so announce both ends: without them a stalled boot is
     // indistinguishable from a hang.
-    if migrations::table_needs_chain_rebuild(&tx)? {
+    if migrations::table_needs_chain_rebuild(tx)? {
         logger::info(
             LogTag::Tokens,
             "Tokens database predates chain identity — rebuilding every token table onto the chain-scoped schema (one time, may take several minutes on a large database)",
         );
         let started_at = std::time::Instant::now();
-        migrations::migrate_legacy_schema(&tx)?;
+        migrations::migrate_legacy_schema(tx)?;
         logger::info(
             LogTag::Tokens,
             &format!(
@@ -432,28 +435,21 @@ pub fn initialize_schema(conn: &Connection) -> Result<(), Error> {
 
     for statement in CREATE_TABLES {
         tx.execute(statement, [])
-            .map_err(|e| DatabaseError::Query {
-                operation: "create table".to_owned(),
-                message: e.to_string(),
-            })?;
+            .map_err(|e| DatabaseError::classify_sqlite_failure("create table", e))?;
     }
 
-    migrations::apply_additive_migrations(&tx)?;
+    migrations::apply_additive_migrations(tx)?;
 
     for statement in CREATE_INDEXES {
         tx.execute(statement, [])
-            .map_err(|e| DatabaseError::Query {
-                operation: "create index".to_owned(),
-                message: e.to_string(),
-            })?;
+            .map_err(|e| DatabaseError::classify_sqlite_failure("create index", e))?;
     }
 
     if tx
         .query_row("PRAGMA foreign_key_check", [], |_| Ok(()))
         .optional()
-        .map_err(|error| DatabaseError::Query {
-            operation: "validate tokens foreign keys".to_owned(),
-            message: error.to_string(),
+        .map_err(|error| {
+            DatabaseError::classify_sqlite_failure("validate tokens foreign keys", error)
         })?
         .is_some()
     {
@@ -464,18 +460,10 @@ pub fn initialize_schema(conn: &Connection) -> Result<(), Error> {
     }
 
     tx.pragma_update(None, "user_version", SCHEMA_VERSION)
-        .map_err(|error| DatabaseError::Query {
-            operation: "record tokens schema version".to_owned(),
-            message: error.to_string(),
+        .map_err(|error| {
+            DatabaseError::classify_sqlite_failure("record tokens schema version", error)
         })?;
-
-    tx.commit().map_err(|error| {
-        DatabaseError::Query {
-            operation: "commit tokens schema initialization".to_owned(),
-            message: error.to_string(),
-        }
-        .into()
-    })
+    Ok(())
 }
 
 /// Check if database is initialized
@@ -486,6 +474,12 @@ pub fn is_initialized(conn: &Connection) -> bool {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::chains::ChainId;
+    use crate::database::{catalog, open};
+
+    fn initialize_schema(conn: &mut Connection) -> Result<(), DatabaseError> {
+        open::upgrade_connection(conn, &catalog::TOKENS, vec![ChainId::Solana])
+    }
 
     fn legacy_statement(statement: &str) -> String {
         statement
@@ -509,7 +503,7 @@ mod tests {
 
     #[test]
     fn legacy_tokens_schema_migrates_losslessly_and_idempotently() {
-        let conn = Connection::open_in_memory().unwrap();
+        let mut conn = Connection::open_in_memory().unwrap();
         for statement in CREATE_TABLES {
             conn.execute(&legacy_statement(statement), []).unwrap();
         }
@@ -525,8 +519,8 @@ mod tests {
         .unwrap();
         conn.pragma_update(None, "user_version", 1).unwrap();
 
-        initialize_schema(&conn).unwrap();
-        initialize_schema(&conn).unwrap();
+        initialize_schema(&mut conn).unwrap();
+        initialize_schema(&mut conn).unwrap();
 
         let migrated: (String, String) = conn
             .query_row(
@@ -548,8 +542,8 @@ mod tests {
 
     #[test]
     fn raw_foreign_chain_rows_do_not_match_solana_queries() {
-        let conn = Connection::open_in_memory().unwrap();
-        initialize_schema(&conn).unwrap();
+        let mut conn = Connection::open_in_memory().unwrap();
+        initialize_schema(&mut conn).unwrap();
         conn.execute(
             "INSERT INTO tokens (chain_id, mint, symbol, name, decimals, first_discovered_at, metadata_last_fetched_at, decimals_last_fetched_at) VALUES ('foreign', 'shared-mint', 'X', 'Foreign', 9, 1, 1, 1)",
             [],

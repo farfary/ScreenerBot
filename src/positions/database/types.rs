@@ -5,12 +5,6 @@
 
 use chrono::{DateTime, Utc};
 use serde::{Deserialize, Serialize};
-use std::sync::atomic::AtomicBool;
-use std::sync::LazyLock;
-
-// Static flag to track if database has been initialized (to reduce log noise)
-pub(super) static POSITIONS_DB_INITIALIZED: LazyLock<AtomicBool> =
-    LazyLock::new(|| AtomicBool::new(false));
 
 // Database schema version
 pub(super) const POSITIONS_SCHEMA_VERSION: u32 = 6;

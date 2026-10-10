@@ -26,7 +26,6 @@ use std::sync::Arc;
 use tokio::sync::{mpsc, Notify, RwLock};
 use uuid::Uuid;
 
-use crate::database::{catalog, recovery};
 use crate::rpc::types::{CircuitState, ProviderKind, RpcCallResult};
 
 /// Statistics manager
@@ -48,12 +47,7 @@ pub struct StatsManager {
 impl StatsManager {
     /// Create a stats manager; `enabled` gates collection for its lifetime
     pub async fn new(enabled: bool) -> crate::Result<Self> {
-        let path = crate::chains::get_rpc_stats_db_path();
-        let db = recovery::open_cache_store(&catalog::RPC_STATS, &path, || async {
-            RpcStatsDatabase::new()
-        })
-        .await?;
-        let db = Arc::new(db);
+        let db = Arc::new(RpcStatsDatabase::new()?);
         let session_id = format!(
             "session_{}",
             Uuid::new_v4()

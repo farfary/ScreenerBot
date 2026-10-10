@@ -8,6 +8,7 @@
 //! Detection never re-opens a range contained in a resolved row.
 
 use crate::database::WriteTransaction;
+use crate::errors::DatabaseError;
 use crate::ohlcvs::types::{MintGapAggregate, OhlcvError, OhlcvResult, Timeframe};
 use chrono::{DateTime, Utc};
 use rusqlite::{params, Connection, Result as SqliteResult};
@@ -58,7 +59,9 @@ impl OhlcvDatabase {
                 end_timestamp
             ],
         )
-        .map_err(|e| OhlcvError::DatabaseError(format!("Failed to insert gap: {e}")))?;
+        .map_err(|e| {
+            OhlcvError::Database(DatabaseError::classify_sqlite_failure("insert gap", e))
+        })?;
 
         Ok(())
     }
@@ -82,7 +85,9 @@ impl OhlcvDatabase {
                    AND attempts < ?4 AND end_timestamp >= ?5
                  ORDER BY timeframe, start_timestamp, end_timestamp",
             )
-            .map_err(|e| OhlcvError::DatabaseError(format!("Failed to prepare: {e}")))?;
+            .map_err(|e| {
+                OhlcvError::Database(DatabaseError::classify_sqlite_failure("prepare", e))
+            })?;
 
         let rows = stmt
             .query_map(
@@ -103,9 +108,13 @@ impl OhlcvDatabase {
                     ))
                 },
             )
-            .map_err(|e| OhlcvError::DatabaseError(format!("Query failed: {e}")))?
+            .map_err(|e| {
+                OhlcvError::Database(DatabaseError::classify_sqlite_failure("query failed", e))
+            })?
             .collect::<SqliteResult<Vec<_>>>()
-            .map_err(|e| OhlcvError::DatabaseError(format!("Failed to collect: {e}")))?;
+            .map_err(|e| {
+                OhlcvError::Database(DatabaseError::classify_sqlite_failure("collect", e))
+            })?;
 
         Ok(rows
             .into_iter()
@@ -152,7 +161,12 @@ impl OhlcvDatabase {
                 error
             ],
         )
-        .map_err(|e| OhlcvError::DatabaseError(format!("Failed to record gap attempt: {e}")))
+        .map_err(|e| {
+            OhlcvError::Database(DatabaseError::classify_sqlite_failure(
+                "record gap attempt",
+                e,
+            ))
+        })
     }
 
     /// Resolve `[start, end]`: the source answered for every bucket in it. Marks
@@ -168,9 +182,9 @@ impl OhlcvDatabase {
         attempted_at: i64,
     ) -> OhlcvResult<()> {
         let mut conn = self.conn()?;
-        let tx = conn
-            .write_tx()
-            .map_err(|e| OhlcvError::DatabaseError(format!("Failed to begin: {e}")))?;
+        let tx = conn.write_tx().map_err(|e| {
+            OhlcvError::Database(DatabaseError::classify_sqlite_failure("begin", e))
+        })?;
         let key = GapKey {
             chain_id: self.chain_id(),
             mint,
@@ -187,8 +201,12 @@ impl OhlcvDatabase {
             attempted_at,
             None,
         )?;
-        tx.commit()
-            .map_err(|e| OhlcvError::DatabaseError(format!("Failed to resolve gap span: {e}")))
+        tx.commit().map_err(|e| {
+            OhlcvError::Database(DatabaseError::classify_sqlite_failure(
+                "resolve gap span",
+                e,
+            ))
+        })
     }
 
     /// Record an answer that covered only `[covered_start, end]` of `[start, end]`.
@@ -208,9 +226,9 @@ impl OhlcvDatabase {
         attempted_at: i64,
     ) -> OhlcvResult<()> {
         let mut conn = self.conn()?;
-        let tx = conn
-            .write_tx()
-            .map_err(|e| OhlcvError::DatabaseError(format!("Failed to begin: {e}")))?;
+        let tx = conn.write_tx().map_err(|e| {
+            OhlcvError::Database(DatabaseError::classify_sqlite_failure("begin", e))
+        })?;
         let key = GapKey {
             chain_id: self.chain_id(),
             mint,
@@ -236,8 +254,9 @@ impl OhlcvDatabase {
             attempted_at,
             Some("source answer covered part of the span"),
         )?;
-        tx.commit()
-            .map_err(|e| OhlcvError::DatabaseError(format!("Failed to split gap span: {e}")))
+        tx.commit().map_err(|e| {
+            OhlcvError::Database(DatabaseError::classify_sqlite_failure("split gap span", e))
+        })
     }
 
     pub fn get_unfilled_gaps(
@@ -254,7 +273,9 @@ impl OhlcvDatabase {
                  ORDER BY start_timestamp DESC
                  LIMIT 100",
             )
-            .map_err(|e| OhlcvError::DatabaseError(format!("Failed to prepare: {e}")))?;
+            .map_err(|e| {
+                OhlcvError::Database(DatabaseError::classify_sqlite_failure("prepare", e))
+            })?;
 
         let gaps = stmt
             .query_map(params![self.chain_id(), mint, timeframe.as_str()], |row| {
@@ -264,9 +285,13 @@ impl OhlcvDatabase {
                     row.get::<_, i64>(2)?,
                 ))
             })
-            .map_err(|e| OhlcvError::DatabaseError(format!("Query failed: {e}")))?
+            .map_err(|e| {
+                OhlcvError::Database(DatabaseError::classify_sqlite_failure("query failed", e))
+            })?
             .collect::<SqliteResult<Vec<_>>>()
-            .map_err(|e| OhlcvError::DatabaseError(format!("Failed to collect: {e}")))?;
+            .map_err(|e| {
+                OhlcvError::Database(DatabaseError::classify_sqlite_failure("collect", e))
+            })?;
 
         Ok(gaps)
     }
@@ -281,7 +306,12 @@ impl OhlcvDatabase {
                 params![self.chain_id()],
                 |row| Ok((row.get(0)?, row.get(1)?)),
             )
-            .map_err(|e| OhlcvError::DatabaseError(format!("Failed to read gap aggregate: {e}")))?;
+            .map_err(|e| {
+                OhlcvError::Database(DatabaseError::classify_sqlite_failure(
+                    "read gap aggregate",
+                    e,
+                ))
+            })?;
 
         Ok((token_count.max(0) as usize, gap_count.max(0) as usize))
     }
@@ -305,7 +335,10 @@ impl OhlcvDatabase {
                  LIMIT ?2",
             )
             .map_err(|e| {
-                OhlcvError::DatabaseError(format!("Failed to prepare gap summary: {e}"))
+                OhlcvError::Database(DatabaseError::classify_sqlite_failure(
+                    "prepare gap summary",
+                    e,
+                ))
             })?;
 
         let rows = stmt
@@ -323,10 +356,18 @@ impl OhlcvDatabase {
                     latest_gap_end: latest_gap,
                 })
             })
-            .map_err(|e| OhlcvError::DatabaseError(format!("Gap summary query failed: {e}")))?;
+            .map_err(|e| {
+                OhlcvError::Database(DatabaseError::classify_sqlite_failure(
+                    "gap summary query failed",
+                    e,
+                ))
+            })?;
 
         let aggregates = rows.collect::<SqliteResult<Vec<_>>>().map_err(|e| {
-            OhlcvError::DatabaseError(format!("Failed to collect gap summary: {e}"))
+            OhlcvError::Database(DatabaseError::classify_sqlite_failure(
+                "collect gap summary",
+                e,
+            ))
         })?;
 
         Ok(aggregates)
@@ -365,7 +406,9 @@ impl GapKey<'_> {
                 attempt_text(attempted_at)
             ],
         )
-        .map_err(|e| OhlcvError::DatabaseError(format!("Failed to close gap rows: {e}")))?;
+        .map_err(|e| {
+            OhlcvError::Database(DatabaseError::classify_sqlite_failure("close gap rows", e))
+        })?;
         Ok(())
     }
 
@@ -403,7 +446,9 @@ impl GapKey<'_> {
                 error
             ],
         )
-        .map_err(|e| OhlcvError::DatabaseError(format!("Failed to write gap row: {e}")))?;
+        .map_err(|e| {
+            OhlcvError::Database(DatabaseError::classify_sqlite_failure("write gap row", e))
+        })?;
         Ok(())
     }
 }

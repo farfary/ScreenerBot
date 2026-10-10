@@ -16,6 +16,9 @@ use screenerbot::storage::types::Classification;
 
 const CHILD_ENV: &str = "SCREENERBOT_STORAGE_STARTUP_CHILD";
 const CACHE_CHILD_ENV: &str = "SCREENERBOT_CACHE_RECOVERY_CHILD";
+/// The longest the storage phase may take to open every store, the owner's real stores
+/// included.
+const STORAGE_PHASE_BUDGET: std::time::Duration = std::time::Duration::from_secs(5);
 /// The cache stores whose owners open through the recovery path.
 const RECOVERED_CACHE_FILES: &[&str] = &["ohlcvs.db", "pools.db", "rpc_stats.db"];
 /// Tables whose rows are still pruned on their owner's own schedule and therefore carry
@@ -417,6 +420,12 @@ fn database_filenames(source: &str) -> BTreeSet<String> {
 fn initialize_startup_stores() {
     screenerbot::paths::ensure_all_directories().expect("create startup-storage directories");
     screenerbot::config::load_config().expect("load isolated configuration");
+    let elapsed = screenerbot::database::open::open_all();
+    assert!(
+        elapsed < STORAGE_PHASE_BUDGET,
+        "the storage phase took {elapsed:?}"
+    );
+    assert_every_store_opened_by_the_phase();
 
     let runtime = tokio::runtime::Builder::new_multi_thread()
         .enable_all()
@@ -499,6 +508,28 @@ fn initialize_startup_stores() {
             .expect("advance startup-storage sentinel");
     }
     assert_every_written_entry_is_declared();
+}
+
+/// Every catalog store is opened by the storage phase before any owner asks for it, and
+/// every one of them opened.
+fn assert_every_store_opened_by_the_phase() {
+    let open: Vec<std::path::PathBuf> = screenerbot::database::handles::open_stores()
+        .into_iter()
+        .map(|handle| handle.path)
+        .collect();
+    for store in STORES {
+        let path = store.path(ChainId::Solana);
+        assert!(open.contains(&path), "{} was not opened", store.id);
+        let status = screenerbot::database::health::status(&path)
+            .unwrap_or_else(|| panic!("{} has no recorded health", store.id));
+        assert_eq!(
+            status.health,
+            screenerbot::database::health::StoreHealth::Healthy,
+            "{}",
+            store.id
+        );
+    }
+    assert_eq!(open.len(), STORES.len());
 }
 
 /// Everything a launch leaves under the data root is a store, a declared family or a

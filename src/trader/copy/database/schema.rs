@@ -3,14 +3,50 @@
 
 //! Schema and migrations for the copy-trading database - copy_tasks, copy_spend and copy_paper_positions tables plus the mode-scoped spend rebuild.
 
-use rusqlite::{Connection, OptionalExtension, Transaction};
+use rusqlite::{params, OptionalExtension, Transaction};
 
+use crate::database::schema::{ddl, SchemaContext, StoreSchema};
+use crate::errors::DatabaseError;
 use crate::trader::copy::types::CopyOutcome;
 use crate::trader::error::Error;
 
-pub(super) const SCHEMA_VERSION: i64 = 7;
+const SCHEMA_VERSION: i64 = 7;
 
-pub(super) const SCHEMA: &str = r#"
+/// The schema of `copy_trading.db`.
+pub(crate) const SCHEMA: StoreSchema = StoreSchema {
+    version: SCHEMA_VERSION,
+    min_reader_version: SCHEMA_VERSION,
+    baseline: SCHEMA_VERSION,
+    renames: Some(&super::column_names::RENAMES),
+    step,
+    legacy_stamp: None,
+};
+
+fn step(transaction: &Transaction<'_>, _: &SchemaContext) -> Result<(), DatabaseError> {
+    create_schema(transaction).map_err(|error| match error {
+        Error::Database(error) => error,
+        other => DatabaseError::Migration {
+            store: "copy_trading.db".to_owned(),
+            detail: other.to_string(),
+        },
+    })
+}
+
+/// Creates the tables, runs every migration and stamps the schema version.
+fn create_schema(transaction: &Transaction<'_>) -> crate::trader::Result<()> {
+    ddl::run_batch(transaction, "create copy-trading tables", SCHEMA_SQL)?;
+    migrate(transaction)?;
+    transaction
+        .execute(
+            "INSERT INTO copy_metadata (key, value) VALUES ('schema_version', ?1) \
+             ON CONFLICT(key) DO UPDATE SET value = excluded.value",
+            params![SCHEMA_VERSION.to_string()],
+        )
+        .map_err(|e| DatabaseError::classify_sqlite_failure("stamp copy-trading schema", e))?;
+    Ok(())
+}
+
+const SCHEMA_SQL: &str = r#"
 CREATE TABLE IF NOT EXISTS copy_metadata (
     key TEXT PRIMARY KEY,
     value TEXT NOT NULL
@@ -129,7 +165,7 @@ CREATE TABLE IF NOT EXISTS copy_position_links (
 
 /// Every schema step of one open. Runs inside the opener's transaction, so a
 /// step refused here leaves the stored schema exactly as it was.
-pub(super) fn migrate(connection: &Transaction<'_>) -> crate::trader::Result<()> {
+fn migrate(connection: &Transaction<'_>) -> crate::trader::Result<()> {
     let mut statement = connection
         .prepare("PRAGMA table_info(copy_tasks)")
         .map_err(crate::errors::DatabaseError::from)?;
@@ -207,7 +243,7 @@ pub(super) fn migrate(connection: &Transaction<'_>) -> crate::trader::Result<()>
     // before the v5 rebuild, which books paper fills through `apply_paper_buy`.
     // A legacy book may still carry the pre-rename column, which the unit
     // rename below moves to the canonical name.
-    if !table_columns(connection, "copy_paper_positions")?
+    if !ddl::column_names(connection, "copy_paper_positions")?
         .iter()
         .any(|column| column == "peak_price_native" || column == "peak_price_sol")
     {
@@ -219,7 +255,7 @@ pub(super) fn migrate(connection: &Transaction<'_>) -> crate::trader::Result<()>
             .map_err(crate::errors::DatabaseError::from)?;
     }
     // v7: the per-task filter override and the stored reason for a pause.
-    let task_columns = table_columns(connection, "copy_tasks")?;
+    let task_columns = ddl::column_names(connection, "copy_tasks")?;
     for (column, definition) in [
         ("require_filter_pass", "INTEGER"),
         ("pause_reason_json", "TEXT"),
@@ -241,28 +277,13 @@ pub(super) fn migrate(connection: &Transaction<'_>) -> crate::trader::Result<()>
     Ok(())
 }
 
-pub(super) fn table_columns(
-    connection: &Connection,
-    table: &str,
-) -> crate::trader::Result<Vec<String>> {
-    let mut statement = connection
-        .prepare(&format!("PRAGMA table_info({table})"))
-        .map_err(crate::errors::DatabaseError::from)?;
-    let columns = statement
-        .query_map([], |row| row.get::<_, String>(1))
-        .map_err(crate::errors::DatabaseError::from)?
-        .collect::<Result<Vec<_>, _>>()
-        .map_err(crate::errors::DatabaseError::from)?;
-    Ok(columns)
-}
-
 /// v5: spend was one ledger shared by paper and live, so paper fills consumed the
 /// live budget and a task armed for live started half spent. Rebuild it keyed by
 /// mode from the recorded decisions (the source of every spend increment); spend no
 /// decision explains is kept under the task's current mode rather than dropped.
 /// Every recorded paper fill is booked into the new paper position ledger.
 fn migrate_mode_scoped_spend(transaction: &Transaction<'_>) -> crate::trader::Result<()> {
-    if table_columns(transaction, "copy_spend")?
+    if ddl::column_names(transaction, "copy_spend")?
         .iter()
         .any(|column| column == "mode")
     {

@@ -4,7 +4,8 @@
 //! OHLCV service — public API for querying candle data with cache and database fallback.
 
 use crate::chains::{ChainId, ChainScope, PerChain};
-use crate::database::{catalog, recovery};
+use crate::database::catalog;
+use crate::errors::InternalError;
 use crate::logger::{self, LogTag};
 use crate::ohlcvs::aggregator::OhlcvAggregator;
 use crate::ohlcvs::cache::OhlcvCache;
@@ -59,13 +60,9 @@ pub(super) struct OhlcvServiceImpl {
 }
 
 impl OhlcvServiceImpl {
-    /// Open `chain`'s store, rebuilding it when its file or schema is unusable.
+    /// Open `chain`'s store.
     async fn new(chain: ChainId) -> OhlcvResult<Self> {
-        let path = catalog::OHLCVS.path(chain);
-        let db = recovery::open_cache_store(&catalog::OHLCVS, &path, || async {
-            OhlcvDatabase::new(&path, chain)
-        })
-        .await?;
+        let db = OhlcvDatabase::new(catalog::OHLCVS.path(chain), chain)?;
         Ok(Self::with_database(Arc::new(db)))
     }
 
@@ -114,7 +111,7 @@ impl OhlcvServiceImpl {
         let db = Arc::clone(&self.db);
         let result = tokio::task::spawn_blocking(move || db.clear_all_ohlcv_data())
             .await
-            .map_err(|e| OhlcvError::DatabaseError(format!("Task join error: {e}")))??;
+            .map_err(|e| OhlcvError::Internal(InternalError::from(e)))??;
         self.cache.clear()?;
         self.bundle_cache.write().await.clear();
         Ok(result)
@@ -256,7 +253,7 @@ impl OhlcvServiceImpl {
                 db.get_latest_native_timestamp(&mint_owned, &pool_owned, timeframe)
             })
             .await
-            .map_err(|e| OhlcvError::DatabaseError(format!("Task join error: {e}")))??;
+            .map_err(|e| OhlcvError::Internal(InternalError::from(e)))??;
             if native_newest.is_none() {
                 return Ok(Vec::new());
             }
@@ -350,7 +347,7 @@ impl OhlcvServiceImpl {
             )
         })
         .await
-        .map_err(|e| OhlcvError::DatabaseError(format!("Task join error: {e}")))??;
+        .map_err(|e| OhlcvError::Internal(InternalError::from(e)))??;
 
         // NOTE: deliberately NO "query any pool" fallback here. Candles from a
         // different pool are a different price series; merging them would combine
@@ -386,7 +383,7 @@ impl OhlcvServiceImpl {
                 )
             })
             .await
-            .map_err(|e| OhlcvError::DatabaseError(format!("Task join error: {e}")))??;
+            .map_err(|e| OhlcvError::Internal(InternalError::from(e)))??;
 
             if !raw_candles.is_empty() {
                 // Aggregate 1m data to requested timeframe
@@ -690,7 +687,7 @@ impl OhlcvServiceImpl {
                     )
                 })
                 .await
-                .map_err(|e| OhlcvError::DatabaseError(format!("Task join error: {e}")))??;
+                .map_err(|e| OhlcvError::Internal(InternalError::from(e)))??;
 
                 Ok(candles)
             });

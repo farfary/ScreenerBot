@@ -202,25 +202,28 @@ mod amount_tests {
     use crate::wallets::database::schema::{
         LEGACY_TOKEN_BALANCES_SCHEMA, TOKEN_BALANCES_SCHEMA, WALLETS_INDEXES, WALLETS_SCHEMA,
     };
-    use r2d2::Pool;
-    use r2d2_sqlite::SqliteConnectionManager;
     use rusqlite::Connection;
 
     fn open(path: &std::path::Path) -> WalletsDatabase {
-        let manager = SqliteConnectionManager::file(path).with_init(|conn| {
-            crate::database::configure_connection(conn, crate::database::WALLETS_DB)
-        });
-        let db = WalletsDatabase {
-            pool: Pool::builder()
-                .max_size(1)
-                .idle_timeout(None)
-                .max_lifetime(None)
-                .build(manager)
-                .unwrap(),
+        let pool = crate::database::open::pool_at(
+            &crate::database::catalog::WALLETS,
+            path,
+            vec![ChainId::Solana],
+        )
+        .unwrap();
+        WalletsDatabase {
+            pool,
             chain: ChainId::Solana,
-        };
-        db.initialize().unwrap();
-        db
+        }
+    }
+
+    /// Runs the store's whole open-time upgrade on `path` in one transaction.
+    fn upgrade(path: &std::path::Path) -> Result<(), crate::errors::DatabaseError> {
+        crate::database::open::upgrade_connection(
+            &mut Connection::open(path).unwrap(),
+            &crate::database::catalog::WALLETS,
+            vec![ChainId::Solana],
+        )
     }
 
     fn fixture(path: &std::path::Path, legacy_schema: &str) {
@@ -357,10 +360,7 @@ mod amount_tests {
             let path = dir.path().join("wallets.db");
             fixture(&path, &schema);
             let before = Connection::open(&path).unwrap().query_row("SELECT sql FROM sqlite_master WHERE name = 'wallet_token_balances'", [], |row| row.get::<_, String>(0)).unwrap();
-            let manager = SqliteConnectionManager::file(&path)
-                .with_init(|conn| crate::database::configure_connection(conn, crate::database::WALLETS_DB));
-            let db = WalletsDatabase { pool: Pool::builder().max_size(1).build(manager).unwrap(), chain: ChainId::Solana };
-            assert!(db.initialize().is_err());
+            assert!(upgrade(&path).is_err());
             let conn = Connection::open(&path).unwrap();
             assert_eq!(conn.query_row("SELECT sql FROM sqlite_master WHERE name = 'wallet_token_balances'", [], |row| row.get::<_, String>(0)).unwrap(), before);
             assert_eq!(conn.query_row("SELECT COUNT(*) FROM wallet_token_balances", [], |row| row.get::<_, i64>(0)).unwrap(), 4);
@@ -414,10 +414,7 @@ mod amount_tests {
             let before = conn.query_row("SELECT sql FROM sqlite_master WHERE name = 'wallet_token_balances'", [], |row| row.get::<_, String>(0)).unwrap();
             let before_value = conn.query_row("SELECT typeof(balance), quote(balance) FROM wallet_token_balances WHERE mint = 'mint0'", [], |row| Ok((row.get::<_, String>(0)?, row.get::<_, String>(1)?))).unwrap();
             drop(conn);
-            let manager = SqliteConnectionManager::file(&path)
-                .with_init(|conn| crate::database::configure_connection(conn, crate::database::WALLETS_DB));
-            let db = WalletsDatabase { pool: Pool::builder().max_size(1).build(manager).unwrap(), chain: ChainId::Solana };
-            assert!(db.initialize().is_err());
+            assert!(upgrade(&path).is_err());
             let conn = Connection::open(&path).unwrap();
             assert_eq!(conn.query_row("SELECT sql FROM sqlite_master WHERE name = 'wallet_token_balances'", [], |row| row.get::<_, String>(0)).unwrap(), before);
             assert_eq!(conn.query_row("SELECT typeof(balance), quote(balance) FROM wallet_token_balances WHERE mint = 'mint0'", [], |row| Ok((row.get::<_, String>(0)?, row.get::<_, String>(1)?))).unwrap(), before_value);

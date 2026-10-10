@@ -6,6 +6,8 @@
 
 use rusqlite::{params, Connection, OptionalExtension};
 
+use crate::chains::ChainId;
+use crate::database::schema::ddl;
 use crate::logger::{self, LogTag};
 use crate::transactions::types::*;
 
@@ -38,7 +40,7 @@ impl TransactionDatabase {
     /// Rebuild only the released v7 ledger shape; never discard an unrecognized
     /// column, constraint, index, or trigger during a table replacement. Runs inside
     /// the opener's transaction.
-    pub(super) fn migrate_subject_delta_amounts(&self, tx: &Connection) -> Result<(), Error> {
+    pub(super) fn migrate_subject_delta_amounts(tx: &Connection) -> Result<(), Error> {
         let conn = tx;
         let mut stmt = conn
             .prepare("PRAGMA table_xinfo(subject_asset_deltas)")
@@ -274,28 +276,12 @@ impl TransactionDatabase {
     /// The fee and delta columns may still carry their legacy unit names here (the
     /// rename runs after the versioned rebuilds); either name counts as present, and
     /// a missing column is added under its canonical name.
-    pub(super) fn apply_pre_chain_migrations(&self, conn: &Connection) -> Result<bool, Error> {
+    pub(super) fn apply_pre_chain_migrations(conn: &Connection) -> Result<bool, Error> {
         // Ensure processed_transactions has the fee column for MCP tools compatibility
         let mut has_fee_native = false;
         let mut has_native_delta = false;
         let mut has_type_kind = false;
-        let mut stmt = conn
-            .prepare("PRAGMA table_info(processed_transactions)")
-            .map_err(|e| Error::SchemaInspect {
-                detail: format!("failed to inspect processed_transactions schema: {e}"),
-            })?;
-        let rows = stmt
-            .query_map([], |row| {
-                let name: String = row.get(1)?;
-                Ok(name)
-            })
-            .map_err(|e| Error::SchemaInspect {
-                detail: format!("failed to read processed_transactions schema: {e}"),
-            })?;
-        for r in rows {
-            let name = r.map_err(|e| Error::SchemaInspect {
-                detail: format!("failed to parse schema row: {e}"),
-            })?;
+        for name in ddl::column_names(conn, "processed_transactions")? {
             if name.eq_ignore_ascii_case("fee_sol") || name.eq_ignore_ascii_case("fee_native") {
                 has_fee_native = true;
             } else if name.eq_ignore_ascii_case("sol_delta")
@@ -306,7 +292,6 @@ impl TransactionDatabase {
                 has_type_kind = true;
             }
         }
-        drop(stmt);
         // A table missing these columns predates the historical rebuilds that
         // follow, which read the legacy names; the unit rename at the end of the
         // open moves them to the canonical names.
@@ -376,10 +361,13 @@ impl TransactionDatabase {
     }
 
     /// Ensure the chain-scoped bootstrap row after the v7 table rebuild.
-    pub(super) fn initialize_chain_bootstrap_state(&self, conn: &Connection) -> Result<(), Error> {
+    pub(super) fn initialize_chain_bootstrap_state(
+        conn: &Connection,
+        chain: ChainId,
+    ) -> Result<(), Error> {
         conn.execute(
             "INSERT OR IGNORE INTO bootstrap_state (chain_id, id, full_history_completed) VALUES (?1, 1, 0)",
-            params![self.chain.as_str()],
+            params![chain.as_str()],
         )
         .map_err(|e| Error::Migration {
             step: "initialize bootstrap_state row".to_owned(),
@@ -410,7 +398,6 @@ impl TransactionDatabase {
     /// crash mid-migration leaves only the untouched tables needing another pass), so
     /// this is safe to call on every boot.
     pub(super) fn migrate_signature_wallet_tables(
-        &self,
         tx: &rusqlite::Transaction<'_>,
     ) -> Result<(), Error> {
         let conn: &Connection = tx;
@@ -531,7 +518,7 @@ impl TransactionDatabase {
     /// was released with, so the unit columns are read under their legacy names and
     /// written under their canonical ones. A table created earlier in this open
     /// already has the canonical names and is read under those.
-    pub(super) fn migrate_chain_identity_tables(&self, tx: &Connection) -> Result<(), Error> {
+    pub(super) fn migrate_chain_identity_tables(tx: &Connection) -> Result<(), Error> {
         let conn = tx;
         let stored_version = Self::read_schema_version(conn)?;
         if stored_version.unwrap_or(0) >= 7 {
@@ -647,7 +634,10 @@ impl TransactionDatabase {
     }
 
     /// Runs inside the opener's transaction, after the unit column rename.
-    pub(super) fn backfill_processed_native_delta(&self, conn: &Connection) -> Result<(), Error> {
+    pub(super) fn backfill_processed_native_delta(
+        conn: &Connection,
+        chain: ChainId,
+    ) -> Result<(), Error> {
         const BATCH_SIZE: i64 = 1000;
         let mut total_updated = 0usize;
 
@@ -668,14 +658,11 @@ impl TransactionDatabase {
                 })?;
 
             let rows = stmt
-                .query_map(
-                    params![self.chain.as_str(), wallet_address, BATCH_SIZE],
-                    |row| {
-                        let signature: String = row.get(0)?;
-                        let change_json: Option<String> = row.get(1)?;
-                        Ok((signature, change_json))
-                    },
-                )
+                .query_map(params![chain.as_str(), wallet_address, BATCH_SIZE], |row| {
+                    let signature: String = row.get(0)?;
+                    let change_json: Option<String> = row.get(1)?;
+                    Ok((signature, change_json))
+                })
                 .map_err(|e| Error::Migration {
                     step: "iterate native_delta backfill rows".to_owned(),
                     detail: e.to_string(),
@@ -700,7 +687,7 @@ impl TransactionDatabase {
                 let delta = Self::compute_native_delta_from_json(change_json.as_deref());
                 conn.execute(
                     "UPDATE processed_transactions SET native_delta = ?1 WHERE chain_id = ?2 AND signature = ?3 AND wallet_address = ?4",
-                    params![delta, self.chain.as_str(), signature, wallet_address],
+                    params![delta, chain.as_str(), signature, wallet_address],
                 )
                 .map_err(|e| Error::Migration {
                     step: "update native_delta".to_owned(),

@@ -26,8 +26,6 @@ const MAX_PRICE_HISTORY_AGE_DAYS: i64 = 7;
 /// Maximum allowable gap between price updates (1 minute in seconds)
 const MAX_PRICE_GAP_SECONDS: i64 = 60;
 
-use super::migrations::migrate_schema;
-
 // =============================================================================
 // POOLS DATABASE
 // =============================================================================
@@ -79,29 +77,11 @@ impl PoolsDatabase {
 
     /// Initialize database and create tables
     pub async fn initialize(&mut self) -> Result<(), Error> {
-        // Create the connection pool: every checkout applies the shared
-        // SQLite configuration through the manager's init hook.
-        let manager = SqliteConnectionManager::file(self.db_path.as_str())
-            .with_init(|conn| database::configure_connection(conn, database::POOLS_DB));
-
-        let pool = Pool::builder()
-            .max_size(4)
-            .idle_timeout(None)
-            .max_lifetime(None)
-            .build(manager)
-            .map_err(DatabaseError::from)?;
-
-        // Migrate the schema on one checkout before the writer task or any
-        // other reader exists.
-        {
-            let mut conn = pool.get().map_err(DatabaseError::from)?;
-            migrate_schema(&mut conn)?;
-        }
-        database::handles::register(
+        let pool = database::open::pool_at(
             &database::catalog::POOLS,
             std::path::Path::new(&self.db_path),
-            &pool,
-        );
+            vec![self.chain_id],
+        )?;
 
         self.pool = Some(pool.clone());
 
@@ -500,19 +480,11 @@ impl PoolsDatabase {
 pub(super) fn pooled_legacy_database(label: &str) -> (PoolsDatabase, tempfile::TempDir) {
     let dir = tempfile::tempdir().expect("create test database directory");
     let path = dir.path().join(format!("screenerbot-pools-{label}.db"));
-    let manager = SqliteConnectionManager::file(&path)
-        .with_init(|conn| database::configure_connection(conn, database::POOLS_DB));
-    let pool = Pool::builder()
-        .max_size(4)
-        .idle_timeout(None)
-        .max_lifetime(None)
-        .build(manager)
-        .expect("build pooled test database");
-    {
-        let mut conn = pool.get().expect("checkout test connection");
-        super::migrations::seed_legacy_schema(&conn);
-        migrate_schema(&mut conn).expect("migrate test database");
-    }
+    super::migrations::seed_legacy_schema(
+        &rusqlite::Connection::open(&path).expect("create legacy test database"),
+    );
+    let pool = database::open::pool_at(&database::catalog::POOLS, &path, vec![ChainId::Solana])
+        .expect("open pooled test database");
     let db = PoolsDatabase {
         chain_id: ChainId::Solana,
         db_path: path.to_string_lossy().to_string(),

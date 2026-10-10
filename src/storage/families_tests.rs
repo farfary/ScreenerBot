@@ -57,6 +57,7 @@ fn every_family_id_is_declared_once() {
         FamilyId::StagedCores,
         FamilyId::Quarantine,
         FamilyId::UpgradeBackups,
+        FamilyId::StoreSnapshots,
         FamilyId::WalletResetBackups,
         FamilyId::LatestLog,
         FamilyId::Downloads,
@@ -74,6 +75,7 @@ fn every_family_id_is_declared_once() {
             | FamilyId::StagedCores
             | FamilyId::Quarantine
             | FamilyId::UpgradeBackups
+            | FamilyId::StoreSnapshots
             | FamilyId::WalletResetBackups
             | FamilyId::LatestLog
             | FamilyId::Downloads
@@ -200,6 +202,7 @@ fn names_are_classified_into_their_family() {
             backups.join("upgrade-positions.db"),
             FamilyId::UpgradeBackups,
         ),
+        (backups.join("snapshots"), FamilyId::StoreSnapshots),
         (data.join("quarantine"), FamilyId::Quarantine),
         (data.join("core"), FamilyId::StagedCores),
         (data.join("config.toml"), FamilyId::Config),
@@ -252,6 +255,7 @@ fn the_vault_and_identity_files_are_kept_forever() {
         FamilyId::Config,
         FamilyId::Quarantine,
         FamilyId::UpgradeBackups,
+        FamilyId::StoreSnapshots,
         FamilyId::WalletResetBackups,
     ] {
         for tier in Tier::ALL {

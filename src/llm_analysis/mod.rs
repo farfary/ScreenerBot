@@ -23,10 +23,9 @@ pub mod types;
 // Re-exports
 pub use cache::AnalysisCache;
 pub use db::{
-    clear_old_decisions, create_instruction, delete_instruction, get_analysis_database,
-    get_builtin_templates, get_decision, get_instruction, init_analysis_database, list_decisions,
-    list_decisions_for_mint, list_instructions, record_decision, reorder_instructions,
-    update_instruction, with_analysis_db,
+    clear_old_decisions, create_instruction, delete_instruction, get_builtin_templates,
+    get_decision, get_instruction, init_analysis_database, list_decisions, list_decisions_for_mint,
+    list_instructions, record_decision, reorder_instructions, update_instruction, with_analysis_db,
 };
 pub use engine::{
     get_analysis_engine, init_analysis_engine, try_get_analysis_engine, AnalysisEngine,

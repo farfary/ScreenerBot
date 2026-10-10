@@ -4242,3 +4242,110 @@ fn data_root_locations_are_built_only_in_the_paths_module() {
         violations.join("\n")
     );
 }
+
+/// Modules that exist only to evolve a store's schema. Everything in them runs inside
+/// the open's one IMMEDIATE transaction.
+const SCHEMA_STEP_MODULES: &[&str] = &[
+    "database/schema/renames.rs",
+    "database/schema/upgrade.rs",
+    "ohlcvs/database/migrations.rs",
+    "pools/database/migrations.rs",
+    "positions/database/provenance.rs",
+    "positions/database/raw_migration.rs",
+    "tokens/migrations.rs",
+    "tokens/schema.rs",
+    "tools/database/schema.rs",
+    "trader/copy/database/schema.rs",
+    "transactions/database/migrations.rs",
+    "transactions/database/migrations_rebuild.rs",
+    "transactions/database/schema.rs",
+    "wallets/watch/migrations.rs",
+];
+
+/// Statements that open, end or nest a transaction.
+const TRANSACTION_CONTROL: &[&str] = &[
+    "write_tx(",
+    ".transaction(",
+    "transaction_with_behavior(",
+    "unchecked_transaction(",
+    "\"BEGIN",
+    "\"COMMIT",
+    "\"END",
+    "\"ROLLBACK",
+    "\"SAVEPOINT",
+    "\"RELEASE",
+];
+
+/// A schema step receives only the open's transaction, and nothing it runs may open,
+/// commit or end a transaction of its own: a step committed ahead of a later refusal
+/// would leave a refused store changed. Checked over every schema-only module and over
+/// the `step` and `create_schema` functions of every store that declares a schema.
+#[test]
+fn schema_steps_never_control_their_own_transaction() {
+    let mut violations = Vec::new();
+    let mut steps_seen = 0;
+    for (relative, contents) in walk_src() {
+        let path = relative.to_string_lossy().replace('\\', "/");
+        let code = strip_comment_text(&production_text(&contents));
+        let scanned: Vec<&str> = if SCHEMA_STEP_MODULES.contains(&path.as_str()) {
+            vec![code.as_str()]
+        } else if code.contains("const SCHEMA: StoreSchema") {
+            ["fn step(", "fn create_schema("]
+                .iter()
+                .flat_map(|function| code.match_indices(function).map(|(at, _)| at))
+                .filter_map(|at| {
+                    let body_open = at + code[at..].find('{')?;
+                    let (start, end) = matching_span(&code, body_open)?;
+                    Some(&code[start..=end])
+                })
+                .collect()
+        } else {
+            continue;
+        };
+        steps_seen += scanned.len();
+        for body in scanned {
+            for needle in TRANSACTION_CONTROL {
+                if body.contains(needle) {
+                    violations.push(format!("src/{path}: {needle}"));
+                }
+            }
+        }
+    }
+    assert!(
+        steps_seen >= 30,
+        "the guard must see every schema step ({steps_seen} seen)"
+    );
+    assert!(
+        violations.is_empty(),
+        "schema steps run inside the open's transaction and never control one:\n{}",
+        violations.join("\n")
+    );
+}
+
+/// Every connection pool on a store is built by the store opener, which returns a
+/// typed error instead of panicking and configures every connection the same way.
+#[test]
+fn connection_pools_are_built_only_by_the_store_opener() {
+    let mut violations = Vec::new();
+    for (relative, contents) in walk_src() {
+        if relative == Path::new("database/open.rs") || is_test_support_file(&relative) {
+            continue;
+        }
+        let code = strip_comment_text(&production_text(&contents));
+        for needle in [
+            "Pool::builder(",
+            "Pool::new(",
+            "Mutex<Connection>",
+            "Mutex<rusqlite::Connection>",
+        ] {
+            if code.contains(needle) {
+                violations.push(format!("src/{}: {needle}", relative.display()));
+            }
+        }
+    }
+    assert!(
+        violations.is_empty(),
+        "open stores through crate::database::open:\n{}",
+        violations.join("\n")
+    );
+}

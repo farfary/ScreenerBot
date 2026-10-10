@@ -16,6 +16,7 @@ use super::types::{
     OhlcvResult, OhlcvStatus, PoolMetadata, Priority, Timeframe, TimeframeBundle,
 };
 use crate::chains::{AssetId, ChainId, ChainScope};
+use crate::errors::InternalError;
 use std::collections::HashSet;
 use std::sync::Arc;
 
@@ -183,7 +184,7 @@ pub async fn has_data(chain: ChainId, mint: &str) -> OhlcvResult<bool> {
     // Wrap sync DB call in spawn_blocking to prevent blocking async runtime
     tokio::task::spawn_blocking(move || service_clone.has_data(&mint_owned))
         .await
-        .map_err(|e| OhlcvError::DatabaseError(format!("Task join error: {e}")))?
+        .map_err(|e| OhlcvError::Internal(InternalError::from(e)))?
 }
 
 pub async fn get_status(
@@ -206,7 +207,7 @@ pub async fn get_mints_with_data(chain: ChainId, mints: &[String]) -> OhlcvResul
 
     tokio::task::spawn_blocking(move || service_clone.get_mints_with_data(&owned))
         .await
-        .map_err(|e| OhlcvError::DatabaseError(format!("Task join error: {e}")))?
+        .map_err(|e| OhlcvError::Internal(InternalError::from(e)))?
 }
 
 async fn get_metrics_impl(service: &OhlcvServiceImpl) -> ChainMetrics {
@@ -287,7 +288,7 @@ pub async fn get_all_tokens_with_status(scope: ChainScope) -> OhlcvResult<Vec<Oh
         let db = Arc::clone(&service.db);
         let rows = tokio::task::spawn_blocking(move || db.get_all_tokens_with_status())
             .await
-            .map_err(|e| OhlcvError::DatabaseError(format!("Task join error: {e}")))??;
+            .map_err(|e| OhlcvError::Internal(InternalError::from(e)))??;
         tokens.extend(rows);
     }
     Ok(tokens)
@@ -304,7 +305,7 @@ pub async fn delete_token_data(chain: ChainId, mint: &str) -> OhlcvResult<Delete
 
     tokio::task::spawn_blocking(move || db.delete_token_data(&mint_owned))
         .await
-        .map_err(|e| OhlcvError::DatabaseError(format!("Task join error: {e}")))?
+        .map_err(|e| OhlcvError::Internal(InternalError::from(e)))?
 }
 
 /// Delete OHLCV data for tokens inactive for `inactive_hours` on every enabled chain
@@ -319,7 +320,7 @@ pub async fn delete_inactive_tokens(
         let db = Arc::clone(&service.db);
         let mints = tokio::task::spawn_blocking(move || db.delete_inactive_tokens(inactive_hours))
             .await
-            .map_err(|e| OhlcvError::DatabaseError(format!("Task join error: {e}")))??;
+            .map_err(|e| OhlcvError::Internal(InternalError::from(e)))??;
         for mint in mints {
             deleted.push(AssetId::new(chain, mint)?);
         }
@@ -350,7 +351,7 @@ pub async fn get_database_stats(scope: ChainScope) -> OhlcvResult<DatabaseStats>
         let db = Arc::clone(&service.db);
         let stats = tokio::task::spawn_blocking(move || db.get_database_stats())
             .await
-            .map_err(|e| OhlcvError::DatabaseError(format!("Task join error: {e}")))??;
+            .map_err(|e| OhlcvError::Internal(InternalError::from(e)))??;
         total = Some(combine_database_stats(total, stats));
     }
     Ok(total.unwrap_or_default())

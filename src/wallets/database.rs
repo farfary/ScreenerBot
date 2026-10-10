@@ -7,9 +7,12 @@
 
 use r2d2::{Pool, PooledConnection};
 use r2d2_sqlite::SqliteConnectionManager;
+use rusqlite::{Connection, Transaction};
 
-use crate::errors::{DatabaseError, IoError};
-use crate::paths::get_wallets_db_path;
+use crate::database::schema::{ddl, SchemaContext, StoreSchema};
+use crate::errors::DatabaseError;
+use crate::logger::{self, LogTag};
+use crate::secure_storage::{decrypt_private_key, EncryptedData};
 use crate::wallets::Error;
 use crate::{chains::ChainId, database};
 
@@ -17,7 +20,6 @@ mod schema;
 mod token_balances;
 mod wallet_queries;
 
-use crate::database::WriteTransaction;
 use schema::{
     LEGACY_TOKEN_BALANCES_SCHEMA, TOKEN_BALANCES_SCHEMA, WALLETS_INDEXES, WALLETS_SCHEMA,
 };
@@ -28,30 +30,70 @@ pub struct WalletsDatabase {
     chain: ChainId,
 }
 
+/// The schema of `wallets.db`: the wallets with their encrypted keys, their token
+/// balances and the watched wallets.
+pub(crate) const SCHEMA: StoreSchema = StoreSchema {
+    version: 1,
+    min_reader_version: 1,
+    baseline: 1,
+    renames: None,
+    step,
+    legacy_stamp: None,
+};
+
+fn step(tx: &Transaction<'_>, _: &SchemaContext) -> Result<(), DatabaseError> {
+    WalletsDatabase::create_schema(tx).map_err(|error| match error {
+        Error::Database(error) => error,
+        other => DatabaseError::Migration {
+            store: "wallets.db".to_owned(),
+            detail: other.to_string(),
+        },
+    })
+}
+
+/// Whether a copy of the vault still opens its keys: true when it holds no key or at
+/// least one key decrypts on this machine. A snapshot that fails it is never restored.
+pub(crate) fn snapshot_keys_decrypt(conn: &Connection) -> Result<bool, DatabaseError> {
+    let classify = |e| DatabaseError::classify_sqlite_failure("read snapshot wallet keys", e);
+    let mut statement = conn
+        .prepare("SELECT encrypted_key, nonce FROM wallets")
+        .map_err(classify)?;
+    let keys = statement
+        .query_map([], |row| {
+            Ok(EncryptedData {
+                ciphertext: row.get(0)?,
+                nonce: row.get(1)?,
+            })
+        })
+        .map_err(classify)?
+        .collect::<rusqlite::Result<Vec<_>>>()
+        .map_err(classify)?;
+    Ok(keys.is_empty() || keys.iter().any(|key| decrypt_private_key(key).is_ok()))
+}
+
 impl WalletsDatabase {
-    /// Create or open the wallets database
+    /// The wallets database of `chain`, opened by the storage phase.
     pub fn new(chain: ChainId) -> Result<Self, Error> {
-        let db_path = get_wallets_db_path();
+        let pool = database::open::store(&database::catalog::WALLETS)?;
+        Ok(Self { pool, chain })
+    }
 
-        // Ensure data directory exists
-        if let Some(parent) = db_path.parent() {
-            std::fs::create_dir_all(parent).map_err(IoError::from)?;
+    /// Snapshot the vault after its keys or its main wallet changed. The change stands
+    /// whatever happens to the snapshot; a failed one is logged.
+    fn snapshot_after_key_change(conn: &Connection) {
+        let Some(path) = conn.path().filter(|path| !path.is_empty()) else {
+            return;
+        };
+        if let Err(error) = database::backup::snapshot::take(
+            &database::catalog::WALLETS,
+            std::path::Path::new(path),
+            database::backup::snapshot::SnapshotKind::KeyChange,
+        ) {
+            logger::warning(
+                LogTag::Wallet,
+                &format!("Wallet keys changed but the vault snapshot failed: {error}"),
+            );
         }
-
-        let manager = SqliteConnectionManager::file(&db_path)
-            .with_init(|c| database::configure_connection(c, database::WALLETS_DB));
-        let pool = Pool::builder()
-            .max_size(3)
-            .idle_timeout(None) // SQLite: keep connections alive (WAL stability)
-            .max_lifetime(None) // SQLite: no connection recycling
-            .build(manager)
-            .map_err(DatabaseError::from)?;
-
-        let db = Self { pool, chain };
-        db.initialize()?;
-        database::handles::register(&database::catalog::WALLETS, &db_path, &db.pool);
-
-        Ok(db)
     }
 
     /// Get a connection from the pool
@@ -59,28 +101,24 @@ impl WalletsDatabase {
         self.pool.get().map_err(|e| DatabaseError::from(e).into())
     }
 
-    /// Initialize database schema
-    fn initialize(&self) -> Result<(), Error> {
-        let mut conn = self.conn()?;
-
-        // Create tables
-        conn.execute(WALLETS_SCHEMA, [])
-            .map_err(DatabaseError::from)?;
-
-        conn.execute(TOKEN_BALANCES_SCHEMA, [])
-            .map_err(DatabaseError::from)?;
-        self.migrate_token_balances(&mut conn)?;
-        self.migrate_chain_identity(&mut conn)?;
-
-        // Create indexes
+    /// Creates and migrates every table of the store, the watched wallets' included.
+    fn create_schema(tx: &Transaction<'_>) -> Result<(), Error> {
+        ddl::run(tx, "create wallets table", WALLETS_SCHEMA)?;
+        ddl::run(
+            tx,
+            "create wallet_token_balances table",
+            TOKEN_BALANCES_SCHEMA,
+        )?;
+        Self::migrate_token_balances(tx)?;
+        Self::migrate_chain_identity(tx)?;
         for index_sql in WALLETS_INDEXES {
-            conn.execute(index_sql, []).map_err(DatabaseError::from)?;
+            ddl::run(tx, "create wallets index", index_sql)?;
         }
-
-        Ok(())
+        crate::wallets::watch::database::create_schema(tx)
     }
 
-    fn migrate_token_balances(&self, conn: &mut rusqlite::Connection) -> Result<(), Error> {
+    fn migrate_token_balances(tx: &Transaction<'_>) -> Result<(), Error> {
+        let conn: &Connection = tx;
         let stored: String = conn.query_row(
             "SELECT sql FROM sqlite_master WHERE type = 'table' AND name = 'wallet_token_balances'",
             [],
@@ -142,7 +180,6 @@ impl WalletsDatabase {
             });
         }
 
-        let tx = conn.write_tx().map_err(DatabaseError::from)?;
         tx.execute_batch(
             &TOKEN_BALANCES_SCHEMA
                 .replace("CREATE TABLE IF NOT EXISTS", "CREATE TABLE")
@@ -204,99 +241,73 @@ impl WalletsDatabase {
                 detail: format!("{violations} violations"),
             });
         }
-        tx.commit().map_err(DatabaseError::from)?;
         Ok(())
     }
 
-    fn migrate_chain_identity(&self, conn: &mut rusqlite::Connection) -> Result<(), Error> {
-        let has_chain: bool = conn
-            .prepare("PRAGMA table_info(wallets)")
-            .map_err(|e| Error::SchemaInspect {
-                table: "wallets",
-                detail: e.to_string(),
-            })?
-            .query_map([], |row| row.get::<_, String>(1))
-            .map_err(|e| Error::SchemaInspect {
-                table: "wallets",
-                detail: e.to_string(),
-            })?
-            .filter_map(std::result::Result::ok)
-            .any(|column| column == "chain_id");
-        if has_chain {
+    /// Rebuilds the pre-chain-identity `wallets` table onto `UNIQUE(chain_id, address)`.
+    /// Runs inside the open's transaction with foreign keys off.
+    fn migrate_chain_identity(tx: &Transaction<'_>) -> Result<(), Error> {
+        if ddl::has_column(tx, "wallets", "chain_id")? {
             return Ok(());
         }
-        conn.execute("PRAGMA foreign_keys = OFF", [])
-            .map_err(DatabaseError::from)?;
-        let result = (|| -> Result<(), Error> {
-            let tx = conn.write_tx().map_err(|e| Error::Migration {
-                step: "begin".to_owned(),
+        tx.execute(
+            "CREATE TABLE wallets__chain_v1 (id INTEGER PRIMARY KEY AUTOINCREMENT, chain_id TEXT NOT NULL DEFAULT 'solana', name TEXT NOT NULL, address TEXT NOT NULL, encrypted_key TEXT NOT NULL, nonce TEXT NOT NULL, role TEXT NOT NULL DEFAULT 'secondary', wallet_type TEXT NOT NULL DEFAULT 'generated', created_at TEXT NOT NULL DEFAULT (datetime('now')), last_used_at TEXT, notes TEXT, is_active INTEGER NOT NULL DEFAULT 1, UNIQUE(chain_id, address))",
+            [],
+        ).map_err(|e| Error::Migration { step: "create chain-aware table".to_owned(), detail: e.to_string() })?;
+        let before: i64 = tx
+            .query_row("SELECT COUNT(*) FROM wallets", [], |row| row.get(0))
+            .map_err(|e| Error::Migration {
+                step: "count wallets".to_owned(),
                 detail: e.to_string(),
             })?;
-            tx.execute(
-                "CREATE TABLE wallets__chain_v1 (id INTEGER PRIMARY KEY AUTOINCREMENT, chain_id TEXT NOT NULL DEFAULT 'solana', name TEXT NOT NULL, address TEXT NOT NULL, encrypted_key TEXT NOT NULL, nonce TEXT NOT NULL, role TEXT NOT NULL DEFAULT 'secondary', wallet_type TEXT NOT NULL DEFAULT 'generated', created_at TEXT NOT NULL DEFAULT (datetime('now')), last_used_at TEXT, notes TEXT, is_active INTEGER NOT NULL DEFAULT 1, UNIQUE(chain_id, address))",
-                [],
-            ).map_err(|e| Error::Migration { step: "create chain-aware table".to_owned(), detail: e.to_string() })?;
-            let before: i64 = tx
-                .query_row("SELECT COUNT(*) FROM wallets", [], |row| row.get(0))
-                .map_err(|e| Error::Migration {
-                    step: "count wallets".to_owned(),
-                    detail: e.to_string(),
-                })?;
-            tx.execute("INSERT INTO wallets__chain_v1 (id, chain_id, name, address, encrypted_key, nonce, role, wallet_type, created_at, last_used_at, notes, is_active) SELECT id, 'solana', name, address, encrypted_key, nonce, role, wallet_type, created_at, last_used_at, notes, is_active FROM wallets", [])
-                .map_err(|e| Error::Migration { step: "copy wallets".to_owned(), detail: e.to_string() })?;
-            let after: i64 = tx
-                .query_row("SELECT COUNT(*) FROM wallets__chain_v1", [], |row| {
-                    row.get(0)
-                })
-                .map_err(|e| Error::Migration {
-                    step: "count migrated wallets".to_owned(),
-                    detail: e.to_string(),
-                })?;
-            if before != after {
-                return Err(Error::Migration {
-                    step: "row count check".to_owned(),
-                    detail: format!("row count mismatch: {before} != {after}"),
-                });
-            }
-            tx.execute("DROP TABLE wallets", [])
-                .map_err(|e| Error::Migration {
-                    step: "drop legacy table".to_owned(),
-                    detail: e.to_string(),
-                })?;
-            tx.execute("ALTER TABLE wallets__chain_v1 RENAME TO wallets", [])
-                .map_err(|e| Error::Migration {
-                    step: "rename migrated table".to_owned(),
-                    detail: e.to_string(),
-                })?;
-            let fk_errors: i64 = tx
-                .query_row("SELECT COUNT(*) FROM pragma_foreign_key_check", [], |row| {
-                    row.get(0)
-                })
-                .map_err(|e| Error::Migration {
-                    step: "verify foreign keys".to_owned(),
-                    detail: e.to_string(),
-                })?;
-            if fk_errors != 0 {
-                return Err(Error::Migration {
-                    step: "foreign key check".to_owned(),
-                    detail: format!("found {fk_errors} errors"),
-                });
-            }
-            tx.commit().map_err(|e| Error::Migration {
-                step: "commit".to_owned(),
-                detail: e.to_string(),
+        tx.execute("INSERT INTO wallets__chain_v1 (id, chain_id, name, address, encrypted_key, nonce, role, wallet_type, created_at, last_used_at, notes, is_active) SELECT id, 'solana', name, address, encrypted_key, nonce, role, wallet_type, created_at, last_used_at, notes, is_active FROM wallets", [])
+            .map_err(|e| Error::Migration { step: "copy wallets".to_owned(), detail: e.to_string() })?;
+        let after: i64 = tx
+            .query_row("SELECT COUNT(*) FROM wallets__chain_v1", [], |row| {
+                row.get(0)
             })
-        })();
-        conn.execute("PRAGMA foreign_keys = ON", [])
-            .map_err(DatabaseError::from)?;
-        result
+            .map_err(|e| Error::Migration {
+                step: "count migrated wallets".to_owned(),
+                detail: e.to_string(),
+            })?;
+        if before != after {
+            return Err(Error::Migration {
+                step: "row count check".to_owned(),
+                detail: format!("row count mismatch: {before} != {after}"),
+            });
+        }
+        tx.execute("DROP TABLE wallets", [])
+            .map_err(|e| Error::Migration {
+                step: "drop legacy table".to_owned(),
+                detail: e.to_string(),
+            })?;
+        tx.execute("ALTER TABLE wallets__chain_v1 RENAME TO wallets", [])
+            .map_err(|e| Error::Migration {
+                step: "rename migrated table".to_owned(),
+                detail: e.to_string(),
+            })?;
+        let fk_errors: i64 = tx
+            .query_row("SELECT COUNT(*) FROM pragma_foreign_key_check", [], |row| {
+                row.get(0)
+            })
+            .map_err(|e| Error::Migration {
+                step: "verify foreign keys".to_owned(),
+                detail: e.to_string(),
+            })?;
+        if fk_errors != 0 {
+            return Err(Error::Migration {
+                step: "foreign key check".to_owned(),
+                detail: format!("found {fk_errors} errors"),
+            });
+        }
+        Ok(())
     }
 }
 
 #[cfg(test)]
 mod tests {
     use super::*;
-    use rusqlite::{Connection, OptionalExtension};
+    use rusqlite::OptionalExtension;
 
     fn legacy_connection() -> Connection {
         let conn = Connection::open_in_memory().expect("open test database");
@@ -325,19 +336,17 @@ mod tests {
     #[test]
     fn legacy_wallets_migrate_to_chain_scoped_schema_losslessly_and_idempotently() {
         let mut conn = legacy_connection();
-        let db = WalletsDatabase {
-            pool: Pool::builder()
-                .max_size(1)
-                .build(SqliteConnectionManager::memory())
-                .expect("build unused pool for migration helper"),
-            chain: ChainId::Solana,
+        let upgrade = |conn: &mut Connection| {
+            database::open::upgrade_connection(
+                conn,
+                &database::catalog::WALLETS,
+                vec![ChainId::Solana],
+            )
         };
 
-        db.migrate_chain_identity(&mut conn)
-            .expect("migrate legacy wallets database");
+        upgrade(&mut conn).expect("migrate legacy wallets database");
         // Idempotent: a second pass over the already-migrated schema is a no-op.
-        db.migrate_chain_identity(&mut conn)
-            .expect("repeat wallets chain migration");
+        upgrade(&mut conn).expect("repeat wallets chain migration");
 
         let count: i64 = conn
             .query_row("SELECT COUNT(*) FROM wallets", [], |row| row.get(0))
@@ -373,5 +382,55 @@ mod tests {
             .optional()
             .unwrap()
             .is_none());
+    }
+
+    /// Every change to the vault's keys or its main wallet leaves a snapshot to restore
+    /// the vault from.
+    #[test]
+    fn every_key_change_snapshots_the_vault() {
+        use crate::database::backup::snapshot::{self, SnapshotKind};
+        use crate::wallets::types::{WalletRole, WalletType};
+
+        let directory = tempfile::tempdir().expect("temp dir");
+        let path = directory.path().join("wallets.db");
+        let db = WalletsDatabase {
+            pool: database::open::pool_at(
+                &database::catalog::WALLETS,
+                &path,
+                vec![ChainId::Solana],
+            )
+            .expect("open vault"),
+            chain: ChainId::Solana,
+        };
+        let insert = |address: &str| {
+            db.insert_wallet(
+                address,
+                address,
+                "ciphertext",
+                "nonce",
+                WalletRole::Secondary,
+                WalletType::Generated,
+                None,
+            )
+            .expect("insert wallet")
+        };
+        let first = insert("AAAA");
+        let second = insert("BBBB");
+        db.set_main_wallet(first).expect("set main wallet");
+        db.delete_wallet(second).expect("delete wallet");
+
+        let snapshots = snapshot::list(&path);
+        assert_eq!(snapshots.len(), 4);
+        assert!(snapshots
+            .iter()
+            .all(|snapshot| snapshot.kind == SnapshotKind::KeyChange));
+        let newest = Connection::open(&snapshots[0].path).expect("open newest snapshot");
+        let addresses: i64 = newest
+            .query_row("SELECT COUNT(*) FROM wallets", [], |row| row.get(0))
+            .expect("count wallets");
+        assert_eq!(
+            addresses, 1,
+            "the newest snapshot holds the vault after the delete"
+        );
     }
 }

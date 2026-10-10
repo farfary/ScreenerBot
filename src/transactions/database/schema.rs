@@ -1,19 +1,94 @@
 // Copyright (c) 2024-2026 ScreenerBot (screenerbot.io)
 // SPDX-License-Identifier: BUSL-1.1
 
-//! Transaction database schema — table definitions and migration logic.
-//
-// Database schema definitions and constants
+//! Transaction database schema: table definitions and the schema step the storage phase runs to create and migrate them.
 
-use std::sync::atomic::AtomicBool;
-use std::sync::LazyLock;
+use rusqlite::{params, Transaction};
+
+use crate::chains::ChainId;
+use crate::database::schema::{self, ddl, SchemaContext, StoreSchema};
+use crate::errors::DatabaseError;
+use crate::transactions::error::Error;
+
+use super::operations::TransactionDatabase;
 
 /// Database schema version for migration management
 pub(super) const DATABASE_SCHEMA_VERSION: u32 = 8;
 
-/// Static flag to track if database has been initialized (to reduce log noise)
-pub(super) static DATABASE_INITIALIZED: LazyLock<AtomicBool> =
-    LazyLock::new(|| AtomicBool::new(false));
+/// The schema of `transactions.db`.
+pub(crate) const SCHEMA: StoreSchema = StoreSchema {
+    version: DATABASE_SCHEMA_VERSION as i64,
+    min_reader_version: DATABASE_SCHEMA_VERSION as i64,
+    baseline: DATABASE_SCHEMA_VERSION as i64,
+    renames: Some(&super::column_names::RENAMES),
+    step,
+    legacy_stamp: None,
+};
+
+fn step(tx: &Transaction<'_>, context: &SchemaContext) -> Result<(), DatabaseError> {
+    create_schema(tx, &context.chains).map_err(|error| match error {
+        Error::Database(error) => error,
+        other => DatabaseError::Migration {
+            store: "transactions.db".to_owned(),
+            detail: other.to_string(),
+        },
+    })
+}
+
+/// Creates every table, runs every migration, recreates the indexes and stamps the
+/// schema version. Foreign-key enforcement is already off: the table rebuilds drop
+/// tables other tables reference.
+fn create_schema(tx: &Transaction<'_>, chains: &[ChainId]) -> Result<(), Error> {
+    for table_sql in [
+        SCHEMA_RAW_TRANSACTIONS,
+        SCHEMA_PROCESSED_TRANSACTIONS,
+        SCHEMA_KNOWN_SIGNATURES,
+        SCHEMA_DEFERRED_RETRIES,
+        SCHEMA_PENDING_TRANSACTIONS,
+        SCHEMA_METADATA,
+        SCHEMA_BOOTSTRAP_STATE,
+        SCHEMA_SUBJECT_ASSET_DELTAS,
+    ] {
+        ddl::run(tx, "create transactions table", table_sql)?;
+    }
+
+    // The legacy processed-transaction columns are added before the v5 rebuild below:
+    // that rebuild copies every column of `processed_transactions`, and therefore
+    // needs the fee and delta columns on the pre-v5 shape. Nothing here reads
+    // chain-aware state; legacy bootstrap_state has no chain_id until the v7 rebuild.
+    let needs_native_delta_backfill = TransactionDatabase::apply_pre_chain_migrations(tx)?;
+
+    // The signature-keyed tables move onto a composite (signature, wallet_address)
+    // key after table creation (a table has to exist to migrate) and before index
+    // creation (rebuilding a table drops its indexes with it).
+    TransactionDatabase::migrate_signature_wallet_tables(tx)?;
+    TransactionDatabase::migrate_chain_identity_tables(tx)?;
+    TransactionDatabase::migrate_subject_delta_amounts(tx)?;
+
+    // Unit-neutral column names come after every versioned rebuild, so each of those
+    // reads the historical shape it was written for.
+    schema::renames::rename(tx, &super::column_names::RENAMES)?;
+
+    // Chain-aware bootstrap state is valid only after every legacy table, including
+    // bootstrap_state, has been rebuilt to v7.
+    for chain in chains {
+        TransactionDatabase::initialize_chain_bootstrap_state(tx, *chain)?;
+        if needs_native_delta_backfill {
+            TransactionDatabase::backfill_processed_native_delta(tx, *chain)?;
+        }
+    }
+
+    for index_sql in INDEXES {
+        ddl::run(tx, "create transactions index", index_sql)?;
+    }
+
+    tx.execute(
+        "INSERT OR REPLACE INTO db_metadata (key, value) VALUES (?1, ?2)",
+        params!["schema_version", DATABASE_SCHEMA_VERSION.to_string()],
+    )
+    .map_err(|e| DatabaseError::classify_sqlite_failure("stamp transactions schema version", e))?;
+    Ok(())
+}
 
 /// Raw transactions table schema - stores blockchain data
 ///

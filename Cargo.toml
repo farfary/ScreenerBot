@@ -270,8 +270,9 @@ tempfile = "3"
 # The mainnet swap tier signs with the app's OWN main wallet rather than an
 # exported key file, so the harness reads the encrypted row out of wallets.db and
 # decrypts it through the library's secure_storage. Integration test crates see
-# only dev-dependencies; these mirror the lib's versions and compile once.
-rusqlite = { version = "0.37", features = ["backup", "bundled", "unlock_notify"] }
+# only dev-dependencies; these mirror the lib's versions and compile once. `hooks`
+# lets the storage recovery tests interrupt a store's upgrade at any statement.
+rusqlite = { version = "0.37", features = ["backup", "bundled", "hooks", "unlock_notify"] }
 bs58 = "0.5"
 dirs = "7.0.0"
 # Route-level launch tests drive the real Axum router in-process (tower's oneshot)

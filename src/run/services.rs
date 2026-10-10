@@ -124,6 +124,10 @@ pub(super) async fn create_and_start_services(mode_label: &str) -> Result<()> {
     // in global state, so every dashboard route sees the complete graph.
     crate::webserver::announce_gui_ready();
 
+    // Ledger and vault stores are snapshotted once the app is ready and again on a
+    // schedule while they change.
+    crate::database::backup::snapshot::start_schedule();
+
     // A legacy config layout migrated at load reaches disk only now: a core
     // that failed before this point left the file as the previous release
     // wrote it.

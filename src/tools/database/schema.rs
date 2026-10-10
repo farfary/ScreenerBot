@@ -4,17 +4,13 @@
 //! Database schema definitions and initialization.
 
 use chrono::Utc;
-use r2d2::{Pool, PooledConnection};
+use r2d2::PooledConnection;
 use r2d2_sqlite::SqliteConnectionManager;
-use rusqlite::{params, OptionalExtension};
-use std::sync::atomic::{AtomicBool, Ordering};
-use std::sync::LazyLock;
-use std::time::Duration;
+use rusqlite::{params, OptionalExtension, Transaction};
 
 use crate::database;
+use crate::database::schema::{ddl, SchemaContext, StoreSchema};
 use crate::errors::DatabaseError;
-use crate::logger::{self, LogTag};
-use crate::paths::get_tools_db_path;
 use crate::tools::Error;
 
 // =============================================================================
@@ -23,14 +19,6 @@ use crate::tools::Error;
 
 /// Schema version for migrations
 const TOOLS_SCHEMA_VERSION: u32 = 1;
-
-/// Connection pool configuration
-const POOL_MAX_SIZE: u32 = 3;
-const POOL_MIN_IDLE: u32 = 1;
-const CONNECTION_TIMEOUT_MS: u64 = 30_000;
-
-/// Database initialization flag
-static TOOLS_DB_INITIALIZED: AtomicBool = AtomicBool::new(false);
 
 // =============================================================================
 // SCHEMA DEFINITIONS
@@ -275,125 +263,71 @@ CREATE INDEX IF NOT EXISTS idx_watched_tokens_active ON watched_tokens(is_active
 "#;
 
 // =============================================================================
-// CONNECTION POOL
+// STORE
 // =============================================================================
 
-/// Global connection pool for tools database
-static DB_POOL: LazyLock<Pool<SqliteConnectionManager>> = LazyLock::new(|| {
-    let db_path = get_tools_db_path();
+/// The tools store's schema.
+pub(crate) const SCHEMA: StoreSchema = StoreSchema {
+    version: 1,
+    min_reader_version: 1,
+    baseline: 1,
+    renames: None,
+    step: create_schema,
+    legacy_stamp: None,
+};
 
-    // Ensure parent directory exists
-    if let Some(parent) = db_path.parent() {
-        let _ = std::fs::create_dir_all(parent);
-    }
-
-    let manager = SqliteConnectionManager::file(&db_path)
-        .with_init(|c| database::configure_connection(c, database::TOOLS_DB));
-    let pool = Pool::builder()
-        .max_size(POOL_MAX_SIZE)
-        .min_idle(Some(POOL_MIN_IDLE))
-        .connection_timeout(Duration::from_millis(CONNECTION_TIMEOUT_MS))
-        .idle_timeout(None) // SQLite: keep connections alive (WAL stability)
-        .max_lifetime(None) // SQLite: no connection recycling
-        .build(manager)
-        .expect("Failed to create tools database pool");
-    database::handles::register(&database::catalog::TOOLS, &db_path, &pool);
-    pool
-});
-
-/// Get a connection from the pool
-pub(crate) fn get_connection() -> Result<PooledConnection<SqliteConnectionManager>, Error> {
-    DB_POOL.get().map_err(|e| DatabaseError::from(e).into())
-}
-
-// =============================================================================
-// INITIALIZATION
-// =============================================================================
-
-/// Initialize the tools database with all schemas
-pub fn init_tools_db() -> Result<(), Error> {
-    if TOOLS_DB_INITIALIZED.load(Ordering::Relaxed) {
-        return Ok(());
-    }
-
-    let conn = get_connection()?;
-
-    let migration_step = |step: &str, e: rusqlite::Error| Error::Migration {
-        step: step.to_owned(),
-        detail: e.to_string(),
-    };
-
-    // Create version table first
-    conn.execute_batch(SCHEMA_VERSION_TABLE)
-        .map_err(|e| migration_step("create version table", e))?;
-
-    // Check current schema version
-    let current_version: Option<u32> = conn
+fn create_schema(tx: &Transaction<'_>, _: &SchemaContext) -> Result<(), DatabaseError> {
+    ddl::run_batch(
+        tx,
+        "create tools schema_version table",
+        SCHEMA_VERSION_TABLE,
+    )?;
+    let current_version: Option<u32> = tx
         .query_row(
             "SELECT version FROM schema_version ORDER BY version DESC LIMIT 1",
             [],
             |row| row.get(0),
         )
         .optional()
-        .map_err(|e| migration_step("check schema version", e))?;
+        .map_err(|e| DatabaseError::classify_sqlite_failure("read tools schema version", e))?;
 
     if current_version.unwrap_or(0) < TOOLS_SCHEMA_VERSION {
-        // Create all tables
-        conn.execute_batch(SCHEMA_ATA_SESSIONS)
-            .map_err(|e| migration_step("create ata_sessions table", e))?;
-
-        conn.execute_batch(SCHEMA_ATA_CLOSURES)
-            .map_err(|e| migration_step("create ata_closures table", e))?;
-
-        conn.execute_batch(SCHEMA_ATA_FAILED_CACHE)
-            .map_err(|e| migration_step("create ata_failed_cache table", e))?;
-
-        conn.execute_batch(SCHEMA_TOOL_FAVORITES)
-            .map_err(|e| migration_step("create tool_favorites table", e))?;
-
-        conn.execute_batch(SCHEMA_MW_SESSIONS)
-            .map_err(|e| migration_step("create mw_sessions table", e))?;
-
-        conn.execute_batch(SCHEMA_MW_WALLET_OPS)
-            .map_err(|e| migration_step("create mw_wallet_ops table", e))?;
-
-        conn.execute_batch(SCHEMA_WATCHED_TOKENS)
-            .map_err(|e| migration_step("create watched_tokens table", e))?;
-
-        // Update version
-        conn.execute(
+        for (operation, sql) in [
+            ("create ata_sessions table", SCHEMA_ATA_SESSIONS),
+            ("create ata_closures table", SCHEMA_ATA_CLOSURES),
+            ("create ata_failed_cache table", SCHEMA_ATA_FAILED_CACHE),
+            ("create tool_favorites table", SCHEMA_TOOL_FAVORITES),
+            ("create mw_sessions table", SCHEMA_MW_SESSIONS),
+            ("create mw_wallet_ops table", SCHEMA_MW_WALLET_OPS),
+            ("create watched_tokens table", SCHEMA_WATCHED_TOKENS),
+        ] {
+            ddl::run_batch(tx, operation, sql)?;
+        }
+        tx.execute(
             "INSERT INTO schema_version (version, applied_at) VALUES (?1, ?2)",
             params![TOOLS_SCHEMA_VERSION, Utc::now().to_rfc3339()],
         )
-        .map_err(|e| migration_step("update schema version", e))?;
-
-        logger::info(
-            LogTag::System,
-            &format!(
-                "Tools database initialized at {} (schema v{})",
-                get_tools_db_path().display(),
-                TOOLS_SCHEMA_VERSION
-            ),
-        );
+        .map_err(|e| DatabaseError::classify_sqlite_failure("record tools schema version", e))?;
     }
 
-    // Chain scope: `mw_sessions` and `watched_tokens` gain a chain column.
-    // The check is deliberately OUTSIDE the version-stamp branch above — a
-    // v0.2.13 database already records version 1, and a stamp must never
-    // decide whether a structural migration runs. Historical rows are
-    // Solana's by construction, so the migration backfills 'solana'.
+    // Chain scope: `mw_sessions` and `watched_tokens` gain a chain column, checked
+    // whatever the version stamp says: a store from v0.2.13 already records version 1.
+    // Historical rows are Solana's by construction, so the migration backfills 'solana'.
     for table in ["mw_sessions", "watched_tokens"] {
-        let has_chain = database::schema::table_has_column(&conn, table, "chain_id")
-            .map_err(|e| migration_step("inspect chain column", e))?;
-        if !has_chain {
-            conn.execute(
-                &format!("ALTER TABLE {table} ADD COLUMN chain_id TEXT NOT NULL DEFAULT 'solana'"),
-                [],
-            )
-            .map_err(|e| migration_step("add chain column", e))?;
-        }
+        ddl::add_column(tx, table, "chain_id", "TEXT NOT NULL DEFAULT 'solana'")?;
     }
+    Ok(())
+}
 
-    TOOLS_DB_INITIALIZED.store(true, Ordering::SeqCst);
+/// Get a connection from the tools store's pool.
+pub(crate) fn get_connection() -> Result<PooledConnection<SqliteConnectionManager>, Error> {
+    database::open::store(&database::catalog::TOOLS)?
+        .get()
+        .map_err(|e| DatabaseError::from(e).into())
+}
+
+/// Open the tools store.
+pub fn init_tools_db() -> Result<(), Error> {
+    database::open::store(&database::catalog::TOOLS)?;
     Ok(())
 }

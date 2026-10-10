@@ -4,19 +4,18 @@
 //! Durable storage for the agent-control boundary: client pairings, the
 //! external-agent approval queue, agent trade submissions and the audit log.
 //!
-//! One pooled SQLite database (`agent_control.db`) built through the canonical
-//! `database::configure_connection` init hook so the WAL PRAGMAs survive r2d2
-//! connection recycling. Policy lives in `pairing`/`approvals`/`audit`; this
-//! module owns the pool, the schema, the startup recovery sweep and the stored
-//! answer of a request that ended without one (`interrupted_result`).
+//! One SQLite store (`agent_control.db`) opened through `database::open`. Policy
+//! lives in `pairing`/`approvals`/`audit`; this module owns the schema step, the
+//! startup recovery sweep and the stored answer of a request that ended without one
+//! (`interrupted_result`).
 
 use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::LazyLock;
 use std::time::{Duration, SystemTime, UNIX_EPOCH};
 
-use r2d2::{Pool, PooledConnection};
+use r2d2::PooledConnection;
 use r2d2_sqlite::SqliteConnectionManager;
-use rusqlite::OptionalExtension;
+use rusqlite::{OptionalExtension, Transaction};
 use serde_json::{json, Value};
 
 use crate::agent_control::audit::{self, AuditContext, AuditKind};
@@ -24,6 +23,7 @@ use crate::agent_control::error::{Error, Result};
 use crate::agent_control::permissions::{PermissionLevel, ToolPermissions};
 use crate::agent_control::submissions;
 use crate::database;
+use crate::database::schema::{SchemaContext, StoreSchema};
 use crate::errors::DatabaseError;
 use crate::logger::{self, LogTag};
 
@@ -43,26 +43,55 @@ const SWEEP_INTERVAL: Duration = Duration::from_secs(3_600);
 
 static INITIALIZED: LazyLock<AtomicBool> = LazyLock::new(|| AtomicBool::new(false));
 
-static POOL: LazyLock<Pool<SqliteConnectionManager>> = LazyLock::new(|| {
-    // Tests point this at a temp file so they never touch a real install's DB.
-    let path = std::env::var("SCREENERBOT_AGENT_CONTROL_DB")
-        .ok()
-        .filter(|s| !s.is_empty())
-        .map(std::path::PathBuf::from)
-        .unwrap_or_else(crate::paths::get_agent_control_db_path);
-    let manager = SqliteConnectionManager::file(&path)
-        .with_init(|c| database::configure_connection(c, database::AGENT_CONTROL_DB));
-    let pool = Pool::builder()
-        .max_size(3)
-        .idle_timeout(None)
-        .max_lifetime(None)
-        .build(manager)
-        .expect("failed to create agent_control database pool");
-    database::handles::register(&database::catalog::AGENT_CONTROL, &path, &pool);
-    pool
-});
+/// The schema of `agent_control.db`.
+pub(crate) const SCHEMA: StoreSchema = StoreSchema {
+    version: SCHEMA_VERSION as i64,
+    min_reader_version: SCHEMA_VERSION as i64,
+    baseline: SCHEMA_VERSION as i64,
+    renames: None,
+    step,
+    legacy_stamp: None,
+};
 
-const SCHEMA: &str = r#"
+fn step(tx: &Transaction<'_>, _: &SchemaContext) -> std::result::Result<(), DatabaseError> {
+    create_schema(tx).map_err(|error| match error {
+        Error::Database(error) => error,
+        other => DatabaseError::Migration {
+            store: "agent_control.db".to_owned(),
+            detail: other.to_string(),
+        },
+    })
+}
+
+/// Creates the tables, gives a v1 pairing its permission policy and stamps the
+/// schema version.
+fn create_schema(tx: &Transaction<'_>) -> Result<()> {
+    // This also creates `schema_version` itself and the UNIQUE approval-binding index.
+    tx.execute_batch(SCHEMA_SQL)?;
+
+    // v1 -> v2: give an existing pairing its own permission policy, derived
+    // from the scope it was created with, then drop the scope column.
+    migrate_scope_to_permissions(tx)?;
+
+    // An empty table (a fresh database) is the only "no value" case; every other
+    // SQLite error propagates.
+    let stored_version: Option<u32> = tx
+        .query_row(
+            "SELECT version FROM schema_version ORDER BY version DESC LIMIT 1",
+            [],
+            |row| row.get(0),
+        )
+        .optional()?;
+    if stored_version.unwrap_or(0) < SCHEMA_VERSION {
+        tx.execute(
+            "INSERT OR REPLACE INTO schema_version (version, applied_at) VALUES (?1, ?2)",
+            rusqlite::params![SCHEMA_VERSION, chrono::Utc::now().to_rfc3339()],
+        )?;
+    }
+    Ok(())
+}
+
+const SCHEMA_SQL: &str = r#"
 CREATE TABLE IF NOT EXISTS schema_version (
     version INTEGER PRIMARY KEY,
     applied_at TEXT NOT NULL
@@ -163,47 +192,20 @@ pub(crate) fn now_unix() -> i64 {
 /// the web layer wraps calls in `spawn_blocking`. A raw `rusqlite::Error` from
 /// any later statement converts into `Error::Database` through `?`.
 pub(crate) fn conn() -> Result<PooledConnection<SqliteConnectionManager>> {
-    POOL.get().map_err(|e| {
-        Error::Database(DatabaseError::Connection {
-            message: e.to_string(),
-        })
-    })
+    database::open::store(&database::catalog::AGENT_CONTROL)
+        .map_err(Error::Database)?
+        .get()
+        .map_err(|e| Error::Database(DatabaseError::from(e)))
 }
 
-/// Create the schema (idempotent) and run the startup recovery sweep. Safe to
-/// call in every boot state that has a webserver; repeat calls are no-ops.
+/// Open the store and run the startup recovery sweep. Safe to call in every boot
+/// state that has a webserver; repeat calls are no-ops.
 pub fn init() -> Result<()> {
     if INITIALIZED.load(Ordering::Relaxed) {
         return Ok(());
     }
 
     let connection = conn()?;
-
-    // Create the schema (idempotent) before anything reads it — this also
-    // creates `schema_version` itself and the UNIQUE approval-binding index.
-    connection.execute_batch(SCHEMA)?;
-
-    // v1 -> v2: give an existing pairing its own permission policy, derived
-    // from the scope it was created with, then drop the scope column.
-    migrate_scope_to_permissions(&connection)?;
-
-    // With `schema_version` guaranteed to exist, read the recorded version. An
-    // empty table (a fresh database) is the only "no value" case; every other
-    // SQLite error propagates.
-    let stored_version: Option<u32> = connection
-        .query_row(
-            "SELECT version FROM schema_version ORDER BY version DESC LIMIT 1",
-            [],
-            |row| row.get(0),
-        )
-        .optional()?;
-
-    if stored_version.unwrap_or(0) < SCHEMA_VERSION {
-        connection.execute(
-            "INSERT OR REPLACE INTO schema_version (version, applied_at) VALUES (?1, ?2)",
-            rusqlite::params![SCHEMA_VERSION, chrono::Utc::now().to_rfc3339()],
-        )?;
-    }
 
     let recovered = recover_interrupted(&connection)?;
     if recovered > 0 {
@@ -275,7 +277,7 @@ pub fn init() -> Result<()> {
 /// default, which applies to connections created from now on.
 ///
 /// Public so `tests/agent_control_store.rs` can run it against a hand-built v1
-/// database; the process pool only ever holds one schema version.
+/// database.
 pub fn migrate_scope_to_permissions(connection: &rusqlite::Connection) -> Result<()> {
     let has_scope = connection
         .prepare("SELECT 1 FROM pragma_table_info('pairings') WHERE name = 'scope'")?

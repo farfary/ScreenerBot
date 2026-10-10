@@ -21,8 +21,15 @@ const ROWS_PER_FULL_TOKEN: u64 = 8;
 
 fn store() -> (tempfile::TempDir, Connection) {
     let directory = tempfile::tempdir().expect("temp dir");
-    let conn = Connection::open(directory.path().join("tokens.db")).expect("open tokens store");
-    crate::tokens::schema::initialize_schema(&conn).expect("tokens schema");
+    let mut conn = Connection::open(directory.path().join("tokens.db")).expect("open tokens store");
+    crate::database::configure_connection(&conn, crate::database::TOKENS_DB)
+        .expect("configure tokens store");
+    crate::database::open::upgrade_connection(
+        &mut conn,
+        &crate::database::catalog::TOKENS,
+        vec![crate::chains::ChainId::Solana],
+    )
+    .expect("tokens schema");
     (directory, conn)
 }
 

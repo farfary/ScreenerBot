@@ -4,10 +4,11 @@
 //! Wallet validation — input validation for addresses, keypairs, and wallet names.
 
 use crate::database::catalog;
+use crate::database::schema::ddl;
 use crate::errors::DatabaseError;
 use crate::utils::get_wallet_address;
 use crate::wallets::Error;
-use rusqlite::{Connection, OptionalExtension};
+use rusqlite::{Connection, OpenFlags, OptionalExtension};
 
 #[derive(Debug, Clone)]
 pub enum WalletValidationResult {
@@ -80,28 +81,20 @@ impl WalletValidator {
         }
     }
 
-    /// Get stored wallet address from database metadata table. The table name is a
+    /// Get stored wallet address from database metadata table. The store is opened
+    /// read-only, so the check never creates or changes a file. The table name is a
     /// catalog constant, never input, so it is safe to splice into the statement.
     fn get_stored_wallet(
         db_path: &str,
         metadata_table: &'static str,
     ) -> Result<Option<String>, Error> {
-        let conn = Connection::open(db_path).map_err(DatabaseError::from)?;
-        let query = format!("SELECT value FROM {metadata_table} WHERE key = 'current_wallet'");
-
-        let table_exists = conn
-            .query_row(
-                "SELECT 1 FROM sqlite_master WHERE type = 'table' AND name = ?1",
-                [metadata_table],
-                |_| Ok(()),
-            )
-            .optional()
-            .map_err(DatabaseError::from)?
-            .is_some();
-        if !table_exists {
+        let conn = Connection::open_with_flags(db_path, OpenFlags::SQLITE_OPEN_READ_ONLY)
+            .map_err(DatabaseError::from)?;
+        if !ddl::has_table(&conn, metadata_table)? {
             return Ok(None);
         }
 
+        let query = format!("SELECT value FROM {metadata_table} WHERE key = 'current_wallet'");
         let wallet: Option<String> = conn
             .query_row(&query, [], |row| row.get(0))
             .optional()

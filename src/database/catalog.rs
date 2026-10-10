@@ -4,11 +4,16 @@
 //! The inventory of every app-owned SQLite store: where it lives, how it is configured, what losing it costs and which rows survive a rebuild.
 
 use std::path::PathBuf;
+use std::time::Duration;
+
+use rusqlite::Connection;
 
 use crate::chains::ChainId;
+use crate::errors::DatabaseError;
 use crate::paths::{self, chain_db_path, DbKind};
 
 use super::configure::{self, DbConfig};
+use super::schema::StoreSchema;
 use KeepReason::{Aggregate, Dedupe, Ledger, Schema, UserDecision, Vault};
 
 /// What losing a store costs, which decides how a failed open is recovered.
@@ -105,8 +110,15 @@ pub struct StoreRetention {
 }
 
 impl StoreRetention {
-    /// The rule declared for `table`, if any.
+    /// The rule declared for `table`, if any. The schema ledger every store carries is
+    /// declared once here.
     pub fn rule(&self, table: &str) -> Option<TableRule> {
+        if table == super::schema::ledger::TABLE {
+            return Some(TableRule::Keep {
+                table: super::schema::ledger::TABLE,
+                reason: KeepReason::Schema,
+            });
+        }
         self.tables
             .iter()
             .copied()
@@ -130,6 +142,38 @@ pub struct WalletScope {
     pub label: &'static str,
 }
 
+/// The connection pool the storage phase builds for a store.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub struct PoolShape {
+    pub max_size: u32,
+    /// Connections kept open while idle; `None` keeps as many as were used.
+    pub min_idle: Option<u32>,
+    /// How long a caller waits for a free connection.
+    pub connection_timeout: Duration,
+}
+
+impl PoolShape {
+    const fn sized(max_size: u32, min_idle: Option<u32>) -> Self {
+        Self {
+            max_size,
+            min_idle,
+            connection_timeout: Duration::from_secs(30),
+        }
+    }
+}
+
+/// A second pool on the same file whose connections only read, for a store whose
+/// readers must not wait behind its writer.
+#[derive(Debug, Clone, Copy)]
+pub struct ReaderPool {
+    pub config: DbConfig,
+    pub shape: PoolShape,
+}
+
+/// A check a snapshot must pass before it may replace a damaged store, beyond
+/// `quick_check`.
+pub type SnapshotCheck = fn(&Connection) -> Result<bool, DatabaseError>;
+
 /// One app-owned store.
 #[derive(Debug, Clone, Copy)]
 pub struct StoreSpec {
@@ -144,6 +188,11 @@ pub struct StoreSpec {
     /// Set for a store that holds one wallet's history and is cleared when the main
     /// wallet changes.
     pub wallet_scope: Option<WalletScope>,
+    /// The schema this core supports and the step that brings the store to it.
+    pub schema: StoreSchema,
+    pub pool: PoolShape,
+    pub reader: Option<ReaderPool>,
+    pub verify_snapshot: Option<SnapshotCheck>,
 }
 
 impl StoreSpec {
@@ -176,6 +225,24 @@ impl StoreSpec {
             metadata_table,
             label,
         });
+        self
+    }
+
+    const fn pooled(mut self, max_size: u32, min_idle: Option<u32>) -> Self {
+        self.pool = PoolShape::sized(max_size, min_idle);
+        self
+    }
+
+    const fn with_reader(mut self, config: DbConfig, max_size: u32, min_idle: Option<u32>) -> Self {
+        self.reader = Some(ReaderPool {
+            config,
+            shape: PoolShape::sized(max_size, min_idle),
+        });
+        self
+    }
+
+    const fn verified_by(mut self, check: SnapshotCheck) -> Self {
+        self.verify_snapshot = Some(check);
         self
     }
 }
@@ -212,6 +279,7 @@ const fn shared(
     path: fn() -> PathBuf,
     config: DbConfig,
     class: StoreClass,
+    schema: StoreSchema,
     salvage: &'static [SalvageRule],
     tables: &'static [TableRule],
 ) -> StoreSpec {
@@ -224,6 +292,10 @@ const fn shared(
         compaction: Compaction::Incremental,
         retention: StoreRetention { tables },
         wallet_scope: None,
+        schema,
+        pool: PoolShape::sized(3, None),
+        reader: None,
+        verify_snapshot: None,
     }
 }
 
@@ -231,6 +303,7 @@ const fn per_chain(
     kind: DbKind,
     config: DbConfig,
     class: StoreClass,
+    schema: StoreSchema,
     salvage: &'static [SalvageRule],
     tables: &'static [TableRule],
 ) -> StoreSpec {
@@ -243,6 +316,10 @@ const fn per_chain(
         compaction: Compaction::Incremental,
         retention: StoreRetention { tables },
         wallet_scope: None,
+        schema,
+        pool: PoolShape::sized(3, None),
+        reader: None,
+        verify_snapshot: None,
     }
 }
 
@@ -269,6 +346,7 @@ pub const WALLETS: StoreSpec = shared(
     paths::get_wallets_db_path,
     configure::WALLETS_DB,
     StoreClass::Vault,
+    crate::wallets::database::SCHEMA,
     &[],
     &[
         keep("wallets", Vault),
@@ -277,12 +355,15 @@ pub const WALLETS: StoreSpec = shared(
         keep("watch_cursors", Dedupe),
     ],
 )
-.checkpoint_only();
+.checkpoint_only()
+.pooled(6, None)
+.verified_by(crate::wallets::database::snapshot_keys_decrypt);
 pub const POSITIONS: StoreSpec = shared(
     "positions",
     paths::get_positions_db_path,
     configure::POSITIONS_DB,
     StoreClass::Ledger,
+    crate::positions::database::SCHEMA,
     &[],
     &[
         keep("positions", Ledger),
@@ -294,12 +375,14 @@ pub const POSITIONS: StoreSpec = shared(
         keep("position_metadata", Schema),
     ],
 )
-.wallet_scoped("position_metadata", "Positions");
+.wallet_scoped("position_metadata", "Positions")
+.pooled(5, Some(1));
 pub const COPY_TRADING: StoreSpec = shared(
     "copy_trading",
     paths::get_copy_trading_db_path,
     configure::COPY_TRADING_DB,
     StoreClass::Ledger,
+    crate::trader::copy::database::SCHEMA,
     &[],
     &[
         keep("copy_tasks", UserDecision),
@@ -319,6 +402,7 @@ pub const STRATEGIES: StoreSpec = shared(
     paths::get_strategies_db_path,
     configure::STRATEGIES_DB,
     StoreClass::Ledger,
+    crate::strategies::database::SCHEMA,
     &[rule("strategies"), rule("strategy_assignments")],
     &[
         keep("strategies", UserDecision),
@@ -334,6 +418,7 @@ pub const AGENT_CONTROL: StoreSpec = shared(
     paths::get_agent_control_db_path,
     configure::AGENT_CONTROL_DB,
     StoreClass::Ledger,
+    crate::agent_control::store::SCHEMA,
     &[rule("audit")],
     &[
         keep("pairings", UserDecision),
@@ -348,6 +433,7 @@ pub const AI: StoreSpec = shared(
     paths::get_ai_db_path,
     configure::AI_DB,
     StoreClass::Ledger,
+    crate::llm_analysis::database::SCHEMA,
     &[rule("ai_instructions")],
     &[keep("ai_instructions", UserDecision)],
 );
@@ -356,6 +442,7 @@ pub const AI_CHAT: StoreSpec = shared(
     paths::get_ai_chat_db_path,
     configure::AI_CHAT_DB,
     StoreClass::Ledger,
+    crate::assistant::chat::database::SCHEMA,
     &[rule("ai_scheduled_tasks")],
     &[
         keep("ai_scheduled_tasks", UserDecision),
@@ -369,6 +456,7 @@ pub const TRANSACTIONS: StoreSpec = shared(
     paths::get_transactions_db_path,
     configure::TRANSACTIONS_DB,
     StoreClass::Derived,
+    crate::transactions::database::SCHEMA,
     &[],
     &[
         keep("raw_transactions", Ledger),
@@ -381,12 +469,14 @@ pub const TRANSACTIONS: StoreSpec = shared(
         keep("db_metadata", Schema),
     ],
 )
-.wallet_scoped("db_metadata", "Transactions");
+.wallet_scoped("db_metadata", "Transactions")
+.pooled(5, None);
 pub const WALLET: StoreSpec = shared(
     "wallet",
     paths::get_wallet_db_path,
     configure::WALLET_MONITOR_DB,
     StoreClass::Derived,
+    crate::wallets::balance_monitor::SCHEMA,
     &[],
     &[
         bounded("token_balances"),
@@ -395,11 +485,13 @@ pub const WALLET: StoreSpec = shared(
         keep("wallet_metadata", Schema),
     ],
 )
-.wallet_scoped("wallet_metadata", "Wallet History");
+.wallet_scoped("wallet_metadata", "Wallet History")
+.pooled(3, Some(1));
 pub const TOKENS: StoreSpec = per_chain(
     DbKind::Tokens,
     configure::TOKENS_DB,
     StoreClass::Cache,
+    crate::tokens::schema::SCHEMA,
     &[
         rule("token_favorites"),
         rule("blacklist"),
@@ -417,11 +509,13 @@ pub const TOKENS: StoreSpec = per_chain(
         keep("blacklist", UserDecision),
         keep("authority_reputation", Aggregate),
     ],
-);
+)
+.pooled(8, None);
 pub const OHLCVS: StoreSpec = per_chain(
     DbKind::Ohlcvs,
     configure::OHLCVS_DB,
     StoreClass::Cache,
+    crate::ohlcvs::database::SCHEMA,
     &[OHLCV_MANUAL_MONITORS],
     &[
         evicted("ohlcv_monitor_config"),
@@ -431,18 +525,22 @@ pub const OHLCVS: StoreSpec = per_chain(
         keep("ohlcv_data_versions", Schema),
         keep("schema_migrations", Schema),
     ],
-);
+)
+.pooled(4, None);
 pub const POOLS: StoreSpec = per_chain(
     DbKind::Pools,
     configure::POOLS_DB,
     StoreClass::Cache,
+    crate::pools::database::SCHEMA,
     &[],
     &[bounded("blacklist_accounts"), bounded("blacklist_pools")],
-);
+)
+.pooled(4, None);
 pub const RPC_STATS: StoreSpec = per_chain(
     DbKind::RpcStats,
     configure::RPC_STATS_DB,
     StoreClass::Cache,
+    crate::rpc::stats::database::SCHEMA,
     &[],
     &[
         keep("providers", Aggregate),
@@ -455,22 +553,29 @@ pub const EVENTS: StoreSpec = shared(
     paths::get_events_db_path,
     configure::EVENTS_WRITE_DB,
     StoreClass::Cache,
+    crate::events::database::SCHEMA,
     &[],
     &[],
-);
+)
+.pooled(2, Some(1))
+.with_reader(configure::EVENTS_READ_DB, 4, Some(1));
 pub const ACTIONS: StoreSpec = shared(
     "actions",
     paths::get_actions_db_path,
     configure::ACTIONS_WRITE_DB,
     StoreClass::Cache,
+    crate::actions::database::SCHEMA,
     &[],
     &[],
-);
+)
+.pooled(2, Some(1))
+.with_reader(configure::ACTIONS_READ_DB, 4, Some(1));
 pub const TOOLS: StoreSpec = shared(
     "tools",
     paths::get_tools_db_path,
     configure::TOOLS_DB,
     StoreClass::Cache,
+    crate::tools::database::SCHEMA,
     &[rule("tool_favorites"), rule("watched_tokens")],
     &[
         keep("tool_favorites", UserDecision),
@@ -481,7 +586,8 @@ pub const TOOLS: StoreSpec = shared(
         keep("mw_wallet_ops", Ledger),
         keep("schema_version", Schema),
     ],
-);
+)
+.pooled(3, Some(1));
 
 /// Every app-owned store, vault first and caches last.
 pub const STORES: [&StoreSpec; 16] = [
@@ -504,176 +610,5 @@ pub const STORES: [&StoreSpec; 16] = [
 ];
 
 #[cfg(test)]
-mod tests {
-    use super::*;
-    use std::collections::HashSet;
-
-    #[test]
-    fn every_store_has_one_entry_and_one_file() {
-        let ids: HashSet<&str> = STORES.iter().map(|store| store.id).collect();
-        assert_eq!(ids.len(), STORES.len());
-        let files: HashSet<PathBuf> = STORES
-            .iter()
-            .map(|store| store.path(ChainId::Solana))
-            .collect();
-        assert_eq!(files.len(), STORES.len());
-        for store in STORES {
-            let file = store.path(ChainId::Solana);
-            assert_eq!(
-                file.file_name().and_then(|name| name.to_str()),
-                Some(format!("{}.db", store.id).as_str()),
-                "{} names its Solana file",
-                store.id
-            );
-        }
-    }
-
-    #[test]
-    fn stores_are_ordered_by_class_and_only_the_vault_is_a_vault() {
-        let rank = |class: StoreClass| match class {
-            StoreClass::Vault => 0,
-            StoreClass::Ledger => 1,
-            StoreClass::Derived => 2,
-            StoreClass::Cache => 3,
-        };
-        assert!(STORES
-            .windows(2)
-            .all(|pair| rank(pair[0].class) <= rank(pair[1].class)));
-        let vaults: Vec<&str> = STORES
-            .iter()
-            .filter(|store| store.class == StoreClass::Vault)
-            .map(|store| store.id)
-            .collect();
-        assert_eq!(vaults, vec!["wallets"]);
-        let per_chain: Vec<&str> = STORES
-            .iter()
-            .filter(|store| matches!(store.location, StoreLocation::PerChain(_)))
-            .map(|store| store.id)
-            .collect();
-        assert_eq!(per_chain, vec!["tokens", "ohlcvs", "pools", "rpc_stats"]);
-    }
-
-    /// Every store path function and every chain-scoped kind is a catalog entry, so no
-    /// store can ship without a class, a compaction rule and a place in every derived list.
-    #[test]
-    fn every_store_path_function_and_kind_is_catalogued() {
-        let catalog = include_str!("catalog.rs");
-        let path_functions: Vec<&str> = include_str!("../paths/database.rs")
-            .lines()
-            .filter_map(|line| line.trim().strip_prefix("pub fn "))
-            .filter_map(|rest| rest.split_once("()"))
-            .map(|(name, _)| name)
-            .filter(|name| name.ends_with("_db_path"))
-            .collect();
-        assert!(!path_functions.is_empty());
-        for name in path_functions {
-            assert!(
-                catalog.contains(&format!("paths::{name},")),
-                "paths::{name} names a store the catalog does not list"
-            );
-        }
-        let kind_entry = |kind: DbKind| match kind {
-            DbKind::Tokens => &TOKENS,
-            DbKind::Pools => &POOLS,
-            DbKind::Ohlcvs => &OHLCVS,
-            DbKind::RpcStats => &RPC_STATS,
-        };
-        for kind in [
-            DbKind::Tokens,
-            DbKind::Pools,
-            DbKind::Ohlcvs,
-            DbKind::RpcStats,
-        ] {
-            assert!(matches!(
-                kind_entry(kind).location,
-                StoreLocation::PerChain(entry) if entry == kind
-            ));
-            assert!(STORES.iter().any(|store| store.id == kind.file_stem()));
-        }
-    }
-
-    /// The key vault is never rewritten; every other store may be compacted.
-    #[test]
-    fn only_the_vault_is_checkpoint_only() {
-        for store in STORES {
-            let expected = if store.class == StoreClass::Vault {
-                Compaction::CheckpointOnly
-            } else {
-                Compaction::Incremental
-            };
-            assert_eq!(store.compaction, expected, "{}", store.id);
-        }
-    }
-
-    /// The wallet-scoped stores are the wallet's own history, and each names a metadata
-    /// table its schema creates.
-    #[test]
-    fn wallet_scoped_stores_name_their_metadata_tables() {
-        let sources = [
-            (&POSITIONS, include_str!("../positions/database/types.rs")),
-            (
-                &TRANSACTIONS,
-                include_str!("../transactions/database/schema.rs"),
-            ),
-            (
-                &WALLET,
-                include_str!("../wallets/balance_monitor/database/schema.rs"),
-            ),
-        ];
-        let scoped: Vec<&str> = wallet_scoped_stores().map(|(store, _)| store.id).collect();
-        assert_eq!(scoped, vec!["positions", "transactions", "wallet"]);
-        for (store, source) in sources {
-            let scope = store.wallet_scope.expect("wallet-scoped store");
-            assert!(
-                source.contains(&format!(
-                    "CREATE TABLE IF NOT EXISTS {} (",
-                    scope.metadata_table
-                )),
-                "{} names {}, which its schema does not create",
-                store.id,
-                scope.metadata_table
-            );
-        }
-    }
-
-    /// Salvage names tables by hand; each must be a table its store creates.
-    #[test]
-    fn salvage_rules_name_tables_their_store_creates() {
-        let sources: [(&StoreSpec, &str); 7] = [
-            (&STRATEGIES, include_str!("../strategies/database.rs")),
-            (&AGENT_CONTROL, include_str!("../agent_control/store.rs")),
-            (&AI, include_str!("../llm_analysis/database.rs")),
-            (&AI_CHAT, include_str!("../assistant/scheduled/database.rs")),
-            (&TOKENS, include_str!("../tokens/schema.rs")),
-            (&OHLCVS, include_str!("../ohlcvs/database/mod.rs")),
-            (&TOOLS, include_str!("../tools/database/schema.rs")),
-        ];
-        let salvaging: HashSet<&str> = STORES
-            .iter()
-            .filter(|store| !store.salvage.is_empty())
-            .map(|store| store.id)
-            .collect();
-        assert_eq!(
-            salvaging,
-            sources.iter().map(|(store, _)| store.id).collect()
-        );
-        for (store, source) in sources {
-            for rule in store.salvage {
-                assert!(
-                    source.contains(&format!("CREATE TABLE IF NOT EXISTS {} (", rule.table)),
-                    "{} salvages {}, which its schema does not create",
-                    store.id,
-                    rule.table
-                );
-                for column in rule.columns.unwrap_or_default() {
-                    assert!(
-                        source.contains(&format!("{column} ")),
-                        "{} salvages {}.{column}",
-                        store.id,
-                        rule.table
-                    );
-                }
-            }
-        }
-    }
-}
+#[path = "catalog_tests.rs"]
+mod tests;

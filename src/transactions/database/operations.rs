@@ -13,13 +13,11 @@ use serde::{Deserialize, Serialize};
 #[cfg(test)]
 use std::path::Path;
 use std::path::PathBuf;
-use std::sync::atomic::Ordering;
 
-use crate::database::WriteTransaction;
-use crate::logger::{self, LogTag};
+use crate::chains::ChainId;
+use crate::database::{self, catalog};
 use crate::transactions::error::Error;
 use crate::transactions::types::*;
-use crate::{chains::ChainId, database};
 
 use super::schema::*;
 
@@ -52,59 +50,12 @@ pub struct WalletFlowExportRow {
 }
 
 impl TransactionDatabase {
-    /// Create new TransactionDatabase with connection pooling
+    /// The transaction database of `chain`, opened by the storage phase, with the
+    /// active wallet recorded as the wallet its rows describe.
     pub async fn new(chain: ChainId) -> Result<Self, Error> {
-        let database_path = crate::paths::get_transactions_db_path();
-        let is_first_init = !DATABASE_INITIALIZED.load(Ordering::Relaxed);
-        let db = Self::create_database(database_path, is_first_init, true, chain).await?;
-
-        DATABASE_INITIALIZED.store(true, Ordering::Relaxed);
-
-        Ok(db)
-    }
-
-    async fn create_database(
-        database_path: PathBuf,
-        log_details: bool,
-        record_current_wallet: bool,
-        chain: ChainId,
-    ) -> Result<Self, Error> {
-        let database_path_str = database_path.to_string_lossy().to_string();
-
-        if log_details {
-            logger::info(
-                LogTag::Transactions,
-                &format!("Initializing TransactionDatabase at: {database_path_str}"),
-            );
-        }
-
-        let manager = SqliteConnectionManager::file(&database_path)
-            .with_init(|c| database::configure_connection(c, database::TRANSACTIONS_DB));
-
-        let pool = Pool::builder()
-            .max_size(5)
-            .idle_timeout(None) // SQLite: keep connections alive (WAL stability)
-            .max_lifetime(None) // SQLite: no connection recycling
-            .build(manager)
-            .map_err(crate::errors::DatabaseError::from)?;
-
-        let mut db = Self {
-            pool,
-            database_path: database_path_str,
-            schema_version: DATABASE_SCHEMA_VERSION,
-            chain,
-        };
-
-        db.initialize_schema(record_current_wallet).await?;
-        database::handles::register(&database::catalog::TRANSACTIONS, &database_path, &db.pool);
-
-        if log_details {
-            logger::info(
-                LogTag::Transactions,
-                "TransactionDatabase initialization complete",
-            );
-        }
-
+        let pool = database::open::store(&catalog::TRANSACTIONS)?;
+        let db = Self::with_pool(pool, catalog::TRANSACTIONS.path(chain), chain);
+        db.record_current_wallet()?;
         Ok(db)
     }
 
@@ -113,143 +64,35 @@ impl TransactionDatabase {
         path: P,
         chain: ChainId,
     ) -> Result<Self, Error> {
-        let database_path = path.as_ref().to_path_buf();
-
-        if let Some(parent) = database_path.parent() {
-            std::fs::create_dir_all(parent).map_err(|e| Error::Migration {
-                step: "create data directory".to_owned(),
-                detail: e.to_string(),
-            })?;
-        }
-
-        // Explicit-path databases are used for isolated tests and offline
-        // migration validation. A fresh composite-schema database has no need to
-        // resolve process-global wallet configuration merely to write metadata.
-        Self::create_database(database_path, true, false, chain).await
+        let path = path.as_ref().to_path_buf();
+        let pool = database::open::pool_at(&catalog::TRANSACTIONS, &path, vec![chain])?;
+        Ok(Self::with_pool(pool, path, chain))
     }
 
-    /// Initialize database schema and indexes
-    ///
-    /// Table creation, every migration, the index pass and the metadata stamps
-    /// commit together: a refused or failed open leaves the stored schema exactly
-    /// as it was. Foreign-key enforcement cannot change inside a transaction, so
-    /// it is disabled before BEGIN (the table rebuilds drop referenced tables) and
-    /// restored on every exit path.
-    async fn initialize_schema(&mut self, record_current_wallet: bool) -> Result<(), Error> {
-        let mut conn = self.get_connection()?;
-
-        conn.pragma_update(None, "foreign_keys", 0)
-            .map_err(|e| Error::Migration {
-                step: "disable foreign_keys for schema initialization".to_owned(),
-                detail: e.to_string(),
-            })?;
-        let result = self.initialize_schema_in_transaction(&mut conn, record_current_wallet);
-        conn.pragma_update(None, "foreign_keys", 1)
-            .map_err(|e| Error::Migration {
-                step: "re-enable foreign_keys after schema initialization".to_owned(),
-                detail: e.to_string(),
-            })?;
-        result
+    fn with_pool(pool: Pool<SqliteConnectionManager>, path: PathBuf, chain: ChainId) -> Self {
+        Self {
+            pool,
+            database_path: path.to_string_lossy().to_string(),
+            schema_version: DATABASE_SCHEMA_VERSION,
+            chain,
+        }
     }
 
-    fn initialize_schema_in_transaction(
-        &self,
-        conn: &mut rusqlite::Connection,
-        record_current_wallet: bool,
-    ) -> Result<(), Error> {
-        let tx = conn.write_tx().map_err(|e| Error::Migration {
-            step: "begin schema initialization".to_owned(),
-            detail: e.to_string(),
-        })?;
-        // First, before any historical step can read a store holding both names of a
-        // renamed column as a legacy shape.
-        crate::database::schema::renames::reconcile(&tx, &super::column_names::RENAMES)?;
-
-        // Create all tables
-        let tables = [
-            SCHEMA_RAW_TRANSACTIONS,
-            SCHEMA_PROCESSED_TRANSACTIONS,
-            SCHEMA_KNOWN_SIGNATURES,
-            SCHEMA_DEFERRED_RETRIES,
-            SCHEMA_PENDING_TRANSACTIONS,
-            SCHEMA_METADATA,
-            SCHEMA_BOOTSTRAP_STATE,
-            SCHEMA_SUBJECT_ASSET_DELTAS,
-        ];
-
-        for table_sql in &tables {
-            tx.execute(table_sql, []).map_err(|e| Error::Migration {
-                step: "create table".to_owned(),
+    /// Records the active wallet as the wallet the stored rows describe.
+    fn record_current_wallet(&self) -> Result<(), Error> {
+        let wallet_address =
+            crate::utils::get_wallet_address().map_err(|e| Error::WalletUnavailable {
                 detail: e.to_string(),
             })?;
-        }
-
-        // Apply the legacy processed-transaction column migrations before the v5
-        // rebuild below: that rebuild copies every column of
-        // `processed_transactions`, and therefore needs the fee and delta columns to
-        // exist on the pre-v5 shape. This deliberately does not query chain-aware
-        // state; legacy bootstrap_state has no chain_id until the v7 rebuild.
-        let needs_native_delta_backfill = self.apply_pre_chain_migrations(&tx)?;
-
-        // §7.1: rebuild the signature-keyed tables onto a composite
-        // (signature, wallet_address) primary key so a second subject's perspective
-        // on a signature no longer silently replaces the first. This drops and
-        // recreates whichever of the five tables is still in the pre-v5 shape, so it
-        // must run after table creation above (a table has to exist to migrate) and
-        // before index creation below (rebuilding a table drops its indexes with it).
-        self.migrate_signature_wallet_tables(&tx)?;
-        self.migrate_chain_identity_tables(&tx)?;
-        self.migrate_subject_delta_amounts(&tx)?;
-
-        // Unit-neutral column names come after every versioned rebuild, so each of
-        // those reads the historical shape it was written for.
-        crate::database::schema::renames::rename(&tx, &super::column_names::RENAMES)?;
-
-        // Chain-aware bootstrap state and queries are valid only after every legacy
-        // transaction table, including bootstrap_state, has been rebuilt to v7.
-        self.initialize_chain_bootstrap_state(&tx)?;
-        if needs_native_delta_backfill {
-            self.backfill_processed_native_delta(&tx)?;
-        }
-
-        // Create all indexes (fresh for anything just rebuilt above)
-        for index_sql in INDEXES {
-            tx.execute(index_sql, []).map_err(|e| Error::Migration {
-                step: "create index".to_owned(),
-                detail: e.to_string(),
-            })?;
-        }
-
-        // Set or update schema version
-        tx.execute(
-            "INSERT OR REPLACE INTO db_metadata (key, value) VALUES (?1, ?2)",
-            params!["schema_version", self.schema_version.to_string()],
-        )
-        .map_err(|e| Error::Migration {
-            step: "set schema version".to_owned(),
-            detail: e.to_string(),
-        })?;
-
-        if record_current_wallet {
-            let wallet_address =
-                crate::utils::get_wallet_address().map_err(|e| Error::Migration {
-                    step: "get wallet address".to_owned(),
-                    detail: e.to_string(),
-                })?;
-            tx.execute(
+        self.get_connection()?
+            .execute(
                 "INSERT OR REPLACE INTO db_metadata (key, value) VALUES (?1, ?2)",
                 params!["current_wallet", wallet_address],
             )
-            .map_err(|e| Error::Migration {
-                step: "set current_wallet in metadata".to_owned(),
-                detail: e.to_string(),
+            .map_err(|e| {
+                crate::errors::DatabaseError::classify_sqlite_failure("record current wallet", e)
             })?;
-        }
-
-        tx.commit().map_err(|e| Error::Migration {
-            step: "commit schema initialization".to_owned(),
-            detail: e.to_string(),
-        })
+        Ok(())
     }
 
     /// Get database connection from pool

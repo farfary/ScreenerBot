@@ -6,12 +6,13 @@
 use chrono::{DateTime, Duration as ChronoDuration, Utc};
 use r2d2::{Pool, PooledConnection};
 use r2d2_sqlite::SqliteConnectionManager;
-use rusqlite::{params, OptionalExtension};
+use rusqlite::{params, OptionalExtension, Transaction};
 use std::path::Path;
 
 use super::types::*;
-use crate::database;
-use crate::database::WriteTransaction;
+use crate::database::schema::{ddl, SchemaContext, StoreSchema};
+use crate::database::{catalog, open, WriteTransaction};
+use crate::errors::DatabaseError;
 use crate::rpc::types::{CircuitState, ProviderKind};
 
 /// RPC statistics database
@@ -19,45 +20,21 @@ pub struct RpcStatsDatabase {
     pool: Pool<SqliteConnectionManager>,
 }
 
-impl RpcStatsDatabase {
-    /// Create/open database
-    pub fn new() -> crate::Result<Self> {
-        let db_path = crate::chains::get_rpc_stats_db_path();
-        Self::open(&db_path)
-    }
+/// The RPC statistics store's schema.
+pub(crate) const SCHEMA: StoreSchema = StoreSchema {
+    version: 1,
+    min_reader_version: 1,
+    baseline: 1,
+    renames: None,
+    step: create_schema,
+    legacy_stamp: None,
+};
 
-    /// Open database at specific path
-    pub fn open(path: &Path) -> crate::Result<Self> {
-        // Ensure parent directory exists
-        if let Some(parent) = path.parent() {
-            std::fs::create_dir_all(parent)?;
-        }
-
-        let manager = SqliteConnectionManager::file(path)
-            .with_init(|c| database::configure_connection(c, database::RPC_STATS_DB));
-        let pool = Pool::builder()
-            .max_size(3)
-            .idle_timeout(None) // SQLite: keep connections alive (WAL stability)
-            .max_lifetime(None) // SQLite: no connection recycling
-            .build(manager)?;
-
-        let db = Self { pool };
-        db.initialize_schema()?;
-        database::handles::register(&database::catalog::RPC_STATS, path, &db.pool);
-        Ok(db)
-    }
-
-    /// Get connection from pool
-    fn conn(&self) -> crate::Result<PooledConnection<SqliteConnectionManager>> {
-        self.pool.get().map_err(Into::into)
-    }
-
-    /// Initialize database schema
-    fn initialize_schema(&self) -> crate::Result<()> {
-        let conn = self.conn()?;
-
-        conn.execute_batch(
-            r#"
+fn create_schema(tx: &Transaction<'_>, _: &SchemaContext) -> Result<(), DatabaseError> {
+    ddl::run_batch(
+        tx,
+        "create rpc_stats tables",
+        r#"
             -- Sessions table
             CREATE TABLE IF NOT EXISTS sessions (
                 id TEXT PRIMARY KEY,
@@ -142,29 +119,42 @@ impl RpcStatsDatabase {
                 FOREIGN KEY (provider_id) REFERENCES providers(id)
             );
             "#,
+    )?;
+
+    // Chain scope: the shared file gains a chain column on every table. Historical rows
+    // are Solana's by construction, so the migration backfills 'solana'.
+    for table in [
+        "sessions",
+        "providers",
+        "calls",
+        "minute_buckets",
+        "provider_health",
+    ] {
+        ddl::add_column(tx, table, "chain_id", "TEXT NOT NULL DEFAULT 'solana'")?;
+    }
+    Ok(())
+}
+
+impl RpcStatsDatabase {
+    /// Open the Solana statistics store.
+    pub fn new() -> crate::Result<Self> {
+        let pool = open::chain_store(&catalog::RPC_STATS, crate::chains::legacy_row_chain())?;
+        Ok(Self { pool })
+    }
+
+    /// Open the statistics store at `path`.
+    pub fn open(path: &Path) -> crate::Result<Self> {
+        let pool = open::pool_at(
+            &catalog::RPC_STATS,
+            path,
+            vec![crate::chains::legacy_row_chain()],
         )?;
+        Ok(Self { pool })
+    }
 
-        // Chain scope: the shared file gains a chain column on every table.
-        // Historical rows are Solana's by construction, so the migration
-        // backfills 'solana'; gated on the live schema, never a version stamp.
-        for table in [
-            "sessions",
-            "providers",
-            "calls",
-            "minute_buckets",
-            "provider_health",
-        ] {
-            if !database::schema::table_has_column(&conn, table, "chain_id")? {
-                conn.execute(
-                    &format!(
-                        "ALTER TABLE {table} ADD COLUMN chain_id TEXT NOT NULL DEFAULT 'solana'"
-                    ),
-                    [],
-                )?;
-            }
-        }
-
-        Ok(())
+    /// Get connection from pool
+    fn conn(&self) -> crate::Result<PooledConnection<SqliteConnectionManager>> {
+        self.pool.get().map_err(Into::into)
     }
 
     /// Start new session

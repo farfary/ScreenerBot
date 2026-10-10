@@ -3,7 +3,7 @@
 
 //! SQLite repository for copy tasks, spend, outcomes, activity, and position links.
 
-use std::path::{Path, PathBuf};
+use std::path::Path;
 use std::sync::OnceLock;
 
 use chrono::Utc;
@@ -12,7 +12,6 @@ use r2d2_sqlite::SqliteConnectionManager;
 use rusqlite::{params, OptionalExtension};
 
 use crate::database;
-use crate::database::WriteTransaction;
 use crate::trader::error::Error;
 
 use super::types::{
@@ -35,7 +34,7 @@ mod rows;
 mod schema;
 
 use rows::{json_error, parse_datetime, row_to_task, TASK_COLUMNS};
-use schema::{migrate, SCHEMA, SCHEMA_VERSION};
+pub(crate) use schema::SCHEMA;
 
 #[derive(Clone)]
 pub struct CopyDatabase {
@@ -77,31 +76,15 @@ impl CopyDatabase {
             })
     }
 
-    /// Explicit-path constructor for isolated tests and offline tools.
-    /// Opens one chain-bound repository against the shared copy-trading database.
+    /// Opens one chain-bound repository on the copy-trading store at `path`: the
+    /// store's own file, or an isolated copy for tests and offline tools.
     pub fn open(
         path: impl AsRef<Path>,
         chain: crate::chains::ChainId,
     ) -> crate::trader::Result<Self> {
-        let path = PathBuf::from(path.as_ref());
-        if let Some(parent) = path.parent() {
-            std::fs::create_dir_all(parent).map_err(|e| Error::CopyDatabaseUnavailable {
-                detail: format!("failed to create copy database directory: {e}"),
-            })?;
-        }
-        let manager = SqliteConnectionManager::file(&path).with_init(|connection| {
-            database::configure_connection(connection, database::COPY_TRADING_DB)
-        });
-        let pool = Pool::builder()
-            .max_size(3)
-            .idle_timeout(None)
-            .max_lifetime(None)
-            .build(manager)
-            .map_err(crate::errors::DatabaseError::from)?;
-        let db = Self { pool, chain };
-        db.initialize()?;
-        database::handles::register(&database::catalog::COPY_TRADING, &path, &db.pool);
-        Ok(db)
+        let pool =
+            database::open::pool_at(&database::catalog::COPY_TRADING, path.as_ref(), vec![chain])?;
+        Ok(Self { pool, chain })
     }
 
     fn connection(&self) -> crate::trader::Result<PooledConnection<SqliteConnectionManager>> {
@@ -109,33 +92,6 @@ impl CopyDatabase {
             .pool
             .get()
             .map_err(crate::errors::DatabaseError::from)?)
-    }
-
-    /// Schema creation, every migration and the version stamp commit together:
-    /// a refused or failed open leaves the stored schema exactly as it was.
-    fn initialize(&self) -> crate::trader::Result<()> {
-        let mut connection = self.connection()?;
-        let transaction = connection
-            .write_tx()
-            .map_err(crate::errors::DatabaseError::from)?;
-        // First, before any historical step can read a store holding both names of a
-        // renamed column as a legacy shape.
-        crate::database::schema::renames::reconcile(&transaction, &column_names::RENAMES)?;
-        transaction
-            .execute_batch(SCHEMA)
-            .map_err(crate::errors::DatabaseError::from)?;
-        migrate(&transaction)?;
-        transaction
-            .execute(
-                "INSERT INTO copy_metadata (key, value) VALUES ('schema_version', ?1) \
-                 ON CONFLICT(key) DO UPDATE SET value = excluded.value",
-                params![SCHEMA_VERSION.to_string()],
-            )
-            .map_err(crate::errors::DatabaseError::from)?;
-        transaction
-            .commit()
-            .map_err(crate::errors::DatabaseError::from)?;
-        Ok(())
     }
 
     pub async fn insert_task(&self, task: CopyTask) -> crate::trader::Result<CopyTask> {

@@ -116,10 +116,10 @@ fn category_ids_are_unique_kebab_case() {
         let id = category.as_str();
         assert!(
             !id.is_empty()
-                && id
-                    .split('-')
-                    .all(|part| !part.is_empty()
-                        && part.chars().all(|c| c.is_ascii_lowercase() || c.is_ascii_digit())),
+                && id.split('-').all(|part| !part.is_empty()
+                    && part
+                        .chars()
+                        .all(|c| c.is_ascii_lowercase() || c.is_ascii_digit())),
             "{id} is not kebab-case"
         );
         assert!(seen.insert(id), "duplicate category id {id}");

@@ -24,8 +24,6 @@ pub enum Error {
     SchemaMigration { detail: String },
     /// The store was written by a build with a newer positions schema; opening it with
     /// this build could lose what that schema added, so nothing is changed.
-    #[error("positions storage has schema version {stored}, newer than version {supported} this build supports")]
-    SchemaTooNew { stored: u32, supported: u32 },
     #[error("positions database {operation} failed: {detail}")]
     Maintenance {
         operation: &'static str,
@@ -179,7 +177,6 @@ impl ErrorClass for Error {
             // or the verifier reconciling what actually happened on chain.
             Error::RowDecode { .. }
             | Error::SchemaMigration { .. }
-            | Error::SchemaTooNew { .. }
             | Error::TransitionFailed { .. }
             | Error::AmountOverflow { .. }
             | Error::QuoteFailed { .. }
@@ -208,9 +205,7 @@ impl ErrorClass for Error {
             Error::NotInitialised => Severity::Warning,
             Error::Database(e) => e.severity(),
             Error::Chain(e) => e.severity(),
-            Error::RowDecode { .. }
-            | Error::SchemaMigration { .. }
-            | Error::SchemaTooNew { .. } => Severity::Critical,
+            Error::RowDecode { .. } | Error::SchemaMigration { .. } => Severity::Critical,
             Error::Maintenance { .. } => Severity::Error,
             Error::NotFound { .. }
             | Error::NotFoundById { .. }
@@ -267,7 +262,6 @@ impl ErrorClass for Error {
             Error::QuoteFailed { .. } => 422,
             Error::RowDecode { .. }
             | Error::SchemaMigration { .. }
-            | Error::SchemaTooNew { .. }
             | Error::Maintenance { .. }
             | Error::TransitionFailed { .. }
             | Error::AmountOverflow { .. }
