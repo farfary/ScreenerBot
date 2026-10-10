@@ -735,6 +735,7 @@ fn a_buy_made_elsewhere_grows_the_bot_s_own_position() {
             // booked what it actually paid.
             booked_invested_native: 2.01,
             booked_acquired: raw(1_000_000),
+            booked_received_native: 0.0,
         },
     )]);
 
@@ -777,6 +778,7 @@ fn absorbing_an_outside_buy_is_idempotent() {
             exit_signatures: HashSet::new(),
             booked_invested_native: 2.0,
             booked_acquired: raw(1_000_000),
+            booked_received_native: 0.0,
         },
     )]);
 
@@ -1878,6 +1880,7 @@ fn open_row_legs() -> HashMap<i64, TraderLegs> {
             exit_signatures: HashSet::new(),
             booked_invested_native: 2.0,
             booked_acquired: raw(3_000_000),
+            booked_received_native: 0.0,
         },
     )])
 }
@@ -2109,6 +2112,32 @@ fn sold_outside(mut round: LedgerRound, signature: &str, sol: f64) -> LedgerRoun
     round
 }
 
+/// Adds a priced sale of `tokens` whole tokens for `sol` SOL to an open round, which stays
+/// open.
+fn sold_part_outside(
+    mut round: LedgerRound,
+    signature: &str,
+    tokens: f64,
+    sol: f64,
+) -> LedgerRound {
+    let sold = whole(tokens).raw();
+    round.balance_raw -= sold;
+    round.total_disposed_raw += sold;
+    round.exit_count += 1;
+    round.realized_proceeds_native += sol;
+    round.average_exit_price_native = Some(
+        round.realized_proceeds_native
+            / RawAmount::new(round.total_disposed_raw).to_whole_units(round.decimals),
+    );
+    round.events.push(disposal(
+        signature,
+        LedgerEventKind::PartialExit,
+        tokens,
+        sol,
+    ));
+    round
+}
+
 /// The closed row: bought `a1` for 1.0 SOL, sold it `x1` for 1.2 SOL, verified.
 fn dust_closed_row(round: &LedgerRound) -> Position {
     let mut row = bot_position(round);
@@ -2156,6 +2185,7 @@ fn merged_legs() -> HashMap<i64, TraderLegs> {
                 exit_signatures: HashSet::from(["x1".to_owned()]),
                 booked_invested_native: 1.0,
                 booked_acquired: raw(1_000_000),
+                booked_received_native: 1.2,
             },
         ),
         (
@@ -2165,6 +2195,7 @@ fn merged_legs() -> HashMap<i64, TraderLegs> {
                 exit_signatures: HashSet::new(),
                 booked_invested_native: 0.5,
                 booked_acquired: raw(500_000),
+                booked_received_native: 0.0,
             },
         ),
     ])
@@ -2409,14 +2440,8 @@ fn shared_round_sold_outside() -> (LedgerRound, Vec<Position>, HashMap<i64, Trad
     open.exit_fee_raw = Some(5_000);
 
     let mut legs = merged_legs();
-    legs.get_mut(&1)
-        .expect("closed row legs")
-        .exit_signatures
-        .insert("x2".to_owned());
-    legs.get_mut(&2)
-        .expect("open row legs")
-        .exit_signatures
-        .insert("p1".to_owned());
+    record_exit(legs.get_mut(&1).expect("closed row legs"), "x2", 0.001);
+    record_exit(legs.get_mut(&2).expect("open row legs"), "p1", 0.3);
     let rows = vec![dust_closed_row(&round), open];
     (round, rows, legs)
 }
@@ -2611,10 +2636,9 @@ fn an_outside_sell_all_counts_an_unrecorded_partial_exit_once() {
     // the round's `p1` cannot be told apart from an outside sale, so the close books no
     // proceeds rather than counting `p1` a second time.
     let (round, rows, mut legs) = shared_round_sold_outside();
-    legs.get_mut(&2)
-        .expect("open row legs")
-        .exit_signatures
-        .remove("p1");
+    let open_legs = legs.get_mut(&2).expect("open row legs");
+    assert!(open_legs.exit_signatures.remove("p1"));
+    open_legs.booked_received_native -= 0.3;
 
     let plan = plan_position_writes(
         std::slice::from_ref(&round),
@@ -2636,7 +2660,8 @@ fn an_outside_sell_all_counts_an_unrecorded_partial_exit_once() {
 #[test]
 fn an_outside_sale_of_part_of_a_shared_round_shrinks_the_open_row() {
     // After the open row's own entry, 0.2 tokens are sold for 0.3 SOL in another wallet app:
-    // the round stays open and the open row follows the holding down.
+    // the round stays open, the open row follows the holding down and books the sale's
+    // proceeds.
     let mut round = dust_merged_round(MINT);
     round
         .events
@@ -2650,7 +2675,7 @@ fn an_outside_sale_of_part_of_a_shared_round_shrinks_the_open_row() {
 
     let plan = plan_position_writes(
         std::slice::from_ref(&round),
-        &[closed, open.clone()],
+        &[closed, open],
         &metadata(MINT, false),
         &merged_legs(),
         &no_busy(),
@@ -2669,8 +2694,9 @@ fn an_outside_sale_of_part_of_a_shared_round_shrinks_the_open_row() {
     );
     assert!(shrunk.exit_time.is_none());
     assert_eq!(
-        shrunk.native_received, open.native_received,
-        "proceeds wait for the close"
+        shrunk.native_received,
+        Some(0.3),
+        "the outside sale's proceeds are booked when it is seen"
     );
 }
 
@@ -2991,8 +3017,15 @@ fn following_legs() -> HashMap<i64, TraderLegs> {
             exit_signatures: HashSet::new(),
             booked_invested_native: 1.5,
             booked_acquired: raw(1_500_000),
+            booked_received_native: 0.0,
         },
     )])
+}
+
+/// Records the exit `signature` that received `native` SOL among `legs`.
+fn record_exit(legs: &mut TraderLegs, signature: &str, native: f64) {
+    assert!(legs.exit_signatures.insert(signature.to_owned()));
+    legs.booked_received_native += native;
 }
 
 /// The bot's buy `b1` of 1.0 token for 1.0 SOL and its full exit `x1` for 1.2 SOL.
@@ -3027,18 +3060,15 @@ fn reopened_row() -> Position {
 /// The reopened row's booked legs: entry `b1`, exit `x1`, DCA `d1`.
 fn reopened_legs() -> HashMap<i64, TraderLegs> {
     let mut legs = following_legs();
-    legs.get_mut(&1)
-        .expect("row legs")
-        .exit_signatures
-        .insert("x1".to_owned());
+    record_exit(legs.get_mut(&1).expect("row legs"), "x1", 1.2);
     legs
 }
 
-/// The rows, legs and rounds of an open row whose holding spans two rounds.
-type SpanningCase = (Vec<LedgerRound>, Vec<Position>, HashMap<i64, TraderLegs>);
+/// The rounds, rows and booked legs a planner test reconciles.
+type SyncCase = (Vec<LedgerRound>, Vec<Position>, HashMap<i64, TraderLegs>);
 
 /// The bot's DCA after a sale of everything in another wallet app.
-fn dca_after_outside_sell_all(round_key: Option<&str>) -> SpanningCase {
+fn dca_after_outside_sell_all(round_key: Option<&str>) -> SyncCase {
     (
         vec![sold_out_round(MINT), dca_round(MINT)],
         vec![following_row(round_key)],
@@ -3047,7 +3077,7 @@ fn dca_after_outside_sell_all(round_key: Option<&str>) -> SpanningCase {
 }
 
 /// The late DCA that reopened the row after its full exit.
-fn late_dca_after_full_exit() -> SpanningCase {
+fn late_dca_after_full_exit() -> SyncCase {
     (
         vec![exited_round(MINT), dca_round(MINT)],
         vec![reopened_row()],
@@ -3057,7 +3087,7 @@ fn late_dca_after_full_exit() -> SpanningCase {
 
 /// The bot's DCA after a sale of everything in another wallet app, then the DCA's round sold
 /// `s2` for 0.4 SOL in another wallet app too.
-fn dca_round_sold_outside() -> SpanningCase {
+fn dca_round_sold_outside() -> SyncCase {
     let mut row = following_row(Some(&format!("b1:{MINT}")));
     row.entry_fee_raw = Some(5_000);
     row.exit_fee_raw = Some(5_000);
@@ -3071,7 +3101,7 @@ fn dca_round_sold_outside() -> SpanningCase {
     )
 }
 
-fn plan_case(case: &SpanningCase) -> screenerbot::positions::ledger::SyncPlan {
+fn plan_case(case: &SyncCase) -> screenerbot::positions::ledger::SyncPlan {
     let (rounds, rows, legs) = case;
     plan_position_writes(
         rounds,
@@ -3103,7 +3133,11 @@ fn a_bot_buy_after_an_outside_sell_all_follows_the_new_round() {
         assert_eq!(followed.total_exited_amount, raw(1_000_000));
         assert_eq!(followed.token_amount, Some(raw(1_500_000)));
         assert!((followed.total_size_native - 1.5).abs() < 1e-12);
-        assert_eq!(followed.native_received, None);
+        assert_eq!(
+            followed.native_received,
+            Some(0.8),
+            "the earlier round's outside sale is booked, key: {round_key:?}"
+        );
         assert_eq!(followed.pnl, None);
         assert_eq!(followed.closed_reason, None);
     }
@@ -3138,10 +3172,7 @@ fn a_closed_round_holding_only_a_bot_row_s_legs_is_never_imported() {
     row.remaining_token_amount = Some(raw(0));
     row.total_exited_amount = raw(1_500_000);
     let closed = row.clone();
-    legs.get_mut(&1)
-        .expect("row legs")
-        .exit_signatures
-        .insert("x2".to_owned());
+    record_exit(legs.get_mut(&1).expect("row legs"), "x2", 0.6);
     // The DCA's round, closed by the bot's sale `x2` of 0.5 tokens for 0.6 SOL.
     let rounds = vec![exited_round(MINT), sold_outside(dca_round(MINT), "x2", 0.6)];
 
@@ -3358,6 +3389,512 @@ fn a_late_dca_after_a_full_exit_follows_its_round_in_storage_without_a_loss() {
                 .count();
             assert_eq!(rows_of_mint, 1, "the DCA's round was imported as a twin");
             assert_eq!(get_loss_limit_status().cumulative_loss_native, 0.0);
+            assert!(!is_entry_blocked_by_loss_limit());
+        },
+    );
+}
+
+// =============================================================================
+// AN OPEN ROW BOOKS WHAT ITS PART SOLD OUTSIDE THE BOT
+// =============================================================================
+
+/// The bot's buy `open-sig` of 1.0 token for 2.0 SOL, still held.
+fn bought_round() -> LedgerRound {
+    let mut bought = open_round(MINT, "open-sig:MINT");
+    bought.events = vec![acquisition("open-sig", LedgerEventKind::Entry, 1.0, 2.0)];
+    bought
+}
+
+/// The bot's row owning `round` alone: entry `open-sig`, 1_000_000 raw for 2.0 SOL, recorded.
+fn whole_round_case(round: LedgerRound) -> SyncCase {
+    let mut row = bot_position(&open_round(MINT, "open-sig:MINT"));
+    row.id = Some(7);
+    let legs = HashMap::from([(
+        7i64,
+        TraderLegs {
+            entry_signatures: HashSet::from(["open-sig".to_owned()]),
+            exit_signatures: HashSet::new(),
+            booked_invested_native: 2.0,
+            booked_acquired: raw(1_000_000),
+            booked_received_native: 0.0,
+        },
+    )]);
+    (vec![round], vec![row], legs)
+}
+
+/// The dust-merged round after the open row's own partial exit `p1` of 0.2 tokens for 0.3
+/// SOL, recorded, and the sale `s2` of 0.1 tokens for 0.12 SOL in another wallet app.
+fn shared_round_sold_in_part() -> SyncCase {
+    let round = sold_part_outside(
+        sold_part_outside(dust_merged_round(MINT), "p1", 0.2, 0.3),
+        "s2",
+        0.1,
+        0.12,
+    );
+    let mut open = merged_open_row(&round);
+    open.remaining_token_amount = Some(raw(300_000));
+    open.total_exited_amount = raw(200_000);
+    open.native_received = Some(0.3);
+    open.partial_exit_count = 1;
+    open.entry_fee_raw = Some(5_000);
+    open.exit_fee_raw = Some(5_000);
+    let mut legs = merged_legs();
+    record_exit(legs.get_mut(&2).expect("open row legs"), "p1", 0.3);
+    (
+        vec![round.clone()],
+        vec![dust_closed_row(&round), open],
+        legs,
+    )
+}
+
+/// Writes the case's one planned update back into its rows as the sync writes it, and
+/// checks that a second pass over the same history plans nothing.
+fn settle(case: SyncCase) -> SyncCase {
+    let plan = plan_case(&case);
+    let settled = only_update(&plan).clone();
+    let (rounds, mut rows, legs) = case;
+    for row in &mut rows {
+        if plan
+            .round_key_releases
+            .iter()
+            .any(|release| Some(release.position_id) == row.id)
+        {
+            row.round_key = None;
+        }
+        if row.id == settled.id {
+            *row = settled.clone();
+        }
+    }
+    let settled_case = (rounds, rows, legs);
+    let again = plan_case(&settled_case);
+    assert!(
+        again.is_empty(),
+        "a second pass wrote again: {:?} {:?}",
+        again.updates,
+        again.inserts
+    );
+    settled_case
+}
+
+/// The settled row of `case` with `id`.
+fn settled_row(case: &SyncCase, id: i64) -> &Position {
+    case.1
+        .iter()
+        .find(|row| row.id == Some(id))
+        .expect("row in case")
+}
+
+fn assert_received(row: &Position, expected: f64) {
+    let received = row.native_received.expect("proceeds booked");
+    assert!(
+        (received - expected).abs() < 1e-12,
+        "{received} != {expected}"
+    );
+}
+
+#[test]
+fn an_outside_partial_sale_s_proceeds_join_the_open_row_once() {
+    let whole = settle(whole_round_case(sold_part_outside(
+        bought_round(),
+        "s",
+        0.4,
+        0.5,
+    )));
+    let row = settled_row(&whole, 7);
+    assert_received(row, 0.5);
+    assert_eq!(row.remaining_token_amount, Some(raw(600_000)));
+    assert_eq!(row.total_exited_amount, raw(400_000));
+    assert!(row.exit_time.is_none());
+
+    // The row's own recorded 0.3 plus the outside sale's 0.12; the closed row's sale is
+    // its own.
+    let shared = settle(shared_round_sold_in_part());
+    assert_received(settled_row(&shared, 2), 0.42);
+    assert_eq!(settled_row(&shared, 1).native_received, Some(1.2));
+
+    // The earlier round's outside sell-all `s1`.
+    let spanning = settle(dca_after_outside_sell_all(Some(&format!("b1:{MINT}"))));
+    let row = settled_row(&spanning, 1);
+    assert_received(row, 0.8);
+    assert!(row.exit_time.is_none());
+
+    // Only the row's recorded `p1`: nothing was sold outside, and the row is as booked.
+    let round = sold_part_outside(dust_merged_round(MINT), "p1", 0.2, 0.3);
+    let (_, mut rows, legs) = shared_round_sold_in_part();
+    rows[0].round_key = None;
+    rows[1].round_key = Some(round.round_key.clone());
+    let plan = plan_case(&(vec![round], rows, legs));
+    assert!(plan.is_empty(), "{:?} {:?}", plan.updates, plan.inserts);
+}
+
+#[test]
+fn a_close_after_the_open_row_was_credited_counts_each_outside_sale_once() {
+    let (mut rounds, rows, legs) = settle(shared_round_sold_in_part());
+    assert_received(&rows[1], 0.42);
+    rounds[0] = sold_outside(rounds[0].clone(), "s3", 0.25);
+    let closed = plan_case(&(rounds, rows, legs));
+    let sold = only_update(&closed);
+    assert_eq!(sold.id, Some(2));
+    assert!(sold.exit_time.is_some(), "the outside sale closes the row");
+    assert_received(sold, 0.3 + 0.12 + 0.25);
+    let fees = screenerbot::positions::calculate_position_total_fees(sold);
+    let expected = sold.native_received.expect("proceeds") - sold.total_size_native - fees;
+    let pnl = sold.pnl.expect("pnl");
+    assert!((pnl - expected).abs() < 1e-12, "{pnl} != {expected}");
+
+    let (mut rounds, rows, legs) = settle(dca_after_outside_sell_all(Some(&format!("b1:{MINT}"))));
+    assert_received(&rows[0], 0.8);
+    rounds[1] = sold_outside(rounds[1].clone(), "s2", 0.4);
+    let closed = plan_case(&(rounds, rows, legs));
+    let sold = only_update(&closed);
+    assert!(sold.exit_time.is_some(), "the outside sale closes the row");
+    assert_received(sold, 1.2);
+
+    let (mut rounds, rows, legs) = settle(whole_round_case(sold_part_outside(
+        bought_round(),
+        "s",
+        0.4,
+        0.5,
+    )));
+    assert_received(&rows[0], 0.5);
+    rounds[0] = sold_outside(rounds[0].clone(), "s3", 0.7);
+    let expected = rounds[0].realized_proceeds_native;
+    let closed = plan_case(&(rounds, rows, legs));
+    let sold = only_update(&closed);
+    assert!(sold.exit_time.is_some(), "the outside sale closes the row");
+    assert_received(sold, expected);
+}
+
+/// `round` with its last disposal stripped of its SOL side: a sale quoted in something else,
+/// or, when `transfer`, tokens sent away. Neither adds to the round's proceeds, and a round
+/// left without a priced exit has no exit price.
+fn without_sol_price(mut round: LedgerRound, transfer: bool) -> LedgerRound {
+    let event = round.events.last_mut().expect("a disposal");
+    let sol = event.quote.take().expect("a priced disposal").amount;
+    event.price_native = None;
+    round.realized_proceeds_native -= sol;
+    if transfer {
+        event.kind = LedgerEventKind::Send;
+        round.exit_count -= 1;
+    }
+    let priced_exit = round.events.iter().any(|event| {
+        matches!(
+            event.kind,
+            LedgerEventKind::PartialExit | LedgerEventKind::Exit
+        ) && event.quote.is_some()
+    });
+    if !priced_exit {
+        round.average_exit_price_native = None;
+    }
+    round
+}
+
+#[test]
+fn an_outside_sale_without_a_sol_price_leaves_the_proceeds_as_booked() {
+    // The same sale priced in SOL is credited.
+    let priced = settle(whole_round_case(sold_part_outside(
+        bought_round(),
+        "s",
+        0.4,
+        0.5,
+    )));
+    assert_received(settled_row(&priced, 7), 0.5);
+
+    // A round whose proceeds the reducer refused to price carries no exit price, whatever
+    // its events show.
+    let mut refused = sold_part_outside(bought_round(), "s", 0.4, 0.5);
+    refused.average_exit_price_native = None;
+    let whole = whole_round_case(refused);
+    let plan = plan_case(&whole);
+    let row = only_update(&plan);
+    assert_eq!(row.remaining_token_amount, Some(raw(600_000)));
+    assert_eq!(row.native_received, whole.1[0].native_received);
+    assert!(row.history_complete);
+
+    for transfer in [false, true] {
+        // The disposal alone, and after a priced outside sale.
+        for round in [
+            without_sol_price(sold_part_outside(bought_round(), "s", 0.4, 0.5), transfer),
+            without_sol_price(
+                sold_part_outside(
+                    sold_part_outside(bought_round(), "s", 0.2, 0.25),
+                    "t",
+                    0.2,
+                    0.25,
+                ),
+                transfer,
+            ),
+        ] {
+            let whole = whole_round_case(round);
+            let booked = whole.1[0].native_received;
+            let plan = plan_case(&whole);
+            let row = only_update(&plan);
+            assert_eq!(row.remaining_token_amount, Some(raw(600_000)), "{transfer}");
+            assert_eq!(row.total_exited_amount, raw(400_000), "{transfer}");
+            assert_eq!(row.native_received, booked, "{transfer}");
+            assert!(row.history_complete, "{transfer}");
+        }
+
+        let (mut rounds, rows, legs) = dca_after_outside_sell_all(Some(&format!("b1:{MINT}")));
+        rounds[0] = without_sol_price(rounds[0].clone(), transfer);
+        let booked = rows[0].native_received;
+        let plan = plan_case(&(rounds, rows, legs));
+        let row = only_update(&plan);
+        assert_eq!(row.remaining_token_amount, Some(raw(500_000)), "{transfer}");
+        assert_eq!(row.total_exited_amount, raw(1_000_000), "{transfer}");
+        assert_eq!(row.native_received, booked, "{transfer}");
+        assert!(row.history_complete, "{transfer}");
+    }
+}
+
+/// `round` with a transfer-in `signature` of `amount` whole tokens at its end: held, but
+/// with no SOL side, so the round's basis is incomplete.
+fn with_outside_receive(round: LedgerRound, signature: &str, amount: f64) -> LedgerRound {
+    let mut received = with_outside_buy(round, signature, amount, 0.0);
+    received.entry_count -= 1;
+    received.basis_complete = false;
+    let event = received.events.last_mut().expect("the transfer-in");
+    event.kind = LedgerEventKind::Receive;
+    event.quote = None;
+    event.price_native = None;
+    received
+}
+
+#[test]
+fn an_outside_sale_the_row_s_books_do_not_cover_is_not_credited() {
+    // An outside buy `a` of 0.4 tokens and an outside sale `s` of 0.4 tokens, in either
+    // order, both before any pass saw the buy: the row never absorbed the buy, so the sale's
+    // 0.5 SOL would read as profit against tokens the row still holds.
+    for round in [
+        sold_part_outside(
+            with_outside_buy(bought_round(), "a", 0.4, 0.4),
+            "s",
+            0.4,
+            0.5,
+        ),
+        with_outside_buy(
+            sold_part_outside(bought_round(), "s", 0.4, 0.5),
+            "a",
+            0.4,
+            0.4,
+        ),
+    ] {
+        let events: Vec<String> = round
+            .events
+            .iter()
+            .map(|event| event.signature.clone())
+            .collect();
+        let plan = plan_case(&whole_round_case(round));
+        let row = only_update(&plan);
+        assert_eq!(row.native_received, None, "{events:?}");
+        assert_eq!(
+            row.remaining_token_amount,
+            Some(raw(1_000_000)),
+            "{events:?}"
+        );
+        assert_eq!(row.total_size_native, 2.0, "{events:?}");
+    }
+
+    // The open row's part of a shared round: an outside buy `u` of 0.2 tokens, then an
+    // outside sale `s` of 0.25 tokens. The holding never grew past the row's claim, so the
+    // buy was never absorbed.
+    let round = sold_part_outside(
+        with_outside_buy(dust_merged_round(MINT), "u", 0.2, 0.2),
+        "s",
+        0.25,
+        0.3,
+    );
+    let rows = vec![dust_closed_row(&round), merged_open_row(&round)];
+    let plan = plan_case(&(vec![round], rows, merged_legs()));
+    let row = only_update(&plan);
+    assert_eq!(row.id, Some(2));
+    assert_eq!(row.native_received, None);
+    assert_eq!(row.remaining_token_amount, Some(raw(451_000)));
+
+    // A transfer-in absorbed by an earlier pass: the amount is carried, its cost is not, so
+    // the later sale is not credited.
+    let (_, rows, legs) = settle(whole_round_case(with_outside_receive(
+        bought_round(),
+        "r",
+        0.4,
+    )));
+    let grown = &rows[0];
+    assert_eq!(grown.remaining_token_amount, Some(raw(1_400_000)));
+    assert!(!grown.basis_complete);
+    let sold = sold_part_outside(
+        with_outside_receive(bought_round(), "r", 0.4),
+        "s",
+        0.4,
+        0.5,
+    );
+    let plan = plan_case(&(vec![sold], rows, legs));
+    let row = only_update(&plan);
+    assert_eq!(row.native_received, None);
+    assert_eq!(row.remaining_token_amount, Some(raw(1_000_000)));
+    assert_eq!(row.total_exited_amount, raw(400_000));
+}
+
+#[test]
+fn an_outside_sale_on_history_that_does_not_reconcile_is_not_credited() {
+    // A transfer-in that left no event, then an outside sale `s`: the balance shows the
+    // missing 0.4 tokens, so the sale may be of tokens the row never carried.
+    let mut round = sold_part_outside(bought_round(), "s", 0.4, 0.5);
+    round.balance_raw = 1_000_000;
+    round.total_acquired_raw = 1_400_000;
+    round.history_complete = false;
+    let (rounds, rows, legs) = whole_round_case(round);
+    let plan = plan_case(&(rounds, rows.clone(), legs));
+    let row = only_update(&plan);
+    assert_eq!(books(row), books(&rows[0]));
+    assert!(row.round_key.is_some(), "the round key is stamped");
+
+    // The earlier round of a spanning row does not reconcile.
+    let (mut rounds, rows, legs) = dca_after_outside_sell_all(Some(&format!("b1:{MINT}")));
+    rounds[0].history_complete = false;
+    let plan = plan_case(&(rounds, rows, legs));
+    let row = only_update(&plan);
+    assert_eq!(row.native_received, None);
+    assert_eq!(row.remaining_token_amount, Some(raw(500_000)));
+    assert_eq!(row.total_exited_amount, raw(1_000_000));
+}
+
+#[test]
+fn a_row_whose_records_miss_a_partial_exit_is_credited_nothing() {
+    // The bot's partial exit `p1` of 0.2 tokens for 0.3 SOL, then the sale `s` of 0.2 tokens
+    // for 0.25 SOL in another wallet app.
+    let round = sold_part_outside(
+        sold_part_outside(bought_round(), "p1", 0.2, 0.3),
+        "s",
+        0.2,
+        0.25,
+    );
+    let (rounds, mut rows, mut legs) = whole_round_case(round);
+    rows[0].remaining_token_amount = Some(raw(800_000));
+    rows[0].total_exited_amount = raw(200_000);
+    rows[0].partial_exit_count = 1;
+    rows[0].native_received = Some(0.3);
+
+    let plan = plan_case(&(rounds.clone(), rows.clone(), legs.clone()));
+    assert_eq!(
+        only_update(&plan).native_received,
+        Some(0.3),
+        "`p1` has no record, so the outside sale cannot be told apart from it"
+    );
+
+    record_exit(legs.get_mut(&7).expect("row legs"), "p1", 0.3);
+    let plan = plan_case(&(rounds, rows, legs));
+    assert_received(only_update(&plan), 0.55);
+}
+
+#[test]
+fn the_ledger_s_credit_agrees_with_a_later_bot_partial_exit() {
+    let (rounds, mut rows, mut legs) = settle(whole_round_case(sold_part_outside(
+        bought_round(),
+        "s",
+        0.4,
+        0.5,
+    )));
+    assert_received(&rows[0], 0.5);
+
+    // The bot sells 0.2 tokens `p2`: the verifier books its fee-exact 0.199 SOL on the row
+    // and in the record, and the chain shows the swap's 0.2.
+    let row = &mut rows[0];
+    row.native_received = Some(row.native_received.expect("credited") + 0.199);
+    row.partial_exit_count = 1;
+    row.remaining_token_amount = Some(raw(400_000));
+    row.total_exited_amount = raw(600_000);
+    record_exit(legs.get_mut(&7).expect("row legs"), "p2", 0.199);
+    let rounds = vec![sold_part_outside(rounds[0].clone(), "p2", 0.2, 0.2)];
+
+    let plan = plan_case(&(rounds, rows, legs));
+    assert!(plan.is_empty(), "{:?} {:?}", plan.updates, plan.inserts);
+}
+
+#[test]
+fn a_bot_close_after_an_outside_partial_sale_books_every_sale_and_no_false_loss() {
+    common::run_isolated(
+        "a_bot_close_after_an_outside_partial_sale_books_every_sale_and_no_false_loss",
+        || async {
+            use screenerbot::trader::safety::loss_limit::{
+                get_loss_limit_status, is_entry_blocked_by_loss_limit, reset_loss_limit_state,
+            };
+            let _dir = common::isolated_env();
+            let _cfg = common::config_guard();
+            screenerbot::paths::ensure_all_directories().expect("create data directories");
+            common::configure_own_wallet();
+            common::seed_decimals(common::TEST_MINT, 6);
+            screenerbot::positions::initialize_positions_database()
+                .await
+                .expect("initialise positions database");
+            common::set_config(|cfg| {
+                cfg.trader.loss_limit_enabled = true;
+                cfg.trader.loss_limit_sol = 0.5;
+                cfg.trader.loss_limit_period_hours = 24;
+                cfg.trader.loss_limit_auto_resume = true;
+            });
+            reset_loss_limit_state();
+
+            let id = store_unverified("b1").await;
+            apply_transition(PositionTransition::EntryVerified {
+                position_id: id,
+                effective_entry_price: 1.0,
+                token_amount_units: RawAmount::new(1_000_000),
+                fee_raw: 5_000,
+                native_size: 1.0,
+                held_after: None,
+            })
+            .await
+            .expect("the entry commits");
+
+            // Half the holding was sold `s1` for 0.45 SOL in another wallet app.
+            let mut bought = open_round(common::TEST_MINT, &format!("b1:{}", common::TEST_MINT));
+            bought.entry_signature = Some("b1".to_owned());
+            bought.invested_native = 1.0;
+            bought.remaining_basis_native = 1.0;
+            bought.average_entry_price_native = Some(1.0);
+            bought.events = vec![acquisition("b1", LedgerEventKind::Entry, 1.0, 1.0)];
+            let partly_sold = sold_part_outside(bought, "s1", 0.5, 0.45);
+            assert_eq!(
+                apply_plan(plan_from_storage(std::slice::from_ref(&partly_sold)).await)
+                    .await
+                    .updated,
+                1
+            );
+            let credited = db::get_position_by_id(id)
+                .await
+                .expect("read stored position")
+                .expect("position stored");
+            assert_received(&credited, 0.45);
+            assert_eq!(credited.remaining_token_amount, Some(raw(500_000)));
+
+            // The bot sells the rest `x1` for 0.45 SOL.
+            apply_transition(PositionTransition::ExitVerified {
+                position_id: id,
+                effective_exit_price: 0.9,
+                native_received: 0.45,
+                fee_raw: 5_000,
+                exit_time: Utc::now(),
+                exit_signature: "x1".to_owned(),
+                exit_amount: RawAmount::new(500_000),
+                held_after: None,
+            })
+            .await
+            .expect("the bot's close commits");
+
+            let closed = db::get_position_by_id(id)
+                .await
+                .expect("read stored position")
+                .expect("position stored");
+            assert!(closed.exit_time.is_some());
+            assert_received(&closed, 0.9);
+            let fees = screenerbot::positions::calculate_position_total_fees(&closed);
+            let expected = 0.9 - 1.0 - fees;
+            let pnl = closed.pnl.expect("pnl");
+            assert!((pnl - expected).abs() < 1e-9, "{pnl} != {expected}");
+            assert!(
+                get_loss_limit_status().cumulative_loss_native < 0.5,
+                "the outside sale's proceeds are missing from the close"
+            );
             assert!(!is_entry_blocked_by_loss_limit());
         },
     );

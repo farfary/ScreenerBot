@@ -62,8 +62,8 @@ use std::collections::{HashMap, HashSet};
 use chrono::{DateTime, Utc};
 
 use super::{
-    reconcile_with_wallet, reduce_rounds, LedgerEventKind, LedgerRound, QuoteAsset, WalletHolding,
-    DUST,
+    reconcile_with_wallet, reduce_rounds, LedgerEvent, LedgerEventKind, LedgerRound, QuoteAsset,
+    WalletHolding, DUST,
 };
 use crate::chains::RawAmount;
 use crate::logger::{self, LogTag};
@@ -105,6 +105,8 @@ pub struct TraderLegs {
     pub booked_invested_native: f64,
     /// Tokens those acquisitions booked, raw units.
     pub booked_acquired: RawAmount,
+    /// SOL those disposals received, as the trader recorded it.
+    pub booked_received_native: f64,
 }
 
 impl TraderLegs {
@@ -115,7 +117,9 @@ impl TraderLegs {
         for leg in rows {
             let legs = map.entry(leg.position_id).or_default();
             if leg.is_exit {
-                legs.exit_signatures.insert(leg.signature);
+                if legs.exit_signatures.insert(leg.signature) {
+                    legs.booked_received_native += leg.native;
+                }
             } else if legs.entry_signatures.insert(leg.signature) {
                 legs.booked_invested_native += leg.native;
                 legs.booked_acquired = legs
@@ -209,6 +213,26 @@ impl RoundAttribution {
     fn is_own(&self, signature: &str) -> bool {
         self.own.booked(signature) || self.own_entry_signature.as_deref() == Some(signature)
     }
+
+    /// Where the row's part of `round` starts: its first own event when another position of
+    /// the mint booked part of the round, else the round's first event. `None` when such a
+    /// round holds none of the row's own events.
+    fn part_start(&self, round: &LedgerRound) -> Option<usize> {
+        if self.shares(round) {
+            round
+                .events
+                .iter()
+                .position(|event| self.is_own(&event.signature))
+        } else {
+            Some(0)
+        }
+    }
+
+    /// True when neither this row nor another position of the mint booked `signature`: the
+    /// event happened outside the bot.
+    fn is_outside(&self, signature: &str) -> bool {
+        !self.is_own(signature) && !self.booked_elsewhere.contains(signature)
+    }
 }
 
 /// A row's part of the rounds holding its legs, when it is charged only a part.
@@ -226,8 +250,6 @@ struct RoundShare {
     /// Every outside acquisition of the part is a trade with a SOL quote, in a round whose
     /// basis is complete.
     basis_known: bool,
-    /// What the outside disposals of the part received, when every one was priced in SOL.
-    outside_proceeds: Option<OutsideProceeds>,
     /// Every round of the part reconciles with the balances observed.
     history_complete: bool,
 }
@@ -237,6 +259,8 @@ struct RoundShare {
 struct OutsideProceeds {
     native: f64,
     tokens: f64,
+    /// Raw tokens the part acquired outside the bot.
+    acquired: RawAmount,
 }
 
 /// The row's part of `round`, its home round, and of the `earlier` rounds holding its legs.
@@ -267,36 +291,18 @@ fn round_share(
     let mut entries = u32::try_from(own.entry_signatures.len()).unwrap_or(u32::MAX);
     let mut has_outside_acquisition = false;
     let mut outside_acquisitions_priced = true;
-    let mut disposed = RawAmount::ZERO;
-    let mut proceeds_native = 0.0;
-    let mut disposals_priced = true;
     let mut basis_complete = true;
     let mut history_complete = true;
-    let mut exits_priced = true;
 
     for part_round in earlier.iter().chain(std::iter::once(round)) {
-        let start = if attribution.shares(part_round) {
-            part_round
-                .events
-                .iter()
-                .position(|event| attribution.is_own(&event.signature))?
-        } else {
-            0
-        };
+        let start = attribution.part_start(part_round)?;
         basis_complete &= part_round.basis_complete;
         history_complete &= part_round.history_complete;
-        exits_priced &=
-            part_round.exit_count == 0 || part_round.average_exit_price_native.is_some();
 
-        let outside = part_round.events[start..].iter().filter(|event| {
-            !attribution.is_own(&event.signature)
-                && !attribution.booked_elsewhere.contains(&event.signature)
-        });
+        let outside = part_round.events[start..]
+            .iter()
+            .filter(|event| attribution.is_outside(&event.signature));
         for event in outside {
-            let sol = event
-                .quote
-                .filter(|quote| quote.asset == QuoteAsset::Sol)
-                .map(|quote| quote.amount);
             match event.kind {
                 LedgerEventKind::Entry | LedgerEventKind::Add | LedgerEventKind::Receive => {
                     has_outside_acquisition = true;
@@ -308,31 +314,15 @@ fn round_share(
                         continue;
                     }
                     entries = entries.saturating_add(1);
-                    match sol {
+                    match sol_quote(event) {
                         Some(sol) => invested_native += sol,
                         None => outside_acquisitions_priced = false,
                     }
                 }
-                LedgerEventKind::PartialExit | LedgerEventKind::Exit => {
-                    disposed = disposed
-                        .checked_add(event.amount_raw)
-                        .unwrap_or(RawAmount::MAX);
-                    match sol {
-                        Some(sol) => proceeds_native += sol,
-                        None => disposals_priced = false,
-                    }
-                }
-                LedgerEventKind::Send => disposals_priced = false,
+                LedgerEventKind::PartialExit | LedgerEventKind::Exit | LedgerEventKind::Send => {}
             }
         }
     }
-
-    let disposed_tokens = disposed.to_whole_units(round.decimals);
-    let outside_proceeds =
-        (exits_priced && disposals_priced && disposed_tokens > DUST).then_some(OutsideProceeds {
-            native: proceeds_native,
-            tokens: disposed_tokens,
-        });
 
     Some(RoundShare {
         acquired,
@@ -345,9 +335,74 @@ fn round_share(
         ),
         has_outside_acquisition,
         basis_known: basis_complete && outside_acquisitions_priced,
-        outside_proceeds,
         history_complete,
     })
+}
+
+/// What the row's part of `round` and of the `earlier` rounds holding its legs sold outside
+/// the bot received. `None` when the row's records do not cover its legs, a round of the
+/// part does not reconcile with the balances observed or holds an unpriced disposal, an
+/// outside disposal has no SOL price or was a transfer, or nothing was sold outside.
+///
+/// The row's own sales are counted through its records, and a sale another position of the
+/// mint booked is that position's; only the events no position booked are counted here.
+fn outside_proceeds(
+    round: &LedgerRound,
+    earlier: &[LedgerRound],
+    attribution: &RoundAttribution,
+) -> Option<OutsideProceeds> {
+    if !attribution.records_complete {
+        return None;
+    }
+
+    let mut disposed = RawAmount::ZERO;
+    let mut acquired = RawAmount::ZERO;
+    let mut native = 0.0;
+    for part_round in earlier.iter().chain(std::iter::once(round)) {
+        if !part_round.history_complete {
+            return None;
+        }
+        // The reducer leaves a round's exit price unset when it refused to price its
+        // proceeds, for example SOL legs in a round quoted in USD.
+        if part_round.exit_count > 0 && part_round.average_exit_price_native.is_none() {
+            return None;
+        }
+        let start = attribution.part_start(part_round)?;
+        let outside = part_round.events[start..]
+            .iter()
+            .filter(|event| attribution.is_outside(&event.signature));
+        for event in outside {
+            match event.kind {
+                LedgerEventKind::PartialExit | LedgerEventKind::Exit => {
+                    disposed = disposed
+                        .checked_add(event.amount_raw)
+                        .unwrap_or(RawAmount::MAX);
+                    native += sol_quote(event)?;
+                }
+                LedgerEventKind::Send => return None,
+                LedgerEventKind::Entry | LedgerEventKind::Add | LedgerEventKind::Receive => {
+                    acquired = acquired
+                        .checked_add(event.amount_raw)
+                        .unwrap_or(RawAmount::MAX);
+                }
+            }
+        }
+    }
+
+    let tokens = disposed.to_whole_units(round.decimals);
+    (tokens > DUST).then_some(OutsideProceeds {
+        native,
+        tokens,
+        acquired,
+    })
+}
+
+/// The SOL side of a traded event, when it was quoted in SOL.
+fn sol_quote(event: &LedgerEvent) -> Option<f64> {
+    event
+        .quote
+        .filter(|quote| quote.asset == QuoteAsset::Sol)
+        .map(|quote| quote.amount)
 }
 
 /// Display metadata for a mint, resolved once per sync from the tokens database.
@@ -974,8 +1029,13 @@ fn build_position(
 /// what it holds, keeps its sizes and basis as booked, and a close of its round books no
 /// proceeds.
 ///
+/// While the round is open, the proceeds of the part's outside sales join the row's own
+/// recorded proceeds (see [`outside_proceeds`]); an unpriced or transferred disposal leaves
+/// the proceeds as booked, and so does an outside acquisition of the part that the row's
+/// books do not carry, by amount or by a complete basis (see [`book_outside_proceeds`]).
+///
 /// A round closed by a sale outside the bot closes the row. Its proceeds are the round's
-/// when the row owns the whole round alone, and the row's own booked proceeds plus its
+/// when the row owns the whole round alone, and the row's own recorded proceeds plus its
 /// part's outside sales when it is charged a part; P&L is the realized P&L of the row as
 /// closed.
 fn reconcile_owned_position(
@@ -995,6 +1055,7 @@ fn reconcile_owned_position(
         return position;
     }
 
+    let outside = outside_proceeds(round, earlier, attribution);
     let claimed_remaining = existing.remaining_token_amount.unwrap_or_default();
     let close_proceeds = if attribution.charges_part(round, earlier) {
         let Some(share) = round_share(round, earlier, attribution)
@@ -1026,10 +1087,14 @@ fn reconcile_owned_position(
         }
         if round.is_open {
             shrink_to(&mut position, existing, claimed_remaining, share.held);
+            book_outside_proceeds(&mut position, &attribution.own, outside);
             return position;
         }
         if share.history_complete {
-            CloseProceeds::Outside(share.outside_proceeds)
+            CloseProceeds::Outside {
+                own_native: attribution.own.booked_received_native,
+                sold: outside,
+            }
         } else {
             CloseProceeds::Unknown
         }
@@ -1057,6 +1122,7 @@ fn reconcile_owned_position(
                 claimed_remaining,
                 observed_remaining,
             );
+            book_outside_proceeds(&mut position, &attribution.own, outside);
             return position;
         }
         CloseProceeds::Round
@@ -1091,13 +1157,44 @@ fn shrink_to(
     }
 }
 
+/// Books on an open row what its part sold outside the bot: the row's own recorded proceeds
+/// plus those sales. Recomputed whole on every pass, so a resync writes the same figure;
+/// without a priced outside sale the booked proceeds stand.
+///
+/// An outside acquisition of the part that the row's books do not carry, by amount or by a
+/// complete basis, leaves the proceeds as booked: a sale of tokens whose cost the row does
+/// not carry would read as profit. The books are what the row ever acquired, held plus
+/// exited, since a bot row's entry amount does not grow on a DCA.
+fn book_outside_proceeds(
+    position: &mut Position,
+    own: &TraderLegs,
+    outside: Option<OutsideProceeds>,
+) {
+    let Some(outside) = outside else {
+        return;
+    };
+    let covered = outside.acquired == RawAmount::ZERO
+        || (position.basis_complete
+            && own
+                .booked_acquired
+                .checked_add(outside.acquired)
+                .zip(position.acquired_amount())
+                .is_some_and(|(needed, acquired)| acquired >= needed));
+    if covered {
+        position.native_received = Some(own.booked_received_native + outside.native);
+    }
+}
+
 /// Which proceeds a round closed outside the bot books on the row it closes.
 enum CloseProceeds {
     /// The row owns the whole round: the round's proceeds.
     Round,
-    /// The row is charged a part: its own booked proceeds plus these outside sales, when
-    /// they were all priced.
-    Outside(Option<OutsideProceeds>),
+    /// The row is charged a part: its own recorded proceeds plus its part's outside sales,
+    /// when they were all priced.
+    Outside {
+        own_native: f64,
+        sold: Option<OutsideProceeds>,
+    },
     /// What the row owns of the round is unknown: no proceeds.
     Unknown,
 }
@@ -1164,11 +1261,11 @@ fn close_owned_position(
             Some(exit_price) => (exit_price, round.realized_proceeds_native),
             None => return position,
         },
-        CloseProceeds::Outside(Some(outside)) => (
-            outside.native / outside.tokens,
-            existing.native_received.unwrap_or_default() + outside.native,
-        ),
-        CloseProceeds::Outside(None) => return position,
+        CloseProceeds::Outside {
+            own_native,
+            sold: Some(sold),
+        } => (sold.native / sold.tokens, own_native + sold.native),
+        CloseProceeds::Outside { sold: None, .. } => return position,
         CloseProceeds::Unknown => {
             position.history_complete = false;
             return position;
@@ -1251,9 +1348,7 @@ fn whole_round_invested(existing: &Position, round: &LedgerRound, legs: &TraderL
             matches!(event.kind, LedgerEventKind::Entry | LedgerEventKind::Add)
                 && !booked_signatures.contains(&event.signature)
         })
-        .filter_map(|event| event.quote)
-        .filter(|quote| quote.asset == QuoteAsset::Sol)
-        .map(|quote| quote.amount)
+        .filter_map(sol_quote)
         .sum();
 
     booked_native + external_native
