@@ -231,6 +231,8 @@ mod tests {
     /// in this one test.
     #[tokio::test]
     async fn stage_lifecycle_is_single_start_non_blocking_and_stops_on_shutdown() {
+        // The running fetch loop reads the price refresh heartbeat from config.
+        crate::config::utils::install_default_config();
         let driver = SolanaPricingDriver;
         let monitor = tokio_metrics::TaskMonitor::new();
 
