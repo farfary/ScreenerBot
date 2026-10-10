@@ -25,7 +25,7 @@
 //! `std::thread` instead of relying on a second `#[tokio::test]` function,
 //! so the whole file stays hermetic within a single async test.
 
-mod common;
+use crate::common;
 
 use std::time::Duration;
 

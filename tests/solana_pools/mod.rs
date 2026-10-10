@@ -18,11 +18,9 @@
 //!   and refusal checks that run on the same cases.
 //!
 //! ```text
-//! cargo nextest run -E 'binary(solana_pools)'
+//! cargo nextest run -E 'test(/^solana_pools::/)'
 //! ```
 
 mod accounts;
-#[path = "../common/mod.rs"]
-mod common;
 mod snapshot;
 mod spec;

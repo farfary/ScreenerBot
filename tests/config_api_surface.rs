@@ -15,10 +15,8 @@
 //!
 //! These tests fail the moment those lists drift apart again.
 //!
-//! Its own file (own test binary → own process) because it initialises the
+//! It runs in a process of its own (nextest isolates every test) because it initialises the
 //! global CONFIG via `load_config_from_path` (`OnceLock::set`).
-
-mod common;
 
 use axum::Json;
 use screenerbot::config::metadata::collect_config_metadata;

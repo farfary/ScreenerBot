@@ -3,7 +3,7 @@
 
 //! Caller amount ranges on shared swap execution: an out-of-range quote never executes, an out-of-range fallback quote is skipped, and a completed out-of-range result keeps its signature for verification.
 
-mod common;
+use crate::common;
 
 use async_trait::async_trait;
 use screenerbot::chains::{ChainId, RawAmount};

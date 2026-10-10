@@ -10,7 +10,7 @@
 //! capped by `SB_TEST_MAX_LAMPORTS`. The `mainnet` in the test name puts it in the
 //! serial-mainnet nextest group (never run in parallel).
 
-mod common;
+use crate::common;
 
 #[tokio::test]
 #[ignore = "mainnet swap: spends real SOL"]

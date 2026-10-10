@@ -25,12 +25,9 @@ pub const SCHEMA_VERSION: u32 = 1;
 #[derive(Debug, Clone, Deserialize)]
 pub struct RecordedCase<A> {
     pub schema: u32,
-    pub chain: String,
     pub venue: String,
-    pub program: String,
     pub pool: String,
     pub target_mint: String,
-    pub quote_mint: String,
     #[serde(deserialize_with = "decimal_u64")]
     pub slot: u64,
     pub purpose: String,

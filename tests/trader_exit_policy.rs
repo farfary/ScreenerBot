@@ -17,7 +17,7 @@
 //! `cargo nextest run` (process per test) and plain `cargo test` (threads in one
 //! process).
 
-mod common;
+use crate::common;
 
 use common::config_guard;
 use screenerbot::trader::evaluators::DcaConfigSnapshot;

@@ -9,11 +9,11 @@
 //! switching the main wallet must rebind that subject in place, without
 //! reopening a separate wallet-monitor database.
 //!
-//! Own test file (own process): the wallets manager, the main-keypair cache
+//! It runs in a process of its own (nextest isolates every test): the wallets manager, the main-keypair cache
 //! and the wallet-monitor database are all process-wide statics, same
 //! reasoning as `tests/wallet_readiness.rs`.
 
-mod common;
+use crate::common;
 
 use chrono::Utc;
 use rusqlite::{params, Connection};

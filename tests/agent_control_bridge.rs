@@ -5,7 +5,7 @@
 //! trade's outcome through `get_trade_status`, polling an approval, and an
 //! approved request running to its outcome.
 //!
-//! Its own file (own test binary, own process) because it loads the global
+//! It runs in a process of its own (nextest isolates every test) because it loads the global
 //! configuration, which the bridge reads for `agent_control.enabled`, and points
 //! the agent-control store at a temp database before the pool is first built.
 

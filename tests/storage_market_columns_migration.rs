@@ -3,7 +3,7 @@
 
 //! Unit-neutral token, pool and OHLCV column names through the production initializers.
 
-mod common;
+use crate::common;
 
 use rusqlite::Connection;
 use screenerbot::database;
@@ -20,7 +20,10 @@ fn open(dir: &Path, file: &str) -> Connection {
 fn run_initializers(dir: &Path) -> Output {
     Command::new(std::env::current_exe().unwrap())
         .arg("--exact")
-        .arg("market_initializers_child")
+        .arg(common::test_name(
+            module_path!(),
+            "market_initializers_child",
+        ))
         .env(CHILD, "1")
         .env("SCREENERBOT_DATA_DIR", dir)
         .output()
@@ -303,10 +306,11 @@ fn legacy_market_names_migrate_to_unit_neutral_names() {
     assert_sentinels(dir.path());
 }
 
-/// No released build re-adds the legacy token or price-history names, so a store
-/// holding both names has unknown provenance and its open is refused unchanged.
+/// No released build re-adds the legacy token or price-history names, so a store holding
+/// both names has unknown provenance: the open moves it to the quarantine directory
+/// unchanged and rebuilds it.
 #[test]
-fn market_store_with_both_names_refuses_to_open() {
+fn market_store_with_both_names_is_quarantined_and_rebuilt() {
     if std::env::var_os(CHILD).is_some() {
         return;
     }
@@ -330,27 +334,23 @@ fn market_store_with_both_names_refuses_to_open() {
         let before = schema(&store);
         drop(store);
 
-        let output = run_initializers(dir.path());
-        assert!(
-            !output.status.success(),
-            "{file}: conflicting names were accepted"
-        );
-        let text = format!(
-            "{}{}",
-            String::from_utf8_lossy(&output.stdout),
-            String::from_utf8_lossy(&output.stderr)
-        );
-        assert!(
-            text.contains("SchemaConflict") && text.contains(expected) && text.contains(file),
-            "{file}: unexpected failure: {text}"
-        );
+        boot(dir.path());
 
-        let store = open(dir.path(), file);
-        assert_eq!(
-            schema(&store),
-            before,
-            "{file}: refused open changed the schema"
+        let (moved, reason) = common::quarantined_store(&dir.path().join("data"), file);
+        assert!(
+            reason.contains(expected),
+            "{file}: unexpected quarantine reason: {reason}"
         );
+        let original = Connection::open(moved).unwrap();
+        assert_eq!(
+            schema(&original),
+            before,
+            "{file}: the quarantined store is unchanged"
+        );
+        drop(original);
+
+        let rebuilt = open(dir.path(), file);
+        assert_integrity(&rebuilt);
     }
 }
 
@@ -374,19 +374,8 @@ fn ohlcv_store_of_unknown_provenance_is_quarantined_and_rebuilt() {
 
     boot(dir.path());
 
-    let quarantined: Vec<_> = std::fs::read_dir(dir.path().join("data").join("quarantine"))
-        .unwrap()
-        .map(|entry| entry.unwrap().path())
-        .collect();
-    assert_eq!(quarantined.len(), 1, "one quarantined store");
-    let moved = &quarantined[0];
-    assert!(moved
-        .file_name()
-        .unwrap()
-        .to_string_lossy()
-        .starts_with("ohlcvs-"));
-    assert!(moved.join("manifest.json").exists());
-    let original = Connection::open(moved.join("ohlcvs.db")).unwrap();
+    let (moved, _) = common::quarantined_store(&dir.path().join("data"), "ohlcvs.db");
+    let original = Connection::open(moved).unwrap();
     assert_eq!(
         schema(&original),
         before,

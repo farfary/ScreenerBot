@@ -3,7 +3,7 @@
 
 //! Position bookings and writers against a real positions database: failures change nothing, retries book once, and no writer reverts a committed booking.
 
-mod common;
+use crate::common;
 
 use chrono::{DateTime, Utc};
 use rusqlite::types::Value;
@@ -261,6 +261,7 @@ async fn assert_partial_booked_once(id: i64, before: &Booked) {
 #[test]
 fn a_failed_partial_exit_write_changes_nothing_and_a_retry_books_once() {
     common::run_isolated(
+        module_path!(),
         "a_failed_partial_exit_write_changes_nothing_and_a_retry_books_once",
         || async {
             let _dir = common::isolated_env();
@@ -301,6 +302,7 @@ fn a_failed_partial_exit_write_changes_nothing_and_a_retry_books_once() {
 #[test]
 fn a_failed_exit_record_insert_rolls_back_the_partial_exit_row() {
     common::run_isolated(
+        module_path!(),
         "a_failed_exit_record_insert_rolls_back_the_partial_exit_row",
         || async {
             let _dir = common::isolated_env();
@@ -343,6 +345,7 @@ fn a_failed_exit_record_insert_rolls_back_the_partial_exit_row() {
 #[test]
 fn a_failed_pending_clear_keeps_the_mint_counter_until_the_detail_is_cleared() {
     common::run_isolated(
+        module_path!(),
         "a_failed_pending_clear_keeps_the_mint_counter_until_the_detail_is_cleared",
         || async {
             let _dir = common::isolated_env();
@@ -398,6 +401,7 @@ fn a_failed_pending_clear_keeps_the_mint_counter_until_the_detail_is_cleared() {
 #[test]
 fn a_sent_swap_whose_pending_record_cannot_be_stored_stays_pending_in_memory() {
     common::run_isolated(
+        module_path!(),
         "a_sent_swap_whose_pending_record_cannot_be_stored_stays_pending_in_memory",
         || async {
             let _dir = common::isolated_env();
@@ -445,6 +449,7 @@ fn a_sent_swap_whose_pending_record_cannot_be_stored_stays_pending_in_memory() {
 #[test]
 fn a_failed_dca_write_changes_nothing_and_a_retry_books_once() {
     common::run_isolated(
+        module_path!(),
         "a_failed_dca_write_changes_nothing_and_a_retry_books_once",
         || async {
             let _dir = common::isolated_env();
@@ -496,6 +501,7 @@ fn a_failed_dca_write_changes_nothing_and_a_retry_books_once() {
 #[test]
 fn a_failed_close_write_leaves_the_position_open_and_a_retry_closes_it_once() {
     common::run_isolated(
+        module_path!(),
         "a_failed_close_write_leaves_the_position_open_and_a_retry_closes_it_once",
         || async {
             let _dir = common::isolated_env();
@@ -549,6 +555,7 @@ fn a_failed_close_write_leaves_the_position_open_and_a_retry_closes_it_once() {
 #[test]
 fn a_busy_store_fails_retryably_and_changes_nothing() {
     common::run_isolated(
+        module_path!(),
         "a_busy_store_fails_retryably_and_changes_nothing",
         || async {
             let _dir = common::isolated_env();
@@ -588,6 +595,7 @@ fn a_busy_store_fails_retryably_and_changes_nothing() {
 #[test]
 fn partial_exit_overflow_changes_nothing_and_records_nothing() {
     common::run_isolated(
+        module_path!(),
         "partial_exit_overflow_changes_nothing_and_records_nothing",
         || async {
             let _dir = common::isolated_env();
@@ -617,6 +625,7 @@ fn partial_exit_overflow_changes_nothing_and_records_nothing() {
 #[test]
 fn dca_overflow_changes_nothing_and_records_nothing() {
     common::run_isolated(
+        module_path!(),
         "dca_overflow_changes_nothing_and_records_nothing",
         || async {
             let _dir = common::isolated_env();
@@ -735,6 +744,7 @@ fn verified_close(id: i64) -> PositionTransition {
 #[test]
 fn a_price_update_from_a_stale_snapshot_leaves_a_committed_close_intact() {
     common::run_isolated(
+        module_path!(),
         "a_price_update_from_a_stale_snapshot_leaves_a_committed_close_intact",
         || async {
             let _dir = common::isolated_env();
@@ -776,6 +786,7 @@ fn a_price_update_from_a_stale_snapshot_leaves_a_committed_close_intact() {
 #[test]
 fn a_price_update_writes_only_the_price_and_pnl_columns() {
     common::run_isolated(
+        module_path!(),
         "a_price_update_writes_only_the_price_and_pnl_columns",
         || async {
             let _dir = common::isolated_env();
@@ -828,6 +839,7 @@ fn a_price_update_writes_only_the_price_and_pnl_columns() {
 #[test]
 fn a_failed_force_close_write_changes_nothing_and_returns_the_error() {
     common::run_isolated(
+        module_path!(),
         "a_failed_force_close_write_changes_nothing_and_returns_the_error",
         || async {
             let _dir = common::isolated_env();
@@ -882,6 +894,7 @@ fn a_failed_force_close_write_changes_nothing_and_returns_the_error() {
 #[test]
 fn a_force_close_of_a_row_already_verified_returns_already_closed() {
     common::run_isolated(
+        module_path!(),
         "a_force_close_of_a_row_already_verified_returns_already_closed",
         || async {
             let _dir = common::isolated_env();
@@ -918,6 +931,7 @@ fn a_force_close_of_a_row_already_verified_returns_already_closed() {
 #[test]
 fn a_force_close_of_a_position_not_in_memory_books_the_row_once() {
     common::run_isolated(
+        module_path!(),
         "a_force_close_of_a_position_not_in_memory_books_the_row_once",
         || async {
             let _dir = common::isolated_env();
@@ -961,6 +975,7 @@ fn a_force_close_of_a_position_not_in_memory_books_the_row_once() {
 #[test]
 fn a_failed_sale_after_a_force_close_is_dropped_and_the_write_off_stands() {
     common::run_isolated(
+        module_path!(),
         "a_failed_sale_after_a_force_close_is_dropped_and_the_write_off_stands",
         || async {
             let _dir = common::isolated_env();
@@ -1026,6 +1041,7 @@ fn a_failed_sale_after_a_force_close_is_dropped_and_the_write_off_stands() {
 #[test]
 fn a_failed_exit_clear_on_a_verified_sale_keeps_the_close_and_its_signature() {
     common::run_isolated(
+        module_path!(),
         "a_failed_exit_clear_on_a_verified_sale_keeps_the_close_and_its_signature",
         || async {
             let _dir = common::isolated_env();
@@ -1072,6 +1088,7 @@ fn a_failed_exit_clear_on_a_verified_sale_keeps_the_close_and_its_signature() {
 #[test]
 fn a_failed_exit_clear_on_an_unverified_exit_clears_it_for_retry() {
     common::run_isolated(
+        module_path!(),
         "a_failed_exit_clear_on_an_unverified_exit_clears_it_for_retry",
         || async {
             let _dir = common::isolated_env();
@@ -1108,6 +1125,7 @@ fn a_failed_exit_clear_on_an_unverified_exit_clears_it_for_retry() {
 #[test]
 fn a_submitted_exit_is_stored_without_a_price_update() {
     common::run_isolated(
+        module_path!(),
         "a_submitted_exit_is_stored_without_a_price_update",
         || async {
             let _dir = common::isolated_env();
@@ -1138,6 +1156,7 @@ fn a_submitted_exit_is_stored_without_a_price_update() {
 #[test]
 fn a_failed_exit_submission_write_still_marks_the_exit_in_memory() {
     common::run_isolated(
+        module_path!(),
         "a_failed_exit_submission_write_still_marks_the_exit_in_memory",
         || async {
             let _dir = common::isolated_env();
@@ -1168,6 +1187,7 @@ fn a_failed_exit_submission_write_still_marks_the_exit_in_memory() {
 #[test]
 fn a_full_exit_whose_submission_write_failed_is_booked_in_full_at_verification() {
     common::run_isolated(
+        module_path!(),
         "a_full_exit_whose_submission_write_failed_is_booked_in_full_at_verification",
         || async {
             let _dir = common::isolated_env();
@@ -1228,6 +1248,7 @@ fn a_full_exit_whose_submission_write_failed_is_booked_in_full_at_verification()
 #[test]
 fn an_exit_submitted_after_a_force_close_leaves_the_close_intact() {
     common::run_isolated(
+        module_path!(),
         "an_exit_submitted_after_a_force_close_leaves_the_close_intact",
         || async {
             let _dir = common::isolated_env();
@@ -1272,6 +1293,7 @@ fn an_exit_submitted_after_a_force_close_leaves_the_close_intact() {
 #[test]
 fn a_busy_exit_submission_write_is_retried_until_it_lands() {
     common::run_isolated(
+        module_path!(),
         "a_busy_exit_submission_write_is_retried_until_it_lands",
         || async {
             let _dir = common::isolated_env();
@@ -1313,6 +1335,7 @@ fn a_busy_exit_submission_write_is_retried_until_it_lands() {
 #[test]
 fn a_price_update_leaves_the_unrealized_pnl_of_a_closed_position_unchanged() {
     common::run_isolated(
+        module_path!(),
         "a_price_update_leaves_the_unrealized_pnl_of_a_closed_position_unchanged",
         || async {
             let _dir = common::isolated_env();
@@ -1365,6 +1388,7 @@ fn entry_verified(id: i64) -> PositionTransition {
 #[test]
 fn a_close_booked_from_a_stale_snapshot_keeps_a_committed_dca_in_the_row() {
     common::run_isolated(
+        module_path!(),
         "a_close_booked_from_a_stale_snapshot_keeps_a_committed_dca_in_the_row",
         || async {
             let _dir = common::isolated_env();
@@ -1398,6 +1422,7 @@ fn a_close_booked_from_a_stale_snapshot_keeps_a_committed_dca_in_the_row() {
 #[test]
 fn a_force_close_from_a_stale_snapshot_keeps_a_committed_partial_exit() {
     common::run_isolated(
+        module_path!(),
         "a_force_close_from_a_stale_snapshot_keeps_a_committed_partial_exit",
         || async {
             let _dir = common::isolated_env();
@@ -1435,6 +1460,7 @@ fn a_force_close_from_a_stale_snapshot_keeps_a_committed_partial_exit() {
 #[test]
 fn a_dca_from_a_stale_snapshot_keeps_a_committed_partial_exit() {
     common::run_isolated(
+        module_path!(),
         "a_dca_from_a_stale_snapshot_keeps_a_committed_partial_exit",
         || async {
             let _dir = common::isolated_env();
@@ -1472,36 +1498,41 @@ fn a_dca_from_a_stale_snapshot_keeps_a_committed_partial_exit() {
 
 #[test]
 fn an_entry_verified_twice_books_once() {
-    common::run_isolated("an_entry_verified_twice_books_once", || async {
-        let _dir = common::isolated_env();
-        let _cfg = common::config_guard();
-        let id = open_position(|position| {
-            position.transaction_entry_verified = false;
-        })
-        .await;
-        apply_transition(entry_verified(id))
-            .await
-            .expect("the entry commits");
-        register_partial(id).await;
-        apply_transition(partial_exit(id))
-            .await
-            .expect("the partial exit commits");
-        let booked = in_storage(id).await;
+    common::run_isolated(
+        module_path!(),
+        "an_entry_verified_twice_books_once",
+        || async {
+            let _dir = common::isolated_env();
+            let _cfg = common::config_guard();
+            let id = open_position(|position| {
+                position.transaction_entry_verified = false;
+            })
+            .await;
+            apply_transition(entry_verified(id))
+                .await
+                .expect("the entry commits");
+            register_partial(id).await;
+            apply_transition(partial_exit(id))
+                .await
+                .expect("the partial exit commits");
+            let booked = in_storage(id).await;
 
-        apply_transition(entry_verified(id))
-            .await
-            .expect("a repeated entry verification is a no-op");
+            apply_transition(entry_verified(id))
+                .await
+                .expect("a repeated entry verification is a no-op");
 
-        assert_eq!(in_storage(id).await, booked, "the entry was booked twice");
-        assert_eq!(in_memory(id).await, booked, "memory changed");
-        assert_eq!(booked.remaining_token_amount, Some(RawAmount::new(600_000)));
-        assert_eq!(entry_records(id).await, 1);
-    });
+            assert_eq!(in_storage(id).await, booked, "the entry was booked twice");
+            assert_eq!(in_memory(id).await, booked, "memory changed");
+            assert_eq!(booked.remaining_token_amount, Some(RawAmount::new(600_000)));
+            assert_eq!(entry_records(id).await, 1);
+        },
+    );
 }
 
 #[test]
 fn memory_adopts_the_committed_row_in_commit_order() {
     common::run_isolated(
+        module_path!(),
         "memory_adopts_the_committed_row_in_commit_order",
         || async {
             const ADDS: u32 = 8;
@@ -1542,6 +1573,7 @@ fn memory_adopts_the_committed_row_in_commit_order() {
 #[test]
 fn adopting_a_committed_row_keeps_the_columns_other_writers_own() {
     common::run_isolated(
+        module_path!(),
         "adopting_a_committed_row_keeps_the_columns_other_writers_own",
         || async {
             let _dir = common::isolated_env();
@@ -1590,6 +1622,7 @@ fn adopting_a_committed_row_keeps_the_columns_other_writers_own() {
 #[test]
 fn an_exit_submission_waits_for_a_committed_booking_to_be_adopted() {
     common::run_isolated(
+        module_path!(),
         "an_exit_submission_waits_for_a_committed_booking_to_be_adopted",
         || async {
             let _dir = common::isolated_env();
@@ -1712,6 +1745,7 @@ async fn assert_removal_refused(id: i64) {
 #[test]
 fn an_orphan_removal_targets_its_own_id_not_the_first_position_of_the_mint() {
     common::run_isolated(
+        module_path!(),
         "an_orphan_removal_targets_its_own_id_not_the_first_position_of_the_mint",
         || async {
             let _dir = common::isolated_env();
@@ -1744,6 +1778,7 @@ fn an_orphan_removal_targets_its_own_id_not_the_first_position_of_the_mint() {
 #[test]
 fn an_orphan_removal_deletes_the_row_and_releases_the_slot_once() {
     common::run_isolated(
+        module_path!(),
         "an_orphan_removal_deletes_the_row_and_releases_the_slot_once",
         || async {
             let _dir = common::isolated_env();
@@ -1813,6 +1848,7 @@ fn an_orphan_removal_deletes_the_row_and_releases_the_slot_once() {
 #[test]
 fn an_orphan_removal_refuses_a_position_whose_entry_landed() {
     common::run_isolated(
+        module_path!(),
         "an_orphan_removal_refuses_a_position_whose_entry_landed",
         || async {
             let _dir = common::isolated_env();
@@ -1882,6 +1918,7 @@ fn an_orphan_removal_refuses_a_position_whose_entry_landed() {
 #[test]
 fn an_orphan_removal_refuses_a_position_with_a_booked_dca() {
     common::run_isolated(
+        module_path!(),
         "an_orphan_removal_refuses_a_position_with_a_booked_dca",
         || async {
             let _dir = common::isolated_env();
@@ -1910,6 +1947,7 @@ fn an_orphan_removal_refuses_a_position_with_a_booked_dca() {
 #[test]
 fn an_orphan_removal_refuses_a_position_with_a_dca_or_partial_exit_in_flight() {
     common::run_isolated(
+        module_path!(),
         "an_orphan_removal_refuses_a_position_with_a_dca_or_partial_exit_in_flight",
         || async {
             let _dir = common::isolated_env();
@@ -1949,6 +1987,7 @@ fn an_orphan_removal_refuses_a_position_with_a_dca_or_partial_exit_in_flight() {
 #[test]
 fn an_orphan_removal_refuses_a_position_with_an_exit_submitted() {
     common::run_isolated(
+        module_path!(),
         "an_orphan_removal_refuses_a_position_with_an_exit_submitted",
         || async {
             let _dir = common::isolated_env();
@@ -1973,6 +2012,7 @@ fn an_orphan_removal_refuses_a_position_with_an_exit_submitted() {
 #[test]
 fn an_orphan_removal_refuses_a_position_whose_exit_is_verified() {
     common::run_isolated(
+        module_path!(),
         "an_orphan_removal_refuses_a_position_whose_exit_is_verified",
         || async {
             let _dir = common::isolated_env();
@@ -1991,6 +2031,7 @@ fn an_orphan_removal_refuses_a_position_whose_exit_is_verified() {
 #[test]
 fn removing_a_row_keeps_the_signatures_of_other_rows_of_the_mint() {
     common::run_isolated(
+        module_path!(),
         "removing_a_row_keeps_the_signatures_of_other_rows_of_the_mint",
         || async {
             let _dir = common::isolated_env();
@@ -2029,29 +2070,33 @@ fn removing_a_row_keeps_the_signatures_of_other_rows_of_the_mint() {
 
 #[test]
 fn removing_a_row_never_drops_a_held_mint_lock() {
-    common::run_isolated("removing_a_row_never_drops_a_held_mint_lock", || async {
-        let _dir = common::isolated_env();
-        let _cfg = common::config_guard();
-        let id = open_position(|_| {}).await;
-        let held = state::acquire_position_lock(common::TEST_MINT).await;
+    common::run_isolated(
+        module_path!(),
+        "removing_a_row_never_drops_a_held_mint_lock",
+        || async {
+            let _dir = common::isolated_env();
+            let _cfg = common::config_guard();
+            let id = open_position(|_| {}).await;
+            let held = state::acquire_position_lock(common::TEST_MINT).await;
 
-        assert!(state::remove_position_by_id(id).await.is_some());
-        let wait = std::time::Duration::from_millis(200);
-        assert!(
-            tokio::time::timeout(wait, state::acquire_position_lock(common::TEST_MINT))
-                .await
-                .is_err(),
-            "a second holder acquired the mint lock while the first held it"
-        );
+            assert!(state::remove_position_by_id(id).await.is_some());
+            let wait = std::time::Duration::from_millis(200);
+            assert!(
+                tokio::time::timeout(wait, state::acquire_position_lock(common::TEST_MINT))
+                    .await
+                    .is_err(),
+                "a second holder acquired the mint lock while the first held it"
+            );
 
-        drop(held);
-        assert!(
-            tokio::time::timeout(wait, state::acquire_position_lock(common::TEST_MINT))
-                .await
-                .is_ok(),
-            "the lock is free once its holder drops it"
-        );
-    });
+            drop(held);
+            assert!(
+                tokio::time::timeout(wait, state::acquire_position_lock(common::TEST_MINT))
+                    .await
+                    .is_ok(),
+                "the lock is free once its holder drops it"
+            );
+        },
+    );
 }
 
 // ==================== LATE FILLS ON CLOSED POSITIONS ====================
@@ -2163,6 +2208,7 @@ async fn assert_acquired_balances(id: i64, acquired: u128) {
 #[test]
 fn a_sell_verified_after_a_force_close_books_its_proceeds_and_restates_the_loss() {
     common::run_isolated(
+        module_path!(),
         "a_sell_verified_after_a_force_close_books_its_proceeds_and_restates_the_loss",
         || async {
             let _dir = common::isolated_env();
@@ -2204,6 +2250,7 @@ fn a_sell_verified_after_a_force_close_books_its_proceeds_and_restates_the_loss(
 #[test]
 fn a_sale_in_flight_at_a_write_off_is_verified_after_a_restart_and_booked_once() {
     common::run_isolated(
+        module_path!(),
         "a_sale_in_flight_at_a_write_off_is_verified_after_a_restart_and_booked_once",
         || async {
             let _dir = common::isolated_env();
@@ -2248,6 +2295,7 @@ fn a_sale_in_flight_at_a_write_off_is_verified_after_a_restart_and_booked_once()
 #[test]
 fn a_sale_with_a_residual_on_a_written_off_row_is_booked_and_not_retried() {
     common::run_isolated(
+        module_path!(),
         "a_sale_with_a_residual_on_a_written_off_row_is_booked_and_not_retried",
         || async {
             let _dir = common::isolated_env();
@@ -2291,6 +2339,7 @@ fn a_sale_with_a_residual_on_a_written_off_row_is_booked_and_not_retried() {
 #[test]
 fn a_full_exit_residual_counts_only_the_positions_own_tokens() {
     common::run_isolated(
+        module_path!(),
         "a_full_exit_residual_counts_only_the_positions_own_tokens",
         || async {
             let _dir = common::isolated_env();
@@ -2325,6 +2374,7 @@ fn a_full_exit_residual_counts_only_the_positions_own_tokens() {
 #[test]
 fn a_full_exit_residual_reads_the_other_positions_as_storage_has_them() {
     common::run_isolated(
+        module_path!(),
         "a_full_exit_residual_reads_the_other_positions_as_storage_has_them",
         || async {
             let _dir = common::isolated_env();
@@ -2384,6 +2434,7 @@ fn a_full_exit_residual_reads_the_other_positions_as_storage_has_them() {
 #[test]
 fn an_unverified_entry_of_another_position_never_stalls_a_close() {
     common::run_isolated(
+        module_path!(),
         "an_unverified_entry_of_another_position_never_stalls_a_close",
         || async {
             let _dir = common::isolated_env();
@@ -2487,6 +2538,7 @@ fn wallet_history_close_reasons() -> [String; 3] {
 #[test]
 fn a_sale_the_wallet_history_close_already_counts_is_not_booked_again() {
     common::run_isolated(
+        module_path!(),
         "a_sale_the_wallet_history_close_already_counts_is_not_booked_again",
         || async {
             let _dir = common::isolated_env();
@@ -2540,6 +2592,7 @@ fn a_sale_the_wallet_history_close_already_counts_is_not_booked_again() {
 #[test]
 fn a_partial_exit_after_a_close_keeps_acquired_equal_to_held_plus_exited() {
     common::run_isolated(
+        module_path!(),
         "a_partial_exit_after_a_close_keeps_acquired_equal_to_held_plus_exited",
         || async {
             let _dir = common::isolated_env();
@@ -2566,6 +2619,7 @@ fn a_partial_exit_after_a_close_keeps_acquired_equal_to_held_plus_exited() {
 #[test]
 fn a_dca_after_a_write_off_with_tokens_held_reopens_the_position() {
     common::run_isolated(
+        module_path!(),
         "a_dca_after_a_write_off_with_tokens_held_reopens_the_position",
         || async {
             let _dir = common::isolated_env();
@@ -2629,6 +2683,7 @@ fn a_dca_after_a_write_off_with_tokens_held_reopens_the_position() {
 #[test]
 fn a_dca_whose_tokens_the_close_sold_stays_closed_and_restates_the_loss() {
     common::run_isolated(
+        module_path!(),
         "a_dca_whose_tokens_the_close_sold_stays_closed_and_restates_the_loss",
         || async {
             let _dir = common::isolated_env();
@@ -2664,6 +2719,7 @@ fn a_dca_whose_tokens_the_close_sold_stays_closed_and_restates_the_loss() {
 #[test]
 fn an_entry_after_a_write_off_reopens_with_the_real_amount() {
     common::run_isolated(
+        module_path!(),
         "an_entry_after_a_write_off_reopens_with_the_real_amount",
         || async {
             let _dir = common::isolated_env();
@@ -2710,6 +2766,7 @@ fn an_entry_after_a_write_off_reopens_with_the_real_amount() {
 #[test]
 fn an_archived_row_reopened_by_a_late_buy_is_brought_back_and_takes_a_slot() {
     common::run_isolated(
+        module_path!(),
         "an_archived_row_reopened_by_a_late_buy_is_brought_back_and_takes_a_slot",
         || async {
             let _dir = common::isolated_env();
@@ -2753,6 +2810,7 @@ fn an_archived_row_reopened_by_a_late_buy_is_brought_back_and_takes_a_slot() {
 #[test]
 fn a_late_fill_without_a_balance_reading_is_requeued_not_guessed() {
     common::run_isolated(
+        module_path!(),
         "a_late_fill_without_a_balance_reading_is_requeued_not_guessed",
         || async {
             let _dir = common::isolated_env();
@@ -2831,6 +2889,7 @@ async fn assert_late_fills_wait(id: i64, held_after: RawAmount) {
 #[test]
 fn a_late_fill_waits_while_another_position_of_the_mint_has_an_unverified_entry() {
     common::run_isolated(
+        module_path!(),
         "a_late_fill_waits_while_another_position_of_the_mint_has_an_unverified_entry",
         || async {
             let _dir = common::isolated_env();
@@ -2881,6 +2940,7 @@ fn a_late_fill_waits_while_another_position_of_the_mint_has_an_unverified_entry(
 #[test]
 fn a_late_fill_waits_while_another_swap_of_the_mint_is_in_flight() {
     common::run_isolated(
+        module_path!(),
         "a_late_fill_waits_while_another_swap_of_the_mint_is_in_flight",
         || async {
             let _dir = common::isolated_env();
@@ -2923,6 +2983,7 @@ fn a_late_fill_waits_while_another_swap_of_the_mint_is_in_flight() {
 #[test]
 fn late_fills_on_two_closed_positions_of_a_mint_book_in_send_order() {
     common::run_isolated(
+        module_path!(),
         "late_fills_on_two_closed_positions_of_a_mint_book_in_send_order",
         || async {
             let _dir = common::isolated_env();
@@ -2996,6 +3057,7 @@ fn late_fills_on_two_closed_positions_of_a_mint_book_in_send_order() {
 #[test]
 fn deleting_a_position_clears_its_pending_swaps_so_later_late_fills_book() {
     common::run_isolated(
+        module_path!(),
         "deleting_a_position_clears_its_pending_swaps_so_later_late_fills_book",
         || async {
             let _dir = common::isolated_env();
@@ -3103,6 +3165,7 @@ async fn stored_pending_of(key: &str, position_id: i64) -> usize {
 #[test]
 fn startup_drops_the_pending_swaps_of_deleted_positions() {
     common::run_isolated(
+        module_path!(),
         "startup_drops_the_pending_swaps_of_deleted_positions",
         || async {
             let _dir = common::isolated_env();
@@ -3174,6 +3237,7 @@ fn startup_drops_the_pending_swaps_of_deleted_positions() {
 #[test]
 fn deleting_the_archived_positions_clears_the_markers_of_every_row_deleted() {
     common::run_isolated(
+        module_path!(),
         "deleting_the_archived_positions_clears_the_markers_of_every_row_deleted",
         || async {
             let _dir = common::isolated_env();
@@ -3212,6 +3276,7 @@ fn deleting_the_archived_positions_clears_the_markers_of_every_row_deleted() {
 #[test]
 fn a_failed_dca_persist_still_persists_the_cleared_partial_exits() {
     common::run_isolated(
+        module_path!(),
         "a_failed_dca_persist_still_persists_the_cleared_partial_exits",
         || async {
             let _dir = common::isolated_env();
@@ -3247,6 +3312,7 @@ fn a_failed_dca_persist_still_persists_the_cleared_partial_exits() {
 #[test]
 fn deleting_a_position_waits_for_a_swap_registering_its_marker() {
     common::run_isolated(
+        module_path!(),
         "deleting_a_position_waits_for_a_swap_registering_its_marker",
         || async {
             let _dir = common::isolated_env();
@@ -3273,7 +3339,7 @@ fn deleting_a_position_waits_for_a_swap_registering_its_marker() {
 
 #[test]
 fn each_late_fill_is_booked_once() {
-    common::run_isolated("each_late_fill_is_booked_once", || async {
+    common::run_isolated(module_path!(), "each_late_fill_is_booked_once", || async {
         let _dir = common::isolated_env();
         let _cfg = common::config_guard();
         enable_loss_limit();
@@ -3309,6 +3375,7 @@ fn each_late_fill_is_booked_once() {
 #[test]
 fn the_loss_figure_after_a_restart_equals_the_live_figure_after_restatement() {
     common::run_isolated(
+        module_path!(),
         "the_loss_figure_after_a_restart_equals_the_live_figure_after_restatement",
         || async {
             let _dir = common::isolated_env();
@@ -3340,6 +3407,7 @@ fn the_loss_figure_after_a_restart_equals_the_live_figure_after_restatement() {
 #[test]
 fn a_restatement_that_lowers_the_loss_keeps_a_pause_that_already_fired() {
     common::run_isolated(
+        module_path!(),
         "a_restatement_that_lowers_the_loss_keeps_a_pause_that_already_fired",
         || async {
             let _dir = common::isolated_env();
@@ -3366,6 +3434,7 @@ fn a_restatement_that_lowers_the_loss_keeps_a_pause_that_already_fired() {
 #[test]
 fn a_restatement_that_raises_the_loss_past_the_limit_pauses_entries() {
     common::run_isolated(
+        module_path!(),
         "a_restatement_that_raises_the_loss_past_the_limit_pauses_entries",
         || async {
             let _dir = common::isolated_env();
@@ -3404,6 +3473,7 @@ async fn call_dashboard(method: &str, path: &str) -> axum::http::StatusCode {
 #[test]
 fn deleting_a_closed_position_removes_its_loss_from_the_limiter() {
     common::run_isolated(
+        module_path!(),
         "deleting_a_closed_position_removes_its_loss_from_the_limiter",
         || async {
             let _dir = common::isolated_env();
@@ -3422,6 +3492,7 @@ fn deleting_a_closed_position_removes_its_loss_from_the_limiter() {
 #[test]
 fn deleting_the_archived_positions_removes_their_losses_from_the_limiter() {
     common::run_isolated(
+        module_path!(),
         "deleting_the_archived_positions_removes_their_losses_from_the_limiter",
         || async {
             let _dir = common::isolated_env();
@@ -3447,6 +3518,7 @@ fn deleting_the_archived_positions_removes_their_losses_from_the_limiter() {
 #[test]
 fn archiving_requires_a_verified_entry_only_while_the_position_is_open() {
     common::run_isolated(
+        module_path!(),
         "archiving_requires_a_verified_entry_only_while_the_position_is_open",
         || async {
             let _dir = common::isolated_env();
@@ -3488,6 +3560,7 @@ fn archiving_requires_a_verified_entry_only_while_the_position_is_open() {
 #[test]
 fn a_synthetic_close_of_a_wallet_derived_row_records_no_loss() {
     common::run_isolated(
+        module_path!(),
         "a_synthetic_close_of_a_wallet_derived_row_records_no_loss",
         || async {
             let _dir = common::isolated_env();
@@ -3506,6 +3579,7 @@ fn a_synthetic_close_of_a_wallet_derived_row_records_no_loss() {
 #[test]
 fn an_exit_clear_with_a_stale_signature_leaves_the_newer_exit_untouched() {
     common::run_isolated(
+        module_path!(),
         "an_exit_clear_with_a_stale_signature_leaves_the_newer_exit_untouched",
         || async {
             let _dir = common::isolated_env();
@@ -3566,6 +3640,7 @@ fn open_and_close_notices(
 #[test]
 fn a_late_entry_on_a_row_that_stays_closed_announces_no_open() {
     common::run_isolated(
+        module_path!(),
         "a_late_entry_on_a_row_that_stays_closed_announces_no_open",
         || async {
             let _dir = common::isolated_env();
@@ -3611,6 +3686,7 @@ fn a_late_entry_on_a_row_that_stays_closed_announces_no_open() {
 #[test]
 fn a_late_sale_on_a_written_off_row_announces_no_second_close() {
     common::run_isolated(
+        module_path!(),
         "a_late_sale_on_a_written_off_row_announces_no_second_close",
         || async {
             let _dir = common::isolated_env();
@@ -3659,6 +3735,7 @@ fn a_late_sale_on_a_written_off_row_announces_no_second_close() {
 #[test]
 fn every_fill_on_a_position_missing_from_memory_is_refused_as_not_found() {
     common::run_isolated(
+        module_path!(),
         "every_fill_on_a_position_missing_from_memory_is_refused_as_not_found",
         || async {
             let _dir = common::isolated_env();
@@ -3717,6 +3794,7 @@ async fn archive(id: i64) {
 #[test]
 fn storage_refuses_a_second_open_position_of_a_mint() {
     common::run_isolated(
+        module_path!(),
         "storage_refuses_a_second_open_position_of_a_mint",
         || async {
             let _dir = common::isolated_env();
@@ -3790,6 +3868,7 @@ async fn assert_second_buy_adds(first_origin: PositionOrigin) {
 #[test]
 fn a_manual_buy_of_a_token_with_a_manual_position_adds_to_it() {
     common::run_isolated(
+        module_path!(),
         "a_manual_buy_of_a_token_with_a_manual_position_adds_to_it",
         || async {
             let _dir = common::isolated_env();
@@ -3802,6 +3881,7 @@ fn a_manual_buy_of_a_token_with_a_manual_position_adds_to_it() {
 #[test]
 fn a_manual_buy_of_a_token_with_a_bot_position_adds_to_it() {
     common::run_isolated(
+        module_path!(),
         "a_manual_buy_of_a_token_with_a_bot_position_adds_to_it",
         || async {
             let _dir = common::isolated_env();
@@ -3816,6 +3896,7 @@ fn a_manual_buy_of_a_token_with_a_bot_position_adds_to_it() {
 #[test]
 fn a_buy_beside_an_archived_open_position_adds_to_it_and_brings_it_back() {
     common::run_isolated(
+        module_path!(),
         "a_buy_beside_an_archived_open_position_adds_to_it_and_brings_it_back",
         || async {
             let _dir = common::isolated_env();
@@ -3889,6 +3970,7 @@ fn a_buy_beside_an_archived_open_position_adds_to_it_and_brings_it_back() {
 #[test]
 fn a_late_fill_after_a_new_buy_adds_to_the_open_position() {
     common::run_isolated(
+        module_path!(),
         "a_late_fill_after_a_new_buy_adds_to_the_open_position",
         || async {
             let _dir = common::isolated_env();
@@ -3954,6 +4036,7 @@ fn a_late_fill_after_a_new_buy_adds_to_the_open_position() {
 #[test]
 fn a_late_fill_whose_tokens_are_gone_leaves_the_open_position_untouched() {
     common::run_isolated(
+        module_path!(),
         "a_late_fill_whose_tokens_are_gone_leaves_the_open_position_untouched",
         || async {
             let _dir = common::isolated_env();
@@ -3984,6 +4067,7 @@ fn a_late_fill_whose_tokens_are_gone_leaves_the_open_position_untouched() {
 #[test]
 fn a_late_dca_below_the_entry_price_moves_at_its_own_cost() {
     common::run_isolated(
+        module_path!(),
         "a_late_dca_below_the_entry_price_moves_at_its_own_cost",
         || async {
             let _dir = common::isolated_env();
@@ -4125,6 +4209,7 @@ async fn late_dca_beside_an_exiting_position() -> (i64, i64) {
 #[test]
 fn an_exit_in_flight_that_sold_a_late_fill_s_tokens_books_them_on_its_position() {
     common::run_isolated(
+        module_path!(),
         "an_exit_in_flight_that_sold_a_late_fill_s_tokens_books_them_on_its_position",
         || async {
             let _dir = common::isolated_env();
@@ -4170,6 +4255,7 @@ fn an_exit_in_flight_that_sold_a_late_fill_s_tokens_books_them_on_its_position()
 #[test]
 fn an_exit_in_flight_sized_before_a_late_fill_retries_its_tokens_as_its_own_residual() {
     common::run_isolated(
+        module_path!(),
         "an_exit_in_flight_sized_before_a_late_fill_retries_its_tokens_as_its_own_residual",
         || async {
             let _dir = common::isolated_env();
@@ -4217,6 +4303,7 @@ fn an_exit_in_flight_sized_before_a_late_fill_retries_its_tokens_as_its_own_resi
 #[test]
 fn a_slot_is_freed_only_by_its_holder_and_only_once() {
     common::run_isolated(
+        module_path!(),
         "a_slot_is_freed_only_by_its_holder_and_only_once",
         || async {
             let _dir = common::isolated_env();
@@ -4259,6 +4346,7 @@ fn a_slot_is_freed_only_by_its_holder_and_only_once() {
 #[test]
 fn a_store_with_two_open_rows_names_the_same_open_position_in_memory_and_storage() {
     common::run_isolated(
+        module_path!(),
         "a_store_with_two_open_rows_names_the_same_open_position_in_memory_and_storage",
         || async {
             let _dir = common::isolated_env();
@@ -4297,6 +4385,7 @@ fn a_store_with_two_open_rows_names_the_same_open_position_in_memory_and_storage
 #[test]
 fn unarchiving_beside_another_active_open_row_is_refused_naming_both() {
     common::run_isolated(
+        module_path!(),
         "unarchiving_beside_another_active_open_row_is_refused_naming_both",
         || async {
             let _dir = common::isolated_env();
@@ -4331,6 +4420,7 @@ fn unarchiving_beside_another_active_open_row_is_refused_naming_both() {
 #[test]
 fn reclaiming_a_slot_takes_one_permit_and_none_for_a_wallet_derived_position() {
     common::run_isolated(
+        module_path!(),
         "reclaiming_a_slot_takes_one_permit_and_none_for_a_wallet_derived_position",
         || async {
             let _dir = common::isolated_env();

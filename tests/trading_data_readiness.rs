@@ -26,7 +26,7 @@
 //! Each rule here is a guard that was added after this file first pinned the behaviour
 //! without it, so the comments name both the answer and the wrong answer it replaced.
 
-mod common;
+use crate::common;
 
 use common::{
     anchor_ts, bundle_with, candle, candle_series, condition, context_bare, context_with_candles,

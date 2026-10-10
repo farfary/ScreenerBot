@@ -13,7 +13,7 @@
 //! is negative while losing, so the comparison is inverted relative to how it reads:
 //! `pnl_pct >= threshold_pct` means "the loss is not deep enough yet".
 
-mod common;
+use crate::common;
 
 use chrono::{Duration, Utc};
 use common::test_position;

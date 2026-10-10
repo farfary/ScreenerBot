@@ -13,7 +13,7 @@
 // per-test runtime that nothing else shares.
 #![allow(clippy::await_holding_lock)]
 
-mod common;
+use crate::common;
 
 use chrono::Utc;
 use common::config_guard;

@@ -25,7 +25,7 @@
 //! blocking call via `tokio::task::block_in_place` -- that panics on the default
 //! current-thread test runtime.
 
-mod common;
+use crate::common;
 
 use rusqlite::{params, Connection};
 use screenerbot::chains::solana::solana_sdk::signature::{Keypair, Signer};

@@ -8,7 +8,7 @@
 //! directory in a process-wide `LazyLock`, and plain `cargo test` runs one
 //! file's tests concurrently.
 
-mod common;
+use crate::common;
 
 use rusqlite::{Connection, OptionalExtension};
 use screenerbot::chains::ChainId;

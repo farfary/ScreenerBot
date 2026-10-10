@@ -3,6 +3,7 @@
 
 //! Fault injection for the storage phase: every catalog store, damaged in each way a store file fails, opens as its class declares in a fresh process, and an upgrade interrupted at any point leaves its store unchanged and fully upgraded by the next open.
 
+use crate::common;
 use std::collections::BTreeMap;
 use std::path::{Path, PathBuf};
 use std::process::Command;
@@ -105,7 +106,7 @@ fn seed_every_store() {
 fn launch(base: &Path, mode: &str) -> Vec<serde_json::Value> {
     let status = Command::new(std::env::current_exe().expect("test executable"))
         .arg("--exact")
-        .arg("storage_recovery_child")
+        .arg(common::test_name(module_path!(), "storage_recovery_child"))
         .arg("--nocapture")
         .env(CHILD_ENV, mode)
         .env("SCREENERBOT_DATA_DIR", base)

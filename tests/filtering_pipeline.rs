@@ -9,7 +9,7 @@
 //! stays pure: no network, no database, no wallet.
 #![allow(clippy::await_holding_lock)]
 
-mod common;
+use crate::common;
 
 use common::{
     config_guard, filter_token, filters_all_disabled, filters_default_dex_only, holder,

@@ -14,7 +14,7 @@
 //! Item 4 (instruction structure) is covered co-located in
 //! `src/chains/solana/swaps/programs/raydium_clmm.rs` (CPMM already had its own).
 
-mod common;
+use crate::common;
 
 use async_trait::async_trait;
 use screenerbot::chains::ChainId;

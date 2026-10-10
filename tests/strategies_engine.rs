@@ -9,7 +9,7 @@
 //! cached result reused for a context it was not computed for (the bot trades on a stale
 //! answer). Both are covered below.
 
-mod common;
+use crate::common;
 
 use common::{condition, context_bare, TEST_MINT};
 use screenerbot::strategies::engine::{EngineConfig, StrategyEngine};

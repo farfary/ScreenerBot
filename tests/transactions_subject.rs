@@ -3,8 +3,6 @@
 
 //! Pure: the transaction subject and subject-relative deltas.
 
-mod common;
-
 use screenerbot::chains::solana::solana_sdk::pubkey::Pubkey;
 use screenerbot::chains::solana::transactions::subject as solana_subject;
 use screenerbot::chains::{AccountId, ChainId, Error as ChainError};

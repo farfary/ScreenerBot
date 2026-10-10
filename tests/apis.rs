@@ -7,7 +7,7 @@
 //! (or `./test.sh live`). A failure here means an upstream endpoint/schema drifted or a
 //! client regressed, not that trading is unsafe.
 
-mod common;
+use crate::common;
 
 use screenerbot::apis::{DexScreenerClient, RugcheckClient};
 use screenerbot::native_price::fetch_and_cache_native_price;

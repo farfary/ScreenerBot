@@ -3,7 +3,7 @@
 
 //! Chain-aware swap routing regression suite.
 //!
-//! Own test binary (own process) because `crate::swaps::registry::ROUTER_FACTORY`
+//! It runs in a process of its own (nextest isolates every test) because `crate::swaps::registry::ROUTER_FACTORY`
 //! is a process-wide `OnceLock<fn() -> Vec<Arc<dyn SwapRouter>>>` that can only be
 //! set once per process — see `src/swaps/registry.rs::set_router_factory`. This
 //! file installs its stub routers into that global exactly once, the same way

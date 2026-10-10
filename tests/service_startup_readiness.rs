@@ -27,7 +27,7 @@
 //! The only persisted fixture is an account refresh token, proving the account
 //! service restores it before the dashboard can report a signed-out state.
 
-mod common;
+use crate::common;
 
 use std::time::Duration;
 

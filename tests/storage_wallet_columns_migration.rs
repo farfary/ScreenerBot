@@ -3,7 +3,7 @@
 
 //! Unit-neutral wallet-monitor column and table names through the production initializers.
 
-mod common;
+use crate::common;
 
 use rusqlite::Connection;
 use std::path::Path;
@@ -18,7 +18,10 @@ fn open(dir: &Path, file: &str) -> Connection {
 fn run_initializers(dir: &Path) -> Output {
     Command::new(std::env::current_exe().unwrap())
         .arg("--exact")
-        .arg("wallet_initializers_child")
+        .arg(common::test_name(
+            module_path!(),
+            "wallet_initializers_child",
+        ))
         .env(CHILD, "1")
         .env("SCREENERBOT_DATA_DIR", dir)
         .output()
@@ -192,8 +195,10 @@ fn legacy_wallet_monitor_names_migrate_to_unit_neutral_names() {
     );
 }
 
+/// A monitor holding both names of a renamed object has unknown provenance and is derived
+/// data: the open moves it to the quarantine directory unchanged and rebuilds it.
 #[test]
-fn wallet_monitor_with_both_names_refuses_to_open() {
+fn wallet_monitor_with_both_names_is_quarantined_and_rebuilt() {
     if std::env::var_os(CHILD).is_some() {
         return;
     }
@@ -216,20 +221,23 @@ fn wallet_monitor_with_both_names_refuses_to_open() {
         let before = schema(&monitor);
         drop(monitor);
 
-        let output = run_initializers(dir.path());
-        assert!(!output.status.success(), "conflicting names were accepted");
-        let text = format!(
-            "{}{}",
-            String::from_utf8_lossy(&output.stdout),
-            String::from_utf8_lossy(&output.stderr)
-        );
-        assert!(
-            text.contains("SchemaConflict") && text.contains("wallet.db") && text.contains(expected),
-            "unexpected failure: {text}"
-        );
+        boot(dir.path());
 
-        let monitor = open(dir.path(), "wallet.db");
-        assert_eq!(schema(&monitor), before, "refused open changed the schema");
+        let (moved, reason) = common::quarantined_store(&dir.path().join("data"), "wallet.db");
+        assert!(
+            reason.contains(expected),
+            "unexpected quarantine reason: {reason}"
+        );
+        let original = Connection::open(moved).unwrap();
+        assert_eq!(
+            schema(&original),
+            before,
+            "the quarantined store is unchanged"
+        );
+        drop(original);
+
+        let rebuilt = open(dir.path(), "wallet.db");
+        assert_canonical_names(&rebuilt);
     }
 }
 

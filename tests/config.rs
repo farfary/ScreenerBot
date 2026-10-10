@@ -7,11 +7,9 @@
 //! otherwise silent — the app would start with defaults and quietly drop persisted
 //! settings. This asserts a non-default value survives a full save/load cycle.
 //!
-//! Its own file (its own test binary → own process) because it initialises the global
+//! It runs in a process of its own (nextest isolates every test) because it initialises the global
 //! CONFIG via `load_config_from_path` (`OnceLock::set`), which would clash with any
 //! other config-initialising test sharing the process.
-
-mod common;
 
 use screenerbot::config::schemas::Config;
 use screenerbot::config::utils::{load_config_from_path, save_config_to_file, with_config};

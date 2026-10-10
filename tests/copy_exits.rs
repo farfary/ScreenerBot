@@ -3,7 +3,7 @@
 
 //! Pure Phase 4 copy-sell ownership, gating, execution, and lock contracts.
 
-mod common;
+use crate::common;
 
 use std::sync::atomic::{AtomicBool, AtomicUsize, Ordering};
 use std::sync::Arc;

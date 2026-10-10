@@ -25,7 +25,7 @@
 //!
 //! These are pure/local: no network, no wallet, isolated temp storage.
 
-mod common;
+use crate::common;
 
 use std::sync::atomic::Ordering;
 use std::sync::{Arc, Mutex, MutexGuard, OnceLock};

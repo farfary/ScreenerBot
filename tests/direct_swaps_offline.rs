@@ -24,7 +24,7 @@
 //! RELATIONSHIPS — fee rates, orientation, monotonicity — not on a specific
 //! output amount that would rot with the next trade.
 
-mod common;
+use crate::common;
 
 use screenerbot::chains::solana::layout::{token_account_amount, u64_at};
 use screenerbot::chains::solana::pools::layouts::fluxbeam::FluxbeamPoolState;

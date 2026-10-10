@@ -18,7 +18,7 @@
 //! nextest report these tests as failed spuriously.)
 #![allow(clippy::await_holding_lock)]
 
-mod common;
+use crate::common;
 
 use common::{
     config_guard, filter_token, filters_default_dex_only, holder, onchain_rules_with,

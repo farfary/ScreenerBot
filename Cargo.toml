@@ -6,6 +6,8 @@ license = "BUSL-1.1"
 default-run = "screenerbot"
 # Disable automatic binary discovery - only the main binary is bundled.
 autobins = false
+# Integration tests build as one binary, declared below; see tests/integration.rs.
+autotests = false
 
 # Note: We do NOT use a [workspace] here to keep the build simple.
 # Verification lives in the standard test suite (tests/ + co-located #[cfg(test)]),
@@ -18,7 +20,6 @@ debug = 0                # no debug info -> much faster compile/link
 incremental = true
 codegen-units = 256
 lto = false
-panic = "abort"          # simpler codegen, faster builds
 debug-assertions = false # skip extra checks for speed
 overflow-checks = false  # skip integer overflow checks
 
@@ -33,6 +34,11 @@ panic = "abort"          # Security: no stack unwinding, smaller binary
 strip = "symbols"        # Strip ALL symbols (no function names leak)
 debug-assertions = false # No debug assertions in release
 overflow-checks = false  # No overflow checks (performance)
+
+# One integration test binary: tests/integration.rs declares every test file as a module.
+[[test]]
+name = "integration"
+path = "tests/integration.rs"
 
 [lib]
 name = "screenerbot"
@@ -53,8 +59,11 @@ path = "src/main.rs"
 # =============================================================================
 
 [dependencies]
-# Core async runtime with minimal features for faster builds
-# Added tracing for tokio-console support
+# Feature sets here are the union of what the library and its tests need. A
+# feature that only a dev-dependency enables is unified into test builds alone,
+# so `cargo build` and `cargo test` would each compile their own copy of the
+# crate and everything that depends on it. `test-util` costs one atomic load per
+# clock read while no test has paused the clock; `tracing` serves tokio-console.
 tokio = { version = "1", features = [
   "rt-multi-thread",
   "macros",
@@ -63,6 +72,7 @@ tokio = { version = "1", features = [
   "fs",
   "net",
   "tracing",
+  "test-util",
 ] }
 console-subscriber = { version = "0.5", optional = true }
 tokio-metrics = "0.5"
@@ -71,7 +81,7 @@ tokio-metrics = "0.5"
 anyhow = "1.0"
 arc-swap = "1.7"
 serde = { version = "1.0", features = ["derive"] }
-serde_json = "1.0"
+serde_json = { version = "1.0", features = ["float_roundtrip"] }
 chrono = { version = "0.4", features = ["serde"] }
 semver = "1.0"
 blake3 = "1.5"
@@ -95,7 +105,7 @@ rustls = { version = "0.23", default-features = false, features = ["aws_lc_rs", 
 openssl = { version = "0.10", features = ["vendored"], optional = true }
 
 # Database with bundled sqlite for faster builds
-rusqlite = { version = "0.37", features = ["backup", "bundled", "unlock_notify"] }
+rusqlite = { version = "0.37", features = ["backup", "bundled", "hooks", "unlock_notify"] }
 r2d2 = "0.8"
 r2d2_sqlite = "0.31"
 

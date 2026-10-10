@@ -4,13 +4,13 @@
 //! Wallet-monitor database lifecycle: readiness flips exactly once, from
 //! false to true, and never earlier than a real initialized database.
 //!
-//! Own test file (own process) because `crate::paths` resolves
+//! It runs in a process of its own (nextest isolates every test) because `crate::paths` resolves
 //! `SCREENERBOT_DATA_DIR` into a process-wide `LazyLock` on first access, and
 //! `WALLET_DB_READY`/`GLOBAL_WALLET_DB` are process-wide statics that can only
 //! go from not-ready to ready once per process — see
 //! `src/wallets/balance_monitor/database.rs`.
 
-mod common;
+use crate::common;
 
 use screenerbot::wallet::{
     get_current_wallet_status, initialize_wallet_database, is_wallet_database_ready,

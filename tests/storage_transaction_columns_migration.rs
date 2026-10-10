@@ -8,7 +8,7 @@
 //! base directory per process, so every fixture needs its own process to open its
 //! own data directory.
 
-mod common;
+use crate::common;
 
 use rusqlite::Connection;
 use std::path::{Path, PathBuf};
@@ -53,7 +53,10 @@ fn open(dir: &Path) -> Connection {
 fn run_initializer(dir: &Path) -> Output {
     Command::new(std::env::current_exe().unwrap())
         .arg("--exact")
-        .arg("transaction_initializer_child")
+        .arg(common::test_name(
+            module_path!(),
+            "transaction_initializer_child",
+        ))
         .env(CHILD, "1")
         .env("SCREENERBOT_DATA_DIR", dir)
         .output()
@@ -217,8 +220,10 @@ fn legacy_transaction_columns_migrate_to_unit_neutral_names() {
     );
 }
 
+/// A store holding both names of a renamed column has unknown provenance and is derived
+/// data: the open moves it to the quarantine directory unchanged and rebuilds it.
 #[test]
-fn transaction_store_with_both_names_refuses_to_open() {
+fn transaction_store_with_both_names_is_quarantined_and_rebuilt() {
     if std::env::var_os(CHILD).is_some() {
         return;
     }
@@ -230,32 +235,33 @@ fn transaction_store_with_both_names_refuses_to_open() {
     let before = schema(&conn);
     drop(conn);
 
-    let output = run_initializer(dir.path());
-    assert!(!output.status.success(), "conflicting names were accepted");
-    let text = format!(
-        "{}{}",
-        String::from_utf8_lossy(&output.stdout),
-        String::from_utf8_lossy(&output.stderr)
-    );
-    assert!(
-        text.contains("SchemaConflict")
-            && text.contains("transactions.db")
-            && text
-                .contains("processed_transactions.fee_sol and processed_transactions.fee_native"),
-        "unexpected failure: {text}"
-    );
+    boot(dir.path());
 
-    let conn = open(dir.path());
-    assert_eq!(schema(&conn), before, "refused open changed the schema");
+    let (moved, reason) = common::quarantined_store(&dir.path().join("data"), "transactions.db");
+    assert!(
+        reason.contains("processed_transactions.fee_sol and processed_transactions.fee_native"),
+        "unexpected quarantine reason: {reason}"
+    );
+    let original = Connection::open(moved).unwrap();
     assert_eq!(
-        conn.query_row(
-            "SELECT value FROM db_metadata WHERE key = 'schema_version'",
-            [],
-            |r| r.get::<_, String>(0)
-        )
-        .unwrap(),
+        schema(&original),
+        before,
+        "the quarantined store is unchanged"
+    );
+    assert_eq!(
+        original
+            .query_row(
+                "SELECT value FROM db_metadata WHERE key = 'schema_version'",
+                [],
+                |r| r.get::<_, String>(0)
+            )
+            .unwrap(),
         "7"
     );
+    drop(original);
+
+    let rebuilt = open(dir.path());
+    assert_canonical_names(&rebuilt);
 }
 
 /// An older build re-adds `fee_sol` (`DEFAULT 0`) and `sol_delta` to a migrated store

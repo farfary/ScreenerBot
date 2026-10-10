@@ -3,7 +3,7 @@
 
 //! The token blacklist refuses new entries and nothing else: an owned token keeps its pool.
 
-mod common;
+use crate::common;
 
 use std::collections::HashSet;
 use std::sync::Arc;

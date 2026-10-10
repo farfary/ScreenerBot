@@ -13,7 +13,7 @@
 //! rule is written the way it is. Rules whose behaviour is deliberately surprising (single
 //! ASCII letters surviving the "single character" filter) say so too.
 
-mod common;
+use crate::common;
 
 use common::{filter_token, holder, onchain_rules, security_risk};
 use screenerbot::config::schemas::{

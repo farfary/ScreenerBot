@@ -20,7 +20,7 @@
 //! = 1 — the state a real v0.2.13 database holds — which is exactly why the
 //! chain-column migration gates on the live schema and never on that stamp.
 
-mod common;
+use crate::common;
 
 use rusqlite::Connection;
 use screenerbot::database::{self, DbConfig};
@@ -87,7 +87,10 @@ fn seed_fixture(directory: &std::path::Path, database: &str, config: DbConfig, f
 fn run_child(directory: &std::path::Path) {
     let status = Command::new(std::env::current_exe().expect("test executable"))
         .arg("--exact")
-        .arg("v0_2_13_fixtures_gain_chain_scope_and_survive_a_second_boot")
+        .arg(common::test_name(
+            module_path!(),
+            "v0_2_13_fixtures_gain_chain_scope_and_survive_a_second_boot",
+        ))
         .arg("--nocapture")
         .env(CHILD_ENV, "1")
         .env("SCREENERBOT_DATA_DIR", directory)

@@ -3,7 +3,7 @@
 
 //! Released copy-trading storage through the production opener: unit-neutral column names.
 
-mod common;
+use crate::common;
 
 use rusqlite::Connection;
 use screenerbot::chains::ChainId;

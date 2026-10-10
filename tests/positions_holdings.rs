@@ -3,7 +3,7 @@
 
 //! Pure: checked token-holding bookkeeping on a position.
 
-mod common;
+use crate::common;
 
 use common::test_position;
 use screenerbot::chains::RawAmount;

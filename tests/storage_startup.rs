@@ -3,7 +3,7 @@
 
 //! Regression coverage for the SQLite stores opened during desktop startup.
 
-mod common;
+use crate::common;
 
 use std::collections::BTreeSet;
 use std::process::Command;
@@ -203,7 +203,10 @@ fn unreadable_cache_stores_are_quarantined_and_rebuilt() {
     for launch in 1..=2 {
         let status = Command::new(std::env::current_exe().expect("test executable"))
             .arg("--exact")
-            .arg("unreadable_cache_stores_are_quarantined_and_rebuilt")
+            .arg(common::test_name(
+                module_path!(),
+                "unreadable_cache_stores_are_quarantined_and_rebuilt",
+            ))
             .arg("--nocapture")
             .env(CACHE_CHILD_ENV, "1")
             .env("SCREENERBOT_DATA_DIR", directory.path())
@@ -340,7 +343,10 @@ fn assert_every_table_has_a_retention_rule(directory: &std::path::Path) {
 fn launch_startup_stores(directory: &std::path::Path, launch: usize) {
     let status = Command::new(std::env::current_exe().expect("test executable"))
         .arg("--exact")
-        .arg("startup_storage_matrix_survives_two_fresh_process_launches")
+        .arg(common::test_name(
+            module_path!(),
+            "startup_storage_matrix_survives_two_fresh_process_launches",
+        ))
         .arg("--nocapture")
         .env(CHILD_ENV, "1")
         .env("SCREENERBOT_DATA_DIR", directory)

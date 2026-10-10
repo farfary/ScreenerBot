@@ -12,7 +12,7 @@
 //! ones bind a loopback listener so the "server that never answers" case is exact
 //! and deterministic rather than something we hope to observe against a real host.
 
-mod common;
+use crate::common;
 
 use std::time::{Duration, Instant};
 use tokio::io::AsyncReadExt;

@@ -34,7 +34,7 @@
 //! `cargo nextest run -E 'binary(dashboard_startup_perf)' --run-ignored all --success-output immediate`
 #![allow(clippy::await_holding_lock)]
 
-mod common;
+use crate::common;
 
 use std::time::{Duration, Instant};
 

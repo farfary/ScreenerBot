@@ -14,7 +14,7 @@
 //! exists. Each sweep stops after [`DEFAULT_TRANSACTIONS`] transactions unless
 //! `SB_TEST_REALDB_FULL=1` asks for the whole store.
 
-mod common;
+use crate::common;
 
 use std::cell::Cell;
 use std::collections::HashSet;

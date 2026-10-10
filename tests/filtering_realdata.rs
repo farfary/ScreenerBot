@@ -23,7 +23,7 @@
 //! reasonable time; set `SB_TEST_REALDB_FULL=1` for the entire corpus.
 #![allow(clippy::await_holding_lock)]
 
-mod common;
+use crate::common;
 
 use common::{config_guard, filters_all_disabled, filters_default_dex_only, per_item_micros};
 use screenerbot::chains::{ChainId, ChainScope};

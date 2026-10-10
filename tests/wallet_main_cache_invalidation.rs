@@ -6,12 +6,12 @@
 //! never keep signing with a stale key after `create_wallet` (set_as_main),
 //! `import_wallet` (set_as_main), or `set_main_wallet` changes it.
 //!
-//! Own test file (own process): `crate::wallets::manager` and the main-
+//! It runs in a process of its own (nextest isolates every test): `crate::wallets::manager` and the main-
 //! keypair cache in `crate::chains::solana::accounts::signing` are both
 //! process-wide statics, so isolating them from any other DB-touching test
-//! requires a dedicated binary, same as `tests/wallet_readiness.rs`.
+//! requires a process of its own, same as `tests/wallet_readiness.rs`.
 
-mod common;
+use crate::common;
 
 use screenerbot::chains::solana::accounts::main_keypair;
 use screenerbot::chains::solana::solana_sdk::signature::Signer;

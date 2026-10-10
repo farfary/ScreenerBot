@@ -21,7 +21,7 @@
 //! Decimals are pre-seeded into the token cache so the token-amount branches run with
 //! no DB and no RPC.
 
-mod common;
+use crate::common;
 
 use common::{seed_decimals, test_position, TEST_MINT};
 use screenerbot::positions::{

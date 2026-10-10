@@ -7,15 +7,15 @@
 //!
 //! Integration tests are split into one file **per domain** (`apis.rs`, `rpc.rs`,
 //! `ohlcv.rs`, `config.rs`, `conversions.rs`, `trading.rs`, … future: `pools.rs`,
-//! `positions.rs`, `transactions.rs`). Each `tests/*.rs` is its own crate/binary, so
-//! it can only see the library's `pub` API plus dev-dependencies. Internal / private
+//! `positions.rs`, `transactions.rs`), each a module of the one suite binary,
+//! `tests/integration.rs`, which sees only the library's `pub` API plus dev-dependencies. Internal / private
 //! pure logic is tested with co-located `#[cfg(test)] mod tests` in its own source
 //! file instead.
 //!
 //! # Test levels (expressed the standard Rust way, with `#[ignore]`)
 //!
 //! * **Pure** — no attribute. No network, DB, or wallet. Runs by default.
-//!   `cargo nextest run`            (or `cargo test`)
+//!   `cargo nextest run`
 //! * **Live** — `#[ignore]`. Real read-only network (APIs, RPC). No money.
 //!   `cargo nextest run --run-ignored ignored-only -E 'kind(test)'`
 //! * **Mainnet** — `#[ignore]` + [`require_mainnet`]. Spends real SOL. Self-skips
@@ -26,8 +26,6 @@
 //! own `#[ignore]`'d unit tests. `../test.sh` (wrapper root) is a thin convenience
 //! around these exact commands (adds logging + a mainnet confirmation prompt); the
 //! suite does not depend on it.
-
-#![allow(dead_code)] // each test binary compiles only the part of this module it uses.
 
 pub mod pool_cases;
 pub mod released_reopen;
@@ -201,10 +199,20 @@ static CONFIG_MUTEX: OnceLock<Mutex<()>> = OnceLock::new();
 /// Set in the child process [`run_isolated`] launches.
 const ISOLATED_CHILD_ENV: &str = "SCREENERBOT_ISOLATED_TEST_CHILD";
 
+/// The libtest name of `test` in the module whose `module_path!()` is `module`: the module
+/// path without the crate name, then the function name. A child process that re-runs the
+/// suite binary with `--exact` must name its test this way.
+pub fn test_name(module: &str, test: &str) -> String {
+    match module.split_once("::") {
+        Some((_, path)) => format!("{path}::{test}"),
+        None => test.to_owned(),
+    }
+}
+
 /// Runs `body` on a multi-thread runtime in a child process of its own, whichever harness
 /// launched the test. For tests that open the process-wide stores and in-memory state:
-/// the child re-runs this test binary with `--exact test_name`.
-pub fn run_isolated<F, Fut>(test_name: &str, body: F)
+/// the child re-runs the suite binary with `--exact` and the test's qualified name.
+pub fn run_isolated<F, Fut>(module: &str, test: &str, body: F)
 where
     F: FnOnce() -> Fut,
     Fut: std::future::Future<Output = ()>,
@@ -220,12 +228,12 @@ where
 
     let status = std::process::Command::new(std::env::current_exe().expect("test executable"))
         .arg("--exact")
-        .arg(test_name)
+        .arg(test_name(module, test))
         .arg("--nocapture")
         .env(ISOLATED_CHILD_ENV, "1")
         .status()
         .expect("run isolated child");
-    assert!(status.success(), "{test_name} failed in its child process");
+    assert!(status.success(), "{test} failed in its child process");
 }
 
 /// Take the config-mutation guard and initialise config to DEFAULTS.
@@ -922,6 +930,57 @@ pub fn backup_store(from: &Path, to: &Path) {
     destination
         .query_row("PRAGMA journal_mode = DELETE", [], |_| Ok(()))
         .expect("store the clone as a single file");
+}
+
+/// The single quarantine entry that `file` was moved into under `data_dir`: returns the path
+/// of the moved store file and the `reason` recorded in the entry's manifest. Asserts that
+/// exactly one entry exists for the store and that it carries a manifest.
+pub fn quarantined_store(data_dir: &Path, file: &str) -> (PathBuf, String) {
+    let (entry, reason) = quarantine_entry(data_dir, file);
+    (entry.join(file), reason)
+}
+
+/// Put the quarantined `file` back at `data_dir/file` in place of the rebuilt store, so a
+/// test can continue on the original bytes. The rebuilt store and its sidecars are removed,
+/// the quarantined store and its sidecars are moved back, and the emptied quarantine entry
+/// is removed. Returns the manifest `reason`.
+pub fn reinstate_quarantined(data_dir: &Path, file: &str) -> String {
+    let (entry, reason) = quarantine_entry(data_dir, file);
+    for suffix in ["", "-wal", "-shm"] {
+        let name = format!("{file}{suffix}");
+        let live = data_dir.join(&name);
+        if live.exists() {
+            std::fs::remove_file(&live).unwrap();
+        }
+        let moved = entry.join(&name);
+        if moved.exists() {
+            std::fs::rename(&moved, &live).unwrap();
+        }
+    }
+    std::fs::remove_file(entry.join("manifest.json")).unwrap();
+    std::fs::remove_dir(&entry).unwrap();
+    reason
+}
+
+fn quarantine_entry(data_dir: &Path, file: &str) -> (PathBuf, String) {
+    let prefix = format!("{}-", file.trim_end_matches(".db"));
+    let entries: Vec<PathBuf> =
+        std::fs::read_dir(data_dir.join(screenerbot::paths::QUARANTINE_DIRECTORY_NAME))
+            .unwrap()
+            .map(|entry| entry.unwrap().path())
+            .filter(|path| {
+                path.file_name()
+                    .unwrap()
+                    .to_string_lossy()
+                    .starts_with(&prefix)
+            })
+            .collect();
+    assert_eq!(entries.len(), 1, "one quarantined entry for {file}");
+    let manifest = std::fs::read_to_string(entries[0].join("manifest.json"))
+        .unwrap_or_else(|e| panic!("manifest for {file}: {e}"));
+    let manifest: serde_json::Value = serde_json::from_str(&manifest).unwrap();
+    let reason = manifest["reason"].as_str().unwrap().to_owned();
+    (entries[0].clone(), reason)
 }
 
 /// Open the cloned tokens database and install it as the Solana token database, then

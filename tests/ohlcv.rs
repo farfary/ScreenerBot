@@ -5,8 +5,6 @@
 //! documented next addition (a `#[ignore]` test through the bot's real fetch path,
 //! asserting SOL-denominated candles with volume > 0 and canonical-bucket timestamps).
 
-mod common;
-
 use screenerbot::ohlcvs::Timeframe;
 
 #[test]

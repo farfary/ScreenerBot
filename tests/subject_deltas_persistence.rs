@@ -18,7 +18,7 @@
 //! `#[tokio::test(flavor = "multi_thread")]` is required: database init resolves the own
 //! wallet through `block_in_place`, which panics on the current-thread runtime.
 
-mod common;
+use crate::common;
 
 use serde_json::json;
 

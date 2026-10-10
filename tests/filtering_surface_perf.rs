@@ -35,7 +35,7 @@
 //! exists. Run with:
 //! `cargo nextest run -E 'binary(filtering_surface_perf)' --run-ignored all -j1 --success-output immediate`
 
-mod common;
+use crate::common;
 
 use std::time::{Duration, Instant};
 

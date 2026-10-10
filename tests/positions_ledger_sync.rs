@@ -18,7 +18,7 @@
 //! and `now` is passed in. The application cases run against a real positions database
 //! in a child process of their own.
 
-mod common;
+use crate::common;
 
 use chrono::{DateTime, TimeZone, Utc};
 use std::collections::{HashMap, HashSet};
@@ -945,6 +945,7 @@ fn a_buy_in_flight_before_its_row_is_saved_is_not_imported() {
 #[test]
 fn an_insert_planned_before_a_bot_swap_started_is_skipped_at_write_time() {
     common::run_isolated(
+        module_path!(),
         "an_insert_planned_before_a_bot_swap_started_is_skipped_at_write_time",
         || async {
             let _dir = common::isolated_env();
@@ -1311,6 +1312,7 @@ fn a_bot_buy_then_a_sale_made_elsewhere_closes_exactly_one_position() {
 #[test]
 fn a_ledger_write_keeps_a_booking_committed_after_the_plan() {
     common::run_isolated(
+        module_path!(),
         "a_ledger_write_keeps_a_booking_committed_after_the_plan",
         || async {
             const PARTIAL: &str = "partial-exit-sig";
@@ -1417,6 +1419,7 @@ fn a_ledger_write_keeps_a_booking_committed_after_the_plan() {
 #[test]
 fn a_ledger_close_of_a_bot_position_at_a_loss_past_the_limit_pauses_entries() {
     common::run_isolated(
+        module_path!(),
         "a_ledger_close_of_a_bot_position_at_a_loss_past_the_limit_pauses_entries",
         || async {
             use screenerbot::trader::safety::loss_limit::{
@@ -1502,6 +1505,7 @@ fn a_ledger_close_of_a_bot_position_at_a_loss_past_the_limit_pauses_entries() {
 #[test]
 fn a_planned_update_skipped_at_write_time_is_not_counted_as_written() {
     common::run_isolated(
+        module_path!(),
         "a_planned_update_skipped_at_write_time_is_not_counted_as_written",
         || async {
             let _dir = common::isolated_env();
@@ -1569,6 +1573,7 @@ fn a_planned_update_skipped_at_write_time_is_not_counted_as_written() {
 #[test]
 fn a_ledger_write_leaves_a_bot_row_whose_fill_was_booked_after_the_history_was_read() {
     common::run_isolated(
+        module_path!(),
         "a_ledger_write_leaves_a_bot_row_whose_fill_was_booked_after_the_history_was_read",
         || async {
             const PARTIAL: &str = "partial-exit-sig";
@@ -1674,6 +1679,7 @@ fn a_ledger_write_leaves_a_bot_row_whose_fill_was_booked_after_the_history_was_r
 #[test]
 fn a_fill_booked_after_the_history_was_read_holds_back_only_its_own_row() {
     common::run_isolated(
+        module_path!(),
         "a_fill_booked_after_the_history_was_read_holds_back_only_its_own_row",
         || async {
             const PARTIAL: &str = "other-partial-exit-sig";
@@ -1991,6 +1997,7 @@ fn a_closed_row_s_own_round_never_takes_the_open_row_of_a_later_round() {
 #[test]
 fn a_sync_moves_a_shared_round_s_key_from_the_closed_row_to_the_open_row() {
     common::run_isolated(
+        module_path!(),
         "a_sync_moves_a_shared_round_s_key_from_the_closed_row_to_the_open_row",
         || async {
             let _dir = common::isolated_env();
@@ -2776,6 +2783,7 @@ async fn plan_from_storage(rounds: &[LedgerRound]) -> screenerbot::positions::le
 #[test]
 fn a_sync_charges_the_open_row_only_its_share_of_a_shared_round_in_storage() {
     common::run_isolated(
+        module_path!(),
         "a_sync_charges_the_open_row_only_its_share_of_a_shared_round_in_storage",
         || async {
             let _dir = common::isolated_env();
@@ -2827,6 +2835,7 @@ fn a_sync_charges_the_open_row_only_its_share_of_a_shared_round_in_storage() {
 #[test]
 fn a_record_booked_on_another_row_after_planning_holds_back_the_write() {
     common::run_isolated(
+        module_path!(),
         "a_record_booked_on_another_row_after_planning_holds_back_the_write",
         || async {
             let _dir = common::isolated_env();
@@ -2876,6 +2885,7 @@ fn a_record_booked_on_another_row_after_planning_holds_back_the_write() {
 #[test]
 fn a_non_shared_round_writes_while_another_row_of_the_mint_is_unverified() {
     common::run_isolated(
+        module_path!(),
         "a_non_shared_round_writes_while_another_row_of_the_mint_is_unverified",
         || async {
             let _dir = common::isolated_env();
@@ -3282,6 +3292,7 @@ fn reconciling_a_row_across_rounds_twice_plans_no_second_write() {
 #[test]
 fn a_late_dca_after_a_full_exit_follows_its_round_in_storage_without_a_loss() {
     common::run_isolated(
+        module_path!(),
         "a_late_dca_after_a_full_exit_follows_its_round_in_storage_without_a_loss",
         || async {
             use screenerbot::trader::safety::loss_limit::{
@@ -3813,6 +3824,7 @@ fn the_ledger_s_credit_agrees_with_a_later_bot_partial_exit() {
 #[test]
 fn a_bot_close_after_an_outside_partial_sale_books_every_sale_and_no_false_loss() {
     common::run_isolated(
+        module_path!(),
         "a_bot_close_after_an_outside_partial_sale_books_every_sale_and_no_false_loss",
         || async {
             use screenerbot::trader::safety::loss_limit::{
@@ -3907,6 +3919,7 @@ fn a_bot_close_after_an_outside_partial_sale_books_every_sale_and_no_false_loss(
 #[test]
 fn a_key_stamp_on_a_position_the_bot_closed_announces_no_close() {
     common::run_isolated(
+        module_path!(),
         "a_key_stamp_on_a_position_the_bot_closed_announces_no_close",
         || async {
             let _dir = common::isolated_env();
@@ -3973,6 +3986,7 @@ fn a_key_stamp_on_a_position_the_bot_closed_announces_no_close() {
 #[test]
 fn an_archived_position_the_ledger_shrinks_announces_no_close() {
     common::run_isolated(
+        module_path!(),
         "an_archived_position_the_ledger_shrinks_announces_no_close",
         || async {
             let _dir = common::isolated_env();
@@ -4037,6 +4051,7 @@ fn an_archived_position_the_ledger_shrinks_announces_no_close() {
 #[test]
 fn a_position_written_off_after_the_plan_is_neither_closed_nor_announced_by_the_ledger() {
     common::run_isolated(
+        module_path!(),
         "a_position_written_off_after_the_plan_is_neither_closed_nor_announced_by_the_ledger",
         || async {
             let _dir = common::isolated_env();

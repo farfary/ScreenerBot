@@ -7,7 +7,7 @@
 //! canonical `[chains.solana]` layout. A hot reload of a legacy file applies and
 //! rewrites it at once.
 //!
-//! Its own file (own test binary → own process) because `load_config_from_path`
+//! It runs in a process of its own (nextest isolates every test) because `load_config_from_path`
 //! initialises the global CONFIG (`OnceLock::set`). The steps share that global,
 //! so they run in one test, in order.
 

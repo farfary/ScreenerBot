@@ -3,7 +3,7 @@
 
 //! Complete v0.2.13 wallet schemas through the production initializers.
 
-mod common;
+use crate::common;
 
 use rusqlite::{params, Connection};
 use std::path::Path;
@@ -19,7 +19,10 @@ fn open(dir: &Path, file: &str) -> Connection {
 fn boot(dir: &Path) {
     let status = Command::new(std::env::current_exe().unwrap())
         .arg("--exact")
-        .arg("v0_2_13_wallet_amount_storage_survives_two_initializers")
+        .arg(common::test_name(
+            module_path!(),
+            "v0_2_13_wallet_amount_storage_survives_two_initializers",
+        ))
         .env(CHILD, "1")
         .env("SCREENERBOT_DATA_DIR", dir)
         .status()
@@ -236,15 +239,22 @@ fn unknown_wallet_amount_schema_leaves_original_data_and_ddl() {
         }
         let status = Command::new(std::env::current_exe().unwrap())
             .arg("--exact")
-            .arg("v0_2_13_wallet_amount_storage_survives_two_initializers")
+            .arg(common::test_name(module_path!(), "v0_2_13_wallet_amount_storage_survives_two_initializers"))
             .env(CHILD, "1")
             .env("SCREENERBOT_DATA_DIR", dir.path())
             .output().unwrap();
-        assert!(!status.status.success(), "unfamiliar {table} shape was accepted");
         let output = format!("{}{}", String::from_utf8_lossy(&status.stdout), String::from_utf8_lossy(&status.stderr));
-        assert!(output.contains("unrecognized table definition"), "unexpected failure for {table}: {output}");
-        let conn = open(dir.path(), file);
-        let after: (String, i64) = conn.query_row(&format!("SELECT sql, (SELECT balance FROM {table} WHERE mint = 'mint') FROM sqlite_master WHERE type = 'table' AND name = ?1"), [table], |r| Ok((r.get(0)?, r.get(1)?))).unwrap();
+        let preserved = if file == "wallet.db" {
+            assert!(status.status.success(), "derived {table} store was not rebuilt: {output}");
+            let (moved, reason) = common::quarantined_store(&dir.path().join("data"), file);
+            assert!(reason.contains("unrecognized table definition"), "unexpected quarantine reason: {reason}");
+            Connection::open(moved).unwrap()
+        } else {
+            assert!(!status.status.success(), "unfamiliar {table} shape was accepted");
+            assert!(output.contains("unrecognized table definition"), "unexpected failure for {table}: {output}");
+            open(dir.path(), file)
+        };
+        let after: (String, i64) = preserved.query_row(&format!("SELECT sql, (SELECT balance FROM {table} WHERE mint = 'mint') FROM sqlite_master WHERE type = 'table' AND name = ?1"), [table], |r| Ok((r.get(0)?, r.get(1)?))).unwrap();
         assert_eq!(after, before, "rejected {table} migration changed data or DDL");
     }
 }

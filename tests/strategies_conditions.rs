@@ -10,7 +10,7 @@
 //! instead of quietly evaluating to `false` (a `false` reads as "no signal" and is
 //! indistinguishable from a working condition that simply did not fire).
 
-mod common;
+use crate::common;
 
 use common::{
     anchor_ts, bundle_with, candle, candle_series, condition, context_bare, context_with_candles,

@@ -21,7 +21,7 @@
 // contends for the guard.
 #![allow(clippy::await_holding_lock)]
 
-mod common;
+use crate::common;
 
 use chrono::Duration;
 use common::{aged, config_guard, set_config, test_position};

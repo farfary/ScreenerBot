@@ -5,8 +5,6 @@
 //!
 //! A regression here is a silent correctness bug in every trade size and P&L figure.
 
-mod common;
-
 use screenerbot::chains::solana::constants::{lamports_to_sol, sol_to_lamports};
 
 const LAMPORTS_PER_SOL: u64 = 1_000_000_000;

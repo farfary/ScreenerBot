@@ -21,7 +21,7 @@
 //! deepest pool of each venue, chosen so they stay alive; if one is ever drained
 //! or migrated, the fix is to repoint the constant, not to weaken the assertion.
 
-mod common;
+use crate::common;
 
 use screenerbot::chains::solana::solana_sdk::pubkey::Pubkey;
 use screenerbot::chains::solana::swaps::direct::{

@@ -35,7 +35,7 @@
 //! ```
 #![allow(clippy::await_holding_lock)]
 
-mod common;
+use crate::common;
 
 use chrono::{DateTime, Duration, TimeZone, Utc};
 use screenerbot::chains::ChainId;

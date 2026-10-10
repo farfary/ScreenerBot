@@ -3,7 +3,7 @@
 
 //! Released position storage through the production initializer in fresh processes.
 
-mod common;
+use crate::common;
 
 use rusqlite::{params, types::Value, Connection};
 use std::{path::Path, process::Command};
@@ -71,7 +71,10 @@ fn has_column(conn: &Connection, table: &str, name: &str) -> bool {
 fn boot(dir: &Path, succeeds: bool) {
     let status = Command::new(std::env::current_exe().unwrap())
         .arg("--exact")
-        .arg("released_position_amounts_survive_initialization")
+        .arg(common::test_name(
+            module_path!(),
+            "released_position_amounts_survive_initialization",
+        ))
         .env(CHILD, "1")
         .env("SCREENERBOT_DATA_DIR", dir)
         .status()

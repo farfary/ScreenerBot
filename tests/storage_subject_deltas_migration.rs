@@ -2,12 +2,19 @@
 // SPDX-License-Identifier: BUSL-1.1
 
 //! File-backed upgrade coverage for the released integer subject-delta schema.
+//!
+//! Each open runs in a child process: the process-wide store pool caches the first open
+//! of a file, so a later in-process open would never re-validate the mutated file.
 
-mod common;
+use crate::common;
 
 use rusqlite::{params, Connection};
 use screenerbot::chains::ChainId;
 use screenerbot::transactions::TransactionDatabase;
+use std::path::Path;
+use std::process::Command;
+
+const CHILD: &str = "SCREENERBOT_SUBJECT_DELTAS_CHILD";
 
 const LEGACY_SCHEMA: &str = include_str!("fixtures/v0.2.13-transactions.sql");
 
@@ -31,8 +38,38 @@ fn replace_subject_table(conn: &mut Connection, table_ddl: &str) {
 }
 
 #[tokio::test(flavor = "multi_thread")]
-async fn released_subject_deltas_migrate_losslessly_and_reopen_idempotently() {
-    let _guard = common::isolated_env();
+async fn subject_deltas_open_child() {
+    if std::env::var_os(CHILD).is_none() {
+        return;
+    }
+    common::ensure_config();
+    common::configure_own_wallet();
+    TransactionDatabase::new(ChainId::Solana).await.unwrap();
+}
+
+fn open_in_child(data_dir: &Path) {
+    let output = Command::new(std::env::current_exe().unwrap())
+        .arg("--exact")
+        .arg(common::test_name(
+            module_path!(),
+            "subject_deltas_open_child",
+        ))
+        .env(CHILD, "1")
+        .env("SCREENERBOT_DATA_DIR", data_dir)
+        .output()
+        .unwrap();
+    assert!(
+        output.status.success(),
+        "transaction database open failed: {}{}",
+        String::from_utf8_lossy(&output.stdout),
+        String::from_utf8_lossy(&output.stderr)
+    );
+}
+
+#[test]
+fn released_subject_deltas_migrate_losslessly_and_reopen_idempotently() {
+    let guard = common::isolated_env();
+    let data_dir = guard.path();
     common::configure_own_wallet();
     let path = screenerbot::paths::get_transactions_db_path();
     let conn = common::seed_store(&path, screenerbot::database::TRANSACTIONS_DB, LEGACY_SCHEMA);
@@ -66,7 +103,12 @@ async fn released_subject_deltas_migrate_losslessly_and_reopen_idempotently() {
     )
     .unwrap();
     drop(conn);
-    assert!(TransactionDatabase::new(ChainId::Solana).await.is_err());
+    open_in_child(data_dir);
+    let reason = common::reinstate_quarantined(path.parent().unwrap(), "transactions.db");
+    assert!(
+        reason.contains("transactions.db"),
+        "unexpected quarantine reason: {reason}"
+    );
     let conn = Connection::open(&path).unwrap();
     assert_eq!(
         conn.query_row(
@@ -109,7 +151,12 @@ async fn released_subject_deltas_migrate_losslessly_and_reopen_idempotently() {
     .unwrap();
     conn.execute("UPDATE subject_asset_deltas SET external_tag = 'preserve-me' WHERE wallet_address = 'wallet-a'", []).unwrap();
     drop(conn);
-    assert!(TransactionDatabase::new(ChainId::Solana).await.is_err());
+    open_in_child(data_dir);
+    let reason = common::reinstate_quarantined(path.parent().unwrap(), "transactions.db");
+    assert!(
+        reason.contains("transactions.db"),
+        "unexpected quarantine reason: {reason}"
+    );
     let conn = Connection::open(&path).unwrap();
     assert_eq!(
         conn.query_row(
@@ -165,7 +212,12 @@ async fn released_subject_deltas_migrate_losslessly_and_reopen_idempotently() {
         )
         .unwrap();
     drop(conn);
-    assert!(TransactionDatabase::new(ChainId::Solana).await.is_err());
+    open_in_child(data_dir);
+    let reason = common::reinstate_quarantined(path.parent().unwrap(), "transactions.db");
+    assert!(
+        reason.contains("transactions.db"),
+        "unexpected quarantine reason: {reason}"
+    );
     let mut conn = Connection::open(&path).unwrap();
     assert_eq!(
         conn.query_row(
@@ -210,7 +262,12 @@ async fn released_subject_deltas_migrate_losslessly_and_reopen_idempotently() {
         )
         .unwrap();
     drop(conn);
-    assert!(TransactionDatabase::new(ChainId::Solana).await.is_err());
+    open_in_child(data_dir);
+    let reason = common::reinstate_quarantined(path.parent().unwrap(), "transactions.db");
+    assert!(
+        reason.contains("transactions.db"),
+        "unexpected quarantine reason: {reason}"
+    );
     let mut conn = Connection::open(&path).unwrap();
     assert_eq!(
         conn.query_row(
@@ -239,7 +296,13 @@ async fn released_subject_deltas_migrate_losslessly_and_reopen_idempotently() {
     replace_subject_table(&mut conn, released_table_ddl);
     drop(conn);
 
-    let db = TransactionDatabase::new(ChainId::Solana).await.unwrap();
+    open_in_child(data_dir);
+    assert!(
+        !data_dir
+            .join(screenerbot::paths::QUARANTINE_DIRECTORY_NAME)
+            .exists(),
+        "the lossless migration must not quarantine transactions.db"
+    );
     let conn = Connection::open(&path).unwrap();
     assert_eq!(
         conn.query_row(
@@ -316,9 +379,14 @@ async fn released_subject_deltas_migrate_losslessly_and_reopen_idempotently() {
         0
     );
     drop(conn);
-    drop(db);
 
-    let _db_again = TransactionDatabase::new(ChainId::Solana).await.unwrap();
+    open_in_child(data_dir);
+    assert!(
+        !data_dir
+            .join(screenerbot::paths::QUARANTINE_DIRECTORY_NAME)
+            .exists(),
+        "the idempotent reopen must not quarantine transactions.db"
+    );
     let conn = Connection::open(&path).unwrap();
     assert_eq!(
         conn.query_row("SELECT COUNT(*) FROM subject_asset_deltas", [], |r| r

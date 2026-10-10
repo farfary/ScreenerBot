@@ -11,7 +11,7 @@
 //! - A batch of changes is atomic and schema-validated: a rejected entry leaves
 //!   the live configuration and `config.toml` exactly as they were.
 //!
-//! Its own file (own test binary → own process) because it initialises the
+//! It runs in a process of its own (nextest isolates every test) because it initialises the
 //! global CONFIG via `load_config_from_path` (`OnceLock::set`) and then mutates
 //! it; the writes also land on a real `config.toml` in a temp data directory.
 

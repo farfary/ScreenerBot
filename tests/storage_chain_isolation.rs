@@ -18,7 +18,7 @@
 //! one temp base directory but writes to its own distinctly-named db file, so there
 //! is no cross-store collision.
 
-mod common;
+use crate::common;
 
 use rusqlite::Connection;
 use screenerbot::chains::ChainId;

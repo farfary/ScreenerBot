@@ -3,7 +3,7 @@
 
 //! The storage routes Settings reads and drives: the report answers every category against its limit, a requested cleanup starts once while another runs, its result reaches the report, and the key vault and live store files survive it.
 
-mod common;
+use crate::common;
 
 use std::path::Path;
 use std::sync::Arc;
