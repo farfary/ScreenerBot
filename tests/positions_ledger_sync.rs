@@ -3496,3 +3496,82 @@ fn an_archived_position_the_ledger_shrinks_announces_no_close() {
         },
     );
 }
+
+#[test]
+fn a_position_written_off_after_the_plan_is_neither_closed_nor_announced_by_the_ledger() {
+    common::run_isolated(
+        "a_position_written_off_after_the_plan_is_neither_closed_nor_announced_by_the_ledger",
+        || async {
+            let _dir = common::isolated_env();
+            let _cfg = common::config_guard();
+            screenerbot::paths::ensure_all_directories().expect("create data directories");
+            common::configure_own_wallet();
+            common::seed_decimals(common::TEST_MINT, 6);
+            screenerbot::positions::initialize_positions_database()
+                .await
+                .expect("initialise positions database");
+            common::start_events().await;
+            state::init_global_position_semaphore(1);
+
+            let id = store_unverified("a1").await;
+            assert!(state::try_consume_global_position_permit());
+            state::register_position_slot(id).await;
+            apply_transition(PositionTransition::EntryVerified {
+                position_id: id,
+                effective_entry_price: 1.0,
+                token_amount_units: RawAmount::new(1_000_000),
+                fee_raw: 5_000,
+                native_size: 1.0,
+                held_after: None,
+            })
+            .await
+            .expect("the entry commits");
+
+            // The whole holding was sold `s1` for 0.6 SOL in another wallet app.
+            let mut bought = open_round(common::TEST_MINT, &format!("a1:{}", common::TEST_MINT));
+            bought.entry_signature = Some("a1".to_owned());
+            bought.invested_native = 1.0;
+            bought.remaining_basis_native = 1.0;
+            bought.average_entry_price_native = Some(1.0);
+            bought.events = vec![acquisition("a1", LedgerEventKind::Entry, 1.0, 1.0)];
+            let sold = sold_outside(bought, "s1", 0.6);
+
+            let plan = plan_from_storage(std::slice::from_ref(&sold)).await;
+            assert!(
+                only_update(&plan).exit_time.is_some(),
+                "the plan closes the open row"
+            );
+
+            // The operator writes the position off before the plan is applied.
+            screenerbot::positions::operations::force_close_position(id, "stuck")
+                .await
+                .expect("the write-off commits");
+            let written_off = db::get_position_by_id(id)
+                .await
+                .expect("read written-off row")
+                .expect("written-off row stored");
+            assert!(
+                state::try_consume_global_position_permit(),
+                "the write-off frees the slot"
+            );
+
+            assert_eq!(
+                apply_plan(plan).await.updated,
+                1,
+                "the round key is stamped on the written-off row"
+            );
+            let stored = db::get_position_by_id(id)
+                .await
+                .expect("read stored position")
+                .expect("position stored");
+            assert_eq!(stored.round_key, Some(format!("a1:{}", common::TEST_MINT)));
+            assert_eq!(books(&stored), books(&written_off));
+            assert_eq!(stored.closed_reason, written_off.closed_reason);
+            assert_eq!(common::position_events("closed_externally").await, 0);
+            assert!(
+                !state::try_consume_global_position_permit(),
+                "the ledger freed a second slot"
+            );
+        },
+    );
+}
