@@ -8,10 +8,10 @@ use crate::logger::{self, LogTag};
 use crate::ohlcvs::aggregator::OhlcvAggregator;
 use crate::ohlcvs::cache::OhlcvCache;
 use crate::ohlcvs::database::OhlcvDatabase;
-use crate::ohlcvs::fetcher::OhlcvFetcher;
+use crate::ohlcvs::fetcher::{FetchResponse, OhlcvFetcher};
 use crate::ohlcvs::gaps::GapManager;
 use crate::ohlcvs::manager::PoolManager;
-use crate::ohlcvs::monitor::OhlcvMonitor;
+use crate::ohlcvs::monitor::{data_server_usable, OhlcvMonitor};
 use crate::ohlcvs::types::{
     Candle, OhlcvError, OhlcvResult, OhlcvStatus, OhlcvTimeframeStatus, Timeframe, TimeframeBundle,
     BUNDLE_CANDLE_COUNT,
@@ -29,6 +29,10 @@ const BUNDLE_CACHE_TTL_SECONDS: u64 = 30;
 const BUNDLE_CACHE_MAX_SIZE: usize = 150;
 const PARALLEL_FETCH_LIMIT: usize = 10;
 const BUNDLE_REFRESH_INTERVAL_SECONDS: u64 = 5;
+
+/// Longest a chart read waits for a read-through of its timeframe (pool discovery plus one
+/// Data Server request, which the server bounds to 3.5 s on a cold series).
+const CHART_READ_THROUGH_DEADLINE: Duration = Duration::from_secs(5);
 
 /// One OHLCV runtime per enabled chain, built on first use.
 static SERVICES: PerChain<OnceCell<Arc<OhlcvServiceImpl>>> = PerChain::new(empty_service_slot);
@@ -60,6 +64,12 @@ impl OhlcvServiceImpl {
             chain_db_path(DbKind::Ohlcvs, chain),
             chain,
         )?);
+        Ok(Self::with_database(db))
+    }
+
+    /// The runtime of the chain `db` belongs to, over that database.
+    fn with_database(db: Arc<OhlcvDatabase>) -> Self {
+        let chain = db.chain();
         let fetcher = Arc::new(OhlcvFetcher::new(chain));
         let cache = Arc::new(OhlcvCache::new(chain));
         let pool_manager = Arc::new(PoolManager::new(Arc::clone(&db), Arc::clone(&cache)));
@@ -79,7 +89,7 @@ impl OhlcvServiceImpl {
         let bundle_cache = Arc::new(RwLock::new(HashMap::new()));
         let build_in_progress = Arc::new(RwLock::new(HashSet::new()));
 
-        Ok(Self {
+        Self {
             db,
             fetcher,
             cache,
@@ -88,7 +98,7 @@ impl OhlcvServiceImpl {
             monitor,
             bundle_cache,
             build_in_progress,
-        })
+        }
     }
 
     /// Wipe ALL cached candle data (DB) AND both in-memory caches. Clearing only
@@ -107,6 +117,10 @@ impl OhlcvServiceImpl {
         Ok(result)
     }
 
+    /// Stored candles of one timeframe. A timeframe without stored rows is aggregated from
+    /// the stored 1m rows only while the Data Server is unusable: with it usable, the
+    /// timeframe's own series is fetched instead (`get_chart_ohlcv`), and an aggregate of the
+    /// few stored minutes would misstate a coarse timeframe.
     pub(super) async fn get_ohlcv_data(
         &self,
         mint: &str,
@@ -115,6 +129,97 @@ impl OhlcvServiceImpl {
         limit: usize,
         from_timestamp: Option<i64>,
         to_timestamp: Option<i64>,
+    ) -> OhlcvResult<Vec<Candle>> {
+        self.read_stored(
+            mint,
+            timeframe,
+            pool_address,
+            limit,
+            from_timestamp,
+            to_timestamp,
+            !data_server_usable(),
+        )
+        .await
+    }
+
+    /// The newest `limit` candles (`0` for all) of a viewed chart timeframe. A timeframe
+    /// without native candles is read through from the Data Server first
+    /// (`OhlcvMonitor::read_through_timeframe`), bounded by `CHART_READ_THROUGH_DEADLINE`.
+    pub(super) async fn get_chart_ohlcv(
+        &self,
+        mint: &str,
+        timeframe: Timeframe,
+        limit: usize,
+    ) -> OhlcvResult<Vec<Candle>> {
+        let fetcher = Arc::clone(&self.fetcher);
+        let data_server = data_server_usable().then(|| {
+            let mint = mint.to_string();
+            move |pool: String, limit: usize| async move {
+                let (api_endpoint, aggregate) = timeframe.to_api_params();
+                fetcher
+                    .fetch_from_screenerbot_server(
+                        &mint,
+                        &pool,
+                        api_endpoint,
+                        aggregate,
+                        limit,
+                        None,
+                    )
+                    .await
+            }
+        });
+        self.chart_candles(mint, timeframe, limit, data_server)
+            .await
+    }
+
+    /// `get_chart_ohlcv` over a Data Server fetch, `None` when the Data Server is unusable:
+    /// then the 1m aggregate is the only coarse series there is.
+    async fn chart_candles<F, Fut>(
+        &self,
+        mint: &str,
+        timeframe: Timeframe,
+        limit: usize,
+        data_server: Option<F>,
+    ) -> OhlcvResult<Vec<Candle>>
+    where
+        F: FnOnce(String, usize) -> Fut,
+        Fut: std::future::Future<Output = Option<FetchResponse>>,
+    {
+        let Some(fetch) = data_server else {
+            return self
+                .read_stored(mint, timeframe, None, limit, None, None, true)
+                .await;
+        };
+        let deadline = tokio::time::Instant::now() + CHART_READ_THROUGH_DEADLINE;
+        if let Err(e) = self
+            .monitor
+            .read_through_timeframe(mint, timeframe, deadline, fetch)
+            .await
+        {
+            logger::debug(
+                LogTag::Ohlcv,
+                &format!(
+                    "Read-through failed for mint={} timeframe={}: {}",
+                    mint, timeframe, e
+                ),
+            );
+        }
+        self.read_stored(mint, timeframe, None, limit, None, None, false)
+            .await
+    }
+
+    /// Stored candles of one timeframe from the hot cache or the database, on `pool_address`
+    /// or the token's series pool. With `aggregate_fallback`, a timeframe without stored rows
+    /// is aggregated from the same pool's 1m rows.
+    async fn read_stored(
+        &self,
+        mint: &str,
+        timeframe: Timeframe,
+        pool_address: Option<&str>,
+        limit: usize,
+        from_timestamp: Option<i64>,
+        to_timestamp: Option<i64>,
+        aggregate_fallback: bool,
     ) -> OhlcvResult<Vec<Candle>> {
         // Determine pool to use
         let pool = if let Some(addr) = pool_address {
@@ -176,7 +281,7 @@ impl OhlcvServiceImpl {
         // Fallback: if still empty and requested timeframe is not 1m, try
         // aggregating from 1m data — scoped to the SAME resolved pool (never
         // across pools).
-        if candles.is_empty() && timeframe != Timeframe::Minute1 {
+        if aggregate_fallback && candles.is_empty() && timeframe != Timeframe::Minute1 {
             let db = Arc::clone(&self.db);
             let mint_owned = mint.to_string();
             let pool_owned = pool.clone();
@@ -718,5 +823,157 @@ impl OhlcvService {
 async fn stop_monitors(monitors: &[Arc<OhlcvMonitor>]) {
     for monitor in monitors {
         monitor.stop().await;
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::ohlcvs::database::SeriesPoolPlan;
+    use crate::ohlcvs::fetcher::CandleSource;
+    use crate::ohlcvs::types::PoolConfig;
+    use std::sync::atomic::{AtomicUsize, Ordering};
+
+    const DAY: i64 = 86_400;
+
+    struct Harness {
+        service: Arc<OhlcvServiceImpl>,
+        path: std::path::PathBuf,
+    }
+
+    impl Harness {
+        /// A token with a registered series pool and a few stored 1m rows, so an aggregate of
+        /// any coarse timeframe is available locally.
+        fn open(label: &str) -> Self {
+            crate::config::utils::install_default_config();
+            let path = std::env::temp_dir().join(format!(
+                "screenerbot-ohlcv-service-{label}-{}.db",
+                std::process::id()
+            ));
+            let _ = std::fs::remove_file(&path);
+            let db = Arc::new(OhlcvDatabase::new(&path, ChainId::Solana).unwrap());
+            db.write_series_pools("mint", |_| {
+                Some(SeriesPoolPlan {
+                    pools: vec![PoolConfig::new("pool".to_string(), "dex".to_string(), 1.0)],
+                    series: "pool".to_string(),
+                })
+            })
+            .unwrap();
+            let minute = Utc::now().timestamp() / 60 * 60 - 600;
+            let minutes: Vec<Candle> = (0..5)
+                .map(|i| Candle::new(minute + i * 60, 1.0, 1.0, 1.0, 1.0, 1.0))
+                .collect();
+            db.insert_candles_batch("mint", "pool", Timeframe::Minute1, &minutes, "monitor")
+                .unwrap();
+            Self {
+                service: Arc::new(OhlcvServiceImpl::with_database(db)),
+                path,
+            }
+        }
+    }
+
+    impl Drop for Harness {
+        fn drop(&mut self) {
+            let _ = std::fs::remove_file(&self.path);
+        }
+    }
+
+    /// The Data Server's daily series: three closed days ending yesterday.
+    fn server_days() -> Vec<Candle> {
+        let today = Utc::now().timestamp() / DAY * DAY;
+        (1..=3)
+            .rev()
+            .map(|days| Candle::new(today - days * DAY, 2.0, 3.0, 1.0, 2.5, 10.0))
+            .collect()
+    }
+
+    fn server_page() -> FetchResponse {
+        FetchResponse {
+            candles: server_days(),
+            server_refreshing: false,
+            source: Some(CandleSource::DataServer),
+            series_pool: Some("pool".to_string()),
+        }
+    }
+
+    fn timestamps(candles: &[Candle]) -> Vec<i64> {
+        candles.iter().map(|c| c.timestamp).collect()
+    }
+
+    #[tokio::test]
+    async fn a_cold_timeframe_is_served_from_the_data_server_not_aggregated() {
+        let h = Harness::open("read-through");
+        let calls = AtomicUsize::new(0);
+        let fetch = |pool: String, _limit: usize| {
+            calls.fetch_add(1, Ordering::SeqCst);
+            assert_eq!(pool, "pool");
+            async { Some(server_page()) }
+        };
+
+        let candles = h
+            .service
+            .chart_candles("mint", Timeframe::Day1, 0, Some(fetch))
+            .await
+            .unwrap();
+
+        assert_eq!(timestamps(&candles), timestamps(&server_days()));
+        assert!(candles.iter().all(|c| c.volume == 10.0));
+        assert_eq!(calls.load(Ordering::SeqCst), 1);
+        assert!(h
+            .service
+            .db
+            .get_latest_native_timestamp("mint", "pool", Timeframe::Day1)
+            .unwrap()
+            .is_some());
+    }
+
+    #[tokio::test]
+    async fn without_a_usable_data_server_the_1m_aggregate_is_served() {
+        let h = Harness::open("aggregate");
+        let unusable: Option<fn(String, usize) -> std::future::Ready<Option<FetchResponse>>> = None;
+
+        let candles = h
+            .service
+            .chart_candles("mint", Timeframe::Day1, 0, unusable)
+            .await
+            .unwrap();
+
+        assert!(!candles.is_empty());
+        assert_eq!(candles.iter().map(|c| c.volume).sum::<f64>(), 5.0);
+        assert!(candles.iter().all(|c| c.close == 1.0));
+        assert!(h
+            .service
+            .db
+            .get_latest_native_timestamp("mint", "pool", Timeframe::Day1)
+            .unwrap()
+            .is_none());
+    }
+
+    #[tokio::test]
+    async fn concurrent_reads_of_one_cold_timeframe_share_one_data_server_fetch() {
+        let h = Harness::open("single-flight");
+        let calls = Arc::new(AtomicUsize::new(0));
+        let read = |calls: Arc<AtomicUsize>| {
+            let service = Arc::clone(&h.service);
+            async move {
+                let fetch = move |_pool: String, _limit: usize| async move {
+                    calls.fetch_add(1, Ordering::SeqCst);
+                    tokio::time::sleep(Duration::from_millis(100)).await;
+                    Some(server_page())
+                };
+                service
+                    .chart_candles("mint", Timeframe::Day1, 0, Some(fetch))
+                    .await
+                    .unwrap()
+            }
+        };
+
+        let reads: Vec<_> = (0..4).map(|_| read(Arc::clone(&calls))).collect();
+        let answers = futures::future::join_all(reads).await;
+
+        assert_eq!(calls.load(Ordering::SeqCst), 1);
+        for candles in answers {
+            assert_eq!(timestamps(&candles), timestamps(&server_days()));
+        }
     }
 }

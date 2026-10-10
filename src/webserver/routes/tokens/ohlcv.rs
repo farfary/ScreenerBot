@@ -100,28 +100,20 @@ pub async fn get_token_ohlcv(
         );
     }
 
-    // Fetch OHLCV data using new API - return empty array if no data available
-    let data = match crate::ohlcvs::get_ohlcv_data(
-        chain,
-        &mint,
-        timeframe,
-        None,
-        query.limit as usize,
-        None,
-        None,
-    )
-    .await
-    {
-        Ok(data) => data,
-        Err(e) => {
-            logger::debug(
-                LogTag::Webserver,
-                &format!("mint={mint} timeframe={timeframe} no_data error={e}"),
-            );
-            // Return empty array for tokens without OHLCV data yet
-            Vec::new()
-        }
-    };
+    // The viewed timeframe, read through from the Data Server when it holds no native
+    // candles yet; an empty array while nothing is stored.
+    let data =
+        match crate::ohlcvs::get_chart_ohlcv(chain, &mint, timeframe, query.limit as usize).await {
+            Ok(data) => data,
+            Err(e) => {
+                logger::debug(
+                    LogTag::Webserver,
+                    &format!("mint={mint} timeframe={timeframe} no_data error={e}"),
+                );
+                // Return empty array for tokens without OHLCV data yet
+                Vec::new()
+            }
+        };
 
     let points: Vec<OhlcvPoint> = data
         .iter()

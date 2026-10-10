@@ -49,6 +49,9 @@ pub struct FetchResponse {
     pub server_refreshing: bool,
     /// The upstream that served `candles`; `None` when no source was asked.
     pub source: Option<CandleSource>,
+    /// The pool the Data Server served the series from, its own series pool for the token.
+    /// `None` for provider answers and for a Data Server that does not report it.
+    pub series_pool: Option<String>,
 }
 
 /// `GET /v1/ohlcv?stateful=true` body.
@@ -57,6 +60,9 @@ struct StatefulOhlcv {
     candles: Vec<Candle>,
     #[serde(default)]
     state: String,
+    /// The server's effective series pool, which may differ from the requested one.
+    #[serde(default)]
+    pool: Option<String>,
 }
 
 /// Whether a Data Server OHLCV state announces a refresh in progress. Unknown
@@ -354,7 +360,7 @@ impl OhlcvFetcher {
     /// to the providers. The reason is published once by `data_server::access`.
     /// `before` (unix secs, exclusive) asks for the newest `limit` stored candles
     /// strictly older than it instead of the newest candles ending now.
-    async fn fetch_from_screenerbot_server(
+    pub(super) async fn fetch_from_screenerbot_server(
         &self,
         mint: &str,
         pool_address: &str,
@@ -388,6 +394,7 @@ impl OhlcvFetcher {
             server_refreshing: server_state_is_refreshing(&body.state),
             candles: body.candles,
             source: Some(CandleSource::DataServer),
+            series_pool: body.pool.filter(|pool| !pool.is_empty()),
         })
     }
 
@@ -458,6 +465,7 @@ impl OhlcvFetcher {
             candles,
             server_refreshing: false,
             source: Some(CandleSource::GeckoTerminal),
+            series_pool: None,
         })
     }
 
@@ -481,6 +489,7 @@ impl OhlcvFetcher {
                         candles,
                         server_refreshing: false,
                         source: Some(CandleSource::Feed(feed.label)),
+                        series_pool: None,
                     })
                 }
                 Ok(_) => {
@@ -931,5 +940,9 @@ mod tests {
         }
         let without_state: StatefulOhlcv = serde_json::from_str(r#"{"candles":[]}"#).unwrap();
         assert!(!server_state_is_refreshing(&without_state.state));
+        assert_eq!(without_state.pool, None);
+        let with_pool: StatefulOhlcv =
+            serde_json::from_str(r#"{"candles":[],"state":"ready","pool":"server-pool"}"#).unwrap();
+        assert_eq!(with_pool.pool.as_deref(), Some("server-pool"));
     }
 }

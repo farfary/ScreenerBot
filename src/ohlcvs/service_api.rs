@@ -45,6 +45,19 @@ pub async fn get_ohlcv_data(
         .await
 }
 
+/// The newest `limit` candles (`0` for all) of a timeframe a chart is viewing. A timeframe
+/// without native candles is read through from the Data Server first, within a bounded wait.
+pub async fn get_chart_ohlcv(
+    chain: ChainId,
+    mint: &str,
+    timeframe: Timeframe,
+    limit: usize,
+) -> OhlcvResult<Vec<Candle>> {
+    let service = get_or_init_service(chain).await?;
+
+    service.get_chart_ohlcv(mint, timeframe, limit).await
+}
+
 /// List available pools for a token that have OHLCV data.
 pub async fn get_available_pools(chain: ChainId, mint: &str) -> OhlcvResult<Vec<PoolMetadata>> {
     let service = get_or_init_service(chain).await?;

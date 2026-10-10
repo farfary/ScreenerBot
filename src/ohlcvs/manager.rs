@@ -339,6 +339,23 @@ impl PoolManager {
         Ok(write.plan.pools)
     }
 
+    /// Make `server_pool`, the series pool the Data Server reported while serving a candle
+    /// request, the token's default through the one series write
+    /// (`OhlcvDatabase::write_series_pools`). The server's report is its own series, so it
+    /// overrides the switch factor and the handover cooldown; when it already is the one
+    /// default nothing is written, so repeated reports never reset the series again. Returns
+    /// whether the default moved.
+    pub async fn adopt_server_series(&self, mint: &str, server_pool: &str) -> OhlcvResult<bool> {
+        let write = self.db.write_series_pools(mint, |registered| {
+            plan_server_series(registered, server_pool)
+        })?;
+        let Some(reset) = write.and_then(|write| write.reset) else {
+            return Ok(false);
+        };
+        self.series_moved(mint, server_pool, &reset, true).await?;
+        Ok(true)
+    }
+
     /// Follow up a committed series move onto `current`: invalidate the hot candle cache, so
     /// no reader keeps serving the previous pool's series, and record the move.
     async fn series_moved(
@@ -476,6 +493,33 @@ fn plan_series_pools(
         pool.is_default = pool.address == series;
     }
     Some(SeriesPoolPlan { pools, series })
+}
+
+/// The plan that makes `server_pool` the series pool over the `registered` rows, or `None`
+/// when it already is the one default. A pool the token has not registered is added with an
+/// unknown quote, so only the Data Server serves it. The current default and the native pools
+/// stay registered under `plan_series_pools`; no cooldown applies to the server's own pool.
+fn plan_server_series(registered: &[PoolConfig], server_pool: &str) -> Option<SeriesPoolPlan> {
+    let defaults: Vec<&str> = registered
+        .iter()
+        .filter(|p| p.is_default)
+        .map(|p| p.address.as_str())
+        .collect();
+    if defaults.as_slice() == [server_pool] {
+        return None;
+    }
+    let mut pools = registered.to_vec();
+    if !pools.iter().any(|p| p.address == server_pool) {
+        let mut unknown = PoolConfig::new(server_pool.to_string(), "unknown".to_string(), 0.0);
+        unknown.is_native_pair = false;
+        pools.push(unknown);
+    }
+    plan_series_pools(
+        pools,
+        Some(server_pool),
+        registered.iter().find(|p| p.is_default),
+        &HashSet::new(),
+    )
 }
 
 /// The series handover after a failed fetch of `failed`: a default that is now unhealthy and
@@ -1017,5 +1061,53 @@ mod tests {
         h.manager.mark_success("mint", "deep").await.unwrap();
         assert!(h.stored("deep").is_healthy());
         assert_eq!(h.series(), "deep");
+    }
+
+    /// The pool the Data Server reports overrides the switch factor and the cooldown, resets the
+    /// series once, and a repeated report of the current default writes nothing.
+    #[tokio::test]
+    async fn the_data_server_series_pool_is_adopted_once_whatever_the_local_rules_say() {
+        let mut h = Harness::open("server-series");
+        assert_eq!(h.discover(None, &POOLS).await, "deep");
+        h.seed("deep");
+        h.count_reset();
+        h.resets = 0;
+        // Cooling and below the switch factor: local discovery would never choose it.
+        h.manager.cooling_until.lock().unwrap().insert(
+            pool_key("mint", "shallow"),
+            Instant::now() + SERIES_HANDOVER_COOLDOWN,
+        );
+
+        assert!(h
+            .manager
+            .adopt_server_series("mint", "shallow")
+            .await
+            .unwrap());
+        assert_eq!(h.series(), "shallow");
+        assert!(!h.rows("deep"));
+        h.count_reset();
+        assert_eq!(h.resets, 1);
+
+        h.seed("shallow");
+        assert!(!h
+            .manager
+            .adopt_server_series("mint", "shallow")
+            .await
+            .unwrap());
+        assert!(h.rows("shallow"));
+        h.count_reset();
+        assert_eq!(h.resets, 1);
+
+        // An unregistered server pool is registered with an unknown quote.
+        assert!(h
+            .manager
+            .adopt_server_series("mint", "unlisted")
+            .await
+            .unwrap());
+        assert_eq!(h.series(), "unlisted");
+        assert!(!h.stored("unlisted").is_native_pair);
+        assert!(h.stored("deep").is_native_pair);
+        h.count_reset();
+        assert_eq!(h.resets, 2);
     }
 }

@@ -11,7 +11,7 @@ use crate::ohlcvs::aggregator::OhlcvAggregator;
 use crate::ohlcvs::cache::OhlcvCache;
 use crate::ohlcvs::database::{OhlcvDatabase, StoredBucket};
 use crate::ohlcvs::feeds::CandleFeed;
-use crate::ohlcvs::fetcher::{CandleSource, OhlcvFetcher, MAX_CANDLES_PER_REQUEST};
+use crate::ohlcvs::fetcher::{CandleSource, FetchResponse, OhlcvFetcher, MAX_CANDLES_PER_REQUEST};
 use crate::ohlcvs::gaps::{GapManager, GAP_FILL_REQUESTS_PER_CYCLE};
 use crate::ohlcvs::manager::PoolManager;
 use crate::ohlcvs::priorities::{ActivityType, PriorityManager};
@@ -23,9 +23,9 @@ use chrono::{DateTime, Utc};
 use serde_json::json;
 use std::collections::{HashMap, HashSet};
 use std::sync::{Arc, Mutex};
-use tokio::sync::RwLock;
+use tokio::sync::{Mutex as AsyncMutex, RwLock};
 use tokio::task::spawn_blocking;
-use tokio::time::{interval, sleep, Duration, Instant};
+use tokio::time::{interval, sleep, sleep_until, Duration, Instant};
 
 const AGGREGATED_TIMEFRAMES: [Timeframe; 6] = [
     Timeframe::Minute5,
@@ -47,6 +47,12 @@ pub(super) const CATCH_UP_MARGIN: usize = 2;
 
 /// Minimum spacing of two native fetches that count toward the no-newer rule.
 const NATIVE_RETRY_DELAY_SECS: i64 = 15;
+
+/// Longest wait of a chart read-through for pool discovery to register the token's series pool.
+const READ_THROUGH_POOL_WAIT: Duration = Duration::from_secs(2);
+
+/// Spacing of the series pool reads while a read-through waits for discovery.
+const READ_THROUGH_POOL_POLL: Duration = Duration::from_millis(100);
 
 /// Delay of the first re-fetch after the Data Server reports it is refreshing
 /// a series. Each further re-fetch doubles the delay up to
@@ -461,7 +467,7 @@ fn order_by_overdue(due: &mut [DueTimeframe], now: i64, priority: Priority) {
 
 /// The Data Server can answer OHLCV requests now: configured, online, signed
 /// in, not refused, and not in a transport outage.
-fn data_server_usable() -> bool {
+pub(super) fn data_server_usable() -> bool {
     crate::data_server::is_usable(crate::data_server::Surface::Ohlcv)
         && !matches!(
             crate::data_server::access::current(),
@@ -554,6 +560,9 @@ pub struct OhlcvMonitor {
     /// Per-series refresh state keyed by `(mint, pool, timeframe)`, so a series move starts
     /// the new pool from a clean state.
     native_series: Arc<Mutex<HashMap<(String, String, Timeframe), NativeSeriesState>>>,
+    /// One lock per `(mint, timeframe)` with a read-through running or waiting (see
+    /// `read_through_timeframe`).
+    read_through_flights: Arc<Mutex<HashMap<(String, Timeframe), Arc<AsyncMutex<()>>>>>,
     telemetry: Arc<RwLock<MonitorTelemetry>>,
 }
 
@@ -576,6 +585,7 @@ impl OhlcvMonitor {
             backfill_in_progress: Arc::new(Mutex::new(HashSet::new())),
             discovery_in_progress: Arc::new(Mutex::new(HashSet::new())),
             native_series: Arc::new(Mutex::new(HashMap::new())),
+            read_through_flights: Arc::new(Mutex::new(HashMap::new())),
             telemetry: Arc::new(RwLock::new(MonitorTelemetry::default())),
         }
     }
@@ -2636,10 +2646,8 @@ impl OhlcvMonitor {
         self.finish_backfill(mint);
     }
 
-    /// Fetch the newest `limit` native candles of one timeframe, store them under
-    /// `OhlcvDatabase::NATIVE_SOURCE`, drop the timeframe's hot-cache entry and
-    /// record the page in the series coverage state. Returns rows inserted or
-    /// changed.
+    /// Fetch the newest `limit` native candles of one timeframe and store them
+    /// (`store_native_page`). Returns rows inserted or changed.
     async fn fetch_native_timeframe(
         &self,
         mint: &str,
@@ -2662,10 +2670,6 @@ impl OhlcvMonitor {
         );
 
         let pool_is_native = self.pool_is_native(mint, pool_address);
-
-        let stored_newest = self
-            .db
-            .get_latest_native_timestamp(mint, pool_address, timeframe)?;
 
         // Fetch using multi-source fallback
         let response = match self
@@ -2690,6 +2694,36 @@ impl OhlcvMonitor {
                 return Err(e);
             }
         };
+
+        self.store_native_page(mint, pool_address, timeframe, response)
+            .await
+    }
+
+    /// Store one fetched native page of `timeframe` under `OhlcvDatabase::NATIVE_SOURCE`,
+    /// drop the timeframe's hot-cache entry and record the page in the series coverage state.
+    /// A page the Data Server served from another series pool than `pool_address` first moves
+    /// the token's default onto that pool (`PoolManager::adopt_server_series`) and is stored
+    /// under it. Returns rows inserted or changed.
+    async fn store_native_page(
+        &self,
+        mint: &str,
+        pool_address: &str,
+        timeframe: Timeframe,
+        response: FetchResponse,
+    ) -> OhlcvResult<usize> {
+        let pool_address = match response.series_pool.as_deref() {
+            Some(server_pool) if server_pool != pool_address => {
+                self.pool_manager
+                    .adopt_server_series(mint, server_pool)
+                    .await?;
+                server_pool
+            }
+            _ => pool_address,
+        };
+
+        let stored_newest = self
+            .db
+            .get_latest_native_timestamp(mint, pool_address, timeframe)?;
 
         let changed = if response.candles.is_empty() {
             0
@@ -2723,6 +2757,123 @@ impl OhlcvMonitor {
         });
 
         Ok(changed)
+    }
+
+    /// Serve a viewed timeframe that holds no native candles from the Data Server ahead of the
+    /// backfill: wait up to `READ_THROUGH_POOL_WAIT` for the token's series pool, then fetch
+    /// that one timeframe's backfill page through `fetch` and store it (`store_native_page`).
+    /// Concurrent calls for one `(mint, timeframe)` share one fetch: a later caller waits for
+    /// the running one and then finds the stored candles or the recent attempt. A timeframe
+    /// attempted within `NATIVE_RETRY_DELAY_SECS` is not fetched again. Everything ends by
+    /// `deadline`. Returns whether the timeframe holds native candles afterwards.
+    pub(super) async fn read_through_timeframe<F, Fut>(
+        &self,
+        mint: &str,
+        timeframe: Timeframe,
+        deadline: Instant,
+        fetch: F,
+    ) -> OhlcvResult<bool>
+    where
+        F: FnOnce(String, usize) -> Fut,
+        Fut: std::future::Future<Output = Option<FetchResponse>>,
+    {
+        let Some(pool) = self
+            .wait_for_series_pool(mint, deadline.min(Instant::now() + READ_THROUGH_POOL_WAIT))
+            .await?
+        else {
+            return Ok(false);
+        };
+        let native_newest = |pool: &str| self.db.get_latest_native_timestamp(mint, pool, timeframe);
+        if native_newest(&pool)?.is_some() {
+            return Ok(true);
+        }
+
+        let flight = self.read_through_flight(mint, timeframe);
+        let Ok(_turn) = tokio::time::timeout_at(deadline, flight.lock()).await else {
+            return Ok(false);
+        };
+        if native_newest(&pool)?.is_some() {
+            return Ok(true);
+        }
+        let now = Utc::now().timestamp();
+        let attempted_recently = self
+            .native_series_state(mint, &pool, timeframe)
+            .last_fetch_at
+            .is_some_and(|at| now - at < NATIVE_RETRY_DELAY_SECS);
+        if attempted_recently {
+            return Ok(false);
+        }
+
+        let response = tokio::time::timeout_at(
+            deadline,
+            fetch(pool.clone(), timeframe.max_backfill_candles()),
+        )
+        .await
+        .ok()
+        .flatten();
+        let Some(response) = response else {
+            self.update_native_series(mint, &pool, timeframe, |state| state.record_failure(now));
+            logger::debug(
+                LogTag::Ohlcv,
+                &format!(
+                    "Read-through of mint={} timeframe={} pool={} got no Data Server answer",
+                    mint,
+                    timeframe.as_str(),
+                    pool
+                ),
+            );
+            return Ok(false);
+        };
+        let changed = self
+            .store_native_page(mint, &pool, timeframe, response)
+            .await?;
+        logger::debug(
+            LogTag::Ohlcv,
+            &format!(
+                "Read-through of mint={} timeframe={} stored {} candles",
+                mint,
+                timeframe.as_str(),
+                changed
+            ),
+        );
+        let series = self.pool_manager.series_pool(mint).await?;
+        Ok(match series {
+            Some(series) => native_newest(&series.address)?.is_some(),
+            None => false,
+        })
+    }
+
+    /// The token's series pool, polled until `until` while discovery has not registered one.
+    async fn wait_for_series_pool(
+        &self,
+        mint: &str,
+        until: Instant,
+    ) -> OhlcvResult<Option<String>> {
+        loop {
+            if let Some(pool) = self.pool_manager.series_pool(mint).await? {
+                return Ok(Some(pool.address));
+            }
+            let next = Instant::now() + READ_THROUGH_POOL_POLL;
+            if next > until {
+                return Ok(None);
+            }
+            sleep_until(next).await;
+        }
+    }
+
+    /// The lock that orders read-through fetches of one `(mint, timeframe)`. An entry no
+    /// caller holds any more is dropped on the way.
+    fn read_through_flight(&self, mint: &str, timeframe: Timeframe) -> Arc<AsyncMutex<()>> {
+        let mut flights = self
+            .read_through_flights
+            .lock()
+            .unwrap_or_else(|poisoned| poisoned.into_inner());
+        flights.retain(|_, flight| Arc::strong_count(flight) > 1);
+        Arc::clone(
+            flights
+                .entry((mint.to_string(), timeframe))
+                .or_insert_with(|| Arc::new(AsyncMutex::new(()))),
+        )
     }
 
     /// Whether a timeframe is due to settle its newest closed bucket (see
@@ -2913,6 +3064,7 @@ impl Clone for OhlcvMonitor {
             backfill_in_progress: Arc::clone(&self.backfill_in_progress),
             discovery_in_progress: Arc::clone(&self.discovery_in_progress),
             native_series: Arc::clone(&self.native_series),
+            read_through_flights: Arc::clone(&self.read_through_flights),
             telemetry: Arc::clone(&self.telemetry),
         }
     }
@@ -3609,6 +3761,102 @@ mod tests {
         .unwrap();
         assert!(!monitor.pool_rediscovery_due("mint", true).await.unwrap());
         assert!(monitor.pool_rediscovery_due("mint", false).await.unwrap());
+
+        drop(monitor);
+        drop(db);
+        let _ = std::fs::remove_file(path);
+    }
+
+    /// The pool the Data Server reports with a page: a different pool moves the default (one
+    /// reset) and the page is stored under it; no report or the current default writes as before.
+    #[tokio::test]
+    async fn a_page_from_another_server_series_pool_moves_the_default_and_is_stored_under_it() {
+        use crate::chains::ChainId;
+        use crate::ohlcvs::database::SeriesPoolPlan;
+        crate::config::utils::install_default_config();
+        let path = std::env::temp_dir().join(format!(
+            "screenerbot-ohlcv-monitor-envelope-pool-{}.db",
+            std::process::id()
+        ));
+        let _ = std::fs::remove_file(&path);
+        let db = Arc::new(OhlcvDatabase::new(&path, ChainId::Solana).unwrap());
+        let fetcher = Arc::new(OhlcvFetcher::new(ChainId::Solana));
+        let cache = Arc::new(OhlcvCache::new(ChainId::Solana));
+        let pool_manager = Arc::new(PoolManager::new(Arc::clone(&db), Arc::clone(&cache)));
+        let gap_manager = Arc::new(GapManager::new(
+            Arc::clone(&db),
+            Arc::clone(&fetcher),
+            Arc::clone(&cache),
+        ));
+        let monitor = OhlcvMonitor::new(Arc::clone(&db), fetcher, cache, pool_manager, gap_manager);
+        db.upsert_monitor_config(&TokenOhlcvConfig::new("mint".to_string(), Priority::High))
+            .unwrap();
+        db.write_series_pools("mint", |_| {
+            Some(SeriesPoolPlan {
+                pools: vec![
+                    PoolConfig::new("local".to_string(), "dex".to_string(), 300.0),
+                    PoolConfig::new("server".to_string(), "dex".to_string(), 100.0),
+                ],
+                series: "local".to_string(),
+            })
+        })
+        .unwrap();
+        let default =
+            || PoolConfig::series_pool(&db.get_pools("mint").unwrap()).map(|p| p.address.clone());
+        let hour = Utc::now().timestamp() / HOUR * HOUR - HOUR;
+        let page = |series_pool: Option<&str>| FetchResponse {
+            candles: vec![Candle::new(hour, 1.0, 2.0, 0.5, 1.5, 3.0)],
+            server_refreshing: false,
+            source: Some(CandleSource::DataServer),
+            series_pool: series_pool.map(str::to_string),
+        };
+        let newest = |pool: &str| {
+            db.get_latest_native_timestamp("mint", pool, Timeframe::Hour1)
+                .unwrap()
+        };
+
+        // An older server without the field: stored under the requested pool, nothing reset.
+        db.mark_all_backfills_complete("mint", "local").unwrap();
+        monitor
+            .store_native_page("mint", "local", Timeframe::Hour1, page(None))
+            .await
+            .unwrap();
+        assert_eq!(default().as_deref(), Some("local"));
+        assert_eq!(newest("local"), Some(hour));
+        assert!(db.is_backfill_complete("mint", Timeframe::Hour1).unwrap());
+
+        // The current default reported again: nothing reset.
+        monitor
+            .store_native_page("mint", "local", Timeframe::Hour1, page(Some("local")))
+            .await
+            .unwrap();
+        assert_eq!(newest("local"), Some(hour));
+        assert!(db.is_backfill_complete("mint", Timeframe::Hour1).unwrap());
+
+        // Another pool: the default moves, the flags and the previous pool's rows are reset, and
+        // the page is stored under the reported pool.
+        monitor
+            .store_native_page("mint", "local", Timeframe::Hour1, page(Some("server")))
+            .await
+            .unwrap();
+        assert_eq!(default().as_deref(), Some("server"));
+        assert!(!db.is_backfill_complete("mint", Timeframe::Hour1).unwrap());
+        assert_eq!(newest("local"), None);
+        assert_eq!(newest("server"), Some(hour));
+        assert!(monitor
+            .native_series_state("mint", "server", Timeframe::Hour1)
+            .last_fetch_at
+            .is_some());
+
+        // A write still addressed to the previous pool follows the server again without a reset.
+        db.mark_all_backfills_complete("mint", "server").unwrap();
+        monitor
+            .store_native_page("mint", "local", Timeframe::Hour1, page(Some("server")))
+            .await
+            .unwrap();
+        assert_eq!(default().as_deref(), Some("server"));
+        assert_eq!(newest("server"), Some(hour));
+        assert!(db.is_backfill_complete("mint", Timeframe::Hour1).unwrap());
 
         drop(monitor);
         drop(db);
