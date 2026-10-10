@@ -261,6 +261,42 @@ pub struct OhlcvPoint {
     pub volume: f64,
 }
 
+impl From<&crate::ohlcvs::Candle> for OhlcvPoint {
+    fn from(candle: &crate::ohlcvs::Candle) -> Self {
+        Self {
+            timestamp: candle.timestamp,
+            open: candle.open,
+            high: candle.high,
+            low: candle.low,
+            close: candle.close,
+            volume: candle.volume,
+        }
+    }
+}
+
+/// `GET /api/tokens/:mint/ohlcv?since=` — the stored tail of the chart series from bucket
+/// `since` on. A chart drops held bars older than `first` (the oldest stored bucket), merges
+/// `candles` into the series it holds and reloads the whole series when `pool` or `count` (the
+/// stored series size) differs from what the merge holds.
+#[derive(Debug, Serialize)]
+pub struct OhlcvTail {
+    pub pool: Option<String>,
+    pub count: usize,
+    pub first: Option<i64>,
+    pub candles: Vec<OhlcvPoint>,
+}
+
+impl From<crate::ohlcvs::ChartTail> for OhlcvTail {
+    fn from(tail: crate::ohlcvs::ChartTail) -> Self {
+        Self {
+            pool: tail.pool,
+            count: tail.count,
+            first: tail.first,
+            candles: tail.candles.iter().map(OhlcvPoint::from).collect(),
+        }
+    }
+}
+
 // =============================================================================
 // TOKEN ANALYSIS RESPONSE TYPES
 // =============================================================================
@@ -424,6 +460,8 @@ pub struct OhlcvQuery {
     pub limit: u32,
     #[serde(default = "default_ohlcv_timeframe")]
     pub timeframe: String,
+    /// Bucket (unix secs) from which only the stored tail is answered, as an `OhlcvTail`.
+    pub since: Option<i64>,
 }
 
 /// `GET /api/tokens/:mint/ohlcv/status` — an optional `[from, to]` span (unix secs) asks how

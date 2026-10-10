@@ -9,6 +9,7 @@ use std::sync::{LazyLock, Mutex};
 use axum::{
     extract::{Path, Query},
     http::StatusCode,
+    response::{IntoResponse, Response},
     Json,
 };
 
@@ -20,11 +21,12 @@ use crate::{
 
 /// GET /api/tokens/:mint/ohlcv
 ///
-/// Get OHLCV chart data for a token
+/// OHLCV chart data for a token: the newest `limit` candles as an array, or with `since` the
+/// stored tail of the series as an `OhlcvTail`, read from storage only.
 pub async fn get_token_ohlcv(
     Path(mint): Path<String>,
     Query(query): Query<OhlcvQuery>,
-) -> Result<Json<Vec<OhlcvPoint>>, StatusCode> {
+) -> Result<Response, StatusCode> {
     let chain = crate::chains::active_chain();
     let normalized_tf = query.timeframe.trim().to_ascii_lowercase();
     let timeframe = match crate::ohlcvs::Timeframe::from_str(normalized_tf.as_str()) {
@@ -44,6 +46,10 @@ pub async fn get_token_ohlcv(
     // a real SOL chart. No monitoring/activity — this series is maintained globally.
     if crate::chains::adapter_for(chain).is_native_asset(&mint) {
         let series = crate::ohlcvs::native_usd_chart::series(chain, timeframe);
+        if let Some(since) = query.since {
+            let tail = crate::ohlcvs::ChartTail::from_series(None, series.to_vec(), since);
+            return Ok(Json(OhlcvTail::from(tail)).into_response());
+        }
         // `limit == 0` means "all" here (the chart sends CHART_CANDLE_LIMIT = 0 to
         // fetch the full series); otherwise keep the newest `limit` candles.
         let take = if query.limit == 0 {
@@ -52,18 +58,8 @@ pub async fn get_token_ohlcv(
             (query.limit as usize).min(series.len())
         };
         let start = series.len() - take;
-        let points: Vec<OhlcvPoint> = series[start..]
-            .iter()
-            .map(|c| OhlcvPoint {
-                timestamp: c.timestamp,
-                open: c.open,
-                high: c.high,
-                low: c.low,
-                close: c.close,
-                volume: c.volume,
-            })
-            .collect();
-        return Ok(Json(points));
+        let points: Vec<OhlcvPoint> = series[start..].iter().map(OhlcvPoint::from).collect();
+        return Ok(Json(points).into_response());
     }
 
     logger::debug(
@@ -100,6 +96,20 @@ pub async fn get_token_ohlcv(
         );
     }
 
+    if let Some(since) = query.since {
+        let tail = match crate::ohlcvs::get_chart_tail(chain, &mint, timeframe, since).await {
+            Ok(tail) => tail,
+            Err(e) => {
+                logger::debug(
+                    LogTag::Webserver,
+                    &format!("mint={mint} timeframe={timeframe} since={since} no_tail error={e}"),
+                );
+                crate::ohlcvs::ChartTail::default()
+            }
+        };
+        return Ok(Json(OhlcvTail::from(tail)).into_response());
+    }
+
     // The viewed timeframe, read through from the Data Server when it holds no native
     // candles yet; an empty array while nothing is stored.
     let data =
@@ -115,19 +125,9 @@ pub async fn get_token_ohlcv(
             }
         };
 
-    let points: Vec<OhlcvPoint> = data
-        .iter()
-        .map(|d| OhlcvPoint {
-            timestamp: d.timestamp,
-            open: d.open,
-            high: d.high,
-            low: d.low,
-            close: d.close,
-            volume: d.volume,
-        })
-        .collect();
+    let points: Vec<OhlcvPoint> = data.iter().map(OhlcvPoint::from).collect();
 
-    Ok(Json(points))
+    Ok(Json(points).into_response())
 }
 
 /// GET /api/tokens/:mint/ohlcv/status
@@ -587,5 +587,45 @@ pub async fn get_token_transactions(
             );
             Err(StatusCode::INTERNAL_SERVER_ERROR)
         }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::{OhlcvQuery, OhlcvTail};
+    use crate::ohlcvs::{Candle, ChartTail};
+
+    /// A plain chart query keeps the full-series answer; `since` asks for the tail.
+    #[test]
+    fn since_is_optional_on_the_chart_query() {
+        let plain: OhlcvQuery = serde_json::from_str(r#"{"timeframe":"1h"}"#).unwrap();
+        assert_eq!(plain.since, None);
+        let tail: OhlcvQuery = serde_json::from_str(r#"{"timeframe":"1h","since":3600}"#).unwrap();
+        assert_eq!(tail.since, Some(3600));
+    }
+
+    /// The tail body carries the series pool, the stored series size and first bucket, and the
+    /// tail candles in the chart point shape.
+    #[test]
+    fn a_tail_answers_pool_count_and_points() {
+        let series = vec![
+            Candle::new(60, 1.0, 2.0, 0.5, 1.5, 3.0),
+            Candle::new(120, 1.5, 2.5, 1.0, 2.0, 4.0),
+        ];
+        let tail = ChartTail::from_series(Some("pool".to_string()), series, 120);
+
+        let body = serde_json::to_value(OhlcvTail::from(tail)).unwrap();
+
+        assert_eq!(
+            body,
+            serde_json::json!({
+                "pool": "pool",
+                "count": 2,
+                "first": 60,
+                "candles": [
+                    {"timestamp": 120, "open": 1.5, "high": 2.5, "low": 1.0, "close": 2.0, "volume": 4.0}
+                ]
+            })
+        );
     }
 }

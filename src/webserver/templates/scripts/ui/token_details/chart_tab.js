@@ -10,7 +10,7 @@
 import * as Utils from "../../core/utils.js";
 import * as AppState from "../../core/app_state.js";
 import {
-  fetchCandles,
+  loadCandles,
   fetchOhlcvStatus,
   findTimeframeWithData,
   renderOhlcvStatus,
@@ -70,6 +70,7 @@ export function applyChartTabMixin(DialogClass) {
       this.advancedChart = null;
       this.chart = null;
       this.chartDataLoaded = false;
+      this._chartSeries = null;
     }
 
     // Determine current theme
@@ -256,8 +257,9 @@ export function applyChartTabMixin(DialogClass) {
 
     try {
       // The shared helper fixes the candle limit, so this load and the poll
-      // refresh can never disagree about the dataset.
-      const chartData = await fetchCandles(mint, timeframe, {
+      // refresh can never disagree about the dataset. An initial load (open or
+      // timeframe change) always reads the full series.
+      const series = await loadCandles(mint, timeframe, isInitialLoad ? null : this._chartSeries, {
         priority: isInitialLoad ? "high" : "normal",
       });
 
@@ -270,6 +272,8 @@ export function applyChartTabMixin(DialogClass) {
       if (this.tokenData?.mint !== mint || this.currentTimeframe !== timeframe) {
         return;
       }
+      this._chartSeries = series;
+      const chartData = series.bars;
 
       if (!chartData.length) {
         // The selected timeframe has no candles. The token can still have OHLCV

@@ -56,6 +56,16 @@ const TIMEFRAME_SECONDS = {
   "1d": 86400,
 };
 
+/** One chart bar from a candle of the OHLCV route. */
+const toBar = (c) => ({
+  time: c.timestamp,
+  open: c.open,
+  high: c.high,
+  low: c.low,
+  close: c.close,
+  volume: c.volume || 0,
+});
+
 /**
  * Fetch the full candle series for one timeframe.
  * @param {string} mint
@@ -69,14 +79,56 @@ export async function fetchCandles(mint, timeframe, { priority = "normal" } = {}
     { priority }
   );
   if (!Array.isArray(data)) return [];
-  return data.map((c) => ({
-    time: c.timestamp,
-    open: c.open,
-    high: c.high,
-    low: c.low,
-    close: c.close,
-    volume: c.volume || 0,
-  }));
+  return data.map(toBar);
+}
+
+/**
+ * Merge the stored tail of a series (`?since=`, `{ pool, count, first, candles }`) into the
+ * series a chart holds. Held bars older than the stored series' first bucket are dropped and
+ * the tail replaces every bar from `since` on. Null when the tail shows the stored series
+ * changed behind it — another series pool, or a size the merge does not reproduce (deep
+ * history, a filled gap) — so the caller reloads it in full.
+ * @param {{ bars: Array, pool: string|null }} held
+ * @param {{ pool: string|null, count: number, first: number|null, candles: Array }} tail
+ * @param {number} since - unix seconds the tail was asked from
+ * @returns {{ bars: Array, pool: string|null }|null}
+ */
+export function mergeCandleTail(held, tail, since) {
+  if (!held?.bars?.length || !tail || !Array.isArray(tail.candles)) return null;
+  if (held.pool && tail.pool !== held.pool) return null;
+  const first = Number.isFinite(tail.first) ? tail.first : -Infinity;
+  const bars = held.bars
+    .filter((bar) => bar.time >= first && bar.time < since)
+    .concat(tail.candles.map(toBar));
+  if (bars.length !== tail.count) return null;
+  return { bars, pool: tail.pool ?? null };
+}
+
+/**
+ * Load a chart series, or refresh the one a chart holds. A held series of the same token and
+ * timeframe polls only its stored tail from its newest bar (which may still be forming) and
+ * merges it (`mergeCandleTail`); without one, or when the merge refuses, the series is
+ * fetched in full. The result is the series to hold for the next call.
+ * @param {string} mint
+ * @param {string} timeframe
+ * @param {{ mint: string, timeframe: string, bars: Array, pool: string|null }|null} held
+ * @param {{ priority?: string }} [opts]
+ * @returns {Promise<{ mint: string, timeframe: string, bars: Array, pool: string|null }>}
+ */
+export async function loadCandles(mint, timeframe, held, { priority = "normal" } = {}) {
+  let pool = null;
+  if (held?.mint === mint && held.timeframe === timeframe && held.bars?.length) {
+    const since = held.bars[held.bars.length - 1].time;
+    const tail = await requestManager.fetch(
+      `/api/tokens/${mint}/ohlcv?timeframe=${timeframe}&since=${since}`,
+      { priority }
+    );
+    const merged = mergeCandleTail(held, tail, since);
+    if (merged) return { mint, timeframe, ...merged };
+    pool = tail?.pool ?? null;
+  }
+  const bars = await fetchCandles(mint, timeframe, { priority });
+  return { mint, timeframe, bars, pool };
 }
 
 /**

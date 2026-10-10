@@ -21,8 +21,8 @@ import { renderStateView } from "../state_view.js";
 import {
   CHART_TIMEFRAMES,
   barForTimestamp,
-  fetchCandles,
   fetchOhlcvStatus,
+  loadCandles,
   renderOhlcvStatus,
   timeframeCoveringSpan,
   timeframeForSpan,
@@ -326,12 +326,16 @@ export function applyChartMixin(PositionDetailsDialog) {
     const seq = (this._pddLoadSeq = (this._pddLoadSeq || 0) + 1);
 
     try {
-      const chartData = await fetchCandles(mint, timeframe, {
+      // A held series of this timeframe polls only its stored tail; a timeframe change
+      // reads the full series.
+      const series = await loadCandles(mint, timeframe, isInitial ? null : this._pddSeries, {
         priority: isInitial ? "high" : "normal",
       });
 
       if (seq !== this._pddLoadSeq || !this._pddChart) return;
       if (this._chartTimeframe !== timeframe) return;
+      this._pddSeries = series;
+      const chartData = series.bars;
 
       if (!chartData.length) {
         this._pddEmptyPolls = (this._pddEmptyPolls || 0) + 1;
@@ -765,6 +769,7 @@ export function applyChartMixin(PositionDetailsDialog) {
       this._pddChart = null;
     }
     this._pddChartData = null;
+    this._pddSeries = null;
     this._pddRenderedTf = null;
     this._pddLatestCandle = null;
     this._pddMarkerSignature = null;

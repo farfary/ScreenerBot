@@ -5,8 +5,8 @@
 /**
  * Tests for the shared chart data rules (`ui/chart_data.js`).
  *
- * Covers the pure helpers the position chart relies on: which stored timeframe can show a
- * position, and which candle an event belongs to. Both were bugs on real positions — a
+ * Covers the pure helpers the chart dialogs rely on: which stored timeframe can show a
+ * position, which candle an event belongs to, and how a polled tail merges into a held series. Both were bugs on real positions — a
  * weeks-old position opened on a timeframe whose capped history started after it closed, and
  * an event on an illiquid token snapped to a candle days before it happened.
  *
@@ -131,4 +131,69 @@ test("barForTimestamp rejects unusable input", async () => {
   assert.equal(barForTimestamp([{ time: 0 }], Number.NaN, 60), null);
   assert.equal(barForTimestamp([{ time: 0 }], 0, null), null);
   assert.equal(timeframeSeconds("7m"), null);
+});
+
+const candle = (timestamp, close = 1) => ({
+  timestamp,
+  open: close,
+  high: close,
+  low: close,
+  close,
+  volume: 1,
+});
+const bar = (time, close = 1) => ({ time, open: close, high: close, low: close, close, volume: 1 });
+
+test("mergeCandleTail replaces the forming bar and appends new ones", async () => {
+  const { mergeCandleTail } = await mod();
+  const held = { bars: [bar(60), bar(120), bar(180, 1)], pool: "pool" };
+  const tail = { pool: "pool", count: 4, first: 60, candles: [candle(180, 2), candle(240, 3)] };
+
+  const merged = mergeCandleTail(held, tail, 180);
+
+  assert.deepEqual(
+    merged.bars.map((b) => [b.time, b.close]),
+    [
+      [60, 1],
+      [120, 1],
+      [180, 2],
+      [240, 3],
+    ]
+  );
+  assert.equal(merged.pool, "pool");
+});
+
+test("mergeCandleTail drops held bars the stored series no longer keeps", async () => {
+  const { mergeCandleTail } = await mod();
+  const held = { bars: [bar(60), bar(120), bar(180)], pool: "pool" };
+  const tail = { pool: "pool", count: 3, first: 120, candles: [candle(180), candle(240)] };
+
+  assert.deepEqual(
+    mergeCandleTail(held, tail, 180).bars.map((b) => b.time),
+    [120, 180, 240]
+  );
+});
+
+test("mergeCandleTail refuses a tail whose stored series changed behind it", async () => {
+  const { mergeCandleTail } = await mod();
+  const held = { bars: [bar(60), bar(180)], pool: "pool" };
+  const next = { pool: "pool", count: 2, first: 60, candles: [candle(180)] };
+  assert.ok(mergeCandleTail(held, next, 180));
+
+  // Another series pool.
+  assert.equal(mergeCandleTail(held, { ...next, pool: "other" }, 180), null);
+  // A bucket filled below the tail (a gap fill or deep history).
+  assert.equal(mergeCandleTail(held, { ...next, count: 3 }, 180), null);
+  // The stored series emptied.
+  assert.equal(mergeCandleTail(held, { pool: "pool", count: 0, first: null, candles: [] }, 180), null);
+  // Nothing held, or no tail body.
+  assert.equal(mergeCandleTail({ bars: [], pool: null }, next, 180), null);
+  assert.equal(mergeCandleTail(held, null, 180), null);
+});
+
+test("mergeCandleTail learns the pool when the held series has none yet", async () => {
+  const { mergeCandleTail } = await mod();
+  const held = { bars: [bar(60)], pool: null };
+  const tail = { pool: "pool", count: 1, first: 60, candles: [candle(60, 2)] };
+
+  assert.equal(mergeCandleTail(held, tail, 60).pool, "pool");
 });

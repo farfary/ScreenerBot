@@ -104,6 +104,7 @@ export function applyUtilitiesMixin(DialogClass) {
       this.advancedChart.destroy();
       this.advancedChart = null;
     }
+    this._chartSeries = null;
     this.chart = null;
 
     if (this.dialogEl) {

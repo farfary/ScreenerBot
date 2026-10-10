@@ -27,7 +27,7 @@ import { renderPoolsTab, renderLinksTab } from "./token_details/pools_links_tab.
 import { applyTradeActionsMixin } from "./token_details/trade_actions.js";
 import { applyTransactionsTabMixin } from "./token_details/transactions_tab.js";
 import { applyChartTabMixin } from "./token_details/chart_tab.js";
-import { fetchCandles, triggerRefresh } from "./chart_data.js";
+import { loadCandles, triggerRefresh } from "./chart_data.js";
 import { applyUtilitiesMixin } from "./token_details/utilities.js";
 import { applyStateHandlingMixin } from "./token_details/state_handling.js";
 import { renderStateView } from "./state_view.js";
@@ -120,6 +120,7 @@ export class TokenDetailsDialog {
     this.txChart = null;
     this.txChartResizeObserver = null;
     this.chartDataLoaded = false; // Track whether OHLCV data has been loaded
+    this._chartSeries = null; // Series on the chart, refreshed by its stored tail (loadCandles)
     this._focusTrap = null;
     this._isClosing = false;
     // Data source status tracking
@@ -637,9 +638,11 @@ export class TokenDetailsDialog {
     }
 
     try {
-      // Normal priority for the periodic chart refresh; the limit is fixed by
-      // the shared helper so this poll and the initial load never disagree.
-      const chartData = await fetchCandles(pollMint, pollTimeframe, { priority: "normal" });
+      // Normal priority for the periodic chart refresh. A held series of this
+      // token and timeframe polls only its stored tail (see loadCandles).
+      const series = await loadCandles(pollMint, pollTimeframe, this._chartSeries, {
+        priority: "normal",
+      });
 
       // Drop a response that arrived after the user moved to another token or
       // timeframe (see _loadChartData) — otherwise it overwrites the live chart
@@ -647,6 +650,8 @@ export class TokenDetailsDialog {
       if (this.tokenData?.mint !== pollMint || this.currentTimeframe !== pollTimeframe) {
         return;
       }
+      this._chartSeries = series;
+      const chartData = series.bars;
 
       if (!chartData.length) {
         // No data yet. After a streak of empty responses, switch to a clearer
@@ -872,6 +877,7 @@ export class TokenDetailsDialog {
         this.advancedChart.destroy();
         this.advancedChart = null;
       }
+      this._chartSeries = null;
       this._disposeTransactionsChart();
       this.chart = null;
 
