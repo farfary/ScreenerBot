@@ -1,14 +1,14 @@
 // Copyright (c) 2024-2026 ScreenerBot (screenerbot.io)
 // SPDX-License-Identifier: BUSL-1.1
 
-//! OHLCV schema migrations — the chain-scope upgrade run by
-//! `OhlcvDatabase::create_tables`.
+//! OHLCV schema migrations — the chain-scope upgrade and the additive monitor
+//! columns, run by `OhlcvDatabase::create_tables`.
 
 use rusqlite::{params, Connection};
 
-use crate::ohlcvs::types::{OhlcvError, OhlcvResult};
+use crate::ohlcvs::types::{OhlcvError, OhlcvResult, DEEP_HISTORY_TIMEFRAMES};
 
-use super::table_has_column;
+use super::{deep_history_column, table_has_column};
 
 const CHAIN_SCOPE_MIGRATION: &str = "20260821_chain_scope";
 
@@ -129,6 +129,28 @@ pub(super) fn migrate_chain_scope(conn: &Connection) -> OhlcvResult<()> {
     Ok(())
 }
 
+/// Add each missing deep-history flag column to `ohlcv_monitor_config`, cleared. Additive
+/// and idempotent: existing rows, candles and backfill flags are kept, and every token
+/// pages its deep history once.
+pub(super) fn add_deep_history_columns(conn: &Connection) -> OhlcvResult<()> {
+    for timeframe in DEEP_HISTORY_TIMEFRAMES {
+        let column = deep_history_column(timeframe);
+        if table_has_column(conn, "ohlcv_monitor_config", &column)? {
+            continue;
+        }
+        conn.execute(
+            &format!(
+                "ALTER TABLE ohlcv_monitor_config ADD COLUMN {column} INTEGER NOT NULL DEFAULT 0"
+            ),
+            [],
+        )
+        .map_err(|e| {
+            OhlcvError::DatabaseError(format!("Failed to add ohlcv_monitor_config.{column}: {e}"))
+        })?;
+    }
+    Ok(())
+}
+
 pub(super) fn create_chain_indexes(conn: &Connection) -> OhlcvResult<()> {
     conn.execute_batch(
         "CREATE INDEX IF NOT EXISTS idx_pools_mint ON ohlcv_pools(chain_id, mint);
@@ -188,6 +210,70 @@ mod tests {
             .unwrap();
         assert_eq!(count, 1);
         drop(reopened);
+        let _ = std::fs::remove_file(path);
+    }
+
+    /// A database written before the deep-history flags gains them, cleared, and keeps its
+    /// candles, its backfill flags and its data version.
+    #[test]
+    fn deep_history_columns_are_added_without_touching_existing_data() {
+        use crate::ohlcvs::types::{Candle, Priority, TokenOhlcvConfig, DEEP_HISTORY_TIMEFRAMES};
+        let path = test_path("deep-history-columns");
+        let _ = std::fs::remove_file(&path);
+        let db = OhlcvDatabase::new(&path, ChainId::Solana).unwrap();
+        db.upsert_monitor_config(&TokenOhlcvConfig::new("mint".to_string(), Priority::High))
+            .unwrap();
+        db.insert_candles_batch(
+            "mint",
+            "pool",
+            Timeframe::Hour1,
+            &[Candle::new(3_600, 1.0, 2.0, 0.5, 1.5, 3.0)],
+            OhlcvDatabase::NATIVE_SOURCE,
+        )
+        .unwrap();
+        db.mark_all_backfills_complete("mint", "pool").unwrap();
+        {
+            let conn = db.conn().unwrap();
+            for tf in DEEP_HISTORY_TIMEFRAMES {
+                conn.execute(
+                    &format!(
+                        "ALTER TABLE ohlcv_monitor_config DROP COLUMN {}",
+                        deep_history_column(tf)
+                    ),
+                    [],
+                )
+                .unwrap();
+            }
+        }
+        drop(db);
+
+        let db = OhlcvDatabase::new(&path, ChainId::Solana).unwrap();
+        let conn = db.conn().unwrap();
+        for tf in DEEP_HISTORY_TIMEFRAMES {
+            assert!(
+                table_has_column(&conn, "ohlcv_monitor_config", &deep_history_column(tf)).unwrap()
+            );
+            assert!(!db.is_deep_history_complete("mint", tf).unwrap(), "{tf:?}");
+        }
+        assert!(db.is_backfill_complete("mint", Timeframe::Hour1).unwrap());
+        assert_eq!(
+            db.get_candles("mint", Some("pool"), Timeframe::Hour1, None, None, None)
+                .unwrap()
+                .len(),
+            1
+        );
+        let version: i64 = conn
+            .query_row(
+                "SELECT version FROM ohlcv_data_versions WHERE chain_id = 'solana'",
+                [],
+                |row| row.get(0),
+            )
+            .unwrap();
+        assert_eq!(version, OHLCV_DATA_VERSION);
+        drop(conn);
+        // A second open finds every column and adds nothing.
+        drop(db);
+        OhlcvDatabase::new(&path, ChainId::Solana).unwrap();
         let _ = std::fs::remove_file(path);
     }
 

@@ -18,7 +18,9 @@ pub use types::{
 };
 
 use crate::database::WriteTransaction;
-use crate::ohlcvs::types::{OhlcvError, OhlcvResult, PoolConfig};
+use crate::ohlcvs::types::{
+    OhlcvError, OhlcvResult, PoolConfig, Timeframe, DEEP_HISTORY_TIMEFRAMES,
+};
 use crate::{chains::ChainId, database};
 use chrono::{DateTime, Utc};
 use r2d2::{Pool, PooledConnection};
@@ -26,7 +28,7 @@ use r2d2_sqlite::SqliteConnectionManager;
 use rusqlite::{params, Connection, Result as SqliteResult};
 use std::path::Path;
 
-use migrations::{create_chain_indexes, migrate_chain_scope};
+use migrations::{add_deep_history_columns, create_chain_indexes, migrate_chain_scope};
 
 /// OHLCV store: an r2d2 pool over the chain-scoped SQLite file, matching
 /// every other database in the bot (the shared-store rule). The database is
@@ -191,6 +193,9 @@ impl OhlcvDatabase {
         // Unit-neutral column names come after the chain-scope rebuild, so that
         // rebuild reads the historical shape it was written for.
         column_names::rename_unit_neutral_columns(&tx)?;
+        // After the chain-scope rebuild, which recreates the monitor table in its
+        // historical shape.
+        add_deep_history_columns(&tx)?;
         create_chain_indexes(&tx)?;
         data_version::ensure_data_version(&tx, self.chain_id())?;
 
@@ -400,18 +405,22 @@ fn apply_series_plan(
             )
             .map_err(series_write_err)?;
         tx.execute(
-            "UPDATE ohlcv_monitor_config SET
-                backfill_1m_complete = 0,
-                backfill_5m_complete = 0,
-                backfill_15m_complete = 0,
-                backfill_1h_complete = 0,
-                backfill_4h_complete = 0,
-                backfill_12h_complete = 0,
-                backfill_1d_complete = 0,
-                backfill_started_at = NULL,
-                backfill_completed_at = NULL,
-                updated_at = CURRENT_TIMESTAMP
-             WHERE chain_id = ?1 AND mint = ?2",
+            &format!(
+                "UPDATE ohlcv_monitor_config SET
+                    backfill_1m_complete = 0,
+                    backfill_5m_complete = 0,
+                    backfill_15m_complete = 0,
+                    backfill_1h_complete = 0,
+                    backfill_4h_complete = 0,
+                    backfill_12h_complete = 0,
+                    backfill_1d_complete = 0,
+                    backfill_started_at = NULL,
+                    backfill_completed_at = NULL,
+                    {},
+                    updated_at = CURRENT_TIMESTAMP
+                 WHERE chain_id = ?1 AND mint = ?2",
+                deep_history_reset()
+            ),
             params![chain_id, mint],
         )
         .map_err(series_write_err)?;
@@ -490,6 +499,21 @@ pub(super) fn ensure_series_pool(
     }
 }
 
+/// The `ohlcv_monitor_config` column flagging that a deep-history timeframe holds its kept
+/// depth or the Data Server's whole history (see `Timeframe::max_history_candles`).
+pub(super) fn deep_history_column(timeframe: Timeframe) -> String {
+    format!("deep_{}_complete", timeframe.as_str())
+}
+
+/// The `SET` assignments clearing every deep-history flag.
+fn deep_history_reset() -> String {
+    DEEP_HISTORY_TIMEFRAMES
+        .iter()
+        .map(|tf| format!("{} = 0", deep_history_column(*tf)))
+        .collect::<Vec<_>>()
+        .join(", ")
+}
+
 pub(super) fn table_has_column(conn: &Connection, table: &str, column: &str) -> OhlcvResult<bool> {
     let mut stmt = conn
         .prepare(&format!("PRAGMA table_info({table})"))
@@ -519,20 +543,24 @@ pub(super) fn wipe_candle_data(conn: &Connection, chain_id: &str) -> SqliteResul
     // treated as never-fetched and re-pulls its full series. The monitor rows
     // themselves (and pools) stay so we still know which tokens to watch.
     let tokens_reset = conn.execute(
-        "UPDATE ohlcv_monitor_config SET
-            backfill_1m_complete = 0,
-            backfill_5m_complete = 0,
-            backfill_15m_complete = 0,
-            backfill_1h_complete = 0,
-            backfill_4h_complete = 0,
-            backfill_12h_complete = 0,
-            backfill_1d_complete = 0,
-            backfill_started_at = NULL,
-            backfill_completed_at = NULL,
-            last_fetch = NULL,
-            consecutive_empty_fetches = 0,
-            updated_at = CURRENT_TIMESTAMP
-         WHERE chain_id = ?1",
+        &format!(
+            "UPDATE ohlcv_monitor_config SET
+                backfill_1m_complete = 0,
+                backfill_5m_complete = 0,
+                backfill_15m_complete = 0,
+                backfill_1h_complete = 0,
+                backfill_4h_complete = 0,
+                backfill_12h_complete = 0,
+                backfill_1d_complete = 0,
+                backfill_started_at = NULL,
+                backfill_completed_at = NULL,
+                {},
+                last_fetch = NULL,
+                consecutive_empty_fetches = 0,
+                updated_at = CURRENT_TIMESTAMP
+             WHERE chain_id = ?1",
+            deep_history_reset()
+        ),
         params![chain_id],
     )?;
     Ok(ClearAllResult {

@@ -14,6 +14,15 @@ pub const UNHEALTHY_POOL_RETRY_BASE: Duration = Duration::from_secs(60);
 /// Longest pause between fetches of an unhealthy pool.
 pub const UNHEALTHY_POOL_RETRY_MAX: Duration = Duration::from_secs(30 * 60);
 
+/// Timeframes whose kept history (`Timeframe::max_history_candles`) reaches past the
+/// backfill page, so the monitor pages them further back from the Data Server.
+pub const DEEP_HISTORY_TIMEFRAMES: [Timeframe; 4] = [
+    Timeframe::Hour1,
+    Timeframe::Hour4,
+    Timeframe::Hour12,
+    Timeframe::Day1,
+];
+
 /// Supported timeframes for OHLCV data
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Serialize, Deserialize)]
 pub enum Timeframe {
@@ -94,6 +103,23 @@ impl Timeframe {
     /// coarse charts (1d was 30 candles) even though the server had far more.
     pub fn max_backfill_candles(&self) -> usize {
         1000
+    }
+
+    /// How many candles of this timeframe the app keeps for a series. Fine timeframes keep
+    /// the backfill page; coarse timeframes are paged further back from the Data Server
+    /// (see `DEEP_HISTORY_TIMEFRAMES`) up to 1h 365 days, 4h and 12h 730 days, and 1d 3650
+    /// days, which covers every day a Solana token can have traded. The coarse caps sum to
+    /// about 18k rows per token at most; a token holds fewer when its history is shorter.
+    pub fn max_history_candles(&self) -> usize {
+        match self {
+            Timeframe::Minute1 | Timeframe::Minute5 | Timeframe::Minute15 => {
+                self.max_backfill_candles()
+            }
+            Timeframe::Hour1 => 8_760,
+            Timeframe::Hour4 => 4_380,
+            Timeframe::Hour12 => 1_460,
+            Timeframe::Day1 => 3_650,
+        }
     }
 
     /// Priority order for backfilling (fastest first)
@@ -731,8 +757,31 @@ pub struct OhlcvStatus {
 #[cfg(test)]
 mod tests {
     use super::{
-        Duration, PoolConfig, Priority, UNHEALTHY_POOL_RETRY_BASE, UNHEALTHY_POOL_RETRY_MAX,
+        Duration, PoolConfig, Priority, Timeframe, DEEP_HISTORY_TIMEFRAMES,
+        UNHEALTHY_POOL_RETRY_BASE, UNHEALTHY_POOL_RETRY_MAX,
     };
+
+    /// The deep-history set is exactly the timeframes kept past the backfill page, and no
+    /// timeframe keeps less than that page.
+    #[test]
+    fn deep_history_timeframes_are_those_kept_past_the_backfill_page() {
+        let deep: Vec<Timeframe> = Timeframe::all()
+            .into_iter()
+            .filter(|tf| tf.max_history_candles() > tf.max_backfill_candles())
+            .collect();
+        assert_eq!(deep, DEEP_HISTORY_TIMEFRAMES.to_vec());
+        for tf in Timeframe::all() {
+            assert!(
+                tf.max_history_candles() >= tf.max_backfill_candles(),
+                "{tf:?}"
+            );
+        }
+        let days = |tf: Timeframe| tf.max_history_candles() as i64 * tf.to_seconds() / 86_400;
+        assert_eq!(days(Timeframe::Hour1), 365);
+        assert_eq!(days(Timeframe::Hour4), 730);
+        assert_eq!(days(Timeframe::Hour12), 730);
+        assert_eq!(days(Timeframe::Day1), 3_650);
+    }
 
     /// Catalog key of the label for each monitoring priority. The match is
     /// exhaustive, so a new variant fails to compile until it is mapped here and
