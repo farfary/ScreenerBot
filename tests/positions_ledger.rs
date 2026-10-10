@@ -22,7 +22,7 @@
 //! No database, no network, no clock: `SubjectAssetDelta` values are built inline.
 
 use screenerbot::chains::solana::constants::{SOL_MINT, USDC_MINT};
-use screenerbot::chains::ChainId;
+use screenerbot::chains::{ChainId, RawAmount};
 use screenerbot::positions::ledger::{
     reconcile_with_wallet, reduce_rounds, LedgerEventKind, LedgerRound, QuoteAsset, WalletHolding,
 };
@@ -880,4 +880,139 @@ fn an_overflowing_round_total_is_a_hole_not_a_wrap() {
     assert!(!round.history_complete);
     assert_eq!(round.total_acquired_raw, i128::MAX as u128);
     assert_eq!(round.balance_raw, 2);
+}
+
+// ==================== exact event sizes ====================
+
+/// Every round of `deltas` whose history reconciles: its acquisitions' exact sizes sum to
+/// what it acquired, and its disposals' to what it disposed.
+fn assert_event_sizes_sum_to_the_round_totals(deltas: &[SubjectAssetDelta]) {
+    for round in reduce_rounds(deltas)
+        .iter()
+        .filter(|round| round.history_complete)
+    {
+        let sum = |acquisition: bool| {
+            round
+                .events
+                .iter()
+                .filter(|event| event.kind.is_acquisition() == acquisition)
+                .map(|event| event.amount_raw.raw())
+                .sum::<u128>()
+        };
+        assert_eq!(sum(true), round.total_acquired_raw, "{}", round.round_key);
+        assert_eq!(sum(false), round.total_disposed_raw, "{}", round.round_key);
+    }
+}
+
+#[test]
+fn every_event_carries_its_exact_raw_amount() {
+    // Above 2^53 raw a whole-token f64 can no longer tell neighbouring amounts apart.
+    let bought: u128 = (1 << 60) + 7;
+    let added: u128 = (1 << 58) + 3;
+    let sold: u128 = (1 << 59) + 1;
+    let rest = bought + added - sold;
+    let big = |signature: &str, slot: u64, delta: i128, before: u128, after: u128| {
+        token(
+            signature,
+            slot,
+            MINT_A,
+            delta,
+            before,
+            after,
+            DeltaKind::Trade,
+        )
+    };
+    let deltas = vec![
+        big("big-buy", 10, bought as i128, 0, bought),
+        native("big-buy", 10, -1.0),
+        big("big-add", 11, added as i128, bought, bought + added),
+        native("big-add", 11, -0.5),
+        big("big-sell", 12, -(sold as i128), bought + added, rest),
+        native("big-sell", 12, 0.7),
+        big("big-close", 13, -(rest as i128), rest, 0),
+        native("big-close", 13, 0.9),
+    ];
+
+    let rounds = reduce_rounds(&deltas);
+    let round = round_for(&rounds, MINT_A);
+    let sizes: Vec<RawAmount> = round.events.iter().map(|event| event.amount_raw).collect();
+    assert_eq!(
+        sizes,
+        [bought, added, sold, rest].map(RawAmount::new).to_vec()
+    );
+    assert_event_sizes_sum_to_the_round_totals(&deltas);
+
+    // The same sums hold for every shape of round the reducer produces.
+    let mut partly_sold = buy("sig1", 10, MINT_A, 1_000.0, 2.0);
+    partly_sold.push(token(
+        "sig2",
+        11,
+        MINT_A,
+        -250_000_000,
+        1_000_000_000,
+        750_000_000,
+        DeltaKind::Trade,
+    ));
+    partly_sold.push(native("sig2", 11, 1.0));
+
+    let mut sold_and_bought_again = buy("sig1", 10, MINT_A, 1_000.0, 2.0);
+    sold_and_bought_again.push(token(
+        "sig2",
+        11,
+        MINT_A,
+        -1_000_000_000,
+        1_000_000_000,
+        0,
+        DeltaKind::Trade,
+    ));
+    sold_and_bought_again.push(native("sig2", 11, 3.0));
+    sold_and_bought_again.extend(buy("sig3", 12, MINT_A, 500.0, 1.0));
+
+    let mut token_to_token = buy("sig1", 10, MINT_A, 1_000.0, 2.0);
+    token_to_token.push(token(
+        "sig2",
+        11,
+        MINT_A,
+        -1_000_000_000,
+        1_000_000_000,
+        0,
+        DeltaKind::Trade,
+    ));
+    token_to_token.push(token(
+        "sig2",
+        11,
+        MINT_B,
+        500_000_000,
+        0,
+        500_000_000,
+        DeltaKind::Trade,
+    ));
+
+    let mut received_then_sent = vec![token(
+        "sig1",
+        10,
+        MINT_A,
+        1_000_000_000,
+        0,
+        1_000_000_000,
+        DeltaKind::Transfer,
+    )];
+    received_then_sent.push(token(
+        "sig2",
+        11,
+        MINT_A,
+        -400_000_000,
+        1_000_000_000,
+        600_000_000,
+        DeltaKind::Transfer,
+    ));
+
+    for fixture in [
+        partly_sold,
+        sold_and_bought_again,
+        token_to_token,
+        received_then_sent,
+    ] {
+        assert_event_sizes_sum_to_the_round_totals(&fixture);
+    }
 }

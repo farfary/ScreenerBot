@@ -6,6 +6,7 @@
 use chrono::{DateTime, Utc};
 use rusqlite::{params, Connection, OptionalExtension};
 
+use crate::chains::RawAmount;
 use crate::errors::DatabaseError;
 use crate::positions::types::Position;
 use crate::positions::{Error, Result};
@@ -776,40 +777,101 @@ impl PositionsDatabase {
     }
 }
 
-/// A swap leg the trader booked: `(position_id, transaction_signature, is_exit, sol)`.
-pub type TraderSwapLeg = (i64, String, bool, f64);
+/// A swap leg the trader booked, read from an entry or exit record.
+#[derive(Debug, Clone, PartialEq)]
+pub struct TraderSwapLeg {
+    pub position_id: i64,
+    pub signature: String,
+    pub is_exit: bool,
+    /// SOL spent on an entry, or received from an exit, as the record booked it.
+    pub native: f64,
+    /// Tokens the leg bought or sold, raw units.
+    pub amount: RawAmount,
+}
 
-/// Every swap leg the trader booked for `wallet_address`, from the entry and exit records,
-/// limited to one position when `position_id` is given.
+/// Which positions a swap-leg read covers.
+#[derive(Debug, Clone, Copy)]
+pub(super) enum SwapLegScope<'a> {
+    /// Every position of the wallet.
+    Wallet,
+    /// Every position of `mint` in the store of `chain`.
+    Mint { chain: &'a str, mint: &'a str },
+}
+
+/// Every swap leg the trader booked for `wallet_address` in `scope`, from the entry and exit
+/// records. A record whose amount does not decode fails the read.
 pub(super) fn query_trader_swap_legs(
     conn: &Connection,
     wallet_address: &str,
-    position_id: Option<i64>,
+    scope: SwapLegScope<'_>,
 ) -> rusqlite::Result<Vec<TraderSwapLeg>> {
-    let position_filter = if position_id.is_some() {
-        " AND position_id = ?2"
-    } else {
-        ""
+    let position_filter = match scope {
+        SwapLegScope::Wallet => "",
+        SwapLegScope::Mint { .. } => {
+            " AND position_id IN (SELECT id FROM positions WHERE chain_id = ?2 AND mint = ?3)"
+        }
     };
     let mut stmt = conn.prepare(&format!(
-        "SELECT position_id, transaction_signature, 0 AS is_exit, native_spent AS sol
+        "SELECT position_id, transaction_signature, 0 AS is_exit, native_spent AS native, amount
            FROM position_entries WHERE wallet_address = ?1{position_filter}
          UNION ALL
-         SELECT position_id, transaction_signature, 1 AS is_exit, native_received AS sol
+         SELECT position_id, transaction_signature, 1 AS is_exit, native_received AS native, amount
            FROM position_exits WHERE wallet_address = ?1{position_filter}"
     ))?;
     let leg = |row: &rusqlite::Row<'_>| {
-        Ok((
-            row.get::<_, i64>(0)?,
-            row.get::<_, String>(1)?,
-            row.get::<_, i64>(2)? != 0,
-            row.get::<_, f64>(3)?,
-        ))
+        Ok(TraderSwapLeg {
+            position_id: row.get(0)?,
+            signature: row.get(1)?,
+            is_exit: row.get::<_, i64>(2)? != 0,
+            native: row.get(3)?,
+            amount: row.get(4)?,
+        })
     };
-    match position_id {
-        Some(position_id) => stmt
-            .query_map(params![wallet_address, position_id], leg)?
+    match scope {
+        SwapLegScope::Wallet => stmt.query_map(params![wallet_address], leg)?.collect(),
+        SwapLegScope::Mint { chain, mint } => stmt
+            .query_map(params![wallet_address, chain, mint], leg)?
             .collect(),
-        None => stmt.query_map(params![wallet_address], leg)?.collect(),
     }
+}
+
+/// The signatures a position of a mint is booked under, beside its records.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct MintRow {
+    pub id: i64,
+    pub entry_signature: Option<String>,
+    pub exit_signature: Option<String>,
+}
+
+impl MintRow {
+    /// The row's identity and signatures, `None` for a row not stored yet.
+    pub fn of(position: &Position) -> Option<Self> {
+        Some(Self {
+            id: position.id?,
+            entry_signature: position.entry_transaction_signature.clone(),
+            exit_signature: position.exit_transaction_signature.clone(),
+        })
+    }
+}
+
+/// Every position of `mint` for `wallet_address` in the store of `chain`.
+pub(super) fn query_mint_rows(
+    conn: &Connection,
+    chain: &str,
+    wallet_address: &str,
+    mint: &str,
+) -> rusqlite::Result<Vec<MintRow>> {
+    let mut stmt = conn.prepare(
+        "SELECT id, entry_transaction_signature, exit_transaction_signature
+         FROM positions
+         WHERE chain_id = ?1 AND wallet_address = ?2 AND mint = ?3",
+    )?;
+    let rows = stmt.query_map(params![chain, wallet_address, mint], |row| {
+        Ok(MintRow {
+            id: row.get(0)?,
+            entry_signature: row.get(1)?,
+            exit_signature: row.get(2)?,
+        })
+    })?;
+    rows.collect()
 }

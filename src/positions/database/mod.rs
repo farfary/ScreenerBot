@@ -37,6 +37,7 @@ pub use global::{
 
 pub(crate) use booking::{Booking, BookingReads, BookingRecord, Committed, OtherOpenHeld};
 pub(crate) use operations::carry_columns_not_booked;
+pub use queries::{MintRow, TraderSwapLeg};
 
 // Re-export convenience functions
 pub(crate) use convenience::{

@@ -14,7 +14,7 @@ use crate::positions::{Error, Result};
 use super::booking::{query_other_open_held, Booking, BookingReads, Committed, OtherOpenHeld};
 use super::global::GLOBAL_POSITIONS_DB;
 use super::open_round::{query_open_round_id, refuse_second_active_open_round};
-use super::queries::{query_trader_swap_legs, TraderSwapLeg};
+use super::queries::{query_trader_swap_legs, SwapLegScope, TraderSwapLeg};
 use super::types::{DailyTradingStats, PeriodTradingStats, TokenSnapshot};
 
 // =============================================================================
@@ -584,6 +584,8 @@ pub async fn get_trader_swap_legs() -> Result<Vec<TraderSwapLeg>> {
             detail: e.to_string(),
         })?;
 
-    Ok(query_trader_swap_legs(&conn, &wallet_address, None)
-        .map_err(|e| DatabaseError::classify_sqlite_failure("get_trader_swap_legs", e))?)
+    Ok(
+        query_trader_swap_legs(&conn, &wallet_address, SwapLegScope::Wallet)
+            .map_err(|e| DatabaseError::classify_sqlite_failure("get_trader_swap_legs", e))?,
+    )
 }

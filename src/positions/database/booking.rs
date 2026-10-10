@@ -14,7 +14,9 @@ use crate::positions::{Error, Result};
 
 use super::open_round::{query_active_open_round_ids, query_open_round_id};
 use super::operations::write_position_row;
-use super::queries::{query_trader_swap_legs, TraderSwapLeg};
+use super::queries::{
+    query_mint_rows, query_trader_swap_legs, MintRow, SwapLegScope, TraderSwapLeg,
+};
 use super::types::{PositionsDatabase, POSITION_SELECT_COLUMNS};
 
 /// The history record written in the same transaction as the row.
@@ -188,10 +190,21 @@ impl BookingReads<'_> {
         Ok(Some(row))
     }
 
-    /// The swap legs the trader booked for this position.
-    pub(crate) fn trader_swap_legs(&self) -> Result<Vec<TraderSwapLeg>> {
+    /// The swap legs the trader booked for every position of `mint` in this wallet.
+    pub(crate) fn mint_swap_legs(&self, mint: &str) -> Result<Vec<TraderSwapLeg>> {
         let wallet_address = self.wallet_address.clone()?;
-        query_trader_swap_legs(self.conn, wallet_address, Some(self.position_id))
+        let scope = SwapLegScope::Mint {
+            chain: self.chain,
+            mint,
+        };
+        query_trader_swap_legs(self.conn, wallet_address, scope)
+            .map_err(|e| DatabaseError::classify_sqlite_failure("commit_booking", e).into())
+    }
+
+    /// Every position of `mint` in this wallet, with the signatures it is booked under.
+    pub(crate) fn mint_rows(&self, mint: &str) -> Result<Vec<MintRow>> {
+        let wallet_address = self.wallet_address.clone()?;
+        query_mint_rows(self.conn, self.chain, wallet_address, mint)
             .map_err(|e| DatabaseError::classify_sqlite_failure("commit_booking", e).into())
     }
 

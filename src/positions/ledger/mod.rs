@@ -118,6 +118,8 @@ pub struct LedgerEvent {
     pub kind: LedgerEventKind,
     /// Absolute size of the movement, whole tokens.
     pub amount: f64,
+    /// Absolute size of the movement in raw units, exact.
+    pub amount_raw: RawAmount,
     /// Round balance after this movement, whole tokens.
     pub balance_after: f64,
     /// Consideration observed in the same transaction, when there was one.

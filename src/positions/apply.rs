@@ -1376,9 +1376,11 @@ struct HandedTo {
 }
 
 /// Whether the close of `row` came from the wallet history and its proceeds already count
-/// a sale made at `sale_time`. The ledger books a round's close from the chain, with the
-/// proceeds of every disposal up to the round's close time, and only when the history
-/// reconciles; a sale at or before that time is in them.
+/// a sale made at `sale_time`. The ledger books a round's close from the chain, only when
+/// the history reconciles, with the row's own booked proceeds plus every disposal of its
+/// part of the round, up to the round's close time, that no position booked. A late bot
+/// sale is unbooked when the ledger closes the row, so a sale at or before that time is in
+/// them.
 fn ledger_close_counts(row: &Position, sale_time: DateTime<Utc>) -> bool {
     !row.synthetic_exit
         && row.history_complete

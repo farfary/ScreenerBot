@@ -46,9 +46,11 @@
 //! was sold somewhere else. Following it UP is what makes a buy the user made in another
 //! wallet app show up — it is the same round, so it is the same row, and the row's basis
 //! becomes the trader's booked SOL plus the chain's SOL for every leg the trader did not
-//! book (see [`TraderLegs`]). Nothing else the trader owns is rewritten, and a row with
-//! work in flight (an unverified entry, a pending DCA or partial exit) is left
-//! completely alone until that work lands — including not being duplicated.
+//! book (see [`TraderLegs`]). A round that another position of the mint booked part of
+//! charges the row only its own part, and a closed row is never resized. Nothing else the
+//! trader owns is rewritten, and a row with work in flight (an unverified entry, a pending
+//! DCA or partial exit) is left completely alone until that work lands — including not
+//! being duplicated.
 //!
 //! Freezing is a FLAG, never an action: a frozen token account sets
 //! `holding_state = "frozen"` so the user can see the holding cannot be sold and archive
@@ -64,7 +66,9 @@ use super::{
 };
 use crate::chains::RawAmount;
 use crate::logger::{self, LogTag};
-use crate::positions::db::{Booking, Committed};
+use crate::positions::db::{Booking, Committed, MintRow, TraderSwapLeg};
+use crate::positions::pnl::realized_pnl;
+use crate::positions::round_state::attributable_held;
 use crate::positions::types::{Position, PositionManagement, PositionOrigin, HOLDING_STATE_FROZEN};
 use crate::positions::{EXIT_RETRY_PENDING, PENDING_VERIFICATION_SUFFIX};
 
@@ -94,27 +98,224 @@ pub fn is_wallet_history_close_reason(reason: Option<&str>) -> bool {
 pub struct TraderLegs {
     /// Signatures of acquisitions the trader booked.
     pub entry_signatures: HashSet<String>,
+    /// Signatures of disposals the trader booked.
+    pub exit_signatures: HashSet<String>,
     /// SOL those acquisitions cost, fee-exact as the trader recorded it.
     pub booked_invested_native: f64,
+    /// Tokens those acquisitions booked, raw units.
+    pub booked_acquired: RawAmount,
 }
 
 impl TraderLegs {
-    /// Build the per-position map from `(position_id, signature, is_exit, sol)` rows.
-    pub fn from_rows(
-        rows: impl IntoIterator<Item = (i64, String, bool, f64)>,
-    ) -> HashMap<i64, Self> {
+    /// Build the per-position map from the booked legs, counting each signature once per
+    /// position.
+    pub fn from_rows(rows: impl IntoIterator<Item = TraderSwapLeg>) -> HashMap<i64, Self> {
         let mut map: HashMap<i64, Self> = HashMap::new();
-        for (position_id, signature, is_exit, sol) in rows {
-            if is_exit {
-                continue;
-            }
-            let legs = map.entry(position_id).or_default();
-            if legs.entry_signatures.insert(signature) {
-                legs.booked_invested_native += sol;
+        for leg in rows {
+            let legs = map.entry(leg.position_id).or_default();
+            if leg.is_exit {
+                legs.exit_signatures.insert(leg.signature);
+            } else if legs.entry_signatures.insert(leg.signature) {
+                legs.booked_invested_native += leg.native;
+                legs.booked_acquired = legs
+                    .booked_acquired
+                    .checked_add(leg.amount)
+                    .unwrap_or(RawAmount::MAX);
             }
         }
         map
     }
+
+    /// True when this position booked a leg under `signature`.
+    fn booked(&self, signature: &str) -> bool {
+        self.entry_signatures.contains(signature) || self.exit_signatures.contains(signature)
+    }
+}
+
+/// What a bot row's reconciliation may charge it from a round: its own booked legs, and
+/// which of the round's signatures other positions of the mint booked.
+///
+/// A round is a wallet fact, so it can hold the legs of more than one position: a closed
+/// position whose round never returned to zero (dust, a write-off whose tokens stayed) and
+/// the open position bought into the same holding. Each is charged only its own part.
+#[derive(Debug, Clone)]
+struct RoundAttribution {
+    /// The legs this row booked.
+    own: TraderLegs,
+    /// This row's entry signature, which identifies its part even without records.
+    own_entry_signature: Option<String>,
+    /// Every record, entry and exit signature of the mint's other positions.
+    booked_elsewhere: HashSet<String>,
+    /// What the mint's other open positions hold.
+    held_elsewhere: RawAmount,
+    /// The row's records cover its entry, every DCA and every partial exit it booked.
+    records_complete: bool,
+}
+
+impl RoundAttribution {
+    /// The attribution of `row` among `mint_rows`, every position of its mint, from the
+    /// booked `legs` of each and what the other open positions hold.
+    fn new(
+        row: &Position,
+        mint_rows: &[MintRow],
+        legs: &HashMap<i64, TraderLegs>,
+        held_elsewhere: RawAmount,
+    ) -> Self {
+        let mut booked_elsewhere = HashSet::new();
+        for other in mint_rows.iter().filter(|other| Some(other.id) != row.id) {
+            booked_elsewhere.extend(other.entry_signature.iter().cloned());
+            booked_elsewhere.extend(other.exit_signature.iter().cloned());
+            if let Some(other_legs) = legs.get(&other.id) {
+                booked_elsewhere.extend(other_legs.entry_signatures.iter().cloned());
+                booked_elsewhere.extend(other_legs.exit_signatures.iter().cloned());
+            }
+        }
+        let own: TraderLegs = row
+            .id
+            .and_then(|id| legs.get(&id))
+            .cloned()
+            .unwrap_or_default();
+        let records_complete = row
+            .entry_transaction_signature
+            .as_ref()
+            .is_none_or(|signature| own.entry_signatures.contains(signature))
+            && own.entry_signatures.len() >= 1 + row.dca_count as usize
+            && own.exit_signatures.len() >= row.partial_exit_count as usize;
+        Self {
+            own,
+            own_entry_signature: row.entry_transaction_signature.clone(),
+            booked_elsewhere,
+            held_elsewhere,
+            records_complete,
+        }
+    }
+
+    /// True when another position of the mint booked one of the round's signatures.
+    fn shares(&self, round: &LedgerRound) -> bool {
+        round
+            .events
+            .iter()
+            .any(|event| self.booked_elsewhere.contains(&event.signature))
+    }
+
+    /// True when `signature` is one of this row's own: a booked leg or its entry.
+    fn is_own(&self, signature: &str) -> bool {
+        self.own.booked(signature) || self.own_entry_signature.as_deref() == Some(signature)
+    }
+}
+
+/// A row's part of a round it shares with another position of its mint.
+#[derive(Debug, Clone)]
+struct RoundShare {
+    /// The row's booked acquisitions plus every outside acquisition of its part, raw.
+    acquired: RawAmount,
+    /// The row's booked SOL plus the SOL of every outside traded acquisition of its part.
+    invested_native: f64,
+    /// The row's booked entries plus the outside traded acquisitions of its part.
+    entries: u32,
+    /// The wallet's holding the row can own.
+    held: RawAmount,
+    has_outside_acquisition: bool,
+    /// Every outside acquisition of the part is a trade with a SOL quote, in a round whose
+    /// basis is complete.
+    basis_known: bool,
+    /// What the outside disposals of the part received, when every one was priced in SOL.
+    outside_proceeds: Option<OutsideProceeds>,
+}
+
+/// SOL received for whole tokens sold outside the bot.
+#[derive(Debug, Clone, Copy, PartialEq)]
+struct OutsideProceeds {
+    native: f64,
+    tokens: f64,
+}
+
+/// The row's part of a shared `round`: the events from its first own event to the end of
+/// the round. `None` when the round is not shared, the row's records do not cover its
+/// entry, every DCA and every partial exit, or none of the round's events is the row's own.
+///
+/// The row's own legs come from its records. An event the row booked is skipped, and an
+/// event another position booked belongs to that position; every other event of the part
+/// happened outside the bot and is the row's. A leg the row booked without a record would
+/// be counted as outside, so a row missing one has no part that can be told apart.
+fn round_share(round: &LedgerRound, attribution: &RoundAttribution) -> Option<RoundShare> {
+    if !attribution.shares(round) || !attribution.records_complete {
+        return None;
+    }
+    let start = round
+        .events
+        .iter()
+        .position(|event| attribution.is_own(&event.signature))?;
+
+    let own = &attribution.own;
+    let mut acquired = own.booked_acquired;
+    let mut invested_native = own.booked_invested_native;
+    let mut entries = u32::try_from(own.entry_signatures.len()).unwrap_or(u32::MAX);
+    let mut has_outside_acquisition = false;
+    let mut outside_acquisitions_priced = true;
+    let mut disposed = RawAmount::ZERO;
+    let mut proceeds_native = 0.0;
+    let mut disposals_priced = true;
+
+    let outside = round.events[start..].iter().filter(|event| {
+        !attribution.is_own(&event.signature)
+            && !attribution.booked_elsewhere.contains(&event.signature)
+    });
+    for event in outside {
+        let sol = event
+            .quote
+            .filter(|quote| quote.asset == QuoteAsset::Sol)
+            .map(|quote| quote.amount);
+        match event.kind {
+            LedgerEventKind::Entry | LedgerEventKind::Add | LedgerEventKind::Receive => {
+                has_outside_acquisition = true;
+                acquired = acquired
+                    .checked_add(event.amount_raw)
+                    .unwrap_or(RawAmount::MAX);
+                if event.kind == LedgerEventKind::Receive {
+                    outside_acquisitions_priced = false;
+                    continue;
+                }
+                entries = entries.saturating_add(1);
+                match sol {
+                    Some(sol) => invested_native += sol,
+                    None => outside_acquisitions_priced = false,
+                }
+            }
+            LedgerEventKind::PartialExit | LedgerEventKind::Exit => {
+                disposed = disposed
+                    .checked_add(event.amount_raw)
+                    .unwrap_or(RawAmount::MAX);
+                match sol {
+                    Some(sol) => proceeds_native += sol,
+                    None => disposals_priced = false,
+                }
+            }
+            LedgerEventKind::Send => disposals_priced = false,
+        }
+    }
+
+    let disposed_tokens = disposed.to_whole_units(round.decimals);
+    let outside_proceeds =
+        (round.average_exit_price_native.is_some() && disposals_priced && disposed_tokens > DUST)
+            .then_some(OutsideProceeds {
+                native: proceeds_native,
+                tokens: disposed_tokens,
+            });
+
+    Some(RoundShare {
+        acquired,
+        invested_native,
+        entries,
+        held: attributable_held(
+            RawAmount::new(round.balance_raw),
+            attribution.held_elsewhere,
+            acquired,
+        ),
+        has_outside_acquisition,
+        basis_known: round.basis_complete && outside_acquisitions_priced,
+        outside_proceeds,
+    })
 }
 
 /// Display metadata for a mint, resolved once per sync from the tokens database.
@@ -137,8 +338,8 @@ pub struct SyncPlan {
     /// The planning clock, reused when an update is re-derived at write time.
     pub now: DateTime<Utc>,
     /// The signatures of every swap leg the trader had booked before the wallet history
-    /// was read, when known. A bot row whose legs include one booked later is not
-    /// reconciled: its round may predate that fill.
+    /// was read, when known. A bot row of a mint with a leg booked later, on any of its
+    /// positions, is not reconciled: its round may predate that fill.
     booked_before: Option<HashSet<String>>,
 }
 
@@ -224,6 +425,13 @@ pub fn plan_position_writes(
                 .map(|round_key| (round_key, position))
         })
         .collect();
+    let mut by_mint: HashMap<&str, Vec<&Position>> = HashMap::new();
+    for position in existing {
+        by_mint
+            .entry(position.mint.as_str())
+            .or_default()
+            .push(position);
+    }
 
     // Rows that predate the ledger, and rows the trader opened before their transaction
     // reached the delta table, carry no round key yet. They are adopted by
@@ -282,8 +490,16 @@ pub fn plan_position_writes(
             },
         };
 
-        let legs = current.id.and_then(|id| trader_legs.get(&id));
-        let Some(position) = rewrite_row(current, round, &meta, legs, busy_mints, now) else {
+        let attribution = (!current.is_wallet_derived()).then(|| {
+            let mint_positions = by_mint
+                .get(current.mint.as_str())
+                .map(Vec::as_slice)
+                .unwrap_or_default();
+            planned_attribution(current, mint_positions, trader_legs)
+        });
+        let Some(position) =
+            rewrite_row(current, round, &meta, attribution.as_ref(), busy_mints, now)
+        else {
             continue;
         };
         if open_row.is_some() {
@@ -306,6 +522,29 @@ pub fn plan_position_writes(
     }
 
     plan
+}
+
+/// The attribution of bot row `row` against `mint_positions`, every row of its mint read for
+/// the plan: the other open rows of the mint hold what they claim.
+fn planned_attribution(
+    row: &Position,
+    mint_positions: &[&Position],
+    trader_legs: &HashMap<i64, TraderLegs>,
+) -> RoundAttribution {
+    let mint_rows: Vec<MintRow> = mint_positions
+        .iter()
+        .copied()
+        .filter_map(MintRow::of)
+        .collect();
+    let held_elsewhere = mint_positions
+        .iter()
+        .copied()
+        .filter(|other| other.id != row.id && other.exit_time.is_none())
+        .filter_map(Position::held_amount)
+        .fold(RawAmount::ZERO, |held, amount| {
+            held.checked_add(amount).unwrap_or(RawAmount::MAX)
+        });
+    RoundAttribution::new(row, &mint_rows, trader_legs, held_elsewhere)
 }
 
 /// The open row of `round`'s mint whose own entry is one of the round's acquisitions and
@@ -346,13 +585,14 @@ fn acquisition_signatures(round: &LedgerRound) -> Vec<&str> {
 /// as it is.
 ///
 /// A row the bot executed is reconciled against the chain, never rewritten, and left
-/// alone while the trader has work in flight on it. A wallet-derived row is rebuilt from
-/// the round. Either way, a rewrite that changes nothing is not written.
+/// alone while the trader has work in flight on it; it needs its `attribution`, and is left
+/// as it is without one. A wallet-derived row is rebuilt from the round. Either way, a
+/// rewrite that changes nothing is not written.
 fn rewrite_row(
     current: &Position,
     round: &LedgerRound,
     meta: &RoundMetadata,
-    legs: Option<&TraderLegs>,
+    attribution: Option<&RoundAttribution>,
     busy_mints: &HashSet<String>,
     now: DateTime<Utc>,
 ) -> Option<Position> {
@@ -363,7 +603,7 @@ fn rewrite_row(
     if is_busy(current, busy_mints) {
         return None;
     }
-    let fresh = reconcile_owned_position(current, round, meta, legs, now);
+    let fresh = reconcile_owned_position(current, round, meta, attribution?, now);
     differs_owned(current, &fresh).then_some(fresh)
 }
 
@@ -536,29 +776,28 @@ fn build_position(
 /// entry records are never touched. What the CHAIN owns is the size of the holding and
 /// what it cost, and this is where the two meet.
 ///
+/// A closed row is settled: the ledger stamps its round key and holding state and changes
+/// nothing else, whatever its round did after the close.
+///
 /// A round is one wallet fact and one row, so an acquisition the user made in another
-/// wallet app belongs to the same round as the bot's own buy. Ignoring it — which is
-/// what this used to do — left the row claiming the balance and the cost basis it had
-/// before the outside buy: the Positions tab showed 0.005 SOL invested while the wallet
-/// held three times the tokens, and the next exit would have been sized against a
-/// holding that no longer existed.
+/// wallet app belongs to the same round as the bot's own buy, and the row follows the
+/// holding up as well as down (see [`adopt_external_growth`]).
 ///
-/// So the growth is ADOPTED, but only from legs the trader did not book itself:
-/// `legs` carries the signatures and fee-exact SOL of the entries this position already
-/// recorded, and everything else in the round is taken from the chain. That makes the
-/// basis `booked + external`, which is recomputed identically on every resync instead of
-/// accumulating.
+/// When another position of the mint booked part of the round (a closed position whose
+/// round never returned to zero, with the open position bought into the same holding), the
+/// row is charged only its own part (see [`round_share`]): its booked legs, plus the
+/// outside events after its first own event. A row whose part cannot be located, whose
+/// records miss its entry, a DCA or a partial exit, or whose records do not cover what it
+/// holds, keeps its sizes and basis as booked, and a close of its round books no proceeds.
 ///
-/// Adoption requires the round to reconcile. A round whose history has a hole
-/// (`history_complete == false`) keeps the old shrink-only behaviour, and a round whose
-/// consideration could not be established in SOL (`basis_complete == false`) leaves the
-/// trader's basis alone and clears `basis_complete` on the row, so the dashboard hides a
-/// P&L it cannot compute rather than showing a wrong one.
+/// A round closed by a sale outside the bot closes the row. Its proceeds are the round's
+/// when the row owns the whole round, and the row's own booked proceeds plus its part's
+/// outside sales when it shares it; P&L is the realized P&L of the row as closed.
 fn reconcile_owned_position(
     existing: &Position,
     round: &LedgerRound,
     meta: &RoundMetadata,
-    legs: Option<&TraderLegs>,
+    attribution: &RoundAttribution,
     now: DateTime<Utc>,
 ) -> Position {
     let mut position = existing.clone();
@@ -566,40 +805,121 @@ fn reconcile_owned_position(
     position.holding_state =
         (meta.frozen && round.is_open).then(|| HOLDING_STATE_FROZEN.to_owned());
 
-    let observed_remaining = RawAmount::new(round.balance_raw);
-    let claimed_remaining = existing.remaining_token_amount.unwrap_or_default();
-    let grew = observed_remaining > claimed_remaining;
-
-    if grew && round.history_complete {
-        adopt_external_growth(&mut position, existing, round, legs);
-    }
-
-    if round.is_open {
-        if let Some(sold) = claimed_remaining
-            .checked_sub(observed_remaining)
-            .filter(|sold| *sold > RawAmount::ZERO)
-        {
-            if let Err(error) = position.book_exit(sold) {
-                position.remaining_token_amount = Some(observed_remaining);
-                position.history_complete = false;
-                logger::warning(
-                    LogTag::Positions,
-                    &format!(
-                        "Ledger reconcile for {}: exited amount not updated: {error}",
-                        short_mint(&existing.mint)
-                    ),
-                );
-            }
-        }
-        return position;
-    }
-
-    // The round is closed on chain. A position that already booked its own exit is
-    // settled — the trader wrote the fee-exact numbers and there is nothing to add.
     if existing.exit_time.is_some() {
         return position;
     }
 
+    let claimed_remaining = existing.remaining_token_amount.unwrap_or_default();
+    let close_proceeds = if attribution.shares(round) {
+        let Some(share) =
+            round_share(round, attribution).filter(|share| share.acquired >= claimed_remaining)
+        else {
+            // The row's legs are not all recorded, or its records do not cover what it
+            // holds: what it owns of the round is unknown.
+            if round.is_open {
+                return position;
+            }
+            return close_owned_position(position, existing, round, CloseProceeds::Unknown, now);
+        };
+        if share.has_outside_acquisition && share.held > claimed_remaining && round.history_complete
+        {
+            adopt_external_growth(
+                &mut position,
+                Growth {
+                    held: share.held,
+                    acquired: share.acquired,
+                    exited: share
+                        .acquired
+                        .checked_sub(share.held)
+                        .unwrap_or(RawAmount::ZERO),
+                    entries: share.entries,
+                    invested_native: share.basis_known.then_some(share.invested_native),
+                },
+                round.decimals,
+            );
+        }
+        if round.is_open {
+            shrink_to(&mut position, existing, claimed_remaining, share.held);
+            return position;
+        }
+        CloseProceeds::Outside(share.outside_proceeds)
+    } else {
+        let observed_remaining = RawAmount::new(round.balance_raw);
+        if observed_remaining > claimed_remaining && round.history_complete {
+            adopt_external_growth(
+                &mut position,
+                Growth {
+                    held: observed_remaining,
+                    acquired: RawAmount::new(round.total_acquired_raw),
+                    exited: RawAmount::new(round.total_disposed_raw),
+                    entries: round.entry_count,
+                    invested_native: round
+                        .basis_complete
+                        .then(|| whole_round_invested(existing, round, &attribution.own)),
+                },
+                round.decimals,
+            );
+        }
+        if round.is_open {
+            shrink_to(
+                &mut position,
+                existing,
+                claimed_remaining,
+                observed_remaining,
+            );
+            return position;
+        }
+        CloseProceeds::Round
+    };
+
+    close_owned_position(position, existing, round, close_proceeds, now)
+}
+
+/// Lowers an open row's holding from `claimed` to `observed` when tokens left the wallet.
+fn shrink_to(
+    position: &mut Position,
+    existing: &Position,
+    claimed: RawAmount,
+    observed: RawAmount,
+) {
+    let Some(sold) = claimed
+        .checked_sub(observed)
+        .filter(|sold| *sold > RawAmount::ZERO)
+    else {
+        return;
+    };
+    if let Err(error) = position.book_exit(sold) {
+        position.remaining_token_amount = Some(observed);
+        position.history_complete = false;
+        logger::warning(
+            LogTag::Positions,
+            &format!(
+                "Ledger reconcile for {}: exited amount not updated: {error}",
+                short_mint(&existing.mint)
+            ),
+        );
+    }
+}
+
+/// Which proceeds a round closed outside the bot books on the row it closes.
+enum CloseProceeds {
+    /// The row owns the whole round: the round's proceeds.
+    Round,
+    /// The row shares the round: its own booked proceeds plus these outside sales, when
+    /// they were all priced.
+    Outside(Option<OutsideProceeds>),
+    /// What the row owns of the round is unknown: no proceeds.
+    Unknown,
+}
+
+/// Close an open bot row whose round closed on chain without the bot selling it.
+fn close_owned_position(
+    mut position: Position,
+    existing: &Position,
+    round: &LedgerRound,
+    proceeds: CloseProceeds,
+    now: DateTime<Utc>,
+) -> Position {
     if let Err(error) = position.book_remaining_as_exited() {
         position.history_complete = false;
         logger::warning(
@@ -639,7 +959,7 @@ fn reconcile_owned_position(
     position.unrealized_pnl = None;
     position.unrealized_pnl_percent = None;
 
-    // Proceeds only when every disposal in the round was priced in SOL AND the history
+    // Proceeds only when every disposal counted was priced in SOL AND the history
     // reconciles. A round whose tokens left the wallet without a disposal we could
     // observe still carries the average price of the disposals we DID see, so pricing
     // the close from it would book the proceeds of part of the position against the cost
@@ -649,63 +969,89 @@ fn reconcile_owned_position(
         return position;
     }
 
-    if let Some(exit_price) = round.average_exit_price_native {
-        position.exit_price = Some(exit_price);
-        position.effective_exit_price = Some(exit_price);
-        position.average_exit_price = Some(exit_price);
-        position.native_received = Some(round.realized_proceeds_native);
-        // The basis is the position's own cumulative `total_size_native` (entry + every
-        // DCA), which is fee-exact because the trader booked it; the proceeds are the
-        // chain's. Mixing the two is the only complete number available here.
-        if position.total_size_native > DUST {
-            let pnl = round.realized_proceeds_native - position.total_size_native;
-            position.pnl = Some(pnl);
-            position.pnl_percent = Some(pnl / position.total_size_native * 100.0);
+    let (exit_price, native_received) = match proceeds {
+        CloseProceeds::Round => match round.average_exit_price_native {
+            Some(exit_price) => (exit_price, round.realized_proceeds_native),
+            None => return position,
+        },
+        CloseProceeds::Outside(Some(outside)) => (
+            outside.native / outside.tokens,
+            existing.native_received.unwrap_or_default() + outside.native,
+        ),
+        CloseProceeds::Outside(None) => return position,
+        CloseProceeds::Unknown => {
+            position.history_complete = false;
+            return position;
         }
+    };
+    position.exit_price = Some(exit_price);
+    position.effective_exit_price = Some(exit_price);
+    position.average_exit_price = Some(exit_price);
+    position.native_received = Some(native_received);
+    // The basis is the position's own cumulative `total_size_native` (entry + every DCA),
+    // fee-exact because the trader booked it; the proceeds are the chain's.
+    if position.total_size_native > DUST {
+        let (pnl, pnl_percent) = realized_pnl(&position);
+        position.pnl = Some(pnl);
+        position.pnl_percent = Some(pnl_percent);
     }
 
     position
 }
 
+/// The holding a bot row takes on when acquisitions made outside the bot grew it.
+struct Growth {
+    held: RawAmount,
+    acquired: RawAmount,
+    exited: RawAmount,
+    /// Traded acquisitions, the entry included.
+    entries: u32,
+    /// What everything acquired cost, `None` when part of it has no SOL price.
+    invested_native: Option<f64>,
+}
+
 /// Fold acquisitions the user made outside the bot into a bot-owned row.
 ///
-/// The trader's own legs are identified by signature and keep the SOL it recorded (which
-/// includes the fee it actually paid); every other traded acquisition in the round
-/// contributes the SOL the chain shows. Recomputing the whole basis from those two parts
-/// on each pass is what makes a resync idempotent — adding the difference would inflate
-/// the position a little more every time the wallet moved.
-fn adopt_external_growth(
-    position: &mut Position,
-    existing: &Position,
-    round: &LedgerRound,
-    legs: Option<&TraderLegs>,
-) {
-    // Chain truth for the sizes, whoever bought them.
-    position.remaining_token_amount = Some(RawAmount::new(round.balance_raw));
-    position.token_amount = Some(RawAmount::new(round.total_acquired_raw));
-    position.total_exited_amount = RawAmount::new(round.total_disposed_raw);
-    position.dca_count = round.entry_count.saturating_sub(1);
+/// The sizes are the chain's. The basis is the trader's own legs at the SOL it recorded
+/// (which includes the fee it actually paid) plus the SOL the chain shows for every other
+/// traded acquisition the row is charged with. Recomputing the whole basis from those two
+/// parts on each pass is what makes a resync idempotent — adding the difference would
+/// inflate the position a little more every time the wallet moved. An outside buy with no
+/// SOL price (an airdrop, a USD fill, a token -> token swap) leaves the trader's basis alone
+/// and clears `basis_complete`: the holding is real, the cost of part of it is not.
+fn adopt_external_growth(position: &mut Position, growth: Growth, decimals: u8) {
+    position.remaining_token_amount = Some(growth.held);
+    position.token_amount = Some(growth.acquired);
+    position.total_exited_amount = growth.exited;
+    position.dca_count = growth.entries.saturating_sub(1);
 
-    if !round.basis_complete {
-        // The outside buy has no SOL price we can trust (an airdrop, a USD fill, a
-        // token -> token swap). The holding is real, the cost of part of it is not.
+    let Some(invested_native) = growth.invested_native else {
         position.basis_complete = false;
         return;
+    };
+    position.total_size_native = invested_native;
+    let acquired = growth.acquired.to_whole_units(decimals);
+    if acquired > DUST {
+        position.average_entry_price = invested_native / acquired;
     }
+}
 
-    // Legs the trader booked itself; without any records the row's own total is the
-    // best fee-exact number we have and its entry signature is the only leg we can
-    // attribute.
-    let (booked_signatures, booked_native) = match legs.filter(|l| !l.entry_signatures.is_empty()) {
-        Some(legs) => (legs.entry_signatures.clone(), legs.booked_invested_native),
-        None => (
+/// What a round the row owns alone cost: the trader's booked SOL for its own legs, plus the
+/// chain's SOL for every other traded acquisition. Without any records the row's own total
+/// is the best fee-exact number there is, and its entry signature the only leg it can
+/// attribute.
+fn whole_round_invested(existing: &Position, round: &LedgerRound, legs: &TraderLegs) -> f64 {
+    let (booked_signatures, booked_native) = if legs.entry_signatures.is_empty() {
+        (
             existing
                 .entry_transaction_signature
                 .iter()
                 .cloned()
                 .collect(),
             existing.total_size_native,
-        ),
+        )
+    } else {
+        (legs.entry_signatures.clone(), legs.booked_invested_native)
     };
 
     let external_native: f64 = round
@@ -720,12 +1066,7 @@ fn adopt_external_growth(
         .map(|quote| quote.amount)
         .sum();
 
-    position.total_size_native = booked_native + external_native;
-
-    let acquired = RawAmount::new(round.total_acquired_raw).to_whole_units(round.decimals);
-    if acquired > DUST {
-        position.average_entry_price = position.total_size_native / acquired;
-    }
+    booked_native + external_native
 }
 
 /// True when the reconciliation of a bot-owned row changes anything. Every other field
@@ -821,14 +1162,24 @@ pub async fn sync_wallet_history() -> super::super::error::Result<SyncSummary> {
 
     // Which legs the trader booked itself, read BEFORE the history: a bot-owned round can
     // then absorb an outside buy without double-counting the bot's own, and a leg booked
-    // after this read marks a round that may predate it. A failure here is not fatal: the
-    // row falls back to its own recorded total.
-    let booked_legs = crate::positions::db::get_trader_swap_legs()
-        .await
-        .unwrap_or_default();
+    // after this read marks a round that may predate it. A failure here is not fatal: with
+    // no legs known, every bot row of a mint that has a record is left unreconciled by this
+    // sync, and wallet-derived rows still sync.
+    let booked_legs = match crate::positions::db::get_trader_swap_legs().await {
+        Ok(legs) => legs,
+        Err(e) => {
+            logger::warning(
+                LogTag::Positions,
+                &format!(
+                    "Wallet-history sync could not read the booked swap legs; bot positions with records are not reconciled: {e}"
+                ),
+            );
+            Vec::new()
+        }
+    };
     let booked_before: HashSet<String> = booked_legs
         .iter()
-        .map(|(_, signature, _, _)| signature.clone())
+        .map(|leg| leg.signature.clone())
         .collect();
     let trader_legs = TraderLegs::from_rows(booked_legs);
 
@@ -974,8 +1325,10 @@ async fn resolve_metadata(
 ///
 /// An update is re-derived from its round on the row read inside its own booking
 /// transaction (see [`rewrite_row`]), so a booking committed between planning and writing
-/// is kept, and memory adopts the committed row. A row that became busy, no longer
-/// differs, or carries a leg booked after the history was read is left untouched.
+/// is kept, and memory adopts the committed row. A bot row is charged its part of the round
+/// from the legs, rows and holdings of its mint read in that same transaction. A row that
+/// became busy, no longer differs, or whose mint carries a leg booked after the history was
+/// read is left untouched.
 ///
 /// A single failed row is logged and skipped: one unwritable position must not abort the
 /// import of the rest of the wallet's history. Returns the rows actually written.
@@ -992,27 +1345,37 @@ pub async fn apply_plan(plan: SyncPlan) -> AppliedPlan {
         let busy_mints = crate::positions::state::mints_with_pending_swaps().await;
         let booked_before = plan.booked_before.as_ref();
         let committed = crate::positions::apply::book_position(id, |row, reads| {
-            let legs = if row.is_wallet_derived() {
+            let attribution = if row.is_wallet_derived() {
                 None
             } else {
-                let rows = reads.trader_swap_legs()?;
-                // A fill the trader booked after the history was read is not in the round
-                // yet: reconciling against it would book the fill again as an outside leg,
-                // or shrink the row by it.
-                if booked_before.is_some_and(|seen| {
-                    rows.iter()
-                        .any(|(_, signature, _, _)| !seen.contains(signature))
-                }) {
+                let legs = reads.mint_swap_legs(&row.mint)?;
+                // A fill the trader booked on any position of the mint after the history
+                // was read is not in the round yet: reconciling against it would book the
+                // fill again as an outside leg, or shrink the row by it.
+                if booked_before
+                    .is_some_and(|seen| legs.iter().any(|leg| !seen.contains(&leg.signature)))
+                {
                     return Ok(Booking::Skip(()));
                 }
-                Some(TraderLegs::from_rows(rows).remove(&id).unwrap_or_default())
+                let mut attribution = RoundAttribution::new(
+                    row,
+                    &reads.mint_rows(&row.mint)?,
+                    &TraderLegs::from_rows(legs),
+                    RawAmount::ZERO,
+                );
+                // Only a shared round charges the row against what the mint's other open
+                // positions hold, and that read fails while one of them is unverified.
+                if attribution.shares(&update.round) {
+                    attribution.held_elsewhere = reads.other_open_held(&row.mint)?;
+                }
+                Some(attribution)
             };
             Ok(
                 match rewrite_row(
                     row,
                     &update.round,
                     &update.meta,
-                    legs.as_ref(),
+                    attribution.as_ref(),
                     &busy_mints,
                     plan.now,
                 ) {

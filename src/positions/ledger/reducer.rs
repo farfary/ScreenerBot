@@ -382,7 +382,8 @@ impl Round {
             self.opened_at = delta.block_time;
         }
 
-        let amount = RawAmount::new(amount_raw.unsigned_abs()).to_whole_units(self.decimals);
+        let exact = RawAmount::new(amount_raw.unsigned_abs());
+        let amount = exact.to_whole_units(self.decimals);
         let quote = traded
             .then(|| quote_for(group, &delta.mint, true))
             .flatten();
@@ -412,6 +413,7 @@ impl Round {
             block_time: delta.block_time,
             kind,
             amount,
+            amount_raw: exact,
             balance_after: RawAmount::new(after.unsigned_abs()).to_whole_units(self.decimals),
             quote,
             price_native,
@@ -490,7 +492,8 @@ impl Round {
         };
         self.remaining_basis = (self.remaining_basis - allocated_basis).max(0.0);
 
-        let amount = RawAmount::new(amount_raw.unsigned_abs()).to_whole_units(self.decimals);
+        let exact = RawAmount::new(amount_raw.unsigned_abs());
+        let amount = exact.to_whole_units(self.decimals);
         let quote = traded
             .then(|| quote_for(group, &delta.mint, false))
             .flatten();
@@ -519,6 +522,7 @@ impl Round {
             block_time: delta.block_time,
             kind,
             amount,
+            amount_raw: exact,
             balance_after: RawAmount::new(after.unsigned_abs()).to_whole_units(self.decimals),
             quote,
             price_native,
