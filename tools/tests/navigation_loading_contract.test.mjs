@@ -37,8 +37,8 @@ test("the router replaces the viewport with one canonical transition loader", as
 
   assert.match(begin, /mainContent\.replaceChildren\(loadingEl\)/);
   assert.doesNotMatch(begin, /mainContent\.appendChild\(loadingEl\)/);
-  assert.match(begin, /TabBarManager\?\.hideAll\(\)/);
-  assert.match(begin, /ActionBarManager\?\.hideAll\(\)/);
+  assert.match(begin, /TabBarManager\.hideAll\(\)/);
+  assert.match(begin, /ActionBarManager\.hideAll\(\)/);
 
   const beginCall = load.indexOf("beginPageTransition(mainContent, navigationId)");
   const cacheBranch = load.indexOf("if (!pageEl)");

@@ -9,6 +9,8 @@ import { waitForReady } from "./bootstrap.js";
 import { playClick, playTabSwitch } from "./sounds.js";
 import { closeStackedOverlays } from "./escape_stack.js";
 import { stripIsolates } from "./format.js";
+import { ActionBarManager } from "../ui/action_bar.js";
+import { TabBarManager } from "../ui/tab_bar.js";
 
 const assetVersion = window.__ASSET_VERSION__ || "";
 const assetQuery = assetVersion ? `?v=${encodeURIComponent(assetVersion)}` : "";
@@ -29,24 +31,6 @@ const PAGE_IDS = Object.freeze([
   "trader",
   "copy",
 ]);
-
-// Import TabBarManager for coordinated tab bar management
-let TabBarManager = null;
-try {
-  const tabBarModule = await import(`../ui/tab_bar.js${assetQuery}`);
-  TabBarManager = tabBarModule.TabBarManager;
-} catch (err) {
-  console.warn("[Router] TabBar module not available:", err.message);
-}
-
-// Import ActionBarManager for coordinated action bar management
-let ActionBarManager = null;
-try {
-  const actionBarModule = await import(`../ui/action_bar.js${assetQuery}`);
-  ActionBarManager = actionBarModule.ActionBarManager;
-} catch (err) {
-  console.warn("[Router] ActionBar module not available:", err.message);
-}
 
 const _state = {
   currentPage: null,
@@ -231,8 +215,8 @@ function beginPageTransition(mainContent, navigationId) {
   // network/style/module wait so the outgoing page cannot remain half-visible.
   closeStackedOverlays();
   runCleanupHandlers();
-  TabBarManager?.hideAll();
-  ActionBarManager?.hideAll();
+  TabBarManager.hideAll();
+  ActionBarManager.hideAll();
 
   mainContent.setAttribute("data-loading", "true");
   mainContent.setAttribute("aria-busy", "true");
@@ -350,9 +334,9 @@ export async function loadPage(pageName, { historyMode = "push" } = {}) {
     // a hash over from the previous page or having the router erase the new one.
     await PageLifecycleRegistry.activate(pageName);
     if (!isCurrentNavigation()) return;
-    TabBarManager?.onPageSwitch(pageName, previousPage);
-    ActionBarManager?.onPageSwitch(pageName, previousPage);
-    await TabBarManager?.syncFromLocation(pageName);
+    TabBarManager.onPageSwitch(pageName, previousPage);
+    ActionBarManager.onPageSwitch(pageName, previousPage);
+    await TabBarManager.syncFromLocation(pageName);
     if (!isCurrentNavigation()) return;
 
     _state.pendingPage = null;
@@ -461,7 +445,7 @@ export function initRouter() {
     const pageName = e.state?.page || getPageFromPath();
     if (pageName) {
       if (pageName === _state.currentPage && _state.pendingPage === null) {
-        void TabBarManager?.syncFromLocation(pageName);
+        void TabBarManager.syncFromLocation(pageName);
       } else {
         loadPage(pageName, { historyMode: "none" });
       }
