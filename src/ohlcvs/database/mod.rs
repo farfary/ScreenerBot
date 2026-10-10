@@ -44,6 +44,7 @@ pub struct OhlcvDatabase {
 impl OhlcvDatabase {
     /// Initialize the database and create tables
     pub fn new<P: AsRef<Path>>(path: P, chain: ChainId) -> OhlcvResult<Self> {
+        let path = path.as_ref();
         let manager = SqliteConnectionManager::file(path)
             .with_init(|conn| database::configure_connection(conn, database::OHLCVS_DB));
 
@@ -57,6 +58,7 @@ impl OhlcvDatabase {
         let db = Self { pool, chain };
 
         db.create_tables()?;
+        database::handles::register(&database::catalog::OHLCVS, path, &db.pool);
         Ok(db)
     }
 

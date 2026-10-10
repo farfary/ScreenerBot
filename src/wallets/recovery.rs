@@ -15,21 +15,19 @@
 use std::fs;
 use std::path::PathBuf;
 
+use crate::database::catalog;
 use crate::errors::IoError;
 use crate::logger::{self, LogTag};
 use crate::paths;
 use crate::wallets::Error;
 
-/// The wallet-scoped databases that must be cleared on a wallet change.
-///
-/// These are the exact databases [`crate::wallets::validation`] checks for a
-/// stored-vs-current wallet mismatch.
+/// The wallet-scoped databases that must be cleared on a wallet change: the
+/// catalog's wallet-scoped stores, the same set [`crate::wallets::validation`]
+/// checks for a stored-vs-current wallet mismatch.
 fn wallet_scoped_db_paths() -> Vec<PathBuf> {
-    vec![
-        paths::get_transactions_db_path(),
-        paths::get_positions_db_path(),
-        paths::get_wallet_db_path(),
-    ]
+    catalog::wallet_scoped_stores()
+        .flat_map(|(store, _)| store.paths())
+        .collect()
 }
 
 /// Back up the wallet-scoped databases, then delete the originals.
@@ -40,7 +38,7 @@ fn wallet_scoped_db_paths() -> Vec<PathBuf> {
 /// failure never destroys un-backed-up data.
 pub fn backup_and_clean_wallet_data() -> Result<PathBuf, Error> {
     let timestamp = chrono::Local::now().format("%Y%m%d-%H%M%S");
-    let backup_dir = paths::get_backups_directory().join(format!("wallet-reset-{timestamp}"));
+    let backup_dir = paths::get_wallet_reset_directory(&timestamp.to_string());
 
     fs::create_dir_all(&backup_dir).map_err(IoError::from)?;
 

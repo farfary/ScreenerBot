@@ -79,6 +79,7 @@ impl PositionsDatabase {
 
         // Initialize database schema
         db.initialize_schema(is_first_init).await?;
+        database::handles::register(&database::catalog::POSITIONS, database_path, &db.pool);
 
         if is_first_init {
             logger::info(

@@ -135,8 +135,7 @@ pub struct StartupError {
 impl StartupError {
     /// Construct a startup error, resolving the current log path automatically.
     pub fn new(code: StartupErrorCode, title: UiText, detail: UiText, remedy: UiText) -> Self {
-        let log_path = crate::paths::get_logs_directory()
-            .join("latest.log")
+        let log_path = crate::paths::get_latest_log_path()
             .to_string_lossy()
             .into_owned();
 

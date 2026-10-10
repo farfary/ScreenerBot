@@ -49,6 +49,7 @@ impl WalletsDatabase {
 
         let db = Self { pool, chain };
         db.initialize()?;
+        database::handles::register(&database::catalog::WALLETS, &db_path, &db.pool);
 
         Ok(db)
     }

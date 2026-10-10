@@ -8,6 +8,10 @@
 
 use rusqlite::Connection;
 
+/// Size a store's WAL file is truncated back to after a checkpoint resets it, so a
+/// burst of writes never leaves a WAL of that burst's size on disk.
+pub const JOURNAL_SIZE_LIMIT_BYTES: i64 = 16 * 1024 * 1024;
+
 /// Workload-based presets for SQLite tuning.
 ///
 /// Each preset defines cache_size (pages × 4 KB), mmap_size, and busy_timeout
@@ -62,7 +66,7 @@ impl DbConfig {
 /// read; a header write here would turn that reader's next write into
 /// `SQLITE_BUSY_SNAPSHOT`. `auto_vacuum` is therefore set only on a brand-new file
 /// (no pages yet); converting an existing file belongs to
-/// `maintenance::ensure_auto_vacuum_mode`.
+/// `maintenance::convert_to_incremental`.
 pub fn configure_connection(conn: &Connection, cfg: DbConfig) -> rusqlite::Result<()> {
     let (default_cache, default_mmap) = match cfg.preset {
         DbPreset::Hot => (5000_i64, 268_435_456_i64), // 20 MB cache, 256 MB mmap
@@ -88,6 +92,7 @@ pub fn configure_connection(conn: &Connection, cfg: DbConfig) -> rusqlite::Resul
         conn.pragma_update(None, "auto_vacuum", "INCREMENTAL")?;
     }
     conn.pragma_update(None, "journal_mode", "WAL")?;
+    conn.pragma_update(None, "journal_size_limit", JOURNAL_SIZE_LIMIT_BYTES)?;
     conn.pragma_update(None, "synchronous", "NORMAL")?;
     conn.pragma_update(None, "cache_size", cache_size)?;
     conn.pragma_update(None, "temp_store", "MEMORY")?;
@@ -181,6 +186,16 @@ mod tests {
             .pragma_query_value(None, "auto_vacuum", |row| row.get(0))
             .unwrap();
         assert_eq!(mode, 2);
+    }
+
+    #[test]
+    fn every_connection_bounds_the_wal_it_leaves_behind() {
+        let dir = tempfile::tempdir().unwrap();
+        let conn = open(&dir.path().join("bounded.db"));
+        let limit: i64 = conn
+            .pragma_query_value(None, "journal_size_limit", |row| row.get(0))
+            .unwrap();
+        assert_eq!(limit, JOURNAL_SIZE_LIMIT_BYTES);
     }
 
     #[test]

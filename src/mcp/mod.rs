@@ -537,7 +537,7 @@ fn validate_runtime_origin(raw: &str) -> Option<String> {
 /// Read `agent-runtime.json`. Absence, or a `url` that is not an exact loopback
 /// origin, means "not running / not usable".
 fn read_runtime_info() -> Option<RuntimeInfo> {
-    let path = crate::paths::get_data_directory().join("agent-runtime.json");
+    let path = crate::paths::get_agent_runtime_path();
     let raw = std::fs::read_to_string(&path).ok()?;
     let value: serde_json::Value = serde_json::from_str(&raw).ok()?;
     let url = match value.get("url").and_then(|u| u.as_str()) {

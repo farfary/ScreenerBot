@@ -52,12 +52,14 @@ static POOL: LazyLock<Pool<SqliteConnectionManager>> = LazyLock::new(|| {
         .unwrap_or_else(crate::paths::get_agent_control_db_path);
     let manager = SqliteConnectionManager::file(&path)
         .with_init(|c| database::configure_connection(c, database::AGENT_CONTROL_DB));
-    Pool::builder()
+    let pool = Pool::builder()
         .max_size(3)
         .idle_timeout(None)
         .max_lifetime(None)
         .build(manager)
-        .expect("failed to create agent_control database pool")
+        .expect("failed to create agent_control database pool");
+    database::handles::register(&database::catalog::AGENT_CONTROL, &path, &pool);
+    pool
 });
 
 const SCHEMA: &str = r#"

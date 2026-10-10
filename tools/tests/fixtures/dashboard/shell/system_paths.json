@@ -2,7 +2,5 @@
   "base_directory": "/Users/trader/Library/Application Support/ScreenerBot",
   "data_directory": "/Users/trader/Library/Application Support/ScreenerBot/data",
   "logs_directory": "/Users/trader/Library/Application Support/ScreenerBot/logs",
-  "cache_pool_directory": "/Users/trader/Library/Application Support/ScreenerBot/data/cache_pool",
-  "analysis_exports_directory": "/Users/trader/Library/Application Support/ScreenerBot/analysis-exports",
   "config_path": "/Users/trader/Library/Application Support/ScreenerBot/data/config.toml"
 }

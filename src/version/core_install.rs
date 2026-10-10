@@ -32,13 +32,8 @@ struct CoreQuarantine {
     versions: Vec<String>,
 }
 
-/// Directory holding every staged core plus the pointer.
-pub(super) fn core_dir() -> PathBuf {
-    crate::paths::get_data_directory().join("core")
-}
-
 fn pointer_path() -> PathBuf {
-    core_dir().join("current.json")
+    crate::paths::get_core_directory().join("current.json")
 }
 
 /// The staged core the desktop shell would launch, if any.
@@ -56,7 +51,7 @@ pub fn read_staged_core() -> Option<StagedCore> {
         let _ = std::fs::remove_file(pointer);
         return None;
     }
-    let binary = core_dir().join(&staged.path);
+    let binary = crate::paths::get_core_directory().join(&staged.path);
     // Keep status reads cheap: Electron performs the full digest check at the
     // activation boundary. Here the authenticated size is enough to reject a
     // missing/truncated pointer without hashing a large binary on every poll.
@@ -82,7 +77,7 @@ pub(super) fn is_core_quarantined(version: &str) -> bool {
     if !is_safe_version(version) {
         return true;
     }
-    std::fs::read(core_dir().join("quarantine.json"))
+    std::fs::read(crate::paths::get_core_directory().join("quarantine.json"))
         .ok()
         .is_some_and(|bytes| quarantine_contains(&bytes, version))
 }
@@ -121,7 +116,7 @@ fn stage_core_blocking(version: &str, core: &CoreArtifact, archive: &Path) -> Re
         }));
     }
 
-    let root = core_dir();
+    let root = crate::paths::get_core_directory();
     std::fs::create_dir_all(&root).map_err(|e| Error::Io(crate::errors::IoError::from(e)))?;
     restrict_permissions(&root)?;
 

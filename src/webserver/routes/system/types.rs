@@ -46,8 +46,6 @@ pub struct PathsResponse {
     pub base_directory: String,
     pub data_directory: String,
     pub logs_directory: String,
-    pub cache_pool_directory: String,
-    pub analysis_exports_directory: String,
     pub config_path: String,
 }
 

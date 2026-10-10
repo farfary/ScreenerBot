@@ -34,10 +34,7 @@ fn get_machine_id() -> Result<String> {
 
     #[cfg(target_os = "android")]
     {
-        use crate::paths::get_data_directory;
-
-        let data_dir = get_data_directory();
-        let id_file = data_dir.join(".device_id");
+        let id_file = crate::paths::get_device_id_path();
 
         if id_file.exists() {
             std::fs::read_to_string(&id_file).map_err(crate::errors::IoError::from)

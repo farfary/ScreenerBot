@@ -119,25 +119,52 @@ pub fn get_quarantine_directory() -> PathBuf {
     get_data_directory().join(QUARANTINE_DIRECTORY_NAME)
 }
 
+/// Name prefix of each wallet data reset's backup directory.
+pub const WALLET_RESET_DIRECTORY_PREFIX: &str = "wallet-reset-";
+
+/// Returns the backup directory of the wallet data reset stamped `stamp`.
+pub fn get_wallet_reset_directory(stamp: &str) -> PathBuf {
+    get_backups_directory().join(format!("{WALLET_RESET_DIRECTORY_PREFIX}{stamp}"))
+}
+
 /// Returns the logs directory path.
 ///
-/// Contains daily log files with automatic rotation.
+/// Contains the log files, rotated by size and pruned by storage housekeeping.
 pub fn get_logs_directory() -> PathBuf {
     BASE_DIRECTORY.join("logs")
 }
 
-/// Returns the cache pool directory path.
-///
-/// Contains pool-specific cache files.
-pub fn get_cache_pool_directory() -> PathBuf {
-    get_data_directory().join("cache_pool")
+/// File name of the link that always names the active log file.
+pub const LATEST_LOG_NAME: &str = "latest.log";
+
+/// Name prefix of every log file; each is `<prefix><timestamp>[_<n>].log`.
+pub const LOG_FILE_PREFIX: &str = "screenerbot_";
+
+/// Returns the path of the link that always names the active log file.
+pub fn get_latest_log_path() -> PathBuf {
+    get_logs_directory().join(LATEST_LOG_NAME)
 }
 
-/// Returns the analysis exports directory path.
+/// Returns the directory logs are written to when the logs directory cannot be
+/// created.
+pub fn get_log_fallback_directory() -> PathBuf {
+    std::env::temp_dir().join("screenerbot_logs")
+}
+
+/// Returns the updates directory path.
 ///
-/// Contains exported CSV files from analysis tools.
-pub fn get_analysis_exports_directory() -> PathBuf {
-    BASE_DIRECTORY.join("analysis-exports")
+/// Holds downloaded release installers and core archives, and the partial file
+/// of a download in progress.
+pub fn get_updates_directory() -> PathBuf {
+    get_data_directory().join("updates")
+}
+
+/// Returns the staged core directory path.
+///
+/// Holds every core binary staged by an update and the pointer naming the one
+/// the desktop shell launches.
+pub fn get_core_directory() -> PathBuf {
+    get_data_directory().join("core")
 }
 
 // =============================================================================
@@ -158,8 +185,6 @@ pub fn ensure_all_directories() -> Result<(), IoError> {
         ("base", get_base_directory()),
         ("data", get_data_directory()),
         ("logs", get_logs_directory()),
-        ("cache_pool", get_cache_pool_directory()),
-        ("analysis-exports", get_analysis_exports_directory()),
     ];
 
     for (name, dir) in dirs_to_create {
@@ -240,20 +265,6 @@ mod tests {
         let config = get_config_path();
         assert!(config.starts_with(&data));
         assert_eq!(config.file_name().unwrap(), "config.toml");
-    }
-
-    #[test]
-    fn test_cache_pool_in_data_dir() {
-        let data = get_data_directory();
-        let cache = get_cache_pool_directory();
-        assert!(cache.starts_with(&data));
-    }
-
-    #[test]
-    fn test_analysis_exports_in_base_dir() {
-        let base = get_base_directory();
-        let exports = get_analysis_exports_directory();
-        assert!(exports.starts_with(&base));
     }
 
     #[test]

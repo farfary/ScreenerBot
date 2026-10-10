@@ -190,10 +190,6 @@ pub(super) async fn get_paths() -> Response {
         base_directory: paths::get_base_directory_display(),
         data_directory: paths::get_data_directory().display().to_string(),
         logs_directory: paths::get_logs_directory().display().to_string(),
-        cache_pool_directory: paths::get_cache_pool_directory().display().to_string(),
-        analysis_exports_directory: paths::get_analysis_exports_directory()
-            .display()
-            .to_string(),
         config_path: paths::get_config_path().display().to_string(),
     };
 

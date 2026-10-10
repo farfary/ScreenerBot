@@ -289,14 +289,16 @@ static DB_POOL: LazyLock<Pool<SqliteConnectionManager>> = LazyLock::new(|| {
 
     let manager = SqliteConnectionManager::file(&db_path)
         .with_init(|c| database::configure_connection(c, database::TOOLS_DB));
-    Pool::builder()
+    let pool = Pool::builder()
         .max_size(POOL_MAX_SIZE)
         .min_idle(Some(POOL_MIN_IDLE))
         .connection_timeout(Duration::from_millis(CONNECTION_TIMEOUT_MS))
         .idle_timeout(None) // SQLite: keep connections alive (WAL stability)
         .max_lifetime(None) // SQLite: no connection recycling
         .build(manager)
-        .expect("Failed to create tools database pool")
+        .expect("Failed to create tools database pool");
+    database::handles::register(&database::catalog::TOOLS, &db_path, &pool);
+    pool
 });
 
 /// Get a connection from the pool

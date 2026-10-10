@@ -104,6 +104,7 @@ pub fn init_chat_db() -> Result<Pool<SqliteConnectionManager>> {
         })?;
         initialize_schema(&conn)?;
     }
+    database::handles::register(&database::catalog::AI_CHAT, &db_path, &pool);
 
     logger::info(
         LogTag::System,

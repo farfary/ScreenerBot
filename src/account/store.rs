@@ -25,13 +25,12 @@ use std::path::PathBuf;
 use serde::{Deserialize, Serialize};
 
 use crate::errors::{DataError, IoError};
-use crate::paths::get_data_directory;
+use crate::paths::get_account_store_path;
 use crate::secure_storage::{decrypt_private_key, encrypt_private_key, EncryptedData};
 use crate::{Error, Result};
 
 /// Deliberately not inside `config.toml`: that file is plain text and gets
 /// shared. This one is opaque and gets ignored.
-const STORE_FILE: &str = "account.dat";
 
 /// What survives a restart. The access token is absent on purpose.
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -52,7 +51,7 @@ struct EncryptedEnvelope {
 }
 
 fn store_path() -> PathBuf {
-    get_data_directory().join(STORE_FILE)
+    get_account_store_path()
 }
 
 /// Read the stored session, or None when there is none.

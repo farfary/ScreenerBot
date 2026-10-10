@@ -124,6 +124,11 @@ impl TokenDatabase {
         let conn = db.conn()?;
         crate::tokens::schema::initialize_schema(&conn)?;
         drop(conn);
+        crate::database::handles::register(
+            &crate::database::catalog::TOKENS,
+            std::path::Path::new(path),
+            &db.pool,
+        );
 
         Ok(db)
     }

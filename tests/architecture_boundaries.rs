@@ -2708,7 +2708,7 @@ const MIGRATED_TO_TYPED_ERRORS: &[&str] = &[
     "version",
     "config",
     "webserver",
-    "reset",
+    "storage",
     "secure_storage",
     "run",
     "database",
@@ -4207,5 +4207,38 @@ fn the_ledger_writes_read_the_mints_in_flight_fresh() {
     assert!(
         !body[after_updates..inserts].contains("book_position("),
         "the inserts read the mints in flight before the last update"
+    );
+}
+
+/// Files and directories under the data root are named only by `src/paths/`, so the
+/// storage families can declare every one of them. Production code elsewhere asks
+/// `paths` for the exact location instead of joining onto a root directory.
+#[test]
+fn data_root_locations_are_built_only_in_the_paths_module() {
+    const ROOTS: &[&str] = &[
+        "get_base_directory().join(",
+        "get_data_directory().join(",
+        "get_backups_directory().join(",
+        "get_logs_directory().join(",
+    ];
+    let mut violations = Vec::new();
+    for (relative, contents) in walk_src() {
+        if relative.starts_with("paths") || is_test_support_file(&relative) {
+            continue;
+        }
+        let code: String = strip_comment_text(&production_text(&contents))
+            .chars()
+            .filter(|c| !c.is_whitespace())
+            .collect();
+        for root in ROOTS {
+            if code.contains(root) {
+                violations.push(format!("src/{}: {root}", relative.display()));
+            }
+        }
+    }
+    assert!(
+        violations.is_empty(),
+        "add a path function in src/paths/ instead of joining onto a data root:\n{}",
+        violations.join("\n")
     );
 }

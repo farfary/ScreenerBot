@@ -97,6 +97,7 @@ impl ActionsDatabase {
 
         // Initialize database schema
         db.initialize_schema().await?;
+        database::handles::register(&database::catalog::ACTIONS, &database_path, &db.write_pool);
 
         logger::info(
             LogTag::System,

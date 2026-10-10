@@ -16,9 +16,6 @@ pub fn print_help() {
     println!("    By default, ScreenerBot starts the trading bot with webserver on http://localhost:8080");
     println!();
     println!("SPECIAL MODES (execute and exit):");
-    println!(
-        "    --reset                     Reset pending verifications and delete database files"
-    );
     println!("    --reset-default-configs     Reset all config to defaults (preserves wallet + RPC URLs)");
     println!("    --clean-wallet-data         Back up, then clear the previous wallet's local data and continue (use when switching wallets)");
     println!("    --help, -h                  Show this help message");
@@ -50,7 +47,6 @@ pub fn print_help() {
     println!("      screenerbot --port 3000 --host 0.0.0.0");
     println!();
     println!("MODIFIERS:");
-    println!("    --force                     Skip confirmation prompts (with --reset)");
     println!("    --cache-only                Use cached data only, no RPC calls (debug tools)");
     println!("    --force-refresh             Force refresh from RPC even if cached (debug tools)");
     println!();
@@ -77,8 +73,6 @@ pub fn print_help() {
     );
     println!("    screenerbot --gui --promo-fixtures           # Promo fixtures for media capture");
     println!("    screenerbot --debug-trader                   # Start bot with trader debug logs");
-    println!("    screenerbot --reset                          # Reset with confirmation prompt");
-    println!("    screenerbot --reset --force                  # Reset without confirmation");
     println!("    screenerbot --reset-default-configs          # Reset config to defaults");
     println!(
         "    screenerbot --clean-wallet-data              # Clean databases when switching wallets"
@@ -127,9 +121,6 @@ pub fn get_enabled_debug_modes() -> Vec<String> {
         }
     }
 
-    if is_reset_enabled() {
-        modes.push("reset".to_owned());
-    }
     if is_gui_enabled() {
         modes.push("gui".to_owned());
     }
@@ -141,9 +132,6 @@ pub fn get_enabled_debug_modes() -> Vec<String> {
     }
     if is_promo_freeze_enabled() {
         modes.push("promo-freeze".to_owned());
-    }
-    if is_force_enabled() {
-        modes.push("force".to_owned());
     }
     if is_cache_only_enabled() {
         modes.push("cache-only".to_owned());

@@ -93,6 +93,7 @@ impl EventsDatabase {
 
         // Initialize database schema
         db.initialize_schema().await?;
+        database::handles::register(&database::catalog::EVENTS, &database_path, &db.write_pool);
 
         logger::info(
             LogTag::System,

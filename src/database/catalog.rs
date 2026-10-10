@@ -43,6 +43,27 @@ pub struct SalvageRule {
     pub filter: Option<&'static str>,
 }
 
+/// How housekeeping may shrink a store's file.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum Compaction {
+    /// Free pages are reclaimed with incremental vacuum, and a file not yet in
+    /// incremental auto-vacuum mode is converted once while it is small enough to
+    /// rewrite online.
+    Incremental,
+    /// Only the write-ahead log is checkpointed; the file is never rewritten,
+    /// vacuumed or converted.
+    CheckpointOnly,
+}
+
+/// The metadata table of a store whose rows belong to one wallet, and the name the
+/// startup wallet check reports for it.
+#[derive(Debug, Clone, Copy)]
+pub struct WalletScope {
+    /// Table holding the `current_wallet` key.
+    pub metadata_table: &'static str,
+    pub label: &'static str,
+}
+
 /// One app-owned store.
 #[derive(Debug, Clone, Copy)]
 pub struct StoreSpec {
@@ -52,6 +73,10 @@ pub struct StoreSpec {
     pub config: DbConfig,
     pub class: StoreClass,
     pub salvage: &'static [SalvageRule],
+    pub compaction: Compaction,
+    /// Set for a store that holds one wallet's history and is cleared when the main
+    /// wallet changes.
+    pub wallet_scope: Option<WalletScope>,
 }
 
 impl StoreSpec {
@@ -62,6 +87,37 @@ impl StoreSpec {
             StoreLocation::PerChain(kind) => chain_db_path(kind, chain),
         }
     }
+
+    /// The store's file on every chain this build supports; a shared store has one.
+    pub fn paths(&self) -> Vec<PathBuf> {
+        match self.location {
+            StoreLocation::Shared(path) => vec![path()],
+            StoreLocation::PerChain(kind) => ChainId::ALL
+                .iter()
+                .map(|chain| chain_db_path(kind, *chain))
+                .collect(),
+        }
+    }
+
+    const fn checkpoint_only(mut self) -> Self {
+        self.compaction = Compaction::CheckpointOnly;
+        self
+    }
+
+    const fn wallet_scoped(mut self, metadata_table: &'static str, label: &'static str) -> Self {
+        self.wallet_scope = Some(WalletScope {
+            metadata_table,
+            label,
+        });
+        self
+    }
+}
+
+/// The stores whose rows belong to the main wallet.
+pub fn wallet_scoped_stores() -> impl Iterator<Item = (&'static StoreSpec, WalletScope)> {
+    STORES
+        .into_iter()
+        .filter_map(|store| store.wallet_scope.map(|scope| (store, scope)))
 }
 
 const fn rule(table: &'static str) -> SalvageRule {
@@ -85,6 +141,8 @@ const fn shared(
         config,
         class,
         salvage,
+        compaction: Compaction::Incremental,
+        wallet_scope: None,
     }
 }
 
@@ -100,6 +158,8 @@ const fn per_chain(
         config,
         class,
         salvage,
+        compaction: Compaction::Incremental,
+        wallet_scope: None,
     }
 }
 
@@ -127,14 +187,16 @@ pub const WALLETS: StoreSpec = shared(
     configure::WALLETS_DB,
     StoreClass::Vault,
     &[],
-);
+)
+.checkpoint_only();
 pub const POSITIONS: StoreSpec = shared(
     "positions",
     paths::get_positions_db_path,
     configure::POSITIONS_DB,
     StoreClass::Ledger,
     &[],
-);
+)
+.wallet_scoped("position_metadata", "Positions");
 pub const COPY_TRADING: StoreSpec = shared(
     "copy_trading",
     paths::get_copy_trading_db_path,
@@ -176,14 +238,16 @@ pub const TRANSACTIONS: StoreSpec = shared(
     configure::TRANSACTIONS_DB,
     StoreClass::Derived,
     &[],
-);
+)
+.wallet_scoped("db_metadata", "Transactions");
 pub const WALLET: StoreSpec = shared(
     "wallet",
     paths::get_wallet_db_path,
     configure::WALLET_MONITOR_DB,
     StoreClass::Derived,
     &[],
-);
+)
+.wallet_scoped("wallet_metadata", "Wallet History");
 pub const TOKENS: StoreSpec = per_chain(
     DbKind::Tokens,
     configure::TOKENS_DB,
@@ -297,6 +361,89 @@ mod tests {
             .map(|store| store.id)
             .collect();
         assert_eq!(per_chain, vec!["tokens", "ohlcvs", "pools", "rpc_stats"]);
+    }
+
+    /// Every store path function and every chain-scoped kind is a catalog entry, so no
+    /// store can ship without a class, a compaction rule and a place in every derived list.
+    #[test]
+    fn every_store_path_function_and_kind_is_catalogued() {
+        let catalog = include_str!("catalog.rs");
+        let path_functions: Vec<&str> = include_str!("../paths/database.rs")
+            .lines()
+            .filter_map(|line| line.trim().strip_prefix("pub fn "))
+            .filter_map(|rest| rest.split_once("()"))
+            .map(|(name, _)| name)
+            .filter(|name| name.ends_with("_db_path"))
+            .collect();
+        assert!(!path_functions.is_empty());
+        for name in path_functions {
+            assert!(
+                catalog.contains(&format!("paths::{name},")),
+                "paths::{name} names a store the catalog does not list"
+            );
+        }
+        let kind_entry = |kind: DbKind| match kind {
+            DbKind::Tokens => &TOKENS,
+            DbKind::Pools => &POOLS,
+            DbKind::Ohlcvs => &OHLCVS,
+            DbKind::RpcStats => &RPC_STATS,
+        };
+        for kind in [
+            DbKind::Tokens,
+            DbKind::Pools,
+            DbKind::Ohlcvs,
+            DbKind::RpcStats,
+        ] {
+            assert!(matches!(
+                kind_entry(kind).location,
+                StoreLocation::PerChain(entry) if entry == kind
+            ));
+            assert!(STORES.iter().any(|store| store.id == kind.file_stem()));
+        }
+    }
+
+    /// The key vault is never rewritten; every other store may be compacted.
+    #[test]
+    fn only_the_vault_is_checkpoint_only() {
+        for store in STORES {
+            let expected = if store.class == StoreClass::Vault {
+                Compaction::CheckpointOnly
+            } else {
+                Compaction::Incremental
+            };
+            assert_eq!(store.compaction, expected, "{}", store.id);
+        }
+    }
+
+    /// The wallet-scoped stores are the wallet's own history, and each names a metadata
+    /// table its schema creates.
+    #[test]
+    fn wallet_scoped_stores_name_their_metadata_tables() {
+        let sources = [
+            (&POSITIONS, include_str!("../positions/database/types.rs")),
+            (
+                &TRANSACTIONS,
+                include_str!("../transactions/database/schema.rs"),
+            ),
+            (
+                &WALLET,
+                include_str!("../wallets/balance_monitor/database/schema.rs"),
+            ),
+        ];
+        let scoped: Vec<&str> = wallet_scoped_stores().map(|(store, _)| store.id).collect();
+        assert_eq!(scoped, vec!["positions", "transactions", "wallet"]);
+        for (store, source) in sources {
+            let scope = store.wallet_scope.expect("wallet-scoped store");
+            assert!(
+                source.contains(&format!(
+                    "CREATE TABLE IF NOT EXISTS {} (",
+                    scope.metadata_table
+                )),
+                "{} names {}, which its schema does not create",
+                store.id,
+                scope.metadata_table
+            );
+        }
     }
 
     /// Salvage names tables by hand; each must be a table its store creates.

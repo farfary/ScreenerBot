@@ -96,6 +96,7 @@ impl TransactionDatabase {
         };
 
         db.initialize_schema(record_current_wallet).await?;
+        database::handles::register(&database::catalog::TRANSACTIONS, &database_path, &db.pool);
 
         if log_details {
             logger::info(

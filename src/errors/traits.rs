@@ -8,7 +8,7 @@ use std::time::Duration;
 
 use super::{
     AccountError, ConfigurationError, DataError, DatabaseError, Error, InternalError, IoError,
-    NetworkError, RpcProviderError, ServiceError,
+    NetworkError, RpcProviderError, ServiceError, StorageError,
 };
 
 /// How loudly a failure should be reported.
@@ -184,6 +184,47 @@ impl ErrorClass for DatabaseError {
     }
 }
 
+impl ErrorClass for StorageError {
+    fn is_retryable(&self) -> bool {
+        // Housekeeping runs again on its next pass; a held lock or a busy store
+        // clears by then.
+        match self {
+            StorageError::Store { source, .. } => source.is_retryable(),
+            StorageError::Measure { .. }
+            | StorageError::Delete { .. }
+            | StorageError::Interrupted { .. } => true,
+            StorageError::OutsideRoot { .. } => false,
+        }
+    }
+
+    fn retry_after(&self) -> Option<Duration> {
+        match self {
+            StorageError::Store { source, .. } => source.retry_after(),
+            _ => None,
+        }
+    }
+
+    fn severity(&self) -> Severity {
+        match self {
+            StorageError::Store { source, .. } => source.severity(),
+            StorageError::Measure { .. }
+            | StorageError::Delete { .. }
+            | StorageError::OutsideRoot { .. }
+            | StorageError::Interrupted { .. } => Severity::Warning,
+        }
+    }
+
+    fn http_status(&self) -> u16 {
+        match self {
+            StorageError::Store { source, .. } => source.http_status(),
+            StorageError::Measure { .. }
+            | StorageError::Delete { .. }
+            | StorageError::OutsideRoot { .. }
+            | StorageError::Interrupted { .. } => 500,
+        }
+    }
+}
+
 impl ErrorClass for ConfigurationError {
     fn is_retryable(&self) -> bool {
         // Nothing in configuration fixes itself; a human has to edit
@@ -336,7 +377,7 @@ impl ErrorClass for Error {
             Error::Version(e) => e.is_retryable(),
             Error::Config(e) => e.is_retryable(),
             Error::Webserver(e) => e.is_retryable(),
-            Error::Reset(e) => e.is_retryable(),
+            Error::Storage(e) => e.is_retryable(),
             Error::SecureStorage(e) => e.is_retryable(),
             Error::Run(e) => e.is_retryable(),
             Error::Process(e) => e.is_retryable(),
@@ -380,7 +421,7 @@ impl ErrorClass for Error {
             Error::Version(e) => e.retry_after(),
             Error::Config(e) => e.retry_after(),
             Error::Webserver(e) => e.retry_after(),
-            Error::Reset(e) => e.retry_after(),
+            Error::Storage(e) => e.retry_after(),
             Error::SecureStorage(e) => e.retry_after(),
             Error::Run(e) => e.retry_after(),
             Error::Process(e) => e.retry_after(),
@@ -419,7 +460,7 @@ impl ErrorClass for Error {
             Error::Version(e) => e.severity(),
             Error::Config(e) => e.severity(),
             Error::Webserver(e) => e.severity(),
-            Error::Reset(e) => e.severity(),
+            Error::Storage(e) => e.severity(),
             Error::SecureStorage(e) => e.severity(),
             Error::Run(e) => e.severity(),
             Error::Process(e) => e.severity(),
@@ -459,7 +500,7 @@ impl ErrorClass for Error {
             Error::Version(e) => e.http_status(),
             Error::Config(e) => e.http_status(),
             Error::Webserver(e) => e.http_status(),
-            Error::Reset(e) => e.http_status(),
+            Error::Storage(e) => e.http_status(),
             Error::SecureStorage(e) => e.http_status(),
             Error::Run(e) => e.http_status(),
             Error::Process(e) => e.http_status(),

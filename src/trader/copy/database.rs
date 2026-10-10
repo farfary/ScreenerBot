@@ -89,7 +89,7 @@ impl CopyDatabase {
                 detail: format!("failed to create copy database directory: {e}"),
             })?;
         }
-        let manager = SqliteConnectionManager::file(path).with_init(|connection| {
+        let manager = SqliteConnectionManager::file(&path).with_init(|connection| {
             database::configure_connection(connection, database::COPY_TRADING_DB)
         });
         let pool = Pool::builder()
@@ -100,6 +100,7 @@ impl CopyDatabase {
             .map_err(crate::errors::DatabaseError::from)?;
         let db = Self { pool, chain };
         db.initialize()?;
+        database::handles::register(&database::catalog::COPY_TRADING, &path, &db.pool);
         Ok(db)
     }
 

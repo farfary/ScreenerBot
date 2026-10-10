@@ -574,14 +574,9 @@ pub async fn test_port_binding(
 // AGENT RUNTIME FILE
 // =============================================================================
 
-/// Path of the agent runtime metadata file. It advertises the local webserver
-/// URL/port/pid to co-located tooling. It carries NO security token and NO
-/// secret — it is owner-readable only, but its contents are not sensitive.
-fn agent_runtime_file_path() -> std::path::PathBuf {
-    crate::paths::get_data_directory().join("agent-runtime.json")
-}
-
-/// Write the agent runtime metadata file atomically. On Unix the temp file is
+/// Write the agent runtime metadata file atomically. It advertises the local
+/// webserver URL/port/pid to co-located tooling and carries no security token or
+/// secret. On Unix the temp file is
 /// created with `0600` before it is written or renamed, so it is never briefly
 /// group/world-readable; the mode is preserved across the rename. On other
 /// platforms the standard atomic write is used.
@@ -594,7 +589,7 @@ fn write_agent_runtime_file(port: u16, is_gui: bool) {
         "version": env!("CARGO_PKG_VERSION"),
     });
 
-    let path = agent_runtime_file_path();
+    let path = crate::paths::get_agent_runtime_path();
     let temporary = path.with_extension("json.tmp");
     let write_result = (|| -> std::io::Result<()> {
         use std::io::Write;
@@ -627,7 +622,6 @@ fn write_agent_runtime_file(port: u16, is_gui: bool) {
                 LogTag::Webserver,
                 &format!("Agent runtime file written to {}", path.display()),
             );
-            let _ = std::fs::remove_file(crate::paths::get_data_directory().join("mcp.json"));
         }
         Err(e) => {
             let _ = std::fs::remove_file(&temporary);
@@ -641,7 +635,7 @@ fn write_agent_runtime_file(port: u16, is_gui: bool) {
 
 /// Remove the agent runtime metadata file on shutdown.
 fn cleanup_agent_runtime_file() {
-    let path = agent_runtime_file_path();
+    let path = crate::paths::get_agent_runtime_path();
     if path.exists() {
         if let Err(e) = std::fs::remove_file(&path) {
             logger::warning(

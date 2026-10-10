@@ -35,6 +35,9 @@ mod history;
 mod installer;
 mod manifest;
 mod policy;
+pub mod retention;
+#[cfg(test)]
+mod retention_tests;
 mod service;
 pub mod types;
 
@@ -76,12 +79,8 @@ async fn state_lock() -> &'static RwLock<UpdateState> {
         .await
 }
 
-fn state_path() -> std::path::PathBuf {
-    crate::paths::get_data_directory().join("update-state.json")
-}
-
 fn load_persisted_state() -> UpdateState {
-    let mut state = std::fs::read(state_path())
+    let mut state = std::fs::read(crate::paths::get_update_state_path())
         .ok()
         .and_then(|bytes| serde_json::from_slice::<UpdateState>(&bytes).ok())
         .unwrap_or_default();
@@ -162,7 +161,7 @@ fn normalize_loaded_state(state: &mut UpdateState, staged_version: Option<&str>)
 
 async fn persist_state(snapshot: UpdateState) {
     let result = tokio::task::spawn_blocking(move || -> Result<()> {
-        let path = state_path();
+        let path = crate::paths::get_update_state_path();
         let parent = path.parent().ok_or_else(|| {
             Error::Data(crate::errors::DataError::InvalidFormat {
                 expected: "update state path with a parent directory".to_owned(),

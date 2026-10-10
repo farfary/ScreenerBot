@@ -129,12 +129,14 @@ static DB_POOL: LazyLock<Pool<SqliteConnectionManager>> = LazyLock::new(|| {
     let db_path = crate::paths::get_strategies_db_path();
     let manager = SqliteConnectionManager::file(&db_path)
         .with_init(|c| database::configure_connection(c, database::STRATEGIES_DB));
-    Pool::builder()
+    let pool = Pool::builder()
         .max_size(3)
         .idle_timeout(None) // SQLite: keep connections alive (WAL stability)
         .max_lifetime(None) // SQLite: no connection recycling
         .build(manager)
-        .expect("Failed to create strategies database pool")
+        .expect("Failed to create strategies database pool");
+    database::handles::register(&database::catalog::STRATEGIES, &db_path, &pool);
+    pool
 });
 
 /// Get a connection from the pool

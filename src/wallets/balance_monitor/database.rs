@@ -122,6 +122,7 @@ impl WalletDatabase {
 
         // Initialize database schema
         db.initialize_schema().await?;
+        database::handles::register(&database::catalog::WALLET, &database_path, &db.pool);
 
         logger::debug(LogTag::Wallet, "Wallet database initialized successfully");
         Ok(db)

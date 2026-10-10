@@ -3,15 +3,11 @@
 
 //! Wallet validation — input validation for addresses, keypairs, and wallet names.
 
+use crate::database::catalog;
 use crate::errors::DatabaseError;
-use crate::paths;
 use crate::utils::get_wallet_address;
 use crate::wallets::Error;
 use rusqlite::{Connection, OptionalExtension};
-
-const TRANSACTIONS_METADATA_TABLE: &str = "db_metadata";
-const POSITIONS_METADATA_TABLE: &str = "position_metadata";
-const WALLET_METADATA_TABLE: &str = "wallet_metadata";
 
 #[derive(Debug, Clone)]
 pub enum WalletValidationResult {
@@ -37,29 +33,20 @@ impl WalletValidator {
             detail: e.to_string(),
         })?;
 
-        let databases = [
-            (
-                "Transactions",
-                paths::get_transactions_db_path(),
-                TRANSACTIONS_METADATA_TABLE,
-            ),
-            (
-                "Positions",
-                paths::get_positions_db_path(),
-                POSITIONS_METADATA_TABLE,
-            ),
-            (
-                "Wallet History",
-                paths::get_wallet_db_path(),
-                WALLET_METADATA_TABLE,
-            ),
-        ];
+        let databases: Vec<_> = catalog::wallet_scoped_stores()
+            .flat_map(|(store, scope)| {
+                store
+                    .paths()
+                    .into_iter()
+                    .map(move |path| (scope.label, path, scope.metadata_table))
+            })
+            .collect();
         Self::validate_stored_wallets(current_wallet, &databases)
     }
 
     fn validate_stored_wallets(
         current_wallet: String,
-        databases: &[(&str, std::path::PathBuf, &str)],
+        databases: &[(&str, std::path::PathBuf, &'static str)],
     ) -> Result<WalletValidationResult, Error> {
         let mut mismatches: Vec<(String, String)> = Vec::new();
 
@@ -93,30 +80,19 @@ impl WalletValidator {
         }
     }
 
-    /// Get stored wallet address from database metadata table
-    fn get_stored_wallet(db_path: &str, metadata_table: &str) -> Result<Option<String>, Error> {
+    /// Get stored wallet address from database metadata table. The table name is a
+    /// catalog constant, never input, so it is safe to splice into the statement.
+    fn get_stored_wallet(
+        db_path: &str,
+        metadata_table: &'static str,
+    ) -> Result<Option<String>, Error> {
         let conn = Connection::open(db_path).map_err(DatabaseError::from)?;
-
-        let (table_name, query) = match metadata_table {
-            TRANSACTIONS_METADATA_TABLE => (
-                TRANSACTIONS_METADATA_TABLE,
-                "SELECT value FROM db_metadata WHERE key = 'current_wallet'",
-            ),
-            POSITIONS_METADATA_TABLE => (
-                POSITIONS_METADATA_TABLE,
-                "SELECT value FROM position_metadata WHERE key = 'current_wallet'",
-            ),
-            WALLET_METADATA_TABLE => (
-                WALLET_METADATA_TABLE,
-                "SELECT value FROM wallet_metadata WHERE key = 'current_wallet'",
-            ),
-            _ => unreachable!("wallet metadata table must be statically whitelisted"),
-        };
+        let query = format!("SELECT value FROM {metadata_table} WHERE key = 'current_wallet'");
 
         let table_exists = conn
             .query_row(
                 "SELECT 1 FROM sqlite_master WHERE type = 'table' AND name = ?1",
-                [table_name],
+                [metadata_table],
                 |_| Ok(()),
             )
             .optional()
@@ -127,7 +103,7 @@ impl WalletValidator {
         }
 
         let wallet: Option<String> = conn
-            .query_row(query, [], |row| row.get(0))
+            .query_row(&query, [], |row| row.get(0))
             .optional()
             .map_err(DatabaseError::from)?;
 
@@ -139,7 +115,13 @@ impl WalletValidator {
 mod tests {
     use rusqlite::Connection;
 
-    use super::{WalletValidationResult, WalletValidator, POSITIONS_METADATA_TABLE};
+    use super::{WalletValidationResult, WalletValidator};
+    use crate::database::catalog;
+
+    const POSITIONS_METADATA_TABLE: &str = match catalog::POSITIONS.wallet_scope {
+        Some(scope) => scope.metadata_table,
+        None => panic!("positions is a wallet-scoped store"),
+    };
 
     #[test]
     fn stored_wallet_treats_missing_metadata_table_as_first_run_state() {

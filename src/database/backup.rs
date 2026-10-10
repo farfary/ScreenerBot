@@ -28,14 +28,17 @@ pub struct UpgradeBackupManifest {
     pub created_at_ms: i64,
 }
 
+/// Name prefix of every upgrade backup file and manifest.
+pub const UPGRADE_BACKUP_PREFIX: &str = "upgrade-";
+
 /// The backup file and manifest of `store`: `upgrade-<stem>.db` and
 /// `upgrade-<stem>.json` in the `backups` directory beside the store.
 pub fn upgrade_backup_paths(store_path: &Path) -> Option<(PathBuf, PathBuf)> {
     let directory = store_path.parent()?.join(BACKUPS_DIRECTORY_NAME);
     let stem = store_path.file_stem()?.to_str()?;
     Some((
-        directory.join(format!("upgrade-{stem}.db")),
-        directory.join(format!("upgrade-{stem}.json")),
+        directory.join(format!("{UPGRADE_BACKUP_PREFIX}{stem}.db")),
+        directory.join(format!("{UPGRADE_BACKUP_PREFIX}{stem}.json")),
     ))
 }
 

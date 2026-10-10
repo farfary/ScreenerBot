@@ -9,11 +9,11 @@
 pub mod backup;
 pub mod catalog;
 pub mod configure;
+pub mod handles;
 pub mod maintenance;
 pub mod recovery;
 pub mod schema;
 pub mod transaction;
 
 pub use configure::*;
-pub use maintenance::start_maintenance_task as start_db_maintenance_task;
 pub use transaction::WriteTransaction;

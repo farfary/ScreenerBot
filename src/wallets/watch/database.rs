@@ -104,6 +104,7 @@ impl WatchDatabase {
 
         let db = Self { pool, chain };
         db.initialize_sync()?;
+        database::handles::register(&database::catalog::WALLETS, &db_path, &db.pool);
         Ok(db)
     }
 

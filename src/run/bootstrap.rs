@@ -26,9 +26,9 @@ pub(super) async fn initialize_dashboard_persistence() -> Result<(), StartupErro
         .map_err(|e| StartupError::failed(ids::STARTUP_FAILURE_ACTIONS_SYNC, e))?;
     crate::actions::spawn_cleanup_task();
 
-    // Maintenance covers every database that currently exists and is safe in
-    // all boot modes. Database-specific initialization still owns its schema.
-    tokio::spawn(crate::database::start_db_maintenance_task());
+    // Housekeeping covers every store opened in this process and every file family,
+    // in all boot modes. Database-specific initialization still owns its schema.
+    crate::storage::start_housekeeping();
 
     // Analysis instructions and Assistant chat history are dashboard
     // persistence, not model execution. Their databases exist even when LLM

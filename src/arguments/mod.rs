@@ -8,7 +8,6 @@
 //! ## Argument Types
 //!
 //! **Execution Modes** (mutually exclusive — choose one):
-//! - `--reset`: Reset database state
 //! - `--clean-wallet-data`: Clean all wallet-specific databases
 //! - `--help`: Show help information
 //!
@@ -16,7 +15,6 @@
 //! - `--gui`: Launch with desktop GUI window (requires 'gui' feature)
 //!
 //! **Modifiers**:
-//! - `--force`: Skip confirmation prompts (works with: --reset)
 //! - `--cache-only`: Use cached data only (works with debug tools)
 //! - `--force-refresh`: Force refresh from RPC (works with debug tools)
 

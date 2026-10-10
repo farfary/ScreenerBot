@@ -14,11 +14,6 @@ pub fn is_gui_enabled() -> bool {
     has_arg("--gui")
 }
 
-/// Reset mode — clears pending verifications and database files.
-pub fn is_reset_enabled() -> bool {
-    has_arg("--reset")
-}
-
 /// Promo fixtures — show deterministic showcase data for owner-only media capture.
 pub fn is_promo_fixtures_enabled() -> bool {
     has_arg("--promo-fixtures")
@@ -46,11 +41,6 @@ pub fn is_dashboard_onboarding_forced() -> bool {
 // =============================================================================
 // MODIFIER FLAGS
 // =============================================================================
-
-/// Force mode — skip confirmation prompts.
-pub fn is_force_enabled() -> bool {
-    has_arg("--force")
-}
 
 /// Cache-only mode — read from local DB only, never call RPC.
 pub fn is_cache_only_enabled() -> bool {

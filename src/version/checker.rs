@@ -5,6 +5,7 @@
 //! decision of which components a release actually has to replace.
 
 use super::manifest;
+use super::retention::RELEASE_ASSET_PREFIX;
 use super::types::*;
 use super::{
     core_platform_key, current_platform_key, local_shell_revision, mutate_state, Error, Result,
@@ -344,7 +345,7 @@ pub(super) fn validate_release_filename(filename: &str, version: &str) -> Result
         && filename.len() <= 255
         && !filename.contains('/')
         && !filename.contains('\\')
-        && filename.starts_with(&format!("ScreenerBot-v{version}-"))
+        && filename.starts_with(&format!("{RELEASE_ASSET_PREFIX}{version}-"))
         && filename
             .bytes()
             .all(|byte| byte.is_ascii_alphanumeric() || b"._+-".contains(&byte));

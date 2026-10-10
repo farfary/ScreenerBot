@@ -10,30 +10,30 @@ use std::process::Command;
 
 use rusqlite::Connection;
 use screenerbot::chains::ChainId;
+use screenerbot::database::catalog::STORES;
 use screenerbot::paths::{chain_db_path, DbKind};
+use screenerbot::storage::types::Classification;
 
 const CHILD_ENV: &str = "SCREENERBOT_STORAGE_STARTUP_CHILD";
 const CACHE_CHILD_ENV: &str = "SCREENERBOT_CACHE_RECOVERY_CHILD";
 /// The cache stores whose owners open through the recovery path.
 const RECOVERED_CACHE_FILES: &[&str] = &["ohlcvs.db", "pools.db", "rpc_stats.db"];
-const DATABASE_FILES: &[&str] = &[
-    "actions.db",
-    "agent_control.db",
-    "ai.db",
-    "ai_chat.db",
-    "copy_trading.db",
-    "events.db",
-    "ohlcvs.db",
-    "pools.db",
-    "positions.db",
-    "rpc_stats.db",
-    "strategies.db",
-    "tokens.db",
-    "tools.db",
-    "transactions.db",
-    "wallet.db",
-    "wallets.db",
-];
+
+/// The Solana file name of every catalog store: the startup matrix covers exactly the
+/// stores the catalog declares.
+fn database_files() -> Vec<String> {
+    STORES
+        .into_iter()
+        .map(|store| {
+            store
+                .path(ChainId::Solana)
+                .file_name()
+                .expect("catalog store file name")
+                .to_string_lossy()
+                .into_owned()
+        })
+        .collect()
+}
 
 #[test]
 fn database_filename_inventory_matches_production_paths() {
@@ -71,13 +71,16 @@ fn database_filename_inventory_matches_production_paths() {
         production.insert(name);
     }
 
-    let expected = DATABASE_FILES
-        .iter()
-        .map(|name| (*name).to_owned())
-        .collect();
+    let catalog = database_files();
+    let expected: BTreeSet<String> = catalog.iter().cloned().collect();
+    assert_eq!(
+        expected.len(),
+        catalog.len(),
+        "two catalog stores share a file"
+    );
     assert_eq!(
         production, expected,
-        "classify every production SQLite filename in the startup-storage matrix"
+        "every production SQLite filename is a catalog store"
     );
 }
 
@@ -98,7 +101,9 @@ fn startup_storage_matrix_survives_two_fresh_process_launches() {
 #[test]
 #[ignore = "requires a local ScreenerBot data directory; runs only against a throwaway clone"]
 fn real_stores_survive_two_fresh_process_launches_on_a_clone() {
-    let Some(clone) = common::clone_real_stores(DATABASE_FILES) else {
+    let files = database_files();
+    let names: Vec<&str> = files.iter().map(String::as_str).collect();
+    let Some(clone) = common::clone_real_stores(&names) else {
         return;
     };
     assert_two_launches_keep_every_store(clone.path());
@@ -286,8 +291,8 @@ fn schema(connection: &Connection) -> Vec<(String, String, Option<String>)> {
 }
 
 fn assert_every_store_is_clean(directory: &std::path::Path, launches: &str) {
-    for database in DATABASE_FILES {
-        let path = directory.join("data").join(database);
+    for database in database_files() {
+        let path = directory.join("data").join(&database);
         assert!(
             path.exists(),
             "production initializer did not create {database}"
@@ -399,7 +404,7 @@ fn initialize_startup_stores() {
     screenerbot::agent_control::init_store().expect("initialize agent-control database");
     screenerbot::rpc::RpcStatsDatabase::new().expect("initialize RPC statistics database");
 
-    for database in DATABASE_FILES {
+    for database in database_files() {
         let path = screenerbot::paths::get_data_directory().join(database);
         let connection = Connection::open(&path).expect("open initialized database for sentinel");
         connection
@@ -415,6 +420,28 @@ fn initialize_startup_stores() {
             )
             .expect("advance startup-storage sentinel");
     }
+    assert_every_written_entry_is_declared();
+}
+
+/// Everything a launch leaves under the data root is a store, a declared family or a
+/// layout directory, so housekeeping has a rule for it.
+fn assert_every_written_entry_is_declared() {
+    let mut pending = vec![screenerbot::paths::get_base_directory()];
+    let mut undeclared = Vec::new();
+    while let Some(directory) = pending.pop() {
+        for entry in std::fs::read_dir(&directory).expect("list data root") {
+            let path = entry.expect("read data root entry").path();
+            match screenerbot::storage::classify(&path) {
+                Classification::LayoutDirectory => pending.push(path),
+                Classification::Store(_) | Classification::Family(_) => {}
+                Classification::Unknown => undeclared.push(path),
+            }
+        }
+    }
+    assert!(
+        undeclared.is_empty(),
+        "entries with no store or family declaration: {undeclared:?}"
+    );
 }
 
 fn open_cache_stores_through_recovery() {

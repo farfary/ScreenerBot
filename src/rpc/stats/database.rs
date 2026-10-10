@@ -43,6 +43,7 @@ impl RpcStatsDatabase {
 
         let db = Self { pool };
         db.initialize_schema()?;
+        database::handles::register(&database::catalog::RPC_STATS, path, &db.pool);
         Ok(db)
     }
 

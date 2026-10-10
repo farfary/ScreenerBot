@@ -48,6 +48,7 @@ mod tags;
 pub use config::{
     get_logger_config, init_from_args, set_logger_config, update_logger_config, LoggerConfig,
 };
+pub use file::active_log_file;
 pub use format::route_console_to_stderr;
 pub use levels::LogLevel;
 pub use redact::{redact_url, redact_urls_in};

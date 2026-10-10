@@ -97,6 +97,11 @@ impl PoolsDatabase {
             let mut conn = pool.get().map_err(DatabaseError::from)?;
             migrate_schema(&mut conn)?;
         }
+        database::handles::register(
+            &database::catalog::POOLS,
+            std::path::Path::new(&self.db_path),
+            &pool,
+        );
 
         self.pool = Some(pool.clone());
 

@@ -5,7 +5,7 @@
 
 use super::{
     AccountError, ConfigurationError, DataError, DatabaseError, InternalError, IoError,
-    NetworkError, RpcProviderError, ServiceError,
+    NetworkError, RpcProviderError, ServiceError, StorageError,
 };
 use crate::rpc::errors::RpcError;
 
@@ -101,9 +101,9 @@ pub enum Error {
     #[error(transparent)]
     Webserver(#[from] crate::webserver::Error),
 
-    /// Runtime reset operations.
+    /// Storage housekeeping: retention deletions and store compaction.
     #[error(transparent)]
-    Reset(#[from] crate::reset::Error),
+    Storage(#[from] StorageError),
 
     /// Local encryption and password-hashing operations.
     #[error(transparent)]

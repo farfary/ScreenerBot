@@ -1,171 +1,17 @@
 // Copyright (c) 2024-2026 ScreenerBot (screenerbot.io)
 // SPDX-License-Identifier: BUSL-1.1
 
-//! Centralized database maintenance for ScreenerBot.
+//! The SQLite operations housekeeping runs on an open store's connection: WAL checkpoint, one-time conversion to incremental auto-vacuum, and free-page reclaim.
 //!
-//! This module handles:
-//! - Auto-vacuum mode migration (one-time conversion from NONE to INCREMENTAL)
-//! - Periodic incremental vacuum to reclaim free pages
-//! - Periodic WAL checkpoint to prevent unbounded WAL file growth
-//! - Monitoring and logging of database health
-//!
-//! ## Background
-//!
-//! SQLite's auto_vacuum mode must be set BEFORE a database is created, or requires
-//! a full VACUUM to convert. Phase A set `PRAGMA auto_vacuum = INCREMENTAL` per-connection,
-//! but existing databases retained their original mode (0 = NONE). This causes free pages
-//! to accumulate indefinitely (e.g., pools.db at 729 MB with 0 rows).
-//!
-//! WAL (Write-Ahead Logging) files grow with writes and are only reset via checkpoint.
-//! Without periodic checkpoints, WAL files can grow to hundreds of MB on a 24/7 bot.
-//!
-//! This module performs a one-time migration then maintains all databases via
-//! periodic incremental vacuum and WAL checkpoint operations.
+//! Every function takes a connection checked out of the store owner's own pool, so
+//! no operation here ever opens a store file by path. Which store gets which
+//! operation, and when, is decided by `crate::storage`.
 
 use rusqlite::Connection;
-use std::path::{Path, PathBuf};
-use std::time::Duration;
+use std::time::{Duration, Instant};
 
 use crate::errors::DatabaseError;
 use crate::logger::{self, LogTag};
-use crate::paths;
-
-// =============================================================================
-// DATABASE PATH DISCOVERY
-// =============================================================================
-
-/// Returns all ScreenerBot database name+path pairs that exist on disk.
-///
-/// Uses `crate::paths` to resolve standard database paths and filters to only
-/// paths that currently exist. This ensures maintenance operations only run
-/// on active databases.
-pub fn get_all_db_paths() -> Vec<(String, PathBuf)> {
-    let candidates = vec![
-        ("tokens.db", crate::chains::get_tokens_db_path()),
-        ("transactions.db", paths::get_transactions_db_path()),
-        ("positions.db", paths::get_positions_db_path()),
-        ("wallet.db", paths::get_wallet_db_path()),
-        ("events.db", paths::get_events_db_path()),
-        ("pools.db", crate::chains::get_pools_db_path()),
-        ("strategies.db", paths::get_strategies_db_path()),
-        ("ohlcvs.db", crate::chains::get_ohlcvs_db_path()),
-        ("actions.db", paths::get_actions_db_path()),
-        ("tools.db", paths::get_tools_db_path()),
-        ("ai.db", paths::get_ai_db_path()),
-        ("ai_chat.db", paths::get_ai_chat_db_path()),
-        ("agent_control.db", paths::get_agent_control_db_path()),
-        // rpc_stats.db uses its own path function (not in paths module)
-        (
-            "rpc_stats.db",
-            paths::get_data_directory().join("rpc_stats.db"),
-        ),
-    ];
-
-    candidates
-        .into_iter()
-        .filter(|(_, path)| path.exists())
-        .map(|(name, path)| (name.to_string(), path))
-        .collect()
-}
-
-// =============================================================================
-// AUTO-VACUUM MODE MIGRATION
-// =============================================================================
-
-/// Ensures a database is in INCREMENTAL auto-vacuum mode.
-///
-/// SQLite's auto_vacuum mode is stored in the database file header and cannot
-/// be changed after creation except via a full VACUUM. This function:
-///
-/// 1. Checks the current auto_vacuum mode (0=NONE, 1=FULL, 2=INCREMENTAL)
-/// 2. If not INCREMENTAL: sets the pragma and runs VACUUM to convert
-/// 3. If already INCREMENTAL: returns immediately
-///
-/// ## Arguments
-///
-/// * `path` - Path to the database file
-///
-/// ## Returns
-///
-/// - `Ok(true)` if conversion was performed
-/// - `Ok(false)` if database was already in INCREMENTAL mode
-/// - `Err(String)` if any operation failed
-///
-/// ## Notes
-///
-/// This is I/O heavy (full VACUUM) and should only run during the initial
-/// maintenance cycle, not on every periodic run.
-pub fn ensure_auto_vacuum_mode(path: &Path) -> Result<bool, DatabaseError> {
-    let conn = Connection::open(path).map_err(|e| DatabaseError::Query {
-        operation: format!("open database {} for auto-vacuum migration", path.display()),
-        message: e.to_string(),
-    })?;
-
-    // Configure connection for safe operation
-    conn.pragma_update(None, "busy_timeout", 5000)
-        .map_err(|e| DatabaseError::Query {
-            operation: "set busy_timeout for auto-vacuum migration".to_owned(),
-            message: e.to_string(),
-        })?;
-    conn.pragma_update(None, "journal_mode", "WAL")
-        .map_err(|e| DatabaseError::Query {
-            operation: "set WAL journal mode for auto-vacuum migration".to_owned(),
-            message: e.to_string(),
-        })?;
-
-    // Check current auto_vacuum mode
-    let auto_vacuum_mode: i64 = conn
-        .pragma_query_value(None, "auto_vacuum", |row| row.get(0))
-        .map_err(|e| DatabaseError::Query {
-            operation: "query auto_vacuum mode".to_owned(),
-            message: e.to_string(),
-        })?;
-
-    // Mode 2 = INCREMENTAL, we're done
-    if auto_vacuum_mode == 2 {
-        return Ok(false);
-    }
-
-    logger::info(
-        LogTag::System,
-        &format!(
-            "Database {} has auto_vacuum={}, converting to INCREMENTAL",
-            path.display(),
-            auto_vacuum_mode
-        ),
-    );
-
-    // Set INCREMENTAL mode
-    conn.pragma_update(None, "auto_vacuum", 2)
-        .map_err(|e| DatabaseError::Query {
-            operation: "set auto_vacuum to incremental".to_owned(),
-            message: e.to_string(),
-        })?;
-
-    // Run full VACUUM to convert (this rewrites the entire database)
-    let start = std::time::Instant::now();
-    conn.execute_batch("VACUUM;")
-        .map_err(|e| DatabaseError::Query {
-            operation: "vacuum database for incremental auto-vacuum".to_owned(),
-            message: e.to_string(),
-        })?;
-    let elapsed = start.elapsed();
-
-    logger::info(
-        LogTag::System,
-        &format!(
-            "Converted {} to INCREMENTAL mode in {:.2}s",
-            path.display(),
-            elapsed.as_secs_f64()
-        ),
-    );
-
-    Ok(true)
-}
-
-// =============================================================================
-// INCREMENTAL VACUUM
-// =============================================================================
 
 /// Pages reclaimed per `incremental_vacuum` statement (16 MB at 4 KB pages).
 const VACUUM_CHUNK_PAGES: u32 = 4096;
@@ -173,160 +19,160 @@ const VACUUM_CHUNK_PAGES: u32 = 4096;
 /// Pause between chunks so concurrent writers get the lock back.
 const VACUUM_CHUNK_PAUSE: Duration = Duration::from_millis(25);
 
-/// Largest live content a full `VACUUM` may rewrite in place of the incremental
-/// path. Rewriting this much finishes well inside the 5 s `busy_timeout`, so
-/// writers wait rather than fail; larger databases keep the chunked path.
-const REBUILD_MAX_LIVE_BYTES: u64 = 64 * 1024 * 1024;
+/// Largest live content a full `VACUUM` may rewrite: converting a file to
+/// incremental auto-vacuum, or rebuilding a mostly-free file in place of the
+/// chunked path. Rewriting this much finishes well inside the 5 s `busy_timeout`,
+/// so writers wait rather than fail.
+pub const REBUILD_MAX_LIVE_BYTES: u64 = 64 * 1024 * 1024;
 
-/// Runs incremental vacuum on a database to reclaim free pages.
-///
-/// Incremental vacuum removes pages from the database freelist in batches,
-/// reducing file size without requiring a full VACUUM (which can take minutes
-/// for large databases and locks the entire database).
-///
-/// ## Arguments
-///
-/// * `path` - Path to the database file
-///
-/// ## Returns
-///
-/// - `Ok(freed)` where `freed` is the number of pages freed
-/// - `Err(String)` if any operation failed
-///
-/// ## Notes
-///
-/// - The WHOLE freelist is reclaimed, in `VACUUM_CHUNK_PAGES` steps with a short
-///   pause between them so writers are never locked out for long. A fixed small
-///   batch per cycle cannot keep up with retention deletes: at 500 pages a day,
-///   a database that shed 2.5 GB of rows would take decades to shrink.
-/// - Only works if auto_vacuum mode is INCREMENTAL
-/// - A database that is mostly free pages around a small live core (events.db
-///   after retention: 2.6 GB file, 177 rows) is rebuilt with one `VACUUM`
-///   instead. Incremental vacuum relocates pages one chunk at a time and ran for
-///   hours on such a file, holding every other database's cycle behind it.
-pub fn run_incremental_vacuum(path: &Path) -> Result<u64, DatabaseError> {
-    let conn = Connection::open(path).map_err(|e| DatabaseError::Query {
-        operation: format!("open database {} for incremental vacuum", path.display()),
-        message: e.to_string(),
-    })?;
+/// `PRAGMA auto_vacuum` value of a file in incremental mode.
+const AUTO_VACUUM_INCREMENTAL: i64 = 2;
 
-    // Configure connection
-    conn.pragma_update(None, "busy_timeout", 5000)
+fn query_i64(conn: &Connection, pragma: &str) -> Result<i64, DatabaseError> {
+    conn.pragma_query_value(None, pragma, |row| row.get(0))
         .map_err(|e| DatabaseError::Query {
-            operation: "set busy_timeout for incremental vacuum".to_owned(),
+            operation: format!("query {pragma}"),
+            message: e.to_string(),
+        })
+}
+
+/// Checkpoint every WAL frame into the store and reset the WAL file to zero bytes.
+/// A store not in WAL mode is left alone.
+pub fn checkpoint(store: &str, conn: &Connection) -> Result<(), DatabaseError> {
+    let journal_mode: String = conn
+        .pragma_query_value(None, "journal_mode", |row| row.get(0))
+        .map_err(|e| DatabaseError::Query {
+            operation: format!("query journal mode of {store}"),
             message: e.to_string(),
         })?;
-
-    // Get freelist count before vacuum
-    let freelist_before: u64 = conn
-        .pragma_query_value(None, "freelist_count", |row| row.get(0))
-        .map_err(|e| DatabaseError::Query {
-            operation: "query freelist before incremental vacuum".to_owned(),
-            message: e.to_string(),
-        })?;
-
-    if freelist_before == 0 {
-        return Ok(0); // Nothing to free
+    if !journal_mode.eq_ignore_ascii_case("wal") {
+        return Ok(());
     }
 
-    let page_count: u64 = conn
-        .pragma_query_value(None, "page_count", |row| row.get(0))
+    let start = Instant::now();
+    conn.pragma_update(None, "wal_checkpoint", "TRUNCATE")
         .map_err(|e| DatabaseError::Query {
-            operation: "query page count before vacuum".to_owned(),
+            operation: format!("checkpoint the WAL of {store}"),
             message: e.to_string(),
         })?;
-    let page_size: u64 = conn
-        .pragma_query_value(None, "page_size", |row| row.get(0))
+    let elapsed = start.elapsed();
+    if elapsed.as_millis() > 100 {
+        logger::info(
+            LogTag::System,
+            &format!(
+                "WAL checkpoint of {store} took {:.2}s",
+                elapsed.as_secs_f64()
+            ),
+        );
+    }
+    Ok(())
+}
+
+/// Convert a store to incremental auto-vacuum with one full `VACUUM`, which rewrites
+/// the whole file. Returns whether a conversion ran; a store already in incremental
+/// mode is untouched.
+pub fn convert_to_incremental(store: &str, conn: &Connection) -> Result<bool, DatabaseError> {
+    let mode = query_i64(conn, "auto_vacuum")?;
+    if mode == AUTO_VACUUM_INCREMENTAL {
+        return Ok(false);
+    }
+
+    let start = Instant::now();
+    conn.pragma_update(None, "auto_vacuum", AUTO_VACUUM_INCREMENTAL)
         .map_err(|e| DatabaseError::Query {
-            operation: "query page size before vacuum".to_owned(),
+            operation: format!("set incremental auto-vacuum on {store}"),
             message: e.to_string(),
         })?;
+    conn.execute_batch("VACUUM;")
+        .map_err(|e| DatabaseError::Query {
+            operation: format!("vacuum {store} into incremental auto-vacuum"),
+            message: e.to_string(),
+        })?;
+    truncate_wal_after_rewrite(store, conn);
+
+    logger::info(
+        LogTag::System,
+        &format!(
+            "Converted {store} from auto_vacuum={mode} to incremental in {:.2}s",
+            start.elapsed().as_secs_f64()
+        ),
+    );
+    Ok(true)
+}
+
+/// Reclaim a store's free pages and return how many left the file.
+///
+/// The whole freelist is reclaimed in `VACUUM_CHUNK_PAGES` steps with a short pause
+/// between them, so writers are never locked out for long and a store that shed
+/// gigabytes of rows shrinks in one pass. A store that is mostly free pages around a
+/// small live core is rebuilt with one `VACUUM` instead: relocating pages chunk by
+/// chunk around a tiny core runs for hours.
+pub fn reclaim(store: &str, conn: &Connection) -> Result<u64, DatabaseError> {
+    let freelist_before = u64::try_from(query_i64(conn, "freelist_count")?).unwrap_or(0);
+    if freelist_before == 0 {
+        return Ok(0);
+    }
+    let page_count = u64::try_from(query_i64(conn, "page_count")?).unwrap_or(0);
+    let page_size = u64::try_from(query_i64(conn, "page_size")?).unwrap_or(0);
     let live_bytes = page_count.saturating_sub(freelist_before) * page_size;
     if freelist_before * 2 >= page_count && live_bytes <= REBUILD_MAX_LIVE_BYTES {
-        return rebuild_database(&conn, path, page_count, page_size);
+        return rebuild(store, conn, page_count, page_size);
     }
 
-    let start = std::time::Instant::now();
+    let start = Instant::now();
     let sql = format!("PRAGMA incremental_vacuum({VACUUM_CHUNK_PAGES});");
     let mut freelist_after = freelist_before;
     while freelist_after > 0 {
         conn.execute_batch(&sql).map_err(|e| DatabaseError::Query {
-            operation: "execute incremental vacuum".to_owned(),
+            operation: format!("incrementally vacuum {store}"),
             message: e.to_string(),
         })?;
-        let remaining: u64 = conn
-            .pragma_query_value(None, "freelist_count", |row| row.get(0))
-            .map_err(|e| DatabaseError::Query {
-                operation: "query freelist after incremental vacuum".to_owned(),
-                message: e.to_string(),
-            })?;
-        // A step that frees nothing means the rest is not reclaimable right now
-        // (a reader holds the tail); the next cycle picks it up.
+        let remaining = u64::try_from(query_i64(conn, "freelist_count")?).unwrap_or(0);
+        // A step that frees nothing means the rest is not reclaimable right now (a
+        // reader holds the tail); the next compaction picks it up.
         if remaining >= freelist_after {
             break;
         }
         freelist_after = remaining;
         std::thread::sleep(VACUUM_CHUNK_PAUSE);
     }
-    let elapsed = start.elapsed();
 
     let freed = freelist_before.saturating_sub(freelist_after);
-
     if freed > 0 {
         logger::info(
             LogTag::System,
             &format!(
-                "Incremental vacuum on {} freed {} pages ({:.2} MB) in {:.2}s",
-                path.display(),
-                freed,
-                (freed as f64 * 4.0) / 1024.0,
-                elapsed.as_secs_f64()
+                "Incremental vacuum of {store} freed {freed} pages ({:.2} MB) in {:.2}s",
+                (freed * page_size) as f64 / (1024.0 * 1024.0),
+                start.elapsed().as_secs_f64()
             ),
         );
     }
-
     Ok(freed)
 }
 
-/// Rewrites a mostly-empty database with a full `VACUUM`, then truncates the WAL
-/// so the reclaimed space actually leaves the disk. Returns the pages freed.
-fn rebuild_database(
+/// Rewrite a mostly-free store with a full `VACUUM`, then truncate the WAL so the
+/// reclaimed space leaves the disk. Returns the pages freed.
+fn rebuild(
+    store: &str,
     conn: &Connection,
-    path: &Path,
     page_count_before: u64,
     page_size: u64,
 ) -> Result<u64, DatabaseError> {
-    let start = std::time::Instant::now();
+    let start = Instant::now();
     conn.execute_batch("VACUUM;")
         .map_err(|e| DatabaseError::Query {
-            operation: "rebuild database with VACUUM".to_owned(),
+            operation: format!("rebuild {store} with VACUUM"),
             message: e.to_string(),
         })?;
-    // In WAL mode the rebuilt image sits in the WAL until a checkpoint; a busy
-    // reader only defers it to the periodic checkpoint cycle.
-    if let Err(e) = conn.pragma_update(None, "wal_checkpoint", "TRUNCATE") {
-        logger::warning(
-            LogTag::System,
-            &format!(
-                "WAL checkpoint after rebuilding {} deferred: {e}",
-                path.display()
-            ),
-        );
-    }
-    let page_count_after: u64 = conn
-        .pragma_query_value(None, "page_count", |row| row.get(0))
-        .map_err(|e| DatabaseError::Query {
-            operation: "query page count after vacuum".to_owned(),
-            message: e.to_string(),
-        })?;
+    truncate_wal_after_rewrite(store, conn);
+    let page_count_after = u64::try_from(query_i64(conn, "page_count")?).unwrap_or(0);
 
     let freed = page_count_before.saturating_sub(page_count_after);
     logger::info(
         LogTag::System,
         &format!(
-            "Rebuilt {} with VACUUM: freed {} pages ({:.2} MB) in {:.2}s",
-            path.display(),
-            freed,
+            "Rebuilt {store} with VACUUM: freed {freed} pages ({:.2} MB) in {:.2}s",
             (freed * page_size) as f64 / (1024.0 * 1024.0),
             start.elapsed().as_secs_f64()
         ),
@@ -334,270 +180,13 @@ fn rebuild_database(
     Ok(freed)
 }
 
-// =============================================================================
-// WAL CHECKPOINT
-// =============================================================================
-
-/// Runs a WAL checkpoint on a database to prevent unbounded WAL file growth.
-///
-/// Uses TRUNCATE mode which checkpoints all frames, resets the WAL file to zero
-/// bytes, and ensures the WAL file doesn't grow indefinitely on long-running bots.
-///
-/// ## Arguments
-///
-/// * `path` - Path to the database file
-///
-/// ## Returns
-///
-/// - `Ok(())` on success
-/// - `Err(String)` if the checkpoint failed
-///
-/// ## Notes
-///
-/// - TRUNCATE mode requires exclusive access briefly; busy_timeout handles contention
-/// - This is lightweight compared to VACUUM — typically completes in milliseconds
-/// - Only meaningful for databases using WAL journal mode
-pub fn run_wal_checkpoint(path: &Path) -> Result<(), DatabaseError> {
-    let conn = Connection::open(path).map_err(|e| DatabaseError::Query {
-        operation: format!("open database {} for WAL checkpoint", path.display()),
-        message: e.to_string(),
-    })?;
-
-    conn.pragma_update(None, "busy_timeout", 5000)
-        .map_err(|e| DatabaseError::Query {
-            operation: "set busy_timeout for WAL checkpoint".to_owned(),
-            message: e.to_string(),
-        })?;
-
-    // Check journal mode — only checkpoint WAL databases
-    let journal_mode: String = conn
-        .pragma_query_value(None, "journal_mode", |row| row.get(0))
-        .map_err(|e| DatabaseError::Query {
-            operation: "query journal mode for WAL checkpoint".to_owned(),
-            message: e.to_string(),
-        })?;
-
-    if journal_mode.to_lowercase() != "wal" {
-        return Ok(()); // Not in WAL mode, nothing to do
-    }
-
-    // TRUNCATE mode: checkpoint all frames and reset WAL file to zero bytes
-    let start = std::time::Instant::now();
-    conn.pragma_update(None, "wal_checkpoint", "TRUNCATE")
-        .map_err(|e| DatabaseError::Query {
-            operation: "run WAL checkpoint".to_owned(),
-            message: e.to_string(),
-        })?;
-    let elapsed = start.elapsed();
-
-    if elapsed.as_millis() > 100 {
-        logger::info(
-            LogTag::System,
-            &format!(
-                "WAL checkpoint on {} took {:.2}s",
-                path.display(),
-                elapsed.as_secs_f64()
-            ),
-        );
-    }
-
-    Ok(())
-}
-
-// =============================================================================
-// BACKGROUND MAINTENANCE TASK
-// =============================================================================
-
-/// Starts the background database maintenance task.
-///
-/// This spawns a tokio task that:
-///
-/// 1. Waits 60 seconds after startup (avoid interfering with initialization)
-/// 2. One-time: runs `ensure_auto_vacuum_mode()` on all databases (migration)
-/// 3. Periodic: runs WAL checkpoint (default: every 1h) and incremental vacuum
-///    (default: every 6h) on all databases. Intervals are read from config.
-///
-/// ## Operation
-///
-/// - All SQLite operations run in `spawn_blocking` to avoid blocking async runtime
-/// - Each database is processed independently (errors are logged but don't stop processing)
-/// - Timing and results are logged for monitoring
-/// - Uses `tokio::select!` to interleave two different interval timers
-///
-/// ## Call this from startup sequence
-///
-/// ```rust
-/// use screenerbot::database::start_db_maintenance_task;
-///
-/// tokio::spawn(start_db_maintenance_task());
-/// ```
-pub async fn start_maintenance_task() {
-    // Read config intervals (with sane minimums)
-    let (vacuum_secs, wal_secs) = crate::config::with_config(|cfg| {
-        let vacuum = cfg.maintenance.vacuum_interval_secs.max(3600); // min 1h
-        let wal = cfg.maintenance.wal_checkpoint_interval_secs.max(300); // min 5min
-        (vacuum, wal)
-    });
-
-    logger::info(
-        LogTag::System,
-        &format!(
-            "Database maintenance task started (60s delay, vacuum every {}h, WAL checkpoint every {}m)",
-            vacuum_secs / 3600,
-            wal_secs / 60
-        ),
-    );
-
-    // Wait for system initialization
-    tokio::time::sleep(Duration::from_secs(60)).await;
-
-    // Phase 1: One-time auto-vacuum mode migration
-    logger::info(
-        LogTag::System,
-        "Starting one-time auto-vacuum mode migration for all databases",
-    );
-
-    let db_paths = get_all_db_paths();
-    let migration_count = db_paths.len();
-
-    for (name, path) in db_paths {
-        let name_clone = name.clone();
-        let path_clone = path.clone();
-
-        match tokio::task::spawn_blocking(move || ensure_auto_vacuum_mode(&path_clone)).await {
-            Ok(Ok(converted)) => {
-                if converted {
-                    logger::info(
-                        LogTag::System,
-                        &format!("Migrated {name} to INCREMENTAL mode"),
-                    );
-                } else {
-                    logger::info(
-                        LogTag::System,
-                        &format!("{name} already in INCREMENTAL mode"),
-                    );
-                }
-            }
-            Ok(Err(e)) => {
-                logger::warning(LogTag::System, &format!("Failed to migrate {name}: {e}"));
-            }
-            Err(e) => {
-                logger::warning(
-                    LogTag::System,
-                    &format!("Task panic during migration of {name_clone}: {e}"),
-                );
-            }
-        }
-    }
-
-    logger::info(
-        LogTag::System,
-        &format!(
-            "Auto-vacuum migration complete ({} databases processed)",
-            migration_count
-        ),
-    );
-
-    // Phase 2: Periodic maintenance with two timers
-    let mut vacuum_interval = tokio::time::interval(Duration::from_secs(vacuum_secs));
-    vacuum_interval.set_missed_tick_behavior(tokio::time::MissedTickBehavior::Skip);
-
-    let mut wal_interval = tokio::time::interval(Duration::from_secs(wal_secs));
-    wal_interval.set_missed_tick_behavior(tokio::time::MissedTickBehavior::Skip);
-
-    loop {
-        tokio::select! {
-            _ = vacuum_interval.tick() => {
-                run_vacuum_cycle().await;
-            }
-            _ = wal_interval.tick() => {
-                run_wal_cycle().await;
-            }
-        }
-    }
-}
-
-/// Runs incremental vacuum on all databases.
-async fn run_vacuum_cycle() {
-    logger::info(
-        LogTag::System,
-        "Running periodic incremental vacuum on all databases",
-    );
-
-    let db_paths = get_all_db_paths();
-    let mut total_freed: u64 = 0;
-    let mut successful = 0;
-
-    for (name, path) in db_paths {
-        let name_clone = name.clone();
-        let path_clone = path.clone();
-
-        match tokio::task::spawn_blocking(move || run_incremental_vacuum(&path_clone)).await {
-            Ok(Ok(freed)) => {
-                total_freed += freed;
-                if freed > 0 {
-                    logger::info(LogTag::System, &format!("{name} freed {freed} pages"));
-                }
-                successful += 1;
-            }
-            Ok(Err(e)) => {
-                logger::warning(LogTag::System, &format!("Failed to vacuum {name}: {e}"));
-            }
-            Err(e) => {
-                logger::warning(
-                    LogTag::System,
-                    &format!("Task panic during vacuum of {name_clone}: {e}"),
-                );
-            }
-        }
-    }
-
-    logger::info(
-        LogTag::System,
-        &format!(
-            "Incremental vacuum cycle complete: {} databases processed, {} pages freed ({:.2} MB)",
-            successful,
-            total_freed,
-            (total_freed as f64 * 4.0) / 1024.0
-        ),
-    );
-}
-
-/// Runs WAL checkpoint on all databases.
-async fn run_wal_cycle() {
-    let db_paths = get_all_db_paths();
-    let mut successful = 0;
-    let mut errors = 0;
-
-    for (name, path) in db_paths {
-        let name_clone = name.clone();
-        let path_clone = path.clone();
-
-        match tokio::task::spawn_blocking(move || run_wal_checkpoint(&path_clone)).await {
-            Ok(Ok(())) => {
-                successful += 1;
-            }
-            Ok(Err(e)) => {
-                logger::warning(
-                    LogTag::System,
-                    &format!("WAL checkpoint failed for {name}: {e}"),
-                );
-                errors += 1;
-            }
-            Err(e) => {
-                logger::warning(
-                    LogTag::System,
-                    &format!("Task panic during WAL checkpoint of {}: {}", name_clone, e),
-                );
-                errors += 1;
-            }
-        }
-    }
-
-    if errors > 0 {
+/// In WAL mode a rewritten image sits in the WAL until a checkpoint; a busy reader
+/// only defers it to the next housekeeping pass.
+fn truncate_wal_after_rewrite(store: &str, conn: &Connection) {
+    if let Err(e) = conn.pragma_update(None, "wal_checkpoint", "TRUNCATE") {
         logger::warning(
             LogTag::System,
-            &format!("WAL checkpoint cycle: {successful} ok, {errors} errors"),
+            &format!("WAL checkpoint after rewriting {store} deferred: {e}"),
         );
     }
 }

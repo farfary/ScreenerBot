@@ -851,9 +851,7 @@ async fn retained_partial_bytes(update: &UpdateInfo) -> Option<u64> {
         (UpdateKind::Core, Some(core)) => &core.filename,
         _ => &update.filename,
     };
-    let path = crate::paths::get_data_directory()
-        .join("updates")
-        .join(format!("{filename}.part"));
+    let path = crate::paths::get_updates_directory().join(format!("{filename}.part"));
     tokio::fs::metadata(path)
         .await
         .ok()
@@ -862,7 +860,7 @@ async fn retained_partial_bytes(update: &UpdateInfo) -> Option<u64> {
 }
 
 pub(super) fn get_download_dir() -> Result<PathBuf> {
-    let dir = crate::paths::get_data_directory().join("updates");
+    let dir = crate::paths::get_updates_directory();
     std::fs::create_dir_all(&dir)
         .map_err(|error| Error::Io(crate::errors::IoError::from(error)))?;
     #[cfg(unix)]

@@ -20,6 +20,7 @@ mod network;
 mod rpc_provider;
 mod service;
 mod startup;
+mod storage;
 mod traits;
 
 pub use account::*;
@@ -34,4 +35,5 @@ pub use network::*;
 pub use rpc_provider::*;
 pub use service::*;
 pub use startup::{StartupError, StartupErrorCode, StartupRecovery};
+pub use storage::StorageError;
 pub use traits::{ErrorClass, Severity};
