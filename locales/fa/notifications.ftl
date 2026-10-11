@@ -42,12 +42,8 @@ notifications-empty-completed = اقدام تکمیل‌شده‌ای وجود �
 notifications-empty-failed = اقدام ناموفقی وجود ندارد
 notifications-source-auto = خودکار
 notifications-source-manual = دستی
-notifications-state-locked = وضعیت را تب کنترل می‌کند
 notifications-cancelled = لغو شد
-notifications-dismiss = بستن
-notifications-dismiss-failed = بستن اعلان ناموفق بود
 notifications-load-failed = بارگذاری ناموفق بود
-notifications-mark-read-failed = علامت‌گذاری اعلان‌ها به‌عنوان خوانده‌شده ناموفق بود
 notifications-clear-title = پاک‌کردن اعلان‌ها
 notifications-clear-message = همه اعلان‌های این فهرست بسته شوند؟ آن‌ها در تاریخچه تکمیل‌شده/ناموفق باقی می‌مانند.
 notifications-clear-failed = پاک‌کردن اعلان‌ها ناموفق بود
@@ -59,3 +55,22 @@ notifications-stream-lag-missed =
     } — در حال تازه‌سازی
 notifications-stream-lag-refreshing = در حال تازه‌سازی
 notifications-sync-failed = تازه‌سازی اقدامات ممکن نشد
+
+# Action rows (ui/action_row.js): day headings, the copy-trading source, the detail.
+notifications-day-today = امروز
+notifications-day-yesterday = دیروز
+notifications-source-copy = کپی‌تریدینگ
+notifications-steps = مراحل
+notifications-detail-transaction = تراکنش
+notifications-detail-fill-price = قیمت اجرا
+    .title = مقدار { -sol } این سواپ تقسیم بر مقدار توکن آن
+notifications-detail-fee = کارمزد شبکه
+notifications-detail-pnl = سود و زیان پوزیشن
+notifications-detail-route = مسیر
+notifications-detail-duration = مدت
+notifications-detail-reason = دلیل
+notifications-view-token = مشاهده توکن
+notifications-view-position = مشاهده پوزیشن
+notifications-view-transaction = مشاهده تراکنش
+notifications-unrecorded = در پوزیشن ثبت نشده
+notifications-unrecorded-detail = این سواپ در پوزیشن ثبت نشده و ممکن است انجام نشده باشد. تراکنش آن را بررسی کنید.

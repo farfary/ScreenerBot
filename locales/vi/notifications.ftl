@@ -42,12 +42,8 @@ notifications-empty-completed = Không có hành động đã hoàn thành
 notifications-empty-failed = Không có hành động thất bại
 notifications-source-auto = Tự động
 notifications-source-manual = Thủ công
-notifications-state-locked = Trạng thái do tab điều khiển
 notifications-cancelled = Đã hủy
-notifications-dismiss = Bỏ qua
-notifications-dismiss-failed = Không thể bỏ qua thông báo
 notifications-load-failed = Không thể tải
-notifications-mark-read-failed = Không thể đánh dấu thông báo đã đọc
 notifications-clear-title = Xóa thông báo
 notifications-clear-message = Bỏ qua tất cả thông báo trong danh sách này? Chúng vẫn nằm trong lịch sử Đã hoàn thành/Thất bại.
 notifications-clear-failed = Không thể xóa thông báo
@@ -58,3 +54,22 @@ notifications-stream-lag-missed =
     } — đang làm mới
 notifications-stream-lag-refreshing = Đang làm mới
 notifications-sync-failed = Không thể làm mới hành động
+
+# Action rows (ui/action_row.js): day headings, the copy-trading source, the detail.
+notifications-day-today = Hôm nay
+notifications-day-yesterday = Hôm qua
+notifications-source-copy = Copy trading
+notifications-steps = Các bước
+notifications-detail-transaction = Giao dịch
+notifications-detail-fill-price = Giá khớp
+    .title = Số { -sol } của giao dịch hoán đổi này chia cho số lượng token
+notifications-detail-fee = Phí mạng
+notifications-detail-pnl = P&L vị thế
+notifications-detail-route = Tuyến
+notifications-detail-duration = Thời lượng
+notifications-detail-reason = Lý do
+notifications-view-token = Xem token
+notifications-view-position = Xem vị thế
+notifications-view-transaction = Xem giao dịch
+notifications-unrecorded = Chưa ghi nhận vào vị thế
+notifications-unrecorded-detail = Giao dịch hoán đổi này chưa được ghi nhận vào vị thế và có thể chưa thành công. Hãy kiểm tra giao dịch của nó.

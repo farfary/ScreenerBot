@@ -523,24 +523,17 @@
         <!-- Compact header -->
         <header class="notification-panel-header">
           <div class="notification-panel-heading">
-            <h3 id="notificationDrawerTitle" data-l10n-id="shell-notification-title"></h3>
+            <h3 id="notificationDrawerTitle" data-l10n-id="shell-notification-heading"></h3>
           </div>
           <div class="notification-panel-actions">
-            <button
-              type="button"
-              id="markAllReadBtn"
-              class="panel-action-btn"
-              data-l10n-id="shell-notification-mark-all-read"
-            >
-              <i class="icon-check"></i>
-            </button>
             <button
               type="button"
               id="clearAllBtn"
               class="panel-action-btn"
               data-l10n-id="shell-notification-clear-all"
+              hidden
             >
-              <i class="icon-trash-2"></i>
+              <i class="icon-trash-2" aria-hidden="true"></i>
             </button>
             <button
               type="button"
@@ -548,83 +541,73 @@
               class="panel-close-btn"
               data-l10n-id="shell-notification-close"
             >
-              <i class="icon-x"></i>
+              <i class="icon-x" aria-hidden="true"></i>
             </button>
           </div>
         </header>
 
-        <!-- Tab navigation -->
-        <nav class="notification-tabs" role="tablist">
-          <button
-            type="button"
-            class="notification-tab active"
-            data-tab="all"
-            role="tab"
-            aria-selected="true"
-          >
-            <span data-l10n-id="shell-notification-tab-all"></span>
-            <span class="tab-count" id="allCount">0</span>
-          </button>
-          <button
-            type="button"
-            class="notification-tab"
-            data-tab="active"
-            role="tab"
-            aria-selected="false"
-          >
-            <span data-l10n-id="shell-notification-tab-active"></span>
-            <span class="tab-count" id="activeCount">0</span>
-          </button>
-          <button
-            type="button"
-            class="notification-tab"
-            data-tab="completed"
-            role="tab"
-            aria-selected="false"
-          >
-            <span data-l10n-id="shell-notification-tab-done"></span>
-            <span class="tab-count" id="completedCount">0</span>
-          </button>
-          <button
-            type="button"
-            class="notification-tab"
-            data-tab="failed"
-            role="tab"
-            aria-selected="false"
-          >
-            <span data-l10n-id="shell-notification-tab-failed"></span>
-            <span class="tab-count" id="failedCount">0</span>
-          </button>
-        </nav>
-
-        <!-- Filters for history tabs -->
-        <div class="notification-filters" id="notificationFilters">
-          <div class="filter-row">
-            <select id="filterActionType" class="filter-select" data-custom-select>
-              <option value="" data-l10n-id="shell-notification-filter-type-all"></option>
-              <option value="swap_buy" data-l10n-id="shell-notification-filter-type-buy"></option>
-              <option value="swap_sell" data-l10n-id="shell-notification-filter-type-sell"></option>
-              <option value="position_open" data-l10n-id="shell-notification-filter-type-open"></option>
-              <option value="position_close" data-l10n-id="shell-notification-filter-type-close"></option>
-              <option value="position_dca" data-l10n-id="shell-notification-filter-type-dca"></option>
-              <option value="position_partial_exit" data-l10n-id="shell-notification-filter-type-partial"></option>
-            </select>
-            <select id="filterState" class="filter-select" data-custom-select>
-              <option value="" data-l10n-id="shell-notification-filter-state-all"></option>
-              <option value="in_progress" data-l10n-id="shell-notification-filter-state-in-progress"></option>
-              <option value="completed" data-l10n-id="shell-notification-filter-state-completed"></option>
-              <option value="failed" data-l10n-id="shell-notification-filter-state-failed"></option>
-              <option value="cancelled" data-l10n-id="shell-notification-filter-state-cancelled"></option>
-            </select>
+        <!-- Tabs by state, then the type filter of the history tabs -->
+        <div class="notification-toolbar">
+          <nav class="notification-tabs" role="tablist">
             <button
               type="button"
-              id="clearFiltersBtn"
-              class="filter-clear-btn"
-              data-l10n-id="shell-notification-filter-clear"
-              disabled
+              class="notification-tab active"
+              data-tab="all"
+              role="tab"
+              aria-selected="true"
             >
-              <i class="icon-x" aria-hidden="true"></i>
+              <span data-l10n-id="shell-notification-tab-all"></span>
+              <span class="tab-count" id="allCount" hidden>0</span>
             </button>
+            <button
+              type="button"
+              class="notification-tab"
+              data-tab="active"
+              role="tab"
+              aria-selected="false"
+            >
+              <span data-l10n-id="shell-notification-tab-active"></span>
+              <span class="tab-count" id="activeCount" hidden>0</span>
+            </button>
+            <button
+              type="button"
+              class="notification-tab"
+              data-tab="completed"
+              role="tab"
+              aria-selected="false"
+            >
+              <span data-l10n-id="shell-notification-tab-done"></span>
+              <span class="tab-count" id="completedCount" hidden>0</span>
+            </button>
+            <button
+              type="button"
+              class="notification-tab"
+              data-tab="failed"
+              role="tab"
+              aria-selected="false"
+            >
+              <span data-l10n-id="shell-notification-tab-failed"></span>
+              <span class="tab-count" id="failedCount" hidden>0</span>
+            </button>
+          </nav>
+          <div class="notification-filters" id="notificationFilters">
+            <div class="filter-row">
+              <select id="filterActionType" class="notification-type-select" data-custom-select>
+                <option value="" data-l10n-id="shell-notification-filter-type-all"></option>
+                <option value="buy" data-l10n-id="shell-notification-filter-type-buy"></option>
+                <option value="sell" data-l10n-id="shell-notification-filter-type-sell"></option>
+                <option value="dca" data-l10n-id="shell-notification-filter-type-dca"></option>
+              </select>
+              <button
+                type="button"
+                id="clearFiltersBtn"
+                class="filter-clear-btn"
+                data-l10n-id="shell-notification-filter-clear"
+                hidden
+              >
+                <i class="icon-x" aria-hidden="true"></i>
+              </button>
+            </div>
           </div>
         </div>
 

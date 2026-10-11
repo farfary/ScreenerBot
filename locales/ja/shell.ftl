@@ -98,11 +98,10 @@ shell-ticker-services-unknown = サービス: <strong>—</strong>
 
 ## Notification drawer
 
-shell-notification-title = アクション
-shell-notification-mark-all-read =
-    .title = すべて既読にする
+shell-notification-heading = アクションと通知
 shell-notification-clear-all =
     .title = すべてクリア
+    .aria-label = すべてクリア
 shell-notification-close =
     .aria-label = 閉じる
 shell-notification-tab-all = すべて
@@ -112,18 +111,10 @@ shell-notification-tab-failed = 失敗
 shell-notification-filter-type-all = すべての種類
 shell-notification-filter-type-buy = 購入
 shell-notification-filter-type-sell = 売却
-shell-notification-filter-type-open = オープン
-shell-notification-filter-type-close = クローズ
 shell-notification-filter-type-dca = DCA
-shell-notification-filter-type-partial = 部分
 shell-notification-filter-clear =
     .title = フィルターをクリア
     .aria-label = フィルターをクリア
-shell-notification-filter-state-all = すべての状態
-shell-notification-filter-state-in-progress = 進行中
-shell-notification-filter-state-completed = 完了
-shell-notification-filter-state-failed = 失敗
-shell-notification-filter-state-cancelled = キャンセル
 shell-notification-list =
     .aria-label = 通知
 shell-notification-empty = アクションはまだありません

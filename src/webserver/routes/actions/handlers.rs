@@ -17,7 +17,9 @@ use std::convert::Infallible;
 use std::sync::Arc;
 use std::time::Duration;
 
+use super::outcome::with_outcomes;
 use super::types::*;
+use crate::actions::ActionType;
 use crate::i18n::ids;
 use crate::webserver::api_error::{ApiError, ApiErrorCode};
 use crate::webserver::state::AppState;
@@ -98,7 +100,7 @@ pub(super) async fn get_all_actions(State(_state): State<Arc<AppState>>) -> impl
     let total = actions.len();
 
     Json(ActionHistoryResponse {
-        actions,
+        actions: with_outcomes(actions).await,
         total,
         limit: 0,
         offset: 0,
@@ -115,20 +117,8 @@ pub(super) async fn get_action_history(
     filters.limit = Some(query.limit);
     filters.offset = Some(query.offset);
 
-    // Parse action type. Accept both the DB form ("swapbuy") and the API/JSON
-    // snake_case form the UI sends ("swap_buy") by stripping underscores.
-    if let Some(action_type_str) = query.action_type {
-        let normalized = action_type_str.to_lowercase().replace('_', "");
-        filters.action_type = match normalized.as_str() {
-            "swapbuy" => Some(crate::actions::ActionType::SwapBuy),
-            "swapsell" => Some(crate::actions::ActionType::SwapSell),
-            "positionopen" => Some(crate::actions::ActionType::PositionOpen),
-            "positionclose" => Some(crate::actions::ActionType::PositionClose),
-            "positiondca" => Some(crate::actions::ActionType::PositionDca),
-            "positionpartialexit" => Some(crate::actions::ActionType::PositionPartialExit),
-            "manualorder" => Some(crate::actions::ActionType::ManualOrder),
-            _ => None,
-        };
+    if let Some(action_type) = query.action_type.as_deref() {
+        filters.action_types = action_types_for_filter(action_type);
     }
 
     filters.entity_id = query.entity_id;
@@ -153,7 +143,7 @@ pub(super) async fn get_action_history(
     // Fetch from database using helper function
     match crate::actions::query_action_history(filters).await {
         Ok((actions, total)) => Json(ActionHistoryResponse {
-            actions,
+            actions: with_outcomes(actions).await,
             total,
             limit: query.limit,
             offset: query.offset,
@@ -170,6 +160,29 @@ pub(super) async fn get_action_history(
                 offset: query.offset,
             })
         }
+    }
+}
+
+/// The action types a history `action_type` filter selects. The panel filters by trade
+/// side, and each side is recorded under more than one type: a manual buy is `SwapBuy`,
+/// a strategy buy `PositionOpen`. A single type id is accepted in its serialized form
+/// (`swap_buy`) and its stored form (`swapbuy`); an unknown value filters nothing.
+fn action_types_for_filter(value: &str) -> Vec<ActionType> {
+    match value.to_lowercase().replace('_', "").as_str() {
+        "buy" => vec![ActionType::SwapBuy, ActionType::PositionOpen],
+        "sell" => vec![
+            ActionType::SwapSell,
+            ActionType::PositionClose,
+            ActionType::PositionPartialExit,
+        ],
+        "dca" | "positiondca" => vec![ActionType::PositionDca],
+        "swapbuy" => vec![ActionType::SwapBuy],
+        "swapsell" => vec![ActionType::SwapSell],
+        "positionopen" => vec![ActionType::PositionOpen],
+        "positionclose" => vec![ActionType::PositionClose],
+        "positionpartialexit" => vec![ActionType::PositionPartialExit],
+        "manualorder" => vec![ActionType::ManualOrder],
+        _ => Vec::new(),
     }
 }
 
@@ -293,4 +306,31 @@ pub(super) async fn get_subscriber_count(State(_state): State<Arc<AppState>>) ->
     Json(SubscriberCountResponse {
         subscriber_count: count,
     })
+}
+
+#[cfg(test)]
+mod tests {
+    use super::action_types_for_filter;
+    use crate::actions::ActionType;
+
+    #[test]
+    fn a_trade_side_selects_every_type_it_is_recorded_under() {
+        assert_eq!(
+            action_types_for_filter("buy"),
+            vec![ActionType::SwapBuy, ActionType::PositionOpen]
+        );
+        assert!(action_types_for_filter("sell").contains(&ActionType::PositionClose));
+        assert_eq!(
+            action_types_for_filter("dca"),
+            vec![ActionType::PositionDca]
+        );
+    }
+
+    #[test]
+    fn a_single_type_is_accepted_in_both_spellings() {
+        for spelling in ["swap_buy", "swapbuy", "SWAP_BUY"] {
+            assert_eq!(action_types_for_filter(spelling), vec![ActionType::SwapBuy]);
+        }
+        assert!(action_types_for_filter("anything").is_empty());
+    }
 }

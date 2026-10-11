@@ -42,12 +42,8 @@ notifications-empty-completed = Завершених дій немає
 notifications-empty-failed = Невдалих дій немає
 notifications-source-auto = Авто
 notifications-source-manual = Вручну
-notifications-state-locked = Станом керує вкладка
 notifications-cancelled = Скасовано
-notifications-dismiss = Закрити
-notifications-dismiss-failed = Не вдалося закрити сповіщення
 notifications-load-failed = Не вдалося завантажити
-notifications-mark-read-failed = Не вдалося позначити сповіщення прочитаними
 notifications-clear-title = Очистити сповіщення
 notifications-clear-message = Закрити всі сповіщення з цього списку? Вони залишаться в історії завершених і невдалих дій.
 notifications-clear-failed = Не вдалося очистити сповіщення
@@ -61,3 +57,22 @@ notifications-stream-lag-missed =
     } — оновлення
 notifications-stream-lag-refreshing = Оновлення
 notifications-sync-failed = Не вдалося оновити дії
+
+# Action rows (ui/action_row.js): day headings, the copy-trading source, the detail.
+notifications-day-today = Сьогодні
+notifications-day-yesterday = Учора
+notifications-source-copy = Копітрейдинг
+notifications-steps = Кроки
+notifications-detail-transaction = Транзакція
+notifications-detail-fill-price = Ціна виконання
+    .title = Сума в { -sol } цього свопу, поділена на кількість токенів
+notifications-detail-fee = Комісія мережі
+notifications-detail-pnl = Прибуток/збиток позиції
+notifications-detail-route = Маршрут
+notifications-detail-duration = Тривалість
+notifications-detail-reason = Причина
+notifications-view-token = Показати токен
+notifications-view-position = Показати позицію
+notifications-view-transaction = Показати транзакцію
+notifications-unrecorded = Не враховано в позиції
+notifications-unrecorded-detail = Цей своп не враховано в позиції, і він, можливо, не пройшов. Перевірте його транзакцію.

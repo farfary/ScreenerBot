@@ -2,13 +2,12 @@
  * SPDX-License-Identifier: BUSL-1.1 */
 
 /* =============================================================================
-   Notification Panel - Compact, Modern, Minimal Design
-   Uses centralized floating.css variables
-   Professional trading dashboard notification system
+   Actions drawer (ui/notification_panel.js, rows from ui/action_row.js)
+   A slide-in panel listing trade actions as compact rows grouped by day.
    ============================================================================= */
 
 /* -----------------------------------------------------------------------------
-   Drawer Layout - Full-screen overlay with wide slide-in panel
+   Drawer layout
    ----------------------------------------------------------------------------- */
 
 .notification-drawer {
@@ -34,7 +33,6 @@ body.notification-drawer-open {
   overflow: hidden;
 }
 
-/* Backdrop */
 .notification-drawer__backdrop {
   flex: 1 1 auto;
   background: var(--floating-overlay-bg);
@@ -47,11 +45,9 @@ body.notification-drawer-open {
   opacity: 1;
 }
 
-/* Main Panel - Wider and more minimal */
 .notification-drawer__panel {
   position: relative;
-  width: min(560px, 96vw);
-  max-width: 600px;
+  width: min(460px, 100vw);
   background: var(--bg-secondary);
   display: flex;
   flex-direction: column;
@@ -66,7 +62,7 @@ body.notification-drawer-open {
 }
 
 /* -----------------------------------------------------------------------------
-   Compact Header
+   Header
    ----------------------------------------------------------------------------- */
 
 .notification-panel-header {
@@ -81,9 +77,7 @@ body.notification-drawer-open {
 }
 
 .notification-panel-heading {
-  display: flex;
-  align-items: center;
-  gap: 10px;
+  min-width: 0;
 }
 
 .notification-panel-header h3 {
@@ -94,76 +88,73 @@ body.notification-drawer-open {
   letter-spacing: -0.01em;
 }
 
-/* Action Buttons */
 .notification-panel-actions {
   display: flex;
-  gap: 6px;
+  gap: 4px;
   align-items: center;
 }
 
-.panel-action-btn {
-  width: 28px;
-  height: 28px;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  background: transparent;
-  border: 1px solid transparent;
-  border-radius: var(--radius-md);
-  cursor: pointer;
-  font-size: 13px;
-  color: var(--text-muted);
-  transition: all var(--transition-fast);
-}
-
-.panel-action-btn:hover {
-  background: var(--hover-bg);
-  color: var(--text-primary);
-}
-
+/* Bare glyph buttons: colour is the only state. */
+.panel-action-btn,
 .panel-close-btn {
   width: 28px;
   height: 28px;
   display: flex;
   align-items: center;
   justify-content: center;
-  border-radius: var(--radius-md);
   background: transparent;
-  border: 1px solid transparent;
-  font-size: 16px;
-  line-height: 1;
-  color: var(--text-muted);
+  border: none;
+  padding: 0;
   cursor: pointer;
-  transition: all var(--transition-fast);
+  font-size: 15px;
+  color: var(--text-muted);
+  transition: color var(--transition-fast);
 }
 
+.panel-action-btn[hidden] {
+  display: none;
+}
+
+.panel-action-btn:hover,
 .panel-close-btn:hover {
-  background: var(--danger-alpha-10);
+  color: var(--text-primary);
+}
+
+.panel-action-btn:hover {
   color: var(--error-color);
 }
 
 /* -----------------------------------------------------------------------------
-   Compact Tabs
+   Toolbar: state tabs, then the type filter of the history tabs
    ----------------------------------------------------------------------------- */
+
+.notification-toolbar {
+  /* Tabs and the type filter share one control height. */
+  --notification-control-height: 26px;
+
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: 6px 8px;
+  padding: 8px 12px;
+  border-bottom: 1px solid var(--border-color);
+  background: var(--bg-secondary);
+  flex-shrink: 0;
+}
 
 .notification-tabs {
   display: flex;
   gap: 2px;
-  padding: 8px 12px;
-  border-bottom: 1px solid var(--border-color);
-  background: var(--bg-secondary);
-  overflow-x: auto;
-  flex-shrink: 0;
-  -webkit-overflow-scrolling: touch;
+  min-width: 0;
 }
-
-/* Hidden scrollbar - uses global scrollbar-hidden pattern */
 
 .notification-tab {
   display: inline-flex;
   align-items: center;
-  gap: 5px;
-  padding: 6px 12px;
+  gap: 6px;
+  height: var(--notification-control-height);
+  padding: 0 10px;
   background: transparent;
   border: none;
   border-radius: var(--radius-md);
@@ -171,7 +162,9 @@ body.notification-drawer-open {
   font-weight: 500;
   color: var(--text-secondary);
   cursor: pointer;
-  transition: all var(--transition-fast);
+  transition:
+    background-color var(--transition-fast),
+    color var(--transition-fast);
   white-space: nowrap;
 }
 
@@ -181,375 +174,471 @@ body.notification-drawer-open {
 }
 
 .notification-tab.active {
-  background: var(--primary-color);
-  color: white;
+  background: var(--primary-alpha-10);
+  color: var(--primary-color);
   font-weight: 600;
 }
 
-/* Tab count badge */
+/* One count style on every tab, active or not. */
 .tab-count {
-  min-width: 16px;
-  height: 16px;
-  padding: 0 5px;
-  background: var(--bg-card-hover);
-  border-radius: var(--radius-lg);
-  font-size: 10px;
-  font-weight: 600;
   display: inline-flex;
   align-items: center;
   justify-content: center;
+  min-width: 18px;
+  height: 16px;
+  padding: 0 5px;
+  border-radius: var(--radius-full);
+  background: var(--bg-card-hover);
+  color: var(--text-secondary);
+  font-size: 10px;
+  font-weight: 600;
+  line-height: 1;
   font-family: var(--font-data);
+  font-feature-settings: "tnum" 1;
+}
+
+.tab-count[hidden] {
+  display: none;
 }
 
 .notification-tab.active .tab-count {
-  background: rgb(255, 255, 255, 0.25);
-  color: white;
+  background: var(--primary-alpha-20);
+  color: var(--primary-color);
 }
 
-/* -----------------------------------------------------------------------------
-   Compact Filters
-   ----------------------------------------------------------------------------- */
-
 .notification-filters {
+  flex: 0 1 168px;
+  min-width: 128px;
+}
+
+.notification-filters[hidden] {
   display: none;
-  padding: 8px 12px;
-  background: var(--bg-primary);
-  border-bottom: 1px solid var(--border-color);
-  flex-shrink: 0;
 }
 
 .filter-row {
   display: flex;
-  gap: 8px;
+  gap: 4px;
   align-items: center;
 }
 
-.filter-select {
-  flex: 1;
-  padding: 6px 10px;
-  padding-inline-end: 24px;
-  border: 1px solid var(--border-color);
-  border-radius: var(--radius-md);
-
-  /* background-color (not the `background` shorthand) so the global select arrow survives. */
-  background-color: var(--bg-secondary);
-  color: var(--text-primary);
+/* The type filter reads as quietly as the tabs beside it: same height, no box at rest. */
+.notification-filters .notification-type-select .cs-trigger {
+  min-height: 0;
+  height: var(--notification-control-height);
+  padding: 0 10px;
+  padding-inline-end: 8px;
+  border-color: transparent;
+  background: transparent;
+  color: var(--text-secondary);
   font-size: 12px;
   font-weight: 500;
-  cursor: pointer;
-  transition: all var(--transition-fast);
-
-  /* Arrow inherited from global `select {}` (form_controls.css). */
+  line-height: 1.3;
 }
 
-.filter-select:hover {
-  border-color: var(--primary-color);
+.notification-filters .notification-type-select:hover .cs-trigger {
+  border-color: transparent;
+  background: var(--hover-bg);
+  color: var(--text-primary);
 }
 
-.filter-select:focus {
-  outline: none;
-  border-color: var(--primary-color);
+.notification-filters .notification-type-select.open .cs-trigger,
+.notification-filters .notification-type-select.closing .cs-trigger {
+  border-color: var(--border-color);
+  background: var(--bg-secondary);
 }
 
 .filter-clear-btn {
-  width: 28px;
-  height: 28px;
+  width: 24px;
+  height: 24px;
   display: flex;
   align-items: center;
   justify-content: center;
-  border: 1px solid var(--border-color);
-  border-radius: var(--radius-md);
+  border: none;
+  padding: 0;
   background: transparent;
   color: var(--text-muted);
-  font-size: 12px;
+  font-size: 13px;
   cursor: pointer;
-  transition: all var(--transition-fast);
   flex-shrink: 0;
+  transition: color var(--transition-fast);
 }
 
-.filter-clear-btn:disabled {
-  opacity: 0.4;
-  cursor: default;
+.filter-clear-btn[hidden] {
+  display: none;
 }
 
-.filter-clear-btn:hover:not(:disabled) {
-  background: var(--danger-alpha-10);
-  border-color: var(--error-color);
-  color: var(--error-color);
+.filter-clear-btn:hover {
+  color: var(--text-primary);
 }
 
 /* -----------------------------------------------------------------------------
-   Notification List - Scrollable with tighter spacing
+   List and day groups
    ----------------------------------------------------------------------------- */
 
 .notification-list {
   flex: 1;
   overflow-y: auto;
-  padding: 8px 12px;
-  scroll-behavior: smooth;
+  padding: 4px 8px 12px;
   overscroll-behavior: contain;
 }
 
-/* Scrollbar styling - inherits from global scrollbar system */
+.action-day + .action-day {
+  margin-top: 4px;
+}
 
-/* Note: Uses global thin scrollbar pattern from scrollbar.css */
+.action-day__heading {
+  position: sticky;
+  top: 0;
+  z-index: 1;
+  margin: 0;
+  padding: 8px 8px 4px;
+  background: var(--bg-secondary);
+  color: var(--text-muted);
+  font-size: 11px;
+  font-weight: 600;
+  letter-spacing: 0.02em;
+}
 
 /* -----------------------------------------------------------------------------
-   Compact Notification Item
+   Action row
    ----------------------------------------------------------------------------- */
 
-.notification-item {
-  position: relative;
+.action-row {
+  /* The summary's trailing columns; the detail's end padding reserves the same, so
+     values at the end of the detail align with the row's time. */
+  --action-row-pad: 8px;
+  --action-row-gap: 10px;
+  --action-row-chevron: 14px;
+
+  border: 1px solid transparent;
+  border-radius: var(--radius-md);
+}
+
+.action-row.is-unread {
+  background: var(--primary-alpha-5);
+  border-color: var(--primary-alpha-30);
+}
+
+/* An open row and its detail share one surface, so each open unit reads as one. */
+.action-row.is-open {
   background: var(--bg-card);
-  border: 1px solid var(--border-color);
-  border-radius: var(--radius-lg);
-  padding: 8px 10px;
-  margin-bottom: 4px;
+  border-color: var(--border-color);
+}
+
+.action-row.is-open + .action-row {
+  margin-top: 2px;
+}
+
+.action-row__summary {
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr) auto auto;
+  align-items: start;
+  column-gap: var(--action-row-gap);
+  width: 100%;
+  padding: 7px var(--action-row-pad);
+  border: none;
+  border-radius: inherit;
+  background: transparent;
+  color: inherit;
+  font: inherit;
+  text-align: start;
   cursor: pointer;
-  transition: all var(--transition-fast);
-  overflow: hidden;
 }
 
-.notification-item:last-child {
-  margin-bottom: 0;
-}
-
-.notification-item:hover {
+.action-row__summary:hover {
   background: var(--hover-bg);
-  border-color: var(--primary-color);
 }
 
-/* Status indicator - removed for minimal design */
-
-/* Unread indicator: the tint and border the header badge count corresponds to. */
-.notification-item.unread {
-  background: var(--primary-alpha-10);
-  border-color: var(--primary-alpha-40);
-}
-
-/* Notification header */
-.notification-header {
-  display: flex;
-  align-items: center;
-  gap: 8px;
-}
-
-.notification-icon {
+.action-row__status {
+  margin-top: 2px;
   font-size: 14px;
   line-height: 1;
-  flex-shrink: 0;
-  color: var(--text-secondary);
+  color: var(--text-muted);
 }
 
-.notification-item.in-progress .notification-icon {
-  color: var(--warning-color);
-}
-
-.notification-item.completed .notification-icon {
+.action-row--completed .action-row__status {
   color: var(--success-color);
 }
 
-.notification-item.failed .notification-icon {
+.action-row--failed .action-row__status {
   color: var(--error-color);
 }
 
-.notification-icon .icon-loader {
+.action-row.is-unrecorded .action-row__status {
+  color: var(--warning-color);
+}
+
+.action-row--in_progress .action-row__status {
+  color: var(--warning-color);
   animation: spin 1s linear infinite;
 }
 
-
-
-.notification-title {
-  flex: 1;
+.action-row__main {
   display: flex;
-  flex-wrap: wrap;
-  align-items: center;
-  gap: 6px;
-  font-size: 12px;
-  font-weight: 500;
-  color: var(--text-primary);
-  line-height: 1.3;
+  flex-direction: column;
+  gap: 2px;
   min-width: 0;
 }
 
-.notification-title strong {
-  font-weight: 600;
+.action-row__title {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  min-width: 0;
+  font-size: 13px;
+  line-height: 1.3;
+  color: var(--text-primary);
 }
 
-.notification-symbol {
+.action-row__verb {
   font-weight: 600;
-  color: var(--primary-color);
-  font-family: var(--font-mono);
-  font-size: 11px;
-  background: var(--primary-alpha-10);
-  padding: 2px 5px;
-  border-radius: var(--radius-sm);
-  max-width: 100px;
+  white-space: nowrap;
+}
+
+.action-row__token {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  min-width: 0;
+}
+
+.action-row__symbol {
+  font-weight: 600;
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
 }
 
-/* Dismiss button */
-.notification-dismiss {
-  width: 20px;
-  height: 20px;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  background: transparent;
-  border: none;
-  border-radius: var(--radius-sm);
-  font-size: 14px;
+.action-row__source {
   color: var(--text-muted);
-  cursor: pointer;
-  transition: all 0.1s ease;
-  flex-shrink: 0;
-  opacity: 0;
+  font-size: 11px;
+  white-space: nowrap;
 }
 
-.notification-item:hover .notification-dismiss {
-  opacity: 1;
+.action-row__result {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  gap: 2px 8px;
+  min-width: 0;
+  font-size: 12px;
+  line-height: 1.35;
+  color: var(--text-secondary);
+  font-family: var(--font-data);
+  font-feature-settings: "tnum" 1;
 }
 
-.notification-dismiss:hover {
-  background: var(--danger-alpha-10);
-  color: var(--error-color);
+.action-row__flow {
+  display: inline-flex;
+  align-items: baseline;
+  gap: 6px;
+  white-space: nowrap;
 }
 
-/* Source tag (auto / manual) shown next to the title */
-.notification-source {
-  font-size: 9px;
-  font-weight: 600;
-  text-transform: uppercase;
-  letter-spacing: 0.04em;
-  padding: 1px 5px;
-  border-radius: var(--radius-xs);
+.action-row__flow i {
+  align-self: center;
+  font-size: 11px;
+  color: var(--text-muted);
+}
+
+/* Time over the round's P&L, at the row's trailing edge. */
+.action-row__aside {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-end;
+  gap: 2px;
+}
+
+.action-row__pnl,
+.action-detail__pnl {
+  font-size: 12px;
+  white-space: nowrap;
+}
+
+.action-row__chevron {
+  width: var(--action-row-chevron);
+  margin-top: 2px;
+  text-align: center;
+  font-size: 14px;
+  line-height: 1;
+  color: var(--text-muted);
+  transition: transform var(--transition-fast);
+}
+
+.action-row__summary[aria-expanded="true"] .action-row__chevron {
+  transform: rotate(180deg);
+}
+
+.action-row__logo {
+  display: inline-flex;
+}
+
+.action-row__step {
+  font-family: var(--font-sans);
+}
+
+.action-row__elapsed {
+  color: var(--text-muted);
+}
+
+.action-row__error {
+  color: var(--semantic-error-text);
+  font-family: var(--font-sans);
+  overflow-wrap: anywhere;
+}
+
+.action-row__muted {
+  color: var(--text-muted);
+}
+
+.action-row__warning {
+  color: var(--semantic-warning-text);
+  font-family: var(--font-sans);
+}
+
+.action-row__time {
+  margin-top: 1px;
+  color: var(--text-muted);
+  font-size: 11px;
+  font-family: var(--font-data);
+  font-feature-settings: "tnum" 1;
+  white-space: nowrap;
+}
+
+/* -----------------------------------------------------------------------------
+   Row detail
+   ----------------------------------------------------------------------------- */
+
+.action-detail {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  padding-block: 2px 10px;
+  padding-inline: 32px
+    calc(var(--action-row-pad) + var(--action-row-gap) + var(--action-row-chevron));
+  font-size: 12px;
+}
+
+.action-detail[hidden] {
+  display: none;
+}
+
+.action-detail__warning {
+  margin: 0;
+  color: var(--semantic-warning-text);
   line-height: 1.4;
 }
 
-.notification-source--auto {
-  color: var(--primary-color);
-  background: var(--primary-alpha-10);
+.action-detail__error {
+  margin: 0;
+  color: var(--semantic-error-text);
+  line-height: 1.4;
+  overflow-wrap: anywhere;
 }
 
-.notification-source--manual {
+.action-detail__steps {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.action-step {
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr) auto;
+  align-items: center;
+  column-gap: 8px;
   color: var(--text-secondary);
-  background: var(--bg-card-hover);
 }
 
-/* Detail chips row (amount, %, reason, strategy) */
-.notification-details {
+.action-step__icon {
+  font-size: 12px;
+  color: var(--text-muted);
+}
+
+.action-step--completed .action-step__icon {
+  color: var(--success-color);
+}
+
+.action-step--failed .action-step__icon {
+  color: var(--error-color);
+}
+
+.action-step--in_progress .action-step__icon {
+  color: var(--warning-color);
+  animation: spin 1s linear infinite;
+}
+
+.action-step--pending .action-step__label,
+.action-step--skipped .action-step__label {
+  color: var(--text-muted);
+}
+
+.action-step__time {
+  text-align: end;
+  color: var(--text-muted);
+  font-family: var(--font-data);
+  font-feature-settings: "tnum" 1;
+}
+
+.action-step__error {
+  grid-column: 2 / -1;
+  color: var(--semantic-error-text);
+  overflow-wrap: anywhere;
+}
+
+.action-detail__facts {
+  display: grid;
+  grid-template-columns: max-content minmax(0, 1fr);
+  gap: 4px 16px;
+  margin: 0;
+}
+
+.action-detail__fact {
+  display: contents;
+}
+
+.action-detail__fact dt {
+  color: var(--text-muted);
+}
+
+.action-detail__fact dd {
+  margin: 0;
+  min-width: 0;
+  color: var(--text-primary);
+  font-family: var(--font-data);
+  font-feature-settings: "tnum" 1;
+}
+
+.action-detail__signature {
+  display: block;
+  max-width: 100%;
+}
+
+.action-detail__links {
   display: flex;
   flex-wrap: wrap;
-  gap: 4px;
-  margin: 5px 0 0;
-  padding-inline-start: 22px;
+  gap: 4px 16px;
 }
 
-.notification-chip {
-  font-size: 10px;
+.action-detail__link {
+  padding: 0;
+  border: none;
+  background: transparent;
+  color: var(--primary-color);
+  font: inherit;
   font-weight: 500;
-  color: var(--text-secondary);
-  background: var(--bg-card-hover);
-  padding: 2px 7px;
-  border-radius: var(--radius-sm);
-  font-family: var(--font-data);
-  font-feature-settings:
-    "tnum" 1,
-    "zero" 1;
+  cursor: pointer;
+}
+
+.action-detail__link:hover {
+  text-decoration: underline;
 }
 
 /* -----------------------------------------------------------------------------
-   Compact Progress Bar
-   ----------------------------------------------------------------------------- */
-
-.notification-progress {
-  margin: 6px 0 0;
-  padding-inline-start: 22px;
-}
-
-.progress-bar-container {
-  width: 100%;
-  height: 3px;
-  background: var(--bg-card-hover);
-  border-radius: var(--radius-xs);
-  overflow: hidden;
-  margin-bottom: 4px;
-}
-
-.progress-bar-fill {
-  height: 100%;
-  background: var(--warning-color);
-  border-radius: var(--radius-xs);
-  transition: width var(--transition-normal);
-  position: relative;
-  overflow: hidden;
-}
-
-.progress-bar-fill::after {
-  content: "";
-  position: absolute;
-  inset: 0;
-  background: linear-gradient(var(--to-inline-end), transparent, rgb(255, 255, 255, 0.3), transparent);
-  animation: shimmer 1.5s infinite;
-}
-
-.progress-text {
-  font-size: 10px;
-  font-weight: 500;
-  color: var(--text-muted);
-  line-height: 1.2;
-}
-
-/* -----------------------------------------------------------------------------
-   Compact Error State
-   ----------------------------------------------------------------------------- */
-
-.notification-error {
-  margin: 6px 0 0;
-  margin-inline-start: 22px;
-  padding: 6px 8px;
-  background: var(--danger-alpha-10);
-  border-radius: var(--radius-sm);
-  font-size: 10px;
-  font-weight: 500;
-  color: var(--error-color);
-  line-height: 1.3;
-}
-
-/* -----------------------------------------------------------------------------
-   Timestamp
-   ----------------------------------------------------------------------------- */
-
-.notification-footer {
-  display: flex;
-  align-items: center;
-  gap: 8px;
-  margin-top: 6px;
-  padding-inline-start: 22px;
-}
-
-.notification-time {
-  font-size: 10px;
-  color: var(--text-muted);
-  font-family: var(--font-data);
-}
-
-.notification-duration {
-  font-size: 10px;
-  color: var(--text-muted);
-  font-family: var(--font-data);
-  opacity: 0.8;
-}
-
-.notification-duration::before {
-  content: "·";
-  margin-inline-end: 8px;
-}
-
-/* -----------------------------------------------------------------------------
-   Loading & Back to Top
+   Loading & back to top
    ----------------------------------------------------------------------------- */
 
 .notification-loading {
@@ -595,6 +684,18 @@ body.notification-drawer-open {
   box-shadow: 0 4px 12px var(--shadow-md);
 }
 
+@media (prefers-reduced-motion: reduce) {
+  .action-row--in_progress .action-row__status,
+  .action-step--in_progress .action-step__icon,
+  .notification-loading i {
+    animation: none;
+  }
+
+  .action-row__chevron {
+    transition: none;
+  }
+}
+
 /* -----------------------------------------------------------------------------
    Responsive
    ----------------------------------------------------------------------------- */
@@ -602,31 +703,18 @@ body.notification-drawer-open {
 @media (width <= 768px) {
   .notification-drawer__panel {
     width: 100vw;
-    max-width: 100vw;
   }
 
   .notification-panel-header {
     padding: 10px 12px;
   }
 
-  .notification-summary {
-    gap: 0;
-  }
-
-  .summary-stat {
-    padding: 8px;
-  }
-
-  .notification-tabs {
+  .notification-toolbar {
     padding: 6px 10px;
   }
 
   .notification-list {
-    padding: 6px 10px;
-  }
-
-  .notification-item {
-    padding: 8px 10px;
+    padding-inline: 6px;
   }
 }
 

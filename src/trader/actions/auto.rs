@@ -41,12 +41,15 @@ pub struct AutoOpenAction {
 }
 
 impl AutoOpenAction {
-    /// Create and register a new automated position open action
+    /// Create and register a new automated position open action. `origin` is the
+    /// `PositionOrigin::kind` of the position it opens, which tells a strategy entry
+    /// from a copy-trading one.
     pub async fn new(
         mint: &str,
         symbol: Option<&str>,
         strategy_id: Option<&str>,
         reason: &str,
+        origin: &str,
     ) -> Result<Self, Error> {
         let action_id = Uuid::new_v4().to_string();
 
@@ -55,6 +58,7 @@ impl AutoOpenAction {
             "symbol": symbol.unwrap_or("Unknown"),
             "strategy_id": strategy_id,
             "reason": reason,
+            "origin": origin,
             "operation": "auto_open"
         });
 

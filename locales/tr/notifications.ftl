@@ -42,12 +42,8 @@ notifications-empty-completed = Tamamlanan işlem yok
 notifications-empty-failed = Başarısız işlem yok
 notifications-source-auto = Otomatik
 notifications-source-manual = Manuel
-notifications-state-locked = Durum sekme tarafından belirleniyor
 notifications-cancelled = İptal edildi
-notifications-dismiss = Kapat
-notifications-dismiss-failed = Bildirim kapatılamadı
 notifications-load-failed = Yüklenemedi
-notifications-mark-read-failed = Bildirimler okundu olarak işaretlenemedi
 notifications-clear-title = Bildirimleri temizle
 notifications-clear-message = Bu listedeki tüm bildirimler kapatılsın mı? Bildirimler Tamamlanan/Başarısız geçmişinde kalır.
 notifications-clear-failed = Bildirimler temizlenemedi
@@ -59,3 +55,22 @@ notifications-stream-lag-missed =
     } kaçırıldı — yenileniyor
 notifications-stream-lag-refreshing = Yenileniyor
 notifications-sync-failed = İşlemler yenilenemedi
+
+# Action rows (ui/action_row.js): day headings, the copy-trading source, the detail.
+notifications-day-today = Bugün
+notifications-day-yesterday = Dün
+notifications-source-copy = Kopya işlem
+notifications-steps = Adımlar
+notifications-detail-transaction = İşlem
+notifications-detail-fill-price = Gerçekleşen fiyat
+    .title = Bu takastaki { -sol } tutarının token miktarına bölümü
+notifications-detail-fee = Ağ ücreti
+notifications-detail-pnl = Pozisyon K/Z
+notifications-detail-route = Rota
+notifications-detail-duration = Süre
+notifications-detail-reason = Neden
+notifications-view-token = Token'ı görüntüle
+notifications-view-position = Pozisyonu görüntüle
+notifications-view-transaction = İşlemi görüntüle
+notifications-unrecorded = Pozisyona kaydedilmedi
+notifications-unrecorded-detail = Bu takas pozisyona kaydedilmedi ve gerçekleşmemiş olabilir. İşlemini kontrol edin.

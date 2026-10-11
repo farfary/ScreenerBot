@@ -3,15 +3,19 @@
 //
 
 /**
- * Guard: the Actions panel names its controls and shows what its badge counts.
+ * Guard: the Actions panel lists each action as a compact row that says what happened,
+ * opens into its detail, and hands Escape to an open dropdown before the drawer.
  *
- * The filter clear "×" had no accessible name and stayed enabled with both filters on
- * "All", and the bell badge counted unread actions while the cards showed no unread
- * mark a user could see.
- *
- * - An unread card carries a tint and border that a read card does not.
- * - The clear control is named, disabled while no filter applies and enabled by one.
- * - Every tab whose count is above zero lists cards, also when every action has been
+ * - An unread row carries a border that a read row does not.
+ * - Rows sit under a day heading; a settled swap states what it spent and received,
+ *   and the swap that closed a position states the round's P&L.
+ * - A row opens in place into its step timeline, its transaction and the ways to the
+ *   token and the position.
+ * - The clear-filters control exists only while the type filter narrows the list, and
+ *   the header offers Clear all only on the Active tab it changes, with a tooltip.
+ * - Escape with the type dropdown open closes the dropdown and leaves the drawer open;
+ *   the next Escape closes the drawer.
+ * - Every tab whose count is above zero lists rows, also when every action has been
  *   dismissed (completed and failed actions are auto-dismissed).
  * - An empty tab shows the shared state view, its glyph on the message's row.
  *
@@ -31,7 +35,11 @@ import { createApiHandler, FIXTURES_ROOT, loadIndex } from "../lib/dashboard_fix
 const browser = await chromium.launch({ headless: true });
 after(() => browser.close());
 
-const context = await browser.newContext({ viewport: { width: 1440, height: 900 } });
+// UTC, so the fixture's actions fall on one calendar day wherever the suite runs.
+const context = await browser.newContext({
+  viewport: { width: 1440, height: 900 },
+  timezoneId: "UTC",
+});
 const api = createApiHandler([await loadIndex("home"), await loadIndex("shell")], "populated");
 const host = await serveDashboard(context, { locale: "en", onApi: api.onApi });
 after(async () => {
@@ -43,42 +51,217 @@ page.setDefaultTimeout(15000);
 await page.goto(`${host.origin}/home`);
 await page.waitForSelector(PAGE_READY);
 await page.click("#notificationBtn");
-await page.waitForSelector('#notificationDrawer[data-state="open"] .notification-item');
+await page.waitForSelector('#notificationDrawer[data-state="open"] .action-row');
+
+// Fluent isolates every placeable (U+2068/U+2069); the wording is asserted without them.
+const plain = (text) => text.replace(/[⁨⁩]/g, "").replace(/\s+/g, " ").trim();
+/** A token amount as the rows show it, from the page's own formatter. */
+const compact = (value) =>
+  page.evaluate(async (amount) => {
+    const { formatCompactNumber } = await import("/scripts/core/format.js");
+    return formatCompactNumber(amount);
+  }, value);
+const CLOSE_ID = "3f1c2a9e-7b4d-4e21-9a0c-5d8e1f2a3b01";
+const OPEN_ID = "3f1c2a9e-7b4d-4e21-9a0c-5d8e1f2a3b02";
+const BUY_ID = "3f1c2a9e-7b4d-4e21-9a0c-5d8e1f2a3b03";
 
 // Runs first: opening the panel marks every action read, and the next render shows that.
-test("an unread card is marked where a read card is not", async () => {
-  const cards = await page.$$eval("#notificationList .notification-item", (items) =>
-    items.map((item) => {
-      const style = getComputedStyle(item);
-      return {
-        unread: item.classList.contains("unread"),
-        // The background alone was a 5% tint no one could see; the border carries the mark.
-        skin: style.borderTopColor,
-      };
-    })
+test("an unread row is marked where a read row is not", async () => {
+  const rows = await page.$$eval("#notificationList .action-row", (items) =>
+    items.map((item) => ({
+      unread: item.classList.contains("is-unread"),
+      skin: getComputedStyle(item).borderTopColor,
+    }))
   );
-  const unread = new Set(cards.filter((card) => card.unread).map((card) => card.skin));
-  const read = new Set(cards.filter((card) => !card.unread).map((card) => card.skin));
-  assert.ok(unread.size > 0 && read.size > 0, "the fixture carries unread and read cards");
+  const unread = new Set(rows.filter((row) => row.unread).map((row) => row.skin));
+  const read = new Set(rows.filter((row) => !row.unread).map((row) => row.skin));
+  assert.ok(unread.size > 0 && read.size > 0, "the fixture carries unread and read rows");
   for (const skin of unread) {
-    assert.ok(!read.has(skin), "an unread card carries its own border");
+    assert.ok(!read.has(skin), "an unread row carries its own border");
   }
 });
 
-test("the filter clear control is named and applies only to an active filter", async () => {
+test("rows sit under their day and state what each swap spent and received", async () => {
+  const days = await page.$$eval("#notificationList .action-day", (groups) =>
+    groups.map((group) => ({
+      heading: group.querySelector(".action-day__heading")?.textContent.trim(),
+      rows: group.querySelectorAll(".action-row").length,
+    }))
+  );
+  assert.equal(days.length, 1, "the fixture's three actions share one day");
+  assert.ok(days[0].heading, "the day has a heading");
+  assert.equal(days[0].rows, 3);
+
+  const close = page.locator(`.action-row[data-id="${CLOSE_ID}"]`);
+  assert.equal(plain(await close.locator(".action-row__verb").textContent()), "Close");
+  assert.equal(plain(await close.locator(".action-row__source").textContent()), "Auto");
+  const flowOf = (row) =>
+    row
+      .locator(".action-row__flow > span")
+      .evaluateAll((spans) =>
+        spans.map((span) => span.textContent.replace(/[\u2068\u2069]/g, "").trim())
+      );
+  assert.deepEqual(
+    await flowOf(close),
+    [`${await compact(12345.678)} WIF`, "0.0061 SOL"],
+    "sold, received"
+  );
+  assert.equal(await close.locator(".action-row__flow .icon-arrow-right").count(), 1);
+  assert.equal(await close.locator(".action-row__result .action-row__pnl").count(), 0);
+  const pnl = close.locator(".action-row__aside .action-row__pnl");
+  assert.equal(plain(await pnl.textContent()), "+0.0011 SOL +22.0%", "the P&L under the time");
+  assert.equal(await pnl.locator("*").count(), 0, "amount and percent share one tone");
+  assert.match(await pnl.getAttribute("class"), /\bpnl-positive\b/);
+  assert.equal(
+    await close
+      .locator(".action-row__token .ti-logo")
+      .evaluate((logo) => logo.closest("[aria-hidden='true']") !== null),
+    true,
+    "the logo beside the symbol is not announced again"
+  );
+
+  const open = page.locator(`.action-row[data-id="${OPEN_ID}"]`);
+  assert.deepEqual(
+    await flowOf(open),
+    ["0.005 SOL", `${await compact(250000)} BONK`],
+    "spent, received"
+  );
+  assert.match(
+    (await open.locator(".action-row__time").textContent()).trim(),
+    /^\d{1,2}:\d{2}( [AP]M)?$/,
+    "an older action shows its time of day"
+  );
+});
+
+test("a row opens in place into its steps, transaction and links", async () => {
+  const row = page.locator(`.action-row[data-id="${CLOSE_ID}"]`);
+  const summary = row.locator(".action-row__summary");
+  const detail = row.locator(".action-detail");
+  assert.equal(await summary.getAttribute("aria-expanded"), "false");
+  assert.equal(await detail.isVisible(), false);
+
+  const chevron = summary.locator(".action-row__chevron");
+  assert.equal(await chevron.evaluate((glyph) => getComputedStyle(glyph).transform), "none");
+
+  await summary.click();
+  assert.equal(await summary.getAttribute("aria-expanded"), "true");
+  assert.equal(await detail.isVisible(), true);
+  assert.match(await row.getAttribute("class"), /\bis-open\b/, "row and detail share a surface");
+  await page.waitForFunction(
+    (id) =>
+      getComputedStyle(document.querySelector(`.action-row[data-id="${id}"] .action-row__chevron`))
+        .transform !== "none",
+    CLOSE_ID
+  );
+  assert.equal(await detail.locator(".action-step").count(), 4, "one entry per step");
+  assert.equal(await detail.locator(".action-step--completed").count(), 4);
+  assert.ok(
+    (await detail.locator(".ti-address-copy").getAttribute("data-copy")).startsWith("5ynthet1c"),
+    "the transaction can be copied"
+  );
+  const facts = plain(await detail.locator(".action-detail__facts").textContent());
+  for (const label of ["Fill price", "Network fee", "Position P&L", "Duration", "Reason"]) {
+    assert.ok(facts.includes(label), `the detail names its ${label}`);
+  }
+  assert.equal(await detail.locator("[data-open-token]").count(), 1);
+  assert.equal(await detail.locator('[data-open-position="42"]').count(), 1);
+  assert.equal(await detail.locator("[data-open-transaction]").count(), 1);
+
+  assert.match(
+    await detail.locator(".action-detail__pnl").getAttribute("class"),
+    /\bpnl-positive\b/,
+    "the detail's P&L is one tone"
+  );
+
+  await summary.click();
+  assert.equal(await detail.isVisible(), false, "a second click closes it");
+  assert.doesNotMatch(await row.getAttribute("class"), /\bis-open\b/);
+});
+
+test("a completed swap no position booked says so instead of a success mark", async () => {
+  const row = page.locator(`.action-row[data-id="${BUY_ID}"]`);
+  assert.equal(await row.locator(".action-row__status.icon-triangle-alert").count(), 1);
+  assert.equal(await row.locator(".action-row__status.icon-circle-check").count(), 0);
+  assert.equal(
+    plain(await row.locator(".action-row__warning").textContent()),
+    "Not recorded on position"
+  );
+  await row.locator(".action-row__summary").click();
+  const detail = row.locator(".action-detail");
+  assert.match(
+    plain(await detail.locator(".action-detail__warning").textContent()),
+    /not booked on the position and may not have landed/
+  );
+  assert.equal(await detail.locator("[data-open-transaction]").count(), 1, "still checkable");
+
+  // The detail's trailing values end where the row's time does.
+  const [stepTime, rowTime] = await Promise.all([
+    detail.locator(".action-step__time").first().boundingBox(),
+    row.locator(".action-row__time").boundingBox(),
+  ]);
+  assert.ok(
+    Math.abs(stepTime.x + stepTime.width - (rowTime.x + rowTime.width)) <= 1,
+    `step time ends at ${stepTime.x + stepTime.width}, row time at ${rowTime.x + rowTime.width}`
+  );
+  await row.locator(".action-row__summary").click();
+
+  const close = page.locator(`.action-row[data-id="${CLOSE_ID}"]`);
+  assert.equal(await close.locator(".action-row__status.icon-circle-check").count(), 1);
+  assert.equal(await close.locator(".action-row__warning").count(), 0);
+});
+
+test("filter and header controls appear only where they act", async () => {
   const clear = page.locator("#clearFiltersBtn");
   assert.equal(await clear.getAttribute("aria-label"), "Clear filters");
-  assert.equal(await clear.getAttribute("title"), "Clear filters");
-  assert.equal(await clear.isDisabled(), true, "disabled while both filters are All");
+  assert.equal(await clear.isVisible(), false, "no clear control while the filter is All");
 
+  const filtered = page.waitForResponse(
+    (response) =>
+      response.url().includes("/api/actions/history?") &&
+      response.url().includes("action_type=sell")
+  );
   await page.$eval("#filterActionType", (select) => {
-    select.value = "swap_buy";
+    select.value = "sell";
     select.dispatchEvent(new Event("change", { bubbles: true }));
   });
-  assert.equal(await clear.isDisabled(), false, "enabled once a filter applies");
-
+  await filtered;
+  assert.equal(await clear.isVisible(), true, "shown once the filter narrows the list");
   await clear.click();
-  assert.equal(await clear.isDisabled(), true, "disabled again after clearing");
+  assert.equal(await clear.isVisible(), false, "gone again after clearing");
+
+  assert.equal(await page.locator("#markAllReadBtn").count(), 0);
+  const clearAll = page.locator("#clearAllBtn");
+  assert.equal(await clearAll.isVisible(), false, "Clear all is not offered on All");
+  await page.click('.notification-tab[data-tab="active"]');
+  assert.equal(await clearAll.isVisible(), true, "Clear all is offered on Active");
+  assert.equal(await clearAll.getAttribute("data-tooltip"), "Clear all");
+  assert.equal(await clearAll.getAttribute("aria-label"), "Clear all");
+  await page.click('.notification-tab[data-tab="all"]');
+});
+
+test("the type filter is no taller than the tabs beside it", async () => {
+  const [tab, select] = await Promise.all([
+    page.locator('.notification-tab[data-tab="all"]').boundingBox(),
+    page.locator("#notificationFilters .cs-trigger").boundingBox(),
+  ]);
+  assert.ok(select.height <= tab.height + 1, `select ${select.height}px, tab ${tab.height}px`);
+});
+
+test("Escape closes the open type dropdown first and the drawer on the next press", async () => {
+  const dropdown = page.locator("#notificationFilters .custom-select");
+  await dropdown.click();
+  await page.waitForSelector('#notificationFilters .custom-select[aria-expanded="true"]');
+
+  await page.keyboard.press("Escape");
+  assert.equal(await dropdown.getAttribute("aria-expanded"), "false", "the dropdown closed");
+  assert.equal(
+    await page.getAttribute("#notificationDrawer", "data-state"),
+    "open",
+    "the drawer stayed open"
+  );
+
+  await page.keyboard.press("Escape");
+  assert.equal(await page.getAttribute("#notificationDrawer", "data-state"), "closed");
 });
 
 test("every tab with a count above zero lists its actions, dismissed ones included", async (t) => {
@@ -119,14 +302,12 @@ test("every tab with a count above zero lists its actions, dismissed ones includ
     await panel.waitForFunction(
       () => getComputedStyle(document.getElementById("notificationLoading")).display === "none"
     );
-    const count = Number(await panel.textContent(`#${tab}Count`));
+    const countEl = panel.locator(`#${tab}Count`);
+    const count = (await countEl.isVisible()) ? Number(await countEl.textContent()) : 0;
     if (count === 0) continue;
     counted.push(tab);
-    const cards = await panel.$$eval(
-      "#notificationList .notification-item",
-      (items) => items.length
-    );
-    assert.ok(cards > 0, `the ${tab} tab counts ${count} actions and lists ${cards}`);
+    const rows = await panel.$$eval("#notificationList .action-row", (items) => items.length);
+    assert.ok(rows > 0, `the ${tab} tab counts ${count} actions and lists ${rows}`);
   }
   assert.deepEqual(counted, ["all", "completed", "all"], "the fixture counts All and Done");
 });

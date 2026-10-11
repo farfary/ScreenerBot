@@ -98,11 +98,10 @@ shell-ticker-services-unknown = سرویس‌ها: <strong>—</strong>
 
 ## Notification drawer
 
-shell-notification-title = اقدام‌ها
-shell-notification-mark-all-read =
-    .title = علامت‌گذاری همه به‌عنوان خوانده‌شده
+shell-notification-heading = اقدام‌ها و اعلان‌ها
 shell-notification-clear-all =
     .title = پاک کردن همه
+    .aria-label = پاک کردن همه
 shell-notification-close =
     .aria-label = بستن
 shell-notification-tab-all = همه
@@ -112,18 +111,10 @@ shell-notification-tab-failed = ناموفق
 shell-notification-filter-type-all = همه انواع
 shell-notification-filter-type-buy = خرید
 shell-notification-filter-type-sell = فروش
-shell-notification-filter-type-open = باز کردن
-shell-notification-filter-type-close = بستن
 shell-notification-filter-type-dca = DCA
-shell-notification-filter-type-partial = جزئی
 shell-notification-filter-clear =
     .title = پاک کردن فیلترها
     .aria-label = پاک کردن فیلترها
-shell-notification-filter-state-all = همه وضعیت‌ها
-shell-notification-filter-state-in-progress = در حال انجام
-shell-notification-filter-state-completed = تکمیل‌شده
-shell-notification-filter-state-failed = ناموفق
-shell-notification-filter-state-cancelled = لغوشده
 shell-notification-list =
     .aria-label = اعلان‌ها
 shell-notification-empty = هنوز اقدامی ثبت نشده است

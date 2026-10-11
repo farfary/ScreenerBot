@@ -1,40 +1,16 @@
 // Copyright (c) 2024-2026 ScreenerBot (screenerbot.io)
 // SPDX-License-Identifier: BUSL-1.1
 //
-// Notification drawer UI manager
+// Actions drawer - the tabs, the type filter, the day-grouped action rows and their detail.
 import { notificationManager } from "../core/notifications.js";
 import * as Utils from "../core/utils.js";
-import { apiErrorMessage } from "../core/request_manager.js";
-import {
-  formatDate,
-  formatDuration,
-  formatPercentValue,
-  formatSol,
-  formatTimeAgo,
-  formatTimestamp,
-  formatUptime,
-} from "../core/format.js";
-import { stepLabel } from "./action_step.js";
-import { closeReasonText } from "./trade_reason.js";
+import { pushEscapeHandler } from "../core/escape_stack.js";
 import { ConfirmationDialog } from "./confirmation_dialog.js";
 import { enhanceAllSelects } from "./custom_select.js";
 import { playTabSwitch } from "../core/sounds.js";
 import { renderStateView } from "./state_view.js";
-
-/** Notifications younger than a week show a relative time; older ones their date. */
-const WEEK_MS = 7 * 24 * 60 * 60 * 1000;
-
-// Action type ids serialized by `ActionType` (src/actions/types.rs).
-const ACTION_TYPE_LABELS = Object.freeze({
-  swap_buy: "notifications-action-swap-buy",
-  swap_sell: "notifications-action-swap-sell",
-  position_open: "notifications-action-position-open",
-  position_close: "notifications-action-position-close",
-  position_dca: "notifications-action-position-dca",
-  position_partial_exit: "notifications-action-position-partial-exit",
-  manual_order: "notifications-action-manual-order",
-  unknown: "notifications-action-unknown",
-});
+import { resolveTokenCells } from "./token_identity.js";
+import { elapsedLabel, renderActionList, timeLabel } from "./action_row.js";
 
 // Tab ids of the drawer (`data-tab` in base.html).
 const EMPTY_TAB_LABELS = Object.freeze({
@@ -44,40 +20,43 @@ const EMPTY_TAB_LABELS = Object.freeze({
   failed: "notifications-empty-failed",
 });
 
-// Values returned by `sourceFromOperation`.
-const SOURCE_LABELS = Object.freeze({
-  auto: "notifications-source-auto",
-  manual: "notifications-source-manual",
-});
+/** Tabs listed from the persisted history; "active" lists the live in-memory actions. */
+const HISTORY_TABS = new Set(["all", "completed", "failed"]);
+
+/** How often running rows refresh their elapsed time and recent rows their relative time. */
+const CLOCK_INTERVAL_MS = 1000;
+
+const PAGE_SIZE = 30;
 
 let currentTab = "all";
 let isInitialized = false;
 let isOpen = false;
+let releaseEscape = null;
+let clockTimer = null;
 
 // Infinite scroll state
-let pageSize = 30;
 let currentOffset = 0;
 let totalResults = 0;
 let isLoadingMore = false;
 let hasMoreData = true;
 let loadedNotifications = [];
 
-// Filter state
-let currentFilters = {
-  action_type: "",
-  state: "",
-};
+/** The type filter value: a trade side the history route understands, or "" for all. */
+let typeFilter = "";
+
+/** Ids of the rows whose detail is open; kept across re-renders. */
+const expandedRows = new Set();
+
+/** The rows on screen, by id, for the detail actions. */
+let renderedById = new Map();
 
 // Event listener cleanup tracking
 let handlers = {
   backdrop: null,
   closeBtn: null,
-  keydown: null,
   tabs: [],
   filterActionType: null,
-  filterState: null,
   clearFilters: null,
-  markAllRead: null,
   clearAll: null,
   notificationList: null,
   scroll: null,
@@ -86,10 +65,6 @@ let handlers = {
 
 // Subscription cleanup
 let unsubscribe = null;
-
-function escapeText(value) {
-  return Utils.escapeHtml(value === undefined || value === null ? "" : String(value));
-}
 
 /**
  * Initialize notification drawer
@@ -100,6 +75,7 @@ export function init() {
     return;
   }
 
+  setupHeaderTooltips();
   setupTabs();
   setupActions();
   setupDrawerControls();
@@ -109,7 +85,7 @@ export function init() {
   setupNotificationListDelegation();
   subscribeToUpdates();
   renderNotifications();
-  toggleHistoryControls(currentTab);
+  toggleTabControls(currentTab);
 
   isInitialized = true;
 }
@@ -125,12 +101,14 @@ export function open() {
   drawer.setAttribute("data-state", "open");
   drawer.setAttribute("aria-hidden", "false");
   document.body.classList.add("notification-drawer-open");
+  releaseEscape = pushEscapeHandler(close);
+  startClock();
 
   // Refresh with fresh data each time the drawer opens (DB-backed tabs refetch).
   resetScrollState();
   renderNotifications();
 
-  // Mark all as read after short delay
+  // Opening the drawer reads every action in it.
   setTimeout(() => {
     notificationManager.markAllAsRead().catch((error) => {
       console.error("[NotificationPanel] Failed to mark notifications read on open", error);
@@ -149,6 +127,11 @@ export function close() {
   drawer.setAttribute("data-state", "closed");
   drawer.setAttribute("aria-hidden", "true");
   document.body.classList.remove("notification-drawer-open");
+  if (releaseEscape) {
+    releaseEscape();
+    releaseEscape = null;
+  }
+  stopClock();
 }
 
 /**
@@ -160,6 +143,20 @@ export function toggle() {
   } else {
     open();
   }
+}
+
+/**
+ * The header's icon buttons name themselves in the shared hover tooltip, which shows at
+ * once, instead of the native title, which shows late and not at all on touch.
+ */
+function setupHeaderTooltips() {
+  const buttons = document.querySelectorAll(
+    "#notificationDrawer .notification-panel-actions button[title]"
+  );
+  buttons.forEach((button) => {
+    button.dataset.tooltip = button.getAttribute("title");
+    button.removeAttribute("title");
+  });
 }
 
 /**
@@ -179,13 +176,6 @@ function setupDrawerControls() {
     handlers.closeBtn = close;
     closeBtn.addEventListener("click", handlers.closeBtn);
   }
-
-  handlers.keydown = (e) => {
-    if (e.key === "Escape" && isOpen) {
-      close();
-    }
-  };
-  document.addEventListener("keydown", handlers.keydown);
 }
 
 /**
@@ -200,11 +190,17 @@ function setupTabs() {
       setActiveTab(tab);
       playTabSwitch(); // Sound feedback for tab switch
       renderNotifications();
-      toggleHistoryControls(currentTab);
+      toggleTabControls(currentTab);
     };
     handlers.tabs.push({ element: tab, handler });
     tab.addEventListener("click", handler);
   });
+}
+
+/** Clearing is offered only while the filter narrows the list. */
+function syncClearFilters() {
+  const clearFiltersBtn = document.getElementById("clearFiltersBtn");
+  if (clearFiltersBtn) clearFiltersBtn.hidden = !typeFilter;
 }
 
 /**
@@ -212,20 +208,12 @@ function setupTabs() {
  */
 function setupFilters() {
   const filterActionType = document.getElementById("filterActionType");
-  const filterState = document.getElementById("filterState");
   const clearFiltersBtn = document.getElementById("clearFiltersBtn");
-
-  // Clearing is offered only while a filter narrows the list.
-  const syncClearFilters = () => {
-    if (clearFiltersBtn) {
-      clearFiltersBtn.disabled = !currentFilters.action_type && !currentFilters.state;
-    }
-  };
   syncClearFilters();
 
   if (filterActionType) {
     handlers.filterActionType = () => {
-      currentFilters.action_type = filterActionType.value;
+      typeFilter = filterActionType.value;
       syncClearFilters();
       resetScrollState();
       renderNotifications();
@@ -233,21 +221,10 @@ function setupFilters() {
     filterActionType.addEventListener("change", handlers.filterActionType);
   }
 
-  if (filterState) {
-    handlers.filterState = () => {
-      currentFilters.state = filterState.value;
-      syncClearFilters();
-      resetScrollState();
-      renderNotifications();
-    };
-    filterState.addEventListener("change", handlers.filterState);
-  }
-
   if (clearFiltersBtn) {
     handlers.clearFilters = () => {
-      currentFilters = { action_type: "", state: "" };
+      typeFilter = "";
       if (filterActionType) filterActionType.value = "";
-      if (filterState) filterState.value = "";
       syncClearFilters();
       resetScrollState();
       renderNotifications();
@@ -271,19 +248,17 @@ function setupInfiniteScroll() {
 
   handlers.scroll = Utils.throttle(() => {
     if (!isOpen) return;
-    if (currentTab !== "all" && currentTab !== "completed" && currentTab !== "failed") return;
-    if (isLoadingMore || !hasMoreData) return;
+    if (!HISTORY_TABS.has(currentTab)) return;
 
     const scrollTop = list.scrollTop;
     const scrollHeight = list.scrollHeight;
     const clientHeight = list.clientHeight;
 
     // Load more when within 100px of bottom
-    if (scrollTop + clientHeight >= scrollHeight - 100) {
+    if (!isLoadingMore && hasMoreData && scrollTop + clientHeight >= scrollHeight - 100) {
       loadMoreNotifications();
     }
 
-    // Show/hide back to top button
     updateBackToTopVisibility(scrollTop);
   }, 100);
 
@@ -312,12 +287,7 @@ function setupBackToTop() {
 function updateBackToTopVisibility(scrollTop) {
   const backToTopBtn = document.getElementById("backToTopBtn");
   if (!backToTopBtn) return;
-
-  if (scrollTop > 200) {
-    backToTopBtn.style.display = "flex";
-  } else {
-    backToTopBtn.style.display = "none";
-  }
+  backToTopBtn.style.display = scrollTop > 200 ? "flex" : "none";
 }
 
 /**
@@ -331,36 +301,15 @@ function resetScrollState() {
 }
 
 /**
- * Toggle visibility of history controls (filters) for the given tab.
- *
- * Filters show on the DB-backed tabs (all/completed/failed). The state filter is
- * usable only on "all" — on completed/failed the state is fixed by the tab.
+ * Show the controls that act on the given tab. The type filter narrows the history tabs;
+ * Clear all dismisses actions from the live Active list, the only list it changes.
  */
-function toggleHistoryControls(tab) {
-  const showFilters = tab === "all" || tab === "completed" || tab === "failed";
-  const stateLocked = tab === "completed" || tab === "failed";
-
+function toggleTabControls(tab) {
   const filtersEl = document.getElementById("notificationFilters");
-  const stateFilterEl = document.getElementById("filterState");
+  if (filtersEl) filtersEl.hidden = !HISTORY_TABS.has(tab);
 
-  if (filtersEl) {
-    filtersEl.style.display = showFilters ? "block" : "none";
-  }
-
-  if (stateFilterEl) {
-    if (stateLocked) {
-      stateFilterEl.disabled = true;
-      stateFilterEl.value = "";
-      stateFilterEl.style.opacity = "0.5";
-      stateFilterEl.style.cursor = "not-allowed";
-      stateFilterEl.title = I18n.t("notifications-state-locked");
-    } else {
-      stateFilterEl.disabled = false;
-      stateFilterEl.style.opacity = "1";
-      stateFilterEl.style.cursor = "pointer";
-      stateFilterEl.title = "";
-    }
-  }
+  const clearAllBtn = document.getElementById("clearAllBtn");
+  if (clearAllBtn) clearAllBtn.hidden = tab !== "active";
 }
 
 /**
@@ -377,22 +326,7 @@ function showLoading(show) {
  * Setup panel actions
  */
 function setupActions() {
-  const markAllReadBtn = document.getElementById("markAllReadBtn");
   const clearAllBtn = document.getElementById("clearAllBtn");
-
-  if (markAllReadBtn) {
-    handlers.markAllRead = async () => {
-      try {
-        // No success toast: the unread badge clears and every row loses its
-        // unread mark on screen, so a notice would only repeat that.
-        await notificationManager.markAllAsRead();
-      } catch (error) {
-        console.error("[NotificationPanel] Failed to mark all read:", error);
-        Utils.showToast(I18n.t("notifications-mark-read-failed"), "error");
-      }
-    };
-    markAllReadBtn.addEventListener("click", handlers.markAllRead);
-  }
 
   if (clearAllBtn) {
     handlers.clearAll = async () => {
@@ -481,7 +415,9 @@ function subscribeToUpdates() {
 function setActiveTab(activeTab) {
   const tabs = document.querySelectorAll(".notification-tab");
   tabs.forEach((tab) => {
-    tab.classList.toggle("active", tab === activeTab);
+    const active = tab === activeTab;
+    tab.classList.toggle("active", active);
+    tab.setAttribute("aria-selected", active ? "true" : "false");
   });
 }
 
@@ -514,8 +450,16 @@ function updateCount(elementId, count) {
   const el = document.getElementById(elementId);
   if (el) {
     el.textContent = count;
-    el.style.display = count > 0 ? "inline" : "none";
+    el.hidden = !(count > 0);
   }
+}
+
+/** The history request for the current tab, filter and page. */
+function historyOptions(offset) {
+  const options = { limit: PAGE_SIZE, offset };
+  if (currentTab === "completed" || currentTab === "failed") options.state = currentTab;
+  if (typeFilter) options.action_type = typeFilter;
+  return options;
 }
 
 /**
@@ -532,45 +476,21 @@ async function renderNotifications() {
   // All/Completed/Failed are DB-backed (full persisted history) with infinite
   // scroll; only the live "active" tab uses the in-memory cache. "all" passes no
   // state filter so every recorded action shows, newest first.
-  if (currentTab === "all" || currentTab === "completed" || currentTab === "failed") {
+  if (HISTORY_TABS.has(currentTab)) {
     if (currentOffset === 0) {
-      // Initial load
       try {
         isLoadingMore = true;
         showLoading(true);
 
-        const options = {
-          limit: pageSize,
-          offset: 0,
-        };
-
-        if (currentTab === "completed") {
-          options.state = "completed";
-        } else if (currentTab === "failed") {
-          options.state = "failed";
-        } else if (currentTab === "all" && currentFilters.state) {
-          // "All" honors the optional state dropdown filter.
-          options.state = currentFilters.state;
-        }
-
-        if (currentFilters.action_type) {
-          options.action_type = currentFilters.action_type;
-        }
-
-        const response = await notificationManager.fetchHistory(options);
+        const response = await notificationManager.fetchHistory(historyOptions(0));
         loadedNotifications = response.actions || [];
         totalResults = response.total || 0;
         currentOffset = loadedNotifications.length;
         hasMoreData = currentOffset < totalResults;
 
         notificationManager.syncFromHistory(loadedNotifications, { silent: true });
-
-        isLoadingMore = false;
-        showLoading(false);
       } catch (error) {
         console.error("[NotificationPanel] Failed to fetch history:", error);
-        isLoadingMore = false;
-        showLoading(false);
         list.innerHTML = renderStateView({
           kind: "error",
           icon: "icon-triangle-alert",
@@ -578,31 +498,38 @@ async function renderNotifications() {
           compact: true,
         });
         return;
+      } finally {
+        isLoadingMore = false;
+        showLoading(false);
       }
     }
 
     notifications = loadedNotifications.map(mergeWithStoredState);
   } else {
-    // Only the live "active" tab uses the in-memory cache.
-    notifications = notificationManager.getActive().map((n) => ({ ...n }));
+    // Active is the inbox, so a dismissed action leaves it. All, Completed and Failed are
+    // history views: they list every action their tab count includes, dismissed or not
+    // (completed and failed actions are auto-dismissed shortly after they finish).
+    notifications = notificationManager
+      .getActive()
+      .map(mergeWithStoredState)
+      .filter((n) => !n.dismissed);
   }
 
-  // Apply UI state from cache
-  notifications = notifications.map(mergeWithStoredState);
+  // Newest first
+  notifications.sort(
+    (a, b) => new Date(resolveTimestamp(b)).getTime() - new Date(resolveTimestamp(a)).getTime()
+  );
 
-  // Active is the inbox, so a dismissed action leaves it. All, Completed and Failed are
-  // history views: they list every action their tab count includes, dismissed or not
-  // (completed and failed actions are auto-dismissed shortly after they finish).
-  if (currentTab === "active") {
-    notifications = notifications.filter((n) => !n.dismissed);
-  }
+  paintList(list, notifications);
+}
 
-  // Sort by timestamp (newest first)
-  notifications.sort((a, b) => {
-    const timeA = new Date(resolveTimestamp(a)).getTime();
-    const timeB = new Date(resolveTimestamp(b)).getTime();
-    return timeB - timeA;
-  });
+/**
+ * Write the rows into the list, keeping its scroll position. A first paint of the open
+ * drawer resolves the tokens' identities and paints once more with them; that repaint
+ * resolves nothing, so a failed lookup cannot loop.
+ */
+function paintList(list, notifications, { resolveTokens = true } = {}) {
+  renderedById = new Map(notifications.map((n) => [n.id, n]));
 
   if (notifications.length === 0) {
     list.innerHTML = renderStateView({
@@ -613,7 +540,17 @@ async function renderNotifications() {
     return;
   }
 
-  list.innerHTML = notifications.map((n) => renderNotification(n)).join("");
+  const scrollTop = list.scrollTop;
+  list.innerHTML = renderActionList(notifications, { expanded: expandedRows });
+  list.scrollTop = scrollTop;
+
+  // Identities are looked up only for a list the user can see: the drawer renders while
+  // closed on every page load, and that must not cost a request.
+  if (!resolveTokens || !isOpen) return;
+  resolveTokenCells(
+    notifications.map((n) => n.entity_id),
+    () => paintList(list, [...renderedById.values()], { resolveTokens: false })
+  );
 }
 
 /**
@@ -621,30 +558,13 @@ async function renderNotifications() {
  */
 async function loadMoreNotifications() {
   if (isLoadingMore || !hasMoreData) return;
-  if (currentTab !== "all" && currentTab !== "completed" && currentTab !== "failed") return;
+  if (!HISTORY_TABS.has(currentTab)) return;
 
   try {
     isLoadingMore = true;
     showLoading(true);
 
-    const options = {
-      limit: pageSize,
-      offset: currentOffset,
-    };
-
-    if (currentTab === "completed") {
-      options.state = "completed";
-    } else if (currentTab === "failed") {
-      options.state = "failed";
-    } else if (currentTab === "all" && currentFilters.state) {
-      options.state = currentFilters.state;
-    }
-
-    if (currentFilters.action_type) {
-      options.action_type = currentFilters.action_type;
-    }
-
-    const response = await notificationManager.fetchHistory(options);
+    const response = await notificationManager.fetchHistory(historyOptions(currentOffset));
     const newNotifications = response.actions || [];
     totalResults = response.total || 0;
 
@@ -655,23 +575,15 @@ async function loadMoreNotifications() {
 
       notificationManager.syncFromHistory(newNotifications, { silent: true });
 
-      // Append new items to DOM
+      // Re-render the whole list: a new page can continue the last day group.
       const list = document.getElementById("notificationList");
-      if (list) {
-        const newHtml = newNotifications
-          .map(mergeWithStoredState)
-          .map((n) => renderNotification(n))
-          .join("");
-        list.insertAdjacentHTML("beforeend", newHtml);
-      }
+      if (list) paintList(list, loadedNotifications.map(mergeWithStoredState));
     } else {
       hasMoreData = false;
     }
-
-    isLoadingMore = false;
-    showLoading(false);
   } catch (error) {
     console.error("[NotificationPanel] Failed to load more:", error);
+  } finally {
     isLoadingMore = false;
     showLoading(false);
   }
@@ -713,159 +625,53 @@ function mergeWithStoredState(notification) {
   return merged;
 }
 
-/**
- * Render single notification
- */
-function renderNotification(notification) {
-  const { id, action_type, state, steps, metadata, completed_at, started_at, read } = notification;
-
-  const status = notificationManager.getStatus(notification);
-  const isInProgress = status === "in_progress";
-  const isCompleted = status === "completed";
-  const isFailed = status === "failed";
-  const isCancelled = status === "cancelled";
-
-  const statusClass = isInProgress
-    ? "in-progress"
-    : isCompleted
-      ? "completed"
-      : isFailed
-        ? "failed"
-        : isCancelled
-          ? "cancelled"
-          : "";
-
-  const statusIcon = isInProgress
-    ? '<i class="icon-loader"></i>'
-    : isCompleted
-      ? '<i class="icon-circle-check"></i>'
-      : isFailed
-        ? '<i class="icon-circle-x"></i>'
-        : isCancelled
-          ? '<i class="icon-ban"></i>'
-          : "";
-
-  const actionTypeLabel = escapeText(I18n.label(ACTION_TYPE_LABELS, action_type || "unknown"));
-  const rawSymbol =
-    metadata && typeof metadata === "object" && metadata !== null ? metadata.symbol : "";
-  const symbol = rawSymbol ? escapeText(rawSymbol) : "";
-
-  // Build a compact set of detail chips from whatever metadata the action
-  // carries (amount, sell %, strategy reason, strategy id, auto/manual source,
-  // router). Each chip is "<label> value"; they render on one wrapped row.
-  const md = metadata && typeof metadata === "object" ? metadata : {};
-  const details = [];
-
-  const sizeSol = Number(md.size_sol);
-  const inputLamports = Number(md.input_amount);
-  if (Number.isFinite(sizeSol) && sizeSol > 0) {
-    details.push(formatSol(sizeSol));
-  } else if (Number.isFinite(inputLamports) && inputLamports > 0) {
-    details.push(formatSol(inputLamports / 1_000_000_000));
+/** Open or close a row's detail in place. */
+function toggleRow(summary) {
+  const row = summary.closest(".action-row");
+  const id = row?.dataset.id;
+  if (!id) return;
+  const detail = row.querySelector(".action-detail");
+  const expanded = !expandedRows.has(id);
+  if (expanded) {
+    expandedRows.add(id);
+  } else {
+    expandedRows.delete(id);
   }
+  summary.setAttribute("aria-expanded", expanded ? "true" : "false");
+  row.classList.toggle("is-open", expanded);
+  if (detail) detail.hidden = !expanded;
 
-  const pct = Number(md.percentage);
-  if (Number.isFinite(pct) && pct > 0) {
-    details.push(formatPercentValue(pct, { decimals: pct % 1 === 0 ? 0 : 1, plus: "" }));
-  }
-
-  if (md.reason) details.push(closeReasonText(md.reason));
-  if (md.strategy_id) details.push(escapeText(md.strategy_id));
-
-  const source = sourceFromOperation(md.operation);
-  const detailChips = details.length
-    ? `<div class="notification-details">${details
-        .map((d) => `<span class="notification-chip">${escapeText(d)}</span>`)
-        .join("")}</div>`
-    : "";
-
-  const ts = completed_at || notification.timestamp || started_at;
-  const timeLabel = escapeText(formatTime(ts));
-  const timeTitle = escapeText(formatAbsoluteTime(ts));
-  const durationMs = Number(notification.duration_ms);
-  const duration_ns = durationMs * 1_000_000;
-  const durationLabel =
-    (isCompleted || isFailed) && Number.isFinite(durationMs) && durationMs > 0
-      ? escapeText(
-          durationMs < 60_000
-            ? formatDuration(duration_ns)
-            : formatUptime(durationMs / 1000, { style: "trimmed" })
-        )
-      : "";
-
-  const progressInfo = isInProgress ? state : null;
-  const totalSteps = progressInfo?.total_steps ?? steps?.length ?? 0;
-  const currentIndex = progressInfo?.current_step_index ?? notification.current_step_index ?? 0;
-  const progressPctRaw = progressInfo?.progress_pct ?? 0;
-  const boundedProgressPct = Math.max(0, Math.min(100, Number(progressPctRaw) || 0));
-  const currentStepCode = progressInfo?.current_step || steps?.[currentIndex]?.name || "unknown";
-  const safeStepName = escapeText(stepLabel(currentStepCode));
-  const stepPosition =
-    totalSteps > 0 ? `${Math.min(currentIndex + 1, totalSteps)}/${totalSteps}` : "";
-  const safeStepPosition = stepPosition ? escapeText(stepPosition) : "";
-
-  let progressHtml = "";
-  if (isInProgress) {
-    progressHtml = `
-      <div class="notification-progress">
-        <div class="progress-bar-container">
-          <div class="progress-bar-fill" style="width: ${boundedProgressPct}%"></div>
-        </div>
-        <div class="progress-text">
-          ${safeStepName}${safeStepPosition ? ` (${safeStepPosition})` : ""}
-        </div>
-      </div>
-    `;
-  }
-
-  let errorHtml = "";
-  if (isFailed) {
-    const failedStep = steps?.find((step) => step.status === "failed");
-    const errorMsg = apiErrorMessage(
-      { error: state?.error || failedStep?.error },
-      notification.error || I18n.t("actions-failure-unknown")
-    );
-    errorHtml = `<div class="notification-error">${escapeText(errorMsg)}</div>`;
-  } else if (isCancelled) {
-    errorHtml = `<div class="notification-error">${escapeText(I18n.t("notifications-cancelled"))}</div>`;
-  }
-
-  const safeId = escapeText(id);
-  const sourceBadge = source
-    ? `<span class="notification-source notification-source--${source}">${escapeText(I18n.label(SOURCE_LABELS, source))}</span>`
-    : "";
-  const footerHtml = `
-    <div class="notification-footer">
-      <span class="notification-time" title="${timeTitle}">${timeLabel}</span>
-      ${durationLabel ? `<span class="notification-duration">${durationLabel}</span>` : ""}
-    </div>`;
-
-  return `
-    <div class="notification-item ${statusClass} ${read ? "read" : "unread"}" data-id="${safeId}">
-      <div class="notification-header">
-        <span class="notification-icon">${statusIcon}</span>
-        <div class="notification-title">
-          <strong>${actionTypeLabel}</strong>
-          ${symbol ? `<span class="notification-symbol">${symbol}</span>` : ""}
-          ${sourceBadge}
-        </div>
-        <button class="notification-dismiss" data-id="${safeId}" title="${escapeText(I18n.t("notifications-dismiss"))}">×</button>
-      </div>
-      ${detailChips}
-      ${progressHtml}
-      ${errorHtml}
-      ${footerHtml}
-    </div>
-  `;
+  notificationManager.markAsRead(id).catch((error) => {
+    console.error("[NotificationPanel] Failed to mark notification read:", error);
+  });
 }
 
-/** Derive an "auto" | "manual" source tag from the operation field. */
-function sourceFromOperation(operation) {
-  if (!operation) return "";
-  const op = String(operation).toLowerCase();
-  if (op.startsWith("auto")) return "auto";
-  if (op.startsWith("manual")) return "manual";
-  return "";
+function openToken(mint) {
+  const action = [...renderedById.values()].find((n) => n.entity_id === mint);
+  window.dispatchEvent(
+    new CustomEvent("screenerbot:open-token-details", {
+      detail: { mint, symbol: action?.metadata?.symbol },
+    })
+  );
+}
+
+async function openPosition(id, row) {
+  const action = renderedById.get(row?.dataset.id);
+  // The dialog module installs the listener this event reaches; it loads on first use.
+  await import("./position_details_dialog.js");
+  window.dispatchEvent(
+    new CustomEvent("screenerbot:open-position-details", {
+      detail: { id: Number(id), mint: action?.entity_id, symbol: action?.metadata?.symbol },
+    })
+  );
+}
+
+let transactionDialog = null;
+
+async function openTransaction(signature) {
+  const { TransactionDetailsDialog } = await import("./transaction_details_dialog.js");
+  if (!transactionDialog) transactionDialog = new TransactionDetailsDialog();
+  transactionDialog.show({ signature });
 }
 
 /**
@@ -876,54 +682,53 @@ function setupNotificationListDelegation() {
   if (!list) return;
 
   handlers.notificationList = (e) => {
-    const dismissBtn = e.target.closest(".notification-dismiss");
-    if (dismissBtn) {
-      e.stopPropagation();
-      const id = dismissBtn.dataset.id;
-      if (id) {
-        notificationManager.dismiss(id).catch((error) => {
-          console.error("[NotificationPanel] Failed to dismiss notification:", error);
-          Utils.showToast(I18n.t("notifications-dismiss-failed"), "error");
-        });
-      }
+    const token = e.target.closest("[data-open-token]");
+    if (token) {
+      openToken(token.dataset.openToken);
       return;
     }
-
-    const item = e.target.closest(".notification-item");
-    if (item) {
-      const id = item.dataset.id;
-      if (id) {
-        notificationManager.markAsRead(id).catch((error) => {
-          console.error("[NotificationPanel] Failed to mark notification read:", error);
-        });
-      }
+    const position = e.target.closest("[data-open-position]");
+    if (position) {
+      openPosition(position.dataset.openPosition, position.closest(".action-row")).catch((error) =>
+        console.error("[NotificationPanel] Failed to open position:", error)
+      );
+      return;
     }
+    const transaction = e.target.closest("[data-open-transaction]");
+    if (transaction) {
+      openTransaction(transaction.dataset.openTransaction).catch((error) =>
+        console.error("[NotificationPanel] Failed to open transaction:", error)
+      );
+      return;
+    }
+    const summary = e.target.closest(".action-row__summary");
+    if (summary) toggleRow(summary);
   };
 
   list.addEventListener("click", handlers.notificationList);
 }
 
-/** Relative time ("5m ago") for the last week, then the absolute date ("Jun 25"). */
-function formatTime(timestamp) {
-  if (!timestamp) return "";
-
-  const date = new Date(timestamp);
-  if (isNaN(date.getTime())) {
-    return "";
-  }
-
-  if (Date.now() - date.getTime() < WEEK_MS) return formatTimeAgo(date);
-  return formatDate(date, { includeYear: date.getFullYear() !== new Date().getFullYear() });
+/** Keep running rows' elapsed time and recent rows' relative time current while open. */
+function startClock() {
+  stopClock();
+  clockTimer = window.setInterval(() => {
+    const list = document.getElementById("notificationList");
+    if (!list) return;
+    const now = new Date();
+    list.querySelectorAll("[data-elapsed-from]").forEach((el) => {
+      el.textContent = elapsedLabel(el.dataset.elapsedFrom, now);
+    });
+    list.querySelectorAll("[data-relative-time]").forEach((el) => {
+      el.textContent = timeLabel(el.dataset.relativeTime, now);
+    });
+  }, CLOCK_INTERVAL_MS);
 }
 
-/**
- * Full, absolute timestamp for the item's hover title (tooltip).
- */
-function formatAbsoluteTime(timestamp) {
-  if (!timestamp) return "";
-  const date = new Date(timestamp);
-  if (isNaN(date.getTime())) return "";
-  return formatTimestamp(date, { includeSeconds: false });
+function stopClock() {
+  if (clockTimer !== null) {
+    window.clearInterval(clockTimer);
+    clockTimer = null;
+  }
 }
 
 function resolveTimestamp(notification) {
@@ -940,9 +745,7 @@ export function dispose() {
   const backdrop = drawer?.querySelector('[data-role="dismiss"]');
   const closeBtn = document.getElementById("notificationDrawerClose");
   const filterActionType = document.getElementById("filterActionType");
-  const filterState = document.getElementById("filterState");
   const clearFiltersBtn = document.getElementById("clearFiltersBtn");
-  const markAllReadBtn = document.getElementById("markAllReadBtn");
   const clearAllBtn = document.getElementById("clearAllBtn");
   const list = document.getElementById("notificationList");
   const backToTopBtn = document.getElementById("backToTopBtn");
@@ -953,9 +756,6 @@ export function dispose() {
   if (closeBtn && handlers.closeBtn) {
     closeBtn.removeEventListener("click", handlers.closeBtn);
   }
-  if (handlers.keydown) {
-    document.removeEventListener("keydown", handlers.keydown);
-  }
 
   handlers.tabs.forEach(({ element, handler }) => {
     element.removeEventListener("click", handler);
@@ -964,14 +764,8 @@ export function dispose() {
   if (filterActionType && handlers.filterActionType) {
     filterActionType.removeEventListener("change", handlers.filterActionType);
   }
-  if (filterState && handlers.filterState) {
-    filterState.removeEventListener("change", handlers.filterState);
-  }
   if (clearFiltersBtn && handlers.clearFilters) {
     clearFiltersBtn.removeEventListener("click", handlers.clearFilters);
-  }
-  if (markAllReadBtn && handlers.markAllRead) {
-    markAllReadBtn.removeEventListener("click", handlers.markAllRead);
   }
   if (clearAllBtn && handlers.clearAll) {
     clearAllBtn.removeEventListener("click", handlers.clearAll);
@@ -994,17 +788,15 @@ export function dispose() {
   handlers = {
     backdrop: null,
     closeBtn: null,
-    keydown: null,
     tabs: [],
     filterActionType: null,
-    filterState: null,
     clearFilters: null,
-    markAllRead: null,
     clearAll: null,
     notificationList: null,
     scroll: null,
     backToTop: null,
   };
 
+  expandedRows.clear();
   isInitialized = false;
 }

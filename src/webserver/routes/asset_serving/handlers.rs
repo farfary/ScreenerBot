@@ -293,6 +293,7 @@ pub async fn get_ui_script(Path(file): Path<String>) -> Response {
         "settings/licenses_tab.js" => Some(embeds::SETTINGS_LICENSES_TAB_UI),
         "settings/telegram_tab.js" => Some(embeds::SETTINGS_TELEGRAM_TAB_UI),
         "notification_panel.js" => Some(embeds::NOTIFICATION_PANEL_UI),
+        "action_row.js" => Some(embeds::ACTION_ROW_UI),
         "hint_popover.js" => Some(embeds::HINT_POPOVER_UI),
         "search_dialog.js" => Some(embeds::SEARCH_DIALOG_UI),
         "custom_select.js" => Some(embeds::CUSTOM_SELECT_UI),

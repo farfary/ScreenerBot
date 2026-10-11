@@ -104,6 +104,7 @@ pub async fn submit_entry_with_context(
         symbol.as_deref(),
         decision.strategy_id.as_deref(),
         &format!("{:?}", decision.reason),
+        context.origin.kind(),
     )
     .await
     .ok();

@@ -482,6 +482,7 @@ pub const SETTINGS_LICENSES_TAB_UI: &str =
 pub const SETTINGS_TELEGRAM_TAB_UI: &str =
     include_str!("templates/scripts/ui/settings/telegram_tab.js");
 pub const NOTIFICATION_PANEL_UI: &str = include_str!("templates/scripts/ui/notification_panel.js");
+pub const ACTION_ROW_UI: &str = include_str!("templates/scripts/ui/action_row.js");
 pub const HINT_POPOVER_UI: &str = include_str!("templates/scripts/ui/hint_popover.js");
 pub const SEARCH_DIALOG_UI: &str = include_str!("templates/scripts/ui/search_dialog.js");
 pub const CUSTOM_SELECT_UI: &str = include_str!("templates/scripts/ui/custom_select.js");

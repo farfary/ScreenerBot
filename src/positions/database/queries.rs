@@ -4,11 +4,11 @@
 //! Position database queries — read-only methods for fetching positions.
 
 use chrono::{DateTime, Utc};
-use rusqlite::{params, Connection, OptionalExtension};
+use rusqlite::{params, params_from_iter, Connection, OptionalExtension};
 
 use crate::chains::RawAmount;
 use crate::errors::DatabaseError;
-use crate::positions::types::Position;
+use crate::positions::types::{EntryRecord, ExitRecord, Position};
 use crate::positions::{Error, Result};
 
 use super::types::*;
@@ -874,4 +874,89 @@ pub(super) fn query_mint_rows(
         })
     })?;
     rows.collect()
+}
+
+/// Columns of an entry record, in the order [`entry_record_from_row`] reads them.
+pub(super) const ENTRY_RECORD_COLUMNS: &str =
+    "id, position_id, timestamp, amount, price, native_spent, transaction_signature, is_dca, fees_raw";
+
+/// Columns of an exit record, in the order [`exit_record_from_row`] reads them.
+pub(super) const EXIT_RECORD_COLUMNS: &str = "id, position_id, timestamp, amount, price, native_received, transaction_signature, is_partial, percentage, fees_raw";
+
+/// The RFC 3339 record timestamp in column `index`.
+fn record_timestamp(row: &rusqlite::Row<'_>, index: usize) -> rusqlite::Result<DateTime<Utc>> {
+    DateTime::parse_from_rfc3339(&row.get::<_, String>(index)?)
+        .map(|time| time.with_timezone(&Utc))
+        .map_err(|e| {
+            rusqlite::Error::FromSqlConversionFailure(
+                index,
+                rusqlite::types::Type::Text,
+                Box::new(e),
+            )
+        })
+}
+
+/// An entry record from a row selected with [`ENTRY_RECORD_COLUMNS`].
+pub(super) fn entry_record_from_row(row: &rusqlite::Row<'_>) -> rusqlite::Result<EntryRecord> {
+    Ok(EntryRecord {
+        id: row.get(0)?,
+        position_id: row.get(1)?,
+        timestamp: record_timestamp(row, 2)?,
+        amount: row.get(3)?,
+        price: row.get(4)?,
+        native_spent: row.get(5)?,
+        transaction_signature: row.get(6)?,
+        is_dca: row.get(7)?,
+        fees_raw: row.get::<_, Option<i64>>(8)?.map(|f| f as u64),
+    })
+}
+
+/// An exit record from a row selected with [`EXIT_RECORD_COLUMNS`].
+pub(super) fn exit_record_from_row(row: &rusqlite::Row<'_>) -> rusqlite::Result<ExitRecord> {
+    Ok(ExitRecord {
+        id: row.get(0)?,
+        position_id: row.get(1)?,
+        timestamp: record_timestamp(row, 2)?,
+        amount: row.get(3)?,
+        price: row.get(4)?,
+        native_received: row.get(5)?,
+        transaction_signature: row.get(6)?,
+        is_partial: row.get(7)?,
+        percentage: row.get(8)?,
+        fees_raw: row.get::<_, Option<i64>>(9)?.map(|f| f as u64),
+    })
+}
+
+/// The entry and exit records `wallet_address` booked under any of `signatures`. A swap
+/// is booked at most once per position, so each signature yields at most one record per
+/// position.
+pub(super) fn query_records_by_signatures(
+    conn: &Connection,
+    wallet_address: &str,
+    signatures: &[String],
+) -> rusqlite::Result<(Vec<EntryRecord>, Vec<ExitRecord>)> {
+    if signatures.is_empty() {
+        return Ok((Vec::new(), Vec::new()));
+    }
+    let placeholders = (2..signatures.len() + 2)
+        .map(|index| format!("?{index}"))
+        .collect::<Vec<_>>()
+        .join(", ");
+    let values = || std::iter::once(wallet_address.to_owned()).chain(signatures.iter().cloned());
+
+    let entries = conn
+        .prepare(&format!(
+            "SELECT {ENTRY_RECORD_COLUMNS} FROM position_entries
+             WHERE wallet_address = ?1 AND transaction_signature IN ({placeholders})"
+        ))?
+        .query_map(params_from_iter(values()), entry_record_from_row)?
+        .collect::<rusqlite::Result<Vec<_>>>()?;
+    let exits = conn
+        .prepare(&format!(
+            "SELECT {EXIT_RECORD_COLUMNS} FROM position_exits
+             WHERE wallet_address = ?1 AND transaction_signature IN ({placeholders})"
+        ))?
+        .query_map(params_from_iter(values()), exit_record_from_row)?
+        .collect::<rusqlite::Result<Vec<_>>>()?;
+    Ok((entries, exits))
 }

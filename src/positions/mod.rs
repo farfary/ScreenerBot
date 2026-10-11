@@ -77,12 +77,12 @@ pub use db::{
     get_latest_position_by_mint as get_db_latest_position_by_mint,
     get_open_positions as get_db_open_positions, get_period_trading_stats,
     get_position_by_id as get_db_position_by_id, get_positions_database,
-    get_recent_closed_positions_for_mint, get_token_snapshot, get_token_snapshots,
-    initialize_positions_database, load_all_positions, save_position, save_token_snapshot,
-    set_position_archived_db, set_position_management_db, update_position_price_fields,
-    with_positions_database, with_positions_database_async, DailyTradingStats, PeriodTradingStats,
-    PositionState, PositionStateHistory, PositionTracking, PositionsDatabase,
-    PositionsDatabaseStats, TokenSnapshot,
+    get_recent_closed_positions_for_mint, get_swap_records_by_signatures, get_token_snapshot,
+    get_token_snapshots, initialize_positions_database, load_all_positions, save_position,
+    save_token_snapshot, set_position_archived_db, set_position_management_db,
+    update_position_price_fields, with_positions_database, with_positions_database_async,
+    DailyTradingStats, PeriodTradingStats, PositionState, PositionStateHistory, PositionTracking,
+    PositionsDatabase, PositionsDatabaseStats, TokenSnapshot,
 };
 
 pub use helpers::{
@@ -93,7 +93,7 @@ pub use helpers::{
 
 // Core types re-exports
 pub use metrics::ProceedsMetricsSnapshot;
-pub use queue::{enqueue_verification, VerificationItem};
+pub use queue::{enqueue_verification, VerificationItem, MAX_VERIFICATION_AGE_HOURS};
 pub use state::PositionLockGuard;
 pub use transitions::PositionTransition;
 pub use types::{

@@ -42,12 +42,8 @@ notifications-empty-completed = 완료된 작업 없음
 notifications-empty-failed = 실패한 작업 없음
 notifications-source-auto = 자동
 notifications-source-manual = 수동
-notifications-state-locked = 탭에서 상태를 제어합니다
 notifications-cancelled = 취소됨
-notifications-dismiss = 닫기
-notifications-dismiss-failed = 알림을 닫지 못했습니다
 notifications-load-failed = 불러오지 못했습니다
-notifications-mark-read-failed = 알림을 읽음 처리하지 못했습니다
 notifications-clear-title = 알림 지우기
 notifications-clear-message = 이 목록의 모든 알림을 닫으시겠습니까? 완료/실패 기록에는 그대로 남습니다.
 notifications-clear-failed = 알림을 지우지 못했습니다
@@ -58,3 +54,22 @@ notifications-stream-lag-missed =
     }
 notifications-stream-lag-refreshing = 새로고침 중
 notifications-sync-failed = 작업을 새로고침하지 못했습니다
+
+# Action rows (ui/action_row.js): day headings, the copy-trading source, the detail.
+notifications-day-today = 오늘
+notifications-day-yesterday = 어제
+notifications-source-copy = 카피 트레이딩
+notifications-steps = 단계
+notifications-detail-transaction = 트랜잭션
+notifications-detail-fill-price = 체결 가격
+    .title = 이 스왑의 { -sol } 금액을 토큰 수량으로 나눈 값
+notifications-detail-fee = 네트워크 수수료
+notifications-detail-pnl = 포지션 손익
+notifications-detail-route = 경로
+notifications-detail-duration = 소요 시간
+notifications-detail-reason = 사유
+notifications-view-token = 토큰 보기
+notifications-view-position = 포지션 보기
+notifications-view-transaction = 트랜잭션 보기
+notifications-unrecorded = 포지션에 기록되지 않음
+notifications-unrecorded-detail = 이 스왑은 포지션에 기록되지 않았으며 체결되지 않았을 수 있습니다. 트랜잭션을 확인하세요.

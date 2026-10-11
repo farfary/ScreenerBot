@@ -14,7 +14,10 @@ use crate::positions::{Error, Result};
 use super::booking::{query_other_open_held, Booking, BookingReads, Committed, OtherOpenHeld};
 use super::global::GLOBAL_POSITIONS_DB;
 use super::open_round::{query_open_round_id, refuse_second_active_open_round};
-use super::queries::{query_trader_swap_legs, SwapLegScope, TraderSwapLeg};
+use super::queries::{
+    entry_record_from_row, exit_record_from_row, query_records_by_signatures,
+    query_trader_swap_legs, SwapLegScope, TraderSwapLeg, ENTRY_RECORD_COLUMNS, EXIT_RECORD_COLUMNS,
+};
 use super::types::{DailyTradingStats, PeriodTradingStats, TokenSnapshot};
 
 // =============================================================================
@@ -460,39 +463,17 @@ pub async fn get_exit_history(position_id: i64) -> Result<Vec<ExitRecord>> {
         })?;
 
     let mut stmt = conn
-        .prepare(
-            "SELECT id, position_id, timestamp, amount, price, native_received, 
-       transaction_signature, is_partial, percentage, fees_raw 
-       FROM position_exits WHERE position_id = ?1 AND wallet_address = ?2 ORDER BY timestamp ASC",
-        )
+        .prepare(&format!(
+            "SELECT {EXIT_RECORD_COLUMNS} FROM position_exits
+             WHERE position_id = ?1 AND wallet_address = ?2 ORDER BY timestamp ASC"
+        ))
         .map_err(|e| DatabaseError::Query {
             operation: "prepare statement".to_owned(),
             message: e.to_string(),
         })?;
 
     let records = stmt
-        .query_map(params![position_id, wallet_address], |row| {
-            Ok(ExitRecord {
-                id: row.get(0)?,
-                position_id: row.get(1)?,
-                timestamp: DateTime::parse_from_rfc3339(&row.get::<_, String>(2)?)
-                    .map_err(|e| {
-                        rusqlite::Error::FromSqlConversionFailure(
-                            2,
-                            rusqlite::types::Type::Text,
-                            Box::new(e),
-                        )
-                    })?
-                    .with_timezone(&Utc),
-                amount: row.get("amount")?,
-                price: row.get(4)?,
-                native_received: row.get(5)?,
-                transaction_signature: row.get(6)?,
-                is_partial: row.get(7)?,
-                percentage: row.get(8)?,
-                fees_raw: row.get::<_, Option<i64>>(9)?.map(|f| f as u64),
-            })
-        })
+        .query_map(params![position_id, wallet_address], exit_record_from_row)
         .map_err(|e| DatabaseError::Query {
             operation: "query exit records".to_owned(),
             message: e.to_string(),
@@ -521,38 +502,17 @@ pub async fn get_entry_history(position_id: i64) -> Result<Vec<EntryRecord>> {
         })?;
 
     let mut stmt = conn
-        .prepare(
-            "SELECT id, position_id, timestamp, amount, price, native_spent, 
-       transaction_signature, is_dca, fees_raw 
-       FROM position_entries WHERE position_id = ?1 AND wallet_address = ?2 ORDER BY timestamp ASC",
-        )
+        .prepare(&format!(
+            "SELECT {ENTRY_RECORD_COLUMNS} FROM position_entries
+             WHERE position_id = ?1 AND wallet_address = ?2 ORDER BY timestamp ASC"
+        ))
         .map_err(|e| DatabaseError::Query {
             operation: "prepare statement".to_owned(),
             message: e.to_string(),
         })?;
 
     let records = stmt
-        .query_map(params![position_id, wallet_address], |row| {
-            Ok(EntryRecord {
-                id: row.get(0)?,
-                position_id: row.get(1)?,
-                timestamp: DateTime::parse_from_rfc3339(&row.get::<_, String>(2)?)
-                    .map_err(|e| {
-                        rusqlite::Error::FromSqlConversionFailure(
-                            2,
-                            rusqlite::types::Type::Text,
-                            Box::new(e),
-                        )
-                    })?
-                    .with_timezone(&Utc),
-                amount: row.get("amount")?,
-                price: row.get(4)?,
-                native_spent: row.get(5)?,
-                transaction_signature: row.get(6)?,
-                is_dca: row.get(7)?,
-                fees_raw: row.get::<_, Option<i64>>(8)?.map(|f| f as u64),
-            })
-        })
+        .query_map(params![position_id, wallet_address], entry_record_from_row)
         .map_err(|e| DatabaseError::Query {
             operation: "query entry records".to_owned(),
             message: e.to_string(),
@@ -564,6 +524,30 @@ pub async fn get_entry_history(position_id: i64) -> Result<Vec<EntryRecord>> {
         })?;
 
     Ok(records)
+}
+
+/// The entry and exit records the active wallet booked under any of `signatures`, in one
+/// read per table. A swap the positions system has not verified yet has no record.
+pub async fn get_swap_records_by_signatures(
+    signatures: &[String],
+) -> Result<(Vec<EntryRecord>, Vec<ExitRecord>)> {
+    let db_guard = GLOBAL_POSITIONS_DB.lock().await;
+    let db = db_guard.as_ref().ok_or(Error::NotInitialised)?;
+
+    let conn = db.pool.get().map_err(|e| DatabaseError::Connection {
+        message: e.to_string(),
+    })?;
+
+    let wallet_address =
+        crate::utils::get_wallet_address().map_err(|e| Error::WalletUnavailable {
+            detail: e.to_string(),
+        })?;
+
+    Ok(
+        query_records_by_signatures(&conn, &wallet_address, signatures).map_err(|e| {
+            DatabaseError::classify_sqlite_failure("get_swap_records_by_signatures", e)
+        })?,
+    )
 }
 
 /// Every swap leg the TRADER itself booked, for the whole wallet, in one query.

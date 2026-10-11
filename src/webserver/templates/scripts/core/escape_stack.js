@@ -12,13 +12,16 @@
  * `document`, so they fire in registration order, not stacking order.
  *
  * Instead there is ONE document listener here, and Escape is delivered only to
- * the most recently registered (topmost) overlay.
+ * the most recently registered (topmost) overlay -- unless a dropdown or popover
+ * registered with `menu_manager.js` is open, which closes first.
  *
  * Usage:
  *   this._releaseEscape = pushEscapeHandler(() => this.close());
  *   ...
  *   this._releaseEscape();   // on close; safe to call twice
  */
+
+import { openMenuCount } from "./menu_manager.js";
 
 const stack = [];
 
@@ -27,6 +30,10 @@ function onKeydown(event) {
 
   const top = stack[stack.length - 1];
   if (!top) return;
+
+  // An open dropdown inside the overlay takes this Escape: the menu coordinator closes
+  // it, and the overlay closes on the next press.
+  if (openMenuCount() > 0) return;
 
   // Stop lower overlays' own listeners (any not yet migrated to this stack) from
   // also reacting to the same key press.

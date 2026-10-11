@@ -98,11 +98,10 @@ shell-ticker-services-unknown = 服务：<strong>—</strong>
 
 ## Notification drawer
 
-shell-notification-title = 操作
-shell-notification-mark-all-read =
-    .title = 全部标为已读
+shell-notification-heading = 操作和通知
 shell-notification-clear-all =
     .title = 全部清除
+    .aria-label = 全部清除
 shell-notification-close =
     .aria-label = 关闭
 shell-notification-tab-all = 全部
@@ -112,18 +111,10 @@ shell-notification-tab-failed = 失败
 shell-notification-filter-type-all = 全部类型
 shell-notification-filter-type-buy = 买入
 shell-notification-filter-type-sell = 卖出
-shell-notification-filter-type-open = 开仓
-shell-notification-filter-type-close = 平仓
 shell-notification-filter-type-dca = DCA
-shell-notification-filter-type-partial = 部分出场
 shell-notification-filter-clear =
     .title = 清除筛选
     .aria-label = 清除筛选
-shell-notification-filter-state-all = 全部状态
-shell-notification-filter-state-in-progress = 进行中
-shell-notification-filter-state-completed = 已完成
-shell-notification-filter-state-failed = 失败
-shell-notification-filter-state-cancelled = 已取消
 shell-notification-list =
     .aria-label = 通知
 shell-notification-empty = 暂无操作

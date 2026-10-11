@@ -20,7 +20,7 @@ const MAX_VERIFICATION_ATTEMPTS: u8 = 40;
 /// on-chain within seconds, but on a flaky/proxied network confirmation may be
 /// delayed; we keep verifying (across restarts) for a full day rather than
 /// abandoning a position whose exit already landed.
-const MAX_VERIFICATION_AGE_HOURS: i64 = 24;
+pub const MAX_VERIFICATION_AGE_HOURS: i64 = 24;
 
 /// Backoff intervals in seconds for verification retries (dynamic, widening).
 /// Front-loaded for sub-minute confirmation in the common case, then ramping up

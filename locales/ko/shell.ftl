@@ -98,11 +98,10 @@ shell-ticker-services-unknown = 서비스: <strong>—</strong>
 
 ## Notification drawer
 
-shell-notification-title = 작업
-shell-notification-mark-all-read =
-    .title = 모두 읽음으로 표시
+shell-notification-heading = 작업 및 알림
 shell-notification-clear-all =
     .title = 모두 지우기
+    .aria-label = 모두 지우기
 shell-notification-close =
     .aria-label = 닫기
 shell-notification-tab-all = 전체
@@ -112,18 +111,10 @@ shell-notification-tab-failed = 실패
 shell-notification-filter-type-all = 모든 유형
 shell-notification-filter-type-buy = 매수
 shell-notification-filter-type-sell = 매도
-shell-notification-filter-type-open = 진입
-shell-notification-filter-type-close = 종료
 shell-notification-filter-type-dca = DCA
-shell-notification-filter-type-partial = 부분
 shell-notification-filter-clear =
     .title = 필터 지우기
     .aria-label = 필터 지우기
-shell-notification-filter-state-all = 모든 상태
-shell-notification-filter-state-in-progress = 진행 중
-shell-notification-filter-state-completed = 완료됨
-shell-notification-filter-state-failed = 실패
-shell-notification-filter-state-cancelled = 취소됨
 shell-notification-list =
     .aria-label = 알림
 shell-notification-empty = 아직 작업이 없습니다

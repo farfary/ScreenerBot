@@ -454,7 +454,8 @@ impl ActionsDatabase {
 /// Filters for querying actions
 #[derive(Debug, Clone, Default, Serialize, Deserialize)]
 pub struct ActionFilters {
-    pub action_type: Option<ActionType>,
+    /// Matches any of these types; empty matches every type.
+    pub action_types: Vec<ActionType>,
     pub entity_id: Option<String>,
     pub state: Option<Vec<String>>,
     pub started_after: Option<DateTime<Utc>>,

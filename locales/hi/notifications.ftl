@@ -44,12 +44,8 @@ notifications-empty-completed = कोई पूर्ण कार्रवा�
 notifications-empty-failed = कोई विफल कार्रवाई नहीं
 notifications-source-auto = ऑटो
 notifications-source-manual = मैन्युअल
-notifications-state-locked = स्थिति टैब से नियंत्रित होती है
 notifications-cancelled = रद्द किया गया
-notifications-dismiss = खारिज करें
-notifications-dismiss-failed = नोटिफ़िकेशन खारिज करना विफल
 notifications-load-failed = लोड करना विफल
-notifications-mark-read-failed = नोटिफ़िकेशन को पढ़ा हुआ चिह्नित करना विफल
 notifications-clear-title = नोटिफ़िकेशन साफ़ करें
 notifications-clear-message = इस सूची के सभी नोटिफ़िकेशन खारिज करें? वे पूर्ण/विफल इतिहास में बने रहेंगे।
 notifications-clear-failed = नोटिफ़िकेशन साफ़ करना विफल
@@ -61,3 +57,22 @@ notifications-stream-lag-missed =
     } — रीफ़्रेश हो रहा है
 notifications-stream-lag-refreshing = रीफ़्रेश हो रहा है
 notifications-sync-failed = कार्रवाइयाँ रीफ़्रेश नहीं की जा सकीं
+
+# Action rows (ui/action_row.js): day headings, the copy-trading source, the detail.
+notifications-day-today = आज
+notifications-day-yesterday = कल
+notifications-source-copy = कॉपी ट्रेडिंग
+notifications-steps = चरण
+notifications-detail-transaction = ट्रांज़ैक्शन
+notifications-detail-fill-price = निष्पादन प्राइस
+    .title = इस स्वैप की { -sol } राशि को टोकन मात्रा से भाग देने पर
+notifications-detail-fee = नेटवर्क फ़ीस
+notifications-detail-pnl = पोज़िशन का लाभ-हानि
+notifications-detail-route = रूट
+notifications-detail-duration = अवधि
+notifications-detail-reason = कारण
+notifications-view-token = टोकन देखें
+notifications-view-position = पोज़िशन देखें
+notifications-view-transaction = ट्रांज़ैक्शन देखें
+notifications-unrecorded = पोज़िशन में दर्ज नहीं
+notifications-unrecorded-detail = यह स्वैप पोज़िशन में दर्ज नहीं हुआ और हो सकता है पूरा न हुआ हो। इसका ट्रांज़ैक्शन जांचें।

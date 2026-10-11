@@ -42,12 +42,8 @@ notifications-empty-completed = لا توجد إجراءات مكتملة
 notifications-empty-failed = لا توجد إجراءات فاشلة
 notifications-source-auto = تلقائي
 notifications-source-manual = يدوي
-notifications-state-locked = الحالة يتحكم بها التبويب
 notifications-cancelled = ملغى
-notifications-dismiss = تجاهل
-notifications-dismiss-failed = فشل تجاهل الإشعار
 notifications-load-failed = فشل التحميل
-notifications-mark-read-failed = فشل تعليم الإشعارات كمقروءة
 notifications-clear-title = مسح الإشعارات
 notifications-clear-message = هل تريد تجاهل جميع الإشعارات في هذه القائمة؟ ستبقى في سجل المكتملة/الفاشلة.
 notifications-clear-failed = فشل مسح الإشعارات
@@ -63,3 +59,22 @@ notifications-stream-lag-missed =
     }
 notifications-stream-lag-refreshing = جارٍ التحديث
 notifications-sync-failed = تعذّر تحديث الإجراءات
+
+# Action rows (ui/action_row.js): day headings, the copy-trading source, the detail.
+notifications-day-today = اليوم
+notifications-day-yesterday = أمس
+notifications-source-copy = نسخ التداول
+notifications-steps = الخطوات
+notifications-detail-transaction = المعاملة
+notifications-detail-fill-price = سعر التنفيذ
+    .title = مبلغ { -sol } في هذه المبادلة مقسومًا على كمية الرموز
+notifications-detail-fee = رسوم الشبكة
+notifications-detail-pnl = أرباح وخسائر المركز
+notifications-detail-route = المسار
+notifications-detail-duration = المدة
+notifications-detail-reason = السبب
+notifications-view-token = عرض الرمز
+notifications-view-position = عرض المركز
+notifications-view-transaction = عرض المعاملة
+notifications-unrecorded = غير مسجّل في المركز
+notifications-unrecorded-detail = لم تُسجَّل هذه المبادلة في المركز وربما لم تُنفَّذ. تحقّق من معاملتها.

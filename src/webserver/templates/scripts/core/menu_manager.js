@@ -84,12 +84,14 @@ function attachGlobalListeners() {
     true
   );
 
-  // Escape always closes everything.
+  // Escape closes the open menus and nothing else: the overlay a menu sits in waits for
+  // the next press (`escape_stack.js` defers to open menus for the same reason).
   document.addEventListener(
     "keydown",
     (e) => {
       if (e.key === "Escape" && openMenus.size > 0) {
         e.preventDefault();
+        e.stopImmediatePropagation();
         closeAllMenus("escape");
       }
     },

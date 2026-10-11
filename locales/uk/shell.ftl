@@ -98,11 +98,10 @@ shell-ticker-services-unknown = Сервіси: <strong>—</strong>
 
 ## Notification drawer
 
-shell-notification-title = Дії
-shell-notification-mark-all-read =
-    .title = Позначити все як прочитане
+shell-notification-heading = Дії та сповіщення
 shell-notification-clear-all =
     .title = Очистити все
+    .aria-label = Очистити все
 shell-notification-close =
     .aria-label = Закрити
 shell-notification-tab-all = Усі
@@ -112,18 +111,10 @@ shell-notification-tab-failed = Невдалі
 shell-notification-filter-type-all = Усі типи
 shell-notification-filter-type-buy = Купівля
 shell-notification-filter-type-sell = Продаж
-shell-notification-filter-type-open = Відкриття
-shell-notification-filter-type-close = Закриття
 shell-notification-filter-type-dca = DCA
-shell-notification-filter-type-partial = Часткові
 shell-notification-filter-clear =
     .title = Скинути фільтри
     .aria-label = Скинути фільтри
-shell-notification-filter-state-all = Усі стани
-shell-notification-filter-state-in-progress = Виконуються
-shell-notification-filter-state-completed = Завершені
-shell-notification-filter-state-failed = Невдалі
-shell-notification-filter-state-cancelled = Скасовані
 shell-notification-list =
     .aria-label = Сповіщення
 shell-notification-empty = Дій ще немає

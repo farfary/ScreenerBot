@@ -42,12 +42,8 @@ notifications-empty-completed = Tidak ada aksi selesai
 notifications-empty-failed = Tidak ada aksi gagal
 notifications-source-auto = Otomatis
 notifications-source-manual = Manual
-notifications-state-locked = Status dikendalikan oleh tab
 notifications-cancelled = Dibatalkan
-notifications-dismiss = Tutup
-notifications-dismiss-failed = Gagal menutup notifikasi
 notifications-load-failed = Gagal memuat
-notifications-mark-read-failed = Gagal menandai notifikasi sebagai dibaca
 notifications-clear-title = Bersihkan notifikasi
 notifications-clear-message = Tutup semua notifikasi dari daftar ini? Notifikasi tetap ada di riwayat Selesai/Gagal.
 notifications-clear-failed = Gagal membersihkan notifikasi
@@ -58,3 +54,22 @@ notifications-stream-lag-missed =
     } — menyegarkan
 notifications-stream-lag-refreshing = Menyegarkan
 notifications-sync-failed = Tidak dapat menyegarkan aksi
+
+# Action rows (ui/action_row.js): day headings, the copy-trading source, the detail.
+notifications-day-today = Hari Ini
+notifications-day-yesterday = Kemarin
+notifications-source-copy = Copy trading
+notifications-steps = Langkah
+notifications-detail-transaction = Transaksi
+notifications-detail-fill-price = Harga eksekusi
+    .title = Jumlah { -sol } swap ini dibagi jumlah tokennya
+notifications-detail-fee = Biaya jaringan
+notifications-detail-pnl = P&L posisi
+notifications-detail-route = Rute
+notifications-detail-duration = Durasi
+notifications-detail-reason = Alasan
+notifications-view-token = Lihat token
+notifications-view-position = Lihat posisi
+notifications-view-transaction = Lihat transaksi
+notifications-unrecorded = Tidak tercatat di posisi
+notifications-unrecorded-detail = Swap ini tidak tercatat di posisi dan mungkin tidak berhasil. Periksa transaksinya.

@@ -185,7 +185,22 @@ impl Action {
         self.state = ActionState::Cancelled;
         self.completed_at = Some(Utc::now());
     }
+
+    /// The signature of the swap this action submitted, from the latest step that
+    /// recorded one. A swap that reported success without a signature is recorded as
+    /// `"unknown"`, which names no transaction.
+    pub fn swap_signature(&self) -> Option<&str> {
+        self.steps.iter().rev().find_map(|step| {
+            step.metadata
+                .get("signature")
+                .and_then(Value::as_str)
+                .filter(|signature| !signature.is_empty() && *signature != UNKNOWN_SIGNATURE)
+        })
+    }
 }
+
+/// What the trade trackers record as the signature of a swap that reported none.
+const UNKNOWN_SIGNATURE: &str = "unknown";
 
 /// Type of action being performed
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
@@ -450,7 +465,7 @@ mod label_tests {
 
     /// Catalog key of the notification label for each action type. The match is
     /// exhaustive, so a new variant fails to compile until it is mapped here and
-    /// in `ACTION_TYPE_LABELS` (ui/notification_panel.js).
+    /// in `ACTION_TYPE_LABELS` (ui/action_row.js).
     fn label_key(action: ActionType) -> &'static str {
         match action {
             ActionType::SwapBuy => "notifications-action-swap-buy",
@@ -483,5 +498,48 @@ mod label_tests {
             );
             assert_ne!(crate::i18n::format_en(key, None), key, "missing {key}");
         }
+    }
+}
+
+#[cfg(test)]
+mod signature_tests {
+    use super::{Action, ActionStepCode, ActionType, StepStatus};
+    use serde_json::json;
+
+    fn trade(steps: &[serde_json::Value]) -> Action {
+        let mut action = Action::new(
+            "a".to_owned(),
+            ActionType::SwapBuy,
+            "mint".to_owned(),
+            vec![ActionStepCode::Swap; steps.len()],
+            json!({}),
+        );
+        for (index, metadata) in steps.iter().enumerate() {
+            action.update_step(index, StepStatus::Completed, None, Some(metadata.clone()));
+        }
+        action
+    }
+
+    #[test]
+    fn the_latest_recorded_signature_names_the_swap() {
+        let action = trade(&[
+            json!({"signature": "first"}),
+            json!({"signature": "second"}),
+        ]);
+        assert_eq!(action.swap_signature(), Some("second"));
+    }
+
+    #[test]
+    fn a_placeholder_signature_names_no_swap() {
+        let action = trade(&[
+            json!({"router": "jupiter"}),
+            json!({"signature": "unknown"}),
+        ]);
+        assert_eq!(action.swap_signature(), None);
+        let earlier = trade(&[
+            json!({"signature": "real"}),
+            json!({"signature": "unknown"}),
+        ]);
+        assert_eq!(earlier.swap_signature(), Some("real"));
     }
 }

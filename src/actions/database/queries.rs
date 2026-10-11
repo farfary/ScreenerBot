@@ -231,9 +231,12 @@ impl ActionsDatabase {
 
         let mut params: Vec<String> = Vec::new();
 
-        if let Some(action_type) = filters.action_type {
-            query.push_str(" AND action_type = ?");
-            params.push(format!("{:?}", action_type).to_lowercase());
+        if !filters.action_types.is_empty() {
+            let placeholders = vec!["?"; filters.action_types.len()].join(",");
+            query.push_str(&format!(" AND action_type IN ({placeholders})"));
+            for action_type in &filters.action_types {
+                params.push(format!("{:?}", action_type).to_lowercase());
+            }
         }
 
         if let Some(ref entity_id) = filters.entity_id {
@@ -499,9 +502,12 @@ impl ActionsDatabase {
             let mut count_query = "SELECT COUNT(*) FROM actions WHERE 1=1".to_owned();
             let mut params: Vec<String> = Vec::new();
 
-            if let Some(action_type) = filters.action_type {
-                count_query.push_str(" AND action_type = ?");
-                params.push(format!("{:?}", action_type).to_lowercase());
+            if !filters.action_types.is_empty() {
+                let placeholders = vec!["?"; filters.action_types.len()].join(",");
+                count_query.push_str(&format!(" AND action_type IN ({placeholders})"));
+                for action_type in &filters.action_types {
+                    params.push(format!("{:?}", action_type).to_lowercase());
+                }
             }
 
             if let Some(ref entity_id) = filters.entity_id {

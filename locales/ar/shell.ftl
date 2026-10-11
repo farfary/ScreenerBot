@@ -98,11 +98,10 @@ shell-ticker-services-unknown = الخدمات: <strong>—</strong>
 
 ## Notification drawer
 
-shell-notification-title = الإجراءات
-shell-notification-mark-all-read =
-    .title = تحديد الكل كمقروء
+shell-notification-heading = الإجراءات والإشعارات
 shell-notification-clear-all =
     .title = مسح الكل
+    .aria-label = مسح الكل
 shell-notification-close =
     .aria-label = إغلاق
 shell-notification-tab-all = الكل
@@ -112,18 +111,10 @@ shell-notification-tab-failed = الفاشلة
 shell-notification-filter-type-all = كل الأنواع
 shell-notification-filter-type-buy = شراء
 shell-notification-filter-type-sell = بيع
-shell-notification-filter-type-open = فتح
-shell-notification-filter-type-close = إغلاق
 shell-notification-filter-type-dca = DCA
-shell-notification-filter-type-partial = جزئي
 shell-notification-filter-clear =
     .title = مسح عوامل التصفية
     .aria-label = مسح عوامل التصفية
-shell-notification-filter-state-all = كل الحالات
-shell-notification-filter-state-in-progress = قيد التنفيذ
-shell-notification-filter-state-completed = مكتمل
-shell-notification-filter-state-failed = فشل
-shell-notification-filter-state-cancelled = ملغى
 shell-notification-list =
     .aria-label = الإشعارات
 shell-notification-empty = لا توجد إجراءات بعد

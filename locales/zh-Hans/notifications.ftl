@@ -42,12 +42,8 @@ notifications-empty-completed = 暂无已完成的操作
 notifications-empty-failed = 暂无失败的操作
 notifications-source-auto = 自动
 notifications-source-manual = 手动
-notifications-state-locked = 状态由标签页控制
 notifications-cancelled = 已取消
-notifications-dismiss = 忽略
-notifications-dismiss-failed = 忽略通知失败
 notifications-load-failed = 加载失败
-notifications-mark-read-failed = 标记通知为已读失败
 notifications-clear-title = 清除通知
 notifications-clear-message = 忽略此列表中的所有通知？它们仍会保留在已完成/失败的历史记录中。
 notifications-clear-failed = 清除通知失败
@@ -58,3 +54,22 @@ notifications-stream-lag-missed =
     }
 notifications-stream-lag-refreshing = 正在刷新
 notifications-sync-failed = 无法刷新操作
+
+# Action rows (ui/action_row.js): day headings, the copy-trading source, the detail.
+notifications-day-today = 今天
+notifications-day-yesterday = 昨天
+notifications-source-copy = 跟单交易
+notifications-steps = 步骤
+notifications-detail-transaction = 交易
+notifications-detail-fill-price = 成交价
+    .title = 本次兑换的 { -sol } 金额除以代币数量
+notifications-detail-fee = 网络费用
+notifications-detail-pnl = 仓位盈亏
+notifications-detail-route = 路由
+notifications-detail-duration = 时长
+notifications-detail-reason = 原因
+notifications-view-token = 查看代币
+notifications-view-position = 查看仓位
+notifications-view-transaction = 查看交易
+notifications-unrecorded = 未记入仓位
+notifications-unrecorded-detail = 此兑换未记入仓位，可能没有成交。请查看其交易。

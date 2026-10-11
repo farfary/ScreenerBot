@@ -49,12 +49,8 @@ notifications-empty-completed = No completed actions
 notifications-empty-failed = No failed actions
 notifications-source-auto = Auto
 notifications-source-manual = Manual
-notifications-state-locked = State is controlled by tab
 notifications-cancelled = Cancelled
-notifications-dismiss = Dismiss
-notifications-dismiss-failed = Failed to dismiss notification
 notifications-load-failed = Failed to load
-notifications-mark-read-failed = Failed to mark notifications read
 notifications-clear-title = Clear notifications
 notifications-clear-message = Dismiss all notifications from this list? They remain in the Completed/Failed history.
 notifications-clear-failed = Failed to clear notifications
@@ -67,3 +63,22 @@ notifications-stream-lag-missed =
     } — refreshing
 notifications-stream-lag-refreshing = Refreshing
 notifications-sync-failed = Could not refresh actions
+
+# Action rows (ui/action_row.js): day headings, the copy-trading source, the detail.
+notifications-day-today = Today
+notifications-day-yesterday = Yesterday
+notifications-source-copy = Copy trading
+notifications-steps = Steps
+notifications-detail-transaction = Transaction
+notifications-detail-fill-price = Fill price
+    .title = { -sol } amount of this swap divided by its token amount
+notifications-detail-fee = Network fee
+notifications-detail-pnl = Position P&L
+notifications-detail-route = Route
+notifications-detail-duration = Duration
+notifications-detail-reason = Reason
+notifications-view-token = View token
+notifications-view-position = View position
+notifications-view-transaction = View transaction
+notifications-unrecorded = Not recorded on position
+notifications-unrecorded-detail = This swap was not booked on the position and may not have landed. Check its transaction.

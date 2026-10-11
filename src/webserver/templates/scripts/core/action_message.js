@@ -57,6 +57,12 @@ export function routerOf(action) {
   return router || "";
 }
 
+/** The display name of the router that submitted the trade, or "" before one has. */
+export function routerName(action) {
+  const router = routerOf(action);
+  return router ? venueText(router) : "";
+}
+
 /** Lamports are the backend's unit; SOL is the only one the user thinks in. */
 function solFromLamports(lamports) {
   const value = Number(lamports);

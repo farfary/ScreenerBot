@@ -1,9 +1,10 @@
 // Copyright (c) 2024-2026 ScreenerBot (screenerbot.io)
 // SPDX-License-Identifier: BUSL-1.1
 
-//! Actions route — handles user-triggered actions like start, stop, and reset.
+//! Actions routes — the update stream, the active and history listings, and the read and dismiss mutations.
 
 mod handlers;
+mod outcome;
 mod types;
 
 pub use types::*;

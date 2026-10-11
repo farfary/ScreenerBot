@@ -44,12 +44,8 @@ notifications-empty-completed = Aucune action terminée
 notifications-empty-failed = Aucune action échouée
 notifications-source-auto = Auto
 notifications-source-manual = Manuel
-notifications-state-locked = L'état est déterminé par l'onglet
 notifications-cancelled = Annulée
-notifications-dismiss = Fermer
-notifications-dismiss-failed = Impossible de fermer la notification
 notifications-load-failed = Échec du chargement
-notifications-mark-read-failed = Impossible de marquer les notifications comme lues
 notifications-clear-title = Effacer les notifications
 notifications-clear-message = Fermer toutes les notifications de cette liste ? Elles restent dans l'historique des actions terminées et échouées.
 notifications-clear-failed = Impossible d'effacer les notifications
@@ -62,3 +58,22 @@ notifications-stream-lag-missed =
     } — actualisation en cours
 notifications-stream-lag-refreshing = Actualisation en cours
 notifications-sync-failed = Impossible d'actualiser les actions
+
+# Action rows (ui/action_row.js): day headings, the copy-trading source, the detail.
+notifications-day-today = Aujourd'hui
+notifications-day-yesterday = Hier
+notifications-source-copy = Copy trading
+notifications-steps = Étapes
+notifications-detail-transaction = Transaction
+notifications-detail-fill-price = Prix d'exécution
+    .title = Montant en { -sol } de ce swap divisé par sa quantité de tokens
+notifications-detail-fee = Frais de réseau
+notifications-detail-pnl = P&L de la position
+notifications-detail-route = Route
+notifications-detail-duration = Durée
+notifications-detail-reason = Motif
+notifications-view-token = Voir le token
+notifications-view-position = Voir la position
+notifications-view-transaction = Voir la transaction
+notifications-unrecorded = Non enregistré sur la position
+notifications-unrecorded-detail = Ce swap n'a pas été comptabilisé sur la position et n'a peut-être pas abouti. Vérifiez sa transaction.
