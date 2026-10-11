@@ -166,6 +166,8 @@ solana-transaction-status = { version = "2.3.3" }
 solana-account-decoder = { version = "2.3.1" }
 # The wire packet size a transaction must fit; `solana_sdk::packet` is deprecated in favour of it.
 solana-packet = { version = "2.2.1" }
+# The system program instruction builders; `solana_sdk::system_instruction` is deprecated in favour of it.
+solana-system-interface = { version = "1.0.0", features = ["bincode"] }
 
 # SPL Token dependencies - minimal features
 spl-token-2022 = { version = "8.0.1", default-features = false, features = ["no-entrypoint"] }

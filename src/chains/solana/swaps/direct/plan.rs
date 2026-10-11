@@ -50,9 +50,8 @@ use super::fee::FeeSide;
 use super::intent::{is_wsol, DirectSwapIntent};
 use super::quote::DirectQuote;
 use super::venue::{PoolMarket, SwapAccounts};
-use crate::chains::solana::solana_sdk::{
-    instruction::Instruction, pubkey::Pubkey, system_instruction,
-};
+use crate::chains::solana::solana_sdk::{instruction::Instruction, pubkey::Pubkey};
+use crate::chains::solana::solana_system_interface::instruction as system_instruction;
 
 /// A direct swap, fully expanded into instructions and the facts needed to check
 /// afterwards that it did what it said.

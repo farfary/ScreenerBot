@@ -12,6 +12,7 @@ pub use solana_client;
 pub use solana_packet;
 pub use solana_program;
 pub use solana_sdk;
+pub use solana_system_interface;
 pub use solana_transaction_status;
 pub use spl_associated_token_account;
 pub use spl_token;

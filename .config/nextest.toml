@@ -4,8 +4,8 @@
 # global singletons (OnceLock config, ArcSwap live snapshots, the service-manager
 # global Option, r2d2 DB pools). Under plain `cargo test` every test shares one
 # process and that state collides; nextest runs each test in its own process, so every
-# test starts from a clean global world and a `panic = "abort"` is just that test
-# failing, not the whole binary.
+# test starts from a clean global world and a panicking test fails only itself, not
+# the whole binary.
 #
 # Integration tests are organised by DOMAIN (tests/apis.rs, rpc.rs, ohlcv.rs, ...) and
 # the levels are the standard `#[ignore]` attribute — see tests/common/mod.rs. Run:

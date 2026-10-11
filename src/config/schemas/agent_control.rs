@@ -8,7 +8,6 @@
 //! per connection under Settings -> Agent Connections.
 
 use crate::config::metadata::{ConfigCategory, ConfigImpact};
-use crate::config_struct;
 use crate::field_metadata;
 
 config_struct! {

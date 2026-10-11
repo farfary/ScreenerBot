@@ -4,7 +4,6 @@
 //! Holder Watch tool configuration for tracking token holder changes.
 
 use crate::config::metadata::ConfigCategory;
-use crate::config_struct;
 use crate::field_metadata;
 
 // ============================================================================

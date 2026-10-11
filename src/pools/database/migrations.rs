@@ -4,7 +4,7 @@
 //! Pools database schema migrations — legacy-to-chain-scoped upgrade run by
 //! `operations::PoolsDatabase::initialize`.
 
-use crate::database::schema::{self, SchemaContext, StoreSchema};
+use crate::database::schema::{self, ddl, SchemaContext, StoreSchema};
 use crate::errors::DatabaseError;
 use crate::pools::Error;
 use rusqlite::{OptionalExtension, Transaction};
@@ -28,12 +28,6 @@ fn step(tx: &Transaction<'_>, _: &SchemaContext) -> Result<(), DatabaseError> {
             store: "pools.db".to_owned(),
             detail: other.to_string(),
         },
-    })
-}
-
-fn table_has_column(tx: &Transaction<'_>, table: &str, column: &str) -> Result<bool, Error> {
-    schema::table_has_column(tx, table, column).map_err(|e| {
-        DatabaseError::classify_sqlite_failure(&format!("inspect {table} schema"), e).into()
     })
 }
 
@@ -102,9 +96,9 @@ fn migrate_schema(tx: &Transaction<'_>) -> Result<(), Error> {
         .map_err(|e| DatabaseError::classify_sqlite_failure("read pools schema version", e))?;
 
     if schema_version < POOLS_SCHEMA_VERSION {
-        let price_history_has_chain = table_has_column(tx, "price_history", "chain_id")?;
-        let accounts_has_chain = table_has_column(tx, "blacklist_accounts", "chain_id")?;
-        let pools_has_chain = table_has_column(tx, "blacklist_pools", "chain_id")?;
+        let price_history_has_chain = ddl::has_column(tx, "price_history", "chain_id")?;
+        let accounts_has_chain = ddl::has_column(tx, "blacklist_accounts", "chain_id")?;
+        let pools_has_chain = ddl::has_column(tx, "blacklist_pools", "chain_id")?;
 
         if !price_history_has_chain || !accounts_has_chain || !pools_has_chain {
             tx.execute_batch(

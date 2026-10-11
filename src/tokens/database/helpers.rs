@@ -289,7 +289,7 @@ pub(super) fn read_row_value<T: FromSql>(
 ) -> TokenResult<T> {
     row.get(index).map_err(|e| {
         Error::Database(DatabaseError::Query {
-            operation: "Failed to read {field}".to_owned(),
+            operation: format!("Failed to read {field}"),
             message: e.to_string(),
         })
     })

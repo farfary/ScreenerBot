@@ -4,7 +4,6 @@
 //! Data retention configuration: how long history is kept and how much disk the app's data may use.
 
 use crate::config::metadata::{ConfigCategory, ConfigImpact};
-use crate::config_struct;
 use crate::field_metadata;
 
 // ============================================================================

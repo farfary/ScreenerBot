@@ -27,7 +27,6 @@
 //! that sends anything, and it is why the guarantee is worth stating.
 
 use crate::config::metadata::ConfigCategory;
-use crate::config_struct;
 use crate::field_metadata;
 
 config_struct! {

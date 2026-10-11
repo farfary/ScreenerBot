@@ -336,8 +336,7 @@ async fn update_uninitialized_tokens(db: &Arc<TokenDatabase>, coordinator: &Rate
         .map(|chunk| {
             let chunk_vec = chunk.to_vec();
             let db_clone = db.clone();
-            let coord_clone = coordinator.clone();
-            async move { update_tokens_batch(&chunk_vec, &db_clone, &coord_clone).await }
+            async move { update_tokens_batch(&chunk_vec, &db_clone, coordinator).await }
         })
         .collect();
 
@@ -410,8 +409,7 @@ async fn update_open_position_tokens(db: &Arc<TokenDatabase>, coordinator: &Rate
         .map(|chunk| {
             let chunk_vec = chunk.to_vec();
             let db_clone = db.clone();
-            let coord_clone = coordinator.clone();
-            async move { update_tokens_batch(&chunk_vec, &db_clone, &coord_clone).await }
+            async move { update_tokens_batch(&chunk_vec, &db_clone, coordinator).await }
         })
         .collect();
 
@@ -494,8 +492,7 @@ async fn update_pool_tracked_tokens(db: &Arc<TokenDatabase>, coordinator: &RateL
         .map(|chunk| {
             let chunk_vec = chunk.to_vec();
             let db_clone = db.clone();
-            let coord_clone = coordinator.clone();
-            async move { update_tokens_batch(&chunk_vec, &db_clone, &coord_clone).await }
+            async move { update_tokens_batch(&chunk_vec, &db_clone, coordinator).await }
         })
         .collect();
 
@@ -601,8 +598,7 @@ async fn update_filter_passed_tokens(db: &Arc<TokenDatabase>, coordinator: &Rate
         .map(|chunk| {
             let chunk_vec = chunk.to_vec();
             let db_clone = db.clone();
-            let coord_clone = coordinator.clone();
-            async move { update_tokens_batch(&chunk_vec, &db_clone, &coord_clone).await }
+            async move { update_tokens_batch(&chunk_vec, &db_clone, coordinator).await }
         })
         .collect();
 

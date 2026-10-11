@@ -8,7 +8,6 @@
 //! Provider credentials live in `llm`.
 
 use crate::config::metadata::ConfigCategory;
-use crate::config_struct;
 use crate::field_metadata;
 
 config_struct! {

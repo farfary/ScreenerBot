@@ -82,23 +82,22 @@ macro_rules! config_struct {
         impl $name {
             /// Generate metadata for all fields defined in this configuration struct.
             pub fn field_metadata() -> $crate::config::metadata::SectionMetadata {
-                let mut fields = $crate::config::metadata::SectionMetadata::new();
+                $crate::config::metadata::SectionMetadata::from([
+                    $(
+                        (stringify!($field_name), {
+                            let extras: $crate::config::metadata::FieldMetadataExtras =
+                                None$(.or(Some($metadata)))?.unwrap_or_default();
 
-                $(
-                    #[allow(unused_mut)]
-                    let mut extras = $crate::config::metadata::FieldMetadataExtras::default();
-                    $(extras = $metadata;)?
-
-                    let default_value: $field_type = $default_value;
-                    let mut metadata = $crate::config::metadata::FieldMetadata::from_parts::<$field_type>(
-                        &default_value,
-                        extras,
-                    );
-                    metadata.children = <$field_type as $crate::config::metadata::NestedMetadata>::nested_metadata();
-                    fields.insert(stringify!($field_name), metadata);
-                )*
-
-                fields
+                            let default_value: $field_type = $default_value;
+                            let mut metadata = $crate::config::metadata::FieldMetadata::from_parts::<$field_type>(
+                                &default_value,
+                                extras,
+                            );
+                            metadata.children = <$field_type as $crate::config::metadata::NestedMetadata>::nested_metadata();
+                            metadata
+                        }),
+                    )*
+                ])
             }
         }
     };

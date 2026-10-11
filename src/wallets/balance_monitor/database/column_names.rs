@@ -83,3 +83,26 @@ pub(crate) const RENAMES: StoreRenames = StoreRenames {
         },
     ],
 };
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::chains::ChainId;
+
+    /// The merge fallback is a compile-time literal; it must read the keys the
+    /// database owner defines.
+    #[test]
+    fn the_flow_wallet_fallback_is_the_owners_recorded_wallet_expression() {
+        let TableReconcile::MergeRows { columns } = RENAMES.tables[0].reconcile else {
+            panic!("the flow cache merges by key");
+        };
+        let wallet = columns
+            .iter()
+            .find(|column| column.canonical == "wallet_address")
+            .expect("merged wallet column");
+        assert_eq!(
+            wallet.absent,
+            Some(super::super::recorded_wallet_sql("wallet_metadata", ChainId::Solana).as_str())
+        );
+    }
+}

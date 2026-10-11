@@ -55,7 +55,6 @@ impl EventsDatabase {
             let wildcard = format!("%{}%", search_term.to_lowercase());
             query.push_str(&format!(" AND LOWER(json_payload) LIKE ?{idx}"));
             bind.push(Box::new(wildcard));
-            idx += 1;
         }
         query.push_str(" ORDER BY id ASC LIMIT ?");
         bind.push(Box::new(limit as i64));
@@ -132,7 +131,6 @@ impl EventsDatabase {
             let wildcard = format!("%{}%", search_term.to_lowercase());
             query.push_str(&format!(" AND LOWER(json_payload) LIKE ?{idx}"));
             bind.push(Box::new(wildcard));
-            idx += 1;
         }
         query.push_str(" ORDER BY id DESC LIMIT ?");
         bind.push(Box::new(limit as i64));
@@ -245,16 +243,10 @@ impl EventsDatabase {
             let wildcard = format!("%{}%", search_term.to_lowercase());
             query.push_str(&format!(
                 "{} LOWER(json_payload) LIKE ?{}",
-                if where_added {
-                    " AND"
-                } else {
-                    where_added = true;
-                    " WHERE"
-                },
+                if where_added { " AND" } else { " WHERE" },
                 idx
             ));
             bind.push(Box::new(wildcard));
-            idx += 1;
         }
         query.push_str(" ORDER BY id DESC LIMIT ?");
         bind.push(Box::new(limit as i64));
@@ -372,12 +364,7 @@ impl EventsDatabase {
             let wildcard = format!("%{}%", search_term.to_lowercase());
             query.push_str(&format!(
                 "{} LOWER(json_payload) LIKE ?{}",
-                if where_added {
-                    " AND"
-                } else {
-                    where_added = true;
-                    " WHERE"
-                },
+                if where_added { " AND" } else { " WHERE" },
                 idx
             ));
             bind.push(Box::new(wildcard));

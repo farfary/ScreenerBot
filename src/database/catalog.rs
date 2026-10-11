@@ -137,7 +137,7 @@ impl StoreRetention {
 /// startup wallet check reports for it.
 #[derive(Debug, Clone, Copy)]
 pub struct WalletScope {
-    /// Table holding the `current_wallet` key.
+    /// Table holding the key that records the store's wallet.
     pub metadata_table: &'static str,
     pub label: &'static str,
 }

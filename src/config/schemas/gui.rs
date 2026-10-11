@@ -5,7 +5,6 @@
 
 // GUI configuration schema
 
-use crate::config_struct;
 use std::collections::HashMap;
 
 config_struct! {

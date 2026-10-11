@@ -7,7 +7,7 @@
 use rusqlite::{params, Connection, OptionalExtension};
 
 use crate::chains::ChainId;
-use crate::database::schema::ddl;
+use crate::database::schema::{ddl, primary_key_width, table_has_column};
 use crate::logger::{self, LogTag};
 use crate::transactions::types::*;
 
@@ -491,22 +491,11 @@ impl TransactionDatabase {
         conn: &Connection,
         table: &str,
     ) -> Result<bool, Error> {
-        let mut stmt = conn
-            .prepare(&format!("PRAGMA table_info({table})"))
+        primary_key_width(conn, table)
+            .map(|width| width >= 2)
             .map_err(|e| Error::SchemaInspect {
                 detail: format!("failed to inspect {table} schema: {e}"),
-            })?;
-
-        let pk_columns = stmt
-            .query_map([], |row| row.get::<_, i64>(5))
-            .map_err(|e| Error::SchemaInspect {
-                detail: format!("failed to read {table} schema: {e}"),
-            })?
-            .filter_map(|r| r.ok())
-            .filter(|&pk| pk > 0)
-            .count();
-
-        Ok(pk_columns >= 2)
+            })
     }
 
     /// Rebuilds every chain-owned transaction table into the v7 key shape. Legacy
@@ -525,20 +514,9 @@ impl TransactionDatabase {
             return Ok(());
         }
         let has_chain = |table: &str| -> Result<bool, Error> {
-            let mut stmt = conn
-                .prepare(&format!("PRAGMA table_info({table})"))
-                .map_err(|e| Error::SchemaInspect {
-                    detail: format!("failed to inspect {table}: {e}"),
-                })?;
-            let columns = stmt
-                .query_map([], |row| row.get::<_, String>(1))
-                .map_err(|e| Error::SchemaInspect {
-                    detail: format!("failed to inspect {table}: {e}"),
-                })?;
-            let has_chain = columns
-                .filter_map(Result::ok)
-                .any(|name| name == "chain_id");
-            Ok(has_chain)
+            table_has_column(conn, table, "chain_id").map_err(|e| Error::SchemaInspect {
+                detail: format!("failed to inspect {table}: {e}"),
+            })
         };
         if has_chain("raw_transactions")?
             && has_chain("processed_transactions")?

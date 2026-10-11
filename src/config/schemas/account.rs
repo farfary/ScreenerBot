@@ -22,7 +22,6 @@
 //! as it always has.
 
 use crate::config::metadata::ConfigCategory;
-use crate::config_struct;
 use crate::field_metadata;
 
 config_struct! {

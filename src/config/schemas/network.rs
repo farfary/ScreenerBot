@@ -14,7 +14,6 @@
 //! Leave empty to use automatic detection (env vars → macOS system proxy).
 
 use crate::config::metadata::ConfigCategory;
-use crate::config_struct;
 use crate::field_metadata;
 
 // ============================================================================

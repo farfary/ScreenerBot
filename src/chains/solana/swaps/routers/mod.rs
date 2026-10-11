@@ -44,7 +44,7 @@ pub(super) fn checked_quote_amounts(quote: &crate::swaps::Quote) -> crate::Resul
 mod tests {
     use super::*;
     use crate::chains::{ChainId, RawAmount};
-    use crate::swaps::{Quote, SwapMode, SwapRouter};
+    use crate::swaps::{Quote, SwapMode};
 
     #[tokio::test]
     async fn wide_execution_quote_is_refused_before_wallet_or_provider_io() {

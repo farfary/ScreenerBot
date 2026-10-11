@@ -110,8 +110,8 @@ fn format_unix(value: i64) -> String {
     if value <= 0 {
         return "n/a".to_owned();
     }
-    match chrono::NaiveDateTime::from_timestamp_opt(value, 0) {
-        Some(naive) => chrono::DateTime::<chrono::Utc>::from_utc(naive, chrono::Utc).to_rfc3339(),
+    match chrono::DateTime::from_timestamp(value, 0) {
+        Some(timestamp) => timestamp.to_rfc3339(),
         None => "n/a".to_owned(),
     }
 }

@@ -68,7 +68,7 @@ fn parse_array_format(private_key: &str) -> Result<Keypair> {
         });
     }
 
-    Keypair::from_bytes(&bytes).map_err(|e| Error::InvalidKeypair {
+    Keypair::try_from(&bytes[..]).map_err(|e| Error::InvalidKeypair {
         detail: e.to_string(),
     })
 }
@@ -90,7 +90,7 @@ fn parse_base58_format(private_key: &str) -> Result<Keypair> {
         });
     }
 
-    Keypair::from_bytes(&decoded).map_err(|e| Error::InvalidKeypair {
+    Keypair::try_from(&decoded[..]).map_err(|e| Error::InvalidKeypair {
         detail: e.to_string(),
     })
 }

@@ -5,6 +5,7 @@
 
 use std::path::PathBuf;
 
+use crate::chains::ChainId;
 use crate::database::catalog::{self, StoreSpec};
 use crate::database::health::{self, StoreHealth};
 use crate::database::recovery::RecoveryAction;
@@ -12,6 +13,7 @@ use crate::database::schema::ddl;
 use crate::errors::DatabaseError;
 use crate::logger::{self, LogTag};
 use crate::utils::get_wallet_address;
+use crate::wallets::balance_monitor::recorded_wallet_sql;
 use crate::wallets::Error;
 use rusqlite::{Connection, OpenFlags, OptionalExtension};
 
@@ -119,9 +121,10 @@ impl WalletValidator {
         }
     }
 
-    /// Get stored wallet address from database metadata table. The store is opened
-    /// read-only, so the check never creates or changes a file. The table name is a
-    /// catalog constant, never input, so it is safe to splice into the statement.
+    /// Get stored wallet address from database metadata table: the chain-scoped key
+    /// when the store has one, else the unscoped key. The store is opened read-only, so
+    /// the check never creates or changes a file. The table name is a catalog
+    /// constant, never input, so it is safe to splice into the statement.
     fn get_stored_wallet(
         db_path: &str,
         metadata_table: &'static str,
@@ -132,7 +135,10 @@ impl WalletValidator {
             return Ok(None);
         }
 
-        let query = format!("SELECT value FROM {metadata_table} WHERE key = 'current_wallet'");
+        let query = format!(
+            "SELECT {}",
+            recorded_wallet_sql(metadata_table, ChainId::Solana)
+        );
         let wallet: Option<String> = conn
             .query_row(&query, [], |row| row.get(0))
             .optional()
@@ -234,6 +240,48 @@ mod tests {
             } if current == "matching-wallet"
                 && stored == "mismatching-wallet"
                 && affected_systems == ["Positions"]
+        ));
+    }
+
+    /// `wallet.db` records its wallet under the chain-scoped key; the check reads that key
+    /// before the unscoped one older builds wrote.
+    #[test]
+    fn a_changed_wallet_recorded_under_the_chain_scoped_key_is_detected() {
+        let directory = tempfile::tempdir().unwrap();
+        let path = directory.path().join("wallet.db");
+        Connection::open(&path)
+            .unwrap()
+            .execute_batch(
+                "CREATE TABLE wallet_metadata (key TEXT PRIMARY KEY, value TEXT NOT NULL);
+                 INSERT INTO wallet_metadata (key, value) VALUES ('current_wallet:solana', 'scoped-wallet');
+                 INSERT INTO wallet_metadata (key, value) VALUES ('current_wallet', 'unscoped-wallet');",
+            )
+            .unwrap();
+        let wallet_scope = catalog::WALLET
+            .wallet_scope
+            .expect("wallet.db is a wallet-scoped store");
+
+        assert_eq!(
+            WalletValidator::get_stored_wallet(
+                &path.to_string_lossy(),
+                wallet_scope.metadata_table
+            )
+            .unwrap(),
+            Some("scoped-wallet".to_owned())
+        );
+        let files = [(
+            &catalog::WALLET,
+            wallet_scope.label,
+            path.clone(),
+            wallet_scope.metadata_table,
+        )];
+        assert!(matches!(
+            WalletValidator::validate_stored_wallets("scoped-wallet".to_owned(), &files),
+            WalletValidationResult::Valid
+        ));
+        assert!(matches!(
+            WalletValidator::validate_stored_wallets("new-wallet".to_owned(), &files),
+            WalletValidationResult::Mismatch { stored, .. } if stored == "scoped-wallet"
         ));
     }
 

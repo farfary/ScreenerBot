@@ -73,12 +73,10 @@ pub async fn update_position_tracking(mint: &str, current_price: f64) -> bool {
         if current_price > pos.price_highest {
             pos.price_highest = current_price;
             new_highest = Some(current_price);
-            needs_update = true;
         }
         if current_price < pos.price_lowest {
             pos.price_lowest = current_price;
             new_lowest = Some(current_price);
-            needs_update = true;
         }
 
         // Always update current price

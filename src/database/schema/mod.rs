@@ -10,7 +10,9 @@ pub mod renames;
 pub mod types;
 pub mod upgrade;
 
-pub use inspect::{table_columns, table_columns_in, table_exists, table_has_column};
+pub use inspect::{
+    primary_key_width, table_columns, table_columns_in, table_exists, table_has_column,
+};
 pub use types::{
     ColumnDeclaration, ColumnReconcile, ColumnRename, LegacyStamp, MergedColumn, SchemaContext,
     SchemaStep, StoreRenames, StoreSchema, TableReconcile, TableRename,

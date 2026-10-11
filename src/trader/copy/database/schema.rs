@@ -166,45 +166,24 @@ CREATE TABLE IF NOT EXISTS copy_position_links (
 /// Every schema step of one open. Runs inside the opener's transaction, so a
 /// step refused here leaves the stored schema exactly as it was.
 fn migrate(connection: &Transaction<'_>) -> crate::trader::Result<()> {
-    let mut statement = connection
-        .prepare("PRAGMA table_info(copy_tasks)")
-        .map_err(crate::errors::DatabaseError::from)?;
-    let columns = statement
-        .query_map([], |row| row.get::<_, String>(1))
-        .map_err(crate::errors::DatabaseError::from)?
-        .collect::<Result<Vec<_>, _>>()
-        .map_err(crate::errors::DatabaseError::from)?;
-    if !columns.iter().any(|column| column == "exit_policy_json") {
-        connection
-            .execute(
-                "ALTER TABLE copy_tasks ADD COLUMN exit_policy_json TEXT NOT NULL DEFAULT '{}'",
-                [],
-            )
-            .map_err(crate::errors::DatabaseError::from)?;
-    }
-    let mut statement = connection
-        .prepare("PRAGMA table_info(copy_live_claims)")
-        .map_err(crate::errors::DatabaseError::from)?;
-    let claim_columns = statement
-        .query_map([], |row| row.get::<_, String>(1))
-        .map_err(crate::errors::DatabaseError::from)?
-        .collect::<Result<Vec<_>, _>>()
-        .map_err(crate::errors::DatabaseError::from)?;
-    if !claim_columns.iter().any(|column| column == "state") {
-        connection
-            .execute(
-                "ALTER TABLE copy_live_claims ADD COLUMN state TEXT NOT NULL DEFAULT 'claimed'",
-                [],
-            )
-            .map_err(crate::errors::DatabaseError::from)?;
-    }
-    if !claim_columns.iter().any(|column| column == "updated_at") {
-        connection
-            .execute(
-                "ALTER TABLE copy_live_claims ADD COLUMN updated_at TEXT NOT NULL DEFAULT ''",
-                [],
-            )
-            .map_err(crate::errors::DatabaseError::from)?;
+    ddl::add_column(
+        connection,
+        "copy_tasks",
+        "exit_policy_json",
+        "TEXT NOT NULL DEFAULT '{}'",
+    )?;
+    ddl::add_column(
+        connection,
+        "copy_live_claims",
+        "state",
+        "TEXT NOT NULL DEFAULT 'claimed'",
+    )?;
+    if ddl::add_column(
+        connection,
+        "copy_live_claims",
+        "updated_at",
+        "TEXT NOT NULL DEFAULT ''",
+    )? {
         connection
             .execute(
                 "UPDATE copy_live_claims SET updated_at = claimed_at WHERE updated_at = ''",
@@ -212,22 +191,12 @@ fn migrate(connection: &Transaction<'_>) -> crate::trader::Result<()> {
             )
             .map_err(crate::errors::DatabaseError::from)?;
     }
-    let mut statement = connection
-        .prepare("PRAGMA table_info(copy_tasks)")
-        .map_err(crate::errors::DatabaseError::from)?;
-    let columns = statement
-        .query_map([], |row| row.get::<_, String>(1))
-        .map_err(crate::errors::DatabaseError::from)?
-        .collect::<Result<Vec<_>, _>>()
-        .map_err(crate::errors::DatabaseError::from)?;
-    drop(statement);
-    if !columns.iter().any(|column| column == "chain_id") {
-        connection
-            .execute(
-                "ALTER TABLE copy_tasks ADD COLUMN chain_id TEXT NOT NULL DEFAULT 'solana'",
-                [],
-            )
-            .map_err(crate::errors::DatabaseError::from)?;
+    if ddl::add_column(
+        connection,
+        "copy_tasks",
+        "chain_id",
+        "TEXT NOT NULL DEFAULT 'solana'",
+    )? {
         let invalid = connection
             .query_row("PRAGMA foreign_key_check", [], |_| Ok(1_i64))
             .optional()
@@ -255,20 +224,12 @@ fn migrate(connection: &Transaction<'_>) -> crate::trader::Result<()> {
             .map_err(crate::errors::DatabaseError::from)?;
     }
     // v7: the per-task filter override and the stored reason for a pause.
-    let task_columns = ddl::column_names(connection, "copy_tasks")?;
     for (column, definition) in [
         ("require_filter_pass", "INTEGER"),
         ("pause_reason_json", "TEXT"),
         ("paused_at", "TEXT"),
     ] {
-        if !task_columns.iter().any(|existing| existing == column) {
-            connection
-                .execute(
-                    &format!("ALTER TABLE copy_tasks ADD COLUMN {column} {definition}"),
-                    [],
-                )
-                .map_err(crate::errors::DatabaseError::from)?;
-        }
+        ddl::add_column(connection, "copy_tasks", column, definition)?;
     }
     migrate_mode_scoped_spend(connection)?;
     // Unit-neutral column names come last, so every step above reads the

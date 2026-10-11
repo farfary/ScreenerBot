@@ -288,12 +288,12 @@ impl TransactionProcessor {
                     .map(|c| c.change);
 
                 // Compute raw amounts and UI amounts based on direction
-                let mut input_mint = String::new();
-                let mut output_mint = String::new();
-                let mut input_ui: f64 = 0.0;
-                let mut output_ui: f64 = 0.0;
-                let mut input_raw: u64 = 0;
-                let mut output_raw: u64 = 0;
+                let input_mint: String;
+                let output_mint: String;
+                let mut input_ui: f64;
+                let mut output_ui: f64;
+                let mut input_raw: u64;
+                let mut output_raw: u64;
                 let swap_type_str: &str;
 
                 match direction {

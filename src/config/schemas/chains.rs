@@ -8,7 +8,6 @@
 
 use crate::config::metadata::{ConfigCategory, ConfigImpact};
 use crate::config::schemas::{RpcConfig, SolanaEndpointMonitorsConfig, SwapsConfig};
-use crate::config_struct;
 use crate::field_metadata;
 
 config_struct! {

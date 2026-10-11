@@ -6,7 +6,7 @@
 use crate::config::metadata::{ConfigCategory, ConfigImpact};
 use crate::config::{Error, Result};
 use crate::errors::ConfigurationError;
-use crate::{config_struct, field_metadata};
+use crate::field_metadata;
 
 config_struct! {
     pub struct CopyTradingConfig {

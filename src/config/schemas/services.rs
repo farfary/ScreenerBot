@@ -3,8 +3,6 @@
 
 //! Background service enable/disable and startup configuration.
 
-use crate::config_struct;
-
 // ============================================================================
 // SERVICES CONFIGURATION
 // ============================================================================

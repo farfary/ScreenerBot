@@ -320,58 +320,8 @@ pub(super) fn collect_pool_service_snapshot() -> Option<PoolServiceStatusSnapsho
 }
 
 pub(super) async fn collect_token_discovery_snapshot() -> Option<TokenDiscoveryStatusSnapshot> {
-    // Check if discovery service is registered and enabled
-    // Note: We always return a snapshot if the service exists, even if no stats yet
-    // This allows the UI to show "Waiting for first cycle..." messages
-    let running = if let Some(manager_lock) = crate::services::get_service_manager().await {
-        if let Some(manager) = manager_lock.read().await.as_ref() {
-            manager.is_service_enabled("token_discovery")
-        } else {
-            false
-        }
-    } else {
-        false
-    };
-
-    // If service is not registered, return None to hide the tab
-    if !running {
-        return None;
-    }
-
-    // Get stats (may be empty if first cycle hasn't completed yet)
-    // Token discovery service stats not available; hide section
-    return None;
-
-    Some(TokenDiscoveryStatusSnapshot {
-        running,
-        total_cycles: 0,
-        last_cycle_started: None,
-        last_cycle_completed: None,
-        last_processed: 0,
-        last_added: 0,
-        last_deduplicated_removed: 0,
-        last_blacklist_removed: 0,
-        total_processed: 0,
-        total_added: 0,
-        sources: DiscoverySourceSnapshot {
-            profiles: 0,
-            boosted: 0,
-            top_boosts: 0,
-            rug_new: 0,
-            rug_viewed: 0,
-            rug_trending: 0,
-            rug_verified: 0,
-            gecko_updated: 0,
-            gecko_trending: 0,
-            jupiter_tokens: 0,
-            jupiter_top_organic: 0,
-            jupiter_top_traded: 0,
-            jupiter_top_trending: 0,
-            coingecko_markets: 0,
-            defillama_protocols: 0,
-        },
-        last_error: None,
-    })
+    // Token discovery service stats are not available; the section stays hidden.
+    None
 }
 
 pub(super) async fn collect_dexscreener_status_snapshot() -> Option<DexscreenerStatusSnapshot> {
@@ -510,7 +460,7 @@ pub(super) async fn collect_transactions_snapshot() -> Option<TransactionsStatus
     let mut last_signature_check: Option<String> = None;
     let mut pending_entries: Vec<(String, chrono::DateTime<Utc>)> = Vec::new();
     let mut deferred_retries: u64 = 0;
-    let mut db_arc = None;
+    let mut db_arc;
 
     if let Some(manager_arc) = crate::transactions::get_global_transaction_manager().await {
         let manager = manager_arc.lock().await;

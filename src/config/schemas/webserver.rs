@@ -6,7 +6,6 @@
 // Webserver configuration schema
 
 use crate::config::metadata::ConfigCategory;
-use crate::config_struct;
 use crate::field_metadata;
 
 // ============================================================================

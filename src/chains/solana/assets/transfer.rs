@@ -18,9 +18,9 @@ use crate::chains::solana::solana_sdk::{
     pubkey::Pubkey,
     signature::Keypair,
     signer::Signer,
-    system_instruction,
     transaction::Transaction,
 };
+use crate::chains::solana::solana_system_interface::instruction as system_instruction;
 use crate::chains::solana::swaps::presend::send_and_settle_signed;
 use crate::chains::solana::{Error, Result};
 use crate::logger::{self, LogTag};

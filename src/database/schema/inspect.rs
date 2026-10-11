@@ -33,6 +33,16 @@ pub fn table_columns(conn: &Connection, table: &str) -> rusqlite::Result<Vec<Col
     table_columns_in(conn, "main", table)
 }
 
+/// How many columns of `table` form its primary key; zero for a table without one and for a
+/// missing table. A composite key spans two or more.
+pub fn primary_key_width(conn: &Connection, table: &str) -> rusqlite::Result<usize> {
+    conn.query_row(
+        "SELECT COUNT(*) FROM pragma_table_info(?1) WHERE pk > 0",
+        [table],
+        |row| row.get(0),
+    )
+}
+
 /// [`table_columns`] of `table` in the attached database `schema`.
 pub fn table_columns_in(
     conn: &Connection,
@@ -92,6 +102,11 @@ mod tests {
         assert!(table_has_column(&conn, "t", "b").expect("inspect"));
         assert!(!table_has_column(&conn, "t", "z").expect("inspect"));
         assert!(table_exists(&conn, "t").expect("inspect"));
+        assert_eq!(primary_key_width(&conn, "t").expect("inspect"), 0);
+        conn.execute_batch("CREATE TABLE keyed (a TEXT, b TEXT, c TEXT, PRIMARY KEY (a, b))")
+            .expect("create keyed table");
+        assert_eq!(primary_key_width(&conn, "keyed").expect("inspect"), 2);
+        assert_eq!(primary_key_width(&conn, "missing").expect("inspect"), 0);
         assert!(!table_exists(&conn, "missing").expect("inspect"));
         assert!(table_columns(&conn, "missing")
             .expect("inspect missing table")

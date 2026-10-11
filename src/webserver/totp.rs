@@ -8,7 +8,7 @@
 
 use base64::{engine::general_purpose::STANDARD as BASE64, Engine};
 use qrcode::{render::svg, QrCode};
-use totp_rs::{Algorithm, Secret, TOTP};
+use totp_rs::{Algorithm, Builder, Secret, Totp};
 
 use super::{Error, Result};
 
@@ -26,7 +26,7 @@ pub fn generate_secret() -> String {
 }
 
 /// Create a TOTP instance from a base32-encoded secret
-fn create_totp(secret: &str, account: &str, issuer: &str) -> Result<TOTP> {
+fn create_totp(secret: &str, account: &str, issuer: &str) -> Result<Totp> {
     let secret = Secret::try_from_base32(secret)
         .map_err(|e| Error::TotpSecret {
             operation: "decode",
@@ -35,19 +35,19 @@ fn create_totp(secret: &str, account: &str, issuer: &str) -> Result<TOTP> {
         .as_bytes()
         .to_vec();
 
-    TOTP::new(
-        TOTP_ALGORITHM,
-        TOTP_DIGITS,
-        TOTP_SKEW,
-        TOTP_STEP,
-        secret,
-        Some(issuer.to_string()),
-        account.to_string(),
-    )
-    .map_err(|e| Error::TotpSecret {
-        operation: "create",
-        detail: e.to_string(),
-    })
+    Builder::new()
+        .with_algorithm(TOTP_ALGORITHM)
+        .with_digits(TOTP_DIGITS as u8)
+        .with_skew(u16::from(TOTP_SKEW))
+        .with_step_duration(TOTP_STEP)
+        .with_secret(secret)
+        .with_account_name(account)
+        .with_issuer(Some(issuer))
+        .build()
+        .map_err(|e| Error::TotpSecret {
+            operation: "create",
+            detail: e.to_string(),
+        })
 }
 
 /// Generate an otpauth:// URI for use with authenticator apps
@@ -55,7 +55,10 @@ fn create_totp(secret: &str, account: &str, issuer: &str) -> Result<TOTP> {
 /// This URI can be encoded as a QR code for easy setup.
 pub fn get_totp_uri(secret: &str, account: &str) -> Result<String> {
     let totp = create_totp(secret, account, "ScreenerBot")?;
-    Ok(totp.get_url())
+    totp.to_url().map_err(|e| Error::TotpSecret {
+        operation: "encode",
+        detail: e.to_string(),
+    })
 }
 
 /// Verify a TOTP code against the secret

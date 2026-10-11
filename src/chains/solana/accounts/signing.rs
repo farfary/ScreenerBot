@@ -31,7 +31,7 @@ static MAIN_KEYPAIR_CACHE: LazyLock<RwLock<Option<CachedMainKeypair>>> =
     LazyLock::new(|| RwLock::new(None));
 
 fn clone_keypair(keypair: &Keypair) -> Result<Keypair> {
-    Keypair::from_bytes(&keypair.to_bytes()).map_err(|e| Error::InvalidKeypair {
+    Keypair::try_from(&keypair.to_bytes()[..]).map_err(|e| Error::InvalidKeypair {
         detail: format!("failed to clone keypair: {e}"),
     })
 }

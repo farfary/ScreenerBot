@@ -6837,6 +6837,7 @@ dependencies = [
  "solana-packet",
  "solana-program",
  "solana-sdk",
+ "solana-system-interface",
  "solana-transaction-status",
  "spl-associated-token-account 6.0.0",
  "spl-token 8.0.0",

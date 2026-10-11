@@ -50,8 +50,8 @@ pub use dashboard::get_wallet_dashboard_data;
 /// Rename declarations, reached by the schema owner's cross-store guard.
 #[cfg(test)]
 pub(crate) use database::column_names;
-pub(crate) use database::SCHEMA;
 pub use database::{get_wallet_service_metrics, is_wallet_database_ready};
+pub(crate) use database::{recorded_wallet_sql, SCHEMA};
 
 // The single source of truth for what the wallet is worth, and the hook that keeps
 // it live. Every user-facing wallet figure goes through `get_wallet_worth()`.

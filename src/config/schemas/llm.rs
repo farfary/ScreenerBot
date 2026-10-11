@@ -8,7 +8,6 @@
 //! dashboard assistant in `assistant`, and tool permissions in `agent_control`.
 
 use crate::config::metadata::{ConfigCategory, ConfigImpact};
-use crate::config_struct;
 use crate::field_metadata;
 
 config_struct! {

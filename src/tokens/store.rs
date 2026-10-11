@@ -59,9 +59,7 @@ impl TokenStore {
     }
 
     fn get(&self, chain: ChainId, mint: &str) -> Option<Token> {
-        let mut stale_marker: Option<Instant> = None;
-
-        {
+        let stale_marker: Option<Instant> = {
             let guard = self.entries.read().expect("token store poisoned");
             let entry = match guard.get(&(chain, mint.to_owned())) {
                 Some(entry) => entry,
@@ -72,8 +70,8 @@ impl TokenStore {
                 return Some(entry.token.clone());
             }
 
-            stale_marker = Some(entry.refreshed_at);
-        }
+            Some(entry.refreshed_at)
+        };
 
         if let Some(expected_refreshed_at) = stale_marker {
             let mut guard = self.entries.write().expect("token store poisoned");

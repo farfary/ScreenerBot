@@ -33,6 +33,26 @@ use schema::{
     WALLET_INDEXES, WALLET_SCHEMA_VERSION,
 };
 
+/// The `wallet_metadata` key older builds recorded the wallet under, before the keys were
+/// chain-scoped.
+const LEGACY_CURRENT_WALLET_KEY: &str = "current_wallet";
+
+/// The `wallet_metadata` key under which `chain`'s database records the wallet its rows
+/// describe.
+fn current_wallet_key(chain: ChainId) -> String {
+    format!("{LEGACY_CURRENT_WALLET_KEY}:{}", chain.as_str())
+}
+
+/// SQL expression evaluating to the wallet `chain` has recorded in `metadata_table`: the
+/// chain-scoped key, else the legacy key, else the empty string.
+pub(crate) fn recorded_wallet_sql(metadata_table: &str, chain: ChainId) -> String {
+    let scoped = current_wallet_key(chain);
+    format!(
+        "COALESCE((SELECT value FROM {metadata_table} WHERE key = '{scoped}'), \
+         (SELECT value FROM {metadata_table} WHERE key = '{LEGACY_CURRENT_WALLET_KEY}'), '')"
+    )
+}
+
 // =============================================================================
 // GLOBAL DATABASE INSTANCE
 // =============================================================================
@@ -145,10 +165,7 @@ impl WalletDatabase {
         self.get_connection()?
             .execute(
                 "INSERT OR REPLACE INTO wallet_metadata (key, value) VALUES (?1, ?2)",
-                params![
-                    format!("current_wallet:{}", self.chain.as_str()),
-                    self.subject
-                ],
+                params![current_wallet_key(self.chain), self.subject],
             )
             .map_err(|e| DatabaseError::classify_sqlite_failure("record current wallet", e))?;
         Ok(())
@@ -362,7 +379,7 @@ impl WalletDatabase {
             ),
         ];
 
-        conn.execute_batch("CREATE TABLE wallet_snapshots__chain_v1 (id INTEGER PRIMARY KEY AUTOINCREMENT, chain_id TEXT NOT NULL DEFAULT 'solana', wallet_address TEXT NOT NULL, snapshot_time TEXT NOT NULL, native_balance REAL NOT NULL, native_balance_raw INTEGER NOT NULL, total_equity_native REAL, total_tokens_count INTEGER NOT NULL DEFAULT 0, total_nfts_count INTEGER NOT NULL DEFAULT 0, created_at TEXT NOT NULL DEFAULT (datetime('now'))); INSERT INTO wallet_snapshots__chain_v1 (id, chain_id, wallet_address, snapshot_time, native_balance, native_balance_raw, total_equity_native, total_tokens_count, total_nfts_count, created_at) SELECT id, 'solana', wallet_address, snapshot_time, native_balance, native_balance_raw, total_equity_native, total_tokens_count, total_nfts_count, created_at FROM wallet_snapshots; DROP TABLE wallet_snapshots; ALTER TABLE wallet_snapshots__chain_v1 RENAME TO wallet_snapshots; CREATE TABLE native_flow_cache__chain_v1 (chain_id TEXT NOT NULL DEFAULT 'solana', wallet_address TEXT NOT NULL DEFAULT '', signature TEXT NOT NULL, timestamp TEXT NOT NULL, native_delta REAL NOT NULL DEFAULT 0, created_at TEXT NOT NULL DEFAULT (datetime('now')), PRIMARY KEY(chain_id, wallet_address, signature)); INSERT INTO native_flow_cache__chain_v1 (chain_id, wallet_address, signature, timestamp, native_delta, created_at) SELECT 'solana', COALESCE((SELECT value FROM wallet_metadata WHERE key = 'current_wallet'), ''), signature, timestamp, native_delta, created_at FROM native_flow_cache; DROP TABLE native_flow_cache; ALTER TABLE native_flow_cache__chain_v1 RENAME TO native_flow_cache; CREATE TABLE wallet_dashboard_metrics__chain_v1 (chain_id TEXT NOT NULL DEFAULT 'solana', wallet_address TEXT NOT NULL DEFAULT '', window_key TEXT NOT NULL, window_hours INTEGER NOT NULL, snapshot_limit INTEGER NOT NULL, token_limit INTEGER NOT NULL, payload_blob BLOB NOT NULL, payload_format TEXT NOT NULL DEFAULT 'json-gzip', computed_at TEXT NOT NULL, valid_until TEXT NOT NULL, computation_duration_ms INTEGER, snapshot_count INTEGER NOT NULL DEFAULT 0, flow_cache_rows INTEGER NOT NULL DEFAULT 0, last_processed_timestamp TEXT, last_processed_signature TEXT, window_start TEXT, created_at TEXT NOT NULL DEFAULT (datetime('now')), updated_at TEXT NOT NULL DEFAULT (datetime('now')), PRIMARY KEY(chain_id, wallet_address, window_key)); INSERT INTO wallet_dashboard_metrics__chain_v1 (chain_id, wallet_address, window_key, window_hours, snapshot_limit, token_limit, payload_blob, payload_format, computed_at, valid_until, computation_duration_ms, snapshot_count, flow_cache_rows, last_processed_timestamp, last_processed_signature, window_start, created_at, updated_at) SELECT 'solana', COALESCE((SELECT value FROM wallet_metadata WHERE key = 'current_wallet'), ''), window_key, window_hours, snapshot_limit, token_limit, payload_blob, payload_format, computed_at, valid_until, computation_duration_ms, snapshot_count, flow_cache_rows, last_processed_timestamp, last_processed_signature, window_start, created_at, updated_at FROM wallet_dashboard_metrics; DROP TABLE wallet_dashboard_metrics; ALTER TABLE wallet_dashboard_metrics__chain_v1 RENAME TO wallet_dashboard_metrics;")
+        conn.execute_batch(&format!("CREATE TABLE wallet_snapshots__chain_v1 (id INTEGER PRIMARY KEY AUTOINCREMENT, chain_id TEXT NOT NULL DEFAULT 'solana', wallet_address TEXT NOT NULL, snapshot_time TEXT NOT NULL, native_balance REAL NOT NULL, native_balance_raw INTEGER NOT NULL, total_equity_native REAL, total_tokens_count INTEGER NOT NULL DEFAULT 0, total_nfts_count INTEGER NOT NULL DEFAULT 0, created_at TEXT NOT NULL DEFAULT (datetime('now'))); INSERT INTO wallet_snapshots__chain_v1 (id, chain_id, wallet_address, snapshot_time, native_balance, native_balance_raw, total_equity_native, total_tokens_count, total_nfts_count, created_at) SELECT id, 'solana', wallet_address, snapshot_time, native_balance, native_balance_raw, total_equity_native, total_tokens_count, total_nfts_count, created_at FROM wallet_snapshots; DROP TABLE wallet_snapshots; ALTER TABLE wallet_snapshots__chain_v1 RENAME TO wallet_snapshots; CREATE TABLE native_flow_cache__chain_v1 (chain_id TEXT NOT NULL DEFAULT 'solana', wallet_address TEXT NOT NULL DEFAULT '', signature TEXT NOT NULL, timestamp TEXT NOT NULL, native_delta REAL NOT NULL DEFAULT 0, created_at TEXT NOT NULL DEFAULT (datetime('now')), PRIMARY KEY(chain_id, wallet_address, signature)); INSERT INTO native_flow_cache__chain_v1 (chain_id, wallet_address, signature, timestamp, native_delta, created_at) SELECT 'solana', COALESCE((SELECT value FROM wallet_metadata WHERE key = '{LEGACY_CURRENT_WALLET_KEY}'), ''), signature, timestamp, native_delta, created_at FROM native_flow_cache; DROP TABLE native_flow_cache; ALTER TABLE native_flow_cache__chain_v1 RENAME TO native_flow_cache; CREATE TABLE wallet_dashboard_metrics__chain_v1 (chain_id TEXT NOT NULL DEFAULT 'solana', wallet_address TEXT NOT NULL DEFAULT '', window_key TEXT NOT NULL, window_hours INTEGER NOT NULL, snapshot_limit INTEGER NOT NULL, token_limit INTEGER NOT NULL, payload_blob BLOB NOT NULL, payload_format TEXT NOT NULL DEFAULT 'json-gzip', computed_at TEXT NOT NULL, valid_until TEXT NOT NULL, computation_duration_ms INTEGER, snapshot_count INTEGER NOT NULL DEFAULT 0, flow_cache_rows INTEGER NOT NULL DEFAULT 0, last_processed_timestamp TEXT, last_processed_signature TEXT, window_start TEXT, created_at TEXT NOT NULL DEFAULT (datetime('now')), updated_at TEXT NOT NULL DEFAULT (datetime('now')), PRIMARY KEY(chain_id, wallet_address, window_key)); INSERT INTO wallet_dashboard_metrics__chain_v1 (chain_id, wallet_address, window_key, window_hours, snapshot_limit, token_limit, payload_blob, payload_format, computed_at, valid_until, computation_duration_ms, snapshot_count, flow_cache_rows, last_processed_timestamp, last_processed_signature, window_start, created_at, updated_at) SELECT 'solana', COALESCE((SELECT value FROM wallet_metadata WHERE key = '{LEGACY_CURRENT_WALLET_KEY}'), ''), window_key, window_hours, snapshot_limit, token_limit, payload_blob, payload_format, computed_at, valid_until, computation_duration_ms, snapshot_count, flow_cache_rows, last_processed_timestamp, last_processed_signature, window_start, created_at, updated_at FROM wallet_dashboard_metrics; DROP TABLE wallet_dashboard_metrics; ALTER TABLE wallet_dashboard_metrics__chain_v1 RENAME TO wallet_dashboard_metrics;"))
             .map_err(|e| DatabaseError::classify_sqlite_failure("rebuild wallet-monitor tables by chain", e))?;
 
         for (table, count) in expected {
