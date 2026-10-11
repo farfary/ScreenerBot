@@ -29,7 +29,7 @@ pub struct CalendarDay {
     pub trades: i64,
     /// Number of profitable positions closed that day.
     pub wins: i64,
-    /// End-of-day wallet SOL balance, if a snapshot exists for that day.
+    /// End-of-day wallet worth (cash + holdings), if a snapshot exists for that day.
     pub portfolio_value_native: Option<f64>,
     /// Whether the day has any P&L or trade activity.
     pub has_data: bool,
@@ -47,6 +47,47 @@ pub struct PortfolioCalendarResponse {
     pub days: Vec<CalendarDay>,
     pub month_net_pnl_native: f64,
     pub month_trades: i64,
+    /// Days that closed with a net realized profit.
+    pub month_win_days: u32,
+    /// Days that closed with a net realized loss.
+    pub month_loss_days: u32,
+    /// The day with the largest net realized profit; None without a profitable day.
+    pub best_day: Option<CalendarBestDay>,
+}
+
+/// The month's most profitable day.
+#[derive(Debug, Serialize, Deserialize)]
+pub struct CalendarBestDay {
+    /// Full date, YYYY-MM-DD (UTC).
+    pub date: String,
+    pub net_pnl_native: f64,
+}
+
+impl PortfolioCalendarResponse {
+    /// The month's response with its totals summed from `days`, so the footer and the
+    /// cells can never disagree.
+    pub fn from_days(year: i32, month: u32, first_weekday: u32, days: Vec<CalendarDay>) -> Self {
+        let traded = || days.iter().filter(|day| day.has_data);
+        let best_day = traded()
+            .filter(|day| day.net_pnl_native > 0.0)
+            .max_by(|a, b| a.net_pnl_native.total_cmp(&b.net_pnl_native))
+            .map(|day| CalendarBestDay {
+                date: day.date.clone(),
+                net_pnl_native: day.net_pnl_native,
+            });
+        Self {
+            year,
+            month,
+            first_weekday,
+            days_in_month: days.len() as u32,
+            month_net_pnl_native: days.iter().map(|day| day.net_pnl_native).sum(),
+            month_trades: days.iter().map(|day| day.trades).sum(),
+            month_win_days: traded().filter(|day| day.net_pnl_native > 0.0).count() as u32,
+            month_loss_days: traded().filter(|day| day.net_pnl_native < 0.0).count() as u32,
+            best_day,
+            days,
+        }
+    }
 }
 
 // ============================================================================
@@ -193,23 +234,45 @@ pub struct WalletAnalytics {
     pub unpriced_token_count: Option<usize>,
     /// Wallet WORTH at 00:00 UTC today — the change baseline (same quantity as the
     /// headline; using cash here reported a phantom gain the size of the holdings).
-    /// None until a snapshot from today exists, as in the header.
+    /// None without a snapshot at or before the start of the day.
     pub start_of_day_balance_native: Option<f64>,
-    /// total_equity_native - start_of_day_balance_native; None without a baseline or a
-    /// current worth.
+    /// Whether `change_native` could be measured, and if not, why.
+    pub change_status: WorthChangeStatus,
+    /// total_equity_native - start_of_day_balance_native, set only when both price the
+    /// same holdings (`change_status` is `known`): a token entering or leaving pricing
+    /// is never a gain or a loss.
     pub change_native: Option<f64>,
-    /// None without a positive baseline.
+    /// None unless the change is known and the baseline is positive.
     pub change_percent: Option<f64>,
     /// Current SOL/USD price so the client can render an approximate USD value.
     pub native_price_usd: f64,
-    /// Recent wallet WORTH samples, OLDEST first, for a trend sparkline.
+    /// Wallet WORTH since 00:00 UTC today, OLDEST first, for the trend sparkline: the
+    /// start-of-day worth, one sample per bucket that priced the same holdings as the
+    /// live worth, then the live worth. Its first and last points are the two figures
+    /// the day change compares; empty unless the change is known.
     pub balance_history: Vec<f64>,
+}
+
+/// Whether the hero's day change could be measured.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case")]
+pub enum WorthChangeStatus {
+    /// Like-for-like change against the start of the day.
+    Known,
+    /// No live worth yet, or no snapshot at or before the start of the day.
+    NoBaseline,
+    /// The start of the day and now price different holdings, so the two worths are
+    /// not comparable.
+    Incomparable,
 }
 
 #[derive(Debug, Serialize, Deserialize)]
 pub struct PositionsSnapshot {
     pub open_count: i64,
     pub total_invested_native: f64,
+    /// Cost basis plus unrealized P&L of the positions with a cost basis; None while
+    /// any of them has no price yet, since its value would be unknown.
+    pub current_value_native: Option<f64>,
     pub unrealized_pnl_native: f64,
     /// None while no open position has a cost basis.
     pub unrealized_pnl_percent: Option<f64>,
@@ -224,6 +287,9 @@ pub struct PositionsSnapshot {
 
 #[derive(Debug, Serialize, Deserialize)]
 pub struct PositionPerformer {
+    /// Database id, which opens the position's details; None only for a row not yet stored.
+    pub id: Option<i64>,
+    pub mint: String,
     pub symbol: String,
     pub pnl_percent: f64,
 }
@@ -250,8 +316,15 @@ pub struct TokenStatistics {
     /// database-backed totals (`total_in_database`, `found_all_time`) are always real.
     pub snapshot_state: SnapshotState,
     pub total_in_database: usize,
+    /// Tokens with market data in the filtering snapshot: the set the filters evaluate,
+    /// and the header's "monitoring" count.
+    pub monitored: Option<usize>,
+    /// Tokens the pool service holds a live price for right now (the prices trading
+    /// uses); None while the pool service is not running.
     pub with_prices: Option<usize>,
     pub passed_filters: Option<usize>,
+    /// Monitored tokens that did not pass (blacklisted ones included), the header's
+    /// "rejected" count.
     pub rejected_filters: Option<usize>,
     pub blacklisted: Option<usize>,
     pub with_ohlcv: Option<usize>,

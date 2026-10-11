@@ -1,7 +1,7 @@
 // Copyright (c) 2024-2026 ScreenerBot (screenerbot.io)
 // SPDX-License-Identifier: BUSL-1.1
 //
-// Portfolio calendar — month grid of daily realized P&L + end-of-day portfolio value.
+// Portfolio calendar — month grid of daily realized P&L and weekly totals, with a per-day detail popover.
 import { firstDayOfWeek, formatMonthYear, formatWeekday } from "../../core/format.js";
 import * as Utils from "../../core/utils.js";
 
@@ -9,11 +9,14 @@ import * as Utils from "../../core/utils.js";
 // every locale (fa would otherwise name the Persian month over Gregorian days).
 const GRID_CALENDAR = "gregory";
 
-// A day cell has room for 3 decimals; its tone follows that rounding. The month summary
-// and the day popover use the SOL formatters' own precision, as the rest of Home does.
-const CELL_PNL_DECIMALS = 3;
 const PNL_CLASSES = Object.freeze({ positive: "profit", negative: "loss", neutral: "flat" });
 const POPOVER_PNL_CLASSES = Object.freeze({ positive: "profit", negative: "loss", neutral: "" });
+const POPOVER_ID = "homeCalendarDayPopover";
+const DAYS_PER_WEEK = 7;
+// Tint of a traded day, as a share of the profit or loss colour mixed into the cell:
+// the faintest day starts at the floor, the month's largest reaches floor + span.
+const TINT_FLOOR = 8;
+const TINT_SPAN = 18;
 
 /**
  * Create a portfolio calendar controller bound to the home page DOM.
@@ -25,11 +28,12 @@ export function createCalendar(fetcher) {
   let year = now.getUTCFullYear();
   let month = now.getUTCMonth() + 1; // 1-12
   let lastKey = null;
-  let lastData = null;
   const cleanups = [];
   // Per-day detail lookup (date -> day object) + shared hover popover element.
   const dayMap = new Map();
   let popoverEl = null;
+  // The day cell whose detail the popover shows.
+  let activeCell = null;
 
   const grid = () => document.getElementById("portfolioCalendarGrid");
   const monthLabel = () => document.getElementById("calendarMonthLabel");
@@ -58,6 +62,23 @@ export function createCalendar(fetcher) {
     };
   }
 
+  // Lay a month out in week rows: blanks before the 1st and after the last day, so
+  // every row holds seven cells, each row closed by its week cell.
+  function weekRows(leading, dayCells, weekCell) {
+    const slots = [
+      ...Array.from({ length: leading }, () => null),
+      ...dayCells,
+    ];
+    while (slots.length % DAYS_PER_WEEK !== 0) slots.push(null);
+    const html = [];
+    for (let start = 0; start < slots.length; start += DAYS_PER_WEEK) {
+      const week = slots.slice(start, start + DAYS_PER_WEEK);
+      for (const cell of week) html.push(cell ? cell.html : '<div class="calendar-cell blank"></div>');
+      html.push(weekCell(week.filter(Boolean)));
+    }
+    return html.join("");
+  }
+
   // Render an immediate structural skeleton (same grid shape as loaded data)
   // so the card never shows as an empty/confusing box while the fetch is in flight.
   function renderSkeleton() {
@@ -69,18 +90,19 @@ export function createCalendar(fetcher) {
     if (labelEl) labelEl.textContent = formatMonthYear(year, month, { calendar: GRID_CALENDAR });
 
     const todayIso = new Date().toISOString().slice(0, 10);
-    const cells = [];
-    for (let i = 0; i < leadingBlanks(firstWeekday); i++) {
-      cells.push('<div class="calendar-cell blank"></div>');
-    }
+    const days = [];
     for (let d = 1; d <= daysInMonth; d++) {
       const date = `${year}-${String(month).padStart(2, "0")}-${String(d).padStart(2, "0")}`;
       let cls = "calendar-cell skeleton";
       if (date === todayIso) cls += " today";
       else if (date > todayIso) cls += " future";
-      cells.push(`<div class="${cls}"><span class="cell-day">${d}</span></div>`);
+      days.push({ html: `<div class="${cls}"><span class="cell-day">${d}</span></div>` });
     }
-    gridEl.innerHTML = cells.join("");
+    gridEl.innerHTML = weekRows(
+      leadingBlanks(firstWeekday),
+      days,
+      () => '<div class="calendar-week skeleton"></div>'
+    );
   }
 
   async function load() {
@@ -97,18 +119,26 @@ export function createCalendar(fetcher) {
     }
   }
 
+  // A week's total: the realized P&L of its traded days, blank for a week without trades.
+  function weekCellHtml(days) {
+    const traded = days.filter((cell) => cell.day.has_data);
+    if (traded.length === 0) return '<div class="calendar-week"></div>';
+    const total = traded.reduce((sum, cell) => sum + (cell.day.net_pnl_native || 0), 0);
+    const tone = PNL_CLASSES[Utils.signedTone(total)];
+    return (
+      `<div class="calendar-week ${tone}">` +
+      `<span class="cell-pnl">${Utils.formatSignedSol(total, { unit: false })}</span></div>`
+    );
+  }
+
   function render(data) {
     const gridEl = grid();
     if (!gridEl || !data) return;
-    lastData = data;
 
-    // Skip redraw when nothing changed (avoids flicker / scroll reset). Theme is
-    // part of the key so a light/dark switch re-tints the cells (intensity differs).
-    const theme = document.documentElement.getAttribute("data-theme") || "dark";
-    const key = `${theme}|${JSON.stringify(data)}`;
+    // Skip redraw when nothing changed (avoids flicker and a lost keyboard focus).
+    const key = JSON.stringify(data);
     if (key === lastKey) return;
     lastKey = key;
-    const isLight = theme === "light";
 
     const labelEl = monthLabel();
     if (labelEl) {
@@ -123,78 +153,102 @@ export function createCalendar(fetcher) {
     }
 
     const todayIso = new Date().toISOString().slice(0, 10);
-    const cells = [];
+    const focusedDate = gridEl.contains(document.activeElement)
+      ? document.activeElement.dataset.date
+      : null;
     dayMap.clear();
 
-    // Leading blanks so the 1st lands on the correct weekday.
-    for (let i = 0; i < leadingBlanks(data.first_weekday); i++) {
-      cells.push('<div class="calendar-cell blank"></div>');
-    }
-
-    for (const d of data.days) {
+    const days = data.days.map((d) => {
       const pnl = d.net_pnl_native || 0;
       const isFuture = d.date > todayIso;
-      const isToday = d.date === todayIso;
       let cls = "calendar-cell";
       if (isFuture) cls += " future";
-      if (isToday) cls += " today";
-      // A past day without trades still shows its end balance; it is a quiet day,
-      // not an empty one.
+      if (d.date === todayIso) cls += " today";
+      // A past day without trades is a quiet day, not an empty one.
       if (!d.has_data && !isFuture) cls += " no-trades";
-      const tone = Utils.signedTone(pnl, CELL_PNL_DECIMALS);
-      if (tone === "positive") cls += " profit";
-      else if (tone === "negative") cls += " loss";
+      const tone = d.has_data ? Utils.signedTone(pnl) : "neutral";
+      if (tone !== "neutral") cls += ` ${PNL_CLASSES[tone]}`;
 
-      // Heatmap tint intensity relative to the month's largest absolute P&L.
-      // Uses a sqrt curve + a solid floor so even a faint day reads as clearly
-      // green/red rather than a muddy near-black tint. Light theme needs a much
-      // higher floor: the tint sits over a WHITE card, so a low alpha yields a
-      // pale pastel that white cell text can't sit on. Keep it saturated so the
-      // white text (matching dark theme) always reads.
-      let style = "";
-      if (d.has_data && maxAbs > 0 && tone !== "neutral") {
-        const ratio = Math.sqrt(Math.abs(pnl) / maxAbs);
-        const intensity = isLight
-          ? Math.min(0.96, 0.78 + ratio * 0.18)
-          : Math.min(0.9, 0.35 + ratio * 0.55);
-        const rgb = tone === "positive" ? "63, 185, 80" : "248, 81, 73";
-        style = ` style="background: rgba(${rgb}, ${intensity.toFixed(3)});"`;
-      }
-
-      const pnlText = d.has_data
-        ? Utils.formatSignedSol(pnl, { decimals: CELL_PNL_DECIMALS, unit: false })
-        : "";
-      const valText =
-        d.portfolio_value_native != null
-          ? `${Utils.formatSol(d.portfolio_value_native, { decimals: 2, suffix: "" })}`
+      // Tint intensity relative to the month's largest absolute P&L, on a sqrt curve
+      // so a small day still reads as green or red.
+      const style =
+        tone !== "neutral" && maxAbs > 0
+          ? ` style="--cell-tint: ${(TINT_FLOOR + Math.sqrt(Math.abs(pnl) / maxAbs) * TINT_SPAN).toFixed(1)}%"`
           : "";
 
-      // Every day that shows a figure is hoverable, so the popover names it.
+      // Every day with a detail (trades, or an end-of-day worth) opens it on hover,
+      // keyboard focus or a tap.
       const hasDetail = d.has_data || d.portfolio_value_native != null;
-      const detailAttr = hasDetail ? ` data-date="${d.date}"` : "";
       if (hasDetail) dayMap.set(d.date, d);
+      const detailAttr = hasDetail
+        ? ` data-date="${d.date}" tabindex="0" aria-label="${Utils.escapeHtml(dayLabel(d))}"`
+        : "";
+      const pnlText = d.has_data ? Utils.formatSignedSol(pnl, { unit: false }) : "";
 
-      cells.push(
-        `<div class="${cls}"${style}${detailAttr}>` +
+      return {
+        day: d,
+        html:
+          `<div class="${cls}"${style}${detailAttr}>` +
           `<span class="cell-day">${d.day}</span>` +
           (pnlText ? `<span class="cell-pnl">${pnlText}</span>` : "") +
-          (valText ? `<span class="cell-value">${valText}</span>` : "") +
-          "</div>"
-      );
-    }
+          "</div>",
+      };
+    });
 
-    hidePopover(); // avoid a stale popover pinned to a cell we're about to replace
-    gridEl.innerHTML = cells.join("");
+    // A refresh (today's worth moves the day's end balance) rebuilds the cells; an open
+    // day detail moves to its new cell with fresh figures instead of closing.
+    const openDate =
+      activeCell && popoverEl && !popoverEl.hidden ? activeCell.dataset.date : null;
+    gridEl.innerHTML = weekRows(leadingBlanks(data.first_weekday), days, weekCellHtml);
+    activeCell = null;
+    if (focusedDate) gridEl.querySelector(`[data-date="${focusedDate}"]`)?.focus();
+    const reopened = openDate ? gridEl.querySelector(`[data-date="${openDate}"]`) : null;
+    if (reopened) showPopover(reopened);
+    else hidePopover();
 
     const pnlEl = document.getElementById("calendarMonthPnl");
     if (pnlEl) {
       const mp = data.month_net_pnl_native || 0;
-      const cls = PNL_CLASSES[Utils.signedTone(mp)];
       pnlEl.textContent = Utils.formatSignedSol(mp);
-      pnlEl.className = `calendar-summary-value ${cls}`;
+      pnlEl.className = `calendar-summary-value ${PNL_CLASSES[Utils.signedTone(mp)]}`;
     }
-    const tradesEl = document.getElementById("calendarMonthTrades");
-    if (tradesEl) tradesEl.textContent = Utils.formatNumber(data.month_trades ?? 0, 0);
+    const setCount = (id, value) => {
+      const el = document.getElementById(id);
+      if (el) el.textContent = Utils.formatNumber(value ?? 0, 0);
+    };
+    setCount("calendarMonthTrades", data.month_trades);
+    setCount("calendarWinDays", data.month_win_days);
+    setCount("calendarLossDays", data.month_loss_days);
+    const bestEl = document.getElementById("calendarBestDay");
+    if (bestEl) {
+      const best = data.best_day;
+      bestEl.className = `calendar-summary-value ${best ? "profit" : ""}`;
+      bestEl.innerHTML = best
+        ? `<span class="calendar-best-date">${Utils.escapeHtml(dayDate(best.date))}</span> ` +
+          Utils.escapeHtml(Utils.formatSignedSol(best.net_pnl_native))
+        : "—";
+    }
+  }
+
+  // "Mon, Oct 5" in UTC, the calendar's own day.
+  function dayDate(date, weekday = false) {
+    return Utils.formatDate(new Date(`${date}T00:00:00Z`), {
+      includeYear: false,
+      weekday,
+      utc: true,
+      calendar: GRID_CALENDAR,
+    });
+  }
+
+  // The accessible name of a day cell: its date, and its P&L when it traded.
+  function dayLabel(d) {
+    const date = dayDate(d.date, true);
+    return d.has_data
+      ? I18n.t("home-calendar-day-label", {
+          date,
+          pnl: Utils.formatSignedSol(d.net_pnl_native || 0),
+        })
+      : date;
   }
 
   function shiftMonth(delta) {
@@ -207,6 +261,7 @@ export function createCalendar(fetcher) {
       year -= 1;
     }
     lastKey = null; // force redraw for the new month
+    hidePopover(); // its day is not in the month about to show
     renderSkeleton(); // show the new month's structure immediately
     load();
   }
@@ -216,12 +271,13 @@ export function createCalendar(fetcher) {
     if (nextBtn) nextBtn.disabled = isCurrentMonth();
   }
 
-  // ===== Hover detail popover (traded days only) =====
+  // ===== Day detail popover (hover, keyboard focus or tap) =====
 
   function ensurePopover() {
     if (popoverEl) return popoverEl;
     popoverEl = document.createElement("div");
     popoverEl.className = "cal-day-popover";
+    popoverEl.id = POPOVER_ID;
     popoverEl.setAttribute("role", "tooltip");
     popoverEl.hidden = true;
     document.body.appendChild(popoverEl);
@@ -239,12 +295,6 @@ export function createCalendar(fetcher) {
     const pnl = d.net_pnl_native || 0;
     const pnlCls = POPOVER_PNL_CLASSES[Utils.signedTone(pnl)];
     const dt = new Date(`${d.date}T00:00:00Z`);
-    const dateStr = Utils.formatDate(dt, {
-      includeYear: false,
-      weekday: true,
-      utc: true,
-      calendar: GRID_CALENDAR,
-    });
     const trades = d.trades || 0;
     const wins = d.wins || 0;
     const losses = Math.max(0, trades - wins);
@@ -288,27 +338,28 @@ export function createCalendar(fetcher) {
     }
 
     return (
-      `<div class="cal-pop-head"><span class="cal-pop-date">${dateStr}</span>` +
+      `<div class="cal-pop-head"><span class="cal-pop-date">${dayDate(d.date, true)}</span>` +
       `<span class="cal-pop-year">${dt.getUTCFullYear()}</span></div>` +
       `<div class="cal-pop-body">${rows.join("")}</div>`
     );
   }
 
+  // Above the cell when it fits below the weekday row, otherwise below it, so the
+  // popover never covers the month navigation; clamped to the viewport.
   function positionPopover(cell) {
     const el = ensurePopover();
     const m = 8;
     const vw = document.documentElement.clientWidth;
     const vh = document.documentElement.clientHeight;
     const rect = cell.getBoundingClientRect();
+    const ceiling = Math.max(m, grid()?.getBoundingClientRect().top ?? m);
     const pw = el.offsetWidth;
     const ph = el.offsetHeight;
 
-    // Prefer above the cell; flip below if it doesn't fit.
     let top = rect.top - ph - m;
-    if (top < m) top = rect.bottom + m;
+    if (top < ceiling) top = rect.bottom + m;
     if (top + ph > vh - m) top = Math.max(m, vh - ph - m);
 
-    // Center horizontally over the cell, clamped to the viewport.
     let left = rect.left + rect.width / 2 - pw / 2;
     left = Math.max(m, Math.min(left, vw - pw - m));
 
@@ -319,32 +370,65 @@ export function createCalendar(fetcher) {
   function showPopover(cell) {
     const day = dayMap.get(cell.dataset.date);
     if (!day) return;
+    if (activeCell && activeCell !== cell) activeCell.removeAttribute("aria-describedby");
+    activeCell = cell;
+    cell.setAttribute("aria-describedby", POPOVER_ID);
     const el = ensurePopover();
+    const wasVisible = !el.hidden;
     el.innerHTML = buildPopoverHtml(day);
     el.hidden = false;
     positionPopover(cell);
+    if (wasVisible) return;
     // Force reflow so the entrance transition runs, then reveal.
     void el.offsetWidth;
     el.classList.add("cal-day-popover--visible");
   }
 
   function hidePopover() {
+    activeCell?.removeAttribute("aria-describedby");
+    activeCell = null;
     if (!popoverEl) return;
     popoverEl.classList.remove("cal-day-popover--visible");
     popoverEl.hidden = true;
   }
 
+  const detailCell = (e) => e.target.closest(".calendar-cell[data-date]");
+
   function onGridOver(e) {
-    const cell = e.target.closest(".calendar-cell[data-date]");
+    const cell = detailCell(e);
     if (cell) showPopover(cell);
   }
 
   function onGridOut(e) {
-    const cell = e.target.closest(".calendar-cell[data-date]");
+    const cell = detailCell(e);
     if (!cell) return;
-    // Ignore moves that stay inside the same cell.
+    // Ignore moves that stay inside the same cell, and keep a focused cell's popover.
     if (e.relatedTarget && cell.contains(e.relatedTarget)) return;
+    if (cell === document.activeElement) return;
     hidePopover();
+  }
+
+  function onGridFocusIn(e) {
+    const cell = detailCell(e);
+    if (cell) showPopover(cell);
+  }
+
+  function onGridFocusOut(e) {
+    if (!grid()?.contains(e.relatedTarget)) hidePopover();
+  }
+
+  // A tap opens the popover (on a touch screen it is the only way to); tapping
+  // anywhere else blurs the cell, which closes it.
+  function onGridClick(e) {
+    const cell = detailCell(e);
+    if (cell) showPopover(cell);
+  }
+
+  function onGridKey(e) {
+    if (e.key === "Escape" && activeCell) {
+      e.stopPropagation();
+      hidePopover();
+    }
   }
 
   return {
@@ -358,18 +442,17 @@ export function createCalendar(fetcher) {
         shiftMonth(1);
         updateNavState();
       });
-      // Delegated hover on the grid container (survives per-render innerHTML swaps).
+      // Delegated on the grid container (survives per-render innerHTML swaps).
       const gridEl = grid();
       track(gridEl, "mouseover", onGridOver);
       track(gridEl, "mouseout", onGridOut);
+      track(gridEl, "focusin", onGridFocusIn);
+      track(gridEl, "focusout", onGridFocusOut);
+      track(gridEl, "click", onGridClick);
+      track(gridEl, "keydown", onGridKey);
 
-      // Re-tint cells when the theme changes (intensity floor differs per theme).
-      track(window, "screenerbot:theme", () => {
-        if (lastData) render(lastData);
-      });
-
-      document.querySelectorAll(".calendar-weekdays span").forEach((el, index) => {
-        el.textContent = formatWeekday((firstDayOfWeek() + index) % 7);
+      document.querySelectorAll(".calendar-weekdays span:not(.calendar-week-head)").forEach((el, index) => {
+        el.textContent = formatWeekday((firstDayOfWeek() + index) % DAYS_PER_WEEK);
       });
 
       updateNavState();
@@ -386,7 +469,6 @@ export function createCalendar(fetcher) {
       cleanups.forEach((fn) => fn());
       cleanups.length = 0;
       lastKey = null;
-      lastData = null;
       hidePopover();
       dayMap.clear();
       if (popoverEl) {

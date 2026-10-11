@@ -23,7 +23,8 @@ CREATE TABLE IF NOT EXISTS wallet_snapshots (
     total_equity_native REAL,
     total_tokens_count INTEGER NOT NULL DEFAULT 0,
     total_nfts_count INTEGER NOT NULL DEFAULT 0,
-    created_at TEXT NOT NULL DEFAULT (datetime('now'))
+    created_at TEXT NOT NULL DEFAULT (datetime('now')),
+    unpriced_mints TEXT
 );
 "#;
 

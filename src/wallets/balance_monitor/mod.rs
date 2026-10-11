@@ -27,7 +27,7 @@ pub(crate) use service::wallet_database_chain;
 pub use service::{
     clear_dashboard_api_cache,
     force_wallet_snapshot,
-    get_balance_at_time,
+    get_comparable_worth_history,
     get_current_wallet_status,
     get_daily_end_balances,
     get_dashboard_cache_metrics,
@@ -38,6 +38,7 @@ pub use service::{
     get_snapshot_token_balances,
     // Monitoring stats
     get_wallet_monitor_stats,
+    get_worth_at_time,
     // Initialization & background service
     initialize_wallet_database,
     // Dashboard cache management
@@ -59,7 +60,7 @@ pub(crate) use database::{recorded_wallet_sql, SCHEMA};
 // it live. Every user-facing wallet figure goes through `get_wallet_worth()`.
 pub use worth::{
     get_held_mints, get_wallet_worth, held_token_price_native, live_wallet_snapshot,
-    request_balance_refresh,
+    request_balance_refresh, worth_change, WorthChange,
 };
 
 // Re-export public types
@@ -67,5 +68,5 @@ pub use types::{
     CachePerformanceMetrics, DailyFlowPoint, DashboardCacheFreshness, DashboardCacheMetadata,
     DashboardDataSource, NftBalance, SnapshotTokenBalance, WalletBalancePoint, WalletDashboardData,
     WalletFlowCacheStats, WalletFlowMetrics, WalletMonitorStats, WalletNftOverview, WalletSnapshot,
-    WalletSnapshotStatus, WalletSummarySnapshot, WalletTokenOverview, WalletWorth,
+    WalletSnapshotStatus, WalletSummarySnapshot, WalletTokenOverview, WalletWorth, WorthSample,
 };

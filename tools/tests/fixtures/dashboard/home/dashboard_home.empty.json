@@ -54,6 +54,7 @@
     "total_equity_native": null,
     "unpriced_token_count": null,
     "start_of_day_balance_native": null,
+    "change_status": "no_baseline",
     "change_native": null,
     "change_percent": null,
     "native_price_usd": 152.34,
@@ -62,6 +63,7 @@
   "positions": {
     "open_count": 0,
     "total_invested_native": 0.0,
+    "current_value_native": 0.0,
     "unrealized_pnl_native": 0.0,
     "unrealized_pnl_percent": null,
     "avg_position_size_native": null,
@@ -85,6 +87,7 @@
   "tokens": {
     "snapshot_state": "building",
     "total_in_database": 0,
+    "monitored": null,
     "with_prices": null,
     "passed_filters": null,
     "rejected_filters": null,

@@ -21,8 +21,10 @@
 //!
 //! Holdings are valued live-pool-price first, falling back to the token database's
 //! market price for a token the pool service does not track. A token we cannot price
-//! contributes 0 and is counted in `unpriced_token_count` — the worth is never padded
-//! with a fabricated value.
+//! contributes 0 and is listed in `unpriced_mints` — the worth is never padded with a
+//! fabricated value. Two worths compare only when the same mints are unpriced on both
+//! sides (`worth_change`): a holding that enters or leaves pricing is not a gain or a
+//! loss.
 //!
 //! The market fallback is read from the token database once per snapshot and published
 //! WITH the snapshot. It must never come from the token snapshot store: that store
@@ -40,7 +42,7 @@ use tokio::sync::Notify;
 
 use crate::logger::{self, LogTag};
 
-use super::types::{WalletSnapshot, WalletWorth};
+use super::types::{WalletSnapshot, WalletWorth, WorthSample};
 
 /// Token-database market price in SOL per held mint, read when the snapshot was taken.
 /// Mints without a positive market price are absent.
@@ -180,21 +182,23 @@ fn value_snapshot(
     pool_price: impl Fn(&str) -> Option<f64>,
 ) -> WalletWorth {
     let mut tokens_worth_native = 0.0;
-    let mut unpriced_token_count = 0;
+    let mut unpriced_mints = Vec::new();
 
     for balance in &snapshot.token_balances {
         match price_token_native(&balance.mint, market_prices, &pool_price) {
             Some(price_native) => tokens_worth_native += balance.balance_ui * price_native,
-            None => unpriced_token_count += 1,
+            None => unpriced_mints.push(balance.mint.clone()),
         }
     }
+    unpriced_mints.sort_unstable();
+    unpriced_mints.dedup();
 
     WalletWorth {
         native_balance: snapshot.native_balance,
         tokens_worth_native,
         total_equity_native: snapshot.native_balance + tokens_worth_native,
         token_count: snapshot.token_balances.len(),
-        unpriced_token_count,
+        unpriced_mints,
         updated_at: snapshot.snapshot_time,
         has_snapshot: true,
     }
@@ -227,6 +231,36 @@ pub fn get_wallet_worth() -> WalletWorth {
     }
 }
 
+/// How the live worth moved since a past sample.
+#[derive(Debug, Clone, Copy, PartialEq)]
+pub enum WorthChange {
+    /// No live snapshot yet, or no sample at the baseline instant.
+    Unknown,
+    /// The two worths price different holdings (a token entered or left pricing, or
+    /// the sample predates coverage tracking), so their difference is not a change.
+    Incomparable,
+    /// Like-for-like change. `percent` is absent for a zero baseline.
+    Known { native: f64, percent: Option<f64> },
+}
+
+/// The live worth's change since `baseline`, compared only like for like: both sides
+/// must leave the same mints unpriced, or a token gaining or losing its price would be
+/// reported as money made or lost.
+pub fn worth_change(worth: &WalletWorth, baseline: Option<&WorthSample>) -> WorthChange {
+    let Some(baseline) = baseline.filter(|_| worth.has_snapshot) else {
+        return WorthChange::Unknown;
+    };
+    if baseline.unpriced_mints.as_deref() != Some(worth.unpriced_mints.as_slice()) {
+        return WorthChange::Incomparable;
+    }
+    let native = worth.total_equity_native - baseline.equity_native;
+    WorthChange::Known {
+        native,
+        percent: (baseline.equity_native > f64::EPSILON)
+            .then(|| native / baseline.equity_native * 100.0),
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -256,6 +290,7 @@ mod tests {
             total_equity_native: 0.5,
             total_tokens_count: holdings.len() as u32,
             total_nfts_count: 0,
+            unpriced_mints: None,
             token_balances: holdings,
             nft_balances: Vec::new(),
         }
@@ -279,7 +314,7 @@ mod tests {
         assert!((worth.tokens_worth_native - 1.1).abs() < 1e-12);
         assert!((worth.total_equity_native - 1.6).abs() < 1e-12);
         assert_eq!(worth.token_count, 2);
-        assert_eq!(worth.unpriced_token_count, 0);
+        assert_eq!(worth.unpriced_token_count(), 0);
     }
 
     #[test]
@@ -287,7 +322,7 @@ mod tests {
         let wallet = snapshot(vec![holding("unknown", 100.0)]);
         let worth = value_snapshot(&wallet, &MarketPrices::new(), |_| None);
         assert_eq!(worth.tokens_worth_native, 0.0);
-        assert_eq!(worth.unpriced_token_count, 1);
+        assert_eq!(worth.unpriced_mints, vec!["unknown".to_owned()]);
     }
 
     /// The headline is a pure function of the published snapshot, its market prices and
@@ -307,8 +342,73 @@ mod tests {
         for _ in 0..50 {
             let next = value_snapshot(&wallet, &market, pool);
             assert_eq!(next.total_equity_native, first.total_equity_native);
-            assert_eq!(next.unpriced_token_count, first.unpriced_token_count);
+            assert_eq!(next.unpriced_mints, first.unpriced_mints);
         }
+    }
+
+    fn live(equity: f64, unpriced: &[&str]) -> WalletWorth {
+        WalletWorth {
+            total_equity_native: equity,
+            unpriced_mints: unpriced.iter().map(|mint| (*mint).to_owned()).collect(),
+            has_snapshot: true,
+            ..WalletWorth::default()
+        }
+    }
+
+    fn sample(equity: f64, unpriced: Option<&[&str]>) -> WorthSample {
+        WorthSample {
+            equity_native: equity,
+            unpriced_mints: unpriced.map(|mints| mints.iter().map(|m| (*m).to_owned()).collect()),
+        }
+    }
+
+    #[test]
+    fn a_change_compares_only_samples_that_price_the_same_holdings() {
+        // A token that gained its price since the baseline is not a gain.
+        assert_eq!(
+            worth_change(&live(0.107, &[]), Some(&sample(0.088, Some(&["a", "b"])))),
+            WorthChange::Incomparable
+        );
+        // Nor is one that lost it a loss.
+        assert_eq!(
+            worth_change(&live(0.088, &["a"]), Some(&sample(0.107, Some(&[])))),
+            WorthChange::Incomparable
+        );
+        // Equal counts are not enough: the unpriced holdings must be the same ones.
+        assert_eq!(
+            worth_change(&live(1.0, &["b"]), Some(&sample(1.0, Some(&["a"])))),
+            WorthChange::Incomparable
+        );
+        // A sample written before coverage was recorded compares with nothing.
+        assert_eq!(
+            worth_change(&live(1.0, &[]), Some(&sample(1.0, None))),
+            WorthChange::Incomparable
+        );
+        // The same permanently unpriced holding on both sides is like for like.
+        let WorthChange::Known { native, percent } =
+            worth_change(&live(1.5, &["dust"]), Some(&sample(1.0, Some(&["dust"]))))
+        else {
+            panic!("like-for-like samples must compare");
+        };
+        assert!((native - 0.5).abs() < 1e-12);
+        assert!((percent.unwrap() - 50.0).abs() < 1e-9);
+    }
+
+    #[test]
+    fn a_change_without_snapshot_or_baseline_is_unknown() {
+        let baseline = sample(1.0, Some(&[]));
+        assert_eq!(
+            worth_change(&WalletWorth::default(), Some(&baseline)),
+            WorthChange::Unknown
+        );
+        assert_eq!(worth_change(&live(1.0, &[]), None), WorthChange::Unknown);
+        assert_eq!(
+            worth_change(&live(1.0, &[]), Some(&sample(0.0, Some(&[])))),
+            WorthChange::Known {
+                native: 1.0,
+                percent: None
+            }
+        );
     }
 
     #[test]

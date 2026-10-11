@@ -10,9 +10,11 @@ import * as Utils from "../core/utils.js";
 import { requestManager, createScopedFetcher } from "../core/request_manager.js";
 import { showFeaturedRow, hideFeaturedRow } from "../ui/featured_row.js";
 import { renderAddress } from "../ui/token_identity.js";
+import { PositionDetailsDialog } from "../ui/position_details_dialog.js";
 import { notifyClientReady } from "../core/client_ready.js";
 import { WALLET_CHANGE_PERCENT_DECIMALS } from "../core/header_metrics.js";
 import { closeMenu, openMenu } from "../core/menu_manager.js";
+import { paintHtml, paintText } from "../core/dom.js";
 import { createCalendar } from "./home/portfolio_calendar.js";
 import { createUpdateNotice } from "./home/update_notice.js";
 
@@ -36,6 +38,8 @@ function createLifecycle() {
   let walletQrOpen = false;
   let walletIdentityCleanup = null;
   let sparkRoomCleanup = null;
+  let exposureCleanup = null;
+  let positionDialog = null;
   // Animation intervals tracking
   const animationIntervals = [];
 
@@ -158,7 +162,7 @@ function createLifecycle() {
     }
 
     if (changed) {
-      addressEl.innerHTML = renderAddress(nextAddress, { plain: true });
+      addressEl.innerHTML = renderAddress(nextAddress, { plain: true, compact: true });
       qrAddress.innerHTML = renderAddress(nextAddress, { plain: true });
     }
     copyButton.dataset.copy = nextAddress;
@@ -229,8 +233,8 @@ function createLifecycle() {
     updateTokenStats(data.tokens);
   }
 
-  // Number + a small muted "SOL" unit span. Suppress formatSol's built-in
-  // " SOL" suffix so the unit isn't doubled. An unknown amount is a bare dash.
+  // Number + a muted "SOL" unit span. Suppress formatSol's built-in " SOL" suffix so
+  // the unit isn't doubled. An unknown amount is a bare dash.
   function solHtml(value) {
     if (!Number.isFinite(value)) return ABSENT;
     return `${Utils.formatSol(value, { suffix: "" })}<span class="hero-unit">SOL</span>`;
@@ -274,8 +278,10 @@ function createLifecycle() {
     sparkRoomCleanup = () => observer.disconnect();
   }
 
-  // Render the balance-trend sparkline from an oldest-first array of SOL values.
-  function renderSparkline(history) {
+  // Render the day's worth trend from an oldest-first array of SOL values. The series
+  // starts at the start-of-day worth and ends at the live worth (see the home route), and
+  // the line takes the tone of the day change the text beside it shows.
+  function renderSparkline(history, tone) {
     const line = document.getElementById("heroSparkLine");
     const area = document.getElementById("heroSparkArea");
     const svg = document.getElementById("heroSpark");
@@ -307,15 +313,12 @@ function createLifecycle() {
       .join(" ");
     line.setAttribute("points", coords);
 
-    // Close the same path down to the baseline for the soft area fill.
+    // Close the same path down to the baseline for the faint area fill.
     if (area) {
       area.setAttribute("points", `${pad.toFixed(1)},${H} ${coords} ${(W - pad).toFixed(1)},${H}`);
     }
 
-    // Colour the trend by net direction across the window.
-    const up = pts[pts.length - 1] >= pts[0];
-    svg.classList.toggle("up", up);
-    svg.classList.toggle("down", !up);
+    for (const cls of Object.values(PNL_CLASSES)) svg.classList.toggle(cls, cls === tone);
   }
 
   // Populate the portfolio overview from the full dashboard payload.
@@ -328,51 +331,64 @@ function createLifecycle() {
     // Headline: total equity (cash + holdings).
     const balanceEl = document.getElementById("walletBalance");
     if (balanceEl) {
-      balanceEl.innerHTML = solHtml(wallet.total_equity_native);
+      paintHtml(balanceEl, solHtml(wallet.total_equity_native));
     }
 
     // Approximate USD value of total equity.
     const usdEl = document.getElementById("walletUsd");
     if (usdEl) {
       const usd = wallet.total_equity_native * wallet.native_price_usd;
-      if (Number.isFinite(usd) && usd > 0) {
-        usdEl.textContent = withApprox(withUsdSymbol(Utils.formatNumber(usd, 2)));
-        usdEl.style.display = "";
-      } else {
-        usdEl.style.display = "none";
-      }
+      const shown = Number.isFinite(usd) && usd > 0;
+      usdEl.hidden = !shown;
+      if (shown) paintText(usdEl, withApprox(withUsdSymbol(Utils.formatNumber(usd, 2))));
     }
 
-    // Today change (equity vs start-of-day baseline).
+    // Day change: equity against the start-of-day worth, measured only like for like.
+    // Without a baseline, or when the start of the day priced other holdings than now,
+    // it is a dash. The incomparable case explains itself on hover and on keyboard
+    // focus through the shared tooltip, and to assistive technology as its description.
+    const known = wallet.change_status === "known" && Number.isFinite(wallet.change_native);
+    const tone = known ? pnlClass(wallet.change_native) : "flat";
     const changeEl = document.getElementById("homeWalletChange");
     if (changeEl) {
-      // Without a start-of-day baseline the change is unknown: a dash, as in the header.
-      const known = Number.isFinite(wallet.change_native);
-      const cls = known ? pnlClass(wallet.change_native) : "flat";
-      changeEl.className = `hero-change ${cls}`;
-      const percent = Number.isFinite(wallet.change_percent)
-        ? `<span class="change-percent ${cls}">(${Utils.formatPercent(wallet.change_percent, {
-            decimals: WALLET_CHANGE_PERCENT_DECIMALS,
-          })})</span>`
-        : "";
-      changeEl.innerHTML = `
-        <span class="hero-change-value change-value ${cls}">${
+      changeEl.className = `hero-change ${tone}`;
+      const why =
+        wallet.change_status === "incomparable"
+          ? I18n.attr("home-portfolio-change-incomparable", "title")
+          : "";
+      if (why) {
+        changeEl.dataset.tooltip = why;
+        changeEl.setAttribute("aria-description", why);
+        changeEl.tabIndex = 0;
+      } else {
+        delete changeEl.dataset.tooltip;
+        changeEl.removeAttribute("aria-description");
+        changeEl.removeAttribute("tabindex");
+      }
+      const percent =
+        known && Number.isFinite(wallet.change_percent)
+          ? `<span class="change-percent ${tone}">(${Utils.formatPercent(wallet.change_percent, {
+              decimals: WALLET_CHANGE_PERCENT_DECIMALS,
+            })})</span>`
+          : "";
+      paintHtml(
+        changeEl,
+        `<span class="hero-change-value change-value ${tone}">${
           known ? Utils.formatSignedSol(wallet.change_native) : ABSENT
-        }</span>
-        ${percent}
-      `;
+        }</span>${percent ? ` ${percent}` : ""}`
+      );
     }
 
     // Cash tile — free SOL available to trade.
     const cashEl = document.getElementById("heroCash");
     if (cashEl) {
-      cashEl.innerHTML = solHtml(wallet.current_balance_native);
+      paintHtml(cashEl, solHtml(wallet.current_balance_native));
     }
 
-    // Holdings tile — SOL value of held tokens, with a token-count subscript.
+    // Holdings tile — SOL value of held tokens, with the token count under it.
     const holdingsEl = document.getElementById("heroHoldings");
     if (holdingsEl) {
-      holdingsEl.innerHTML = solHtml(wallet.tokens_worth_native);
+      paintHtml(holdingsEl, solHtml(wallet.tokens_worth_native));
     }
     const holdingsCountEl = document.getElementById("heroHoldingsCount");
     if (holdingsCountEl) {
@@ -381,10 +397,12 @@ function createLifecycle() {
       // quietly reporting a headline that is short by an unknown amount.
       const unpriced = wallet.unpriced_token_count ?? 0;
       const label = n > 0 ? I18n.t("home-holdings-token-count", { count: n }) : "";
-      holdingsCountEl.textContent =
+      paintText(
+        holdingsCountEl,
         unpriced > 0
           ? I18n.t("home-holdings-with-unpriced", { tokens: label, count: unpriced })
-          : label;
+          : label
+      );
       holdingsCountEl.title =
         unpriced > 0 ? I18n.t("home-holdings-unpriced-note", { count: unpriced }) : "";
     }
@@ -393,103 +411,151 @@ function createLifecycle() {
     // Explore banner explains why.
     const hasWallet = Boolean(wallet.wallet_address);
 
-    // Open P&L tile — unrealized, from the positions snapshot.
+    // Open P&L tile — unrealized, from the positions snapshot, with its percent under it.
     const openPnlEl = document.getElementById("heroOpenPnl");
     if (openPnlEl && data.positions) {
       const v = hasWallet ? data.positions.unrealized_pnl_native : null;
-      const pct = hasWallet ? data.positions.unrealized_pnl_percent : null;
-      const sub = Number.isFinite(pct)
-        ? ` <span class="hero-stat-sub">${Utils.formatPercent(pct, { decimals: 1 })}</span>`
-        : "";
-      openPnlEl.innerHTML = `${signedSolHtml(v)}${sub}`;
+      paintHtml(openPnlEl, signedSolHtml(v));
       openPnlEl.className = `hero-stat-value ${pnlClass(v)}`;
+    }
+    const openPnlPercentEl = document.getElementById("heroOpenPnlPercent");
+    if (openPnlPercentEl && data.positions) {
+      const pct = hasWallet ? data.positions.unrealized_pnl_percent : null;
+      paintText(
+        openPnlPercentEl,
+        Number.isFinite(pct) ? Utils.formatPercent(pct, { decimals: 1 }) : ""
+      );
     }
 
     // Realized Today — banked net P&L today, from trader analytics.
     const realizedEl = document.getElementById("heroRealizedToday");
     if (realizedEl && data.trader && data.trader.today) {
       const v = hasWallet ? data.trader.today.net_pnl_native : null;
-      realizedEl.innerHTML = signedSolHtml(v);
+      paintHtml(realizedEl, signedSolHtml(v));
       realizedEl.className = `hero-stat-value ${pnlClass(v)}`;
     }
 
-    // Balance-trend sparkline.
-    renderSparkline(wallet.balance_history);
+    // The day's worth trend, in the day change's tone.
+    renderSparkline(wallet.balance_history, tone);
   }
 
-  // Update positions statistics
+  // A position's symbol as a button that opens its details dialog.
+  function positionButton(performer) {
+    if (!performer) return ABSENT;
+    const key = performer.id != null ? `data-position-id="${performer.id}"` : "";
+    return `<button type="button" class="exposure-position" ${key} data-mint="${Utils.escapeHtml(
+      performer.mint
+    )}">${Utils.escapeHtml(performer.symbol)}</button>`;
+  }
+
+  // A performer as "SYMBOL +3.3%", the symbol opening the position.
+  function performerHtml(performer) {
+    if (!performer) return ABSENT;
+    const pnl = performer.pnl_percent || 0;
+    return `${positionButton(performer)} <span class="${pnlClass(pnl, 1)}">${Utils.formatPercent(
+      pnl,
+      { decimals: 1 }
+    )}</span>`;
+  }
+
+  // Open the details dialog of the position a ledger button names.
+  function onExposureClick(event) {
+    const button = event.target.closest(".exposure-position");
+    if (!button) return;
+    const id = Number(button.dataset.positionId);
+    positionDialog ??= new PositionDetailsDialog();
+    positionDialog.show(Number.isFinite(id) && id > 0 ? { id } : { mint: button.dataset.mint });
+  }
+
+  function mountExposure() {
+    const ledger = document.getElementById("exposureLedger");
+    if (!ledger) return;
+    ledger.addEventListener("click", onExposureClick);
+    exposureCleanup = () => ledger.removeEventListener("click", onExposureClick);
+  }
+
+  // The exposure ledger. Averages and best/worst only mean something across two or more
+  // positions; a single position is named instead, with its own hold time.
   function updatePositionsStats(positions) {
     if (!positions) return;
 
-    const countEl = document.getElementById("positionsCount");
-    const investedEl = document.getElementById("positionsInvested");
-    const avgSizeEl = document.getElementById("positionsAvgSize");
-    const avgHoldEl = document.getElementById("positionsAvgHold");
-    const bestEl = document.getElementById("positionsBest");
-    const worstEl = document.getElementById("positionsWorst");
+    // The count names the positions the ledger lists, so it is written with them, never
+    // counted up through values the ledger contradicts.
+    const count = positions.open_count ?? 0;
+    paintText(document.getElementById("positionsCount"), Utils.formatNumber(count, 0));
 
-    if (countEl) animateValue(countEl, positions.open_count);
-    if (investedEl)
-      investedEl.textContent = Utils.formatSol(positions.total_invested_native, {
-        fallback: ABSENT,
+    const emptyEl = document.getElementById("exposureEmpty");
+    const ledger = document.getElementById("exposureLedger");
+    if (emptyEl) emptyEl.hidden = count > 0;
+    if (ledger) {
+      ledger.hidden = count === 0;
+      ledger.querySelectorAll("[data-scope]").forEach((row) => {
+        row.hidden = row.dataset.scope === "single" ? count !== 1 : count < 2;
       });
-    if (avgSizeEl)
-      avgSizeEl.textContent = Utils.formatSol(positions.avg_position_size_native, {
-        fallback: ABSENT,
-      });
-    if (avgHoldEl) {
-      const mins = positions.avg_hold_duration_mins;
-      avgHoldEl.textContent = Number.isFinite(mins) ? Utils.formatUptime(mins * 60) : ABSENT;
     }
-    if (bestEl) {
-      if (positions.best_performer) {
-        const pnl = positions.best_performer.pnl_percent || 0;
-        bestEl.textContent = `${positions.best_performer.symbol} ${Utils.formatPercent(pnl, {
+    if (count === 0) return;
+
+    const setText = (id, text) => paintText(document.getElementById(id), text);
+    const setHtml = (id, html) => paintHtml(document.getElementById(id), html);
+
+    setText(
+      "positionsInvested",
+      Utils.formatSol(positions.total_invested_native, { fallback: ABSENT })
+    );
+    setText(
+      "positionsValue",
+      Utils.formatSol(positions.current_value_native, { fallback: ABSENT })
+    );
+
+    const pnl = positions.unrealized_pnl_native;
+    const pnlPercent = Number.isFinite(positions.unrealized_pnl_percent)
+      ? ` <span class="exposure-percent">${Utils.formatPercent(positions.unrealized_pnl_percent, {
           decimals: 1,
-        })}`;
-        bestEl.className = `position-value ${pnlClass(pnl, 1)}`;
-      } else {
-        bestEl.textContent = "—";
-        bestEl.className = "position-value";
-      }
+        })}</span>`
+      : "";
+    const pnlEl = document.getElementById("positionsPnl");
+    if (pnlEl) {
+      paintHtml(pnlEl, `${Utils.formatSignedSol(pnl, { fallback: ABSENT })}${pnlPercent}`);
+      pnlEl.className = `position-value ${pnlClass(pnl)}`;
     }
-    if (worstEl) {
-      if (positions.worst_performer) {
-        const pnl = positions.worst_performer.pnl_percent || 0;
-        worstEl.textContent = `${positions.worst_performer.symbol} ${Utils.formatPercent(pnl, {
-          decimals: 1,
-        })}`;
-        worstEl.className = `position-value ${pnlClass(pnl, 1)}`;
-      } else {
-        worstEl.textContent = "—";
-        worstEl.className = "position-value";
-      }
+
+    const mins = positions.avg_hold_duration_mins;
+    const hold = Number.isFinite(mins)
+      ? Utils.formatUptime(mins * 60, { style: "compact" })
+      : ABSENT;
+    if (count === 1) {
+      setHtml("positionsOnly", performerHtml(positions.best_performer));
+      setText("positionsHeld", hold);
+      return;
     }
+    setText(
+      "positionsAvgSize",
+      Utils.formatSol(positions.avg_position_size_native, { fallback: ABSENT })
+    );
+    setText("positionsAvgHold", hold);
+    setHtml("positionsBest", performerHtml(positions.best_performer));
+    setHtml("positionsWorst", performerHtml(positions.worst_performer));
   }
 
-  // Market pipeline counts; a passed or rejected count is coloured only above zero.
+  // The market pipeline: a funnel that narrows in order (tracked, monitored, passed),
+  // then the monitored tokens' other counts. Rejected is a normal outcome, not an alarm.
   function updateTokenStats(tokens) {
     if (!tokens) return;
 
-    const totalEl = document.getElementById("tokensTotal");
-    const withPricesEl = document.getElementById("tokensWithPrices");
-    const passedEl = document.getElementById("tokensPassed");
-    const rejectedEl = document.getElementById("tokensRejected");
-    const blacklistedEl = document.getElementById("tokensBlacklisted");
-    const ohlcvEl = document.getElementById("tokensOhlcv");
+    const count = (id, value) => {
+      const el = document.getElementById(id);
+      if (el) animateValue(el, value);
+    };
+    count("tokensTotal", tokens.total_in_database);
+    count("tokensMonitored", tokens.monitored);
+    count("tokensPassed", tokens.passed_filters);
+    count("tokensRejected", tokens.rejected_filters);
+    count("tokensBlacklisted", tokens.blacklisted);
+    count("tokensWithPrices", tokens.with_prices);
+    count("tokensOhlcv", tokens.with_ohlcv);
 
-    if (totalEl) animateValue(totalEl, tokens.total_in_database);
-    if (withPricesEl) animateValue(withPricesEl, tokens.with_prices);
-    if (passedEl) {
-      animateValue(passedEl, tokens.passed_filters);
-      passedEl.className = Utils.countTone(tokens.passed_filters, "success");
-    }
-    if (rejectedEl) {
-      animateValue(rejectedEl, tokens.rejected_filters);
-      rejectedEl.className = Utils.countTone(tokens.rejected_filters, "danger");
-    }
-    if (blacklistedEl) animateValue(blacklistedEl, tokens.blacklisted);
-    if (ohlcvEl) animateValue(ohlcvEl, tokens.with_ohlcv);
+    const passedEl = document.getElementById("tokensPassed");
+    if (passedEl) passedEl.className = Utils.countTone(tokens.passed_filters, "success");
   }
 
   // Animate number value changes
@@ -506,8 +572,14 @@ function createLifecycle() {
       return;
     }
 
-    const currentValue =
-      Number(element.dataset.numericValue ?? element.textContent.replaceAll(",", "")) || 0;
+    // With no number on screen yet (the absent marker) there is nothing to count from:
+    // starting at 0 would show a zero the backend never reported.
+    if (element.dataset.numericValue === undefined) {
+      element.dataset.numericValue = String(targetValue);
+      element.textContent = Utils.formatNumber(targetValue, 0);
+      return;
+    }
+    const currentValue = Number(element.dataset.numericValue);
     if (currentValue === targetValue) return;
     element.dataset.numericValue = String(targetValue);
 
@@ -554,6 +626,7 @@ function createLifecycle() {
       updateNotice = createUpdateNotice(Utils);
       mountWalletIdentity();
       mountSparkRoom();
+      mountExposure();
     },
 
     activate: (ctx) => {
@@ -578,6 +651,9 @@ function createLifecycle() {
       }
       if (!sparkRoomCleanup) {
         mountSparkRoom();
+      }
+      if (!exposureCleanup) {
+        mountExposure();
       }
 
       // If we have cached data from a previous visit, show it immediately
@@ -632,6 +708,10 @@ function createLifecycle() {
       walletIdentityCleanup = null;
       sparkRoomCleanup?.();
       sparkRoomCleanup = null;
+      exposureCleanup?.();
+      exposureCleanup = null;
+      positionDialog?.destroy();
+      positionDialog = null;
       walletAddress = "";
 
       // Note: cachedData is deliberately kept — it lets a revisit paint real

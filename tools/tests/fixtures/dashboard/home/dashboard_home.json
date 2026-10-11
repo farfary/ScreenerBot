@@ -54,20 +54,32 @@
     "total_equity_native": 42.3097,
     "unpriced_token_count": 1,
     "start_of_day_balance_native": 42.0214,
+    "change_status": "known",
     "change_native": 0.2883,
     "change_percent": 0.686,
     "native_price_usd": 152.34,
-    "balance_history": [40.12, 40.48, 40.31, 40.86, 41.2, 41.05, 41.14, 41.62, 42.38, 42.02, 42.31]
+    "balance_history": [42.0214, 41.98, 42.07, 42.15, 42.11, 42.24, 42.19, 42.28, 42.3097]
   },
   "positions": {
     "open_count": 5,
     "total_invested_native": 5.5,
+    "current_value_native": 5.8276,
     "unrealized_pnl_native": 0.3276,
     "unrealized_pnl_percent": 5.96,
     "avg_position_size_native": 1.1,
     "avg_hold_duration_mins": 137,
-    "best_performer": { "symbol": "BONK", "pnl_percent": 24.6 },
-    "worst_performer": { "symbol": "WIF", "pnl_percent": -8.3 },
+    "best_performer": {
+      "id": 412,
+      "mint": "DezXAZ8z7PnrnRJjz3wXBoRgixCa6xjnB7YaB1pPB263",
+      "symbol": "BONK",
+      "pnl_percent": 24.6
+    },
+    "worst_performer": {
+      "id": 409,
+      "mint": "EKpQGSJtjMFqKZ9KQanSqYXRcF8fBopzLHYxdM65zcjm",
+      "symbol": "WIF",
+      "pnl_percent": -8.3
+    },
     "dca_count": 2
   },
   "system": {
@@ -85,9 +97,10 @@
   "tokens": {
     "snapshot_state": "ready",
     "total_in_database": 18452,
-    "with_prices": 6213,
+    "monitored": 6213,
+    "with_prices": 1874,
     "passed_filters": 142,
-    "rejected_filters": 17938,
+    "rejected_filters": 6071,
     "blacklisted": 372,
     "with_ohlcv": 2481,
     "found_today": 0,

@@ -20,7 +20,7 @@ import {
   taskName,
   toneClass,
 } from "./format.js";
-import { forget } from "./tokens.js";
+import { forgetPaint } from "../../core/dom.js";
 import { panelMessage } from "./overview.js";
 
 const TABLE_ID = "copy-compare-table";
@@ -200,7 +200,7 @@ export function createCompare(page) {
     }
     if (!root.querySelector(`#${TABLE_ID}`)) {
       dropTable();
-      forget(root);
+      forgetPaint(root);
       root.innerHTML = `<div data-compare-view></div><div class="copy-compare-table" id="${TABLE_ID}"></div>`;
     }
     paint(root.querySelector("[data-compare-view]"), head + body);

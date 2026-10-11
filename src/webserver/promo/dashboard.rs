@@ -13,6 +13,7 @@ use crate::webserver::routes::dashboard::{
     OpenPositionDetail, PortfolioCalendarResponse, PositionPerformer, PositionsSnapshot,
     PositionsSummary, RpcInfo, ServiceStatus, SystemInfo, SystemMetrics, TokenStatistics,
     TraderAnalytics, TraderStatusInfo, TradingPeriodStats, WalletAnalytics, WalletInfo,
+    WorthChangeStatus,
 };
 
 use super::aggregates::{self, PeriodAgg};
@@ -58,6 +59,7 @@ pub fn get_promo_home_dashboard() -> HomeDashboardResponse {
         total_equity_native: Some(promo_equity),
         unpriced_token_count: Some(0),
         start_of_day_balance_native: Some(PROMO_START_BALANCE),
+        change_status: WorthChangeStatus::Known,
         change_native: Some(promo_equity - PROMO_START_BALANCE),
         change_percent: Some((promo_equity - PROMO_START_BALANCE) / PROMO_START_BALANCE * 100.0),
         native_price_usd: 180.0,
@@ -73,15 +75,20 @@ pub fn get_promo_home_dashboard() -> HomeDashboardResponse {
     let positions = PositionsSnapshot {
         open_count: open.count as i64,
         total_invested_native: open.invested_sol,
+        current_value_native: Some(open.current_value_sol),
         unrealized_pnl_native: open.unrealized_pnl_sol,
         unrealized_pnl_percent: Some(open.unrealized_pnl_percent),
         avg_position_size_native: (open.count > 0).then(|| open.invested_sol / open.count as f64),
         avg_hold_duration_mins: Some(open.avg_hold_minutes),
         best_performer: Some(PositionPerformer {
+            id: None,
+            mint: open_position_mint(open.best.symbol),
             symbol: open.best.symbol.to_owned(),
             pnl_percent: open.best.pnl_percent,
         }),
         worst_performer: Some(PositionPerformer {
+            id: None,
+            mint: open_position_mint(open.worst.symbol),
             symbol: open.worst.symbol.to_owned(),
             pnl_percent: open.worst.pnl_percent,
         }),
@@ -104,6 +111,7 @@ pub fn get_promo_home_dashboard() -> HomeDashboardResponse {
     let tokens = TokenStatistics {
         snapshot_state: SnapshotState::Ready,
         total_in_database: 12847,
+        monitored: Some(8923),
         with_prices: Some(8923),
         passed_filters: Some(347),
         rejected_filters: Some(8576),
@@ -213,6 +221,16 @@ pub fn get_promo_dashboard_overview() -> DashboardOverview {
     }
 }
 
+/// The mint of the promotional open position with `symbol`, so a performer opens the
+/// same position the promo Positions page lists.
+fn open_position_mint(symbol: &str) -> String {
+    PROMO_OPEN_TOKENS
+        .iter()
+        .find(|token| token.0 == symbol)
+        .map(|token| token.2.to_owned())
+        .unwrap_or_default()
+}
+
 /// Generate the promo portfolio calendar for a given month. Real closed trades are
 /// placed on their actual exit days; the remaining days get a gentle deterministic
 /// baseline so the month looks lived-in (as a real active month would).
@@ -242,8 +260,6 @@ pub fn get_promo_portfolio_calendar(
 
     let today = now.date_naive();
     let mut days = Vec::with_capacity(days_in_month as usize);
-    let mut month_net_pnl_native = 0.0f64;
-    let mut month_trades = 0i64;
     let mut balance = PROMO_START_BALANCE;
 
     for day in 1..=days_in_month {
@@ -263,8 +279,6 @@ pub fn get_promo_portfolio_calendar(
         };
 
         balance += net;
-        month_net_pnl_native += net;
-        month_trades += trades_n;
 
         days.push(CalendarDay {
             day,
@@ -279,13 +293,5 @@ pub fn get_promo_portfolio_calendar(
         });
     }
 
-    PortfolioCalendarResponse {
-        year,
-        month,
-        first_weekday,
-        days_in_month,
-        days,
-        month_net_pnl_native,
-        month_trades,
-    }
+    PortfolioCalendarResponse::from_days(year, month, first_weekday, days)
 }

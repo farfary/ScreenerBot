@@ -31,6 +31,11 @@ pub struct WalletSnapshot {
     pub total_equity_native: f64,
     pub total_tokens_count: u32,
     pub total_nfts_count: u32,
+    /// Held mints `total_equity_native` could not price, sorted. `None` for rows
+    /// written before pricing coverage was recorded: their equity cannot be compared
+    /// with another sample, because a holding missing from one side would read as a
+    /// gain or a loss.
+    pub unpriced_mints: Option<Vec<String>>,
     pub token_balances: Vec<SnapshotTokenBalance>,
     pub nft_balances: Vec<NftBalance>,
 }
@@ -51,10 +56,10 @@ pub struct WalletWorth {
     pub total_equity_native: f64,
     /// Distinct fungible tokens held.
     pub token_count: usize,
-    /// Held tokens we could not price (no live pool price, no market data). They
-    /// contribute 0 — we never fabricate a value — so a non-zero count here means
-    /// the worth is a known-low estimate.
-    pub unpriced_token_count: usize,
+    /// Held mints we could not price (no live pool price, no market data), sorted.
+    /// They contribute 0 — we never fabricate a value — so a non-empty list means the
+    /// worth is a known-low estimate, and two worths compare only when it is equal.
+    pub unpriced_mints: Vec<String>,
     /// When the underlying balances were captured on-chain.
     pub updated_at: DateTime<Utc>,
     /// False until the first snapshot lands (worth is all zeroes).
@@ -68,11 +73,29 @@ impl Default for WalletWorth {
             tokens_worth_native: 0.0,
             total_equity_native: 0.0,
             token_count: 0,
-            unpriced_token_count: 0,
+            unpriced_mints: Vec::new(),
             updated_at: Utc::now(),
             has_snapshot: false,
         }
     }
+}
+
+impl WalletWorth {
+    /// Held tokens the worth could not price.
+    pub fn unpriced_token_count(&self) -> usize {
+        self.unpriced_mints.len()
+    }
+}
+
+/// The wallet's persisted worth at one past instant: the baseline a change is
+/// measured from.
+#[derive(Debug, Clone, PartialEq)]
+pub struct WorthSample {
+    /// Cash + holdings priced when the sample was taken (cash alone for rows that
+    /// predate equity tracking).
+    pub equity_native: f64,
+    /// See `WalletSnapshot::unpriced_mints`.
+    pub unpriced_mints: Option<Vec<String>>,
 }
 
 /// Token balance record (fungible tokens only)

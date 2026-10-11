@@ -7,6 +7,7 @@
  * status strip and the controls that act on the position.
  */
 import * as Utils from "../../core/utils.js";
+import { paintHtml } from "../../core/dom.js";
 import * as Hints from "../../core/hints.js";
 import { notificationManager } from "../../core/notifications.js";
 import { HintTrigger } from "../hint_popover.js";
@@ -46,10 +47,10 @@ export function applyHeaderMixin(PositionDetailsDialog) {
     if (!pos || !this.dialogEl) return;
 
     this._renderIdentity(pos);
-    this._paintRegion("#pddHeaderPrice", this._buildHeaderMetrics(pos));
-    this._paintRegion("#pddHeaderBadges", this._buildHeaderBadges(pos));
-    this._paintRegion("#pddPendingSwaps", this._buildPendingSwaps());
-    this._paintRegion("#pddTradeActions", this._buildTradeActions());
+    paintHtml(this.dialogEl?.querySelector("#pddHeaderPrice"), this._buildHeaderMetrics(pos));
+    paintHtml(this.dialogEl?.querySelector("#pddHeaderBadges"), this._buildHeaderBadges(pos));
+    paintHtml(this.dialogEl?.querySelector("#pddPendingSwaps"), this._buildPendingSwaps());
+    paintHtml(this.dialogEl?.querySelector("#pddTradeActions"), this._buildTradeActions());
     this._updateTradeButtonsState();
   };
 
@@ -75,17 +76,17 @@ export function applyHeaderMixin(PositionDetailsDialog) {
         ${renderAddress(pos.mint)}
       </div>`;
 
-    this._paintRegion("#pddIdentity", html, (el) => {
-      const img = el.querySelector("img");
-      img?.addEventListener(
-        "error",
-        () => {
-          img.remove();
-          el.querySelector(".logo-placeholder")?.removeAttribute("hidden");
-        },
-        { once: true }
-      );
-    });
+    const el = this.dialogEl?.querySelector("#pddIdentity");
+    if (!paintHtml(el, html)) return;
+    const img = el.querySelector("img");
+    img?.addEventListener(
+      "error",
+      () => {
+        img.remove();
+        el.querySelector(".logo-placeholder")?.removeAttribute("hidden");
+      },
+      { once: true }
+    );
   };
 
   /**

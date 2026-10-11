@@ -58,9 +58,6 @@ export class PositionDetailsDialog {
     // Incremented per open, so a response that lands after the dialog moved on to another
     // position is dropped instead of painted onto it.
     this._openSeq = 0;
-    // Last markup painted per region (see _paintRegion): a poll that changed nothing
-    // repaints nothing.
-    this._renderKeys = {};
     this._resetActivityState();
   }
 
@@ -85,7 +82,6 @@ export class PositionDetailsDialog {
       this._openSeq += 1;
       this.positionData = positionData;
       this.fullDetails = null;
-      this._renderKeys = {};
       this._resetActivityState();
 
       this._createDialog();
@@ -271,7 +267,6 @@ export class PositionDetailsDialog {
       this._resetActivityState();
       this.positionData = null;
       this.fullDetails = null;
-      this._renderKeys = {};
       // The instance is reused for every position: the next one derives its own timeframe.
       this._chartTimeframe = null;
       this._fetchFailures = 0;
@@ -295,7 +290,6 @@ export class PositionDetailsDialog {
     this._resetActivityState();
     this.positionData = null;
     this.fullDetails = null;
-    this._renderKeys = {};
   }
 
   _createDialog() {

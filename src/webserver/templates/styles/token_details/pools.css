@@ -83,6 +83,15 @@
   border-inline-start: 1px solid var(--border-color);
 }
 
+/* The section rule below the summary is its last row's separator: the last row
+   draws no line of its own. */
+.pools-section:has(+ .pools-section) .pools-summary-fact:nth-child(odd):nth-last-child(-n + 2),
+.pools-section:has(+ .pools-section)
+  .pools-summary-fact:nth-child(odd):nth-last-child(-n + 2)
+  + .pools-summary-fact {
+  border-bottom: 0;
+}
+
 .pools-summary-fact > span,
 .pools-summary-row > span,
 .pool-detail-metric > span,
@@ -253,8 +262,10 @@
   color: var(--text-secondary);
 }
 
-.pool-reserves > .pool-address-row {
-  justify-content: flex-end;
+/* Reserve accounts carry no label: a plain list of addresses at the start. The card's
+   own rule closes the list, so its last row draws none. */
+.pool-reserves > .pool-address-row:last-child {
+  border-bottom: 0;
 }
 
 .pool-no-data {

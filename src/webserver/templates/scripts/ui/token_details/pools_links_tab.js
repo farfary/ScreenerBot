@@ -68,8 +68,8 @@ export function renderPoolsTab(token, options = {}) {
     });
   }
 
-  const totalLiquidity = pools.reduce((sum, pool) => sum + (pool.liquidity_usd || 0), 0);
-  const totalVolume24h = pools.reduce((sum, pool) => sum + (pool.volume_h24_usd || 0), 0);
+  const totalLiquidity = knownTotal(pools, "liquidity_usd");
+  const totalVolume24h = knownTotal(pools, "volume_h24_usd");
   const programCounts = pools.reduce((counts, pool) => {
     const program = pool.program || "";
     counts[program] = (counts[program] || 0) + 1;
@@ -183,6 +183,13 @@ function buildPoolDetail(pool, options = {}) {
       </div>
     </article>
   `;
+}
+
+/** Sum of a pool field over the pools that report it; null when none does, so an
+    unknown total renders as unknown instead of zero. */
+function knownTotal(pools, field) {
+  const known = pools.map((pool) => pool[field]).filter(Number.isFinite);
+  return known.length ? known.reduce((sum, value) => sum + value, 0) : null;
 }
 
 function renderPoolFact(label, value) {

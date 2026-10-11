@@ -57,6 +57,31 @@ export function cls(element, classMap) {
   });
 }
 
+// Markup last written by paintHtml, per element
+const paintedHtml = new WeakMap();
+
+// Replace an element's markup only when it differs from the last paintHtml write to that
+// element, so a poll that changed nothing keeps its children (hover, focus, scroll, text
+// selection). Returns whether it wrote.
+export function paintHtml(element, html) {
+  if (!element || paintedHtml.get(element) === html) return false;
+  paintedHtml.set(element, html);
+  element.innerHTML = html;
+  return true;
+}
+
+// Drop the remembered markup, so the next paintHtml writes even unchanged markup (for a
+// caller that replaced the element's content another way)
+export function forgetPaint(element) {
+  if (element) paintedHtml.delete(element);
+}
+
+// Set an element's text only when it differs, leaving an unchanged text node in place
+export function paintText(element, text) {
+  if (!element || element.textContent === text) return;
+  element.textContent = text;
+}
+
 // Create element with attributes and content
 export function create(tag, attributes = {}, content = "") {
   const el = document.createElement(tag);

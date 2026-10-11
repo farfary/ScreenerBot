@@ -10,6 +10,7 @@
  * token's risk and the market it trades in. Flat sections separated by rules, never cards.
  */
 import * as Utils from "../../core/utils.js";
+import { paintHtml } from "../../core/dom.js";
 import { formatPercentValue, withAgo, withSolUnit } from "../../core/format.js";
 import { closeReasonText } from "../trade_reason.js";
 import { rugcheckRiskName } from "../rugcheck_risk.js";
@@ -41,8 +42,8 @@ export function applySummaryMixin(PositionDetailsDialog) {
     const pos = this.fullDetails?.position;
     if (!pos) return;
 
-    this._paintRegion(
-      "#pddSummary",
+    paintHtml(
+      this.dialogEl?.querySelector("#pddSummary"),
       [
         this._buildPositionSection(pos),
         this._buildPricePathSection(pos),

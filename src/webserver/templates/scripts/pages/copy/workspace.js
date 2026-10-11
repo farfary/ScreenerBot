@@ -5,7 +5,7 @@
 // and the Overview / Holdings / Activity / Rules / Execution tabs.
 import { renderAddress } from "../../ui/token_identity.js";
 import { modeLabel, rangeQuery, stateLabel, taskName, timeAgo } from "./format.js";
-import { forget } from "./tokens.js";
+import { forgetPaint } from "../../core/dom.js";
 import { panelMessage, renderOverview } from "./overview.js";
 import { renderExecution } from "./execution.js";
 import { renderRules } from "./rules.js";
@@ -191,7 +191,7 @@ export function createWorkspace(page) {
 
   function buildShell(root, id) {
     shellFor = id;
-    forget(root);
+    forgetPaint(root);
     root.innerHTML = `<header class="copy-ws-head">
     <div class="copy-ws-identity">
         <div class="copy-ws-title"><h2 id="copy-ws-name"></h2><span id="copy-ws-mode"></span></div>

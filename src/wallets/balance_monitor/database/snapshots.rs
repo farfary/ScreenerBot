@@ -13,8 +13,29 @@ use crate::errors::DatabaseError;
 use crate::wallets::Error;
 
 use super::super::cache::update_wallet_snapshot_status;
-use super::super::types::WalletSnapshot;
+use super::super::types::{WalletSnapshot, WorthSample};
 use super::WalletDatabase;
+
+/// Separator of the stored unpriced-mint list. Base58 mints never contain it.
+const UNPRICED_MINTS_SEPARATOR: char = ',';
+
+/// The stored form of a sorted unpriced-mint list: one comparable TEXT value, empty
+/// when every holding was priced. Equal lists encode to equal text, so SQL can select
+/// the samples that price the same holdings.
+fn encode_unpriced_mints(mints: &[String]) -> String {
+    mints.join(&UNPRICED_MINTS_SEPARATOR.to_string())
+}
+
+/// Reads `unpriced_mints` back; NULL (a row written before coverage was recorded)
+/// stays unknown.
+pub(super) fn decode_unpriced_mints(stored: Option<String>) -> Option<Vec<String>> {
+    stored.map(|text| {
+        text.split(UNPRICED_MINTS_SEPARATOR)
+            .filter(|mint| !mint.is_empty())
+            .map(str::to_owned)
+            .collect()
+    })
+}
 
 impl WalletDatabase {
     /// Save wallet snapshot with token balances
@@ -28,8 +49,8 @@ impl WalletDatabase {
                 r#"
             INSERT INTO wallet_snapshots (
                 chain_id, wallet_address, snapshot_time, native_balance, native_balance_raw, total_equity_native,
-                total_tokens_count, total_nfts_count
-            ) VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8) RETURNING id
+                total_tokens_count, total_nfts_count, unpriced_mints
+            ) VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9) RETURNING id
             "#,
                 params![
                     self.chain.as_str(), self.subject,
@@ -38,7 +59,8 @@ impl WalletDatabase {
                     snapshot.native_balance_raw as i64,
                     snapshot.total_equity_native,
                     snapshot.total_tokens_count as i64,
-                    snapshot.total_nfts_count as i64
+                    snapshot.total_nfts_count as i64,
+                    snapshot.unpriced_mints.as_deref().map(encode_unpriced_mints)
                 ],
                 |row| row.get::<_, i64>(0),
             )
@@ -103,32 +125,95 @@ impl WalletDatabase {
         Ok(snapshot_id)
     }
 
-    /// Wallet WORTH (cash + holdings) at or before a specific time.
+    /// Wallet WORTH (cash + holdings) at or before a specific time, with the holdings
+    /// it left unpriced.
     ///
     /// This is the baseline every "change today" figure is measured against, so it has
     /// to be the same quantity as the headline. Reading `native_balance` here while the
     /// headline showed equity meant a wallet holding tokens reported a phantom gain
     /// equal to its entire holdings value, every day. Rows predating the equity column
     /// fall back to their SOL balance.
-    /// Uses idx_wallet_snapshots_time index for fast descending time lookup.
-    pub fn get_balance_at_time(&self, target_time: DateTime<Utc>) -> Result<Option<f64>, Error> {
+    /// Uses idx_wallet_snapshots_chain_address_time for the descending time lookup.
+    pub fn get_worth_at_time(
+        &self,
+        target_time: DateTime<Utc>,
+    ) -> Result<Option<WorthSample>, Error> {
         let conn = self.get_connection()?;
 
         let result = conn
             .query_row(
                 r#"
-            SELECT COALESCE(total_equity_native, native_balance)
+            SELECT COALESCE(total_equity_native, native_balance), unpriced_mints
             FROM wallet_snapshots
             WHERE chain_id = ?1 AND wallet_address = ?2 AND datetime(snapshot_time) <= datetime(?3)
             ORDER BY snapshot_time DESC
             LIMIT 1
             "#,
                 params![self.chain.as_str(), self.subject, target_time.to_rfc3339()],
-                |row| row.get(0),
+                |row| {
+                    Ok(WorthSample {
+                        equity_native: row.get(0)?,
+                        unpriced_mints: decode_unpriced_mints(row.get(1)?),
+                    })
+                },
             )
             .optional()
             .map_err(DatabaseError::from)?;
 
+        Ok(result)
+    }
+
+    /// Wallet WORTH since `since`, oldest first: the newest sample of each
+    /// `bucket_secs` window among the samples that left exactly `unpriced_mints`
+    /// unpriced. A sample that priced different holdings (a token not yet priced at
+    /// start-up) would otherwise draw a step that is no change in value, and a row
+    /// without recorded coverage is never selected.
+    ///
+    /// `snapshot_time` is stored as RFC 3339 UTC text, so the lower bound compares as
+    /// text and the time index serves the range.
+    pub fn get_comparable_worth_history(
+        &self,
+        since: DateTime<Utc>,
+        unpriced_mints: &[String],
+        bucket_secs: i64,
+    ) -> Result<Vec<f64>, Error> {
+        let conn = self.get_connection()?;
+
+        let mut stmt = conn
+            .prepare(
+                r#"
+            SELECT COALESCE(total_equity_native, native_balance)
+            FROM wallet_snapshots
+            WHERE id IN (
+                SELECT MAX(id)
+                FROM wallet_snapshots
+                WHERE chain_id = ?1 AND wallet_address = ?2
+                  AND snapshot_time >= ?3
+                  AND unpriced_mints = ?4
+                GROUP BY CAST(strftime('%s', snapshot_time) AS INTEGER) / ?5
+            )
+            ORDER BY snapshot_time ASC
+            "#,
+            )
+            .map_err(DatabaseError::from)?;
+
+        let rows = stmt
+            .query_map(
+                params![
+                    self.chain.as_str(),
+                    self.subject,
+                    since.to_rfc3339(),
+                    encode_unpriced_mints(unpriced_mints),
+                    bucket_secs.max(1)
+                ],
+                |row| row.get::<_, f64>(0),
+            )
+            .map_err(DatabaseError::from)?;
+
+        let mut result = Vec::new();
+        for row in rows {
+            result.push(row.map_err(DatabaseError::from)?);
+        }
         Ok(result)
     }
 
@@ -282,6 +367,7 @@ mod amount_tests {
             total_equity_native: 2.0,
             total_tokens_count: 1,
             total_nfts_count: 1,
+            unpriced_mints: Some(Vec::new()),
             token_balances: vec![SnapshotTokenBalance {
                 id: None,
                 snapshot_id: None,
@@ -493,5 +579,74 @@ mod amount_tests {
             assert_eq!(conn.query_row("SELECT typeof(balance), quote(balance) FROM token_balances WHERE mint = 'mint0'", [], |row| Ok((row.get::<_, String>(0)?, row.get::<_, String>(1)?))).unwrap(), before_value);
             assert_eq!(conn.query_row("SELECT COUNT(*) FROM token_balances", [], |row| row.get::<_, i64>(0)).unwrap(), 4);
         }
+    }
+
+    /// A store written before coverage was recorded gains the column; its rows stay
+    /// unknown, new rows keep the mints they left unpriced, and the trend selects only
+    /// samples that priced the same holdings, one per bucket.
+    #[tokio::test]
+    async fn worth_samples_keep_pricing_coverage_and_history_compares_like_for_like() {
+        use chrono::TimeZone;
+
+        let dir = tempfile::tempdir().unwrap();
+        let path = dir.path().join("wallet.db");
+        {
+            let conn = Connection::open(&path).unwrap();
+            let legacy = SCHEMA_WALLET_SNAPSHOTS.replace(",\n    unpriced_mints TEXT", "");
+            assert!(!legacy.contains("unpriced_mints"));
+            conn.execute_batch(&legacy).unwrap();
+            conn.execute_batch(SCHEMA_TOKEN_BALANCES).unwrap();
+            conn.execute_batch(SCHEMA_NFT_BALANCES).unwrap();
+            conn.execute("INSERT INTO wallet_snapshots (wallet_address, snapshot_time, native_balance, native_balance_raw, total_equity_native, total_tokens_count) VALUES ('wallet000', '2026-10-10T23:00:00+00:00', 1.0, 1000000000, 1.2, 1)", []).unwrap();
+        }
+        let db = open(&path).await;
+        let at = |h: u32, m: u32| Utc.with_ymd_and_hms(2026, 10, 11, h, m, 0).unwrap();
+        let day_start = at(0, 0);
+
+        assert_eq!(
+            db.get_worth_at_time(day_start).unwrap(),
+            Some(WorthSample {
+                equity_native: 1.2,
+                unpriced_mints: None
+            })
+        );
+
+        let late = vec!["late".to_owned()];
+        for (time, equity, unpriced) in [
+            (at(0, 5), 1.3, late.clone()),
+            (at(0, 10), 1.5, Vec::new()),
+            (at(0, 20), 1.6, Vec::new()),
+            (at(0, 21), 1.7, Vec::new()),
+        ] {
+            db.save_wallet_snapshot(&WalletSnapshot {
+                snapshot_time: time,
+                total_equity_native: equity,
+                unpriced_mints: Some(unpriced),
+                ..snapshot()
+            })
+            .unwrap();
+        }
+
+        assert_eq!(
+            db.get_worth_at_time(at(0, 10)).unwrap(),
+            Some(WorthSample {
+                equity_native: 1.5,
+                unpriced_mints: Some(Vec::new())
+            })
+        );
+        assert_eq!(
+            db.get_comparable_worth_history(day_start, &[], 900)
+                .unwrap(),
+            vec![1.5, 1.7]
+        );
+        assert_eq!(
+            db.get_comparable_worth_history(day_start, &late, 900)
+                .unwrap(),
+            vec![1.3]
+        );
+        assert_eq!(
+            db.get_recent_snapshots(1).unwrap()[0].unpriced_mints,
+            Some(Vec::new())
+        );
     }
 }

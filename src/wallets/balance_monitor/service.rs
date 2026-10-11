@@ -232,6 +232,7 @@ async fn collect_wallet_snapshot() -> Result<(WalletSnapshot, MarketPrices), Err
         total_equity_native: native_balance,
         total_tokens_count,
         total_nfts_count,
+        unpriced_mints: None,
         token_balances,
         nft_balances,
     };
@@ -241,9 +242,12 @@ async fn collect_wallet_snapshot() -> Result<(WalletSnapshot, MarketPrices), Err
     // would be pricing yesterday's holdings at today's price), so it has to happen here.
     // The live-worth pricing rule applies: pool price first, the market price read
     // with this snapshot otherwise, so a missed pool tick does not drop the holding to 0.
+    // The mints left unpriced are persisted with it: a later comparison against this
+    // row is like for like only when the same holdings are unpriced on both sides.
     let market_prices = load_market_prices(&snapshot).await;
-    snapshot.total_equity_native =
-        value_collected_snapshot(&snapshot, &market_prices).total_equity_native;
+    let worth = value_collected_snapshot(&snapshot, &market_prices);
+    snapshot.total_equity_native = worth.total_equity_native;
+    snapshot.unpriced_mints = Some(worth.unpriced_mints);
 
     logger::debug(
         LogTag::Wallet,
@@ -565,11 +569,28 @@ pub async fn force_wallet_snapshot() -> Result<WalletSnapshot, Error> {
     Ok((*snapshot).clone())
 }
 
-/// Get SOL balance at or before a specific time (optimized single-value query)
-pub async fn get_balance_at_time(target_time: DateTime<Utc>) -> Result<Option<f64>, Error> {
+/// The wallet's persisted worth at or before a specific time, with its pricing coverage.
+pub async fn get_worth_at_time(target_time: DateTime<Utc>) -> Result<Option<WorthSample>, Error> {
     let db_guard = GLOBAL_WALLET_DB.lock().await;
     match db_guard.as_ref() {
-        Some(db) => Ok(db.get_balance_at_time(target_time)?),
+        Some(db) => Ok(db.get_worth_at_time(target_time)?),
+        None => Err(Error::NotInitialized {
+            database: "wallet-monitor",
+        }),
+    }
+}
+
+/// Persisted worth since `since`, oldest first, one sample per `bucket_secs`, keeping
+/// only samples that left exactly `unpriced_mints` unpriced, so every point prices the
+/// same holdings as the live worth it is drawn beside.
+pub async fn get_comparable_worth_history(
+    since: DateTime<Utc>,
+    unpriced_mints: &[String],
+    bucket_secs: i64,
+) -> Result<Vec<f64>, Error> {
+    let db_guard = GLOBAL_WALLET_DB.lock().await;
+    match db_guard.as_ref() {
+        Some(db) => Ok(db.get_comparable_worth_history(since, unpriced_mints, bucket_secs)?),
         None => Err(Error::NotInitialized {
             database: "wallet-monitor",
         }),

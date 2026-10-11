@@ -5,7 +5,13 @@
 ## Portfolio overview
 
 home-portfolio-title = Portfolio value
-home-portfolio-today = today
+# Label before the day's worth change.
+home-portfolio-change-label = Today
+# Range label under the worth trend; the day starts at 00:00 UTC.
+home-trend-range = Since 00:00 UTC
+# Tooltip of the day change when the start of the day and now priced different holdings, so the two worths do not compare.
+home-portfolio-change-incomparable =
+    .title = Some token prices were missing at the start of the day or are missing now, so today's change isn't shown.
 home-stat-available = Available { -sol }
 home-stat-holdings = Token holdings
 home-stat-open-pnl = Open P&L
@@ -56,6 +62,13 @@ home-calendar-next =
     .aria-label = Next month
 home-calendar-month-pnl = Month P&L
 home-calendar-trades = Trades
+home-calendar-win-days = Win days
+home-calendar-loss-days = Loss days
+home-calendar-best-day = Best day
+# Column header of the weekly P&L totals.
+home-calendar-week = Week
+# Accessible name of a traded day: $date is the formatted date, $pnl its signed P&L.
+home-calendar-day-label = { $date }, { $pnl }
 home-calendar-pop-net-pnl = Net P&L
 home-calendar-pop-win-rate = Win rate
 # $rate is the formatted win percentage, $wins and $losses are counts.
@@ -71,14 +84,22 @@ home-operations =
 home-exposure-title = Position exposure
 home-exposure-open = open
 home-exposure-invested = Invested
+home-exposure-value = Current value
+home-exposure-position = Position
+# Hold time of the only open position.
+home-exposure-held = Held
+home-exposure-empty = No open positions
 home-exposure-avg-size = Average size
 home-exposure-avg-hold = Average hold
 home-exposure-best = Best
 home-exposure-worst = Worst
 home-pipeline-title = Market pipeline
 home-pipeline-tracked = Tracked
-home-pipeline-priced = Priced
+# Tokens with market data, which the filters evaluate.
+home-pipeline-monitored = Monitored
 home-pipeline-passed = Passed filters
-home-pipeline-not-passed = Not passed (all tracked)
+home-pipeline-rejected = Rejected
 home-pipeline-blacklisted = Blacklisted
+# Tokens the pool service holds a live price for now.
+home-pipeline-live-price = Live price
 home-pipeline-ohlcv = OHLCV

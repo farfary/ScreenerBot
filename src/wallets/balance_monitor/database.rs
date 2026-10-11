@@ -26,6 +26,8 @@ mod metrics;
 mod schema;
 mod snapshots;
 
+use snapshots::decode_unpriced_mints;
+
 use schema::{
     DASHBOARD_METRICS_INDEXES, FLOW_CACHE_INDEXES, LEGACY_TOKEN_BALANCES_SCHEMA,
     SCHEMA_NATIVE_FLOW_CACHE, SCHEMA_NFT_BALANCES, SCHEMA_TOKEN_BALANCES,
@@ -201,6 +203,10 @@ impl WalletDatabase {
         ddl::add_column(tx, "wallet_snapshots", "total_equity_native", "REAL")?;
 
         Self::migrate_chain_identity(tx)?;
+        // Added after the chain rebuild, which copies a fixed column list. Nullable on
+        // purpose: a row written before coverage was recorded cannot say which holdings
+        // its equity left unpriced, so it compares with no other sample.
+        ddl::add_column(tx, "wallet_snapshots", "unpriced_mints", "TEXT")?;
 
         for index_sql in WALLET_INDEXES
             .iter()
@@ -425,7 +431,8 @@ impl WalletDatabase {
             .prepare(
                 r#"
             SELECT id, wallet_address, snapshot_time, native_balance, native_balance_raw,
-                   COALESCE(total_equity_native, native_balance), total_tokens_count, COALESCE(total_nfts_count, 0)
+                   COALESCE(total_equity_native, native_balance), total_tokens_count, COALESCE(total_nfts_count, 0),
+                   unpriced_mints
             FROM wallet_snapshots
             WHERE chain_id = ?1 AND wallet_address = ?2
             ORDER BY snapshot_time DESC
@@ -487,6 +494,7 @@ impl WalletDatabase {
             total_equity_native: row.get(5)?,
             total_tokens_count: row.get::<_, i64>(6)? as u32,
             total_nfts_count: row.get::<_, i64>(7)? as u32,
+            unpriced_mints: decode_unpriced_mints(row.get(8)?),
             token_balances: Vec::new(), // Loaded separately if needed
             nft_balances: Vec::new(),   // Loaded separately if needed
         })

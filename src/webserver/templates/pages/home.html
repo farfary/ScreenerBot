@@ -14,92 +14,103 @@
   <section class="portfolio-overview" aria-labelledby="portfolioHeading">
     <div class="portfolio-headline">
       <div class="portfolio-primary">
-        <h1 class="hero-label" id="portfolioHeading" data-l10n-id="home-portfolio-title"></h1>
-        <div class="wallet-identity" id="homeWalletIdentity" hidden>
-          <span class="wallet-address" id="homeWalletAddress"></span>
-          <div class="wallet-identity-actions">
-            <button
-              type="button"
-              class="wallet-identity-action"
-              id="homeWalletCopy"
-              data-copy=""
-              data-l10n-id="home-wallet-copy"
-            >
-              <i class="icon-copy" aria-hidden="true"></i>
-            </button>
-            <button
-              type="button"
-              class="wallet-identity-action"
-              id="homeWalletQrButton"
-              data-l10n-id="home-wallet-qr-open"
-              aria-haspopup="dialog"
-              aria-expanded="false"
-            >
-              <i class="icon-qr-code" aria-hidden="true"></i>
-            </button>
-            <div
-              class="wallet-qr-popover"
-              id="homeWalletQrPopover"
-              role="dialog"
-              data-l10n-id="home-wallet-qr-popover"
-              hidden
-            >
-              <div class="wallet-qr-header">
-                <div>
-                  <strong data-l10n-id="home-wallet-qr-receive"></strong>
-                  <span data-l10n-id="home-wallet-qr-assets"></span>
+        <div class="hero-heading">
+          <h1 class="hero-label" id="portfolioHeading" data-l10n-id="home-portfolio-title"></h1>
+          <div class="wallet-identity" id="homeWalletIdentity" hidden>
+            <span class="wallet-address" id="homeWalletAddress"></span>
+            <div class="wallet-identity-actions">
+              <button
+                type="button"
+                class="wallet-identity-action"
+                id="homeWalletCopy"
+                data-copy=""
+                data-l10n-id="home-wallet-copy"
+              >
+                <i class="icon-copy" aria-hidden="true"></i>
+              </button>
+              <button
+                type="button"
+                class="wallet-identity-action"
+                id="homeWalletQrButton"
+                data-l10n-id="home-wallet-qr-open"
+                aria-haspopup="dialog"
+                aria-expanded="false"
+              >
+                <i class="icon-qr-code" aria-hidden="true"></i>
+              </button>
+              <div
+                class="wallet-qr-popover"
+                id="homeWalletQrPopover"
+                role="dialog"
+                data-l10n-id="home-wallet-qr-popover"
+                hidden
+              >
+                <div class="wallet-qr-header">
+                  <div>
+                    <strong data-l10n-id="home-wallet-qr-receive"></strong>
+                    <span data-l10n-id="home-wallet-qr-assets"></span>
+                  </div>
+                  <button
+                    type="button"
+                    class="wallet-identity-action"
+                    id="homeWalletQrClose"
+                    data-l10n-id="home-wallet-qr-close"
+                  >
+                    <i class="icon-x" aria-hidden="true"></i>
+                  </button>
                 </div>
-                <button
-                  type="button"
-                  class="wallet-identity-action"
-                  id="homeWalletQrClose"
-                  data-l10n-id="home-wallet-qr-close"
-                >
-                  <i class="icon-x" aria-hidden="true"></i>
-                </button>
+                <div class="wallet-qr-visual">
+                  <span id="homeWalletQrStatus" data-l10n-id="home-wallet-qr-preparing"></span>
+                  <img
+                    id="homeWalletQrImage"
+                    src="data:image/gif;base64,R0lGODlhAQABAIAAAAAAAP///ywAAAAAAQABAAACAUwAOw=="
+                    data-l10n-id="home-wallet-qr-image"
+                    hidden
+                  />
+                </div>
+                <div class="wallet-qr-address" id="homeWalletQrAddress"></div>
               </div>
-              <div class="wallet-qr-visual">
-                <span id="homeWalletQrStatus" data-l10n-id="home-wallet-qr-preparing"></span>
-                <img
-                  id="homeWalletQrImage"
-                  src="data:image/gif;base64,R0lGODlhAQABAIAAAAAAAP///ywAAAAAAQABAAACAUwAOw=="
-                  data-l10n-id="home-wallet-qr-image"
-                  hidden
-                />
-              </div>
-              <div class="wallet-qr-address" id="homeWalletQrAddress"></div>
             </div>
           </div>
         </div>
         <div class="hero-balance" id="walletBalance">—</div>
         <div class="hero-sub">
-          <span class="hero-usd" id="walletUsd">&#8776; $0.00</span>
+          <span class="hero-usd" id="walletUsd"></span>
           <span class="hero-change-group">
+            <span class="hero-change-label" data-l10n-id="home-portfolio-change-label"></span>
             <span class="hero-change flat" id="homeWalletChange">
-              <span class="hero-change-value change-value flat">0.0000</span>
-              <span class="change-percent flat">(0.00%)</span>
+              <span class="hero-change-value change-value flat">—</span>
             </span>
-            <span class="hero-change-label" data-l10n-id="home-portfolio-today"></span>
           </span>
         </div>
       </div>
 
-      <svg
-        class="hero-spark"
-        id="heroSpark"
-        viewBox="0 0 120 40"
-        preserveAspectRatio="none"
-        aria-hidden="true"
-      >
-        <polygon class="hero-spark-area" id="heroSparkArea" points="" />
-        <polyline class="hero-spark-line" id="heroSparkLine" points="" />
-      </svg>
+      <div class="hero-trend">
+        <svg
+          class="hero-spark"
+          id="heroSpark"
+          viewBox="0 0 120 40"
+          preserveAspectRatio="none"
+          aria-hidden="true"
+        >
+          <defs>
+            <linearGradient id="heroSparkFade" x1="0" y1="0" x2="0" y2="1">
+              <stop class="hero-spark-fade-top" offset="0" />
+              <stop class="hero-spark-fade-bottom" offset="1" />
+            </linearGradient>
+          </defs>
+          <polygon class="hero-spark-area" id="heroSparkArea" points="" />
+          <polyline class="hero-spark-line" id="heroSparkLine" points="" />
+        </svg>
+        <span class="hero-trend-range" data-l10n-id="home-trend-range"></span>
+      </div>
     </div>
 
     <div class="portfolio-stats">
       <div class="portfolio-stat">
         <span class="hero-stat-label" data-l10n-id="home-stat-available"></span>
         <span class="hero-stat-value" id="heroCash">—</span>
+        <span class="hero-stat-sub"></span>
       </div>
       <div class="portfolio-stat">
         <span class="hero-stat-label" data-l10n-id="home-stat-holdings"></span>
@@ -109,10 +120,12 @@
       <div class="portfolio-stat">
         <span class="hero-stat-label" data-l10n-id="home-stat-open-pnl"></span>
         <span class="hero-stat-value flat" id="heroOpenPnl">—</span>
+        <span class="hero-stat-sub" id="heroOpenPnlPercent"></span>
       </div>
       <div class="portfolio-stat">
         <span class="hero-stat-label" data-l10n-id="home-stat-realized-today"></span>
         <span class="hero-stat-value flat" id="heroRealizedToday">—</span>
+        <span class="hero-stat-sub"></span>
       </div>
     </div>
   </section>
@@ -145,6 +158,7 @@
       </div>
       <div class="calendar-weekdays">
         <span></span><span></span><span></span><span></span><span></span><span></span><span></span>
+        <span class="calendar-week-head" data-l10n-id="home-calendar-week"></span>
       </div>
       <div class="calendar-grid" id="portfolioCalendarGrid">
         <div class="calendar-cell skeleton"></div>
@@ -197,7 +211,19 @@
         </div>
         <div class="calendar-summary-stat">
           <span class="calendar-summary-label" data-l10n-id="home-calendar-trades"></span>
-          <span class="calendar-summary-value" id="calendarMonthTrades">0</span>
+          <span class="calendar-summary-value" id="calendarMonthTrades">—</span>
+        </div>
+        <div class="calendar-summary-stat">
+          <span class="calendar-summary-label" data-l10n-id="home-calendar-win-days"></span>
+          <span class="calendar-summary-value" id="calendarWinDays">—</span>
+        </div>
+        <div class="calendar-summary-stat">
+          <span class="calendar-summary-label" data-l10n-id="home-calendar-loss-days"></span>
+          <span class="calendar-summary-value" id="calendarLossDays">—</span>
+        </div>
+        <div class="calendar-summary-stat">
+          <span class="calendar-summary-label" data-l10n-id="home-calendar-best-day"></span>
+          <span class="calendar-summary-value" id="calendarBestDay">—</span>
         </div>
       </div>
     </section>
@@ -209,29 +235,46 @@
             <i class="icon-trending-up"></i> <span data-l10n-id="home-exposure-title"></span>
           </h2>
           <span class="section-count"
-            ><span id="positionsCount">0</span> <span data-l10n-id="home-exposure-open"></span
+            ><span id="positionsCount">—</span> <span data-l10n-id="home-exposure-open"></span
           ></span>
         </div>
-        <div class="metric-ledger">
+        <p class="exposure-empty" id="exposureEmpty" data-l10n-id="home-exposure-empty" hidden></p>
+        <div class="metric-ledger" id="exposureLedger">
           <div class="metric-row">
             <span class="position-label" data-l10n-id="home-exposure-invested"></span>
             <span class="position-value" id="positionsInvested">—</span>
           </div>
           <div class="metric-row">
+            <span class="position-label" data-l10n-id="home-exposure-value"></span>
+            <span class="position-value" id="positionsValue">—</span>
+          </div>
+          <div class="metric-row">
+            <span class="position-label" data-l10n-id="home-stat-open-pnl"></span>
+            <span class="position-value" id="positionsPnl">—</span>
+          </div>
+          <div class="metric-row" data-scope="single" hidden>
+            <span class="position-label" data-l10n-id="home-exposure-position"></span>
+            <span class="position-value" id="positionsOnly">—</span>
+          </div>
+          <div class="metric-row" data-scope="single" hidden>
+            <span class="position-label" data-l10n-id="home-exposure-held"></span>
+            <span class="position-value" id="positionsHeld">—</span>
+          </div>
+          <div class="metric-row" data-scope="multi" hidden>
             <span class="position-label" data-l10n-id="home-exposure-avg-size"></span>
             <span class="position-value" id="positionsAvgSize">—</span>
           </div>
-          <div class="metric-row">
+          <div class="metric-row" data-scope="multi" hidden>
             <span class="position-label" data-l10n-id="home-exposure-avg-hold"></span>
             <span class="position-value" id="positionsAvgHold">—</span>
           </div>
-          <div class="metric-row">
+          <div class="metric-row" data-scope="multi" hidden>
             <span class="position-label" data-l10n-id="home-exposure-best"></span>
-            <span class="position-value profit" id="positionsBest">—</span>
+            <span class="position-value" id="positionsBest">—</span>
           </div>
-          <div class="metric-row">
+          <div class="metric-row" data-scope="multi" hidden>
             <span class="position-label" data-l10n-id="home-exposure-worst"></span>
-            <span class="position-value loss" id="positionsWorst">—</span>
+            <span class="position-value" id="positionsWorst">—</span>
           </div>
         </div>
       </section>
@@ -242,27 +285,33 @@
             <i class="icon-funnel"></i> <span data-l10n-id="home-pipeline-title"></span>
           </h2>
         </div>
+        <ol class="pipeline-funnel">
+          <li class="pipeline-metric pipeline-step">
+            <span data-l10n-id="home-pipeline-tracked"></span><strong id="tokensTotal">—</strong>
+          </li>
+          <li class="pipeline-metric pipeline-step">
+            <span data-l10n-id="home-pipeline-monitored"></span
+            ><strong id="tokensMonitored">—</strong>
+          </li>
+          <li class="pipeline-metric pipeline-step">
+            <span data-l10n-id="home-pipeline-passed"></span><strong id="tokensPassed">—</strong>
+          </li>
+        </ol>
         <div class="pipeline-grid">
           <div class="pipeline-metric">
-            <span data-l10n-id="home-pipeline-tracked"></span><strong id="tokensTotal">0</strong>
-          </div>
-          <div class="pipeline-metric">
-            <span data-l10n-id="home-pipeline-priced"></span
-            ><strong id="tokensWithPrices">0</strong>
-          </div>
-          <div class="pipeline-metric">
-            <span data-l10n-id="home-pipeline-passed"></span><strong id="tokensPassed">0</strong>
-          </div>
-          <div class="pipeline-metric">
-            <span data-l10n-id="home-pipeline-not-passed"></span
-            ><strong id="tokensRejected">0</strong>
+            <span data-l10n-id="home-pipeline-rejected"></span
+            ><strong id="tokensRejected">—</strong>
           </div>
           <div class="pipeline-metric">
             <span data-l10n-id="home-pipeline-blacklisted"></span
-            ><strong id="tokensBlacklisted">0</strong>
+            ><strong id="tokensBlacklisted">—</strong>
           </div>
           <div class="pipeline-metric">
-            <span data-l10n-id="home-pipeline-ohlcv"></span><strong id="tokensOhlcv">0</strong>
+            <span data-l10n-id="home-pipeline-live-price"></span
+            ><strong id="tokensWithPrices">—</strong>
+          </div>
+          <div class="pipeline-metric">
+            <span data-l10n-id="home-pipeline-ohlcv"></span><strong id="tokensOhlcv">—</strong>
           </div>
         </div>
       </section>

@@ -347,5 +347,8 @@
     }
   ],
   "month_net_pnl_native": 1.462,
-  "month_trades": 24
+  "month_trades": 24,
+  "month_win_days": 4,
+  "month_loss_days": 2,
+  "best_day": { "date": "2026-10-05", "net_pnl_native": 1.237 }
 }

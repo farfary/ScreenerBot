@@ -298,6 +298,9 @@ export function renderTokenRowCell(
   </div>`;
 }
 
+// Characters kept at each end of a compact address.
+const COMPACT_ADDRESS = Object.freeze({ start: 4, end: 4 });
+
 const EXPLORER_PATHS = { token: "token", account: "account" };
 
 /** Glyph advance, smallest font size and action width of `.ti-address` (token_identity.css). */
@@ -364,12 +367,14 @@ function valueMarkup(value, shown, { plain, path, isSignature }) {
  * size, so the layout only has to give the address a line of its own.
  *
  * `plain` renders the bare value without link or copy, for a row that is itself
- * the action (search results).
+ * the action (search results). `compact` shows the `head…tail` form with the full
+ * value in its tooltip, for an identity line that carries its own copy action.
  */
 export function renderAddress(address, options = {}) {
   if (!address) return "—";
   const path = EXPLORER_PATHS[options.explorer] || EXPLORER_PATHS.token;
-  return valueMarkup(address, address, { plain: options.plain, path, isSignature: false });
+  const shown = options.compact ? Utils.formatSignatureCompact(address, COMPACT_ADDRESS) : address;
+  return valueMarkup(address, shown, { plain: options.plain, path, isSignature: false });
 }
 
 /**

@@ -5,7 +5,7 @@
 //! mutation to its stable `subject` (`WalletDatabase::subject` in
 //! `src/wallets/balance_monitor/database.rs`), never merely to
 //! `ChainId::Solana` -- two wallet addresses sharing a chain must never mix
-//! in a snapshot list, a monitor-stats row, or a balance-at-time lookup. And
+//! in a snapshot list, a monitor-stats row, or a worth-at-time lookup. And
 //! switching the main wallet must rebind that subject in place, without
 //! reopening a separate wallet-monitor database.
 //!
@@ -19,7 +19,7 @@ use chrono::Utc;
 use rusqlite::{params, Connection};
 
 use screenerbot::wallet::{
-    get_balance_at_time, get_recent_wallet_snapshots, get_wallet_monitor_stats,
+    get_recent_wallet_snapshots, get_wallet_monitor_stats, get_worth_at_time,
     initialize_wallet_database,
 };
 use screenerbot::wallets::{create_wallet, CreateWalletRequest};
@@ -97,13 +97,14 @@ async fn wallet_monitor_reads_stay_scoped_to_the_active_subject_and_rebind_on_ma
     );
     assert_eq!(stats.wallet_address, wallet_a.address);
 
-    let balance = get_balance_at_time(Utc::now())
+    let balance = get_worth_at_time(Utc::now())
         .await
-        .expect("balance-at-time query succeeds");
+        .expect("worth-at-time query succeeds")
+        .map(|sample| sample.equity_native);
     assert_eq!(
         balance,
         Some(1.0),
-        "balance-at-time must read A's row, never OTHER's 99.0"
+        "worth-at-time must read A's row, never OTHER's 99.0"
     );
 
     // Switching the main wallet must rebind the monitor's subject to B --

@@ -55,7 +55,7 @@ export const views = [
       { selector: "#walletSol", text: "^—$" },
       { selector: "#walletTokenCount", text: "^—$" },
       { selector: "#calendarMonthTrades", text: "^0$" },
-      { selector: "#positionsBest", text: "^—$" },
+      { selector: "#exposureEmpty", text: "^No open positions$" },
     ],
     dialogs: [
       {

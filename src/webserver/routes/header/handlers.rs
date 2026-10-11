@@ -12,7 +12,9 @@ use crate::filtering::{try_fetch_stats, SnapshotState};
 use crate::global::are_core_services_ready;
 use crate::rpc::{get_global_rpc_stats, RpcStats};
 use crate::services::get_service_manager;
-use crate::wallet::{get_balance_at_time, get_wallet_worth, WalletWorth};
+use crate::wallet::{
+    get_wallet_worth, get_worth_at_time, worth_change, WalletWorth, WorthChange, WorthSample,
+};
 
 use super::types::*;
 
@@ -41,7 +43,7 @@ pub(super) async fn get_header_metrics() -> Json<HeaderMetricsResponse> {
     // are briefly absent cost nothing here; the very next poll picks them up.
     let (today_stats, start_balance, filtering_stats, system) = tokio::join!(
         crate::positions::get_period_trading_stats(today_start, Some(now)),
-        get_balance_at_time(today_start),
+        get_worth_at_time(today_start),
         try_fetch_stats(ChainScope::All),
         calculate_system_health(),
     );
@@ -79,8 +81,10 @@ pub(super) async fn get_header_metrics() -> Json<HeaderMetricsResponse> {
         .as_ref()
         .map(|stats| stats.net_pnl_native)
         .unwrap_or_default();
-    let start_balance_sol = start_balance.ok().flatten();
-    let today_pnl_percent = start_balance_sol
+    let start_balance = start_balance.ok().flatten();
+    let today_pnl_percent = start_balance
+        .as_ref()
+        .map(|sample| sample.equity_native)
         .filter(|balance| *balance > f64::EPSILON)
         .map(|balance| today_pnl_native / balance * 100.0)
         .unwrap_or_default();
@@ -92,7 +96,7 @@ pub(super) async fn get_header_metrics() -> Json<HeaderMetricsResponse> {
         today_pnl_percent,
     };
 
-    let wallet = wallet_header_info(&worth, start_balance_sol);
+    let wallet = wallet_header_info(&worth, start_balance.as_ref());
 
     let rpc = rpc_header_info(get_global_rpc_stats().as_ref());
 
@@ -132,20 +136,20 @@ pub(super) async fn get_header_metrics() -> Json<HeaderMetricsResponse> {
 
 /// The header's wallet card from the live worth. Without a snapshot (no wallet, or the
 /// first balance read has not landed) the worth is unknown, so its default zeroes never
-/// reach the header as an empty wallet.
-fn wallet_header_info(worth: &WalletWorth, start_balance_sol: Option<f64>) -> WalletHeaderInfo {
+/// reach the header as an empty wallet. The day change is the like-for-like one the
+/// home hero shows, absent when the start of day priced other holdings.
+fn wallet_header_info(worth: &WalletWorth, start_of_day: Option<&WorthSample>) -> WalletHeaderInfo {
     let known = |value| worth.has_snapshot.then_some(value);
-    let equity = known(worth.total_equity_native);
+    let (change_today_native, change_today_percent) = match worth_change(worth, start_of_day) {
+        WorthChange::Known { native, percent } => (Some(native), percent),
+        WorthChange::Unknown | WorthChange::Incomparable => (None, None),
+    };
     WalletHeaderInfo {
         sol_balance: known(worth.native_balance),
         tokens_worth_native: known(worth.tokens_worth_native),
-        total_equity_native: equity,
-        change_today_native: equity
-            .zip(start_balance_sol)
-            .map(|(equity, start)| equity - start),
-        change_today_percent: equity
-            .zip(start_balance_sol.filter(|start| *start > f64::EPSILON))
-            .map(|(equity, start)| (equity - start) / start * 100.0),
+        total_equity_native: known(worth.total_equity_native),
+        change_today_native,
+        change_today_percent,
         token_count: worth.has_snapshot.then_some(worth.token_count),
         last_updated: worth.has_snapshot.then(|| worth.updated_at.to_rfc3339()),
     }
@@ -265,9 +269,17 @@ mod tests {
         }
     }
 
+    fn start_of_day(equity_native: f64, unpriced_mints: Option<Vec<String>>) -> WorthSample {
+        WorthSample {
+            equity_native,
+            unpriced_mints,
+        }
+    }
+
     #[test]
     fn wallet_figures_are_absent_until_the_first_snapshot() {
-        let wallet = wallet_header_info(&worth(false), Some(1.0));
+        let baseline = start_of_day(1.0, Some(Vec::new()));
+        let wallet = wallet_header_info(&worth(false), Some(&baseline));
         assert_eq!(wallet.sol_balance, None);
         assert_eq!(wallet.tokens_worth_native, None);
         assert_eq!(wallet.total_equity_native, None);
@@ -276,7 +288,7 @@ mod tests {
         assert_eq!(wallet.token_count, None);
         assert_eq!(wallet.last_updated, None);
 
-        let measured = wallet_header_info(&worth(true), Some(1.0));
+        let measured = wallet_header_info(&worth(true), Some(&baseline));
         assert_eq!(measured.sol_balance, Some(1.5));
         assert_eq!(measured.tokens_worth_native, Some(0.5));
         assert_eq!(measured.total_equity_native, Some(2.0));
@@ -284,6 +296,15 @@ mod tests {
         assert_eq!(measured.change_today_percent, Some(100.0));
         assert_eq!(measured.token_count, Some(3));
         assert!(measured.last_updated.is_some());
+    }
+
+    #[test]
+    fn a_start_of_day_that_priced_other_holdings_has_no_change() {
+        let baseline = start_of_day(1.0, Some(vec!["unpriced".to_owned()]));
+        let wallet = wallet_header_info(&worth(true), Some(&baseline));
+        assert_eq!(wallet.total_equity_native, Some(2.0));
+        assert_eq!(wallet.change_today_native, None);
+        assert_eq!(wallet.change_today_percent, None);
     }
 
     #[test]

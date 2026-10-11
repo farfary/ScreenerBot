@@ -10,18 +10,21 @@
  * Market cap, liquidity and 24h volume are shown in the dialog header and in one
  * section of a tab, never again: Overview names each at most once, and Pools states
  * liquidity and volume once for the summary and once per pool card (no separate
- * canonical-pool block repeating its card).
+ * canonical-pool block repeating its card). A total no pool reports is unknown, "—",
+ * never "$0.00". The transaction activity counts read as one unit, "42 / 33", set at the
+ * same edge as the percent line under them.
  *
  * Run with `npm run test:js`.
  */
 
 import test, { after } from "node:test";
 import assert from "node:assert/strict";
+import { readFileSync } from "node:fs";
 
 import { chromium } from "playwright";
 
 import { serveDashboard, PAGE_READY } from "../lib/dashboard_host.mjs";
-import { createApiHandler, loadIndex } from "../lib/dashboard_fixtures.mjs";
+import { createApiHandler, FIXTURES_ROOT, loadIndex } from "../lib/dashboard_fixtures.mjs";
 
 const browser = await chromium.launch({ headless: true });
 after(() => browser.close());
@@ -105,4 +108,65 @@ test("Overview and Pools state market cap, liquidity and volume once", async (t)
   const pools = await labels("pools");
   assert.equal(count(pools, "Liquidity"), cards + 1, "summary plus one per pool card");
   assert.equal(count(pools, "24h Volume"), cards + 1, "summary plus one per pool card");
+});
+
+async function openDetails(t, answers = {}) {
+  const context = await browser.newContext({ viewport: { width: 1440, height: 900 } });
+  const api = createApiHandler([tokens, shell], "populated");
+  const host = await serveDashboard(context, {
+    locale: "en",
+    onApi: (request) => {
+      const body = answers[request.url.pathname];
+      return body ? { body } : api.onApi(request);
+    },
+  });
+  t.after(async () => {
+    await context.close();
+    await host.close();
+  });
+  const page = await context.newPage();
+  await page.goto(`${host.origin}/tokens`);
+  await page.waitForSelector(PAGE_READY);
+  await page.click("#tokens-root tr[data-row-id] .ti-row-cell__symbol");
+  return page;
+}
+
+test("a pool total no pool reports reads as unknown, not zero", async (t) => {
+  const mint = "DezXAZ8z7PnrnRJjz3wXBoRgixCa6xjnB7YaB1pPB263";
+  const body = JSON.parse(readFileSync(`${FIXTURES_ROOT}/tokens/token_detail_bonk.json`, "utf8"));
+  body.pools = body.pools.map((pool) => ({ ...pool, liquidity_usd: null }));
+  const page = await openDetails(t, { [`/api/tokens/${mint}`]: JSON.stringify(body) });
+  await page.click('.token-details-dialog [data-dialog-tab="pools"]');
+  await page.waitForSelector(".token-details-dialog .pools-summary-fact");
+  const summary = await page.$$eval(".token-details-dialog .pools-summary-fact", (facts) =>
+    Object.fromEntries(
+      facts.map((fact) => [
+        fact.querySelector("span").textContent.trim(),
+        fact.querySelector("strong").textContent.trim(),
+      ])
+    )
+  );
+  assert.equal(summary.Liquidity, "—");
+  assert.notEqual(summary["24h Volume"], "—", "a reported total still shows");
+});
+
+test("transaction activity counts read as one unit over their percent line", async (t) => {
+  const page = await openDetails(t);
+  await page.waitForSelector(".token-details-dialog .overview-flow-counts-main");
+  const rows = await page.$$eval(".token-details-dialog .overview-flow-counts", (cells) =>
+    cells.map((cell) => {
+      const box = (selector) => cell.querySelector(selector).getBoundingClientRect();
+      return {
+        split: box(".overview-flow-sell-count").left - box(".overview-flow-buy-count").right,
+        edges: Math.abs(
+          box(".overview-flow-counts-main").right - box(".overview-flow-counts-sub").right
+        ),
+      };
+    })
+  );
+  assert.ok(rows.length > 0, "the fixture token shows transaction activity");
+  for (const { split, edges } of rows) {
+    assert.ok(split < 16, `buy and sell counts sit ${split}px apart`);
+    assert.ok(edges < 2, `the counts and the percent line end ${edges}px apart`);
+  }
 });

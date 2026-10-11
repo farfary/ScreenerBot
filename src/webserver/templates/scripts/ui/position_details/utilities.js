@@ -40,18 +40,6 @@ export function applyUtilitiesMixin(PositionDetailsDialog) {
     return Boolean(pos && (pos.transaction_exit_verified || pos.exit_time != null));
   };
 
-  /**
-   * Repaint one region only when its markup changed. The dialog repaints on every poll, and
-   * an unguarded innerHTML write resets scroll and wipes any text selection each tick.
-   */
-  proto._paintRegion = function (selector, html, afterPaint) {
-    const el = this.dialogEl?.querySelector(selector);
-    if (!el || this._renderKeys[selector] === html) return;
-    this._renderKeys[selector] = html;
-    el.innerHTML = html;
-    afterPaint?.(el);
-  };
-
   proto._formatPrice = function (price) {
     if (price === null || price === undefined) return "—";
     return Utils.formatPriceSubscript(price, { trim: false });

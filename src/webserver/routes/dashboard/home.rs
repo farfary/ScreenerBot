@@ -13,7 +13,7 @@ use crate::global::{
 use crate::positions;
 use crate::rpc::get_global_rpc_stats;
 use crate::trader::is_trader_running;
-use crate::wallet::WalletWorth;
+use crate::wallet::{worth_change, WalletWorth, WorthChange, WorthSample};
 use crate::webserver::promo;
 use crate::webserver::snapshot::get_cached_system_metrics;
 use crate::webserver::state::AppState;
@@ -21,37 +21,66 @@ use crate::webserver::state::AppState;
 use super::types::*;
 use super::utils::format_uptime;
 
+/// Width of one sparkline sample: the newest snapshot of each 15-minute window, so a
+/// full day is at most 96 points however often the monitor snapshots.
+const TREND_BUCKET_SECS: i64 = 15 * 60;
+
 /// The hero's wallet block from the live worth. Without a snapshot (no wallet, or the
 /// first balance read has not landed) the worth is unknown, so its default zeroes never
-/// reach the hero as a measured balance. No baseline means the change is unknown, not
-/// zero: falling back to the current worth reported a flat day the header shows as
-/// unknown.
+/// reach the hero as a measured balance. The day change is measured like for like
+/// (`wallet::worth_change`): without a baseline, or when the start of the day priced
+/// other holdings than now, it is absent and `change_status` says why.
 fn wallet_analytics(
     wallet_address: String,
     worth: &WalletWorth,
-    start_of_day_balance_native: Option<f64>,
+    start_of_day: Option<&WorthSample>,
     native_price_usd: f64,
-    balance_history: Vec<f64>,
+    comparable_history: Vec<f64>,
 ) -> WalletAnalytics {
     let known = |value| worth.has_snapshot.then_some(value);
-    let equity = known(worth.total_equity_native);
+    let change = worth_change(worth, start_of_day);
+    let (change_status, change_native, change_percent) = match change {
+        WorthChange::Known { native, percent } => (WorthChangeStatus::Known, Some(native), percent),
+        WorthChange::Unknown => (WorthChangeStatus::NoBaseline, None, None),
+        WorthChange::Incomparable => (WorthChangeStatus::Incomparable, None, None),
+    };
+    let baseline = matches!(change, WorthChange::Known { .. })
+        .then(|| start_of_day.map(|sample| sample.equity_native))
+        .flatten();
     WalletAnalytics {
         wallet_address,
         current_balance_native: known(worth.native_balance),
         token_count: worth.has_snapshot.then_some(worth.token_count),
         tokens_worth_native: known(worth.tokens_worth_native),
-        total_equity_native: equity,
-        unpriced_token_count: worth.has_snapshot.then_some(worth.unpriced_token_count),
-        start_of_day_balance_native,
-        change_native: equity
-            .zip(start_of_day_balance_native)
-            .map(|(equity, start)| equity - start),
-        change_percent: equity
-            .zip(start_of_day_balance_native.filter(|start| *start > 0.0))
-            .map(|(equity, start)| (equity - start) / start * 100.0),
+        total_equity_native: known(worth.total_equity_native),
+        unpriced_token_count: worth.has_snapshot.then(|| worth.unpriced_token_count()),
+        start_of_day_balance_native: start_of_day.map(|sample| sample.equity_native),
+        change_status,
+        change_native,
+        change_percent,
         native_price_usd,
-        balance_history,
+        balance_history: day_trend(
+            baseline,
+            comparable_history,
+            known(worth.total_equity_native),
+        ),
     }
+}
+
+/// The day's worth trend: the start-of-day worth, the comparable samples since, and the
+/// live worth last, so the line starts and ends on the two figures the day change
+/// compares and its direction is the change's sign. Without a comparable baseline there
+/// is no day change, and no line: a trend of the samples alone would read as the day's
+/// movement while the change beside it is unknown.
+fn day_trend(baseline: Option<f64>, samples: Vec<f64>, live: Option<f64>) -> Vec<f64> {
+    let Some(baseline) = baseline else {
+        return Vec::new();
+    };
+    std::iter::once(baseline)
+        .chain(samples)
+        .chain(live)
+        .filter(|value| value.is_finite())
+        .collect()
 }
 
 /// GET /api/dashboard/home
@@ -91,8 +120,7 @@ pub async fn get_home_dashboard(State(state): State<Arc<AppState>>) -> Json<Home
         ),
         // Wallet data
         main_wallet_address_result,
-        recent_snapshots_result,
-        start_of_day_balance_result,
+        start_of_day_result,
         // Positions data
         open_positions_result,
         // System metrics (cached, fast)
@@ -112,11 +140,8 @@ pub async fn get_home_dashboard(State(state): State<Arc<AppState>>) -> Json<Home
         },
         // Main wallet public address
         crate::wallets::get_main_address(),
-        // Wallet snapshots (newest first) — [0] is the current status, the rest
-        // form the balance-trend sparkline.
-        crate::wallet::get_recent_wallet_snapshots(30),
-        // Start of day balance
-        crate::wallet::get_balance_at_time(today_start),
+        // Start-of-day worth and the holdings it left unpriced
+        crate::wallet::get_worth_at_time(today_start),
         // Open positions
         positions::get_db_open_positions(),
         // System metrics (cached)
@@ -163,30 +188,32 @@ pub async fn get_home_dashboard(State(state): State<Arc<AppState>>) -> Json<Home
     };
 
     // Wallet worth comes from the live in-memory snapshot, priced now — the SAME call
-    // the header makes, so the two surfaces can never disagree. The snapshot list is only
-    // used for the trend sparkline.
-    //
-    // (Summing `snapshot.token_balances` here used to be the bug: `get_recent_snapshots`
-    // leaves that vector EMPTY, so the holdings value was permanently 0 and the hero's
-    // "Portfolio Value" was really just cash.)
+    // the header makes, so the two surfaces can never disagree.
     let worth = crate::wallet::get_wallet_worth();
-    let recent_snapshots = recent_snapshots_result.unwrap_or_default();
+    let start_of_day = start_of_day_result.ok().flatten();
 
-    // Oldest-first worth trend for the sparkline (reverse of newest-first). It plots the
-    // same quantity as the headline above it — it used to plot cash while the headline
-    // showed equity.
-    let balance_history: Vec<f64> = recent_snapshots
-        .iter()
-        .rev()
-        .map(|s| s.total_equity_native)
-        .collect();
+    // The day's trend plots the same quantity as the headline, and only samples that
+    // priced the same holdings: a sample taken before a held token had a price would
+    // draw a step that is no change in value. It depends on the live coverage, so it
+    // is read after the worth.
+    let comparable_history = if worth.has_snapshot {
+        crate::wallet::get_comparable_worth_history(
+            today_start,
+            &worth.unpriced_mints,
+            TREND_BUCKET_SECS,
+        )
+        .await
+        .unwrap_or_default()
+    } else {
+        Vec::new()
+    };
 
     let wallet = wallet_analytics(
         main_wallet_address_result.unwrap_or_default(),
         &worth,
-        start_of_day_balance_result.ok().flatten(),
+        start_of_day.as_ref(),
         crate::native_price::get_native_price(),
-        balance_history,
+        comparable_history,
     );
 
     // Process positions snapshot from parallel results
@@ -205,6 +232,8 @@ pub async fn get_home_dashboard(State(state): State<Arc<AppState>>) -> Json<Home
     let mut worst_performer: Option<PositionPerformer> = None;
     let mut total_hold_duration_mins: i64 = 0;
     let mut dca_count: i64 = 0;
+    // A position with a cost basis but no price tick yet has an unknown value.
+    let mut unpriced_with_basis = false;
 
     let unrealized_pnl_native: f64 = open_positions
         .iter()
@@ -232,67 +261,55 @@ pub async fn get_home_dashboard(State(state): State<Arc<AppState>>) -> Json<Home
                 p.entry_price
             };
 
-            if let Some(current) = p.current_price {
-                // Rank on the same fee-aware P&L the Open P&L figure sums, so a
-                // position cannot read as a gain here and a loss beside it. The
-                // raw price move stands in only until the first price tick.
-                let pnl_pct = p.unrealized_pnl_percent.unwrap_or(if entry > 0.0 {
-                    ((current - entry) / entry) * 100.0
+            let Some(current) = p.current_price else {
+                unpriced_with_basis = true;
+                return None;
+            };
+
+            // Rank on the same fee-aware P&L the Open P&L figure sums, so a position
+            // cannot read as a gain here and a loss beside it. The raw price move
+            // stands in only until the first price tick.
+            let pnl_pct = p.unrealized_pnl_percent.unwrap_or(if entry > 0.0 {
+                ((current - entry) / entry) * 100.0
+            } else {
+                0.0
+            });
+            let performer = || PositionPerformer {
+                id: p.id,
+                mint: p.mint.clone(),
+                symbol: p.symbol.clone(),
+                pnl_percent: pnl_pct,
+            };
+            if best_performer
+                .as_ref()
+                .is_none_or(|best| pnl_pct > best.pnl_percent)
+            {
+                best_performer = Some(performer());
+            }
+            if worst_performer
+                .as_ref()
+                .is_none_or(|worst| pnl_pct < worst.pnl_percent)
+            {
+                worst_performer = Some(performer());
+            }
+
+            // Prefer the P&L the position already booked (fee-aware, computed by the
+            // price updater); fall back to the basis-scaled estimate only until the
+            // first price tick lands.
+            Some(p.unrealized_pnl.unwrap_or_else(|| {
+                if entry > 0.0 {
+                    (current - entry) * p.total_size_native / entry
                 } else {
                     0.0
-                });
-
-                // Track best/worst performers
-                match &best_performer {
-                    None => {
-                        best_performer = Some(PositionPerformer {
-                            symbol: p.symbol.clone(),
-                            pnl_percent: pnl_pct,
-                        });
-                    }
-                    Some(best) if pnl_pct > best.pnl_percent => {
-                        best_performer = Some(PositionPerformer {
-                            symbol: p.symbol.clone(),
-                            pnl_percent: pnl_pct,
-                        });
-                    }
-                    _ => {}
                 }
-
-                match &worst_performer {
-                    None => {
-                        worst_performer = Some(PositionPerformer {
-                            symbol: p.symbol.clone(),
-                            pnl_percent: pnl_pct,
-                        });
-                    }
-                    Some(worst) if pnl_pct < worst.pnl_percent => {
-                        worst_performer = Some(PositionPerformer {
-                            symbol: p.symbol.clone(),
-                            pnl_percent: pnl_pct,
-                        });
-                    }
-                    _ => {}
-                }
-
-                // Prefer the P&L the position already booked (fee-aware, computed by
-                // the price updater); fall back to the basis-scaled estimate only until
-                // the first price tick lands.
-                Some(p.unrealized_pnl.unwrap_or_else(|| {
-                    if entry > 0.0 {
-                        (current - entry) * p.total_size_native / entry
-                    } else {
-                        0.0
-                    }
-                }))
-            } else {
-                None
-            }
+            }))
         })
         .sum();
 
     let unrealized_pnl_percent = (total_invested_native > 0.0)
         .then(|| (unrealized_pnl_native / total_invested_native) * 100.0);
+    let current_value_native =
+        (!unpriced_with_basis).then_some(total_invested_native + unrealized_pnl_native);
     let avg_position_size_native =
         (open_count > 0).then(|| total_invested_native / open_count as f64);
     let avg_hold_duration_mins = (open_count > 0).then(|| total_hold_duration_mins / open_count);
@@ -300,6 +317,7 @@ pub async fn get_home_dashboard(State(state): State<Arc<AppState>>) -> Json<Home
     let positions_snapshot = PositionsSnapshot {
         open_count,
         total_invested_native,
+        current_value_native,
         unrealized_pnl_native,
         unrealized_pnl_percent,
         avg_position_size_native,
@@ -373,13 +391,20 @@ pub async fn get_home_dashboard(State(state): State<Arc<AppState>>) -> Json<Home
     // nothing is priced, which is a different claim from "not counted yet".
     let filtering_stats = filtering_stats_result;
 
+    let monitored = filtering_stats.as_ref().map(|s| s.total_tokens);
     let passed_filters = filtering_stats.as_ref().map(|s| s.passed_filtering);
-    let with_prices = filtering_stats.as_ref().map(|s| s.with_pool_price);
+    // Read live from the pool price cache, the source of every trading price. The
+    // filtering snapshot's count is the cache intersected with its tokens at the moment
+    // it was built, so it lagged the pool service by a whole snapshot cycle (0 right
+    // after start-up while positions already showed a pool price).
+    let with_prices = crate::pools::is_pool_service_running()
+        .then(|| crate::pools::get_cache_stats(crate::chains::ChainScope::All).fresh_prices);
     let blacklisted = filtering_stats.as_ref().map(|s| s.blacklisted);
     let with_ohlcv = filtering_stats.as_ref().map(|s| s.with_ohlcv);
 
-    // Tracked, passed, rejected and blacklisted come from ONE filtering snapshot, so the
-    // pipeline adds up: rejected = tracked - passed - blacklisted at the same instant.
+    // The funnel narrows in order: tracked (every token in the database) ⊇ monitored
+    // (those with market data, which the filters evaluate) ⊇ passed. Rejected is
+    // monitored minus passed, the header's count, all read from ONE filtering snapshot.
     // Only before the first snapshot is the tracked total counted live, through the
     // async wrapper: called directly, `count_tokens()` takes the token database's
     // connection lock on the async worker thread and parks it for the duration
@@ -390,11 +415,14 @@ pub async fn get_home_dashboard(State(state): State<Arc<AppState>>) -> Json<Home
             .await
             .unwrap_or_default(),
     };
-    let rejected_filters = filtering_stats.as_ref().map(pipeline_rejected);
+    let rejected_filters = filtering_stats
+        .as_ref()
+        .map(|s| s.total_tokens.saturating_sub(s.passed_filtering));
 
     let tokens = TokenStatistics {
         snapshot_state: SnapshotState::of(&filtering_stats),
         total_in_database,
+        monitored,
         with_prices,
         passed_filters,
         rejected_filters,
@@ -422,76 +450,115 @@ pub async fn get_home_dashboard(State(state): State<Arc<AppState>>) -> Json<Home
     })
 }
 
-/// The pipeline's rejected count: every tracked token that neither passed nor is
-/// blacklisted, all read from one filtering snapshot so the pipeline adds up.
-fn pipeline_rejected(stats: &crate::filtering::FilteringStatsSnapshot) -> usize {
-    stats
-        .total_tokens_in_database
-        .saturating_sub(stats.passed_filtering)
-        .saturating_sub(stats.blacklisted)
-}
-
 #[cfg(test)]
 mod tests {
     use super::*;
 
-    fn worth(has_snapshot: bool) -> WalletWorth {
+    fn worth(has_snapshot: bool, unpriced: &[&str]) -> WalletWorth {
         WalletWorth {
             native_balance: 1.5,
             tokens_worth_native: 0.5,
             total_equity_native: 2.0,
             token_count: 3,
-            unpriced_token_count: 1,
+            unpriced_mints: unpriced.iter().map(|mint| (*mint).to_owned()).collect(),
             has_snapshot,
             ..WalletWorth::default()
         }
     }
 
+    fn start_of_day(equity_native: f64, unpriced: Option<&[&str]>) -> WorthSample {
+        WorthSample {
+            equity_native,
+            unpriced_mints: unpriced.map(|mints| mints.iter().map(|m| (*m).to_owned()).collect()),
+        }
+    }
+
     #[test]
     fn wallet_without_snapshot_reports_no_worth() {
-        let wallet = wallet_analytics(String::new(), &worth(false), Some(1.0), 150.0, vec![]);
+        let baseline = start_of_day(1.0, Some(&[]));
+        let wallet = wallet_analytics(
+            String::new(),
+            &worth(false, &[]),
+            Some(&baseline),
+            150.0,
+            vec![],
+        );
         assert_eq!(wallet.current_balance_native, None);
         assert_eq!(wallet.tokens_worth_native, None);
         assert_eq!(wallet.total_equity_native, None);
         assert_eq!(wallet.token_count, None);
         assert_eq!(wallet.unpriced_token_count, None);
+        assert_eq!(wallet.change_status, WorthChangeStatus::NoBaseline);
         assert_eq!(wallet.change_native, None);
         assert_eq!(wallet.change_percent, None);
+        assert!(wallet.balance_history.is_empty());
     }
 
     #[test]
     fn wallet_with_snapshot_reports_worth_and_change() {
-        let wallet = wallet_analytics("addr".to_owned(), &worth(true), Some(1.0), 150.0, vec![]);
+        let baseline = start_of_day(1.0, Some(&["dust"]));
+        let wallet = wallet_analytics(
+            "addr".to_owned(),
+            &worth(true, &["dust"]),
+            Some(&baseline),
+            150.0,
+            vec![1.2, 1.8],
+        );
         assert_eq!(wallet.current_balance_native, Some(1.5));
         assert_eq!(wallet.total_equity_native, Some(2.0));
         assert_eq!(wallet.token_count, Some(3));
+        assert_eq!(wallet.unpriced_token_count, Some(1));
+        assert_eq!(wallet.change_status, WorthChangeStatus::Known);
         assert_eq!(wallet.change_native, Some(1.0));
         assert_eq!(wallet.change_percent, Some(100.0));
+        // The trend starts at the baseline and ends at the live worth.
+        assert_eq!(wallet.balance_history, vec![1.0, 1.2, 1.8, 2.0]);
     }
 
+    /// A token priced now but not at the start of the day is not a gain: the change is
+    /// withheld, and no trend is drawn beside the unknown change.
     #[test]
-    fn pipeline_counts_add_up_within_one_snapshot() {
-        let stats = crate::filtering::FilteringStatsSnapshot {
-            total_tokens_in_database: 1_000,
-            total_tokens: 400,
-            with_pool_price: 1,
-            open_positions: 0,
-            blacklisted: 20,
-            with_ohlcv: 5,
-            passed_filtering: 3,
-            updated_at: chrono::Utc::now(),
-        };
-        let rejected = pipeline_rejected(&stats);
-        assert_eq!(
-            rejected + stats.passed_filtering + stats.blacklisted,
-            stats.total_tokens_in_database
+    fn a_token_entering_pricing_is_not_a_day_change() {
+        let baseline = start_of_day(1.0, Some(&["late"]));
+        let wallet = wallet_analytics(
+            "addr".to_owned(),
+            &worth(true, &[]),
+            Some(&baseline),
+            150.0,
+            vec![1.9],
         );
+        assert_eq!(wallet.total_equity_native, Some(2.0));
+        assert_eq!(wallet.change_status, WorthChangeStatus::Incomparable);
+        assert_eq!(wallet.change_native, None);
+        assert_eq!(wallet.change_percent, None);
+        assert!(wallet.balance_history.is_empty());
+
+        let legacy = start_of_day(1.0, None);
+        let wallet = wallet_analytics(
+            "addr".to_owned(),
+            &worth(true, &[]),
+            Some(&legacy),
+            150.0,
+            vec![],
+        );
+        assert_eq!(wallet.change_status, WorthChangeStatus::Incomparable);
+    }
+
+    /// The live price count reads the pool price cache, never the filtering snapshot's
+    /// copy of it, which is only as fresh as its last build.
+    #[test]
+    fn live_price_count_reads_the_pool_cache() {
+        let source = include_str!("home.rs");
+        let production = source.split("#[cfg(test)]").next().unwrap_or(source);
+        assert!(production.contains("get_cache_stats"));
+        assert!(!production.contains("with_pool_price"));
     }
 
     #[test]
     fn wallet_without_baseline_reports_no_change() {
-        let wallet = wallet_analytics("addr".to_owned(), &worth(true), None, 150.0, vec![]);
+        let wallet = wallet_analytics("addr".to_owned(), &worth(true, &[]), None, 150.0, vec![]);
         assert_eq!(wallet.total_equity_native, Some(2.0));
+        assert_eq!(wallet.change_status, WorthChangeStatus::NoBaseline);
         assert_eq!(wallet.change_native, None);
         assert_eq!(wallet.change_percent, None);
     }

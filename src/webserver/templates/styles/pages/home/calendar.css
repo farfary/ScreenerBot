@@ -14,6 +14,12 @@
   gap: 0.25rem;
 }
 
+/* Sized to the shared header height (`.workspace-header`). */
+.calendar-nav .btn-icon {
+  width: 1.75rem;
+  height: 1.75rem;
+}
+
 .calendar-month-label {
   /* Fixed width sized for the longest label ("September 2026") so the prev/next
      buttons never shift when the month name length changes. */
@@ -26,80 +32,102 @@
   font-family: var(--font-data);
 }
 
-.calendar-weekdays {
+/* Seven days and the week's total. */
+.calendar-weekdays,
+.calendar-grid {
   display: grid;
-  grid-template-columns: repeat(7, 1fr);
+  grid-template-columns: repeat(7, minmax(0, 1fr)) minmax(0, 0.9fr);
   gap: 1px;
-  margin-bottom: 1px;
+}
+
+.calendar-weekdays {
   flex-shrink: 0;
+  margin-bottom: 1px;
 }
 
 .calendar-weekdays span {
   padding-inline-start: 0.4rem;
+  overflow: hidden;
   font-size: 0.56rem;
   font-weight: 700;
   color: var(--text-muted);
   text-transform: uppercase;
   letter-spacing: 0.09em;
+  white-space: nowrap;
 }
 
+.calendar-weekdays .calendar-week-head {
+  padding-inline: 0 0.4rem;
+  text-align: end;
+}
+
+/* The rows share the room the section has, never below a readable cell height:
+   the grid grows to fill it and does not shrink below its rows (the section scrolls
+   instead), so the month summary always sits directly under the last week. */
 .calendar-grid {
-  display: grid;
-  grid-template-columns: repeat(7, 1fr);
-  grid-auto-rows: minmax(0, 1fr);
-  gap: 1px;
-  flex: 1 1 auto;
-  min-height: 0;
+  grid-auto-rows: minmax(2.5rem, 1fr);
+  flex: 1 0 auto;
   background: var(--border-color);
 }
 
-.calendar-cell {
+.calendar-cell,
+.calendar-week {
+  --cell-base: var(--bg-secondary);
+
   position: relative;
   display: flex;
   flex-direction: column;
+  min-width: 0;
   min-height: 0;
   padding: 0.3rem 0.4rem;
-  background: var(--bg-secondary);
+  background: var(--cell-base);
   border: 0;
   overflow: hidden;
   transition: background-color var(--transition-fast);
 }
 
-/* In light theme --bg-secondary == --bg-card (both white), so give cells a
-   subtle fill + darker border to define the grid. Tinted (profit/loss) cells
-   keep their inline heatmap background, which wins over this rule. */
+/* In light theme --bg-secondary == --bg-card (both white), so cells take a subtle
+   fill to define the grid. */
 [data-theme="light"] .calendar-cell {
-  background: var(--bg-card-hover);
+  --cell-base: var(--bg-card-hover);
 }
 
-.calendar-cell:not(.blank, .future):hover {
-  background-color: var(--bg-card-hover);
-  z-index: 1;
+/* A traded day is its own fill tinted toward the profit or loss colour by
+   `--cell-tint` (set per cell from the day's share of the month's largest move); the
+   figure carries the full colour. Cells stay opaque: the grid paints its 1px gaps
+   with the border colour, so a translucent cell would show that colour through. */
+.calendar-cell.profit {
+  background: color-mix(in srgb, var(--badge-online) var(--cell-tint, 0%), var(--cell-base));
 }
 
-.calendar-cell.blank {
-  background: var(--bg-primary);
-  border: none;
+.calendar-cell.loss {
+  background: color-mix(in srgb, var(--badge-error) var(--cell-tint, 0%), var(--cell-base));
 }
 
-/* Cells stay opaque: the grid paints its 1px gaps with the border colour, so a
-   translucent cell would show that colour through its whole face. Quiet days dim
-   their content; days not yet reached take the out-of-month fill. */
+/* Dark theme cells sit one step below the hover fill; light theme cells already use it. */
+.calendar-cell[data-date]:hover {
+  --cell-base: var(--bg-card-hover);
+}
+
+/* Blanks before the 1st and after the last day, days not yet reached and the week
+   column take the out-of-month fill. */
+.calendar-cell.blank,
+.calendar-cell.future,
+.calendar-week {
+  --cell-base: var(--bg-primary);
+}
+
 .calendar-cell.no-trades > *,
 .calendar-cell.skeleton > * {
   opacity: 0.7;
-}
-
-.calendar-cell.future {
-  background: var(--bg-primary);
 }
 
 .calendar-cell.future > * {
   opacity: 0.4;
 }
 
-/* Day number: top-left marker; today gets an accent pill instead of a heavy
-   full-cell outline so it reads cleanly alongside the heatmap tints. */
+/* Day number: top-start marker. Today is a filled pill in the primary button
+   colour, whose white figure reads in both themes. */
 .calendar-cell .cell-day {
   align-self: flex-start;
   font-size: 0.62rem;
@@ -117,88 +145,122 @@
   margin-block: -0.1rem 0;
   margin-inline: -0.1rem 0;
   padding: 0 0.2rem;
-  background: var(--link-color);
+  background: var(--button-primary-bg);
   color: #fff;
   font-weight: 700;
   border-radius: 999px;
 }
 
-/* P&L is the hero metric — pushed to the bottom with the portfolio value under it. */
-.calendar-cell .cell-pnl {
+/* The day's (or week's) realized P&L, at the foot of the cell in its tone. */
+.cell-pnl {
   margin-top: auto;
+  overflow: hidden;
   font-family: var(--font-data);
-  font-size: 0.8rem;
+  font-size: 0.78rem;
   font-weight: 700;
   line-height: 1.15;
   letter-spacing: -0.01em;
+  text-overflow: ellipsis;
+  white-space: nowrap;
   font-feature-settings:
     "tnum" 1,
     "zero" 1;
 }
 
-.calendar-cell .cell-value {
-  margin-top: 0.1rem;
-  font-family: var(--font-data);
-  font-size: 0.6rem;
-  font-weight: 500;
-  color: var(--text-muted);
-  line-height: 1.2;
-  font-feature-settings: "tnum" 1;
+.calendar-week {
+  align-items: flex-end;
 }
 
-/* Days without trades show only the end balance, which the popover names — keep it
-   bottom-aligned. */
-.calendar-cell.no-trades .cell-value {
-  margin-top: auto;
-}
-
-/* Profit/loss cells carry a saturated heatmap tint (the JS raises the alpha
-   floor in light theme so the fill stays a solid colour, not a pale pastel), so
-   white text reads on the coloured cells in BOTH themes. No-trade cells
-   have no tint and keep their dark --text-muted for contrast on the light card. */
 .calendar-cell.profit .cell-pnl,
-.calendar-cell.loss .cell-pnl {
-  color: #fff;
-  text-shadow: 0 1px 2px rgb(0 0 0 / 0.4);
+.calendar-week.profit .cell-pnl {
+  color: var(--semantic-success-text);
 }
 
-.calendar-cell.profit .cell-day,
-.calendar-cell.loss .cell-day {
-  color: rgb(255 255 255 / 0.9);
+.calendar-cell.loss .cell-pnl,
+.calendar-week.loss .cell-pnl {
+  color: var(--semantic-error-text);
 }
 
-.calendar-cell.profit .cell-value,
-.calendar-cell.loss .cell-value {
-  color: rgb(255 255 255 / 0.85);
-}
-
-/* ===== Calendar month summary ===== */
+/* ===== Calendar month summary =====
+   An even grid that wraps whole: five across, then 3 + 2 (on a six-column track),
+   then 2 + 2 + 1, by the width the calendar section has. */
 .calendar-summary {
   display: grid;
-  grid-template-columns: repeat(2, 1fr);
-  gap: 0;
-  margin-top: 0;
   flex-shrink: 0;
+  grid-template-columns: repeat(5, minmax(0, 1fr));
   border-top: 1px solid var(--border-color);
 }
 
 .calendar-summary-stat {
   display: flex;
-  justify-content: space-between;
-  align-items: center;
-  padding: 0.55rem 0;
+  flex-direction: column;
+  gap: 0.2rem;
+  min-width: 0;
+  padding-block: 0.5rem;
+  padding-inline: 0.75rem;
+  white-space: nowrap;
 }
 
 .calendar-summary-stat:first-child {
-  padding-inline-end: 1rem;
+  padding-inline-start: 0;
 }
 
-.calendar-summary-stat + .calendar-summary-stat {
-  padding-inline-start: 1rem;
+.calendar-summary-stat:not(:first-child) {
   border-inline-start: 1px solid var(--border-color);
 }
 
+@container calendar (width < 40rem) {
+  .calendar-summary {
+    grid-template-columns: repeat(6, minmax(0, 1fr));
+  }
+
+  .calendar-summary-stat {
+    grid-column: span 2;
+  }
+
+  .calendar-summary-stat:nth-child(n + 4) {
+    grid-column: span 3;
+    border-top: 1px solid var(--border-color);
+  }
+
+  .calendar-summary-stat:nth-child(4) {
+    padding-inline-start: 0;
+    border-inline-start: 0;
+  }
+}
+
+@container calendar (width < 24rem) {
+  .calendar-summary {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+
+  .calendar-summary-stat,
+  .calendar-summary-stat:nth-child(n + 4) {
+    grid-column: span 1;
+  }
+
+  .calendar-summary-stat:nth-child(n + 3) {
+    border-top: 1px solid var(--border-color);
+  }
+
+  .calendar-summary-stat:nth-child(odd) {
+    padding-inline-start: 0;
+    border-inline-start: 0;
+  }
+
+  .calendar-summary-stat:nth-child(even) {
+    padding-inline-start: 0.75rem;
+    border-inline-start: 1px solid var(--border-color);
+  }
+
+  .calendar-summary-stat:last-child {
+    grid-column: span 2;
+  }
+}
+
 .calendar-summary-label {
+  overflow: hidden;
+  text-overflow: ellipsis;
   font-size: var(--label-size);
   font-weight: 600;
   color: var(--text-secondary);
@@ -224,7 +286,31 @@
   color: var(--badge-error);
 }
 
-/* ===== Day detail popover (hover, traded days only) ===== */
+.calendar-best-date {
+  color: var(--text-secondary);
+  font-weight: 600;
+}
+
+/* A phone keeps the seven days only, each a tinted cell whose detail opens on a tap. */
+@media (width <= 640px) {
+  .calendar-weekdays,
+  .calendar-grid {
+    grid-template-columns: repeat(7, minmax(0, 1fr));
+  }
+
+  .calendar-week,
+  .calendar-weekdays .calendar-week-head,
+  .calendar-cell .cell-pnl {
+    display: none;
+  }
+
+  .calendar-weekdays span {
+    padding-inline-start: 0.25rem;
+    letter-spacing: 0.02em;
+  }
+}
+
+/* ===== Day detail popover (hover, keyboard focus or tap) ===== */
 .cal-day-popover {
   position: fixed;
   z-index: var(--z-app-tooltip, 10090);

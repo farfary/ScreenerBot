@@ -347,5 +347,8 @@
     }
   ],
   "month_net_pnl_native": 0,
-  "month_trades": 0
+  "month_trades": 0,
+  "month_win_days": 0,
+  "month_loss_days": 0,
+  "best_day": null
 }
