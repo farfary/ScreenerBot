@@ -11,7 +11,7 @@ use super::wipe_candle_data;
 use crate::chains::ChainId;
 use crate::database::schema::ddl::has_column;
 use crate::errors::DatabaseError;
-use crate::ohlcvs::types::{OhlcvError, OhlcvResult};
+use crate::ohlcvs::error::{OhlcvError, OhlcvResult};
 use rusqlite::{params, Connection, OptionalExtension};
 
 /// Version of the OHLCV candle data logic. Bump this whenever a change to how

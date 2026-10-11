@@ -24,9 +24,8 @@ pub use types::{
 use crate::database::schema::{self, ddl, SchemaContext, StoreSchema};
 use crate::database::WriteTransaction;
 use crate::errors::DatabaseError;
-use crate::ohlcvs::types::{
-    OhlcvError, OhlcvResult, PoolConfig, Timeframe, DEEP_HISTORY_TIMEFRAMES,
-};
+use crate::ohlcvs::error::{OhlcvError, OhlcvResult};
+use crate::ohlcvs::types::{PoolConfig, Timeframe, DEEP_HISTORY_TIMEFRAMES};
 use crate::{chains::ChainId, database};
 use chrono::{DateTime, Utc};
 use r2d2::{Pool, PooledConnection};
@@ -618,6 +617,36 @@ mod tests {
     use super::migrations::test_path;
     use super::*;
     use crate::ohlcvs::types::{Candle, Timeframe};
+
+    /// A full disk while the schema step runs is a failure of the store's surroundings:
+    /// the step keeps the classified `DiskFull`, and recovery reports the cache store
+    /// unavailable instead of quarantining and rebuilding it.
+    #[test]
+    fn disk_full_during_schema_step_leaves_the_store_unavailable() {
+        use crate::database::catalog;
+        use crate::database::recovery::{decide, FailureKind, RecoveryAction};
+
+        let mut conn = Connection::open_in_memory().expect("open test database");
+        conn.execute_batch("PRAGMA max_page_count = 1")
+            .expect("cap the database at one page");
+        let tx = conn.transaction().expect("begin schema transaction");
+        let context = SchemaContext {
+            chains: vec![ChainId::Solana],
+        };
+
+        let error = step(&tx, &context).expect_err("a capped database cannot take the schema");
+
+        assert!(
+            matches!(error, DatabaseError::DiskFull { .. }),
+            "schema step must keep the disk-full class, got {error:?}"
+        );
+        let kind = FailureKind::of(&error);
+        assert!(!kind.is_content());
+        assert_eq!(
+            decide(catalog::OHLCVS.class, kind, false),
+            RecoveryAction::Unavailable
+        );
+    }
 
     #[test]
     fn status_queries_are_pool_scoped_and_count_the_bucket_containing_the_span_start() {

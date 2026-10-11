@@ -9,7 +9,8 @@
 
 use crate::database::WriteTransaction;
 use crate::errors::DatabaseError;
-use crate::ohlcvs::types::{MintGapAggregate, OhlcvError, OhlcvResult, Timeframe};
+use crate::ohlcvs::error::{OhlcvError, OhlcvResult};
+use crate::ohlcvs::types::{MintGapAggregate, Timeframe};
 use chrono::{DateTime, Utc};
 use rusqlite::{params, Connection, Result as SqliteResult};
 

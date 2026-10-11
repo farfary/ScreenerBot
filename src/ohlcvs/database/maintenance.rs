@@ -5,7 +5,7 @@
 
 use crate::database::WriteTransaction;
 use crate::errors::DatabaseError;
-use crate::ohlcvs::types::{OhlcvError, OhlcvResult};
+use crate::ohlcvs::error::{OhlcvError, OhlcvResult};
 use chrono::{Duration, Utc};
 use rusqlite::{params, params_from_iter, Result as SqliteResult};
 use std::collections::HashSet;

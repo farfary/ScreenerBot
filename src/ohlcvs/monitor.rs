@@ -10,14 +10,15 @@ use crate::logger::{self, LogTag};
 use crate::ohlcvs::aggregator::OhlcvAggregator;
 use crate::ohlcvs::cache::OhlcvCache;
 use crate::ohlcvs::database::{OhlcvDatabase, StoredBucket};
+use crate::ohlcvs::error::{OhlcvError, OhlcvResult};
 use crate::ohlcvs::feeds::CandleFeed;
 use crate::ohlcvs::fetcher::{CandleSource, FetchResponse, OhlcvFetcher, MAX_CANDLES_PER_REQUEST};
 use crate::ohlcvs::gaps::{GapManager, GAP_FILL_REQUESTS_PER_CYCLE};
 use crate::ohlcvs::manager::PoolManager;
 use crate::ohlcvs::priorities::{ActivityType, PriorityManager};
 use crate::ohlcvs::types::{
-    Candle, MonitorStats, MonitorTelemetrySnapshot, OhlcvError, OhlcvResult, PoolConfig, Priority,
-    Timeframe, TokenOhlcvConfig,
+    Candle, MonitorStats, MonitorTelemetrySnapshot, PoolConfig, Priority, Timeframe,
+    TokenOhlcvConfig,
 };
 use chrono::{DateTime, Utc};
 use serde_json::json;

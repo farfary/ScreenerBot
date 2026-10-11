@@ -6,7 +6,8 @@
 
 use crate::database::WriteTransaction;
 use crate::errors::DatabaseError;
-use crate::ohlcvs::types::{Candle, OhlcvError, OhlcvResult, Timeframe, DEEP_HISTORY_TIMEFRAMES};
+use crate::ohlcvs::error::{OhlcvError, OhlcvResult};
+use crate::ohlcvs::types::{Candle, Timeframe, DEEP_HISTORY_TIMEFRAMES};
 use chrono::Utc;
 use rusqlite::{params, OptionalExtension};
 

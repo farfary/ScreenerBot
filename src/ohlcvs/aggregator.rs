@@ -4,7 +4,8 @@
 //! OHLCV aggregator — combines candles from multiple timeframes and sources.
 
 use crate::events::{record_ohlcv_event, Severity};
-use crate::ohlcvs::types::{Candle, OhlcvError, OhlcvResult, Timeframe};
+use crate::ohlcvs::error::{OhlcvError, OhlcvResult};
+use crate::ohlcvs::types::{Candle, Timeframe};
 use serde_json::json;
 use std::collections::HashMap;
 

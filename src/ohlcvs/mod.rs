@@ -5,6 +5,7 @@
 mod aggregator;
 mod cache;
 pub(crate) mod database;
+mod error;
 mod feeds;
 mod fetcher;
 mod gaps;
@@ -16,10 +17,11 @@ mod service;
 mod service_api;
 mod types;
 
+pub use error::{OhlcvError, OhlcvResult};
 pub use types::{
-    Candle, ChartTail, MonitorStats, MonitorTelemetrySnapshot, OhlcvError, OhlcvMetrics,
-    OhlcvResult, OhlcvStatus, OhlcvTimeframeStatus, PoolConfig, PoolMetadata, Priority, Timeframe,
-    TimeframeBundle, TokenOhlcvConfig, BUNDLE_CANDLE_COUNT,
+    Candle, ChartTail, MonitorStats, MonitorTelemetrySnapshot, OhlcvMetrics, OhlcvStatus,
+    OhlcvTimeframeStatus, PoolConfig, PoolMetadata, Priority, Timeframe, TimeframeBundle,
+    TokenOhlcvConfig, BUNDLE_CANDLE_COUNT,
 };
 
 /// Rename declarations, reached by the schema owner's cross-store guard.

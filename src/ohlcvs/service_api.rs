@@ -8,12 +8,13 @@
 //! scope it returns that chain's value unchanged.
 
 use super::database::{ClearAllResult, DatabaseStats, DeleteResult, OhlcvTokenStatus};
+use super::error::{OhlcvError, OhlcvResult};
 use super::monitor::GAP_SUMMARY_LIMIT;
 use super::priorities::ActivityType;
 use super::service::{built_service, get_or_init_service, OhlcvServiceImpl};
 use super::types::{
-    Candle, ChartTail, MonitorStats, MonitorTelemetrySnapshot, OhlcvError, OhlcvMetrics,
-    OhlcvResult, OhlcvStatus, PoolMetadata, Priority, Timeframe, TimeframeBundle,
+    Candle, ChartTail, MonitorStats, MonitorTelemetrySnapshot, OhlcvMetrics, OhlcvStatus,
+    PoolMetadata, Priority, Timeframe, TimeframeBundle,
 };
 use crate::chains::{AssetId, ChainId, ChainScope};
 use crate::errors::InternalError;

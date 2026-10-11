@@ -10,13 +10,14 @@ use crate::logger::{self, LogTag};
 use crate::ohlcvs::aggregator::OhlcvAggregator;
 use crate::ohlcvs::cache::OhlcvCache;
 use crate::ohlcvs::database::OhlcvDatabase;
+use crate::ohlcvs::error::{OhlcvError, OhlcvResult};
 use crate::ohlcvs::fetcher::{FetchResponse, OhlcvFetcher};
 use crate::ohlcvs::gaps::GapManager;
 use crate::ohlcvs::manager::PoolManager;
 use crate::ohlcvs::monitor::{data_server_usable, OhlcvMonitor};
 use crate::ohlcvs::types::{
-    Candle, ChartTail, OhlcvError, OhlcvResult, OhlcvStatus, OhlcvTimeframeStatus, Timeframe,
-    TimeframeBundle, BUNDLE_CANDLE_COUNT,
+    Candle, ChartTail, OhlcvStatus, OhlcvTimeframeStatus, Timeframe, TimeframeBundle,
+    BUNDLE_CANDLE_COUNT,
 };
 use chrono::Utc;
 use std::collections::{HashMap, HashSet};

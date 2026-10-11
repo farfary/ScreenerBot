@@ -4,7 +4,8 @@
 //! Monitor configuration — upsert, query, and list token monitoring configs.
 
 use crate::errors::DatabaseError;
-use crate::ohlcvs::types::{OhlcvError, OhlcvResult, Priority, TokenOhlcvConfig};
+use crate::ohlcvs::error::{OhlcvError, OhlcvResult};
+use crate::ohlcvs::types::{Priority, TokenOhlcvConfig};
 use chrono::{DateTime, Utc};
 use rusqlite::{params, OptionalExtension, Result as SqliteResult};
 

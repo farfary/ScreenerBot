@@ -7,7 +7,8 @@
 use crate::errors::DatabaseError;
 use rusqlite::{params, Connection};
 
-use crate::ohlcvs::types::{OhlcvError, OhlcvResult, DEEP_HISTORY_TIMEFRAMES};
+use crate::ohlcvs::error::{OhlcvError, OhlcvResult};
+use crate::ohlcvs::types::DEEP_HISTORY_TIMEFRAMES;
 
 use super::deep_history_column;
 use crate::database::schema::ddl::has_column;

@@ -348,9 +348,9 @@ impl WalletDatabase {
             conn.query_row(&format!("SELECT COUNT(*) FROM {table}"), [], |row| {
                 row.get(0)
             })
-            .map_err(|e| Error::Migration {
-                step: format!("count {table}"),
-                detail: e.to_string(),
+            .map_err(|e| {
+                DatabaseError::classify_sqlite_failure(&format!("count wallet-monitor {table}"), e)
+                    .into()
             })
         }
         let expected = [
@@ -363,7 +363,7 @@ impl WalletDatabase {
         ];
 
         conn.execute_batch("CREATE TABLE wallet_snapshots__chain_v1 (id INTEGER PRIMARY KEY AUTOINCREMENT, chain_id TEXT NOT NULL DEFAULT 'solana', wallet_address TEXT NOT NULL, snapshot_time TEXT NOT NULL, native_balance REAL NOT NULL, native_balance_raw INTEGER NOT NULL, total_equity_native REAL, total_tokens_count INTEGER NOT NULL DEFAULT 0, total_nfts_count INTEGER NOT NULL DEFAULT 0, created_at TEXT NOT NULL DEFAULT (datetime('now'))); INSERT INTO wallet_snapshots__chain_v1 (id, chain_id, wallet_address, snapshot_time, native_balance, native_balance_raw, total_equity_native, total_tokens_count, total_nfts_count, created_at) SELECT id, 'solana', wallet_address, snapshot_time, native_balance, native_balance_raw, total_equity_native, total_tokens_count, total_nfts_count, created_at FROM wallet_snapshots; DROP TABLE wallet_snapshots; ALTER TABLE wallet_snapshots__chain_v1 RENAME TO wallet_snapshots; CREATE TABLE native_flow_cache__chain_v1 (chain_id TEXT NOT NULL DEFAULT 'solana', wallet_address TEXT NOT NULL DEFAULT '', signature TEXT NOT NULL, timestamp TEXT NOT NULL, native_delta REAL NOT NULL DEFAULT 0, created_at TEXT NOT NULL DEFAULT (datetime('now')), PRIMARY KEY(chain_id, wallet_address, signature)); INSERT INTO native_flow_cache__chain_v1 (chain_id, wallet_address, signature, timestamp, native_delta, created_at) SELECT 'solana', COALESCE((SELECT value FROM wallet_metadata WHERE key = 'current_wallet'), ''), signature, timestamp, native_delta, created_at FROM native_flow_cache; DROP TABLE native_flow_cache; ALTER TABLE native_flow_cache__chain_v1 RENAME TO native_flow_cache; CREATE TABLE wallet_dashboard_metrics__chain_v1 (chain_id TEXT NOT NULL DEFAULT 'solana', wallet_address TEXT NOT NULL DEFAULT '', window_key TEXT NOT NULL, window_hours INTEGER NOT NULL, snapshot_limit INTEGER NOT NULL, token_limit INTEGER NOT NULL, payload_blob BLOB NOT NULL, payload_format TEXT NOT NULL DEFAULT 'json-gzip', computed_at TEXT NOT NULL, valid_until TEXT NOT NULL, computation_duration_ms INTEGER, snapshot_count INTEGER NOT NULL DEFAULT 0, flow_cache_rows INTEGER NOT NULL DEFAULT 0, last_processed_timestamp TEXT, last_processed_signature TEXT, window_start TEXT, created_at TEXT NOT NULL DEFAULT (datetime('now')), updated_at TEXT NOT NULL DEFAULT (datetime('now')), PRIMARY KEY(chain_id, wallet_address, window_key)); INSERT INTO wallet_dashboard_metrics__chain_v1 (chain_id, wallet_address, window_key, window_hours, snapshot_limit, token_limit, payload_blob, payload_format, computed_at, valid_until, computation_duration_ms, snapshot_count, flow_cache_rows, last_processed_timestamp, last_processed_signature, window_start, created_at, updated_at) SELECT 'solana', COALESCE((SELECT value FROM wallet_metadata WHERE key = 'current_wallet'), ''), window_key, window_hours, snapshot_limit, token_limit, payload_blob, payload_format, computed_at, valid_until, computation_duration_ms, snapshot_count, flow_cache_rows, last_processed_timestamp, last_processed_signature, window_start, created_at, updated_at FROM wallet_dashboard_metrics; DROP TABLE wallet_dashboard_metrics; ALTER TABLE wallet_dashboard_metrics__chain_v1 RENAME TO wallet_dashboard_metrics;")
-            .map_err(|e| Error::Migration { step: "rebuild tables".to_owned(), detail: e.to_string() })?;
+            .map_err(|e| DatabaseError::classify_sqlite_failure("rebuild wallet-monitor tables by chain", e))?;
 
         for (table, count) in expected {
             let actual = row_count(conn, table)?;
@@ -378,9 +378,8 @@ impl WalletDatabase {
             .query_row("SELECT COUNT(*) FROM pragma_foreign_key_check", [], |row| {
                 row.get(0)
             })
-            .map_err(|e| Error::Migration {
-                step: "verify foreign keys".to_owned(),
-                detail: e.to_string(),
+            .map_err(|e| {
+                DatabaseError::classify_sqlite_failure("verify wallet-monitor foreign keys", e)
             })?;
         if fk_errors != 0 {
             return Err(Error::Migration {
@@ -742,6 +741,77 @@ mod migration_tests {
             .optional()
             .unwrap()
             .is_none());
+    }
+
+    /// Opens a current wallet-monitor store holding `metadata`, re-creates the legacy
+    /// flow table an older build writes with one row, reopens it and returns the
+    /// wallet the merged row is attributed to.
+    fn merged_flow_wallet(metadata: &[(&str, &str)]) -> String {
+        let mut conn = Connection::open_in_memory().expect("open test database");
+        upgrade(&mut conn).expect("create wallet-monitor schema");
+        for (key, value) in metadata {
+            conn.execute(
+                "INSERT INTO wallet_metadata (key, value) VALUES (?1, ?2)",
+                params![key, value],
+            )
+            .expect("record wallet metadata");
+        }
+        conn.execute_batch(
+            "CREATE TABLE sol_flow_cache (
+                signature TEXT PRIMARY KEY,
+                timestamp TEXT NOT NULL,
+                sol_delta REAL NOT NULL DEFAULT 0,
+                created_at TEXT NOT NULL DEFAULT (datetime('now'))
+            );
+            INSERT INTO sol_flow_cache (signature, timestamp, sol_delta)
+            VALUES ('sig-legacy', '2026-01-01T00:00:00Z', 0.25);",
+        )
+        .expect("re-create the legacy flow table");
+
+        upgrade(&mut conn).expect("merge the legacy flow table");
+
+        conn.query_row(
+            "SELECT wallet_address FROM native_flow_cache WHERE signature = 'sig-legacy'",
+            [],
+            |row| row.get(0),
+        )
+        .expect("read merged flow row")
+    }
+
+    #[test]
+    fn merged_legacy_flow_rows_take_the_chain_scoped_wallet_key_first() {
+        let wallet = merged_flow_wallet(&[
+            ("current_wallet:solana", "SCOPED_WALLET"),
+            ("current_wallet", "UNSCOPED_WALLET"),
+        ]);
+        assert_eq!(wallet, "SCOPED_WALLET");
+    }
+
+    #[test]
+    fn merged_legacy_flow_rows_fall_back_to_the_unscoped_wallet_key() {
+        let wallet = merged_flow_wallet(&[("current_wallet", "UNSCOPED_WALLET")]);
+        assert_eq!(wallet, "UNSCOPED_WALLET");
+    }
+
+    /// A full disk during the chain-identity rebuild is a failure of the store's
+    /// surroundings: the open keeps the disk-full class, so recovery never rebuilds the
+    /// store over it.
+    #[test]
+    fn disk_full_during_chain_identity_rebuild_is_an_environment_failure() {
+        let mut conn = legacy_connection();
+        let pages: i64 = conn
+            .query_row("PRAGMA page_count", [], |row| row.get(0))
+            .expect("read page count");
+        conn.execute_batch(&format!("PRAGMA max_page_count = {pages}"))
+            .expect("cap the database at its current size");
+
+        let error = upgrade(&mut conn).expect_err("a capped database cannot be rebuilt");
+
+        assert!(
+            matches!(error, DatabaseError::DiskFull { .. }),
+            "open must keep the disk-full class, got {error:?}"
+        );
+        assert!(error.is_environment_failure());
     }
 
     /// A migration that fails partway (here: the rebuild's very first `CREATE

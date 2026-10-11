@@ -9,9 +9,11 @@ use crate::database::schema::{
 
 /// Older builds re-create `sol_flow_cache` and re-add `total_equity_sol` and write only
 /// those names: the flow rows merge by key into the canonical cache, and the canonical
-/// equity takes the legacy value where it is still unset. A flow table older than the
-/// chain-scoped cache is attributed as the chain-identity rebuild attributes it. No
-/// released build re-adds any other legacy name here.
+/// equity takes the legacy value where it is still unset. A flow row without a wallet
+/// column is attributed to the wallet recorded under the chain-scoped
+/// `current_wallet:solana` key, or under the unscoped `current_wallet` key older builds
+/// wrote when the scoped key is missing. No released build re-adds any other legacy
+/// name here.
 pub(crate) const RENAMES: StoreRenames = StoreRenames {
     store: "wallet.db",
     tables: &[TableRename {
@@ -28,7 +30,7 @@ pub(crate) const RENAMES: StoreRenames = StoreRenames {
                     canonical: "wallet_address",
                     legacy: "wallet_address",
                     absent: Some(
-                        "COALESCE((SELECT value FROM wallet_metadata WHERE key = 'current_wallet'), '')",
+                        "COALESCE((SELECT value FROM wallet_metadata WHERE key = 'current_wallet:solana'), (SELECT value FROM wallet_metadata WHERE key = 'current_wallet'), '')",
                     ),
                 },
                 MergedColumn {

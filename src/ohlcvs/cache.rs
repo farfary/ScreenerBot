@@ -8,7 +8,8 @@
 // INVARIANT: All cached data MUST be stored in ASC timestamp order.
 // This ensures consistent behavior across cache hits, DB queries, and aggregations.
 
-use crate::ohlcvs::types::{Candle, OhlcvError, OhlcvResult, Timeframe};
+use crate::ohlcvs::error::{OhlcvError, OhlcvResult};
+use crate::ohlcvs::types::{Candle, Timeframe};
 use crate::{
     chains::ChainId,
     events::{record_ohlcv_event, Severity},
