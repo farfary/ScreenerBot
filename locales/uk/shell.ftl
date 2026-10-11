@@ -171,6 +171,13 @@ shell-restart-failed = Не вдалося перезапустити
 shell-restart-failed-status = Не вдалося перезапустити: { $status }
 shell-restart-helper-unavailable = Помічник автоматичного перезапуску недоступний. Незабаром перезавантажте панель керування.
 
+# Source: scripts/ui/auto_trader_control.js
+shell-trader-start-confirm-title = Запустити автотрейдер?
+shell-trader-start-confirm-message = Автотрейдер сам купуватиме й продаватиме за реальні кошти з торгового гаманця { $wallet }, по { $size } на угоду.
+shell-trader-start-confirm-message-unsized = Автотрейдер сам купуватиме й продаватиме за реальні кошти з торгового гаманця { $wallet }.
+shell-trader-start-confirm-message-plain = Автотрейдер сам купуватиме й продаватиме за реальні кошти з основного торгового гаманця.
+shell-trader-start-confirm-action = Почати торгівлю
+
 # Source: scripts/core/router.js
 shell-page-title-fallback = Панель керування
 shell-page-load-failed = Не вдалося завантажити сторінку

@@ -370,6 +370,8 @@ pub const POSITION_REMOVE_DIALOG_UI: &str =
     include_str!("templates/scripts/ui/position_remove_dialog.js");
 pub const TRADE_ACTION_DIALOG_UI: &str =
     include_str!("templates/scripts/ui/trade_action_dialog.js");
+pub const AUTO_TRADER_CONTROL_UI: &str =
+    include_str!("templates/scripts/ui/auto_trader_control.js");
 pub const MANUAL_TRADE_UI: &str = include_str!("templates/scripts/ui/manual_trade.js");
 pub const TRADE_ACTION_QUICK_TRADE_JS: &str =
     include_str!("templates/scripts/ui/trade_action/quick_trade.js");

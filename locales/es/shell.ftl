@@ -171,6 +171,13 @@ shell-restart-failed = Falló el reinicio
 shell-restart-failed-status = Falló el reinicio: { $status }
 shell-restart-helper-unavailable = El asistente de reinicio automático no está disponible. Recarga el panel en unos momentos.
 
+# Source: scripts/ui/auto_trader_control.js
+shell-trader-start-confirm-title = ¿Iniciar Auto Trader?
+shell-trader-start-confirm-message = Auto Trader comprará y venderá por su cuenta con fondos reales de la billetera de trading { $wallet }, { $size } por operación.
+shell-trader-start-confirm-message-unsized = Auto Trader comprará y venderá por su cuenta con fondos reales de la billetera de trading { $wallet }.
+shell-trader-start-confirm-message-plain = Auto Trader comprará y venderá por su cuenta con fondos reales de la billetera de trading principal.
+shell-trader-start-confirm-action = Empezar a operar
+
 # Source: scripts/core/router.js
 shell-page-title-fallback = Panel
 shell-page-load-failed = No se pudo cargar la página

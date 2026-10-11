@@ -149,6 +149,12 @@ shell-restart-failed = Не удалось перезапустить
 shell-restart-failed-status = Не удалось перезапустить: { $status }
 shell-restart-helper-unavailable = Помощник автоматического перезапуска недоступен. Скоро перезагрузите дашборд.
 
+shell-trader-start-confirm-title = Запустить автотрейдер?
+shell-trader-start-confirm-message = Автотрейдер будет сам покупать и продавать на реальные средства с торгового кошелька { $wallet }, по { $size } на сделку.
+shell-trader-start-confirm-message-unsized = Автотрейдер будет сам покупать и продавать на реальные средства с торгового кошелька { $wallet }.
+shell-trader-start-confirm-message-plain = Автотрейдер будет сам покупать и продавать на реальные средства с основного торгового кошелька.
+shell-trader-start-confirm-action = Начать торговлю
+
 shell-page-title-fallback = Дашборд
 shell-page-load-failed = Не удалось загрузить страницу
 

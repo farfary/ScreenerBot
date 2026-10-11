@@ -171,6 +171,13 @@ shell-restart-failed = راه‌اندازی مجدد ناموفق بود
 shell-restart-failed-status = راه‌اندازی مجدد ناموفق بود: { $status }
 shell-restart-helper-unavailable = ابزار راه‌اندازی مجدد خودکار در دسترس نیست. کمی بعد داشبورد را دوباره بارگذاری کنید.
 
+# Source: scripts/ui/auto_trader_control.js
+shell-trader-start-confirm-title = معامله‌گر خودکار روشن شود؟
+shell-trader-start-confirm-message = معامله‌گر خودکار با دارایی واقعی از کیف پول معاملاتی { $wallet } به‌طور خودکار خرید و فروش می‌کند، { $size } برای هر معامله.
+shell-trader-start-confirm-message-unsized = معامله‌گر خودکار با دارایی واقعی از کیف پول معاملاتی { $wallet } به‌طور خودکار خرید و فروش می‌کند.
+shell-trader-start-confirm-message-plain = معامله‌گر خودکار با دارایی واقعی از کیف پول معاملاتی اصلی به‌طور خودکار خرید و فروش می‌کند.
+shell-trader-start-confirm-action = شروع معامله
+
 # Source: scripts/core/router.js
 shell-page-title-fallback = داشبورد
 shell-page-load-failed = بارگذاری صفحه ناموفق بود

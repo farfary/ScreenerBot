@@ -171,6 +171,13 @@ shell-restart-failed = 재시작 실패
 shell-restart-failed-status = 재시작 실패: { $status }
 shell-restart-helper-unavailable = 자동 재시작 도우미를 사용할 수 없습니다. 잠시 후 대시보드를 새로 고치세요.
 
+# Source: scripts/ui/auto_trader_control.js
+shell-trader-start-confirm-title = 자동 트레이더를 시작할까요?
+shell-trader-start-confirm-message = 자동 트레이더가 트레이딩 지갑 { $wallet }의 실제 자금으로 스스로 매수와 매도를 합니다. 거래당 { $size }입니다.
+shell-trader-start-confirm-message-unsized = 자동 트레이더가 트레이딩 지갑 { $wallet }의 실제 자금으로 스스로 매수와 매도를 합니다.
+shell-trader-start-confirm-message-plain = 자동 트레이더가 메인 트레이딩 지갑의 실제 자금으로 스스로 매수와 매도를 합니다.
+shell-trader-start-confirm-action = 거래 시작
+
 # Source: scripts/core/router.js
 shell-page-title-fallback = 대시보드
 shell-page-load-failed = 페이지를 불러오지 못했습니다

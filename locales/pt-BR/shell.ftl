@@ -171,6 +171,13 @@ shell-restart-failed = Falha ao reiniciar
 shell-restart-failed-status = Falha ao reiniciar: { $status }
 shell-restart-helper-unavailable = O auxiliar de reinicialização automática está indisponível. Recarregue o painel em instantes.
 
+# Source: scripts/ui/auto_trader_control.js
+shell-trader-start-confirm-title = Iniciar o Trader automático?
+shell-trader-start-confirm-message = O Trader automático vai comprar e vender sozinho com fundos reais da carteira de trading { $wallet }, { $size } por operação.
+shell-trader-start-confirm-message-unsized = O Trader automático vai comprar e vender sozinho com fundos reais da carteira de trading { $wallet }.
+shell-trader-start-confirm-message-plain = O Trader automático vai comprar e vender sozinho com fundos reais da carteira de trading principal.
+shell-trader-start-confirm-action = Começar a operar
+
 # Source: scripts/core/router.js
 shell-page-title-fallback = Painel
 shell-page-load-failed = Falha ao carregar a página

@@ -163,6 +163,12 @@ shell-restart-failed = Neustart fehlgeschlagen
 shell-restart-failed-status = Neustart fehlgeschlagen: { $status }
 shell-restart-helper-unavailable = Der automatische Neustart-Helfer ist nicht verfügbar. Laden Sie das Dashboard in Kürze neu.
 
+shell-trader-start-confirm-title = Auto-Trader starten?
+shell-trader-start-confirm-message = Der Auto-Trader kauft und verkauft selbstständig mit echtem Guthaben aus der Trading-Wallet { $wallet }, { $size } pro Trade.
+shell-trader-start-confirm-message-unsized = Der Auto-Trader kauft und verkauft selbstständig mit echtem Guthaben aus der Trading-Wallet { $wallet }.
+shell-trader-start-confirm-message-plain = Der Auto-Trader kauft und verkauft selbstständig mit echtem Guthaben aus der Haupt-Trading-Wallet.
+shell-trader-start-confirm-action = Trading starten
+
 shell-page-title-fallback = Dashboard
 shell-page-load-failed = Seite konnte nicht geladen werden
 

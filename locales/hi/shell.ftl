@@ -149,6 +149,12 @@ shell-restart-failed = रीस्टार्ट विफल
 shell-restart-failed-status = रीस्टार्ट विफल: { $status }
 shell-restart-helper-unavailable = ऑटोमैटिक रीस्टार्ट हेल्पर उपलब्ध नहीं है। थोड़ी देर में डैशबोर्ड रीलोड करें।
 
+shell-trader-start-confirm-title = ऑटो ट्रेडर शुरू करें?
+shell-trader-start-confirm-message = ऑटो ट्रेडर ट्रेडिंग वॉलेट { $wallet } के असली फंड से अपने आप खरीद-बिक्री करेगा, हर ट्रेड में { $size }।
+shell-trader-start-confirm-message-unsized = ऑटो ट्रेडर ट्रेडिंग वॉलेट { $wallet } के असली फंड से अपने आप खरीद-बिक्री करेगा।
+shell-trader-start-confirm-message-plain = ऑटो ट्रेडर मुख्य ट्रेडिंग वॉलेट के असली फंड से अपने आप खरीद-बिक्री करेगा।
+shell-trader-start-confirm-action = ट्रेडिंग शुरू करें
+
 shell-page-title-fallback = डैशबोर्ड
 shell-page-load-failed = पेज लोड करने में विफल
 

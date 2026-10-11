@@ -149,6 +149,12 @@ shell-restart-failed = Échec du redémarrage
 shell-restart-failed-status = Échec du redémarrage : { $status }
 shell-restart-helper-unavailable = L'assistant de redémarrage automatique est indisponible. Rechargez le tableau de bord dans un instant.
 
+shell-trader-start-confirm-title = Démarrer Auto Trader ?
+shell-trader-start-confirm-message = Auto Trader achètera et vendra de lui-même avec des fonds réels du portefeuille de trading { $wallet }, { $size } par trade.
+shell-trader-start-confirm-message-unsized = Auto Trader achètera et vendra de lui-même avec des fonds réels du portefeuille de trading { $wallet }.
+shell-trader-start-confirm-message-plain = Auto Trader achètera et vendra de lui-même avec des fonds réels du portefeuille de trading principal.
+shell-trader-start-confirm-action = Commencer à trader
+
 shell-page-title-fallback = Tableau de bord
 shell-page-load-failed = Échec du chargement de la page
 

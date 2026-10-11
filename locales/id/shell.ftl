@@ -151,6 +151,12 @@ shell-restart-failed = Mulai ulang gagal
 shell-restart-failed-status = Mulai ulang gagal: { $status }
 shell-restart-helper-unavailable = Helper mulai ulang otomatis tidak tersedia. Muat ulang dasbor sebentar lagi.
 
+shell-trader-start-confirm-title = Mulai Auto Trader?
+shell-trader-start-confirm-message = Auto Trader akan membeli dan menjual sendiri dengan dana nyata dari wallet trading { $wallet }, { $size } per trade.
+shell-trader-start-confirm-message-unsized = Auto Trader akan membeli dan menjual sendiri dengan dana nyata dari wallet trading { $wallet }.
+shell-trader-start-confirm-message-plain = Auto Trader akan membeli dan menjual sendiri dengan dana nyata dari wallet trading utama.
+shell-trader-start-confirm-action = Mulai trading
+
 shell-page-title-fallback = Dasbor
 shell-page-load-failed = Gagal Memuat Halaman
 

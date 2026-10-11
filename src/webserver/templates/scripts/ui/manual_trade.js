@@ -138,7 +138,7 @@ async function fetchTokenIdentity(mint) {
  * superseded trade size is the same class of bug as one that shows a stale balance.
  * requestManager dedupes concurrent calls, so opening a dialog costs one request.
  */
-async function fetchTraderDefaults() {
+export async function fetchTraderDefaults() {
   try {
     // Config GET routes wrap the section in { data, timestamp }.
     const body = await requestManager.fetch("/api/config/trader", { priority: "high" });

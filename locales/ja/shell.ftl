@@ -171,6 +171,13 @@ shell-restart-failed = 再起動に失敗しました
 shell-restart-failed-status = 再起動に失敗しました: { $status }
 shell-restart-helper-unavailable = 自動再起動ヘルパーを利用できません。しばらくしてからダッシュボードを再読み込みしてください。
 
+# Source: scripts/ui/auto_trader_control.js
+shell-trader-start-confirm-title = 自動トレーダーを開始しますか？
+shell-trader-start-confirm-message = 自動トレーダーは取引ウォレット { $wallet } の実際の資金で自動的に売買します。1回の取引あたり { $size } です。
+shell-trader-start-confirm-message-unsized = 自動トレーダーは取引ウォレット { $wallet } の実際の資金で自動的に売買します。
+shell-trader-start-confirm-message-plain = 自動トレーダーはメインの取引ウォレットの実際の資金で自動的に売買します。
+shell-trader-start-confirm-action = 取引を開始
+
 # Source: scripts/core/router.js
 shell-page-title-fallback = ダッシュボード
 shell-page-load-failed = ページを読み込めませんでした

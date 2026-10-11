@@ -171,6 +171,13 @@ shell-restart-failed = فشلت إعادة التشغيل
 shell-restart-failed-status = فشلت إعادة التشغيل: { $status }
 shell-restart-helper-unavailable = مساعد إعادة التشغيل التلقائي غير متاح. أعد تحميل لوحة التحكم بعد قليل.
 
+# Source: scripts/ui/auto_trader_control.js
+shell-trader-start-confirm-title = تشغيل المتداول الآلي؟
+shell-trader-start-confirm-message = سيشتري المتداول الآلي ويبيع تلقائيًا بأموال حقيقية من محفظة التداول { $wallet }، بمبلغ { $size } لكل صفقة.
+shell-trader-start-confirm-message-unsized = سيشتري المتداول الآلي ويبيع تلقائيًا بأموال حقيقية من محفظة التداول { $wallet }.
+shell-trader-start-confirm-message-plain = سيشتري المتداول الآلي ويبيع تلقائيًا بأموال حقيقية من محفظة التداول الرئيسية.
+shell-trader-start-confirm-action = بدء التداول
+
 # Source: scripts/core/router.js
 shell-page-title-fallback = لوحة التحكم
 shell-page-load-failed = فشل تحميل الصفحة

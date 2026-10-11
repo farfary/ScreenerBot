@@ -149,6 +149,12 @@ shell-restart-failed = Yeniden başlatma başarısız
 shell-restart-failed-status = Yeniden başlatma başarısız: { $status }
 shell-restart-helper-unavailable = Otomatik yeniden başlatma yardımcısı kullanılamıyor. Paneli birazdan yeniden yükleyin.
 
+shell-trader-start-confirm-title = Auto Trader başlatılsın mı?
+shell-trader-start-confirm-message = Auto Trader, { $wallet } işlem cüzdanındaki gerçek fonlarla kendi başına alım satım yapacak; işlem başına { $size }.
+shell-trader-start-confirm-message-unsized = Auto Trader, { $wallet } işlem cüzdanındaki gerçek fonlarla kendi başına alım satım yapacak.
+shell-trader-start-confirm-message-plain = Auto Trader, ana işlem cüzdanındaki gerçek fonlarla kendi başına alım satım yapacak.
+shell-trader-start-confirm-action = İşleme başla
+
 shell-page-title-fallback = Panel
 shell-page-load-failed = Sayfa yüklenemedi
 

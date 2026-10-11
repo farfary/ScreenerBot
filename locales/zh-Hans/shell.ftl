@@ -171,6 +171,13 @@ shell-restart-failed = 重启失败
 shell-restart-failed-status = 重启失败：{ $status }
 shell-restart-helper-unavailable = 自动重启助手不可用。请稍后重新加载仪表盘。
 
+# Source: scripts/ui/auto_trader_control.js
+shell-trader-start-confirm-title = 启动自动交易？
+shell-trader-start-confirm-message = 自动交易将使用交易钱包 { $wallet } 中的真实资金自行买卖，每笔交易 { $size }。
+shell-trader-start-confirm-message-unsized = 自动交易将使用交易钱包 { $wallet } 中的真实资金自行买卖。
+shell-trader-start-confirm-message-plain = 自动交易将使用主交易钱包中的真实资金自行买卖。
+shell-trader-start-confirm-action = 开始交易
+
 # Source: scripts/core/router.js
 shell-page-title-fallback = 仪表盘
 shell-page-load-failed = 页面加载失败

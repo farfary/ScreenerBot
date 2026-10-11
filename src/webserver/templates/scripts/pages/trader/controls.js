@@ -5,6 +5,7 @@
 
 import { formatTimeSpan } from "../../core/format.js";
 import { apiErrorMessage } from "../../core/request_manager.js";
+import { setAutoTraderEnabled } from "../../ui/auto_trader_control.js";
 
 /**
  * Trader Controls Module
@@ -95,20 +96,20 @@ export function createTraderControls({
   /**
    * Toggle auto trader on/off
    */
-  async function toggleAutoTrader(shouldStart, _triggerElement) {
-    // Disable all toggles while processing
+  async function toggleAutoTrader(shouldStart) {
     const allToggles = [$("#stats-trader-toggle")];
-    allToggles.forEach((toggle) => {
-      if (toggle) toggle.disabled = true;
-    });
-
-    const endpoint = shouldStart ? "/api/trader/start" : "/api/trader/stop";
 
     try {
-      const response = await fetch(endpoint, {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
+      // The toggles lock only once the request goes out; a declined start leaves them
+      // as they were.
+      const control = await setAutoTraderEnabled(shouldStart, {
+        onRequest: () =>
+          allToggles.forEach((toggle) => {
+            if (toggle) toggle.disabled = true;
+          }),
       });
+      if (control.cancelled) return;
+      const { response } = control;
 
       if (!response.ok) {
         throw new Error(
@@ -155,8 +156,12 @@ export function createTraderControls({
     const statsToggle = $("#stats-trader-toggle");
 
     if (statsToggle) {
-      addTrackedListener(statsToggle, "change", (e) => {
-        toggleAutoTrader(e.target.checked, statsToggle);
+      addTrackedListener(statsToggle, "click", (e) => {
+        const shouldStart = statsToggle.checked;
+        // Starting waits for the confirmation: cancelling the click keeps the switch off
+        // until the trader actually runs, so it never shows on and then flips back.
+        if (shouldStart) e.preventDefault();
+        toggleAutoTrader(shouldStart);
       });
     }
 

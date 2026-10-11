@@ -171,6 +171,13 @@ shell-restart-failed = Restart failed
 shell-restart-failed-status = Restart failed: { $status }
 shell-restart-helper-unavailable = Automatic restart helper is unavailable. Reload the dashboard shortly.
 
+# Source: scripts/ui/auto_trader_control.js
+shell-trader-start-confirm-title = Start the Auto Trader?
+shell-trader-start-confirm-message = The Auto Trader will buy and sell on its own with real funds from the trading wallet { $wallet }, { $size } per trade.
+shell-trader-start-confirm-message-unsized = The Auto Trader will buy and sell on its own with real funds from the trading wallet { $wallet }.
+shell-trader-start-confirm-message-plain = The Auto Trader will buy and sell on its own with real funds from the main trading wallet.
+shell-trader-start-confirm-action = Start trading
+
 # Source: scripts/core/router.js
 shell-page-title-fallback = Dashboard
 shell-page-load-failed = Failed to Load Page

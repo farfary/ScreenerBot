@@ -299,7 +299,7 @@ export function renderTokenRowCell(
 }
 
 // Characters kept at each end of a compact address.
-const COMPACT_ADDRESS = Object.freeze({ start: 4, end: 4 });
+export const COMPACT_ADDRESS = Object.freeze({ start: 4, end: 4 });
 
 const EXPLORER_PATHS = { token: "token", account: "account" };
 

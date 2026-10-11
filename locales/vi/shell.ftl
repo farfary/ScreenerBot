@@ -149,6 +149,12 @@ shell-restart-failed = Khởi động lại thất bại
 shell-restart-failed-status = Khởi động lại thất bại: { $status }
 shell-restart-helper-unavailable = Trình hỗ trợ khởi động lại tự động không khả dụng. Hãy tải lại bảng điều khiển sau ít phút.
 
+shell-trader-start-confirm-title = Bật Auto Trader?
+shell-trader-start-confirm-message = Auto Trader sẽ tự mua bán bằng tiền thật từ ví giao dịch { $wallet }, { $size } mỗi giao dịch.
+shell-trader-start-confirm-message-unsized = Auto Trader sẽ tự mua bán bằng tiền thật từ ví giao dịch { $wallet }.
+shell-trader-start-confirm-message-plain = Auto Trader sẽ tự mua bán bằng tiền thật từ ví giao dịch chính.
+shell-trader-start-confirm-action = Bắt đầu giao dịch
+
 shell-page-title-fallback = Bảng điều khiển
 shell-page-load-failed = Không thể tải trang
 

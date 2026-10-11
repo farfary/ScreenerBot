@@ -32,6 +32,7 @@ import "./action_toasts.js";
 // and the manual-trade submitter with the rest of the dashboard.
 import "../ui/quick_trade_shortcuts.js";
 import { apiErrorMessage } from "./request_manager.js";
+import { setAutoTraderEnabled } from "../ui/auto_trader_control.js";
 import { pushEscapeHandler } from "./escape_stack.js";
 
 const state = {
@@ -148,21 +149,14 @@ async function controlTrader(action) {
     return;
   }
 
-  setLoading(true);
-
-  const endpoint = action === "start" ? "/api/trader/start" : "/api/trader/stop";
-
   try {
-    const res = await fetch(endpoint, {
-      method: "POST",
-      headers: {
-        "Content-Type": "application/json",
-        "X-Requested-With": "fetch",
-      },
-      cache: "no-store",
+    // The card turns busy only once the request goes out: while the start confirmation
+    // is open it keeps its state, so a declined start changes nothing on screen.
+    const control = await setAutoTraderEnabled(action === "start", {
+      onRequest: () => setLoading(true),
     });
-
-    const payload = await res.json().catch(() => null);
+    if (control.cancelled) return;
+    const { response: res, payload } = control;
 
     if (!res.ok) {
       const message = apiErrorMessage(
