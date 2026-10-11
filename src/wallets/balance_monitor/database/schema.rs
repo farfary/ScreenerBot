@@ -6,7 +6,18 @@
 // Database schema version
 // 4: total_equity_native on wallet_snapshots — the baseline/history for every wallet
 //    figure is now full worth (cash + holdings), not cash alone.
-pub(super) const WALLET_SCHEMA_VERSION: u32 = 5;
+// 5: chain_id on every wallet-scoped table.
+// 6: unpriced_mints on wallet_snapshots — the holdings a worth sample left unpriced.
+//    Additive and nullable, so cores that write version 5 still read and write the store.
+pub(super) const WALLET_SCHEMA_VERSION: u32 = 6;
+
+/// The oldest store version whose code still reads and writes the current schema.
+/// Raised to `WALLET_SCHEMA_VERSION` only by a breaking change (a rename, a drop, a
+/// type change, a NOT NULL column without a default or a changed meaning).
+pub(super) const WALLET_MIN_READER_VERSION: u32 = 5;
+
+/// The store version when the schema ledger was adopted. Fixed.
+pub(super) const WALLET_LEDGER_BASELINE: u32 = 5;
 
 // =============================================================================
 // DATABASE SCHEMA DEFINITIONS

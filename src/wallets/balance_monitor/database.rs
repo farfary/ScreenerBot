@@ -32,7 +32,7 @@ use schema::{
     DASHBOARD_METRICS_INDEXES, FLOW_CACHE_INDEXES, LEGACY_TOKEN_BALANCES_SCHEMA,
     SCHEMA_NATIVE_FLOW_CACHE, SCHEMA_NFT_BALANCES, SCHEMA_TOKEN_BALANCES,
     SCHEMA_WALLET_DASHBOARD_METRICS, SCHEMA_WALLET_METADATA, SCHEMA_WALLET_SNAPSHOTS,
-    WALLET_INDEXES, WALLET_SCHEMA_VERSION,
+    WALLET_INDEXES, WALLET_LEDGER_BASELINE, WALLET_MIN_READER_VERSION, WALLET_SCHEMA_VERSION,
 };
 
 /// The `wallet_metadata` key older builds recorded the wallet under, before the keys were
@@ -107,8 +107,8 @@ pub struct WalletDatabase {
 /// The schema of the wallet-monitor store.
 pub(crate) const SCHEMA: StoreSchema = StoreSchema {
     version: WALLET_SCHEMA_VERSION as i64,
-    min_reader_version: WALLET_SCHEMA_VERSION as i64,
-    baseline: WALLET_SCHEMA_VERSION as i64,
+    min_reader_version: WALLET_MIN_READER_VERSION as i64,
+    baseline: WALLET_LEDGER_BASELINE as i64,
     renames: Some(&column_names::RENAMES),
     step,
     legacy_stamp: None,
@@ -203,7 +203,7 @@ impl WalletDatabase {
         ddl::add_column(tx, "wallet_snapshots", "total_equity_native", "REAL")?;
 
         Self::migrate_chain_identity(tx)?;
-        // Added after the chain rebuild, which copies a fixed column list. Nullable on
+        // Schema v6. Added after the chain rebuild, which copies a fixed column list. Nullable on
         // purpose: a row written before coverage was recorded cannot say which holdings
         // its equity left unpriced, so it compares with no other sample.
         ddl::add_column(tx, "wallet_snapshots", "unpriced_mints", "TEXT")?;

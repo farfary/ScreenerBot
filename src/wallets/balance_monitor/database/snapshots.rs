@@ -581,6 +581,72 @@ mod amount_tests {
         }
     }
 
+    /// A version-5 store gains `unpriced_mints` and is recorded at version 6 without a
+    /// pre-upgrade copy, and the ledger it leaves still admits a core that writes version 5.
+    #[test]
+    fn a_version_5_store_upgrades_to_version_6_and_stays_readable_by_version_5_cores() {
+        use crate::database::schema::ledger::{self, Assessment};
+        use crate::database::schema::StoreSchema;
+
+        let schema = super::super::SCHEMA;
+        let version_5 = StoreSchema {
+            version: 5,
+            ..schema
+        };
+        let dir = tempfile::tempdir().unwrap();
+        let path = dir.path().join("wallet.db");
+        {
+            let conn = Connection::open(&path).unwrap();
+            let legacy = SCHEMA_WALLET_SNAPSHOTS.replace(",\n    unpriced_mints TEXT", "");
+            assert!(!legacy.contains("unpriced_mints"));
+            conn.execute_batch(&legacy).unwrap();
+            conn.execute_batch(SCHEMA_TOKEN_BALANCES).unwrap();
+            conn.execute_batch(SCHEMA_NFT_BALANCES).unwrap();
+            conn.execute("INSERT INTO wallet_snapshots (wallet_address, snapshot_time, native_balance, native_balance_raw, total_equity_native, total_tokens_count) VALUES ('wallet000', '2026-10-10T23:00:00+00:00', 1.0, 1000000000, 1.2, 1)", []).unwrap();
+            ledger::write(&conn, &version_5).unwrap();
+        }
+        assert_eq!(
+            ledger::assess(
+                ledger::read(&Connection::open(&path).unwrap())
+                    .unwrap()
+                    .as_ref(),
+                &schema
+            ),
+            Assessment::Older {
+                from: 5,
+                breaking: false
+            }
+        );
+
+        upgrade(&path).unwrap();
+
+        let conn = Connection::open(&path).unwrap();
+        assert!(crate::database::schema::table_has_column(
+            &conn,
+            "wallet_snapshots",
+            "unpriced_mints"
+        )
+        .unwrap());
+        assert!(conn
+            .query_row(
+                "SELECT unpriced_mints IS NULL FROM wallet_snapshots",
+                [],
+                |row| row.get::<_, bool>(0)
+            )
+            .unwrap());
+        let row = ledger::read(&conn).unwrap().unwrap();
+        assert_eq!((row.version, row.min_reader_version), (6, 5));
+        assert_eq!(
+            ledger::assess(Some(&row), &version_5),
+            Assessment::CompatibleNewer
+        );
+        let (backup, _) = crate::database::backup::upgrade_backup_paths(&path).unwrap();
+        assert!(
+            !backup.exists(),
+            "a non-breaking upgrade takes no pre-upgrade copy"
+        );
+    }
+
     /// A store written before coverage was recorded gains the column; its rows stay
     /// unknown, new rows keep the mints they left unpriced, and the trend selects only
     /// samples that priced the same holdings, one per bucket.
