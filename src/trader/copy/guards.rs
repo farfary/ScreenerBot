@@ -143,17 +143,81 @@ pub(super) async fn sync_paused_watches(database: &CopyDatabase) -> crate::trade
         {
             continue;
         }
+        match crate::wallets::watch::copy_source_disable_reason(task.id, &task.target_address).await
+        {
+            Ok(Some(reason)) if watch_waits_for_user(&reason) => continue,
+            Ok(_) => {}
+            Err(error) => {
+                if watch_store_unavailable(&error) {
+                    return Ok(());
+                }
+                log_watch_state_error(task.id, &error);
+                continue;
+            }
+        }
         let attached =
             match crate::wallets::watch::copy_source_active(task.id, &task.target_address).await {
                 Ok(attached) => attached,
-                // The watch service is not up yet; nothing can be judged this pass.
-                Err(_) => return Ok(()),
+                Err(error) => {
+                    if watch_store_unavailable(&error) {
+                        return Ok(());
+                    }
+                    log_watch_state_error(task.id, &error);
+                    continue;
+                }
             };
-        if attached != control::wants_watch(database, &task).await? {
-            control::sync_task_watch(database, &task).await?;
+        let wants_watch = match control::wants_watch(database, &task).await {
+            Ok(wants_watch) => wants_watch,
+            Err(error) => {
+                logger::warning(
+                    LogTag::Trader,
+                    &format!(
+                        "Copy task {} watch requirement could not be read: {error}",
+                        task.id
+                    ),
+                );
+                continue;
+            }
+        };
+        if attached != wants_watch {
+            if let Err(error) = control::sync_task_watch(database, &task).await {
+                logger::warning(
+                    LogTag::Trader,
+                    &format!(
+                        "Copy task {} watch could not be reconciled: {error}",
+                        task.id
+                    ),
+                );
+            }
         }
     }
     Ok(())
+}
+
+fn watch_store_unavailable(error: &crate::wallets::Error) -> bool {
+    matches!(
+        error,
+        crate::wallets::Error::Internal(
+            crate::errors::InternalError::InvariantViolation { message }
+        ) if message == "watch database not initialized"
+    )
+}
+
+fn log_watch_state_error(task_id: i64, error: &crate::wallets::Error) {
+    logger::warning(
+        LogTag::Trader,
+        &format!("Copy task {task_id} watch state could not be read: {error}"),
+    );
+}
+
+fn watch_waits_for_user(reason: &crate::wallets::watch::WatchDisableReason) -> bool {
+    matches!(
+        reason,
+        crate::wallets::watch::WatchDisableReason::SignatureBudget { .. }
+            | crate::wallets::watch::WatchDisableReason::Unknown
+            | crate::wallets::watch::WatchDisableReason::HeliusUnavailable
+            | crate::wallets::watch::WatchDisableReason::ProcessingFailed
+    )
 }
 
 fn watch_pause_reason(
@@ -312,7 +376,10 @@ mod tests {
 
     use chrono::Utc;
 
-    use super::{backfill_skip_reason, stand_down_for_store_restore, watch_pause_reason};
+    use super::{
+        backfill_skip_reason, stand_down_for_store_restore, watch_pause_reason,
+        watch_store_unavailable,
+    };
     use crate::database::health::StoreHealth;
     use crate::trader::copy::{
         CopyDatabase, CopyMode, CopyPauseReason, CopySkip, CopyTask, ExitMode, SizingMode,
@@ -320,6 +387,23 @@ mod tests {
     use crate::wallets::watch::WatchDisableReason;
 
     const THRESHOLD_MS: u64 = 5_000;
+
+    #[test]
+    fn only_an_uninitialized_watch_database_ends_the_reconciliation_pass() {
+        let unavailable =
+            crate::wallets::Error::Internal(crate::errors::InternalError::InvariantViolation {
+                message: "watch database not initialized".to_owned(),
+            });
+        let other_invariant =
+            crate::wallets::Error::Internal(crate::errors::InternalError::InvariantViolation {
+                message: "another invariant failed".to_owned(),
+            });
+        let other_error = crate::wallets::Error::NotInitialized { database: "wallet" };
+
+        assert!(watch_store_unavailable(&unavailable));
+        assert!(!watch_store_unavailable(&other_invariant));
+        assert!(!watch_store_unavailable(&other_error));
+    }
 
     fn task(target: &str, enabled: bool) -> CopyTask {
         CopyTask {
@@ -443,5 +527,25 @@ mod tests {
             watch_pause_reason(Some(&WatchDisableReason::ProcessingFailed)),
             Some(CopyPauseReason::WatchProcessingFailed)
         );
+    }
+
+    #[test]
+    fn paused_watch_user_action_state_is_skipped_without_stopping_later_tasks() {
+        let tasks = [
+            (
+                1,
+                WatchDisableReason::SignatureBudget {
+                    page_budget: 5,
+                    signatures_checked: 500,
+                },
+            ),
+            (2, WatchDisableReason::User),
+        ];
+        let reconciled: Vec<_> = tasks
+            .iter()
+            .filter(|(_, reason)| !super::watch_waits_for_user(reason))
+            .map(|(id, _)| *id)
+            .collect();
+        assert_eq!(reconciled, [2]);
     }
 }
