@@ -183,11 +183,11 @@ async fn fetch_manifest_body(
             })
         })?;
     if !response.status().is_success() {
-        return Err(Error::Network(crate::errors::NetworkError::HttpStatus {
-            endpoint: response.url().to_string(),
-            status: response.status().as_u16(),
-            body: None,
-        }));
+        return Err(Error::Network(crate::errors::NetworkError::http_status(
+            response.url().to_string(),
+            response.status().as_u16(),
+            None,
+        )));
     }
     if check_url_allowlist {
         super::download::validate_final_url(response.url())?;
@@ -458,11 +458,11 @@ mod tests {
     #[test]
     fn refused_or_throttled_hosts_are_transient_and_missing_assets_are_not() {
         let status = |status| {
-            Error::Network(crate::errors::NetworkError::HttpStatus {
-                endpoint: "https://github.com/x".to_owned(),
+            Error::Network(crate::errors::NetworkError::http_status(
+                "https://github.com/x".to_owned(),
                 status,
-                body: None,
-            })
+                None,
+            ))
         };
         assert!(is_transient_failure(&status(403)));
         assert!(is_transient_failure(&status(429)));

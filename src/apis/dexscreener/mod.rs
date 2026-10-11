@@ -183,7 +183,14 @@ impl DexScreenerClient {
             let body = response.text().await.unwrap_or_default();
             self.stats.record_request(false, elapsed).await;
             self.stats
-                .record_error_with_event("DexScreener", endpoint, format!("HTTP {status}: {body}"))
+                .record_error_with_event(
+                    "DexScreener",
+                    endpoint,
+                    format!(
+                        "HTTP {status}: {}",
+                        crate::errors::summarize_http_body(&body)
+                    ),
+                )
                 .await;
             // Simple 429 backoff to avoid hammering when rate limited
             if status.as_u16() == 429 {
@@ -194,11 +201,11 @@ impl DexScreenerClient {
                 }
                 .into());
             }
-            return Err(NetworkError::HttpStatus {
-                endpoint: endpoint.to_owned(),
-                status: status.as_u16(),
-                body: Some(body),
-            }
+            return Err(NetworkError::http_status(
+                endpoint.to_owned(),
+                status.as_u16(),
+                Some(body),
+            )
             .into());
         }
 

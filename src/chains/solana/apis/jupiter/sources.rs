@@ -286,11 +286,11 @@ async fn fetch_sol_price_from_jupiter() -> Result<f64, crate::apis::Error> {
         })?;
 
     if !response.status().is_success() {
-        return Err(NetworkError::HttpStatus {
-            endpoint: "jupiter sol price".to_owned(),
-            status: response.status().as_u16(),
-            body: None,
-        }
+        return Err(NetworkError::http_status(
+            "jupiter sol price".to_owned(),
+            response.status().as_u16(),
+            None,
+        )
         .into());
     }
 

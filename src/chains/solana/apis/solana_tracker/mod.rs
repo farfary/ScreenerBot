@@ -186,7 +186,10 @@ impl SolanaTrackerClient {
                 .record_error_with_event(
                     "SolanaTracker",
                     endpoint,
-                    format!("HTTP {status}: {body}"),
+                    format!(
+                        "HTTP {status}: {}",
+                        crate::errors::summarize_http_body(&body)
+                    ),
                 )
                 .await;
             if status.as_u16() == 429 {
@@ -196,11 +199,11 @@ impl SolanaTrackerClient {
                 }
                 .into());
             }
-            return Err(NetworkError::HttpStatus {
-                endpoint: endpoint.to_owned(),
-                status: status.as_u16(),
-                body: Some(body),
-            }
+            return Err(NetworkError::http_status(
+                endpoint.to_owned(),
+                status.as_u16(),
+                Some(body),
+            )
             .into());
         }
 

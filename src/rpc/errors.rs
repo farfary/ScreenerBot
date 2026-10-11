@@ -196,10 +196,16 @@ impl RpcError {
                 after: Duration::from_secs(30),
             },
             502 | 503 => Self::Network {
-                message: format!("Service unavailable ({status}): {body}"),
+                message: format!(
+                    "Service unavailable ({status}): {}",
+                    crate::errors::summarize_http_body(body)
+                ),
                 is_timeout: false,
             },
-            _ => Self::Other(format!("HTTP {status}: {body}")),
+            _ => Self::Other(format!(
+                "HTTP {status}: {}",
+                crate::errors::summarize_http_body(body)
+            )),
         }
     }
 
@@ -351,6 +357,19 @@ mod tests {
     use crate::rpc::types::CircuitState;
     use crate::rpc::{CircuitBreakerConfig, ProviderCircuitBreaker};
     use std::time::Duration;
+
+    #[test]
+    fn html_http_error_bodies_are_summarized() {
+        let body = "<!DOCTYPE html><html><head><title>Gateway error</title></head>\n<body>failure</body></html>";
+        let error = RpcError::from_http_response(503, body, "provider");
+        let message = error.to_string();
+        assert!(message.contains(&format!(
+            "HTML page \"Gateway error\", {} bytes",
+            body.len()
+        )));
+        assert!(!message.contains("<html"));
+        assert!(!message.contains('\n'));
+    }
 
     #[tokio::test]
     async fn unsupported_transaction_version_does_not_retry_or_open_provider_circuit() {

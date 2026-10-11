@@ -110,11 +110,11 @@ impl InternetMonitor {
                 Box::pin(async move {
                     match client.head(&url).send().await {
                         Ok(response) if response.status().is_success() => Ok(()),
-                        Ok(response) => Err(NetworkError::HttpStatus {
-                            endpoint: url,
-                            status: response.status().as_u16(),
-                            body: None,
-                        }),
+                        Ok(response) => Err(NetworkError::http_status(
+                            url,
+                            response.status().as_u16(),
+                            None,
+                        )),
                         Err(e) => Err(NetworkError::RequestFailed {
                             endpoint: url,
                             detail: e.to_string(),

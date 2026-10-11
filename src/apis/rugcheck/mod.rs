@@ -136,7 +136,14 @@ impl RugcheckClient {
             self.stats.record_request(false, elapsed).await;
             let body = response.text().await.unwrap_or_default();
             self.stats
-                .record_error_with_event("Rugcheck", endpoint, format!("HTTP {status}: {body}"))
+                .record_error_with_event(
+                    "Rugcheck",
+                    endpoint,
+                    format!(
+                        "HTTP {status}: {}",
+                        crate::errors::summarize_http_body(&body)
+                    ),
+                )
                 .await;
 
             // Check for 404 Not Found
@@ -155,11 +162,11 @@ impl RugcheckClient {
                 });
             }
 
-            return Err(NetworkError::HttpStatus {
-                endpoint: endpoint.to_owned(),
-                status: status.as_u16(),
-                body: Some(body),
-            }
+            return Err(NetworkError::http_status(
+                endpoint.to_owned(),
+                status.as_u16(),
+                Some(body),
+            )
             .into());
         }
 

@@ -100,12 +100,9 @@ impl CoinGeckoClient {
 
         if !response.status().is_success() {
             self.stats.record_request(false, elapsed).await;
-            return Err(NetworkError::HttpStatus {
-                endpoint: url.clone(),
-                status: response.status().as_u16(),
-                body: None,
-            }
-            .into());
+            return Err(
+                NetworkError::http_status(url.clone(), response.status().as_u16(), None).into(),
+            );
         }
 
         let coins: Vec<CoinGeckoCoin> = match response.json().await {

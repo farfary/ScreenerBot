@@ -450,11 +450,11 @@ where
                 retry_after_ms,
             }));
         }
-        return Err(Error::Network(crate::errors::NetworkError::HttpStatus {
-            endpoint: response.url().to_string(),
-            status: response.status().as_u16(),
-            body: None,
-        }));
+        return Err(Error::Network(crate::errors::NetworkError::http_status(
+            response.url().to_string(),
+            response.status().as_u16(),
+            None,
+        )));
     }
     if check_url_allowlist {
         validate_final_url(response.url())?;
@@ -1004,12 +1004,9 @@ mod tests {
 
     #[test]
     fn a_stopped_download_is_described_by_its_cause() {
-        let unreachable =
-            download_failure_text(&Error::Network(crate::errors::NetworkError::HttpStatus {
-                endpoint: "https://github.com/x".to_owned(),
-                status: 403,
-                body: None,
-            }));
+        let unreachable = download_failure_text(&Error::Network(
+            crate::errors::NetworkError::http_status("https://github.com/x".to_owned(), 403, None),
+        ));
         assert_eq!(unreachable.id, "updates-download-error-unreachable");
         let unverified = download_failure_text(&Error::DigestMismatch {
             detail: String::new(),

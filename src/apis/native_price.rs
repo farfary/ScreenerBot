@@ -432,11 +432,11 @@ async fn fetch_from_dexscreener() -> Result<f64, Error> {
         })?;
 
     if !response.status().is_success() {
-        return Err(NetworkError::HttpStatus {
-            endpoint: "dexscreener sol price".to_owned(),
-            status: response.status().as_u16(),
-            body: None,
-        }
+        return Err(NetworkError::http_status(
+            "dexscreener sol price".to_owned(),
+            response.status().as_u16(),
+            None,
+        )
         .into());
     }
 
@@ -503,11 +503,11 @@ async fn fetch_from_geckoterminal() -> Result<f64, Error> {
         })?;
 
     if !response.status().is_success() {
-        return Err(NetworkError::HttpStatus {
-            endpoint: "geckoterminal sol price".to_owned(),
-            status: response.status().as_u16(),
-            body: None,
-        }
+        return Err(NetworkError::http_status(
+            "geckoterminal sol price".to_owned(),
+            response.status().as_u16(),
+            None,
+        )
         .into());
     }
 

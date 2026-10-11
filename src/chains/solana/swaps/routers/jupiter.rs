@@ -664,11 +664,7 @@ impl JupiterRouter {
                     endpoint,
                     retry_after_ms: failure.retry_after.map(|d| d.as_millis() as u64),
                 },
-                Some(status) => NetworkError::HttpStatus {
-                    endpoint,
-                    status,
-                    body: Some(failure.body),
-                },
+                Some(status) => NetworkError::http_status(endpoint, status, Some(failure.body)),
                 None => NetworkError::RequestFailed {
                     endpoint,
                     detail: failure.body,
