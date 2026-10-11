@@ -13,7 +13,7 @@ use crate::database::schema::ddl;
 use crate::errors::DatabaseError;
 use crate::logger::{self, LogTag};
 use crate::utils::get_wallet_address;
-use crate::wallets::balance_monitor::recorded_wallet_sql;
+use crate::wallets::balance_monitor::{recorded_wallet_sql, wallet_database_chain};
 use crate::wallets::Error;
 use rusqlite::{Connection, OpenFlags, OptionalExtension};
 
@@ -44,6 +44,7 @@ impl WalletValidator {
             dependency: "config",
             detail: e.to_string(),
         })?;
+        let chain = wallet_database_chain();
 
         let databases: Vec<_> = catalog::wallet_scoped_stores()
             .flat_map(|(store, scope)| {
@@ -53,7 +54,11 @@ impl WalletValidator {
                     .map(move |path| (store, scope.label, path, scope.metadata_table))
             })
             .collect();
-        Ok(Self::validate_stored_wallets(current_wallet, &databases))
+        Ok(Self::validate_stored_wallets(
+            current_wallet,
+            chain,
+            &databases,
+        ))
     }
 
     /// Compare the wallet each wallet-scoped store records with `current_wallet`. A store
@@ -62,6 +67,7 @@ impl WalletValidator {
     /// already reports as not open keeps its recorded state and is not read.
     fn validate_stored_wallets(
         current_wallet: String,
+        chain: ChainId,
         databases: &[WalletScopedFile],
     ) -> WalletValidationResult {
         let mut mismatches: Vec<(String, String)> = Vec::new();
@@ -81,7 +87,7 @@ impl WalletValidator {
                 );
                 continue;
             }
-            match Self::get_stored_wallet(&path.to_string_lossy(), metadata_table) {
+            match Self::get_stored_wallet(&path.to_string_lossy(), metadata_table, chain) {
                 Ok(Some(stored_wallet)) if stored_wallet != current_wallet => {
                     mismatches.push(((*system).to_owned(), stored_wallet));
                 }
@@ -128,6 +134,7 @@ impl WalletValidator {
     fn get_stored_wallet(
         db_path: &str,
         metadata_table: &'static str,
+        chain: ChainId,
     ) -> Result<Option<String>, DatabaseError> {
         let conn = Connection::open_with_flags(db_path, OpenFlags::SQLITE_OPEN_READ_ONLY)
             .map_err(DatabaseError::from)?;
@@ -135,10 +142,7 @@ impl WalletValidator {
             return Ok(None);
         }
 
-        let query = format!(
-            "SELECT {}",
-            recorded_wallet_sql(metadata_table, ChainId::Solana)
-        );
+        let query = format!("SELECT {}", recorded_wallet_sql(metadata_table, chain));
         let wallet: Option<String> = conn
             .query_row(&query, [], |row| row.get(0))
             .optional()
@@ -153,6 +157,7 @@ mod tests {
     use rusqlite::Connection;
 
     use super::{WalletValidationResult, WalletValidator};
+    use crate::chains::ChainId;
     use crate::database::catalog::{self, StoreClass};
     use crate::database::health::{self, StoreHealth};
     use crate::database::recovery::FailureKind;
@@ -169,8 +174,12 @@ mod tests {
         Connection::open(&path).unwrap();
 
         assert_eq!(
-            WalletValidator::get_stored_wallet(&path.to_string_lossy(), POSITIONS_METADATA_TABLE)
-                .unwrap(),
+            WalletValidator::get_stored_wallet(
+                &path.to_string_lossy(),
+                POSITIONS_METADATA_TABLE,
+                ChainId::Solana
+            )
+            .unwrap(),
             None
         );
     }
@@ -187,8 +196,12 @@ mod tests {
             .unwrap();
 
         assert_eq!(
-            WalletValidator::get_stored_wallet(&path.to_string_lossy(), POSITIONS_METADATA_TABLE)
-                .unwrap(),
+            WalletValidator::get_stored_wallet(
+                &path.to_string_lossy(),
+                POSITIONS_METADATA_TABLE,
+                ChainId::Solana
+            )
+            .unwrap(),
             None
         );
 
@@ -199,13 +212,18 @@ mod tests {
             )
             .unwrap();
         assert_eq!(
-            WalletValidator::get_stored_wallet(&path.to_string_lossy(), POSITIONS_METADATA_TABLE)
-                .unwrap(),
+            WalletValidator::get_stored_wallet(
+                &path.to_string_lossy(),
+                POSITIONS_METADATA_TABLE,
+                ChainId::Solana
+            )
+            .unwrap(),
             Some("matching-wallet".to_owned())
         );
         assert!(matches!(
             WalletValidator::validate_stored_wallets(
                 "matching-wallet".to_owned(),
+                ChainId::Solana,
                 &[(
                     &catalog::POSITIONS,
                     "Positions",
@@ -224,6 +242,7 @@ mod tests {
             .unwrap();
         let validation = WalletValidator::validate_stored_wallets(
             "matching-wallet".to_owned(),
+            ChainId::Solana,
             &[(
                 &catalog::POSITIONS,
                 "Positions",
@@ -264,7 +283,8 @@ mod tests {
         assert_eq!(
             WalletValidator::get_stored_wallet(
                 &path.to_string_lossy(),
-                wallet_scope.metadata_table
+                wallet_scope.metadata_table,
+                ChainId::Solana,
             )
             .unwrap(),
             Some("scoped-wallet".to_owned())
@@ -276,11 +296,15 @@ mod tests {
             wallet_scope.metadata_table,
         )];
         assert!(matches!(
-            WalletValidator::validate_stored_wallets("scoped-wallet".to_owned(), &files),
+            WalletValidator::validate_stored_wallets(
+                "scoped-wallet".to_owned(),
+                ChainId::Solana,
+                &files
+            ),
             WalletValidationResult::Valid
         ));
         assert!(matches!(
-            WalletValidator::validate_stored_wallets("new-wallet".to_owned(), &files),
+            WalletValidator::validate_stored_wallets("new-wallet".to_owned(), ChainId::Solana, &files),
             WalletValidationResult::Mismatch { stored, .. } if stored == "scoped-wallet"
         ));
     }
@@ -296,7 +320,8 @@ mod tests {
 
         assert!(WalletValidator::get_stored_wallet(
             &path.to_string_lossy(),
-            POSITIONS_METADATA_TABLE
+            POSITIONS_METADATA_TABLE,
+            ChainId::Solana
         )
         .is_err());
     }
@@ -319,6 +344,7 @@ mod tests {
 
         let validation = WalletValidator::validate_stored_wallets(
             "current-wallet".to_owned(),
+            ChainId::Solana,
             &[
                 (
                     &catalog::POSITIONS,
@@ -368,6 +394,7 @@ mod tests {
         assert!(matches!(
             WalletValidator::validate_stored_wallets(
                 "current-wallet".to_owned(),
+                ChainId::Solana,
                 &[(
                     &catalog::POSITIONS,
                     "Positions",

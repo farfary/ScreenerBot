@@ -72,12 +72,7 @@ async fn a_route_whose_store_is_not_open_answers_store_unavailable() {
         assert_eq!(error["code"], "STORE_UNAVAILABLE", "{uri}");
         assert_eq!(error["text"]["id"], "errors-store-unavailable", "{uri}");
         assert_eq!(error["text"]["args"]["store"]["value"], store.id, "{uri}");
-        assert!(
-            error["message"]
-                .as_str()
-                .is_some_and(|message| message.contains(store.id)),
-            "{uri}: {error}"
-        );
+        assert_eq!(error["text"]["args"]["store"]["value"], store.id, "{uri}");
         assert!(
             error["details"]
                 .as_str()

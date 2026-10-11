@@ -629,7 +629,7 @@ mod tests {
         let mut conn = Connection::open_in_memory().expect("open test database");
         conn.execute_batch("PRAGMA max_page_count = 1")
             .expect("cap the database at one page");
-        let tx = conn.transaction().expect("begin schema transaction");
+        let tx = conn.write_tx().expect("begin schema transaction");
         let context = SchemaContext {
             chains: vec![ChainId::Solana],
         };

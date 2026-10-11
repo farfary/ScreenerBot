@@ -21,6 +21,8 @@ mod service;
 mod types;
 mod worth;
 
+pub(crate) use service::wallet_database_chain;
+
 // Re-export public API
 pub use service::{
     clear_dashboard_api_cache,

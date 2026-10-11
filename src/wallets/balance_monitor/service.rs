@@ -34,6 +34,12 @@ use super::worth::{
 };
 use crate::wallets::Error;
 
+/// The chain the wallet store records its wallet under; the startup wallet check reads
+/// the recorded wallet back under the same chain.
+pub(crate) fn wallet_database_chain() -> crate::chains::ChainId {
+    active_chain()
+}
+
 // =============================================================================
 // INITIALIZATION
 // =============================================================================
@@ -45,7 +51,7 @@ pub async fn initialize_wallet_database() -> Result<(), Error> {
         return Ok(()); // Already initialized
     }
 
-    let db = super::database::WalletDatabase::new(active_chain()).await?;
+    let db = super::database::WalletDatabase::new(wallet_database_chain()).await?;
     let latest_snapshot_time = db.get_latest_snapshot_time()?;
 
     // Hydrate the live worth cache from the last persisted snapshot so the header and
