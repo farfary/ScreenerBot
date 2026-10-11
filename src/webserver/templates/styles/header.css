@@ -3,24 +3,6 @@
 
 /* Global dashboard header: shell, brand, metrics, and actions. */
 
-/* Electron title-bar drag layer. It must stay transparent: the header paints the
-   macOS title-bar and header as one surface so no theme seam can appear. */
-.electron-titlebar-bg {
-  display: none;
-  position: fixed;
-  inset: 0 0 auto;
-  height: 28px;
-  z-index: var(--z-titlebar-drag);
-  background: transparent;
-  user-select: none;
-  -webkit-app-region: drag;
-  app-region: drag;
-}
-
-.electron-macos .electron-titlebar-bg {
-  display: block;
-}
-
 .modern-header {
   --header-inline-padding: 32px;
 
@@ -36,12 +18,43 @@
   transition:
     background-color var(--transition-normal),
     box-shadow var(--transition-normal);
+}
+
+/* The macOS window is frameless (titleBarStyle 'hiddenInset'), so the header is its
+   title bar: the header paints the traffic-light band through padding-top and drags
+   the window like a native toolbar. */
+.electron-macos .modern-header {
+  padding-top: 28px;
+  -webkit-app-region: drag;
+  app-region: drag;
+}
+
+/* A drag region swallows clicks, hover and wheel scrolling, so every control and
+   both scrolling rows (tabs, ticker) stay out of it. */
+.electron-macos .modern-header :is(
+    button,
+    a,
+    input,
+    select,
+    textarea,
+    [role="button"],
+    [role="tab"],
+    [tabindex],
+    [title],
+    .tab-scroll-area
+  ) {
   -webkit-app-region: no-drag;
   app-region: no-drag;
 }
 
-.electron-macos .modern-header {
-  padding-top: 28px;
+/* Electron builds the drag shape in document order and ignores z-index: a later
+   no-drag box cuts it, an element without app-region does not. Overlays mount on
+   body after the header (dialogs, drawers, backdrops, menus), so each open one cuts
+   the header's drag area where it covers it. Persistent overlays stay laid out while
+   closed (transparent, aria-hidden), so a closed overlay must not cut. */
+.electron-macos .modern-header ~ :not([aria-hidden="true"], [hidden], [inert]) {
+  -webkit-app-region: no-drag;
+  app-region: no-drag;
 }
 
 /* Main row */

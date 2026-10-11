@@ -172,8 +172,7 @@
       /* This prevents dashboard from showing through during splash/onboarding/setup */
       body.initialization-mode .modern-header,
       body.initialization-mode .app-main,
-      body.initialization-mode .status-bar,
-      body.initialization-mode .electron-titlebar-bg {
+      body.initialization-mode .status-bar {
         display: none !important;
         visibility: hidden !important;
       }
@@ -191,9 +190,6 @@
 
     <!-- Lockscreen - Security overlay (hidden by default) -->
     {{LOCKSCREEN}}
-
-    <!-- Electron: Title bar background area (matches header color behind traffic lights on macOS) -->
-    <div class="electron-titlebar-bg"></div>
 
     <!-- THREE-ROW HEADER: Main Control + Tabs + Live Ticker -->
     <header class="modern-header">
