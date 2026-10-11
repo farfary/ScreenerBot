@@ -51,16 +51,17 @@ static BASE_DIRECTORY: LazyLock<PathBuf> = LazyLock::new(|| {
 fn resolve_base_directory() -> PathBuf {
     const APP_DIR: &str = "ScreenerBot";
 
-    // Test/dev override: pin ALL data (config.toml, *.db, logs, exports) to an
-    // arbitrary directory. The test harness sets this to an isolated tempdir so
-    // integration/live tests never read or write the owner's real data, and it is
-    // also handy for fresh-run testing. Empty/unset falls through to the platform
-    // default below, so normal runs are unaffected.
+    // Explicit overrides apply to every process. Test processes without an
+    // override use a shared temporary root instead of the platform data directory.
     if let Ok(dir) = std::env::var("SCREENERBOT_DATA_DIR") {
         let trimmed = dir.trim();
         if !trimmed.is_empty() {
             return PathBuf::from(trimmed);
         }
+    }
+
+    if cfg!(test) || std::env::var_os("NEXTEST_RUN_ID").is_some() {
+        return std::env::temp_dir().join("screenerbot-tests");
     }
 
     if let Some(dir) = dirs::data_local_dir() {
@@ -220,6 +221,9 @@ pub fn is_initialized() -> bool {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use std::sync::Mutex;
+
+    static ENV_LOCK: Mutex<()> = Mutex::new(());
 
     #[test]
     fn test_base_directory_not_empty() {
@@ -269,5 +273,25 @@ mod tests {
         let lock = get_process_lock_path();
         assert!(lock.starts_with(&data));
         assert_eq!(lock.file_name().unwrap(), ".screenerbot.lock");
+    }
+
+    #[test]
+    fn test_process_without_override_uses_temporary_base_directory() {
+        let _guard = ENV_LOCK.lock().unwrap_or_else(|error| error.into_inner());
+        let previous = std::env::var_os("SCREENERBOT_DATA_DIR");
+        unsafe { std::env::remove_var("SCREENERBOT_DATA_DIR") };
+        let base = resolve_base_directory();
+        if let Some(value) = previous {
+            unsafe { std::env::set_var("SCREENERBOT_DATA_DIR", value) };
+        }
+
+        assert!(base.starts_with(std::env::temp_dir()));
+        for platform_directory in [dirs::data_local_dir(), dirs::data_dir(), dirs::home_dir()]
+            .into_iter()
+            .flatten()
+            .map(|directory| directory.join("ScreenerBot"))
+        {
+            assert!(!base.starts_with(platform_directory));
+        }
     }
 }
