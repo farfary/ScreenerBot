@@ -76,6 +76,29 @@ export default [
     },
   },
   {
+    files: ["tools/tests/**/*.mjs"],
+    languageOptions: {
+      globals: {
+        Buffer: "readonly",
+        Event: "readonly",
+        I18n: "readonly",
+        Node: "readonly",
+        NodeFilter: "readonly",
+        URL: "readonly",
+        URLSearchParams: "readonly",
+        clearTimeout: "readonly",
+        console: "readonly",
+        document: "readonly",
+        getComputedStyle: "readonly",
+        process: "readonly",
+        requestAnimationFrame: "readonly",
+        setImmediate: "readonly",
+        setTimeout: "readonly",
+        window: "readonly",
+      },
+    },
+  },
+  {
     files: ["src/webserver/templates/scripts/ui/advanced_chart/framing.js"],
     languageOptions: {
       globals: { module: "readonly" },

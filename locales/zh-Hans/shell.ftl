@@ -162,6 +162,7 @@ shell-connection-restored = 核心程序连接已恢复
 
 # Source: scripts/core/header.js
 shell-trader-control-failed = 交易引擎控制失败
+shell-trader-request-failed-status = 交易请求失败（{ $status }）
 shell-notification-button-unread = 操作和通知，{ $count } 条未读
 shell-restart-confirm-title = 重启机器人
 shell-restart-confirm-message =

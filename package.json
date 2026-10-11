@@ -19,7 +19,7 @@
     "stylelint-config-standard": "^40.0.0"
   },
   "scripts": {
-    "lint:js": "eslint 'src/webserver/templates/**/*.js'",
+    "lint:js": "eslint 'src/webserver/templates/**/*.js' 'tools/lib/**/*.mjs' 'tools/tests/**/*.mjs'",
     "lint:css": "stylelint 'src/webserver/templates/**/*.css'",
     "lint:html": "html-validate 'src/webserver/templates/**/*.html'",
     "lint:ui-contract": "node tools/dashboard-ui-audit.mjs",

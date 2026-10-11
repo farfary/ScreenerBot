@@ -162,6 +162,7 @@ shell-connection-restored = Core connection restored
 
 # Source: scripts/core/header.js
 shell-trader-control-failed = Trader control failed
+shell-trader-request-failed-status = Trader request failed ({ $status })
 shell-notification-button-unread = Actions and notifications, { $count } unread
 shell-restart-confirm-title = Restart Bot
 shell-restart-confirm-message =

@@ -32,7 +32,7 @@ test("the native update command reaches the dashboard's real update check", asyn
 
 test("retry resumes the retained update payload instead of only rechecking metadata", async () => {
   const source = await fs.readFile(updatesTabPath, "utf8");
-  const retryHandler = source.match(/on\("updatesRetry",[\s\S]*?\n  \}\);/);
+  const retryHandler = source.match(/on\("updatesRetry",[\s\S]*?\n {2}\}\);/);
 
   assert.ok(retryHandler, "the retry action must remain wired");
   assert.match(retryHandler[0], /\/api\/updates\/download/);

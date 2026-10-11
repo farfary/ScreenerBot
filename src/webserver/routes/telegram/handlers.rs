@@ -62,7 +62,7 @@ pub(super) async fn get_settings(State(_state): State<Arc<AppState>>) -> Respons
         .map(|s| {
             let is_auth = s.is_authenticated();
             let last_activity = s.last_activity.elapsed().as_secs();
-            let created_at = s.created_at.elapsed().as_secs();
+            let age_secs = s.created_at.elapsed().as_secs();
             SessionResponse {
                 user_id: s.user_id,
                 username: s.username.clone(),
@@ -70,7 +70,7 @@ pub(super) async fn get_settings(State(_state): State<Arc<AppState>>) -> Respons
                 state: format!("{:?}", s.state),
                 is_authenticated: is_auth,
                 last_activity_secs: last_activity,
-                created_at_secs: created_at,
+                age_secs,
             }
         })
         .collect();
@@ -227,7 +227,7 @@ pub(super) async fn list_sessions(State(_state): State<Arc<AppState>>) -> Respon
         .map(|s| {
             let is_auth = s.is_authenticated();
             let last_activity = s.last_activity.elapsed().as_secs();
-            let created_at = s.created_at.elapsed().as_secs();
+            let age_secs = s.created_at.elapsed().as_secs();
             SessionResponse {
                 user_id: s.user_id,
                 username: s.username.clone(),
@@ -235,7 +235,7 @@ pub(super) async fn list_sessions(State(_state): State<Arc<AppState>>) -> Respon
                 state: format!("{:?}", s.state),
                 is_authenticated: is_auth,
                 last_activity_secs: last_activity,
-                created_at_secs: created_at,
+                age_secs,
             }
         })
         .collect();

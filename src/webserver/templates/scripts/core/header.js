@@ -165,7 +165,10 @@ async function controlTrader(action) {
     const payload = await res.json().catch(() => null);
 
     if (!res.ok) {
-      const message = apiErrorMessage(payload, `Trader request failed (${res.status})`);
+      const message = apiErrorMessage(
+        payload,
+        I18n.t("shell-trader-request-failed-status", { status: String(res.status) })
+      );
       throw new Error(message);
     }
 

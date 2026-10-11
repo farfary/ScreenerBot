@@ -162,6 +162,7 @@ shell-connection-restored = З’єднання з ядром відновлен
 
 # Source: scripts/core/header.js
 shell-trader-control-failed = Не вдалося керувати трейдером
+shell-trader-request-failed-status = Не вдалося виконати запит трейдера ({ $status })
 shell-notification-button-unread = Дії та сповіщення, непрочитаних: { $count }
 shell-restart-confirm-title = Перезапустити бота
 shell-restart-confirm-message =

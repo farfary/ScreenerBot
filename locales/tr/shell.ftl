@@ -140,6 +140,7 @@ shell-connection-overlay-detail = Çekirdeğe ulaşılamıyor. İşlem duraklat�
 shell-connection-restored = Çekirdek bağlantısı yeniden kuruldu
 
 shell-trader-control-failed = Trader kontrolü başarısız oldu
+shell-trader-request-failed-status = Trader isteği başarısız oldu ({ $status })
 shell-notification-button-unread = Eylemler ve bildirimler, okunmamış: { $count }
 shell-restart-confirm-title = Botu yeniden başlat
 shell-restart-confirm-message =

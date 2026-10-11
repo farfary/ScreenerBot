@@ -162,6 +162,7 @@ shell-connection-restored = 코어 연결이 복구되었습니다
 
 # Source: scripts/core/header.js
 shell-trader-control-failed = 트레이더 제어에 실패했습니다
+shell-trader-request-failed-status = 트레이더 요청에 실패했습니다 ({ $status })
 shell-notification-button-unread = 작업 및 알림, 읽지 않음 { $count }건
 shell-restart-confirm-title = 봇 재시작
 shell-restart-confirm-message =

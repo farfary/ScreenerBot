@@ -48,7 +48,7 @@ test("base form controls set typed words in the UI face", () => {
 
 test("a data face reaches only number, date, time and left-to-right inputs", () => {
   const found = rulesOf("components/form_controls.css")
-    .filter(({ selector, body }) => /^(?:input|textarea|select)\b/.test(selector))
+    .filter(({ selector }) => /^(?:input|textarea|select)\b/.test(selector))
     .filter(({ body }) => DATA_FACE.test(fontOf(body) ?? ""))
     .map(({ selector }) => selector)
     .filter((selector) => !DATA_INPUT.test(selector));

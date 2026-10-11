@@ -140,6 +140,7 @@ shell-connection-overlay-detail = Ядро недоступно. Торговл�
 shell-connection-restored = Соединение с ядром восстановлено
 
 shell-trader-control-failed = Не удалось управлять трейдером
+shell-trader-request-failed-status = Не удалось выполнить запрос трейдера ({ $status })
 shell-notification-button-unread = Действия и уведомления, непрочитанных: { $count }
 shell-restart-confirm-title = Перезапустить бота
 shell-restart-confirm-message =

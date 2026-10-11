@@ -162,6 +162,7 @@ shell-connection-restored = コアとの接続を復旧しました
 
 # Source: scripts/core/header.js
 shell-trader-control-failed = トレーダーの操作に失敗しました
+shell-trader-request-failed-status = トレーダーのリクエストに失敗しました ({ $status })
 shell-notification-button-unread = アクションと通知、未読 { $count }件
 shell-restart-confirm-title = ボットを再起動
 shell-restart-confirm-message =

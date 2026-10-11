@@ -140,6 +140,7 @@ shell-connection-overlay-detail = कोर तक पहुंच नहीं 
 shell-connection-restored = कोर कनेक्शन बहाल हुआ
 
 shell-trader-control-failed = ट्रेडर कंट्रोल विफल
+shell-trader-request-failed-status = ट्रेडर अनुरोध विफल हुआ ({ $status })
 shell-notification-button-unread = कार्रवाइयां और नोटिफ़िकेशन, { $count } अपठित
 shell-restart-confirm-title = बॉट रीस्टार्ट करें
 shell-restart-confirm-message =

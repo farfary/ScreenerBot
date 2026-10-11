@@ -142,6 +142,7 @@ shell-connection-overlay-detail = Core tidak dapat dijangkau. Trading dijeda; ak
 shell-connection-restored = Koneksi core dipulihkan
 
 shell-trader-control-failed = Kontrol trader gagal
+shell-trader-request-failed-status = Permintaan trader gagal ({ $status })
 shell-notification-button-unread = Aksi dan notifikasi, { $count } belum dibaca
 shell-restart-confirm-title = Mulai Ulang Bot
 shell-restart-confirm-message =

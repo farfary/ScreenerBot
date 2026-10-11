@@ -22,6 +22,7 @@
 import { createServer } from "node:http";
 import { existsSync, readdirSync, readFileSync } from "node:fs";
 import { resolve, extname } from "node:path";
+import { URL } from "node:url";
 
 import { REPO_ROOT, TEMPLATES_ROOT } from "./dashboard_ui.mjs";
 import { formatMessage, localeDirection, localizeTemplate } from "../html/l10n_transform.mjs";
@@ -98,7 +99,7 @@ function lucideCss() {
 }
 
 const globalStyles = memoized(() => {
-  const list = /let combined_styles = \[([\s\S]*?)\n    \];/.exec(TEMPLATES_RS)?.[1];
+  const list = /let\s+combined_styles\s*=\s*\[([\s\S]*?)\n {4}\];/.exec(TEMPLATES_RS)?.[1];
   if (!list) throw new Error("combined_styles not found in templates.rs");
   return stripComments(list)
     .split(",")

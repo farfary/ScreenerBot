@@ -140,6 +140,7 @@ shell-connection-overlay-detail = Không thể kết nối tới core. Giao dị
 shell-connection-restored = Đã khôi phục kết nối với core
 
 shell-trader-control-failed = Điều khiển Trader thất bại
+shell-trader-request-failed-status = Yêu cầu của Trader thất bại ({ $status })
 shell-notification-button-unread = Hành động và thông báo, { $count } chưa đọc
 shell-restart-confirm-title = Khởi động lại bot
 shell-restart-confirm-message =

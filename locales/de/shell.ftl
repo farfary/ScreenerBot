@@ -154,6 +154,7 @@ shell-connection-overlay-detail = Der Kern ist nicht erreichbar. Das Trading ist
 shell-connection-restored = Verbindung zum Kern wiederhergestellt
 
 shell-trader-control-failed = Trader-Steuerung fehlgeschlagen
+shell-trader-request-failed-status = Trader-Anfrage fehlgeschlagen ({ $status })
 shell-notification-button-unread = Aktionen und Benachrichtigungen, { $count } ungelesen
 shell-restart-confirm-title = Bot neu starten
 shell-restart-confirm-message =

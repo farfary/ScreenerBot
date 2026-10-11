@@ -24,7 +24,7 @@ pub struct SessionResponse {
     pub state: String,
     pub is_authenticated: bool,
     pub last_activity_secs: u64,
-    pub created_at_secs: u64,
+    pub age_secs: u64,
 }
 
 #[derive(Serialize)]

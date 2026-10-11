@@ -162,6 +162,7 @@ shell-connection-restored = تمت استعادة الاتصال بالنواة
 
 # Source: scripts/core/header.js
 shell-trader-control-failed = فشل التحكم بالمتداول
+shell-trader-request-failed-status = فشل طلب المتداول ({ $status })
 shell-notification-button-unread = الإجراءات والإشعارات، غير المقروءة: { $count }
 shell-restart-confirm-title = إعادة تشغيل البوت
 shell-restart-confirm-message =

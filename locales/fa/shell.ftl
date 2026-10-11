@@ -162,6 +162,7 @@ shell-connection-restored = اتصال به هسته برقرار شد
 
 # Source: scripts/core/header.js
 shell-trader-control-failed = کنترل معامله‌گر ناموفق بود
+shell-trader-request-failed-status = درخواست معامله‌گر ناموفق بود ({ $status })
 shell-notification-button-unread = اقدام‌ها و اعلان‌ها، { $count } خوانده‌نشده
 shell-restart-confirm-title = راه‌اندازی مجدد ربات
 shell-restart-confirm-message =

@@ -140,6 +140,7 @@ shell-connection-overlay-detail = Le noyau est injoignable. Le trading est suspe
 shell-connection-restored = Connexion au noyau rétablie
 
 shell-trader-control-failed = Échec du contrôle du trader
+shell-trader-request-failed-status = Échec de la requête du trader ({ $status })
 shell-notification-button-unread = Actions et notifications, { $count } non lues
 shell-restart-confirm-title = Redémarrer le bot
 shell-restart-confirm-message =
