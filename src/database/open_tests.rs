@@ -350,3 +350,46 @@ fn environment_failures_never_move_a_file() {
     }
     assert!(quarantined(directory.path()).is_empty());
 }
+
+static REFUSALS: std::sync::atomic::AtomicUsize = std::sync::atomic::AtomicUsize::new(0);
+static FAILING_STORE: std::sync::OnceLock<PathBuf> = std::sync::OnceLock::new();
+
+fn failing_store_path() -> PathBuf {
+    FAILING_STORE.get().expect("path set by the test").clone()
+}
+
+fn counted_refuse(
+    tx: &rusqlite::Transaction<'_>,
+    context: &SchemaContext,
+) -> Result<(), DatabaseError> {
+    REFUSALS.fetch_add(1, std::sync::atomic::Ordering::SeqCst);
+    refuse(tx, context)
+}
+
+/// A store file whose open failed is opened once: every later caller receives the same
+/// error from the failure cache and the file is never probed or checked again.
+#[test]
+fn a_failed_store_open_is_attempted_once_per_process() {
+    let directory = tempfile::tempdir().unwrap();
+    let path = fixture(directory.path(), "ledger.db", &LEDGER);
+    FAILING_STORE.set(path.clone()).unwrap();
+    let spec: &'static StoreSpec = Box::leak(Box::new(StoreSpec {
+        location: StoreLocation::Shared(failing_store_path),
+        ..*raised(&LEDGER, counted_refuse)
+    }));
+    assert!(is_store_file(spec, &path));
+
+    let first = pool_at(spec, &path, chains()).expect_err("the open is refused");
+    let state = health_of(&path);
+    assert!(matches!(
+        state,
+        StoreHealth::Unavailable { isolated: true, .. }
+    ));
+    for _ in 0..3 {
+        let again = pool_at(spec, &path, chains()).expect_err("the failure is cached");
+        assert_eq!(again.to_string(), first.to_string());
+        assert_eq!(FailureKind::of(&again), FailureKind::of(&first));
+    }
+    assert_eq!(REFUSALS.load(std::sync::atomic::Ordering::SeqCst), 1);
+    assert_eq!(health_of(&path), state);
+}

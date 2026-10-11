@@ -3,12 +3,21 @@
 
 //! Wallet validation — input validation for addresses, keypairs, and wallet names.
 
-use crate::database::catalog;
+use std::path::PathBuf;
+
+use crate::database::catalog::{self, StoreSpec};
+use crate::database::health::{self, StoreHealth};
+use crate::database::recovery::RecoveryAction;
 use crate::database::schema::ddl;
 use crate::errors::DatabaseError;
+use crate::logger::{self, LogTag};
 use crate::utils::get_wallet_address;
 use crate::wallets::Error;
 use rusqlite::{Connection, OpenFlags, OptionalExtension};
+
+/// One file of a wallet-scoped store: its catalog entry, the system name shown when the
+/// wallet differs, the file and the table that records its wallet.
+type WalletScopedFile = (&'static StoreSpec, &'static str, PathBuf, &'static str);
 
 #[derive(Debug, Clone)]
 pub enum WalletValidationResult {
@@ -39,45 +48,74 @@ impl WalletValidator {
                 store
                     .paths()
                     .into_iter()
-                    .map(move |path| (scope.label, path, scope.metadata_table))
+                    .map(move |path| (store, scope.label, path, scope.metadata_table))
             })
             .collect();
-        Self::validate_stored_wallets(current_wallet, &databases)
+        Ok(Self::validate_stored_wallets(current_wallet, &databases))
     }
 
+    /// Compare the wallet each wallet-scoped store records with `current_wallet`. A store
+    /// that cannot be read never stops the check: it is recorded as unavailable in the
+    /// health registry and its own opener and services handle it. A store the registry
+    /// already reports as not open keeps its recorded state and is not read.
     fn validate_stored_wallets(
         current_wallet: String,
-        databases: &[(&str, std::path::PathBuf, &'static str)],
-    ) -> Result<WalletValidationResult, Error> {
+        databases: &[WalletScopedFile],
+    ) -> WalletValidationResult {
         let mut mismatches: Vec<(String, String)> = Vec::new();
 
-        for (system, path, metadata_table) in databases {
-            if path.exists() {
-                if let Some(stored_wallet) =
-                    Self::get_stored_wallet(&path.to_string_lossy(), metadata_table)?
-                {
-                    if stored_wallet != current_wallet {
-                        mismatches.push(((*system).to_owned(), stored_wallet));
-                    }
+        for (spec, system, path, metadata_table) in databases {
+            if !path.exists() {
+                continue;
+            }
+            if let Some(status) = health::status(path).filter(|status| !status.health.is_open()) {
+                logger::warning(
+                    LogTag::Wallet,
+                    &format!(
+                        "{system} wallet check skipped: {} is {}",
+                        path.display(),
+                        status.health.as_str()
+                    ),
+                );
+                continue;
+            }
+            match Self::get_stored_wallet(&path.to_string_lossy(), metadata_table) {
+                Ok(Some(stored_wallet)) if stored_wallet != current_wallet => {
+                    mismatches.push(((*system).to_owned(), stored_wallet));
+                }
+                Ok(_) => {}
+                Err(error) => {
+                    logger::error(
+                        LogTag::Wallet,
+                        &format!(
+                            "{system} wallet check could not read {}: {error}",
+                            path.display()
+                        ),
+                    );
+                    health::publish(
+                        spec,
+                        path,
+                        StoreHealth::unavailable(&error, RecoveryAction::Unavailable),
+                    );
                 }
             }
         }
 
         if mismatches.is_empty() {
-            if databases.iter().any(|(_, path, _)| path.exists()) {
-                Ok(WalletValidationResult::Valid)
+            if databases.iter().any(|(_, _, path, _)| path.exists()) {
+                WalletValidationResult::Valid
             } else {
-                Ok(WalletValidationResult::FirstRun)
+                WalletValidationResult::FirstRun
             }
         } else {
             let affected_systems = mismatches.iter().map(|(sys, _)| sys.clone()).collect();
             let stored = mismatches[0].1.clone();
 
-            Ok(WalletValidationResult::Mismatch {
+            WalletValidationResult::Mismatch {
                 current: current_wallet,
                 stored,
                 affected_systems,
-            })
+            }
         }
     }
 
@@ -87,7 +125,7 @@ impl WalletValidator {
     fn get_stored_wallet(
         db_path: &str,
         metadata_table: &'static str,
-    ) -> Result<Option<String>, Error> {
+    ) -> Result<Option<String>, DatabaseError> {
         let conn = Connection::open_with_flags(db_path, OpenFlags::SQLITE_OPEN_READ_ONLY)
             .map_err(DatabaseError::from)?;
         if !ddl::has_table(&conn, metadata_table)? {
@@ -109,7 +147,9 @@ mod tests {
     use rusqlite::Connection;
 
     use super::{WalletValidationResult, WalletValidator};
-    use crate::database::catalog;
+    use crate::database::catalog::{self, StoreClass};
+    use crate::database::health::{self, StoreHealth};
+    use crate::database::recovery::FailureKind;
 
     const POSITIONS_METADATA_TABLE: &str = match catalog::POSITIONS.wallet_scope {
         Some(scope) => scope.metadata_table,
@@ -160,9 +200,13 @@ mod tests {
         assert!(matches!(
             WalletValidator::validate_stored_wallets(
                 "matching-wallet".to_owned(),
-                &[("Positions", path.clone(), POSITIONS_METADATA_TABLE)],
-            )
-            .unwrap(),
+                &[(
+                    &catalog::POSITIONS,
+                    "Positions",
+                    path.clone(),
+                    POSITIONS_METADATA_TABLE
+                )],
+            ),
             WalletValidationResult::Valid
         ));
 
@@ -174,9 +218,13 @@ mod tests {
             .unwrap();
         let validation = WalletValidator::validate_stored_wallets(
             "matching-wallet".to_owned(),
-            &[("Positions", path.clone(), POSITIONS_METADATA_TABLE)],
-        )
-        .unwrap();
+            &[(
+                &catalog::POSITIONS,
+                "Positions",
+                path.clone(),
+                POSITIONS_METADATA_TABLE,
+            )],
+        );
         assert!(matches!(
             validation,
             WalletValidationResult::Mismatch {
@@ -203,5 +251,93 @@ mod tests {
             POSITIONS_METADATA_TABLE
         )
         .is_err());
+    }
+
+    /// An unreadable positions store never stops the wallet check: it is published as
+    /// unavailable and the check goes on to the readable stores.
+    #[test]
+    fn an_unreadable_wallet_scoped_store_is_published_unavailable_and_the_check_continues() {
+        let directory = tempfile::tempdir().unwrap();
+        let damaged = directory.path().join("positions.db");
+        std::fs::write(&damaged, b"this file holds no SQLite header".repeat(128)).unwrap();
+        let readable = directory.path().join("positions-readable.db");
+        Connection::open(&readable)
+            .unwrap()
+            .execute_batch(
+                "CREATE TABLE position_metadata (key TEXT PRIMARY KEY, value TEXT NOT NULL);
+                 INSERT INTO position_metadata (key, value) VALUES ('current_wallet', 'stored-wallet');",
+            )
+            .unwrap();
+
+        let validation = WalletValidator::validate_stored_wallets(
+            "current-wallet".to_owned(),
+            &[
+                (
+                    &catalog::POSITIONS,
+                    "Positions",
+                    damaged.clone(),
+                    POSITIONS_METADATA_TABLE,
+                ),
+                (
+                    &catalog::POSITIONS,
+                    "Positions",
+                    readable.clone(),
+                    POSITIONS_METADATA_TABLE,
+                ),
+            ],
+        );
+        assert!(matches!(
+            validation,
+            WalletValidationResult::Mismatch { stored, .. } if stored == "stored-wallet"
+        ));
+        let status = health::status(&damaged).expect("the unreadable store is published");
+        assert!(matches!(
+            status.health,
+            StoreHealth::Unavailable {
+                failure: FailureKind::NotADatabase,
+                isolated: false,
+                ..
+            }
+        ));
+        assert!(health::status(&readable).is_none());
+    }
+
+    /// A store its opener already left unavailable keeps that state and is not read.
+    #[test]
+    fn a_store_already_unavailable_keeps_its_recorded_state() {
+        let directory = tempfile::tempdir().unwrap();
+        let path = directory.path().join("positions.db");
+        std::fs::write(&path, b"this file holds no SQLite header".repeat(128)).unwrap();
+        let isolated = StoreHealth::unavailable(
+            &crate::errors::DatabaseError::Corrupt {
+                operation: "check".to_owned(),
+                message: "damaged".to_owned(),
+            },
+            crate::database::recovery::RecoveryAction::Isolate,
+        );
+        health::publish(&catalog::POSITIONS, &path, isolated.clone());
+
+        assert!(matches!(
+            WalletValidator::validate_stored_wallets(
+                "current-wallet".to_owned(),
+                &[(
+                    &catalog::POSITIONS,
+                    "Positions",
+                    path.clone(),
+                    POSITIONS_METADATA_TABLE
+                )],
+            ),
+            WalletValidationResult::Valid
+        ));
+        assert_eq!(health::status(&path).unwrap().health, isolated);
+    }
+
+    /// The vault is never a wallet-scoped store, so the wallet check can never absorb a
+    /// failure of `wallets.db`: its open in the wallet manager still stops full mode.
+    #[test]
+    fn the_vault_is_outside_the_wallet_check() {
+        assert!(catalog::wallet_scoped_stores()
+            .all(|(store, _)| store.class != StoreClass::Vault && store.id != catalog::WALLETS.id));
+        assert!(catalog::WALLETS.wallet_scope.is_none());
     }
 }

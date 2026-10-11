@@ -13,7 +13,8 @@ use chrono::{DateTime, NaiveDateTime, Utc};
 use rusqlite::{Connection, OpenFlags};
 
 use crate::database::catalog::{StoreClass, StoreSpec};
-use crate::database::handles;
+use crate::database::handles::{self, StoreHandle};
+use crate::database::health;
 use crate::errors::DatabaseError;
 use crate::logger::{self, LogTag};
 use crate::paths::{get_db_with_wal_files, BACKUPS_DIRECTORY_NAME};
@@ -285,29 +286,46 @@ pub fn start_schedule() {
 }
 
 async fn snapshot_open_stores(kind: SnapshotKind) {
-    let outcome = tokio::task::spawn_blocking(move || {
-        for handle in handles::open_stores() {
-            if !is_snapshotted(handle.spec.class)
-                || (kind == SnapshotKind::Periodic && !changed_since_last(&handle.path))
-            {
-                continue;
-            }
-            match take(handle.spec, &handle.path, kind) {
-                Ok(Some(file)) => logger::debug(
-                    LogTag::System,
-                    &format!("{} snapshot written to {}", handle.spec.id, file.display()),
-                ),
-                Ok(None) => {}
-                Err(error) => logger::warning(
-                    LogTag::System,
-                    &format!("{} snapshot failed: {error}", handle.spec.id),
-                ),
-            }
-        }
-    })
-    .await;
+    let outcome =
+        tokio::task::spawn_blocking(move || snapshot_stores(&handles::open_stores(), kind)).await;
     if let Err(error) = outcome {
         logger::warning(LogTag::System, &format!("Store snapshots stopped: {error}"));
+    }
+}
+
+/// Snapshot each ledger and vault store of `stores`; a periodic pass skips a store that
+/// has not changed. A store the health registry reports as not open is skipped and never
+/// opened here: its opener left it unavailable or is replacing it.
+fn snapshot_stores(stores: &[StoreHandle], kind: SnapshotKind) {
+    for handle in stores {
+        if !is_snapshotted(handle.spec.class)
+            || (kind == SnapshotKind::Periodic && !changed_since_last(&handle.path))
+        {
+            continue;
+        }
+        if let Some(status) = health::status(&handle.path).filter(|status| !status.health.is_open())
+        {
+            logger::debug(
+                LogTag::System,
+                &format!(
+                    "{} snapshot skipped: the store is {}",
+                    handle.spec.id,
+                    status.health.as_str()
+                ),
+            );
+            continue;
+        }
+        match take(handle.spec, &handle.path, kind) {
+            Ok(Some(file)) => logger::debug(
+                LogTag::System,
+                &format!("{} snapshot written to {}", handle.spec.id, file.display()),
+            ),
+            Ok(None) => {}
+            Err(error) => logger::warning(
+                LogTag::System,
+                &format!("{} snapshot failed: {error}", handle.spec.id),
+            ),
+        }
     }
 }
 

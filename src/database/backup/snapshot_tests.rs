@@ -199,3 +199,44 @@ fn only_a_verified_snapshot_is_offered_for_a_restore() {
     .unwrap();
     assert_eq!(latest_verified(&POSITIONS, &ledger), None);
 }
+
+/// The snapshot pass copies an open ledger store and skips one its opener left
+/// unavailable, without opening it.
+#[test]
+fn the_snapshot_pass_skips_a_store_that_is_not_open() {
+    let directory = tempfile::tempdir().unwrap();
+    let handle = |name: &str| {
+        let path = directory.path().join(name);
+        Connection::open(&path)
+            .unwrap()
+            .execute_batch("CREATE TABLE t (v INTEGER)")
+            .unwrap();
+        StoreHandle {
+            spec: &POSITIONS,
+            pool: r2d2::Pool::builder()
+                .max_size(1)
+                .build(r2d2_sqlite::SqliteConnectionManager::file(&path))
+                .unwrap(),
+            path,
+        }
+    };
+    let open = handle("open.db");
+    let unavailable = handle("unavailable.db");
+    health::publish(&POSITIONS, &open.path, health::StoreHealth::Healthy);
+    health::publish(
+        &POSITIONS,
+        &unavailable.path,
+        health::StoreHealth::unavailable(
+            &DatabaseError::Corrupt {
+                operation: "check".to_owned(),
+                message: "damaged".to_owned(),
+            },
+            recovery::RecoveryAction::Isolate,
+        ),
+    );
+
+    snapshot_stores(&[open.clone(), unavailable.clone()], SnapshotKind::Boot);
+    assert_eq!(list(&open.path).len(), 1);
+    assert!(list(&unavailable.path).is_empty());
+    assert!(!super::directory(&unavailable.path).exists());
+}

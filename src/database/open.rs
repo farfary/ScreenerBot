@@ -40,6 +40,12 @@ static POOLS: LazyLock<Mutex<HashMap<PathBuf, Slot>>> =
     LazyLock::new(|| Mutex::new(HashMap::new()));
 static READERS: LazyLock<Mutex<HashMap<PathBuf, Slot>>> =
     LazyLock::new(|| Mutex::new(HashMap::new()));
+/// The error each store file's failed open ended with, kept until the process restarts.
+/// A failed open has already spent its retry budget and published the store as
+/// unavailable; opening it again would repeat the probe and `quick_check` on every
+/// caller without a different outcome.
+static FAILED: LazyLock<Mutex<HashMap<PathBuf, DatabaseError>>> =
+    LazyLock::new(|| Mutex::new(HashMap::new()));
 
 /// The pool of the shared store `spec`, opening it on first use.
 pub fn store(spec: &'static StoreSpec) -> Result<SqlitePool, DatabaseError> {
@@ -53,9 +59,9 @@ pub fn chain_store(spec: &'static StoreSpec, chain: ChainId) -> Result<SqlitePoo
 }
 
 /// The pool of the store `spec` at `path`. One of the store's own files is opened once
-/// per process and every later caller shares its pool; a failed open is tried again by
-/// the next caller. Any other file (an isolated test store, an offline copy) is opened
-/// afresh on every call.
+/// per process and every later caller shares its pool; a failed open is not tried again
+/// until the process restarts, and every later caller receives its error. Any other file
+/// (an isolated test store, an offline copy) is opened afresh on every call.
 pub fn pool_at(
     spec: &'static StoreSpec,
     path: &Path,
@@ -63,7 +69,9 @@ pub fn pool_at(
 ) -> Result<SqlitePool, DatabaseError> {
     let context = SchemaContext { chains };
     if is_store_file(spec, path) {
-        cached(&POOLS, path, || open(spec, path, &context))
+        cached(&POOLS, path, || {
+            open_once(path, || open(spec, path, &context))
+        })
     } else {
         open(spec, path, &context)
     }
@@ -111,6 +119,27 @@ fn cached(
     let pool = open()?;
     *slot = Some(pool.clone());
     Ok(pool)
+}
+
+/// Run `open` unless an earlier open of `path` failed, in which case its error is
+/// returned without touching the file. A failure is recorded for good.
+fn open_once(
+    path: &Path,
+    open: impl FnOnce() -> Result<SqlitePool, DatabaseError>,
+) -> Result<SqlitePool, DatabaseError> {
+    if let Some(error) = FAILED
+        .lock()
+        .unwrap_or_else(PoisonError::into_inner)
+        .get(path)
+    {
+        return Err(error.clone());
+    }
+    open().inspect_err(|error| {
+        FAILED
+            .lock()
+            .unwrap_or_else(PoisonError::into_inner)
+            .insert(path.to_path_buf(), error.clone());
+    })
 }
 
 /// Open the store, recovering a failed open as the decision table says.
