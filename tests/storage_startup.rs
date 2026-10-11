@@ -10,7 +10,7 @@ use std::process::Command;
 
 use rusqlite::Connection;
 use screenerbot::chains::ChainId;
-use screenerbot::database::catalog::STORES;
+use screenerbot::database::catalog::{StoreClass, STORES};
 use screenerbot::paths::{chain_db_path, DbKind};
 use screenerbot::storage::types::Classification;
 
@@ -20,7 +20,6 @@ const CACHE_CHILD_ENV: &str = "SCREENERBOT_CACHE_RECOVERY_CHILD";
 /// included.
 const STORAGE_PHASE_BUDGET: std::time::Duration = std::time::Duration::from_secs(5);
 /// The cache stores whose owners open through the recovery path.
-const RECOVERED_CACHE_FILES: &[&str] = &["ohlcvs.db", "pools.db", "rpc_stats.db"];
 /// Tables whose rows are still pruned on their owner's own schedule and therefore carry
 /// no catalog retention rule. The list only shrinks.
 const OWNER_PRUNED_TABLES: &[(&str, &str)] = &[
@@ -42,8 +41,21 @@ const OWNER_PRUNED_TABLES: &[(&str, &str)] = &[
 /// The Solana file name of every catalog store: the startup matrix covers exactly the
 /// stores the catalog declares.
 fn database_files() -> Vec<String> {
-    STORES
-        .into_iter()
+    store_files(STORES.into_iter())
+}
+
+fn recovered_cache_files() -> Vec<String> {
+    store_files(
+        STORES
+            .into_iter()
+            .filter(|store| store.class == StoreClass::Cache),
+    )
+}
+
+fn store_files<'a>(
+    stores: impl Iterator<Item = &'a screenerbot::database::catalog::StoreSpec>,
+) -> Vec<String> {
+    stores
         .map(|store| {
             store
                 .path(ChainId::Solana)
@@ -196,7 +208,8 @@ fn unreadable_cache_stores_are_quarantined_and_rebuilt() {
     let data = directory.path().join("data");
     std::fs::create_dir_all(&data).expect("create data directory");
     let damaged = b"this file holds no SQLite header".repeat(128);
-    for file in RECOVERED_CACHE_FILES {
+    let recovered_cache_files = recovered_cache_files();
+    for file in &recovered_cache_files {
         std::fs::write(data.join(file), &damaged).expect("write damaged cache store");
     }
 
@@ -216,7 +229,7 @@ fn unreadable_cache_stores_are_quarantined_and_rebuilt() {
     }
 
     let quarantine = data.join("quarantine");
-    for file in RECOVERED_CACHE_FILES {
+    for file in &recovered_cache_files {
         let stem = file.trim_end_matches(".db");
         let moved: Vec<std::path::PathBuf> = std::fs::read_dir(&quarantine)
             .expect("list quarantine directory")
@@ -562,21 +575,5 @@ fn assert_every_written_entry_is_declared() {
 fn open_cache_stores_through_recovery() {
     screenerbot::paths::ensure_all_directories().expect("create cache-recovery directories");
     screenerbot::config::load_config().expect("load isolated configuration");
-    let runtime = tokio::runtime::Builder::new_multi_thread()
-        .enable_all()
-        .build()
-        .expect("create multi-thread runtime");
-    runtime.block_on(async {
-        screenerbot::ohlcvs::OhlcvService::initialize(screenerbot::chains::ChainScope::One(
-            ChainId::Solana,
-        ))
-        .await
-        .expect("open OHLCV store through recovery");
-        screenerbot::pools::database::initialize_database(ChainId::Solana)
-            .await
-            .expect("open pools store through recovery");
-        screenerbot::rpc::StatsManager::new(true)
-            .await
-            .expect("open RPC statistics store through recovery");
-    });
+    screenerbot::database::open::open_all();
 }

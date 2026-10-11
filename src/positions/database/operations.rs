@@ -951,6 +951,7 @@ mod tests {
     use rusqlite::{params, Connection};
 
     use crate::chains::RawAmount;
+    use crate::database::schema;
 
     use super::super::booking::Booking;
     use super::super::open_round::OPEN_ROUND_INDEX_NAME;
@@ -996,14 +997,10 @@ mod tests {
             "position_metadata",
             "token_snapshots",
         ] {
-            let exists = connection
-                .query_row(
-                    "SELECT COUNT(*) FROM sqlite_master WHERE type = 'table' AND name = ?1",
-                    [table],
-                    |row| row.get::<_, i64>(0),
-                )
-                .unwrap();
-            assert_eq!(exists, 1, "missing table {table}");
+            assert!(
+                schema::table_exists(connection, table).unwrap(),
+                "missing table {table}"
+            );
         }
         for column in [
             "chain_id",
@@ -1015,14 +1012,10 @@ mod tests {
             "history_complete",
             "holding_state",
         ] {
-            let exists = connection
-                .query_row(
-                    "SELECT COUNT(*) FROM pragma_table_info('positions') WHERE name = ?1",
-                    [column],
-                    |row| row.get::<_, i64>(0),
-                )
-                .unwrap();
-            assert_eq!(exists, 1, "missing positions.{column}");
+            assert!(
+                schema::table_has_column(connection, "positions", column).unwrap(),
+                "missing positions.{column}"
+            );
         }
         for index_sql in POSITIONS_INDEXES {
             let index_name = index_sql

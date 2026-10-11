@@ -23,7 +23,7 @@ use crate::agent_control::error::{Error, Result};
 use crate::agent_control::permissions::{PermissionLevel, ToolPermissions};
 use crate::agent_control::submissions;
 use crate::database;
-use crate::database::schema::{SchemaContext, StoreSchema};
+use crate::database::schema::{ddl, SchemaContext, StoreSchema};
 use crate::errors::DatabaseError;
 use crate::logger::{self, LogTag};
 
@@ -279,16 +279,12 @@ pub fn init() -> Result<()> {
 /// Public so `tests/agent_control_store.rs` can run it against a hand-built v1
 /// database.
 pub fn migrate_scope_to_permissions(connection: &rusqlite::Connection) -> Result<()> {
-    let has_scope = connection
-        .prepare("SELECT 1 FROM pragma_table_info('pairings') WHERE name = 'scope'")?
-        .exists([])?;
+    let has_scope = ddl::has_column(connection, "pairings", "scope")?;
     if !has_scope {
         return Ok(());
     }
 
-    let has_permissions = connection
-        .prepare("SELECT 1 FROM pragma_table_info('pairings') WHERE name = 'permissions'")?
-        .exists([])?;
+    let has_permissions = ddl::has_column(connection, "pairings", "permissions")?;
     if !has_permissions {
         connection.execute(
             "ALTER TABLE pairings ADD COLUMN permissions TEXT NOT NULL DEFAULT ''",

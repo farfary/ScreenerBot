@@ -240,25 +240,7 @@ pub(super) fn apply_additive_migrations(transaction: &Connection) -> Result<(), 
 fn copy_legacy_rows(transaction: &Connection, table: &str) -> Result<(), Error> {
     let legacy = format!("{table}_legacy_chain");
     let columns = |name: &str| -> Result<Vec<String>, Error> {
-        let mut statement = transaction
-            .prepare(&format!("PRAGMA table_info({name})"))
-            .map_err(|error| DatabaseError::Query {
-                operation: format!("Failed to inspect {name}"),
-                message: error.to_string(),
-            })?;
-        let rows = statement
-            .query_map([], |row| row.get::<_, String>(1))
-            .map_err(|error| DatabaseError::Query {
-                operation: format!("Failed to read {name} columns"),
-                message: error.to_string(),
-            })?;
-        rows.collect::<std::result::Result<Vec<_>, rusqlite::Error>>()
-            .map_err(|error| {
-                Error::from(DatabaseError::Query {
-                    operation: format!("decode {name} columns"),
-                    message: error.to_string(),
-                })
-            })
+        ddl::column_names(transaction, name).map_err(Error::from)
     };
     let old = columns(&legacy)?;
     let new = columns(table)?;

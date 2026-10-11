@@ -318,9 +318,12 @@ impl OhlcvDatabase {
                 continue;
             }
             let aligned_ts = Self::bucket_start(candle.timestamp, timeframe);
-            if let Ok(rows) = write(&tx, item, aligned_ts) {
-                changed += rows;
-            }
+            changed += write(&tx, item, aligned_ts).map_err(|error| {
+                OhlcvError::Database(DatabaseError::classify_sqlite_failure(
+                    "upsert OHLCV candle",
+                    error,
+                ))
+            })?;
         }
 
         tx.commit().map_err(|e| {
@@ -826,6 +829,41 @@ mod tests {
     fn upsert(db: &OhlcvDatabase, candles: &[Candle], source: &str) -> usize {
         db.insert_candles_batch_at("mint", "pool", Timeframe::Hour1, candles, source, NOW)
             .unwrap()
+    }
+
+    #[test]
+    fn failed_candle_write_rolls_back_the_batch() {
+        let (db, path) = open_db("failed-candle-write-rolls-back");
+        write_series(&db, &[registered("pool", 1.0)], "pool").unwrap();
+        db.conn()
+            .unwrap()
+            .execute_batch(
+                "CREATE TRIGGER reject_candle BEFORE INSERT ON ohlcv_candles
+                 WHEN NEW.timestamp = 1699999200
+                 BEGIN SELECT RAISE(ABORT, 'rejected candle'); END;",
+            )
+            .unwrap();
+
+        let result = db.insert_candles_batch_at(
+            "mint",
+            "pool",
+            Timeframe::Hour1,
+            &[candle(CLOSED, 2.0), candle(FORMING, 3.0)],
+            OhlcvDatabase::NATIVE_SOURCE,
+            NOW,
+        );
+
+        assert!(result.is_err(), "a failed row must fail the batch");
+        assert_eq!(
+            db.conn()
+                .unwrap()
+                .query_row("SELECT COUNT(*) FROM ohlcv_candles", [], |row| row
+                    .get::<_, i64>(0))
+                .unwrap(),
+            0,
+            "a failed row must roll back earlier writes"
+        );
+        close_db(db, path);
     }
 
     fn aggregate(db: &OhlcvDatabase, candles: &[Candle], newest_minute: i64) -> usize {

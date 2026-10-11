@@ -9,7 +9,7 @@
 
 use super::wipe_candle_data;
 use crate::chains::ChainId;
-use crate::database::schema::ddl::has_column;
+use crate::database::schema::ddl::{has_column, has_table};
 use crate::errors::DatabaseError;
 use crate::ohlcvs::error::{OhlcvError, OhlcvResult};
 use rusqlite::{params, Connection, OptionalExtension};
@@ -138,16 +138,7 @@ fn inherit_solana_user_version(conn: &Connection) -> OhlcvResult<bool> {
 }
 
 fn migrate_global_data_version_table(conn: &Connection) -> OhlcvResult<()> {
-    let exists: bool = conn
-        .query_row(
-            "SELECT EXISTS(SELECT 1 FROM sqlite_master WHERE type = 'table' AND name = 'ohlcv_data_versions')",
-            [],
-            |row| row.get::<_, i64>(0),
-        )
-        .map_err(|e| {
-            OhlcvError::Database(DatabaseError::classify_sqlite_failure("inspect OHLCV data version table", e))
-        })?
-        != 0;
+    let exists = has_table(conn, "ohlcv_data_versions")?;
     if !exists || has_column(conn, "ohlcv_data_versions", "chain_id")? {
         return Ok(());
     }

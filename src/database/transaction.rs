@@ -53,10 +53,8 @@ mod tests {
     /// instead of failing.
     #[test]
     fn immediate_transaction_survives_a_concurrent_writer() {
-        let dir = std::env::temp_dir().join(format!("sb_write_tx_{}", std::process::id()));
-        std::fs::create_dir_all(&dir).expect("create temp dir");
-        let path = dir.join("upgrade.db");
-        let _ = std::fs::remove_file(&path);
+        let dir = tempfile::tempdir().expect("create temp dir");
+        let path = dir.path().join("upgrade.db");
 
         let setup = Connection::open(&path).expect("open setup connection");
         setup
@@ -119,7 +117,5 @@ mod tests {
         tx.execute("UPDATE t SET v = 4 WHERE k = 1", [])
             .expect("immediate writes after reading");
         tx.commit().expect("commit");
-
-        let _ = std::fs::remove_file(&path);
     }
 }
