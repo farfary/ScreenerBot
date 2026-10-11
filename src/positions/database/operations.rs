@@ -974,8 +974,12 @@ mod tests {
         let path = directory.path().join("positions.db");
         let manager = SqliteConnectionManager::file(&path);
         // No connection is made before the store opener runs: an empty file left by an
-        // eager pool is a store that is not a database.
-        let pool = Pool::builder().max_size(1).build_unchecked(manager);
+        // eager pool is a store that is not a database. `build_unchecked` alone still
+        // opens `min_idle` connections on a background thread, so `min_idle` is zero.
+        let pool = Pool::builder()
+            .max_size(1)
+            .min_idle(Some(0))
+            .build_unchecked(manager);
         (
             PositionsDatabase {
                 pool,
@@ -985,6 +989,16 @@ mod tests {
             },
             directory,
         )
+    }
+
+    /// The test pool connects only when a test asks for a connection. A connection made
+    /// in the background would create the store as an empty file, which the store opener
+    /// moves to quarantine as not a database, leaving the pool on the moved file.
+    #[test]
+    fn the_test_pool_creates_no_store_file_before_its_first_connection() {
+        let (database, _directory) = test_database();
+        std::thread::sleep(std::time::Duration::from_millis(200));
+        assert!(!std::path::Path::new(&database.database_path).exists());
     }
 
     fn assert_current_schema(connection: &Connection) {
