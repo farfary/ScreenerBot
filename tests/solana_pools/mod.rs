@@ -5,8 +5,9 @@
 //!
 //! The cases live in `tests/fixtures/pools/solana/<slug>/`, one directory per
 //! `ProgramKind::protocol_slug()`, and are read through `tests/common/pool_cases.rs`.
-//! A case has a `purpose`: `direct-swap` cases are the accounts the swap engine reads, and
-//! `price-snapshot` cases are the account bundle the price fetcher hands a decoder. Accounts the
+//! A case has a `purpose`: `direct-swap` cases are the accounts the swap engine reads,
+//! `price-snapshot` cases are the account bundle the price fetcher hands a decoder, and `no-price`
+//! cases are such a bundle for a pool its decoder must refuse. Accounts the
 //! swap cases share with a price case carry the price case's lamports; the others carry `0`.
 //!
 //! * `accounts` — every `direct-swap` case holds exactly the accounts the swap engine's

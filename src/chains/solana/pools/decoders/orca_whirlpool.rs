@@ -67,6 +67,18 @@ impl PoolDecoder for OrcaWhirlpoolDecoder {
             ),
         );
 
+        // No in-range liquidity: the stored sqrt_price is the last traded one, not a live market.
+        if pool_info.liquidity == 0 {
+            logger::debug(
+                LogTag::PoolDecoder,
+                &format!(
+                    "Orca Whirlpool pool {} has no active liquidity",
+                    pool_account.pubkey
+                ),
+            );
+            return None;
+        }
+
         // Determine which token is SOL and which is the target
         let (sol_vault, token_vault, sol_reserve, token_reserve, is_token_a_sol) =
             if pool_info.token_mint_a == SOL_MINT {
@@ -467,5 +479,63 @@ mod tests {
             reserves,
             vec![token_vault_a.to_string(), token_vault_b.to_string()]
         );
+    }
+
+    /// A token/WSOL Whirlpool (the token is mint A with 6 decimals) at `sqrt_price` 2^64
+    /// holding `liquidity`, with both vaults in the bundle. Returns the bundle and the token.
+    fn token_sol_pool(liquidity: u128) -> (HashMap<String, AccountData>, String) {
+        use std::str::FromStr;
+        let pool = Pubkey::new_unique();
+        let token_mint = Pubkey::new_unique();
+        let wsol = Pubkey::from_str(SOL_MINT).unwrap();
+        let (vault_a, vault_b) = (Pubkey::new_unique(), Pubkey::new_unique());
+        let mut data = vec![0u8; 653];
+        data[49..65].copy_from_slice(&liquidity.to_le_bytes());
+        data[65..81].copy_from_slice(&(1u128 << 64).to_le_bytes());
+        data[101..133].copy_from_slice(token_mint.as_ref());
+        data[133..165].copy_from_slice(vault_a.as_ref());
+        data[181..213].copy_from_slice(wsol.as_ref());
+        data[213..245].copy_from_slice(vault_b.as_ref());
+        crate::tokens::cache_decimals(crate::chains::ChainId::Solana, &token_mint.to_string(), 6);
+
+        let account = |pubkey: Pubkey, owner: Pubkey, data: Vec<u8>| AccountData {
+            pubkey,
+            data,
+            slot: 1,
+            fetched_at: std::time::Instant::now(),
+            lamports: 0,
+            owner,
+        };
+        let token_account = |mint: &Pubkey| {
+            let mut data = vec![0u8; 165];
+            data[0..32].copy_from_slice(mint.as_ref());
+            data[64..72].copy_from_slice(&1_000_000_000u64.to_le_bytes());
+            data
+        };
+        let program = Pubkey::from_str(ORCA_WHIRLPOOL_PROGRAM_ID).unwrap();
+        let token_program = crate::chains::solana::spl_token::id();
+        let accounts = HashMap::from([
+            (pool.to_string(), account(pool, program, data)),
+            (
+                vault_a.to_string(),
+                account(vault_a, token_program, token_account(&token_mint)),
+            ),
+            (
+                vault_b.to_string(),
+                account(vault_b, token_program, token_account(&wsol)),
+            ),
+        ]);
+        (accounts, token_mint.to_string())
+    }
+
+    #[test]
+    fn a_pool_without_active_liquidity_yields_no_price() {
+        let (accounts, mint) = token_sol_pool(1_000);
+        assert!(
+            OrcaWhirlpoolDecoder::decode_and_calculate(&accounts, &mint, SOL_MINT).is_some(),
+            "the same pool with active liquidity prices"
+        );
+        let (accounts, mint) = token_sol_pool(0);
+        assert!(OrcaWhirlpoolDecoder::decode_and_calculate(&accounts, &mint, SOL_MINT).is_none());
     }
 }

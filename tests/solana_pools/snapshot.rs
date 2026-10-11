@@ -10,9 +10,9 @@
 //!
 //! # Coverage
 //!
-//! Eleven cases cover ten of the eleven `ProgramKind`s with a decoder: Meteora DAMM v2, Meteora
-//! DBC (plain and with an output fee), Meteora DLMM, Moonit, Orca Whirlpool, pump.fun AMM,
-//! pump.fun legacy, Raydium AMM v4, Raydium CLMM and Raydium CPMM. `ProgramKind::Unknown` has no
+//! Twelve cases cover ten of the eleven `ProgramKind`s with a decoder: Meteora DAMM v2 (WSOL as
+//! token B and as token A), Meteora DBC (plain and with an output fee), Meteora DLMM, Moonit, Orca
+//! Whirlpool, pump.fun AMM, pump.fun legacy, Raydium AMM v4, Raydium CLMM and Raydium CPMM. `ProgramKind::Unknown` has no
 //! decoder and no pool, so it has no case.
 //!
 //! **Uncovered: `ProgramKind::FluxbeamAmm`.** The only recorded fluxbeam pool
@@ -20,6 +20,11 @@
 //! on mainnet and its fee account is closed, so its decoder returns no price. The test asserts
 //! the covered kinds exactly, so adding a fluxbeam case is a deliberate change to
 //! [`COVERED_KINDS`].
+//!
+//! # Refusals
+//!
+//! A `no-price` case is a recorded pool its decoder must refuse, such as a drained DAMM v2 pool
+//! whose stored sqrt price outlived its liquidity. It holds the same bundle a price case holds.
 //!
 //! # Inputs
 //!
@@ -42,9 +47,11 @@ use crate::common::solana_pools::{
     TOKEN_ACCOUNT_BASE_LEN,
 };
 use screenerbot::chains::solana::constants::SOL_MINT;
+use screenerbot::chains::solana::layout::token_account_amount;
 use screenerbot::chains::solana::pools::analyzer::PoolAnalyzer;
 use screenerbot::chains::solana::pools::decoders::decode_pool;
 use screenerbot::chains::solana::pools::fetcher::AccountData;
+use screenerbot::chains::solana::pools::layouts::meteora_damm::DammPoolState;
 use screenerbot::chains::solana::pools::types::ProgramKind;
 use screenerbot::chains::solana::solana_sdk::pubkey::Pubkey;
 use serde::{Deserialize, Serialize};
@@ -52,6 +59,7 @@ use std::collections::{BTreeSet, HashMap};
 use std::path::PathBuf;
 
 const PRICE_PURPOSE: &str = "price-snapshot";
+const NO_PRICE_PURPOSE: &str = "no-price";
 const SWAP_PURPOSE: &str = "direct-swap";
 
 /// Protocol slugs of the program kinds the price cases cover; see the module doc for the
@@ -143,12 +151,17 @@ fn decode_all(cases: &[(String, SolanaCase)]) -> Vec<RecordedPrice> {
         .collect()
 }
 
-/// The price cases of one program kind.
-fn price_cases_of(kind: ProgramKind) -> Vec<(String, SolanaCase)> {
-    cases_for_purpose(PRICE_PURPOSE)
+/// The cases of one purpose and program kind.
+fn cases_of(purpose: &str, kind: ProgramKind) -> Vec<(String, SolanaCase)> {
+    cases_for_purpose(purpose)
         .into_iter()
         .filter(|(_, case)| case.venue == kind.protocol_slug())
         .collect()
+}
+
+/// The price cases of one program kind.
+fn price_cases_of(kind: ProgramKind) -> Vec<(String, SolanaCase)> {
+    cases_of(PRICE_PURPOSE, kind)
 }
 
 #[test]
@@ -222,7 +235,10 @@ fn fetched_account_set(
 #[test]
 fn price_cases_hold_exactly_the_analyzer_account_set() {
     let mut mismatches = Vec::new();
-    for (name, case) in cases_for_purpose(PRICE_PURPOSE) {
+    let cases = cases_for_purpose(PRICE_PURPOSE)
+        .into_iter()
+        .chain(cases_for_purpose(NO_PRICE_PURPOSE));
+    for (name, case) in cases {
         let kind = program_kind(&case);
         let pool = &case.accounts[&case.pool];
         let derived: BTreeSet<String> =
@@ -356,6 +372,75 @@ fn a_migrated_dbc_pool_yields_no_price() {
             case.pool
         );
     }
+}
+
+#[test]
+fn a_drained_damm_pool_yields_no_price() {
+    let cases = cases_of(NO_PRICE_PURPOSE, ProgramKind::MeteoraDamm);
+    assert!(
+        !cases.is_empty(),
+        "the refusal cases carry a drained DAMM pool"
+    );
+    for (name, case) in cases {
+        let state = DammPoolState::decode(pubkey(&case.pool), &case.accounts[&case.pool].data)
+            .expect("the drained pool still decodes");
+        assert_eq!(
+            state.liquidity, 0,
+            "case {name} pool {} is drained",
+            case.pool
+        );
+        assert!(
+            state.sqrt_price > 0
+                && (state.sqrt_min_price..=state.sqrt_max_price).contains(&state.sqrt_price),
+            "case {name} pool {} keeps an in-range sqrt price, so only the liquidity refuses it",
+            case.pool
+        );
+        assert!(
+            decode_case(&case).is_none(),
+            "drained pool {} of case {name} must not price",
+            case.pool
+        );
+    }
+}
+
+/// A DAMM v2 price agrees with the pool's own vaults. The recorded pools span the full price
+/// range, so the vault balances less the unclaimed protocol fees sit near the sqrt price, apart
+/// from the partner fees and rounding the pool has accrued. An orientation or decimals error is
+/// off by orders of magnitude.
+#[test]
+fn a_damm_price_agrees_with_its_vault_implied_price() {
+    let cases = price_cases_of(ProgramKind::MeteoraDamm);
+    let sol = pubkey(SOL_MINT);
+    let mut orientations = BTreeSet::new();
+    for (name, case) in cases {
+        let price = decode_case(&case)
+            .unwrap_or_else(|| panic!("case {name} pool {} prices", case.pool))
+            .price_native;
+        let state = DammPoolState::decode(pubkey(&case.pool), &case.accounts[&case.pool].data)
+            .expect("the recorded pool decodes");
+        let human = |vault: &Pubkey, fee: u64, mint: &Pubkey| {
+            let amount = token_account_amount(&case.accounts[&vault.to_string()].data)
+                .expect("the vault is a token account");
+            (amount - fee) as f64 / 10f64.powi(i32::from(case.decimals[&mint.to_string()]))
+        };
+        let a = human(&state.vault_a, state.protocol_fee_a, &state.mint_a);
+        let b = human(&state.vault_b, state.protocol_fee_b, &state.mint_b);
+        let sol_is_a = state.mint_a == sol;
+        orientations.insert(sol_is_a);
+        let vault_price = if sol_is_a { a / b } else { b / a };
+        let deviation = (price / vault_price - 1.0).abs();
+        assert!(
+            deviation < 0.25,
+            "case {name} pool {}: price {price:e} is {:.1}% from the vault-implied {vault_price:e}",
+            case.pool,
+            deviation * 100.0
+        );
+    }
+    assert_eq!(
+        orientations,
+        BTreeSet::from([false, true]),
+        "the DAMM price cases hold WSOL as token A and as token B"
+    );
 }
 
 #[test]

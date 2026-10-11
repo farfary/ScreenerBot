@@ -461,7 +461,6 @@ const ACCOUNT_OFFSET_SCANNED_FILES: &[&str] = &[
 /// under its count all fail, so the list shrinks in the same change that removes a read.
 const ACCOUNT_OFFSET_READS: &[(&str, usize)] = &[
     ("chains/solana/pools/decoders/fluxbeam_amm.rs", 1),
-    ("chains/solana/pools/decoders/meteora_damm.rs", 2),
     ("chains/solana/pools/decoders/meteora_dbc.rs", 1),
     ("chains/solana/pools/decoders/meteora_dlmm.rs", 2),
     ("chains/solana/pools/decoders/moonit_amm.rs", 1),

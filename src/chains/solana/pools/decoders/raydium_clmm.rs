@@ -62,6 +62,16 @@ impl PoolDecoder for RaydiumClmmDecoder {
             ),
         );
 
+        // No in-range liquidity: the stored sqrt_price_x64 is the last traded one, not a live
+        // market.
+        if clmm_info.liquidity == 0 {
+            logger::debug(
+                LogTag::PoolDecoder,
+                &format!("CLMM pool {} has no active liquidity", pool_account.pubkey),
+            );
+            return None;
+        }
+
         // Determine which token is SOL and which is the base token
         // Handle both orientations: TOKEN/SOL and SOL/TOKEN
         let (token_mint, sol_vault, token_vault, is_token_0) = if clmm_info.token_mint_1 == SOL_MINT
@@ -799,6 +809,65 @@ mod tests {
             reserves,
             vec![token_vault_0.to_string(), token_vault_1.to_string()]
         );
+    }
+
+    /// A token/WSOL CLMM pool (the token is mint 0 with 6 decimals) at `sqrt_price_x64`
+    /// 2^64 holding `liquidity`, with both vaults in the bundle. Returns the bundle and
+    /// the token.
+    fn token_sol_pool(liquidity: u128) -> (HashMap<String, AccountData>, String) {
+        use std::str::FromStr;
+        let pool = Pubkey::new_unique();
+        let token_mint = Pubkey::new_unique();
+        let wsol = Pubkey::from_str(SOL_MINT).unwrap();
+        let (vault_0, vault_1) = (Pubkey::new_unique(), Pubkey::new_unique());
+        let mut data = vec![0u8; 1544];
+        data[73..105].copy_from_slice(token_mint.as_ref());
+        data[105..137].copy_from_slice(wsol.as_ref());
+        data[137..169].copy_from_slice(vault_0.as_ref());
+        data[169..201].copy_from_slice(vault_1.as_ref());
+        data[237..253].copy_from_slice(&liquidity.to_le_bytes());
+        data[253..269].copy_from_slice(&(1u128 << 64).to_le_bytes());
+        crate::tokens::cache_decimals(crate::chains::ChainId::Solana, &token_mint.to_string(), 6);
+
+        let account = |pubkey: Pubkey, owner: Pubkey, data: Vec<u8>| AccountData {
+            pubkey,
+            data,
+            slot: 1,
+            fetched_at: Instant::now(),
+            lamports: 0,
+            owner,
+        };
+        let token_account = |mint: &Pubkey| {
+            let mut data = vec![0u8; 165];
+            data[0..32].copy_from_slice(mint.as_ref());
+            data[64..72].copy_from_slice(&1_000_000_000u64.to_le_bytes());
+            data
+        };
+        let program = Pubkey::from_str(RAYDIUM_CLMM_PROGRAM_ID).unwrap();
+        let token_program = crate::chains::solana::spl_token::id();
+        let accounts = HashMap::from([
+            (pool.to_string(), account(pool, program, data)),
+            (
+                vault_0.to_string(),
+                account(vault_0, token_program, token_account(&token_mint)),
+            ),
+            (
+                vault_1.to_string(),
+                account(vault_1, token_program, token_account(&wsol)),
+            ),
+        ]);
+        (accounts, token_mint.to_string())
+    }
+
+    #[test]
+    fn a_pool_without_active_liquidity_yields_no_price() {
+        let (accounts, mint) = token_sol_pool(1_000);
+        assert!(
+            RaydiumClmmDecoder::decode_and_calculate(&accounts, &mint, SOL_MINT).is_some(),
+            "the same pool with active liquidity prices"
+        );
+        let (accounts, mint) = token_sol_pool(0);
+        assert!(RaydiumClmmDecoder::decode_and_calculate(&accounts, &mint, SOL_MINT).is_none());
     }
 }
 
