@@ -4,11 +4,14 @@
 //! Wallet route — manages wallet operations (add, remove, set main) via the UI.
 
 use axum::{
+    middleware::from_fn_with_state,
     routing::{get, post},
     Router,
 };
 use std::sync::Arc;
 
+use crate::database::catalog;
+use crate::webserver::middleware::store_gate;
 use crate::webserver::state::AppState;
 
 mod handlers;
@@ -40,4 +43,5 @@ pub fn routes() -> Router<Arc<AppState>> {
             "/wallet/cache-metrics",
             get(handlers::get_wallet_cache_metrics),
         )
+        .route_layer(from_fn_with_state(&catalog::WALLET, store_gate))
 }

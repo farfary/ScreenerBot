@@ -204,6 +204,15 @@ pub fn status(path: &Path) -> Option<StoreStatus> {
         .cloned()
 }
 
+/// The recorded state of the first file of the store `spec` that is not open, `None`
+/// while every file the phase reached is open.
+pub fn first_unavailable(spec: &StoreSpec) -> Option<StoreStatus> {
+    spec.paths()
+        .iter()
+        .filter_map(|path| status(path))
+        .find(|status| !status.health.is_open())
+}
+
 /// Every store's recorded state, in path order.
 pub fn all() -> Vec<StoreStatus> {
     REGISTRY

@@ -56,6 +56,7 @@ errors-system-storage-cleanup-running = ストレージのクリーンアップ�
 
 errors-initialization-required = このエンドポイントにアクセスするには、ボットの初期化が必要です。Web インターフェースで初期化を完了してください。
 errors-initialization-explore-unavailable = Explore モードではウォレットが接続されていません。ウォレットとコピートレードを使うにはセットアップを完了してください。
+errors-store-unavailable = データストア { $store } を開けませんでした。解決するまでこの機能は利用できません。
 errors-initialization-onboarding-update-failed = オンボーディングの状態を更新できませんでした
 errors-initialization-validation-required = セットアップを保存する前に、認証情報の検証が必要です
 errors-initialization-encrypt-failed = 秘密鍵を暗号化できませんでした

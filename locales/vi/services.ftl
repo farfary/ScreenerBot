@@ -11,6 +11,8 @@ services-health-wallet-watch-polling-only = Việc phát hiện chỉ chạy b�
 services-health-assistant-tasks-disabled = Đã tắt trong cấu hình
 services-health-connectivity-critical-unhealthy = Các endpoint quan trọng không ổn định: { $endpoints }
 services-health-filtering-snapshot-stale = Ảnh chụp nhanh của bộ lọc đã cũ { $seconds } giây
+services-health-start-failed = Không khởi động được: { $reason }
+services-health-dependency-failed = Chưa khởi động: { $dependency } không khởi động được
 
 ## Services page (pages/services.js)
 

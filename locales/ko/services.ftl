@@ -14,6 +14,8 @@ services-health-wallet-watch-polling-only = 폴링만으로 감지 중
 services-health-assistant-tasks-disabled = 설정에서 비활성화됨
 services-health-connectivity-critical-unhealthy = 핵심 엔드포인트 비정상: { $endpoints }
 services-health-filtering-snapshot-stale = 필터링 스냅샷이 { $seconds }초 지났습니다
+services-health-start-failed = 시작 실패: { $reason }
+services-health-dependency-failed = 시작되지 않음: { $dependency } 시작에 실패했습니다
 
 ## Services page (pages/services.js)
 

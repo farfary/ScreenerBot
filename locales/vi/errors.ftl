@@ -53,6 +53,7 @@ errors-system-storage-cleanup-running = Một lượt dọn dẹp lưu trữ đa
 
 errors-initialization-required = Cần khởi tạo bot trước khi truy cập endpoint này. Vui lòng hoàn tất quá trình khởi tạo qua giao diện web.
 errors-initialization-explore-unavailable = Chế độ khám phá chưa kết nối ví nào. Hoàn tất thiết lập để dùng ví và giao dịch sao chép.
+errors-store-unavailable = Không mở được kho dữ liệu { $store }. Tính năng này không khả dụng cho đến khi sự cố được khắc phục.
 errors-initialization-onboarding-update-failed = Không cập nhật được trạng thái làm quen
 errors-initialization-validation-required = Cần xác minh thông tin xác thực trước khi lưu thiết lập
 errors-initialization-encrypt-failed = Không mã hóa được khóa riêng tư

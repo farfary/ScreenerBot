@@ -3,11 +3,14 @@
 
 //! Position management routes (list, detail, debug views, force-close, archive/delete).
 use axum::{
+    middleware::from_fn_with_state,
     routing::{delete, get, post},
     Router,
 };
 use std::sync::Arc;
 
+use crate::database::catalog;
+use crate::webserver::middleware::store_gate;
 use crate::webserver::state::AppState;
 
 // Module declarations
@@ -56,4 +59,5 @@ pub fn routes() -> Router<Arc<AppState>> {
         )
         .route("/positions/{position_id}/management", post(set_management))
         .route("/positions/{position_id}", delete(delete_position))
+        .route_layer(from_fn_with_state(&catalog::POSITIONS, store_gate))
 }

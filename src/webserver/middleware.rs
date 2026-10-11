@@ -5,11 +5,12 @@
 //!
 //! Request interceptors for authentication, validation, gating, and cache control
 
+use crate::database::{self, catalog::StoreSpec, health::StoreHealth};
 use crate::i18n::ids;
 use crate::webserver::api_error::{ApiError, ApiErrorCode};
 use axum::{
     body::Body,
-    extract::Request,
+    extract::{Request, State},
     http::{header, header::HeaderValue, uri::Authority, HeaderMap, StatusCode, Uri},
     middleware::Next,
     response::{IntoResponse, Response},
@@ -288,6 +289,40 @@ pub async fn full_setup_gate(request: Request, next: Next) -> Response {
         ids::ERRORS_INITIALIZATION_EXPLORE_UNAVAILABLE,
     )
     .into_response()
+}
+
+/// Store gate for the route group of a feature whose data lives in one catalog store
+///
+/// While the storage phase has recorded the store as not open (unavailable, or being
+/// rebuilt), every route of the group answers `STORE_UNAVAILABLE` (503) naming the
+/// store, instead of failing inside a store its owner never opened. Attached once per
+/// feature with `route_layer(from_fn_with_state(&catalog::STORE, store_gate))`.
+pub async fn store_gate(
+    State(store): State<&'static StoreSpec>,
+    request: Request,
+    next: Next,
+) -> Response {
+    let Some(status) = database::health::first_unavailable(store) else {
+        return next.run(request).await;
+    };
+    logger::debug(
+        LogTag::Webserver,
+        &format!(
+            "Blocked request to {}: store {} is {}",
+            request.uri().path(),
+            store.id,
+            status.health.as_str()
+        ),
+    );
+    let details = match &status.health {
+        StoreHealth::Unavailable {
+            failure, detail, ..
+        } => format!("{}: {detail}", failure.as_str()),
+        other => other.as_str().to_owned(),
+    };
+    ApiError::store_unavailable(store.id)
+        .details(details)
+        .into_response()
 }
 
 /// Promotional fixtures answer wallet reads without a wallet, so a capture passes.

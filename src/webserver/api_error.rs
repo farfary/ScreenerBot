@@ -18,7 +18,7 @@ use serde::Serialize;
 use serde_json::{json, Value};
 use std::borrow::Cow;
 
-use crate::i18n::{MessageId, UiArg, UiText};
+use crate::i18n::{ids, MessageId, UiArg, UiText};
 
 /// Machine category of an API error. The category alone determines the HTTP
 /// status, so a client can act on `code` without reading `message`.
@@ -69,6 +69,8 @@ pub enum ApiErrorCode {
     PayloadTooLarge,
     /// No enabled swap route offers this shape of trade.
     RouteNotOffered,
+    /// The data store a feature reads could not be opened at startup.
+    StoreUnavailable,
 }
 
 impl ApiErrorCode {
@@ -116,6 +118,7 @@ impl ApiErrorCode {
             Self::CopyError => "COPY_ERROR",
             Self::PayloadTooLarge => "PAYLOAD_TOO_LARGE",
             Self::RouteNotOffered => "ROUTE_NOT_OFFERED",
+            Self::StoreUnavailable => "STORE_UNAVAILABLE",
         }
     }
 
@@ -177,7 +180,7 @@ impl ApiErrorCode {
             Self::RateLimited => StatusCode::TOO_MANY_REQUESTS,
             Self::UpstreamTimeout => StatusCode::GATEWAY_TIMEOUT,
             Self::UpstreamError => StatusCode::BAD_GATEWAY,
-            Self::ServiceUnavailable | Self::InitializationRequired => {
+            Self::ServiceUnavailable | Self::InitializationRequired | Self::StoreUnavailable => {
                 StatusCode::SERVICE_UNAVAILABLE
             }
         }
@@ -199,6 +202,16 @@ impl ApiError {
             text: UiText::new(id),
             details: None,
         }
+    }
+
+    /// The data store `store` (its catalog id) is not open, so the feature that reads
+    /// it cannot answer.
+    pub fn store_unavailable(store: &str) -> Self {
+        Self::new(
+            ApiErrorCode::StoreUnavailable,
+            ids::ERRORS_STORE_UNAVAILABLE,
+        )
+        .text_arg("store", store)
     }
 
     /// Error whose message is an already-built [`UiText`], for a typed domain

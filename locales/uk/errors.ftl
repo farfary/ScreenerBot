@@ -53,6 +53,7 @@ errors-system-storage-cleanup-running = Очищення сховища вже �
 
 errors-initialization-required = Перед доступом до цієї кінцевої точки потрібна ініціалізація бота. Завершіть процес ініціалізації у вебінтерфейсі.
 errors-initialization-explore-unavailable = У режимі огляду гаманець не підключено. Завершіть налаштування, щоб користуватися гаманцями та копітрейдингом.
+errors-store-unavailable = Не вдалося відкрити сховище даних { $store }. Функція недоступна, доки проблему не буде усунено.
 errors-initialization-onboarding-update-failed = Не вдалося оновити стан початкового налаштування
 errors-initialization-validation-required = Перед збереженням налаштувань потрібна перевірка облікових даних
 errors-initialization-encrypt-failed = Не вдалося зашифрувати приватний ключ

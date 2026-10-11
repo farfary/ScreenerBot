@@ -6,7 +6,7 @@
 
 use axum::{
     extract::{Path, Query},
-    middleware::from_fn,
+    middleware::{from_fn, from_fn_with_state},
     response::Response,
     routing::{get, post},
     Json, Router,
@@ -14,12 +14,13 @@ use axum::{
 use serde::{Deserialize, Serialize};
 use std::sync::Arc;
 
+use crate::database::catalog;
 use crate::errors::ErrorClass;
 use crate::i18n::ids;
 use crate::trader::copy::workspace::{self, ActivityFilter, CloneRequest, RangeQuery};
 use crate::trader::copy::{control, CopyMode, CopySkip, CopyTask, CopyTaskInput};
 use crate::webserver::api_error::{ApiError, ApiErrorCode};
-use crate::webserver::middleware::full_setup_gate;
+use crate::webserver::middleware::{full_setup_gate, store_gate};
 use crate::webserver::promo;
 use crate::webserver::state::AppState;
 use crate::webserver::utils::success_response;
@@ -61,6 +62,7 @@ pub fn routes() -> Router<Arc<AppState>> {
         .route("/defaults", get(defaults))
         .route("/wallets/{address}", get(wallet_profile))
         .route("/activity", get(list_activity))
+        .route_layer(from_fn_with_state(&catalog::COPY_TRADING, store_gate))
 }
 
 #[derive(Serialize)]

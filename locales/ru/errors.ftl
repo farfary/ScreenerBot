@@ -53,6 +53,7 @@ errors-system-storage-cleanup-running = Очистка хранилища уже
 
 errors-initialization-required = Перед обращением к этому эндпоинту необходимо инициализировать бота. Завершите инициализацию через веб-интерфейс.
 errors-initialization-explore-unavailable = В режиме обзора кошелёк не подключён. Завершите настройку, чтобы пользоваться кошельками и копи-трейдингом.
+errors-store-unavailable = Не удалось открыть хранилище данных { $store }. Функция недоступна, пока проблема не будет устранена.
 errors-initialization-onboarding-update-failed = Не удалось обновить состояние начальной настройки
 errors-initialization-validation-required = Перед сохранением настройки необходимо проверить учётные данные
 errors-initialization-encrypt-failed = Не удалось зашифровать приватный ключ

@@ -19,6 +19,12 @@ impl Service for WebserverService {
         "webserver"
     }
 
+    /// The dashboard is how every other failure is seen and resolved, so a webserver
+    /// that cannot start stops startup.
+    fn essential(&self) -> bool {
+        true
+    }
+
     fn priority(&self) -> i32 {
         30
     }
@@ -110,7 +116,7 @@ impl Service for WebserverService {
             logger::error(
                 LogTag::System,
                 &format!(
-                    "[PRE-FLIGHT] ❌ FAILED - Webserver pre-flight check failed: {}",
+                    "[PRE-FLIGHT] FAILED - Webserver pre-flight check failed: {}",
                     e
                 ),
             );
@@ -122,7 +128,7 @@ impl Service for WebserverService {
 
         logger::debug(
             LogTag::System,
-            "[PRE-FLIGHT] ✅ PASSED - Pre-flight check succeeded",
+            "[PRE-FLIGHT] PASSED - Pre-flight check succeeded",
         );
 
         // Pre-flight passed, spawn background task with CLI overrides
@@ -142,12 +148,12 @@ impl Service for WebserverService {
                 crate::webserver::report_startup(Err(e.clone()));
                 logger::error(
                     LogTag::System,
-                    &format!("[WEBSERVER] ❌ start_server() FAILED: {e}"),
+                    &format!("[WEBSERVER] start_server() FAILED: {e}"),
                 );
             } else {
                 logger::debug(
                     LogTag::System,
-                    "[WEBSERVER] ✅ start_server() completed successfully",
+                    "[WEBSERVER] start_server() completed successfully",
                 );
             }
         }));

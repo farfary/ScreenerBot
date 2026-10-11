@@ -11,6 +11,8 @@ services-health-wallet-watch-polling-only = Виявлення працює ли
 services-health-assistant-tasks-disabled = Вимкнено в конфігурації
 services-health-connectivity-critical-unhealthy = Критичні ендпоінти несправні: { $endpoints }
 services-health-filtering-snapshot-stale = Знімок фільтрації застарів на { $seconds } с
+services-health-start-failed = Не вдалося запустити: { $reason }
+services-health-dependency-failed = Не запущено: не вдалося запустити { $dependency }
 
 services-status-healthy = Справний
 services-status-starting = Запускається

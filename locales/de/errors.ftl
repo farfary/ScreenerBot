@@ -53,6 +53,7 @@ errors-system-storage-cleanup-running = Eine Speicherbereinigung läuft bereits
 
 errors-initialization-required = Vor dem Zugriff auf diesen Endpunkt ist die Initialisierung des Bots erforderlich. Bitte schließen Sie die Initialisierung über die Weboberfläche ab.
 errors-initialization-explore-unavailable = Im Explore Mode ist keine Wallet verbunden. Schließen Sie die Einrichtung ab, um Wallets und Copy-Trading zu nutzen.
+errors-store-unavailable = Der Datenspeicher { $store } konnte nicht geöffnet werden. Diese Funktion ist bis zur Behebung nicht verfügbar.
 errors-initialization-onboarding-update-failed = Onboarding-Status konnte nicht aktualisiert werden
 errors-initialization-validation-required = Vor dem Speichern der Einrichtung ist eine Verifizierung der Zugangsdaten erforderlich
 errors-initialization-encrypt-failed = Privater Schlüssel konnte nicht verschlüsselt werden

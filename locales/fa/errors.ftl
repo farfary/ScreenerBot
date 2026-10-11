@@ -66,6 +66,7 @@ errors-system-storage-cleanup-running = یک پاک‌سازی فضای ذخیر
 # Initialization
 errors-initialization-required = پیش از دسترسی به این اندپوینت، راه‌اندازی اولیه ربات لازم است. فرایند راه‌اندازی را از طریق رابط وب کامل کنید.
 errors-initialization-explore-unavailable = در حالت کاوش هیچ کیف پولی متصل نیست. برای استفاده از کیف پول‌ها و کپی ترید، راه‌اندازی را کامل کنید.
+errors-store-unavailable = مخزن داده { $store } باز نشد. این قابلیت تا رفع مشکل در دسترس نیست.
 errors-initialization-onboarding-update-failed = به‌روزرسانی وضعیت راه‌اندازی اولیه ناموفق بود
 errors-initialization-validation-required = پیش از ذخیره تنظیمات، تأیید اعتبارنامه‌ها لازم است
 errors-initialization-encrypt-failed = رمزگذاری کلید خصوصی ناموفق بود

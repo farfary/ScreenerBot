@@ -135,6 +135,20 @@ mod tests {
                 ),
                 "Filtering snapshot is 412s old",
             ),
+            (
+                with(
+                    ids::SERVICES_HEALTH_START_FAILED,
+                    vec![arg("reason", "positions.db: store too new")],
+                ),
+                "Failed to start: positions.db: store too new",
+            ),
+            (
+                with(
+                    ids::SERVICES_HEALTH_DEPENDENCY_FAILED,
+                    vec![arg("dependency", "positions")],
+                ),
+                "Not started: positions failed to start",
+            ),
         ]
     }
 

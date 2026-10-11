@@ -15,6 +15,8 @@ services-health-wallet-watch-polling-only = 检测仅依靠轮询运行
 services-health-assistant-tasks-disabled = 已在配置中停用
 services-health-connectivity-critical-unhealthy = 关键端点异常：{ $endpoints }
 services-health-filtering-snapshot-stale = 过滤快照已过 { $seconds } 秒
+services-health-start-failed = 启动失败：{ $reason }
+services-health-dependency-failed = 未启动：{ $dependency } 启动失败
 
 ## Services page (pages/services.js)
 

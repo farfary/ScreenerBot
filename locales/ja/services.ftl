@@ -14,6 +14,8 @@ services-health-wallet-watch-polling-only = ポーリングのみで検出中
 services-health-assistant-tasks-disabled = 設定で無効
 services-health-connectivity-critical-unhealthy = 重要なエンドポイントが異常です: { $endpoints }
 services-health-filtering-snapshot-stale = フィルタリングのスナップショットは{ $seconds }秒前のものです
+services-health-start-failed = 起動に失敗しました: { $reason }
+services-health-dependency-failed = 未起動: { $dependency } の起動に失敗しました
 
 ## Services page (pages/services.js)
 

@@ -3,11 +3,14 @@
 
 //! Strategy CRUD and configuration routes for the web UI.
 use axum::{
+    middleware::from_fn_with_state,
     routing::{get, patch, post},
     Router,
 };
 use std::sync::Arc;
 
+use crate::database::catalog;
+use crate::webserver::middleware::store_gate;
 use crate::webserver::state::AppState;
 
 // Submodules
@@ -60,4 +63,5 @@ pub fn routes() -> Router<Arc<AppState>> {
             post(validation::validate_strategy_handler),
         )
         .route("/{id}/deploy", post(deployment::deploy_strategy_handler))
+        .route_layer(from_fn_with_state(&catalog::STRATEGIES, store_gate))
 }

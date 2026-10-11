@@ -17,6 +17,8 @@ services-health-assistant-tasks-disabled = در پیکربندی غیرفعال 
 services-health-connectivity-critical-unhealthy = اندپوینت‌های حیاتی ناسالم هستند: { $endpoints }
 # $seconds is the age of the filtering snapshot.
 services-health-filtering-snapshot-stale = اسنپ‌شات فیلترینگ { $seconds } ثانیه قدمت دارد
+services-health-start-failed = راه‌اندازی ناموفق بود: { $reason }
+services-health-dependency-failed = راه‌اندازی نشد: { $dependency } راه‌اندازی نشد
 
 ## Services page (pages/services.js)
 

@@ -15,15 +15,25 @@ use crate::{
 /// initialization, Explore Mode, and full boot states. Keeping them outside the service
 /// tier prevents globally available dashboard surfaces from depending on the
 /// wallet setup branch that happened to start the process.
+///
+/// A store that cannot be opened never stops startup here: the storage phase has
+/// recorded it in the health registry, the failure is logged, and the feature that
+/// owns the store stays unavailable while the dashboard and the update path run.
 pub(super) async fn initialize_dashboard_persistence() -> Result<(), StartupError> {
-    crate::actions::init_database()
-        .await
-        .map_err(|e| StartupError::failed(ids::STARTUP_FAILURE_ACTIONS_INIT, e))?;
-    logger::info(LogTag::System, "Actions database initialized successfully");
-
-    crate::actions::sync_from_db()
-        .await
-        .map_err(|e| StartupError::failed(ids::STARTUP_FAILURE_ACTIONS_SYNC, e))?;
+    match crate::actions::init_database().await {
+        Ok(()) => {
+            logger::info(LogTag::System, "Actions database initialized successfully");
+            crate::actions::sync_from_db()
+                .await
+                .map_err(|e| StartupError::failed(ids::STARTUP_FAILURE_ACTIONS_SYNC, e))?;
+        }
+        Err(e) => logger::error(
+            LogTag::System,
+            &format!(
+                "Failed to initialize actions database: {e} - action history will not be recorded"
+            ),
+        ),
+    }
     crate::actions::spawn_cleanup_task();
 
     // Housekeeping covers every store opened in this process and every file family,
@@ -67,10 +77,15 @@ pub(super) async fn initialize_dashboard_persistence() -> Result<(), StartupErro
     // Strategy authoring and persistence are dashboard features. Evaluation is
     // consumed only by the full-mode trader, but the editor, templates, and
     // configuration APIs must remain usable in Explore Mode.
-    crate::strategies::init_strategy_system(crate::strategies::engine::EngineConfig::default())
-        .await
-        .map_err(|e| StartupError::failed(ids::STARTUP_FAILURE_STRATEGY_INIT, e))?;
-    logger::info(LogTag::System, "Strategy system initialized successfully");
+    if let Err(e) =
+        crate::strategies::init_strategy_system(crate::strategies::engine::EngineConfig::default())
+            .await
+    {
+        logger::error(
+            LogTag::System,
+            &format!("Failed to open the strategies database: {e} - strategies are unavailable"),
+        );
+    }
 
     Ok(())
 }

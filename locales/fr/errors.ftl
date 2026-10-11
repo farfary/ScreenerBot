@@ -61,6 +61,7 @@ errors-system-storage-cleanup-running = Un nettoyage du stockage est déjà en c
 # Initialization
 errors-initialization-required = L'initialisation du bot est requise avant d'accéder à cet endpoint. Veuillez terminer l'initialisation via l'interface web.
 errors-initialization-explore-unavailable = Le Mode Explorer n'a aucun portefeuille connecté. Terminez la configuration pour utiliser les portefeuilles et le copy trading.
+errors-store-unavailable = Le stockage de données { $store } n'a pas pu être ouvert. Cette fonction est indisponible jusqu'à sa résolution.
 errors-initialization-onboarding-update-failed = Échec de la mise à jour de l'état d'intégration
 errors-initialization-validation-required = La vérification des identifiants est requise avant d'enregistrer la configuration
 errors-initialization-encrypt-failed = Échec du chiffrement de la clé privée

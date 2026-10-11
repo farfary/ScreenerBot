@@ -18,6 +18,7 @@ pub use health::ServiceHealth;
 pub use logging::*;
 pub use metrics::{MetricsCollector, ServiceMetrics};
 
+use crate::i18n::{ids, UiArg, UiText};
 use crate::logger::{self, LogTag};
 use async_trait::async_trait;
 use std::collections::HashMap;
@@ -31,6 +32,13 @@ use tokio::task::JoinHandle;
 pub trait Service: Send + Sync {
     /// Unique service identifier
     fn name(&self) -> &'static str;
+
+    /// Whether a failure to initialize or start this service stops startup. Any other
+    /// service that fails is reported, left down with its dependents, and startup
+    /// continues without it.
+    fn essential(&self) -> bool {
+        false
+    }
 
     /// Service priority (lower = starts earlier, stops later)
     fn priority(&self) -> i32 {
@@ -139,6 +147,9 @@ pub struct ServiceManager {
     shutdown: Arc<Notify>,
     metrics_collector: MetricsCollector,
     task_monitors: HashMap<&'static str, tokio_metrics::TaskMonitor>,
+    /// Why each service that failed to start, or was not started because a dependency
+    /// failed, is down; reported as its health until it starts.
+    start_failures: HashMap<&'static str, UiText>,
     // Cached health/metrics to avoid blocking during snapshot collection
     cached_health: Arc<RwLock<HashMap<&'static str, ServiceHealth>>>,
     cached_metrics: Arc<RwLock<HashMap<&'static str, ServiceMetrics>>>,
@@ -152,6 +163,7 @@ impl ServiceManager {
             shutdown: Arc::new(Notify::new()),
             metrics_collector: MetricsCollector::new(),
             task_monitors: HashMap::new(),
+            start_failures: HashMap::new(),
             cached_health: Arc::new(RwLock::new(HashMap::new())),
             cached_metrics: Arc::new(RwLock::new(HashMap::new())),
         })
@@ -176,8 +188,12 @@ impl ServiceManager {
         self.services.len()
     }
 
-    /// Start all enabled services in dependency and priority order
-    pub async fn start_all(&mut self) -> crate::Result<()> {
+    /// Start all enabled services in dependency and priority order.
+    ///
+    /// A service that fails to initialize or start is reported, its dependents are not
+    /// attempted, and startup continues with the rest. Only the failure of an
+    /// [`essential`](Service::essential) service stops startup and is returned.
+    pub async fn start_all(&mut self) -> crate::Result<ServiceStartupReport> {
         let total_registered = self.services.len();
 
         // Filter enabled services with debug logging
@@ -242,97 +258,36 @@ impl ServiceManager {
         }
 
         let startup_timer = Instant::now();
-        let mut last_service_time = startup_timer;
-
-        // Initialize and start each service
-        for &service_name in ordered.iter() {
-            // Log gap between services if > 100ms
-            let gap = last_service_time.elapsed().as_millis();
-            if gap > 100 {
-                logger::info(
-                    LogTag::System,
-                    &format!("Gap before '{service_name}': {gap}ms"),
-                );
-            }
-
-            let service_timer = Instant::now();
-
-            // Get TaskMonitor FIRST (before any mutable borrow)
-            let monitor = self.get_task_monitor(service_name);
-
-            if let Some(service) = self.services.get_mut(service_name) {
-                startup::mark_service_start(service_name);
-                log_service_event(service_name, ServiceLogEvent::InitializeStart, None, false);
-                let init_start = Instant::now();
-                if let Err(error) = service.initialize().await {
-                    log_start_failure(service_name, "initialize", &error);
-                    return Err(error);
-                }
-                let init_elapsed = init_start.elapsed().as_millis();
-
-                log_service_event(
-                    service_name,
-                    ServiceLogEvent::InitializeSuccess,
-                    None,
-                    false,
-                );
-
-                log_service_event(service_name, ServiceLogEvent::StartStart, None, false);
-                let start_timer = Instant::now();
-                let handles = match service.start(self.shutdown.clone(), monitor.clone()).await {
-                    Ok(handles) => handles,
-                    Err(error) => {
-                        log_start_failure(service_name, "start", &error);
-                        return Err(error);
-                    }
-                };
-                let start_elapsed = start_timer.elapsed().as_millis();
-                let handle_count = handles.len();
-
-                // Always log timing for services that take > 100ms
-                let total_service_time = service_timer.elapsed().as_millis();
-                if total_service_time > 100 {
-                    logger::info(
-                        LogTag::System,
-                        &format!(
-                            "Service '{}'took {}ms (init: {}ms, start: {}ms, handles: {})",
-                            service_name,
-                            total_service_time,
-                            init_elapsed,
-                            start_elapsed,
-                            handle_count
-                        ),
-                    );
-                }
-
-                let handle_detail = Some(format!("handles={handle_count}"));
-                log_service_event(
-                    service_name,
-                    ServiceLogEvent::StartSuccess,
-                    handle_detail.as_deref(),
-                    false,
-                );
-                self.handles.insert(service_name, handles);
-                startup::mark_service_ready(service_name);
-            }
-
-            // Update last service time for gap detection
-            last_service_time = Instant::now();
-
-            // Register monitor with metrics collector and start intervals() background task
-            self.metrics_collector
-                .start_monitoring(service_name, monitor, self.shutdown.clone())
-                .await;
-        }
+        let (started, failures) = self.start_ordered(&ordered, false).await?;
 
         let elapsed = startup_timer.elapsed().as_millis();
-        let completion = format!("started={} duration_ms={}", ordered.len(), elapsed);
-        log_service_startup_phase("complete", Some(&completion));
-        logger::info(
-            LogTag::System,
-            &format!("service_startup status=ready {completion}"),
+        let completion = format!(
+            "started={} failed={} duration_ms={}",
+            started.len(),
+            failures.len(),
+            elapsed
         );
-        Ok(())
+        log_service_startup_phase("complete", Some(&completion));
+        if failures.is_empty() {
+            logger::info(
+                LogTag::System,
+                &format!("service_startup status=ready {completion}"),
+            );
+        } else {
+            logger::warning(
+                LogTag::System,
+                &format!("service_startup status=partial {completion}"),
+            );
+        }
+
+        Ok(ServiceStartupReport {
+            attempted: ordered,
+            started,
+            failures,
+            already_running: 0,
+            total_enabled: enabled_services.len(),
+            duration_ms: elapsed,
+        })
     }
 
     /// Start services that are now enabled (after initialization)
@@ -413,87 +368,7 @@ impl ServiceManager {
         );
 
         let startup_timer = Instant::now();
-        let mut successful_starts = Vec::new();
-        let mut failed_starts: Vec<ServiceStartupFailure> = Vec::new();
-
-        // Initialize and start each service
-        for &service_name in ordered.iter() {
-            let service_timer = Instant::now();
-
-            // Get TaskMonitor FIRST (before any mutable borrow)
-            let monitor = self.get_task_monitor(service_name);
-
-            if let Some(service) = self.services.get_mut(service_name) {
-                startup::mark_service_start(service_name);
-                // Initialize
-                log_service_event(service_name, ServiceLogEvent::InitializeStart, None, true);
-                match service.initialize().await {
-                    Ok(_) => {
-                        log_service_event(
-                            service_name,
-                            ServiceLogEvent::InitializeSuccess,
-                            None,
-                            true,
-                        );
-                    }
-                    Err(e) => {
-                        log_start_failure(service_name, "initialize", &e);
-                        failed_starts.push(ServiceStartupFailure {
-                            name: service_name,
-                            error: format!(
-                                "Initialize failed: {}",
-                                crate::errors::source_chain(&e).join(": ")
-                            ),
-                        });
-                        continue; // Skip starting this service
-                    }
-                }
-
-                // Start
-                log_service_event(service_name, ServiceLogEvent::StartStart, None, true);
-                match service.start(self.shutdown.clone(), monitor.clone()).await {
-                    Ok(handles) => {
-                        let handle_count = handles.len();
-                        let elapsed = service_timer.elapsed().as_millis();
-
-                        logger::info(
-                            LogTag::System,
-                            &format!(
-                                "Service '{}'started successfully ({}ms, {} handles)",
-                                service_name, elapsed, handle_count
-                            ),
-                        );
-
-                        log_service_event(
-                            service_name,
-                            ServiceLogEvent::StartSuccess,
-                            Some(&format!("handles={handle_count}")),
-                            true,
-                        );
-
-                        self.handles.insert(service_name, handles);
-                        successful_starts.push(service_name);
-                        startup::mark_service_ready(service_name);
-
-                        // Register monitor with metrics collector
-                        self.metrics_collector
-                            .start_monitoring(service_name, monitor, self.shutdown.clone())
-                            .await;
-                    }
-                    Err(e) => {
-                        log_start_failure(service_name, "start", &e);
-                        failed_starts.push(ServiceStartupFailure {
-                            name: service_name,
-                            error: format!(
-                                "Start failed: {}",
-                                crate::errors::source_chain(&e).join(": ")
-                            ),
-                        });
-                    }
-                }
-            }
-        }
-
+        let (successful_starts, failed_starts) = self.start_ordered(&ordered, true).await?;
         let total_elapsed = startup_timer.elapsed().as_millis();
 
         if failed_starts.is_empty() {
@@ -509,19 +384,12 @@ impl ServiceManager {
             logger::warning(
                 LogTag::System,
                 &format!(
-          "Service startup completed with partial failures: successful={} failed={} duration_ms={}",
-          successful_starts.len(),
-          failed_starts.len(),
-          total_elapsed
-        ),
+                    "Service startup completed with partial failures: successful={} failed={} duration_ms={}",
+                    successful_starts.len(),
+                    failed_starts.len(),
+                    total_elapsed
+                ),
             );
-
-            for failure in &failed_starts {
-                logger::error(
-                    LogTag::System,
-                    &format!("{}: {}", failure.name, failure.error),
-                );
-            }
         }
 
         Ok(ServiceStartupReport {
@@ -532,6 +400,143 @@ impl ServiceManager {
             total_enabled: all_enabled.len(),
             duration_ms: total_elapsed,
         })
+    }
+
+    /// Initialize and start every service of `ordered`, which is in startup order.
+    ///
+    /// A service one of whose dependencies failed to start is not attempted. A failed
+    /// essential service stops the pass and its error is returned; every other failure
+    /// is logged with its cause, recorded as the service's health and returned in the
+    /// list of failures. `post_init` marks a pass that runs after initialization in the
+    /// service log.
+    async fn start_ordered(
+        &mut self,
+        ordered: &[&'static str],
+        post_init: bool,
+    ) -> crate::Result<(Vec<&'static str>, Vec<ServiceStartupFailure>)> {
+        let mut started = Vec::new();
+        let mut failures: Vec<ServiceStartupFailure> = Vec::new();
+        let mut last_service_time = Instant::now();
+
+        for &service_name in ordered {
+            // Log gap between services if > 100ms
+            let gap = last_service_time.elapsed().as_millis();
+            if gap > 100 {
+                logger::info(
+                    LogTag::System,
+                    &format!("Gap before '{service_name}': {gap}ms"),
+                );
+            }
+            let service_timer = Instant::now();
+
+            // Get TaskMonitor FIRST (before any mutable borrow)
+            let monitor = self.get_task_monitor(service_name);
+
+            let Some(service) = self.services.get_mut(service_name) else {
+                continue;
+            };
+
+            if let Some(dependency) = service
+                .dependencies()
+                .into_iter()
+                .find(|dependency| self.start_failures.contains_key(dependency))
+            {
+                logger::warning(
+                    LogTag::System,
+                    &format!(
+                        "Service '{service_name}' not started: its dependency '{dependency}' failed to start"
+                    ),
+                );
+                self.start_failures.insert(
+                    service_name,
+                    UiText::new(ids::SERVICES_HEALTH_DEPENDENCY_FAILED)
+                        .arg("dependency", UiArg::Text(dependency.to_owned())),
+                );
+                failures.push(ServiceStartupFailure {
+                    name: service_name,
+                    error: format!("Dependency '{dependency}' failed to start"),
+                });
+                last_service_time = Instant::now();
+                continue;
+            }
+
+            startup::mark_service_start(service_name);
+            log_service_event(
+                service_name,
+                ServiceLogEvent::InitializeStart,
+                None,
+                post_init,
+            );
+            let init_start = Instant::now();
+            let outcome = match service.initialize().await {
+                Ok(()) => {
+                    log_service_event(
+                        service_name,
+                        ServiceLogEvent::InitializeSuccess,
+                        None,
+                        post_init,
+                    );
+                    log_service_event(service_name, ServiceLogEvent::StartStart, None, post_init);
+                    let init_elapsed = init_start.elapsed().as_millis();
+                    let start_timer = Instant::now();
+                    service
+                        .start(self.shutdown.clone(), monitor.clone())
+                        .await
+                        .map(|handles| (handles, init_elapsed, start_timer.elapsed().as_millis()))
+                        .map_err(|error| ("start", error))
+                }
+                Err(error) => Err(("initialize", error)),
+            };
+
+            match outcome {
+                Ok((handles, init_elapsed, start_elapsed)) => {
+                    let handle_count = handles.len();
+                    let total_service_time = service_timer.elapsed().as_millis();
+                    if total_service_time > 100 {
+                        logger::info(
+                            LogTag::System,
+                            &format!(
+                                "Service '{service_name}' took {total_service_time}ms (init: {init_elapsed}ms, start: {start_elapsed}ms, handles: {handle_count})"
+                            ),
+                        );
+                    }
+                    log_service_event(
+                        service_name,
+                        ServiceLogEvent::StartSuccess,
+                        Some(&format!("handles={handle_count}")),
+                        post_init,
+                    );
+                    self.handles.insert(service_name, handles);
+                    self.start_failures.remove(service_name);
+                    started.push(service_name);
+                    startup::mark_service_ready(service_name);
+                    // Register monitor with metrics collector and start intervals() background task
+                    self.metrics_collector
+                        .start_monitoring(service_name, monitor, self.shutdown.clone())
+                        .await;
+                }
+                Err((phase, error)) => {
+                    log_start_failure(service_name, phase, &error);
+                    if service.essential() {
+                        return Err(error);
+                    }
+                    let cause = crate::errors::source_chain(&error).join(": ");
+                    self.start_failures.insert(
+                        service_name,
+                        UiText::new(ids::SERVICES_HEALTH_START_FAILED)
+                            .arg("reason", UiArg::Text(cause.clone())),
+                    );
+                    failures.push(ServiceStartupFailure {
+                        name: service_name,
+                        error: format!("Failed to {phase}: {cause}"),
+                    });
+                }
+            }
+
+            last_service_time = Instant::now();
+        }
+
+        Ok((started, failures))
     }
 
     /// Check if services can be started (initialization complete)
@@ -764,12 +769,15 @@ impl ServiceManager {
         Ok(())
     }
 
-    /// Get health status. Intentionally-disabled services report `Disabled` (a normal
-    /// state) rather than their internal health, so they are never surfaced as issues.
+    /// Get health status. A service that failed to start reports `Unhealthy` with the
+    /// reason; intentionally-disabled services report `Disabled` (a normal state) rather
+    /// than their internal health, so they are never surfaced as issues.
     pub async fn get_health(&self) -> HashMap<&'static str, ServiceHealth> {
         let mut health = HashMap::new();
         for (name, service) in &self.services {
-            let status = if service.is_enabled() {
+            let status = if let Some(reason) = self.start_failures.get(name) {
+                ServiceHealth::Unhealthy(reason.clone())
+            } else if service.is_enabled() {
                 service.health().await
             } else {
                 ServiceHealth::Disabled

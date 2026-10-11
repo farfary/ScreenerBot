@@ -60,6 +60,7 @@ mod storage_subject_deltas_migration;
 mod storage_tokens_migration;
 mod storage_transaction_columns_migration;
 mod storage_transactions_migration;
+mod storage_unavailable_startup;
 mod storage_wallet_amount_migration;
 mod storage_wallet_columns_migration;
 mod strategies_conditions;

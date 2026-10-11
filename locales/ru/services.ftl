@@ -11,6 +11,8 @@ services-health-wallet-watch-polling-only = Обнаружение работа�
 services-health-assistant-tasks-disabled = Отключено в конфигурации
 services-health-connectivity-critical-unhealthy = Критичные эндпоинты неисправны: { $endpoints }
 services-health-filtering-snapshot-stale = Снимок фильтрации устарел на { $seconds } с
+services-health-start-failed = Не удалось запустить: { $reason }
+services-health-dependency-failed = Не запущен: не удалось запустить { $dependency }
 
 ## Services page (pages/services.js)
 

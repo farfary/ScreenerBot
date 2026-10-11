@@ -14,6 +14,8 @@ services-health-wallet-watch-polling-only = Deteksi berjalan hanya dengan pollin
 services-health-assistant-tasks-disabled = Dinonaktifkan di konfigurasi
 services-health-connectivity-critical-unhealthy = Endpoint kritis tidak sehat: { $endpoints }
 services-health-filtering-snapshot-stale = Snapshot pemfilteran berumur { $seconds } dtk
+services-health-start-failed = Gagal dimulai: { $reason }
+services-health-dependency-failed = Tidak dimulai: { $dependency } gagal dimulai
 
 ## Services page (pages/services.js)
 

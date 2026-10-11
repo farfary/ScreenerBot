@@ -11,6 +11,8 @@ services-health-wallet-watch-polling-only = Tespit yalnızca yoklamayla çalış
 services-health-assistant-tasks-disabled = Yapılandırmada devre dışı
 services-health-connectivity-critical-unhealthy = Kritik uç noktalar sağlıksız: { $endpoints }
 services-health-filtering-snapshot-stale = Filtreleme anlık görüntüsü { $seconds }sn eski
+services-health-start-failed = Başlatılamadı: { $reason }
+services-health-dependency-failed = Başlatılmadı: { $dependency } başlatılamadı
 
 ## Services page (pages/services.js)
 

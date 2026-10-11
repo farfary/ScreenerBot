@@ -145,5 +145,9 @@ pub async fn gather_status_snapshot() -> StatusSnapshot {
         transactions,
         dexscreener,
         geckoterminal,
+        stores: crate::database::health::all()
+            .iter()
+            .map(StoreStatusSnapshot::from)
+            .collect(),
     }
 }

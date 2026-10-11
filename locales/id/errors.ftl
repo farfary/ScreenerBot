@@ -56,6 +56,7 @@ errors-system-storage-cleanup-running = Pembersihan penyimpanan sedang berjalan
 
 errors-initialization-required = Inisialisasi bot diperlukan sebelum mengakses endpoint ini. Selesaikan proses inisialisasi melalui antarmuka web.
 errors-initialization-explore-unavailable = Mode Jelajah tidak memiliki dompet yang terhubung. Selesaikan penyiapan untuk memakai dompet dan copy trading.
+errors-store-unavailable = Penyimpanan data { $store } tidak dapat dibuka. Fitur ini tidak tersedia sampai masalahnya diselesaikan.
 errors-initialization-onboarding-update-failed = Gagal memperbarui status onboarding
 errors-initialization-validation-required = Verifikasi kredensial diperlukan sebelum menyimpan pengaturan awal
 errors-initialization-encrypt-failed = Gagal mengenkripsi private key

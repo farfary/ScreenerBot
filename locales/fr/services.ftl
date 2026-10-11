@@ -11,6 +11,8 @@ services-health-wallet-watch-polling-only = Détection par interrogation uniquem
 services-health-assistant-tasks-disabled = Désactivé dans la configuration
 services-health-connectivity-critical-unhealthy = Endpoints critiques défaillants : { $endpoints }
 services-health-filtering-snapshot-stale = L'instantané du filtrage date de { $seconds } s
+services-health-start-failed = Échec du démarrage : { $reason }
+services-health-dependency-failed = Non démarré : { $dependency } n'a pas pu démarrer
 
 ## Services page (pages/services.js)
 

@@ -64,6 +64,7 @@ errors-system-storage-cleanup-running = 存储清理已在运行
 # Initialization
 errors-initialization-required = 访问此接口前需要先完成机器人初始化。请通过网页界面完成初始化流程。
 errors-initialization-explore-unavailable = 探索模式未连接钱包。请完成设置以使用钱包和跟单交易。
+errors-store-unavailable = 无法打开数据存储 { $store }。在问题解决之前，此功能不可用。
 errors-initialization-onboarding-update-failed = 更新引导状态失败
 errors-initialization-validation-required = 保存设置前需要先验证凭据
 errors-initialization-encrypt-failed = 加密私钥失败

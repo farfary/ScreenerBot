@@ -6,11 +6,14 @@
 //! Provides endpoints for listing, filtering, and viewing transaction details
 
 use axum::{
+    middleware::from_fn_with_state,
     routing::{get, post},
     Router,
 };
 use std::sync::Arc;
 
+use crate::database::catalog;
+use crate::webserver::middleware::store_gate;
 use crate::webserver::state::AppState;
 
 mod handlers;
@@ -24,4 +27,5 @@ pub fn routes() -> Router<Arc<AppState>> {
         .route("/list", post(handlers::list_transactions))
         .route("/summary", post(handlers::get_summary))
         .route("/{signature}", get(handlers::get_transaction_detail))
+        .route_layer(from_fn_with_state(&catalog::TRANSACTIONS, store_gate))
 }

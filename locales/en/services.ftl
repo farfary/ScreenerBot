@@ -17,6 +17,10 @@ services-health-assistant-tasks-disabled = Disabled in config
 services-health-connectivity-critical-unhealthy = Critical endpoints unhealthy: { $endpoints }
 # $seconds is the age of the filtering snapshot.
 services-health-filtering-snapshot-stale = Filtering snapshot is { $seconds }s old
+# $reason is the technical cause chain of the failure and is not translated.
+services-health-start-failed = Failed to start: { $reason }
+# $dependency is a service identifier and is not translated.
+services-health-dependency-failed = Not started: { $dependency } failed to start
 
 ## Services page (pages/services.js)
 

@@ -17,6 +17,8 @@ services-health-assistant-tasks-disabled = معطّلة في الإعدادات
 services-health-connectivity-critical-unhealthy = نقاط الاتصال الحرجة غير سليمة: { $endpoints }
 # $seconds is the age of the filtering snapshot.
 services-health-filtering-snapshot-stale = عمر لقطة الترشيح { $seconds }ث
+services-health-start-failed = تعذّر التشغيل: { $reason }
+services-health-dependency-failed = لم يُشغَّل: تعذّر تشغيل { $dependency }
 
 ## Services page (pages/services.js)
 

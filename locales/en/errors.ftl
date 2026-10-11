@@ -66,6 +66,8 @@ errors-system-storage-cleanup-running = A storage cleanup is already running
 # Initialization
 errors-initialization-required = Bot initialization is required before accessing this endpoint. Please complete the initialization process through the web interface.
 errors-initialization-explore-unavailable = Explore Mode has no wallet connected. Complete setup to use wallets and copy trading.
+# $store is the catalog name of a data store and is not translated.
+errors-store-unavailable = The { $store } data store could not be opened. This feature is unavailable until it is resolved.
 errors-initialization-onboarding-update-failed = Failed to update onboarding state
 errors-initialization-validation-required = Credential verification is required before saving setup
 errors-initialization-encrypt-failed = Failed to encrypt private key

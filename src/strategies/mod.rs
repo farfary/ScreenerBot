@@ -31,14 +31,11 @@ static STRATEGY_ENGINE: LazyLock<Arc<RwLock<Option<StrategyEngine>>>> =
 
 /// Initialize the strategy system
 pub async fn init_strategy_system(config: EngineConfig) -> crate::Result<()> {
-    // Initialize database
+    // The engine exists whatever the state of the store, so an evaluation reaches the
+    // store's own error instead of an uninitialized engine.
+    *STRATEGY_ENGINE.write().await = Some(StrategyEngine::new(config));
+
     db::init_strategies_db()?;
-
-    // Create and store engine
-    let engine = StrategyEngine::new(config);
-    let mut global_engine = STRATEGY_ENGINE.write().await;
-    *global_engine = Some(engine);
-
     logger::info(LogTag::System, "Strategy system initialized successfully");
 
     Ok(())

@@ -107,21 +107,23 @@ pub(super) async fn create_and_start_services(mode_label: &str) -> Result<()> {
         })?
     };
 
-    service_manager
-        .start_all()
-        .await
-        .map_err(|source| Error::Core {
-            source: Box::new(source),
-        })?;
+    // Only an essential service stops startup here. Any other failure, a service
+    // whose store could not be opened among them, is already logged and reported as
+    // that service's health, and the rest of the app runs without it.
+    let started = service_manager.start_all().await;
 
     {
         let mut guard = manager_ref.write().await;
         *guard = Some(service_manager);
     }
 
+    started.map_err(|source| Error::Core {
+        source: Box::new(source),
+    })?;
+
     // SCREENERBOT_READY is an adoption boundary for silent core updates. Emit
-    // it only after every enabled service has started and the manager is back
-    // in global state, so every dashboard route sees the complete graph.
+    // it only after startup has finished and the manager is back in global
+    // state, so every dashboard route sees the complete graph.
     crate::webserver::announce_gui_ready();
 
     // Ledger and vault stores are snapshotted once the app is ready and again on a

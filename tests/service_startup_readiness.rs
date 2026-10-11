@@ -70,10 +70,19 @@ async fn the_service_layer_boots_offline_inside_a_startup_budget() {
         "registration produced no services at all"
     );
 
-    tokio::time::timeout(Duration::from_secs(60), service_manager.start_all())
+    let report = tokio::time::timeout(Duration::from_secs(60), service_manager.start_all())
         .await
         .expect("service layer boot hung past the 60s startup budget")
         .expect("service layer boot returned an error");
+    let failures: Vec<String> = report
+        .failures
+        .iter()
+        .map(|failure| format!("{}: {}", failure.name, failure.error))
+        .collect();
+    assert!(
+        failures.is_empty(),
+        "services failed to start offline: {failures:?}"
+    );
 
     // (b) Every registered service reaches Ready (has running handles), or the
     // code's own `is_enabled()` declares it out of scope for this boot — the

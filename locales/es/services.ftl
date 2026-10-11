@@ -11,6 +11,8 @@ services-health-wallet-watch-polling-only = Detección funcionando solo con sond
 services-health-assistant-tasks-disabled = Desactivado en la configuración
 services-health-connectivity-critical-unhealthy = Endpoints críticos con problemas: { $endpoints }
 services-health-filtering-snapshot-stale = La instantánea de filtrado tiene { $seconds } s de antigüedad
+services-health-start-failed = No se pudo iniciar: { $reason }
+services-health-dependency-failed = No iniciado: { $dependency } no pudo iniciarse
 
 services-status-healthy = Saludable
 services-status-starting = Iniciando

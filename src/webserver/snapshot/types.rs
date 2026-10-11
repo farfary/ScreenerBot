@@ -7,6 +7,8 @@ use chrono::{DateTime, Utc};
 use serde::Serialize;
 use std::collections::HashMap;
 
+use crate::database::health::{StoreHealth, StoreStatus};
+use crate::database::recovery::FailureKind;
 use crate::rpc::{RpcMinuteBucket, RpcSessionSnapshot, RpcStats};
 
 #[derive(Clone, Copy, Debug, Default)]
@@ -54,6 +56,43 @@ pub struct StatusSnapshot {
     pub dexscreener: Option<DexscreenerStatusSnapshot>,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub geckoterminal: Option<GeckoTerminalStatusSnapshot>,
+    /// Every store file the storage phase reached, in path order.
+    pub stores: Vec<StoreStatusSnapshot>,
+}
+
+/// The health of one store file, as the storage registry records it.
+#[derive(Clone, Debug, Serialize)]
+pub struct StoreStatusSnapshot {
+    pub store: &'static str,
+    pub state: &'static str,
+    /// False while a replaced ledger store waits to be reconciled with the wallet
+    /// history.
+    pub reconciled: bool,
+    /// Why an unavailable store could not be opened.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub failure: Option<FailureKind>,
+    /// Whether an unavailable store is kept in place by policy rather than blocked by
+    /// its surroundings.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub isolated: Option<bool>,
+}
+
+impl From<&StoreStatus> for StoreStatusSnapshot {
+    fn from(status: &StoreStatus) -> Self {
+        let (failure, isolated) = match &status.health {
+            StoreHealth::Unavailable {
+                failure, isolated, ..
+            } => (Some(*failure), Some(*isolated)),
+            _ => (None, None),
+        };
+        Self {
+            store: status.store,
+            state: status.health.as_str(),
+            reconciled: status.reconciled,
+            failure,
+            isolated,
+        }
+    }
 }
 
 #[derive(Clone, Debug, Serialize)]
