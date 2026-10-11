@@ -93,8 +93,6 @@ export function createWalletRenderers({
       id: "is_token_2022",
       label: I18n.t("wallets-holdings-col-type"),
       sortable: true,
-      // l10n-ignore: token program standard names
-      value: (row) => (row.is_token_2022 ? "Token-2022" : "SPL"),
       render: (value, row) =>
         row.is_token_2022
           ? // l10n-ignore: token program standard name

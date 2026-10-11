@@ -7,11 +7,12 @@ import * as Utils from "../core/utils.js";
 import { apiErrorMessage } from "../core/request_manager.js";
 import {
   formatDate,
+  formatDuration,
   formatPercentValue,
   formatSol,
   formatTimeAgo,
-  formatTimeSpan,
   formatTimestamp,
+  formatUptime,
 } from "../core/format.js";
 import { stepLabel } from "./action_step.js";
 import { closeReasonText } from "./trade_reason.js";
@@ -782,9 +783,14 @@ function renderNotification(notification) {
   const timeLabel = escapeText(formatTime(ts));
   const timeTitle = escapeText(formatAbsoluteTime(ts));
   const durationMs = Number(notification.duration_ms);
+  const duration_ns = durationMs * 1_000_000;
   const durationLabel =
     (isCompleted || isFailed) && Number.isFinite(durationMs) && durationMs > 0
-      ? escapeText(formatDuration(durationMs))
+      ? escapeText(
+          durationMs < 60_000
+            ? formatDuration(duration_ns)
+            : formatUptime(durationMs / 1000, { style: "trimmed" })
+        )
       : "";
 
   const progressInfo = isInProgress ? state : null;
@@ -860,16 +866,6 @@ function sourceFromOperation(operation) {
   if (op.startsWith("auto")) return "auto";
   if (op.startsWith("manual")) return "manual";
   return "";
-}
-
-/** Compact duration: "820ms", "3.4s", "1m 12s". */
-function formatDuration(ms) {
-  if (ms < 1000) return formatTimeSpan(Math.round(ms), { unit: "millisecond" });
-  const sec = ms / 1000;
-  if (sec < 60) return formatTimeSpan(sec, { decimals: 1, trim: true });
-  const m = Math.floor(sec / 60);
-  const s = Math.round(sec % 60);
-  return `${formatTimeSpan(m, { unit: "minute" })} ${formatTimeSpan(s)}`;
 }
 
 /**

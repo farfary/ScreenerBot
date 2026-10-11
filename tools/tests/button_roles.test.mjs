@@ -28,10 +28,7 @@ import { createApiHandler, loadIndex } from "../lib/dashboard_fixtures.mjs";
 import { loadStylesheets } from "../lib/dashboard_ui.mjs";
 
 // Rules in stylesheets that no page loads any more; the list only shrinks.
-const UNUSED_RULES = new Set([
-  "pages/trader.css .trader-action-bar .btn-primary",
-  "pages/trader.css .form-actions .btn.primary",
-]);
+const UNUSED_RULES = new Set();
 
 const tab = (id) => `#subTabsContainer [data-tab-id="${id}"]`;
 

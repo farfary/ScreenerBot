@@ -83,15 +83,6 @@
   animation: fadeIn 0.3s ease-out;
 }
 
-/* Add spacing between sections, but not between action bar and first content */
-.trader-tab-content > .trader-action-bar + * {
-  margin-top: 0;
-}
-
-.trader-tab-content > * + *:not(.trader-action-bar + *) {
-  margin-top: 1rem;
-}
-
 /* ============================================================================
    Trader Status Bar - Auto Trader Toggle Control
    ============================================================================ */
@@ -168,99 +159,6 @@
 
 .trader-status-bar[data-status="stopped"] .status-bar-status {
   color: var(--error-color);
-}
-
-/* ============================================================================
-   Trader Action Bar - Sticky Actions at Top
-   ============================================================================ */
-
-.trader-action-bar {
-  position: sticky;
-  top: 0;
-  background: var(--surface-color);
-  border-bottom: 2px solid var(--border-color);
-  padding: 0.75rem 1rem;
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: 0.75rem;
-  z-index: 10;
-  min-height: 52px;
-}
-
-.action-bar-title {
-  display: flex;
-  align-items: center;
-  gap: 0.75rem;
-  flex: 1;
-  min-width: 0;
-}
-
-.action-bar-title i {
-  font-size: 18px;
-  color: var(--primary-color);
-  flex-shrink: 0;
-  line-height: 1;
-}
-
-.action-bar-title h3 {
-  font-size: 1.05rem;
-  font-weight: 600;
-  margin: 0;
-  color: var(--text-color);
-  letter-spacing: 0.01em;
-}
-
-.action-bar-actions {
-  display: flex;
-  gap: 0.375rem;
-  align-items: center;
-  flex-shrink: 0;
-}
-
-.trader-action-bar .btn {
-  padding: 6px 12px;
-  font-size: 0.8rem;
-  height: 32px;
-  font-weight: 500;
-  border-radius: var(--radius-md);
-  display: inline-flex;
-  align-items: center;
-  gap: 6px;
-  transition: all var(--transition-base);
-}
-
-.trader-action-bar .btn-primary {
-  background: var(--primary-color);
-  color: #fff;
-}
-
-.trader-action-bar .btn-primary:hover {
-  background: var(--primary-hover);
-  transform: translateY(-1px);
-  box-shadow: 0 2px 6px var(--shadow-md);
-}
-
-.trader-action-bar .btn-secondary {
-  background: var(--background-secondary);
-  color: var(--text-primary);
-  border: 1px solid var(--border-color);
-}
-
-.trader-action-bar .btn-secondary:hover {
-  background: var(--bg-card-hover);
-  border-color: var(--primary-alpha-30);
-  transform: translateY(-1px);
-  box-shadow: 0 2px 6px var(--shadow-md);
-}
-
-.trader-action-bar .btn i {
-  font-size: 14px;
-  line-height: 1;
-}
-
-.trader-action-bar .btn:active {
-  transform: translateY(1px);
 }
 
 /* ============================================================================
@@ -709,47 +607,6 @@
   text-align: center;
 }
 
-/* Form Actions */
-.form-actions {
-  display: flex;
-  flex-wrap: wrap;
-  justify-content: flex-end;
-  gap: 0.75rem;
-  margin-top: 1.25rem;
-  padding-top: 1.25rem;
-  border-top: 1px solid var(--border-color);
-}
-
-.form-actions .btn {
-  padding: 0.6rem 1.25rem;
-  border-radius: 0.5rem;
-  font-size: 0.8125rem;
-  font-weight: 500;
-  cursor: pointer;
-  border: none;
-  transition: all 0.2s;
-  min-width: 160px;
-}
-
-.form-actions .btn.primary {
-  background: var(--primary-color);
-  color: white;
-}
-
-.form-actions .btn.primary:hover {
-  background: var(--primary-hover);
-}
-
-.form-actions .btn.secondary {
-  background: var(--bg-secondary);
-  color: var(--text-primary);
-  border: 1px solid var(--border-color);
-}
-
-.form-actions .btn.secondary:hover {
-  background: var(--bg-tertiary);
-}
-
 /* Status List */
 .status-list {
   margin-top: 0.75rem;
@@ -908,15 +765,6 @@
   .exit-bar-header {
     flex-direction: column;
     align-items: flex-start;
-  }
-
-  .form-actions {
-    justify-content: stretch;
-  }
-
-  .form-actions .btn {
-    width: 100%;
-    min-width: 0;
   }
 
   .strategies-grid {

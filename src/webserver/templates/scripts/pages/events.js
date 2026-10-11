@@ -15,7 +15,12 @@ import {
   severityBadge,
 } from "../ui/event_labels.js";
 import { requestManager } from "../core/request_manager.js";
-import { renderTokenCell, resolveTokenCells, TOKEN_CELL_MIN_WIDTH } from "../ui/token_identity.js";
+import {
+  renderAddress,
+  renderTokenCell,
+  resolveTokenCells,
+  TOKEN_CELL_MIN_WIDTH,
+} from "../ui/token_identity.js";
 
 const DEFAULT_FILTERS = {
   category: "all",
@@ -75,7 +80,10 @@ function formatPayloadPreview(value) {
     const val =
       raw === null || raw === undefined ? "null" : typeof raw === "object" ? "{...}" : String(raw);
     const safeKey = Utils.escapeHtml(String(key));
-    const safeVal = Utils.escapeHtml(val.length > 32 ? `${val.slice(0, 32)}...` : val);
+    const isAddress = /(?:address|mint|pubkey)$/i.test(String(key)) && typeof raw === "string";
+    const safeVal = isAddress
+      ? renderAddress(raw, { plain: true })
+      : Utils.escapeHtml(val.length > 32 ? `${val.slice(0, 32)}...` : val);
     return `${safeKey}: ${safeVal}`;
   });
 

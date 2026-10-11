@@ -797,21 +797,6 @@ export class SettingsDialog {
   }
 
   /**
-   * Build Data tab content - Comprehensive data management
-   */
-
-  // ==========================================================================
-  // SECURITY TAB - Lockscreen settings (extracted to settings/security_tab.js)
-  // ==========================================================================
-
-  // Security tab methods have been extracted to settings/security_tab.js
-  // The loadSecurityTab function is imported and used in _loadTabContent
-
-  // ==========================================================================
-  // UPDATES TAB - Version checking and auto-update (extracted to settings/updates_tab.js)
-  // ==========================================================================
-
-  /**
    * Attach handlers for About tab.
    *
    * About answers "what is this and where do I find it"; every data location

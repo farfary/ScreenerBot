@@ -287,7 +287,7 @@
 
 .config-import-section-item.invalid {
   border-color: var(--error-color);
-  background: var(--danger-alpha-05);
+  background: var(--danger-alpha-10);
 }
 
 .config-import-section-header {

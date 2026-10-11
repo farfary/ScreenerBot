@@ -492,7 +492,7 @@ test("right-to-left formatter output differs from left-to-right only by isolatio
 test("no module defines its own function under a core formatter's name", () => {
   // A local namesake hides the owner and drifts from it ("0.1 SOL" built twice).
   // Known namesakes still to fold into their owner; this list only shrinks.
-  const KNOWN = new Set(["ui/notification_panel.js: formatDuration"]);
+  const KNOWN = new Set();
   const owned = new Set([...FORMAT_JS.matchAll(/^export function (\w+)/gm)].map((m) => m[1]));
   const scripts = new URL("templates/scripts/", WEBSERVER);
   const shadows = fs

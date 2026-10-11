@@ -656,7 +656,7 @@ body {
 .token-address,
 .signature,
 [class*="-mint"],
-[class*="-address"],
+[class*="-address"]:not(button),
 [class*="-signature"] {
   user-select: text;
   cursor: text;

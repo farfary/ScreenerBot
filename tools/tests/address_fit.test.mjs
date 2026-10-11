@@ -85,8 +85,8 @@ test("no dashboard script crops an address or mint", () => {
   // Free-text previews (event messages, payload summaries, config values) that are
   // not addresses.
   const allowed = [
-    ["pages/events.js", "text.slice(0, 160)"],
     ["pages/events.js", "val.slice(0, 32)"],
+    ["pages/events.js", "text.slice(0, 160)"],
     ["ui/events_dialog.js", "message.slice(0, 140)"],
     ["ui/config_import_export_dialog.js", "value.substring(0, 40)"],
   ];

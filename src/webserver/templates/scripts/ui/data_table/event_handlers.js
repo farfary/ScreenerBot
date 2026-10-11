@@ -243,7 +243,7 @@ export function applyEventHandlersMixin(DataTable) {
     this._attachToolbarSegmentedEvents(toolbarRoot);
     this._attachToolbarOverflowEvents(toolbarRoot);
 
-    // Column visibility toggle - NEW: Using settings dialog instead of dropdown
+    // Column visibility opens the table settings dialog.
     const columnBtn = toolbarRoot?.querySelector(".dt-btn-columns");
     if (columnBtn) {
       const settingsHandler = () => {
