@@ -27,6 +27,8 @@ pub enum Error {
     ForceStopped,
     #[error("core services are not ready for trading: {pending}")]
     CoreServicesNotReady { pending: String },
+    #[error("trading data is unavailable: {detail}")]
+    StorageUnavailable { detail: String },
     #[error("invalid token mint address {mint}")]
     InvalidMint { mint: String },
     #[error("token {mint} is blacklisted")]
@@ -133,7 +135,7 @@ impl ErrorClass for Error {
             Error::ConfigUpdate { .. } => false,
             Error::TraderUnavailable | Error::ForceStopActive | Error::ForceStopped => false,
             Error::TemplateNotFound { .. } => false,
-            Error::CoreServicesNotReady { .. } => true,
+            Error::CoreServicesNotReady { .. } | Error::StorageUnavailable { .. } => true,
             Error::InvalidMint { .. }
             | Error::Blacklisted { .. }
             | Error::InvalidSlippage { .. }
@@ -187,7 +189,9 @@ impl ErrorClass for Error {
                 Severity::Warning
             }
             Error::TemplateNotFound { .. } => Severity::Warning,
-            Error::CoreServicesNotReady { .. } => Severity::Warning,
+            Error::CoreServicesNotReady { .. } | Error::StorageUnavailable { .. } => {
+                Severity::Warning
+            }
             Error::InvalidMint { .. }
             | Error::Blacklisted { .. }
             | Error::InvalidSlippage { .. }
@@ -227,7 +231,7 @@ impl ErrorClass for Error {
             Error::TraderUnavailable | Error::ForceStopActive => 409,
             Error::TemplateNotFound { .. } => 400,
             Error::ForceStopped | Error::Blacklisted { .. } => 403,
-            Error::CoreServicesNotReady { .. } => 503,
+            Error::CoreServicesNotReady { .. } | Error::StorageUnavailable { .. } => 503,
             Error::InvalidMint { .. }
             | Error::InvalidSlippage { .. }
             | Error::InvalidPercentage { .. } => 400,

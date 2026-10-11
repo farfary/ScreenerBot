@@ -5,9 +5,13 @@
 //! that is no longer watched, a pipeline that fell behind, a replay too old to
 //! copy. A pause stores its reason on the task and is announced.
 
+use std::sync::atomic::{AtomicBool, Ordering};
+
 use chrono::Utc;
 
 use crate::config::with_config;
+use crate::database::catalog::COPY_TRADING;
+use crate::database::health::{self, StoreHealth};
 use crate::logger::{self, LogTag};
 use crate::wallets::watch::{ActivityKind, WalletActivity};
 
@@ -20,6 +24,64 @@ use super::{
 /// A task edited this recently may still be attaching its watch source, so the
 /// reconciler never judges it detached.
 const SOURCE_SETTLE_SECS: i64 = 120;
+
+/// Set once this process has stood its tasks down for a restored copy store, so a
+/// restarted copy service never pauses again a task resumed since.
+static STORE_RESTORE_HANDLED: AtomicBool = AtomicBool::new(false);
+
+/// A copy store that opened restored from a snapshot or recreated empty may hold
+/// budgets, claims and task settings older than the failure. Every enabled task is
+/// paused with [`CopyPauseReason::StorageRestored`] and is resumed only explicitly.
+/// Runs until it has succeeded once in this process.
+pub(super) async fn pause_after_store_restore(
+    database: &CopyDatabase,
+) -> crate::trader::Result<()> {
+    if STORE_RESTORE_HANDLED.load(Ordering::SeqCst) {
+        return Ok(());
+    }
+    let health = COPY_TRADING
+        .paths()
+        .iter()
+        .find_map(|path| health::status(path))
+        .map(|status| status.health);
+    if let Some(health) = health {
+        for task in stand_down_for_store_restore(database, &health).await? {
+            notify::announce_pause(&task, &CopyPauseReason::StorageRestored).await;
+            logger::warning(
+                LogTag::Trader,
+                &format!(
+                    "Paused copy task {}: the copy store opened {}",
+                    task.id,
+                    health.as_str()
+                ),
+            );
+        }
+    }
+    STORE_RESTORE_HANDLED.store(true, Ordering::SeqCst);
+    Ok(())
+}
+
+/// Pause every enabled task when `health` is replacement contents; the tasks it
+/// paused.
+async fn stand_down_for_store_restore(
+    database: &CopyDatabase,
+    health: &StoreHealth,
+) -> crate::trader::Result<Vec<CopyTask>> {
+    let mut paused = Vec::new();
+    if !health.is_replacement() {
+        return Ok(paused);
+    }
+    for task in database.list_tasks().await? {
+        if task.enabled
+            && database
+                .pause_task(task.id, CopyPauseReason::StorageRestored)
+                .await?
+        {
+            paused.push(task);
+        }
+    }
+    Ok(paused)
+}
 
 /// An enabled task whose target is no longer an enabled watch source (the watcher
 /// disabled it as saturated, or it was removed) receives nothing, yet would still
@@ -246,11 +308,94 @@ fn backfill_skip_reason(
 
 #[cfg(test)]
 mod tests {
-    use super::{backfill_skip_reason, watch_pause_reason};
-    use crate::trader::copy::{CopyPauseReason, CopySkip};
+    use std::path::PathBuf;
+
+    use chrono::Utc;
+
+    use super::{backfill_skip_reason, stand_down_for_store_restore, watch_pause_reason};
+    use crate::database::health::StoreHealth;
+    use crate::trader::copy::{
+        CopyDatabase, CopyMode, CopyPauseReason, CopySkip, CopyTask, ExitMode, SizingMode,
+    };
     use crate::wallets::watch::WatchDisableReason;
 
     const THRESHOLD_MS: u64 = 5_000;
+
+    fn task(target: &str, enabled: bool) -> CopyTask {
+        CopyTask {
+            id: 0,
+            chain: crate::chains::ChainId::Solana,
+            target_address: target.to_owned(),
+            label: None,
+            enabled,
+            mode: CopyMode::Paper,
+            sizing: SizingMode::Fixed { sol: 0.1 },
+            exit_mode: ExitMode::BuyOnly,
+            exit_policy_overrides: Default::default(),
+            max_native_per_trade: 0.2,
+            max_native_per_token: 1.0,
+            total_budget_native: 5.0,
+            min_target_trade_native: None,
+            max_target_trade_native: None,
+            buy_once_per_token: false,
+            slippage_pct: 1.0,
+            created_at: Utc::now(),
+            updated_at: Utc::now(),
+            require_filter_pass: None,
+            pause_reason: (!enabled).then_some(CopyPauseReason::User),
+            paused_at: (!enabled).then(Utc::now),
+        }
+    }
+
+    #[tokio::test]
+    async fn a_restored_copy_store_pauses_every_enabled_task_until_resumed() {
+        let dir = tempfile::tempdir().unwrap();
+        let database = CopyDatabase::open(
+            dir.path().join("copy_trading.db"),
+            crate::chains::ChainId::Solana,
+        )
+        .unwrap();
+        let first = database.insert_task(task("first", true)).await.unwrap();
+        let second = database.insert_task(task("second", true)).await.unwrap();
+        let user_paused = database.insert_task(task("third", false)).await.unwrap();
+
+        let healthy = stand_down_for_store_restore(&database, &StoreHealth::Healthy)
+            .await
+            .unwrap();
+        assert!(healthy.is_empty(), "a healthy store pauses nothing");
+        assert!(database.get_task(first.id).await.unwrap().unwrap().enabled);
+
+        let quarantine = PathBuf::from("/copy-guard-test/quarantine");
+        let restored = StoreHealth::Restored {
+            snapshot_at: None,
+            quarantine: quarantine.clone(),
+        };
+        let mut paused: Vec<i64> = stand_down_for_store_restore(&database, &restored)
+            .await
+            .unwrap()
+            .iter()
+            .map(|task| task.id)
+            .collect();
+        paused.sort_unstable();
+        assert_eq!(paused, [first.id, second.id]);
+
+        // A later pass, a recreated store included, finds nothing enabled: nothing is
+        // resumed on its own.
+        let recovered = StoreHealth::Recovered { quarantine };
+        for health in [&restored, &recovered] {
+            assert!(stand_down_for_store_restore(&database, health)
+                .await
+                .unwrap()
+                .is_empty());
+        }
+        for id in [first.id, second.id] {
+            let stored = database.get_task(id).await.unwrap().unwrap();
+            assert!(!stored.enabled, "task {id} stays paused");
+            assert_eq!(stored.pause_reason, Some(CopyPauseReason::StorageRestored));
+        }
+        let kept = database.get_task(user_paused.id).await.unwrap().unwrap();
+        assert_eq!(kept.pause_reason, Some(CopyPauseReason::User));
+    }
 
     #[test]
     fn backfilled_observation_without_a_block_time_is_refused() {

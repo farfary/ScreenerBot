@@ -66,6 +66,9 @@ pub enum CopyPauseReason {
     },
     HeliusUnavailable,
     WatchProcessingFailed,
+    /// The copy store opened with restored or recreated contents, so budgets, claims and
+    /// task settings may predate the failure. Cleared only by an explicit resume.
+    StorageRestored,
 }
 
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]

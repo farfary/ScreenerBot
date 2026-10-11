@@ -33,6 +33,7 @@ copy-skip-entry-blocked = Entrée bloquée
 copy-entry-block-force-stopped = Le trading est en arrêt forcé
 copy-entry-block-loss-limit = La limite de perte bloque les nouvelles entrées
 copy-entry-block-connectivity = Les services requis sont indisponibles
+copy-entry-block-storage-unavailable = Les données de trading sont indisponibles ou en cours de restauration
 copy-entry-block-position-limit = Limite de positions ouvertes atteinte
 copy-entry-block-already-open = Une position est déjà ouverte
 copy-entry-block-reentry-cooldown = Délai avant nouvelle entrée sur le token
@@ -47,6 +48,7 @@ copy-pause-watch-detached = Mise en pause automatique : le portefeuille n'est p
 copy-pause-watch-budget-exceeded = En pause : ce portefeuille a atteint sa limite de { $limit } signatures vérifiées avant d'avoir rattrapé son retard
 copy-pause-helius-unavailable = En pause : les vérifications de portefeuille via { -helius } ont échoué
 copy-pause-watch-processing-failed = En pause : l'activité du portefeuille n'a pas pu être traitée
+copy-pause-storage-restored = En pause : les données de copie ont été restaurées après une panne de stockage
 copy-pause-unspecified = En pause
 
 copy-pause-short-user = par vous
@@ -55,6 +57,7 @@ copy-pause-short-watch-detached = suivi perdu
 copy-pause-short-watch-budget-exceeded = limite de suivi
 copy-pause-short-helius-unavailable = fournisseur de suivi
 copy-pause-short-watch-processing-failed = traitement du suivi
+copy-pause-short-storage-restored = données restaurées
 copy-state-paused = En pause
 copy-state-paused-reason = En pause · { $reason }
 

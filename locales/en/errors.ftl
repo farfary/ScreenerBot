@@ -363,6 +363,7 @@ errors-trade-force-stop-active = the emergency stop is active; clear it first
 errors-trade-template-not-found = no trader template named { $template }
 errors-trade-manual-force-stopped = manual trading is disabled while the emergency stop is active
 errors-trade-core-services-not-ready = core services are not ready for trading: { $pending }
+errors-trade-storage-unavailable = trading data is unavailable or being restored: { $detail }
 errors-trade-mint-invalid = invalid token mint address { $mint }
 errors-trade-blacklisted = token { $mint } is blacklisted
 errors-trade-slippage-invalid = slippage { $slippage }% must be in (0, { $maximum }]

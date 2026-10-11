@@ -33,6 +33,7 @@ copy-skip-entry-blocked = एंट्री ब्लॉक
 copy-entry-block-force-stopped = ट्रेडिंग ज़बरन रोकी गई है
 copy-entry-block-loss-limit = लॉस लिमिट नई एंट्री रोकती है
 copy-entry-block-connectivity = ज़रूरी सर्विसेज़ उपलब्ध नहीं हैं
+copy-entry-block-storage-unavailable = ट्रेडिंग डेटा उपलब्ध नहीं है या पुनर्स्थापित हो रहा है
 copy-entry-block-position-limit = खुली पोज़िशन की सीमा पूरी हो गई
 copy-entry-block-already-open = एक पोज़िशन पहले से खुली है
 copy-entry-block-reentry-cooldown = टोकन री-एंट्री कूलडाउन
@@ -47,6 +48,7 @@ copy-pause-watch-detached = ऑटो-पॉज़: वॉलेट अब व�
 copy-pause-watch-budget-exceeded = रोका गया: इस वॉलेट ने पिछड़ी गतिविधि पकड़ने से पहले वॉच जाँच की { $limit } सिग्नेचर की सीमा छू ली
 copy-pause-helius-unavailable = रोका गया: { -helius } वॉलेट जाँच विफल रही
 copy-pause-watch-processing-failed = रोका गया: वॉलेट गतिविधि प्रोसेस नहीं हो सकी
+copy-pause-storage-restored = रोका गया: स्टोरेज विफलता के बाद कॉपी डेटा पुनर्स्थापित किया गया
 copy-pause-unspecified = रोका गया
 
 copy-pause-short-user = आपके द्वारा
@@ -55,6 +57,7 @@ copy-pause-short-watch-detached = वॉच टूटा
 copy-pause-short-watch-budget-exceeded = वॉच सीमा
 copy-pause-short-helius-unavailable = वॉच प्रोवाइडर
 copy-pause-short-watch-processing-failed = वॉच प्रोसेसिंग
+copy-pause-short-storage-restored = डेटा पुनर्स्थापित
 copy-state-paused = रोका गया
 copy-state-paused-reason = रोका गया · { $reason }
 

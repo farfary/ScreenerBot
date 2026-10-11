@@ -358,6 +358,7 @@ errors-trade-force-stop-active = 紧急停止已生效，请先解除
 errors-trade-template-not-found = 没有名为 { $template } 的交易引擎模板
 errors-trade-manual-force-stopped = 紧急停止生效期间，手动交易已停用
 errors-trade-core-services-not-ready = 核心服务尚未就绪，无法交易：{ $pending }
+errors-trade-storage-unavailable = 交易数据不可用或正在恢复：{ $detail }
 errors-trade-mint-invalid = 代币铸造地址无效：{ $mint }
 errors-trade-blacklisted = 代币 { $mint } 已加入黑名单
 errors-trade-slippage-invalid = 滑点 { $slippage }% 必须在 (0, { $maximum }] 范围内

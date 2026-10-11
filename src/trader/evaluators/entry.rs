@@ -5,7 +5,7 @@
 //!
 //! Evaluates whether an entry should be made for a token by checking:
 //! 1. Source-independent admission (see `trader::admission::check_entry_admission`):
-//!    force stop, loss limit, connectivity, position limits, existing position,
+//!    force stop, loss limit, entry storage, connectivity, position limits, existing position,
 //!    re-entry cooldown, blacklist
 //! 2. LLM entry analysis (if enabled)
 //! 3. Strategy signals
@@ -43,6 +43,7 @@ pub async fn evaluate_entry_for_token(
             }),
             EntryBlock::ForceStopped
             | EntryBlock::LossLimit
+            | EntryBlock::StorageUnavailable(_)
             | EntryBlock::PositionLimit
             | EntryBlock::AlreadyOpen
             | EntryBlock::ReentryCooldown

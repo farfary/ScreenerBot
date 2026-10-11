@@ -327,6 +327,7 @@ errors-trade-force-stop-active = Dừng khẩn cấp đang bật; hãy xóa tr�
 errors-trade-template-not-found = Không có mẫu Trader nào tên { $template }
 errors-trade-manual-force-stopped = Giao dịch thủ công bị tắt khi dừng khẩn cấp đang bật
 errors-trade-core-services-not-ready = Các dịch vụ lõi chưa sẵn sàng để giao dịch: { $pending }
+errors-trade-storage-unavailable = Dữ liệu giao dịch không khả dụng hoặc đang được khôi phục: { $detail }
 errors-trade-mint-invalid = Địa chỉ mint của token không hợp lệ { $mint }
 errors-trade-blacklisted = Token { $mint } nằm trong danh sách đen
 errors-trade-slippage-invalid = Trượt giá { $slippage }% phải nằm trong (0, { $maximum }]

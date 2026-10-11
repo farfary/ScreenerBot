@@ -37,6 +37,7 @@ impl CopyPauseReason {
             }
             Self::HeliusUnavailable => UiText::new(ids::COPY_PAUSE_HELIUS_UNAVAILABLE),
             Self::WatchProcessingFailed => UiText::new(ids::COPY_PAUSE_WATCH_PROCESSING_FAILED),
+            Self::StorageRestored => UiText::new(ids::COPY_PAUSE_STORAGE_RESTORED),
         }
     }
 }
@@ -65,7 +66,8 @@ mod tests {
             | CopyPauseReason::WatchDetached
             | CopyPauseReason::WatchBudgetExceeded { .. }
             | CopyPauseReason::HeliusUnavailable
-            | CopyPauseReason::WatchProcessingFailed => reason,
+            | CopyPauseReason::WatchProcessingFailed
+            | CopyPauseReason::StorageRestored => reason,
         };
         vec![
             listed(CopyPauseReason::User),
@@ -80,6 +82,7 @@ mod tests {
             }),
             listed(CopyPauseReason::HeliusUnavailable),
             listed(CopyPauseReason::WatchProcessingFailed),
+            listed(CopyPauseReason::StorageRestored),
         ]
     }
 

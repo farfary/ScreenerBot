@@ -103,6 +103,7 @@ const ENTRY_BLOCK_LABELS = Object.freeze({
   force_stopped: "copy-entry-block-force-stopped",
   loss_limit: "copy-entry-block-loss-limit",
   connectivity: "copy-entry-block-connectivity",
+  storage_unavailable: "copy-entry-block-storage-unavailable",
   position_limit: "copy-entry-block-position-limit",
   already_open: "copy-entry-block-already-open",
   reentry_cooldown: "copy-entry-block-reentry-cooldown",
@@ -135,6 +136,7 @@ const PAUSE_SHORT_LABELS = Object.freeze({
   watch_budget_exceeded: "copy-pause-short-watch-budget-exceeded",
   helius_unavailable: "copy-pause-short-helius-unavailable",
   watch_processing_failed: "copy-pause-short-watch-processing-failed",
+  storage_restored: "copy-pause-short-storage-restored",
 });
 
 /** Short cause of a pause for the task list; empty when the kind has none. */

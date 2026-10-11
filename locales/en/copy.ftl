@@ -35,6 +35,7 @@ copy-skip-entry-blocked = Entry blocked
 copy-entry-block-force-stopped = Trading is force-stopped
 copy-entry-block-loss-limit = Loss limit blocks new entries
 copy-entry-block-connectivity = Required services are unavailable
+copy-entry-block-storage-unavailable = Trading data is unavailable or being restored
 copy-entry-block-position-limit = Open-position limit reached
 copy-entry-block-already-open = A position is already open
 copy-entry-block-reentry-cooldown = Token re-entry cooldown
@@ -52,6 +53,7 @@ copy-pause-watch-detached = Auto-paused: the wallet is no longer watched
 copy-pause-watch-budget-exceeded = Paused: this wallet reached its { $limit }-signature watch check limit before catching up
 copy-pause-helius-unavailable = Paused: { -helius } wallet checks failed
 copy-pause-watch-processing-failed = Paused: wallet activity could not be processed
+copy-pause-storage-restored = Paused: copy data was restored after a storage failure
 # A paused task with no recorded reason.
 copy-pause-unspecified = Paused
 
@@ -62,6 +64,7 @@ copy-pause-short-watch-detached = watch lost
 copy-pause-short-watch-budget-exceeded = watch limit
 copy-pause-short-helius-unavailable = watch provider
 copy-pause-short-watch-processing-failed = watch processing
+copy-pause-short-storage-restored = data restored
 copy-state-paused = Paused
 copy-state-paused-reason = Paused · { $reason }
 

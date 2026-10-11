@@ -31,6 +31,7 @@ copy-skip-entry-blocked = Giriş engellendi
 copy-entry-block-force-stopped = İşlem zorla durduruldu
 copy-entry-block-loss-limit = Zarar limiti yeni girişleri engelliyor
 copy-entry-block-connectivity = Gerekli servisler kullanılamıyor
+copy-entry-block-storage-unavailable = İşlem verileri kullanılamıyor veya geri yükleniyor
 copy-entry-block-position-limit = Açık pozisyon limitine ulaşıldı
 copy-entry-block-already-open = Bir pozisyon zaten açık
 copy-entry-block-reentry-cooldown = Token yeniden giriş bekleme süresi
@@ -45,6 +46,7 @@ copy-pause-watch-detached = Otomatik duraklatıldı: cüzdan artık izlenmiyor
 copy-pause-watch-budget-exceeded = Duraklatıldı: bu cüzdan, yetişmeden önce { $limit } imzalık izleme kontrol sınırına ulaştı
 copy-pause-helius-unavailable = Duraklatıldı: { -helius } cüzdan kontrolleri başarısız oldu
 copy-pause-watch-processing-failed = Duraklatıldı: cüzdan etkinliği işlenemedi
+copy-pause-storage-restored = Duraklatıldı: kopyalama verileri bir depolama hatasından sonra geri yüklendi
 copy-pause-unspecified = Duraklatıldı
 
 copy-pause-short-user = sizce
@@ -53,6 +55,7 @@ copy-pause-short-watch-detached = izleme kayıp
 copy-pause-short-watch-budget-exceeded = izleme limiti
 copy-pause-short-helius-unavailable = izleme sağlayıcısı
 copy-pause-short-watch-processing-failed = izleme işleme
+copy-pause-short-storage-restored = veriler geri yüklendi
 copy-state-paused = Duraklatıldı
 copy-state-paused-reason = Duraklatıldı · { $reason }
 

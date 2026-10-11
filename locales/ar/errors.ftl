@@ -363,6 +363,7 @@ errors-trade-force-stop-active = الإيقاف الطارئ نشط؛ ألغِه
 errors-trade-template-not-found = لا يوجد قالب متداول آلي باسم { $template }
 errors-trade-manual-force-stopped = التداول اليدوي معطّل أثناء نشاط الإيقاف الطارئ
 errors-trade-core-services-not-ready = الخدمات الأساسية غير جاهزة للتداول: { $pending }
+errors-trade-storage-unavailable = بيانات التداول غير متاحة أو قيد الاستعادة: { $detail }
 errors-trade-mint-invalid = عنوان إصدار الرمز { $mint } غير صالح
 errors-trade-blacklisted = الرمز { $mint } في القائمة السوداء
 errors-trade-slippage-invalid = يجب أن يكون الانزلاق السعري { $slippage }% ضمن ⁨(0, { $maximum }]⁩

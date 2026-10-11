@@ -327,6 +327,7 @@ errors-trade-force-stop-active = Der Notfallstopp ist aktiv; heben Sie ihn zuers
 errors-trade-template-not-found = Keine Trader-Vorlage namens { $template }
 errors-trade-manual-force-stopped = Manuelles Trading ist deaktiviert, solange der Notfallstopp aktiv ist
 errors-trade-core-services-not-ready = Die Kerndienste sind nicht bereit fürs Trading: { $pending }
+errors-trade-storage-unavailable = Die Handelsdaten sind nicht verfügbar oder werden wiederhergestellt: { $detail }
 errors-trade-mint-invalid = Ungültige Token-Mint-Adresse { $mint }
 errors-trade-blacklisted = Token { $mint } steht auf der Blacklist
 errors-trade-slippage-invalid = Slippage { $slippage }% muss in (0, { $maximum }] liegen

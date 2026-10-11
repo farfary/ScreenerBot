@@ -330,6 +330,7 @@ errors-trade-force-stop-active = a parada de emergência está ativa; desative-a
 errors-trade-template-not-found = nenhum modelo de trader chamado { $template }
 errors-trade-manual-force-stopped = o trading manual fica desativado enquanto a parada de emergência estiver ativa
 errors-trade-core-services-not-ready = os serviços principais não estão prontos para o trading: { $pending }
+errors-trade-storage-unavailable = os dados de trading estão indisponíveis ou sendo restaurados: { $detail }
 errors-trade-mint-invalid = endereço do mint do token inválido { $mint }
 errors-trade-blacklisted = o token { $mint } está na lista negra
 errors-trade-slippage-invalid = o slippage { $slippage }% deve estar em (0, { $maximum }]

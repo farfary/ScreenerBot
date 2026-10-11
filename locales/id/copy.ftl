@@ -31,6 +31,7 @@ copy-skip-entry-blocked = Entry diblokir
 copy-entry-block-force-stopped = Trading dihentikan paksa
 copy-entry-block-loss-limit = Batas kerugian memblokir entry baru
 copy-entry-block-connectivity = Layanan yang diperlukan tidak tersedia
+copy-entry-block-storage-unavailable = Data trading tidak tersedia atau sedang dipulihkan
 copy-entry-block-position-limit = Batas posisi terbuka tercapai
 copy-entry-block-already-open = Posisi sudah terbuka
 copy-entry-block-reentry-cooldown = Cooldown entry ulang token
@@ -45,6 +46,7 @@ copy-pause-watch-detached = Dijeda otomatis: dompet tidak lagi dipantau
 copy-pause-watch-budget-exceeded = Dijeda: dompet ini mencapai batas pemeriksaan pantau { $limit } signature sebelum berhasil menyusul
 copy-pause-helius-unavailable = Dijeda: pemeriksaan dompet { -helius } gagal
 copy-pause-watch-processing-failed = Dijeda: aktivitas dompet tidak dapat diproses
+copy-pause-storage-restored = Dijeda: data salin dipulihkan setelah kegagalan penyimpanan
 copy-pause-unspecified = Dijeda
 
 copy-pause-short-user = oleh Anda
@@ -53,6 +55,7 @@ copy-pause-short-watch-detached = pantauan hilang
 copy-pause-short-watch-budget-exceeded = batas pantau
 copy-pause-short-helius-unavailable = penyedia pantau
 copy-pause-short-watch-processing-failed = pemrosesan pantau
+copy-pause-short-storage-restored = data dipulihkan
 copy-state-paused = Dijeda
 copy-state-paused-reason = Dijeda · { $reason }
 

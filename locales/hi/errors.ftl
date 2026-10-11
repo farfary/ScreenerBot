@@ -327,6 +327,7 @@ errors-trade-force-stop-active = इमरजेंसी स्टॉप सक
 errors-trade-template-not-found = { $template } नाम का कोई ट्रेडर टेम्पलेट नहीं है
 errors-trade-manual-force-stopped = इमरजेंसी स्टॉप सक्रिय होने पर मैन्युअल ट्रेडिंग बंद रहती है
 errors-trade-core-services-not-ready = कोर सर्विसेज़ ट्रेडिंग के लिए तैयार नहीं हैं: { $pending }
+errors-trade-storage-unavailable = ट्रेडिंग डेटा उपलब्ध नहीं है या पुनर्स्थापित किया जा रहा है: { $detail }
 errors-trade-mint-invalid = टोकन मिंट एड्रेस { $mint } अमान्य है
 errors-trade-blacklisted = टोकन { $mint } ब्लैकलिस्ट है
 errors-trade-slippage-invalid = स्लिपेज { $slippage }% (0, { $maximum }] के भीतर होना चाहिए

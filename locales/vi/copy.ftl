@@ -31,6 +31,7 @@ copy-skip-entry-blocked = Lệnh vào bị chặn
 copy-entry-block-force-stopped = Giao dịch đang bị dừng cưỡng chế
 copy-entry-block-loss-limit = Giới hạn lỗ đang chặn các lệnh vào mới
 copy-entry-block-connectivity = Các dịch vụ cần thiết không khả dụng
+copy-entry-block-storage-unavailable = Dữ liệu giao dịch không khả dụng hoặc đang được khôi phục
 copy-entry-block-position-limit = Đã đạt giới hạn vị thế đang mở
 copy-entry-block-already-open = Đã có một vị thế đang mở
 copy-entry-block-reentry-cooldown = Thời gian chờ vào lại token
@@ -45,6 +46,7 @@ copy-pause-watch-detached = Tự động tạm dừng: ví không còn được 
 copy-pause-watch-budget-exceeded = Đã tạm dừng: ví này đạt giới hạn { $limit } chữ ký cho mỗi lần kiểm tra theo dõi trước khi bắt kịp
 copy-pause-helius-unavailable = Đã tạm dừng: kiểm tra ví qua { -helius } thất bại
 copy-pause-watch-processing-failed = Đã tạm dừng: không thể xử lý hoạt động của ví
+copy-pause-storage-restored = Đã tạm dừng: dữ liệu copy đã được khôi phục sau sự cố lưu trữ
 copy-pause-unspecified = Đã tạm dừng
 
 copy-pause-short-user = do bạn
@@ -53,6 +55,7 @@ copy-pause-short-watch-detached = mất theo dõi
 copy-pause-short-watch-budget-exceeded = giới hạn theo dõi
 copy-pause-short-helius-unavailable = nhà cung cấp theo dõi
 copy-pause-short-watch-processing-failed = xử lý theo dõi
+copy-pause-short-storage-restored = dữ liệu đã khôi phục
 copy-state-paused = Đã tạm dừng
 copy-state-paused-reason = Đã tạm dừng · { $reason }
 

@@ -38,8 +38,8 @@ pub const FORCE_CLOSED_PREFIX: &str = "force_closed:";
 
 // Public API exports
 pub use operations::{
-    add_to_position, close_position_direct, open_position_direct, open_position_with_size,
-    partial_close_position, update_position_price,
+    add_to_position, awaiting_reconciliation, close_position_direct, open_position_direct,
+    open_position_with_size, partial_close_position, update_position_price,
 };
 
 pub use state::{

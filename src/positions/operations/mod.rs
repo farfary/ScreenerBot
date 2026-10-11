@@ -23,6 +23,8 @@ pub use force_close::{force_close_position, ForceClosed};
 pub use open::{open_position_direct, open_position_with_size};
 pub use partial_close::partial_close_position;
 
+use crate::database::catalog::POSITIONS;
+use crate::database::health::{self, StoreStatus};
 use crate::logger::{self, LogTag};
 use crate::positions::db::{save_position, update_position_price_fields};
 use crate::positions::state::acquire_position_lock;
@@ -31,6 +33,45 @@ use crate::positions::{Error, Result};
 use chrono::Utc;
 use serde_json::json;
 use tokio::time::{sleep, Duration};
+
+/// Refuse `transition` of `mint` while the positions store holds restored or recreated
+/// contents not yet reconciled with the wallet history. Only changes sized from the
+/// stored position call this (an add, a partial exit); a full close sizes from the
+/// on-chain balance and stays available.
+pub(crate) fn refuse_until_reconciled(transition: &'static str, mint: &str) -> Result<()> {
+    reconciliation_refusal(positions_status().as_ref(), transition, mint)
+}
+
+/// Whether the positions store holds restored or recreated contents not yet reconciled,
+/// so [`refuse_until_reconciled`] would refuse. The auto-trader asks this before it
+/// proposes an add or a partial exit, instead of attempting one per tick.
+pub fn awaiting_reconciliation() -> bool {
+    reconciliation_refusal(positions_status().as_ref(), "", "").is_err()
+}
+
+fn positions_status() -> Option<StoreStatus> {
+    POSITIONS
+        .paths()
+        .iter()
+        .find_map(|path| health::status(path))
+}
+
+fn reconciliation_refusal(
+    status: Option<&StoreStatus>,
+    transition: &'static str,
+    mint: &str,
+) -> Result<()> {
+    match status {
+        Some(status) if status.health.is_replacement() && !status.reconciled => {
+            Err(Error::StoreNotReconciled {
+                transition,
+                mint: mint.to_owned(),
+                state: status.health.as_str(),
+            })
+        }
+        _ => Ok(()),
+    }
+}
 
 /// Wait before retrying the next slippage rung of an exit.
 ///
@@ -209,4 +250,114 @@ pub async fn update_position_price(token_mint: &str, current_price: f64) -> Resu
     update_position_price_fields(&position).await?;
 
     Ok(())
+}
+
+#[cfg(test)]
+mod tests {
+    use std::path::PathBuf;
+
+    use super::{add_to_position, partial_close_position, reconciliation_refusal};
+    use crate::database::catalog::POSITIONS;
+    use crate::database::health::{self, StoreHealth, StoreStatus};
+    use crate::positions::types::TradeOrigin;
+    use crate::positions::Error;
+
+    fn replaced() -> [StoreHealth; 2] {
+        let quarantine = PathBuf::from("/operations-test/quarantine");
+        [
+            StoreHealth::Restored {
+                snapshot_at: None,
+                quarantine: quarantine.clone(),
+            },
+            StoreHealth::Recovered { quarantine },
+        ]
+    }
+
+    fn status(health: StoreHealth, reconciled: bool) -> StoreStatus {
+        StoreStatus {
+            store: "positions",
+            path: PathBuf::from("/operations-test/positions.db"),
+            health,
+            changed_at: chrono::Utc::now(),
+            reconciled,
+        }
+    }
+
+    #[test]
+    fn replaced_positions_refuse_changes_until_reconciled() {
+        for health in replaced() {
+            let state = health.as_str();
+            let waiting = status(health.clone(), false);
+            match reconciliation_refusal(Some(&waiting), "dca", "mint") {
+                Err(Error::StoreNotReconciled {
+                    transition: "dca",
+                    state: refused,
+                    ..
+                }) => assert_eq!(refused, state),
+                other => panic!("expected a refusal, got {other:?}"),
+            }
+            let reconciled = status(health, true);
+            assert!(reconciliation_refusal(Some(&reconciled), "dca", "mint").is_ok());
+        }
+        let healthy = status(StoreHealth::Healthy, true);
+        assert!(reconciliation_refusal(Some(&healthy), "partial_exit", "mint").is_ok());
+        assert!(reconciliation_refusal(None, "partial_exit", "mint").is_ok());
+    }
+
+    #[tokio::test]
+    async fn an_add_and_a_partial_exit_wait_for_a_restored_store() {
+        let [restored, _] = replaced();
+        let path = POSITIONS.paths().remove(0);
+        health::publish(&POSITIONS, &path, restored);
+
+        let add = add_to_position("mint", 0.1, None, TradeOrigin::Manual).await;
+        assert!(
+            matches!(
+                add,
+                Err(Error::StoreNotReconciled {
+                    transition: "dca",
+                    ..
+                })
+            ),
+            "{add:?}"
+        );
+        let partial = partial_close_position("mint", 50.0, "manual_exit", None).await;
+        assert!(
+            matches!(
+                partial,
+                Err(Error::StoreNotReconciled {
+                    transition: "partial_exit",
+                    ..
+                })
+            ),
+            "{partial:?}"
+        );
+
+        assert!(super::awaiting_reconciliation());
+        health::mark_reconciled(&path);
+        assert!(!super::awaiting_reconciliation());
+        let add = add_to_position("mint", 0.1, None, TradeOrigin::Manual).await;
+        assert!(matches!(add, Err(Error::NotFound { .. })), "{add:?}");
+    }
+
+    /// Only operations sized from the stored position wait for reconciliation; a full
+    /// close sizes from the on-chain balance, and a force close books a write-off, so
+    /// both stay available after a restore.
+    #[test]
+    fn only_position_sized_operations_wait_for_reconciliation() {
+        let gate = "refuse_until_reconciled(";
+        assert!(include_str!("dca.rs").contains(gate));
+        assert!(include_str!("partial_close.rs").contains(gate));
+        for (file, source) in [
+            ("close.rs", include_str!("close.rs")),
+            ("force_close.rs", include_str!("force_close.rs")),
+            ("open.rs", include_str!("open.rs")),
+            ("exit_ladder.rs", include_str!("exit_ladder.rs")),
+        ] {
+            assert!(
+                !source.contains(gate),
+                "{file} must not wait for reconciliation"
+            );
+        }
+    }
 }

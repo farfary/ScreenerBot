@@ -330,6 +330,7 @@ errors-trade-force-stop-active = penghentian darurat aktif; hapus terlebih dahul
 errors-trade-template-not-found = tidak ada template trader bernama { $template }
 errors-trade-manual-force-stopped = trading manual dinonaktifkan selama penghentian darurat aktif
 errors-trade-core-services-not-ready = layanan inti belum siap untuk trading: { $pending }
+errors-trade-storage-unavailable = data trading tidak tersedia atau sedang dipulihkan: { $detail }
 errors-trade-mint-invalid = alamat mint token tidak valid { $mint }
 errors-trade-blacklisted = token { $mint } masuk daftar hitam
 errors-trade-slippage-invalid = slippage { $slippage }% harus dalam rentang (0, { $maximum }]

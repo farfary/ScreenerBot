@@ -76,6 +76,15 @@ pub enum Error {
     HoldingUnattributable { mint: String, detail: String },
     #[error("persisted position {field} has unknown value '{value}'")]
     UnknownPersistedValue { field: &'static str, value: String },
+    /// The positions store holds restored or recreated contents that the wallet history
+    /// has not been reconciled against yet, so a change sized from the stored position
+    /// is refused before anything is sent.
+    #[error("the {transition} of token {mint} waits until the {state} positions store is reconciled with the wallet history")]
+    StoreNotReconciled {
+        transition: &'static str,
+        mint: String,
+        state: &'static str,
+    },
 
     // --- validation ---
     #[error("invalid price {price} for token {mint}")]
@@ -166,7 +175,8 @@ impl ErrorClass for Error {
             | Error::DuplicateOpenRound { .. }
             | Error::EntryLanded { .. }
             | Error::UnverifiedEntryArchive { .. }
-            | Error::UnknownPersistedValue { .. } => false,
+            | Error::UnknownPersistedValue { .. }
+            | Error::StoreNotReconciled { .. } => false,
             // Validation failures are a property of the input, not the attempt.
             Error::InvalidPrice { .. }
             | Error::InvalidTradeSize { .. }
@@ -217,7 +227,8 @@ impl ErrorClass for Error {
             | Error::EntryLanded { .. }
             | Error::UnverifiedEntryArchive { .. }
             | Error::HoldingUnattributable { .. }
-            | Error::UnknownPersistedValue { .. } => Severity::Warning,
+            | Error::UnknownPersistedValue { .. }
+            | Error::StoreNotReconciled { .. } => Severity::Warning,
             Error::AlreadyStored { .. } | Error::DuplicateOpenRound { .. } => Severity::Error,
             Error::InvalidPrice { .. }
             | Error::InvalidTradeSize { .. }
@@ -252,6 +263,7 @@ impl ErrorClass for Error {
             | Error::EntryLanded { .. }
             | Error::UnverifiedEntryArchive { .. }
             | Error::HoldingUnattributable { .. }
+            | Error::StoreNotReconciled { .. }
             | Error::ZeroExitAmount { .. } => 409,
             Error::UnknownPersistedValue { .. }
             | Error::InvalidPrice { .. }

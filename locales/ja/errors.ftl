@@ -330,6 +330,7 @@ errors-trade-force-stop-active = 緊急停止が有効です。先に解除し�
 errors-trade-template-not-found = { $template } という名前のトレーダーテンプレートはありません
 errors-trade-manual-force-stopped = 緊急停止が有効な間は、手動取引は無効です
 errors-trade-core-services-not-ready = コアサービスが取引の準備できていません: { $pending }
+errors-trade-storage-unavailable = 取引データが利用できないか、復元中です: { $detail }
 errors-trade-mint-invalid = トークンのミントアドレス { $mint } が無効です
 errors-trade-blacklisted = トークン { $mint } はブラックリストに登録されています
 errors-trade-slippage-invalid = スリッページ { $slippage }% は (0, { $maximum }] の範囲で指定してください

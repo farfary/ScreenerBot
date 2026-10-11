@@ -13,7 +13,7 @@ use serde::Serialize;
 use crate::errors::DatabaseError;
 use crate::logger::{self, LogTag};
 
-use super::catalog::StoreSpec;
+use super::catalog::{StoreClass, StoreSpec};
 use super::recovery::{FailureKind, RecoveryAction};
 
 /// The state of one store file.
@@ -62,6 +62,26 @@ impl StoreHealth {
             StoreHealth::Unavailable { .. } | StoreHealth::Rebuilding { .. }
         )
     }
+
+    /// Whether the store's contents are older than the moment it failed: a snapshot copy
+    /// or an empty file standing in for the damaged one.
+    pub fn is_replacement(&self) -> bool {
+        matches!(
+            self,
+            StoreHealth::Restored { .. } | StoreHealth::Recovered { .. }
+        )
+    }
+
+    /// The serialized name of the state.
+    pub fn as_str(&self) -> &'static str {
+        match self {
+            StoreHealth::Healthy => "healthy",
+            StoreHealth::Rebuilding { .. } => "rebuilding",
+            StoreHealth::Restored { .. } => "restored",
+            StoreHealth::Recovered { .. } => "recovered",
+            StoreHealth::Unavailable { .. } => "unavailable",
+        }
+    }
 }
 
 /// One store's entry in the registry.
@@ -71,6 +91,16 @@ pub struct StoreStatus {
     pub path: PathBuf,
     pub health: StoreHealth,
     pub changed_at: DateTime<Utc>,
+    /// False while a Ledger store holds replacement contents that the wallet history has
+    /// not yet been reconciled against; money decisions that read the store wait for it.
+    pub reconciled: bool,
+}
+
+impl StoreStatus {
+    /// Whether the store is open and its contents may drive money decisions.
+    pub fn is_settled(&self) -> bool {
+        self.health.is_open() && self.reconciled
+    }
 }
 
 static REGISTRY: LazyLock<RwLock<BTreeMap<PathBuf, StoreStatus>>> =
@@ -86,6 +116,7 @@ pub fn publish(spec: &StoreSpec, path: &Path, health: StoreHealth) {
         return;
     }
     log_transition(spec, path, &health);
+    let reconciled = !(spec.class == StoreClass::Ledger && health.is_replacement());
     registry.insert(
         path.to_path_buf(),
         StoreStatus {
@@ -93,8 +124,30 @@ pub fn publish(spec: &StoreSpec, path: &Path, health: StoreHealth) {
             path: path.to_path_buf(),
             health,
             changed_at: Utc::now(),
+            reconciled,
         },
     );
+}
+
+/// Record that the replacement contents of the store at `path` were reconciled against
+/// the wallet history. The state is kept, so the restore stays visible. Returns whether
+/// the store was waiting for it.
+pub fn mark_reconciled(path: &Path) -> bool {
+    let mut registry = REGISTRY.write().unwrap_or_else(PoisonError::into_inner);
+    let Some(status) = registry.get_mut(path).filter(|status| !status.reconciled) else {
+        return false;
+    };
+    status.reconciled = true;
+    logger::info(
+        LogTag::System,
+        &format!(
+            "{} ({}): {} contents reconciled with the wallet history",
+            status.store,
+            path.display(),
+            status.health.as_str()
+        ),
+    );
+    true
 }
 
 fn log_transition(spec: &StoreSpec, path: &Path, health: &StoreHealth) {
@@ -164,7 +217,7 @@ pub fn all() -> Vec<StoreStatus> {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::database::catalog::RPC_STATS;
+    use crate::database::catalog::{POSITIONS, RPC_STATS};
 
     #[test]
     fn a_change_of_state_is_recorded_and_a_repeat_is_not() {
@@ -192,5 +245,52 @@ mod tests {
         assert_eq!(json["health"]["state"], "unavailable");
         assert_eq!(json["health"]["failure"], "disk_full");
         assert_eq!(json["health"]["isolated"], false);
+    }
+
+    #[test]
+    fn a_replaced_ledger_store_waits_for_reconciliation_and_keeps_its_state() {
+        let restored = StoreHealth::Restored {
+            snapshot_at: None,
+            quarantine: PathBuf::from("/health-test/quarantine"),
+        };
+        let recovered = StoreHealth::Recovered {
+            quarantine: PathBuf::from("/health-test/quarantine"),
+        };
+        for (index, health) in [restored, recovered].into_iter().enumerate() {
+            let path = PathBuf::from(format!("/health-test/positions-{index}.db"));
+            publish(&POSITIONS, &path, health.clone());
+            let recorded = status(&path).expect("recorded");
+            assert!(recorded.health.is_open());
+            assert!(!recorded.reconciled);
+            assert!(!recorded.is_settled());
+
+            assert!(mark_reconciled(&path));
+            let recorded = status(&path).expect("recorded");
+            assert!(recorded.reconciled);
+            assert!(recorded.is_settled());
+            assert_eq!(recorded.health, health);
+            assert!(!mark_reconciled(&path), "a second mark changes nothing");
+        }
+    }
+
+    #[test]
+    fn only_a_replaced_ledger_store_starts_unreconciled() {
+        let path = PathBuf::from("/health-test/positions-healthy.db");
+        publish(&POSITIONS, &path, StoreHealth::Healthy);
+        assert!(status(&path).expect("recorded").reconciled);
+        assert!(!mark_reconciled(&path));
+
+        let cache = PathBuf::from("/health-test/rpc_stats-recovered.db");
+        publish(
+            &RPC_STATS,
+            &cache,
+            StoreHealth::Recovered {
+                quarantine: PathBuf::from("/health-test/quarantine"),
+            },
+        );
+        assert!(status(&cache).expect("recorded").is_settled());
+        assert!(!mark_reconciled(&PathBuf::from(
+            "/health-test/never-opened.db"
+        )));
     }
 }

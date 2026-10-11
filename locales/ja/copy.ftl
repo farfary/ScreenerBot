@@ -31,6 +31,7 @@ copy-skip-entry-blocked = エントリーがブロックされました
 copy-entry-block-force-stopped = 取引は強制停止されています
 copy-entry-block-loss-limit = 損失上限により新規エントリーがブロックされています
 copy-entry-block-connectivity = 必要なサービスが利用できません
+copy-entry-block-storage-unavailable = 取引データが利用できないか、復元中です
 copy-entry-block-position-limit = オープンポジションの上限に達しました
 copy-entry-block-already-open = ポジションはすでにオープンしています
 copy-entry-block-reentry-cooldown = トークン再エントリーのクールダウン
@@ -45,6 +46,7 @@ copy-pause-watch-detached = 自動一時停止: ウォレットのウォッチ�
 copy-pause-watch-budget-exceeded = 一時停止: このウォレットは追いつく前に、ウォッチのチェック上限（{ $limit } シグネチャ）に達しました
 copy-pause-helius-unavailable = 一時停止: { -helius } のウォレットチェックに失敗しました
 copy-pause-watch-processing-failed = 一時停止: ウォレットの動きを処理できませんでした
+copy-pause-storage-restored = 一時停止: ストレージ障害の後、コピーデータが復元されました
 copy-pause-unspecified = 一時停止中
 
 copy-pause-short-user = ユーザー操作
@@ -53,6 +55,7 @@ copy-pause-short-watch-detached = ウォッチ切断
 copy-pause-short-watch-budget-exceeded = ウォッチ上限
 copy-pause-short-helius-unavailable = ウォッチプロバイダー
 copy-pause-short-watch-processing-failed = ウォッチ処理
+copy-pause-short-storage-restored = データ復元
 copy-state-paused = 一時停止中
 copy-state-paused-reason = 一時停止中 · { $reason }
 

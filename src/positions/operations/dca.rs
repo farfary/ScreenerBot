@@ -28,6 +28,7 @@ pub async fn add_to_position(
     slippage_pct: Option<f64>,
     origin: TradeOrigin,
 ) -> Result<String> {
+    super::refuse_until_reconciled("dca", token_mint)?;
     // Serialize per-mint DCA operations
     let _lock = acquire_position_lock(token_mint).await;
     // The open position of the mint, archived or not: an add on an archived one unarchives

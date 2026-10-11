@@ -31,6 +31,7 @@ copy-skip-entry-blocked = 入场被拦截
 copy-entry-block-force-stopped = 交易已被强制停止
 copy-entry-block-loss-limit = 亏损限额已拦截新入场
 copy-entry-block-connectivity = 所需服务不可用
+copy-entry-block-storage-unavailable = 交易数据不可用或正在恢复
 copy-entry-block-position-limit = 已达持仓上限
 copy-entry-block-already-open = 已有仓位处于持仓中
 copy-entry-block-reentry-cooldown = 代币再入场冷却时间
@@ -45,6 +46,7 @@ copy-pause-watch-detached = 已自动暂停：不再监控该钱包
 copy-pause-watch-budget-exceeded = 已暂停：该钱包在追上进度前已达到 { $limit } 个签名的监控检查上限
 copy-pause-helius-unavailable = 已暂停：{ -helius } 钱包检查失败
 copy-pause-watch-processing-failed = 已暂停：无法处理钱包活动
+copy-pause-storage-restored = 已暂停：存储故障后已恢复跟单数据
 copy-pause-unspecified = 已暂停
 
 copy-pause-short-user = 由您暂停
@@ -53,6 +55,7 @@ copy-pause-short-watch-detached = 监控丢失
 copy-pause-short-watch-budget-exceeded = 监控上限
 copy-pause-short-helius-unavailable = 监控提供商
 copy-pause-short-watch-processing-failed = 监控处理
+copy-pause-short-storage-restored = 数据已恢复
 copy-state-paused = 已暂停
 copy-state-paused-reason = 已暂停 · { $reason }
 

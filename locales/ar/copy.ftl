@@ -31,6 +31,7 @@ copy-skip-entry-blocked = الدخول محظور
 copy-entry-block-force-stopped = التداول في إيقاف قسري
 copy-entry-block-loss-limit = حد الخسارة يمنع عمليات الدخول الجديدة
 copy-entry-block-connectivity = الخدمات المطلوبة غير متاحة
+copy-entry-block-storage-unavailable = بيانات التداول غير متاحة أو قيد الاستعادة
 copy-entry-block-position-limit = تم بلوغ حد المراكز المفتوحة
 copy-entry-block-already-open = يوجد مركز مفتوح بالفعل
 copy-entry-block-reentry-cooldown = فترة تهدئة إعادة دخول الرمز
@@ -45,6 +46,7 @@ copy-pause-watch-detached = إيقاف مؤقت تلقائي: لم تعد الم
 copy-pause-watch-budget-exceeded = متوقف مؤقتًا: بلغت هذه المحفظة حد فحص المراقبة (عدد التوقيعات: { $limit }) قبل أن تلحق بالركب
 copy-pause-helius-unavailable = متوقف مؤقتًا: فشلت فحوصات المحفظة عبر { -helius }
 copy-pause-watch-processing-failed = متوقف مؤقتًا: تعذّرت معالجة نشاط المحفظة
+copy-pause-storage-restored = متوقف مؤقتًا: استُعيدت بيانات النسخ بعد عطل في التخزين
 copy-pause-unspecified = متوقف مؤقتًا
 
 copy-pause-short-user = بواسطتك
@@ -53,6 +55,7 @@ copy-pause-short-watch-detached = فُقدت المراقبة
 copy-pause-short-watch-budget-exceeded = حد المراقبة
 copy-pause-short-helius-unavailable = مزوّد المراقبة
 copy-pause-short-watch-processing-failed = معالجة المراقبة
+copy-pause-short-storage-restored = استعادة البيانات
 copy-state-paused = متوقف مؤقتًا
 copy-state-paused-reason = متوقف مؤقتًا · { $reason }
 

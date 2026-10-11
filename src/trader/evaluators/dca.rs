@@ -224,6 +224,14 @@ pub async fn process_dca_opportunities() -> crate::trader::Result<Vec<TradeDecis
         return Ok(Vec::new());
     }
 
+    if positions::awaiting_reconciliation() {
+        logger::debug(
+            LogTag::Trader,
+            "DCA evaluation skipped: the positions store is not reconciled",
+        );
+        return Ok(Vec::new());
+    }
+
     // Get all open positions
     let open_positions = positions::get_open_positions().await;
     if open_positions.is_empty() {

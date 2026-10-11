@@ -358,6 +358,7 @@ errors-trade-force-stop-active = 긴급 중지가 활성화되어 있습니다. 
 errors-trade-template-not-found = 트레이더 템플릿을 찾을 수 없습니다: { $template }
 errors-trade-manual-force-stopped = 긴급 중지가 활성화된 동안에는 수동 거래를 사용할 수 없습니다
 errors-trade-core-services-not-ready = 거래에 필요한 핵심 서비스가 준비되지 않았습니다: { $pending }
+errors-trade-storage-unavailable = 거래 데이터를 사용할 수 없거나 복원 중입니다: { $detail }
 errors-trade-mint-invalid = 토큰 민트 주소가 올바르지 않습니다: { $mint }
 errors-trade-blacklisted = 블랙리스트에 등록된 토큰입니다: { $mint }
 errors-trade-slippage-invalid = 슬리피지 { $slippage }%는 (0, { $maximum }] 범위여야 합니다

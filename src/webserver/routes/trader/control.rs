@@ -41,6 +41,10 @@ pub(super) fn trader_failure(error: &trader::Error) -> Response {
             ApiError::new(code, ids::ERRORS_TRADE_CORE_SERVICES_NOT_READY)
                 .text_arg("pending", pending.clone())
         }
+        Error::StorageUnavailable { detail } => {
+            ApiError::new(code, ids::ERRORS_TRADE_STORAGE_UNAVAILABLE)
+                .text_arg("detail", detail.clone())
+        }
         Error::InvalidMint { mint } => {
             ApiError::new(code, ids::ERRORS_TRADE_MINT_INVALID).text_arg("mint", mint.clone())
         }

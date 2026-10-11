@@ -31,6 +31,7 @@ copy-skip-entry-blocked = Einstieg blockiert
 copy-entry-block-force-stopped = Trading ist per Sofortstopp angehalten
 copy-entry-block-loss-limit = Verlustlimit blockiert neue Einstiege
 copy-entry-block-connectivity = Erforderliche Dienste sind nicht verfügbar
+copy-entry-block-storage-unavailable = Handelsdaten sind nicht verfügbar oder werden wiederhergestellt
 copy-entry-block-position-limit = Limit offener Positionen erreicht
 copy-entry-block-already-open = Eine Position ist bereits offen
 copy-entry-block-reentry-cooldown = Abkühlphase für erneuten Token-Einstieg
@@ -45,6 +46,7 @@ copy-pause-watch-detached = Automatisch pausiert: Die Wallet wird nicht mehr beo
 copy-pause-watch-budget-exceeded = Pausiert: Diese Wallet hat ihr Limit von { $limit } Signaturen pro Beobachtungsprüfung erreicht, bevor sie aufgeholt hat
 copy-pause-helius-unavailable = Pausiert: Wallet-Prüfungen über { -helius } sind fehlgeschlagen
 copy-pause-watch-processing-failed = Pausiert: Wallet-Aktivität konnte nicht verarbeitet werden
+copy-pause-storage-restored = Pausiert: Copy-Daten wurden nach einem Speicherfehler wiederhergestellt
 copy-pause-unspecified = Pausiert
 
 copy-pause-short-user = durch Sie
@@ -53,6 +55,7 @@ copy-pause-short-watch-detached = Beobachtung verloren
 copy-pause-short-watch-budget-exceeded = Beobachtungslimit
 copy-pause-short-helius-unavailable = Beobachtungsanbieter
 copy-pause-short-watch-processing-failed = Beobachtungsverarbeitung
+copy-pause-short-storage-restored = Daten wiederhergestellt
 copy-state-paused = Pausiert
 copy-state-paused-reason = Pausiert · { $reason }
 

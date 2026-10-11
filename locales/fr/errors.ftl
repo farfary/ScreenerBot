@@ -355,6 +355,7 @@ errors-trade-force-stop-active = L'arrêt d'urgence est actif ; levez-le d'abord
 errors-trade-template-not-found = Aucun modèle de Trader nommé { $template }
 errors-trade-manual-force-stopped = Le trading manuel est désactivé tant que l'arrêt d'urgence est actif
 errors-trade-core-services-not-ready = Les services essentiels ne sont pas prêts pour le trading : { $pending }
+errors-trade-storage-unavailable = Les données de trading sont indisponibles ou en cours de restauration : { $detail }
 errors-trade-mint-invalid = Adresse de mint de token invalide { $mint }
 errors-trade-blacklisted = Le token { $mint } est sur liste noire
 errors-trade-slippage-invalid = Le slippage de { $slippage }{ " " }% doit être dans l'intervalle ]0, { $maximum }]

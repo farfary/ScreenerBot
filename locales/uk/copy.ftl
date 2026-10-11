@@ -31,6 +31,7 @@ copy-skip-entry-blocked = Вхід заблоковано
 copy-entry-block-force-stopped = Торгівлю примусово зупинено
 copy-entry-block-loss-limit = Ліміт збитків блокує нові входи
 copy-entry-block-connectivity = Потрібні сервіси недоступні
+copy-entry-block-storage-unavailable = Торгові дані недоступні або відновлюються
 copy-entry-block-position-limit = Досягнуто ліміту відкритих позицій
 copy-entry-block-already-open = Позицію вже відкрито
 copy-entry-block-reentry-cooldown = Пауза перед повторним входом у токен
@@ -45,6 +46,7 @@ copy-pause-watch-detached = Автопауза: за гаманцем більш
 copy-pause-watch-budget-exceeded = Призупинено: цей гаманець досяг ліміту перевірок стеження (підписів за перевірку: { $limit }), не наздогнавши активність
 copy-pause-helius-unavailable = Призупинено: перевірки гаманця через { -helius } не вдалися
 copy-pause-watch-processing-failed = Призупинено: не вдалося обробити активність гаманця
+copy-pause-storage-restored = Призупинено: дані копіювання відновлено після збою сховища
 copy-pause-unspecified = Призупинено
 
 copy-pause-short-user = вами
@@ -53,6 +55,7 @@ copy-pause-short-watch-detached = стеження втрачено
 copy-pause-short-watch-budget-exceeded = ліміт стеження
 copy-pause-short-helius-unavailable = провайдер стеження
 copy-pause-short-watch-processing-failed = обробка стеження
+copy-pause-short-storage-restored = дані відновлено
 copy-state-paused = Призупинено
 copy-state-paused-reason = Призупинено · { $reason }
 

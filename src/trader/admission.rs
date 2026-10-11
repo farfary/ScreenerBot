@@ -7,7 +7,13 @@
 //! what produced the signal. Extracted from `evaluators::entry` so a second entry source
 //! runs the identical gauntlet instead of a copy of it.
 
+use crate::database::catalog::{StoreSpec, COPY_TRADING, POSITIONS, STRATEGIES};
+use crate::database::health::{self, StoreStatus};
 use crate::trader::safety;
+
+/// The stores every entry decision reads: open positions and their limits, copy tasks and
+/// their budgets, and the strategies that produce signals.
+pub const ENTRY_STORES: [&StoreSpec; 3] = [&POSITIONS, &COPY_TRADING, &STRATEGIES];
 
 /// Why an entry may not proceed. Every variant is a value a caller can record, count and
 /// render — the checks used to be log lines only.
@@ -17,6 +23,9 @@ pub enum EntryBlock {
     ForceStopped,
     LossLimit,
     Connectivity(String),
+    /// An entry store is not open, or holds restored contents not yet reconciled with
+    /// the wallet history. The detail names the store and its state.
+    StorageUnavailable(String),
     PositionLimit,
     AlreadyOpen,
     ReentryCooldown,
@@ -42,6 +51,36 @@ pub fn open_cooldown_wait_secs(
     (elapsed < cooldown_secs).then_some(cooldown_secs - elapsed)
 }
 
+/// The block for the first entry store in `statuses` that is not settled. A store the
+/// storage phase has not reached (`None`) does not block: its owner opens it on first use
+/// and reports its own error.
+fn storage_block<'a>(
+    statuses: impl IntoIterator<Item = Option<&'a StoreStatus>>,
+) -> Option<EntryBlock> {
+    statuses
+        .into_iter()
+        .flatten()
+        .find(|status| !status.is_settled())
+        .map(|status| {
+            let state = status.health.as_str();
+            EntryBlock::StorageUnavailable(if status.health.is_open() {
+                format!("{}: {state}, not yet reconciled", status.store)
+            } else {
+                format!("{}: {state}", status.store)
+            })
+        })
+}
+
+/// Refuse an entry while any entry store is not settled.
+pub fn check_entry_storage() -> Result<(), EntryBlock> {
+    let statuses: Vec<Option<StoreStatus>> = ENTRY_STORES
+        .iter()
+        .flat_map(|spec| spec.paths())
+        .map(|path| health::status(&path))
+        .collect();
+    storage_block(statuses.iter().map(Option::as_ref)).map_or(Ok(()), Err)
+}
+
 pub async fn check_open_cooldown() -> Result<(), EntryBlock> {
     let cooldown_secs = crate::config::with_config(|config| {
         config.positions.position_open_cooldown_secs.max(0) as u64
@@ -57,7 +96,92 @@ pub async fn check_open_cooldown() -> Result<(), EntryBlock> {
 mod tests {
     use chrono::{Duration, TimeZone, Utc};
 
-    use super::{open_cooldown_wait_secs, EntryBlock};
+    use std::path::PathBuf;
+
+    use super::{open_cooldown_wait_secs, storage_block, EntryBlock};
+    use crate::database::health::{StoreHealth, StoreStatus};
+    use crate::database::recovery::RecoveryAction;
+    use crate::errors::DatabaseError;
+
+    fn store(store: &'static str, health: StoreHealth, reconciled: bool) -> StoreStatus {
+        StoreStatus {
+            store,
+            path: PathBuf::from(format!("/admission-test/{store}.db")),
+            health,
+            changed_at: Utc::now(),
+            reconciled,
+        }
+    }
+
+    fn healthy(store_id: &'static str) -> StoreStatus {
+        store(store_id, StoreHealth::Healthy, true)
+    }
+
+    #[test]
+    fn every_store_state_that_is_not_open_blocks_entries() {
+        let disk_full = DatabaseError::DiskFull {
+            operation: "open".to_owned(),
+            message: "full".to_owned(),
+        };
+        let closed = [
+            StoreHealth::Rebuilding {
+                since: Utc::now(),
+                phase: "restore".to_owned(),
+            },
+            StoreHealth::unavailable(&disk_full, RecoveryAction::Unavailable),
+            StoreHealth::unavailable(&disk_full, RecoveryAction::Isolate),
+        ];
+        for health in closed {
+            let state = health.as_str();
+            let copy = store("copy_trading", health, true);
+            let positions = healthy("positions");
+            let strategies = healthy("strategies");
+            assert_eq!(
+                storage_block([Some(&positions), Some(&copy), Some(&strategies)]),
+                Some(EntryBlock::StorageUnavailable(format!(
+                    "copy_trading: {state}"
+                )))
+            );
+        }
+    }
+
+    #[test]
+    fn replaced_contents_block_entries_until_reconciled() {
+        let quarantine = PathBuf::from("/admission-test/quarantine");
+        for health in [
+            StoreHealth::Restored {
+                snapshot_at: None,
+                quarantine: quarantine.clone(),
+            },
+            StoreHealth::Recovered {
+                quarantine: quarantine.clone(),
+            },
+        ] {
+            let state = health.as_str();
+            let waiting = store("positions", health.clone(), false);
+            let strategies = healthy("strategies");
+            assert_eq!(
+                storage_block([Some(&waiting), Some(&strategies)]),
+                Some(EntryBlock::StorageUnavailable(format!(
+                    "positions: {state}, not yet reconciled"
+                )))
+            );
+            let reconciled = store("positions", health, true);
+            assert_eq!(storage_block([Some(&reconciled), Some(&strategies)]), None);
+        }
+    }
+
+    #[test]
+    fn settled_or_unopened_stores_never_block_entries() {
+        let positions = healthy("positions");
+        let copy = healthy("copy_trading");
+        let strategies = healthy("strategies");
+        assert_eq!(
+            storage_block([Some(&positions), Some(&copy), Some(&strategies)]),
+            None
+        );
+        assert_eq!(storage_block([None, None, None]), None);
+    }
 
     #[test]
     fn open_cooldown_reports_the_boundary_without_rounding_it_away() {
@@ -82,6 +206,7 @@ mod tests {
             EntryBlock::ForceStopped => "copy-entry-block-force-stopped",
             EntryBlock::LossLimit => "copy-entry-block-loss-limit",
             EntryBlock::Connectivity(_) => "copy-entry-block-connectivity",
+            EntryBlock::StorageUnavailable(_) => "copy-entry-block-storage-unavailable",
             EntryBlock::PositionLimit => "copy-entry-block-position-limit",
             EntryBlock::AlreadyOpen => "copy-entry-block-already-open",
             EntryBlock::ReentryCooldown => "copy-entry-block-reentry-cooldown",
@@ -98,6 +223,7 @@ mod tests {
             EntryBlock::ForceStopped,
             EntryBlock::LossLimit,
             EntryBlock::Connectivity(String::new()),
+            EntryBlock::StorageUnavailable(String::new()),
             EntryBlock::PositionLimit,
             EntryBlock::AlreadyOpen,
             EntryBlock::ReentryCooldown,
@@ -122,8 +248,8 @@ mod tests {
 
 /// Run the source-independent admission gauntlet for a potential entry.
 ///
-/// Order: force stop -> loss limit -> connectivity -> position limits -> existing
-/// position -> re-entry cooldown -> blacklist.
+/// Order: force stop -> loss limit -> entry storage -> connectivity -> position limits ->
+/// existing position -> re-entry cooldown -> blacklist.
 ///
 /// `required_endpoints` differs by source on purpose: strategy entries depend on filter
 /// freshness and require rpc + dexscreener + rugcheck; a copy entry requires rpc only,
@@ -154,6 +280,19 @@ pub async fn check_entry_admission(
             ),
         );
         return Err(EntryBlock::LossLimit);
+    }
+
+    // Entry stores open and reconciled: a restored or recreated ledger would size and
+    // count against a past state of the positions, copy budgets or strategies.
+    if let Err(block) = check_entry_storage() {
+        crate::logger::debug(
+            crate::logger::LogTag::Trader,
+            &format!(
+                "[ENTRY-EVAL] {}: blocked by storage: {block:?}",
+                &mint[..8.min(mint.len())]
+            ),
+        );
+        return Err(block);
     }
 
     // 1. Connectivity check - no required endpoint may be CONFIRMED down.

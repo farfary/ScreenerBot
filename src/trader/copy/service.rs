@@ -77,6 +77,7 @@ pub async fn run(shutdown: Arc<Notify>, database: CopyDatabase) {
 }
 
 async fn reconcile_runtime_state(database: &CopyDatabase) -> crate::trader::Result<()> {
+    super::guards::pause_after_store_restore(database).await?;
     let abandoned = database.reconcile_stale_claims(300).await?;
     if abandoned > 0 {
         logger::warning(

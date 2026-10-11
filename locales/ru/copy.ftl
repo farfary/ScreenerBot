@@ -31,6 +31,7 @@ copy-skip-entry-blocked = Вход заблокирован
 copy-entry-block-force-stopped = Торговля принудительно остановлена
 copy-entry-block-loss-limit = Лимит убытков блокирует новые входы
 copy-entry-block-connectivity = Необходимые сервисы недоступны
+copy-entry-block-storage-unavailable = Торговые данные недоступны или восстанавливаются
 copy-entry-block-position-limit = Достигнут лимит открытых позиций
 copy-entry-block-already-open = Позиция уже открыта
 copy-entry-block-reentry-cooldown = Пауза до повторного входа в токен
@@ -45,6 +46,7 @@ copy-pause-watch-detached = Автопауза: кошелёк больше не
 copy-pause-watch-budget-exceeded = Пауза: кошелёк достиг лимита проверок наблюдения ({ $limit } подписей) раньше, чем наверстал отставание
 copy-pause-helius-unavailable = Пауза: не удалось выполнить проверки кошелька через { -helius }
 copy-pause-watch-processing-failed = Пауза: не удалось обработать активность кошелька
+copy-pause-storage-restored = Пауза: данные копирования восстановлены после сбоя хранилища
 copy-pause-unspecified = Пауза
 
 copy-pause-short-user = вами
@@ -53,6 +55,7 @@ copy-pause-short-watch-detached = наблюдение потеряно
 copy-pause-short-watch-budget-exceeded = лимит наблюдения
 copy-pause-short-helius-unavailable = провайдер наблюдения
 copy-pause-short-watch-processing-failed = обработка наблюдения
+copy-pause-short-storage-restored = данные восстановлены
 copy-state-paused = Пауза
 copy-state-paused-reason = Пауза · { $reason }
 

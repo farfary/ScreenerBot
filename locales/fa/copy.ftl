@@ -31,6 +31,7 @@ copy-skip-entry-blocked = ورود مسدود شد
 copy-entry-block-force-stopped = معاملات به‌طور اجباری متوقف شده است
 copy-entry-block-loss-limit = محدودیت ضرر ورودهای جدید را مسدود می‌کند
 copy-entry-block-connectivity = سرویس‌های موردنیاز در دسترس نیستند
+copy-entry-block-storage-unavailable = داده‌های معاملات در دسترس نیست یا در حال بازیابی است
 copy-entry-block-position-limit = به سقف پوزیشن‌های باز رسیده است
 copy-entry-block-already-open = یک پوزیشن از قبل باز است
 copy-entry-block-reentry-cooldown = زمان انتظار ورود مجدد توکن
@@ -45,6 +46,7 @@ copy-pause-watch-detached = توقف خودکار: کیف پول دیگر پای
 copy-pause-watch-budget-exceeded = متوقف شد: این کیف پول پیش از رسیدن به وضعیت به‌روز، به سقف { $limit } امضا در هر بررسی پایش رسید
 copy-pause-helius-unavailable = متوقف شد: بررسی کیف پول از طریق { -helius } ناموفق بود
 copy-pause-watch-processing-failed = متوقف شد: فعالیت کیف پول قابل پردازش نبود
+copy-pause-storage-restored = متوقف شد: داده‌های کپی پس از خرابی ذخیره‌سازی بازیابی شد
 copy-pause-unspecified = متوقف
 
 copy-pause-short-user = توسط شما
@@ -53,6 +55,7 @@ copy-pause-short-watch-detached = پایش قطع شد
 copy-pause-short-watch-budget-exceeded = سقف پایش
 copy-pause-short-helius-unavailable = ارائه‌دهنده پایش
 copy-pause-short-watch-processing-failed = پردازش پایش
+copy-pause-short-storage-restored = بازیابی داده
 copy-state-paused = متوقف
 copy-state-paused-reason = متوقف · { $reason }
 

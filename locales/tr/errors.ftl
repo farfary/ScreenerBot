@@ -355,6 +355,7 @@ errors-trade-force-stop-active = Acil durdurma etkin; önce onu kaldırın
 errors-trade-template-not-found = Şu adla bir trader şablonu yok: { $template }
 errors-trade-manual-force-stopped = Acil durdurma etkinken manuel işlem devre dışıdır
 errors-trade-core-services-not-ready = Çekirdek hizmetler işleme hazır değil: { $pending }
+errors-trade-storage-unavailable = İşlem verileri kullanılamıyor veya geri yükleniyor: { $detail }
 errors-trade-mint-invalid = Token mint adresi geçersiz: { $mint }
 errors-trade-blacklisted = Token kara listede: { $mint }
 errors-trade-slippage-invalid = Kayma %{ $slippage } değeri (0, { $maximum }] aralığında olmalı

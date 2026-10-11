@@ -327,6 +327,7 @@ errors-trade-force-stop-active = екстрена зупинка активна;
 errors-trade-template-not-found = шаблону трейдера з назвою { $template } немає
 errors-trade-manual-force-stopped = ручну торгівлю вимкнено, доки активна екстрена зупинка
 errors-trade-core-services-not-ready = основні сервіси не готові до торгівлі: { $pending }
+errors-trade-storage-unavailable = торгові дані недоступні або відновлюються: { $detail }
 errors-trade-mint-invalid = недійсна адреса мінта токена { $mint }
 errors-trade-blacklisted = токен { $mint } у чорному списку
 errors-trade-slippage-invalid = проковзування { $slippage }% має бути в межах (0, { $maximum }]

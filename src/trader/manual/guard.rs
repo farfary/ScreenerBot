@@ -2,10 +2,11 @@
 // SPDX-License-Identifier: BUSL-1.1
 
 //! Preflight gates shared by every manual trade entry point (dashboard routes and
-//! agent tools): emergency stop, core-service readiness, address shape,
-//! blacklist, and the per-trade slippage bound. A refused trade is also recorded
+//! agent tools): emergency stop, core-service readiness, storage settlement for
+//! buys and adds, address shape, blacklist, and the per-trade slippage bound. A refused trade is also recorded
 //! as a failed action so it shows in the dashboard like any other attempt.
 
+use crate::trader::admission::{check_entry_storage, EntryBlock};
 use crate::trader::constants::MAX_MANUAL_SLIPPAGE_PCT;
 use crate::trader::Error;
 
@@ -66,6 +67,18 @@ async fn holds_position_for(kind: ManualTradeKind, mint: &str) -> bool {
     }
 }
 
+/// The unsettled-store text when `kind` grows exposure (a buy or an add) while an entry
+/// store is not settled. A sell never waits: it must always be able to leave a position.
+fn entry_storage_detail(kind: ManualTradeKind) -> Option<String> {
+    if kind == ManualTradeKind::Sell {
+        return None;
+    }
+    match check_entry_storage() {
+        Err(EntryBlock::StorageUnavailable(detail)) => Some(detail),
+        _ => None,
+    }
+}
+
 /// Run every gate a manual trade must pass before it may be submitted.
 pub async fn preflight(
     kind: ManualTradeKind,
@@ -79,6 +92,8 @@ pub async fn preflight(
         Some(Error::CoreServicesNotReady {
             pending: crate::global::get_pending_services().join(", "),
         })
+    } else if let Some(detail) = entry_storage_detail(kind) {
+        Some(Error::StorageUnavailable { detail })
     } else if crate::chains::adapter().validate_address(mint).is_err() {
         Some(Error::InvalidMint {
             mint: mint.to_owned(),
@@ -128,6 +143,45 @@ pub fn validate_percentage(percentage: f64) -> Result<f64, Error> {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::database::catalog::POSITIONS;
+    use crate::database::health::{self, StoreHealth};
+    use std::sync::atomic::Ordering;
+
+    /// A buy or an add is refused while the positions store is replaced and unreconciled;
+    /// a sell is never gated by storage, so it fails on its own checks instead.
+    #[tokio::test]
+    async fn storage_gates_buys_and_adds_but_not_sells() {
+        crate::global::CONNECTIVITY_SYSTEM_READY.store(true, Ordering::SeqCst);
+        crate::global::TOKENS_SYSTEM_READY.store(true, Ordering::SeqCst);
+        crate::global::POSITIONS_SYSTEM_READY.store(true, Ordering::SeqCst);
+        crate::global::POOL_SERVICE_READY.store(true, Ordering::SeqCst);
+        crate::global::TRANSACTIONS_SYSTEM_READY.store(true, Ordering::SeqCst);
+        let path = POSITIONS.paths().remove(0);
+        health::publish(
+            &POSITIONS,
+            &path,
+            StoreHealth::Restored {
+                snapshot_at: None,
+                quarantine: std::path::PathBuf::from("/guard-test/quarantine"),
+            },
+        );
+
+        for kind in [ManualTradeKind::Buy, ManualTradeKind::Add] {
+            let refused = preflight(kind, "mint", BlacklistPolicy::Enforce).await;
+            assert!(
+                matches!(refused, Err(Error::StorageUnavailable { .. })),
+                "{kind:?}: {refused:?}"
+            );
+        }
+        let sell = preflight(ManualTradeKind::Sell, "mint", BlacklistPolicy::Ignore).await;
+        assert!(
+            !matches!(sell, Err(Error::StorageUnavailable { .. })),
+            "{sell:?}"
+        );
+
+        health::mark_reconciled(&path);
+        assert!(entry_storage_detail(ManualTradeKind::Buy).is_none());
+    }
 
     #[test]
     fn slippage_override_is_bounded() {

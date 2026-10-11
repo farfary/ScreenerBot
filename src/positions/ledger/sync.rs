@@ -1445,6 +1445,43 @@ pub async fn sync_wallet_history() -> super::super::error::Result<SyncSummary> {
         return Err(Error::NotInitialised);
     };
 
+    let summary = sync_rounds(&transactions_db, &wallet_address).await?;
+    reconcile_replaced_stores(&transactions_db).await;
+    Ok(summary)
+}
+
+/// Mark the replaced entry stores reconciled once a sync completes over the full
+/// transaction history: restored positions, copy tasks and strategies then reflect every
+/// wallet movement since their snapshot, and entries may use them again. Before the
+/// history bootstrap completes, a sync sees only part of the wallet, so nothing changes.
+async fn reconcile_replaced_stores(
+    transactions_db: &crate::transactions::database::TransactionDatabase,
+) {
+    match transactions_db.get_bootstrap_state().await {
+        Ok(state) if state.full_history_completed => {
+            for spec in crate::trader::admission::ENTRY_STORES {
+                for path in spec.paths() {
+                    crate::database::health::mark_reconciled(&path);
+                }
+            }
+        }
+        Ok(_) => {}
+        Err(e) => logger::warning(
+            LogTag::Positions,
+            &format!(
+                "Wallet-history sync could not read the history bootstrap state; replaced stores stay unreconciled: {e}"
+            ),
+        ),
+    }
+}
+
+/// Reduce the wallet's processed history into rounds and apply the resulting plan.
+async fn sync_rounds(
+    transactions_db: &crate::transactions::database::TransactionDatabase,
+    wallet_address: &str,
+) -> super::super::error::Result<SyncSummary> {
+    use crate::positions::Error;
+
     // Which legs the trader booked itself, read BEFORE the history: a bot-owned round can
     // then absorb an outside buy without double-counting the bot's own, and a leg booked
     // after this read marks a round that may predate it. A failure here is not fatal: with
@@ -1469,7 +1506,7 @@ pub async fn sync_wallet_history() -> super::super::error::Result<SyncSummary> {
     let trader_legs = TraderLegs::from_rows(booked_legs);
 
     let deltas = transactions_db
-        .get_subject_deltas(&wallet_address)
+        .get_subject_deltas(wallet_address)
         .await
         .map_err(|e| Error::WalletHistorySync {
             detail: e.to_string(),
@@ -1484,7 +1521,7 @@ pub async fn sync_wallet_history() -> super::super::error::Result<SyncSummary> {
     // reduced rounds are still the best truth we have, they simply keep their observed
     // balances (and `reconcile_with_wallet` is what would have flagged a mismatch).
     let holdings =
-        match crate::chains::solana::assets::ata::get_all_token_accounts(&wallet_address).await {
+        match crate::chains::solana::assets::ata::get_all_token_accounts(wallet_address).await {
             Ok(accounts) => accounts,
             Err(e) => {
                 logger::warning(

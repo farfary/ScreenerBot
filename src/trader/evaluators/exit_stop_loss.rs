@@ -102,6 +102,16 @@ pub async fn check_stop_loss(
     ) else {
         return Ok(None);
     };
+    if exit_percentage.is_some() && crate::positions::awaiting_reconciliation() {
+        logger::debug(
+            LogTag::Trader,
+            &format!(
+                "Partial stop loss skipped for {}: the positions store is not reconciled",
+                position.symbol
+            ),
+        );
+        return Ok(None);
+    }
 
     logger::info(
         LogTag::Trader,

@@ -29,6 +29,7 @@ pub async fn partial_close_position(
     exit_reason: &str,
     slippage_pct: Option<f64>,
 ) -> Result<String> {
+    super::refuse_until_reconciled("partial_exit", token_mint)?;
     // Serialize per-mint operations to avoid overlapping partials/full exits
     let _lock = acquire_position_lock(token_mint).await;
 

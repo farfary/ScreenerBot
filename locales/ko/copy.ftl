@@ -31,6 +31,7 @@ copy-skip-entry-blocked = 진입 차단됨
 copy-entry-block-force-stopped = 거래가 강제 중지되었습니다
 copy-entry-block-loss-limit = 손실 한도로 신규 진입이 차단되었습니다
 copy-entry-block-connectivity = 필요한 서비스를 사용할 수 없습니다
+copy-entry-block-storage-unavailable = 거래 데이터를 사용할 수 없거나 복원 중입니다
 copy-entry-block-position-limit = 보유 포지션 한도에 도달했습니다
 copy-entry-block-already-open = 이미 포지션이 열려 있습니다
 copy-entry-block-reentry-cooldown = 토큰 재진입 쿨다운
@@ -45,6 +46,7 @@ copy-pause-watch-detached = 자동 일시 중지: 지갑을 더 이상 감시하
 copy-pause-watch-budget-exceeded = 일시 중지: 이 지갑이 따라잡기 전에 서명 { $limit }건의 감시 확인 한도에 도달했습니다
 copy-pause-helius-unavailable = 일시 중지: { -helius } 지갑 확인에 실패했습니다
 copy-pause-watch-processing-failed = 일시 중지: 지갑 활동을 처리하지 못했습니다
+copy-pause-storage-restored = 일시 중지: 저장소 오류 후 카피 데이터가 복원되었습니다
 copy-pause-unspecified = 일시 중지됨
 
 copy-pause-short-user = 사용자
@@ -53,6 +55,7 @@ copy-pause-short-watch-detached = 감시 끊김
 copy-pause-short-watch-budget-exceeded = 감시 한도
 copy-pause-short-helius-unavailable = 감시 제공자
 copy-pause-short-watch-processing-failed = 감시 처리
+copy-pause-short-storage-restored = 데이터 복원
 copy-state-paused = 일시 중지됨
 copy-state-paused-reason = 일시 중지됨 · { $reason }
 

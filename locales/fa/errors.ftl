@@ -363,6 +363,7 @@ errors-trade-force-stop-active = توقف اضطراری فعال است؛ اب�
 errors-trade-template-not-found = قالب معامله‌گری با نام { $template } وجود ندارد
 errors-trade-manual-force-stopped = تا زمانی که توقف اضطراری فعال است، معامله دستی غیرفعال است
 errors-trade-core-services-not-ready = سرویس‌های اصلی برای معامله آماده نیستند: { $pending }
+errors-trade-storage-unavailable = داده‌های معامله در دسترس نیستند یا در حال بازیابی‌اند: { $detail }
 errors-trade-mint-invalid = آدرس مینت توکن { $mint } نامعتبر است
 errors-trade-blacklisted = توکن { $mint } در فهرست سیاه است
 errors-trade-slippage-invalid = اسلیپیج { $slippage }% باید در بازه ⁨(0, { $maximum }]⁩ باشد

@@ -31,6 +31,7 @@ copy-skip-entry-blocked = Entrada bloqueada
 copy-entry-block-force-stopped = El trading está detenido a la fuerza
 copy-entry-block-loss-limit = El límite de pérdidas bloquea nuevas entradas
 copy-entry-block-connectivity = Los servicios necesarios no están disponibles
+copy-entry-block-storage-unavailable = Los datos de trading no están disponibles o se están restaurando
 copy-entry-block-position-limit = Se alcanzó el límite de posiciones abiertas
 copy-entry-block-already-open = Ya hay una posición abierta
 copy-entry-block-reentry-cooldown = Enfriamiento de reentrada del token
@@ -45,6 +46,7 @@ copy-pause-watch-detached = Pausa automática: la billetera ya no está en segui
 copy-pause-watch-budget-exceeded = Pausada: esta billetera alcanzó su límite de { $limit } firmas por comprobación de seguimiento antes de ponerse al día
 copy-pause-helius-unavailable = Pausada: fallaron las comprobaciones de la billetera con { -helius }
 copy-pause-watch-processing-failed = Pausada: no se pudo procesar la actividad de la billetera
+copy-pause-storage-restored = Pausada: los datos de copia se restauraron tras un fallo de almacenamiento
 copy-pause-unspecified = En pausa
 
 copy-pause-short-user = por ti
@@ -53,6 +55,7 @@ copy-pause-short-watch-detached = seguimiento perdido
 copy-pause-short-watch-budget-exceeded = límite de seguimiento
 copy-pause-short-helius-unavailable = proveedor de seguimiento
 copy-pause-short-watch-processing-failed = proceso de seguimiento
+copy-pause-short-storage-restored = datos restaurados
 copy-state-paused = En pausa
 copy-state-paused-reason = En pausa · { $reason }
 
