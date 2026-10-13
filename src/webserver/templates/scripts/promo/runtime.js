@@ -21,6 +21,7 @@ const assetQuery = assetVersion ? `?v=${encodeURIComponent(assetVersion)}` : "";
 
 const overlay = await import(`./overlay.js${assetQuery}`);
 const audio = await import(`./audio.js${assetQuery}`);
+const framing = await import(`./framing.js${assetQuery}`);
 const { loadPage, getCurrentPage } = await import(`../core/router.js${assetQuery}`);
 const { pauseAllPollers, resumeAllPollers, listPollers } = await import(
   `../core/poller.js${assetQuery}`
@@ -151,7 +152,7 @@ function loadingVisible() {
   // variant, so it has to be listed: without it the token details dialog was
   // photographed with "Waiting for chart data…" spinning in half the frame.
   const candidates = document.querySelectorAll(
-    ".page-loading, [data-loading='true'], .loading-spinner, .chart-loading-spinner," +
+    "main.content[aria-busy='true'], .page-loading, [data-loading='true'], .loading-spinner, .chart-loading-spinner," +
       " .skeleton, .skeleton-row"
   );
   for (const el of candidates) {
@@ -413,6 +414,26 @@ export async function goto({ page, timeout = DEFAULT_TIMEOUT_MS } = {}) {
   return { page: getCurrentPage() };
 }
 
+/** Apply a still's framing after layout settles and verify it across consecutive paints. */
+export async function prepareFrame({ scrolls = [], timeout = DEFAULT_TIMEOUT_MS } = {}) {
+  const deadline = performance.now() + timeout;
+  let mismatch = "unsettled layout";
+  await waitStable({ timeout });
+  while (performance.now() < deadline) {
+    const plan = framing.frameScrollers({ scrolls });
+    await waitStable({ timeout: Math.max(1, deadline - performance.now()) });
+    let quiet = 0;
+    while (quiet < QUIET_FRAMES && performance.now() < deadline) {
+      await nextFrame();
+      mismatch = framing.framingMismatch(plan);
+      if (mismatch) break;
+      quiet += 1;
+    }
+    if (quiet === QUIET_FRAMES) return { scrolls: framing.describeFraming(plan) };
+  }
+  throw new Error(`prepareFrame timed out after ${timeout}ms (${mismatch})`);
+}
+
 /**
  * Click an element the way a person would: the promo cursor travels to it, presses,
  * and only then is the real click dispatched. `moveCursor: false` clicks silently,
@@ -601,6 +622,7 @@ export function setMotionScale({ scale = 1 } = {}) {
 // ---------------------------------------------------------------------------
 
 const COMMANDS = {
+  "promo.prepareFrame": prepareFrame,
   "wait.stable": waitStable,
   "wait.viewport": waitViewport,
   "promo.measureChrome": measureChrome,
@@ -681,6 +703,7 @@ window.__SB_PROMO__ = {
   measureChrome,
   waitFor,
   goto,
+  prepareFrame,
   click,
   hover,
   type,

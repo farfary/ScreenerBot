@@ -114,6 +114,7 @@ pub async fn get_promo_script(Path(file): Path<String>) -> Response {
 
     let content = match file.as_str() {
         "runtime.js" => Some(embeds::PROMO_RUNTIME),
+        "framing.js" => Some(embeds::PROMO_FRAMING),
         "overlay.js" => Some(embeds::PROMO_OVERLAY),
         "audio.js" => Some(embeds::PROMO_AUDIO),
         _ => None,

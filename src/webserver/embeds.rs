@@ -340,6 +340,7 @@ pub const CORE_CHAT_WIDGET: &str = include_str!("templates/scripts/core/chat_wid
 // Promo Studio runtime — served and loaded only under --promo-capture. Kept in
 // its own namespace so nothing in the normal dashboard can reach it.
 pub const PROMO_RUNTIME: &str = include_str!("templates/scripts/promo/runtime.js");
+pub const PROMO_FRAMING: &str = include_str!("templates/scripts/promo/framing.js");
 pub const PROMO_OVERLAY: &str = include_str!("templates/scripts/promo/overlay.js");
 pub const PROMO_AUDIO: &str = include_str!("templates/scripts/promo/audio.js");
 pub(super) const PROMO_CAPTURE_STYLES: &str = include_str!("templates/styles/promo/capture.css");
