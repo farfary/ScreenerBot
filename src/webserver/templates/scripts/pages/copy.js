@@ -90,16 +90,6 @@ function createLifecycle() {
     }
   }
 
-  async function loadFeatureLabel() {
-    try {
-      const features = await requestManager.fetch("/api/features");
-      const label = $("#copy-feature-label");
-      if (label) label.hidden = features?.trading?.copy_wallet !== "beta";
-    } catch {
-      // Without the feature map the page simply carries no Beta label.
-    }
-  }
-
   function render() {
     renderStrip(page);
     const error = $("#copy-load-error");
@@ -239,7 +229,6 @@ function createLifecycle() {
       render();
       void load();
       void loadDefaults();
-      void loadFeatureLabel();
     },
 
     activate(ctx) {

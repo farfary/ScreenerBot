@@ -159,7 +159,6 @@ copy-range-label =
     .aria-label = Tarih aralığı
 
 copy-page-title = Kopya İşlem
-copy-page-beta = Beta
 copy-strip-loading = Yükleniyor
 copy-strip-unavailable = Kullanılamıyor
 copy-strip-setup-required = Kurulum gerekli · kopya işlem cüzdan ve RPC gerektirir

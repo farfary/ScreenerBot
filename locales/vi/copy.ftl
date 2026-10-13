@@ -152,7 +152,6 @@ copy-range-label =
     .aria-label = Khoảng ngày
 
 copy-page-title = Copy trading
-copy-page-beta = Beta
 copy-strip-loading = Đang tải
 copy-strip-unavailable = Không khả dụng
 copy-strip-setup-required = Cần thiết lập · giao dịch sao chép cần ví và RPC

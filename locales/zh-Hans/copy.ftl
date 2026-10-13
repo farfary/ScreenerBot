@@ -158,7 +158,6 @@ copy-range-label =
 ## Page strip
 
 copy-page-title = 跟单交易
-copy-page-beta = 测试版
 copy-strip-loading = 加载中
 copy-strip-unavailable = 不可用
 copy-strip-setup-required = 需要设置 · 跟单交易需要钱包和 RPC

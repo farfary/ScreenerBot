@@ -56,10 +56,11 @@ mod tests {
         assert!(is_trading_feature_available("stop-loss"));
         assert!(is_trading_feature_available("dca"));
         assert!(is_trading_feature_available("copy-wallet"));
-        assert_eq!(
-            get_trading_feature_status("copy_wallet"),
-            FeatureStatus::Beta
-        );
+        for id in ["copy-wallet", "copy_wallet"] {
+            assert_eq!(get_trading_feature_status(id), FeatureStatus::Available);
+        }
+        let features = serde_json::to_value(get_features()).unwrap();
+        assert_eq!(features["trading"]["copy_wallet"], "available");
         assert!(!is_trading_feature_available("unknown-feature"));
     }
 

@@ -160,7 +160,6 @@ copy-range-label =
 ## Page strip (pages/copy.html, pages/copy/summary.js)
 
 copy-page-title = 카피 트레이딩
-copy-page-beta = 베타
 copy-strip-loading = 불러오는 중
 copy-strip-unavailable = 사용할 수 없음
 copy-strip-setup-required = 설정 필요 · 카피 트레이딩에는 지갑과 RPC가 필요합니다

@@ -166,7 +166,6 @@ copy-range-label =
     .aria-label = Intervalo de datas
 
 copy-page-title = Copy Trading
-copy-page-beta = Beta
 copy-strip-loading = Carregando
 copy-strip-unavailable = Indisponível
 copy-strip-setup-required = Configuração necessária · o copy trading precisa de carteira e RPC

@@ -182,7 +182,6 @@ copy-range-label =
 ## Page strip (pages/copy.html, pages/copy/summary.js)
 
 copy-page-title = Copy Trading
-copy-page-beta = Beta
 copy-strip-loading = Loading
 copy-strip-unavailable = Unavailable
 copy-strip-setup-required = Setup required · copy trading needs a wallet and RPC

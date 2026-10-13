@@ -165,7 +165,6 @@ copy-range-label =
 ## Page strip
 
 copy-page-title = کپی‌تریدینگ
-copy-page-beta = بتا
 copy-strip-loading = در حال بارگذاری
 copy-strip-unavailable = در دسترس نیست
 copy-strip-setup-required = راه‌اندازی لازم است · کپی ترید به کیف پول و RPC نیاز دارد

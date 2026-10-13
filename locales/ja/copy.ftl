@@ -158,7 +158,6 @@ copy-range-label =
 ## Page strip
 
 copy-page-title = コピートレード
-copy-page-beta = ベータ
 copy-strip-loading = 読み込み中
 copy-strip-unavailable = 利用不可
 copy-strip-setup-required = セットアップが必要 · コピートレードにはウォレットと RPC が必要です

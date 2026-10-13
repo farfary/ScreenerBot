@@ -165,7 +165,6 @@ copy-range-label =
 ## Page strip
 
 copy-page-title = Copy-Trading
-copy-page-beta = Beta
 copy-strip-loading = Wird geladen
 copy-strip-unavailable = Nicht verfügbar
 copy-strip-setup-required = Einrichtung erforderlich · Copy-Trading benötigt Wallet und RPC

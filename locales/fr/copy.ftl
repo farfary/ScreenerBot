@@ -176,7 +176,6 @@ copy-range-label =
 ## Page strip (pages/copy.html, pages/copy/summary.js)
 
 copy-page-title = Copy trading
-copy-page-beta = Bêta
 copy-strip-loading = Chargement
 copy-strip-unavailable = Indisponible
 copy-strip-setup-required = Configuration requise · le copy trading nécessite un portefeuille et un RPC

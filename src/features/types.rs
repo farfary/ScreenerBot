@@ -110,7 +110,7 @@ impl Default for TradingFeatures {
             partial_exit: FeatureStatus::Available,
             loss_blacklist: FeatureStatus::Available,
             strategies: FeatureStatus::Available,
-            copy_wallet: FeatureStatus::Beta,
+            copy_wallet: FeatureStatus::Available,
         }
     }
 }

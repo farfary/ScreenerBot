@@ -161,7 +161,6 @@ copy-range-label =
     .aria-label = तारीख़ सीमा
 
 copy-page-title = कॉपी ट्रेडिंग
-copy-page-beta = बीटा
 copy-strip-loading = लोड हो रहा है
 copy-strip-unavailable = उपलब्ध नहीं
 copy-strip-setup-required = सेटअप ज़रूरी · कॉपी ट्रेडिंग के लिए वॉलेट और RPC चाहिए

@@ -179,7 +179,6 @@ copy-range-label =
 ## Page strip
 
 copy-page-title = Копитрейдинг
-copy-page-beta = Бета
 copy-strip-loading = Загрузка
 copy-strip-unavailable = Недоступно
 copy-strip-setup-required = Требуется настройка · для копи-трейдинга нужны кошелёк и RPC

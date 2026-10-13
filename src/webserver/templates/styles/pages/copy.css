@@ -47,14 +47,6 @@
   color: var(--primary-color);
 }
 
-.copy-strip-feature {
-  font-size: var(--font-size-xs);
-  font-weight: 600;
-  letter-spacing: 0.06em;
-  text-transform: uppercase;
-  color: var(--warning-color);
-}
-
 .copy-strip-state {
   font-size: var(--font-size-sm);
   color: var(--text-muted);

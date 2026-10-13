@@ -189,7 +189,6 @@ copy-range-label =
 ## Page strip
 
 copy-page-title = نسخ التداول
-copy-page-beta = تجريبي (Beta)
 copy-strip-loading = جارٍ التحميل
 copy-strip-unavailable = غير متاح
 copy-strip-setup-required = الإعداد مطلوب · نسخ التداول يتطلب محفظة وRPC

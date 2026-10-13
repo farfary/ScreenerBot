@@ -158,7 +158,6 @@ copy-range-label =
 ## Page strip
 
 copy-page-title = Copy Trading
-copy-page-beta = Beta
 copy-strip-loading = Memuat
 copy-strip-unavailable = Tidak tersedia
 copy-strip-setup-required = Penyiapan diperlukan · copy trading memerlukan dompet dan RPC

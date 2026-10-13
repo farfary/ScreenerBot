@@ -21,7 +21,7 @@
     "partial_exit": "available",
     "loss_blacklist": "available",
     "strategies": "available",
-    "copy_wallet": "beta"
+    "copy_wallet": "available"
   },
   "integrations": {
     "telegram": "available"
