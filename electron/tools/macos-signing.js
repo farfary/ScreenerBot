@@ -79,6 +79,9 @@ function readEntitlements(target) {
 
 /** Exercise dyld and the shipped Electron runtime without running app code or starting the core. */
 function probeElectronLoader(appPath, architecture) {
+  if (process.arch !== architecture) {
+    throw new Error(`Packaged Electron loader requires a native ${architecture} runner; current architecture is ${process.arch}`);
+  }
   const executable = path.join(appPath, 'Contents', 'MacOS', 'ScreenerBot');
   const env = Object.fromEntries(Object.entries(process.env).filter(([key]) =>
     !key.startsWith('DYLD_') && key !== 'NODE_OPTIONS'));

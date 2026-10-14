@@ -13,7 +13,11 @@ import { fileURLToPath } from "node:url";
 const ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "../..");
 const require = createRequire(path.join(ROOT, "electron", "package.json"));
 const plist = require("plist");
-const { macosSigningOptions, verifyProcessSignature } = require("./tools/macos-signing.js");
+const {
+  macosSigningOptions,
+  verifyProcessSignature,
+  probeElectronLoader,
+} = require("./tools/macos-signing.js");
 const LIBRARY_VALIDATION = "com.apple.security.cs.disable-library-validation";
 const ALLOW_JIT = "com.apple.security.cs.allow-jit";
 
@@ -128,5 +132,18 @@ test("the macOS release gate verifies the actual package and architecture", () =
     workflow.includes(
       'node electron/tools/macos-signing.js --verify "$APP" "${{ matrix.electron-arch }}"'
     )
+  );
+  const packaging = workflow.slice(
+    workflow.indexOf("  package-macos:"),
+    workflow.indexOf("  package-linux:")
+  );
+  assert.match(packaging, /os: macos-\d+-intel\s+arch: x64/);
+});
+
+test("the packaged loader refuses a non-native runner before spawning Electron", () => {
+  const foreignArchitecture = process.arch === "x64" ? "arm64" : "x64";
+  assert.throws(
+    () => probeElectronLoader("/unused-package", foreignArchitecture),
+    /requires a native .* runner/
   );
 });
