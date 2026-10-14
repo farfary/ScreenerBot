@@ -46,6 +46,22 @@ test("changing a shell source changes the revision", () => {
   assert.equal(computeShellRevision(), before);
 });
 
+test("macOS signing policy and every entitlement template are part of the revision", () => {
+  const shellRoot = path.join(path.dirname(REVISION_FILE), "..");
+  for (const relative of ["tools/macos-signing.js", "assets/entitlements/default.plist", "assets/entitlements/jit.plist", "assets/entitlements/plugin.plist"]) {
+    const file = path.join(shellRoot, relative);
+    const before = computeShellRevision();
+    const original = fs.readFileSync(file);
+    try {
+      fs.appendFileSync(file, relative.endsWith(".plist") ? "\n<!-- revision probe -->\n" : "\n// revision probe\n");
+      assert.notEqual(computeShellRevision(), before, relative);
+    } finally {
+      fs.writeFileSync(file, original);
+    }
+    assert.equal(computeShellRevision(), before, relative);
+  }
+});
+
 test("line endings are not part of the revision", () => {
   // The revision is computed on the Linux runner and re-asserted on the macOS
   // and Windows packaging runners. A Windows checkout may materialise CRLF,

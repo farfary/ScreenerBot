@@ -5,6 +5,7 @@
 
 const path = require('path');
 const { APP_ID, windowsInstallerIdentity } = require('./tools/windows-installer');
+const { macosSigningOptions } = require('./tools/macos-signing');
 
 // Platform-specific binary name
 const isWindows = process.platform === 'win32';
@@ -48,22 +49,10 @@ module.exports = {
         path.join(__dirname, 'redist', isArm64 ? 'vc_redist.arm64.exe' : 'vc_redist.x64.exe')
       ] : [])
     ],
-    // macOS bundles require a valid code signature. arm64 enforces signature
-    // validation at launch, so an unsigned bundle is refused; x86_64 executes
-    // unsigned code, so the same build runs on Intel.
-    //
-    // `-` is codesign's ad-hoc pseudo-identity, not a certificate name, so
-    // identity validation must be disabled for it: @electron/osx-sign otherwise
-    // resolves the identity against the keychain and throws "No identity found
-    // for signing". @electron/packager defaults `continueOnError` to true, which
-    // demotes that error to a warning and packages the bundle unsigned.
-    // `continueOnError: false` restores it as a build failure. An Apple identity
-    // supplied through APPLE_SIGNING_IDENTITY is keychain-validated as usual.
-    osxSign: {
-      identity: process.env.APPLE_SIGNING_IDENTITY || '-',
-      identityValidation: Boolean(process.env.APPLE_SIGNING_IDENTITY),
-      continueOnError: false,
-    },
+    // Ad-hoc signing seals the bundle but provides no Team ID for hardened
+    // runtime library validation. Per-process entitlements permit the bundled
+    // Electron frameworks while retaining the remaining runtime protections.
+    osxSign: macosSigningOptions(process.env.APPLE_SIGNING_IDENTITY),
     ...(process.env.APPLE_ID && process.env.APPLE_PASSWORD && process.env.APPLE_TEAM_ID
       ? {
           osxNotarize: {

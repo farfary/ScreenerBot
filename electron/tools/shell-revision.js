@@ -36,7 +36,7 @@ const REVISION_FILE = path.join(SHELL_ROOT, 'src', 'shell_revision.json');
 const REVISION_LENGTH = 12;
 
 const INPUT_DIRECTORIES = ['src', 'assets'];
-const INPUT_FILES = ['forge.config.js', 'tools/windows-installer.js'];
+const INPUT_FILES = ['forge.config.js', 'tools/windows-installer.js', 'tools/macos-signing.js'];
 /**
  * Files outside electron/ that are packaged into the shell (`extraResource`) and
  * that decide what it renders. Only these: the other catalogs belong to the
