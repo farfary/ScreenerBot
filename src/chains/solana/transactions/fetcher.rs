@@ -8,9 +8,10 @@
 // This module handles all blockchain data retrieval operations including
 // batch signature fetching, transaction details retrieval, and RPC optimization.
 
-use crate::chains::solana::solana_sdk::commitment_config::CommitmentConfig;
+use crate::chains::solana::solana_sdk::commitment_config::{CommitmentConfig, CommitmentLevel};
 use crate::chains::solana::solana_sdk::pubkey::Pubkey;
 use std::collections::HashMap;
+use std::future::Future;
 use std::time::{Duration, Instant};
 use tokio::time::sleep;
 
@@ -285,6 +286,15 @@ impl TransactionFetcher {
         let details = self.fetch_transaction_details_with_retry(signature).await?;
 
         let duration = start_time.elapsed();
+        logger::debug(
+            LogTag::Transactions,
+            &format!(
+                "Transaction details fetch completed in {}ms at {:?} commitment: {}",
+                duration.as_millis(),
+                self.config.commitment.commitment,
+                signature
+            ),
+        );
 
         if duration.as_millis() > 5000 {
             // Log slow fetches
@@ -390,6 +400,18 @@ impl TransactionFetcher {
         }
     }
 
+    async fn request_transaction_details<F, Fut>(
+        &self,
+        signature: &str,
+        request: F,
+    ) -> crate::Result<crate::chains::solana::rpc::TransactionDetails>
+    where
+        F: FnOnce(String, CommitmentLevel) -> Fut,
+        Fut: Future<Output = crate::Result<crate::chains::solana::rpc::TransactionDetails>>,
+    {
+        request(signature.to_owned(), self.config.commitment.commitment).await
+    }
+
     /// Fetch single transaction details from RPC
     async fn fetch_single_transaction_details(
         &self,
@@ -397,33 +419,35 @@ impl TransactionFetcher {
     ) -> crate::chains::solana::Result<crate::chains::solana::rpc::TransactionDetails> {
         let rpc_client = get_rpc_client();
 
-        // Use existing RPC client method
-        rpc_client
-            .get_transaction_details(signature)
-            .await
-            .map_err(|e| match &e {
-                // The RPC layer already signals "not found" structurally: a null
-                // `getTransaction` response is parsed into this exact tagged
-                // `DataError::ParseError` at the call site that owns it
-                // (`rpc/client/methods_impl.rs`). Recognize the tag, not the text.
-                crate::Error::Data(crate::errors::DataError::ParseError { data_type, .. })
-                    if data_type == "transaction" =>
-                {
-                    crate::chains::solana::Error::Execution(
-                        crate::chains::ExecutionFailure::NotFound {
-                            reference: signature.to_owned(),
-                        },
-                    )
-                }
-                crate::Error::Rpc(source) => crate::chains::solana::Error::RpcFailure {
-                    operation: "get_transaction_details",
-                    source: source.clone(),
-                },
-                _ => crate::chains::solana::Error::Rpc {
-                    operation: "get_transaction_details",
-                    detail: e.to_string(),
-                },
-            })
+        // Use the explicit commitment-aware RPC method so detail reads match the
+        // fetcher's configured consistency level.
+        self.request_transaction_details(signature, |signature, commitment| async move {
+            rpc_client
+                .get_transaction_details_with_commitment(&signature, commitment)
+                .await
+        })
+        .await
+        .map_err(|e| match &e {
+            // The RPC layer already signals "not found" structurally: a null
+            // `getTransaction` response is parsed into this exact tagged
+            // `DataError::ParseError` at the call site that owns it
+            // (`rpc/client/methods_impl.rs`). Recognize the tag, not the text.
+            crate::Error::Data(crate::errors::DataError::ParseError { data_type, .. })
+                if data_type == "transaction" =>
+            {
+                crate::chains::solana::Error::Execution(crate::chains::ExecutionFailure::NotFound {
+                    reference: signature.to_owned(),
+                })
+            }
+            crate::Error::Rpc(source) => crate::chains::solana::Error::RpcFailure {
+                operation: "get_transaction_details",
+                source: source.clone(),
+            },
+            _ => crate::chains::solana::Error::Rpc {
+                operation: "get_transaction_details",
+                detail: e.to_string(),
+            },
+        })
     }
 
     /// Fetch multiple transaction details concurrently with rate limiting
@@ -513,34 +537,8 @@ impl TransactionFetcher {
 }
 
 #[cfg(test)]
-mod tests {
-    use crate::chains::solana::error::Error as SolanaError;
-    use crate::errors::ErrorClass;
-    use crate::rpc::RpcError;
-
-    #[test]
-    fn transaction_fetcher_preserves_rpc_retry_classification() {
-        let unsupported_version = SolanaError::RpcFailure {
-            operation: "get_transaction_details",
-            source: RpcError::ProviderError {
-                code: -32015,
-                message: "Transaction version (1) is not supported".to_owned(),
-                data: None,
-            },
-        };
-        assert!(!unsupported_version.is_retryable());
-
-        let provider_fault = SolanaError::RpcFailure {
-            operation: "get_transaction_details",
-            source: RpcError::ProviderError {
-                code: -32005,
-                message: "node is unhealthy".to_owned(),
-                data: None,
-            },
-        };
-        assert!(provider_fault.is_retryable());
-    }
-}
+#[path = "fetcher/tests.rs"]
+mod tests;
 
 // =============================================================================
 // FETCHER METRICS

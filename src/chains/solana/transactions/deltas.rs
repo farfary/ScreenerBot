@@ -22,6 +22,35 @@ use crate::chains::ChainId;
 use crate::transactions::deltas::{DeltaKind, SubjectAssetDelta, NATIVE_SOL_SENTINEL};
 use crate::transactions::types::Transaction;
 
+/// Calculate native SOL movement across the subject and its owned token accounts.
+///
+/// Summing token-account lamports removes ATA rent and wrapping from the subject's
+/// apparent SOL movement while retaining wrapped-SOL swap consideration.
+pub(crate) fn subject_native_delta(
+    meta: &crate::chains::solana::rpc::TransactionMeta,
+    subject_index: usize,
+    owned_token_indices: impl IntoIterator<Item = usize>,
+) -> Option<i128> {
+    let subject_pre = i128::from(*meta.pre_balances.get(subject_index)?);
+    let subject_post = i128::from(*meta.post_balances.get(subject_index)?);
+    let mut delta = subject_post.checked_sub(subject_pre)?;
+    if subject_index == 0 {
+        delta = delta.checked_add(i128::from(meta.fee))?;
+    }
+
+    let mut seen = HashSet::new();
+    seen.insert(subject_index);
+    for index in owned_token_indices {
+        if !seen.insert(index) {
+            continue;
+        }
+        let pre = i128::from(*meta.pre_balances.get(index)?);
+        let post = i128::from(*meta.post_balances.get(index)?);
+        delta = delta.checked_add(post.checked_sub(pre)?)?;
+    }
+    Some(delta)
+}
+
 /// Below this, a native SOL delta is indistinguishable from transaction-fee noise.
 const NATIVE_NOISE_LAMPORTS: i128 = 50_000;
 
@@ -127,29 +156,21 @@ pub fn extract_subject_deltas(
     }
 
     // ---- native SOL delta ----
-    let subject_pre = meta.pre_balances.get(subject_index).copied().unwrap_or(0) as i128;
-    let subject_post = meta.post_balances.get(subject_index).copied().unwrap_or(0) as i128;
-    let mut native_delta = subject_post - subject_pre;
-    if subject_index == 0 {
-        native_delta += meta.fee as i128;
-    }
-
-    // ATA rent correction: creating/closing a wallet-owned (non-wSOL) token account
-    // moves rent out of/back into native SOL in the same transaction. That is not
-    // swap consideration and must not inflate an entry price or sale proceeds.
-    for (&account_index, mint) in owned_account_mints.iter() {
-        if account_index as usize == subject_index || mint == SOL_MINT {
-            continue;
-        }
-        let idx = account_index as usize;
-        let acc_pre = meta.pre_balances.get(idx).copied().unwrap_or(0) as i128;
-        let acc_post = meta.post_balances.get(idx).copied().unwrap_or(0) as i128;
-        native_delta += acc_post - acc_pre;
-    }
+    // ATA rent correction: non-wSOL token accounts carry rent, not swap
+    // consideration. Wrapped SOL accounts remain separate rows in the ledger and
+    // are excluded from this correction to preserve its established semantics.
+    let native_delta = subject_native_delta(
+        meta,
+        subject_index,
+        owned_account_mints
+            .iter()
+            .filter_map(|(&index, mint)| (mint != SOL_MINT).then_some(index as usize)),
+    );
 
     // ---- classification (transaction-level, shared by every delta emitted) ----
     let has_token_delta = !token_deltas.is_empty();
-    let native_above_noise = native_delta.unsigned_abs() > NATIVE_NOISE_LAMPORTS as u128;
+    let native_above_noise =
+        native_delta.is_some_and(|delta| delta.unsigned_abs() > NATIVE_NOISE_LAMPORTS as u128);
     let kind = if venue.is_some() {
         DeltaKind::Trade
     } else if has_token_delta || native_above_noise {
@@ -188,7 +209,9 @@ pub fn extract_subject_deltas(
         });
     }
 
-    if native_above_noise {
+    if let (Some(native_delta), true) = (native_delta, native_above_noise) {
+        let subject_pre = meta.pre_balances.get(subject_index).copied().unwrap_or(0) as i128;
+        let subject_post = meta.post_balances.get(subject_index).copied().unwrap_or(0) as i128;
         deltas.push(SubjectAssetDelta {
             chain: ChainId::Solana,
             wallet_address: subject_address.to_owned(),
@@ -254,6 +277,36 @@ mod tests {
         tx.success = success;
         tx.raw_transaction_data = Some(raw);
         tx
+    }
+
+    #[test]
+    fn native_delta_adds_fee_once_and_deduplicates_owned_accounts() {
+        let meta = serde_json::from_value(json!({
+            "fee": 3,
+            "preBalances": [100, 50, 20],
+            "postBalances": [90, 60, 15],
+            "preTokenBalances": [],
+            "postTokenBalances": []
+        }))
+        .expect("transaction metadata fixture parses");
+
+        assert_eq!(subject_native_delta(&meta, 0, [0, 1, 1, 2]), Some(-2));
+        assert_eq!(subject_native_delta(&meta, 0, [1]), Some(3));
+    }
+
+    #[test]
+    fn native_delta_rejects_balance_array_mismatches() {
+        let meta = serde_json::from_value(json!({
+            "fee": 3,
+            "preBalances": [100],
+            "postBalances": [90],
+            "preTokenBalances": [],
+            "postTokenBalances": []
+        }))
+        .expect("transaction metadata fixture parses");
+
+        assert_eq!(subject_native_delta(&meta, 1, []), None);
+        assert_eq!(subject_native_delta(&meta, 0, [1]), None);
     }
 
     #[test]

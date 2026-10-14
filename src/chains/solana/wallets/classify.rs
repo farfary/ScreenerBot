@@ -8,25 +8,22 @@
 //! to make that impossible: a `Swap` is only ever produced when a known DEX/
 //! aggregator program is present in the transaction (`program_ids::
 //! detect_router_from_program_id`) -- a balance delta alone, however swap-shaped, is
-//! never sufficient. See PLAN.md §6.4.
+//! never sufficient.
 
-use std::cmp::Ordering;
 use std::collections::{HashMap, HashSet};
 
-use crate::chains::solana::constants::lamports_to_sol;
-use crate::chains::solana::constants::{SOL_MINT, USDC_MINT, USDT_MINT};
+use crate::chains::solana::constants::{LAMPORTS_PER_SOL, SOL_MINT, USDC_MINT, USDT_MINT};
 use crate::chains::solana::transactions::analyzer::balance::account_keys_from_message;
 use crate::chains::solana::transactions::analyzer::dex::extract_program_ids;
+use crate::chains::solana::transactions::deltas::{extract_subject_deltas, subject_native_delta};
 use crate::chains::solana::transactions::program_ids::detect_router_from_program_id;
+use crate::transactions::deltas::NATIVE_SOL_SENTINEL;
 use crate::transactions::types::Transaction;
 use crate::wallets::watch::{ActivityKind, SwapSide, TransferDirection};
 
 /// Below this, a SOL balance delta is indistinguishable from transaction-fee noise
 /// (base fee + a moderate priority fee) rather than a real transfer.
 const FEE_NOISE_LAMPORTS: i64 = 50_000;
-
-/// Floating-point tolerance for "no change" when comparing UI token/SOL amounts.
-const EPSILON: f64 = 1e-9;
 
 /// Returns whether the decoded transaction may have changed the subject's assets.
 ///
@@ -52,16 +49,17 @@ pub fn subject_has_meaningful_effect(
         return true;
     };
 
-    let (Some(pre_sol), Some(post_sol)) = (
-        meta.pre_balances.get(*subject_index),
-        meta.post_balances.get(*subject_index),
-    ) else {
+    let owned_indices = meta
+        .pre_token_balances
+        .iter()
+        .chain(meta.post_token_balances.iter())
+        .flatten()
+        .filter(|balance| balance.owner.as_deref() == Some(subject_address))
+        .map(|balance| balance.account_index as usize)
+        .collect::<HashSet<_>>();
+    let Some(sol_delta) = subject_native_delta(meta, *subject_index, owned_indices) else {
         return true;
     };
-    let mut sol_delta = i128::from(*post_sol) - i128::from(*pre_sol);
-    if *subject_index == 0 {
-        sol_delta += i128::from(meta.fee);
-    }
     if sol_delta != 0 {
         return true;
     }
@@ -136,7 +134,7 @@ fn record_subject_token_balance(
 ///
 /// Returns `(kind, skip_reason)`. `skip_reason` is `Some` whenever `kind` came back
 /// `Other` because an explicit rule below declined to call it a `Swap` or `Transfer`
-/// (no DEX program, ambiguous multi-hop, a route with no SOL-quoted leg) rather than
+/// (no DEX program, ambiguous token legs, a route with no SOL-quoted leg) rather than
 /// because nothing happened at all -- the funnel logs it so "why didn't this copy"
 /// never has to be guessed at.
 pub fn classify_transaction_activity(
@@ -167,16 +165,34 @@ pub fn classify_transaction_activity(
         return Some((ActivityKind::Other, Some("subject not among account keys")));
     };
 
-    let observed_sol_delta = subject_sol_delta_lamports(meta, subject_index);
-    // Account key 0 is the fee payer. Its observed balance delta includes the base
-    // and priority fee, which is not part of the quoted swap leg. Add the fee back
-    // to recover the trade/transfer delta before classification and sizing.
-    let sol_delta_lamports = if subject_index == 0 {
-        observed_sol_delta.saturating_add(meta.fee.min(i64::MAX as u64) as i64)
-    } else {
-        observed_sol_delta
+    let Some(token_decimals) =
+        validated_subject_token_decimals(meta, subject_address, account_keys.len())
+    else {
+        return Some((
+            ActivityKind::Other,
+            Some("invalid subject token balance metadata"),
+        ));
     };
-    let token_deltas = subject_token_deltas(meta, subject_address);
+    let owned_indices = meta
+        .pre_token_balances
+        .iter()
+        .chain(meta.post_token_balances.iter())
+        .flatten()
+        .filter(|balance| balance.owner.as_deref() == Some(subject_address))
+        .map(|balance| balance.account_index as usize)
+        .collect::<HashSet<_>>();
+    let Some(sol_delta_lamports) =
+        subject_native_delta(meta, subject_index, owned_indices.iter().copied())
+    else {
+        return Some((ActivityKind::Other, Some("missing native balance metadata")));
+    };
+    let raw_deltas = extract_subject_deltas(subject_address, transaction);
+    let token_deltas = raw_deltas
+        .into_iter()
+        .filter(|delta| delta.mint != NATIVE_SOL_SENTINEL)
+        .map(|delta| (delta.mint, delta.delta_raw))
+        .filter(|(_, delta)| *delta != 0)
+        .collect::<Vec<_>>();
 
     let venue = extract_program_ids(&tx_data).ok().and_then(|ids| {
         ids.iter()
@@ -184,127 +200,194 @@ pub fn classify_transaction_activity(
     });
 
     Some(if venue.is_some() {
-        classify_swap(sol_delta_lamports, &token_deltas, venue)
+        if has_ambiguous_native_transfer(raw, &account_keys, subject_index, &owned_indices) {
+            (
+                ActivityKind::Other,
+                Some("ambiguous independent native transfer"),
+            )
+        } else {
+            classify_swap(sol_delta_lamports, &token_deltas, &token_decimals, venue)
+        }
     } else {
-        classify_transfer(sol_delta_lamports, &token_deltas)
+        classify_transfer(sol_delta_lamports, &token_deltas, &token_decimals)
     })
 }
 
-/// The subject's own SOL balance change, in lamports. `0` when the subject's account
-/// index cannot be matched against the pre/post balance arrays (should not happen --
-/// `subject_index` was resolved from the same account-keys list those arrays are
-/// indexed by -- but a mismatched jsonParsed response must never panic).
-fn subject_sol_delta_lamports(
-    meta: &crate::chains::solana::rpc::TransactionMeta,
-    subject_index: usize,
-) -> i64 {
-    let pre = meta.pre_balances.get(subject_index).copied().unwrap_or(0) as i64;
-    let post = meta.post_balances.get(subject_index).copied().unwrap_or(0) as i64;
-    post - pre
-}
-
-/// `(mint, ui delta)` for every token balance change owned by `subject_address`.
-/// Mirrors `analyzer::balance::extract_token_balance_changes`'s pre/post merge, but
-/// filtered to one owner instead of flattening every account in the transaction --
-/// that flattening is exactly what makes the shared `Transaction.token_balance_
-/// changes` field unusable for a subject-relative decision (the owning account is
-/// discarded once every account's changes are merged into one list).
-fn subject_token_deltas(
+/// Validate raw token-balance fields before the ledger extractor is used for sizing.
+fn validated_subject_token_decimals(
     meta: &crate::chains::solana::rpc::TransactionMeta,
     subject_address: &str,
-) -> Vec<(String, f64)> {
-    let empty = Vec::new();
-    let pre = meta.pre_token_balances.as_ref().unwrap_or(&empty);
-    let post = meta.post_token_balances.as_ref().unwrap_or(&empty);
-
-    let mut pre_map: HashMap<(u32, &str), f64> = HashMap::new();
-    for balance in pre {
-        if balance.owner.as_deref() == Some(subject_address) {
-            pre_map.insert(
-                (balance.account_index, balance.mint.as_str()),
-                balance.ui_token_amount.ui_amount.unwrap_or(0.0),
-            );
+    account_count: usize,
+) -> Option<HashMap<String, u8>> {
+    let pre = meta.pre_token_balances.as_ref()?;
+    let post = meta.post_token_balances.as_ref()?;
+    let mut decimals = HashMap::new();
+    let mut seen_pre = HashSet::new();
+    let mut seen_post = HashSet::new();
+    let mut account_mints = HashMap::<u32, String>::new();
+    let mut raw_totals = HashMap::<String, (i128, i128)>::new();
+    for (balances, seen, is_pre) in [(pre, &mut seen_pre, true), (post, &mut seen_post, false)] {
+        for balance in balances {
+            let owner = balance.owner.as_deref()?;
+            if owner != subject_address {
+                continue;
+            }
+            let index = balance.account_index as usize;
+            let raw_amount = balance.ui_token_amount.amount.as_str();
+            if raw_amount.is_empty() || !raw_amount.bytes().all(|byte| byte.is_ascii_digit()) {
+                return None;
+            }
+            let amount = raw_amount.parse::<i128>().ok()?;
+            if amount < 0 {
+                return None;
+            }
+            if index >= account_count
+                || meta.pre_balances.get(index).is_none()
+                || meta.post_balances.get(index).is_none()
+                || !seen.insert(balance.account_index)
+            {
+                return None;
+            }
+            if account_mints
+                .insert(balance.account_index, balance.mint.clone())
+                .is_some_and(|previous| previous != balance.mint)
+            {
+                return None;
+            }
+            match decimals.insert(balance.mint.clone(), balance.ui_token_amount.decimals) {
+                Some(previous) if previous != balance.ui_token_amount.decimals => return None,
+                _ => {}
+            }
+            let total = raw_totals.entry(balance.mint.clone()).or_default();
+            let amount_total = if is_pre { &mut total.0 } else { &mut total.1 };
+            *amount_total = amount_total.checked_add(amount)?;
         }
     }
+    if raw_totals
+        .values()
+        .any(|(pre, post)| post.checked_sub(*pre).is_none())
+    {
+        return None;
+    }
+    Some(decimals)
+}
 
-    let mut post_map: HashMap<(u32, &str), f64> = HashMap::new();
-    for balance in post {
-        if balance.owner.as_deref() == Some(subject_address) {
-            post_map.insert(
-                (balance.account_index, balance.mint.as_str()),
-                balance.ui_token_amount.ui_amount.unwrap_or(0.0),
-            );
+fn has_ambiguous_native_transfer(
+    raw: &serde_json::Value,
+    account_keys: &[String],
+    subject_index: usize,
+    owned_indices: &HashSet<usize>,
+) -> bool {
+    let Some(instructions) = raw
+        .pointer("/transaction/message/instructions")
+        .and_then(serde_json::Value::as_array)
+    else {
+        return false;
+    };
+    const SYSTEM_PROGRAM: &str = "11111111111111111111111111111111";
+    for instruction in instructions {
+        if instruction
+            .get("program")
+            .and_then(serde_json::Value::as_str)
+            != Some("system")
+            && instruction
+                .get("programId")
+                .and_then(serde_json::Value::as_str)
+                != Some(SYSTEM_PROGRAM)
+        {
+            continue;
+        }
+        let Some(parsed) = instruction.get("parsed") else {
+            continue;
+        };
+        let Some(kind) = parsed.get("type").and_then(serde_json::Value::as_str) else {
+            continue;
+        };
+        if !matches!(kind, "transfer" | "transferWithSeed") {
+            continue;
+        }
+        let Some(info) = parsed.get("info") else {
+            return true;
+        };
+        let source = info.get("source").and_then(serde_json::Value::as_str);
+        let destination = info.get("destination").and_then(serde_json::Value::as_str);
+        let (Some(source), Some(destination)) = (source, destination) else {
+            return true;
+        };
+        let subject = account_keys.get(subject_index).map(String::as_str);
+        let owned_counterparty = |address: &str| {
+            owned_indices
+                .iter()
+                .any(|index| account_keys.get(*index).map(String::as_str) == Some(address))
+        };
+        if (Some(source) == subject && !owned_counterparty(destination))
+            || (Some(destination) == subject && !owned_counterparty(source))
+        {
+            return true;
         }
     }
-
-    let mut keys: HashSet<(u32, &str)> = HashSet::new();
-    keys.extend(pre_map.keys().copied());
-    keys.extend(post_map.keys().copied());
-
-    let mut deltas: HashMap<String, f64> = HashMap::new();
-    for key in keys {
-        let pre_ui = pre_map.get(&key).copied().unwrap_or(0.0);
-        let post_ui = post_map.get(&key).copied().unwrap_or(0.0);
-        let delta = post_ui - pre_ui;
-        if delta.abs() > EPSILON {
-            *deltas.entry(key.1.to_owned()).or_insert(0.0) += delta;
-        }
-    }
-
-    deltas.into_iter().collect()
+    false
 }
 
 /// A DEX program is present. Resolve to `Swap` only when the subject has exactly one
-/// dominant non-SOL, non-stable leg AND a nonzero SOL-side delta -- V1 handles
-/// SOL-quoted legs only (a USDC-quoted route, or a route with no SOL leg at all for
-/// this subject, is skipped with a reason rather than mis-sized).
+/// non-wSOL token leg, a nonzero native SOL movement, and opposing movement signs.
+/// Stable-quoted and multi-token routes remain `Other` because this activity shape
+/// has no independent quote amount for those routes.
 fn classify_swap(
-    sol_delta_lamports: i64,
-    token_deltas: &[(String, f64)],
+    sol_delta_lamports: i128,
+    token_deltas: &[(String, i128)],
+    decimals: &HashMap<String, u8>,
     venue: Option<String>,
 ) -> (ActivityKind, Option<&'static str>) {
-    if sol_delta_lamports.abs() <= FEE_NOISE_LAMPORTS {
+    if sol_delta_lamports.unsigned_abs() <= FEE_NOISE_LAMPORTS as u128 {
         return (
             ActivityKind::Other,
             Some("no SOL-quoted leg for this subject"),
         );
     }
 
-    let candidates: Vec<&(String, f64)> = token_deltas
+    if token_deltas
         .iter()
-        .filter(|(mint, _)| mint != SOL_MINT && mint != USDC_MINT && mint != USDT_MINT)
+        .any(|(mint, delta)| (mint == USDC_MINT || mint == USDT_MINT) && *delta != 0)
+    {
+        return (ActivityKind::Other, Some("unsupported stable-quoted swap"));
+    }
+
+    let candidates: Vec<&(String, i128)> = token_deltas
+        .iter()
+        .filter(|(mint, _)| mint != SOL_MINT)
         .collect();
 
-    if candidates.is_empty() {
-        return (ActivityKind::Other, Some("no non-stable token leg found"));
+    if candidates.len() != 1 {
+        return (ActivityKind::Other, Some("ambiguous nonquote token legs"));
     }
 
-    // Ambiguous multi-hop: more than one candidate mint and no single dominant leg
-    // (the runner-up is within half the magnitude of the leader) -- never guess.
-    if candidates.len() >= 2 {
-        let mut magnitudes: Vec<f64> = candidates.iter().map(|(_, d)| d.abs()).collect();
-        magnitudes.sort_by(|a, b| b.partial_cmp(a).unwrap_or(Ordering::Equal));
-        if magnitudes[1] > magnitudes[0] * 0.5 {
-            return (
-                ActivityKind::Other,
-                Some("ambiguous multi-hop: no single dominant mint"),
-            );
-        }
+    let (mint, token_delta) = candidates[0];
+    if (*token_delta > 0) == (sol_delta_lamports > 0) {
+        return (
+            ActivityKind::Other,
+            Some("token and native movements have same sign"),
+        );
     }
 
-    let (mint, token_delta) = candidates
-        .into_iter()
-        .max_by(|a, b| a.1.abs().partial_cmp(&b.1.abs()).unwrap_or(Ordering::Equal))
-        .expect("candidates is non-empty");
-
-    let side = if *token_delta > 0.0 {
+    let side = if *token_delta > 0 {
         SwapSide::Buy
     } else {
         SwapSide::Sell
     };
-    let sol_amount = lamports_to_sol(sol_delta_lamports.unsigned_abs());
-    let token_amount = token_delta.abs();
-    let price_sol = (token_amount > EPSILON).then_some(sol_amount / token_amount);
+    let sol_amount = sol_delta_lamports.unsigned_abs() as f64 / LAMPORTS_PER_SOL as f64;
+    let token_amount = token_delta.unsigned_abs() as f64
+        / 10_f64.powi(i32::from(*decimals.get(mint).unwrap_or(&0)));
+    let price_sol = sol_amount / token_amount;
+    if !sol_amount.is_finite()
+        || !token_amount.is_finite()
+        || !price_sol.is_finite()
+        || sol_amount <= 0.0
+        || token_amount <= 0.0
+        || price_sol <= 0.0
+    {
+        return (ActivityKind::Other, Some("invalid swap amount"));
+    }
 
     (
         ActivityKind::Swap {
@@ -313,7 +396,7 @@ fn classify_swap(
             native_amount: sol_amount,
             token_amount,
             venue,
-            price_native: price_sol,
+            price_native: Some(price_sol),
         },
         None,
     )
@@ -326,12 +409,13 @@ fn classify_swap(
 /// airdrop/CEX-deposit shape that must never come out as a sell, so it is not forced
 /// into a `Transfer` either -- it is simply not confidently anything.
 fn classify_transfer(
-    sol_delta_lamports: i64,
-    token_deltas: &[(String, f64)],
+    sol_delta_lamports: i128,
+    token_deltas: &[(String, i128)],
+    decimals: &HashMap<String, u8>,
 ) -> (ActivityKind, Option<&'static str>) {
     if token_deltas.len() == 1 {
         let (mint, delta) = &token_deltas[0];
-        let direction = if *delta > 0.0 {
+        let direction = if *delta > 0 {
             TransferDirection::In
         } else {
             TransferDirection::Out
@@ -339,14 +423,15 @@ fn classify_transfer(
         return (
             ActivityKind::Transfer {
                 mint: mint.clone(),
-                amount: delta.abs(),
+                amount: delta.unsigned_abs() as f64
+                    / 10_f64.powi(i32::from(*decimals.get(mint).unwrap_or(&0))),
                 direction,
             },
             None,
         );
     }
 
-    if token_deltas.is_empty() && sol_delta_lamports.abs() > FEE_NOISE_LAMPORTS {
+    if token_deltas.is_empty() && sol_delta_lamports.unsigned_abs() > FEE_NOISE_LAMPORTS as u128 {
         let direction = if sol_delta_lamports > 0 {
             TransferDirection::In
         } else {
@@ -355,7 +440,7 @@ fn classify_transfer(
         return (
             ActivityKind::Transfer {
                 mint: SOL_MINT.to_owned(),
-                amount: lamports_to_sol(sol_delta_lamports.unsigned_abs()),
+                amount: sol_delta_lamports.unsigned_abs() as f64 / LAMPORTS_PER_SOL as f64,
                 direction,
             },
             None,
