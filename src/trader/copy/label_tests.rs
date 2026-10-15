@@ -234,6 +234,11 @@ fn every_outcome_kind_has_a_label() {
     ];
     for outcome in &all {
         assert_eq!(serialized(outcome, "outcome"), id(outcome));
-        assert_text(&format!("copy-outcome-{}", kebab(id(outcome))));
+        if matches!(outcome, CopyOutcome::PaperFilled(_)) {
+            assert_text("copy-outcome-paper-filled-quote");
+            assert_text("copy-outcome-paper-filled-legacy");
+        } else {
+            assert_text(&format!("copy-outcome-{}", kebab(id(outcome))));
+        }
     }
 }

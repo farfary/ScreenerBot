@@ -13,8 +13,8 @@ use super::pause_text;
 use super::{
     apply_paper_book, arrival_distance_ms, build_task_stats, closed_rounds,
     confirm_mode_transition, summarize_arrival_distances, sync_open_position_management,
-    ArrivalDistanceStats, CopyActivityRow, CopyDatabase, CopyMode, CopyPauseReason, CopyRound,
-    CopyTask, CopyTaskInput, CopyTaskStats, ExitMode, PaperPosition,
+    ArrivalDistanceStats, CopyActivityRow, CopyDatabase, CopyMode, CopyOutcome, CopyPauseReason,
+    CopyRound, CopyTask, CopyTaskInput, CopyTaskStats, ExitMode, PaperPosition,
 };
 use crate::i18n::UiText;
 use crate::positions::{Position, PositionOrigin};
@@ -211,11 +211,33 @@ pub fn book_stats(
     paper_book: &[PaperPosition],
     mark: impl Fn(&PaperPosition) -> Option<f64>,
 ) -> (CopyTaskStats, Vec<CopyRound>) {
-    let mut stats = build_task_stats(task.id, activity, positions);
+    let current_activity = activity
+        .iter()
+        .filter(|row| match (&row.outcome, task.mode) {
+            (CopyOutcome::PaperFilled(decision), CopyMode::Paper) => {
+                decision.fill.has_quote_provenance()
+            }
+            (CopyOutcome::PaperSellObserved(decision), CopyMode::Paper) => decision
+                .paper_fill
+                .as_ref()
+                .is_some_and(|fill| fill.has_quote_provenance()),
+            (CopyOutcome::Skipped { paper, .. }, CopyMode::Paper) => paper
+                .as_ref()
+                .is_some_and(|context| context.model == super::PaperModel::Quote),
+            (CopyOutcome::Skipped { paper, .. }, CopyMode::Live) => paper.is_none(),
+            (_, CopyMode::Live) => !matches!(
+                row.outcome,
+                CopyOutcome::PaperFilled(_) | CopyOutcome::PaperSellObserved(_)
+            ),
+            _ => false,
+        })
+        .cloned()
+        .collect::<Vec<_>>();
+    let mut stats = build_task_stats(task.id, &current_activity, positions);
     if task.mode == CopyMode::Paper {
         apply_paper_book(&mut stats, paper_book, mark);
     }
-    let rounds = closed_rounds(task.id, stats.book, activity, positions);
+    let rounds = closed_rounds(task.id, stats.book, &current_activity, positions);
     stats.wins = rounds.iter().filter(|round| round.pnl_native > 0.0).count();
     stats.losses = rounds.len() - stats.wins;
     (stats, rounds)
@@ -671,7 +693,22 @@ mod tests {
         sell: Option<f64>,
     ) -> CopyActivityRow {
         use crate::trader::copy::{
-            CopyOutcome, CopySellDecision, CopyTelemetry, PaperDecision, PaperFill, PaperSellFill,
+            CopyOutcome, CopySellDecision, CopyTelemetry, PaperDecision, PaperFill,
+            PaperQuoteMetadata, PaperSellFill,
+        };
+        let quote = |output_amount, input_amount| PaperQuoteMetadata {
+            router_id: "fixture".to_owned(),
+            initial_at: at,
+            landing_at: at,
+            requested_delay_ms: 1000,
+            queue_duration_ms: 0,
+            minimum_output_amount: output_amount,
+            final_output_amount: output_amount,
+            input_amount: Some(input_amount),
+            token_decimals: Some(6),
+            epoch: 0,
+            network_fee_estimated: true,
+            platform_fee_included_in_output: true,
         };
         let telemetry = CopyTelemetry {
             target_block_time: Some(at.timestamp() - 1),
@@ -698,13 +735,18 @@ mod tests {
                     fill: PaperFill {
                         input_sol: 1.0,
                         market_price_sol: 0.01,
-                        priced_from_pool: true,
+                        priced_from_pool: false,
                         fill_price_sol: 0.01,
                         token_amount: 100.0,
                         referral_fee_sol: 0.0,
                         network_fee_sol: 0.0,
                         priority_fee_sol: 0.0,
                         total_cost_sol: 1.0,
+                        model: crate::trader::copy::PaperModel::Quote,
+                        quote: Some(quote(
+                            crate::chains::RawAmount::from(100_000_000_u64),
+                            crate::chains::RawAmount::from(1_000_000_000_u64),
+                        )),
                     },
                     telemetry,
                 }),
@@ -725,15 +767,21 @@ mod tests {
                     paper_fill: Some(PaperSellFill {
                         token_amount: 100.0,
                         market_price_sol: proceeds / 100.0,
-                        priced_from_pool: true,
+                        priced_from_pool: false,
                         fill_price_sol: proceeds / 100.0,
                         gross_sol: proceeds,
                         referral_fee_sol: 0.0,
                         network_fee_sol: 0.0,
                         priority_fee_sol: 0.0,
                         net_proceeds_sol: proceeds,
+                        model: crate::trader::copy::PaperModel::Quote,
+                        quote: Some(quote(
+                            crate::chains::RawAmount::from((proceeds * 1_000_000_000.0) as u64),
+                            crate::chains::RawAmount::from(100_000_000_u64),
+                        )),
                     }),
                     exit_rule: None,
+                    paper_context: None,
                 }),
             ),
         };
@@ -761,6 +809,29 @@ mod tests {
         assert_eq!((stats.wins, stats.losses), (1, 1));
         assert_eq!(stats.filled_buys, 3);
         assert_eq!(stats.target_sells, 2);
+    }
+
+    #[test]
+    fn legacy_paper_rows_do_not_enter_current_task_totals() {
+        let now = Utc::now();
+        let mut buy = paper_row(1, "legacy", now, None);
+        if let CopyOutcome::PaperFilled(decision) = &mut buy.outcome {
+            decision.fill.model = super::super::PaperModel::Legacy;
+            decision.fill.quote = None;
+        }
+        let mut sell = paper_row(2, "legacy", now, Some(2.0));
+        if let CopyOutcome::PaperSellObserved(decision) = &mut sell.outcome {
+            let fill = decision.paper_fill.as_mut().unwrap();
+            fill.model = super::super::PaperModel::Legacy;
+            fill.quote = None;
+        }
+        let activity = [buy, sell];
+
+        let (stats, rounds) = book_stats(&stored(), &activity, &[], &[], |_| None);
+        assert!(rounds.is_empty());
+        assert_eq!(stats.decisions, 0);
+        assert_eq!(stats.filled_buys, 0);
+        assert_eq!(stats.target_sells, 0);
     }
 
     #[test]

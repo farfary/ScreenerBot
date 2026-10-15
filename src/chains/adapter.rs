@@ -21,6 +21,8 @@ pub trait ChainAdapter: Send + Sync + 'static {
     // --- native units ---
     /// Base units in one whole native asset (lamports per SOL, wei per ETH).
     fn raw_units_per_native(&self) -> u64;
+    /// Platform swap-fee rate in basis points; estimates and rounding affect measured charges.
+    fn platform_swap_fee_bps(&self) -> u16;
     /// Converts a raw base-unit amount to whole native-asset units.
     fn raw_to_native(&self, raw: u64) -> f64 {
         raw as f64 / self.raw_units_per_native() as f64

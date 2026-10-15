@@ -12,7 +12,9 @@
 
 use std::collections::{HashMap, HashSet};
 
-use crate::chains::solana::constants::{LAMPORTS_PER_SOL, SOL_MINT, USDC_MINT, USDT_MINT};
+use crate::chains::solana::constants::{
+    LAMPORTS_PER_SOL, SOL_MINT, SYSTEM_PROGRAM_ID, USDC_MINT, USDT_MINT,
+};
 use crate::chains::solana::transactions::analyzer::balance::account_keys_from_message;
 use crate::chains::solana::transactions::analyzer::dex::extract_program_ids;
 use crate::chains::solana::transactions::deltas::{extract_subject_deltas, subject_native_delta};
@@ -284,7 +286,6 @@ fn has_ambiguous_native_transfer(
     else {
         return false;
     };
-    const SYSTEM_PROGRAM: &str = "11111111111111111111111111111111";
     for instruction in instructions {
         if instruction
             .get("program")
@@ -293,7 +294,7 @@ fn has_ambiguous_native_transfer(
             && instruction
                 .get("programId")
                 .and_then(serde_json::Value::as_str)
-                != Some(SYSTEM_PROGRAM)
+                != Some(SYSTEM_PROGRAM_ID)
         {
             continue;
         }

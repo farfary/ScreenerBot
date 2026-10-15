@@ -5,12 +5,13 @@
 //! `trader::copy::control`, which owns every rule these endpoints enforce.
 
 use axum::{
-    extract::{Path, Query},
+    extract::{rejection::JsonRejection, Path, Query},
     middleware::{from_fn, from_fn_with_state},
     response::Response,
     routing::{get, post},
     Json, Router,
 };
+use chrono::{DateTime, Utc};
 use serde::{Deserialize, Serialize};
 use std::sync::Arc;
 
@@ -85,6 +86,14 @@ struct ActivityQuery {
 struct ModeRequest {
     mode: CopyMode,
     confirmation: Option<String>,
+}
+
+/// The holding round a manual paper close was confirmed for: the exact
+/// `opened_at` instant the workspace returned for that holding.
+#[derive(Deserialize)]
+#[serde(deny_unknown_fields)]
+struct CloseHoldingRequest {
+    opened_at: DateTime<Utc>,
 }
 
 fn default_limit() -> usize {
@@ -214,8 +223,22 @@ async fn reset_paper_book(Path(id): Path<i64>) -> Response {
     respond(workspace::reset_paper_book(id).await)
 }
 
-async fn close_holding(Path((id, mint)): Path<(i64, String)>) -> Response {
-    respond(workspace::close_paper_holding(id, &mint).await)
+async fn close_holding(
+    Path((id, mint)): Path<(i64, String)>,
+    body: Result<Json<CloseHoldingRequest>, JsonRejection>,
+) -> Response {
+    let request = match body {
+        Ok(Json(request)) => request,
+        Err(rejection) => {
+            return ApiError::new(
+                ApiErrorCode::InvalidInput,
+                ids::ERRORS_COPY_REQUEST_REJECTED,
+            )
+            .details(rejection.body_text())
+            .into_response();
+        }
+    };
+    respond(workspace::close_paper_holding(id, &mint, request.opened_at).await)
 }
 
 async fn defaults() -> Response {
@@ -280,4 +303,67 @@ fn copy_error(error: &crate::trader::Error) -> Response {
     ApiError::new(code, id)
         .details(error.to_string())
         .into_response()
+}
+
+#[cfg(test)]
+mod tests {
+    use super::{close_holding, CloseHoldingRequest};
+    use axum::{
+        body::Body,
+        http::{header, Request, StatusCode},
+        routing::post,
+        Router,
+    };
+    use chrono::{TimeZone, Timelike, Utc};
+    use tower::ServiceExt;
+
+    async fn post_close(body: Option<&str>) -> (StatusCode, serde_json::Value) {
+        let router = Router::new().route("/tasks/{id}/holdings/{mint}/close", post(close_holding));
+        let mut request = Request::post("/tasks/1/holdings/Mint111/close");
+        let payload = match body {
+            Some(text) => {
+                request = request.header(header::CONTENT_TYPE, "application/json");
+                Body::from(text.to_owned())
+            }
+            None => Body::empty(),
+        };
+        let response = router
+            .oneshot(request.body(payload).expect("request"))
+            .await
+            .expect("response");
+        let status = response.status();
+        let bytes = axum::body::to_bytes(response.into_body(), usize::MAX)
+            .await
+            .expect("body");
+        (status, serde_json::from_slice(&bytes).unwrap_or_default())
+    }
+
+    #[tokio::test]
+    async fn a_close_without_the_confirmed_round_is_a_structured_rejection() {
+        for body in [
+            None,
+            Some("{}"),
+            Some(r#"{"opened_at":null}"#),
+            Some(r#"{"opened_at":"not-a-date"}"#),
+            Some(r#"{"opened_at":"2026-10-07T03:00:00Z","mint":"x"}"#),
+        ] {
+            let (status, json) = post_close(body).await;
+            assert_eq!(status, StatusCode::BAD_REQUEST, "body {body:?}");
+            assert_eq!(json["error"]["code"], "INVALID_INPUT", "body {body:?}");
+        }
+    }
+
+    #[test]
+    fn the_confirmed_round_keeps_sub_millisecond_precision() {
+        let request: CloseHoldingRequest =
+            serde_json::from_str(r#"{"opened_at":"2026-10-07T03:00:00.123456789Z"}"#)
+                .expect("request");
+        assert_eq!(request.opened_at.nanosecond(), 123_456_789);
+        assert_eq!(
+            request.opened_at.date_naive(),
+            Utc.with_ymd_and_hms(2026, 10, 7, 0, 0, 0)
+                .unwrap()
+                .date_naive()
+        );
+    }
 }

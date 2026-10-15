@@ -16,6 +16,11 @@ copy-skip-invalid-sizing = El tamaño de la tarea no es válido
 copy-skip-invalid-slippage = El deslizamiento de la tarea no es válido
 copy-skip-invalid-exit-policy = Las reglas de salida de la tarea no son válidas
 copy-skip-invalid-price = No hay un precio de mercado utilizable
+copy-skip-paper-quote-unavailable = No se pudo obtener una cotización de swap para la ejecución simulada
+copy-skip-paper-quote-unfillable = La cotización no permite una ejecución simulada utilizable
+copy-skip-paper-minimum-output-not-met = La segunda cotización quedó por debajo de la salida mínima de la primera
+copy-skip-paper-queue-full = La cola de ejecución simulada de esta tarea está llena
+copy-skip-paper-execution-unavailable = La ejecución simulada no se completó: el servicio se detuvo, la tarea o la tenencia cambió, o la solicitud duplicaba una en curso
 copy-skip-not-sell-swap = La actividad de la billetera no fue una venta
 copy-skip-exit-mode-disabled = Venta de la billetera ignorada: la tarea vende con sus propias reglas
 copy-skip-force-stopped = El trading está detenido a la fuerza
@@ -222,13 +227,13 @@ copy-toast-global-failed = No se pudo cambiar el procesamiento de copias
 ## Onboarding
 
 copy-onboarding-title = Copia las billeteras en las que confías, pruébalas primero en simulación
-copy-onboarding-body = Toda tarea empieza en simulación: las operaciones objetivo se simulan al precio del pool con tu deslizamiento y tus comisiones, y tus reglas de salida se aplican sobre la cartera simulada. Activa el modo en vivo por billetera cuando sus resultados simulados lo justifiquen.
+copy-onboarding-paper-body = Toda tarea empieza en simulación: las operaciones objetivo se simulan a partir de dos cotizaciones de router con comisiones de red estimadas, y tus reglas de salida se aplican sobre la cartera simulada. Activa el modo en vivo por billetera cuando sus resultados simulados lo justifiquen.
 copy-onboarding-add = Añade tu primera billetera
 copy-setup-gate-title = El copy trading necesita una billetera
 copy-onboarding-observe = Observar
 copy-onboarding-observe-detail = Detecta los swaps de la billetera sin gastar { -sol }.
 copy-onboarding-evaluate = Evaluar
-copy-onboarding-evaluate-detail = Revisa el P&L simulado, la tasa de aciertos, las omisiones, la velocidad de detección y el deslizamiento.
+copy-onboarding-evaluate-paper-detail = Revisa el P&L simulado, la tasa de aciertos, las omisiones, la velocidad de detección y la diferencia de precio con el objetivo.
 copy-onboarding-arm = Activar
 copy-onboarding-arm-detail = Supera las comprobaciones de preparación y activa los swaps reales.
 
@@ -271,6 +276,26 @@ copy-settings-unit-rounds = rondas
 copy-settings-save = Guardar configuración
 copy-settings-load-failed = No se pudo cargar la configuración de copias
 copy-settings-saved = Configuración de copy trading guardada
+copy-outcome-paper-filled-legacy = Estimación simulada heredada
+copy-outcome-paper-filled-quote = Ejecución simulada por cotización
+copy-outcome-paper-sell-legacy = Estimación de salida simulada heredada
+copy-outcome-paper-sell-quote = Salida simulada por cotización
+
+## Paper execution model
+
+copy-paper-model = Modelo de ejecución simulada
+copy-paper-model-note = Cada ejecución simulada usa dos cotizaciones de router dimensionadas a la operación, tomadas con la espera supuesta de separación. La segunda cotización debe seguir alcanzando la salida mínima de la primera. Los precios de pool siguen valorando las tenencias y activando las reglas de salida. Las comisiones de red y de prioridad son una sola estimación, contada una vez; la comisión de la plataforma ya forma parte de la salida cotizada. El MEV y el orden de los validadores no se simulan.
+copy-paper-wait-label = Espera de aterrizaje supuesta
+copy-paper-queue-label = Tamaño de cola por tarea
+copy-paper-legacy-title = Estimaciones simuladas heredadas
+copy-paper-legacy-note = Estimaciones de solo lectura conservadas de antes de la simulación por cotización. No forman parte del gasto ni de las tenencias de la cartera actual y no ofrecen acciones. Los importes restantes se valoran al último precio guardado de cada token, nunca a un precio de mercado actual.
+copy-paper-legacy-spent = Gasto estimado heredado
+copy-paper-legacy-realized = Estimación realizada heredada
+copy-paper-legacy-col-tokens = Tokens
+copy-paper-legacy-col-cost = Coste restante ({ -sol })
+copy-paper-legacy-col-realized = Estimación realizada ({ -sol })
+copy-paper-legacy-col-price = Último precio guardado ({ -sol })
+copy-paper-legacy-col-remaining = P&L restante al precio guardado ({ -sol })
 
 ## Workspace
 
@@ -495,7 +520,7 @@ copy-warning-mirror = Solo las ventas de la billetera cierran las tenencias: nin
 copy-warning-no-rules = Ninguna regla de salida está activa y las ventas de la billetera se ignoran: las tenencias nunca se venden.
 copy-warning-no-stop-loss = No se aplica ningún stop loss: un token a la baja se mantiene hasta que otra regla o la billetera venda.
 copy-warning-stop-delay = El stop loss espera { $hold } tras cada compra: un token que caiga más rápido se cierra bastante más allá de { $threshold }.
-copy-warning-take-profit-cost = El take profit en { $target } no cubre la venta ({ $slippage } de deslizamiento y { $fee } de comisión de swap), así que cierra rondas con pérdida.
+copy-warning-take-profit-small = El take profit en { $target } no supera los costes de venta: hasta { $slippage } de tolerancia de deslizamiento y { $fee } de comisión de swap. Un objetivo pequeño puede no cubrirlos. La tolerancia es un límite sobre el precio de venta, no un coste previsto.
 copy-warning-trailing-distance = La distancia del trailing es al menos igual a su ganancia de activación, así que un trailing activado puede vender por debajo de la entrada.
 
 ## Execution tab
@@ -518,23 +543,24 @@ copy-execution-arrival-samples =
        *[other] { $count } operaciones vistas en el momento
     }
 copy-execution-p95 = Llegada p95
-copy-execution-median-slippage = Deslizamiento mediano
-copy-execution-slippage-samples =
+copy-execution-target-price-difference = Diferencia mediana de precio con el objetivo
+copy-execution-target-difference-samples =
     { $count ->
         [one] { $count } ejecución medida
         [many] { $count } ejecuciones medidas
        *[other] { $count } ejecuciones medidas
     }
-copy-execution-worst-slippage = Peor deslizamiento
-copy-execution-average-slippage = Promedio { $amount }
+copy-execution-target-difference-worst = Peor diferencia de precio con el objetivo
+copy-execution-target-difference-average = Diferencia media de precio con el objetivo { $amount }
 copy-execution-delay-title = Retraso de detección
 copy-execution-delay-note = Tiempo desde el bloque de la billetera hasta que este bot ve la operación. Se excluyen las reproducciones tras una interrupción.
 copy-execution-delay-limit = Las barras que superan el límite de llegada de { $limit } se muestran en ámbar.
 copy-execution-fastest = Más rápida
 copy-execution-average = Promedio
 copy-execution-slowest = Más lenta
-copy-execution-fill-title = Ejecución frente a la billetera
-copy-execution-fill-note = Positivo significa peor que la billetera: pagaste más en una compra o recibiste menos en una venta replicada. Una ejecución simulada de un token sin precio de pool se valora a la operación de la propia billetera, así que no mide nada y se excluye.
+copy-execution-target-difference-title = Diferencia de precio con el objetivo
+copy-execution-target-difference-note = Compara el precio de cada ejecución con el precio de la propia operación de la billetera cuando ambos son mayores que cero. Positivo significa una ejecución peor que la de la billetera: pagaste más en una compra o recibiste menos en una venta. Es una comparación, no la tolerancia de deslizamiento de la tarea.
+copy-execution-wait-note = El retraso de detección se mide desde el bloque de la billetera. La espera de aterrizaje es una suposición del modelo simulado; el tiempo que una decisión pasa en la cola de la tarea se suma a ella y se registra en cada ejecución.
 copy-execution-samples = Muestras
 copy-execution-median = Mediana
 copy-execution-worst = Peor
@@ -555,7 +581,7 @@ copy-table-rounds = Rondas
 copy-table-realized = Realizado ({ -sol })
 copy-table-profit-factor = Factor de beneficio
 copy-table-average-hold = Tenencia prom.
-copy-table-median-slippage = Deslizamiento mediano
+copy-table-target-difference = Diferencia mediana de precio con el objetivo
 
 ## Charts
 
@@ -639,7 +665,7 @@ copy-holdings-token-details = Abrir detalles del token
 copy-holdings-opened = Abierta { $time }
 copy-holdings-no-pool-price = Sin precio de pool
 copy-holdings-close = Cerrar
-copy-holdings-write-off = Dar de baja
+copy-holdings-close-pending = Cierre pendiente
 copy-holdings-activity = Actividad
 copy-holdings-no-exit-rule = Sin regla de salida
 copy-holdings-watch-stop = Stop { $level }
@@ -664,7 +690,7 @@ copy-holdings-col-invested = Invertido ({ -sol })
 copy-holdings-col-proceeds = Ingresos ({ -sol })
 copy-holdings-col-exit = Salida
 copy-holdings-col-closed = Cerrada
-copy-holdings-price-note = Los precios son { -sol } por token. La entrada incluye el deslizamiento y las comisiones de la compra; el máximo y los niveles de salida son relativos a ella, así que una tenencia se abre con su máximo por debajo de la entrada. Pasa el cursor por uno para ver su precio de pool.
+copy-holdings-marks-note = Los precios son { -sol } por token. La valoración y los niveles de salida usan el precio de pool, que también activa las reglas de salida; las ejecuciones registradas usan cotizaciones de router. La entrada incluye la comisión de red estimada de la compra; el máximo y los niveles de salida son relativos a ella, así que una tenencia se abre con su máximo por debajo de la entrada. Pasa el cursor por uno para ver su precio de pool.
 copy-holdings-paused-rules = En pausa: sin copias nuevas. Tus reglas de salida siguen cerrando estas tenencias.
 copy-holdings-paused-mirror = En pausa: sin copias nuevas. Las ventas de la billetera siguen cerrando estas tenencias.
 copy-holdings-paused-hybrid = En pausa: sin copias nuevas. Las ventas de la billetera y tus reglas de salida siguen cerrando estas tenencias.
@@ -673,17 +699,17 @@ copy-holdings-closed-loading = Cargando rondas cerradas…
 copy-holdings-closed-empty = Aún no hay rondas cerradas.
 copy-holdings-closed-latest = Últimas { $shown } de { $total } rondas.
 copy-holdings-close-title = Cerrar tenencia simulada
-copy-holdings-close-message = Vende { $token } en la cartera simulada al precio del pool ({ $price }) con el deslizamiento y las comisiones de la tarea.
+copy-holdings-close-quote-message = Cierra la tenencia simulada de { $token } con dos cotizaciones de router separadas unos { $delay }. La ejecución usa la segunda cotización, que debe alcanzar la salida mínima de la primera, menos la comisión de red estimada. Si no hay ninguna cotización utilizable, la tenencia sigue abierta y sin cambios.
 copy-holdings-close-confirm = Cerrar tenencia
-copy-holdings-write-off-title = Dar de baja tenencia simulada
-copy-holdings-write-off-message = { $token } no tiene precio de pool al que vender. Al darlo de baja se cierra a cero y su costo de { $cost } se registra como pérdida.
 copy-holdings-keep = Conservar
-copy-holdings-written-off = { $token } dado de baja
 copy-holdings-closed = { $token } cerrado
-copy-holdings-written-off-detail = Cerrada con ingresos cero
 copy-holdings-sold-at = Vendido a { $price }
 copy-holdings-close-failed = No se pudo cerrar la tenencia
-copy-holdings-reset-message = Empezar de nuevo “{ $name }”: se eliminan sus tenencias simuladas, gasto, ejecuciones, salidas y omisiones. Las reglas y la billetera se conservan.
+copy-holdings-close-pending-detail = El cierre está en cola o en curso. Su resultado aparecerá en Actividad.
+copy-holdings-close-unconfirmed = Resultado del cierre sin confirmar
+copy-holdings-close-unconfirmed-detail = La conexión terminó antes de recibir el resultado y Actividad aún no tiene ninguno. Revisa Actividad antes de volver a cerrar.
+copy-holdings-closed-check-activity = La tenencia está cerrada. Actividad tiene la ejecución registrada.
+copy-holdings-reset-quote-message = Empezar de nuevo “{ $name }”: se borran sus tenencias simuladas actuales, gasto, ejecuciones, salidas y omisiones, y empieza una nueva cartera basada en cotizaciones. Las estimaciones heredadas y el historial en vivo se conservan. Las reglas y la billetera se conservan.
 copy-holdings-reset-cancel = Conservar historial
 copy-holdings-reset-done = Cartera simulada restablecida
 copy-holdings-reset-detail =
@@ -699,7 +725,6 @@ copy-holdings-reset-failed = No se pudo restablecer la cartera simulada
 copy-activity-title = Actividad
 copy-activity-filter-label = Filtro de actividad
 copy-filter-all = Todas
-copy-outcome-paper-filled = Compra simulada
 copy-outcome-live-submitted = Compra en vivo enviada
 copy-outcome-live-confirmed = Compra en vivo confirmada
 copy-outcome-live-failed = Compra en vivo fallida
@@ -708,9 +733,14 @@ copy-outcome-live-sell-submitted = Venta en vivo enviada
 copy-outcome-live-sell-failed = Venta en vivo fallida
 copy-outcome-skipped = Omitida
 copy-activity-decision = Decisión
-copy-activity-paper-exit = Salida simulada · { $rule }
+copy-activity-paper-exit-quote = Salida simulada por cotización · { $rule }
+copy-activity-paper-exit-legacy = Estimación de salida simulada heredada · { $rule }
 copy-activity-filled = { $input } a { $price } · la billetera compró { $target }
+copy-activity-filled-target-difference = { $input } a { $price } · la billetera compró { $target } · diferencia de precio con el objetivo { $difference }
 copy-activity-filled-slippage = { $input } a { $price } · la billetera compró { $target } · deslizamiento { $slippage }
+copy-activity-quote-router = Router { $router } · cotizaciones recibidas { $initial } y { $landing }
+copy-activity-quote-wait = Espera supuesta { $assumed } · en cola { $queued }
+copy-activity-quote-fees = Comisiones de red y de prioridad estimadas { $fee }, contadas una vez · comisión de la plataforma ya incluida en la salida cotizada
 copy-activity-filled-unpriced = { $input } a { $price } · valorada a la operación de la billetera, sin precio de pool
 copy-activity-live-sized = { $sized } · la billetera compró { $target }
 copy-activity-sell-nothing = La billetera vendió { $amount } · nada en cartera que vender
@@ -785,7 +815,7 @@ copy-editor-name-placeholder = p. ej., Rotador rápido
 copy-editor-enabled-title = Procesar las operaciones de la billetera
 copy-editor-enabled-help = Desactivado mantiene la tarea en pausa hasta que la reanudes.
 copy-editor-note-live = Esta tarea está en vivo: los cambios se aplican a sus próximas copias reales.
-copy-editor-note-paper = Las tareas se ejecutan en simulación hasta que las actives: las operaciones se simulan al precio del pool y no se gasta nada.
+copy-editor-note-paper-quote = Las tareas se ejecutan en simulación hasta que las actives: las operaciones se simulan a partir de cotizaciones de router y no se gasta nada.
 copy-editor-copy-size = Tamaño de copia
 copy-editor-sizing-fixed = Importe fijo
 copy-editor-sizing-ratio = Proporción de la operación de la billetera

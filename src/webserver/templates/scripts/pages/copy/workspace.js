@@ -117,6 +117,7 @@ export function createWorkspace(page) {
       if (id !== state.selectedId) return;
       changed = ws?.id === id && ws.stats?.decisions !== next.stats?.decisions;
       ws = next;
+      holdings.sync(next);
       wsError = null;
       await refreshWatchStatus(id, next.target_address);
     } catch (error) {

@@ -16,6 +16,11 @@ copy-skip-invalid-sizing = Dimensionierung der Aufgabe ungültig
 copy-skip-invalid-slippage = Slippage der Aufgabe ungültig
 copy-skip-invalid-exit-policy = Ausstiegsregeln der Aufgabe ungültig
 copy-skip-invalid-price = Kein verwendbarer Marktpreis
+copy-skip-paper-quote-unavailable = Für die Paper-Ausführung konnte keine Swap-Quote abgerufen werden
+copy-skip-paper-quote-unfillable = Aus der Quote lässt sich keine verwendbare Paper-Ausführung ableiten
+copy-skip-paper-minimum-output-not-met = Die zweite Quote lag unter dem Mindestertrag der ersten Quote
+copy-skip-paper-queue-full = Die Paper-Warteschlange dieser Aufgabe ist voll
+copy-skip-paper-execution-unavailable = Paper-Ausführung nicht abgeschlossen: Der Dienst wurde beendet, die Aufgabe oder der Bestand hat sich geändert oder die Anfrage war ein Duplikat einer laufenden Anfrage
 copy-skip-not-sell-swap = Wallet-Aktivität war kein Verkauf
 copy-skip-exit-mode-disabled = Wallet-Verkauf ignoriert: Die Aufgabe verkauft nach eigenen Regeln
 copy-skip-force-stopped = Trading ist per Sofortstopp angehalten
@@ -212,13 +217,13 @@ copy-toast-global-failed = Copy-Verarbeitung konnte nicht geändert werden
 ## Onboarding
 
 copy-onboarding-title = Kopieren Sie Wallets, denen Sie vertrauen – und testen Sie sie zuerst im Paper-Modus
-copy-onboarding-body = Jede Aufgabe startet im Paper-Modus: Trades der Ziel-Wallet werden zum Pool-Preis mit Ihrer Slippage und Ihren Gebühren simuliert, und Ihre Ausstiegsregeln laufen auf dem Paper-Buch. Schalten Sie Live pro Wallet scharf, sobald ihre Paper-Ergebnisse es rechtfertigen.
+copy-onboarding-paper-body = Jede Aufgabe startet im Paper-Modus: Trades der Ziel-Wallet werden anhand von zwei Router-Quoten mit geschätzten Netzwerkgebühren simuliert, und Ihre Ausstiegsregeln laufen auf dem Paper-Buch. Schalten Sie Live pro Wallet scharf, sobald ihre Paper-Ergebnisse es rechtfertigen.
 copy-onboarding-add = Erste Wallet hinzufügen
 copy-setup-gate-title = Copy-Trading benötigt eine Wallet
 copy-onboarding-observe = Beobachten
 copy-onboarding-observe-detail = Erkennt die Swaps der Wallet, ohne { -sol } auszugeben.
 copy-onboarding-evaluate = Auswerten
-copy-onboarding-evaluate-detail = Paper-GuV, Gewinnquote, übersprungene Trades, Erkennungsgeschwindigkeit und Slippage prüfen.
+copy-onboarding-evaluate-paper-detail = Paper-GuV, Trefferquote, übersprungene Trades, Erkennungsgeschwindigkeit und die Preisdifferenz zur Ziel-Wallet prüfen.
 copy-onboarding-arm = Scharfschalten
 copy-onboarding-arm-detail = Bereitschaftsprüfungen bestehen, dann echte Swaps aktivieren.
 
@@ -261,6 +266,26 @@ copy-settings-unit-rounds = Runden
 copy-settings-save = Einstellungen speichern
 copy-settings-load-failed = Copy-Einstellungen konnten nicht geladen werden
 copy-settings-saved = Copy-Trading-Einstellungen gespeichert
+copy-outcome-paper-filled-legacy = Alte Paper-Schätzung
+copy-outcome-paper-filled-quote = Paper-Ausführung auf Quote-Basis
+copy-outcome-paper-sell-legacy = Alte Paper-Ausstiegsschätzung
+copy-outcome-paper-sell-quote = Paper-Ausstieg auf Quote-Basis
+
+## Paper execution model
+
+copy-paper-model = Paper-Ausführungsmodell
+copy-paper-model-note = Jede Paper-Ausführung nutzt zwei auf den Trade zugeschnittene Router-Quoten, die um die angenommene Wartezeit versetzt abgerufen werden. Die spätere Quote muss weiterhin den Mindestertrag der ersten Quote erreichen. Pool-Preise bewerten weiterhin die Bestände und lösen Ausstiegsregeln aus. Netzwerk- und Prioritätsgebühren sind eine einzige Schätzung und werden einmal gezählt; die Plattformgebühr ist bereits im quotierten Ertrag enthalten. MEV und die Reihenfolge der Validatoren werden nicht simuliert.
+copy-paper-wait-label = Angenommene Wartezeit bis zur Ausführung
+copy-paper-queue-label = Warteschlangengröße pro Aufgabe
+copy-paper-legacy-title = Alte Paper-Schätzungen
+copy-paper-legacy-note = Schreibgeschützte Schätzungen aus der Zeit vor der quotenbasierten Simulation. Sie zählen nicht zu den Ausgaben oder Beständen des aktuellen Buchs und bieten keine Aktionen. Restmengen werden mit dem zuletzt gespeicherten Preis je Token bewertet, nie mit einem aktuellen Marktpreis.
+copy-paper-legacy-spent = Alte geschätzte Ausgaben
+copy-paper-legacy-realized = Alte realisierte Schätzung
+copy-paper-legacy-col-tokens = Tokens
+copy-paper-legacy-col-cost = Restkosten ({ -sol })
+copy-paper-legacy-col-realized = Realisierte Schätzung ({ -sol })
+copy-paper-legacy-col-price = Zuletzt gespeicherter Preis ({ -sol })
+copy-paper-legacy-col-remaining = Rest-GuV zum gespeicherten Preis ({ -sol })
 
 ## Workspace
 
@@ -477,7 +502,7 @@ copy-warning-mirror = Nur die Verkäufe der Wallet schließen Bestände: Kein St
 copy-warning-no-rules = Keine Ausstiegsregel ist aktiv und Wallet-Verkäufe werden ignoriert: Bestände werden nie verkauft.
 copy-warning-no-stop-loss = Kein Stop-Loss aktiv: Ein fallender Token wird gehalten, bis eine andere Regel oder die Wallet verkauft.
 copy-warning-stop-delay = Der Stop-Loss wartet nach jedem Kauf { $hold }: Ein Token, der schneller fällt, wird deutlich unter { $threshold } geschlossen.
-copy-warning-take-profit-cost = Take Profit bei { $target } deckt den Verkauf nicht ab ({ $slippage } Slippage und { $fee } Swap-Gebühr), sodass Runden mit Verlust geschlossen werden.
+copy-warning-take-profit-small = Take Profit bei { $target } ist nicht größer als die Verkaufskosten: bis zu { $slippage } Slippage-Toleranz und { $fee } Swap-Gebühr. Ein kleines Ziel deckt sie womöglich nicht ab. Die Toleranz ist eine Grenze für den Verkaufspreis, keine vorhergesagte Kostenposition.
 copy-warning-trailing-distance = Der Trailing-Abstand ist mindestens so groß wie der Aktivierungsgewinn, sodass ein aktivierter Trail unter dem Einstieg verkaufen kann.
 
 ## Execution tab
@@ -498,22 +523,23 @@ copy-execution-arrival-samples =
        *[other] { $count } Trades in Echtzeit erfasst
     }
 copy-execution-p95 = p95-Ankunft
-copy-execution-median-slippage = Median-Slippage
-copy-execution-slippage-samples =
+copy-execution-target-price-difference = Median-Preisdifferenz zur Ziel-Wallet
+copy-execution-target-difference-samples =
     { $count ->
         [one] { $count } gemessene Ausführung
        *[other] { $count } gemessene Ausführungen
     }
-copy-execution-worst-slippage = Schlechteste Slippage
-copy-execution-average-slippage = Durchschnitt { $amount }
+copy-execution-target-difference-worst = Größte Preisdifferenz zur Ziel-Wallet
+copy-execution-target-difference-average = Durchschnittliche Preisdifferenz zur Ziel-Wallet { $amount }
 copy-execution-delay-title = Erkennungsverzögerung
 copy-execution-delay-note = Zeit vom Block der Wallet bis zur Erkennung des Trades durch diesen Bot. Nachholungen nach Ausfallzeiten sind ausgenommen.
 copy-execution-delay-limit = Balken über dem Ankunftslimit von { $limit } sind gelb.
 copy-execution-fastest = Schnellste
 copy-execution-average = Durchschnitt
 copy-execution-slowest = Langsamste
-copy-execution-fill-title = Ausführung gegenüber der Wallet
-copy-execution-fill-note = Positiv bedeutet schlechter als die Wallet: bei einem Kauf mehr bezahlt, bei einem gespiegelten Verkauf weniger erhalten. Eine Paper-Ausführung eines Tokens ohne Pool-Preis wird zum Trade der Wallet selbst bepreist, misst also nichts und bleibt unberücksichtigt.
+copy-execution-target-difference-title = Preisdifferenz zur Ziel-Wallet
+copy-execution-target-difference-note = Vergleicht jeden Ausführungspreis mit dem eigenen Tradepreis der Wallet, wenn beide über null liegen. Positiv bedeutet eine schlechtere Ausführung als bei der Wallet: bei einem Kauf mehr bezahlt oder bei einem Verkauf weniger erhalten. Es ist ein Vergleich, nicht die Slippage-Toleranz der Aufgabe.
+copy-execution-wait-note = Die Erkennungsverzögerung wird ab dem Block der Wallet gemessen. Die Wartezeit bis zur Ausführung ist eine Annahme des Paper-Modells; die Zeit, die eine Entscheidung in der Warteschlange der Aufgabe verbringt, wird addiert und bei jeder Ausführung festgehalten.
 copy-execution-samples = Stichproben
 copy-execution-median = Median
 copy-execution-worst = Schlechteste
@@ -534,7 +560,7 @@ copy-table-rounds = Runden
 copy-table-realized = Realisiert ({ -sol })
 copy-table-profit-factor = Profitfaktor
 copy-table-average-hold = Ø Haltedauer
-copy-table-median-slippage = Median-Slippage
+copy-table-target-difference = Median-Preisdifferenz zur Ziel-Wallet
 
 ## Charts
 
@@ -616,7 +642,7 @@ copy-holdings-token-details = Token-Details öffnen
 copy-holdings-opened = Eröffnet { $time }
 copy-holdings-no-pool-price = Kein Pool-Preis
 copy-holdings-close = Schließen
-copy-holdings-write-off = Abschreiben
+copy-holdings-close-pending = Schließen ausstehend
 copy-holdings-activity = Aktivität
 copy-holdings-no-exit-rule = Keine Ausstiegsregel
 copy-holdings-watch-stop = Stop { $level }
@@ -641,7 +667,7 @@ copy-holdings-col-invested = Investiert ({ -sol })
 copy-holdings-col-proceeds = Erlös ({ -sol })
 copy-holdings-col-exit = Ausstieg
 copy-holdings-col-closed = Geschlossen
-copy-holdings-price-note = Preise sind in { -sol } pro Token angegeben. Der Einstieg enthält Slippage und Gebühren des Kaufs; Höchststand und Ausstiegsniveaus beziehen sich darauf, sodass ein Bestand mit einem Höchststand unter dem Einstieg eröffnet wird. Fahren Sie mit der Maus über einen Wert, um den Pool-Preis zu sehen.
+copy-holdings-marks-note = Preise sind in { -sol } pro Token angegeben. Bewertung und Ausstiegsniveaus nutzen den Pool-Preis, der auch Ausstiegsregeln auslöst; festgehaltene Ausführungen nutzen Router-Quoten. Der Einstieg enthält die geschätzte Netzwerkgebühr des Kaufs; Höchststand und Ausstiegsniveaus beziehen sich darauf, sodass ein Bestand mit einem Höchststand unter dem Einstieg eröffnet wird. Fahren Sie mit der Maus über einen Wert, um den Pool-Preis zu sehen.
 copy-holdings-paused-rules = Pausiert: keine neuen Kopien. Ihre Ausstiegsregeln schließen diese Bestände weiterhin.
 copy-holdings-paused-mirror = Pausiert: keine neuen Kopien. Die Verkäufe der Wallet schließen diese Bestände weiterhin.
 copy-holdings-paused-hybrid = Pausiert: keine neuen Kopien. Die Verkäufe der Wallet und Ihre Ausstiegsregeln schließen diese Bestände weiterhin.
@@ -650,17 +676,17 @@ copy-holdings-closed-loading = Geschlossene Runden werden geladen…
 copy-holdings-closed-empty = Noch keine geschlossenen Runden.
 copy-holdings-closed-latest = Die letzten { $shown } von { $total } Runden.
 copy-holdings-close-title = Paper-Bestand schließen
-copy-holdings-close-message = { $token } im Paper-Buch zum Pool-Preis ({ $price }) mit Slippage und Gebühren der Aufgabe verkaufen.
+copy-holdings-close-quote-message = Paper-Bestand von { $token } mit zwei Router-Quoten schließen, die etwa { $delay } auseinanderliegen. Die Ausführung nutzt die spätere Quote, die den Mindestertrag der ersten Quote erreichen muss, abzüglich der geschätzten Netzwerkgebühr. Ist keine verwendbare Quote verfügbar, bleibt der Bestand unverändert offen.
 copy-holdings-close-confirm = Bestand schließen
-copy-holdings-write-off-title = Paper-Bestand abschreiben
-copy-holdings-write-off-message = Für { $token } gibt es keinen Pool-Preis zum Verkaufen. Beim Abschreiben wird er mit null geschlossen und seine Kosten von { $cost } als Verlust verbucht.
 copy-holdings-keep = Behalten
-copy-holdings-written-off = { $token } abgeschrieben
 copy-holdings-closed = { $token } geschlossen
-copy-holdings-written-off-detail = Ohne Erlös geschlossen
 copy-holdings-sold-at = Verkauft zu { $price }
 copy-holdings-close-failed = Bestand konnte nicht geschlossen werden
-copy-holdings-reset-message = „{ $name }“ neu starten: Paper-Bestände, Ausgaben, Ausführungen, Ausstiege und übersprungene Trades werden entfernt. Die Regeln und die Wallet bleiben.
+copy-holdings-close-pending-detail = Das Schließen ist eingereiht oder läuft. Das Ergebnis erscheint unter Aktivität.
+copy-holdings-close-unconfirmed = Ergebnis des Schließens nicht bestätigt
+copy-holdings-close-unconfirmed-detail = Die Verbindung endete, bevor das Ergebnis eintraf, und unter Aktivität liegt noch kein Ergebnis vor. Prüfen Sie die Aktivität, bevor Sie erneut schließen.
+copy-holdings-closed-check-activity = Der Bestand ist geschlossen. Die festgehaltene Ausführung steht unter Aktivität.
+copy-holdings-reset-quote-message = „{ $name }“ neu starten: Die aktuellen Paper-Bestände, Ausgaben, Ausführungen, Ausstiege und übersprungenen Trades werden gelöscht und ein neues quotenbasiertes Buch beginnt. Alte Schätzungen und der Live-Verlauf bleiben. Die Regeln und die Wallet bleiben.
 copy-holdings-reset-cancel = Verlauf behalten
 copy-holdings-reset-done = Paper-Buch zurückgesetzt
 copy-holdings-reset-detail =
@@ -675,7 +701,6 @@ copy-holdings-reset-failed = Paper-Buch konnte nicht zurückgesetzt werden
 copy-activity-title = Aktivität
 copy-activity-filter-label = Aktivitätsfilter
 copy-filter-all = Alle
-copy-outcome-paper-filled = Paper-Kauf
 copy-outcome-live-submitted = Live-Kauf übermittelt
 copy-outcome-live-confirmed = Live-Kauf bestätigt
 copy-outcome-live-failed = Live-Kauf fehlgeschlagen
@@ -684,9 +709,14 @@ copy-outcome-live-sell-submitted = Live-Verkauf übermittelt
 copy-outcome-live-sell-failed = Live-Verkauf fehlgeschlagen
 copy-outcome-skipped = Übersprungen
 copy-activity-decision = Entscheidung
-copy-activity-paper-exit = Paper-Ausstieg · { $rule }
+copy-activity-paper-exit-quote = Paper-Ausstieg auf Quote-Basis · { $rule }
+copy-activity-paper-exit-legacy = Alte Paper-Ausstiegsschätzung · { $rule }
 copy-activity-filled = { $input } zu { $price } · Wallet kaufte { $target }
+copy-activity-filled-target-difference = { $input } zu { $price } · Wallet kaufte { $target } · Preisdifferenz zur Ziel-Wallet { $difference }
 copy-activity-filled-slippage = { $input } zu { $price } · Wallet kaufte { $target } · Slippage { $slippage }
+copy-activity-quote-router = Router { $router } · Quoten erhalten: { $initial } und { $landing }
+copy-activity-quote-wait = Angenommene Wartezeit { $assumed } · in der Warteschlange { $queued }
+copy-activity-quote-fees = Geschätzte Netzwerk- und Prioritätsgebühren { $fee }, einmal gezählt · Plattformgebühr bereits im quotierten Ertrag enthalten
 copy-activity-filled-unpriced = { $input } zu { $price } · zum Trade der Wallet bepreist, kein Pool-Preis
 copy-activity-live-sized = { $sized } · Wallet kaufte { $target }
 copy-activity-sell-nothing = Wallet verkaufte { $amount } · nichts im Bestand, das verkauft werden könnte
@@ -760,7 +790,7 @@ copy-editor-name-placeholder = z. B. Schneller Rotator
 copy-editor-enabled-title = Trades der Wallet verarbeiten
 copy-editor-enabled-help = Bei „Aus“ bleibt die Aufgabe pausiert, bis Sie sie fortsetzen.
 copy-editor-note-live = Diese Aufgabe läuft live: Änderungen gelten für ihre nächsten echten Kopien.
-copy-editor-note-paper = Aufgaben laufen im Paper-Modus, bis Sie sie scharfschalten: Trades werden zum Pool-Preis simuliert und nichts wird ausgegeben.
+copy-editor-note-paper-quote = Aufgaben laufen im Paper-Modus, bis Sie sie scharfschalten: Trades werden anhand von Router-Quoten simuliert und nichts wird ausgegeben.
 copy-editor-copy-size = Kopiergröße
 copy-editor-sizing-fixed = Fester Betrag
 copy-editor-sizing-ratio = Anteil am Wallet-Trade

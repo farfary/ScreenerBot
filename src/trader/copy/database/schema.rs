@@ -10,7 +10,7 @@ use crate::errors::DatabaseError;
 use crate::trader::copy::types::CopyOutcome;
 use crate::trader::error::Error;
 
-const SCHEMA_VERSION: i64 = 7;
+const SCHEMA_VERSION: i64 = 8;
 
 /// The schema of `copy_trading.db`.
 pub(crate) const SCHEMA: StoreSchema = StoreSchema {
@@ -87,6 +87,27 @@ CREATE TABLE IF NOT EXISTS copy_spend (
     FOREIGN KEY (task_id) REFERENCES copy_tasks(id) ON DELETE CASCADE
 );
 CREATE TABLE IF NOT EXISTS copy_paper_positions (
+    task_id INTEGER NOT NULL,
+    mint TEXT NOT NULL,
+    token_amount REAL NOT NULL DEFAULT 0,
+    cost_basis_native REAL NOT NULL DEFAULT 0,
+    invested_native REAL NOT NULL DEFAULT 0,
+    realized_proceeds_native REAL NOT NULL DEFAULT 0,
+    realized_cost_native REAL NOT NULL DEFAULT 0,
+    buys INTEGER NOT NULL DEFAULT 0,
+    sells INTEGER NOT NULL DEFAULT 0,
+    last_price_native REAL,
+    last_price_at TEXT,
+    opened_at TEXT NOT NULL,
+    closed_at TEXT,
+    updated_at TEXT NOT NULL,
+    peak_price_native REAL,
+    token_amount_raw TEXT,
+    token_decimals INTEGER,
+    PRIMARY KEY (task_id, mint),
+    FOREIGN KEY (task_id) REFERENCES copy_tasks(id) ON DELETE CASCADE
+);
+CREATE TABLE IF NOT EXISTS copy_paper_legacy_positions (
     task_id INTEGER NOT NULL,
     mint TEXT NOT NULL,
     token_amount REAL NOT NULL DEFAULT 0,
@@ -209,7 +230,7 @@ fn migrate(connection: &Transaction<'_>) -> crate::trader::Result<()> {
         }
     }
     // v6: the paper book tracks each round's peak for the trailing stop. Added
-    // before the v5 rebuild, which books paper fills through `apply_paper_buy`.
+    // before the v5 rebuild, which books paper fills through the canonical paper-book mutation.
     // A legacy book may still carry the pre-rename column, which the unit
     // rename below moves to the canonical name.
     if !ddl::column_names(connection, "copy_paper_positions")?
@@ -235,6 +256,124 @@ fn migrate(connection: &Transaction<'_>) -> crate::trader::Result<()> {
     // Unit-neutral column names come last, so every step above reads the
     // historical shape it was written for.
     crate::database::schema::renames::rename(connection, &super::column_names::RENAMES)?;
+    migrate_legacy_paper_archive(connection)?;
+    ddl::add_column(
+        connection,
+        "copy_paper_positions",
+        "token_amount_raw",
+        "TEXT",
+    )?;
+    ddl::add_column(
+        connection,
+        "copy_paper_positions",
+        "token_decimals",
+        "INTEGER",
+    )?;
+    validate_active_paper_amounts(connection)?;
+    Ok(())
+}
+
+/// Active rows may only contain validated raw balances; archived estimates stay float-only.
+fn validate_active_paper_amounts(transaction: &Transaction<'_>) -> crate::trader::Result<()> {
+    let invalid = transaction
+        .query_row(
+            "SELECT 1 FROM copy_paper_positions WHERE token_amount_raw IS NULL \
+             OR token_decimals IS NULL OR token_decimals < 0 OR token_decimals > 255 \
+             OR token_amount_raw NOT GLOB '[0-9]*' OR token_amount_raw = '' \
+             OR (token_amount_raw != '0' AND substr(token_amount_raw, 1, 1) = '0') \
+             LIMIT 1",
+            [],
+            |_| Ok(true),
+        )
+        .optional()
+        .map_err(crate::errors::DatabaseError::from)?
+        .unwrap_or(false);
+    if invalid {
+        return Err(Error::CopyValidation {
+            detail: "active paper book contains a missing or noncanonical raw balance".to_owned(),
+        });
+    }
+    let rows = {
+        let mut statement = transaction
+            .prepare(
+                "SELECT token_amount, token_amount_raw, token_decimals, closed_at \
+                      FROM copy_paper_positions",
+            )
+            .map_err(crate::errors::DatabaseError::from)?;
+        let rows = statement
+            .query_map([], |row| {
+                Ok((
+                    row.get::<_, f64>(0)?,
+                    row.get::<_, crate::chains::RawAmount>(1)?,
+                    row.get::<_, u8>(2)?,
+                    row.get::<_, Option<String>>(3)?.is_some(),
+                ))
+            })
+            .map_err(crate::errors::DatabaseError::from)?
+            .collect::<Result<Vec<_>, _>>()
+            .map_err(crate::errors::DatabaseError::from)?;
+        rows
+    };
+    if rows.iter().any(|(display, raw, decimals, closed)| {
+        !display.is_finite()
+            || *display < 0.0
+            || display.to_bits() != raw.to_whole_units(*decimals).to_bits()
+            || (*raw == crate::chains::RawAmount::ZERO) != *closed
+    }) {
+        return Err(Error::CopyValidation {
+            detail: "active paper display amount does not match its raw balance".to_owned(),
+        });
+    }
+    Ok(())
+}
+
+/// Freeze the v7 estimates after all historical spend and fill replays have run.
+/// Archive writes and the current-book clear share the schema migration transaction.
+fn migrate_legacy_paper_archive(transaction: &Transaction<'_>) -> crate::trader::Result<()> {
+    let raw_version = transaction
+        .query_row(
+            "SELECT value FROM copy_metadata WHERE key = 'schema_version'",
+            [],
+            |row| row.get::<_, String>(0),
+        )
+        .optional()
+        .map_err(crate::errors::DatabaseError::from)?;
+    let version = match raw_version {
+        None => 0,
+        Some(value) => value.parse::<i64>().map_err(|_| Error::CopyValidation {
+            detail: "copy schema version is malformed".to_owned(),
+        })?,
+    };
+    if version < 0 {
+        return Err(Error::CopyValidation {
+            detail: "copy schema version is malformed".to_owned(),
+        });
+    }
+    if version >= SCHEMA_VERSION {
+        return Ok(());
+    }
+
+    transaction
+        .execute(
+            "INSERT INTO copy_paper_legacy_positions (task_id, mint, token_amount, cost_basis_native, \
+             invested_native, realized_proceeds_native, realized_cost_native, buys, sells, \
+             last_price_native, last_price_at, opened_at, closed_at, updated_at, peak_price_native) \
+             SELECT task_id, mint, token_amount, cost_basis_native, invested_native, \
+             realized_proceeds_native, realized_cost_native, buys, sells, last_price_native, \
+             last_price_at, opened_at, closed_at, updated_at, peak_price_native \
+             FROM copy_paper_positions",
+            [],
+        )
+        .map_err(crate::errors::DatabaseError::from)?;
+    transaction
+        .execute(
+            "UPDATE copy_spend SET mode = 'paper_legacy' WHERE mode = 'paper'",
+            [],
+        )
+        .map_err(crate::errors::DatabaseError::from)?;
+    transaction
+        .execute("DELETE FROM copy_paper_positions", [])
+        .map_err(crate::errors::DatabaseError::from)?;
     Ok(())
 }
 
@@ -301,7 +440,7 @@ fn migrate_mode_scoped_spend(transaction: &Transaction<'_>) -> crate::trader::Re
     };
     for json in fills {
         if let Ok(CopyOutcome::PaperFilled(decision)) = serde_json::from_str(&json) {
-            super::ledger::apply_paper_buy(transaction, &decision)?;
+            super::paper_book::apply_historical_paper_buy(transaction, &decision)?;
         }
     }
     Ok(())

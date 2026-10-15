@@ -150,8 +150,34 @@ pub struct PaperHolding {
     pub held_seconds: i64,
     /// Highest pool price of the open round; what arms the paper trailing stop.
     pub peak_price_native: Option<f64>,
+    /// True while a manual quote close is queued or executing.
+    pub close_pending: bool,
     /// `None` when the policy does not manage this task's exits.
     pub exit_watch: Option<HoldingExitWatch>,
+}
+
+#[derive(Debug, Serialize)]
+pub struct LegacyPaperHolding {
+    pub mint: String,
+    pub token_amount: f64,
+    pub remaining_cost_basis_native: f64,
+    pub realized_proceeds_native: f64,
+    pub realized_cost_native: f64,
+    pub realized_pnl_native: f64,
+    pub last_recorded_price_native: Option<f64>,
+    pub last_recorded_price_at: Option<DateTime<Utc>>,
+    pub remaining_pnl_at_last_recorded_price_native: Option<f64>,
+    pub opened_at: DateTime<Utc>,
+    pub closed_at: Option<DateTime<Utc>>,
+}
+
+#[derive(Debug, Default, Serialize)]
+pub struct LegacyPaperSummary {
+    pub spent_native: f64,
+    pub realized_proceeds_native: f64,
+    pub realized_cost_native: f64,
+    pub realized_pnl_native: f64,
+    pub holdings: Vec<LegacyPaperHolding>,
 }
 
 /// `mark` is the holding's pool price; a closed holding is never marked, and a
@@ -189,6 +215,7 @@ fn paper_holding(
         closed_at: position.closed_at,
         held_seconds: (position.closed_at.unwrap_or(now) - position.opened_at).num_seconds(),
         peak_price_native: position.peak_price_native.filter(|_| open),
+        close_pending: false,
         exit_watch: entry
             .zip(policy)
             .map(|(entry, policy)| exit_watch(position, entry, policy)),
@@ -210,8 +237,17 @@ pub struct CopyTaskWorkspace {
     pub policy_manages_exits: bool,
     pub global_require_filter_pass: bool,
     pub paper_holdings: Vec<PaperHolding>,
+    pub legacy_paper: LegacyPaperSummary,
+    pub paper_execution: PaperExecutionSettings,
     pub readiness: Readiness,
     pub activity: Vec<CopyActivityRow>,
+}
+
+#[derive(Debug, Serialize)]
+pub struct PaperExecutionSettings {
+    pub model: &'static str,
+    pub landing_delay_ms: u64,
+    pub queue_capacity: usize,
 }
 
 pub async fn task_workspace(id: i64) -> Result<CopyTaskWorkspace> {
@@ -225,6 +261,9 @@ pub async fn task_workspace(id: i64) -> Result<CopyTaskWorkspace> {
     let positions = control::all_positions().await;
     let activity = db.list_task_activity(id, TASK_ACTIVITY_WINDOW).await?;
     let paper_book = db.paper_positions(id).await?;
+    let paper_epoch = db.paper_epoch(id).await?;
+    let legacy_paper_book = db.legacy_paper_positions(id).await?;
+    let legacy_paper_spent = db.legacy_task_total_spent(id).await?;
     let spent_native = db.task_total_spent(id, task.mode).await?;
     let live_spent_native = db.task_total_spent(id, CopyMode::Live).await?;
     let chain = task.chain;
@@ -238,16 +277,24 @@ pub async fn task_workspace(id: i64) -> Result<CopyTaskWorkspace> {
         spent_native,
         mark,
     );
-    Ok(build_workspace(
+    let mut workspace = build_workspace(
         summary,
         live_spent_native,
         &activity,
         &positions,
         &paper_book,
+        &legacy_paper_book,
+        legacy_paper_spent,
         mark,
         control::live_block_reason(),
         Utc::now(),
-    ))
+    );
+    if let Some(runtime) = super::paper_execution::active() {
+        for holding in &mut workspace.paper_holdings {
+            holding.close_pending = runtime.manual_close_pending(id, &holding.mint, paper_epoch);
+        }
+    }
+    Ok(workspace)
 }
 
 /// The workspace from what was already read: the task's `live_spent_native`,
@@ -261,6 +308,8 @@ pub fn build_workspace(
     activity: &[CopyActivityRow],
     positions: &[Position],
     paper_book: &[PaperPosition],
+    legacy_paper_book: &[PaperPosition],
+    legacy_paper_spent: f64,
     mark: impl Fn(&PaperPosition) -> Option<f64>,
     block: Option<&'static str>,
     now: DateTime<Utc>,
@@ -271,6 +320,8 @@ pub fn build_workspace(
         .iter()
         .map(|position| paper_holding(position, manages.then_some(&policy), mark(position), now))
         .collect::<Vec<_>>();
+    let legacy_paper = legacy_paper_summary(legacy_paper_book, legacy_paper_spent);
+    let config = with_config(|config| config.copy_trading.clone());
     let paper_rounds = closed_rounds(summary.task.id, CopyBook::Paper, activity, positions);
     let readiness = readiness::readiness(&summary, &paper_rounds, &paper_holdings, block);
     CopyTaskWorkspace {
@@ -282,9 +333,43 @@ pub fn build_workspace(
         policy_manages_exits: manages,
         global_require_filter_pass: with_config(|config| config.copy_trading.require_filter_pass),
         paper_holdings,
+        legacy_paper,
+        paper_execution: PaperExecutionSettings {
+            model: "quote",
+            landing_delay_ms: config.paper_landing_delay_ms,
+            queue_capacity: config.paper_queue_capacity,
+        },
         readiness,
         activity: activity.iter().take(WORKSPACE_ACTIVITY).cloned().collect(),
     }
+}
+
+fn legacy_paper_summary(book: &[PaperPosition], spent_native: f64) -> LegacyPaperSummary {
+    let mut summary = LegacyPaperSummary {
+        spent_native,
+        ..LegacyPaperSummary::default()
+    };
+    for position in book {
+        summary.realized_proceeds_native += position.realized_proceeds_native;
+        summary.realized_cost_native += position.realized_cost_native;
+        summary.holdings.push(LegacyPaperHolding {
+            mint: position.mint.clone(),
+            token_amount: position.token_amount,
+            remaining_cost_basis_native: position.cost_basis_native,
+            realized_proceeds_native: position.realized_proceeds_native,
+            realized_cost_native: position.realized_cost_native,
+            realized_pnl_native: position.realized_proceeds_native - position.realized_cost_native,
+            last_recorded_price_native: position.last_price_native,
+            last_recorded_price_at: position.last_price_at,
+            remaining_pnl_at_last_recorded_price_native: position
+                .last_price_native
+                .map(|price| position.token_amount * price - position.cost_basis_native),
+            opened_at: position.opened_at,
+            closed_at: position.closed_at,
+        });
+    }
+    summary.realized_pnl_native = summary.realized_proceeds_native - summary.realized_cost_native;
+    summary
 }
 
 /// Activity query string: `filter` is one of all/fills/exits/skips/errors.
@@ -471,13 +556,15 @@ pub struct CopyDefaults {
     pub max_slippage_pct: f64,
     /// The smallest copy sizing will place; a smaller size or per-trade cap never copies.
     pub min_trade_size_native: f64,
-    /// The swap fee every paper and live fill pays on each side, in percent.
+    /// Platform swap-fee rate policy in percent; estimates and raw-unit rounding affect actual charges.
     pub swap_fee_pct: f64,
     pub max_active_tasks: usize,
     pub latency_kill_switch_enabled: bool,
     pub max_arrival_distance_ms: u64,
     pub latency_window_size: usize,
     pub readiness_min_closed_rounds: usize,
+    pub paper_landing_delay_ms: u64,
+    pub paper_queue_capacity: usize,
     pub live_confirmation: &'static str,
 }
 
@@ -490,12 +577,14 @@ pub fn defaults() -> CopyDefaults {
         min_slippage_pct: super::MIN_COPY_SLIPPAGE_PCT,
         max_slippage_pct: crate::trader::constants::MAX_MANUAL_SLIPPAGE_PCT,
         min_trade_size_native: crate::trader::constants::MIN_TRADE_SIZE_NATIVE,
-        swap_fee_pct: f64::from(super::PAPER_REFERRAL_FEE_BPS) / 100.0,
+        swap_fee_pct: f64::from(crate::chains::platform_swap_fee_bps()) / 100.0,
         max_active_tasks: config.max_active_tasks,
         latency_kill_switch_enabled: config.latency_kill_switch_enabled,
         max_arrival_distance_ms: config.max_arrival_distance_ms,
         latency_window_size: config.latency_window_size,
         readiness_min_closed_rounds: config.readiness_min_closed_rounds,
+        paper_landing_delay_ms: config.paper_landing_delay_ms,
+        paper_queue_capacity: config.paper_queue_capacity,
         live_confirmation: LIVE_ARM_CONFIRMATION,
     }
 }

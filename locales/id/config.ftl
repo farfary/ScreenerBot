@@ -185,6 +185,11 @@ config-copy-trading-readiness-min-closed-rounds = Putaran Kesiapan Live
     .hint = Putaran paper tertutup yang dibutuhkan tugas sebelum daftar periksa kesiapan live-nya lolos
 config-copy-trading-require-filter-pass = Wajibkan Lolos Filter
     .hint = Hanya salin token yang diterima pipeline pemfilteran
+config-copy-trading-paper-landing-delay-ms = Jeda Pendaratan Paper
+    .hint = Waktu yang diasumsikan antara kuotasi swap pertama dan kedua pada fill paper. Kuotasi kedua tetap harus memenuhi output minimum kuotasi pertama; biaya adalah estimasi, dan MEV, validator, serta urutan mempool tidak disimulasikan.
+    .unit = ms
+config-copy-trading-paper-queue-capacity = Kapasitas Antrean Paper
+    .hint = Keputusan paper dari satu tugas yang boleh menunggu, dijalankan satu per satu sesuai urutan kedatangan; keputusan yang mendapati antrean penuh dicatat sebagai dilewati.
 
 ## events
 

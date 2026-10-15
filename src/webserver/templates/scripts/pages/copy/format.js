@@ -95,6 +95,11 @@ const SKIP_LABELS = Object.freeze({
   claim_reconciled_abandoned: "copy-skip-claim-reconciled-abandoned",
   stale_observation: "copy-skip-stale-observation",
   unknown_observation_time: "copy-skip-unknown-observation-time",
+  paper_quote_unavailable: "copy-skip-paper-quote-unavailable",
+  paper_quote_unfillable: "copy-skip-paper-quote-unfillable",
+  paper_minimum_output_not_met: "copy-skip-paper-minimum-output-not-met",
+  paper_queue_full: "copy-skip-paper-queue-full",
+  paper_execution_unavailable: "copy-skip-paper-execution-unavailable",
   entry_blocked: "copy-skip-entry-blocked",
 });
 
@@ -264,9 +269,19 @@ export function priceSol(value) {
   return withSolUnit(price(value));
 }
 
-export function seconds(ms) {
+/**
+ * A millisecond span in seconds. Arrival distances read at one decimal below ten seconds
+ * and whole seconds above. `precise` is for configured paper waits, which may carry
+ * millisecond precision: it shows one decimal when the value is a whole tenth, two when a
+ * whole hundredth and three otherwise, and never rounds.
+ */
+export function seconds(ms, { precise = false } = {}) {
   const number = finite(ms);
   if (number === null) return "—";
+  if (precise) {
+    const decimals = number % 100 === 0 ? 1 : number % 10 === 0 ? 2 : 3;
+    return formatTimeSpan(number / 1000, { decimals });
+  }
   return number < 10_000
     ? formatTimeSpan(number / 1000, { decimals: 1 })
     : formatTimeSpan(Math.round(number / 1000));

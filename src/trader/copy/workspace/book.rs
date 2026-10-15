@@ -2,18 +2,14 @@
 // SPDX-License-Identifier: BUSL-1.1
 
 //! Paper-book maintenance behind the workspace: clone a task, reset its paper
-//! book, and close (or write off) one paper holding by hand.
+//! book, and close one paper holding by hand.
 
-use chrono::{DateTime, Utc};
+use chrono::Utc;
 use serde::{Deserialize, Serialize};
+use std::future::Future;
 
 use super::super::control::{self, open_database};
-use super::super::paper_exits::paper_exit_outcome;
-use super::super::service::paper_costs;
-use super::super::{
-    notify, CopyMode, CopyOutcome, CopySellDecision, CopyTask, CopyTaskInput, CopyTelemetry,
-    PaperExitRule, PaperPosition, PaperSellFill,
-};
+use super::super::{notify, CopyMode, CopyTask, CopyTaskInput, PaperPosition};
 use crate::trader::{Error, Result};
 
 #[derive(Debug, Default, Deserialize)]
@@ -80,92 +76,263 @@ pub async fn reset_paper_book(id: i64) -> Result<ResetResult> {
 pub struct ClosedHolding {
     pub task_id: i64,
     pub mint: String,
-    /// No pool price: the holding was closed at zero proceeds.
-    pub written_off: bool,
-    pub mark_price_native: Option<f64>,
+    pub fill_price_native: f64,
 }
 
-/// An unpriced holding cannot be sold at a price that does not exist, so the
-/// book closes it at zero and realizes its whole cost basis as the loss.
-fn write_off(task: &CopyTask, position: &PaperPosition, now: DateTime<Utc>) -> CopyOutcome {
-    CopyOutcome::PaperSellObserved(CopySellDecision {
-        task_id: task.id,
-        target_address: task.target_address.clone(),
-        target_signature: format!(
-            "paper-writeoff:{}:{}:{}",
-            position.mint,
-            position.opened_at.timestamp(),
-            position.sells
-        ),
-        mint: position.mint.clone(),
-        target_token_amount: 0.0,
-        target_sol_amount: 0.0,
-        exit_percentage: None,
-        transaction_signature: None,
-        error: None,
-        telemetry: CopyTelemetry {
-            target_block_time: None,
-            detected_at: now,
-            decoded_at: now,
-            decided_at: now,
-            submitted_at: None,
-            confirmed_at: None,
-            target_price_sol: None,
-            fill_price_sol: None,
-            backfill: false,
+/// Sell one paper holding round through the same serialized quote worker as
+/// other exits. `expected_opened_at` is the exact opening instant of the round
+/// the caller confirmed; a different or newer round is refused unchanged.
+pub async fn close_paper_holding(
+    id: i64,
+    mint: &str,
+    expected_opened_at: chrono::DateTime<Utc>,
+) -> Result<ClosedHolding> {
+    let database = open_database().await?;
+    close_paper_holding_with(
+        database,
+        id,
+        mint,
+        expected_opened_at,
+        |database, task, position, epoch, queued_at| async move {
+            super::super::paper_exits::paper_exit_outcome(
+                &database,
+                &task,
+                &position,
+                super::super::PaperExitRule::Manual,
+                None,
+                epoch,
+                queued_at,
+                crate::swaps::try_get_best_quote,
+                |delay| async move {
+                    tokio::time::sleep(delay).await;
+                    if crate::global::is_force_stopped() {
+                        return Err(super::super::CopySkip::ForceStopped);
+                    }
+                    Ok(())
+                },
+            )
+            .await
         },
-        paper_fill: Some(PaperSellFill {
-            token_amount: position.token_amount,
-            market_price_sol: 0.0,
-            priced_from_pool: false,
-            fill_price_sol: 0.0,
-            gross_sol: 0.0,
-            referral_fee_sol: 0.0,
-            network_fee_sol: 0.0,
-            priority_fee_sol: 0.0,
-            net_proceeds_sol: 0.0,
-        }),
-        exit_rule: Some(PaperExitRule::Manual),
-    })
+    )
+    .await
 }
 
-/// Sell a paper holding by hand at the pool price, like an exit rule would; a
-/// holding without a pool price is written off.
-pub async fn close_paper_holding(id: i64, mint: &str) -> Result<ClosedHolding> {
-    let db = open_database().await?;
+pub(super) async fn close_paper_holding_with<F, Fut>(
+    db: super::super::CopyDatabase,
+    id: i64,
+    mint: &str,
+    expected_opened_at: chrono::DateTime<Utc>,
+    execute_exit: F,
+) -> Result<ClosedHolding>
+where
+    F: FnOnce(
+            super::super::CopyDatabase,
+            CopyTask,
+            PaperPosition,
+            u64,
+            chrono::DateTime<Utc>,
+        ) -> Fut
+        + Send
+        + 'static,
+    Fut: Future<Output = std::result::Result<super::super::CopyOutcome, super::super::CopySkip>>
+        + Send
+        + 'static,
+{
     let task = db
         .get_task(id)
         .await?
         .ok_or(Error::CopyTaskNotFound { task_id: id })?;
-    let position = db
+    if task.mode != CopyMode::Paper {
+        return Err(Error::CopyValidation {
+            detail: "return the task to paper before closing a paper holding".to_owned(),
+        });
+    }
+    let round_key = db
         .paper_position(id, mint)
         .await?
         .filter(PaperPosition::is_open)
-        .ok_or_else(|| Error::CopyHoldingNotFound {
+        .ok_or(Error::CopyHoldingNotFound {
             task_id: id,
             mint: mint.to_owned(),
         })?;
-    let now = Utc::now();
-    let mark = control::paper_mark(task.chain, &position)
-        .filter(|price| price.is_finite() && *price > 0.0);
-    let outcome = match mark {
-        Some(mark) => paper_exit_outcome(
-            &task,
-            &position,
-            PaperExitRule::Manual,
-            None,
-            mark,
-            paper_costs(),
-            now,
+    if round_key.opened_at != expected_opened_at {
+        return Err(Error::CopyTaskRejected {
+            reason: super::super::CopySkip::PaperExecutionUnavailable,
+        });
+    }
+    let epoch = db.paper_epoch(id).await?;
+    let Some(runtime) = super::super::paper_execution::active() else {
+        let reason = super::super::CopySkip::PaperExecutionUnavailable;
+        notify::record(
+            &db,
+            super::super::paper_execution::skipped_paper_intent(
+                id,
+                format!(
+                    "manual-close-unavailable:{mint}:{}",
+                    Utc::now().timestamp_nanos_opt().unwrap_or_default()
+                ),
+                mint,
+                reason.clone(),
+                epoch,
+            ),
         )
-        .map_err(|reason| Error::CopyTaskRejected { reason })?,
-        None => write_off(&task, &position, now),
+        .await?;
+        return Err(Error::CopyTaskRejected { reason });
     };
-    notify::record(&db, outcome).await?;
-    Ok(ClosedHolding {
-        task_id: id,
-        mint: mint.to_owned(),
-        written_off: mark.is_none(),
-        mark_price_native: mark,
-    })
+    let db_job = db.clone();
+    let mint_job = mint.to_owned();
+    let queued_at = Utc::now();
+    let key = format!(
+        "manual:{mint}:{}:{}",
+        round_key
+            .opened_at
+            .timestamp_nanos_opt()
+            .unwrap_or_default(),
+        epoch
+    );
+    let fallback_mint = mint.to_owned();
+    let receiver = match runtime.enqueue_manual(id, key, mint.to_owned(), db.clone(), async move {
+        let result: std::result::Result<super::super::CopyOutcome, super::super::CopySkip> =
+            async {
+                if crate::global::is_force_stopped() {
+                    return Err(super::super::CopySkip::ForceStopped);
+                }
+                let current_task = db_job
+                    .get_task(id)
+                    .await
+                    .map_err(|_| super::super::CopySkip::PaperExecutionUnavailable)?
+                    .filter(|task| task.mode == CopyMode::Paper)
+                    .ok_or(super::super::CopySkip::TaskDisabled)?;
+                let position = db_job
+                    .paper_position(id, &mint_job)
+                    .await
+                    .map_err(|_| super::super::CopySkip::PaperExecutionUnavailable)?
+                    .filter(PaperPosition::is_open)
+                    .ok_or(super::super::CopySkip::CopyPositionNotFound)?;
+                if position.opened_at != round_key.opened_at {
+                    return Err(super::super::CopySkip::PaperExecutionUnavailable);
+                }
+                if !matches!(db_job.paper_epoch(id).await, Ok(current) if current == epoch) {
+                    return Err(super::super::CopySkip::PaperExecutionUnavailable);
+                }
+                let execution_position = position.clone();
+                let outcome = execute_exit(
+                    db_job.clone(),
+                    current_task.clone(),
+                    execution_position.clone(),
+                    epoch,
+                    queued_at,
+                )
+                .await?;
+                if crate::global::is_force_stopped()
+                    || !matches!(db_job.paper_epoch(id).await, Ok(current) if current == epoch)
+                {
+                    return Err(super::super::CopySkip::PaperExecutionUnavailable);
+                }
+                let current_task_after = db_job
+                    .get_task(id)
+                    .await
+                    .map_err(|_| super::super::CopySkip::PaperExecutionUnavailable)?
+                    .filter(|task| {
+                        task.mode == CopyMode::Paper
+                            && task.slippage_pct == current_task.slippage_pct
+                    })
+                    .ok_or(super::super::CopySkip::TaskDisabled)?;
+                let current_position_after = db_job
+                    .paper_position(id, &mint_job)
+                    .await
+                    .map_err(|_| super::super::CopySkip::PaperExecutionUnavailable)?
+                    .filter(PaperPosition::is_open)
+                    .filter(|current| {
+                        current.opened_at == execution_position.opened_at
+                            && current.sells == execution_position.sells
+                    })
+                    .ok_or(super::super::CopySkip::PaperExecutionUnavailable)?;
+                if current_position_after
+                    .raw_token_amount
+                    .is_none_or(|current| {
+                        execution_position
+                            .raw_token_amount
+                            .is_none_or(|expected| current < expected)
+                    })
+                    || current_task_after.mode != CopyMode::Paper
+                {
+                    return Err(super::super::CopySkip::PaperExecutionUnavailable);
+                }
+                Ok(outcome)
+            }
+            .await;
+        result.unwrap_or_else(|reason| {
+            super::super::paper_execution::skipped_paper_intent(
+                id,
+                format!(
+                    "manual-close-skip:{fallback_mint}:{}",
+                    Utc::now().timestamp_nanos_opt().unwrap_or_default()
+                ),
+                &fallback_mint,
+                reason,
+                epoch,
+            )
+        })
+    }) {
+        Ok(receiver) => receiver,
+        Err(super::super::paper_execution::EnqueueError::Duplicate) => {
+            return Err(Error::CopyTaskRejected {
+                reason: super::super::CopySkip::PaperExecutionUnavailable,
+            });
+        }
+        Err(error) => {
+            let reason = match error {
+                super::super::paper_execution::EnqueueError::Full => {
+                    super::super::CopySkip::PaperQueueFull
+                }
+                super::super::paper_execution::EnqueueError::Unavailable => {
+                    super::super::CopySkip::PaperExecutionUnavailable
+                }
+                super::super::paper_execution::EnqueueError::Duplicate => unreachable!(),
+            };
+            let skipped = super::super::paper_execution::skipped_paper_intent(
+                id,
+                format!(
+                    "manual-close-queue:{}:{}",
+                    mint,
+                    Utc::now().timestamp_nanos_opt().unwrap_or_default()
+                ),
+                mint,
+                reason.clone(),
+                epoch,
+            );
+            notify::record(&db, skipped).await?;
+            return Err(Error::CopyTaskRejected { reason });
+        }
+    };
+    match receiver.await.map_err(|_| Error::CopyTaskRejected {
+        reason: super::super::CopySkip::PaperExecutionUnavailable,
+    })? {
+        Err(error) => Err(error),
+        Ok((outcome, inserted)) => {
+            if !inserted {
+                return Err(Error::CopyTaskRejected {
+                    reason: super::super::CopySkip::PaperExecutionUnavailable,
+                });
+            }
+            match outcome {
+                super::super::CopyOutcome::PaperSellObserved(decision) => Ok(ClosedHolding {
+                    task_id: id,
+                    mint: mint.to_owned(),
+                    fill_price_native: decision.telemetry.fill_price_sol.ok_or(
+                        Error::CopyTaskRejected {
+                            reason: super::super::CopySkip::PaperQuoteUnfillable,
+                        },
+                    )?,
+                }),
+                super::super::CopyOutcome::Skipped { reason, .. } => {
+                    Err(Error::CopyTaskRejected { reason })
+                }
+                _ => Err(Error::CopyTaskRejected {
+                    reason: super::super::CopySkip::PaperExecutionUnavailable,
+                }),
+            }
+        }
+    }
 }

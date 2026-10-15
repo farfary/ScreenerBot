@@ -16,6 +16,11 @@ copy-skip-invalid-sizing = 任务仓位规模无效
 copy-skip-invalid-slippage = 任务滑点无效
 copy-skip-invalid-exit-policy = 任务出场规则无效
 copy-skip-invalid-price = 没有可用的市场价格
+copy-skip-paper-quote-unavailable = 无法为模拟成交获取兑换报价
+copy-skip-paper-quote-unfillable = 该报价无法产生可用的模拟成交
+copy-skip-paper-minimum-output-not-met = 第二次报价低于第一次报价的最低输出
+copy-skip-paper-queue-full = 此任务的模拟执行队列已满
+copy-skip-paper-execution-unavailable = 模拟执行未完成：服务已停止，任务或持仓已变更，或该请求与正在处理的请求重复
 copy-skip-not-sell-swap = 钱包活动不是卖出
 copy-skip-exit-mode-disabled = 已忽略钱包卖出：该任务按自身规则卖出
 copy-skip-force-stopped = 交易已被强制停止
@@ -202,13 +207,13 @@ copy-toast-global-failed = 无法更改跟单处理状态
 ## Onboarding
 
 copy-onboarding-title = 跟单您信任的钱包，先用模拟交易验证
-copy-onboarding-body = 每个任务都从模拟交易开始：目标交易会按流动性池价格，结合您的滑点和手续费进行模拟，您的出场规则会在模拟账本上运行。待某个钱包的模拟结果达标后，再为其单独启用实盘。
+copy-onboarding-paper-body = 每个任务都从模拟交易开始：目标交易会基于两次路由报价并结合预估网络费用进行模拟，您的出场规则会在模拟账本上运行。待某个钱包的模拟结果达标后，再为其单独启用实盘。
 copy-onboarding-add = 添加您的第一个钱包
 copy-setup-gate-title = 跟单交易需要钱包
 copy-onboarding-observe = 观察
 copy-onboarding-observe-detail = 检测钱包的兑换，无需花费 { -sol }。
 copy-onboarding-evaluate = 评估
-copy-onboarding-evaluate-detail = 查看模拟盈亏、胜率、跳过情况、检测速度和滑点。
+copy-onboarding-evaluate-paper-detail = 查看模拟盈亏、胜率、跳过情况、检测速度和与目标价格的差异。
 copy-onboarding-arm = 启用
 copy-onboarding-arm-detail = 通过就绪检查，然后开启真实兑换。
 
@@ -251,6 +256,26 @@ copy-settings-unit-rounds = 轮
 copy-settings-save = 保存设置
 copy-settings-load-failed = 无法加载跟单设置
 copy-settings-saved = 跟单交易设置已保存
+copy-outcome-paper-filled-legacy = 旧版模拟估算
+copy-outcome-paper-filled-quote = 基于报价的模拟成交
+copy-outcome-paper-sell-legacy = 旧版模拟出场估算
+copy-outcome-paper-sell-quote = 基于报价的模拟出场
+
+## Paper execution model
+
+copy-paper-model = 模拟执行模型
+copy-paper-model-note = 每次模拟成交使用两次按交易规模获取的路由报价，二者相隔假定的等待时间。后一次报价仍须满足第一次报价的最低输出。流动性池价格继续用于持仓估值并触发出场规则。网络费和优先费合为一项估算，只计一次；平台费已包含在报价输出中。MEV 和验证者排序不会被模拟。
+copy-paper-wait-label = 假定的落地等待时间
+copy-paper-queue-label = 每个任务的队列大小
+copy-paper-legacy-title = 旧版模拟估算
+copy-paper-legacy-note = 在基于报价的模拟之前保留下来的只读估算。它们不计入当前账本的花费或持仓，也不提供任何操作。剩余数量按每个代币最后保存的价格估值，绝不按当前市场价格估值。
+copy-paper-legacy-spent = 旧版估算花费
+copy-paper-legacy-realized = 旧版已实现估算
+copy-paper-legacy-col-tokens = 代币
+copy-paper-legacy-col-cost = 剩余成本（{ -sol }）
+copy-paper-legacy-col-realized = 已实现估算（{ -sol }）
+copy-paper-legacy-col-price = 最后保存的价格（{ -sol }）
+copy-paper-legacy-col-remaining = 按保存价格的剩余盈亏（{ -sol }）
 
 ## Workspace
 
@@ -459,7 +484,7 @@ copy-warning-mirror = 仅钱包的卖出会平掉持仓：没有止损保护，�
 copy-warning-no-rules = 没有开启任何出场规则，且钱包的卖出被忽略：持仓永远不会被卖出。
 copy-warning-no-stop-loss = 未设置止损：下跌的代币会一直持有，直到其他规则触发或钱包卖出。
 copy-warning-stop-delay = 止损会在每次买入后等待 { $hold }：下跌更快的代币平仓时会远低于 { $threshold }。
-copy-warning-take-profit-cost = { $target } 的止盈无法覆盖卖出成本（{ $slippage } 滑点和 { $fee } 兑换手续费），因此平仓轮次会亏损。
+copy-warning-take-profit-small = { $target } 的止盈不高于卖出成本：最高 { $slippage } 的滑点容差和 { $fee } 的兑换手续费。较小的目标可能无法覆盖这些成本。容差是对卖出价格的限制，而不是预测的成本。
 copy-warning-trailing-distance = 追踪距离不小于其启动涨幅，因此已启动的追踪可能在低于入场价时卖出。
 
 ## Execution tab
@@ -478,21 +503,22 @@ copy-execution-arrival-samples =
        *[other] 实时观察到 { $count } 笔交易
     }
 copy-execution-p95 = p95 到达时间
-copy-execution-median-slippage = 滑点中位数
-copy-execution-slippage-samples =
+copy-execution-target-price-difference = 与目标价格差异的中位数
+copy-execution-target-difference-samples =
     { $count ->
        *[other] { $count } 笔已测量的成交
     }
-copy-execution-worst-slippage = 最大滑点
-copy-execution-average-slippage = 平均 { $amount }
+copy-execution-target-difference-worst = 与目标价格的最大差异
+copy-execution-target-difference-average = 与目标价格的平均差异 { $amount }
 copy-execution-delay-title = 检测延迟
 copy-execution-delay-note = 从钱包所在区块到此机器人发现交易的时间。停机后的重放不计入。
 copy-execution-delay-limit = 超过 { $limit } 到达上限的柱条以琥珀色显示。
 copy-execution-fastest = 最快
 copy-execution-average = 平均
 copy-execution-slowest = 最慢
-copy-execution-fill-title = 与钱包成交的对比
-copy-execution-fill-note = 正值表示比钱包更差：买入时付出更多，镜像卖出时获得更少。对于没有流动性池价格的代币，模拟成交按钱包自己的交易价计价，因此无法衡量，已被排除。
+copy-execution-target-difference-title = 与目标价格的差异
+copy-execution-target-difference-note = 当两者均大于零时，将每笔成交价与钱包自己的交易价进行比较。正值表示成交比钱包更差：买入时付出更多，或卖出时获得更少。这只是一个对比，不是任务的滑点容差。
+copy-execution-wait-note = 检测延迟从钱包所在区块开始计算。落地等待时间是模拟模型的假定；决策在任务队列中停留的时间会加到其上，并记录在每笔成交中。
 copy-execution-samples = 样本
 copy-execution-median = 中位数
 copy-execution-worst = 最差
@@ -513,7 +539,7 @@ copy-table-rounds = 轮次
 copy-table-realized = 已实现（{ -sol }）
 copy-table-profit-factor = 盈利因子
 copy-table-average-hold = 平均持仓
-copy-table-median-slippage = 滑点中位数
+copy-table-target-difference = 与目标价格差异的中位数
 
 ## Charts
 
@@ -593,7 +619,7 @@ copy-holdings-token-details = 打开代币详情
 copy-holdings-opened = 开仓于 { $time }
 copy-holdings-no-pool-price = 无流动性池价格
 copy-holdings-close = 平仓
-copy-holdings-write-off = 核销
+copy-holdings-close-pending = 等待平仓
 copy-holdings-activity = 活动
 copy-holdings-no-exit-rule = 无出场规则
 copy-holdings-watch-stop = 止损 { $level }
@@ -618,7 +644,7 @@ copy-holdings-col-invested = 投入（{ -sol }）
 copy-holdings-col-proceeds = 所得（{ -sol }）
 copy-holdings-col-exit = 出场价
 copy-holdings-col-closed = 平仓时间
-copy-holdings-price-note = 价格以每个代币的 { -sol } 计。入场价已包含买入的滑点和手续费；峰值和出场水平均相对于入场价，因此持仓建立时其峰值低于入场价。将鼠标悬停在某项上可查看其流动性池价格。
+copy-holdings-marks-note = 价格以每个代币的 { -sol } 计。估值和出场水平使用流动性池价格，该价格同时触发出场规则；记录的成交使用路由报价。入场价已包含买入的预估网络费；峰值和出场水平均相对于入场价，因此持仓建立时其峰值低于入场价。将鼠标悬停在某项上可查看其流动性池价格。
 copy-holdings-paused-rules = 已暂停：不会新增跟单。您的出场规则仍会平掉这些持仓。
 copy-holdings-paused-mirror = 已暂停：不会新增跟单。钱包的卖出仍会平掉这些持仓。
 copy-holdings-paused-hybrid = 已暂停：不会新增跟单。钱包的卖出和您的出场规则仍会平掉这些持仓。
@@ -627,17 +653,17 @@ copy-holdings-closed-loading = 正在加载已平仓轮次…
 copy-holdings-closed-empty = 暂无已平仓轮次。
 copy-holdings-closed-latest = 最近 { $shown } 个，共 { $total } 个轮次。
 copy-holdings-close-title = 平掉模拟持仓
-copy-holdings-close-message = 在模拟账本中按流动性池价格（{ $price }）并结合任务的滑点和手续费卖出 { $token }。
+copy-holdings-close-quote-message = 使用相隔约 { $delay } 的两次路由报价，平掉 { $token } 的模拟持仓。成交使用后一次报价，该报价须满足第一次报价的最低输出，并扣除预估网络费。如果没有可用报价，持仓保持开启且不变。
 copy-holdings-close-confirm = 平仓
-copy-holdings-write-off-title = 核销模拟持仓
-copy-holdings-write-off-message = { $token } 没有可用于卖出的流动性池价格。核销会将其按零平仓，并把 { $cost } 的成本记为亏损。
 copy-holdings-keep = 保留
-copy-holdings-written-off = { $token } 已核销
 copy-holdings-closed = { $token } 已平仓
-copy-holdings-written-off-detail = 按零所得平仓
 copy-holdings-sold-at = 卖出价 { $price }
 copy-holdings-close-failed = 无法平仓
-copy-holdings-reset-message = 重新开始“{ $name }”：其模拟持仓、花费、成交、出场和跳过记录将被移除，规则和钱包保留。
+copy-holdings-close-pending-detail = 平仓正在排队或执行中。结果会显示在“活动”中。
+copy-holdings-close-unconfirmed = 平仓结果未确认
+copy-holdings-close-unconfirmed-detail = 连接在收到结果前已中断，“活动”中也还没有结果。再次平仓前请先查看“活动”。
+copy-holdings-closed-check-activity = 持仓已平仓。记录的成交见“活动”。
+copy-holdings-reset-quote-message = 重新开始“{ $name }”：其当前的模拟持仓、花费、成交、出场和跳过记录将被清除，并开始新的基于报价的账本。旧版估算和实盘历史保留，规则和钱包也保留。
 copy-holdings-reset-cancel = 保留历史
 copy-holdings-reset-done = 模拟账本已重置
 copy-holdings-reset-detail =
@@ -651,7 +677,6 @@ copy-holdings-reset-failed = 无法重置模拟账本
 copy-activity-title = 活动
 copy-activity-filter-label = 活动过滤
 copy-filter-all = 全部
-copy-outcome-paper-filled = 模拟买入
 copy-outcome-live-submitted = 实盘买入已提交
 copy-outcome-live-confirmed = 实盘买入已确认
 copy-outcome-live-failed = 实盘买入失败
@@ -660,9 +685,14 @@ copy-outcome-live-sell-submitted = 实盘卖出已提交
 copy-outcome-live-sell-failed = 实盘卖出失败
 copy-outcome-skipped = 已跳过
 copy-activity-decision = 决策
-copy-activity-paper-exit = 模拟出场 · { $rule }
+copy-activity-paper-exit-quote = 基于报价的模拟出场 · { $rule }
+copy-activity-paper-exit-legacy = 旧版模拟出场估算 · { $rule }
 copy-activity-filled = { $input }，价格 { $price } · 钱包买入 { $target }
+copy-activity-filled-target-difference = { $input }，价格 { $price } · 钱包买入 { $target } · 与目标价格的差异 { $difference }
 copy-activity-filled-slippage = { $input }，价格 { $price } · 钱包买入 { $target } · 滑点 { $slippage }
+copy-activity-quote-router = 路由 { $router } · 收到报价的时间 { $initial } 和 { $landing }
+copy-activity-quote-wait = 假定等待 { $assumed } · 排队 { $queued }
+copy-activity-quote-fees = 预估网络费和优先费 { $fee }，只计一次 · 平台费已包含在报价输出中
 copy-activity-filled-unpriced = { $input }，价格 { $price } · 钱包买入 { $target } · 按钱包的交易价计价，无流动性池价格
 copy-activity-live-sized = { $sized } · 钱包买入 { $target }
 copy-activity-sell-nothing = 钱包卖出 { $amount } · 无持仓可卖
@@ -735,7 +765,7 @@ copy-editor-name-placeholder = 例如：快进快出
 copy-editor-enabled-title = 处理该钱包的交易
 copy-editor-enabled-help = 关闭后任务保持暂停，直到您恢复。
 copy-editor-note-live = 此任务为实盘：更改将应用于其后续真实跟单。
-copy-editor-note-paper = 任务在您启用实盘前一直以模拟方式运行：交易按流动性池价格模拟，不会花费资金。
+copy-editor-note-paper-quote = 任务在您启用实盘前一直以模拟方式运行：交易基于路由报价模拟，不会花费资金。
 copy-editor-copy-size = 跟单金额
 copy-editor-sizing-fixed = 固定金额
 copy-editor-sizing-ratio = 钱包交易的占比

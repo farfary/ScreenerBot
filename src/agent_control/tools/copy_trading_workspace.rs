@@ -66,8 +66,9 @@ impl Tool for GetCopyInsightsTool {
                           positions when live), win rate, average win/loss, profit factor, \
                           average hold, cumulative P&L curve, P&L by exit (target_sell, \
                           stop_loss, trailing_stop, take_profit, time_override, manual), skip \
-                          reasons, arrival-latency histogram and fill slippage against the \
-                          target's price. Without task_id: every task side by side."
+                          reasons, arrival-latency histogram and the fill's price \
+                          difference against the target's price; legacy estimates are \
+                          excluded from current paper performance. Without task_id: every task side by side."
                 .to_owned(),
             category: ToolCategory::Portfolio,
             parameters: json!({
@@ -208,10 +209,11 @@ impl Tool for ResetCopyPaperBookTool {
     fn definition(&self) -> ToolDefinition {
         ToolDefinition {
             name: "reset_copy_paper_book".to_owned(),
-            description: "Start a paper task's evaluation over: removes its paper holdings, \
-                          paper spend and the paper fills, sells and skips that built them. \
-                          Refused for a live task. Use after changing a task's rules so the \
-                          results measure the new rules only."
+            description: "Start a paper task's evaluation over under the quote model: removes \
+                          its current paper holdings, paper spend and the quote fills, sells \
+                          and skips that built them, while legacy estimates and live data are \
+                          preserved. Refused for a live task. Use after changing a task's \
+                          rules so the results measure the new rules only."
                 .to_owned(),
             category: ToolCategory::Trading,
             parameters: task_id_schema("Paper task to reset"),
@@ -239,6 +241,7 @@ pub struct CloseCopyPaperHoldingTool;
 struct CloseParams {
     task_id: i64,
     mint: String,
+    opened_at: DateTime<Utc>,
 }
 
 #[async_trait]
@@ -246,19 +249,29 @@ impl Tool for CloseCopyPaperHoldingTool {
     fn definition(&self) -> ToolDefinition {
         ToolDefinition {
             name: "close_copy_paper_holding".to_owned(),
-            description: "Sell one open paper holding of a copy task at the live pool price, \
-                          with the task's slippage and fees, booked as a manual exit. A holding \
-                          with no pool price is written off at zero proceeds. Simulated only: \
-                          no money moves."
+            description: "Sell one open paper holding round of a copy task through the paper \
+                          book's FIFO quote queue: a quote for the held amount, the task's \
+                          simulated delay, then a second quote that must meet the first \
+                          quote's minimum output, with estimated costs counted once, \
+                          booked as a manual exit. opened_at \
+                          must be the exact paper_holdings.opened_at the workspace returned \
+                          for the round; a round that closed or reopened since is refused. A \
+                          failed quote leaves the holding unchanged. Simulated only: no money \
+                          moves."
                 .to_owned(),
             category: ToolCategory::Trading,
             parameters: json!({
                 "type": "object",
                 "properties": {
                     "task_id": { "type": "integer" },
-                    "mint": { "type": "string", "description": "Token of the paper holding" }
+                    "mint": { "type": "string", "description": "Token of the paper holding" },
+                    "opened_at": {
+                        "type": "string",
+                        "format": "date-time",
+                        "description": "Use the EXACT paper_holdings.opened_at the workspace returned for this holding round"
+                    }
                 },
-                "required": ["task_id", "mint"]
+                "required": ["task_id", "mint", "opened_at"]
             }),
             mutating: true,
             requires_confirmation: true,
@@ -270,6 +283,65 @@ impl Tool for CloseCopyPaperHoldingTool {
             Ok(p) => p,
             Err(e) => return e,
         };
-        respond(workspace::close_paper_holding(params.task_id, params.mint.trim()).await)
+        respond(
+            workspace::close_paper_holding(params.task_id, params.mint.trim(), params.opened_at)
+                .await,
+        )
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::{parse, CloseCopyPaperHoldingTool, CloseParams};
+    use crate::agent_control::tools::{Tool, ToolCategory};
+    use chrono::Timelike;
+    use serde_json::json;
+
+    #[test]
+    fn the_close_schema_requires_the_confirmed_round() {
+        let definition = CloseCopyPaperHoldingTool.definition();
+        assert_eq!(
+            definition.parameters["required"],
+            json!(["task_id", "mint", "opened_at"])
+        );
+        assert_eq!(
+            definition.parameters["properties"]["opened_at"]["type"],
+            "string"
+        );
+        assert_eq!(
+            definition.parameters["properties"]["opened_at"]["format"],
+            "date-time"
+        );
+    }
+
+    #[test]
+    fn the_close_capability_flags_are_unchanged() {
+        let definition = CloseCopyPaperHoldingTool.definition();
+        assert_eq!(definition.name, "close_copy_paper_holding");
+        assert!(matches!(definition.category, ToolCategory::Trading));
+        assert!(definition.mutating);
+        assert!(definition.requires_confirmation);
+    }
+
+    #[test]
+    fn a_close_without_a_valid_round_fails_before_any_store_call() {
+        for params in [
+            json!({ "task_id": 1, "mint": "Mint111" }),
+            json!({ "task_id": 1, "mint": "Mint111", "opened_at": null }),
+            json!({ "task_id": 1, "mint": "Mint111", "opened_at": "yesterday" }),
+        ] {
+            assert!(parse::<CloseParams>(params.clone()).is_err(), "{params}");
+        }
+    }
+
+    #[test]
+    fn a_close_keeps_the_round_instant_exact() {
+        let params: CloseParams = parse(json!({
+            "task_id": 1,
+            "mint": "Mint111",
+            "opened_at": "2026-10-07T03:00:00.123456789Z"
+        }))
+        .unwrap_or_else(|_| panic!("valid parameters"));
+        assert_eq!(params.opened_at.nanosecond(), 123_456_789);
     }
 }

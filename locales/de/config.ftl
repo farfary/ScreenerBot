@@ -185,6 +185,11 @@ config-copy-trading-readiness-min-closed-rounds = Runden für Live-Bereitschaft
     .hint = Geschlossene Paper-Runden, die eine Aufgabe benötigt, bevor ihre Live-Bereitschaftsprüfung besteht
 config-copy-trading-require-filter-pass = Bestandene Filterung verlangen
     .hint = Nur Tokens kopieren, die von der Filterungs-Pipeline akzeptiert wurden
+config-copy-trading-paper-landing-delay-ms = Paper-Ausführungsverzögerung
+    .hint = Angenommene Zeit zwischen der ersten und der zweiten Swap-Quote einer Paper-Ausführung. Die zweite Quote muss weiterhin den Mindestertrag der ersten erreichen; Gebühren sind Schätzungen, und MEV, Validatoren und die Mempool-Reihenfolge werden nicht simuliert.
+    .unit = ms
+config-copy-trading-paper-queue-capacity = Paper-Warteschlangenkapazität
+    .hint = Paper-Entscheidungen einer Aufgabe, die warten dürfen und nacheinander in der Reihenfolge ihres Eintreffens ausgeführt werden; eine Entscheidung, die die Warteschlange voll vorfindet, wird als übersprungen erfasst.
 
 ## events
 

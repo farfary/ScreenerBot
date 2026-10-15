@@ -140,6 +140,7 @@ impl CopyDatabase {
                 reason: CopySkip::ClaimReconciledAbandoned,
                 decided_at: now,
                 telemetry: None,
+                paper: None,
             };
             let json = serde_json::to_string(&outcome).map_err(|e| Error::CopySerialize {
                 field: "reconciled_claim",

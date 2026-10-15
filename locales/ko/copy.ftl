@@ -16,6 +16,11 @@ copy-skip-invalid-sizing = 작업 규모 설정이 올바르지 않습니다
 copy-skip-invalid-slippage = 작업 슬리피지 설정이 올바르지 않습니다
 copy-skip-invalid-exit-policy = 작업 청산 규칙이 올바르지 않습니다
 copy-skip-invalid-price = 사용할 수 있는 시장 가격이 없습니다
+copy-skip-paper-quote-unavailable = 모의 체결에 사용할 스왑 견적을 받지 못했습니다
+copy-skip-paper-quote-unfillable = 이 견적으로는 사용할 수 있는 모의 체결을 만들 수 없습니다
+copy-skip-paper-minimum-output-not-met = 두 번째 견적이 첫 번째 견적의 최소 출력보다 낮았습니다
+copy-skip-paper-queue-full = 이 작업의 모의 실행 대기열이 가득 찼습니다
+copy-skip-paper-execution-unavailable = 모의 실행이 완료되지 않았습니다. 서비스가 중지되었거나, 작업 또는 보유 수량이 변경되었거나, 진행 중인 요청과 중복된 요청입니다
 copy-skip-not-sell-swap = 지갑 활동이 매도가 아니었습니다
 copy-skip-exit-mode-disabled = 지갑 매도 무시됨: 작업이 자체 규칙으로 매도합니다
 copy-skip-force-stopped = 거래가 강제 중지되었습니다
@@ -204,13 +209,13 @@ copy-toast-global-failed = 카피 처리 상태를 변경하지 못했습니다
 ## Onboarding (pages/copy.html)
 
 copy-onboarding-title = 신뢰하는 지갑을 카피하되, 먼저 모의 거래로 검증하세요
-copy-onboarding-body = 모든 작업은 모의 거래로 시작합니다. 대상 지갑의 거래는 풀 가격에 설정한 슬리피지와 수수료를 반영해 시뮬레이션되며, 청산 규칙은 모의 장부에서 실행됩니다. 모의 결과가 충분하면 지갑별로 실거래를 활성화하세요.
+copy-onboarding-paper-body = 모든 작업은 모의 거래로 시작합니다. 대상 지갑의 거래는 예상 네트워크 수수료를 반영한 두 번의 라우터 견적으로 시뮬레이션되며, 청산 규칙은 모의 장부에서 실행됩니다. 모의 결과가 충분하면 지갑별로 실거래를 활성화하세요.
 copy-onboarding-add = 첫 지갑 추가
 copy-setup-gate-title = 카피 트레이딩에는 지갑이 필요합니다
 copy-onboarding-observe = 관찰
 copy-onboarding-observe-detail = { -sol }을 사용하지 않고 지갑의 스왑을 감지합니다.
 copy-onboarding-evaluate = 평가
-copy-onboarding-evaluate-detail = 모의 손익, 승률, 건너뜀, 감지 속도, 슬리피지를 확인합니다.
+copy-onboarding-evaluate-paper-detail = 모의 손익, 승률, 건너뜀, 감지 속도, 대상 가격과의 차이를 확인합니다.
 copy-onboarding-arm = 활성화
 copy-onboarding-arm-detail = 준비 상태 점검을 통과한 뒤 실제 스왑을 사용합니다.
 
@@ -254,6 +259,26 @@ copy-settings-unit-rounds = 회
 copy-settings-save = 설정 저장
 copy-settings-load-failed = 카피 설정을 불러오지 못했습니다
 copy-settings-saved = 카피 트레이딩 설정이 저장되었습니다
+copy-outcome-paper-filled-legacy = 이전 모의 추정
+copy-outcome-paper-filled-quote = 견적 기반 모의 체결
+copy-outcome-paper-sell-legacy = 이전 모의 청산 추정
+copy-outcome-paper-sell-quote = 견적 기반 모의 청산
+
+## Paper execution model
+
+copy-paper-model = 모의 실행 모델
+copy-paper-model-note = 모의 체결마다 거래 규모에 맞춘 두 번의 라우터 견적을, 가정한 대기 시간만큼 간격을 두고 받습니다. 나중 견적도 첫 번째 견적의 최소 출력을 충족해야 합니다. 풀 가격은 계속 보유 수량 평가와 청산 규칙 발동에 사용됩니다. 네트워크 수수료와 우선 수수료는 하나의 추정치로 한 번만 계산되며, 플랫폼 수수료는 이미 견적 출력에 포함되어 있습니다. MEV와 검증자 순서는 시뮬레이션되지 않습니다.
+copy-paper-wait-label = 가정한 착지 대기 시간
+copy-paper-queue-label = 작업별 대기열 크기
+copy-paper-legacy-title = 이전 모의 추정
+copy-paper-legacy-note = 견적 기반 시뮬레이션 이전부터 보존된 읽기 전용 추정입니다. 현재 장부의 지출이나 보유 수량에는 포함되지 않으며 어떤 작업도 제공하지 않습니다. 남은 수량은 각 토큰의 마지막으로 저장된 가격으로 평가되며, 현재 시장 가격으로는 평가되지 않습니다.
+copy-paper-legacy-spent = 이전 추정 지출
+copy-paper-legacy-realized = 이전 실현 추정
+copy-paper-legacy-col-tokens = 토큰
+copy-paper-legacy-col-cost = 남은 비용 ({ -sol })
+copy-paper-legacy-col-realized = 실현 추정 ({ -sol })
+copy-paper-legacy-col-price = 마지막 저장 가격 ({ -sol })
+copy-paper-legacy-col-remaining = 저장 가격 기준 남은 손익 ({ -sol })
 
 ## Workspace (pages/copy/workspace.js)
 
@@ -462,7 +487,7 @@ copy-warning-mirror = 지갑의 매도만 보유 수량을 종료합니다. 손�
 copy-warning-no-rules = 청산 규칙이 없고 지갑 매도도 무시됩니다. 보유 수량이 매도되지 않습니다.
 copy-warning-no-stop-loss = 적용되는 손절이 없습니다. 하락하는 토큰은 다른 규칙이나 지갑의 매도가 있을 때까지 보유됩니다.
 copy-warning-stop-delay = 손절은 매수 후 { $hold } 동안 대기합니다. 그보다 빨리 하락하는 토큰은 { $threshold }보다 훨씬 낮은 가격에서 종료됩니다.
-copy-warning-take-profit-cost = { $target } 익절은 매도 비용(슬리피지 { $slippage }, 스왑 수수료 { $fee })을 충당하지 못해 손실로 라운드가 종료됩니다.
+copy-warning-take-profit-small = { $target } 익절은 매도 비용(최대 { $slippage } 슬리피지 허용치와 스왑 수수료 { $fee })보다 크지 않습니다. 작은 목표는 이를 충당하지 못할 수 있습니다. 허용치는 매도 가격의 한도이며 예측된 비용이 아닙니다.
 copy-warning-trailing-distance = 트레일링 거리가 활성화 수익률 이상이므로 활성화된 트레일링이 진입가보다 낮은 가격에 매도할 수 있습니다.
 
 ## Execution tab (pages/copy/execution.js)
@@ -481,21 +506,22 @@ copy-execution-arrival-samples =
        *[other] 실시간으로 확인한 거래 { $count }건
     }
 copy-execution-p95 = p95 도착
-copy-execution-median-slippage = 슬리피지 중앙값
-copy-execution-slippage-samples =
+copy-execution-target-price-difference = 대상 가격과의 차이 중앙값
+copy-execution-target-difference-samples =
     { $count ->
        *[other] 측정된 체결 { $count }건
     }
-copy-execution-worst-slippage = 최대 슬리피지
-copy-execution-average-slippage = 평균 { $amount }
+copy-execution-target-difference-worst = 대상 가격과의 최대 차이
+copy-execution-target-difference-average = 대상 가격과의 평균 차이 { $amount }
 copy-execution-delay-title = 감지 지연
 copy-execution-delay-note = 지갑의 블록 시점부터 이 봇이 거래를 확인하기까지의 시간입니다. 중단 후 재처리분은 제외됩니다.
 copy-execution-delay-limit = 도착 한도 { $limit }를 넘는 막대는 주황색입니다.
 copy-execution-fastest = 가장 빠름
 copy-execution-average = 평균
 copy-execution-slowest = 가장 느림
-copy-execution-fill-title = 지갑 대비 체결
-copy-execution-fill-note = 양수는 지갑보다 불리하다는 뜻입니다. 매수는 더 많이 지불했고, 따라가는 매도는 더 적게 받았습니다. 풀 가격이 없는 토큰의 모의 체결은 지갑 자신의 거래 가격으로 계산되므로 측정할 것이 없어 제외됩니다.
+copy-execution-target-difference-title = 대상 가격과의 차이
+copy-execution-target-difference-note = 두 가격이 모두 0보다 클 때 각 체결 가격을 지갑 자신의 거래 가격과 비교합니다. 양수는 지갑보다 불리한 체결을 뜻합니다. 매수는 더 많이 지불했거나 매도는 더 적게 받았습니다. 이는 비교 값이며 작업의 슬리피지 허용치가 아닙니다.
+copy-execution-wait-note = 감지 지연은 지갑의 블록 시점부터 측정합니다. 착지 대기 시간은 모의 모델의 가정이며, 결정이 작업 대기열에서 보낸 시간이 여기에 더해져 각 체결에 기록됩니다.
 copy-execution-samples = 샘플
 copy-execution-median = 중앙값
 copy-execution-worst = 최대
@@ -516,7 +542,7 @@ copy-table-rounds = 라운드
 copy-table-realized = 실현 ({ -sol })
 copy-table-profit-factor = 프로핏 팩터
 copy-table-average-hold = 평균 보유
-copy-table-median-slippage = 슬리피지 중앙값
+copy-table-target-difference = 대상 가격과의 차이 중앙값
 
 ## Charts (pages/copy/charts.js)
 
@@ -596,7 +622,7 @@ copy-holdings-token-details = 토큰 상세 열기
 copy-holdings-opened = 진입 { $time }
 copy-holdings-no-pool-price = 풀 가격 없음
 copy-holdings-close = 종료
-copy-holdings-write-off = 상각
+copy-holdings-close-pending = 종료 대기 중
 copy-holdings-activity = 활동
 copy-holdings-no-exit-rule = 청산 규칙 없음
 copy-holdings-watch-stop = 손절 { $level }
@@ -621,7 +647,7 @@ copy-holdings-col-invested = 투자금 ({ -sol })
 copy-holdings-col-proceeds = 회수액 ({ -sol })
 copy-holdings-col-exit = 청산
 copy-holdings-col-closed = 종료
-copy-holdings-price-note = 가격은 토큰당 { -sol }입니다. 진입가에는 매수 시 슬리피지와 수수료가 포함되며, 고점과 청산 기준은 진입가를 기준으로 하므로 보유 수량은 고점이 진입가보다 낮은 상태로 시작합니다. 마우스를 올리면 풀 가격을 볼 수 있습니다.
+copy-holdings-marks-note = 가격은 토큰당 { -sol }입니다. 평가와 청산 기준에는 청산 규칙도 발동시키는 풀 가격을 사용하며, 기록된 체결에는 라우터 견적을 사용합니다. 진입가에는 매수 시 예상 네트워크 수수료가 포함되며, 고점과 청산 기준은 진입가를 기준으로 하므로 보유 수량은 고점이 진입가보다 낮은 상태로 시작합니다. 마우스를 올리면 풀 가격을 볼 수 있습니다.
 copy-holdings-paused-rules = 일시 중지됨: 신규 카피 없음. 내 청산 규칙은 이 보유 수량을 계속 종료합니다.
 copy-holdings-paused-mirror = 일시 중지됨: 신규 카피 없음. 지갑의 매도는 이 보유 수량을 계속 종료합니다.
 copy-holdings-paused-hybrid = 일시 중지됨: 신규 카피 없음. 지갑의 매도와 내 청산 규칙은 이 보유 수량을 계속 종료합니다.
@@ -630,17 +656,17 @@ copy-holdings-closed-loading = 종료된 라운드 불러오는 중…
 copy-holdings-closed-empty = 종료된 라운드가 아직 없습니다.
 copy-holdings-closed-latest = 최근 { $shown }개 (전체 { $total }개 라운드)
 copy-holdings-close-title = 모의 보유 수량 종료
-copy-holdings-close-message = 모의 장부에서 풀 가격 { $price } 기준으로 작업의 슬리피지와 수수료를 적용해 매도합니다. 토큰: { $token }
+copy-holdings-close-quote-message = { $token }의 모의 보유 수량을 약 { $delay } 간격의 두 번의 라우터 견적으로 종료합니다. 체결에는 나중 견적을 사용하며, 이 견적은 첫 번째 견적의 최소 출력을 충족해야 하고 예상 네트워크 수수료가 차감됩니다. 사용할 수 있는 견적이 없으면 보유 수량은 변경 없이 열린 상태로 유지됩니다.
 copy-holdings-close-confirm = 보유 수량 종료
-copy-holdings-write-off-title = 모의 보유 수량 상각
-copy-holdings-write-off-message = 매도할 풀 가격이 없는 토큰입니다. 상각하면 0으로 종료되고 원가 { $cost }이 손실로 기록됩니다. 토큰: { $token }
 copy-holdings-keep = 유지
-copy-holdings-written-off = 상각 완료: { $token }
 copy-holdings-closed = 종료 완료: { $token }
-copy-holdings-written-off-detail = 회수액 0으로 종료됨
 copy-holdings-sold-at = 매도가 { $price }
 copy-holdings-close-failed = 보유 수량을 종료하지 못했습니다
-copy-holdings-reset-message = "{ $name }" 작업을 처음부터 다시 시작합니다. 모의 보유 수량, 지출, 체결, 청산, 건너뜀 기록이 삭제되며 규칙과 지갑은 유지됩니다.
+copy-holdings-close-pending-detail = 종료가 대기 중이거나 실행 중입니다. 결과는 활동에 표시됩니다.
+copy-holdings-close-unconfirmed = 종료 결과를 확인하지 못했습니다
+copy-holdings-close-unconfirmed-detail = 결과를 받기 전에 연결이 끊겼고 활동에도 아직 결과가 없습니다. 다시 종료하기 전에 활동을 확인하세요.
+copy-holdings-closed-check-activity = 보유 수량이 종료되었습니다. 기록된 체결은 활동에서 확인할 수 있습니다.
+copy-holdings-reset-quote-message = "{ $name }" 작업을 처음부터 다시 시작합니다. 현재 모의 보유 수량, 지출, 체결, 청산, 건너뜀 기록이 지워지고 견적 기반의 새 장부가 시작됩니다. 이전 추정과 실거래 기록은 유지됩니다. 규칙과 지갑도 유지됩니다.
 copy-holdings-reset-cancel = 기록 유지
 copy-holdings-reset-done = 모의 장부를 초기화했습니다
 copy-holdings-reset-detail =
@@ -655,7 +681,6 @@ copy-holdings-reset-failed = 모의 장부를 초기화하지 못했습니다
 copy-activity-title = 활동
 copy-activity-filter-label = 활동 필터
 copy-filter-all = 전체
-copy-outcome-paper-filled = 모의 매수
 copy-outcome-live-submitted = 실거래 매수 제출됨
 copy-outcome-live-confirmed = 실거래 매수 확정됨
 copy-outcome-live-failed = 실거래 매수 실패
@@ -664,9 +689,14 @@ copy-outcome-live-sell-submitted = 실거래 매도 제출됨
 copy-outcome-live-sell-failed = 실거래 매도 실패
 copy-outcome-skipped = 건너뜀
 copy-activity-decision = 결정
-copy-activity-paper-exit = 모의 청산 · { $rule }
+copy-activity-paper-exit-quote = 견적 기반 모의 청산 · { $rule }
+copy-activity-paper-exit-legacy = 이전 모의 청산 추정 · { $rule }
 copy-activity-filled = { $input }, 가격 { $price } · 지갑 매수 { $target }
+copy-activity-filled-target-difference = { $input }, 가격 { $price } · 지갑 매수 { $target } · 대상 가격과의 차이 { $difference }
 copy-activity-filled-slippage = { $input }, 가격 { $price } · 지갑 매수 { $target } · 슬리피지 { $slippage }
+copy-activity-quote-router = 라우터 { $router } · 견적 수신 { $initial } 및 { $landing }
+copy-activity-quote-wait = 가정한 대기 { $assumed } · 대기열 { $queued }
+copy-activity-quote-fees = 예상 네트워크 및 우선 수수료 { $fee }, 한 번만 계산 · 플랫폼 수수료는 이미 견적 출력에 포함
 copy-activity-filled-unpriced = { $input }, 가격 { $price } · 지갑 매수 { $target } · 풀 가격이 없어 지갑의 거래 가격 적용
 copy-activity-live-sized = { $sized } · 지갑 매수 { $target }
 copy-activity-sell-nothing = 지갑 매도 { $amount } · 매도할 보유 수량 없음
@@ -739,7 +769,7 @@ copy-editor-name-placeholder = 예: 빠른 로테이터
 copy-editor-enabled-title = 지갑의 거래 처리
 copy-editor-enabled-help = 끄면 재개하기 전까지 작업이 일시 중지된 상태로 유지됩니다.
 copy-editor-note-live = 이 작업은 실거래 중입니다. 변경 사항은 다음 실제 카피부터 적용됩니다.
-copy-editor-note-paper = 작업은 활성화하기 전까지 모의로 실행됩니다. 거래는 풀 가격으로 시뮬레이션되며 자금은 사용되지 않습니다.
+copy-editor-note-paper-quote = 작업은 활성화하기 전까지 모의로 실행됩니다. 거래는 라우터 견적으로 시뮬레이션되며 자금은 사용되지 않습니다.
 copy-editor-copy-size = 카피 규모
 copy-editor-sizing-fixed = 고정 금액
 copy-editor-sizing-ratio = 지갑 거래의 비율

@@ -15,10 +15,10 @@ use crate::database::health::{self, StoreHealth};
 use crate::logger::{self, LogTag};
 use crate::wallets::watch::{ActivityKind, WalletActivity};
 
-use super::service::{observation_telemetry, skipped};
+use super::paper_execution::{observation_telemetry, skipped, skipped_paper};
 use super::{
-    arrival_distance_ms, control, latency_should_pause, notify, CopyDatabase, CopyPauseReason,
-    CopySkip, CopyTask,
+    arrival_distance_ms, control, latency_should_pause, notify, CopyDatabase, CopyMode,
+    CopyPauseReason, CopySkip, CopyTask,
 };
 
 /// A task edited this recently may still be attaching its watch source, so the
@@ -300,19 +300,22 @@ pub(super) async fn apply_latency_kill_switch(
                 ActivityKind::Swap { mint, .. } => mint.clone(),
                 _ => String::new(),
             };
-            notify::record(
-                database,
-                skipped(
+            let reason = CopySkip::LatencyKillSwitch {
+                average_ms,
+                threshold_ms,
+            };
+            let outcome = if task.mode == CopyMode::Paper {
+                skipped_paper(
                     task.id,
                     activity,
                     &mint,
-                    CopySkip::LatencyKillSwitch {
-                        average_ms,
-                        threshold_ms,
-                    },
-                ),
-            )
-            .await?;
+                    reason,
+                    database.paper_epoch(task.id).await?,
+                )
+            } else {
+                skipped(task.id, activity, &mint, reason)
+            };
+            notify::record(database, outcome).await?;
             logger::warning(
                 LogTag::Trader,
                 &format!(
@@ -347,7 +350,18 @@ pub(super) async fn reject_stale_backfill(
         return Ok(false);
     };
     for task in tasks {
-        notify::record(database, skipped(task.id, activity, mint, reason.clone())).await?;
+        let outcome = if task.mode == CopyMode::Paper {
+            skipped_paper(
+                task.id,
+                activity,
+                mint,
+                reason.clone(),
+                database.paper_epoch(task.id).await?,
+            )
+        } else {
+            skipped(task.id, activity, mint, reason.clone())
+        };
+        notify::record(database, outcome).await?;
     }
     Ok(true)
 }

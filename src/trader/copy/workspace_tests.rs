@@ -1,10 +1,13 @@
 // Copyright (c) 2024-2026 ScreenerBot (screenerbot.io)
 // SPDX-License-Identifier: BUSL-1.1
 
-//! Tests the task comparison row - a task's own label and its full target address reach the dashboard unshortened.
+//! Tests the copy workspace: task comparison rows, default settings, and legacy paper summaries. Manual paper closes are in `manual_close`.
 
 use super::*;
 use crate::trader::copy::{ExitMode, SizingMode};
+
+#[path = "workspace_tests/manual_close.rs"]
+mod manual_close;
 
 const ADDRESS: &str = "CopyTarget1111111111111111111111111111111111";
 
@@ -50,4 +53,46 @@ fn a_named_task_compares_by_its_label() {
     let row = comparison(&task(Some("Momentum desk")), CopyInsights::default());
     assert_eq!(row.label.as_deref(), Some("Momentum desk"));
     assert_eq!(row.target_address, ADDRESS);
+}
+
+#[test]
+fn legacy_workspace_values_use_only_saved_paper_estimates() {
+    let now = Utc::now();
+    let position = PaperPosition {
+        task_id: 7,
+        mint: "legacy-mint".to_owned(),
+        token_amount: 10.0,
+        raw_token_amount: None,
+        token_decimals: None,
+        cost_basis_native: 2.0,
+        invested_native: 2.5,
+        realized_proceeds_native: 1.0,
+        realized_cost_native: 0.5,
+        buys: 2,
+        sells: 1,
+        last_price_native: Some(0.3),
+        last_price_at: Some(now),
+        opened_at: now,
+        closed_at: None,
+        peak_price_native: None,
+    };
+
+    let summary = legacy_paper_summary(&[position], 2.5);
+    assert_eq!(summary.spent_native, 2.5);
+    assert_eq!(summary.realized_pnl_native, 0.5);
+    assert_eq!(summary.holdings[0].last_recorded_price_native, Some(0.3));
+    assert_eq!(
+        summary.holdings[0].remaining_pnl_at_last_recorded_price_native,
+        Some(1.0)
+    );
+}
+
+#[test]
+fn copy_defaults_fee_rate_uses_the_chain_adapter_policy() {
+    crate::config::utils::install_default_config();
+    let defaults = super::defaults();
+    assert_eq!(
+        defaults.swap_fee_pct,
+        f64::from(crate::chains::platform_swap_fee_bps()) / 100.0
+    );
 }

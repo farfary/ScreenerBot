@@ -11,10 +11,12 @@ import {
   exitLabel,
   price,
   priceSol,
+  seconds,
   segmented,
   signedPct,
   signedSolCell,
-  sol,
+  skipKey,
+  skipLabel,
   solCell,
   taskName,
   toneClass,
@@ -48,11 +50,47 @@ function timeText(level, from) {
     : I18n.t("copy-holdings-watch-time", { level });
 }
 
+/**
+ * One round of one task's holding. `opened_at` is kept as the opaque string the backend
+ * sent: a reopened position of the same mint is a different round with a different value.
+ */
+const roundKey = (taskId, mint, openedAt) => JSON.stringify([taskId, mint, openedAt]);
+
+/** Signature prefixes of the skipped intents a manual close records (workspace/book.rs). */
+const MANUAL_SKIP_PREFIXES = [
+  "manual-close-skip:",
+  "manual-close-queue:",
+  "manual-close-unavailable:",
+];
+
+const isManualSale = (outcome) =>
+  outcome.outcome === "paper_sell_observed" &&
+  outcome.exit_rule === "manual" &&
+  Boolean(outcome.paper_fill);
+
+const isManualSkip = (outcome) =>
+  outcome.outcome === "skipped" &&
+  outcome.paper?.model === "quote" &&
+  typeof outcome.signature === "string" &&
+  MANUAL_SKIP_PREFIXES.some((prefix) => outcome.signature.startsWith(prefix));
+
+/** The newest activity id of a workspace: later rows were recorded after it was read. */
+const newestActivityId = (ws) =>
+  (ws?.activity || []).reduce((newest, row) => Math.max(newest, Number(row.id) || 0), 0);
+
 export function createHoldings(page, { rerender, showActivityFor }) {
   const { Utils, api, on, notify, confirm } = page;
   const esc = Utils.escapeHtml;
   let view = "open";
   let lastWs = null;
+  /**
+   * Manual closes this page started, by round key. `requesting` is true while the HTTP call
+   * is open; afterwards the entry stays until the workspace no longer reports the close as
+   * pending and the recorded result has been shown.
+   */
+  const closing = new Map();
+  /** Round keys (and reset task keys) whose confirmation dialog is open. */
+  const confirming = new Set();
 
   function setup(root) {
     on(root, "click", (event) => {
@@ -64,11 +102,11 @@ export function createHoldings(page, { rerender, showActivityFor }) {
       }
       const button = event.target.closest("[data-holding-action]");
       if (!button) return;
-      const { holdingAction: action, mint } = button.dataset;
+      const { holdingAction: action, mint, openedAt } = button.dataset;
       if (action === "details") openTokenDetails(mint);
       else if (action === "activity") showActivityFor(mint);
       else if (action === "positions") loadPage("positions");
-      else if (action === "close") void close(mint, button);
+      else if (action === "close") void close(mint, openedAt);
       else if (action === "reset") void reset(button);
     });
   }
@@ -151,6 +189,8 @@ export function createHoldings(page, { rerender, showActivityFor }) {
     const rows = holdings
       .map((holding) => {
         const priced = holding.mark_price_native != null;
+        const pending =
+          holding.close_pending || closing.has(roundKey(ws.id, holding.mint, holding.opened_at));
         const pnl = priced
           ? `<span class="${toneClass(holding.unrealized_pnl_native)}">${esc(signedSolCell(holding.unrealized_pnl_native))}</span><small>${esc(signedPct(holding.unrealized_pnl_pct))}</small>`
           : `<span class="copy-warning-text">${esc(I18n.t("copy-holdings-no-pool-price"))}</span>`;
@@ -164,14 +204,14 @@ export function createHoldings(page, { rerender, showActivityFor }) {
           <td>${exitCell(holding, ws)}</td>
           <td class="num" title="${esc(I18n.t("copy-holdings-opened", { time: dateTime(holding.opened_at) }))}">${esc(duration(holding.held_seconds))}</td>
           <td class="copy-row-actions">
-            <button class="btn btn-secondary btn-sm" type="button" data-holding-action="close" data-mint="${esc(holding.mint)}">${esc(priced ? I18n.t("copy-holdings-close") : I18n.t("copy-holdings-write-off"))}</button>
+            <button class="btn btn-secondary btn-sm" type="button" data-holding-action="close" data-mint="${esc(holding.mint)}" data-opened-at="${esc(holding.opened_at)}"${pending ? " disabled" : ""}>${esc(pending ? I18n.t("copy-holdings-close-pending") : I18n.t("copy-holdings-close"))}</button>
             <button class="btn btn-ghost btn-sm" type="button" data-holding-action="activity" data-mint="${esc(holding.mint)}">${esc(I18n.t("copy-holdings-activity"))}</button>
           </td>
         </tr>`;
       })
       .join("");
     return `<div class="copy-table-wrap"><table class="copy-table"><thead><tr><th scope="col">${esc(I18n.t("copy-holdings-col-token"))}</th><th scope="col" class="num">${esc(I18n.t("copy-holdings-col-cost"))}</th><th scope="col" class="num">${esc(I18n.t("copy-holdings-col-entry"))}</th><th scope="col" class="num">${esc(I18n.t("copy-holdings-col-mark"))}</th><th scope="col" class="num">${esc(I18n.t("copy-holdings-col-peak"))}</th><th scope="col" class="num">${esc(I18n.t("copy-holdings-col-pnl"))}</th><th scope="col">${esc(I18n.t("copy-holdings-col-exit-rules"))}</th><th scope="col" class="num">${esc(I18n.t("copy-holdings-col-held"))}</th><th scope="col"><span class="sr-only">${esc(I18n.t("copy-holdings-col-actions"))}</span></th></tr></thead><tbody>${rows}</tbody></table></div>
-    ${pausedNote(ws)}<p class="copy-note">${esc(I18n.t("copy-holdings-price-note"))}</p>`;
+    ${pausedNote(ws)}<p class="copy-note">${esc(I18n.t("copy-holdings-marks-note"))}</p>`;
   }
 
   /** A paused task still closes what it holds; say by what. */
@@ -216,7 +256,6 @@ export function createHoldings(page, { rerender, showActivityFor }) {
   }
 
   function html({ ws, insights, error }) {
-    lastWs = ws;
     const live = ws.mode === "live";
     const open = (ws.paper_holdings || []).filter((holding) => holding.open);
     ensureIdentities(
@@ -246,71 +285,202 @@ export function createHoldings(page, { rerender, showActivityFor }) {
     return head + openTable(open, ws);
   }
 
-  async function close(mint, button) {
-    const holding = lastWs?.paper_holdings?.find((item) => item.mint === mint && item.open);
-    if (!holding) return;
-    const name = tokenName(mint);
-    const priced = holding.mark_price_native != null;
-    const result = await confirm(
-      priced
-        ? {
-            title: I18n.t("copy-holdings-close-title"),
-            message: I18n.t("copy-holdings-close-message", {
-              token: name,
-              price: priceSol(holding.mark_price_native),
-            }),
-            confirmLabel: I18n.t("copy-holdings-close-confirm"),
-            cancelLabel: I18n.t("copy-holdings-keep"),
-            variant: "warning",
-          }
-        : {
-            title: I18n.t("copy-holdings-write-off-title"),
-            message: I18n.t("copy-holdings-write-off-message", {
-              token: name,
-              cost: sol(holding.cost_basis_native),
-            }),
-            confirmLabel: I18n.t("copy-holdings-write-off"),
-            cancelLabel: I18n.t("copy-holdings-keep"),
-            variant: "danger",
-          }
-    );
-    if (!result.confirmed) return;
-    button.disabled = true;
-    try {
-      const closed = await api.closeHolding(lastWs.id, mint);
+  /** Rows this close recorded for its task and mint, newest first. */
+  async function recordedRows(entry) {
+    const response = await api.activity(entry.taskId, {
+      filter: "all",
+      mint: entry.mint,
+      limit: 10,
+    });
+    return (response.activity || [])
+      .filter(
+        (row) =>
+          Number(row.id) > entry.baseline &&
+          row.outcome?.task_id === entry.taskId &&
+          row.outcome?.mint === entry.mint
+      )
+      .sort((a, b) => Number(b.id) - Number(a.id));
+  }
+
+  /**
+   * How the workspace shows the closed round and its mint: whether that round is still
+   * open, was seen closed, and whether a different round of the mint is open.
+   */
+  function roundState(ws, entry) {
+    const holdings = (ws.paper_holdings || []).filter((item) => item.mint === entry.mint);
+    const same = holdings.filter((item) => item.opened_at === entry.openedAt);
+    return {
+      original: same.find((item) => item.open) || null,
+      closed: same.some((item) => !item.open),
+      other: holdings.some((item) => item.open && item.opened_at !== entry.openedAt),
+    };
+  }
+
+  /**
+   * The factual result of a close the page no longer waits on. Only the manual sale or
+   * manual skip recorded for this task and mint answers it, and a different round of the
+   * mint is never read as the answer for the round that was closed.
+   */
+  function reportClose({ entry, round, rows }) {
+    const token = tokenName(entry.mint);
+    const manual = rows.find((row) => isManualSale(row.outcome) || isManualSkip(row.outcome));
+    if (entry.failure?.status !== undefined) {
+      notify("error", I18n.t("copy-holdings-close-failed"), entry.failure.detail);
+    } else if (manual && isManualSale(manual.outcome) && !round.original && !round.other) {
       notify(
         "success",
-        closed.written_off
-          ? I18n.t("copy-holdings-written-off", {
-              token: name,
-            })
-          : I18n.t("copy-holdings-closed", {
-              token: name,
-            }),
-        closed.written_off
-          ? I18n.t("copy-holdings-written-off-detail")
-          : I18n.t("copy-holdings-sold-at", { price: priceSol(closed.mark_price_native) })
+        I18n.t("copy-holdings-closed", { token }),
+        I18n.t("copy-holdings-sold-at", {
+          price: priceSol(manual.outcome.paper_fill.fill_price_sol),
+        })
+      );
+    } else if (manual && isManualSkip(manual.outcome) && round.original) {
+      notify(
+        "error",
+        I18n.t("copy-holdings-close-failed"),
+        skipLabel(skipKey(manual.outcome.reason))
+      );
+    } else if (round.closed && !round.original && !round.other) {
+      notify(
+        "info",
+        I18n.t("copy-holdings-closed", { token }),
+        I18n.t("copy-holdings-closed-check-activity")
+      );
+    } else {
+      notify(
+        "warning",
+        I18n.t("copy-holdings-close-unconfirmed"),
+        I18n.t("copy-holdings-close-unconfirmed-detail")
+      );
+    }
+  }
+
+  /**
+   * Reconciles a close whose request has ended with the backend's state. While the
+   * workspace reports it pending the entry stays; nothing is inferred from elapsed time.
+   */
+  async function settle(entry) {
+    if (entry.settling) return;
+    entry.settling = true;
+    try {
+      const ws = await api.workspace(entry.taskId);
+      const round = roundState(ws, entry);
+      if (round.original?.close_pending) {
+        if (!entry.noticed) {
+          entry.noticed = true;
+          notify(
+            "info",
+            I18n.t("copy-holdings-close-pending"),
+            I18n.t("copy-holdings-close-pending-detail")
+          );
+        }
+        return;
+      }
+      const rows = await recordedRows(entry);
+      if (closing.get(entry.key) === entry) closing.delete(entry.key);
+      reportClose({ entry, round, rows });
+      await page.reload();
+    } catch {
+      // The workspace or activity could not be read; the close stays tracked as pending.
+    } finally {
+      entry.settling = false;
+    }
+  }
+
+  /** Settles every ended request of this task whose round the workspace no longer reports pending. */
+  function settleFinished(ws) {
+    closing.forEach((entry) => {
+      if (entry.requesting || entry.settling || entry.taskId !== ws.id) return;
+      if (!roundState(ws, entry).original?.close_pending) void settle(entry);
+    });
+  }
+
+  /** Takes the latest workspace read on every poll, whichever tab is shown. */
+  function sync(ws) {
+    lastWs = ws;
+    settleFinished(ws);
+  }
+
+  async function close(mint, openedAt) {
+    const ws = lastWs;
+    const holding = ws?.paper_holdings?.find(
+      (item) => item.mint === mint && item.opened_at === openedAt && item.open
+    );
+    if (!holding || holding.close_pending) return;
+    const key = roundKey(ws.id, mint, holding.opened_at);
+    if (closing.has(key) || confirming.has(key)) return;
+    const token = tokenName(mint);
+    const entry = {
+      key,
+      taskId: ws.id,
+      mint,
+      openedAt: holding.opened_at,
+      baseline: newestActivityId(ws),
+      requesting: true,
+      settling: false,
+      noticed: false,
+      failure: null,
+    };
+    confirming.add(key);
+    let result;
+    try {
+      result = await confirm({
+        title: I18n.t("copy-holdings-close-title"),
+        message: I18n.t("copy-holdings-close-quote-message", {
+          token,
+          delay: seconds(ws.paper_execution?.landing_delay_ms, { precise: true }),
+        }),
+        confirmLabel: I18n.t("copy-holdings-close-confirm"),
+        cancelLabel: I18n.t("copy-holdings-keep"),
+        variant: "warning",
+      });
+    } finally {
+      confirming.delete(key);
+    }
+    if (!result.confirmed || closing.has(key)) return;
+    closing.set(key, entry);
+    rerender();
+    void page.reload();
+    try {
+      const closed = await api.closeHolding(entry.taskId, mint, entry.openedAt);
+      if (closing.get(key) === entry) closing.delete(key);
+      notify(
+        "success",
+        I18n.t("copy-holdings-closed", { token }),
+        I18n.t("copy-holdings-sold-at", { price: priceSol(closed.fill_price_native) })
       );
       await page.reload();
     } catch (error) {
-      notify("error", I18n.t("copy-holdings-close-failed"), error.detail);
-      if (button.isConnected) button.disabled = false;
+      entry.requesting = false;
+      entry.failure = error;
+      await page.reload();
+      await settle(entry);
     }
   }
 
   async function reset(button) {
-    if (!lastWs) return;
-    const result = await confirm({
-      title: I18n.t("copy-holdings-reset"),
-      message: I18n.t("copy-holdings-reset-message", { name: taskName(lastWs) }),
-      confirmLabel: I18n.t("copy-holdings-reset"),
-      cancelLabel: I18n.t("copy-holdings-reset-cancel"),
-      variant: "danger",
-    });
+    const ws = lastWs;
+    if (!ws) return;
+    const { id } = ws;
+    const key = JSON.stringify(["reset", id]);
+    if (confirming.has(key)) return;
+    confirming.add(key);
+    let result;
+    try {
+      result = await confirm({
+        title: I18n.t("copy-holdings-reset"),
+        message: I18n.t("copy-holdings-reset-quote-message", { name: taskName(ws) }),
+        confirmLabel: I18n.t("copy-holdings-reset"),
+        cancelLabel: I18n.t("copy-holdings-reset-cancel"),
+        variant: "danger",
+      });
+    } finally {
+      confirming.delete(key);
+    }
     if (!result.confirmed) return;
     button.disabled = true;
     try {
-      const outcome = await api.reset(lastWs.id);
+      const outcome = await api.reset(id);
       notify(
         "success",
         I18n.t("copy-holdings-reset-done"),
@@ -326,9 +496,9 @@ export function createHoldings(page, { rerender, showActivityFor }) {
   return {
     setup,
     html,
+    sync,
     reset: () => {
       view = "open";
-      lastWs = null;
     },
   };
 }

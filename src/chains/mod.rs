@@ -35,6 +35,11 @@ pub use scope::ChainScope;
 pub use settlement::{Holding, SettlementReader, SignatureCheck, SignatureVerdict};
 pub use types::{AccountId, AssetId, ChainId, ChainMetadata, NativeAsset, PoolId, TransactionId};
 
+/// Platform swap-fee rate for the active process chain, in basis points.
+pub fn platform_swap_fee_bps() -> u16 {
+    adapter().platform_swap_fee_bps()
+}
+
 pub(crate) use config::PRE_CHAINS_LAYOUT_CHAIN;
 
 use crate::paths::{chain_db_path, DbKind};

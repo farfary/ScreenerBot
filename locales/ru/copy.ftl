@@ -16,6 +16,11 @@ copy-skip-invalid-sizing = Некорректный расчёт размера 
 copy-skip-invalid-slippage = Некорректное проскальзывание в задаче
 copy-skip-invalid-exit-policy = Некорректные правила выхода в задаче
 copy-skip-invalid-price = Нет пригодной рыночной цены
+copy-skip-paper-quote-unavailable = Не удалось получить котировку свопа для виртуального исполнения
+copy-skip-paper-quote-unfillable = По этой котировке нельзя получить пригодное виртуальное исполнение
+copy-skip-paper-minimum-output-not-met = Вторая котировка оказалась ниже минимального выхода первой
+copy-skip-paper-queue-full = Очередь виртуального исполнения этой задачи заполнена
+copy-skip-paper-execution-unavailable = Виртуальное исполнение не завершено: сервис остановился, задача или актив изменились, либо запрос дублировал выполняемый
 copy-skip-not-sell-swap = Активность кошелька не была продажей
 copy-skip-exit-mode-disabled = Продажа кошелька проигнорирована: задача продаёт по собственным правилам
 copy-skip-force-stopped = Торговля принудительно остановлена
@@ -232,13 +237,13 @@ copy-toast-global-failed = Не удалось изменить состояни
 ## Onboarding
 
 copy-onboarding-title = Копируйте кошельки, которым доверяете, сначала проверив их в виртуальном режиме
-copy-onboarding-body = Каждая задача начинается в виртуальном режиме: сделки целевого кошелька симулируются по цене пула с вашим проскальзыванием и комиссиями, а ваши правила выхода работают на виртуальном портфеле. Включайте боевой режим для отдельного кошелька, когда его виртуальные результаты это заслужат.
+copy-onboarding-paper-body = Каждая задача начинается в виртуальном режиме: сделки целевого кошелька симулируются по двум котировкам роутера с оценочными сетевыми комиссиями, а ваши правила выхода работают на виртуальном портфеле. Включайте боевой режим для отдельного кошелька, когда его виртуальные результаты это заслужат.
 copy-onboarding-add = Добавьте первый кошелёк
 copy-setup-gate-title = Для копи-трейдинга нужен кошелёк
 copy-onboarding-observe = Наблюдение
 copy-onboarding-observe-detail = Обнаруживайте свопы кошелька, не тратя { -sol }.
 copy-onboarding-evaluate = Оценка
-copy-onboarding-evaluate-detail = Изучайте виртуальный P&L, долю прибыльных сделок, пропуски, скорость обнаружения и проскальзывание.
+copy-onboarding-evaluate-paper-detail = Изучайте виртуальный P&L, долю прибыльных сделок, пропуски, скорость обнаружения и разницу с ценой целевого кошелька.
 copy-onboarding-arm = Боевой режим
 copy-onboarding-arm-detail = Пройдите проверки готовности, затем включите реальные свопы.
 
@@ -281,6 +286,26 @@ copy-settings-unit-rounds = раундов
 copy-settings-save = Сохранить настройки
 copy-settings-load-failed = Не удалось загрузить настройки копирования
 copy-settings-saved = Настройки копитрейдинга сохранены
+copy-outcome-paper-filled-legacy = Прежняя виртуальная оценка
+copy-outcome-paper-filled-quote = Виртуальное исполнение по котировке
+copy-outcome-paper-sell-legacy = Прежняя виртуальная оценка выхода
+copy-outcome-paper-sell-quote = Виртуальный выход по котировке
+
+## Paper execution model
+
+copy-paper-model = Модель виртуального исполнения
+copy-paper-model-note = Каждое виртуальное исполнение использует две котировки роутера под размер сделки, полученные с интервалом, равным предполагаемому ожиданию. Вторая котировка по-прежнему должна достигать минимального выхода первой. Цены пула по-прежнему оценивают активы и запускают правила выхода. Сетевая и приоритетная комиссии — одна оценка, учитываемая один раз; комиссия платформы уже входит в котируемый выход. MEV и порядок валидаторов не симулируются.
+copy-paper-wait-label = Предполагаемое ожидание исполнения
+copy-paper-queue-label = Размер очереди на задачу
+copy-paper-legacy-title = Прежние виртуальные оценки
+copy-paper-legacy-note = Оценки только для чтения, сохранённые с момента до симуляции по котировкам. Они не входят в расходы и активы текущего портфеля и не предлагают действий. Остатки оцениваются по последней сохранённой цене каждого токена, а не по текущей рыночной цене.
+copy-paper-legacy-spent = Прежние оценочные расходы
+copy-paper-legacy-realized = Прежняя реализованная оценка
+copy-paper-legacy-col-tokens = Токены
+copy-paper-legacy-col-cost = Остаточная стоимость ({ -sol })
+copy-paper-legacy-col-realized = Реализованная оценка ({ -sol })
+copy-paper-legacy-col-price = Последняя сохранённая цена ({ -sol })
+copy-paper-legacy-col-remaining = Остаточный P&L по сохранённой цене ({ -sol })
 
 ## Workspace
 
@@ -513,7 +538,7 @@ copy-warning-mirror = Активы закрывают только продаж�
 copy-warning-no-rules = Ни одно правило выхода не включено, а продажи кошелька игнорируются: активы никогда не продаются.
 copy-warning-no-stop-loss = Стоп-лосс не действует: падающий токен удерживается, пока его не продаст другое правило или кошелёк.
 copy-warning-stop-delay = Стоп-лосс ждёт { $hold } после каждой покупки: токен, который падает быстрее, закрывается значительно ниже { $threshold }.
-copy-warning-take-profit-cost = Тейк-профит на уровне { $target } не покрывает продажу (проскальзывание { $slippage } и комиссия свопа { $fee }), поэтому раунды закрываются в убыток.
+copy-warning-take-profit-small = Тейк-профит на уровне { $target } не превышает издержек продажи: допуск проскальзывания до { $slippage } и комиссия свопа { $fee }. Небольшая цель может их не покрыть. Допуск — это предел цены продажи, а не прогнозируемые издержки.
 copy-warning-trailing-distance = Дистанция трейлинга не меньше порога его включения, поэтому включённый трейлинг может продать ниже цены входа.
 
 ## Execution tab
@@ -538,24 +563,25 @@ copy-execution-arrival-samples =
        *[other] { $count } сделки замечены в момент совершения
     }
 copy-execution-p95 = Поступление p95
-copy-execution-median-slippage = Медианное проскальзывание
-copy-execution-slippage-samples =
+copy-execution-target-price-difference = Медианная разница с ценой цели
+copy-execution-target-difference-samples =
     { $count ->
         [one] { $count } измеренное исполнение
         [few] { $count } измеренных исполнения
         [many] { $count } измеренных исполнений
        *[other] { $count } измеренного исполнения
     }
-copy-execution-worst-slippage = Худшее проскальзывание
-copy-execution-average-slippage = Среднее { $amount }
+copy-execution-target-difference-worst = Наибольшая разница с ценой цели
+copy-execution-target-difference-average = Средняя разница с ценой цели { $amount }
 copy-execution-delay-title = Задержка обнаружения
 copy-execution-delay-note = Время от блока кошелька до момента, когда этот бот увидел сделку. Воспроизведения после простоя не учитываются.
 copy-execution-delay-limit = Столбцы выше лимита поступления { $limit } выделены жёлтым.
 copy-execution-fastest = Самая быстрая
 copy-execution-average = Средняя
 copy-execution-slowest = Самая медленная
-copy-execution-fill-title = Исполнение относительно кошелька
-copy-execution-fill-note = Положительное значение означает хуже, чем у кошелька: при покупке заплачено больше, при зеркальной продаже получено меньше. Виртуальное исполнение токена без цены пула оценивается по сделке самого кошелька, поэтому ничего не измеряет и не учитывается.
+copy-execution-target-difference-title = Разница с ценой цели
+copy-execution-target-difference-note = Сравнивает цену каждого исполнения с ценой собственной сделки кошелька, когда обе больше нуля. Положительное значение означает исполнение хуже, чем у кошелька: при покупке заплачено больше или при продаже получено меньше. Это сравнение, а не допуск проскальзывания задачи.
+copy-execution-wait-note = Задержка обнаружения отсчитывается от блока кошелька. Ожидание исполнения — допущение виртуальной модели; время, которое решение проводит в очереди задачи, прибавляется к нему и записывается в каждое исполнение.
 copy-execution-samples = Замеры
 copy-execution-median = Медиана
 copy-execution-worst = Худшее
@@ -576,7 +602,7 @@ copy-table-rounds = Раунды
 copy-table-realized = Реализовано ({ -sol })
 copy-table-profit-factor = Профит-фактор
 copy-table-average-hold = Ср. удержание
-copy-table-median-slippage = Медианное проскальзывание
+copy-table-target-difference = Медианная разница с ценой цели
 
 ## Charts
 
@@ -662,7 +688,7 @@ copy-holdings-token-details = Открыть сведения о токене
 copy-holdings-opened = Открыто { $time }
 copy-holdings-no-pool-price = Нет цены пула
 copy-holdings-close = Закрыть
-copy-holdings-write-off = Списать
+copy-holdings-close-pending = Закрытие ожидает выполнения
 copy-holdings-activity = Активность
 copy-holdings-no-exit-rule = Нет правила выхода
 copy-holdings-watch-stop = Стоп { $level }
@@ -687,7 +713,7 @@ copy-holdings-col-invested = Вложено ({ -sol })
 copy-holdings-col-proceeds = Выручка ({ -sol })
 copy-holdings-col-exit = Выход
 copy-holdings-col-closed = Закрыто
-copy-holdings-price-note = Цены указаны в { -sol } за токен. Цена входа включает проскальзывание и комиссии покупки; пик и уровни выхода отсчитываются от неё, поэтому актив открывается с пиком ниже входа. Наведите курсор, чтобы увидеть цену пула.
+copy-holdings-marks-note = Цены указаны в { -sol } за токен. Оценка и уровни выхода используют цену пула, которая также запускает правила выхода; записанные исполнения используют котировки роутера. Вход включает оценочную сетевую комиссию покупки; пик и уровни выхода отсчитываются от него, поэтому актив открывается с пиком ниже входа. Наведите курсор, чтобы увидеть цену пула.
 copy-holdings-paused-rules = Пауза: новых копий нет. Ваши правила выхода по-прежнему закрывают эти активы.
 copy-holdings-paused-mirror = Пауза: новых копий нет. Продажи кошелька по-прежнему закрывают эти активы.
 copy-holdings-paused-hybrid = Пауза: новых копий нет. Продажи кошелька и ваши правила выхода по-прежнему закрывают эти активы.
@@ -696,17 +722,17 @@ copy-holdings-closed-loading = Загрузка закрытых раундов�
 copy-holdings-closed-empty = Закрытых раундов пока нет.
 copy-holdings-closed-latest = Показаны последние: { $shown } из { $total }.
 copy-holdings-close-title = Закрытие виртуального актива
-copy-holdings-close-message = Продать { $token } в виртуальном портфеле по цене пула ({ $price }) с учётом проскальзывания и комиссий задачи.
+copy-holdings-close-quote-message = Закрыть виртуальный актив { $token } по двум котировкам роутера с интервалом около { $delay }. Исполнение использует вторую котировку, которая должна достигать минимального выхода первой, за вычетом оценочной сетевой комиссии. Если пригодной котировки нет, актив остаётся открытым без изменений.
 copy-holdings-close-confirm = Закрыть актив
-copy-holdings-write-off-title = Списание виртуального актива
-copy-holdings-write-off-message = У { $token } нет цены пула для продажи. Списание закрывает актив по нулевой цене и записывает его стоимость { $cost } как убыток.
 copy-holdings-keep = Оставить
-copy-holdings-written-off = { $token } списан
 copy-holdings-closed = { $token } закрыт
-copy-holdings-written-off-detail = Закрыт с нулевой выручкой
 copy-holdings-sold-at = Продан по { $price }
 copy-holdings-close-failed = Не удалось закрыть актив
-copy-holdings-reset-message = Начать «{ $name }» заново: её виртуальные активы, расходы, исполнения, выходы и пропуски будут удалены. Правила и кошелёк останутся.
+copy-holdings-close-pending-detail = Закрытие в очереди или выполняется. Результат появится в разделе «Активность».
+copy-holdings-close-unconfirmed = Результат закрытия не подтверждён
+copy-holdings-close-unconfirmed-detail = Соединение прервалось до получения результата, а в разделе «Активность» его пока нет. Проверьте «Активность», прежде чем закрывать снова.
+copy-holdings-closed-check-activity = Актив закрыт. Записанное исполнение есть в разделе «Активность».
+copy-holdings-reset-quote-message = Начать «{ $name }» заново: её текущие виртуальные активы, расходы, исполнения, выходы и пропуски будут очищены, и начнётся новый портфель на основе котировок. Прежние оценки и боевая история сохранятся. Правила и кошелёк останутся.
 copy-holdings-reset-cancel = Сохранить историю
 copy-holdings-reset-done = Виртуальный портфель сброшен
 copy-holdings-reset-detail =
@@ -723,7 +749,6 @@ copy-holdings-reset-failed = Не удалось сбросить виртуал
 copy-activity-title = Активность
 copy-activity-filter-label = Фильтр активности
 copy-filter-all = Все
-copy-outcome-paper-filled = Виртуальная покупка
 copy-outcome-live-submitted = Боевая покупка отправлена
 copy-outcome-live-confirmed = Боевая покупка подтверждена
 copy-outcome-live-failed = Боевая покупка не удалась
@@ -732,9 +757,14 @@ copy-outcome-live-sell-submitted = Боевая продажа отправле�
 copy-outcome-live-sell-failed = Боевая продажа не удалась
 copy-outcome-skipped = Пропущено
 copy-activity-decision = Решение
-copy-activity-paper-exit = Виртуальный выход · { $rule }
+copy-activity-paper-exit-quote = Виртуальный выход по котировке · { $rule }
+copy-activity-paper-exit-legacy = Прежняя виртуальная оценка выхода · { $rule }
 copy-activity-filled = { $input } по цене { $price } · кошелёк купил { $target }
+copy-activity-filled-target-difference = { $input } по цене { $price } · кошелёк купил { $target } · разница с ценой цели { $difference }
 copy-activity-filled-slippage = { $input } по цене { $price } · кошелёк купил { $target } · проскальзывание { $slippage }
+copy-activity-quote-router = Роутер { $router } · котировки получены { $initial } и { $landing }
+copy-activity-quote-wait = Предполагаемое ожидание { $assumed } · в очереди { $queued }
+copy-activity-quote-fees = Оценочные сетевая и приоритетная комиссии { $fee }, учтены один раз · комиссия платформы уже входит в котируемый выход
 copy-activity-filled-unpriced = { $input } по цене { $price } · оценено по сделке кошелька, цены пула нет
 copy-activity-live-sized = { $sized } · кошелёк купил { $target }
 copy-activity-sell-nothing = Кошелёк продал { $amount } · нечего продавать
@@ -810,7 +840,7 @@ copy-editor-name-placeholder = например, Быстрый ротатор
 copy-editor-enabled-title = Обрабатывать сделки кошелька
 copy-editor-enabled-help = Если выключено, задача остаётся на паузе, пока вы её не возобновите.
 copy-editor-note-live = Эта задача работает в боевом режиме: изменения применяются к её следующим реальным копиям.
-copy-editor-note-paper = Задачи работают в виртуальном режиме, пока вы не включите боевой: сделки симулируются по цене пула, средства не тратятся.
+copy-editor-note-paper-quote = Задачи работают в виртуальном режиме, пока вы не включите боевой: сделки симулируются по котировкам роутера, средства не тратятся.
 copy-editor-copy-size = Размер копии
 copy-editor-sizing-fixed = Фиксированная сумма
 copy-editor-sizing-ratio = Доля от сделки кошелька

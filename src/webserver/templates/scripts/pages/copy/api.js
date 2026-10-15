@@ -8,6 +8,9 @@ import { apiErrorMessage } from "../../core/request_manager.js";
 
 const BASE = "/api/copy-trading";
 
+/** A manual paper close waits in the task's queue for two router quotes. */
+export const CLOSE_TIMEOUT_MS = 1_800_000;
+
 /** Attach the server's error detail to a request failure. */
 export async function withDetail(error) {
   if (error?.detail) return error;
@@ -25,7 +28,10 @@ export async function withDetail(error) {
 }
 
 export function createApi(requestManager) {
-  async function call(path, { method = "GET", body, signal } = {}) {
+  async function call(
+    path,
+    { method = "GET", body, signal, timeout, retryOnConnectionError } = {}
+  ) {
     const write = method !== "GET";
     try {
       return await requestManager.fetch(`${BASE}${path}`, {
@@ -35,6 +41,8 @@ export function createApi(requestManager) {
           : {}),
         priority: write ? "high" : "normal",
         skipDedup: write,
+        ...(timeout !== undefined ? { timeout } : {}),
+        ...(retryOnConnectionError !== undefined ? { retryOnConnectionError } : {}),
         signal,
       });
     } catch (error) {
@@ -68,8 +76,16 @@ export function createApi(requestManager) {
         body: confirmation ? { mode, confirmation } : { mode },
       }),
     reset: (id) => call(`/tasks/${id}/reset`, { method: "POST" }),
-    closeHolding: (id, mint) =>
-      call(`/tasks/${id}/holdings/${encodeURIComponent(mint)}/close`, { method: "POST" }),
+    // A close whose response was lost is reconciled from the workspace, never sent again.
+    // `openedAt` is the exact opened_at of the confirmed round, so a round that
+    // reopened after confirmation is refused by the server.
+    closeHolding: (id, mint, openedAt) =>
+      call(`/tasks/${id}/holdings/${encodeURIComponent(mint)}/close`, {
+        method: "POST",
+        body: { opened_at: openedAt },
+        timeout: CLOSE_TIMEOUT_MS,
+        retryOnConnectionError: false,
+      }),
     async config() {
       try {
         const response = await requestManager.fetch("/api/config/copy_trading");

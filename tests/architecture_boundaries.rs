@@ -892,6 +892,20 @@ fn crate_root_constants_facade_must_not_return() {
 /// Removing only the test items — and replacing them with blank lines so
 /// reported line numbers still point at the real source — closes that hole.
 fn production_text(contents: &str) -> String {
+    let has_module_level_test_gate = contents
+        .lines()
+        .find(|line| {
+            let trimmed = line.trim();
+            !trimmed.is_empty() && !trimmed.starts_with("//")
+        })
+        .is_some_and(|line| line.trim() == "#![cfg(test)]");
+    if has_module_level_test_gate {
+        let mut blank = contents.lines().map(|_| "").collect::<Vec<_>>().join("\n");
+        if contents.ends_with('\n') {
+            blank.push('\n');
+        }
+        return blank;
+    }
     let mut out = String::with_capacity(contents.len());
     let mut skipping_depth: Option<i32> = None;
     let mut awaiting_block = false;
@@ -1124,7 +1138,6 @@ const NEUTRAL_FILES_NAMING_CHAINS_SOLANA: &[&str] = &[
     "tools/multi_wallet/consolidate.rs",
     "tools/multi_wallet/sell.rs",
     "tools/multi_wallet/transfer.rs",
-    "trader/copy/service.rs",
     "transactions/database/deltas.rs",
     "transactions/debug.rs",
     "transactions/debug_helpers.rs",
@@ -1548,7 +1561,6 @@ const PROCESS_CHAIN_SEAM_CALLER_FILES: &[&str] = &[
     "tools/swap_executor.rs",
     "tools/trade_watcher/monitor.rs",
     "trader/copy/control.rs",
-    "trader/copy/service.rs",
     "trader/copy/workspace/profile.rs",
     "trader/manual/guard.rs",
     "trader/policy.rs",
@@ -1669,6 +1681,21 @@ fn is_active_chain_call(line: &str) -> bool {
 /// the chain runtime. Every direct call below is a seam call site that a
 /// later step must lift behind the injected runtime; the caller file set is
 /// ratcheted so it can only shrink.
+#[test]
+fn production_text_ignores_test_only_module_files() {
+    let source = "// Copyright (c) 2024-2026 ScreenerBot (screenerbot.io)\n// SPDX-License-Identifier: BUSL-1.1\n\n#![cfg(test)]\nfn fixture() { crate::chains::active_chain(); }\n";
+    let production = production_text(source);
+    assert_eq!(production.split('\n').count(), source.split('\n').count());
+    assert!(!production.contains("active_chain"));
+
+    let nested_marker =
+        "fn production() { crate::chains::active_chain(); }\nmod tests {\n    #![cfg(test)]\n}\n";
+    assert!(production_text(nested_marker).contains("active_chain"));
+
+    let raw_string_marker = "fn production() { crate::chains::active_chain(); }\nconst FIXTURE: &str = r#\"#![cfg(test)]\"#;\n";
+    assert!(production_text(raw_string_marker).contains("active_chain"));
+}
+
 #[test]
 fn process_chain_seam_shrinks() {
     let mut hits: Vec<String> = Vec::new();

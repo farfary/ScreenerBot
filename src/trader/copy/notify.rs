@@ -192,15 +192,16 @@ fn announcement(outcome: &CopyOutcome) -> Option<Announcement> {
 pub(super) async fn record(
     database: &CopyDatabase,
     outcome: CopyOutcome,
-) -> crate::trader::Result<()> {
+) -> crate::trader::Result<bool> {
     let announcement = announcement(&outcome);
-    if database.record_outcome(outcome).await? {
+    let inserted = database.record_outcome(outcome).await?;
+    if inserted {
         if let Some(announcement) = announcement {
             let task = database.get_task(announcement.task_id).await.ok().flatten();
             publish(task.as_ref().map(task_name), announcement).await;
         }
     }
-    Ok(())
+    Ok(inserted)
 }
 
 /// Announce a guard pausing a task.

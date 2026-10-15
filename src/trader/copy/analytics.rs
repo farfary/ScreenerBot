@@ -61,10 +61,11 @@ pub fn build_task_stats(
     for row in activity.iter().filter(|row| row.task_id == task_id) {
         stats.decisions += 1;
         let telemetry = match &row.outcome {
-            CopyOutcome::PaperFilled(decision) => {
+            CopyOutcome::PaperFilled(decision) if decision.fill.has_quote_provenance() => {
                 stats.filled_buys += 1;
                 Some(&decision.telemetry)
             }
+            CopyOutcome::PaperFilled(_) => None,
             CopyOutcome::LiveSubmitted(decision) => {
                 stats.filled_buys += 1;
                 stats.submitted += 1;
@@ -78,7 +79,12 @@ pub fn build_task_stats(
                 stats.failed += 1;
                 Some(&decision.telemetry)
             }
-            CopyOutcome::PaperSellObserved(decision) => {
+            CopyOutcome::PaperSellObserved(decision)
+                if decision
+                    .paper_fill
+                    .as_ref()
+                    .is_some_and(|fill| fill.has_quote_provenance()) =>
+            {
                 match decision.exit_rule {
                     None => stats.target_sells += 1,
                     Some(PaperExitRule::Manual) => stats.manual_closes += 1,
@@ -86,6 +92,7 @@ pub fn build_task_stats(
                 }
                 Some(&decision.telemetry)
             }
+            CopyOutcome::PaperSellObserved(_) => None,
             CopyOutcome::LiveSellSubmitted(decision) => {
                 stats.target_sells += 1;
                 stats.submitted += 1;
@@ -173,6 +180,8 @@ mod tests {
             task_id: 1,
             mint: mint.to_owned(),
             token_amount: tokens,
+            raw_token_amount: Some(crate::chains::RawAmount::from_integral_f64(tokens).unwrap()),
+            token_decimals: Some(0),
             cost_basis_native: cost,
             invested_native: cost + realized_cost,
             realized_proceeds_native: proceeds,

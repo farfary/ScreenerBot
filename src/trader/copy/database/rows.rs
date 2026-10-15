@@ -6,6 +6,7 @@
 use chrono::Utc;
 
 use crate::trader::copy::types::CopyTask;
+use rusqlite::{Connection, OptionalExtension};
 
 /// Column order `row_to_task` decodes; every task SELECT interpolates it.
 pub(super) const TASK_COLUMNS: &str = "id, chain_id, target_address, label, enabled, mode_json, \
@@ -69,4 +70,18 @@ pub(super) fn parse_datetime(value: &str, index: usize) -> rusqlite::Result<chro
 
 pub(super) fn json_error(error: serde_json::Error) -> rusqlite::Error {
     rusqlite::Error::FromSqlConversionFailure(0, rusqlite::types::Type::Text, Box::new(error))
+}
+
+pub(super) fn task_on(
+    connection: &Connection,
+    task_id: i64,
+    chain_id: &str,
+) -> rusqlite::Result<Option<CopyTask>> {
+    connection
+        .query_row(
+            &format!("SELECT {TASK_COLUMNS} FROM copy_tasks WHERE id = ?1 AND chain_id = ?2"),
+            rusqlite::params![task_id, chain_id],
+            row_to_task,
+        )
+        .optional()
 }

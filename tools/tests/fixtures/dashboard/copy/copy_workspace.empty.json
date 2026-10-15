@@ -128,6 +128,18 @@
   "policy_manages_exits": true,
   "global_require_filter_pass": true,
   "paper_holdings": [],
+  "legacy_paper": {
+    "spent_native": 0,
+    "realized_proceeds_native": 0,
+    "realized_cost_native": 0,
+    "realized_pnl_native": 0,
+    "holdings": []
+  },
+  "paper_execution": {
+    "model": "quote",
+    "landing_delay_ms": 1000,
+    "queue_capacity": 32
+  },
   "readiness": {
     "ready": false,
     "checks": [

@@ -305,9 +305,11 @@ export function validateOverrides(overrides) {
 }
 
 /**
- * What a reader must know about the rules in effect. `slippagePct` and `feePct`
- * are the task's own selling costs: an exit rule measures from the entry price,
- * which already carries the buy's costs, so a sell still pays both again.
+ * What a reader must know about the rules in effect. `slippagePct` is the task's
+ * slippage tolerance, a limit on the sale price rather than a predicted cost, and
+ * `feePct` the swap fee rate: an exit rule measures from the entry price, which
+ * already carries the buy's costs, so a target no larger than both together may
+ * not cover the sale.
  */
 export function exitWarnings(policy, exitMode, { slippagePct = null, feePct = null } = {}) {
   const warnings = [];
@@ -336,10 +338,10 @@ export function exitWarnings(policy, exitMode, { slippagePct = null, feePct = nu
   const slippage = finite(slippagePct);
   const fee = finite(feePct);
   if (roi?.enabled && slippage !== null && fee !== null) {
-    const sellCost = slippage + fee;
-    if (Number(roi.target_profit_pct) <= sellCost) {
+    const sellCostCeiling = slippage + fee;
+    if (Number(roi.target_profit_pct) <= sellCostCeiling) {
       warnings.push(
-        I18n.t("copy-warning-take-profit-cost", {
+        I18n.t("copy-warning-take-profit-small", {
           target: settingSignedPct(roi.target_profit_pct),
           slippage: settingPct(slippage),
           fee: settingPct(fee),

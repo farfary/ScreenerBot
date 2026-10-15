@@ -32,6 +32,10 @@ config_struct! {
         latency_window_size: usize = 10,
         #[metadata(field_metadata! { min: 1, max: 500, step: 1, impact: ConfigImpact::Low, category: ConfigCategory::CopyTrading, })]
         readiness_min_closed_rounds: usize = 10,
+        #[metadata(field_metadata! { min: 0, max: 30000, step: 100, impact: ConfigImpact::High, category: ConfigCategory::CopyTrading, })]
+        paper_landing_delay_ms: u64 = 1000,
+        #[metadata(field_metadata! { min: 1, max: 256, step: 1, impact: ConfigImpact::Medium, category: ConfigCategory::CopyTrading, })]
+        paper_queue_capacity: usize = 32,
     }
 }
 
@@ -87,6 +91,18 @@ impl CopyTradingConfig {
             }
             .into());
         }
+        if self.paper_landing_delay_ms > 30_000 {
+            return Err(ConfigurationError::Generic {
+                message: "Paper quote delay must be between 0 and 30000 ms".to_owned(),
+            }
+            .into());
+        }
+        if !(1..=256).contains(&self.paper_queue_capacity) {
+            return Err(ConfigurationError::Generic {
+                message: "Paper queue capacity must be between 1 and 256".to_owned(),
+            }
+            .into());
+        }
         Ok(())
     }
 }
@@ -118,5 +134,35 @@ mod tests {
         let saved: CopyTradingConfig =
             toml::from_str("require_filter_pass = true").expect("saved section parses");
         assert!(saved.require_filter_pass);
+    }
+
+    #[test]
+    fn paper_queue_defaults_and_bounds_are_validated() {
+        let defaults = CopyTradingConfig::default();
+        assert_eq!(defaults.paper_landing_delay_ms, 1000);
+        assert_eq!(defaults.paper_queue_capacity, 32);
+        assert!(defaults.validate().is_ok());
+
+        let mut minimums = defaults.clone();
+        minimums.paper_landing_delay_ms = 0;
+        minimums.paper_queue_capacity = 1;
+        assert!(minimums.validate().is_ok());
+
+        let mut maximums = defaults.clone();
+        maximums.paper_landing_delay_ms = 30_000;
+        maximums.paper_queue_capacity = 256;
+        assert!(maximums.validate().is_ok());
+
+        let mut delay_over = defaults.clone();
+        delay_over.paper_landing_delay_ms = 30_001;
+        assert!(delay_over.validate().is_err());
+
+        let mut capacity_under = defaults.clone();
+        capacity_under.paper_queue_capacity = 0;
+        assert!(capacity_under.validate().is_err());
+
+        let mut capacity_over = defaults;
+        capacity_over.paper_queue_capacity = 257;
+        assert!(capacity_over.validate().is_err());
     }
 }

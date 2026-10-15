@@ -33,6 +33,10 @@ impl ChainAdapter for SolanaAdapter {
         LAMPORTS_PER_SOL
     }
 
+    fn platform_swap_fee_bps(&self) -> u16 {
+        super::swaps::revenue::PLATFORM_FEE_BPS
+    }
+
     fn validate_address(&self, address: &str) -> Result<(), ChainError> {
         super::accounts::validate_address(address).map_err(|_| ChainError::InvalidAccount {
             chain: ChainId::Solana,
@@ -110,6 +114,14 @@ mod tests {
     /// A real, well-formed ed25519 transaction signature (88 base58 chars).
     const REAL_SIGNATURE: &str =
         "5VERv8NMvzbJMEkV8xnrLkEaWRtSz9CosKDYjCJjBRnbJLgp8uirBgmQpjKhoR4tjF3ZpRzrFmBV6UjKdiSZkQUW";
+
+    #[test]
+    fn platform_swap_fee_matches_revenue_policy() {
+        assert_eq!(
+            SolanaAdapter.platform_swap_fee_bps(),
+            super::super::swaps::revenue::PLATFORM_FEE_BPS
+        );
+    }
 
     #[test]
     fn raw_native_round_trip() {

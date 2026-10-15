@@ -155,7 +155,7 @@ function walletStep(context, esc) {
   const note =
     mode === "edit" && source.mode === "live"
       ? I18n.t("copy-editor-note-live")
-      : I18n.t("copy-editor-note-paper");
+      : I18n.t("copy-editor-note-paper-quote");
   return `${address}
     <label class="copy-field"><span>${I18n.markup("copy-editor-name-label")}</span><input type="text" data-field="label" value="${esc(draft.label || "")}" maxlength="64" placeholder="${esc(I18n.t("copy-editor-name-placeholder"))}" /></label>
     ${toggleRow(esc, { name: "enabled", title: I18n.t("copy-editor-enabled-title"), help: I18n.t("copy-editor-enabled-help"), checked: draft.enabled })}

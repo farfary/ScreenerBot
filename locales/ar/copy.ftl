@@ -16,6 +16,11 @@ copy-skip-invalid-sizing = حجم المهمة غير صالح
 copy-skip-invalid-slippage = الانزلاق السعري للمهمة غير صالح
 copy-skip-invalid-exit-policy = قواعد الخروج للمهمة غير صالحة
 copy-skip-invalid-price = لا يوجد سعر سوق صالح للاستخدام
+copy-skip-paper-quote-unavailable = تعذّر الحصول على عرض سعر للمبادلة من أجل التنفيذ التجريبي
+copy-skip-paper-quote-unfillable = لا يمكن لعرض السعر أن ينتج تنفيذًا تجريبيًا صالحًا للاستخدام
+copy-skip-paper-minimum-output-not-met = انخفض عرض السعر الثاني عن الحد الأدنى للمخرجات في عرض السعر الأول
+copy-skip-paper-queue-full = طابور التنفيذ التجريبي لهذه المهمة ممتلئ
+copy-skip-paper-execution-unavailable = لم يكتمل التنفيذ التجريبي: توقفت الخدمة، أو تغيّرت المهمة أو الحيازة، أو كان الطلب مكررًا لطلب قيد التنفيذ
 copy-skip-not-sell-swap = نشاط المحفظة لم يكن عملية بيع
 copy-skip-exit-mode-disabled = تم تجاهل بيع المحفظة: المهمة تبيع وفق قواعدها الخاصة
 copy-skip-force-stopped = التداول في إيقاف قسري
@@ -248,13 +253,13 @@ copy-toast-global-failed = تعذّر تغيير معالجة النسخ
 ## Onboarding
 
 copy-onboarding-title = انسخ المحافظ التي تثق بها، واختبرها في التجريبي أولًا
-copy-onboarding-body = كل مهمة تبدأ في الوضع التجريبي: تُحاكى صفقات الهدف بسعر المجمع مع الانزلاق السعري والرسوم الخاصة بك، وتعمل قواعد الخروج الخاصة بك على السجل التجريبي. فعّل التداول الحي لكل محفظة عندما تستحقه نتائجها التجريبية.
+copy-onboarding-paper-body = كل مهمة تبدأ في الوضع التجريبي: تُحاكى صفقات الهدف من عرضَي سعر من الموجّه مع رسوم شبكة مقدرة، وتعمل قواعد الخروج الخاصة بك على السجل التجريبي. فعّل التداول الحي لكل محفظة عندما تستحقه نتائجها التجريبية.
 copy-onboarding-add = أضف أول محفظة لك
 copy-setup-gate-title = نسخ التداول يتطلب محفظة
 copy-onboarding-observe = راقب
 copy-onboarding-observe-detail = اكتشف مبادلات المحفظة دون إنفاق { -sol }.
 copy-onboarding-evaluate = قيّم
-copy-onboarding-evaluate-detail = اقرأ الأرباح والخسائر التجريبية ونسبة الربح وعمليات التخطي وسرعة الاكتشاف والانزلاق السعري.
+copy-onboarding-evaluate-paper-detail = اقرأ الأرباح والخسائر التجريبية ونسبة الربح وعمليات التخطي وسرعة الاكتشاف وفرق السعر عن سعر الهدف.
 copy-onboarding-arm = فعّل
 copy-onboarding-arm-detail = اجتز فحوصات الجاهزية ثم فعّل المبادلات الحقيقية.
 
@@ -297,6 +302,26 @@ copy-settings-unit-rounds = جولة
 copy-settings-save = حفظ الإعدادات
 copy-settings-load-failed = تعذّر تحميل إعدادات النسخ
 copy-settings-saved = تم حفظ إعدادات نسخ التداول
+copy-outcome-paper-filled-legacy = تقدير تجريبي قديم
+copy-outcome-paper-filled-quote = تنفيذ تجريبي قائم على عرض السعر
+copy-outcome-paper-sell-legacy = تقدير خروج تجريبي قديم
+copy-outcome-paper-sell-quote = خروج تجريبي قائم على عرض السعر
+
+## Paper execution model
+
+copy-paper-model = نموذج التنفيذ التجريبي
+copy-paper-model-note = يستخدم كل تنفيذ تجريبي عرضَي سعر من الموجّه بحجم الصفقة، يُؤخذان بفاصل يساوي زمن الانتظار المفترض. ويجب أن يظل عرض السعر الثاني محققًا للحد الأدنى للمخرجات في عرض السعر الأول. تواصل أسعار المجمع تقييم الحيازات وتشغيل قواعد الخروج. رسوم الشبكة والأولوية تقدير واحد يُحتسب مرة واحدة؛ ورسوم المنصة مشمولة أصلًا في المخرجات المعروضة. لا تُحاكى MEV ولا ترتيب المدققين.
+copy-paper-wait-label = زمن الانتظار المفترض حتى التنفيذ
+copy-paper-queue-label = حجم الطابور لكل مهمة
+copy-paper-legacy-title = تقديرات تجريبية قديمة
+copy-paper-legacy-note = تقديرات للقراءة فقط محفوظة من قبل المحاكاة القائمة على عروض الأسعار. ليست جزءًا من إنفاق السجل الحالي أو حيازاته ولا تتيح أي إجراءات. تُقيَّم المبالغ المتبقية بآخر سعر محفوظ لكل رمز، ولا تُقيَّم أبدًا بسعر السوق الحالي.
+copy-paper-legacy-spent = الإنفاق التقديري القديم
+copy-paper-legacy-realized = التقدير المحقق القديم
+copy-paper-legacy-col-tokens = الرموز
+copy-paper-legacy-col-cost = التكلفة المتبقية ({ -sol })
+copy-paper-legacy-col-realized = التقدير المحقق ({ -sol })
+copy-paper-legacy-col-price = آخر سعر محفوظ ({ -sol })
+copy-paper-legacy-col-remaining = الأرباح والخسائر المتبقية بالسعر المحفوظ ({ -sol })
 
 ## Workspace
 
@@ -545,7 +570,7 @@ copy-warning-mirror = عمليات بيع المحفظة وحدها تغلق ا�
 copy-warning-no-rules = لا توجد قاعدة خروج مفعّلة وعمليات بيع المحفظة متجاهلة: لن تُباع الحيازات أبدًا.
 copy-warning-no-stop-loss = لا يوجد وقف خسارة: الرمز الهابط يبقى محتفَظًا به حتى تبيعه قاعدة أخرى أو المحفظة.
 copy-warning-stop-delay = وقف الخسارة ينتظر { $hold } بعد كل عملية شراء: الرمز الذي يهبط أسرع يُغلق بعيدًا عن { $threshold }.
-copy-warning-take-profit-cost = جني الأرباح عند { $target } لا يغطي تكلفة البيع (انزلاق سعري { $slippage } ورسوم مبادلة { $fee })، لذا يغلق الجولات بخسارة.
+copy-warning-take-profit-small = جني الأرباح عند { $target } ليس أكبر من تكاليف البيع: تسامح انزلاق سعري يصل إلى { $slippage } ورسوم مبادلة { $fee }. قد لا يغطيها هدف صغير. التسامح حد لسعر البيع وليس تكلفة متوقعة.
 copy-warning-trailing-distance = مسافة الوقف المتحرك تساوي ربح تفعيله أو تزيد عليه، لذا قد يبيع الوقف المفعّل دون سعر الدخول.
 
 ## Execution tab
@@ -574,8 +599,8 @@ copy-execution-arrival-samples =
        *[other] { $count } صفقة رُصدت لحظة حدوثها
     }
 copy-execution-p95 = وصول p95
-copy-execution-median-slippage = وسيط الانزلاق السعري
-copy-execution-slippage-samples =
+copy-execution-target-price-difference = وسيط فرق السعر عن الهدف
+copy-execution-target-difference-samples =
     { $count ->
         [zero] { $count } عملية تنفيذ مقاسة
         [one] { $count } عملية تنفيذ مقاسة
@@ -584,16 +609,17 @@ copy-execution-slippage-samples =
         [many] { $count } عملية تنفيذ مقاسة
        *[other] { $count } عملية تنفيذ مقاسة
     }
-copy-execution-worst-slippage = أسوأ انزلاق سعري
-copy-execution-average-slippage = المتوسط { $amount }
+copy-execution-target-difference-worst = أكبر فرق سعر عن الهدف
+copy-execution-target-difference-average = متوسط فرق السعر عن الهدف { $amount }
 copy-execution-delay-title = تأخر الاكتشاف
 copy-execution-delay-note = الزمن من كتلة المحفظة إلى رؤية هذا البوت للصفقة. تُستثنى عمليات إعادة التشغيل بعد التوقف.
 copy-execution-delay-limit = الأعمدة التي تتجاوز حد الوصول { $limit } تظهر باللون الكهرماني.
 copy-execution-fastest = الأسرع
 copy-execution-average = المتوسط
 copy-execution-slowest = الأبطأ
-copy-execution-fill-title = التنفيذ مقارنةً بالمحفظة
-copy-execution-fill-note = القيمة الموجبة تعني أسوأ من المحفظة: دفعت أكثر في الشراء، أو استلمت أقل في بيع محاكى. التنفيذ التجريبي لرمز بلا سعر مجمع يُسعَّر بصفقة المحفظة نفسها، فلا يقيس شيئًا ويُستبعد.
+copy-execution-target-difference-title = فرق السعر عن الهدف
+copy-execution-target-difference-note = يقارن سعر كل تنفيذ بسعر صفقة المحفظة نفسها عندما يكون كلاهما أكبر من الصفر. القيمة الموجبة تعني تنفيذًا أسوأ مما حصلت عليه المحفظة: دُفع أكثر في الشراء أو استُلم أقل في البيع. إنها مقارنة وليست تسامح الانزلاق السعري للمهمة.
+copy-execution-wait-note = يُقاس تأخر الاكتشاف من كتلة المحفظة. زمن الانتظار حتى التنفيذ افتراض في النموذج التجريبي؛ ويُضاف إليه الزمن الذي يقضيه القرار في طابور المهمة ويُسجَّل مع كل تنفيذ.
 copy-execution-samples = العينات
 copy-execution-median = الوسيط
 copy-execution-worst = الأسوأ
@@ -614,7 +640,7 @@ copy-table-rounds = الجولات
 copy-table-realized = المحقق ({ -sol })
 copy-table-profit-factor = عامل الربح
 copy-table-average-hold = متوسط الاحتفاظ
-copy-table-median-slippage = وسيط الانزلاق السعري
+copy-table-target-difference = وسيط فرق السعر عن الهدف
 
 ## Charts
 
@@ -704,7 +730,7 @@ copy-holdings-token-details = فتح تفاصيل الرمز
 copy-holdings-opened = فُتح { $time }
 copy-holdings-no-pool-price = لا يوجد سعر مجمع
 copy-holdings-close = إغلاق
-copy-holdings-write-off = شطب
+copy-holdings-close-pending = الإغلاق قيد الانتظار
 copy-holdings-activity = النشاط
 copy-holdings-no-exit-rule = لا توجد قاعدة خروج
 copy-holdings-watch-stop = وقف { $level }
@@ -729,7 +755,7 @@ copy-holdings-col-invested = المستثمر ({ -sol })
 copy-holdings-col-proceeds = العائد ({ -sol })
 copy-holdings-col-exit = الخروج
 copy-holdings-col-closed = الإغلاق
-copy-holdings-price-note = الأسعار بوحدة { -sol } لكل رمز. سعر الدخول يشمل انزلاق الشراء ورسومه؛ والذروة ومستويات الخروج نسبة إليه، لذا تُفتح الحيازة وذروتها دون سعر الدخول. مرّر المؤشر فوق أي منها لرؤية سعر مجمعها.
+copy-holdings-marks-note = الأسعار بوحدة { -sol } لكل رمز. يستخدم التقييم ومستويات الخروج سعر المجمع، وهو ما يشغّل قواعد الخروج أيضًا؛ وتستخدم عمليات التنفيذ المسجلة عروض أسعار الموجّه. يشمل سعر الدخول رسوم الشبكة المقدرة للشراء؛ والذروة ومستويات الخروج نسبة إليه، لذا تُفتح الحيازة وذروتها دون سعر الدخول. مرّر المؤشر فوق أي منها لرؤية سعر مجمعها.
 copy-holdings-paused-rules = متوقف مؤقتًا: لا نسخ جديد. قواعد الخروج الخاصة بك ما زالت تغلق هذه الحيازات.
 copy-holdings-paused-mirror = متوقف مؤقتًا: لا نسخ جديد. عمليات بيع المحفظة ما زالت تغلق هذه الحيازات.
 copy-holdings-paused-hybrid = متوقف مؤقتًا: لا نسخ جديد. عمليات بيع المحفظة وقواعد الخروج الخاصة بك ما زالت تغلق هذه الحيازات.
@@ -738,17 +764,17 @@ copy-holdings-closed-loading = جارٍ تحميل الجولات المغلقة
 copy-holdings-closed-empty = لا توجد جولات مغلقة بعد.
 copy-holdings-closed-latest = أحدث { $shown } من أصل { $total } من الجولات.
 copy-holdings-close-title = إغلاق حيازة تجريبية
-copy-holdings-close-message = بيع { $token } في السجل التجريبي بسعر المجمع ({ $price }) مع الانزلاق السعري والرسوم الخاصة بالمهمة.
+copy-holdings-close-quote-message = أغلق الحيازة التجريبية لـ { $token } بعرضَي سعر من الموجّه بينهما نحو { $delay }. يستخدم التنفيذ عرض السعر الثاني، الذي يجب أن يحقق الحد الأدنى للمخرجات في الأول، مع خصم رسوم الشبكة المقدرة. إن لم يتوفر عرض سعر صالح تبقى الحيازة مفتوحة دون تغيير.
 copy-holdings-close-confirm = إغلاق الحيازة
-copy-holdings-write-off-title = شطب حيازة تجريبية
-copy-holdings-write-off-message = { $token } بلا سعر مجمع للبيع عنده. الشطب يغلقها عند الصفر ويسجل تكلفتها ({ $cost }) كخسارة.
 copy-holdings-keep = إبقاء
-copy-holdings-written-off = تم شطب { $token }
 copy-holdings-closed = تم إغلاق { $token }
-copy-holdings-written-off-detail = أُغلقت بعائد صفري
 copy-holdings-sold-at = بيعت بسعر { $price }
 copy-holdings-close-failed = تعذّر إغلاق الحيازة
-copy-holdings-reset-message = ابدأ «{ $name }» من جديد: ستُزال حيازاتها التجريبية وإنفاقها وعمليات التنفيذ والخروج والتخطي. تبقى القواعد والمحفظة.
+copy-holdings-close-pending-detail = الإغلاق في الطابور أو قيد التنفيذ. ستظهر نتيجته في النشاط.
+copy-holdings-close-unconfirmed = نتيجة الإغلاق غير مؤكدة
+copy-holdings-close-unconfirmed-detail = انتهى الاتصال قبل استلام النتيجة ولا توجد نتيجة بعد في النشاط. تحقق من النشاط قبل الإغلاق مرة أخرى.
+copy-holdings-closed-check-activity = الحيازة مغلقة. التنفيذ المسجل موجود في النشاط.
+copy-holdings-reset-quote-message = ابدأ «{ $name }» من جديد: ستُمسح حيازاتها التجريبية الحالية وإنفاقها وعمليات التنفيذ والخروج والتخطي ويبدأ سجل جديد قائم على عروض الأسعار. تبقى التقديرات القديمة وسجل التداول الحي. تبقى القواعد والمحفظة.
 copy-holdings-reset-cancel = إبقاء السجل
 copy-holdings-reset-done = تمت إعادة تعيين السجل التجريبي
 copy-holdings-reset-detail =
@@ -767,7 +793,6 @@ copy-holdings-reset-failed = تعذّرت إعادة تعيين السجل ال�
 copy-activity-title = النشاط
 copy-activity-filter-label = مرشح النشاط
 copy-filter-all = الكل
-copy-outcome-paper-filled = شراء تجريبي
 copy-outcome-live-submitted = أُرسل شراء حي
 copy-outcome-live-confirmed = تأكد شراء حي
 copy-outcome-live-failed = فشل شراء حي
@@ -776,9 +801,14 @@ copy-outcome-live-sell-submitted = أُرسل بيع حي
 copy-outcome-live-sell-failed = فشل بيع حي
 copy-outcome-skipped = تم التخطي
 copy-activity-decision = القرار
-copy-activity-paper-exit = خروج تجريبي · { $rule }
+copy-activity-paper-exit-quote = خروج تجريبي قائم على عرض السعر · { $rule }
+copy-activity-paper-exit-legacy = تقدير خروج تجريبي قديم · { $rule }
 copy-activity-filled = { $input } بسعر { $price } · اشترت المحفظة { $target }
+copy-activity-filled-target-difference = { $input } بسعر { $price } · اشترت المحفظة { $target } · فرق السعر عن الهدف { $difference }
 copy-activity-filled-slippage = { $input } بسعر { $price } · اشترت المحفظة { $target } · الانزلاق السعري { $slippage }
+copy-activity-quote-router = الموجّه { $router } · عروض الأسعار المستلمة { $initial } و { $landing }
+copy-activity-quote-wait = الانتظار المفترض { $assumed } · في الطابور { $queued }
+copy-activity-quote-fees = رسوم الشبكة والأولوية المقدرة { $fee }، تُحتسب مرة واحدة · رسوم المنصة مشمولة أصلًا في المخرجات المعروضة
 copy-activity-filled-unpriced = { $input } بسعر { $price } · اشترت المحفظة { $target } · سُعّر بصفقة المحفظة، لا يوجد سعر مجمع
 copy-activity-live-sized = { $sized } · اشترت المحفظة { $target }
 copy-activity-sell-nothing = باعت المحفظة { $amount } · لا شيء محتفَظ به للبيع
@@ -856,7 +886,7 @@ copy-editor-name-placeholder = مثال: المتبدّل السريع
 copy-editor-enabled-title = معالجة صفقات المحفظة
 copy-editor-enabled-help = التعطيل يُبقي المهمة متوقفة مؤقتًا حتى تستأنفها.
 copy-editor-note-live = هذه المهمة حية: التغييرات تُطبَّق على نسخها الحقيقي التالي.
-copy-editor-note-paper = المهام تعمل في التجريبي حتى تفعّلها: تُحاكى الصفقات بسعر المجمع ولا يُنفق شيء.
+copy-editor-note-paper-quote = المهام تعمل في التجريبي حتى تفعّلها: تُحاكى الصفقات من عروض أسعار الموجّه ولا يُنفق شيء.
 copy-editor-copy-size = حجم النسخ
 copy-editor-sizing-fixed = مبلغ ثابت
 copy-editor-sizing-ratio = حصة من صفقة المحفظة

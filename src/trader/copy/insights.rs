@@ -17,11 +17,10 @@ use crate::positions::{Position, PositionOrigin};
 use super::analytics::{arrival_distance_ms, summarize_arrival_distances};
 use super::types::{
     ArrivalDistanceStats, CopyActivityRow, CopyBook, CopyOutcome, CopySkip, PaperExitRule,
+    PaperModel,
 };
 
-/// Remaining tokens below this fraction of the round count as sold out, as in
-/// the paper ledger.
-const CLOSE_RESIDUE_FRACTION: f64 = 1e-9;
+/// Pre-raw historical quote records are replayed in their saved display units.
 /// Newest closed rounds kept in the response.
 const RECENT_ROUNDS: usize = 50;
 /// Upper bounds of the arrival histogram buckets; the last bucket is open.
@@ -160,6 +159,8 @@ impl PaperExitRule {
 struct OpenRound {
     opened_at: Option<DateTime<Utc>>,
     tokens: f64,
+    raw_tokens: Option<crate::chains::RawAmount>,
+    token_decimals: Option<u8>,
     cost: f64,
     realized_cost: f64,
     proceeds: f64,
@@ -179,13 +180,42 @@ fn replay_paper(rows: &[&CopyActivityRow]) -> (Vec<CopyRound>, Vec<ExitLeg>) {
     let mut legs = Vec::new();
     for row in rows {
         match &row.outcome {
-            CopyOutcome::PaperFilled(decision) => {
+            CopyOutcome::PaperFilled(decision) if decision.fill.has_quote_provenance() => {
                 let round = open.entry(decision.mint.as_str()).or_default();
                 round.opened_at.get_or_insert(decision.telemetry.decided_at);
-                round.tokens += decision.fill.token_amount;
+                if round.raw_tokens.is_none() && round.tokens > 0.0 {
+                    round.tokens += decision.fill.token_amount;
+                } else if let Some(quote) = &decision.fill.quote {
+                    if let Some(decimals) = quote.token_decimals {
+                        let next_raw = round
+                            .raw_tokens
+                            .unwrap_or(crate::chains::RawAmount::ZERO)
+                            .checked_add(quote.final_output_amount);
+                        if round.token_decimals.is_none_or(|held| held == decimals) {
+                            round.raw_tokens = next_raw;
+                            round.token_decimals = Some(decimals);
+                            round.tokens = next_raw
+                                .map(|raw| raw.to_whole_units(decimals))
+                                .unwrap_or(round.tokens + decision.fill.token_amount);
+                        } else {
+                            round.raw_tokens = None;
+                            round.token_decimals = None;
+                            round.tokens += decision.fill.token_amount;
+                        }
+                    } else {
+                        round.tokens += decision.fill.token_amount;
+                    }
+                } else {
+                    round.tokens += decision.fill.token_amount;
+                }
                 round.cost += decision.fill.total_cost_sol;
             }
-            CopyOutcome::PaperSellObserved(decision) => {
+            CopyOutcome::PaperSellObserved(decision)
+                if decision
+                    .paper_fill
+                    .as_ref()
+                    .is_some_and(|fill| fill.has_quote_provenance()) =>
+            {
                 let Some(fill) = &decision.paper_fill else {
                     continue;
                 };
@@ -196,9 +226,42 @@ fn replay_paper(rows: &[&CopyActivityRow]) -> (Vec<CopyRound>, Vec<ExitLeg>) {
                     continue;
                 }
                 let held = round.tokens;
-                let sold = fill.token_amount.min(held);
-                let cost_sold = round.cost * sold / held;
-                round.tokens -= sold;
+                let exact_sold = fill
+                    .quote
+                    .as_ref()
+                    .and_then(|quote| quote.input_amount.zip(quote.token_decimals));
+                let (sold, raw_remainder, raw_share) =
+                    match (round.raw_tokens, round.token_decimals, exact_sold) {
+                        (Some(raw_held), Some(decimals), Some((raw_sold, quote_decimals)))
+                            if decimals == quote_decimals && raw_sold <= raw_held =>
+                        {
+                            match raw_held.checked_sub(raw_sold) {
+                                Some(remainder) => (
+                                    raw_sold.to_whole_units(decimals),
+                                    Some((remainder, decimals)),
+                                    Some(raw_sold.raw() as f64 / raw_held.raw() as f64),
+                                ),
+                                None => (fill.token_amount.min(held), None, None),
+                            }
+                        }
+                        _ => (fill.token_amount.min(held), None, None),
+                    };
+                let closes_exactly = raw_remainder
+                    .is_some_and(|(remainder, _)| remainder == crate::chains::RawAmount::ZERO)
+                    || (raw_remainder.is_none() && sold >= held);
+                let cost_sold = if closes_exactly {
+                    round.cost
+                } else {
+                    round.cost * raw_share.unwrap_or(sold / held)
+                };
+                if let Some((remainder, decimals)) = raw_remainder {
+                    round.raw_tokens = Some(remainder);
+                    round.tokens = remainder.to_whole_units(decimals);
+                } else {
+                    round.raw_tokens = None;
+                    round.token_decimals = None;
+                    round.tokens -= sold;
+                }
                 round.cost -= cost_sold;
                 round.realized_cost += cost_sold;
                 round.proceeds += fill.net_proceeds_sol;
@@ -209,7 +272,9 @@ fn replay_paper(rows: &[&CopyActivityRow]) -> (Vec<CopyRound>, Vec<ExitLeg>) {
                     exit: exit.clone(),
                     pnl_native: fill.net_proceeds_sol - cost_sold,
                 });
-                if round.tokens <= held * CLOSE_RESIDUE_FRACTION {
+                let exactly_closed =
+                    round.raw_tokens == Some(crate::chains::RawAmount::ZERO) || sold >= held;
+                if exactly_closed {
                     if let Some(closed) = open.remove(decision.mint.as_str()) {
                         let opened_at = closed.opened_at.unwrap_or(at);
                         let pnl = closed.proceeds - closed.realized_cost;
@@ -305,7 +370,7 @@ fn skip_key(reason: &CopySkip) -> String {
 /// construction, so it measures nothing and is left out.
 fn slippage_pct(outcome: &CopyOutcome) -> Option<f64> {
     let (target, fill, buy) = match outcome {
-        CopyOutcome::PaperFilled(decision) if decision.fill.priced_from_pool => (
+        CopyOutcome::PaperFilled(decision) if decision.fill.has_quote_provenance() => (
             decision.telemetry.target_price_sol,
             Some(decision.fill.fill_price_sol),
             true,
@@ -320,7 +385,7 @@ fn slippage_pct(outcome: &CopyOutcome) -> Option<f64> {
             decision
                 .paper_fill
                 .as_ref()
-                .filter(|fill| fill.priced_from_pool)
+                .filter(|fill| fill.has_quote_provenance())
                 .map(|fill| fill.fill_price_sol),
             false,
         ),
@@ -471,7 +536,10 @@ pub fn build_insights(
     let mut skips: HashMap<String, usize> = HashMap::new();
     let mut arrival = Vec::new();
     let mut slippage = Vec::new();
-    for row in rows.iter().filter(|row| range.contains(row.created_at)) {
+    for row in rows
+        .iter()
+        .filter(|row| range.contains(row.created_at) && outcome_matches_book(&row.outcome, book))
+    {
         match &row.outcome {
             CopyOutcome::PaperFilled(_)
             | CopyOutcome::LiveSubmitted(_)
@@ -510,6 +578,25 @@ pub fn build_insights(
     insights.slippage = summarize_slippage(slippage);
     insights.recent_rounds = rounds.iter().rev().take(RECENT_ROUNDS).cloned().collect();
     insights
+}
+
+fn outcome_matches_book(outcome: &CopyOutcome, book: CopyBook) -> bool {
+    match (book, outcome) {
+        (CopyBook::Paper, CopyOutcome::PaperFilled(decision)) => {
+            decision.fill.has_quote_provenance()
+        }
+        (CopyBook::Paper, CopyOutcome::PaperSellObserved(decision)) => decision
+            .paper_fill
+            .as_ref()
+            .is_some_and(|fill| fill.has_quote_provenance()),
+        (CopyBook::Paper, CopyOutcome::Skipped { paper, .. }) => paper
+            .as_ref()
+            .is_some_and(|context| context.model == PaperModel::Quote),
+        (CopyBook::Paper, _) => false,
+        (CopyBook::Live, CopyOutcome::PaperFilled(_) | CopyOutcome::PaperSellObserved(_)) => false,
+        (CopyBook::Live, CopyOutcome::Skipped { paper, .. }) => paper.is_none(),
+        (CopyBook::Live, _) => true,
+    }
 }
 
 #[cfg(test)]

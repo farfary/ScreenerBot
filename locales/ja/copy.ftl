@@ -16,6 +16,11 @@ copy-skip-invalid-sizing = タスクのサイジングが無効です
 copy-skip-invalid-slippage = タスクのスリッページが無効です
 copy-skip-invalid-exit-policy = タスクのエグジットルールが無効です
 copy-skip-invalid-price = 使用できる市場価格がありません
+copy-skip-paper-quote-unavailable = ペーパー約定用のスワップ見積もりを取得できませんでした
+copy-skip-paper-quote-unfillable = この見積もりでは使用可能なペーパー約定を作成できません
+copy-skip-paper-minimum-output-not-met = 2 回目の見積もりが 1 回目の最低出力を下回りました
+copy-skip-paper-queue-full = このタスクのペーパー実行キューは満杯です
+copy-skip-paper-execution-unavailable = ペーパー実行が完了しませんでした。サービスが停止した、タスクまたは保有が変更された、または進行中のリクエストと重複しています
 copy-skip-not-sell-swap = ウォレットの動きは売却ではありませんでした
 copy-skip-exit-mode-disabled = ウォレットの売却は無視しました: このタスクは独自のルールで売却します
 copy-skip-force-stopped = 取引は強制停止されています
@@ -202,13 +207,13 @@ copy-toast-global-failed = コピー処理を変更できませんでした
 ## Onboarding
 
 copy-onboarding-title = 信頼できるウォレットをコピーし、まずペーパーで検証しましょう
-copy-onboarding-body = すべてのタスクはペーパーで開始します。対象の取引はプール価格、設定したスリッページ、手数料でシミュレートされ、エグジットルールはペーパー上のポジションに適用されます。ペーパーの結果が十分だったウォレットから、ウォレットごとにライブを有効化します。
+copy-onboarding-paper-body = すべてのタスクはペーパーで開始します。対象の取引は、推定ネットワーク手数料を加えた 2 回のルーター見積もりからシミュレートされ、エグジットルールはペーパー帳簿に適用されます。ペーパーの結果が十分だったウォレットから、ウォレットごとにライブを有効化します。
 copy-onboarding-add = 最初のウォレットを追加
 copy-setup-gate-title = コピートレードにはウォレットが必要です
 copy-onboarding-observe = 観察
 copy-onboarding-observe-detail = { -sol } を使わずにウォレットのスワップを検出します。
 copy-onboarding-evaluate = 評価
-copy-onboarding-evaluate-detail = ペーパー損益、勝率、スキップ、検出速度、スリッページを確認します。
+copy-onboarding-evaluate-paper-detail = ペーパー損益、勝率、スキップ、検出速度、対象価格との差を確認します。
 copy-onboarding-arm = 有効化
 copy-onboarding-arm-detail = 準備チェックに合格したら、実際のスワップを有効にします。
 
@@ -251,6 +256,26 @@ copy-settings-unit-rounds = 回
 copy-settings-save = 設定を保存
 copy-settings-load-failed = コピー設定を読み込めませんでした
 copy-settings-saved = コピートレード設定を保存しました
+copy-outcome-paper-filled-legacy = 旧ペーパー推定
+copy-outcome-paper-filled-quote = 見積もりベースのペーパー約定
+copy-outcome-paper-sell-legacy = 旧ペーパーエグジット推定
+copy-outcome-paper-sell-quote = 見積もりベースのペーパーエグジット
+
+## Paper execution model
+
+copy-paper-model = ペーパー実行モデル
+copy-paper-model-note = ペーパー約定ごとに、取引サイズに合わせた 2 回のルーター見積もりを、想定待機時間の間隔で取得します。後の見積もりも、1 回目の見積もりの最低出力を満たす必要があります。プール価格は引き続き保有の評価とエグジットルールの発動に使われます。ネットワーク手数料と優先手数料は 1 つの推定値として 1 回だけ計上され、プラットフォーム手数料は見積もりの出力にすでに含まれています。MEV とバリデーターの順序はシミュレートされません。
+copy-paper-wait-label = 想定する着地待機時間
+copy-paper-queue-label = タスクごとのキューサイズ
+copy-paper-legacy-title = 旧ペーパー推定
+copy-paper-legacy-note = 見積もりベースのシミュレーション以前から保持されている読み取り専用の推定です。現在の帳簿の使用額や保有には含まれず、操作もできません。残りの数量は各トークンの最後に保存された価格で評価され、現在の市場価格では評価されません。
+copy-paper-legacy-spent = 旧推定使用額
+copy-paper-legacy-realized = 旧実現推定
+copy-paper-legacy-col-tokens = トークン
+copy-paper-legacy-col-cost = 残りコスト（{ -sol }）
+copy-paper-legacy-col-realized = 実現推定（{ -sol }）
+copy-paper-legacy-col-price = 最後に保存した価格（{ -sol }）
+copy-paper-legacy-col-remaining = 保存価格での残り損益（{ -sol }）
 
 ## Workspace
 
@@ -459,7 +484,7 @@ copy-warning-mirror = 保有をクローズするのはウォレットの売却�
 copy-warning-no-rules = エグジットルールが無効で、ウォレットの売却も無視されます。保有は売却されません。
 copy-warning-no-stop-loss = 損切りが適用されません。下落するトークンは、別のルールが働くかウォレットが売却するまで保有されます。
 copy-warning-stop-delay = 損切りは各購入の後 { $hold } 待機します。それより速く下落したトークンは、{ $threshold } を大きく超えてクローズされます。
-copy-warning-take-profit-cost = { $target } での利確は、売却コスト（スリッページ { $slippage } とスワップ手数料 { $fee }）を賄えないため、損失でラウンドがクローズされます。
+copy-warning-take-profit-small = { $target } での利確は売却コスト（最大 { $slippage } のスリッページ許容値とスワップ手数料 { $fee }）以下です。小さな目標ではこれらを賄えない可能性があります。許容値は売却価格の上限であり、予測されたコストではありません。
 copy-warning-trailing-distance = トレーリングの下落幅が有効化の利益以上のため、有効化されたトレールがエントリー価格を下回って売却する可能性があります。
 
 ## Execution tab
@@ -478,21 +503,22 @@ copy-execution-arrival-samples =
        *[other] 発生時に確認した取引 { $count }件
     }
 copy-execution-p95 = p95 到着
-copy-execution-median-slippage = スリッページの中央値
-copy-execution-slippage-samples =
+copy-execution-target-price-difference = 対象価格との差の中央値
+copy-execution-target-difference-samples =
     { $count ->
        *[other] 計測した約定 { $count }件
     }
-copy-execution-worst-slippage = 最悪のスリッページ
-copy-execution-average-slippage = 平均 { $amount }
+copy-execution-target-difference-worst = 対象価格との最大の差
+copy-execution-target-difference-average = 対象価格との差の平均 { $amount }
 copy-execution-delay-title = 検出の遅延
 copy-execution-delay-note = ウォレットのブロックから、このボットが取引を検出するまでの時間です。停止期間後の再生は含まれません。
 copy-execution-delay-limit = 到着の上限 { $limit } を超えたバーはアンバーで表示されます。
 copy-execution-fastest = 最速
 copy-execution-average = 平均
 copy-execution-slowest = 最遅
-copy-execution-fill-title = ウォレットとの約定差
-copy-execution-fill-note = 正の値はウォレットより不利であることを示します。購入では高く支払い、ミラーした売却では受け取りが少ない場合です。プール価格のないトークンのペーパー約定はウォレット自身の取引価格で評価されるため、何も計測できず、対象から除外されます。
+copy-execution-target-difference-title = 対象価格との差
+copy-execution-target-difference-note = どちらも 0 より大きい場合に、各約定価格をウォレット自身の取引価格と比較します。正の値はウォレットより不利な約定を示します。購入では高く支払い、売却では受け取りが少ない場合です。これは比較であり、タスクのスリッページ許容値ではありません。
+copy-execution-wait-note = 検出の遅延はウォレットのブロックから測定します。着地待機時間はペーパーモデルの想定です。決定がタスクのキューで過ごした時間はこれに加算され、各約定に記録されます。
 copy-execution-samples = サンプル
 copy-execution-median = 中央値
 copy-execution-worst = 最悪
@@ -513,7 +539,7 @@ copy-table-rounds = ラウンド
 copy-table-realized = 確定（{ -sol }）
 copy-table-profit-factor = プロフィットファクター
 copy-table-average-hold = 平均保有時間
-copy-table-median-slippage = スリッページ中央値
+copy-table-target-difference = 対象価格との差の中央値
 
 ## Charts
 
@@ -593,7 +619,7 @@ copy-holdings-token-details = トークンの詳細を開く
 copy-holdings-opened = { $time } にオープン
 copy-holdings-no-pool-price = プール価格なし
 copy-holdings-close = クローズ
-copy-holdings-write-off = 償却
+copy-holdings-close-pending = クローズ待ち
 copy-holdings-activity = アクティビティ
 copy-holdings-no-exit-rule = エグジットルールなし
 copy-holdings-watch-stop = 損切り { $level }
@@ -618,7 +644,7 @@ copy-holdings-col-invested = 投資額（{ -sol }）
 copy-holdings-col-proceeds = 売却代金（{ -sol }）
 copy-holdings-col-exit = エグジット
 copy-holdings-col-closed = クローズ
-copy-holdings-price-note = 価格は 1 トークンあたりの { -sol } です。エントリーには購入時のスリッページと手数料が含まれます。ピークとエグジット水準はこれを基準とするため、保有はピークがエントリーを下回った状態で始まります。カーソルを合わせるとプール価格を確認できます。
+copy-holdings-marks-note = 価格は 1 トークンあたりの { -sol } です。評価とエグジット水準にはプール価格を使い、これはエグジットルールの発動にも使われます。記録された約定にはルーター見積もりを使います。エントリーには購入時の推定ネットワーク手数料が含まれます。ピークとエグジット水準はこれを基準とするため、保有はピークがエントリーを下回った状態で始まります。カーソルを合わせるとプール価格を確認できます。
 copy-holdings-paused-rules = 一時停止中: 新規コピーは行われません。エグジットルールにより、これらの保有は引き続きクローズされます。
 copy-holdings-paused-mirror = 一時停止中: 新規コピーは行われません。ウォレットの売却により、これらの保有は引き続きクローズされます。
 copy-holdings-paused-hybrid = 一時停止中: 新規コピーは行われません。ウォレットの売却とエグジットルールにより、これらの保有は引き続きクローズされます。
@@ -627,17 +653,17 @@ copy-holdings-closed-loading = クローズ済みラウンドを読み込み中�
 copy-holdings-closed-empty = クローズ済みラウンドはまだありません。
 copy-holdings-closed-latest = 全 { $total }ラウンドのうち直近 { $shown }件。
 copy-holdings-close-title = ペーパー保有をクローズ
-copy-holdings-close-message = ペーパー帳簿で { $token } を、プール価格（{ $price }）とタスクのスリッページ・手数料で売却します。
+copy-holdings-close-quote-message = { $token } のペーパー保有を、約 { $delay } 間隔の 2 回のルーター見積もりでクローズします。約定には後の見積もりを使い、これは 1 回目の最低出力を満たす必要があり、推定ネットワーク手数料が差し引かれます。使用できる見積もりがない場合、保有は変更されずに開いたままです。
 copy-holdings-close-confirm = 保有をクローズ
-copy-holdings-write-off-title = ペーパー保有を償却
-copy-holdings-write-off-message = { $token } には売却できるプール価格がありません。償却すると 0 でクローズされ、取得原価 { $cost } が損失として計上されます。
 copy-holdings-keep = 残す
-copy-holdings-written-off = { $token } を償却しました
 copy-holdings-closed = { $token } をクローズしました
-copy-holdings-written-off-detail = 売却代金 0 でクローズしました
 copy-holdings-sold-at = { $price } で売却
 copy-holdings-close-failed = 保有をクローズできませんでした
-copy-holdings-reset-message = 「{ $name }」をやり直します。ペーパー保有、使用額、約定、エグジット、スキップは削除されます。ルールとウォレットは残ります。
+copy-holdings-close-pending-detail = クローズは待機中または実行中です。結果はアクティビティに表示されます。
+copy-holdings-close-unconfirmed = クローズ結果を確認できません
+copy-holdings-close-unconfirmed-detail = 結果を受信する前に接続が終了し、アクティビティにもまだ結果がありません。もう一度クローズする前にアクティビティを確認してください。
+copy-holdings-closed-check-activity = 保有はクローズされました。記録された約定はアクティビティにあります。
+copy-holdings-reset-quote-message = 「{ $name }」をやり直します。現在のペーパー保有、使用額、約定、エグジット、スキップはクリアされ、見積もりベースの新しい帳簿が始まります。旧推定とライブ履歴は残ります。ルールとウォレットも残ります。
 copy-holdings-reset-cancel = 履歴を残す
 copy-holdings-reset-done = ペーパー帳簿をリセットしました
 copy-holdings-reset-detail =
@@ -651,7 +677,6 @@ copy-holdings-reset-failed = ペーパー帳簿をリセットできませんで
 copy-activity-title = アクティビティ
 copy-activity-filter-label = アクティビティのフィルター
 copy-filter-all = すべて
-copy-outcome-paper-filled = ペーパー購入
 copy-outcome-live-submitted = ライブ購入を送信
 copy-outcome-live-confirmed = ライブ購入を確認
 copy-outcome-live-failed = ライブ購入に失敗
@@ -660,9 +685,14 @@ copy-outcome-live-sell-submitted = ライブ売却を送信
 copy-outcome-live-sell-failed = ライブ売却に失敗
 copy-outcome-skipped = スキップ
 copy-activity-decision = 判断
-copy-activity-paper-exit = ペーパーエグジット · { $rule }
+copy-activity-paper-exit-quote = 見積もりベースのペーパーエグジット · { $rule }
+copy-activity-paper-exit-legacy = 旧ペーパーエグジット推定 · { $rule }
 copy-activity-filled = { $input }（{ $price }）· ウォレットの購入 { $target }
+copy-activity-filled-target-difference = { $input }（{ $price }）· ウォレットの購入 { $target } · 対象価格との差 { $difference }
 copy-activity-filled-slippage = { $input }（{ $price }）· ウォレットの購入 { $target } · スリッページ { $slippage }
+copy-activity-quote-router = ルーター { $router } · 見積もり受信 { $initial } と { $landing }
+copy-activity-quote-wait = 想定待機 { $assumed } · キュー待ち { $queued }
+copy-activity-quote-fees = 推定ネットワーク手数料と優先手数料 { $fee }（1 回のみ計上）· プラットフォーム手数料は見積もりの出力に含まれます
 copy-activity-filled-unpriced = { $input }（{ $price }）· ウォレットの購入 { $target } · ウォレットの取引価格で評価、プール価格なし
 copy-activity-live-sized = { $sized } · ウォレットの購入 { $target }
 copy-activity-sell-nothing = ウォレットが { $amount } を売却 · 売却できる保有なし
@@ -735,7 +765,7 @@ copy-editor-name-placeholder = 例: 高速ローテーター
 copy-editor-enabled-title = ウォレットの取引を処理
 copy-editor-enabled-help = 無効にすると、再開するまでタスクは一時停止のままです。
 copy-editor-note-live = このタスクはライブです。変更は次の実際のコピーから適用されます。
-copy-editor-note-paper = タスクは有効化するまでペーパーで実行されます。取引はプール価格でシミュレートされ、資金は使用されません。
+copy-editor-note-paper-quote = タスクは有効化するまでペーパーで実行されます。取引はルーター見積もりからシミュレートされ、資金は使用されません。
 copy-editor-copy-size = コピーサイズ
 copy-editor-sizing-fixed = 固定額
 copy-editor-sizing-ratio = ウォレットの取引に対する割合

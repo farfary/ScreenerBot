@@ -62,6 +62,11 @@ config-copy-trading-readiness-min-closed-rounds = Rodadas para prontidão do mod
     .hint = Rodadas fechadas em Paper de que uma tarefa precisa para passar na lista de prontidão do modo real
 config-copy-trading-require-filter-pass = Exigir aprovação nos filtros
     .hint = Copia apenas tokens aceitos pelo pipeline de filtragem
+config-copy-trading-paper-landing-delay-ms = Atraso de aterrissagem em Paper
+    .hint = Tempo assumido entre a primeira e a segunda cotação de swap de uma execução em Paper. A segunda cotação ainda precisa atingir a saída mínima da primeira; as taxas são estimativas e MEV, validadores e a ordenação do mempool não são simulados.
+    .unit = ms
+config-copy-trading-paper-queue-capacity = Capacidade da fila em Paper
+    .hint = Decisões em Paper de uma tarefa que podem aguardar, executadas uma por vez na ordem de chegada; uma decisão que encontra a fila cheia é registrada como ignorada.
 
 config-chain-enabled = Ativado
     .hint = Executar esta rede neste processo. Surte efeito após uma reinicialização.

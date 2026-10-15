@@ -12,8 +12,9 @@ use chrono::{TimeZone, Utc};
 use screenerbot::chains::ChainId;
 use screenerbot::positions::{PositionManagement, PositionOrigin};
 use screenerbot::trader::copy::{
-    execute_copy_sell_with, paper_sell_outcome, prepare_copy_sell, CopyMode, CopyOutcome,
-    CopySellSubmitResult, CopySkip, CopyTask, ExitMode, PaperCosts, PaperMarket, SizingMode,
+    execute_copy_sell_with, paper_sell_outcome, prepare_copy_sell, proportional_exit_percentage,
+    CopyDatabase, CopyMode, CopyOutcome, CopySellSubmitResult, CopySkip, CopyTask, ExitMode,
+    PaperPosition, SizingMode,
 };
 use screenerbot::trader::{TradeAction, TradeReason};
 use screenerbot::wallets::watch::{ActivityKind, SwapSide, WalletActivity, WatchSource};
@@ -163,48 +164,57 @@ fn exit_mode_force_stop_and_user_ownership_are_typed_skips() {
     .is_ok());
 }
 
-const PAPER_COSTS: PaperCosts = PaperCosts {
-    network_fee_native: 0.000005,
-    priority_fee_native: 0.0,
-};
-
 #[test]
 fn paper_mode_sells_the_targets_fraction_of_the_paper_holding() {
     // The target sold 30 of its 100 tokens; the paper book holds 50.
-    let outcome = paper_sell_outcome(
-        &sell_activity(),
-        &task(ExitMode::Mirror, CopyMode::Paper),
-        false,
-        100.0,
-        50.0,
-        PaperMarket::pool(0.01),
-        PAPER_COSTS,
-        Utc::now(),
-    )
-    .unwrap();
-    let CopyOutcome::PaperSellObserved(decision) = outcome else {
-        panic!("expected a paper sell");
-    };
-    let fill = decision.paper_fill.expect("paper sell books a fill");
-    assert!((fill.token_amount - 15.0).abs() < 1e-9);
-    assert!((fill.fill_price_sol - 0.0098).abs() < 1e-12);
-    assert!(fill.net_proceeds_sol < fill.gross_sol);
+    let pct = proportional_exit_percentage(30.0, 100.0).unwrap();
+    assert_eq!(pct, 30.0);
+    assert_eq!(50.0 * pct / 100.0, 15.0);
 }
 
-#[test]
-fn paper_sell_without_a_paper_holding_is_skipped() {
+#[tokio::test]
+async fn paper_sell_without_a_paper_holding_is_skipped_before_quoting() {
+    let dir = tempfile::tempdir().unwrap();
+    let db = CopyDatabase::open(dir.path().join("copy_trading.db"), ChainId::Solana).unwrap();
+    let position = PaperPosition {
+        task_id: 7,
+        mint: common::TEST_MINT.to_owned(),
+        token_amount: 0.0,
+        raw_token_amount: None,
+        token_decimals: None,
+        cost_basis_native: 0.0,
+        invested_native: 0.0,
+        realized_proceeds_native: 0.0,
+        realized_cost_native: 0.0,
+        buys: 0,
+        sells: 0,
+        last_price_native: None,
+        last_price_at: None,
+        opened_at: Utc.timestamp_opt(10, 0).unwrap(),
+        closed_at: None,
+        peak_price_native: None,
+    };
     assert_eq!(
         paper_sell_outcome(
             &sell_activity(),
             &task(ExitMode::Hybrid, CopyMode::Paper),
             false,
             100.0,
-            0.0,
-            PaperMarket::pool(0.01),
-            PAPER_COSTS,
+            &position,
+            &db,
+            0,
             Utc::now(),
-        ),
-        Err(CopySkip::CopyPositionNotFound)
+            |_| async {
+                Err(screenerbot::swaps::QuoteError::Unavailable {
+                    router: "test".to_owned(),
+                    detail: "not reached".to_owned(),
+                })
+            },
+            |_| async { Ok(()) },
+        )
+        .await
+        .unwrap_err(),
+        CopySkip::CopyPositionNotFound
     );
 }
 

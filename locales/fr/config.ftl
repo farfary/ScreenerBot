@@ -188,6 +188,11 @@ config-copy-trading-readiness-min-closed-rounds = Cycles de préparation au rée
     .hint = Nombre de cycles simulés clôturés dont une tâche a besoin pour valider sa liste de préparation au réel
 config-copy-trading-require-filter-pass = Exiger la validation des filtres
     .hint = Copie uniquement les tokens acceptés par le pipeline de filtrage
+config-copy-trading-paper-landing-delay-ms = Délai d'atterrissage simulé
+    .hint = Durée supposée entre la première et la seconde cotation de swap d'une exécution simulée. La seconde cotation doit toujours atteindre le minimum de sortie de la première ; les frais sont des estimations, et le MEV, les validateurs et l'ordre du mempool ne sont pas simulés.
+    .unit = ms
+config-copy-trading-paper-queue-capacity = Capacité de la file simulée
+    .hint = Décisions simulées d'une tâche pouvant attendre, exécutées une à une dans l'ordre d'arrivée ; une décision qui trouve la file pleine est enregistrée comme ignorée.
 
 ## events
 

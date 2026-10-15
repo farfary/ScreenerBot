@@ -1,25 +1,80 @@
 // Copyright (c) 2024-2026 ScreenerBot (screenerbot.io)
 // SPDX-License-Identifier: BUSL-1.1
 
-//! The task's own exit policy applied to its paper book. A live copy position in
-//! `buy_only`/`hybrid` mode is managed by the exit monitor (stop loss, trailing
-//! stop, ROI, time override); paper holdings get the same rules here, evaluated by
-//! the evaluators' pure cores, so paper results predict what live would have done.
-//! `mirror` tasks hand exits to the target's sells alone, exactly as live does.
+//! Shared exit decision rules applied to paper holdings using pool marks. Live
+//! `buy_only`/`hybrid` positions are evaluated by the exit monitor; `mirror` mode
+//! exits only when target sells are observed.
 
+use std::future::Future;
 use std::sync::{LazyLock, RwLock};
 
 use chrono::{DateTime, Utc};
 
+use crate::chains::RawAmount;
 use crate::logger::{self, LogTag};
 use crate::positions::PositionManagement;
+use crate::swaps::{QuoteRequest, SwapMode};
 use crate::trader::evaluators::{exit_roi, exit_stop_loss, exit_time, exit_trailing};
 use crate::trader::policy::ExitPolicy;
 
 use super::{
-    management_for_exit_mode, simulate_sell, CopyDatabase, CopyMode, CopyOutcome, CopySellDecision,
-    CopySkip, CopyTask, CopyTelemetry, PaperCosts, PaperExitRule, PaperMarket, PaperPosition,
+    management_for_exit_mode, CopyDatabase, CopyMode, CopyOutcome, CopySellDecision, CopySkip,
+    CopyTask, CopyTelemetry, PaperExitRule, PaperPosition,
 };
+
+const EXIT_PERCENT_SCALE: u128 = 10_u128.pow(9);
+const EXIT_PERCENT_DENOMINATOR: u128 = 100 * EXIT_PERCENT_SCALE;
+
+/// Select the exact raw token input shared by policy, mirror, and manual paper exits.
+pub(super) fn raw_sell_amount(
+    held: RawAmount,
+    exit_percentage: Option<f64>,
+) -> Result<RawAmount, CopySkip> {
+    if held == RawAmount::ZERO {
+        return Err(CopySkip::CopyPositionNotFound);
+    }
+    let Some(percentage) = exit_percentage else {
+        return Ok(held);
+    };
+    if !percentage.is_finite() {
+        return Err(CopySkip::InvalidSizing);
+    }
+    if percentage >= 100.0 {
+        return Ok(held);
+    }
+    if percentage <= 0.0 {
+        return Err(CopySkip::InvalidSizing);
+    }
+    let parts = RawAmount::from_integral_f64((percentage * EXIT_PERCENT_SCALE as f64).floor())
+        .filter(|parts| parts.raw() > 0 && parts.raw() < EXIT_PERCENT_DENOMINATOR)
+        .ok_or(CopySkip::InvalidSizing)?;
+    let amount = held
+        .checked_mul_div(parts, RawAmount::new(EXIT_PERCENT_DENOMINATOR))
+        .filter(|amount| *amount > RawAmount::ZERO && *amount <= held)
+        .ok_or(CopySkip::InvalidSizing)?;
+    Ok(amount)
+}
+
+/// Build the exact request consumed by both policy and mirrored paper close paths.
+pub(super) fn paper_sell_request(
+    task: &CopyTask,
+    mint: &str,
+    held: RawAmount,
+    exit_percentage: Option<f64>,
+    wallet_address: String,
+) -> Result<QuoteRequest, CopySkip> {
+    let adapter = crate::chains::adapter_for(task.chain);
+    Ok(QuoteRequest {
+        chain: task.chain,
+        input_mint: mint.to_owned(),
+        output_mint: adapter.native_asset_address().to_owned(),
+        input_amount: raw_sell_amount(held, exit_percentage)?,
+        wallet_address,
+        slippage_pct: task.slippage_pct,
+        swap_mode: SwapMode::ExactIn,
+        exclude_dexes: None,
+    })
+}
 
 /// Which rule, if any, closes this holding at `mark_price_native`, checked in the
 /// live monitor's order. The inner percentage is a partial exit; `None` sells all.
@@ -70,34 +125,91 @@ pub fn evaluate_paper_exit(
 /// The simulated sell a triggered rule books. Its signature is unique per exit
 /// leg of a round (`sells` grows with every booked sell), so a sweep that repeats
 /// before the ledger moves is absorbed by the decision table's uniqueness.
-pub fn paper_exit_outcome(
+pub async fn paper_exit_outcome<Q, QFut, W, WFut>(
+    database: &CopyDatabase,
     task: &CopyTask,
     position: &PaperPosition,
     rule: PaperExitRule,
     exit_percentage: Option<f64>,
-    mark_price_native: f64,
-    costs: PaperCosts,
+    epoch: u64,
     now: DateTime<Utc>,
-) -> Result<CopyOutcome, CopySkip> {
-    let sell_amount = match exit_percentage {
-        Some(pct) if pct < 100.0 => position.token_amount * pct / 100.0,
-        _ => position.token_amount,
-    };
-    let fill = simulate_sell(
-        sell_amount,
-        PaperMarket::pool(mark_price_native),
-        task.slippage_pct,
-        costs,
+    quote: Q,
+    wait: W,
+) -> Result<CopyOutcome, CopySkip>
+where
+    Q: FnMut(QuoteRequest) -> QFut,
+    QFut: Future<Output = Result<crate::swaps::Quote, crate::swaps::QuoteError>>,
+    W: FnOnce(std::time::Duration) -> WFut,
+    WFut: Future<Output = Result<(), CopySkip>>,
+{
+    let held_raw = position
+        .raw_token_amount
+        .filter(|amount| *amount > RawAmount::ZERO)
+        .ok_or(CopySkip::CopyPositionNotFound)?;
+    let stored_decimals = position
+        .token_decimals
+        .ok_or(CopySkip::PaperQuoteUnfillable)?;
+    let decimals = stored_decimals;
+    let wallet_address = crate::wallets::get_main_address()
+        .await
+        .map_err(|_| CopySkip::PaperQuoteUnfillable)?;
+    let request = paper_sell_request(
+        task,
+        &position.mint,
+        held_raw,
+        exit_percentage,
+        wallet_address,
     )?;
+    let raw = request.input_amount;
+    let delay_ms = crate::config::with_config(|config| config.copy_trading.paper_landing_delay_ms);
+    let fill = super::paper::simulate_sell(
+        request,
+        decimals,
+        delay_ms,
+        now,
+        epoch,
+        quote,
+        |delay| async move {
+            wait(delay).await?;
+            if crate::global::is_force_stopped() {
+                return Err(CopySkip::ForceStopped);
+            }
+            match database.get_task(task.id).await {
+                Ok(Some(current))
+                    if current.mode == CopyMode::Paper
+                        && current.slippage_pct == task.slippage_pct => {}
+                _ => return Err(CopySkip::TaskDisabled),
+            }
+            let current = database
+                .paper_position(task.id, &position.mint)
+                .await
+                .map_err(|_| CopySkip::PaperExecutionUnavailable)?;
+            if current
+                .filter(PaperPosition::is_open)
+                .is_none_or(|current| {
+                    current.opened_at != position.opened_at
+                        || current.sells != position.sells
+                        || current.raw_token_amount.is_none_or(|held| held < raw)
+                })
+            {
+                return Err(CopySkip::PaperExecutionUnavailable);
+            }
+            if database
+                .paper_epoch(task.id)
+                .await
+                .map_err(|_| CopySkip::PaperExecutionUnavailable)?
+                != epoch
+            {
+                return Err(CopySkip::PaperExecutionUnavailable);
+            }
+            Ok(())
+        },
+    )
+    .await?;
     Ok(CopyOutcome::PaperSellObserved(CopySellDecision {
         task_id: task.id,
         target_address: task.target_address.clone(),
-        target_signature: format!(
-            "paper-exit:{}:{}:{}",
-            position.mint,
-            position.opened_at.timestamp(),
-            position.sells
-        ),
+        target_signature: paper_exit_signature(position, epoch),
         mint: position.mint.clone(),
         target_token_amount: 0.0,
         target_sol_amount: 0.0,
@@ -108,7 +220,7 @@ pub fn paper_exit_outcome(
             target_block_time: None,
             detected_at: now,
             decoded_at: now,
-            decided_at: now,
+            decided_at: Utc::now(),
             submitted_at: None,
             confirmed_at: None,
             target_price_sol: None,
@@ -117,14 +229,27 @@ pub fn paper_exit_outcome(
         },
         paper_fill: Some(fill),
         exit_rule: Some(rule),
+        paper_context: Some(super::types::PaperContext {
+            model: super::types::PaperModel::Quote,
+            epoch,
+        }),
     }))
 }
 
-/// Mints held open by any paper task, refreshed every sweep. Pool discovery watches
-/// them like position tokens: without it a paper holding the filters never passed
-/// has no pool price, so it can be neither marked nor exited.
-static HELD_PAPER_MINTS: LazyLock<RwLock<Vec<String>>> = LazyLock::new(Default::default);
+fn paper_exit_signature(position: &PaperPosition, epoch: u64) -> String {
+    format!(
+        "paper-exit:{}:{}:{}:{}",
+        position.mint,
+        position.opened_at.timestamp_nanos_opt().unwrap_or_default(),
+        position.sells,
+        epoch,
+    )
+}
 
+/// Mints held open by any paper task, refreshed every sweep. Pool marks drive
+/// valuation and policy triggers; manual and mirrored sells can be quoted without
+/// a pool mark.
+static HELD_PAPER_MINTS: LazyLock<RwLock<Vec<String>>> = LazyLock::new(Default::default);
 pub fn held_paper_mints() -> Vec<String> {
     HELD_PAPER_MINTS
         .read()
@@ -139,7 +264,7 @@ pub fn held_paper_mints() -> Vec<String> {
 /// (pausing stops new copies, not the management of what is held) and stands down
 /// under the emergency stop. Holdings are marked at the pool price only; a token
 /// without one is left for the next pass rather than sold on a stale trade price.
-pub async fn sweep(database: &CopyDatabase, costs: PaperCosts) -> crate::trader::Result<()> {
+pub async fn sweep(database: &CopyDatabase) -> crate::trader::Result<()> {
     let tasks = database.list_tasks().await?;
     let mut books = Vec::new();
     for task in tasks.iter().filter(|task| task.mode == CopyMode::Paper) {
@@ -197,24 +322,176 @@ pub async fn sweep(database: &CopyDatabase, costs: PaperCosts) -> crate::trader:
                         continue;
                     }
                 };
-            match paper_exit_outcome(task, position, rule, exit_percentage, mark, costs, now) {
-                Ok(outcome) => {
-                    logger::info(
-                        LogTag::Trader,
-                        &format!(
-                            "Copy task {} paper exit {rule:?} on {} at {mark:.12} SOL",
-                            task.id, position.mint
+            let epoch = database.paper_epoch(task.id).await?;
+            let opened_nanos = position.opened_at.timestamp_nanos_opt().unwrap_or_default();
+            let pending_key = format!(
+                "policy:{}:{}:{}:{}",
+                position.mint, opened_nanos, position.sells, epoch
+            );
+            let Some(runtime) = super::paper_execution::active() else {
+                super::notify::record(
+                    database,
+                    super::paper_execution::skipped_paper_intent(
+                        task.id,
+                        format!(
+                            "paper-queue-unavailable:{}:{}",
+                            position.mint,
+                            now.timestamp_nanos_opt().unwrap_or_default()
                         ),
-                    );
-                    super::notify::record(database, outcome).await?;
-                }
-                Err(reason) => logger::debug(
-                    LogTag::Trader,
-                    &format!(
-                        "Copy task {} paper exit on {} not simulated: {reason:?}",
-                        task.id, position.mint
+                        &position.mint,
+                        CopySkip::PaperExecutionUnavailable,
+                        epoch,
                     ),
-                ),
+                )
+                .await?;
+                continue;
+            };
+            let db = database.clone();
+            let task = (**task).clone();
+            let task_id = task.id;
+            let position = position.clone();
+            let key = pending_key.clone();
+            let queued_at = Utc::now();
+            let fallback_mint = position.mint.clone();
+            let fallback_mint_job = fallback_mint.clone();
+            if let Err(error) = runtime.enqueue(task_id, key, database.clone(), Some(fallback_mint.clone()), async move {
+                let current = async {
+                    if crate::global::is_force_stopped() {
+                        return Err(CopySkip::ForceStopped);
+                    }
+                    let current_task = db
+                        .get_task(task.id)
+                        .await
+                        .map_err(|_| CopySkip::PaperExecutionUnavailable)?
+                        .filter(|task| {
+                            task.mode == CopyMode::Paper
+                                && management_for_exit_mode(task.exit_mode)
+                                    != PositionManagement::CopyTask
+                        })
+                        .ok_or(CopySkip::TaskDisabled)?;
+                    let current_position = db
+                        .paper_position(task.id, &position.mint)
+                        .await
+                        .map_err(|_| CopySkip::PaperExecutionUnavailable)?
+                        .filter(PaperPosition::is_open)
+                        .filter(|current| {
+                            current.opened_at == position.opened_at
+                                && current.sells == position.sells
+                        })
+                        .ok_or(CopySkip::PaperExecutionUnavailable)?;
+                    if !matches!(db.paper_epoch(task.id).await, Ok(current) if current == epoch) {
+                        return Err(CopySkip::PaperExecutionUnavailable);
+                    }
+                    let outcome = paper_exit_outcome(
+                        &db,
+                        &current_task,
+                        &current_position,
+                        rule,
+                        exit_percentage,
+                        epoch,
+                        queued_at,
+                        crate::swaps::try_get_best_quote,
+                        |delay| async move {
+                            tokio::time::sleep(delay).await;
+                            if crate::global::is_force_stopped() {
+                                return Err(CopySkip::ForceStopped);
+                            }
+                            Ok(())
+                        },
+                    )
+                    .await?;
+                    let requested_raw = match &outcome {
+                        CopyOutcome::PaperSellObserved(decision) => decision
+                            .paper_fill
+                            .as_ref()
+                            .and_then(|fill| fill.quote.as_ref())
+                            .and_then(|quote| quote.input_amount)
+                            .ok_or(CopySkip::PaperExecutionUnavailable)?,
+                        _ => return Err(CopySkip::PaperExecutionUnavailable),
+                    };
+                    if crate::global::is_force_stopped()
+                        || !matches!(db.paper_epoch(task.id).await, Ok(current) if current == epoch)
+                    {
+                        return Err(CopySkip::PaperExecutionUnavailable);
+                    }
+                    let current_task_after = db
+                        .get_task(task.id)
+                        .await
+                        .map_err(|_| CopySkip::PaperExecutionUnavailable)?
+                        .filter(|task| {
+                            task.mode == CopyMode::Paper
+                                && management_for_exit_mode(task.exit_mode)
+                                    != PositionManagement::CopyTask
+                                && task.slippage_pct == current_task.slippage_pct
+                        })
+                        .ok_or(CopySkip::TaskDisabled)?;
+                    let fresh_mark = crate::pools::get_pool_price(current_task_after.chain, &position.mint)
+                        .map(|price| price.price_native)
+                        .filter(|price| price.is_finite() && *price > 0.0)
+                        .ok_or(CopySkip::PaperExecutionUnavailable)?;
+                    let fresh_peak = current_position.peak_price_native
+                        .map_or(fresh_mark, |peak| peak.max(fresh_mark));
+                    let mut fresh_policy = ExitPolicy::from_config();
+                    fresh_policy.apply_overrides(&current_task_after.exit_policy_overrides);
+                    if !matches!(
+                        evaluate_paper_exit(&current_position, fresh_mark, fresh_peak, &fresh_policy, Utc::now()),
+                        Ok(Some((fresh_rule, fresh_pct))) if fresh_rule == rule && fresh_pct == exit_percentage
+                    ) {
+                        return Err(CopySkip::PaperExecutionUnavailable);
+                    }
+                    let current = db
+                        .paper_position(task.id, &position.mint)
+                        .await
+                        .map_err(|_| CopySkip::PaperExecutionUnavailable)?
+                        .filter(PaperPosition::is_open)
+                        .filter(|current| {
+                            current.opened_at == position.opened_at
+                                && current.sells == position.sells
+                        })
+                        .ok_or(CopySkip::PaperExecutionUnavailable)?;
+                    if current
+                        .raw_token_amount
+                        .is_none_or(|held| held < requested_raw)
+                    {
+                        return Err(CopySkip::PaperExecutionUnavailable);
+                    }
+                    Ok(outcome)
+                }.await;
+                match current {
+                    Ok(outcome) => outcome,
+                    Err(reason) => super::paper_execution::skipped_paper_intent(
+                            task.id,
+                            format!(
+                                "paper-exit-skip:{}:{}",
+                                fallback_mint_job,
+                                queued_at.timestamp_nanos_opt().unwrap_or_default()
+                            ),
+                            &fallback_mint_job,
+                            reason,
+                            epoch,
+                        ),
+                }
+            }) {
+                if error == super::paper_execution::EnqueueError::Duplicate { continue; }
+                let reason = match error {
+                    super::paper_execution::EnqueueError::Full => CopySkip::PaperQueueFull,
+                    super::paper_execution::EnqueueError::Duplicate => unreachable!(),
+                    super::paper_execution::EnqueueError::Unavailable => {
+                        CopySkip::PaperExecutionUnavailable
+                    }
+                };
+                let skip = super::paper_execution::skipped_paper_intent(
+                    task_id,
+                    format!(
+                        "paper-queue-skip:{}:{}",
+                        fallback_mint,
+                        Utc::now().timestamp_nanos_opt().unwrap_or_default()
+                    ),
+                    &fallback_mint,
+                    reason,
+                    epoch,
+                );
+                super::notify::record(database, skip).await?;
             }
         }
     }
@@ -222,173 +499,5 @@ pub async fn sweep(database: &CopyDatabase, costs: PaperCosts) -> crate::trader:
 }
 
 #[cfg(test)]
-mod tests {
-    use chrono::Duration;
-
-    use super::*;
-    use crate::trader::evaluators::dca::DcaConfigSnapshot;
-    use crate::trader::policy::{RoiPolicy, StopLossPolicy, TimePolicy, TrailingPolicy};
-
-    fn policy() -> ExitPolicy {
-        ExitPolicy {
-            stop_loss: StopLossPolicy {
-                enabled: true,
-                threshold_pct: 30.0,
-                min_hold_seconds: 0,
-                allow_partial: true,
-                partial_exit_default_pct: 50.0,
-            },
-            trailing: TrailingPolicy {
-                enabled: true,
-                activation_pct: 20.0,
-                distance_pct: 10.0,
-            },
-            roi: RoiPolicy {
-                enabled: true,
-                target_profit_pct: 100.0,
-            },
-            time: TimePolicy {
-                enabled: true,
-                loss_threshold_pct: -10.0,
-                duration_seconds: 3600.0,
-            },
-            dca: DcaConfigSnapshot {
-                enabled: false,
-                max_count: 0,
-                cooldown_minutes: 0,
-                threshold_pct: 0.0,
-                size_percentage: 0.0,
-            },
-        }
-    }
-
-    /// 100 tokens for 1 SOL: entry 0.01 SOL per token.
-    fn holding(sells: u64, age: Duration) -> PaperPosition {
-        let now = Utc::now();
-        PaperPosition {
-            task_id: 1,
-            mint: "mint".to_owned(),
-            token_amount: 100.0,
-            cost_basis_native: 1.0,
-            invested_native: 1.0,
-            realized_proceeds_native: 0.0,
-            realized_cost_native: 0.0,
-            buys: 1,
-            sells,
-            last_price_native: None,
-            last_price_at: None,
-            opened_at: now - age,
-            closed_at: None,
-            peak_price_native: Some(0.01),
-        }
-    }
-
-    fn evaluate(
-        position: &PaperPosition,
-        mark: f64,
-        peak: f64,
-    ) -> Option<(PaperExitRule, Option<f64>)> {
-        evaluate_paper_exit(position, mark, peak, &policy(), Utc::now()).unwrap()
-    }
-
-    #[test]
-    fn stop_loss_takes_one_partial_then_exits_fully() {
-        let fresh = holding(0, Duration::seconds(60));
-        assert_eq!(
-            evaluate(&fresh, 0.0065, 0.01),
-            Some((PaperExitRule::StopLoss, Some(50.0)))
-        );
-        let cut = holding(1, Duration::seconds(60));
-        assert_eq!(
-            evaluate(&cut, 0.0065, 0.01),
-            Some((PaperExitRule::StopLoss, None))
-        );
-    }
-
-    #[test]
-    fn trailing_stop_arms_off_the_peak_and_fires_only_in_profit() {
-        let position = holding(0, Duration::seconds(60));
-        // Peaked at +25%, retraced to +12%: under the stop (0.0125 * 0.9 = 0.01125).
-        assert_eq!(
-            evaluate(&position, 0.0112, 0.0125),
-            Some((PaperExitRule::TrailingStop, None))
-        );
-        // Same retracement without the peak ever reaching activation: nothing.
-        assert_eq!(evaluate(&position, 0.0112, 0.0115), None);
-        // Retraced into a loss: the trail never sells at a loss.
-        assert_eq!(evaluate(&position, 0.0095, 0.0125), None);
-    }
-
-    #[test]
-    fn roi_target_and_time_override_fire_in_monitor_order() {
-        let young = holding(0, Duration::seconds(60));
-        assert_eq!(
-            evaluate(&young, 0.02, 0.02),
-            Some((PaperExitRule::TakeProfit, None))
-        );
-        assert_eq!(evaluate(&young, 0.0085, 0.01), None);
-        let old = holding(0, Duration::hours(2));
-        assert_eq!(
-            evaluate(&old, 0.0085, 0.01),
-            Some((PaperExitRule::TimeOverride, None))
-        );
-    }
-
-    #[test]
-    fn an_impossible_trailing_configuration_is_reported_not_traded() {
-        let mut broken = policy();
-        broken.trailing.distance_pct = 25.0;
-        let position = holding(0, Duration::seconds(60));
-        assert!(evaluate_paper_exit(&position, 0.0105, 0.0125, &broken, Utc::now()).is_err());
-    }
-
-    #[test]
-    fn exit_legs_book_distinct_idempotent_signatures() {
-        let task = CopyTask {
-            id: 7,
-            chain: crate::chains::ChainId::Solana,
-            target_address: "target".to_owned(),
-            label: None,
-            enabled: true,
-            mode: CopyMode::Paper,
-            sizing: super::super::SizingMode::Fixed { sol: 0.1 },
-            exit_mode: super::super::ExitMode::Hybrid,
-            exit_policy_overrides: Default::default(),
-            max_native_per_trade: 1.0,
-            max_native_per_token: 1.0,
-            total_budget_native: 1.0,
-            min_target_trade_native: None,
-            max_target_trade_native: None,
-            buy_once_per_token: true,
-            slippage_pct: 1.0,
-            created_at: Utc::now(),
-            updated_at: Utc::now(),
-            require_filter_pass: None,
-            pause_reason: None,
-            paused_at: None,
-        };
-        let costs = PaperCosts {
-            network_fee_native: 0.0,
-            priority_fee_native: 0.0,
-        };
-        let signature = |sells| match paper_exit_outcome(
-            &task,
-            &holding(sells, Duration::seconds(60)),
-            PaperExitRule::StopLoss,
-            Some(50.0),
-            0.0065,
-            costs,
-            Utc::now(),
-        )
-        .unwrap()
-        {
-            CopyOutcome::PaperSellObserved(decision) => {
-                assert_eq!(decision.exit_rule, Some(PaperExitRule::StopLoss));
-                assert!((decision.paper_fill.unwrap().token_amount - 50.0).abs() < 1e-9);
-                decision.target_signature
-            }
-            other => panic!("unexpected outcome {other:?}"),
-        };
-        assert_ne!(signature(0), signature(1));
-    }
-}
+#[path = "paper_exits/tests.rs"]
+mod tests;

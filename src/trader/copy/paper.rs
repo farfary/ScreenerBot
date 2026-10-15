@@ -1,136 +1,342 @@
 // Copyright (c) 2024-2026 ScreenerBot (screenerbot.io)
 // SPDX-License-Identifier: BUSL-1.1
 
-//! Deterministic paper fills using the decision-time pool price.
+//! Quote-based paper fills with an injected landing wait for deterministic tests.
 
-use super::types::{CopySkip, PaperFill, PaperSellFill};
+use std::future::Future;
+use std::time::Duration;
 
-/// Jupiter's mandatory referral fee. Kept equal to the hardcoded router constant;
-/// it is not configurable because paper results must model the live cost path.
-pub const PAPER_REFERRAL_FEE_BPS: u16 = 50;
+use chrono::{DateTime, Utc};
 
-#[derive(Debug, Clone, Copy, PartialEq)]
-pub struct PaperCosts {
-    pub network_fee_native: f64,
-    pub priority_fee_native: f64,
+use crate::chains::{ChainAdapter, RawAmount};
+use crate::swaps::{Quote, QuoteError, QuoteRequest, SwapMode};
+
+use super::types::{CopySkip, PaperFill, PaperModel, PaperQuoteMetadata, PaperSellFill};
+
+#[derive(Debug, Clone, PartialEq)]
+pub enum SettledPaperQuote {
+    Buy(PaperFill),
+    Sell(PaperSellFill),
 }
 
-/// The decision-time price a paper fill trades at, and where it came from. A
-/// token the pool service does not track is priced at the observed trade's own
-/// price instead; such a fill is exactly the configured slippage away from the
-/// target by construction, so it measures nothing about execution.
-#[derive(Debug, Clone, Copy, PartialEq)]
-pub struct PaperMarket {
-    pub price_native: f64,
-    pub from_pool: bool,
+fn quote_failure(_: QuoteError) -> CopySkip {
+    CopySkip::PaperQuoteUnavailable
 }
 
-impl PaperMarket {
-    pub const fn pool(price_native: f64) -> Self {
-        Self {
-            price_native,
-            from_pool: true,
-        }
+fn quote_matches(request: &QuoteRequest, quote: &Quote) -> bool {
+    quote.chain == request.chain
+        && quote.input_mint == request.input_mint
+        && quote.output_mint == request.output_mint
+        && quote.input_amount == request.input_amount
+        && quote.swap_mode == request.swap_mode
+        && quote.wallet_address == request.wallet_address
+        && !quote.router_id.trim().is_empty()
+        && quote.output_amount > RawAmount::ZERO
+        && quote.minimum_output_amount > RawAmount::ZERO
+        && quote.minimum_output_amount <= quote.output_amount
+        && quote.price_impact_pct.is_finite()
+        && quote.price_impact_pct >= 0.0
+}
+
+fn quote_metadata(
+    request: &QuoteRequest,
+    token_decimals: u8,
+    initial: &Quote,
+    landing: &Quote,
+    initial_at: DateTime<Utc>,
+    landing_at: DateTime<Utc>,
+    requested_delay_ms: u64,
+    queue_duration_ms: u64,
+    epoch: u64,
+) -> PaperQuoteMetadata {
+    PaperQuoteMetadata {
+        router_id: landing.router_id.clone(),
+        initial_at,
+        landing_at,
+        requested_delay_ms,
+        queue_duration_ms,
+        minimum_output_amount: initial.minimum_output_amount,
+        final_output_amount: landing.output_amount,
+        input_amount: Some(request.input_amount),
+        token_decimals: Some(token_decimals),
+        epoch,
+        network_fee_estimated: true,
+        platform_fee_included_in_output: true,
     }
-
-    pub const fn observed(price_native: f64) -> Self {
-        Self {
-            price_native,
-            from_pool: false,
-        }
-    }
 }
 
-pub fn simulate_fill(
-    input_native: f64,
-    market: PaperMarket,
-    slippage_pct: f64,
-    costs: PaperCosts,
-) -> Result<PaperFill, CopySkip> {
-    if !input_native.is_finite() || input_native <= 0.0 {
+fn checked_samples(
+    request: &QuoteRequest,
+    initial: Quote,
+    landing: Quote,
+) -> Result<(Quote, Quote), CopySkip> {
+    if !quote_matches(request, &initial) || !quote_matches(request, &landing) {
+        return Err(CopySkip::PaperQuoteUnfillable);
+    }
+    if initial.estimated_network_fee_lamports.is_none()
+        || landing.estimated_network_fee_lamports.is_none()
+    {
+        return Err(CopySkip::PaperQuoteUnfillable);
+    }
+    if landing.output_amount < initial.minimum_output_amount {
+        return Err(CopySkip::PaperMinimumOutputNotMet);
+    }
+    Ok((initial, landing))
+}
+
+async fn quote_twice<Q, QFut, W, WFut>(
+    request: &QuoteRequest,
+    token_decimals: u8,
+    delay_ms: u64,
+    queued_at: DateTime<Utc>,
+    epoch: u64,
+    mut quote: Q,
+    wait: W,
+) -> Result<(Quote, Quote, PaperQuoteMetadata), CopySkip>
+where
+    Q: FnMut(QuoteRequest) -> QFut,
+    QFut: Future<Output = Result<Quote, QuoteError>>,
+    W: FnOnce(Duration) -> WFut,
+    WFut: Future<Output = Result<(), CopySkip>>,
+{
+    let queued_duration_start = Utc::now();
+    let initial = quote(request.clone()).await.map_err(quote_failure)?;
+    let initial_at = Utc::now();
+    if !quote_matches(request, &initial) || initial.estimated_network_fee_lamports.is_none() {
+        return Err(CopySkip::PaperQuoteUnfillable);
+    }
+    wait(Duration::from_millis(delay_ms)).await?;
+    let landing = quote(request.clone()).await.map_err(quote_failure)?;
+    let landing_at = Utc::now();
+    let (initial, landing) = checked_samples(request, initial, landing)?;
+    let metadata = quote_metadata(
+        request,
+        token_decimals,
+        &initial,
+        &landing,
+        initial_at,
+        landing_at,
+        delay_ms,
+        queued_duration_start
+            .signed_duration_since(queued_at)
+            .num_milliseconds()
+            .max(0) as u64,
+        epoch,
+    );
+    Ok((initial, landing, metadata))
+}
+
+fn estimated_network_fee(total_lamports: u64, adapter: &dyn ChainAdapter) -> f64 {
+    adapter.raw_to_native(total_lamports)
+}
+
+/// Settle validated samples from one exact-input request. This is also the
+/// deterministic fixture boundary used by Promo Studio; it performs no I/O.
+pub fn settle_quote_samples(
+    request: &QuoteRequest,
+    token_decimals: u8,
+    initial: Quote,
+    landing: Quote,
+    initial_at: DateTime<Utc>,
+    landing_at: DateTime<Utc>,
+    requested_delay_ms: u64,
+    queue_duration_ms: u64,
+    epoch: u64,
+) -> Result<SettledPaperQuote, CopySkip> {
+    if request.swap_mode != SwapMode::ExactIn || request.input_amount == RawAmount::ZERO {
         return Err(CopySkip::InvalidSizing);
     }
-    let market_price_native = market.price_native;
-    if !market_price_native.is_finite() || market_price_native <= 0.0 {
-        return Err(CopySkip::InvalidPrice);
+    let (initial, landing) = checked_samples(request, initial, landing)?;
+    let adapter = crate::chains::adapter_for(request.chain);
+    let fee_lamports = landing
+        .estimated_network_fee_lamports
+        .ok_or(CopySkip::PaperQuoteUnfillable)?;
+    let network_fee_sol = estimated_network_fee(fee_lamports, adapter);
+    let metadata = quote_metadata(
+        request,
+        token_decimals,
+        &initial,
+        &landing,
+        initial_at,
+        landing_at,
+        requested_delay_ms,
+        queue_duration_ms,
+        epoch,
+    );
+    if adapter.is_native_asset(&request.input_mint) {
+        if adapter.is_native_asset(&request.output_mint) {
+            return Err(CopySkip::PaperQuoteUnfillable);
+        }
+        let input_sol = request
+            .input_amount
+            .to_whole_units(adapter.native_asset_decimals());
+        let token_amount = landing.output_amount.to_whole_units(token_decimals);
+        let fill_price_sol = input_sol / token_amount;
+        let total_cost_sol = input_sol + network_fee_sol;
+        if !input_sol.is_finite()
+            || input_sol <= 0.0
+            || !token_amount.is_finite()
+            || token_amount <= 0.0
+            || !fill_price_sol.is_finite()
+            || fill_price_sol <= 0.0
+            || !total_cost_sol.is_finite()
+            || total_cost_sol <= 0.0
+        {
+            return Err(CopySkip::PaperQuoteUnfillable);
+        }
+        let fill = PaperFill {
+            input_sol,
+            market_price_sol: fill_price_sol,
+            priced_from_pool: false,
+            fill_price_sol,
+            token_amount,
+            referral_fee_sol: 0.0,
+            network_fee_sol,
+            priority_fee_sol: 0.0,
+            total_cost_sol,
+            model: PaperModel::Quote,
+            quote: Some(metadata),
+        };
+        return Ok(SettledPaperQuote::Buy(fill));
     }
-    let fill_price_native = market_price_native * (1.0 + slippage_pct / 100.0);
-    let referral_fee_native = input_native * f64::from(PAPER_REFERRAL_FEE_BPS) / 10_000.0;
-    let token_amount = (input_native - referral_fee_native) / fill_price_native;
-    Ok(PaperFill {
-        input_sol: input_native,
-        market_price_sol: market_price_native,
-        priced_from_pool: market.from_pool,
-        fill_price_sol: fill_price_native,
+    if !adapter.is_native_asset(&request.output_mint) {
+        return Err(CopySkip::PaperQuoteUnfillable);
+    }
+    let token_amount = request.input_amount.to_whole_units(token_decimals);
+    let quoted_net_sol = landing
+        .output_amount
+        .to_whole_units(adapter.native_asset_decimals());
+    let net_proceeds_sol = quoted_net_sol - network_fee_sol;
+    let fill_price_sol = quoted_net_sol / token_amount;
+    if !token_amount.is_finite()
+        || token_amount <= 0.0
+        || !quoted_net_sol.is_finite()
+        || quoted_net_sol <= 0.0
+        || !net_proceeds_sol.is_finite()
+        || net_proceeds_sol <= 0.0
+        || !fill_price_sol.is_finite()
+        || fill_price_sol <= 0.0
+    {
+        return Err(CopySkip::PaperQuoteUnfillable);
+    }
+    let fill = PaperSellFill {
         token_amount,
-        referral_fee_sol: referral_fee_native,
-        network_fee_sol: costs.network_fee_native,
-        priority_fee_sol: costs.priority_fee_native,
-        total_cost_sol: input_native + costs.network_fee_native + costs.priority_fee_native,
-    })
+        market_price_sol: fill_price_sol,
+        priced_from_pool: false,
+        fill_price_sol,
+        gross_sol: quoted_net_sol,
+        referral_fee_sol: 0.0,
+        network_fee_sol,
+        priority_fee_sol: 0.0,
+        net_proceeds_sol,
+        model: PaperModel::Quote,
+        quote: Some(metadata),
+    };
+    Ok(SettledPaperQuote::Sell(fill))
 }
 
-/// Sell `token_amount` from the paper book at the decision-time price less
-/// slippage, paying the same referral fee and network costs a live sell would.
-pub fn simulate_sell(
-    token_amount: f64,
-    market: PaperMarket,
-    slippage_pct: f64,
-    costs: PaperCosts,
-) -> Result<PaperSellFill, CopySkip> {
-    if !token_amount.is_finite() || token_amount <= 0.0 {
+/// Simulate a buy from the initial and landing quote for its exact raw input.
+pub async fn simulate_buy<Q, QFut, W, WFut>(
+    request: QuoteRequest,
+    token_decimals: u8,
+    delay_ms: u64,
+    queued_at: DateTime<Utc>,
+    epoch: u64,
+    quote: Q,
+    wait: W,
+) -> Result<PaperFill, CopySkip>
+where
+    Q: FnMut(QuoteRequest) -> QFut,
+    QFut: Future<Output = Result<Quote, QuoteError>>,
+    W: FnOnce(Duration) -> WFut,
+    WFut: Future<Output = Result<(), CopySkip>>,
+{
+    if request.swap_mode != SwapMode::ExactIn || request.input_amount == RawAmount::ZERO {
+        return Err(CopySkip::InvalidSizing);
+    }
+    let adapter = crate::chains::adapter_for(request.chain);
+    if !adapter.is_native_asset(&request.input_mint)
+        || adapter.is_native_asset(&request.output_mint)
+    {
+        return Err(CopySkip::PaperQuoteUnfillable);
+    }
+    let (initial, landing, metadata) = quote_twice(
+        &request,
+        token_decimals,
+        delay_ms,
+        queued_at,
+        epoch,
+        quote,
+        wait,
+    )
+    .await?;
+    match settle_quote_samples(
+        &request,
+        token_decimals,
+        initial,
+        landing,
+        metadata.initial_at,
+        metadata.landing_at,
+        metadata.requested_delay_ms,
+        metadata.queue_duration_ms,
+        metadata.epoch,
+    )? {
+        SettledPaperQuote::Buy(fill) => Ok(fill),
+        SettledPaperQuote::Sell(_) => Err(CopySkip::PaperQuoteUnfillable),
+    }
+}
+
+/// Simulate a sell using the exact raw token amount accepted for quoting.
+pub async fn simulate_sell<Q, QFut, W, WFut>(
+    request: QuoteRequest,
+    token_decimals: u8,
+    delay_ms: u64,
+    queued_at: DateTime<Utc>,
+    epoch: u64,
+    quote: Q,
+    wait: W,
+) -> Result<PaperSellFill, CopySkip>
+where
+    Q: FnMut(QuoteRequest) -> QFut,
+    QFut: Future<Output = Result<Quote, QuoteError>>,
+    W: FnOnce(Duration) -> WFut,
+    WFut: Future<Output = Result<(), CopySkip>>,
+{
+    if request.swap_mode != SwapMode::ExactIn || request.input_amount == RawAmount::ZERO {
         return Err(CopySkip::CopyPositionNotFound);
     }
-    let market_price_native = market.price_native;
-    if !market_price_native.is_finite() || market_price_native <= 0.0 {
-        return Err(CopySkip::InvalidPrice);
+    let adapter = crate::chains::adapter_for(request.chain);
+    if adapter.is_native_asset(&request.input_mint)
+        || !adapter.is_native_asset(&request.output_mint)
+    {
+        return Err(CopySkip::PaperQuoteUnfillable);
     }
-    let fill_price_native = market_price_native * (1.0 - slippage_pct / 100.0).max(0.0);
-    let gross_native = token_amount * fill_price_native;
-    let referral_fee_native = gross_native * f64::from(PAPER_REFERRAL_FEE_BPS) / 10_000.0;
-    Ok(PaperSellFill {
-        token_amount,
-        market_price_sol: market_price_native,
-        priced_from_pool: market.from_pool,
-        fill_price_sol: fill_price_native,
-        gross_sol: gross_native,
-        referral_fee_sol: referral_fee_native,
-        network_fee_sol: costs.network_fee_native,
-        priority_fee_sol: costs.priority_fee_native,
-        net_proceeds_sol: gross_native
-            - referral_fee_native
-            - costs.network_fee_native
-            - costs.priority_fee_native,
-    })
+    let (initial, landing, metadata) = quote_twice(
+        &request,
+        token_decimals,
+        delay_ms,
+        queued_at,
+        epoch,
+        quote,
+        wait,
+    )
+    .await?;
+    match settle_quote_samples(
+        &request,
+        token_decimals,
+        initial,
+        landing,
+        metadata.initial_at,
+        metadata.landing_at,
+        metadata.requested_delay_ms,
+        metadata.queue_duration_ms,
+        metadata.epoch,
+    )? {
+        SettledPaperQuote::Sell(fill) => Ok(fill),
+        SettledPaperQuote::Buy(_) => Err(CopySkip::PaperQuoteUnfillable),
+    }
 }
 
 #[cfg(test)]
-mod tests {
-    use super::*;
-
-    const COSTS: PaperCosts = PaperCosts {
-        network_fee_native: 0.000005,
-        priority_fee_native: 0.0,
-    };
-
-    #[test]
-    fn a_round_trip_at_an_unchanged_price_loses_exactly_slippage_and_fees() {
-        let buy = simulate_fill(1.0, PaperMarket::pool(0.01), 1.0, COSTS).unwrap();
-        let sell = simulate_sell(buy.token_amount, PaperMarket::pool(0.01), 1.0, COSTS).unwrap();
-        let expected = buy.token_amount * 0.01 * 0.99 * (1.0 - 0.005) - COSTS.network_fee_native;
-        assert!((sell.net_proceeds_sol - expected).abs() < 1e-12);
-        assert!(sell.net_proceeds_sol < buy.total_cost_sol);
-    }
-
-    #[test]
-    fn a_sell_without_tokens_or_price_is_refused() {
-        assert_eq!(
-            simulate_sell(0.0, PaperMarket::pool(0.01), 1.0, COSTS),
-            Err(CopySkip::CopyPositionNotFound)
-        );
-        assert_eq!(
-            simulate_sell(10.0, PaperMarket::observed(f64::NAN), 1.0, COSTS),
-            Err(CopySkip::InvalidPrice)
-        );
-    }
-}
+#[path = "paper/tests.rs"]
+mod tests;

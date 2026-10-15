@@ -62,6 +62,11 @@ config-copy-trading-readiness-min-closed-rounds = Số vòng sẵn sàng cho liv
     .hint = Số vòng thử nghiệm đã đóng mà một tác vụ cần có trước khi danh sách kiểm tra sẵn sàng cho live đạt
 config-copy-trading-require-filter-pass = Yêu cầu đạt bộ lọc
     .hint = Chỉ copy các token được quy trình lọc chấp nhận
+config-copy-trading-paper-landing-delay-ms = Độ trễ khớp thử nghiệm
+    .hint = Thời gian giả định giữa báo giá swap đầu tiên và báo giá swap thứ hai của một lệnh khớp thử nghiệm. Báo giá thứ hai vẫn phải đạt đầu ra tối thiểu của báo giá đầu; phí là ước tính, và MEV, validator cùng thứ tự mempool không được mô phỏng.
+    .unit = ms
+config-copy-trading-paper-queue-capacity = Sức chứa hàng đợi thử nghiệm
+    .hint = Các quyết định thử nghiệm của một tác vụ được phép chờ, chạy lần lượt từng quyết định theo thứ tự đến; quyết định gặp hàng đợi đầy sẽ được ghi là bỏ qua.
 
 config-chain-enabled = Đã bật
     .hint = Chạy chuỗi này trong tiến trình này. Có hiệu lực sau khi khởi động lại.

@@ -185,6 +185,11 @@ config-copy-trading-readiness-min-closed-rounds = Rondas para pasar a vivo
     .hint = Rondas simuladas cerradas que necesita una tarea para superar su lista de comprobación de preparación para vivo
 config-copy-trading-require-filter-pass = Exigir aprobar el filtrado
     .hint = Copia solo los tokens aceptados por el pipeline de filtrado
+config-copy-trading-paper-landing-delay-ms = Retraso de aterrizaje simulado
+    .hint = Tiempo supuesto entre la primera y la segunda cotización de swap de una ejecución simulada. La segunda cotización debe seguir alcanzando la salida mínima de la primera; las comisiones son estimaciones y no se simulan el MEV, los validadores ni el orden del mempool.
+    .unit = ms
+config-copy-trading-paper-queue-capacity = Capacidad de la cola simulada
+    .hint = Decisiones simuladas de una tarea que pueden esperar y se ejecutan una a una por orden de llegada; una decisión que encuentra la cola llena se registra como omitida.
 
 ## events
 

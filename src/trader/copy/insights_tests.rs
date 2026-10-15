@@ -7,8 +7,25 @@ use chrono::{Duration, Utc};
 
 use super::*;
 use crate::trader::copy::types::{
-    CopySellDecision, CopyTelemetry, PaperDecision, PaperFill, PaperSellFill,
+    CopySellDecision, CopyTelemetry, PaperDecision, PaperFill, PaperQuoteMetadata, PaperSellFill,
 };
+
+fn quote_provenance(at: DateTime<Utc>, output: u64, input: u64) -> PaperQuoteMetadata {
+    PaperQuoteMetadata {
+        router_id: "test-router".to_owned(),
+        initial_at: at,
+        landing_at: at,
+        requested_delay_ms: 1000,
+        queue_duration_ms: 0,
+        minimum_output_amount: crate::chains::RawAmount::from(1_u64),
+        final_output_amount: crate::chains::RawAmount::from(output),
+        input_amount: Some(crate::chains::RawAmount::from(input)),
+        token_decimals: Some(6),
+        epoch: 0,
+        network_fee_estimated: true,
+        platform_fee_included_in_output: true,
+    }
+}
 
 fn telemetry(at: DateTime<Utc>, target_price: Option<f64>) -> CopyTelemetry {
     CopyTelemetry {
@@ -41,13 +58,19 @@ fn buy(id: i64, mint: &str, tokens: f64, cost: f64, at: DateTime<Utc>) -> CopyAc
             fill: PaperFill {
                 input_sol: cost,
                 market_price_sol: cost / tokens,
-                priced_from_pool: true,
+                priced_from_pool: false,
                 fill_price_sol: cost / tokens * 1.01,
                 token_amount: tokens,
                 referral_fee_sol: 0.0,
                 network_fee_sol: 0.0,
                 priority_fee_sol: 0.0,
                 total_cost_sol: cost,
+                model: super::super::types::PaperModel::Quote,
+                quote: Some(quote_provenance(
+                    at,
+                    (tokens * 1_000_000.0).round() as u64,
+                    1,
+                )),
             },
             telemetry: telemetry(at, Some(cost / tokens)),
         }),
@@ -81,15 +104,22 @@ fn sell(
             paper_fill: Some(PaperSellFill {
                 token_amount: tokens,
                 market_price_sol: proceeds / tokens,
-                priced_from_pool: true,
+                priced_from_pool: false,
                 fill_price_sol: proceeds / tokens,
                 gross_sol: proceeds,
                 referral_fee_sol: 0.0,
                 network_fee_sol: 0.0,
                 priority_fee_sol: 0.0,
                 net_proceeds_sol: proceeds,
+                model: super::super::types::PaperModel::Quote,
+                quote: Some(quote_provenance(
+                    at,
+                    (proceeds * 1_000_000_000.0).round() as u64,
+                    (tokens * 1_000_000.0).round() as u64,
+                )),
             }),
             exit_rule: rule,
+            paper_context: None,
         }),
     }
 }
@@ -172,7 +202,7 @@ fn a_range_keeps_rounds_that_closed_inside_it() {
 }
 
 #[test]
-fn a_fill_priced_at_the_observed_trade_is_no_slippage_sample() {
+fn quote_slippage_samples_do_not_require_a_pool_price_source() {
     let t0 = Utc::now();
     let mut observed = buy(1, "a", 100.0, 1.0, t0);
     if let CopyOutcome::PaperFilled(decision) = &mut observed.outcome {
@@ -187,7 +217,7 @@ fn a_fill_priced_at_the_observed_trade_is_no_slippage_sample() {
         InsightRange::default(),
         None,
     );
-    assert_eq!(insights.slippage.samples, 1);
+    assert_eq!(insights.slippage.samples, 2);
 }
 
 #[test]

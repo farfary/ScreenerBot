@@ -1,6 +1,115 @@
 {
   "activity": [
     {
+      "id": 314,
+      "task_id": 1,
+      "kind": "paper_sell_observed",
+      "outcome": {
+        "outcome": "paper_sell_observed",
+        "task_id": 1,
+        "target_address": "CopyTargetAAA1111111111111111111111111111111",
+        "target_signature": "paper-exit-314",
+        "mint": "4k3Dyjzvzp8eMZWUXbBCjEvwSkkk59S5iCNLY3QrkX6R",
+        "target_token_amount": 0,
+        "target_sol_amount": 0,
+        "exit_percentage": null,
+        "transaction_signature": null,
+        "error": null,
+        "telemetry": {
+          "target_block_time": 1791344400,
+          "detected_at": "2026-10-07T03:40:09.000Z",
+          "decoded_at": "2026-10-07T03:40:09.040Z",
+          "decided_at": "2026-10-07T03:40:11.590Z",
+          "submitted_at": null,
+          "confirmed_at": null,
+          "target_price_sol": null,
+          "fill_price_sol": 0.00003251,
+          "backfill": false
+        },
+        "paper_fill": {
+          "token_amount": 2416.04,
+          "market_price_sol": 0.000033,
+          "priced_from_pool": false,
+          "fill_price_sol": 0.00003251,
+          "gross_sol": 0.07854,
+          "referral_fee_sol": 0,
+          "network_fee_sol": 0.00006,
+          "priority_fee_sol": 0,
+          "net_proceeds_sol": 0.07848,
+          "model": "quote",
+          "quote": {
+            "router_id": "jupiter",
+            "initial_at": "2026-10-07T03:40:09.220Z",
+            "landing_at": "2026-10-07T03:40:10.310Z",
+            "requested_delay_ms": 1000,
+            "queue_duration_ms": 180,
+            "minimum_output_amount": "77100000",
+            "final_output_amount": "78540000",
+            "input_amount": "2416040000",
+            "token_decimals": 6,
+            "epoch": 1,
+            "network_fee_estimated": true,
+            "platform_fee_included_in_output": true
+          }
+        },
+        "exit_rule": "stop_loss"
+      },
+      "created_at": "2026-10-07T03:40:11.600Z"
+    },
+    {
+      "id": 313,
+      "task_id": 1,
+      "kind": "paper_filled",
+      "outcome": {
+        "outcome": "paper_filled",
+        "task_id": 1,
+        "target_address": "CopyTargetAAA1111111111111111111111111111111",
+        "signature": "CopySig313x22222222222222222222222222222222222222222222222222222222222222222222222222222",
+        "mint": "4k3Dyjzvzp8eMZWUXbBCjEvwSkkk59S5iCNLY3QrkX6R",
+        "target_size_sol": 1.5,
+        "target_token_amount": 36590,
+        "sized_sol": 0.1,
+        "fill": {
+          "input_sol": 0.1,
+          "market_price_sol": 0.0000412,
+          "priced_from_pool": false,
+          "fill_price_sol": 0.00004139,
+          "token_amount": 2416.04,
+          "referral_fee_sol": 0,
+          "network_fee_sol": 0.00006,
+          "priority_fee_sol": 0,
+          "total_cost_sol": 0.10006,
+          "model": "quote",
+          "quote": {
+            "router_id": "jupiter",
+            "initial_at": "2026-10-07T02:14:07.120Z",
+            "landing_at": "2026-10-07T02:14:08.190Z",
+            "requested_delay_ms": 1000,
+            "queue_duration_ms": 240,
+            "minimum_output_amount": "2380000000",
+            "final_output_amount": "2416040000",
+            "input_amount": "100000000",
+            "token_decimals": 6,
+            "epoch": 1,
+            "network_fee_estimated": true,
+            "platform_fee_included_in_output": true
+          }
+        },
+        "telemetry": {
+          "target_block_time": 1791339240,
+          "detected_at": "2026-10-07T02:14:06.800Z",
+          "decoded_at": "2026-10-07T02:14:06.840Z",
+          "decided_at": "2026-10-07T02:14:08.280Z",
+          "submitted_at": null,
+          "confirmed_at": null,
+          "target_price_sol": 0.0000409,
+          "fill_price_sol": 0.00004139,
+          "backfill": false
+        }
+      },
+      "created_at": "2026-10-07T02:14:08.300Z"
+    },
+    {
       "id": 312,
       "task_id": 1,
       "kind": "paper_filled",

@@ -38,7 +38,7 @@
   <section class="copy-onboarding" id="copy-onboarding" hidden>
     <div class="copy-onboarding-copy">
       <h2 data-l10n-id="copy-onboarding-title"></h2>
-      <p data-l10n-id="copy-onboarding-body"></p>
+      <p data-l10n-id="copy-onboarding-paper-body"></p>
       <button class="btn btn-primary" id="copy-onboarding-add" type="button">
         <i class="icon-plus"></i> <span data-l10n-id="copy-onboarding-add"></span>
       </button>
@@ -50,7 +50,7 @@
       </li>
       <li>
         <strong data-l10n-id="copy-onboarding-evaluate"></strong>
-        <span data-l10n-id="copy-onboarding-evaluate-detail"></span>
+        <span data-l10n-id="copy-onboarding-evaluate-paper-detail"></span>
       </li>
       <li>
         <strong data-l10n-id="copy-onboarding-arm"></strong>
@@ -264,6 +264,38 @@
                   required
                 /><span class="input-unit">%</span></span
               >
+            </label>
+            <label class="copy-field">
+              <span data-l10n-id="config-copy-trading-paper-landing-delay-ms"></span>
+              <span class="copy-number-row"
+                ><input
+                  id="copy-settings-paper-delay"
+                  type="number"
+                  min="0"
+                  max="30"
+                  step="0.001"
+                  required /><span
+                  class="input-unit"
+                  data-l10n-id="copy-settings-unit-seconds"
+                ></span
+              ></span>
+              <small data-config-hint="config-copy-trading-paper-landing-delay-ms"></small>
+            </label>
+            <label class="copy-field">
+              <span data-l10n-id="config-copy-trading-paper-queue-capacity"></span>
+              <span class="copy-number-row"
+                ><input
+                  id="copy-settings-paper-queue"
+                  type="number"
+                  min="1"
+                  max="256"
+                  step="1"
+                  required /><span
+                  class="input-unit"
+                  data-l10n-id="copy-settings-unit-trades"
+                ></span
+              ></span>
+              <small data-config-hint="config-copy-trading-paper-queue-capacity"></small>
             </label>
             <label class="copy-field">
               <span data-l10n-id="config-copy-trading-max-active-tasks"></span>

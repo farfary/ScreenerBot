@@ -185,6 +185,11 @@ config-copy-trading-readiness-min-closed-rounds = 실거래 준비 라운드 수
     .hint = 작업이 실거래 준비 체크리스트를 통과하는 데 필요한 종료된 모의 라운드 수
 config-copy-trading-require-filter-pass = 필터 통과 필수
     .hint = 필터링 파이프라인을 통과한 토큰만 카피합니다
+config-copy-trading-paper-landing-delay-ms = 모의 착지 지연
+    .hint = 모의 체결에서 첫 번째와 두 번째 스왑 견적 사이에 가정한 시간입니다. 두 번째 견적도 첫 번째 견적의 최소 출력을 충족해야 하며, 수수료는 추정치이고 MEV, 검증자, 멤풀 순서는 시뮬레이션되지 않습니다.
+    .unit = ms
+config-copy-trading-paper-queue-capacity = 모의 대기열 용량
+    .hint = 한 작업에서 대기할 수 있는 모의 결정의 수입니다. 도착 순서대로 한 번에 하나씩 실행되며, 대기열이 가득 찬 상태에서 들어온 결정은 건너뜀으로 기록됩니다.
 
 ## events
 

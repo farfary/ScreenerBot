@@ -188,6 +188,11 @@ config-copy-trading-readiness-min-closed-rounds = Live Readiness Rounds
     .hint = Closed paper rounds a task needs before its live-readiness checklist passes
 config-copy-trading-require-filter-pass = Require Filter Pass
     .hint = Only copy tokens accepted by the filtering pipeline
+config-copy-trading-paper-landing-delay-ms = Paper Landing Delay
+    .hint = Assumed time between the first and the landing swap quote of a paper fill. The landing quote must still meet the first quote's minimum output; fees are estimates and MEV, validators and mempool ordering are not simulated.
+    .unit = ms
+config-copy-trading-paper-queue-capacity = Paper Queue Capacity
+    .hint = Paper decisions of one task that may wait, run one at a time in arrival order; a decision that finds the queue full is recorded as skipped.
 
 ## events
 

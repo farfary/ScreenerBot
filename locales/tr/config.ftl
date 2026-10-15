@@ -185,6 +185,11 @@ config-copy-trading-readiness-min-closed-rounds = Canlı Hazırlık Turları
     .hint = Bir görevin canlı hazırlık kontrol listesini geçmesi için gereken kapanmış sanal tur sayısı
 config-copy-trading-require-filter-pass = Filtre Geçişini Zorunlu Kıl
     .hint = Yalnızca filtreleme hattının kabul ettiği tokenları kopyalayın
+config-copy-trading-paper-landing-delay-ms = Sanal Ağa Ulaşma Gecikmesi
+    .hint = Bir sanal dolumun birinci ve ikinci takas fiyat teklifi arasındaki varsayılan süre. İkinci teklif yine de ilk teklifin asgari çıktısını karşılamalıdır; ücretler tahmindir ve MEV, doğrulayıcılar ve mempool sıralaması simüle edilmez.
+    .unit = ms
+config-copy-trading-paper-queue-capacity = Sanal Kuyruk Kapasitesi
+    .hint = Bir görevin bekleyebilecek sanal kararları gelme sırasına göre tek tek çalıştırılır; kuyruğu dolu bulan bir karar atlandı olarak kaydedilir.
 
 ## events
 

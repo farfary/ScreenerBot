@@ -3,6 +3,7 @@
 //
 // The Activity tab: the task's whole decision history, paged from the server and
 // filtered by kind or token. Consecutive skips for one reason fold into a group.
+import { formatNumber } from "../../core/format.js";
 import {
   dateTime,
   duration,
@@ -55,7 +56,6 @@ const FILTERS = [
 ];
 // Outcome kinds serialized by `CopyOutcome` (src/trader/copy/types.rs).
 const OUTCOME_LABELS = Object.freeze({
-  paper_filled: "copy-outcome-paper-filled",
   live_submitted: "copy-outcome-live-submitted",
   live_confirmed: "copy-outcome-live-confirmed",
   live_failed: "copy-outcome-live-failed",
@@ -127,6 +127,129 @@ function skipDetail(reason) {
     default:
       return label;
   }
+}
+
+/** A paper leg's execution model comes from its recorded field, never from the pool flag. */
+const isQuote = (fill) => fill?.model === "quote";
+
+/** The outcome's heading: its execution model and, for an exit, the rule that closed it. */
+export function outcomeTitle(outcome) {
+  if (outcome.outcome === "paper_filled") {
+    return isQuote(outcome.fill)
+      ? I18n.t("copy-outcome-paper-filled-quote")
+      : I18n.t("copy-outcome-paper-filled-legacy");
+  }
+  if (outcome.outcome === "paper_sell_observed" && outcome.paper_fill) {
+    const quote = isQuote(outcome.paper_fill);
+    if (outcome.exit_rule) {
+      const rule = exitLabel(outcome.exit_rule);
+      return quote
+        ? I18n.t("copy-activity-paper-exit-quote", { rule })
+        : I18n.t("copy-activity-paper-exit-legacy", { rule });
+    }
+    return quote
+      ? I18n.t("copy-outcome-paper-sell-quote")
+      : I18n.t("copy-outcome-paper-sell-legacy");
+  }
+  return Object.hasOwn(OUTCOME_LABELS, outcome.outcome)
+    ? I18n.label(OUTCOME_LABELS, outcome.outcome)
+    : I18n.t("copy-activity-decision");
+}
+
+/**
+ * The outcome's figures. A quote fill is compared with the wallet's trade price whenever
+ * both prices are positive; a legacy fill keeps the pool-price wording it was recorded under.
+ */
+export function outcomeDetail(outcome) {
+  switch (outcome.outcome) {
+    case "paper_filled": {
+      const fill = outcome.fill || {};
+      const target = outcome.telemetry?.target_price_sol;
+      const difference =
+        target > 0 && fill.fill_price_sol > 0 ? (fill.fill_price_sol / target - 1) * 100 : null;
+      const values = {
+        input: sol(fill.input_sol),
+        price: price(fill.fill_price_sol),
+        target: sol(outcome.target_size_sol, 3),
+      };
+      if (isQuote(fill)) {
+        return difference === null
+          ? I18n.t("copy-activity-filled", values)
+          : I18n.t("copy-activity-filled-target-difference", {
+              ...values,
+              difference: signedPct(difference, 2),
+            });
+      }
+      if (!fill.priced_from_pool) return I18n.t("copy-activity-filled-unpriced", values);
+      return difference === null
+        ? I18n.t("copy-activity-filled", values)
+        : I18n.t("copy-activity-filled-slippage", {
+            ...values,
+            slippage: signedPct(difference, 2),
+          });
+    }
+    case "live_submitted":
+    case "live_confirmed":
+    case "live_failed":
+      return (
+        outcome.error ||
+        I18n.t("copy-activity-live-sized", {
+          sized: sol(outcome.sized_sol),
+          target: sol(outcome.target_size_sol, 3),
+        })
+      );
+    case "paper_sell_observed": {
+      const fill = outcome.paper_fill;
+      if (!fill) {
+        return I18n.t("copy-activity-sell-nothing", {
+          amount: sol(outcome.target_sol_amount, 3),
+        });
+      }
+      if (!isQuote(fill) && outcome.exit_rule === "manual" && !fill.fill_price_sol) {
+        return I18n.t("copy-activity-written-off");
+      }
+      return I18n.t("copy-activity-sold", {
+        tokens: formatNumber(fill.token_amount),
+        proceeds: sol(fill.net_proceeds_sol),
+        price: price(fill.fill_price_sol),
+      });
+    }
+    case "live_sell_submitted":
+    case "live_sell_failed":
+      return (
+        outcome.error ||
+        (outcome.exit_percentage == null
+          ? I18n.t("copy-activity-full-close")
+          : I18n.t("copy-activity-partial-exit", { pct: pct(outcome.exit_percentage, 1) }))
+      );
+    case "skipped":
+      return skipDetail(outcome.reason);
+    default:
+      return "";
+  }
+}
+
+/**
+ * What a quote fill recorded about its own execution: the router, when both quotes were
+ * received, the assumed and the queued wait, and the one fee estimate. Network and priority
+ * fees are a single estimate on a quote fill, so only `network_fee_sol` is shown.
+ */
+export function quoteNotes(outcome) {
+  const fill = outcome.outcome === "paper_filled" ? outcome.fill : outcome.paper_fill;
+  const quote = isQuote(fill) ? fill.quote : null;
+  if (!quote) return [];
+  return [
+    I18n.t("copy-activity-quote-router", {
+      router: quote.router_id,
+      initial: dateTime(quote.initial_at),
+      landing: dateTime(quote.landing_at),
+    }),
+    I18n.t("copy-activity-quote-wait", {
+      assumed: seconds(quote.requested_delay_ms, { precise: true }),
+      queued: seconds(quote.queue_duration_ms, { precise: true }),
+    }),
+    I18n.t("copy-activity-quote-fees", { fee: sol(fill.network_fee_sol, 6) }),
+  ];
 }
 
 export function createActivity(page, { rerender }) {
@@ -253,75 +376,6 @@ export function createActivity(page, { rerender }) {
     }
   }
 
-  function title(outcome) {
-    if (outcome.outcome === "paper_sell_observed" && outcome.exit_rule) {
-      return I18n.t("copy-activity-paper-exit", { rule: exitLabel(outcome.exit_rule) });
-    }
-    return Object.hasOwn(OUTCOME_LABELS, outcome.outcome)
-      ? I18n.label(OUTCOME_LABELS, outcome.outcome)
-      : I18n.t("copy-activity-decision");
-  }
-
-  function detail(outcome) {
-    switch (outcome.outcome) {
-      case "paper_filled": {
-        const fill = outcome.fill || {};
-        const target = outcome.telemetry?.target_price_sol;
-        const slip =
-          fill.priced_from_pool && target > 0 && fill.fill_price_sol > 0
-            ? (fill.fill_price_sol / target - 1) * 100
-            : null;
-        const values = {
-          input: sol(fill.input_sol),
-          price: price(fill.fill_price_sol),
-          target: sol(outcome.target_size_sol, 3),
-        };
-        if (!fill.priced_from_pool) return I18n.t("copy-activity-filled-unpriced", values);
-        return slip === null
-          ? I18n.t("copy-activity-filled", values)
-          : I18n.t("copy-activity-filled-slippage", { ...values, slippage: signedPct(slip, 2) });
-      }
-      case "live_submitted":
-      case "live_confirmed":
-      case "live_failed":
-        return (
-          outcome.error ||
-          I18n.t("copy-activity-live-sized", {
-            sized: sol(outcome.sized_sol),
-            target: sol(outcome.target_size_sol, 3),
-          })
-        );
-      case "paper_sell_observed": {
-        const fill = outcome.paper_fill;
-        if (!fill) {
-          return I18n.t("copy-activity-sell-nothing", {
-            amount: sol(outcome.target_sol_amount, 3),
-          });
-        }
-        if (outcome.exit_rule === "manual" && !fill.fill_price_sol) {
-          return I18n.t("copy-activity-written-off");
-        }
-        return I18n.t("copy-activity-sold", {
-          tokens: Utils.formatNumber(fill.token_amount),
-          proceeds: sol(fill.net_proceeds_sol),
-          price: price(fill.fill_price_sol),
-        });
-      }
-      case "live_sell_submitted":
-      case "live_sell_failed":
-        return (
-          outcome.error ||
-          (outcome.exit_percentage == null
-            ? I18n.t("copy-activity-full-close")
-            : I18n.t("copy-activity-partial-exit", { pct: pct(outcome.exit_percentage, 1) }))
-        );
-      case "skipped":
-        return skipDetail(outcome.reason);
-      default:
-        return "";
-    }
-  }
-
   function links(outcome) {
     const target = chainSignature(outcome.signature || outcome.target_signature);
     const own = chainSignature(outcome.transaction_signature);
@@ -340,12 +394,15 @@ export function createActivity(page, { rerender }) {
       ? `<button class="copy-token-link" type="button" data-activity-mint="${esc(outcome.mint)}" title="${esc(`${I18n.t("copy-activity-only-token")} · ${outcome.mint}`)}">${tokenWithMint(outcome.mint)}</button>`
       : "";
     const arrival = arrivalText(outcome.telemetry);
+    const notes = quoteNotes(outcome)
+      .map((note) => `<span>${esc(note)}</span>`)
+      .join("");
     return `<li class="copy-event ${TONES[outcome.outcome] || ""}">
       <time datetime="${esc(String(at || ""))}">${esc(dateTime(at))}</time>
       <div class="copy-event-main">
-        <div class="copy-event-line"><strong>${esc(title(outcome))}</strong>${token}</div>
-        <div class="copy-event-detail">${esc(detail(outcome))}</div>
-        <div class="copy-event-meta">${arrival ? `<span>${esc(arrival)}</span>` : ""}${links(outcome)}</div>
+        <div class="copy-event-line"><strong>${esc(outcomeTitle(outcome))}</strong>${token}</div>
+        <div class="copy-event-detail">${esc(outcomeDetail(outcome))}</div>
+        <div class="copy-event-meta">${arrival ? `<span>${esc(arrival)}</span>` : ""}${notes}${links(outcome)}</div>
       </div>
     </li>`;
   }

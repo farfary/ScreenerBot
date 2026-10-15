@@ -185,6 +185,11 @@ config-copy-trading-readiness-min-closed-rounds = ライブ準備に必要なラ
     .hint = ライブ準備チェックリストに合格するために、タスクに必要なクローズ済みペーパーラウンド数
 config-copy-trading-require-filter-pass = フィルター通過を必須にする
     .hint = フィルタリングパイプラインを通過したトークンのみコピーします
+config-copy-trading-paper-landing-delay-ms = ペーパー着地遅延
+    .hint = ペーパー約定における 1 回目と 2 回目のスワップ見積もりの間の想定時間です。2 回目の見積もりも 1 回目の最低出力を満たす必要があります。手数料は推定値で、MEV、バリデーター、メムプールの順序はシミュレートされません。
+    .unit = ms
+config-copy-trading-paper-queue-capacity = ペーパーキュー容量
+    .hint = 1 つのタスクで待機できるペーパー判断の数です。到着順に 1 件ずつ実行され、キューが満杯のときの判断はスキップとして記録されます。
 
 ## events
 

@@ -16,9 +16,24 @@ use crate::trader::error::Error;
 use super::rows::{json_error, parse_datetime};
 use super::CopyDatabase;
 
-/// Activity kinds a paper reset removes: everything the paper book was built
-/// from plus the skips of the same evaluation.
-const PAPER_KINDS: &str = "'paper_filled', 'paper_sell_observed', 'skipped'";
+/// Current quote-model decisions and skips removed by a reset. Legacy JSON is
+/// intentionally left byte-for-byte intact.
+const CURRENT_PAPER_DECISIONS: &str = "(
+    (json_extract(outcome_json, '$.outcome') = 'paper_filled'
+        AND json_extract(outcome_json, '$.fill.model') = 'quote')
+    OR (json_extract(outcome_json, '$.outcome') = 'paper_sell_observed'
+        AND json_extract(outcome_json, '$.paper_fill.model') = 'quote')
+    OR (json_extract(outcome_json, '$.outcome') = 'skipped'
+        AND json_extract(outcome_json, '$.paper.model') = 'quote')
+)";
+const CURRENT_PAPER_ACTIVITY: &str = "(
+    (json_extract(details_json, '$.outcome') = 'paper_filled'
+        AND json_extract(details_json, '$.fill.model') = 'quote')
+    OR (json_extract(details_json, '$.outcome') = 'paper_sell_observed'
+        AND json_extract(details_json, '$.paper_fill.model') = 'quote')
+    OR (json_extract(details_json, '$.outcome') = 'skipped'
+        AND json_extract(details_json, '$.paper.model') = 'quote')
+)";
 
 /// One page of decisions, newest first. Every filter is optional.
 #[derive(Debug, Clone, Default)]
@@ -186,6 +201,19 @@ impl CopyDatabase {
             let transaction = connection
                 .write_tx()
                 .map_err(crate::errors::DatabaseError::from)?;
+            let epoch_key = format!("paper_epoch:{task_id}");
+            let epoch = super::ledger::read_paper_epoch(&transaction, task_id)?
+                .checked_add(1)
+                .ok_or_else(|| crate::trader::Error::CopyValidation {
+                    detail: "paper reset epoch overflow".to_owned(),
+                })?;
+            transaction
+                .execute(
+                    "INSERT INTO copy_metadata (key, value) VALUES (?1, ?2) \
+                     ON CONFLICT(key) DO UPDATE SET value = excluded.value",
+                    params![epoch_key, epoch.to_string()],
+                )
+                .map_err(crate::errors::DatabaseError::from)?;
             let execute = |sql: &str| {
                 transaction
                     .execute(sql, params![task_id])
@@ -195,10 +223,11 @@ impl CopyDatabase {
             execute("DELETE FROM copy_spend WHERE task_id = ?1 AND mode = 'paper'")?;
             execute(&format!(
                 "DELETE FROM copy_decisions WHERE task_id = ?1 \
-                 AND json_extract(outcome_json, '$.outcome') IN ({PAPER_KINDS})"
+                 AND {CURRENT_PAPER_DECISIONS}"
             ))?;
             let removed = execute(&format!(
-                "DELETE FROM copy_activity WHERE task_id = ?1 AND kind IN ({PAPER_KINDS})"
+                "DELETE FROM copy_activity WHERE task_id = ?1 \
+                 AND {CURRENT_PAPER_ACTIVITY}"
             ))?;
             transaction
                 .execute(

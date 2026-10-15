@@ -159,6 +159,8 @@ pub fn get_promo_copy_workspace(id: i64) -> Result<CopyTaskWorkspace> {
         &activity,
         &desk.positions,
         &paper_book,
+        &[],
+        0.0,
         desk::mark,
         None,
         Utc::now(),
@@ -263,10 +265,32 @@ mod tests {
     use super::*;
     use crate::trader::copy::CopyOutcome;
 
+    fn assert_paper_timeline(
+        telemetry: &crate::trader::copy::CopyTelemetry,
+        quote: &crate::trader::copy::PaperQuoteMetadata,
+    ) {
+        if let Some(target_block_time) = telemetry.target_block_time {
+            let target_block =
+                chrono::DateTime::<chrono::Utc>::from_timestamp(target_block_time, 0)
+                    .expect("fixture target block time is representable");
+            assert!(target_block <= telemetry.detected_at);
+        }
+        assert!(telemetry.detected_at <= telemetry.decoded_at);
+        assert!(telemetry.decoded_at <= quote.initial_at);
+        assert!(quote.initial_at <= quote.landing_at);
+        assert!(quote.landing_at <= telemetry.decided_at);
+        assert_eq!(quote.requested_delay_ms, 1000);
+        assert_eq!(
+            (quote.landing_at - quote.initial_at).num_milliseconds(),
+            1000
+        );
+        assert_eq!(quote.queue_duration_ms, 0);
+        assert_eq!(telemetry.submitted_at, None);
+        assert_eq!(telemetry.confirmed_at, None);
+    }
+
     fn ensure_config() {
-        use crate::config::schemas::Config;
-        let _ =
-            crate::config::utils::CONFIG.get_or_init(|| std::sync::RwLock::new(Config::default()));
+        crate::config::utils::install_default_config();
     }
 
     #[test]
@@ -372,5 +396,141 @@ mod tests {
         assert_eq!(profile.tasks.len(), 1);
         assert!(profile.watch.is_some_and(|watch| watch.subscribed));
         assert!(profile.observations.sells > 0);
+    }
+
+    #[test]
+    fn paper_fixtures_keep_quote_provenance_and_reconcile_fee_net_raw_bookings() {
+        ensure_config();
+        let desk = desk::Desk::build();
+        let task = desk.task(2).expect("paper task is present");
+        let adapter = crate::chains::adapter_for(task.chain);
+        let fee_fraction = f64::from(adapter.platform_swap_fee_bps()) / 10_000.0;
+        let activity = desk.task_activity(task.id);
+        let buys = activity
+            .iter()
+            .filter_map(|row| match &row.outcome {
+                CopyOutcome::PaperFilled(decision) => Some(decision),
+                _ => None,
+            })
+            .collect::<Vec<_>>();
+        let sell_decisions = activity
+            .iter()
+            .filter_map(|row| match &row.outcome {
+                CopyOutcome::PaperSellObserved(decision) => Some(decision),
+                _ => None,
+            })
+            .collect::<Vec<_>>();
+        let sells = sell_decisions
+            .iter()
+            .filter_map(|decision| decision.paper_fill.as_ref())
+            .collect::<Vec<_>>();
+        assert!(!buys.is_empty());
+        assert!(!sells.is_empty());
+        assert_eq!(buys.len(), 15);
+        assert_eq!(sells.len(), 12);
+        let booked = desk.paper_book(task.id);
+        assert_eq!(booked.len(), buys.len());
+
+        for decision in &buys {
+            let fill = &decision.fill;
+            let quote = fill.quote.as_ref().expect("buy quote provenance");
+            assert_paper_timeline(&decision.telemetry, quote);
+            assert_eq!(decision.telemetry.decided_at, quote.landing_at);
+            assert_eq!(fill.model, crate::trader::copy::PaperModel::Quote);
+            assert_eq!(quote.router_id, "promo-fixture");
+            assert_eq!(quote.token_decimals, Some(6));
+            assert!(quote.platform_fee_included_in_output);
+            assert!(quote.network_fee_estimated);
+            let input_amount = quote.input_amount.expect("raw quote input");
+            assert!(input_amount > crate::chains::RawAmount::ZERO);
+            assert_eq!(
+                input_amount
+                    .to_whole_units(adapter.native_asset_decimals())
+                    .to_bits(),
+                fill.input_sol.to_bits()
+            );
+            assert_eq!(quote.minimum_output_amount, quote.final_output_amount);
+            assert_eq!(
+                fill.token_amount.to_bits(),
+                quote.final_output_amount.to_whole_units(6).to_bits()
+            );
+            assert_eq!(
+                fill.total_cost_sol.to_bits(),
+                (fill.input_sol + fill.network_fee_sol).to_bits()
+            );
+
+            if let Some((_, _, _, _, market, ..)) = super::super::data::PROMO_CLOSED_TOKENS
+                .iter()
+                .find(|token| token.2 == decision.mint)
+            {
+                let expected_raw = crate::chains::RawAmount::from_integral_f64(
+                    (fill.input_sol / *market * (1.0 - fee_fraction) * 10_f64.powi(6)).floor(),
+                )
+                .expect("fixture token amount is representable");
+                assert_eq!(quote.final_output_amount, expected_raw);
+            }
+            assert_eq!(fill.referral_fee_sol, 0.0);
+            let position = booked
+                .iter()
+                .find(|position| position.mint == decision.mint)
+                .expect("each paper buy has a book row");
+            assert_eq!(position.opened_at, decision.telemetry.decided_at);
+            assert_eq!(position.opened_at, quote.landing_at);
+        }
+
+        for decision in &sell_decisions {
+            let fill = decision.paper_fill.as_ref().expect("paper sell fill");
+            let quote = fill.quote.as_ref().expect("sell quote provenance");
+            assert_paper_timeline(&decision.telemetry, quote);
+            assert_eq!(decision.telemetry.decided_at, quote.landing_at);
+            let position = booked
+                .iter()
+                .find(|position| position.mint == decision.mint)
+                .expect("each paper sell has a book row");
+            assert_eq!(position.closed_at, Some(decision.telemetry.decided_at));
+            assert_eq!(position.closed_at, Some(quote.landing_at));
+        }
+
+        for fill in &sells {
+            let quote = fill.quote.as_ref().expect("sell quote provenance");
+            assert_eq!(fill.model, crate::trader::copy::PaperModel::Quote);
+            assert_eq!(quote.router_id, "promo-fixture");
+            assert_eq!(quote.token_decimals, Some(6));
+            assert!(quote.platform_fee_included_in_output);
+            assert!(quote.network_fee_estimated);
+            assert!(quote
+                .input_amount
+                .is_some_and(|amount| amount > crate::chains::RawAmount::ZERO));
+            assert_eq!(
+                quote.input_amount.unwrap().to_whole_units(6).to_bits(),
+                fill.token_amount.to_bits()
+            );
+            assert_eq!(quote.minimum_output_amount, quote.final_output_amount);
+            assert_eq!(
+                quote
+                    .final_output_amount
+                    .to_whole_units(adapter.native_asset_decimals())
+                    .to_bits(),
+                fill.gross_sol.to_bits()
+            );
+            assert_eq!(fill.referral_fee_sol, 0.0);
+            assert!(
+                (fill.net_proceeds_sol - (fill.gross_sol - fill.network_fee_sol)).abs() < 1e-12
+            );
+        }
+
+        let ledger_invested: f64 = booked.iter().map(|position| position.invested_native).sum();
+        let quoted_cost: f64 = buys
+            .iter()
+            .map(|decision| decision.fill.total_cost_sol)
+            .sum();
+        let ledger_proceeds: f64 = booked
+            .iter()
+            .map(|position| position.realized_proceeds_native)
+            .sum();
+        let quoted_proceeds: f64 = sells.iter().map(|fill| fill.net_proceeds_sol).sum();
+        assert!((ledger_invested - quoted_cost).abs() < 1e-12);
+        assert!((desk.spent_sol(task.id) - quoted_cost).abs() < 1e-12);
+        assert!((ledger_proceeds - quoted_proceeds).abs() < 1e-12);
     }
 }

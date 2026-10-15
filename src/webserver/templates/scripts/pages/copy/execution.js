@@ -5,7 +5,7 @@
 // copies fill from the target's own price.
 import { histogram } from "./charts.js";
 import { definitionRows, seconds, signedPct } from "./format.js";
-import { insightsBody, metric, rangeHead } from "./overview.js";
+import { insightsBody, metric, paperModelCard, rangeHead } from "./overview.js";
 
 function bucketLabel(bucket, index, buckets) {
   if (bucket.upper_ms != null) {
@@ -45,16 +45,18 @@ function body(insights, defaults, esc) {
     ),
     metric(I18n.t("copy-execution-p95"), seconds(arrival.p95_ms), limit, "", esc),
     metric(
-      I18n.t("copy-execution-median-slippage"),
+      I18n.t("copy-execution-target-price-difference"),
       signedPct(slippage.median_pct, 2),
-      I18n.t("copy-execution-slippage-samples", { count: slippage.samples || 0 }),
+      I18n.t("copy-execution-target-difference-samples", { count: slippage.samples || 0 }),
       "",
       esc
     ),
     metric(
-      I18n.t("copy-execution-worst-slippage"),
+      I18n.t("copy-execution-target-difference-worst"),
       signedPct(slippage.worst_pct, 2),
-      I18n.t("copy-execution-average-slippage", { amount: signedPct(slippage.average_pct, 2) }),
+      I18n.t("copy-execution-target-difference-average", {
+        amount: signedPct(slippage.average_pct, 2),
+      }),
       "",
       esc
     ),
@@ -69,7 +71,7 @@ function body(insights, defaults, esc) {
         ],
         esc
       )}</dl></section>
-    <section class="copy-card"><h4>${esc(I18n.t("copy-execution-fill-title"))}</h4><p class="copy-note">${esc(I18n.t("copy-execution-fill-note"))}</p>
+    <section class="copy-card"><h4>${esc(I18n.t("copy-execution-target-difference-title"))}</h4><p class="copy-note">${esc(I18n.t("copy-execution-target-difference-note"))}</p>
       <dl class="copy-defs">${definitionRows(
         [
           [I18n.t("copy-execution-samples"), String(slippage.samples || 0)],
@@ -92,6 +94,6 @@ function body(insights, defaults, esc) {
   </div>`;
 }
 
-export function renderExecution({ insights, error, range, defaults }, esc) {
-  return `${rangeHead(I18n.t("copy-execution-title"), range, esc)}${insightsBody(insights, error, esc, (data) => body(data, defaults, esc))}`;
+export function renderExecution({ ws, insights, error, range, defaults }, esc) {
+  return `${rangeHead(I18n.t("copy-execution-title"), range, esc)}${insightsBody(insights, error, esc, (data) => body(data, defaults, esc))}${paperModelCard(ws, defaults, esc, I18n.t("copy-execution-wait-note"))}`;
 }

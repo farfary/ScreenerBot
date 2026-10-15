@@ -16,6 +16,11 @@ copy-skip-invalid-sizing = Ukuran tugas tidak valid
 copy-skip-invalid-slippage = Slippage tugas tidak valid
 copy-skip-invalid-exit-policy = Aturan exit tugas tidak valid
 copy-skip-invalid-price = Tidak ada harga pasar yang dapat digunakan
+copy-skip-paper-quote-unavailable = Kuotasi swap tidak dapat diperoleh untuk fill paper
+copy-skip-paper-quote-unfillable = Kuotasi tidak dapat menghasilkan fill paper yang dapat digunakan
+copy-skip-paper-minimum-output-not-met = Kuotasi kedua berada di bawah output minimum kuotasi pertama
+copy-skip-paper-queue-full = Antrean eksekusi paper tugas ini penuh
+copy-skip-paper-execution-unavailable = Eksekusi paper tidak selesai: layanan berhenti, tugas atau kepemilikan berubah, atau permintaan menduplikasi permintaan yang sedang berjalan
 copy-skip-not-sell-swap = Aktivitas dompet bukan penjualan
 copy-skip-exit-mode-disabled = Penjualan dompet diabaikan: tugas menjual berdasarkan aturannya sendiri
 copy-skip-force-stopped = Trading dihentikan paksa
@@ -202,13 +207,13 @@ copy-toast-global-failed = Pemrosesan salinan tidak dapat diubah
 ## Onboarding
 
 copy-onboarding-title = Salin dompet yang Anda percaya, buktikan dulu di Paper
-copy-onboarding-body = Setiap tugas dimulai di Paper: trade target disimulasikan pada harga pool dengan slippage dan biaya Anda, dan aturan exit Anda berjalan pada buku paper. Aktifkan Live per dompet setelah hasil paper-nya memenuhi syarat.
+copy-onboarding-paper-body = Setiap tugas dimulai di Paper: trade target disimulasikan dari dua kuotasi router dengan estimasi biaya jaringan, dan aturan exit Anda berjalan pada buku paper. Aktifkan Live per dompet setelah hasil paper-nya memenuhi syarat.
 copy-onboarding-add = Tambahkan dompet pertama Anda
 copy-setup-gate-title = Copy trading memerlukan dompet
 copy-onboarding-observe = Amati
 copy-onboarding-observe-detail = Deteksi swap dompet tanpa mengeluarkan { -sol }.
 copy-onboarding-evaluate = Evaluasi
-copy-onboarding-evaluate-detail = Baca P&L paper, win rate, trade yang dilewati, kecepatan deteksi, dan slippage.
+copy-onboarding-evaluate-paper-detail = Baca P&L paper, win rate, trade yang dilewati, kecepatan deteksi, dan selisih harga terhadap target.
 copy-onboarding-arm = Aktifkan
 copy-onboarding-arm-detail = Lolos pemeriksaan kesiapan, lalu aktifkan swap sungguhan.
 
@@ -251,6 +256,26 @@ copy-settings-unit-rounds = ronde
 copy-settings-save = Simpan pengaturan
 copy-settings-load-failed = Pengaturan salin tidak dapat dimuat
 copy-settings-saved = Pengaturan copy trading disimpan
+copy-outcome-paper-filled-legacy = Estimasi paper lama
+copy-outcome-paper-filled-quote = Fill paper berbasis kuotasi
+copy-outcome-paper-sell-legacy = Estimasi exit paper lama
+copy-outcome-paper-sell-quote = Exit paper berbasis kuotasi
+
+## Paper execution model
+
+copy-paper-model = Model eksekusi paper
+copy-paper-model-note = Setiap fill paper menggunakan dua kuotasi router yang disesuaikan dengan ukuran trade, diambil dengan jarak sebesar asumsi waktu tunggu. Kuotasi kedua tetap harus memenuhi output minimum kuotasi pertama. Harga pool tetap menilai kepemilikan dan memicu aturan exit. Biaya jaringan dan prioritas adalah satu estimasi yang dihitung sekali; biaya platform sudah termasuk dalam output yang dikuotasikan. MEV dan urutan validator tidak disimulasikan.
+copy-paper-wait-label = Asumsi waktu tunggu pendaratan
+copy-paper-queue-label = Ukuran antrean per tugas
+copy-paper-legacy-title = Estimasi paper lama
+copy-paper-legacy-note = Estimasi hanya-baca yang tersimpan dari sebelum simulasi berbasis kuotasi. Estimasi ini bukan bagian dari pengeluaran atau kepemilikan buku saat ini dan tidak menyediakan tindakan. Jumlah yang tersisa dinilai pada harga terakhir yang tersimpan untuk setiap token, bukan pada harga pasar saat ini.
+copy-paper-legacy-spent = Estimasi pengeluaran lama
+copy-paper-legacy-realized = Estimasi terealisasi lama
+copy-paper-legacy-col-tokens = Token
+copy-paper-legacy-col-cost = Sisa biaya ({ -sol })
+copy-paper-legacy-col-realized = Estimasi terealisasi ({ -sol })
+copy-paper-legacy-col-price = Harga tersimpan terakhir ({ -sol })
+copy-paper-legacy-col-remaining = Sisa P&L pada harga tersimpan ({ -sol })
 
 ## Workspace
 
@@ -459,7 +484,7 @@ copy-warning-mirror = Hanya penjualan dompet yang menutup kepemilikan: tidak ada
 copy-warning-no-rules = Tidak ada aturan exit yang aktif dan penjualan dompet diabaikan: kepemilikan tidak pernah dijual.
 copy-warning-no-stop-loss = Tidak ada stop loss yang berlaku: token yang turun ditahan sampai aturan lain atau dompet menjual.
 copy-warning-stop-delay = Stop loss menunggu { $hold } setelah setiap pembelian: token yang turun lebih cepat akan tertutup jauh melewati { $threshold }.
-copy-warning-take-profit-cost = Take profit di { $target } tidak menutupi biaya penjualan (slippage { $slippage } dan biaya swap { $fee }), sehingga putaran ditutup dengan rugi.
+copy-warning-take-profit-small = Take profit di { $target } tidak lebih besar daripada biaya penjualan: toleransi slippage hingga { $slippage } dan biaya swap { $fee }. Target kecil mungkin tidak menutupinya. Toleransi adalah batas harga jual, bukan biaya yang diprediksi.
 copy-warning-trailing-distance = Jarak trailing sama dengan atau lebih besar dari keuntungan aktivasinya, sehingga trail yang aktif dapat menjual di bawah harga entry.
 
 ## Execution tab
@@ -478,21 +503,22 @@ copy-execution-arrival-samples =
        *[other] { $count } trade terlihat saat terjadi
     }
 copy-execution-p95 = Kedatangan p95
-copy-execution-median-slippage = Median slippage
-copy-execution-slippage-samples =
+copy-execution-target-price-difference = Median selisih harga terhadap target
+copy-execution-target-difference-samples =
     { $count ->
        *[other] { $count } fill terukur
     }
-copy-execution-worst-slippage = Slippage terburuk
-copy-execution-average-slippage = Rata-rata { $amount }
+copy-execution-target-difference-worst = Selisih harga terburuk terhadap target
+copy-execution-target-difference-average = Rata-rata selisih harga terhadap target { $amount }
 copy-execution-delay-title = Jeda deteksi
 copy-execution-delay-note = Waktu dari blok dompet hingga bot ini melihat trade. Pemutaran ulang setelah downtime tidak dihitung.
 copy-execution-delay-limit = Batang yang melewati batas kedatangan { $limit } berwarna kuning.
 copy-execution-fastest = Tercepat
 copy-execution-average = Rata-rata
 copy-execution-slowest = Terlambat
-copy-execution-fill-title = Fill dibandingkan dompet
-copy-execution-fill-note = Positif berarti lebih buruk daripada dompet: membayar lebih saat beli, menerima lebih sedikit saat jual tiruan. Fill paper untuk token tanpa harga pool dihargai pada trade dompet itu sendiri, sehingga tidak mengukur apa pun dan tidak disertakan.
+copy-execution-target-difference-title = Selisih harga terhadap target
+copy-execution-target-difference-note = Membandingkan harga setiap fill dengan harga trade dompet itu sendiri jika keduanya di atas nol. Positif berarti fill lebih buruk daripada yang didapat dompet: membayar lebih saat beli atau menerima lebih sedikit saat jual. Ini adalah perbandingan, bukan toleransi slippage tugas.
+copy-execution-wait-note = Jeda deteksi diukur dari blok dompet. Waktu tunggu pendaratan adalah asumsi model paper; waktu yang dihabiskan keputusan di antrean tugas ditambahkan padanya dan dicatat pada setiap fill.
 copy-execution-samples = Sampel
 copy-execution-median = Median
 copy-execution-worst = Terburuk
@@ -513,7 +539,7 @@ copy-table-rounds = Putaran
 copy-table-realized = Terealisasi ({ -sol })
 copy-table-profit-factor = Profit factor
 copy-table-average-hold = Rata-rata hold
-copy-table-median-slippage = Median slippage
+copy-table-target-difference = Median selisih harga terhadap target
 
 ## Charts
 
@@ -593,7 +619,7 @@ copy-holdings-token-details = Buka detail token
 copy-holdings-opened = Dibuka { $time }
 copy-holdings-no-pool-price = Tidak ada harga pool
 copy-holdings-close = Tutup
-copy-holdings-write-off = Hapus buku
+copy-holdings-close-pending = Penutupan tertunda
 copy-holdings-activity = Aktivitas
 copy-holdings-no-exit-rule = Tanpa aturan exit
 copy-holdings-watch-stop = Stop { $level }
@@ -618,7 +644,7 @@ copy-holdings-col-invested = Diinvestasikan ({ -sol })
 copy-holdings-col-proceeds = Hasil ({ -sol })
 copy-holdings-col-exit = Exit
 copy-holdings-col-closed = Ditutup
-copy-holdings-price-note = Harga dalam { -sol } per token. Entry mencakup slippage dan biaya pembelian; puncak dan level exit relatif terhadapnya, sehingga kepemilikan dibuka dengan puncak di bawah entry. Arahkan kursor ke salah satunya untuk melihat harga pool-nya.
+copy-holdings-marks-note = Harga dalam { -sol } per token. Penilaian dan level exit menggunakan harga pool, yang juga memicu aturan exit; fill yang dicatat menggunakan kuotasi router. Entry mencakup estimasi biaya jaringan pembelian; puncak dan level exit relatif terhadapnya, sehingga kepemilikan dibuka dengan puncak di bawah entry. Arahkan kursor ke salah satunya untuk melihat harga pool-nya.
 copy-holdings-paused-rules = Dijeda: tidak ada salinan baru. Aturan exit Anda tetap menutup kepemilikan ini.
 copy-holdings-paused-mirror = Dijeda: tidak ada salinan baru. Penjualan dompet tetap menutup kepemilikan ini.
 copy-holdings-paused-hybrid = Dijeda: tidak ada salinan baru. Penjualan dompet dan aturan exit Anda tetap menutup kepemilikan ini.
@@ -627,17 +653,17 @@ copy-holdings-closed-loading = Memuat putaran tertutup…
 copy-holdings-closed-empty = Belum ada putaran tertutup.
 copy-holdings-closed-latest = { $shown } terbaru dari { $total } putaran.
 copy-holdings-close-title = Tutup kepemilikan paper
-copy-holdings-close-message = Jual { $token } di buku paper pada harga pool ({ $price }) dengan slippage dan biaya tugas.
+copy-holdings-close-quote-message = Tutup kepemilikan paper { $token } dengan dua kuotasi router yang berjarak sekitar { $delay }. Fill menggunakan kuotasi kedua, yang harus memenuhi output minimum kuotasi pertama, dikurangi estimasi biaya jaringan. Jika tidak ada kuotasi yang dapat digunakan, kepemilikan tetap terbuka dan tidak berubah.
 copy-holdings-close-confirm = Tutup kepemilikan
-copy-holdings-write-off-title = Hapus buku kepemilikan paper
-copy-holdings-write-off-message = { $token } tidak memiliki harga pool untuk dijual. Menghapus buku menutupnya di nol dan mencatat biaya { $cost }-nya sebagai kerugian.
 copy-holdings-keep = Simpan
-copy-holdings-written-off = { $token } dihapus buku
 copy-holdings-closed = { $token } ditutup
-copy-holdings-written-off-detail = Ditutup dengan hasil nol
 copy-holdings-sold-at = Dijual di { $price }
 copy-holdings-close-failed = Kepemilikan tidak dapat ditutup
-copy-holdings-reset-message = Mulai ulang “{ $name }”: kepemilikan paper, pengeluaran, fill, exit, dan trade yang dilewati dihapus. Aturan dan dompet tetap ada.
+copy-holdings-close-pending-detail = Penutupan sedang diantrekan atau berjalan. Hasilnya akan muncul di Aktivitas.
+copy-holdings-close-unconfirmed = Hasil penutupan belum dikonfirmasi
+copy-holdings-close-unconfirmed-detail = Koneksi terputus sebelum hasil diterima dan Aktivitas belum memiliki hasil. Periksa Aktivitas sebelum menutup lagi.
+copy-holdings-closed-check-activity = Kepemilikan sudah ditutup. Fill yang dicatat ada di Aktivitas.
+copy-holdings-reset-quote-message = Mulai ulang “{ $name }”: kepemilikan paper saat ini, pengeluaran, fill, exit, dan trade yang dilewati dihapus dan buku baru berbasis kuotasi dimulai. Estimasi lama dan riwayat live tetap ada. Aturan dan dompet tetap ada.
 copy-holdings-reset-cancel = Simpan riwayat
 copy-holdings-reset-done = Buku paper diatur ulang
 copy-holdings-reset-detail =
@@ -651,7 +677,6 @@ copy-holdings-reset-failed = Buku paper tidak dapat diatur ulang
 copy-activity-title = Aktivitas
 copy-activity-filter-label = Filter aktivitas
 copy-filter-all = Semua
-copy-outcome-paper-filled = Beli paper
 copy-outcome-live-submitted = Beli live terkirim
 copy-outcome-live-confirmed = Beli live terkonfirmasi
 copy-outcome-live-failed = Beli live gagal
@@ -660,9 +685,14 @@ copy-outcome-live-sell-submitted = Jual live terkirim
 copy-outcome-live-sell-failed = Jual live gagal
 copy-outcome-skipped = Dilewati
 copy-activity-decision = Keputusan
-copy-activity-paper-exit = Exit paper · { $rule }
+copy-activity-paper-exit-quote = Exit paper berbasis kuotasi · { $rule }
+copy-activity-paper-exit-legacy = Estimasi exit paper lama · { $rule }
 copy-activity-filled = { $input } di { $price } · dompet membeli { $target }
+copy-activity-filled-target-difference = { $input } di { $price } · dompet membeli { $target } · selisih harga terhadap target { $difference }
 copy-activity-filled-slippage = { $input } di { $price } · dompet membeli { $target } · slippage { $slippage }
+copy-activity-quote-router = Router { $router } · kuotasi diterima { $initial } dan { $landing }
+copy-activity-quote-wait = Asumsi tunggu { $assumed } · diantrekan { $queued }
+copy-activity-quote-fees = Estimasi biaya jaringan dan prioritas { $fee }, dihitung sekali · biaya platform sudah termasuk dalam output yang dikuotasikan
 copy-activity-filled-unpriced = { $input } di { $price } · dihargai pada trade dompet, tanpa harga pool
 copy-activity-live-sized = { $sized } · dompet membeli { $target }
 copy-activity-sell-nothing = Dompet menjual { $amount } · tidak ada yang dimiliki untuk dijual
@@ -735,7 +765,7 @@ copy-editor-name-placeholder = mis. Rotator cepat
 copy-editor-enabled-title = Proses trade dompet
 copy-editor-enabled-help = Jika nonaktif, tugas tetap dijeda sampai Anda melanjutkannya.
 copy-editor-note-live = Tugas ini live: perubahan berlaku pada salinan sungguhan berikutnya.
-copy-editor-note-paper = Tugas berjalan di Paper sampai Anda mengaktifkannya: trade disimulasikan pada harga pool dan tidak ada dana yang dikeluarkan.
+copy-editor-note-paper-quote = Tugas berjalan di Paper sampai Anda mengaktifkannya: trade disimulasikan dari kuotasi router dan tidak ada dana yang dikeluarkan.
 copy-editor-copy-size = Ukuran salinan
 copy-editor-sizing-fixed = Jumlah tetap
 copy-editor-sizing-ratio = Porsi dari trade dompet

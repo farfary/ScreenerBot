@@ -1,33 +1,25 @@
 // Copyright (c) 2024-2026 ScreenerBot (screenerbot.io)
 // SPDX-License-Identifier: BUSL-1.1
 
-//! The promo copy desk: three copied wallets and everything the product records
-//! for them -- decisions, the paper ledger and the real positions the live tasks
-//! opened. It is built per request, so every Copy Trading endpoint, the Positions
-//! page and the Watched tab read one session.
-//!
-//! Nothing here states a figure the product derives. Fills and sells go through
-//! the real paper simulators, and the endpoints run the real stats, rounds,
-//! insights and workspace assembly over the desk.
+//! Shared composition and telemetry for Promo Studio's three copied wallets.
+//! Paper and live fixture families settle into the same production stats, rounds,
+//! insights and workspace assembly.
+
+mod live;
+mod paper;
 
 use std::collections::HashSet;
 
 use chrono::{DateTime, Duration, Utc};
 
 use crate::chains::active_chain;
-use crate::chains::RawAmount;
-use crate::positions::{Position, PositionManagement, PositionOrigin, PriceSource};
+use crate::positions::{Position, PositionManagement, PositionOrigin};
 use crate::trader::copy::{
-    management_for_exit_mode, simulate_fill, simulate_sell, CopyActivityRow, CopyMode, CopyOutcome,
-    CopySellDecision, CopySkip, CopyTask, CopyTelemetry, ExitMode, LiveDecision, PaperCosts,
-    PaperDecision, PaperExitRule, PaperFill, PaperPosition, SizingMode, TargetObservations,
+    management_for_exit_mode, CopyActivityRow, CopyMode, CopyOutcome, CopySkip, CopyTask,
+    CopyTelemetry, ExitMode, PaperPosition, SizingMode, TargetObservations,
 };
-use crate::trader::policy::{
-    ExitPolicyOverrides, RoiPolicyOverrides, StopLossPolicyOverrides, TimePolicyOverrides,
-    TrailingPolicyOverrides,
-};
+use crate::trader::policy::ExitPolicyOverrides;
 
-use super::super::aggregates::{closed_exit_offset_hours, closed_hold_minutes};
 use super::super::data::{PROMO_CLOSED_TOKENS, PROMO_OPEN_TOKENS};
 
 /// The copied wallets: (task id, label, address, age in days). The Watched tab
@@ -53,68 +45,6 @@ pub(in crate::webserver::promo) const PROMO_COPY_WALLETS: [(i64, &str, &str, i64
         21,
     ),
 ];
-
-const COSTS: PaperCosts = PaperCosts {
-    network_fee_native: 0.000_005,
-    priority_fee_native: 0.000_1,
-};
-
-/// Real positions each live task opened: (task id, `PROMO_OPEN_TOKENS` indices,
-/// `PROMO_CLOSED_TOKENS` indices). They are positions the Positions page already
-/// lists, each sized by its task's rule, closed only for a reason the task's exit
-/// mode allows, and opened inside the task's lifetime.
-const LIVE_POSITIONS: [(i64, &[usize], &[usize]); 2] =
-    [(1, &[0, 1], &[0, 3, 5]), (3, &[2, 4], &[1, 6, 9, 18])];
-
-/// The paper task's closed rounds: (`PROMO_CLOSED_TOKENS` index for the mint and
-/// entry price, price move at the exit in %, the rule that sold it -- `None` is a
-/// mirrored wallet sell -- hours since the close, minutes held). Each rule exit
-/// sits where `paper_overrides` fires.
-const PAPER_ROUNDS: [(usize, f64, Option<PaperExitRule>, i64, i64); 12] = [
-    (2, 30.6, Some(PaperExitRule::TakeProfit), 5, 95),
-    (4, 24.0, None, 11, 140),
-    (17, -15.4, Some(PaperExitRule::StopLoss), 20, 45),
-    (5, 13.1, Some(PaperExitRule::TrailingStop), 29, 210),
-    (7, 31.2, Some(PaperExitRule::TakeProfit), 41, 75),
-    (8, 9.0, None, 55, 320),
-    (19, -3.1, Some(PaperExitRule::TimeOverride), 70, 360),
-    (9, 18.4, Some(PaperExitRule::TrailingStop), 86, 130),
-    (10, 27.0, None, 104, 190),
-    (21, -15.8, Some(PaperExitRule::StopLoss), 130, 60),
-    (11, 30.4, Some(PaperExitRule::TakeProfit), 170, 110),
-    (13, 6.5, None, 196, 400),
-];
-
-/// The paper task's open holdings: (`PROMO_OPEN_TOKENS` index, minutes held,
-/// move since the buy in %, peak above the current price in %). One has armed
-/// its trailing stop, one has not, one is under water.
-const PAPER_HOLDINGS: [(usize, i64, f64, f64); 3] =
-    [(6, 41, 18.0, 2.0), (7, 78, 7.0, 1.0), (8, 33, -4.0, 0.0)];
-
-/// Rules the paper task runs under instead of the Trader's.
-fn paper_overrides() -> ExitPolicyOverrides {
-    ExitPolicyOverrides {
-        stop_loss: StopLossPolicyOverrides {
-            enabled: Some(true),
-            threshold_pct: Some(15.0),
-            ..Default::default()
-        },
-        trailing: TrailingPolicyOverrides {
-            enabled: Some(true),
-            activation_pct: Some(12.0),
-            distance_pct: Some(5.0),
-        },
-        roi: RoiPolicyOverrides {
-            enabled: Some(true),
-            target_profit_pct: Some(30.0),
-        },
-        time: TimePolicyOverrides {
-            enabled: Some(true),
-            loss_threshold_pct: Some(0.0),
-            duration_seconds: Some(14_400.0),
-        },
-    }
-}
 
 fn base_task(wallet: (i64, &str, &str, i64), now: DateTime<Utc>) -> CopyTask {
     let created_at = now - Duration::days(wallet.3);
@@ -159,7 +89,7 @@ pub(super) fn tasks(now: DateTime<Utc>) -> Vec<CopyTask> {
             ..base_task(whale, now)
         },
         CopyTask {
-            exit_policy_overrides: paper_overrides(),
+            exit_policy_overrides: paper::paper_overrides(),
             total_budget_native: 8.0,
             max_target_trade_native: Some(25.0),
             ..base_task(scout, now)
@@ -277,7 +207,7 @@ pub(super) fn mark(position: &PaperPosition) -> Option<f64> {
 pub(in crate::webserver::promo) fn position_owner(
     mint: &str,
 ) -> (PositionOrigin, PositionManagement) {
-    let owner = LIVE_POSITIONS
+    let owner = live::LIVE_POSITIONS
         .iter()
         .find(|(_, open, closed)| {
             open.iter().any(|&index| PROMO_OPEN_TOKENS[index].2 == mint)
@@ -305,336 +235,9 @@ pub(in crate::webserver::promo) fn position_owner(
     }
 }
 
-/// A real position a live task opened.
-struct LiveRound<'a> {
-    mint: &'a str,
-    symbol: &'a str,
-    name: &'a str,
-    entry: f64,
-    size: f64,
-    entry_time: DateTime<Utc>,
-    /// (exit price, exit time, closed reason) once it has closed.
-    close: Option<(f64, DateTime<Utc>, &'a str)>,
-    /// The current price while it is open.
-    current: Option<f64>,
-}
-
-/// The position as the positions store holds it; its figures match the Positions
-/// page's row for the same token.
-fn live_position(task: &CopyTask, round: &LiveRound, now: DateTime<Utc>) -> Position {
-    let tokens =
-        RawAmount::from_integral_f64((round.size / round.entry * 1e9).trunc()).unwrap_or_default();
-    let exit_price = round.close.map(|(price, ..)| price);
-    let exit_time = round.close.map(|(_, at, _)| at);
-    let move_pct = |price: f64| (price - round.entry) / round.entry * 100.0;
-    let pnl = exit_price.map(|price| move_pct(price) / 100.0 * round.size);
-    let unrealized = round
-        .current
-        .map(|price| move_pct(price) / 100.0 * round.size);
-    let reference = exit_price.or(round.current).unwrap_or(round.entry);
-    Position {
-        id: None,
-        mint: round.mint.to_owned(),
-        symbol: round.symbol.to_owned(),
-        name: round.name.to_owned(),
-        entry_price: round.entry,
-        entry_time: round.entry_time,
-        exit_price,
-        exit_time,
-        position_type: "long".to_owned(),
-        entry_size_native: round.size,
-        total_size_native: round.size,
-        price_highest: reference.max(round.entry) * 1.03,
-        price_lowest: reference.min(round.entry) * 0.97,
-        entry_transaction_signature: Some(signature("entry", task.id, 0, round.mint)),
-        exit_transaction_signature: exit_time.map(|_| signature("exit", task.id, 0, round.mint)),
-        token_amount: Some(tokens),
-        effective_entry_price: Some(round.entry),
-        effective_exit_price: exit_price,
-        native_received: pnl.map(|pnl| round.size + pnl),
-        profit_target_min: Some(15.0),
-        profit_target_max: Some(50.0),
-        liquidity_tier: Some("high".to_owned()),
-        transaction_entry_verified: true,
-        transaction_exit_verified: exit_time.is_some(),
-        entry_fee_raw: Some(5000),
-        exit_fee_raw: exit_time.map(|_| 5000),
-        current_price: round.current,
-        current_price_updated: round.current.map(|_| now),
-        current_price_source: round.current.map(|_| PriceSource::Pool),
-        phantom_remove: false,
-        phantom_confirmations: 0,
-        phantom_first_seen: None,
-        synthetic_exit: false,
-        closed_reason: round.close.map(|(.., reason)| reason.to_owned()),
-        pnl,
-        pnl_percent: exit_price.map(move_pct),
-        unrealized_pnl: unrealized,
-        unrealized_pnl_percent: round.current.map(move_pct),
-        remaining_token_amount: round.current.map(|_| tokens),
-        total_exited_amount: if exit_time.is_some() {
-            tokens
-        } else {
-            RawAmount::ZERO
-        },
-        average_exit_price: exit_price,
-        partial_exit_count: 0,
-        dca_count: 0,
-        average_entry_price: round.entry,
-        last_dca_time: None,
-        archived: false,
-        archived_at: None,
-        origin: PositionOrigin::Copy {
-            task_id: task.id,
-            source_wallet: task.target_address.clone(),
-        },
-        management: management_for_exit_mode(task.exit_mode),
-        round_key: None,
-        basis_complete: true,
-        history_complete: true,
-        holding_state: None,
-    }
-}
-
 type Decisions = Vec<(DateTime<Utc>, CopyOutcome)>;
 
-/// The copy that opened a live position, confirmed at its entry time.
-fn live_buy(task: &CopyTask, round: &LiveRound, n: usize, decisions: &mut Decisions) {
-    let arrival = arrival_ms(task.id, n);
-    let block = round.entry_time - Duration::milliseconds(arrival + 900);
-    let target_price = round.entry / (1.002 + (n % 5) as f64 * 0.001);
-    let telemetry = observed(block, arrival, target_price, Some(round.entry), true);
-    let target_size = target_trade_sol(task, round.size);
-    decisions.push((
-        telemetry.decided_at,
-        CopyOutcome::LiveConfirmed(LiveDecision {
-            task_id: task.id,
-            target_address: task.target_address.clone(),
-            target_signature: signature("target", task.id, n, round.mint),
-            mint: round.mint.to_owned(),
-            target_size_sol: target_size,
-            target_token_amount: target_size / target_price,
-            sized_sol: round.size,
-            transaction_signature: Some(signature("copy", task.id, n, round.mint)),
-            error: None,
-            telemetry,
-        }),
-    ));
-}
-
-/// A live task's positions and the copies that opened them; returns its spend.
-fn live_desk(
-    task: &CopyTask,
-    now: DateTime<Utc>,
-    decisions: &mut Decisions,
-    positions: &mut Vec<Position>,
-) -> f64 {
-    let Some((_, open, closed)) = LIVE_POSITIONS.iter().find(|(id, ..)| *id == task.id) else {
-        return 0.0;
-    };
-    let open_rounds = open.iter().map(|&index| {
-        let (symbol, name, mint, _logo, entry, current, size, hold_minutes) =
-            PROMO_OPEN_TOKENS[index];
-        LiveRound {
-            mint,
-            symbol,
-            name,
-            entry,
-            size,
-            entry_time: now - Duration::minutes(hold_minutes),
-            close: None,
-            current: Some(current),
-        }
-    });
-    let closed_rounds = closed.iter().map(|&index| {
-        let (symbol, name, mint, _logo, entry, exit, size, reason) = PROMO_CLOSED_TOKENS[index];
-        let exit_time = now - Duration::hours(closed_exit_offset_hours(index));
-        LiveRound {
-            mint,
-            symbol,
-            name,
-            entry,
-            size,
-            entry_time: exit_time - Duration::minutes(closed_hold_minutes(index)),
-            close: Some((exit, exit_time, reason)),
-            current: None,
-        }
-    });
-    let mut spent = 0.0;
-    for (n, round) in open_rounds.chain(closed_rounds).enumerate() {
-        live_buy(task, &round, n, decisions);
-        positions.push(live_position(task, &round, now));
-        spent += round.size;
-    }
-    spent
-}
-
 /// A copied paper buy at `market`; returns the fill and when it was decided.
-fn paper_buy(
-    task: &CopyTask,
-    mint: &str,
-    market: f64,
-    size: f64,
-    block: DateTime<Utc>,
-    n: usize,
-    decisions: &mut Decisions,
-) -> Option<(PaperFill, DateTime<Utc>)> {
-    let fill = simulate_fill(
-        size,
-        crate::trader::copy::PaperMarket::pool(market),
-        task.slippage_pct,
-        COSTS,
-    )
-    .ok()?;
-    let arrival = arrival_ms(task.id, n);
-    let target_price = market * (1.0 + (n % 4) as f64 * 0.0015);
-    let telemetry = observed(
-        block,
-        arrival,
-        target_price,
-        Some(fill.fill_price_sol),
-        false,
-    );
-    let decided_at = telemetry.decided_at;
-    let target_size = target_trade_sol(task, size);
-    decisions.push((
-        decided_at,
-        CopyOutcome::PaperFilled(PaperDecision {
-            task_id: task.id,
-            target_address: task.target_address.clone(),
-            signature: signature("buy", task.id, n, mint),
-            mint: mint.to_owned(),
-            target_size_sol: target_size,
-            target_token_amount: target_size / target_price,
-            sized_sol: size,
-            fill: fill.clone(),
-            telemetry,
-        }),
-    ));
-    Some((fill, decided_at))
-}
-
-/// The paper task's rounds and holdings, booked the way the ledger books them;
-/// returns its spend.
-fn paper_desk(
-    task: &CopyTask,
-    now: DateTime<Utc>,
-    decisions: &mut Decisions,
-    book: &mut Vec<PaperPosition>,
-) -> f64 {
-    let SizingMode::Fixed { sol: size } = task.sizing else {
-        return 0.0;
-    };
-    let mut spent = 0.0;
-    for (n, (index, move_pct, rule, closed_hours, held_minutes)) in
-        PAPER_ROUNDS.into_iter().enumerate()
-    {
-        let (_, _, mint, _, entry, ..) = PROMO_CLOSED_TOKENS[index];
-        let closed_block = now - Duration::hours(closed_hours);
-        let opened_block = closed_block - Duration::minutes(held_minutes);
-        let Some((fill, opened_at)) =
-            paper_buy(task, mint, entry, size, opened_block, n, decisions)
-        else {
-            continue;
-        };
-        spent += size;
-        let exit = entry * (1.0 + move_pct / 100.0);
-        let Ok(sell) = simulate_sell(
-            fill.token_amount,
-            crate::trader::copy::PaperMarket::pool(exit),
-            task.slippage_pct,
-            COSTS,
-        ) else {
-            continue;
-        };
-        let (telemetry, target_signature, target_tokens, target_sol) = match rule {
-            None => {
-                let target_tokens = target_trade_sol(task, size) / entry;
-                (
-                    observed(
-                        closed_block,
-                        arrival_ms(task.id, n + PAPER_ROUNDS.len()),
-                        exit,
-                        Some(sell.fill_price_sol),
-                        false,
-                    ),
-                    signature("sell", task.id, n, mint),
-                    target_tokens,
-                    target_tokens * exit,
-                )
-            }
-            Some(_) => (
-                rule_exit(closed_block, sell.fill_price_sol),
-                format!("paper-exit:{mint}:{}:0", opened_at.timestamp()),
-                0.0,
-                0.0,
-            ),
-        };
-        let closed_at = telemetry.decided_at;
-        book.push(PaperPosition {
-            task_id: task.id,
-            mint: mint.to_owned(),
-            token_amount: 0.0,
-            cost_basis_native: 0.0,
-            invested_native: fill.total_cost_sol,
-            realized_proceeds_native: sell.net_proceeds_sol,
-            realized_cost_native: fill.total_cost_sol,
-            buys: 1,
-            sells: 1,
-            last_price_native: Some(exit),
-            last_price_at: Some(closed_at),
-            opened_at,
-            closed_at: Some(closed_at),
-            peak_price_native: None,
-        });
-        decisions.push((
-            closed_at,
-            CopyOutcome::PaperSellObserved(CopySellDecision {
-                task_id: task.id,
-                target_address: task.target_address.clone(),
-                target_signature,
-                mint: mint.to_owned(),
-                target_token_amount: target_tokens,
-                target_sol_amount: target_sol,
-                exit_percentage: None,
-                transaction_signature: None,
-                error: None,
-                telemetry,
-                paper_fill: Some(sell),
-                exit_rule: rule,
-            }),
-        ));
-    }
-    for (n, (index, held_minutes, move_pct, peak_pct)) in PAPER_HOLDINGS.into_iter().enumerate() {
-        let (_, _, mint, _, _, current, ..) = PROMO_OPEN_TOKENS[index];
-        let market = current / (1.0 + move_pct / 100.0);
-        let block = now - Duration::minutes(held_minutes);
-        let n = PAPER_ROUNDS.len() * 2 + n;
-        let Some((fill, opened_at)) = paper_buy(task, mint, market, size, block, n, decisions)
-        else {
-            continue;
-        };
-        spent += size;
-        book.push(PaperPosition {
-            task_id: task.id,
-            mint: mint.to_owned(),
-            token_amount: fill.token_amount,
-            cost_basis_native: fill.total_cost_sol,
-            invested_native: fill.total_cost_sol,
-            realized_proceeds_native: 0.0,
-            realized_cost_native: 0.0,
-            buys: 1,
-            sells: 0,
-            last_price_native: Some(current),
-            last_price_at: Some(now),
-            opened_at,
-            closed_at: None,
-            peak_price_native: Some((current * (1.0 + peak_pct / 100.0)).max(fill.fill_price_sol)),
-        });
-    }
-    spent
-}
-
 /// Declined target buys, each for a reason its task's rules give.
 fn skips(tasks: &[CopyTask], now: DateTime<Utc>, decisions: &mut Decisions) {
     let open = |index: usize| (PROMO_OPEN_TOKENS[index].2, PROMO_OPEN_TOKENS[index].5);
@@ -722,6 +325,7 @@ fn skips(tasks: &[CopyTask], now: DateTime<Utc>, decisions: &mut Decisions) {
                 reason,
                 decided_at: telemetry.decided_at,
                 telemetry: Some(telemetry),
+                paper: None,
             },
         ));
     }
@@ -746,8 +350,8 @@ impl Desk {
         let mut spend = Vec::with_capacity(tasks.len());
         for task in &tasks {
             let spent = match task.mode {
-                CopyMode::Live => live_desk(task, now, &mut decisions, &mut positions),
-                CopyMode::Paper => paper_desk(task, now, &mut decisions, &mut paper_book),
+                CopyMode::Live => live::live_desk(task, now, &mut decisions, &mut positions),
+                CopyMode::Paper => paper::paper_desk(task, now, &mut decisions, &mut paper_book),
             };
             spend.push((task.id, spent));
         }

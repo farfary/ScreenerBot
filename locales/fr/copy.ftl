@@ -18,6 +18,11 @@ copy-skip-invalid-sizing = Le dimensionnement de la tâche est invalide
 copy-skip-invalid-slippage = Le slippage de la tâche est invalide
 copy-skip-invalid-exit-policy = Les règles de sortie de la tâche sont invalides
 copy-skip-invalid-price = Aucun prix de marché exploitable
+copy-skip-paper-quote-unavailable = Aucune cotation de swap n'a pu être obtenue pour l'exécution simulée
+copy-skip-paper-quote-unfillable = La cotation ne permet pas d'obtenir une exécution simulée exploitable
+copy-skip-paper-minimum-output-not-met = La seconde cotation était inférieure au minimum de sortie de la première
+copy-skip-paper-queue-full = La file d'exécution simulée de cette tâche est pleine
+copy-skip-paper-execution-unavailable = L'exécution simulée n'a pas abouti : le service s'est arrêté, la tâche ou la détention a changé, ou la demande doublonnait une demande en cours
 copy-skip-not-sell-swap = L'activité du portefeuille n'était pas une vente
 copy-skip-exit-mode-disabled = Vente du portefeuille ignorée : la tâche vend selon ses propres règles
 copy-skip-force-stopped = Le trading est en arrêt forcé
@@ -226,13 +231,13 @@ copy-toast-global-failed = Le traitement des copies n'a pas pu être modifié
 ## Onboarding (pages/copy.html)
 
 copy-onboarding-title = Copiez les portefeuilles de confiance, en les validant d'abord en simulé
-copy-onboarding-body = Chaque tâche démarre en simulé : les trades ciblés sont simulés au prix du pool avec votre slippage et vos frais, et vos règles de sortie s'appliquent au registre simulé. Armez le mode réel portefeuille par portefeuille une fois que ses résultats simulés le justifient.
+copy-onboarding-paper-body = Chaque tâche démarre en simulé : les trades ciblés sont simulés à partir de deux cotations de routeur avec des frais réseau estimés, et vos règles de sortie s'appliquent au registre simulé. Armez le mode réel portefeuille par portefeuille une fois que ses résultats simulés le justifient.
 copy-onboarding-add = Ajouter votre premier portefeuille
 copy-setup-gate-title = Le copy trading nécessite un portefeuille
 copy-onboarding-observe = Observer
 copy-onboarding-observe-detail = Détectez les swaps du portefeuille sans dépenser de { -sol }.
 copy-onboarding-evaluate = Évaluer
-copy-onboarding-evaluate-detail = Consultez le P&L simulé, le taux de réussite, les trades ignorés, la vitesse de détection et le slippage.
+copy-onboarding-evaluate-paper-detail = Consultez le P&L simulé, le taux de réussite, les trades ignorés, la vitesse de détection et l'écart de prix par rapport à la cible.
 copy-onboarding-arm = Armer
 copy-onboarding-arm-detail = Validez les contrôles de préparation, puis activez les swaps réels.
 
@@ -276,6 +281,26 @@ copy-settings-unit-rounds = tours
 copy-settings-save = Enregistrer les paramètres
 copy-settings-load-failed = Les paramètres de copie n'ont pas pu être chargés
 copy-settings-saved = Paramètres du copy trading enregistrés
+copy-outcome-paper-filled-legacy = Estimation simulée héritée
+copy-outcome-paper-filled-quote = Exécution simulée par cotation
+copy-outcome-paper-sell-legacy = Estimation de sortie simulée héritée
+copy-outcome-paper-sell-quote = Sortie simulée par cotation
+
+## Paper execution model
+
+copy-paper-model = Modèle d'exécution simulée
+copy-paper-model-note = Chaque exécution simulée utilise deux cotations de routeur calibrées sur le trade, prises à l'écart de l'attente supposée. La seconde cotation doit toujours atteindre le minimum de sortie de la première. Les prix de pool continuent de valoriser les détentions et de déclencher les règles de sortie. Les frais réseau et de priorité forment une seule estimation, comptée une fois ; les frais de plateforme sont déjà inclus dans la sortie cotée. Le MEV et l'ordre des validateurs ne sont pas simulés.
+copy-paper-wait-label = Attente d'atterrissage supposée
+copy-paper-queue-label = Taille de file par tâche
+copy-paper-legacy-title = Estimations simulées héritées
+copy-paper-legacy-note = Estimations en lecture seule conservées d'avant la simulation par cotation. Elles ne font pas partie des dépenses ni des détentions du registre actuel et n'offrent aucune action. Les montants restants sont valorisés au dernier prix enregistré de chaque token, jamais à un prix de marché actuel.
+copy-paper-legacy-spent = Dépenses estimées héritées
+copy-paper-legacy-realized = Estimation réalisée héritée
+copy-paper-legacy-col-tokens = Tokens
+copy-paper-legacy-col-cost = Coût restant ({ -sol })
+copy-paper-legacy-col-realized = Estimation réalisée ({ -sol })
+copy-paper-legacy-col-price = Dernier prix enregistré ({ -sol })
+copy-paper-legacy-col-remaining = P&L restant au prix enregistré ({ -sol })
 
 ## Workspace (pages/copy/workspace.js)
 
@@ -500,7 +525,7 @@ copy-warning-mirror = Seules les ventes du portefeuille clôturent les détentio
 copy-warning-no-rules = Aucune règle de sortie n'est activée et les ventes du portefeuille sont ignorées : les détentions ne sont jamais vendues.
 copy-warning-no-stop-loss = Aucun stop loss ne s'applique : un token en baisse est conservé jusqu'à ce qu'une autre règle ou le portefeuille vende.
 copy-warning-stop-delay = Le stop loss attend { $hold } après chaque achat : un token qui chute plus vite est clôturé bien au-delà de { $threshold }.
-copy-warning-take-profit-cost = Un take profit à { $target } ne couvre pas la vente ({ $slippage } de slippage et { $fee } de frais de swap), il clôture donc les cycles à perte.
+copy-warning-take-profit-small = Un take profit à { $target } n'est pas supérieur aux coûts de vente : jusqu'à { $slippage } de tolérance de slippage et { $fee } de frais de swap. Une petite cible peut ne pas les couvrir. La tolérance est une limite sur le prix de vente, pas un coût prévu.
 copy-warning-trailing-distance = La distance du trailing est au moins égale à son gain d'activation, un trailing armé peut donc vendre sous le prix d'entrée.
 
 ## Execution tab (pages/copy/execution.js)
@@ -523,23 +548,24 @@ copy-execution-arrival-samples =
        *[other] { $count } trades vus en temps réel
     }
 copy-execution-p95 = Arrivée p95
-copy-execution-median-slippage = Slippage médian
-copy-execution-slippage-samples =
+copy-execution-target-price-difference = Écart de prix médian par rapport à la cible
+copy-execution-target-difference-samples =
     { $count ->
         [one] { $count } exécution mesurée
         [many] { $count } exécutions mesurées
        *[other] { $count } exécutions mesurées
     }
-copy-execution-worst-slippage = Pire slippage
-copy-execution-average-slippage = Moyenne { $amount }
+copy-execution-target-difference-worst = Pire écart de prix par rapport à la cible
+copy-execution-target-difference-average = Écart de prix moyen par rapport à la cible { $amount }
 copy-execution-delay-title = Délai de détection
 copy-execution-delay-note = Temps écoulé entre le bloc du portefeuille et la détection du trade par ce bot. Les rejeux après une interruption sont exclus.
 copy-execution-delay-limit = Les barres au-delà de la limite d'arrivée de { $limit } sont en orange.
 copy-execution-fastest = Plus rapide
 copy-execution-average = Moyenne
 copy-execution-slowest = Plus lent
-copy-execution-fill-title = Exécution par rapport au portefeuille
-copy-execution-fill-note = Une valeur positive signifie moins bon que le portefeuille : payé plus cher à l'achat, reçu moins sur une vente répliquée. Une exécution simulée d'un token sans prix de pool est valorisée au trade du portefeuille lui-même, elle ne mesure donc rien et est exclue.
+copy-execution-target-difference-title = Écart de prix par rapport à la cible
+copy-execution-target-difference-note = Compare le prix de chaque exécution au prix du trade du portefeuille lorsque les deux sont supérieurs à zéro. Une valeur positive signifie une exécution moins bonne que celle du portefeuille : payé plus cher à l'achat ou reçu moins à la vente. C'est une comparaison, pas la tolérance de slippage de la tâche.
+copy-execution-wait-note = Le délai de détection est mesuré à partir du bloc du portefeuille. L'attente d'atterrissage est une hypothèse du modèle simulé ; le temps qu'une décision passe dans la file de la tâche s'y ajoute et est enregistré à chaque exécution.
 copy-execution-samples = Échantillons
 copy-execution-median = Médiane
 copy-execution-worst = Pire
@@ -560,7 +586,7 @@ copy-table-rounds = Cycles
 copy-table-realized = Réalisé ({ -sol })
 copy-table-profit-factor = Facteur de profit
 copy-table-average-hold = Détention moy.
-copy-table-median-slippage = Slippage médian
+copy-table-target-difference = Écart de prix médian par rapport à la cible
 
 ## Charts (pages/copy/charts.js)
 
@@ -644,7 +670,7 @@ copy-holdings-token-details = Ouvrir les détails du token
 copy-holdings-opened = Ouverte le { $time }
 copy-holdings-no-pool-price = Aucun prix de pool
 copy-holdings-close = Clôturer
-copy-holdings-write-off = Passer en perte
+copy-holdings-close-pending = Clôture en attente
 copy-holdings-activity = Activité
 copy-holdings-no-exit-rule = Aucune règle de sortie
 copy-holdings-watch-stop = Stop { $level }
@@ -669,7 +695,7 @@ copy-holdings-col-invested = Investi ({ -sol })
 copy-holdings-col-proceeds = Produit ({ -sol })
 copy-holdings-col-exit = Sortie
 copy-holdings-col-closed = Clôturé
-copy-holdings-price-note = Les prix sont en { -sol } par token. L'entrée inclut le slippage et les frais de l'achat ; le pic et les niveaux de sortie sont relatifs à celle-ci, une détention s'ouvre donc avec son pic sous l'entrée. Survolez une valeur pour voir son prix de pool.
+copy-holdings-marks-note = Les prix sont en { -sol } par token. La valorisation et les niveaux de sortie utilisent le prix de pool, qui déclenche aussi les règles de sortie ; les exécutions enregistrées utilisent des cotations de routeur. L'entrée inclut les frais réseau estimés de l'achat ; le pic et les niveaux de sortie sont relatifs à celle-ci, une détention s'ouvre donc avec son pic sous l'entrée. Survolez une valeur pour voir son prix de pool.
 copy-holdings-paused-rules = En pause : aucune nouvelle copie. Vos règles de sortie clôturent toujours ces détentions.
 copy-holdings-paused-mirror = En pause : aucune nouvelle copie. Les ventes du portefeuille clôturent toujours ces détentions.
 copy-holdings-paused-hybrid = En pause : aucune nouvelle copie. Les ventes du portefeuille et vos règles de sortie clôturent toujours ces détentions.
@@ -678,17 +704,17 @@ copy-holdings-closed-loading = Chargement des cycles clôturés…
 copy-holdings-closed-empty = Aucun cycle clôturé pour l'instant.
 copy-holdings-closed-latest = { $shown } derniers cycles sur { $total }.
 copy-holdings-close-title = Clôturer la détention simulée
-copy-holdings-close-message = Vend { $token } dans le registre simulé au prix du pool ({ $price }) avec le slippage et les frais de la tâche.
+copy-holdings-close-quote-message = Clôturer la détention simulée de { $token } avec deux cotations de routeur espacées d'environ { $delay }. L'exécution utilise la seconde cotation, qui doit atteindre le minimum de sortie de la première, moins les frais réseau estimés. Si aucune cotation exploitable n'est disponible, la détention reste ouverte et inchangée.
 copy-holdings-close-confirm = Clôturer la détention
-copy-holdings-write-off-title = Passer la détention simulée en perte
-copy-holdings-write-off-message = { $token } n'a aucun prix de pool auquel être vendu. Le passer en perte le clôture à zéro et comptabilise son coût de { $cost } comme une perte.
 copy-holdings-keep = Conserver
-copy-holdings-written-off = { $token } passé en perte
 copy-holdings-closed = { $token } clôturé
-copy-holdings-written-off-detail = Clôturé pour un produit nul
 copy-holdings-sold-at = Vendu à { $price }
 copy-holdings-close-failed = La détention n'a pas pu être clôturée
-copy-holdings-reset-message = Repartir de zéro pour « { $name } » : ses détentions simulées, dépenses, exécutions, sorties et trades ignorés sont supprimés. Les règles et le portefeuille sont conservés.
+copy-holdings-close-pending-detail = La clôture est en file d'attente ou en cours. Son résultat apparaîtra dans Activité.
+copy-holdings-close-unconfirmed = Résultat de la clôture non confirmé
+copy-holdings-close-unconfirmed-detail = La connexion s'est interrompue avant la réception du résultat et Activité n'en contient pas encore. Vérifiez Activité avant de clôturer à nouveau.
+copy-holdings-closed-check-activity = La détention est clôturée. Activité contient l'exécution enregistrée.
+copy-holdings-reset-quote-message = Repartir de zéro pour « { $name } » : ses détentions simulées actuelles, dépenses, exécutions, sorties et trades ignorés sont effacés et un nouveau registre par cotation commence. Les estimations héritées et l'historique réel sont conservés. Les règles et le portefeuille sont conservés.
 copy-holdings-reset-cancel = Conserver l'historique
 copy-holdings-reset-done = Registre simulé réinitialisé
 copy-holdings-reset-detail =
@@ -705,7 +731,6 @@ copy-holdings-reset-failed = Le registre simulé n'a pas pu être réinitialisé
 copy-activity-title = Activité
 copy-activity-filter-label = Filtre d'activité
 copy-filter-all = Tout
-copy-outcome-paper-filled = Achat simulé
 copy-outcome-live-submitted = Achat réel envoyé
 copy-outcome-live-confirmed = Achat réel confirmé
 copy-outcome-live-failed = Achat réel échoué
@@ -714,9 +739,14 @@ copy-outcome-live-sell-submitted = Vente réelle envoyée
 copy-outcome-live-sell-failed = Vente réelle échouée
 copy-outcome-skipped = Ignoré
 copy-activity-decision = Décision
-copy-activity-paper-exit = Sortie simulée · { $rule }
+copy-activity-paper-exit-quote = Sortie simulée par cotation · { $rule }
+copy-activity-paper-exit-legacy = Estimation de sortie simulée héritée · { $rule }
 copy-activity-filled = { $input } à { $price } · le portefeuille a acheté { $target }
+copy-activity-filled-target-difference = { $input } à { $price } · le portefeuille a acheté { $target } · écart de prix par rapport à la cible { $difference }
 copy-activity-filled-slippage = { $input } à { $price } · le portefeuille a acheté { $target } · slippage { $slippage }
+copy-activity-quote-router = Routeur { $router } · cotations reçues { $initial } et { $landing }
+copy-activity-quote-wait = Attente supposée { $assumed } · en file { $queued }
+copy-activity-quote-fees = Frais réseau et de priorité estimés { $fee }, comptés une fois · frais de plateforme déjà inclus dans la sortie cotée
 copy-activity-filled-unpriced = { $input } à { $price } · le portefeuille a acheté { $target } · valorisé au trade du portefeuille, sans prix de pool
 copy-activity-live-sized = { $sized } · le portefeuille a acheté { $target }
 copy-activity-sell-nothing = Le portefeuille a vendu { $amount } · rien à vendre en détention
@@ -791,7 +821,7 @@ copy-editor-name-placeholder = p. ex. Rotation rapide
 copy-editor-enabled-title = Traiter les trades du portefeuille
 copy-editor-enabled-help = Désactivé, la tâche reste en pause jusqu'à sa reprise.
 copy-editor-note-live = Cette tâche est en réel : les modifications s'appliquent à ses prochaines copies réelles.
-copy-editor-note-paper = Les tâches tournent en simulé jusqu'à ce que vous les armiez : les trades sont simulés au prix du pool et rien n'est dépensé.
+copy-editor-note-paper-quote = Les tâches tournent en simulé jusqu'à ce que vous les armiez : les trades sont simulés à partir de cotations de routeur et rien n'est dépensé.
 copy-editor-copy-size = Taille de copie
 copy-editor-sizing-fixed = Montant fixe
 copy-editor-sizing-ratio = Part du trade du portefeuille

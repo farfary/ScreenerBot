@@ -185,6 +185,11 @@ config-copy-trading-readiness-min-closed-rounds = 实盘就绪轮次
     .hint = 任务通过实盘就绪清单前所需的已平仓模拟轮次
 config-copy-trading-require-filter-pass = 要求通过过滤
     .hint = 仅跟单被过滤流程接受的代币
+config-copy-trading-paper-landing-delay-ms = 模拟落地延迟
+    .hint = 一次模拟成交的第一次与第二次兑换报价之间的假定间隔。第二次报价仍须满足第一次报价的最低输出；费用为估算值，MEV、验证者和内存池排序不会被模拟。
+    .unit = ms
+config-copy-trading-paper-queue-capacity = 模拟队列容量
+    .hint = 单个任务中可等待的模拟决策数量，按到达顺序逐个执行；遇到队列已满的决策会记录为跳过。
 
 ## events
 

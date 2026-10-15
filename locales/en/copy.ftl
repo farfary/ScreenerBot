@@ -19,6 +19,11 @@ copy-skip-invalid-sizing = Task sizing is invalid
 copy-skip-invalid-slippage = Task slippage is invalid
 copy-skip-invalid-exit-policy = Task exit rules are invalid
 copy-skip-invalid-price = No usable market price
+copy-skip-paper-quote-unavailable = A swap quote could not be obtained for the paper fill
+copy-skip-paper-quote-unfillable = The quote cannot produce a usable paper fill
+copy-skip-paper-minimum-output-not-met = The landing quote fell below the first quote's minimum output
+copy-skip-paper-queue-full = This task's paper execution queue is full
+copy-skip-paper-execution-unavailable = Paper execution did not complete: the service stopped, the task or holding changed, or the request duplicated one in progress
 copy-skip-not-sell-swap = Wallet activity was not a sell
 copy-skip-exit-mode-disabled = Wallet sell ignored: the task sells by its own rules
 copy-skip-force-stopped = Trading is force-stopped
@@ -230,13 +235,13 @@ copy-toast-global-failed = Copy processing could not be changed
 ## Onboarding (pages/copy.html)
 
 copy-onboarding-title = Copy the wallets you trust, prove them in Paper first
-copy-onboarding-body = Every task starts in Paper: target trades are simulated at the pool price with your slippage and fees, and your exit rules run on the paper book. Arm Live per wallet once its paper results earn it.
+copy-onboarding-paper-body = Every task starts in Paper: target trades are simulated from two router quotes with estimated network fees, and your exit rules run on the paper book. Arm Live per wallet once its paper results earn it.
 copy-onboarding-add = Add your first wallet
 copy-setup-gate-title = Copy trading needs a wallet
 copy-onboarding-observe = Observe
 copy-onboarding-observe-detail = Detect the wallet's swaps without spending { -sol }.
 copy-onboarding-evaluate = Evaluate
-copy-onboarding-evaluate-detail = Read paper P&L, win rate, skips, detection speed and slippage.
+copy-onboarding-evaluate-paper-detail = Read paper P&L, win rate, skips, detection speed and the target price difference.
 copy-onboarding-arm = Arm
 copy-onboarding-arm-detail = Pass the readiness checks, then enable real swaps.
 
@@ -280,6 +285,26 @@ copy-settings-unit-rounds = rounds
 copy-settings-save = Save settings
 copy-settings-load-failed = Copy settings could not be loaded
 copy-settings-saved = Copy trading settings saved
+copy-outcome-paper-filled-legacy = Legacy paper estimate
+copy-outcome-paper-filled-quote = Quote-based paper fill
+copy-outcome-paper-sell-legacy = Legacy paper exit estimate
+copy-outcome-paper-sell-quote = Quote-based paper exit
+
+## Paper execution model (Overview and Execution tabs)
+
+copy-paper-model = Paper execution model
+copy-paper-model-note = Each paper fill uses two router quotes sized to the trade, taken the assumed wait apart. The later quote must still meet the first quote's minimum output. Pool prices keep marking holdings and triggering exit rules. Network and priority fees are one estimate, counted once; the platform fee is already part of the quoted output. MEV and validator ordering are not simulated.
+copy-paper-wait-label = Assumed landing wait
+copy-paper-queue-label = Queue size per task
+copy-paper-legacy-title = Legacy paper estimates
+copy-paper-legacy-note = Read-only estimates kept from before quote-based simulation. They are not part of the current book's spend or holdings and offer no actions. Remaining amounts are valued at the last price saved for each token, never at a current market price.
+copy-paper-legacy-spent = Legacy estimated spend
+copy-paper-legacy-realized = Legacy realized estimate
+copy-paper-legacy-col-tokens = Tokens
+copy-paper-legacy-col-cost = Remaining cost ({ -sol })
+copy-paper-legacy-col-realized = Realized estimate ({ -sol })
+copy-paper-legacy-col-price = Last saved price ({ -sol })
+copy-paper-legacy-col-remaining = Remaining P&L at saved price ({ -sol })
 
 ## Workspace (pages/copy/workspace.js)
 
@@ -517,7 +542,7 @@ copy-warning-no-stop-loss = No stop loss applies: a falling token is held until 
 # $hold is a duration and $threshold a signed percentage.
 copy-warning-stop-delay = The stop loss waits { $hold } after each buy: a token that falls faster closes well past { $threshold }.
 # $target, $slippage and $fee are formatted percentages.
-copy-warning-take-profit-cost = Take profit at { $target } does not cover selling ({ $slippage } slippage and a { $fee } swap fee), so it closes rounds at a loss.
+copy-warning-take-profit-small = Take profit at { $target } is no larger than the selling costs: up to { $slippage } slippage tolerance and a { $fee } swap fee. A small target may not cover them. The tolerance is a limit on the sale price, not a predicted cost.
 copy-warning-trailing-distance = The trailing distance is at least its activation gain, so an armed trail can sell below entry.
 
 ## Execution tab (pages/copy/execution.js)
@@ -540,15 +565,15 @@ copy-execution-arrival-samples =
        *[other] { $count } trades seen as they happened
     }
 copy-execution-p95 = p95 arrival
-copy-execution-median-slippage = Median slippage
-copy-execution-slippage-samples =
+copy-execution-target-price-difference = Median target price difference
+copy-execution-target-difference-samples =
     { $count ->
         [one] { $count } measured fill
        *[other] { $count } measured fills
     }
-copy-execution-worst-slippage = Worst slippage
+copy-execution-target-difference-worst = Worst target price difference
 # $amount is a signed percentage.
-copy-execution-average-slippage = Average { $amount }
+copy-execution-target-difference-average = Average target price difference { $amount }
 copy-execution-delay-title = Detection delay
 copy-execution-delay-note = Time from the wallet's block to this bot seeing the trade. Replays after downtime are excluded.
 # $limit is a formatted duration.
@@ -556,8 +581,9 @@ copy-execution-delay-limit = Bars past the { $limit } arrival limit are amber.
 copy-execution-fastest = Fastest
 copy-execution-average = Average
 copy-execution-slowest = Slowest
-copy-execution-fill-title = Fill against the wallet
-copy-execution-fill-note = Positive means worse than the wallet: paid more on a buy, received less on a mirrored sell. A paper fill of a token without a pool price is priced at the wallet's own trade, so it measures nothing and is left out.
+copy-execution-target-difference-title = Target price difference
+copy-execution-target-difference-note = Compares each fill price with the wallet's own trade price when both are above zero. Positive means a worse fill than the wallet got: paid more on a buy or received less on a sell. It is a comparison, not the task's slippage tolerance.
+copy-execution-wait-note = Detection delay is measured from the wallet's block. The landing wait is an assumption of the paper model; the time a decision spends in the task's queue is added to it and recorded on each fill.
 copy-execution-samples = Samples
 copy-execution-median = Median
 copy-execution-worst = Worst
@@ -579,7 +605,7 @@ copy-table-rounds = Rounds
 copy-table-realized = Realized ({ -sol })
 copy-table-profit-factor = Profit factor
 copy-table-average-hold = Avg hold
-copy-table-median-slippage = Median slippage
+copy-table-target-difference = Median target price difference
 
 ## Charts (pages/copy/charts.js)
 
@@ -670,7 +696,7 @@ copy-holdings-token-details = Open token details
 copy-holdings-opened = Opened { $time }
 copy-holdings-no-pool-price = No pool price
 copy-holdings-close = Close
-copy-holdings-write-off = Write off
+copy-holdings-close-pending = Close pending
 copy-holdings-activity = Activity
 copy-holdings-no-exit-rule = No exit rule
 # $level is the exit price relative to entry and $span the time until the rule acts.
@@ -696,7 +722,7 @@ copy-holdings-col-invested = Invested ({ -sol })
 copy-holdings-col-proceeds = Proceeds ({ -sol })
 copy-holdings-col-exit = Exit
 copy-holdings-col-closed = Closed
-copy-holdings-price-note = Prices are { -sol } per token. Entry includes the buy's slippage and fees; the peak and the exit levels are relative to it, so a holding opens with its peak below entry. Hover one for its pool price.
+copy-holdings-marks-note = Prices are { -sol } per token. The mark and the exit levels use the pool price, which also triggers exit rules; recorded fills use router quotes. Entry includes the buy's estimated network fee; the peak and the exit levels are relative to it, so a holding opens with its peak below entry. Hover one for its pool price.
 copy-holdings-paused-rules = Paused: no new copies. Your exit rules still close these holdings.
 copy-holdings-paused-mirror = Paused: no new copies. The wallet's sells still close these holdings.
 copy-holdings-paused-hybrid = Paused: no new copies. The wallet's sells and your exit rules still close these holdings.
@@ -706,21 +732,20 @@ copy-holdings-closed-loading = Loading closed rounds…
 copy-holdings-closed-empty = No closed rounds yet.
 copy-holdings-closed-latest = Latest { $shown } of { $total } rounds.
 copy-holdings-close-title = Close paper holding
-# $token is the token symbol and $price a pool price with its unit.
-copy-holdings-close-message = Sell { $token } in the paper book at the pool price ({ $price }) with the task's slippage and fees.
+# $token is the token symbol and $delay the assumed landing wait.
+copy-holdings-close-quote-message = Close the paper holding of { $token } with two router quotes about { $delay } apart. The fill uses the later quote, which must meet the first quote's minimum output, less the estimated network fee. If no usable quote is available the holding stays open and unchanged.
 copy-holdings-close-confirm = Close holding
-copy-holdings-write-off-title = Write off paper holding
-# $token is the token symbol and $cost a SOL amount.
-copy-holdings-write-off-message = { $token } has no pool price to sell at. Writing it off closes it at zero and books its { $cost } cost as a loss.
 copy-holdings-keep = Keep
-copy-holdings-written-off = { $token } written off
 copy-holdings-closed = { $token } closed
-copy-holdings-written-off-detail = Closed at zero proceeds
-# $price is a pool price with its unit.
+# $price is the recorded fill price with its unit.
 copy-holdings-sold-at = Sold at { $price }
 copy-holdings-close-failed = Holding could not be closed
+copy-holdings-close-pending-detail = The close is queued or running. Its result will appear in Activity.
+copy-holdings-close-unconfirmed = Close result not confirmed
+copy-holdings-close-unconfirmed-detail = The connection ended before the result was received and Activity has no result yet. Check Activity before closing again.
+copy-holdings-closed-check-activity = The holding is closed. Activity has the recorded fill.
 # $name is the task name.
-copy-holdings-reset-message = Start “{ $name }” over: its paper holdings, spend, fills, exits and skips are removed. The rules and the wallet stay.
+copy-holdings-reset-quote-message = Start “{ $name }” over: its current paper holdings, spend, fills, exits and skips are cleared and a new quote-based book begins. Legacy estimates and live history stay. The rules and the wallet stay.
 copy-holdings-reset-cancel = Keep history
 copy-holdings-reset-done = Paper book reset
 copy-holdings-reset-detail =
@@ -736,7 +761,6 @@ copy-holdings-reset-failed = Paper book could not be reset
 copy-activity-title = Activity
 copy-activity-filter-label = Activity filter
 copy-filter-all = All
-copy-outcome-paper-filled = Paper buy
 copy-outcome-live-submitted = Live buy submitted
 copy-outcome-live-confirmed = Live buy confirmed
 copy-outcome-live-failed = Live buy failed
@@ -746,10 +770,18 @@ copy-outcome-live-sell-failed = Live sell failed
 copy-outcome-skipped = Skipped
 copy-activity-decision = Decision
 # $rule is the exit rule label.
-copy-activity-paper-exit = Paper exit · { $rule }
-# $input, $price and $target are formatted values; $slippage a signed percentage.
+copy-activity-paper-exit-quote = Quote-based paper exit · { $rule }
+copy-activity-paper-exit-legacy = Legacy paper exit estimate · { $rule }
+# $input, $price and $target are formatted values; $slippage and $difference signed percentages.
 copy-activity-filled = { $input } at { $price } · wallet bought { $target }
+copy-activity-filled-target-difference = { $input } at { $price } · wallet bought { $target } · target price difference { $difference }
 copy-activity-filled-slippage = { $input } at { $price } · wallet bought { $target } · slippage { $slippage }
+# $router is the recorded router id; $initial and $landing are the quote receipt times.
+copy-activity-quote-router = Router { $router } · quotes received { $initial } and { $landing }
+# $assumed is the assumed landing wait and $queued the time spent queued before the first quote.
+copy-activity-quote-wait = Assumed wait { $assumed } · queued { $queued }
+# $fee is one combined network and priority fee estimate.
+copy-activity-quote-fees = Estimated network and priority fees { $fee }, counted once · platform fee already in the quoted output
 copy-activity-filled-unpriced = { $input } at { $price } · wallet bought { $target } · priced at the wallet's trade, no pool price
 copy-activity-live-sized = { $sized } · wallet bought { $target }
 copy-activity-sell-nothing = Wallet sold { $amount } · nothing held to sell
@@ -833,7 +865,7 @@ copy-editor-name-placeholder = e.g. Fast rotator
 copy-editor-enabled-title = Process the wallet's trades
 copy-editor-enabled-help = Off keeps the task paused until you resume it.
 copy-editor-note-live = This task is live: changes apply to its next real copies.
-copy-editor-note-paper = Tasks run in Paper until you arm them: trades are simulated at the pool price and nothing is spent.
+copy-editor-note-paper-quote = Tasks run in Paper until you arm them: trades are simulated from router quotes and nothing is spent.
 copy-editor-copy-size = Copy size
 copy-editor-sizing-fixed = Fixed amount
 copy-editor-sizing-ratio = Share of the wallet's trade

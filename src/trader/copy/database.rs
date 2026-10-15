@@ -26,6 +26,10 @@ pub(crate) mod column_names;
 mod ledger;
 #[path = "database/maintenance.rs"]
 mod maintenance;
+#[path = "database/paper_book.rs"]
+mod paper_book;
+#[path = "database/recording.rs"]
+mod recording;
 
 pub use maintenance::{ActivityQuery, TargetObservations};
 #[path = "database/rows.rs"]
@@ -219,13 +223,7 @@ impl CopyDatabase {
 
     fn get_task_sync(&self, id: i64) -> crate::trader::Result<Option<CopyTask>> {
         let connection = self.connection()?;
-        connection
-            .query_row(
-                &format!("SELECT {TASK_COLUMNS} FROM copy_tasks WHERE id = ?1 AND chain_id=?2"),
-                params![id, self.chain.as_str()],
-                row_to_task,
-            )
-            .optional()
+        rows::task_on(&connection, id, self.chain.as_str())
             .map_err(|e| Error::from(crate::errors::DatabaseError::from(e)))
     }
 

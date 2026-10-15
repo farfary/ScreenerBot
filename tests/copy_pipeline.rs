@@ -8,16 +8,15 @@ use std::collections::HashMap;
 use chrono::{TimeZone, Utc};
 use screenerbot::chains::ChainId;
 use screenerbot::trader::copy::{
-    run_paper_pipeline, CopyMode, CopyOutcome, CopyTask, ExitMode, PaperCosts, PaperMarket,
-    PipelinePolicy, RiskContext, SizingMode, SpendState,
+    plan_paper_entries, CopyMode, CopyTask, ExitMode, PipelinePolicy, RiskContext, SizingMode,
+    SpendState,
 };
 use screenerbot::wallets::watch::{ActivityKind, SwapSide, WalletActivity, WatchSource};
 
 #[test]
-fn observed_buy_matches_sizes_and_produces_costed_paper_fill_with_telemetry() {
+fn observed_buy_is_prechecked_and_sized_before_quote_execution() {
     let detected = Utc.timestamp_opt(10, 0).unwrap();
     let decoded = Utc.timestamp_opt(11, 0).unwrap();
-    let decided = Utc.timestamp_opt(12, 0).unwrap();
     let task = CopyTask {
         id: 7,
         chain: ChainId::Solana,
@@ -60,7 +59,7 @@ fn observed_buy_matches_sizes_and_produces_costed_paper_fill_with_telemetry() {
         sources: vec![WatchSource::Copy { task_id: 7 }],
         backfill: false,
     };
-    let outcomes = run_paper_pipeline(
+    let plans = plan_paper_entries(
         &activity,
         &[task],
         &HashMap::<i64, SpendState>::new(),
@@ -75,25 +74,12 @@ fn observed_buy_matches_sizes_and_produces_costed_paper_fill_with_telemetry() {
             require_filter_pass: true,
             engine_trade_size_native: 1.0,
         },
-        PaperMarket::pool(0.005),
-        PaperCosts {
-            network_fee_native: 0.000005,
-            priority_fee_native: 0.00001,
-        },
-        decided,
     );
-
-    let CopyOutcome::PaperFilled(decision) = &outcomes[0] else {
-        panic!("expected paper fill");
-    };
-    assert_eq!(decision.sized_sol, 0.2);
-    assert_eq!(decision.fill.fill_price_sol, 0.00505);
-    assert!(decision.fill.priced_from_pool);
-    assert_eq!(decision.fill.referral_fee_sol, 0.001);
-    assert!((decision.fill.total_cost_sol - 0.200015).abs() < 1e-12);
-    assert_eq!(decision.telemetry.target_block_time, Some(9));
-    assert_eq!(decision.telemetry.detected_at, detected);
-    assert_eq!(decision.telemetry.decoded_at, decoded);
-    assert_eq!(decision.telemetry.decided_at, decided);
-    assert_eq!(decision.telemetry.confirmed_at, Some(decided));
+    let plan = plans[0].as_ref().expect("entry plan");
+    assert_eq!(plan.task.id, 7);
+    assert_eq!(plan.signature, "signature");
+    assert_eq!(plan.mint, "mint");
+    assert_eq!(plan.target_size_sol, 0.4);
+    assert_eq!(plan.target_token_amount, 100.0);
+    assert_eq!(plan.sized_sol, 0.2);
 }

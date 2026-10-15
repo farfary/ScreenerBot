@@ -16,6 +16,11 @@ copy-skip-invalid-sizing = اندازه‌گذاری وظیفه نامعتبر �
 copy-skip-invalid-slippage = اسلیپیج وظیفه نامعتبر است
 copy-skip-invalid-exit-policy = قوانین خروج وظیفه نامعتبر است
 copy-skip-invalid-price = قیمت بازار قابل استفاده‌ای وجود ندارد
+copy-skip-paper-quote-unavailable = برای اجرای آزمایشی نتوانستیم قیمت پیشنهادی سواپ را دریافت کنیم
+copy-skip-paper-quote-unfillable = این قیمت پیشنهادی اجرای آزمایشی قابل‌استفاده‌ای نمی‌دهد
+copy-skip-paper-minimum-output-not-met = قیمت پیشنهادی دوم پایین‌تر از حداقل خروجی قیمت پیشنهادی اول بود
+copy-skip-paper-queue-full = صف اجرای آزمایشی این وظیفه پر است
+copy-skip-paper-execution-unavailable = اجرای آزمایشی کامل نشد: سرویس متوقف شد، وظیفه یا دارایی تغییر کرد، یا درخواست تکراری از درخواستی در حال انجام بود
 copy-skip-not-sell-swap = فعالیت کیف پول فروش نبود
 copy-skip-exit-mode-disabled = فروش کیف پول نادیده گرفته شد: وظیفه طبق قوانین خودش می‌فروشد
 copy-skip-force-stopped = معاملات به‌طور اجباری متوقف شده است
@@ -212,13 +217,13 @@ copy-toast-global-failed = تغییر پردازش کپی ممکن نشد
 ## Onboarding
 
 copy-onboarding-title = کیف پول‌های مورد اعتماد را کپی کنید، ابتدا در حالت آزمایشی محک بزنید
-copy-onboarding-body = هر وظیفه در حالت آزمایشی شروع می‌شود: معاملات هدف با قیمت استخر، اسلیپیج و کارمزدهای شما شبیه‌سازی می‌شوند و قوانین خروج شما روی دفتر آزمایشی اجرا می‌شوند. وقتی نتایج آزمایشی یک کیف پول شایسته شد، حالت زنده را برای آن فعال کنید.
+copy-onboarding-paper-body = هر وظیفه در حالت آزمایشی شروع می‌شود: معاملات هدف از روی دو قیمت پیشنهادی روتر همراه با کارمزد شبکه‌ی تخمینی شبیه‌سازی می‌شوند و قوانین خروج شما روی دفتر آزمایشی اجرا می‌شوند. وقتی نتایج آزمایشی یک کیف پول شایسته شد، حالت زنده را برای آن فعال کنید.
 copy-onboarding-add = افزودن اولین کیف پول
 copy-setup-gate-title = کپی ترید به کیف پول نیاز دارد
 copy-onboarding-observe = مشاهده
 copy-onboarding-observe-detail = سواپ‌های کیف پول را بدون خرج‌کردن { -sol } شناسایی کنید.
 copy-onboarding-evaluate = ارزیابی
-copy-onboarding-evaluate-detail = سود و زیان آزمایشی، نرخ برد، موارد نادیده، سرعت شناسایی و اسلیپیج را بخوانید.
+copy-onboarding-evaluate-paper-detail = سود و زیان آزمایشی، نرخ برد، موارد نادیده، سرعت شناسایی و تفاوت قیمت با هدف را بخوانید.
 copy-onboarding-arm = فعال‌سازی
 copy-onboarding-arm-detail = از بررسی‌های آمادگی عبور کنید، سپس سواپ واقعی را فعال کنید.
 
@@ -261,6 +266,26 @@ copy-settings-unit-rounds = دور
 copy-settings-save = ذخیره تنظیمات
 copy-settings-load-failed = بارگذاری تنظیمات کپی ممکن نشد
 copy-settings-saved = تنظیمات کپی‌تریدینگ ذخیره شد
+copy-outcome-paper-filled-legacy = تخمین آزمایشی قدیمی
+copy-outcome-paper-filled-quote = اجرای آزمایشی مبتنی بر قیمت پیشنهادی
+copy-outcome-paper-sell-legacy = تخمین خروج آزمایشی قدیمی
+copy-outcome-paper-sell-quote = خروج آزمایشی مبتنی بر قیمت پیشنهادی
+
+## Paper execution model
+
+copy-paper-model = مدل اجرای آزمایشی
+copy-paper-model-note = هر اجرای آزمایشی از دو قیمت پیشنهادی روتر متناسب با اندازه معامله استفاده می‌کند که با فاصله‌ی انتظار فرضی گرفته می‌شوند. قیمت پیشنهادی دوم همچنان باید به حداقل خروجی قیمت پیشنهادی اول برسد. قیمت‌های استخر همچنان دارایی‌ها را ارزش‌گذاری می‌کنند و قوانین خروج را فعال می‌کنند. کارمزد شبکه و اولویت یک تخمین واحد است که یک بار شمرده می‌شود؛ کارمزد پلتفرم از قبل در خروجیِ قیمت پیشنهادی لحاظ شده است. MEV و ترتیب اعتبارسنج‌ها شبیه‌سازی نمی‌شوند.
+copy-paper-wait-label = انتظار فرضی تا اجرا
+copy-paper-queue-label = اندازه صف برای هر وظیفه
+copy-paper-legacy-title = تخمین‌های آزمایشی قدیمی
+copy-paper-legacy-note = تخمین‌های فقط‌خواندنی که از پیش از شبیه‌سازی مبتنی بر قیمت پیشنهادی مانده‌اند. آن‌ها بخشی از مصرف یا دارایی‌های دفتر فعلی نیستند و هیچ اقدامی ارائه نمی‌دهند. مقادیر باقی‌مانده با آخرین قیمت ذخیره‌شده‌ی هر توکن ارزش‌گذاری می‌شوند، نه با قیمت فعلی بازار.
+copy-paper-legacy-spent = مصرف تخمینی قدیمی
+copy-paper-legacy-realized = تخمین تحقق‌یافته‌ی قدیمی
+copy-paper-legacy-col-tokens = توکن‌ها
+copy-paper-legacy-col-cost = هزینه باقی‌مانده ({ -sol })
+copy-paper-legacy-col-realized = تخمین تحقق‌یافته ({ -sol })
+copy-paper-legacy-col-price = آخرین قیمت ذخیره‌شده ({ -sol })
+copy-paper-legacy-col-remaining = سود و زیان باقی‌مانده با قیمت ذخیره‌شده ({ -sol })
 
 ## Workspace
 
@@ -477,7 +502,7 @@ copy-warning-mirror = فقط فروش‌های کیف پول دارایی‌ها
 copy-warning-no-rules = هیچ قانون خروجی روشن نیست و فروش‌های کیف پول نادیده گرفته می‌شوند: دارایی‌ها هرگز فروخته نمی‌شوند.
 copy-warning-no-stop-loss = هیچ حد ضرری اعمال نمی‌شود: توکن در حال ریزش تا زمانی که قانون دیگری یا کیف پول بفروشد نگه داشته می‌شود.
 copy-warning-stop-delay = حد ضرر پس از هر خرید { $hold } صبر می‌کند: توکنی که سریع‌تر سقوط کند خیلی پایین‌تر از { $threshold } بسته می‌شود.
-copy-warning-take-profit-cost = حد سود در { $target } هزینه فروش ({ $slippage } اسلیپیج و { $fee } کارمزد سواپ) را پوشش نمی‌دهد، پس دورها را با ضرر می‌بندد.
+copy-warning-take-profit-small = حد سود در { $target } از هزینه‌های فروش بزرگ‌تر نیست: تا { $slippage } تحمل اسلیپیج و { $fee } کارمزد سواپ. یک هدف کوچک ممکن است آن‌ها را پوشش ندهد. تحمل، سقفی برای قیمت فروش است و هزینه‌ی پیش‌بینی‌شده نیست.
 copy-warning-trailing-distance = فاصله حد ضرر متحرک دست‌کم برابر سود فعال‌سازی آن است، پس یک حد ضرر متحرک فعال‌شده می‌تواند زیر قیمت ورود بفروشد.
 
 ## Execution tab
@@ -498,22 +523,23 @@ copy-execution-arrival-samples =
        *[other] { $count } معامله در لحظه رخ‌دادن دیده شد
     }
 copy-execution-p95 = رسیدن p95
-copy-execution-median-slippage = میانه اسلیپیج
-copy-execution-slippage-samples =
+copy-execution-target-price-difference = میانه تفاوت قیمت با هدف
+copy-execution-target-difference-samples =
     { $count ->
         [one] { $count } اجرای اندازه‌گیری‌شده
        *[other] { $count } اجرای اندازه‌گیری‌شده
     }
-copy-execution-worst-slippage = بدترین اسلیپیج
-copy-execution-average-slippage = میانگین { $amount }
+copy-execution-target-difference-worst = بیشترین تفاوت قیمت با هدف
+copy-execution-target-difference-average = میانگین تفاوت قیمت با هدف { $amount }
 copy-execution-delay-title = تأخیر شناسایی
 copy-execution-delay-note = زمان از بلاک کیف پول تا دیده‌شدن معامله توسط این ربات. بازپخش‌های پس از توقف حذف می‌شوند.
 copy-execution-delay-limit = میله‌های فراتر از حد رسیدن { $limit } کهربایی هستند.
 copy-execution-fastest = سریع‌ترین
 copy-execution-average = میانگین
 copy-execution-slowest = کندترین
-copy-execution-fill-title = اجرا در مقایسه با کیف پول
-copy-execution-fill-note = مثبت یعنی بدتر از کیف پول: در خرید بیشتر پرداخت شده یا در فروش تقلیدی کمتر دریافت شده. اجرای آزمایشی توکنی که قیمت استخر ندارد با قیمت معامله خود کیف پول محاسبه می‌شود، پس چیزی را نمی‌سنجد و کنار گذاشته می‌شود.
+copy-execution-target-difference-title = تفاوت قیمت با هدف
+copy-execution-target-difference-note = وقتی هر دو قیمت بالاتر از صفر باشند، قیمت هر اجرا را با قیمت معامله خود کیف پول مقایسه می‌کند. مثبت یعنی اجرایی بدتر از اجرای کیف پول: در خرید بیشتر پرداخت شده یا در فروش کمتر دریافت شده. این یک مقایسه است، نه تحمل اسلیپیج وظیفه.
+copy-execution-wait-note = تأخیر شناسایی از بلاک کیف پول اندازه‌گیری می‌شود. انتظار تا اجرا یک فرض مدل آزمایشی است؛ زمانی که یک تصمیم در صف وظیفه می‌گذراند به آن افزوده و روی هر اجرا ثبت می‌شود.
 copy-execution-samples = نمونه‌ها
 copy-execution-median = میانه
 copy-execution-worst = بدترین
@@ -534,7 +560,7 @@ copy-table-rounds = دورها
 copy-table-realized = تحقق‌یافته ({ -sol })
 copy-table-profit-factor = ضریب سود
 copy-table-average-hold = میانگین نگهداری
-copy-table-median-slippage = میانه اسلیپیج
+copy-table-target-difference = میانه تفاوت قیمت با هدف
 
 ## Charts
 
@@ -616,7 +642,7 @@ copy-holdings-token-details = باز کردن جزئیات توکن
 copy-holdings-opened = باز شده در { $time }
 copy-holdings-no-pool-price = بدون قیمت استخر
 copy-holdings-close = بستن
-copy-holdings-write-off = حذف از دفتر
+copy-holdings-close-pending = بستن در انتظار
 copy-holdings-activity = فعالیت
 copy-holdings-no-exit-rule = بدون قانون خروج
 copy-holdings-watch-stop = حد ضرر { $level }
@@ -641,7 +667,7 @@ copy-holdings-col-invested = سرمایه‌گذاری‌شده ({ -sol })
 copy-holdings-col-proceeds = عواید ({ -sol })
 copy-holdings-col-exit = خروج
 copy-holdings-col-closed = بسته‌شده
-copy-holdings-price-note = قیمت‌ها به { -sol } برای هر توکن هستند. ورود شامل اسلیپیج و کارمزد خرید است؛ اوج و سطوح خروج نسبت به آن سنجیده می‌شوند، پس یک دارایی با اوجی پایین‌تر از ورود باز می‌شود. برای دیدن قیمت استخر، نشانگر را روی هر مورد نگه دارید.
+copy-holdings-marks-note = قیمت‌ها به { -sol } برای هر توکن هستند. ارزش‌گذاری و سطوح خروج از قیمت استخر استفاده می‌کنند که قوانین خروج را هم فعال می‌کند؛ اجراهای ثبت‌شده از قیمت‌های پیشنهادی روتر استفاده می‌کنند. ورود شامل کارمزد شبکه‌ی تخمینی خرید است؛ اوج و سطوح خروج نسبت به آن سنجیده می‌شوند، پس یک دارایی با اوجی پایین‌تر از ورود باز می‌شود. برای دیدن قیمت استخر، نشانگر را روی هر مورد نگه دارید.
 copy-holdings-paused-rules = متوقف: کپی جدیدی انجام نمی‌شود. قوانین خروج شما همچنان این دارایی‌ها را می‌بندند.
 copy-holdings-paused-mirror = متوقف: کپی جدیدی انجام نمی‌شود. فروش‌های کیف پول همچنان این دارایی‌ها را می‌بندند.
 copy-holdings-paused-hybrid = متوقف: کپی جدیدی انجام نمی‌شود. فروش‌های کیف پول و قوانین خروج شما همچنان این دارایی‌ها را می‌بندند.
@@ -650,17 +676,17 @@ copy-holdings-closed-loading = در حال بارگذاری دورهای بست�
 copy-holdings-closed-empty = هنوز دور بسته‌ای نیست.
 copy-holdings-closed-latest = آخرین { $shown } دور از { $total }.
 copy-holdings-close-title = بستن دارایی آزمایشی
-copy-holdings-close-message = { $token } در دفتر آزمایشی با قیمت استخر ({ $price }) و اسلیپیج و کارمزدهای وظیفه فروخته می‌شود.
+copy-holdings-close-quote-message = دارایی آزمایشی { $token } را با دو قیمت پیشنهادی روتر به فاصله‌ی حدود { $delay } ببندید. اجرا از قیمت پیشنهادی دوم استفاده می‌کند که باید به حداقل خروجی قیمت پیشنهادی اول برسد و کارمزد شبکه‌ی تخمینی از آن کسر می‌شود. اگر قیمت پیشنهادی قابل‌استفاده‌ای در دسترس نباشد، دارایی باز و بدون تغییر می‌ماند.
 copy-holdings-close-confirm = بستن دارایی
-copy-holdings-write-off-title = حذف دارایی آزمایشی از دفتر
-copy-holdings-write-off-message = { $token } قیمت استخری برای فروش ندارد. حذف از دفتر آن را با عواید صفر می‌بندد و هزینه { $cost } آن را به‌عنوان ضرر ثبت می‌کند.
 copy-holdings-keep = نگه داشتن
-copy-holdings-written-off = { $token } از دفتر حذف شد
 copy-holdings-closed = { $token } بسته شد
-copy-holdings-written-off-detail = با عواید صفر بسته شد
 copy-holdings-sold-at = فروخته شد در { $price }
 copy-holdings-close-failed = بستن دارایی ممکن نشد
-copy-holdings-reset-message = «{ $name }» را از نو شروع کنید: دارایی‌ها، مصرف، اجراها، خروج‌ها و موارد نادیده آزمایشی آن پاک می‌شوند. قوانین و کیف پول باقی می‌مانند.
+copy-holdings-close-pending-detail = بستن در صف است یا در حال اجراست. نتیجه‌ی آن در فعالیت نمایش داده می‌شود.
+copy-holdings-close-unconfirmed = نتیجه‌ی بستن تأیید نشد
+copy-holdings-close-unconfirmed-detail = اتصال پیش از دریافت نتیجه قطع شد و فعالیت هنوز نتیجه‌ای ندارد. پیش از بستن دوباره، فعالیت را بررسی کنید.
+copy-holdings-closed-check-activity = دارایی بسته شد. اجرای ثبت‌شده در فعالیت است.
+copy-holdings-reset-quote-message = «{ $name }» را از نو شروع کنید: دارایی‌ها، مصرف، اجراها، خروج‌ها و موارد نادیده‌ی آزمایشیِ فعلی آن پاک می‌شوند و دفتر جدیدی مبتنی بر قیمت پیشنهادی آغاز می‌شود. تخمین‌های قدیمی و تاریخچه‌ی زنده باقی می‌مانند. قوانین و کیف پول هم باقی می‌مانند.
 copy-holdings-reset-cancel = نگه داشتن تاریخچه
 copy-holdings-reset-done = دفتر آزمایشی بازنشانی شد
 copy-holdings-reset-detail =
@@ -675,7 +701,6 @@ copy-holdings-reset-failed = بازنشانی دفتر آزمایشی ممکن �
 copy-activity-title = فعالیت
 copy-activity-filter-label = فیلتر فعالیت
 copy-filter-all = همه
-copy-outcome-paper-filled = خرید آزمایشی
 copy-outcome-live-submitted = خرید زنده ارسال شد
 copy-outcome-live-confirmed = خرید زنده تأیید شد
 copy-outcome-live-failed = خرید زنده ناموفق بود
@@ -684,9 +709,14 @@ copy-outcome-live-sell-submitted = فروش زنده ارسال شد
 copy-outcome-live-sell-failed = فروش زنده ناموفق بود
 copy-outcome-skipped = نادیده گرفته شد
 copy-activity-decision = تصمیم
-copy-activity-paper-exit = خروج آزمایشی · { $rule }
+copy-activity-paper-exit-quote = خروج آزمایشی مبتنی بر قیمت پیشنهادی · { $rule }
+copy-activity-paper-exit-legacy = تخمین خروج آزمایشی قدیمی · { $rule }
 copy-activity-filled = { $input } با قیمت { $price } · کیف پول { $target } خرید
+copy-activity-filled-target-difference = { $input } با قیمت { $price } · کیف پول { $target } خرید · تفاوت قیمت با هدف { $difference }
 copy-activity-filled-slippage = { $input } با قیمت { $price } · کیف پول { $target } خرید · اسلیپیج { $slippage }
+copy-activity-quote-router = روتر { $router } · قیمت‌های پیشنهادی دریافت‌شده { $initial } و { $landing }
+copy-activity-quote-wait = انتظار فرضی { $assumed } · در صف { $queued }
+copy-activity-quote-fees = کارمزد تخمینی شبکه و اولویت { $fee }، یک بار شمرده شده · کارمزد پلتفرم از قبل در خروجیِ قیمت پیشنهادی لحاظ شده است
 copy-activity-filled-unpriced = { $input } با قیمت { $price } · کیف پول { $target } خرید · با قیمت معامله کیف پول محاسبه شد، بدون قیمت استخر
 copy-activity-live-sized = { $sized } · کیف پول { $target } خرید
 copy-activity-sell-nothing = کیف پول { $amount } فروخت · چیزی برای فروش نگه‌داری نمی‌شد
@@ -760,7 +790,7 @@ copy-editor-name-placeholder = مثلاً چرخشی سریع
 copy-editor-enabled-title = پردازش معاملات کیف پول
 copy-editor-enabled-help = خاموش بودن، وظیفه را تا زمانی که ازسر بگیرید متوقف نگه می‌دارد.
 copy-editor-note-live = این وظیفه زنده است: تغییرات روی کپی‌های واقعی بعدی آن اعمال می‌شود.
-copy-editor-note-paper = وظایف تا زمانی که فعالشان کنید در حالت آزمایشی اجرا می‌شوند: معاملات با قیمت استخر شبیه‌سازی می‌شوند و چیزی خرج نمی‌شود.
+copy-editor-note-paper-quote = وظایف تا زمانی که فعالشان کنید در حالت آزمایشی اجرا می‌شوند: معاملات از روی قیمت‌های پیشنهادی روتر شبیه‌سازی می‌شوند و چیزی خرج نمی‌شود.
 copy-editor-copy-size = اندازه کپی
 copy-editor-sizing-fixed = مقدار ثابت
 copy-editor-sizing-ratio = سهمی از معامله کیف پول

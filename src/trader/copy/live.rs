@@ -257,5 +257,6 @@ fn skipped_from_plan(plan: PreparedLiveEntry, reason: CopySkip) -> CopyOutcome {
         reason,
         decided_at: plan.telemetry.decided_at,
         telemetry: Some(plan.telemetry),
+        paper: None,
     }
 }

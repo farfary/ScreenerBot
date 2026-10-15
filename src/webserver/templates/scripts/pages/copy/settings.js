@@ -60,6 +60,8 @@ export function createSettings(page) {
       $("#copy-settings-delay").value = String(Number(config.max_arrival_distance_ms) / 1000);
       $("#copy-settings-window").value = String(config.latency_window_size);
       $("#copy-settings-slippage").value = String(config.default_slippage_pct);
+      $("#copy-settings-paper-delay").value = String(Number(config.paper_landing_delay_ms) / 1000);
+      $("#copy-settings-paper-queue").value = String(config.paper_queue_capacity);
       $("#copy-settings-max-tasks").value = String(config.max_active_tasks);
       $("#copy-settings-readiness").value = String(config.readiness_min_closed_rounds);
       setLoading(false);
@@ -83,6 +85,8 @@ export function createSettings(page) {
       max_arrival_distance_ms: Math.round(number("#copy-settings-delay") * 1000),
       latency_window_size: number("#copy-settings-window"),
       default_slippage_pct: number("#copy-settings-slippage"),
+      paper_landing_delay_ms: Math.round(number("#copy-settings-paper-delay") * 1000),
+      paper_queue_capacity: number("#copy-settings-paper-queue"),
       max_active_tasks: number("#copy-settings-max-tasks"),
       readiness_min_closed_rounds: number("#copy-settings-readiness"),
     };

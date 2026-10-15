@@ -121,7 +121,7 @@ export function createCompare(page) {
     },
     {
       id: "slippage_median_pct",
-      label: I18n.t("copy-table-median-slippage"),
+      label: I18n.t("copy-table-target-difference"),
       type: "percent",
       sortable: true,
       render: (value) => esc(signedPct(value, 2)),
