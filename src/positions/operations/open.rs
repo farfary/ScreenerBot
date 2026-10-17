@@ -248,6 +248,7 @@ async fn open_position_impl(
             price
         }
     };
+    let store_chain = positions_db::get_store_chain().await?;
     // From here the swap may reach the chain, and a buy that may land must not be
     // opened twice: the mark outlives a cancelled call and is released only on a
     // failure that proves nothing was sent.
@@ -255,7 +256,7 @@ async fn open_position_impl(
     // From before the submission until the row is in memory, the wallet-history sync
     // leaves the mint to the trader: a confirmed buy shows in the wallet before then, and
     // the sync would otherwise import it as a second, wallet-derived row of the round.
-    let _in_flight = mark_swap_in_flight(positions_db::get_store_chain().await?, &api_token.mint);
+    let _in_flight = mark_swap_in_flight(store_chain, &api_token.mint);
     let (transaction_signature, output_amount, confirmation_pending, effective_entry_price) =
         match execute_swap_with_fallback(
             &api_token,

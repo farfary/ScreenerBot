@@ -68,6 +68,7 @@ use super::{
 };
 use crate::chains::RawAmount;
 use crate::logger::{self, LogTag};
+use crate::positions::cost_basis::{average_after_acquisition, HeldCost};
 use crate::positions::db::{Booking, Committed, MintRow, TraderSwapLeg};
 use crate::positions::pnl::realized_pnl;
 use crate::positions::round_state::{attributable_held, is_dust, reopen_missed_holding};
@@ -576,16 +577,15 @@ pub fn plan_position_writes(
         let current = match (matched, home_row) {
             (Some(row), home_row) if row.exit_time.is_none() => {
                 if let Some(home_row) = home_row {
-                    let id = |row: &Position| row.id.map_or("?".to_owned(), |id| id.to_string());
                     logger::warning(
                         LogTag::Positions,
                         &format!(
                             "Ledger reconcile for {}: round {} matched open position {} while open position {} holds its latest legs; position {} is not reconciled this sync",
                             short_mint(&round.mint),
                             round.round_key,
-                            id(row),
-                            id(home_row),
-                            id(home_row)
+                            row_id(Some(row)),
+                            row_id(Some(home_row)),
+                            row_id(Some(home_row))
                         ),
                     );
                 }
@@ -603,6 +603,24 @@ pub fn plan_position_writes(
                 }
                 home_row
             }
+            // One open row per mint: a round the wallet still holds belongs to the open row
+            // of its mint, whose legs arrive with the next delta read. Rebuilding a closed
+            // row from it would reopen that row beside the open one.
+            (Some(closed), None)
+                if round.is_open && open_row_of(&by_mint, &plan, &closed.mint).is_some() =>
+            {
+                logger::debug(
+                    LogTag::Positions,
+                    &format!(
+                        "Ledger reconcile for {}: open round {} matched closed position {} beside open position {}; left to the open position",
+                        short_mint(&round.mint),
+                        round.round_key,
+                        row_id(Some(closed)),
+                        row_id(open_row_of(&by_mint, &plan, &round.mint)),
+                    ),
+                );
+                continue;
+            }
             (Some(closed), None) => closed,
             (None, Some(home_row)) => {
                 if let Some(id) = home_row.id {
@@ -616,6 +634,23 @@ pub fn plan_position_writes(
             // A bot swap of the mint in flight may be this round's own buy, whose row is
             // saved once the swap returns; a row imported now would be its twin.
             (None, None) if busy_mints.contains(&round.mint) => continue,
+            // One open row per mint: an open round with no row of its own belongs to the open
+            // row of its mint, whose legs arrive with the next delta read. A row imported now
+            // would be a second open row of the mint.
+            (None, None)
+                if round.is_open && open_row_of(&by_mint, &plan, &round.mint).is_some() =>
+            {
+                logger::debug(
+                    LogTag::Positions,
+                    &format!(
+                        "Ledger reconcile for {}: open round {} imports no row beside open position {}",
+                        short_mint(&round.mint),
+                        round.round_key,
+                        row_id(open_row_of(&by_mint, &plan, &round.mint)),
+                    ),
+                );
+                continue;
+            }
             (None, None) => {
                 plan.inserts.push(build_position(round, &meta, None, now));
                 continue;
@@ -651,6 +686,35 @@ pub fn plan_position_writes(
     }
 
     plan
+}
+
+/// The open row of `mint` once the writes planned so far apply: an existing row as its
+/// planned update leaves it, or a row the plan inserts.
+fn open_row_of<'a>(
+    by_mint: &HashMap<&str, Vec<&'a Position>>,
+    plan: &'a SyncPlan,
+    mint: &str,
+) -> Option<&'a Position> {
+    let planned = |row: &'a Position| {
+        plan.updates
+            .iter()
+            .rev()
+            .find(|update| row.id.is_some() && update.position.id == row.id)
+            .map_or(row, |update| &update.position)
+    };
+    by_mint
+        .get(mint)
+        .into_iter()
+        .flatten()
+        .map(|row| planned(row))
+        .chain(plan.inserts.iter().filter(|row| row.mint == mint))
+        .find(|row| row.exit_time.is_none())
+}
+
+/// A row's id for a log line, `?` for a row without one.
+fn row_id(row: Option<&Position>) -> String {
+    row.and_then(|row| row.id)
+        .map_or_else(|| "?".to_owned(), |id| id.to_string())
 }
 
 /// Where the own legs of each bot row lie among the rounds of one plan.
@@ -1339,7 +1403,17 @@ struct Growth {
 /// inflate the position a little more every time the wallet moved. An outside buy with no
 /// SOL price (an airdrop, a USD fill, a token -> token swap) leaves the trader's basis alone
 /// and clears `basis_complete`: the holding is real, the cost of part of it is not.
+///
+/// The average entry price follows the moving-average rule. While nothing has ever left the
+/// holding, everything acquired is held, so the average is the whole basis over the holding,
+/// recomputed in full on each pass. After a sale, the cost of the tokens sold is no longer
+/// held: the growth since the row's own books is one buy of the newly acquired tokens for the
+/// newly invested SOL, blended into the row's average. The callers adopt only when the
+/// holding grew past what the row claims, so the step is taken once per increase.
 fn adopt_external_growth(position: &mut Position, growth: Growth, decimals: u8) {
+    let acquired_before = position.acquired_amount().unwrap_or(RawAmount::ZERO);
+    let invested_before = position.total_size_native;
+
     position.remaining_token_amount = Some(growth.held);
     position.token_amount = Some(growth.acquired);
     position.total_exited_amount = growth.exited;
@@ -1350,9 +1424,25 @@ fn adopt_external_growth(position: &mut Position, growth: Growth, decimals: u8) 
         return;
     };
     position.total_size_native = invested_native;
-    let acquired = growth.acquired.to_whole_units(decimals);
-    if acquired > DUST {
-        position.average_entry_price = invested_native / acquired;
+    let held_whole = growth.held.to_whole_units(decimals);
+    let average = if growth.exited == RawAmount::ZERO {
+        let mut held_cost = HeldCost::new();
+        held_cost.acquire(invested_native);
+        held_cost.average(held_whole)
+    } else {
+        average_after_acquisition(
+            position.average_entry_price,
+            growth
+                .acquired
+                .checked_sub(acquired_before)
+                .unwrap_or(RawAmount::ZERO)
+                .to_whole_units(decimals),
+            invested_native - invested_before,
+            held_whole,
+        )
+    };
+    if let Some(average) = average {
+        position.average_entry_price = average;
     }
 }
 

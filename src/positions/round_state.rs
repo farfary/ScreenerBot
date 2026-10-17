@@ -7,7 +7,7 @@
 
 use crate::chains::RawAmount;
 
-use super::booking::DcaFill;
+use super::booking::{add_fee, DcaFill};
 use super::pnl::realized_pnl;
 use super::types::Position;
 use super::{Error, Result};
@@ -250,19 +250,29 @@ pub struct LegSplit {
     /// The closed position's earlier tokens the wallet still holds beyond the buy, handed
     /// over at the closed position's average cost before the buy.
     pub handed_earlier: Leg,
+    /// The part of the buy's fee booked on the closed position, raw native units.
+    pub kept_fee_raw: u64,
+    /// The part of the buy's fee handed to the open position, raw native units. The two
+    /// parts sum to the buy's fee.
+    pub handed_fee_raw: u64,
 }
 
 impl LegSplit {
-    /// The whole of `leg` stays on the position it was bought for.
-    fn kept_whole(leg: Leg) -> Self {
+    /// The whole of `fill` stays on the position it was bought for, with its whole fee.
+    fn kept_whole(fill: &DcaFill) -> Self {
         let nothing = Leg {
             tokens: RawAmount::ZERO,
             cost_native: 0.0,
         };
         Self {
-            kept: leg,
+            kept: Leg {
+                tokens: fill.tokens_bought,
+                cost_native: fill.native_spent,
+            },
             handed_leg: nothing,
             handed_earlier: nothing,
+            kept_fee_raw: fill.fee_raw,
+            handed_fee_raw: 0,
         }
     }
 
@@ -277,6 +287,16 @@ impl LegSplit {
             cost_native: self.handed_leg.cost_native + self.handed_earlier.cost_native,
         })
     }
+}
+
+/// `fee_raw` in proportion to `part` of `whole`, rounded down; the whole fee for an empty
+/// whole.
+fn prorated_fee(fee_raw: u64, part: RawAmount, whole: RawAmount) -> u64 {
+    if whole == RawAmount::ZERO {
+        return fee_raw;
+    }
+    let share = (u128::from(fee_raw)).saturating_mul(part.raw()) / whole.raw();
+    u64::try_from(share).unwrap_or(fee_raw).min(fee_raw)
 }
 
 /// `part` as a fraction of `whole`, zero for an empty whole.
@@ -298,20 +318,17 @@ fn fraction(part: RawAmount, whole: RawAmount) -> f64 {
 /// cost: the part of the buy still held at the buy's price, and any of the closed position's
 /// earlier tokens still held beyond the buy at its average cost before the buy. The part of
 /// the buy no longer held is booked on the closed position as acquired and exited at the
-/// buy's price, so the closed position's books change by exactly that part and its P&L is
-/// restated over what it kept.
+/// buy's price, with the same share of the buy's fee, so the closed position's books change
+/// by exactly that part and its P&L is restated over what it kept. The rest of the fee goes
+/// with the handed-over part of the buy.
 pub(crate) fn hand_over_leg(
     position: &mut Position,
     fill: &DcaFill,
     held: RawAmount,
 ) -> Result<(FollowOutcome, LegSplit)> {
-    let whole = Leg {
-        tokens: fill.tokens_bought,
-        cost_native: fill.native_spent,
-    };
     if !is_closed(position) {
         position.book_dca(fill)?;
-        return Ok((FollowOutcome::Unchanged, LegSplit::kept_whole(whole)));
+        return Ok((FollowOutcome::Unchanged, LegSplit::kept_whole(fill)));
     }
     let overflow = || Error::AmountOverflow {
         mint: position.mint.clone(),
@@ -323,7 +340,7 @@ pub(crate) fn hand_over_leg(
         .ok_or_else(overflow)?;
     if is_dust(held, acquired) {
         position.book_dca(fill)?;
-        return Ok((follow_round(position, held)?, LegSplit::kept_whole(whole)));
+        return Ok((follow_round(position, held)?, LegSplit::kept_whole(fill)));
     }
 
     let held = held.min(acquired);
@@ -340,6 +357,8 @@ pub(crate) fn hand_over_leg(
             .unwrap_or(RawAmount::ZERO),
         cost_native: fill.native_spent - handed_leg_cost,
     };
+    let handed_fee_raw = prorated_fee(fill.fee_raw, handed_leg_tokens, fill.tokens_bought);
+    let kept_fee_raw = fill.fee_raw - handed_fee_raw;
 
     let exited = before
         .checked_sub(earlier_tokens)
@@ -347,6 +366,7 @@ pub(crate) fn hand_over_leg(
         .checked_add(kept.tokens)
         .ok_or_else(overflow)?;
     position.total_size_native += kept.cost_native - earlier_cost;
+    add_fee(&mut position.entry_fee_raw, kept_fee_raw);
     if kept.tokens > RawAmount::ZERO {
         position.dca_count += 1;
         position.last_dca_time = Some(fill.dca_time);
@@ -368,6 +388,8 @@ pub(crate) fn hand_over_leg(
                 tokens: earlier_tokens,
                 cost_native: earlier_cost,
             },
+            kept_fee_raw,
+            handed_fee_raw,
         },
     ))
 }
@@ -375,6 +397,7 @@ pub(crate) fn hand_over_leg(
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::positions::pnl::calculate_position_total_fees;
 
     fn dust(held: u128, acquired: u128) -> bool {
         is_dust(RawAmount::new(held), RawAmount::new(acquired))
@@ -583,6 +606,7 @@ mod tests {
         DcaFill {
             tokens_bought: raw(tokens),
             native_spent: native,
+            fee_raw: 0,
             dca_time: chrono::Utc::now(),
         }
     }
@@ -638,6 +662,23 @@ mod tests {
         assert!(close_to(position.pnl.unwrap(), 0.6 - 1.3));
         assert_eq!(position.acquired_amount(), Some(raw(1_600)));
         assert_eq!(position.dca_count, 1);
+    }
+
+    /// The buy's fee divides with its tokens: the closed position books the share of the part
+    /// it keeps before its P&L is restated, and the two shares sum to the fee.
+    #[test]
+    fn the_fee_of_a_late_buy_divides_with_its_tokens() {
+        let mut position = closed(1_000, 1.0, 0.6);
+        let mut buy = late_buy(1_000, 0.5);
+        buy.fee_raw = 10_001;
+        let (outcome, split) = hand_over_leg(&mut position, &buy, raw(400)).unwrap();
+
+        assert_eq!(outcome, FollowOutcome::HandedOver);
+        assert_eq!(split.handed_fee_raw, 4_000);
+        assert_eq!(split.kept_fee_raw, 6_001);
+        assert_eq!(position.entry_fee_raw, Some(6_001));
+        let fee = calculate_position_total_fees(&position);
+        assert!(close_to(position.pnl.unwrap(), 0.6 - 1.3 - fee));
     }
 
     /// The wallet holds more than the buy: the closed position's own earlier tokens are

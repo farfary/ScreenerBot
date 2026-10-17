@@ -168,12 +168,22 @@ impl DirectSwapError {
         }
     }
 
-    /// A fallback is safe only when this typed outcome proves no ambiguous
-    /// wallet state remains.  Never infer that from provider/error prose.
+    /// A fallback is safe only when this typed outcome proves nothing was sent.
+    /// Never infer that from provider/error prose.
     pub fn safe_to_fallback(&self) -> bool {
         matches!(
             self,
-            DirectSwapError::MarketMoved { .. }
+            DirectSwapError::UnsupportedVenue { .. }
+                | DirectSwapError::PoolUndecodable { .. }
+                | DirectSwapError::PairNotInPool { .. }
+                | DirectSwapError::PoolNotTradable { .. }
+                | DirectSwapError::InsufficientLiquidity { .. }
+                | DirectSwapError::QuoteMath { .. }
+                | DirectSwapError::InvalidRequest { .. }
+                | DirectSwapError::InsufficientBalance { .. }
+                | DirectSwapError::AccountUnavailable { .. }
+                | DirectSwapError::NodeUnavailable { .. }
+                | DirectSwapError::MarketMoved { .. }
                 | DirectSwapError::Build { .. }
                 | DirectSwapError::SimulationRejected { .. }
                 | DirectSwapError::TransactionTooLarge { .. }
@@ -338,6 +348,9 @@ impl From<crate::swaps::NotSubmittedReason> for DirectSwapError {
                     logs: Vec::new(),
                 }
             }
+            NotSubmittedReason::SimulationUnavailable { detail } => {
+                DirectSwapError::SimulationUnavailable { detail }
+            }
             other @ (NotSubmittedReason::BuildUnavailable(_)
             | NotSubmittedReason::BuildUnusable { .. }
             | NotSubmittedReason::UnsupportedFormat { .. }
@@ -479,6 +492,64 @@ mod tests {
             err.into_quote_error("Direct Pool"),
             crate::swaps::error::QuoteError::Unavailable { .. }
         ));
+    }
+
+    /// These are raised while the engine reads the pool, prices the swap and
+    /// checks the wallet, all before a transaction exists, so each proves
+    /// nothing was sent. A caller that stops on them neither tries another
+    /// router nor releases the attempt.
+    #[test]
+    fn a_failure_raised_before_any_transaction_exists_is_safe_to_fall_back_from() {
+        let pool = Pubkey::new_unique();
+        let before_the_send = [
+            DirectSwapError::UnsupportedVenue { program: pool },
+            DirectSwapError::PoolUndecodable {
+                pool,
+                detail: String::new(),
+            },
+            DirectSwapError::PairNotInPool {
+                pool,
+                input_mint: Pubkey::new_unique(),
+                output_mint: Pubkey::new_unique(),
+            },
+            DirectSwapError::PoolNotTradable {
+                pool,
+                detail: String::new(),
+            },
+            DirectSwapError::InsufficientLiquidity {
+                pool,
+                amount_in: 1,
+                detail: String::new(),
+            },
+            DirectSwapError::InvalidRequest {
+                detail: String::new(),
+            },
+            DirectSwapError::AccountUnavailable {
+                address: pool,
+                detail: String::new(),
+            },
+            DirectSwapError::NodeUnavailable {
+                operation: "getLatestBlockhash",
+                detail: String::new(),
+            },
+            DirectSwapError::QuoteMath {
+                detail: String::new(),
+            },
+            DirectSwapError::InsufficientBalance {
+                mint: pool,
+                required: 2,
+                available: 1,
+            },
+        ];
+        for error in before_the_send {
+            assert!(!error.submitted(), "{error}");
+            assert!(error.signature().is_none(), "{error}");
+            assert!(error.settled_signature().is_none(), "{error}");
+            assert!(
+                error.safe_to_fallback(),
+                "a failure that proves nothing was sent must license a fallback: {error}"
+            );
+        }
     }
 
     #[test]

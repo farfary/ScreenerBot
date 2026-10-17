@@ -4321,3 +4321,182 @@ fn a_position_written_off_after_the_plan_is_neither_closed_nor_announced_by_the_
         },
     );
 }
+
+/// A bot buy whose transaction has not reached the delta table is held by the wallet but
+/// is in no reduced round, so the wallet read adds a synthetic holding round under the
+/// bare `genesis:<mint>` key. A closed history row an earlier version wrote under that
+/// key matches it, and rebuilding the row from an open round reopens it beside the bot's
+/// own open row; storage then refuses the second open row of the mint at commit. The sync
+/// must never plan a second open row for a mint.
+#[test]
+fn a_holding_round_never_reopens_a_closed_row_beside_the_open_bot_row_of_the_mint() {
+    let history_row = {
+        let closed_round = round(OTHER_MINT, &format!("genesis:{OTHER_MINT}"));
+        materialise(std::slice::from_ref(&closed_round), &no_metadata()).remove(0)
+    };
+    assert_eq!(history_row.id, Some(1));
+    assert!(history_row.exit_time.is_some(), "the history row is closed");
+    assert!(history_row.is_wallet_derived());
+
+    let bot_row = {
+        let mut row = bot_position(&open_round(OTHER_MINT, "bot-buy:mint"));
+        row.id = Some(2);
+        row
+    };
+    assert!(bot_row.exit_time.is_none(), "the bot row is open");
+
+    let mut rounds = Vec::new();
+    screenerbot::positions::ledger::reconcile_with_wallet(
+        &mut rounds,
+        &[screenerbot::positions::ledger::WalletHolding {
+            mint: OTHER_MINT.to_owned(),
+            amount_raw: 423_386,
+            decimals: 6,
+        }],
+        None,
+    );
+    assert_eq!(rounds.len(), 1, "the held mint has no reduced round");
+    assert_eq!(rounds[0].round_key, format!("genesis:{OTHER_MINT}"));
+
+    let existing = vec![history_row, bot_row];
+    let plan = plan_position_writes(
+        &rounds,
+        &existing,
+        &no_metadata(),
+        &no_legs(),
+        &no_busy(),
+        now(),
+    );
+
+    let open_rows = existing
+        .iter()
+        .map(|row| {
+            plan.updates
+                .iter()
+                .find(|update| update.position.id == row.id)
+                .map_or(row, |update| &update.position)
+        })
+        .filter(|row| row.mint == OTHER_MINT && row.exit_time.is_none())
+        .count()
+        + plan
+            .inserts
+            .iter()
+            .filter(|row| row.mint == OTHER_MINT && row.exit_time.is_none())
+            .count();
+    assert!(
+        open_rows <= 1,
+        "the plan leaves {open_rows} open rows of one mint"
+    );
+}
+
+/// A buy made outside the bot after the bot sold part of its holding is averaged with the
+/// cost of the tokens still held: the cost of the tokens already sold is not held, so the
+/// average is the moving average, not the lifetime price of every token acquired.
+#[test]
+fn an_outside_buy_after_a_sale_averages_the_held_cost() {
+    let mut round = open_round(MINT, "open-sig:MINT");
+    round.balance_raw = 1_500_000;
+    round.total_acquired_raw = 2_000_000;
+    round.total_disposed_raw = 500_000;
+    round.entry_count = 2;
+    round.exit_count = 1;
+    round.invested_native = 3.0;
+    round.events = vec![
+        acquisition("open-sig", LedgerEventKind::Entry, 1.0, 2.0),
+        disposal("sell-sig", LedgerEventKind::PartialExit, 0.5, 1.5),
+        acquisition("outside-add", LedgerEventKind::Add, 1.0, 1.0),
+    ];
+
+    // The bot bought 1.0 token for 2.0 SOL and sold half of it for 1.5 SOL.
+    let mut bot_row = bot_position(&open_round(MINT, "open-sig:MINT"));
+    bot_row.id = Some(7);
+    bot_row.remaining_token_amount = Some(raw(500_000));
+    bot_row.total_exited_amount = raw(500_000);
+    bot_row.partial_exit_count = 1;
+    bot_row.native_received = Some(1.5);
+    bot_row.average_entry_price = 2.0;
+
+    let legs = HashMap::from([(
+        7i64,
+        TraderLegs {
+            entry_signatures: HashSet::from(["open-sig".to_owned()]),
+            exit_signatures: HashSet::from(["sell-sig".to_owned()]),
+            booked_invested_native: 2.0,
+            booked_acquired: raw(1_000_000),
+            booked_received_native: 1.5,
+        },
+    )]);
+
+    let plan = plan_position_writes(
+        std::slice::from_ref(&round),
+        &[bot_row],
+        &metadata(MINT, false),
+        &legs,
+        &no_busy(),
+        now(),
+    );
+
+    let grown = only_update(&plan);
+    assert_eq!(grown.remaining_token_amount, Some(raw(1_500_000)));
+    assert!(
+        (grown.total_size_native - 3.0).abs() < 1e-12,
+        "the invested total stays cumulative: {}",
+        grown.total_size_native
+    );
+    // 0.5 token still held at 2.0 plus 1.0 token for 1.0 SOL: 2.0 SOL for 1.5 tokens. The
+    // lifetime price would be 3.0 SOL over 2.0 tokens.
+    assert!(
+        (grown.average_entry_price - 2.0 / 1.5).abs() < 1e-12,
+        "average {}",
+        grown.average_entry_price
+    );
+
+    let again = plan_position_writes(
+        std::slice::from_ref(&round),
+        std::slice::from_ref(grown),
+        &metadata(MINT, false),
+        &legs,
+        &no_busy(),
+        now(),
+    );
+    assert!(
+        again.updates.is_empty() && again.inserts.is_empty(),
+        "a resync blends the outside buy again: {:?}",
+        again.updates
+    );
+}
+
+/// An open round with no row of its own beside the open bot row of its mint belongs to that
+/// row, whose legs arrive with the next delta read. One mint has one open row, so the plan
+/// imports none.
+#[test]
+fn an_open_round_with_no_row_imports_none_beside_the_open_bot_row_of_the_mint() {
+    let mut round = open_round(MINT, "outside-sig:MINT");
+    round.entry_signature = Some("outside-sig".to_owned());
+    let mut bot_row = bot_position(&open_round(MINT, "bot-buy:MINT"));
+    bot_row.id = Some(2);
+    bot_row.entry_transaction_signature = Some("bot-buy".to_owned());
+    assert!(bot_row.exit_time.is_none(), "the bot row is open");
+
+    let plan = plan_position_writes(
+        std::slice::from_ref(&round),
+        std::slice::from_ref(&bot_row),
+        &no_metadata(),
+        &no_legs(),
+        &no_busy(),
+        now(),
+    );
+
+    assert!(
+        plan.inserts.is_empty(),
+        "the plan imports a second open row of the mint: {:?}",
+        plan.inserts
+    );
+    assert!(
+        plan.updates
+            .iter()
+            .all(|update| update.position.id == bot_row.id),
+        "{:?}",
+        plan.updates
+    );
+}

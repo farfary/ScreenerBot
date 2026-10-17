@@ -40,7 +40,7 @@ impl TransactionProcessor {
         Self {
             wallet_pubkey,
             fetcher: TransactionFetcher::new(),
-            analyzer: TransactionAnalyzer::new(false),
+            analyzer: TransactionAnalyzer::new(false, Some(wallet_pubkey.to_string())),
             debug_enabled: false,
             cache_only: false,
             force_refresh: false,
@@ -57,7 +57,7 @@ impl TransactionProcessor {
         Self {
             wallet_pubkey,
             fetcher: TransactionFetcher::new(),
-            analyzer: TransactionAnalyzer::new(false),
+            analyzer: TransactionAnalyzer::new(false, Some(wallet_pubkey.to_string())),
             debug_enabled: false,
             cache_only,
             force_refresh,
@@ -93,7 +93,7 @@ impl TransactionProcessor {
         Self {
             wallet_pubkey,
             fetcher: TransactionFetcher::new(),
-            analyzer: TransactionAnalyzer::new(false),
+            analyzer: TransactionAnalyzer::new(false, Some(wallet_pubkey.to_string())),
             debug_enabled: false,
             cache_only: false,
             force_refresh: false,
@@ -269,9 +269,83 @@ impl TransactionProcessor {
 
 #[cfg(test)]
 mod tests {
+    use std::str::FromStr;
+
     use serde_json::json;
 
     use super::*;
+
+    /// The wallet every recorded transaction below was made by.
+    const WALLET: &str = "6uodGCMLfDLfeXkyW71WpUDK1BEG19bU2EV51x2dcGMv";
+    const RAPTOR_SPLIT_ROUTE_SELL: &str =
+        include_str!("../../../../../tests/fixtures/swaps/raptor_split_route_sell.json");
+    const METEORA_DLMM_SELL: &str =
+        include_str!("../../../../../tests/fixtures/swaps/meteora_dlmm_sell.json");
+    const METEORA_DLMM_BUY: &str =
+        include_str!("../../../../../tests/fixtures/swaps/meteora_dlmm_buy.json");
+    const METEORA_DAMM_V2_SELL: &str =
+        include_str!("../../../../../tests/fixtures/swaps/meteora_damm_v2_sell.json");
+    const UNLISTED_ROUTER_SELL: &str =
+        include_str!("../../../../../tests/fixtures/swaps/unlisted_router_sell.json");
+
+    /// Decodes a recorded transaction for [`WALLET`] through the same pipeline a fetched
+    /// one takes, without the RPC.
+    async fn decode_recorded(fixture: &str) -> Transaction {
+        let details: crate::chains::solana::rpc::TransactionDetails =
+            serde_json::from_str(fixture).expect("the recorded transaction decodes");
+        let signature = details.transaction.signatures[0].clone();
+        TransactionProcessor::new(Pubkey::from_str(WALLET).expect("wallet address"))
+            .decode_details(&signature, &details)
+            .await
+            .expect("the recorded transaction analyzes")
+    }
+
+    async fn router_of(fixture: &str) -> String {
+        decode_recorded(fixture)
+            .await
+            .token_swap_info
+            .expect("the transaction is a swap")
+            .router
+    }
+
+    /// Direct Meteora pool swaps (DLMM `Swap2`, DAMM v2 `Swap`) carry no aggregator. The
+    /// log fallback matches `Instruction: Swap` for both Jupiter and Orca, so the label
+    /// depended on the iteration order of a map built per call; each fixture is decoded
+    /// repeatedly so a lucky order cannot pass.
+    #[tokio::test]
+    async fn a_direct_meteora_pool_swap_is_labelled_by_its_program() {
+        for fixture in [METEORA_DLMM_SELL, METEORA_DLMM_BUY, METEORA_DAMM_V2_SELL] {
+            for _ in 0..32 {
+                assert_eq!(router_of(fixture).await, "meteora");
+            }
+        }
+    }
+
+    /// The route runs through Raydium, Orca and Meteora pools inside the Raptor program;
+    /// the program the wallet called is the router.
+    #[tokio::test]
+    async fn a_raptor_routed_sale_is_labelled_raptor() {
+        for _ in 0..32 {
+            assert_eq!(router_of(RAPTOR_SPLIT_ROUTE_SELL).await, "raptor");
+        }
+    }
+
+    /// 2.18162 USDC went to a router program and 0.032765013 SOL came back to the
+    /// wallet. The program is in no program table, so the swap was only recognised for a
+    /// listed DEX or aggregator and this sale read as a bare program interaction.
+    #[tokio::test]
+    async fn a_sale_through_an_unlisted_router_is_a_sale() {
+        let transaction = decode_recorded(UNLISTED_ROUTER_SELL).await;
+
+        assert!(
+            matches!(
+                transaction.transaction_type,
+                TransactionType::SwapTokenToSol { .. }
+            ),
+            "classified as {:?}",
+            transaction.transaction_type
+        );
+    }
 
     #[tokio::test]
     async fn preloaded_decode_rejects_a_mismatched_signature() {

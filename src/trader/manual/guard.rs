@@ -140,6 +140,23 @@ pub fn validate_percentage(percentage: f64) -> Result<f64, Error> {
     Ok(percentage)
 }
 
+/// Validate a manual trade size: finite and strictly positive.
+pub fn validate_size(size_native: f64) -> Result<f64, Error> {
+    if !size_native.is_finite() {
+        return Err(Error::InvalidSolAmount {
+            amount_native: size_native,
+            reason: "must be finite".to_owned(),
+        });
+    }
+    if size_native <= 0.0 {
+        return Err(Error::InvalidSolAmount {
+            amount_native: size_native,
+            reason: "must be positive".to_owned(),
+        });
+    }
+    Ok(size_native)
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -198,5 +215,14 @@ mod tests {
         assert!(validate_percentage(0.5).is_ok());
         assert!(validate_percentage(0.0).is_err());
         assert!(validate_percentage(101.0).is_err());
+    }
+
+    #[test]
+    fn manual_trade_size_is_finite_and_positive() {
+        assert_eq!(validate_size(0.5).unwrap(), 0.5);
+        assert!(validate_size(0.0).is_err());
+        assert!(validate_size(-1.0).is_err());
+        assert!(validate_size(f64::INFINITY).is_err());
+        assert!(validate_size(f64::NAN).is_err());
     }
 }

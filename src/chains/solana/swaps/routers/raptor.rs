@@ -148,6 +148,8 @@ struct RaptorSwapRequest {
 struct RaptorSwapResponse {
     #[serde(rename = "swapTransaction")]
     swap_transaction: String,
+    #[serde(rename = "lastValidBlockHeight", default)]
+    last_valid_block_height: Option<u64>,
 }
 
 // ============================================================================
@@ -289,7 +291,11 @@ impl RaptorRouter {
     /// The fee placement is recomputed from the quote's own mints rather than
     /// carried across, so the built instruction can never disagree with what the
     /// quote was priced on. Every failure here is before submission.
-    async fn build_transaction(&self, quote: &Quote, user_public_key: &str) -> Result<String> {
+    async fn build_transaction(
+        &self,
+        quote: &Quote,
+        user_public_key: &str,
+    ) -> Result<(String, Option<u64>)> {
         let not_submitted = |reason| {
             Error::Swaps(SwapExecutionError::NotSubmitted {
                 router: self.name().to_owned(),
@@ -347,7 +353,10 @@ impl RaptorRouter {
                     detail: format!("the swap response does not decode: {e}"),
                 })
             })?;
-        Ok(swap_response.swap_transaction)
+        Ok((
+            swap_response.swap_transaction,
+            swap_response.last_valid_block_height,
+        ))
     }
 
     /// Build the transaction for `quote`, addressed to `signer`, and hand it to
@@ -356,20 +365,19 @@ impl RaptorRouter {
     /// the wallet tools.
     async fn build_and_submit(&self, quote: &Quote, signer: &Keypair) -> Result<SwapResult> {
         let start = Instant::now();
-        let transaction = self
+        let (transaction, last_valid_block_height) = self
             .build_transaction(quote, &signer.pubkey().to_string())
             .await?;
 
         // Propagate the send/confirm error UNCHANGED so a submitted-but-
         // unconfirmed signature stays recoverable by
-        // `swaps::unconfirmed_swap_signature`. Raptor's build reports no
-        // blockhash validity, so a send that never lands ends unconfirmed and
-        // is reconciled rather than proven expired.
+        // `swaps::unconfirmed_swap_signature`. A send that never lands within
+        // the block height expires.
         let signature = crate::chains::solana::swaps::presend::submit_built_swap(
             self.name(),
             crate::chains::solana::swaps::presend::ComputeLimit::AsBuilt,
             &transaction,
-            None,
+            last_valid_block_height,
             quote,
             signer,
         )
@@ -652,6 +660,18 @@ fn raptor_quote_error(failure: RouterHttpFailure, router: &str) -> QuoteError {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn a_swap_response_preserves_optional_blockhash_validity() {
+        let built: RaptorSwapResponse =
+            serde_json::from_str(r#"{"swapTransaction":"AQAB","lastValidBlockHeight":123}"#)
+                .expect("a /swap response with blockhash validity decodes");
+        assert_eq!(built.last_valid_block_height, Some(123));
+
+        let bare: RaptorSwapResponse =
+            serde_json::from_str(r#"{"swapTransaction":"AQAB"}"#).expect("decodes");
+        assert_eq!(bare.last_valid_block_height, None);
+    }
 
     #[tokio::test]
     async fn oversized_input_is_rejected_before_router_io() {

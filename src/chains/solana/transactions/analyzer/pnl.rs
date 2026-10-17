@@ -408,9 +408,18 @@ async fn estimate_swap_fees(
 
 #[cfg(test)]
 mod tests {
-    use super::{calculate_fee_breakdown, AtaAnalysis, BalanceAnalysis};
+    use super::{
+        calculate_fee_breakdown, calculate_main_swap_pnl, AtaAnalysis, BalanceAnalysis,
+        FeeBreakdown,
+    };
     use crate::chains::solana::rpc::TransactionDetails;
     use crate::chains::solana::transactions::analyzer::ata::{AccountLifecycle, RentSummary};
+    use crate::chains::solana::transactions::analyzer::balance::analyze_balance_changes;
+    use crate::chains::solana::transactions::analyzer::classify::{
+        ClassifiedType, FlowAnalysis, SwapDirection, TransactionClass,
+    };
+    use crate::chains::solana::transactions::analyzer::AnalysisConfidence;
+    use crate::transactions::types::Transaction;
     use std::collections::HashMap;
 
     #[tokio::test]
@@ -494,6 +503,97 @@ mod tests {
         assert!((fees.network_fee() - 0.000025).abs() < 1e-12);
     }
 
+    fn token_balance(
+        account_index: u32,
+        owner: &str,
+        raw: &str,
+        ui_amount: Option<f64>,
+    ) -> serde_json::Value {
+        serde_json::json!({
+            "accountIndex": account_index,
+            "mint": "SoldMint11111111111111111111111111111111111",
+            "owner": owner,
+            "programId": "TokenkegQfeZyiNwAJbNbGKPFXCWuBvf9Ss623VQ5DA",
+            "uiTokenAmount": {
+                "amount": raw,
+                "decimals": 9,
+                "uiAmount": ui_amount,
+                "uiAmountString": raw,
+            }
+        })
+    }
+
+    /// Recorded sell of a 9-decimal token against a pool holding about 1e8 tokens. A
+    /// binary64 UI amount of that size resolves 15 raw units, so the pool's UI delta read 15
+    /// units more than the 515,568,340,823 the wallet sold, and the larger change of the two
+    /// was taken as the swap's token amount.
+    #[tokio::test]
+    async fn the_swap_token_amount_is_the_raw_amount_the_wallet_gave_up() {
+        const SOLD_RAW: u64 = 515_568_340_823;
+        let tx: TransactionDetails = serde_json::from_value(serde_json::json!({
+            "slot": 1,
+            "transaction": {
+                "signatures": ["signature"],
+                "message": {
+                    "accountKeys": ["WalletOwner1111111111111111111111111111111111", "PoolOwner111111111111111111111111111111111111"],
+                    "instructions": []
+                }
+            },
+            "meta": {
+                "err": null,
+                "fee": 8000,
+                "preBalances": [1_000_000_000u64, 5_000_000_000u64],
+                "postBalances": [1_100_000_000u64, 4_900_000_000u64],
+                "preTokenBalances": [
+                    token_balance(2, "WalletOwner1111111111111111111111111111111111", "515568340823", Some(515.568340823)),
+                    token_balance(3, "PoolOwner111111111111111111111111111111111111", "101596718921504961", Some(101596718.92150496)),
+                ],
+                "postTokenBalances": [
+                    token_balance(2, "WalletOwner1111111111111111111111111111111111", "0", None),
+                    token_balance(3, "PoolOwner111111111111111111111111111111111111", "101597234489845784", Some(101597234.4898458)),
+                ]
+            },
+            "blockTime": null
+        }))
+        .expect("jsonParsed transaction decodes");
+        let transaction = Transaction::new("signature".to_owned());
+        let balances = analyze_balance_changes(&transaction, &tx)
+            .await
+            .expect("balance analysis");
+        let classification = TransactionClass {
+            transaction_type: ClassifiedType::Sell,
+            direction: Some(SwapDirection::TokenToSol),
+            primary_token: Some("SoldMint11111111111111111111111111111111111".to_owned()),
+            secondary_token: None,
+            confidence: AnalysisConfidence::High,
+            flow_analysis: FlowAnalysis {
+                flow_patterns: Vec::new(),
+                nodes: Vec::new(),
+                edges: Vec::new(),
+                flow_confidence: 1.0,
+            },
+        };
+        let fees = FeeBreakdown {
+            base_fee: 0.000008,
+            priority_fee: 0.0,
+            mev_tips: 0.0,
+            swap_fees: 0.0,
+            rent_costs: 0.0,
+            total_fees: 0.000008,
+        };
+
+        let swap = calculate_main_swap_pnl(&balances, &classification, &fees)
+            .await
+            .expect("swap P&L")
+            .expect("a swap");
+
+        let sold_raw = (swap.token_amount * 1e9).round() as u64;
+        assert_eq!(
+            sold_raw, SOLD_RAW,
+            "the swap's token amount is {sold_raw} raw units, not the {SOLD_RAW} the wallet sold"
+        );
+    }
+
     fn empty_balance() -> BalanceAnalysis {
         BalanceAnalysis {
             sol_changes: HashMap::new(),
@@ -502,6 +602,7 @@ mod tests {
             total_tips: 0.0,
             total_rent: 0.0,
             confidence: 1.0,
+            wallet: None,
         }
     }
 
@@ -598,11 +699,29 @@ async fn calculate_main_swap_pnl(
     }))
 }
 
-/// Find the largest token balance change for a specific mint
+/// The swap's token change for a mint: the wallet's own exact change, converted to a UI
+/// amount once from the raw delta. Pools hold amounts whose binary64 UI delta is coarser
+/// than the wallet's, so the largest change across owners is only the fallback for a
+/// transaction in which the wallet's own balance of the mint did not move.
 fn find_largest_token_change(
     balance_analysis: &BalanceAnalysis,
     target_mint: &str,
 ) -> crate::chains::solana::Result<TokenBalanceChange> {
+    let wallet_change = balance_analysis
+        .wallet
+        .as_ref()
+        .and_then(|payer| balance_analysis.token_changes.get(payer))
+        .and_then(|changes| {
+            changes
+                .iter()
+                .find(|c| c.mint == target_mint && c.raw_change != 0)
+        });
+    if let Some(change) = wallet_change {
+        let mut exact = change.clone();
+        exact.change = exact.raw_change as f64 / 10f64.powi(i32::from(exact.decimals));
+        return Ok(exact);
+    }
+
     let mut largest_change: Option<TokenBalanceChange> = None;
     let mut largest_amount = 0.0;
 

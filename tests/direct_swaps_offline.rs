@@ -553,6 +553,90 @@ fn a_pump_amm_quote_off_real_state_charges_a_fee_and_is_monotonic() {
     );
 }
 
+/// Byte offset of the pump-swap `Pool.virtual_quote_reserves` field, a signed 128-bit integer.
+const PUMP_AMM_VIRTUAL_QUOTE_OFFSET: usize = 245;
+/// Byte offsets of `Pool.protocol_fees` and `Pool.creator_fees`, both `u64`, past the
+/// virtual reserve, `creator_fee_bps` and the two flags.
+const PUMP_AMM_PROTOCOL_FEES_OFFSET: usize = 271;
+const PUMP_AMM_CREATOR_FEES_OFFSET: usize = 279;
+
+/// `Pool.virtual_quote_reserves` read from the recorded bytes, independent of the production
+/// decoder.
+fn pump_amm_virtual_quote(pool: &[u8]) -> i128 {
+    i128::from_le_bytes(
+        pool[PUMP_AMM_VIRTUAL_QUOTE_OFFSET..PUMP_AMM_VIRTUAL_QUOTE_OFFSET + 16]
+            .try_into()
+            .expect("sixteen bytes"),
+    )
+}
+
+/// The effective quote reserve and the base reserve a pump-swap pool prices from, read straight
+/// from the recorded bytes: the quote vault PLUS the signed virtual reserve.
+fn pump_amm_pricing_reserves(fixture: &Fixture) -> (u128, u128) {
+    let state = PumpAmmPoolState::decode(fixture.pool, fixture.data(&fixture.pool))
+        .expect("the captured pump-swap pool must decode");
+    let pool = fixture.data(&fixture.pool);
+    let virtual_quote = pump_amm_virtual_quote(pool);
+    let quote_vault = fixture.balance(&state.quote_token_account) as i128;
+    let effective_quote = u128::try_from(quote_vault + virtual_quote)
+        .expect("the effective quote reserve of a live pool is positive");
+    (
+        effective_quote,
+        fixture.balance(&state.base_token_account) as u128,
+    )
+}
+
+#[test]
+fn a_pump_amm_pool_with_a_negative_virtual_reserve_is_priced_off_vault_plus_the_signed_value() {
+    let fixture = Fixture::load("pumpfun_amm", "direct-swap-negative-virtual-reserve");
+    let pool = fixture.data(&fixture.pool);
+    let virtual_quote = pump_amm_virtual_quote(pool);
+    let protocol_fees = u64_at(pool, PUMP_AMM_PROTOCOL_FEES_OFFSET).expect("protocol_fees");
+    let creator_fees = u64_at(pool, PUMP_AMM_CREATOR_FEES_OFFSET).expect("creator_fees");
+    assert!(
+        virtual_quote < 0,
+        "this fixture records a pool whose virtual reserve is negative, got {virtual_quote}"
+    );
+    assert_eq!(
+        virtual_quote,
+        -((protocol_fees as i128) + (creator_fees as i128)),
+        "an unboosted pool's virtual reserve is the negated unclaimed protocol and creator fees \
+         held in its quote vault"
+    );
+
+    let market = fixture_market_case("pumpfun_amm", "direct-swap-negative-virtual-reserve");
+    let (base, quote) = market.mints();
+    let (effective_quote, base_reserve) = pump_amm_pricing_reserves(&fixture);
+
+    // The fee-free constant-product result is the ceiling of any quote; the pool's three fees
+    // total well under 3% at every tier, so a correct quote lands between 97% and 100% of it.
+    let spend = 3_000_000u128; // 0.003 SOL
+    let ideal_buy = base_reserve * spend / (effective_quote + spend);
+    let buy = market
+        .quote(&quote, spend as u64)
+        .expect("a live, captured pool quotes a buy");
+    assert!(
+        (buy.expected_out as u128) <= ideal_buy
+            && (buy.expected_out as u128) * 100 >= ideal_buy * 97,
+        "a {spend} lamport buy quoted {} base units against a constant-product ceiling of \
+         {ideal_buy}",
+        buy.expected_out
+    );
+
+    let sold = 10_000_000u128; // 10 tokens of 6 decimals
+    let ideal_sell = effective_quote * sold / (base_reserve + sold);
+    let sell = market
+        .quote(&base, sold as u64)
+        .expect("a live, captured pool quotes a sell");
+    assert!(
+        (sell.expected_out as u128) <= ideal_sell
+            && (sell.expected_out as u128) * 100 >= ideal_sell * 97,
+        "a {sold} base unit sell quoted {} lamports against a constant-product ceiling of \
+         {ideal_sell}",
+        sell.expected_out
+    );
+}
+
 // ============================================================================
 // QUOTES — relationships that must hold whatever the balances are today
 // ============================================================================
@@ -705,8 +789,8 @@ fn a_sell_back_to_sol_takes_the_fee_out_of_the_proceeds() {
     );
     assert_eq!(
         quote.fee.amount,
-        quote.min_out * 50 / 10_000,
-        "the fee is 0.5% of the GUARANTEED output, not of the estimate"
+        quote.expected_out * 50 / 10_000,
+        "the fee is 0.5% of the expected output"
     );
     assert_eq!(quote.min_net_out, quote.min_out - quote.fee.amount);
 }
@@ -2367,7 +2451,7 @@ fn every_venue_plan_fits_the_packet_on_both_legs() {
         let sell_quote =
             direct::quote_with_market(&sell_intent, market.as_ref()).unwrap_or_else(|_| {
                 let fee_side = FeeSide::for_pair(&token, &sol);
-                let fee = direct::PlatformFee::resolve(fee_side, &token, &sol, 990_000)
+                let fee = direct::PlatformFee::resolve(fee_side, &token, &sol, 1_000_000)
                     .expect("the fee resolves for a SOL leg");
                 eprintln!("{name:<24} sell priced by hand: the snapshot cannot fill a sell");
                 direct::DirectQuote {

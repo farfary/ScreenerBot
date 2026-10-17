@@ -137,8 +137,10 @@ pub struct TransactionDetails {
 
 #[derive(Debug, Serialize)]
 pub struct FeeDetails {
+    /// Network fees of every buy of the position, raw native units.
     pub entry_fee_raw: Option<u64>,
     pub entry_fee_native: Option<f64>,
+    /// Network fees of every sale of the position, raw native units.
     pub exit_fee_raw: Option<u64>,
     pub exit_fee_native: Option<f64>,
     pub total_fees_native: f64,

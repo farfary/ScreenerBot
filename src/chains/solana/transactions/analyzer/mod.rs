@@ -90,12 +90,35 @@ pub enum AnalysisConfidence {
 /// Core transaction analyzer that coordinates all sub-analyzers
 pub struct TransactionAnalyzer {
     debug_enabled: bool,
+    /// The wallet the analysis is for; the fee payer stands in when it is unknown.
+    wallet: Option<String>,
 }
 
 impl TransactionAnalyzer {
     /// Create new transaction analyzer
-    pub fn new(debug_enabled: bool) -> Self {
-        Self { debug_enabled }
+    pub fn new(debug_enabled: bool, wallet: Option<String>) -> Self {
+        Self {
+            debug_enabled,
+            wallet,
+        }
+    }
+
+    /// Balance analysis attributed to the analyzer's wallet.
+    async fn balance_analysis(
+        &self,
+        transaction: &Transaction,
+        tx_data: &crate::chains::solana::rpc::TransactionDetails,
+        full: bool,
+    ) -> crate::chains::solana::Result<BalanceAnalysis> {
+        let mut balance = if full {
+            balance::analyze_balance_changes(transaction, tx_data).await?
+        } else {
+            balance::extract_balance_changes(transaction, tx_data).await?
+        };
+        if self.wallet.is_some() {
+            balance.wallet = self.wallet.clone();
+        }
+        Ok(balance)
     }
 
     /// Perform complete transaction analysis
@@ -115,7 +138,7 @@ impl TransactionAnalyzer {
         }
 
         // Step 1: Extract balance changes (full analyzer for tips/rent detection)
-        let balance_analysis = balance::analyze_balance_changes(transaction, tx_data).await?;
+        let balance_analysis = self.balance_analysis(transaction, tx_data, true).await?;
 
         // Step 2: Detect DEX interactions
         let dex_analysis =
@@ -217,7 +240,7 @@ impl TransactionAnalyzer {
         tx_data: &crate::chains::solana::rpc::TransactionDetails,
     ) -> crate::chains::solana::Result<classify::TransactionClass> {
         // Lightweight analysis for basic classification only
-        let balance_changes = balance::extract_balance_changes(transaction, tx_data).await?;
+        let balance_changes = self.balance_analysis(transaction, tx_data, false).await?;
         let dex_detection =
             dex::detect_dex_interactions(transaction, tx_data, &balance_changes).await?;
 

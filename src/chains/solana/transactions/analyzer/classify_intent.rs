@@ -21,7 +21,9 @@ use crate::chains::solana::constants::{
     SYSTEM_PROGRAM_ID, TOKEN_2022_PROGRAM_ID,
 };
 use crate::chains::solana::rpc::TransactionDetails;
-use crate::chains::solana::transactions::program_ids::detect_router_from_program_id;
+use crate::chains::solana::transactions::program_ids::{
+    detect_router, detect_router_from_program_id,
+};
 use crate::transactions::types::{TransactionType, DUST_RAW};
 
 use super::classify::ClassifiedType;
@@ -330,11 +332,8 @@ fn router_name(dex: &DexAnalysis, calls: &[Call]) -> String {
     if let Some(detected) = dex.detected_dex.as_ref() {
         return detected.router_id().to_owned();
     }
-    calls
-        .iter()
-        .find_map(|call| detect_router_from_program_id(&call.program_id))
-        .unwrap_or("unknown")
-        .to_owned()
+    let program_ids: Vec<&str> = calls.iter().map(|call| call.program_id.as_str()).collect();
+    detect_router(&program_ids).unwrap_or("unknown").to_owned()
 }
 
 fn nft_program(calls: &[Call]) -> Option<(String, &'static str)> {

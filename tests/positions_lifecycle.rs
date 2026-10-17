@@ -979,3 +979,43 @@ async fn a_swap_that_may_have_landed_keeps_the_mark_until_the_position_exists() 
     );
     set_positions(Vec::new()).await;
 }
+
+// ==================== AN ADD NEVER FOLLOWS A SUBMITTED EXIT ====================
+//
+// A full exit that is submitted but not yet verified leaves the position in the open set,
+// because the verification path has to find it. An add that executes in that window buys
+// tokens the exit does not cover: verification then sees a residual balance and the
+// position is closed as an exit retry instead of as the sale the owner asked for.
+
+#[tokio::test]
+async fn an_add_is_refused_while_a_full_exit_is_awaiting_verification() {
+    use screenerbot::positions::{add_to_position, TradeOrigin};
+    use std::time::Duration;
+
+    let _cfg = config_guard();
+    common::set_config(|cfg| cfg.trader.dca_enabled = true);
+
+    let mint = "ExitPendingAdd11111111111111111111111111111";
+    let mut exiting = position_for(mint);
+    exiting.exit_transaction_signature = Some("exit-awaiting-verification".to_owned());
+    exiting.transaction_exit_verified = false;
+    set_positions(vec![exiting]).await;
+
+    for origin in [TradeOrigin::Manual, TradeOrigin::Auto] {
+        let add = tokio::time::timeout(
+            Duration::from_secs(20),
+            add_to_position(mint, 0.01, None, origin),
+        )
+        .await
+        .expect("an add on a position whose exit is pending must be refused at once");
+        match add {
+            Err(PositionError::TransitionFailed {
+                transition: "dca",
+                detail,
+                ..
+            }) => assert!(detail.contains("exit"), "{origin:?}: {detail}"),
+            other => panic!("{origin:?}: expected the add to be refused, got {other:?}"),
+        }
+    }
+    set_positions(Vec::new()).await;
+}

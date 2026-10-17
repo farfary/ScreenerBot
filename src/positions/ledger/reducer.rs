@@ -9,6 +9,7 @@
 use std::collections::{HashMap, HashSet};
 
 use crate::chains::RawAmount;
+use crate::positions::cost_basis::HeldCost;
 use crate::transactions::deltas::{DeltaKind, SubjectAssetDelta, NATIVE_SOL_SENTINEL};
 
 use super::{LedgerEvent, LedgerEventKind, LedgerRound, QuoteAsset, QuoteLeg, WalletHolding, DUST};
@@ -242,10 +243,11 @@ struct Round {
     exit_count: u32,
     quote_asset: Option<QuoteAsset>,
     invested: f64,
-    remaining_basis: f64,
+    held_cost: HeldCost,
+    /// The moving average after the latest priced acquisition.
+    average_price: Option<f64>,
     realized_proceeds: f64,
     realized_cost: f64,
-    priced_acquired: f64,
     priced_disposed: f64,
     basis_complete: bool,
     history_complete: bool,
@@ -271,10 +273,10 @@ impl Round {
             exit_count: 0,
             quote_asset: None,
             invested: 0.0,
-            remaining_basis: 0.0,
+            held_cost: HeldCost::new(),
+            average_price: None,
             realized_proceeds: 0.0,
             realized_cost: 0.0,
-            priced_acquired: 0.0,
             priced_disposed: 0.0,
             basis_complete: true,
             history_complete: true,
@@ -404,8 +406,10 @@ impl Round {
             Some(leg) => {
                 if self.accept_quote(leg) && amount > DUST {
                     self.invested += leg.amount;
-                    self.remaining_basis += leg.amount;
-                    self.priced_acquired += amount;
+                    self.held_cost.acquire(leg.amount);
+                    self.average_price = self.held_cost.average(
+                        RawAmount::new(after.max(0).unsigned_abs()).to_whole_units(self.decimals),
+                    );
                     price_native = Some(leg.amount / amount);
                 }
             }
@@ -494,14 +498,12 @@ impl Round {
 
         // Basis is released pro rata against the balance standing before this disposal.
         let allocated_basis = if before > 0 {
-            let fraction = (amount_raw as f64 / before as f64).clamp(0.0, 1.0);
-            self.remaining_basis * fraction
+            self.held_cost.release(amount_raw as f64 / before as f64)
         } else {
             self.history_complete = false;
             self.basis_complete = false;
             0.0
         };
-        self.remaining_basis = (self.remaining_basis - allocated_basis).max(0.0);
 
         let exact = RawAmount::new(amount_raw.unsigned_abs());
         let amount = exact.to_whole_units(self.decimals);
@@ -541,7 +543,7 @@ impl Round {
         });
 
         if closing {
-            self.remaining_basis = 0.0;
+            self.held_cost.clear();
         }
     }
 
@@ -552,8 +554,7 @@ impl Round {
             && self.quote_asset == Some(QuoteAsset::Sol)
             && self.entry_count > 0;
 
-        let average_entry_price_native = (basis_complete && self.priced_acquired > DUST)
-            .then(|| self.invested / self.priced_acquired);
+        let average_entry_price_native = basis_complete.then_some(self.average_price).flatten();
         let average_exit_price_native = (self.proceeds_complete && self.priced_disposed > DUST)
             .then(|| self.realized_proceeds / self.priced_disposed);
         let realized_pnl_native = (basis_complete && self.proceeds_complete && self.exit_count > 0)
@@ -561,7 +562,7 @@ impl Round {
 
         if !basis_complete {
             self.invested = 0.0;
-            self.remaining_basis = 0.0;
+            self.held_cost.clear();
         }
 
         LedgerRound {
@@ -577,7 +578,7 @@ impl Round {
             entry_count: self.entry_count,
             exit_count: self.exit_count,
             invested_native: self.invested,
-            remaining_basis_native: self.remaining_basis,
+            remaining_basis_native: self.held_cost.cost(),
             realized_proceeds_native: self.realized_proceeds,
             realized_cost_native: self.realized_cost,
             average_entry_price_native,

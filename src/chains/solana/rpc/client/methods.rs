@@ -189,6 +189,8 @@ pub trait RpcClientMethods {
         commitment: CommitmentLevel,
     ) -> impl std::future::Future<Output = crate::Result<(u64, u64)>> + Send;
 
+    fn get_epoch(&self) -> impl std::future::Future<Output = crate::Result<u64>> + Send;
+
     // Transaction methods
     fn send_transaction(
         &self,

@@ -44,6 +44,10 @@ pub struct BalanceAnalysis {
     pub total_rent: f64,
     /// Analysis confidence score
     pub confidence: f64,
+    /// The wallet whose own balance changes define the swap: the fee payer, unless the
+    /// analyzer was given the wallet it analyzes for.
+    #[serde(default)]
+    pub wallet: Option<String>,
 }
 
 /// Clean transfer after filtering noise
@@ -121,6 +125,7 @@ pub async fn analyze_balance_changes(
         total_tips,
         total_rent,
         confidence,
+        wallet: fee_payer_of(tx_data),
     })
 }
 
@@ -156,6 +161,7 @@ pub async fn extract_balance_changes(
         total_tips,
         total_rent,
         confidence,
+        wallet: fee_payer_of(tx_data),
     })
 }
 
@@ -175,7 +181,15 @@ pub async fn extract_basic_changes(
         total_tips: 0.0,
         total_rent: 0.0,
         confidence: 0.8, // Assume good quality for quick analysis
+        wallet: fee_payer_of(tx_data),
     })
+}
+
+/// The transaction's fee payer: the first account key, which always signs.
+fn fee_payer_of(tx_data: &crate::chains::solana::rpc::TransactionDetails) -> Option<String> {
+    account_keys_from_message(&tx_data.transaction.message)
+        .into_iter()
+        .next()
 }
 
 // =============================================================================
@@ -342,11 +356,10 @@ async fn extract_token_balance_changes(
         let pre_amount = pre_map.get(&(account_index, mint.clone()));
         let post_amount = post_map.get(&(account_index, mint.clone()));
 
-        let pre_ui = pre_amount.and_then(|a| a.ui_amount).unwrap_or_default();
-        let post_ui = post_amount.and_then(|a| a.ui_amount).unwrap_or_default();
+        let pre_raw = raw_amount(pre_amount.copied());
+        let post_raw = raw_amount(post_amount.copied());
 
-        if (pre_ui - post_ui).abs() > f64::EPSILON {
-            let change = post_ui - pre_ui;
+        if pre_raw != post_raw {
             // CRITICAL FIX: Use RPC-provided decimals as primary source (authoritative)
             // Fallback to DB lookup only if RPC doesn't provide it
             let decimals = post_amount
@@ -355,13 +368,17 @@ async fn extract_token_balance_changes(
                 .unwrap_or_else(|| {
                     get_cached_decimals(crate::chains::ChainId::Solana, &mint).unwrap_or(9)
                 });
+            let pre_ui = pre_amount.and_then(|a| a.ui_amount).unwrap_or_default();
+            let post_ui = post_amount.and_then(|a| a.ui_amount).unwrap_or_default();
+            let raw_change = post_raw as i128 - pre_raw as i128;
 
             let token_change = TokenBalanceChange {
                 mint: mint.clone(),
                 decimals,
                 pre_balance: Some(pre_ui),
                 post_balance: Some(post_ui),
-                change,
+                change: post_ui - pre_ui,
+                raw_change,
                 usd_value: None, // Will be calculated later if needed
             };
 
@@ -384,6 +401,13 @@ async fn extract_token_balance_changes(
     );
 
     Ok(token_changes)
+}
+
+/// A token account's exact raw balance; an unparsable amount reads as empty.
+fn raw_amount(amount: Option<&crate::chains::solana::rpc::UiTokenAmount>) -> u128 {
+    amount
+        .and_then(|a| a.amount.parse::<u128>().ok())
+        .unwrap_or_default()
 }
 
 // =============================================================================

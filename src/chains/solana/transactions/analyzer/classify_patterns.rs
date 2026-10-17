@@ -189,19 +189,39 @@ pub(super) async fn detect_flow_patterns(
     Ok(patterns)
 }
 
-/// Detect swap patterns (buy/sell operations)
+/// Detect swap patterns (buy/sell operations). The wallet's own account decides the swap
+/// when it shows one: the counterparty of a sale shows the mirror image, and both carry
+/// the same confidence. Only when the wallet moved no swap-shaped balance do the other
+/// accounts speak.
 async fn detect_swap_patterns(
     flow_analysis: &FlowAnalysis,
     has_dex_program: bool,
 ) -> crate::chains::solana::Result<Vec<FlowPattern>> {
-    let mut patterns = Vec::new();
     if !has_dex_program {
-        return Ok(patterns);
+        return Ok(Vec::new());
     }
+    let wallet_patterns = swap_patterns_of(
+        flow_analysis
+            .nodes
+            .iter()
+            .filter(|node| matches!(node.node_type, NodeType::Wallet)),
+    );
+    if !wallet_patterns.is_empty() {
+        return Ok(wallet_patterns);
+    }
+    Ok(swap_patterns_of(flow_analysis.nodes.iter()))
+}
+
+fn swap_patterns_of<'a>(nodes: impl Iterator<Item = &'a FlowNode>) -> Vec<FlowPattern> {
+    let mut patterns = Vec::new();
     let sol_mint = SOL_MINT;
 
     // Find accounts with both SOL and token changes
-    for node in &flow_analysis.nodes {
+    for node in nodes {
+        // Proceeds credited as wrapped SOL into an account the wallet leaves open reach it
+        // as a token change, so they count as SOL received.
+        let sol_received =
+            node.sol_change + node.token_changes.get(sol_mint).copied().unwrap_or(0.0);
         if node.sol_change.abs() > f64::EPSILON && !node.token_changes.is_empty() {
             for (token_mint, token_change) in &node.token_changes {
                 if token_mint == sol_mint {
@@ -220,7 +240,7 @@ async fn detect_swap_patterns(
                 }
 
                 // Sell pattern: Token decrease + SOL increase
-                if *token_change < 0.0 && node.sol_change > 0.0 {
+                if *token_change < 0.0 && sol_received > 0.0 {
                     patterns.push(FlowPattern {
                         pattern_type: PatternType::SimpleSwap,
                         from_token: token_mint.clone(),
@@ -233,7 +253,7 @@ async fn detect_swap_patterns(
         }
     }
 
-    Ok(patterns)
+    patterns
 }
 
 /// Detect transfer patterns (simple movements)
@@ -546,6 +566,7 @@ mod tests {
     use std::collections::HashMap;
 
     use super::*;
+    use crate::chains::solana::transactions::program_ids::METEORA_DLMM_PROGRAM_ID;
 
     fn fee_paying_token_receipt() -> FlowAnalysis {
         FlowAnalysis {
@@ -576,5 +597,75 @@ mod tests {
             .expect("classification");
         assert_eq!(patterns.len(), 1);
         assert!(matches!(patterns[0].pattern_type, PatternType::SimpleSwap));
+    }
+
+    /// The wallet gave up `SOLD` and was credited wrapped SOL in a token account it
+    /// leaves open, so its own lamports only paid the fee.
+    fn token_sold_for_wrapped_sol_left_open() -> FlowAnalysis {
+        FlowAnalysis {
+            flow_patterns: Vec::new(),
+            nodes: vec![FlowNode {
+                account: "subject".to_owned(),
+                sol_change: -0.000005,
+                token_changes: HashMap::from([
+                    ("SOLD".to_owned(), -25.0),
+                    (SOL_MINT.to_owned(), 0.5),
+                ]),
+                node_type: NodeType::Wallet,
+            }],
+            edges: Vec::new(),
+            flow_confidence: 1.0,
+        }
+    }
+
+    fn dex_analysis_of(program_id: &str) -> DexAnalysis {
+        DexAnalysis {
+            detected_dex: None,
+            pool_address: None,
+            program_ids: vec![program_id.to_owned()],
+            confidence: 0.0,
+            detection_method: super::super::dex::DetectionMethod::Heuristic,
+            metadata: HashMap::new(),
+        }
+    }
+
+    /// A pool program that credits the proceeds with plain `transfer` instructions: the
+    /// transaction has no `transferChecked` credit and no Jupiter program.
+    fn pool_sale_without_checked_credits() -> crate::chains::solana::rpc::TransactionDetails {
+        serde_json::from_value(serde_json::json!({
+            "slot": 1,
+            "transaction": {
+                "signatures": ["signature"],
+                "message": { "accountKeys": [], "instructions": [] }
+            },
+            "meta": {
+                "err": null,
+                "fee": 5000,
+                "preBalances": [],
+                "postBalances": []
+            },
+            "blockTime": null
+        }))
+        .expect("transaction decodes")
+    }
+
+    #[tokio::test]
+    async fn a_token_sold_for_wrapped_sol_left_open_is_a_sell() {
+        let patterns = detect_flow_patterns(
+            &token_sold_for_wrapped_sol_left_open(),
+            &pool_sale_without_checked_credits(),
+            &dex_analysis_of(METEORA_DLMM_PROGRAM_ID),
+        )
+        .await
+        .expect("classification");
+
+        assert!(
+            patterns.iter().any(|pattern| {
+                matches!(pattern.pattern_type, PatternType::SimpleSwap)
+                    && pattern.from_token == "SOLD"
+                    && pattern.to_token == SOL_MINT
+            }),
+            "the token left the wallet and wrapped SOL arrived through a DEX program: {patterns:?}"
+        );
     }
 }

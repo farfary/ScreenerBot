@@ -94,15 +94,22 @@ impl DirectQuote {
             });
         }
 
-        // The output-side fee is sized off `min_out` — the amount the chain
-        // guarantees will be in the account when the transfer executes.
+        // The output-side fee is sized off the expected output. The swap
+        // instruction enforces `fill >= min_out` on chain and reverts before the
+        // fee transfer runs, and the fee rate times `expected_out` stays below
+        // `min_out` for every slippage up to `MAX_SLIPPAGE_BPS`; the cap keeps
+        // that true even for a rate the ceiling was not derived for.
         let fee = match input_fee.side {
-            FeeSide::Output => PlatformFee::resolve(
-                FeeSide::Output,
-                &intent.input_mint,
-                &intent.output_mint,
-                min_out,
-            )?,
+            FeeSide::Output => {
+                let mut fee = PlatformFee::resolve(
+                    FeeSide::Output,
+                    &intent.input_mint,
+                    &intent.output_mint,
+                    venue_quote.expected_out,
+                )?;
+                fee.amount = fee.amount.min(min_out);
+                fee
+            }
             _ => input_fee,
         };
 
@@ -245,9 +252,51 @@ mod tests {
             "nothing is held back"
         );
         assert_eq!(quote.min_out, 990_000, "the chain enforces the pool output");
-        assert_eq!(quote.fee.amount, 4_950, "0.5% of the GUARANTEED output");
-        assert_eq!(quote.min_net_out, 985_050);
-        assert_eq!(quote.expected_net_out, 995_050);
+        assert_eq!(quote.fee.amount, 5_000, "0.5% of the expected output");
+        assert_eq!(quote.min_net_out, 985_000);
+        assert_eq!(quote.expected_net_out, 995_000);
+    }
+
+    #[test]
+    fn the_output_fee_never_exceeds_the_guaranteed_output_at_any_allowed_slippage() {
+        use crate::chains::solana::swaps::direct::intent::MAX_SLIPPAGE_BPS;
+        use crate::chains::solana::swaps::revenue::platform_fee_amount;
+
+        for slippage_bps in 1..=MAX_SLIPPAGE_BPS {
+            for expected_out in [200u64, 1_000_000, 123_456_789_012] {
+                let intent = DirectSwapIntent {
+                    input_mint: Pubkey::new_unique(),
+                    output_mint: Pubkey::from_str(SOL_MINT).unwrap(),
+                    slippage_bps,
+                    ..buy_intent()
+                };
+                let placeholder = PlatformFee::resolve(
+                    FeeSide::Output,
+                    &intent.input_mint,
+                    &intent.output_mint,
+                    0,
+                )
+                .unwrap();
+                let Ok(quote) = DirectQuote::assemble(
+                    &intent,
+                    ProgramKind::RaydiumCpmm,
+                    intent.amount_in,
+                    venue_quote(expected_out),
+                    placeholder,
+                ) else {
+                    continue;
+                };
+                assert!(
+                    quote.fee.amount <= quote.min_out,
+                    "fee {} above min_out {} at {slippage_bps} bps",
+                    quote.fee.amount,
+                    quote.min_out
+                );
+                assert_eq!(quote.fee.amount, platform_fee_amount(expected_out));
+                assert_eq!(quote.expected_net_out, expected_out - quote.fee.amount);
+                assert_eq!(quote.min_net_out, quote.min_out - quote.fee.amount);
+            }
+        }
     }
 
     #[test]

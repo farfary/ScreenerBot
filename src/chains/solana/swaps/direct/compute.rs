@@ -27,7 +27,7 @@ const COMPUTE_UNIT_HEADROOM_PCT: u32 = 30;
 const MIN_COMPUTE_UNITS: u32 = 60_000;
 
 /// Ceiling. The runtime rejects a request above 1.4M units outright.
-const MAX_COMPUTE_UNITS: u32 = 1_400_000;
+pub const MAX_COMPUTE_UNITS: u32 = 1_400_000;
 
 /// The two compute-budget instructions, which must lead the transaction.
 ///

@@ -67,12 +67,14 @@ pub async fn close_single_ata(wallet_address: &str, mint: &str) -> Result<String
             }
         }
         None => {
-            let error_msg = format!("No empty ATA found for mint {mint}");
-            logger::warning(LogTag::Wallet, &error_msg);
-            Err(Error::invalid_amount(
-                error_msg.clone(),
-                "No empty ATA found".to_owned(),
-            ))
+            logger::warning(
+                LogTag::Wallet,
+                &format!("No empty ATA found for mint {mint}"),
+            );
+            Err(crate::chains::solana::Error::AccountNotFound {
+                address: format!("empty token account of mint {mint}"),
+            }
+            .into())
         }
     }
 }

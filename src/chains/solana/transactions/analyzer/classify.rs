@@ -234,7 +234,8 @@ async fn build_flow_graph(
             .map(|changes| changes.iter().map(|c| (c.mint.clone(), c.change)).collect())
             .unwrap_or_default();
 
-        let node_type = classify_node_type(account, dex_analysis);
+        let node_type =
+            classify_node_type(account, dex_analysis, balance_analysis.wallet.as_deref());
 
         nodes.push(FlowNode {
             account: account.clone(),
@@ -274,7 +275,7 @@ async fn build_flow_graph(
 }
 
 /// Classify what type of account this is based on patterns
-fn classify_node_type(account: &str, dex_analysis: &DexAnalysis) -> NodeType {
+fn classify_node_type(account: &str, dex_analysis: &DexAnalysis, wallet: Option<&str>) -> NodeType {
     // Check if it's a known DEX program
     if dex_analysis.program_ids.contains(&account.to_string()) {
         return NodeType::Router;
@@ -287,9 +288,7 @@ fn classify_node_type(account: &str, dex_analysis: &DexAnalysis) -> NodeType {
         }
     }
 
-    // Heuristics for other account types
-    if account.len() == 44 {
-        // Could be wallet or other account
+    if wallet == Some(account) {
         NodeType::Wallet
     } else {
         NodeType::Unknown

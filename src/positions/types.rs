@@ -283,8 +283,8 @@ pub struct Position {
     pub transaction_entry_verified: bool, // Whether entry transaction is fully verified
     pub transaction_exit_verified: bool,  // Whether exit transaction is fully verified
     // Fee tracking
-    pub entry_fee_raw: Option<u64>, // Actual entry transaction fee
-    pub exit_fee_raw: Option<u64>,  // Actual exit transaction fee
+    pub entry_fee_raw: Option<u64>, // Network fees of every buy of the position
+    pub exit_fee_raw: Option<u64>,  // Network fees of every sale of the position
     // Price tracking
     pub current_price: Option<f64>, // Current market price (updated by monitoring system)
     pub current_price_updated: Option<DateTime<Utc>>, // When current_price was last updated

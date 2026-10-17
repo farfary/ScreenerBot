@@ -234,6 +234,17 @@ pub async fn start_positions_manager_service(
 
     initialize_positions_system().await?;
 
+    // Restating the cost basis of booked positions reads token decimals, which may need a
+    // fetch, so it runs beside the service instead of ahead of it.
+    tokio::spawn(async {
+        if let Err(error) = super::restate::restate_cost_basis().await {
+            logger::warning(
+                LogTag::Positions,
+                &format!("Cost basis restate of booked positions failed: {error}"),
+            );
+        }
+    });
+
     // Create shutdown watch channel for price updater
     let (shutdown_tx, shutdown_rx) = tokio::sync::watch::channel(false);
 

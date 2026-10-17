@@ -241,6 +241,10 @@ pub async fn process_dca_opportunities() -> crate::trader::Result<Vec<TradeDecis
     let mut dca_decisions = Vec::new();
 
     for position in open_positions {
+        if position.exit_transaction_signature.is_some() && !position.transaction_exit_verified {
+            continue;
+        }
+
         // Skip if position doesn't have ID
         let position_id = match position.id {
             Some(id) => id,

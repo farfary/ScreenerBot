@@ -27,6 +27,8 @@ use crate::rpc::RpcError;
 use base64::Engine;
 use std::str::FromStr;
 
+const MAX_MULTIPLE_ACCOUNTS: usize = 50;
+
 impl RpcClientMethods for RpcClient {
     async fn get_account(&self, pubkey: &Pubkey) -> crate::Result<Option<Account>> {
         self.get_account_with_commitment(pubkey, CommitmentLevel::Confirmed)
@@ -66,10 +68,10 @@ impl RpcClientMethods for RpcClient {
             return Ok(Vec::new());
         }
 
-        // Batch in chunks of 100 (Solana limit)
+        // Keep requests within the provider account limit.
         let mut all_accounts = Vec::with_capacity(pubkeys.len());
 
-        for chunk in pubkeys.chunks(100) {
+        for chunk in pubkeys.chunks(MAX_MULTIPLE_ACCOUNTS) {
             let keys: Vec<String> = chunk.iter().map(|p| p.to_string()).collect();
             let params = serde_json::json!([
                 keys,
@@ -154,28 +156,45 @@ impl RpcClientMethods for RpcClient {
             .execute_raw("getTokenAccountsByOwner", params)
             .await?;
 
-        // Parse the response - look for token accounts and sum their balances
+        // Swaps debit the wallet's associated token account, so that account's balance is
+        // the amount a sell can spend; any other account of the mint is not counted.
         let value = result.get("value").and_then(|v| v.as_array());
+        let Some(accounts) = value else {
+            return Ok(0);
+        };
+        let (Ok(owner), Ok(mint_key)) = (Pubkey::from_str(wallet_address), Pubkey::from_str(mint))
+        else {
+            return Ok(0);
+        };
 
-        if let Some(accounts) = value {
-            if let Some(account) = accounts.first() {
-                if let Some(amount_str) = account
-                    .get("account")
-                    .and_then(|a| a.get("data"))
-                    .and_then(|d| d.get("parsed"))
-                    .and_then(|p| p.get("info"))
-                    .and_then(|i| i.get("tokenAmount"))
-                    .and_then(|t| t.get("amount"))
-                    .and_then(|a| a.as_str())
-                {
-                    return amount_str.parse::<u64>().map_err(|e| {
-                        crate::Error::Data(crate::errors::DataError::ParseError {
-                            data_type: "token amount".to_string(),
-                            error: format!("Failed to parse '{amount_str}': {e}"),
-                        })
-                    });
-                }
+        for account in accounts {
+            let Some(pubkey) = account.get("pubkey").and_then(|p| p.as_str()) else {
+                continue;
+            };
+            let program = account
+                .get("account")
+                .and_then(|a| a.get("owner"))
+                .and_then(|o| o.as_str());
+            if !is_associated_token_account(pubkey, &owner, &mint_key, program) {
+                continue;
             }
+            let Some(amount_str) = account
+                .get("account")
+                .and_then(|a| a.get("data"))
+                .and_then(|d| d.get("parsed"))
+                .and_then(|p| p.get("info"))
+                .and_then(|i| i.get("tokenAmount"))
+                .and_then(|t| t.get("amount"))
+                .and_then(|a| a.as_str())
+            else {
+                continue;
+            };
+            return amount_str.parse::<u64>().map_err(|e| {
+                crate::Error::Data(crate::errors::DataError::ParseError {
+                    data_type: "token amount".to_string(),
+                    error: format!("Failed to parse '{amount_str}': {e}"),
+                })
+            });
         }
 
         // No token account found - return 0
@@ -278,6 +297,25 @@ impl RpcClientMethods for RpcClient {
         Ok((field("absoluteSlot")?, field("blockHeight")?))
     }
 
+    async fn get_epoch(&self) -> crate::Result<u64> {
+        let result = self
+            .manager
+            .execute_raw(
+                "getEpochInfo",
+                serde_json::json!([{"commitment": "confirmed"}]),
+            )
+            .await?;
+        result
+            .get("epoch")
+            .and_then(|value| value.as_u64())
+            .ok_or_else(|| {
+                crate::Error::Data(crate::errors::DataError::ParseError {
+                    data_type: "epoch info".to_owned(),
+                    error: "missing epoch".to_owned(),
+                })
+            })
+    }
+
     async fn send_transaction(
         &self,
         transaction: &VersionedTransaction,
@@ -354,27 +392,7 @@ impl RpcClientMethods for RpcClient {
             .execute_raw("simulateTransaction", params)
             .await?;
 
-        let value = result.get("value").unwrap_or(&result);
-        Ok(SimulationOutcome {
-            err: value.get("err").filter(|v| !v.is_null()).cloned(),
-            logs: value
-                .get("logs")
-                .and_then(|v| v.as_array())
-                .map(|logs| {
-                    logs.iter()
-                        .filter_map(|l| l.as_str().map(str::to_owned))
-                        .collect()
-                })
-                .unwrap_or_default(),
-            units_consumed: value
-                .get("unitsConsumed")
-                .and_then(serde_json::Value::as_u64),
-            inner_instructions: value
-                .get("innerInstructions")
-                .and_then(|v| v.as_array())
-                .cloned()
-                .unwrap_or_default(),
-        })
+        Ok(simulation_outcome(result.get("value").unwrap_or(&result)))
     }
 
     async fn get_transaction(
@@ -1270,6 +1288,45 @@ impl RpcClientMethods for RpcClient {
 
 // Helper functions
 
+/// Read a `simulateTransaction` reply's `value`.
+///
+/// The balance fields are optional: a node that omits one, or returns one in an
+/// unexpected shape, leaves it `None` rather than failing the simulation.
+fn simulation_outcome(value: &serde_json::Value) -> SimulationOutcome {
+    fn field<T: serde::de::DeserializeOwned>(value: &serde_json::Value, key: &str) -> Option<T> {
+        value
+            .get(key)
+            .filter(|v| !v.is_null())
+            .and_then(|v| serde_json::from_value(v.clone()).ok())
+    }
+    SimulationOutcome {
+        err: value.get("err").filter(|v| !v.is_null()).cloned(),
+        logs: value
+            .get("logs")
+            .and_then(|v| v.as_array())
+            .map(|logs| {
+                logs.iter()
+                    .filter_map(|l| l.as_str().map(str::to_owned))
+                    .collect()
+            })
+            .unwrap_or_default(),
+        units_consumed: value
+            .get("unitsConsumed")
+            .and_then(serde_json::Value::as_u64),
+        inner_instructions: value
+            .get("innerInstructions")
+            .and_then(|v| v.as_array())
+            .cloned()
+            .unwrap_or_default(),
+        fee: value.get("fee").and_then(serde_json::Value::as_u64),
+        pre_balances: field(value, "preBalances"),
+        post_balances: field(value, "postBalances"),
+        pre_token_balances: field(value, "preTokenBalances"),
+        post_token_balances: field(value, "postTokenBalances"),
+        loaded_addresses: field(value, "loadedAddresses"),
+    }
+}
+
 fn commitment_to_string(commitment: CommitmentLevel) -> &'static str {
     match commitment {
         CommitmentLevel::Finalized => "finalized",
@@ -1383,10 +1440,82 @@ fn parse_helius_transactions_page(
 mod tests {
     use super::{
         block_height_params, get_transaction_config, helius_successful_transactions_params,
-        parse_helius_transactions_page, token_accounts_from, token_accounts_params,
-        CommitmentLevel, EncodedConfirmedTransactionWithStatusMeta, Pubkey, RpcError, Signature,
-        SPL_TOKEN_PROGRAM_ID,
+        parse_helius_transactions_page, simulation_outcome, token_accounts_from,
+        token_accounts_params, CommitmentLevel, EncodedConfirmedTransactionWithStatusMeta, Pubkey,
+        RpcError, Signature, SPL_TOKEN_PROGRAM_ID,
     };
+    use crate::chains::solana::rpc::types::LoadedAddresses;
+
+    /// The reply shape a mainnet node gave for an unsigned 1,000-lamport
+    /// transfer, with a token balance and loaded addresses added: the fee is
+    /// already deducted from the post-balances.
+    #[test]
+    fn a_simulation_reply_carries_its_fee_balances_and_loaded_addresses() {
+        let token_balance = |amount: &str| {
+            serde_json::json!({
+                "accountIndex": 3,
+                "mint": "So11111111111111111111111111111111111111112",
+                "owner": "6uodGCMLfDLfeXkyW71WpUDK1BEG19bU2EV51x2dcGMv",
+                "programId": SPL_TOKEN_PROGRAM_ID,
+                "uiTokenAmount": {
+                    "amount": amount,
+                    "decimals": 9,
+                    "uiAmount": null,
+                    "uiAmountString": "0"
+                }
+            })
+        };
+        let value = serde_json::json!({
+            "err": null,
+            "logs": ["Program 11111111111111111111111111111111 success"],
+            "unitsConsumed": 150,
+            "innerInstructions": [],
+            "fee": 5000,
+            "preBalances": [811_177_354u64, 85_008_688u64, 1u64],
+            "postBalances": [811_171_354u64, 85_009_688u64, 1u64],
+            "preTokenBalances": [token_balance("0")],
+            "postTokenBalances": [token_balance("1000")],
+            "loadedAddresses": {
+                "writable": ["AcEyePa7h3LcuNhvNZSxVbMp2sU6JFUe3yBtkqQ1UtvW"],
+                "readonly": ["TokenkegQfeZyiNwAJbNbGKPFXCWuBvf9Ss623VQ5DA"]
+            },
+            "accounts": null,
+            "returnData": null
+        });
+
+        let outcome = simulation_outcome(&value);
+
+        assert!(outcome.succeeded());
+        assert_eq!(outcome.units_consumed, Some(150));
+        assert_eq!(outcome.fee, Some(5000));
+        assert_eq!(outcome.pre_balances, Some(vec![811_177_354, 85_008_688, 1]));
+        assert_eq!(
+            outcome.post_balances,
+            Some(vec![811_171_354, 85_009_688, 1])
+        );
+        let pre = outcome.pre_token_balances.expect("pre token balances");
+        let post = outcome.post_token_balances.expect("post token balances");
+        assert_eq!(pre[0].account_index, 3);
+        assert_eq!(
+            pre[0].owner.as_deref(),
+            Some("6uodGCMLfDLfeXkyW71WpUDK1BEG19bU2EV51x2dcGMv")
+        );
+        assert_eq!(pre[0].ui_token_amount.amount, "0");
+        assert_eq!(post[0].ui_token_amount.amount, "1000");
+        assert_eq!(
+            outcome.loaded_addresses,
+            Some(LoadedAddresses {
+                writable: vec!["AcEyePa7h3LcuNhvNZSxVbMp2sU6JFUe3yBtkqQ1UtvW".to_owned()],
+                readonly: vec![SPL_TOKEN_PROGRAM_ID.to_owned()],
+            })
+        );
+
+        // A node that returns none of the balance fields leaves them unset.
+        let bare = simulation_outcome(&serde_json::json!({"err": null, "logs": []}));
+        assert_eq!(bare.fee, None);
+        assert!(bare.pre_balances.is_none() && bare.post_token_balances.is_none());
+        assert!(bare.loaded_addresses.is_none());
+    }
 
     fn token_account(pubkey: &str, mint: &str, amount: &str) -> serde_json::Value {
         serde_json::json!({
@@ -1817,6 +1946,31 @@ fn token_accounts_from(
         .collect::<Option<Vec<u64>>>()
         .and_then(|slots| slots.into_iter().min());
     Ok(TokenAccountsSnapshot { slot, accounts })
+}
+
+/// Whether `pubkey` is the associated token account of `owner` for `mint`, derived with
+/// the token program that owns the account (`program`), or with either token program
+/// when the response does not name one.
+fn is_associated_token_account(
+    pubkey: &str,
+    owner: &Pubkey,
+    mint: &Pubkey,
+    program: Option<&str>,
+) -> bool {
+    let programs: Vec<&str> = match program {
+        Some(program) => vec![program],
+        None => vec![SPL_TOKEN_PROGRAM_ID, TOKEN_2022_PROGRAM_ID],
+    };
+    programs
+        .into_iter()
+        .filter_map(|program| Pubkey::from_str(program).ok())
+        .any(|program| {
+            crate::chains::solana::spl_associated_token_account::get_associated_token_address_with_program_id(
+                owner, mint, &program,
+            )
+            .to_string()
+                == pubkey
+        })
 }
 
 /// Parse token account info from jsonParsed response

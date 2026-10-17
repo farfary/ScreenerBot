@@ -19,11 +19,13 @@
 //! 1. side from the mints,
 //! 2. input-side fee from `amount_in`, leaving `swap_amount_in`,
 //! 3. pool quote on `swap_amount_in` -> `expected_out` -> `min_out`,
-//! 4. output-side fee from `min_out` — the amount the chain guarantees is there.
+//! 4. output-side fee from `expected_out`, capped at `min_out`.
 //!
-//! Step 4 uses `min_out`, never `expected_out`: the transfer is built before the
-//! swap executes, and a fee sized off an optimistic estimate would fail the whole
-//! transaction whenever the fill came in light.
+//! Step 4 uses `expected_out` so the fee is the advertised rate of what the pool
+//! returns. The swap instruction enforces `fill >= min_out` and reverts before
+//! the fee transfer runs, and the rate times `expected_out` stays below
+//! `min_out` for every slippage up to `MAX_SLIPPAGE_BPS`, so the transfer is
+//! always covered by what the account holds.
 
 use super::error::{DirectSwapError, DirectSwapResult};
 use crate::chains::solana::constants::{SOL_MINT, USDC_MINT};
@@ -106,7 +108,7 @@ impl PlatformFee {
     }
 
     /// Size the fee for one leg. `base` is `amount_in` for [`FeeSide::Input`] and
-    /// the guaranteed `min_out` for [`FeeSide::Output`].
+    /// the pool's `expected_out` for [`FeeSide::Output`].
     pub fn resolve(
         side: FeeSide,
         input_mint: &Pubkey,

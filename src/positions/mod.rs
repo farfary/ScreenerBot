@@ -4,6 +4,7 @@
 //! Position lifecycle management — opening, tracking, closing, and DCA operations.
 pub mod apply;
 mod booking;
+mod cost_basis;
 pub mod database;
 pub use database as db;
 mod error;
@@ -19,6 +20,7 @@ pub mod pnl;
 pub mod price_resolution;
 pub mod price_updater;
 pub mod queue;
+pub mod restate;
 pub mod round_state;
 mod settle;
 pub mod state;
@@ -87,8 +89,8 @@ pub use db::{
 
 pub use helpers::{
     add_signature_to_index, calculate_position_pnl, calculate_position_pnl_safe,
-    calculate_position_total_fees, calculate_split_pnl, get_position_index_by_mint,
-    save_position_token_snapshot, update_mint_position_index,
+    calculate_position_total_fees, get_position_index_by_mint, save_position_token_snapshot,
+    update_mint_position_index,
 };
 
 // Core types re-exports

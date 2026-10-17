@@ -360,4 +360,24 @@ mod tests {
             );
         }
     }
+
+    /// Once the entry's pending-open mark is kept, nothing before the swap may return
+    /// early: the mark would outlive an entry that sent nothing and block the mint for
+    /// the whole pending-open window.
+    #[test]
+    fn no_fallible_step_separates_the_kept_pending_open_from_the_swap() {
+        let source = include_str!("open.rs");
+        let kept = source
+            .find("pending_open.keep();")
+            .expect("the open path keeps its pending-open mark");
+        let swap = kept
+            + source[kept..]
+                .find("execute_swap_with_fallback(")
+                .expect("the swap follows the kept mark");
+        let between = &source[kept..swap];
+        assert!(
+            !between.contains(".await?") && !between.contains("return Err"),
+            "a fallible step between keep() and the swap leaves the mark held:\n{between}"
+        );
+    }
 }

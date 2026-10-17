@@ -40,16 +40,9 @@ async fn resolve_evaluation_input(position: &Position) -> Option<(Position, f64)
     // 3. Force-fetch fresh API price if stale
     // This matches the price resolution used by position open/close/DCA operations.
     let current_price = match get_price_with_api_fallback(&position.mint).await {
-        Some((price_result, source)) => {
+        Some((price_result, _source)) => {
             if price_result.price_native > 0.0 && price_result.price_native.is_finite() {
-                // A pool-computed price can sit a few percent below the executed swap price
-                // (about 5-6% on DAMM pools); the entry's own gap corrects it.
-                crate::positions::price_resolution::apply_pool_bias_correction(
-                    price_result.price_native,
-                    source,
-                    position.entry_price,
-                    position.effective_entry_price,
-                )
+                price_result.price_native
             } else {
                 return None; // Invalid price
             }

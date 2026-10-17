@@ -1451,7 +1451,11 @@ fn a_force_close_from_a_stale_snapshot_keeps_a_committed_partial_exit() {
             assert_eq!(booked.total_exited_amount, RawAmount::new(HELD));
             assert_eq!(booked.remaining_token_amount, Some(RawAmount::ZERO));
             let pnl = booked.pnl.expect("a written-off row carries its P&L");
-            assert!((pnl - (0.8 - 1.0)).abs() < 1e-9, "P&L {pnl}");
+            // The partial exit's fee is a cost of the round.
+            assert!(
+                (pnl - (0.8 - 1.0 - fee(SWAP_FEE_RAW))).abs() < 1e-12,
+                "P&L {pnl}"
+            );
             assert_eq!(exit_records(id).await, 1);
         },
     );
@@ -1492,6 +1496,101 @@ fn a_dca_from_a_stale_snapshot_keeps_a_committed_partial_exit() {
             assert_eq!(booked.total_size_native, 1.5);
             assert_eq!(exit_records(id).await, 1);
             assert_eq!(entry_records(id).await, 1);
+        },
+    );
+}
+
+/// Tokens sold leave the books at the average cost in force, so a DCA after a partial exit
+/// averages the cost of the tokens still held with the new buy. The cumulative invested
+/// total includes the cost of the tokens already sold and must not enter the average.
+#[test]
+fn a_dca_after_a_partial_exit_averages_the_cost_of_the_tokens_still_held() {
+    common::run_isolated(
+        module_path!(),
+        "a_dca_after_a_partial_exit_averages_the_cost_of_the_tokens_still_held",
+        || async {
+            let _dir = common::isolated_env();
+            let _cfg = common::config_guard();
+            let id = open_position(|_| {}).await;
+            register_partial(id).await;
+            apply_transition(partial_exit(id))
+                .await
+                .expect("the partial exit commits");
+            register_dca(id).await;
+            apply_transition(PositionTransition::DcaVerified {
+                position_id: id,
+                tokens_bought: RawAmount::new(400_000),
+                native_spent: 0.8,
+                effective_price: 2.0,
+                fee_raw: SWAP_FEE_RAW,
+                dca_time: Utc::now(),
+                dca_signature: DCA_SIGNATURE.to_owned(),
+                held_after: None,
+            })
+            .await
+            .expect("the DCA commits");
+
+            // 0.6 tokens still held from the entry at 1.0 SOL each, plus 0.4 tokens bought at
+            // 2.0 SOL each: 1.4 SOL for 1.0 token.
+            for position in [stored_position(id).await, memory_position(id).await] {
+                assert_eq!(position.remaining_token_amount, Some(RawAmount::new(HELD)));
+                assert!(
+                    (position.total_size_native - 1.8).abs() < 1e-9,
+                    "the invested total is {}",
+                    position.total_size_native
+                );
+                assert!(
+                    (position.average_entry_price - 1.4).abs() < 1e-9,
+                    "the average entry price is {}, not the 1.4 SOL per token the held tokens cost",
+                    position.average_entry_price
+                );
+            }
+        },
+    );
+}
+
+/// The network fee of every swap of a round is a cost of the round: the entry, each DCA, each
+/// partial exit and the close.
+#[test]
+fn a_closed_rounds_realized_pnl_deducts_the_network_fee_of_every_swap() {
+    common::run_isolated(
+        module_path!(),
+        "a_closed_rounds_realized_pnl_deducts_the_network_fee_of_every_swap",
+        || async {
+            let _dir = common::isolated_env();
+            let _cfg = common::config_guard();
+            let id = open_position(|position| {
+                position.entry_fee_raw = Some(SWAP_FEE_RAW);
+            })
+            .await;
+            register_partial(id).await;
+            apply_transition(partial_exit(id))
+                .await
+                .expect("the partial exit commits");
+            register_dca(id).await;
+            apply_transition(dca(id)).await.expect("the DCA commits");
+            apply_transition(PositionTransition::ExitVerified {
+                position_id: id,
+                effective_exit_price: 1.5,
+                native_received: 1.65,
+                fee_raw: SWAP_FEE_RAW,
+                exit_time: Utc::now(),
+                exit_signature: CLOSE_SIGNATURE.to_owned(),
+                exit_amount: RawAmount::new(1_100_000),
+                held_after: None,
+            })
+            .await
+            .expect("the close commits");
+
+            // Received 0.8 + 1.65 SOL for 1.5 SOL invested; four swaps paid SWAP_FEE_RAW each.
+            let expected = 0.8 + 1.65 - 1.5 - fee(4 * SWAP_FEE_RAW);
+            for position in [stored_position(id).await, memory_position(id).await] {
+                let pnl = position.pnl.expect("a realized P&L");
+                assert!(
+                    (pnl - expected).abs() < 1e-12,
+                    "realized P&L {pnl} leaves out network fees: expected {expected}"
+                );
+            }
         },
     );
 }
@@ -2611,7 +2710,8 @@ fn a_partial_exit_after_a_close_keeps_acquired_equal_to_held_plus_exited() {
             assert!(booked.exit_time.is_some(), "the position stays closed");
             assert_acquired_balances(id, HELD).await;
             assert_eq!(exit_records(id).await, 1);
-            assert!((recorded_loss() - 0.2).abs() < 1e-12);
+            // The late partial exit's fee joins the loss.
+            assert!((recorded_loss() - (0.2 + fee(SWAP_FEE_RAW))).abs() < 1e-12);
         },
     );
 }
@@ -2706,8 +2806,8 @@ fn a_dca_whose_tokens_the_close_sold_stays_closed_and_restates_the_loss() {
             assert_eq!(booked.total_size_native, 1.5);
             assert_eq!(booked.remaining_token_amount, Some(RawAmount::ZERO));
             assert_acquired_balances(id, HELD + 500_000).await;
-            assert_eq!(booked.pnl, Some(-1.5));
-            assert_eq!(recorded_loss(), 1.5);
+            assert_eq!(booked.pnl, Some(-1.500005));
+            assert_eq!(recorded_loss(), 1.500005);
             assert!(
                 state::try_consume_global_position_permit(),
                 "a position that stays closed takes no slot"
@@ -3396,7 +3496,10 @@ fn the_loss_figure_after_a_restart_equals_the_live_figure_after_restatement() {
                 .await
                 .expect("the late partial exit is booked");
             let live = recorded_loss();
-            assert!((live - 0.2).abs() < 1e-12, "live figure {live}");
+            assert!(
+                (live - (0.2 + fee(SWAP_FEE_RAW))).abs() < 1e-12,
+                "live figure {live}"
+            );
 
             initialize_from_history().await;
             assert_eq!(recorded_loss(), live, "a restart finds another figure");
@@ -3446,7 +3549,8 @@ fn a_restatement_that_raises_the_loss_past_the_limit_pauses_entries() {
             apply_transition(late_dca(id, Some(RawAmount::ZERO)))
                 .await
                 .expect("the late DCA is booked");
-            assert_eq!(recorded_loss(), 1.5);
+            // The late buy's cost and its fee join the loss.
+            assert!((recorded_loss() - (1.5 + fee(SWAP_FEE_RAW))).abs() < 1e-12);
             assert!(is_entry_blocked_by_loss_limit(), "the restated loss pauses");
         },
     );
@@ -4161,6 +4265,141 @@ fn a_late_dca_below_the_entry_price_moves_at_its_own_cost() {
     );
 }
 
+/// A sale verified after its position was written off joins the fees the position already
+/// paid: the realized P&L deducts the partial exit's fee and the late close's fee alike.
+#[test]
+fn a_late_close_adds_its_fee_to_the_fees_already_paid() {
+    common::run_isolated(
+        module_path!(),
+        "a_late_close_adds_its_fee_to_the_fees_already_paid",
+        || async {
+            let _dir = common::isolated_env();
+            let _cfg = common::config_guard();
+            state::init_global_position_semaphore(1);
+            let id = open_position(|position| {
+                position.exit_transaction_signature = Some(CLOSE_SIGNATURE.to_owned());
+            })
+            .await;
+            assert!(state::try_consume_global_position_permit());
+            state::register_position_slot(id).await;
+            register_partial(id).await;
+            apply_transition(partial_exit(id))
+                .await
+                .expect("the partial exit commits");
+            force_close_position(id, "stuck")
+                .await
+                .expect("force close commits");
+
+            apply_transition(PositionTransition::ExitVerified {
+                position_id: id,
+                effective_exit_price: 1.5,
+                native_received: 0.9,
+                fee_raw: SWAP_FEE_RAW,
+                exit_time: Utc::now(),
+                exit_signature: CLOSE_SIGNATURE.to_owned(),
+                exit_amount: RawAmount::new(600_000),
+                held_after: Some(RawAmount::ZERO),
+            })
+            .await
+            .expect("the late sell is booked");
+
+            // Received 0.8 + 0.9 SOL for 1.0 SOL invested; two sales paid SWAP_FEE_RAW each.
+            let expected = 0.8 + 0.9 - 1.0 - fee(2 * SWAP_FEE_RAW);
+            for position in [stored_position(id).await, memory_position(id).await] {
+                assert_eq!(position.exit_fee_raw, Some(2 * SWAP_FEE_RAW));
+                let pnl = position.pnl.expect("a realized P&L");
+                assert!(
+                    (pnl - expected).abs() < 1e-12,
+                    "realized P&L {pnl} is not {expected}"
+                );
+            }
+        },
+    );
+}
+
+/// A late buy split between a closed position and the open position of its mint splits its
+/// fee with its tokens: each part is booked once, on the row that took those tokens, the
+/// parts sum to the buy's fee, and the closed position's realized P&L deducts its part.
+#[test]
+fn a_handover_books_each_part_of_the_buys_fee_once() {
+    common::run_isolated(
+        module_path!(),
+        "a_handover_books_each_part_of_the_buys_fee_once",
+        || async {
+            let _dir = common::isolated_env();
+            let _cfg = common::config_guard();
+            let closed = open_position(|_| {}).await;
+            apply_transition(PositionTransition::ExitVerified {
+                position_id: closed,
+                effective_exit_price: 0.6,
+                native_received: 0.6,
+                fee_raw: 0,
+                exit_time: Utc::now(),
+                exit_signature: CLOSE_SIGNATURE.to_owned(),
+                exit_amount: RawAmount::new(HELD),
+                held_after: None,
+            })
+            .await
+            .expect("the close is booked");
+            let open = store_position(|position| {
+                position.token_amount = Some(RawAmount::new(2 * HELD));
+                position.remaining_token_amount = Some(RawAmount::new(2 * HELD));
+                position.entry_price = 0.5;
+                position.effective_entry_price = Some(0.5);
+                position.average_entry_price = 0.5;
+            })
+            .await;
+
+            // Half of the buy is still held beside the open position's own tokens.
+            let buy_fee = 2 * SWAP_FEE_RAW;
+            apply_transition(PositionTransition::DcaVerified {
+                position_id: closed,
+                tokens_bought: RawAmount::new(HELD),
+                native_spent: 0.5,
+                effective_price: 0.5,
+                fee_raw: buy_fee,
+                dca_time: Utc::now(),
+                dca_signature: DCA_SIGNATURE.to_owned(),
+                held_after: Some(RawAmount::new(2 * HELD + HELD / 2)),
+            })
+            .await
+            .expect("the late DCA is booked");
+
+            let kept_records = db::get_entry_history(closed).await.expect("read entries");
+            let handed_records = db::get_entry_history(open).await.expect("read entries");
+            assert_eq!(kept_records.len(), 1);
+            assert_eq!(handed_records.len(), 1);
+            assert_eq!(kept_records[0].amount, RawAmount::new(HELD / 2));
+            assert_eq!(handed_records[0].amount, RawAmount::new(HELD / 2));
+            let kept_fee = kept_records[0].fees_raw.expect("the kept part's fee");
+            let handed_fee = handed_records[0].fees_raw.expect("the handed part's fee");
+            assert_eq!(
+                kept_fee + handed_fee,
+                buy_fee,
+                "the parts sum to the buy's fee"
+            );
+
+            for position in [stored_position(closed).await, memory_position(closed).await] {
+                assert!(
+                    position.exit_time.is_some(),
+                    "the closed position stays closed"
+                );
+                assert_eq!(position.entry_fee_raw, Some(kept_fee));
+                // 0.6 SOL received for 1.0 SOL plus the kept 0.25 SOL of the buy.
+                let expected = 0.6 - 1.25 - fee(kept_fee);
+                let pnl = position.pnl.expect("a realized P&L");
+                assert!(
+                    (pnl - expected).abs() < 1e-12,
+                    "realized P&L {pnl} is not {expected}"
+                );
+            }
+            for position in [stored_position(open).await, memory_position(open).await] {
+                assert_eq!(position.entry_fee_raw, Some(handed_fee));
+            }
+        },
+    );
+}
+
 /// The full exit of the open position of the mint, sent and not yet verified.
 const OPEN_EXIT_SIGNATURE: &str = "open-exit-sig";
 
@@ -4242,7 +4481,11 @@ fn an_exit_in_flight_that_sold_a_late_fill_s_tokens_books_them_on_its_position()
                 );
                 assert_eq!(position.remaining_token_amount, Some(RawAmount::ZERO));
                 let pnl = position.pnl.expect("a realized P&L");
-                assert!((pnl - 0.3).abs() < 1e-9, "realized {pnl}");
+                // The handed-over buy carries its fee to the open position.
+                assert!(
+                    (pnl - (0.3 - fee(SWAP_FEE_RAW))).abs() < 1e-12,
+                    "realized {pnl}"
+                );
             }
             assert_acquired_balances(open, HELD + 500_000).await;
         },
@@ -4447,6 +4690,175 @@ fn reclaiming_a_slot_takes_one_permit_and_none_for_a_wallet_derived_position() {
                 !state::try_consume_global_position_permit(),
                 "the first reclaim took no slot"
             );
+        },
+    );
+}
+
+// ==================== COST BASIS RESTATE ====================
+
+/// Books an entry, a partial exit of 0.4 tokens and a DCA of 0.4 tokens for 0.8 SOL onto a
+/// fresh position, each with its own fee and record, and returns its id.
+async fn sold_then_averaged() -> i64 {
+    let id = open_position(|position| {
+        position.transaction_entry_verified = false;
+    })
+    .await;
+    apply_transition(entry_verified(id))
+        .await
+        .expect("the entry commits");
+    register_partial(id).await;
+    apply_transition(partial_exit(id))
+        .await
+        .expect("the partial exit commits");
+    register_dca(id).await;
+    apply_transition(PositionTransition::DcaVerified {
+        position_id: id,
+        tokens_bought: RawAmount::new(400_000),
+        native_spent: 0.8,
+        effective_price: 2.0,
+        fee_raw: SWAP_FEE_RAW,
+        dca_time: Utc::now(),
+        dca_signature: DCA_SIGNATURE.to_owned(),
+        held_after: None,
+    })
+    .await
+    .expect("the DCA commits");
+    id
+}
+
+/// Rewrites the stored row of `id` as an earlier booking left it: the invested total over
+/// the held amount as the average, and only the first swap's fee on each side.
+fn store_earlier_booking(id: i64, pnl: Option<f64>) {
+    injector()
+        .execute(
+            "UPDATE positions SET average_entry_price = 1.8, entry_fee_raw = ?2, exit_fee_raw = ?2, pnl = ?3 WHERE id = ?1",
+            rusqlite::params![id, SWAP_FEE_RAW as i64, pnl],
+        )
+        .expect("store the earlier booking");
+}
+
+/// The cost-basis columns the restate writes.
+fn cost_basis_of(position: &Position) -> (f64, Option<u64>, Option<u64>, Option<f64>, Option<f64>) {
+    (
+        position.average_entry_price,
+        position.entry_fee_raw,
+        position.exit_fee_raw,
+        position.pnl,
+        position.pnl_percent,
+    )
+}
+
+async fn restate() -> usize {
+    screenerbot::positions::restate::restate_cost_basis()
+        .await
+        .expect("the restate runs")
+}
+
+#[test]
+fn a_restate_from_the_records_is_idempotent_and_matches_live_booking() {
+    common::run_isolated(
+        module_path!(),
+        "a_restate_from_the_records_is_idempotent_and_matches_live_booking",
+        || async {
+            let _dir = common::isolated_env();
+            let _cfg = common::config_guard();
+            let id = sold_then_averaged().await;
+            let live = stored_position(id).await;
+            assert!((live.average_entry_price - 1.4).abs() < 1e-9);
+            assert_eq!(live.entry_fee_raw, Some(2 * SWAP_FEE_RAW));
+            assert_eq!(live.exit_fee_raw, Some(SWAP_FEE_RAW));
+
+            store_earlier_booking(id, None);
+            assert_eq!(restate().await, 1, "the earlier booking is restated");
+            for position in [stored_position(id).await, memory_position(id).await] {
+                assert!(
+                    (position.average_entry_price - live.average_entry_price).abs() < 1e-12,
+                    "restated average {} is not the live booking's {}",
+                    position.average_entry_price,
+                    live.average_entry_price
+                );
+                assert_eq!(position.entry_fee_raw, live.entry_fee_raw);
+                assert_eq!(position.exit_fee_raw, live.exit_fee_raw);
+                assert_eq!(position.pnl, None, "an open position has no realized P&L");
+            }
+
+            let restated = cost_basis_of(&stored_position(id).await);
+            assert_eq!(restate().await, 0, "a second restate writes nothing");
+            assert_eq!(cost_basis_of(&stored_position(id).await), restated);
+            assert_eq!(cost_basis_of(&memory_position(id).await), restated);
+        },
+    );
+}
+
+#[test]
+fn a_restate_of_a_closed_position_deducts_every_recorded_fee_from_its_realized_pnl() {
+    common::run_isolated(
+        module_path!(),
+        "a_restate_of_a_closed_position_deducts_every_recorded_fee_from_its_realized_pnl",
+        || async {
+            let _dir = common::isolated_env();
+            let _cfg = common::config_guard();
+            let id = sold_then_averaged().await;
+            apply_transition(PositionTransition::ExitVerified {
+                position_id: id,
+                effective_exit_price: 1.5,
+                native_received: 1.65,
+                fee_raw: SWAP_FEE_RAW,
+                exit_time: Utc::now(),
+                exit_signature: CLOSE_SIGNATURE.to_owned(),
+                exit_amount: RawAmount::new(HELD),
+                held_after: None,
+            })
+            .await
+            .expect("the close commits");
+            let live = stored_position(id).await;
+            let expected = 0.8 + 1.65 - 1.8 - fee(4 * SWAP_FEE_RAW);
+            assert!((live.pnl.expect("a realized P&L") - expected).abs() < 1e-12);
+
+            store_earlier_booking(id, Some(0.8 + 1.65 - 1.8 - fee(2 * SWAP_FEE_RAW)));
+            assert_eq!(restate().await, 1, "the earlier booking is restated");
+            for position in [stored_position(id).await, memory_position(id).await] {
+                assert_eq!(position.entry_fee_raw, Some(2 * SWAP_FEE_RAW));
+                assert_eq!(position.exit_fee_raw, Some(2 * SWAP_FEE_RAW));
+                let pnl = position.pnl.expect("a realized P&L");
+                assert!(
+                    (pnl - expected).abs() < 1e-12,
+                    "restated P&L {pnl} is not {expected}"
+                );
+                let percent = position.pnl_percent.expect("a realized P&L percent");
+                assert!((percent - expected / 1.8 * 100.0).abs() < 1e-9);
+                assert!((position.average_entry_price - 1.4).abs() < 1e-9);
+                assert!(position.exit_time.is_some(), "the position stays closed");
+            }
+
+            let restated = cost_basis_of(&stored_position(id).await);
+            assert_eq!(restate().await, 0, "a second restate writes nothing");
+            assert_eq!(cost_basis_of(&stored_position(id).await), restated);
+        },
+    );
+}
+
+#[test]
+fn a_restate_never_writes_a_position_its_records_do_not_cover() {
+    common::run_isolated(
+        module_path!(),
+        "a_restate_never_writes_a_position_its_records_do_not_cover",
+        || async {
+            let _dir = common::isolated_env();
+            let _cfg = common::config_guard();
+            let id = sold_then_averaged().await;
+            store_earlier_booking(id, None);
+            // The row holds tokens no record bought.
+            injector()
+                .execute(
+                    "UPDATE positions SET remaining_token_amount = '1100000' WHERE id = ?1",
+                    [id],
+                )
+                .expect("grow the stored holding");
+            let before = cost_basis_of(&stored_position(id).await);
+
+            assert_eq!(restate().await, 0);
+            assert_eq!(cost_basis_of(&stored_position(id).await), before);
         },
     );
 }

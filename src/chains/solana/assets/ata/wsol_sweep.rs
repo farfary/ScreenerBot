@@ -1,7 +1,7 @@
 // Copyright (c) 2024-2026 ScreenerBot (screenerbot.io)
 // SPDX-License-Identifier: BUSL-1.1
 
-//! Reclaims the wallet's wrapped-SOL account after a swap leaves it empty.
+//! Reclaims a swapping wallet's wrapped-SOL account after a swap leaves it empty.
 //!
 //! Routers wrap SOL into the wallet's associated WSOL account to trade. Some
 //! leave that account open and empty afterwards (Raptor did, 2026-09-16, locking
@@ -15,19 +15,22 @@
 //! - it holds zero WSOL, so closing never unwraps a balance someone kept;
 //! - no trade, swap or wallet tool is in flight, checked before and after the
 //!   account read, because a swap being built may be about to use it;
-//! - one sweep runs at a time, and swaps arriving while it waits share it.
+//! - one sweep runs per wallet at a time, and swaps of that wallet arriving while
+//!   it waits share it.
 //!
 //! Every router in use creates the WSOL account idempotently inside its own
 //! transaction, so even a swap that starts right after the close is unaffected.
 
 use super::balance::get_all_token_accounts;
 use super::helpers::close_ata;
+use crate::chains::solana::assets::transfer::close_ata_for_wallet;
 use crate::chains::solana::constants::SOL_MINT;
 use crate::chains::solana::solana_sdk::pubkey::Pubkey;
 use crate::chains::solana::spl_associated_token_account::get_associated_token_address_with_program_id;
 use crate::logger::{self, LogTag};
+use std::collections::HashSet;
 use std::str::FromStr;
-use std::sync::atomic::{AtomicBool, Ordering};
+use std::sync::{LazyLock, Mutex};
 use std::time::Duration;
 
 /// Wait after the swap confirms, so its balance changes are visible to the read.
@@ -39,20 +42,37 @@ const BUSY_RETRY_DELAY: Duration = Duration::from_secs(15);
 /// Give up after this many busy checks; the next swap schedules a fresh sweep.
 const MAX_BUSY_RETRIES: u32 = 20;
 
-static SWEEP_SCHEDULED: AtomicBool = AtomicBool::new(false);
+/// Which key signs the sweep's close transaction.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum SweepSigner {
+    /// The configured main wallet.
+    MainWallet,
+    /// One wallet of the wallet tools, by id.
+    Wallet(i64),
+}
 
-/// Schedule a sweep of the wallet's WSOL account. Cheap to call after every swap.
-pub fn schedule_wsol_sweep() {
-    if SWEEP_SCHEDULED.swap(true, Ordering::SeqCst) {
+/// Addresses of the wallets with a sweep pending or running.
+static SWEEPS_SCHEDULED: LazyLock<Mutex<HashSet<String>>> =
+    LazyLock::new(|| Mutex::new(HashSet::new()));
+
+/// Schedule a sweep of `wallet_address`'s WSOL account. Cheap to call after every swap.
+pub fn schedule_wsol_sweep(wallet_address: String, signer: SweepSigner) {
+    let newly_scheduled = SWEEPS_SCHEDULED
+        .lock()
+        .map(|mut scheduled| scheduled.insert(wallet_address.clone()))
+        .unwrap_or(false);
+    if !newly_scheduled {
         return;
     }
-    tokio::spawn(async {
-        sweep_when_idle().await;
-        SWEEP_SCHEDULED.store(false, Ordering::SeqCst);
+    tokio::spawn(async move {
+        sweep_when_idle(&wallet_address, signer).await;
+        if let Ok(mut scheduled) = SWEEPS_SCHEDULED.lock() {
+            scheduled.remove(&wallet_address);
+        }
     });
 }
 
-async fn sweep_when_idle() {
+async fn sweep_when_idle(wallet: &str, signer: SweepSigner) {
     tokio::time::sleep(SETTLE_DELAY).await;
     if !wait_for_idle().await {
         logger::debug(
@@ -62,17 +82,7 @@ async fn sweep_when_idle() {
         return;
     }
 
-    let wallet = match crate::utils::get_wallet_address() {
-        Ok(wallet) => wallet,
-        Err(e) => {
-            logger::debug(
-                LogTag::Wallet,
-                &format!("WSOL sweep skipped: no wallet address ({e})"),
-            );
-            return;
-        }
-    };
-    let accounts = match get_all_token_accounts(&wallet).await {
+    let accounts = match get_all_token_accounts(wallet).await {
         Ok(accounts) => accounts,
         Err(e) => {
             logger::debug(
@@ -83,7 +93,7 @@ async fn sweep_when_idle() {
         }
     };
 
-    let (Ok(owner), Ok(mint)) = (Pubkey::from_str(&wallet), Pubkey::from_str(SOL_MINT)) else {
+    let (Ok(owner), Ok(mint)) = (Pubkey::from_str(wallet), Pubkey::from_str(SOL_MINT)) else {
         return;
     };
     let Some(wsol) = accounts.into_iter().find(|account| {
@@ -111,7 +121,17 @@ async fn sweep_when_idle() {
         return;
     }
 
-    match close_ata(&wallet, &wsol.account, SOL_MINT, wsol.is_token_2022).await {
+    let closed = match signer {
+        SweepSigner::MainWallet => close_ata(wallet, &wsol.account, SOL_MINT, wsol.is_token_2022)
+            .await
+            .map_err(|e| e.to_string()),
+        SweepSigner::Wallet(wallet_id) => {
+            close_ata_for_wallet(wallet_id, SOL_MINT, wsol.is_token_2022)
+                .await
+                .map_err(|e| e.to_string())
+        }
+    };
+    match closed {
         Ok(signature) => logger::info(
             LogTag::Wallet,
             &format!(

@@ -7,7 +7,7 @@
 //! (airdrop, CEX deposit, wallet consolidation) as a sell. This module's one job is
 //! to make that impossible: a `Swap` is only ever produced when a known DEX/
 //! aggregator program is present in the transaction (`program_ids::
-//! detect_router_from_program_id`) -- a balance delta alone, however swap-shaped, is
+//! detect_router`) -- a balance delta alone, however swap-shaped, is
 //! never sufficient.
 
 use std::collections::{HashMap, HashSet};
@@ -18,7 +18,7 @@ use crate::chains::solana::constants::{
 use crate::chains::solana::transactions::analyzer::balance::account_keys_from_message;
 use crate::chains::solana::transactions::analyzer::dex::extract_program_ids;
 use crate::chains::solana::transactions::deltas::{extract_subject_deltas, subject_native_delta};
-use crate::chains::solana::transactions::program_ids::detect_router_from_program_id;
+use crate::chains::solana::transactions::program_ids::detect_router;
 use crate::transactions::deltas::NATIVE_SOL_SENTINEL;
 use crate::transactions::types::Transaction;
 use crate::wallets::watch::{ActivityKind, SwapSide, TransferDirection};
@@ -196,10 +196,9 @@ pub fn classify_transaction_activity(
         .filter(|(_, delta)| *delta != 0)
         .collect::<Vec<_>>();
 
-    let venue = extract_program_ids(&tx_data).ok().and_then(|ids| {
-        ids.iter()
-            .find_map(|id| detect_router_from_program_id(id).map(str::to_owned))
-    });
+    let venue = extract_program_ids(&tx_data)
+        .ok()
+        .and_then(|ids| detect_router(&ids).map(str::to_owned));
 
     Some(if venue.is_some() {
         if has_ambiguous_native_transfer(raw, &account_keys, subject_index, &owned_indices) {

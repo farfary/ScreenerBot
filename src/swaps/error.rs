@@ -297,6 +297,10 @@ pub enum NotSubmittedReason {
         venue: String,
         venue_address: String,
     },
+    /// No node could simulate a transaction that spends the native asset, so
+    /// nothing established what it would do with the wallet before signing.
+    #[error("the transaction could not be simulated: {detail}")]
+    SimulationUnavailable { detail: String },
 }
 
 impl NotSubmittedReason {
@@ -311,6 +315,7 @@ impl NotSubmittedReason {
             | NotSubmittedReason::RequestRejected { .. }
             | NotSubmittedReason::SimulationFailed { .. }
             | NotSubmittedReason::CostExceeded { .. } => 422,
+            NotSubmittedReason::SimulationUnavailable { .. } => 503,
         }
     }
 }

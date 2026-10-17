@@ -65,6 +65,75 @@ struct DirectExecutionData {
 /// whose best few pools cannot be traded is better left to an aggregator.
 const MAX_CANDIDATE_POOLS: usize = 3;
 
+/// The fresh-quote refusal: the market moved below what the caller accepted.
+fn market_moved(
+    fresh_quote: &direct::DirectQuote,
+    data: &DirectExecutionData,
+    fresh_expected_net_out: u64,
+) -> direct::DirectSwapError {
+    direct::DirectSwapError::MarketMoved {
+        pool: fresh_quote.pool,
+        accepted_min_net_out: data.accepted_min_net_out,
+        fresh_expected_net_out,
+    }
+}
+
+/// Raw units of slack when comparing a re-sized net floor to the accepted one.
+/// The output fee is `floor(expected_out * rate)`, so an `expected_out` that
+/// differs by a hair can move the fee by exactly one raw unit while `min_out`
+/// stays flat. That single unit of rounding is not a market move.
+const FEE_ROUNDING_TOLERANCE: u64 = 1;
+
+/// Hold the floor the caller accepted against a fresh quote.
+///
+/// A fresh quote re-derives its own floor from the new mid price -- taking that
+/// one would apply slippage a second time and execute below what was accepted.
+/// So the accepted gross floor is carried into the instruction, and the
+/// output-side fee is re-sized from the fresh expected output, capped at the
+/// floor that will actually be enforced. Refuses with `MarketMoved` when the
+/// fresh quote cannot honour the accepted floor.
+fn hold_accepted_floor(
+    fresh_quote: &mut direct::DirectQuote,
+    data: &DirectExecutionData,
+) -> direct::DirectSwapResult<()> {
+    if fresh_quote.expected_out < data.accepted_min_out
+        || fresh_quote.expected_net_out < data.accepted_min_net_out
+    {
+        return Err(market_moved(
+            fresh_quote,
+            data,
+            fresh_quote.expected_net_out,
+        ));
+    }
+
+    let enforced_min_out = fresh_quote.min_out.max(data.accepted_min_out);
+    fresh_quote.min_out = enforced_min_out;
+    if fresh_quote.fee.side == direct::FeeSide::Output {
+        let mut fee = direct::PlatformFee::resolve(
+            direct::FeeSide::Output,
+            &fresh_quote.input_mint,
+            &fresh_quote.output_mint,
+            fresh_quote.expected_out,
+        )?;
+        fee.amount = fee.amount.min(enforced_min_out);
+        fresh_quote.fee = fee;
+        fresh_quote.expected_net_out = fresh_quote
+            .expected_out
+            .saturating_sub(fresh_quote.fee.amount);
+        fresh_quote.min_net_out = enforced_min_out.saturating_sub(fresh_quote.fee.amount);
+    } else {
+        fresh_quote.min_net_out = enforced_min_out;
+    }
+    if fresh_quote
+        .min_net_out
+        .saturating_add(FEE_ROUNDING_TOLERANCE)
+        < data.accepted_min_net_out
+    {
+        return Err(market_moved(fresh_quote, data, fresh_quote.min_net_out));
+    }
+    Ok(())
+}
+
 /// The direct pool-swap router.
 pub struct DirectPoolRouter;
 
@@ -269,11 +338,6 @@ impl DirectPoolRouter {
         };
 
         let (mut fresh_quote, market) = direct::quote(&intent).await?;
-        let moved = |fresh: u64| direct::DirectSwapError::MarketMoved {
-            pool: intent.pool,
-            accepted_min_net_out: data.accepted_min_net_out,
-            fresh_expected_net_out: fresh,
-        };
 
         // The ceiling is a property of the CURRENT pool, so it is re-applied to
         // the fresh quote: an accepted quote is not a licence to move the pool
@@ -291,40 +355,12 @@ impl DirectPoolRouter {
                     fresh_quote.price_impact_pct, intent.pool
                 ),
             );
-            return Err(moved(fresh_quote.expected_net_out).into());
-        }
-
-        // The caller accepted a GUARANTEED floor, and a fresh quote re-derives
-        // its own floor from the new mid price -- taking that one would apply
-        // slippage a second time and execute below what was accepted. So the
-        // accepted floor is carried into the instruction, and the output-side
-        // fee is re-sized from the floor that will actually be enforced.
-        if fresh_quote.expected_out < data.accepted_min_out
-            || fresh_quote.expected_net_out < data.accepted_min_net_out
-        {
-            return Err(moved(fresh_quote.expected_net_out).into());
+            return Err(market_moved(&fresh_quote, &data, fresh_quote.expected_net_out).into());
         }
 
         let natural_min_out = fresh_quote.min_out;
-        let enforced_min_out = natural_min_out.max(data.accepted_min_out);
-        fresh_quote.min_out = enforced_min_out;
-        if fresh_quote.fee.side == direct::FeeSide::Output {
-            fresh_quote.fee = direct::PlatformFee::resolve(
-                direct::FeeSide::Output,
-                &fresh_quote.input_mint,
-                &fresh_quote.output_mint,
-                enforced_min_out,
-            )?;
-            fresh_quote.expected_net_out = fresh_quote
-                .expected_out
-                .saturating_sub(fresh_quote.fee.amount);
-            fresh_quote.min_net_out = enforced_min_out.saturating_sub(fresh_quote.fee.amount);
-        } else {
-            fresh_quote.min_net_out = enforced_min_out;
-        }
-        if fresh_quote.min_net_out < data.accepted_min_net_out {
-            return Err(moved(fresh_quote.min_net_out).into());
-        }
+        hold_accepted_floor(&mut fresh_quote, &data)?;
+        let enforced_min_out = fresh_quote.min_out;
 
         if enforced_min_out > natural_min_out {
             logger::info(
@@ -536,6 +572,7 @@ fn slippage_bps_for(slippage_pct: f64) -> u16 {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::chains::solana::swaps::direct::intent::wsol_mint;
 
     #[tokio::test]
     async fn oversized_input_is_rejected_before_router_io() {
@@ -727,5 +764,84 @@ mod tests {
         assert_eq!(router.id(), "direct");
         assert_eq!(router.chain(), crate::chains::ChainId::Solana);
         assert!(router.priority() > 0, "Jupiter stays the primary router");
+    }
+
+    fn sell_quote(expected_out: u64, min_out: u64) -> direct::DirectQuote {
+        let input_mint = Pubkey::new_unique();
+        let fee = direct::PlatformFee::resolve(
+            direct::FeeSide::Output,
+            &input_mint,
+            &wsol_mint(),
+            expected_out,
+        )
+        .unwrap();
+        direct::DirectQuote {
+            pool: Pubkey::new_unique(),
+            program: ProgramKind::RaydiumCpmm,
+            input_mint,
+            output_mint: wsol_mint(),
+            amount_in: 1_000_000,
+            swap_amount_in: 1_000_000,
+            expected_out,
+            min_out,
+            expected_net_out: expected_out - fee.amount,
+            min_net_out: min_out - fee.amount,
+            fee,
+            lp_fee: 0,
+            price_impact_pct: 0.0,
+            slippage_bps: 100,
+        }
+    }
+
+    fn accepted(expected_out: u64, min_out: u64) -> DirectExecutionData {
+        let accepted = sell_quote(expected_out, min_out);
+        DirectExecutionData {
+            pool: accepted.pool.to_string(),
+            amount_in: accepted.amount_in,
+            slippage_bps: accepted.slippage_bps,
+            accepted_min_net_out: accepted.min_net_out,
+            accepted_min_out: accepted.min_out,
+        }
+    }
+
+    #[test]
+    fn a_fresh_output_fee_follows_the_fresh_expected_output() {
+        let data = accepted(1_000_000, 990_000);
+
+        let mut above = sell_quote(1_000_199, 990_000);
+        hold_accepted_floor(&mut above, &data).expect("a better fill is accepted");
+        assert_eq!(above.fee.amount, 5_000, "0.5% of the fresh expected output");
+        assert_eq!(above.min_net_out, 990_000 - 5_000);
+        assert_eq!(above.expected_net_out, 1_000_199 - 5_000);
+    }
+
+    #[test]
+    fn a_fresh_quote_below_the_accepted_floor_is_a_market_move() {
+        let data = accepted(1_000_000, 990_000);
+
+        let mut below = sell_quote(989_000, 979_110);
+        assert!(matches!(
+            hold_accepted_floor(&mut below, &data),
+            Err(direct::DirectSwapError::MarketMoved { .. })
+        ));
+    }
+
+    #[test]
+    fn a_fee_that_steps_by_one_raw_unit_is_not_a_market_move() {
+        // 1_000_000 -> fee 5_000; 1_000_200 -> fee 5_001 with the floor unchanged.
+        let data = accepted(1_000_000, 990_000);
+        let mut rounded = sell_quote(1_000_200, 990_000);
+        assert_eq!(rounded.fee.amount, 5_001);
+        hold_accepted_floor(&mut rounded, &data)
+            .expect("one unit of fee rounding is within tolerance");
+        assert_eq!(rounded.min_net_out, 990_000 - 5_001);
+
+        let mut two_units = sell_quote(1_000_000, 990_000);
+        let mut strict = data.clone();
+        strict.accepted_min_net_out = two_units.min_net_out + 2;
+        assert!(matches!(
+            hold_accepted_floor(&mut two_units, &strict),
+            Err(direct::DirectSwapError::MarketMoved { .. })
+        ));
     }
 }

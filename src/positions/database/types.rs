@@ -67,9 +67,9 @@ CREATE TABLE IF NOT EXISTS positions (
   -- Transaction verification status
   transaction_entry_verified BOOLEAN NOT NULL DEFAULT false,
   transaction_exit_verified BOOLEAN NOT NULL DEFAULT false,
-  -- Actual transaction fees (in lamports)
-  entry_fee_raw INTEGER, -- Actual entry transaction fee
-  exit_fee_raw INTEGER, -- Actual exit transaction fee
+  -- Network fees paid (raw native units)
+  entry_fee_raw INTEGER, -- Network fees of every buy of the position
+  exit_fee_raw INTEGER, -- Network fees of every sale of the position
   -- Current price tracking
   current_price REAL, -- Current market price
   current_price_updated TEXT, -- When current_price was last updated

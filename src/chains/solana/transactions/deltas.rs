@@ -17,7 +17,7 @@ use std::collections::{HashMap, HashSet};
 use crate::chains::solana::constants::SOL_MINT;
 use crate::chains::solana::transactions::analyzer::balance::account_keys_from_message;
 use crate::chains::solana::transactions::analyzer::dex::extract_program_ids;
-use crate::chains::solana::transactions::program_ids::detect_router_from_program_id;
+use crate::chains::solana::transactions::program_ids::detect_router;
 use crate::chains::ChainId;
 use crate::transactions::deltas::{DeltaKind, SubjectAssetDelta, NATIVE_SOL_SENTINEL};
 use crate::transactions::types::Transaction;
@@ -106,9 +106,7 @@ pub fn extract_subject_deltas(
         .unwrap_or(0) as u32;
 
     let program_ids = extract_program_ids(&tx_data).unwrap_or_default();
-    let venue = program_ids
-        .iter()
-        .find_map(|id| detect_router_from_program_id(id).map(str::to_owned));
+    let venue = detect_router(&program_ids).map(str::to_owned);
 
     // ---- token deltas: sum raw amounts per mint across every subject-owned account ----
     let empty: Vec<crate::chains::solana::rpc::TokenBalance> = Vec::new();

@@ -14,7 +14,7 @@
 //! 203 lp_supply  211 coin_creator
 //! ```
 
-use crate::chains::solana::layout::{pubkey_at, u128_at, u32_at, u64_at, u8_at};
+use crate::chains::solana::layout::{i128_at, pubkey_at, u128_at, u32_at, u64_at, u8_at};
 use crate::chains::solana::solana_sdk::pubkey::Pubkey;
 
 /// The three rates pump charges, all in basis points of the QUOTE mint.
@@ -145,9 +145,12 @@ pub struct PumpAmmPoolState {
     pub quote_token_account: Pubkey,
     pub coin_creator: Pubkey,
     pub is_cashback_coin: bool,
-    /// Virtual quote reserves of a boosted pool. Pricing only — the payout is
-    /// still capped at what the real vault holds.
-    pub virtual_quote_reserves: u64,
+    /// Signed virtual quote reserves (`i128`, offset 245). A boosted pool
+    /// carries a positive value; an unboosted pool carries the negated unclaimed
+    /// protocol and creator fees held in its quote vault. The programme prices
+    /// off `quote_vault + virtual_quote_reserves`; the payout is still capped at
+    /// what the real vault holds.
+    pub virtual_quote_reserves: i128,
 }
 
 impl PumpAmmPoolState {
@@ -161,7 +164,7 @@ impl PumpAmmPoolState {
             quote_token_account: pubkey_at(data, 171)?,
             coin_creator: pubkey_at(data, 211)?,
             is_cashback_coin: u8_at(data, 244)? != 0,
-            virtual_quote_reserves: u64_at(data, 245)?,
+            virtual_quote_reserves: i128_at(data, 245)?,
         })
     }
 }
@@ -174,10 +177,18 @@ mod tests {
     fn the_cashback_flag_and_virtual_reserve_are_read_from_the_bytes_past_the_idl() {
         let mut data = vec![0u8; 301];
         data[244] = 1;
-        data[245..253].copy_from_slice(&17_584_505_358u64.to_le_bytes());
+        data[245..261].copy_from_slice(&17_584_505_358i128.to_le_bytes());
         let decoded = PumpAmmPoolState::decode(Pubkey::new_unique(), &data).expect("decodes");
         assert!(decoded.is_cashback_coin);
         assert_eq!(decoded.virtual_quote_reserves, 17_584_505_358);
+    }
+
+    #[test]
+    fn a_negative_virtual_reserve_decodes_as_a_signed_value() {
+        let mut data = vec![0u8; 301];
+        data[245..261].copy_from_slice(&(-1_234_567i128).to_le_bytes());
+        let decoded = PumpAmmPoolState::decode(Pubkey::new_unique(), &data).expect("decodes");
+        assert_eq!(decoded.virtual_quote_reserves, -1_234_567);
     }
 
     #[test]

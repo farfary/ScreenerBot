@@ -5,7 +5,6 @@
 //!
 //! Core functions for scanning and closing empty Associated Token Accounts
 
-use std::collections::HashSet;
 use std::time::Duration;
 
 use chrono::Utc;
@@ -13,7 +12,8 @@ use chrono::Utc;
 use crate::chains::adapter;
 use crate::logger::{self, LogTag};
 use crate::tools::database::{
-    get_failed_atas_for_wallet, is_ata_failed, remove_failed_ata, upsert_failed_ata,
+    get_excluded_atas_for_wallet, get_failed_atas_for_wallet, is_ata_failed, remove_failed_ata,
+    upsert_failed_ata,
 };
 use crate::tools::Error;
 use crate::utils::get_wallet_address;
@@ -68,16 +68,12 @@ pub async fn scan_empty_atas(wallet_address: &str) -> Result<Vec<AtaInfo>, Error
     Ok(empty_atas)
 }
 
-/// Scan empty ATAs excluding failed ones from cache
+/// Scan empty ATAs excluding cached failures that are permanent or not yet due for a retry
 pub async fn scan_closeable_atas(wallet_address: &str) -> Result<Vec<AtaInfo>, Error> {
     let empty_atas = scan_empty_atas(wallet_address).await?;
 
-    // Get failed ATAs from database
-    let failed_atas: HashSet<String> = get_failed_atas_for_wallet(wallet_address)
-        .unwrap_or_default()
-        .into_iter()
-        .map(|row| row.ata_address)
-        .collect();
+    // ATAs the cache parks: permanent failures and transient ones not yet due for a retry
+    let failed_atas = get_excluded_atas_for_wallet(wallet_address, Utc::now()).unwrap_or_default();
 
     let closeable: Vec<AtaInfo> = empty_atas
         .into_iter()
@@ -130,6 +126,23 @@ pub async fn close_ata(wallet_address: &str, ata: &AtaInfo) -> Result<String, Er
                 ),
             );
             Ok(signature)
+        }
+        Err(crate::Error::Solana(crate::chains::solana::Error::AccountNotFound { .. })) => {
+            // The account is already gone: nothing to reclaim and nothing to retry.
+            let _ = remove_failed_ata(&ata.ata_address);
+
+            logger::info(
+                LogTag::Wallet,
+                &format!(
+                    "ATA {} for mint {} is already closed",
+                    &ata.ata_address[..8],
+                    &ata.mint[..8]
+                ),
+            );
+            Err(Error::Dependency {
+                dependency: "chains",
+                detail: format!("ATA {} no longer exists", ata.ata_address),
+            })
         }
         Err(e) => {
             let error_msg = e.to_string();

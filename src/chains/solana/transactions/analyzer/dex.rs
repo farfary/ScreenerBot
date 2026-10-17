@@ -59,11 +59,15 @@ pub enum DetectedDex {
     Serum,
     OpenBook,
     Phoenix,
+    Gmgn,
+    Raptor,
+    Moonshot,
+    Fluxbeam,
 }
 
 impl DetectedDex {
     /// Every platform, in declaration order.
-    pub const ALL: [DetectedDex; 12] = [
+    pub const ALL: [DetectedDex; 16] = [
         DetectedDex::Jupiter,
         DetectedDex::Raydium,
         DetectedDex::RaydiumCLMM,
@@ -76,6 +80,10 @@ impl DetectedDex {
         DetectedDex::Serum,
         DetectedDex::OpenBook,
         DetectedDex::Phoenix,
+        DetectedDex::Gmgn,
+        DetectedDex::Raptor,
+        DetectedDex::Moonshot,
+        DetectedDex::Fluxbeam,
     ];
 
     /// Stable router id stored in a transaction's `router` field. The dashboard
@@ -96,7 +104,18 @@ impl DetectedDex {
             DetectedDex::Serum => "serum",
             DetectedDex::OpenBook => "openbook",
             DetectedDex::Phoenix => "phoenix",
+            DetectedDex::Gmgn => "gmgn",
+            DetectedDex::Raptor => "raptor",
+            DetectedDex::Moonshot => "moonshot",
+            DetectedDex::Fluxbeam => "fluxbeam",
         }
+    }
+
+    /// The platform behind a stored router id.
+    pub fn from_router_id(router: &str) -> Option<DetectedDex> {
+        DetectedDex::ALL
+            .into_iter()
+            .find(|dex| dex.router_id() == router)
     }
 }
 
@@ -111,88 +130,40 @@ pub enum DetectionMethod {
 }
 
 // =============================================================================
-// PROGRAM ID MAPPINGS (industry standard)
+// LOG PATTERNS
 // =============================================================================
 
-/// Known DEX program IDs mapped to their platforms
-fn get_dex_program_map() -> HashMap<&'static str, DetectedDex> {
-    let mut map = HashMap::new();
+/// How a log line must match a pattern.
+enum LogMatch {
+    /// The whole line.
+    Line(&'static str),
+    /// The start of the line; the rest is a payload.
+    Prefix(&'static str),
+}
 
-    // Jupiter (DEX aggregator)
-    map.insert(JUPITER_V6_PROGRAM_ID, DetectedDex::Jupiter);
-
-    // Raydium
-    map.insert(
-        "675kPX9MHTjS2zt1qfr1NYHuzeLXfQM9H24wFSUt1Mp8",
+/// Log lines that name a platform when no known program is present, in priority order.
+const LOG_PATTERNS: &[(LogMatch, DetectedDex)] = &[
+    (
+        LogMatch::Prefix("Program log: ray_log:"),
         DetectedDex::Raydium,
-    );
-    map.insert(
-        "CAMMCzo5YL8w4VFF8KVHrK22GGUsp5VTaW7grrKgrWqK",
-        DetectedDex::RaydiumCLMM,
-    );
-
-    // Orca
-    map.insert(
-        "9W959DqEETiGZocYWCQPaJ6sBmUzgfxXfqGeTEdp3aQP",
+    ),
+    (
+        LogMatch::Line("Program log: Instruction: Swap"),
+        DetectedDex::Jupiter,
+    ),
+    (
+        LogMatch::Line("Program log: Instruction: swap"),
         DetectedDex::Orca,
-    );
-    map.insert(
-        "whirLbMiicVdio4qvUfM5KAg6Ct8VwpYzGff3uctyCc",
-        DetectedDex::OrcaWhirlpool,
-    );
-
-    // PumpFun
-    map.insert(
-        "6EF8rrecthR5Dkzon8Nwu78hRvfCKubJ14M5uBEwF6P",
+    ),
+    (
+        LogMatch::Line("Program log: Instruction: buy"),
         DetectedDex::PumpFun,
-    );
-
-    // Other DEXes
-    map.insert(
-        "Dooar9JkhdZ7J3LHN3A7YCuoGRUggXhQaG4kijfLGU2j",
-        DetectedDex::Meteora,
-    );
-    map.insert(
-        "EewxydAPCCVuNEyrVN68PuSYdQ7wKn27V9Gjeoi8dy3S",
-        DetectedDex::Lifinity,
-    );
-    map.insert(
-        "AMM55ShdkoGRB5jVYPjWziwk8m5MpwyDgsMWHaMSQWH6",
-        DetectedDex::Aldrin,
-    );
-    map.insert(
-        "9xQeWvG816bUx9EPjHmaT23yvVM2ZWbrrpZb9PusVFin",
-        DetectedDex::Serum,
-    );
-    map.insert(
-        "srmqPiDkJokFGBWxH3qzowH4NhGFaKjR5Ek8TRnq6PZ",
-        DetectedDex::Serum,
-    );
-    map.insert(
-        "opnb2LAfJYbRMAHHvqjCwQxanZn7ReEHp1k81EohpZb",
-        DetectedDex::OpenBook,
-    );
-    map.insert(
-        "PhoeNiX7BPQtuPBGYWf5KhxZVsXBMNzC9mHvgSe3kfE",
-        DetectedDex::Phoenix,
-    );
-
-    map
-}
-
-/// Log patterns for DEX detection fallback
-fn get_log_patterns() -> HashMap<&'static str, DetectedDex> {
-    let mut patterns = HashMap::new();
-
-    patterns.insert("Program log: Instruction: Swap", DetectedDex::Jupiter);
-    patterns.insert("Program log: ray_log:", DetectedDex::Raydium);
-    patterns.insert("Program log: Instruction: swap", DetectedDex::Orca);
-    patterns.insert("Program log: Instruction: buy", DetectedDex::PumpFun);
-    patterns.insert("Program log: Instruction: sell", DetectedDex::PumpFun);
-    patterns.insert("whirlpool", DetectedDex::OrcaWhirlpool);
-
-    patterns
-}
+    ),
+    (
+        LogMatch::Line("Program log: Instruction: sell"),
+        DetectedDex::PumpFun,
+    ),
+];
 
 // =============================================================================
 // MAIN DETECTION FUNCTIONS
@@ -226,8 +197,12 @@ pub async fn detect_dex_and_router(
     // Step 2: Try program ID detection (primary method)
     let (program_detection, program_confidence) = detect_by_program_id(&program_ids);
 
-    // Step 3: Try log parsing (fallback method)
-    let (log_detection, log_confidence) = detect_by_log_parsing(tx_data)?;
+    // Step 3: Try log parsing, only when no known program names the swap
+    let (log_detection, log_confidence) = if program_detection.is_some() {
+        (None, 0.0)
+    } else {
+        detect_by_log_parsing(tx_data)
+    };
 
     // Step 4: Try pool address detection
     let (pool_detection, pool_address, pool_confidence) = detect_by_pool_address(tx_data)?;
@@ -280,29 +255,19 @@ pub async fn quick_dex_detection(
 
 /// Detect DEX by program ID (most reliable method)
 fn detect_by_program_id(program_ids: &[String]) -> (Option<DetectedDex>, f64) {
-    let dex_map = get_dex_program_map();
-
-    // First, prioritize Jupiter (aggregator) when present to avoid mislabeling as a pool DEX
-    if program_ids.iter().any(|pid| pid == JUPITER_V6_PROGRAM_ID) {
-        return (Some(DetectedDex::Jupiter), 0.95);
+    match detect_known_program(program_ids) {
+        Some(known) => (
+            DetectedDex::from_router_id(known.router),
+            if known.aggregator { 0.95 } else { 0.9 },
+        ),
+        None => (None, 0.0),
     }
-
-    // Otherwise, pick the first matching known program
-    for program_id in program_ids {
-        if let Some(dex) = dex_map.get(program_id.as_str()) {
-            return (Some(dex.clone()), 0.9); // High confidence for direct match
-        }
-    }
-
-    (None, 0.0)
 }
 
 /// Detect DEX by parsing transaction logs
 fn detect_by_log_parsing(
     tx_data: &crate::chains::solana::rpc::TransactionDetails,
-) -> crate::chains::solana::Result<(Option<DetectedDex>, f64)> {
-    let log_patterns = get_log_patterns();
-
+) -> (Option<DetectedDex>, f64) {
     let empty_logs = Vec::new();
     let logs = tx_data
         .meta
@@ -311,14 +276,18 @@ fn detect_by_log_parsing(
         .unwrap_or(&empty_logs);
 
     for log in logs {
-        for (pattern, dex) in &log_patterns {
-            if log.to_lowercase().contains(&pattern.to_lowercase()) {
-                return Ok((Some(dex.clone()), 0.7)); // Medium confidence for log match
+        for (pattern, dex) in LOG_PATTERNS {
+            let matched = match pattern {
+                LogMatch::Line(line) => log == line,
+                LogMatch::Prefix(prefix) => log.starts_with(prefix),
+            };
+            if matched {
+                return (Some(dex.clone()), 0.7); // Medium confidence for log match
             }
         }
     }
 
-    Ok((None, 0.0))
+    (None, 0.0)
 }
 
 /// Detect DEX by recognizing known pool addresses

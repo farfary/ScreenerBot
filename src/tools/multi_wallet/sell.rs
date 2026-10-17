@@ -178,7 +178,26 @@ pub async fn execute_multi_sell(config: MultiSellConfig) -> Result<SessionResult
                     .unwrap_or_default();
 
                 if remaining_balance == 0 {
-                    if let Err(e) = close_ata_for_wallet(wallet.id, &config.token_mint, false).await
+                    let is_token_2022 =
+                        match rpc_client.get_all_token_accounts_str(&wallet.address).await {
+                            Ok(accounts) => accounts
+                                .iter()
+                                .find(|account| account.mint == config.token_mint)
+                                .is_some_and(|account| account.is_token_2022),
+                            Err(e) => {
+                                logger::debug(
+                                    LogTag::Tools,
+                                    &format!(
+                                        "Skipping ATA close for {} - token accounts unreadable: {}",
+                                        &wallet_address[..8],
+                                        e
+                                    ),
+                                );
+                                continue;
+                            }
+                        };
+                    if let Err(e) =
+                        close_ata_for_wallet(wallet.id, &config.token_mint, is_token_2022).await
                     {
                         logger::debug(
                             LogTag::Tools,

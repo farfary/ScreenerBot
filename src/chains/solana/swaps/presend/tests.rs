@@ -317,7 +317,7 @@ fn a_simulation_the_node_ran_is_cleared_or_failed_by_its_own_result() {
             "Program X failed: custom program error: 0x1771".to_owned(),
         ],
         units_consumed: Some(120_000),
-        inner_instructions: vec![],
+        ..Default::default()
     };
     assert!(matches!(
         simulation_verdict(Ok(outcome(None))),
@@ -416,37 +416,38 @@ fn tightening_leaves_every_byte_outside_the_compute_limit_identical() {
 // ----------------------------------------------------------------------------
 
 use super::scripted_tests::{status, ScriptedNode, SendAnswer};
+use crate::chains::solana::constants::JUPITER_V6_PROGRAM_ID;
 use crate::chains::solana::solana_sdk::{
     compute_budget::ComputeBudgetInstruction, transaction::TransactionError,
 };
 use crate::chains::solana::solana_transaction_status::TransactionConfirmationStatus as Level;
+use crate::chains::solana::swaps::revenue;
+use crate::chains::solana::transactions::program_ids::RAPTOR_PROGRAM_ID;
 
 const CEILING: u32 = 1_400_000;
 
+/// The program id of a router's own instruction, as a key.
+fn router_program(program: &str) -> Pubkey {
+    program
+        .parse()
+        .expect("a program id constant is an address")
+}
+
 /// What an aggregator hands back for `signer`: a compute ceiling, a priority
 /// price, the platform fee transfer and the trade, unsigned.
-fn aggregator_build(signer: &Keypair, fee_wallet: &Pubkey) -> VersionedTransaction {
+fn aggregator_build(signer: &Keypair) -> VersionedTransaction {
     let message = Message::new_with_blockhash(
         &[
             ComputeBudgetInstruction::set_compute_unit_limit(CEILING),
             ComputeBudgetInstruction::set_compute_unit_price(50_000),
-            // The platform fee: lamports from the wallet to the fee account.
+            // The platform fee: lamports from the wallet to the fee wallet.
+            crate::chains::solana::solana_system_interface::instruction::transfer(
+                &signer.pubkey(),
+                &revenue::fee_wallet_pubkey(),
+                25_000,
+            ),
             Instruction {
-                program_id: Pubkey::new_unique(),
-                accounts: vec![
-                    crate::chains::solana::solana_sdk::instruction::AccountMeta::new(
-                        signer.pubkey(),
-                        true,
-                    ),
-                    crate::chains::solana::solana_sdk::instruction::AccountMeta::new(
-                        *fee_wallet,
-                        false,
-                    ),
-                ],
-                data: 25_000u64.to_le_bytes().to_vec(),
-            },
-            Instruction {
-                program_id: Pubkey::new_unique(),
+                program_id: router_program(JUPITER_V6_PROGRAM_ID),
                 accounts: vec![],
                 data: vec![1, 2, 3],
             },
@@ -487,6 +488,19 @@ fn quote_for(signer: &Keypair) -> Quote {
     }
 }
 
+/// A sale of 1,000 units of a fresh mint for 0.05 SOL through Jupiter.
+fn quote_for_sale(signer: &Keypair) -> Quote {
+    Quote {
+        input_mint: Pubkey::new_unique().to_string(),
+        output_mint: "So11111111111111111111111111111111111111112".to_owned(),
+        input_amount: 1_000u64.into(),
+        output_amount: 50_000_000u64.into(),
+        minimum_output_amount: 49_500_000u64.into(),
+        platform_fee_lamports: Some(250_000),
+        ..quote_for(signer)
+    }
+}
+
 async fn submit(
     node: &ScriptedNode,
     build: &VersionedTransaction,
@@ -510,13 +524,32 @@ async fn submit_with_limit(
     last_valid_block_height: Option<u64>,
     compute_limit: ComputeLimit,
 ) -> crate::Result<Signature> {
+    submit_quoted(
+        node,
+        build,
+        signer,
+        last_valid_block_height,
+        compute_limit,
+        &quote_for(signer),
+    )
+    .await
+}
+
+async fn submit_quoted(
+    node: &ScriptedNode,
+    build: &VersionedTransaction,
+    signer: &Keypair,
+    last_valid_block_height: Option<u64>,
+    compute_limit: ComputeLimit,
+    quote: &Quote,
+) -> crate::Result<Signature> {
     submit_on(
         node,
         "Jupiter",
         compute_limit,
         &base64_of(build),
         last_valid_block_height,
-        &quote_for(signer),
+        quote,
         signer,
         Duration::from_secs(5),
     )
@@ -530,7 +563,7 @@ async fn submit_with_limit(
 #[tokio::test(start_paused = true)]
 async fn an_unproven_aggregator_send_keeps_its_signature_for_reconciliation() {
     let signer = Keypair::new();
-    let build = aggregator_build(&signer, &Pubkey::new_unique());
+    let build = aggregator_build(&signer);
     let node = ScriptedNode::new(150_000, vec![SendAnswer::TimedOut], vec![Ok(None)], 0);
     let error = submit(&node, &build, &signer, None)
         .await
@@ -576,7 +609,7 @@ async fn an_unproven_aggregator_send_keeps_its_signature_for_reconciliation() {
 #[tokio::test(start_paused = true)]
 async fn an_unproven_aggregator_send_settles_from_chain_state() {
     let signer = Keypair::new();
-    let build = aggregator_build(&signer, &Pubkey::new_unique());
+    let build = aggregator_build(&signer);
 
     let landed = ScriptedNode::new(
         150_000,
@@ -617,14 +650,9 @@ async fn a_swap_reverted_at_confirmed_may_be_sent_again() {
         )))],
         0,
     );
-    let error = submit(
-        &node,
-        &aggregator_build(&signer, &Pubkey::new_unique()),
-        &signer,
-        None,
-    )
-    .await
-    .expect_err("reverted");
+    let error = submit(&node, &aggregator_build(&signer), &signer, None)
+        .await
+        .expect_err("reverted");
     assert!(matches!(
         error,
         crate::Error::Solana(crate::chains::solana::Error::Execution(
@@ -639,8 +667,8 @@ async fn a_swap_reverted_at_confirmed_may_be_sent_again() {
 #[tokio::test(start_paused = true)]
 async fn the_sent_swap_differs_from_its_build_only_in_the_compute_limit() {
     let signer = Keypair::new();
-    let fee_wallet = Pubkey::new_unique();
-    let build = aggregator_build(&signer, &fee_wallet);
+    let fee_wallet = revenue::fee_wallet_pubkey();
+    let build = aggregator_build(&signer);
     let node = ScriptedNode::new(
         150_000,
         vec![SendAnswer::Accepted],
@@ -683,7 +711,7 @@ async fn the_sent_swap_differs_from_its_build_only_in_the_compute_limit() {
 #[tokio::test(start_paused = true)]
 async fn an_as_built_compute_limit_is_sent_unchanged() {
     let signer = Keypair::new();
-    let build = aggregator_build(&signer, &Pubkey::new_unique());
+    let build = aggregator_build(&signer);
     let node = ScriptedNode::new(
         150_000,
         vec![SendAnswer::Accepted],
@@ -740,11 +768,68 @@ async fn a_build_that_needs_a_second_signer_is_refused_before_the_send() {
     assert!(node.sent().is_empty());
 }
 
-/// A node that cannot simulate is not evidence about the transaction: the
-/// swap proceeds with exactly one send, untightened, because there is no
-/// measurement to tighten from.
+/// A third-party build is signed with the wallet's key, so a top-level
+/// instruction that moves the wallet's lamports to an address the trade does
+/// not name is refused before anything is signed. Simulation clears such a
+/// build and the cost guard reads only inner instructions, so only an
+/// inspection of the message itself can refuse it.
 #[tokio::test(start_paused = true)]
-async fn an_unavailable_simulation_proceeds_with_one_untightened_send() {
+async fn a_build_that_transfers_the_wallets_lamports_to_a_stranger_is_refused_before_the_send() {
+    let signer = Keypair::new();
+    let attacker = Pubkey::new_unique();
+    // The quote spends 0.05 SOL; the build also moves 5 SOL out of the wallet.
+    let diverted_lamports = 5_000_000_000;
+    let message = Message::new_with_blockhash(
+        &[
+            ComputeBudgetInstruction::set_compute_unit_limit(CEILING),
+            crate::chains::solana::solana_system_interface::instruction::transfer(
+                &signer.pubkey(),
+                &attacker,
+                diverted_lamports,
+            ),
+            Instruction {
+                program_id: router_program(JUPITER_V6_PROGRAM_ID),
+                accounts: vec![],
+                data: vec![1, 2, 3],
+            },
+        ],
+        Some(&signer.pubkey()),
+        &Hash::new_unique(),
+    );
+    let build = VersionedTransaction {
+        signatures: vec![Signature::default()],
+        message: VersionedMessage::Legacy(message),
+    };
+    let node = ScriptedNode::new(
+        150_000,
+        vec![SendAnswer::Accepted],
+        vec![Ok(Some(status(Level::Confirmed, None)))],
+        0,
+    );
+
+    let error = submit(&node, &build, &signer, None)
+        .await
+        .expect_err("a transfer to an address outside the trade is refused");
+
+    assert!(matches!(
+        error,
+        crate::Error::Swaps(SwapExecutionError::NotSubmitted {
+            reason: NotSubmittedReason::BuildUnusable { .. },
+            ..
+        })
+    ));
+    assert!(crate::swaps::is_fallback_safe(&error));
+    assert!(
+        node.sent().is_empty(),
+        "nothing may be signed and sent for a build that pays the wallet's lamports to a stranger"
+    );
+}
+
+/// A node that cannot simulate is not evidence about a sale: once its message
+/// passes the inspection, the sale proceeds with exactly one send, untightened,
+/// because there is no measurement to tighten from.
+#[tokio::test(start_paused = true)]
+async fn an_unavailable_simulation_lets_a_sale_proceed_with_one_untightened_send() {
     let signer = Keypair::new();
     let node = ScriptedNode::new(
         150_000,
@@ -756,11 +841,13 @@ async fn an_unavailable_simulation_proceeds_with_one_untightened_send() {
         message: "reset".to_owned(),
         is_timeout: false,
     });
-    submit(
+    submit_quoted(
         &node,
-        &aggregator_build(&signer, &Pubkey::new_unique()),
+        &aggregator_build(&signer),
         &signer,
         None,
+        ComputeLimit::TightenToMeasured,
+        &quote_for_sale(&signer),
     )
     .await
     .expect("the swap proceeds and lands");
@@ -772,12 +859,126 @@ async fn an_unavailable_simulation_proceeds_with_one_untightened_send() {
     assert_eq!(message.instructions[0].data[1..5], CEILING.to_le_bytes());
 }
 
+/// A buy spends the wallet's SOL, so it is never signed without a simulation
+/// that showed what the build does with it: nothing is sent, and the refusal
+/// leaves the next router free to try.
+#[tokio::test(start_paused = true)]
+async fn an_unavailable_simulation_refuses_a_buy_before_the_send() {
+    let signer = Keypair::new();
+    let node = ScriptedNode::new(
+        150_000,
+        vec![SendAnswer::Accepted],
+        vec![Ok(Some(status(Level::Confirmed, None)))],
+        0,
+    )
+    .without_simulation(RpcError::Network {
+        message: "reset".to_owned(),
+        is_timeout: false,
+    });
+    let error = submit(&node, &aggregator_build(&signer), &signer, None)
+        .await
+        .expect_err("a buy without a simulation is refused");
+    assert!(
+        matches!(
+            error,
+            crate::Error::Swaps(SwapExecutionError::NotSubmitted {
+                reason: NotSubmittedReason::SimulationUnavailable { .. },
+                ..
+            })
+        ),
+        "{error:?}"
+    );
+    assert!(crate::swaps::is_fallback_safe(&error));
+    assert!(node.sent().is_empty());
+}
+
+/// The shape of a Raptor buy: a heap frame, the compute budget, the wallet's
+/// own wrapped-SOL and output accounts, a wrap of no more than the input, the
+/// sync and Raptor's own program. Every instruction is one a swap needs, so
+/// the build is signed and sent once.
+#[tokio::test(start_paused = true)]
+async fn a_raptor_shaped_build_passes_the_gate() {
+    use crate::chains::solana::spl_associated_token_account::{
+        get_associated_token_address_with_program_id,
+        instruction::create_associated_token_account_idempotent,
+    };
+    use crate::chains::solana::spl_token;
+
+    let signer = Keypair::new();
+    let wallet = signer.pubkey();
+    let wrapped_sol: Pubkey = "So11111111111111111111111111111111111111112"
+        .parse()
+        .unwrap();
+    let quote = Quote {
+        router_id: "raptor".to_owned(),
+        router_name: "Raptor".to_owned(),
+        ..quote_for(&signer)
+    };
+    let output_mint: Pubkey = quote.output_mint.parse().unwrap();
+    let wrapped_sol_account =
+        get_associated_token_address_with_program_id(&wallet, &wrapped_sol, &spl_token::id());
+    let message = Message::new_with_blockhash(
+        &[
+            ComputeBudgetInstruction::request_heap_frame(262_144),
+            ComputeBudgetInstruction::set_compute_unit_limit(CEILING),
+            ComputeBudgetInstruction::set_compute_unit_price(50_000),
+            create_associated_token_account_idempotent(
+                &wallet,
+                &wallet,
+                &wrapped_sol,
+                &spl_token::id(),
+            ),
+            create_associated_token_account_idempotent(
+                &wallet,
+                &wallet,
+                &output_mint,
+                &spl_token::id(),
+            ),
+            crate::chains::solana::solana_system_interface::instruction::transfer(
+                &wallet,
+                &wrapped_sol_account,
+                50_000_000,
+            ),
+            spl_token::instruction::sync_native(&spl_token::id(), &wrapped_sol_account).unwrap(),
+            Instruction {
+                program_id: router_program(RAPTOR_PROGRAM_ID),
+                accounts: vec![],
+                data: vec![1, 2, 3],
+            },
+        ],
+        Some(&wallet),
+        &Hash::new_unique(),
+    );
+    let build = VersionedTransaction {
+        signatures: vec![Signature::default()],
+        message: VersionedMessage::Legacy(message),
+    };
+    let node = ScriptedNode::new(
+        150_000,
+        vec![SendAnswer::Accepted],
+        vec![Ok(Some(status(Level::Confirmed, None)))],
+        0,
+    );
+
+    submit_quoted(
+        &node,
+        &build,
+        &signer,
+        None,
+        ComputeLimit::TightenToMeasured,
+        &quote,
+    )
+    .await
+    .expect("a Raptor-shaped build is signed and lands");
+    assert_eq!(node.sent().len(), 1);
+}
+
 /// A failure seen at `Processed` on an abandoned fork, then the same
 /// signature confirmed cleanly, is a landed swap.
 #[tokio::test(start_paused = true)]
 async fn a_processed_failure_on_an_abandoned_fork_is_not_terminal() {
     let signer = Keypair::new();
-    let mut transaction = aggregator_build(&signer, &Pubkey::new_unique());
+    let mut transaction = aggregator_build(&signer);
     transaction.signatures[0] = signer.sign_message(&transaction.message.serialize());
     let node = ScriptedNode::new(
         0,
@@ -814,7 +1015,7 @@ async fn a_failed_send_preflight_is_never_sent_only_from_the_first_node() {
         data: None,
     };
     let signer = Keypair::new();
-    let build = aggregator_build(&signer, &Pubkey::new_unique());
+    let build = aggregator_build(&signer);
 
     let refused = ScriptedNode::new(
         150_000,
@@ -860,7 +1061,7 @@ async fn a_failed_send_preflight_is_never_sent_only_from_the_first_node() {
 /// block 500, on a node whose finalized tip is past it.
 async fn settled_past_expiry(node: &ScriptedNode) -> Settled {
     let signer = Keypair::new();
-    let mut transaction = aggregator_build(&signer, &Pubkey::new_unique());
+    let mut transaction = aggregator_build(&signer);
     transaction.signatures[0] = signer.sign_message(&transaction.message.serialize());
     let (_, settled) = send_and_settle(node, &transaction, Some(500), Duration::from_secs(30))
         .await
@@ -1072,7 +1273,7 @@ async fn a_wallet_transaction_the_node_refused_is_reported_never_sent() {
 #[tokio::test(start_paused = true)]
 async fn a_hanging_rebroadcast_does_not_hold_up_the_status_polls() {
     let signer = Keypair::new();
-    let mut transaction = aggregator_build(&signer, &Pubkey::new_unique());
+    let mut transaction = aggregator_build(&signer);
     transaction.signatures[0] = signer.sign_message(&transaction.message.serialize());
     let mut statuses: Vec<_> = (0..12).map(|_| Ok(None)).collect();
     statuses.push(Ok(Some(status(Level::Confirmed, None))));
@@ -1108,7 +1309,7 @@ async fn a_hanging_rebroadcast_does_not_hold_up_the_status_polls() {
 #[tokio::test(start_paused = true)]
 async fn a_slow_rebroadcast_is_delivered_rather_than_cut_off() {
     let signer = Keypair::new();
-    let mut transaction = aggregator_build(&signer, &Pubkey::new_unique());
+    let mut transaction = aggregator_build(&signer);
     transaction.signatures[0] = signer.sign_message(&transaction.message.serialize());
     let mut statuses: Vec<_> = (0..30).map(|_| Ok(None)).collect();
     statuses.push(Ok(Some(status(Level::Confirmed, None))));

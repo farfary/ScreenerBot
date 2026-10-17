@@ -535,6 +535,49 @@ fn average_entry_price_is_weighted_across_every_priced_acquisition() {
     assert!(close(round.events[1].price_native.unwrap(), 0.003));
 }
 
+/// A sale releases cost at the average in force, so a buy after it averages the cost of the
+/// tokens still held with the new buy: the moving average, not the lifetime price of every
+/// token the round ever acquired.
+#[test]
+fn a_sale_between_buys_leaves_the_round_average_at_the_held_cost() {
+    let mut deltas = buy("sig1", 10, MINT_A, 1_000.0, 1.0);
+    // Sell half: 0.5 SOL of basis leaves with 500 tokens.
+    deltas.push(token(
+        "sig2",
+        11,
+        MINT_A,
+        -500_000_000,
+        1_000_000_000,
+        500_000_000,
+        DeltaKind::Trade,
+    ));
+    deltas.push(native("sig2", 11, 0.6));
+    // Buy 500 more for 1.5 SOL.
+    deltas.push(token(
+        "sig3",
+        12,
+        MINT_A,
+        500_000_000,
+        500_000_000,
+        1_000_000_000,
+        DeltaKind::Trade,
+    ));
+    deltas.push(native("sig3", 12, -1.5));
+
+    let rounds = reduce_rounds(&deltas);
+    let round = &rounds[0];
+
+    // 0.5 SOL still held from the first buy plus 1.5 SOL for 1_000 tokens; the lifetime
+    // price would be 2.5 SOL over 1_500 tokens.
+    assert!(close(round.remaining_basis_native, 2.0));
+    let average = round.average_entry_price_native.unwrap();
+    assert!(close(average, 0.002), "average {average}");
+    assert!(
+        close(round.invested_native, 2.5),
+        "the invested total stays cumulative"
+    );
+}
+
 #[test]
 fn realized_pnl_is_withheld_when_a_disposal_had_no_observable_proceeds() {
     let mut deltas = buy("sig1", 10, MINT_A, 1_000.0, 2.0);

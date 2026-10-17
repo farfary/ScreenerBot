@@ -3,8 +3,10 @@
 
 //! ATA failed cache database operations.
 
-use chrono::Utc;
-use rusqlite::params;
+use std::collections::HashSet;
+
+use chrono::{DateTime, Duration, Utc};
+use rusqlite::{params, OptionalExtension};
 
 use super::schema::get_connection;
 use super::types::FailedAtaRow;
@@ -15,7 +17,26 @@ use crate::tools::Error;
 // ATA FAILED CACHE OPERATIONS
 // =============================================================================
 
+/// Delay before the first retry of a transient close failure.
+const RETRY_BASE_DELAY_MINUTES: i64 = 10;
+
+/// Longest delay between retries of a transient close failure.
+const RETRY_MAX_DELAY_HOURS: i64 = 24;
+
+/// Delay before the next close attempt after `failure_count` consecutive
+/// failures: the base delay doubled per failure, capped at the maximum.
+fn retry_delay(failure_count: u32) -> Duration {
+    let max = Duration::hours(RETRY_MAX_DELAY_HOURS);
+    let doublings = failure_count.saturating_sub(1).min(16);
+    Duration::minutes(RETRY_BASE_DELAY_MINUTES)
+        .checked_mul(1 << doublings)
+        .map_or(max, |delay| delay.min(max))
+}
+
 /// Add or update failed ATA entry
+///
+/// A transient failure records `next_retry_at` with an exponential backoff on the
+/// failure count; a permanent failure leaves it empty and is never retried.
 pub fn upsert_failed_ata(
     ata_address: &str,
     token_mint: Option<&str>,
@@ -24,23 +45,64 @@ pub fn upsert_failed_ata(
     is_permanent: bool,
 ) -> Result<(), Error> {
     let conn = get_connection()?;
-    let now = Utc::now().to_rfc3339();
+    let now = Utc::now();
+
+    let previous_failures: u32 = conn
+        .query_row(
+            "SELECT failure_count FROM ata_failed_cache WHERE ata_address = ?1",
+            params![ata_address],
+            |row| row.get(0),
+        )
+        .optional()
+        .map_err(DatabaseError::from)?
+        .unwrap_or(0);
+    let next_retry_at = (!is_permanent)
+        .then(|| (now + retry_delay(previous_failures.saturating_add(1))).to_rfc3339());
 
     conn.execute(
         r#"
-        INSERT INTO ata_failed_cache (ata_address, token_mint, wallet_address, last_error, is_permanent_failure, last_failed_at)
-        VALUES (?1, ?2, ?3, ?4, ?5, ?6)
+        INSERT INTO ata_failed_cache (ata_address, token_mint, wallet_address, last_error, is_permanent_failure, last_failed_at, next_retry_at)
+        VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7)
         ON CONFLICT(ata_address) DO UPDATE SET
             failure_count = failure_count + 1,
             last_error = ?4,
             is_permanent_failure = ?5,
-            last_failed_at = ?6
+            last_failed_at = ?6,
+            next_retry_at = ?7
         "#,
-        params![ata_address, token_mint, wallet_address, error, is_permanent as i32, now],
+        params![
+            ata_address,
+            token_mint,
+            wallet_address,
+            error,
+            is_permanent as i32,
+            now.to_rfc3339(),
+            next_retry_at
+        ],
     )
     .map_err(DatabaseError::from)?;
 
     Ok(())
+}
+
+/// ATA addresses of a wallet that the cleanup must not attempt at `now`: permanent
+/// failures, and transient failures whose retry time has not arrived.
+pub fn get_excluded_atas_for_wallet(
+    wallet_address: &str,
+    now: DateTime<Utc>,
+) -> Result<HashSet<String>, Error> {
+    Ok(get_failed_atas_for_wallet(wallet_address)?
+        .into_iter()
+        .filter(|row| {
+            row.is_permanent_failure
+                || row
+                    .next_retry_at
+                    .as_deref()
+                    .and_then(|at| DateTime::parse_from_rfc3339(at).ok())
+                    .is_some_and(|at| at > now)
+        })
+        .map(|row| row.ata_address)
+        .collect())
 }
 
 /// Check if ATA is in failed cache
@@ -104,22 +166,4 @@ pub fn remove_failed_ata(ata_address: &str) -> Result<(), Error> {
     .map_err(DatabaseError::from)?;
 
     Ok(())
-}
-
-/// Clear all non-permanent failed ATAs older than specified days
-pub fn cleanup_old_failed_atas(max_age_days: i32) -> Result<i32, Error> {
-    let conn = get_connection()?;
-
-    let deleted = conn
-        .execute(
-            r#"
-            DELETE FROM ata_failed_cache 
-            WHERE is_permanent_failure = 0 
-              AND last_failed_at < datetime('now', '-' || ?1 || ' days')
-            "#,
-            params![max_age_days],
-        )
-        .map_err(DatabaseError::from)?;
-
-    Ok(deleted as i32)
 }

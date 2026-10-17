@@ -4,7 +4,6 @@
 //! Position profit & loss calculations — P&L for open, closed, and partially exited positions.
 
 use crate::chains::adapter;
-use crate::chains::RawAmount;
 use crate::logger::{self, LogTag};
 use crate::positions::types::Position;
 use crate::tokens::get_decimals;
@@ -94,11 +93,7 @@ pub(crate) fn position_pnl(
 
                     // Account for actual fees only — profit_extra_needed is a decision
                     // buffer, not an actual cost (inflates losses ~2% on small trades)
-                    let buy_fee = position
-                        .entry_fee_raw
-                        .map_or(0.0, |fee| adapter().raw_to_native(fee));
-                    let estimated_sell_fee = buy_fee;
-                    let total_fees = buy_fee + estimated_sell_fee;
+                    let total_fees = paid_and_estimated_sale_fees(position);
                     let net_pnl_native = current_value + realized_native - entry_cost - total_fees;
                     let net_pnl_percent = (net_pnl_native / entry_cost) * 100.0;
 
@@ -108,11 +103,7 @@ pub(crate) fn position_pnl(
 
             // Fallback calculation for closing positions
             let price_change = (current - entry_price) / entry_price;
-            let buy_fee = position
-                .entry_fee_raw
-                .map_or(0.0, |fee| adapter().raw_to_native(fee));
-            let estimated_sell_fee = buy_fee;
-            let total_fees = buy_fee + estimated_sell_fee;
+            let total_fees = paid_and_estimated_sale_fees(position);
             let fee_percent = (total_fees / entry_cost) * 100.0;
             let net_pnl_percent = price_change * 100.0 - fee_percent;
             let net_pnl_native = (net_pnl_percent / 100.0) * entry_cost;
@@ -168,13 +159,7 @@ pub(crate) fn position_pnl(
             let exit_value = ui_token_amount * effective_exit;
 
             // Account for actual buy + sell fees only (no profit buffer for realized P&L)
-            let buy_fee = position
-                .entry_fee_raw
-                .map_or(0.0, |fee| adapter().raw_to_native(fee));
-            let sell_fee = position
-                .exit_fee_raw
-                .map_or(0.0, |fee| adapter().raw_to_native(fee));
-            let total_fees = buy_fee + sell_fee;
+            let total_fees = calculate_position_total_fees(position);
             let net_pnl_native = exit_value - entry_cost - total_fees;
             let net_pnl_percent = (net_pnl_native / entry_cost) * 100.0;
 
@@ -183,13 +168,7 @@ pub(crate) fn position_pnl(
 
         // Fallback for closed positions without token amount
         let price_change = (effective_exit - entry_price) / entry_price;
-        let buy_fee = position
-            .entry_fee_raw
-            .map_or(0.0, |fee| adapter().raw_to_native(fee));
-        let sell_fee = position
-            .exit_fee_raw
-            .map_or(0.0, |fee| adapter().raw_to_native(fee));
-        let total_fees = buy_fee + sell_fee;
+        let total_fees = calculate_position_total_fees(position);
         let fee_percent = (total_fees / position.entry_size_native) * 100.0;
         let net_pnl_percent = price_change * 100.0 - fee_percent;
         let net_pnl_native = (net_pnl_percent / 100.0) * position.entry_size_native;
@@ -233,11 +212,7 @@ pub(crate) fn position_pnl(
 
             // Account for actual fees only — profit_extra_needed is a decision
             // buffer, not an actual cost (inflates losses ~2% on small trades)
-            let buy_fee = position
-                .entry_fee_raw
-                .map_or(0.0, |fee| adapter().raw_to_native(fee));
-            let estimated_sell_fee = buy_fee;
-            let total_fees = buy_fee + estimated_sell_fee;
+            let total_fees = paid_and_estimated_sale_fees(position);
             let net_pnl_native = current_value + realized_native - entry_cost - total_fees;
             let net_pnl_percent = (net_pnl_native / entry_cost) * 100.0;
 
@@ -246,11 +221,7 @@ pub(crate) fn position_pnl(
 
         // Fallback for open positions without token amount
         let price_change = (current - entry_price) / entry_price;
-        let buy_fee = position
-            .entry_fee_raw
-            .map_or(0.0, |fee| adapter().raw_to_native(fee));
-        let estimated_sell_fee = buy_fee;
-        let total_fees = buy_fee + estimated_sell_fee;
+        let total_fees = paid_and_estimated_sale_fees(position);
         let fee_percent = (total_fees / position.entry_size_native) * 100.0;
         let net_pnl_percent = price_change * 100.0 - fee_percent;
         let net_pnl_native = (net_pnl_percent / 100.0) * position.entry_size_native;
@@ -260,6 +231,21 @@ pub(crate) fn position_pnl(
 
     // No price available
     (0.0, 0.0)
+}
+
+/// The fees a position still holding tokens is charged: every fee paid so far plus an
+/// estimate of the sale that closes it, the average fee of the swaps it has made, in native
+/// units.
+fn paid_and_estimated_sale_fees(position: &Position) -> f64 {
+    let paid = position
+        .entry_fee_raw
+        .unwrap_or_default()
+        .saturating_add(position.exit_fee_raw.unwrap_or_default());
+    let swaps = 1_u64
+        .saturating_add(u64::from(position.dca_count))
+        .saturating_add(u64::from(position.partial_exit_count));
+    let estimate = paid / swaps;
+    adapter().raw_to_native(paid.saturating_add(estimate))
 }
 
 /// Realized P&L of a closed position: everything received minus everything invested and
@@ -274,13 +260,7 @@ pub(crate) fn realized_pnl(position: &Position) -> (f64, f64) {
 
     // Use actual transaction fees only — profit_extra_needed is a decision buffer,
     // not an actual cost. Including it here inflates losses by ~2% on small trades.
-    let buy_fee = position
-        .entry_fee_raw
-        .map_or(0.0, |fee| adapter().raw_to_native(fee));
-    let sell_fee = position
-        .exit_fee_raw
-        .map_or(0.0, |fee| adapter().raw_to_native(fee));
-    let total_fees = buy_fee + sell_fee;
+    let total_fees = calculate_position_total_fees(position);
 
     let net_pnl_native = native_received - native_invested - total_fees;
     let safe_invested = if native_invested < 0.00001 {
@@ -293,7 +273,7 @@ pub(crate) fn realized_pnl(position: &Position) -> (f64, f64) {
     (net_pnl_native, net_pnl_percent)
 }
 
-/// Calculate total fees for a position
+/// The network fees a position has paid on every buy and every sale, in native units.
 pub fn calculate_position_total_fees(position: &Position) -> f64 {
     // Sum entry and exit fees in SOL (excluding ATA rent from trading costs)
     let entry_fees_native = adapter().raw_to_native(position.entry_fee_raw.unwrap_or_default());
@@ -348,97 +328,4 @@ pub async fn calculate_position_pnl_safe(
 
     // Return result wrapped in Some - caller can now distinguish None (error) from Some((0.0, 0.0)) (break-even)
     Some(result)
-}
-
-// ==================== SPLIT P&L CALCULATION (PARTIAL EXIT SUPPORT) ====================
-
-/// Calculate split P&L for positions with partial exits
-/// Returns (realized_pnl_native, unrealized_pnl_native, total_pnl_native, total_pnl_percent)
-pub async fn calculate_split_pnl(
-    position: &Position,
-    current_price: Option<f64>,
-) -> (f64, f64, f64, f64) {
-    let entry_price =
-        if position.average_entry_price > 0.0 && position.average_entry_price.is_finite() {
-            position.average_entry_price
-        } else {
-            position
-                .effective_entry_price
-                .unwrap_or(position.entry_price)
-        };
-
-    if entry_price <= 0.0 || !entry_price.is_finite() {
-        return (0.0, 0.0, 0.0, 0.0);
-    }
-
-    // Tokens ever ACQUIRED: what is still held plus what has already been sold. This is
-    // the only correct denominator for "what share of the position is this leg".
-    //
-    // `token_amount` is the ENTRY buy alone — it does not grow on a DCA and does not
-    // shrink on a partial exit. Dividing by it made both shares of an averaged-in
-    // position exceed 1.0, so each leg was charged MORE basis than the whole position
-    // cost and the realized/unrealized split came out badly wrong in both halves.
-    let acquired = match position.acquired_amount() {
-        Some(units) if units > RawAmount::ZERO => units.raw() as f64,
-        _ => position
-            .token_amount
-            .map_or(1.0, |amount| amount.raw() as f64),
-    };
-
-    // Calculate realized P&L from partial exits
-    let realized_pnl_native = if position.total_exited_amount > RawAmount::ZERO {
-        if position.average_exit_price.is_some() {
-            let native_received = position.native_received.unwrap_or_default();
-            let exit_portion = position.total_exited_amount.raw() as f64 / acquired;
-            let invested_in_exited = position.total_size_native * exit_portion;
-            let exit_fees = adapter().raw_to_native(position.exit_fee_raw.unwrap_or_default());
-            native_received - invested_in_exited - exit_fees
-        } else {
-            0.0
-        }
-    } else {
-        0.0
-    };
-
-    // Calculate unrealized P&L from remaining holdings
-    let unrealized_pnl_native = if let Some(remaining) = position.remaining_token_amount {
-        if let Some(current) = current_price {
-            if let Some(decimals) =
-                get_decimals(crate::chains::active_chain(), &position.mint).await
-            {
-                let ui_remaining = remaining.to_whole_units(decimals);
-                let current_value = ui_remaining * current;
-                let remaining_portion = remaining.raw() as f64 / acquired;
-                let invested_in_remaining = position.total_size_native * remaining_portion;
-                let entry_fees_portion = adapter()
-                    .raw_to_native(position.entry_fee_raw.unwrap_or_default())
-                    * remaining_portion;
-                current_value - invested_in_remaining - entry_fees_portion
-            } else {
-                0.0
-            }
-        } else {
-            0.0
-        }
-    } else if position.exit_time.is_none() {
-        // No partial exits yet, full position unrealized
-        if let Some(current) = current_price {
-            let (total_pnl, _) = calculate_position_pnl(position, Some(current)).await;
-            total_pnl
-        } else {
-            0.0
-        }
-    } else {
-        0.0
-    };
-
-    let total_pnl_native = realized_pnl_native + unrealized_pnl_native;
-    let total_pnl_percent = (total_pnl_native / position.total_size_native) * 100.0;
-
-    (
-        realized_pnl_native,
-        unrealized_pnl_native,
-        total_pnl_native,
-        total_pnl_percent,
-    )
 }

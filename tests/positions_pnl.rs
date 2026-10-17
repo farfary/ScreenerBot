@@ -25,8 +25,7 @@ use crate::common;
 
 use common::{seed_decimals, test_position, TEST_MINT};
 use screenerbot::positions::{
-    calculate_position_pnl, calculate_position_pnl_safe, calculate_position_total_fees,
-    calculate_split_pnl, Position,
+    calculate_position_pnl, calculate_position_pnl_safe, calculate_position_total_fees, Position,
 };
 
 const DECIMALS: u8 = 9;
@@ -392,85 +391,11 @@ async fn total_fees_sum_both_legs_and_treat_missing_fees_as_zero() {
     assert_close(calculate_position_total_fees(&position), 0.012, "both legs");
 }
 
-// ==================== SPLIT (REALIZED vs UNREALIZED) ====================
-
-#[tokio::test]
-async fn the_split_reports_realized_and_unrealized_separately() {
-    // Half sold at 2x (1 SOL back on a 0.5 SOL basis = +0.5 realized), half still held
-    // at 2x (1 SOL of value on a 0.5 SOL basis = +0.5 unrealized).
-    let mut position = open_position();
-    position.remaining_token_amount = Some(units(50.0));
-    position.total_exited_amount = units(50.0);
-    position.average_exit_price = Some(0.02);
-    position.native_received = Some(1.0);
-    position.partial_exit_count = 1;
-
-    let (realized, unrealized, total, total_pct) = calculate_split_pnl(&position, Some(0.02)).await;
-    assert_close(realized, 0.5, "realized");
-    assert_close(unrealized, 0.5, "unrealized");
-    assert_close(total, 1.0, "total");
-    assert_close(total_pct, 100.0, "total percent");
-}
-
-#[tokio::test]
-async fn the_split_prices_a_dcad_position_against_the_tokens_it_actually_acquired() {
-    // The denominator for "what share of the position is this" must be the tokens ever
-    // ACQUIRED — `remaining + total_exited`. Using `token_amount` (the FIRST buy, which
-    // never grows on a DCA) makes the shares of a DCA'd position exceed 1.0, so the
-    // basis attributed to each leg is inflated and both halves of the split come out
-    // wrong. Here: 2 SOL bought 200 tokens; 100 were sold for 2 SOL and 100 are still
-    // held at 0.02 — each leg carries exactly half the 2 SOL basis.
-    let mut position = open_position();
-    position.entry_size_native = 1.0;
-    position.total_size_native = 2.0;
-    position.token_amount = Some(units(100.0)); // entry buy only
-    position.remaining_token_amount = Some(units(100.0));
-    position.total_exited_amount = units(100.0);
-    position.average_exit_price = Some(0.02);
-    position.native_received = Some(2.0);
-    position.partial_exit_count = 1;
-    position.dca_count = 1;
-
-    let (realized, unrealized, total, _) = calculate_split_pnl(&position, Some(0.02)).await;
-    assert_close(realized, 1.0, "realized: 2 SOL back on a 1 SOL half-basis");
-    assert_close(
-        unrealized,
-        1.0,
-        "unrealized: 2 SOL of value on a 1 SOL half-basis",
-    );
-    assert_close(total, 2.0, "total");
-}
-
-#[tokio::test]
-async fn a_position_with_no_exits_has_no_realized_pnl() {
-    let position = open_position();
-    let (realized, unrealized, _, _) = calculate_split_pnl(&position, Some(0.02)).await;
-    assert_close(realized, 0.0, "nothing has been sold");
-    assert_close(unrealized, 1.0, "the whole gain is unrealized");
-}
-
-#[tokio::test]
-async fn the_split_is_neutral_when_the_entry_price_is_unusable() {
-    let mut position = open_position();
-    position.average_entry_price = 0.0;
-    position.effective_entry_price = Some(0.0);
-    position.entry_price = 0.0;
-
-    assert_eq!(
-        calculate_split_pnl(&position, Some(0.02)).await,
-        (0.0, 0.0, 0.0, 0.0)
-    );
-}
-
 // ==================== BIT STABILITY ====================
 
 /// Bit patterns of the P&L figures below, captured from the current arithmetic. A change
 /// to how raw amounts reach the float math must leave every bit as it is.
-const GOLDEN: [u64; 10] = [
-    4682349710092441569,
-    4712209498791126696,
-    13826002309425050170,
-    4682349744266989346,
+const GOLDEN: [u64; 6] = [
     4682349710092441569,
     4712209498791126696,
     4682349710092441569,
@@ -489,7 +414,6 @@ async fn large_raw_amounts_keep_their_pnl_bits() {
     base.average_exit_price = Some(0.015);
 
     let (open_pnl, open_pct) = calculate_position_pnl(&base, Some(0.0123)).await;
-    let (realized, unrealized, total, total_pct) = calculate_split_pnl(&base, Some(0.0123)).await;
 
     let mut closing = base.clone();
     closing.exit_transaction_signature = Some("exit-sig".to_owned());
@@ -508,10 +432,6 @@ async fn large_raw_amounts_keep_their_pnl_bits() {
     let bits = [
         open_pnl,
         open_pct,
-        realized,
-        unrealized,
-        total,
-        total_pct,
         closing_pnl,
         closing_pct,
         closed_pnl,

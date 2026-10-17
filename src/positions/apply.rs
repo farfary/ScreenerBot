@@ -614,7 +614,7 @@ pub async fn apply_transition(transition: PositionTransition) -> Result<ApplyEff
                 });
                 if is_closed(row) {
                     let after_write_off = row.synthetic_exit;
-                    row.book_late_partial_exit(native_received);
+                    row.book_late_partial_exit(native_received, fee_raw);
                     let late = late_fill(row, reads, reading, store_chain, after_write_off)?;
                     return Ok(Booking::Write {
                         record: Some(record),
@@ -628,6 +628,7 @@ pub async fn apply_transition(transition: PositionTransition) -> Result<ApplyEff
                     native_received,
                     effective_exit_price,
                     unrealized_pnl: None,
+                    fee_raw,
                 };
                 let mut probe = row.clone();
                 probe.book_partial_exit(&fill)?;
@@ -921,15 +922,15 @@ pub async fn apply_transition(transition: PositionTransition) -> Result<ApplyEff
                 .await
                 .ok_or(Error::NotFoundById { position_id })?;
 
-            // Get token decimals for accurate price calculation
+            // The token's decimals value the held amount the buy is averaged over; without
+            // them the add is booked and the average left as it is.
             let decimals =
-                crate::tokens::get_decimals(crate::chains::active_chain(), &snapshot.mint)
-                    .await
-                    .unwrap_or(9); // Default to 9 if not found
+                crate::tokens::get_decimals(crate::chains::active_chain(), &snapshot.mint).await;
 
             let fill = DcaFill {
                 tokens_bought,
                 native_spent,
+                fee_raw,
                 dca_time,
             };
             let reading = LateFillReading::of(
@@ -962,7 +963,6 @@ pub async fn apply_transition(transition: PositionTransition) -> Result<ApplyEff
                             LateDca {
                                 fill: &fill,
                                 price: effective_price,
-                                fee_raw,
                             },
                         )?;
                         (Some(bring_back_reopened(row, reads, late)?), Some(kept))
@@ -976,39 +976,50 @@ pub async fn apply_transition(transition: PositionTransition) -> Result<ApplyEff
                     row.archived = false;
                     row.archived_at = None;
                 }
-                // An open or reopened position averages its cost over what it now holds; a
-                // row that stays closed keeps the average its round was priced at.
-                if late
-                    .as_ref()
-                    .is_none_or(|late| late.follow == FollowOutcome::Reopened)
-                {
-                    let remaining = row.remaining_token_amount.unwrap_or_default();
-                    match row.recompute_average_entry_price(decimals) {
-                        DcaAverage::Recomputed => {}
-                        DcaAverage::InvalidNormalization => logger::error(
-                            LogTag::Positions,
-                            &format!(
-                                "DCA: Invalid token normalization for position {position_id} \
-                                 (remaining={remaining}, decimals={decimals})"
-                            ),
-                        ),
-                        DcaAverage::InvalidState => logger::error(
-                            LogTag::Positions,
-                            &format!(
-                                "DCA: Invalid position state for average price calculation - \
-                                 position_id={position_id}, remaining_tokens={remaining}, \
-                                 total_size_native={}",
-                                row.total_size_native
-                            ),
-                        ),
-                    }
-                }
                 // The record carries the part of the buy this position booked: all of it,
                 // or, after a handover, the part the open position did not take.
                 let (amount, native, fee) = kept
                     .map_or((tokens_bought, native_spent, fee_raw), |kept: KeptLeg| {
                         (kept.leg.tokens, kept.leg.cost_native, kept.fee_raw)
                     });
+                // An open or reopened position blends the part of the buy it booked into the
+                // average cost of what it now holds; a row that stays closed keeps the
+                // average its round was priced at.
+                if late
+                    .as_ref()
+                    .is_none_or(|late| late.follow == FollowOutcome::Reopened)
+                {
+                    let remaining = row.remaining_token_amount.unwrap_or_default();
+                    match decimals {
+                        Some(decimals) => match row
+                            .blend_average_entry_price(amount, native, decimals)
+                        {
+                            DcaAverage::Recomputed => {}
+                            DcaAverage::InvalidNormalization => logger::error(
+                                LogTag::Positions,
+                                &format!(
+                                    "DCA: Invalid token normalization for position {position_id} \
+                                     (remaining={remaining}, bought={amount}, decimals={decimals})"
+                                ),
+                            ),
+                            DcaAverage::InvalidState => logger::error(
+                                LogTag::Positions,
+                                &format!(
+                                    "DCA: Invalid position state for average price calculation - \
+                                     position_id={position_id}, remaining_tokens={remaining}, \
+                                     bought={amount}, native_spent={native}"
+                                ),
+                            ),
+                        },
+                        None => logger::error(
+                            LogTag::Positions,
+                            &format!(
+                                "Decimals of {} are unknown: the average entry price of position {position_id} is not recomputed after a DCA",
+                                row.mint
+                            ),
+                        ),
+                    }
+                }
                 let record = (amount > RawAmount::ZERO).then(|| {
                     BookingRecord::Entry(EntryRecord {
                         id: None,
@@ -1533,8 +1544,6 @@ struct LateDca<'a> {
     fill: &'a DcaFill,
     /// The buy's effective price, native per whole token.
     price: f64,
-    /// The buy's transaction fee, raw native units.
-    fee_raw: u64,
 }
 
 /// The part of a late buy a closed position books itself, with its share of the fee.
@@ -1542,16 +1551,6 @@ struct LateDca<'a> {
 struct KeptLeg {
     leg: Leg,
     fee_raw: u64,
-}
-
-/// `fee_raw` in proportion to `part` of `whole`, rounded down; the whole fee for an empty
-/// whole.
-fn prorated_fee(fee_raw: u64, part: RawAmount, whole: RawAmount) -> u64 {
-    if whole == RawAmount::ZERO {
-        return fee_raw;
-    }
-    let share = (u128::from(fee_raw)).saturating_mul(part.raw()) / whole.raw();
-    u64::try_from(share).unwrap_or(fee_raw).min(fee_raw)
 }
 
 /// Books a buy that landed on closed `row`. Without another open position of the mint the
@@ -1573,7 +1572,7 @@ fn late_dca(
             tokens: dca.fill.tokens_bought,
             cost_native: dca.fill.native_spent,
         },
-        fee_raw: dca.fee_raw,
+        fee_raw: dca.fill.fee_raw,
     };
     let held = late_fill_holding(row, reads, &reading, chain, dca.fill.tokens_bought)?;
     let Some(open_round_id) = reads.open_round_beside(&row.mint)? else {
@@ -1602,7 +1601,6 @@ fn late_dca(
             operation: "handing a late buy over",
         });
     };
-    let handed_fee = prorated_fee(dca.fee_raw, split.handed_leg.tokens, dca.fill.tokens_bought);
     // Only the buy's own tokens are at the buy's price; earlier tokens carried with them make
     // the record's price their blended average.
     let price = (split.handed_earlier.tokens == RawAmount::ZERO).then_some(dca.price);
@@ -1614,7 +1612,7 @@ fn late_dca(
         HandoverRecord {
             handover,
             price,
-            fees_raw: Some(handed_fee),
+            fees_raw: Some(split.handed_fee_raw),
         },
     )?;
     let late = LateFill {
@@ -1625,7 +1623,7 @@ fn late_dca(
     };
     let kept = KeptLeg {
         leg: split.kept,
-        fee_raw: dca.fee_raw - handed_fee,
+        fee_raw: split.kept_fee_raw,
     };
     Ok((late, kept))
 }
@@ -1680,11 +1678,11 @@ struct HandoverRecord {
 }
 
 /// Books what closed `row` handed over as an add on the open position `open_round_id`, in
-/// the booking transaction of `row`: the tokens and their cost are added, the average entry
-/// price is recomputed, an archived position returns to the open positions, and the add is
-/// recorded as a DCA entry under the late swap's signature. The open position already
-/// holding a record of that swap while `row` does not is an inconsistency the booking
-/// refuses, so nothing is moved twice.
+/// the booking transaction of `row`: the tokens, their cost and the fee share are added, the
+/// tokens are blended into the average entry price, an archived position returns to the open
+/// positions, and the add is recorded as a DCA entry under the late swap's signature. The
+/// open position already holding a record of that swap while `row` does not is an
+/// inconsistency the booking refuses, so nothing is moved twice.
 ///
 /// An open position whose full exit is sent and not yet verified takes the holding all the
 /// same: it is still the mint's one position, so its exit's verification books whatever the
@@ -1727,11 +1725,14 @@ fn hand_over(
         open.book_dca(&DcaFill {
             tokens_bought: handover.tokens,
             native_spent: handover.cost_native,
+            fee_raw: fees_raw.unwrap_or(0),
             dca_time: reading.time,
         })?;
         match reading.decimals {
             Some(decimals) => {
-                if open.recompute_average_entry_price(decimals) != DcaAverage::Recomputed {
+                if open.blend_average_entry_price(handover.tokens, handover.cost_native, decimals)
+                    != DcaAverage::Recomputed
+                {
                     logger::error(
                         LogTag::Positions,
                         &format!(

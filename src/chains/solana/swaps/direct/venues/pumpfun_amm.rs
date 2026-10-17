@@ -41,11 +41,15 @@
 //!
 //! # Virtual reserves
 //!
-//! A "boosted" pool prices off `quote_vault + virtual_quote_reserves`, a `u64`
-//! the published IDL does not carry, at offset 245. Ignoring it over-states the
-//! output of every buy in such a pool by around 16%. The programme's own logs
-//! spell out the rule: "effective = real + virtual is pricing-only; payout is
-//! capped at real_vault".
+//! Every pool prices off `quote_vault + virtual_quote_reserves`, where the
+//! virtual reserve is a signed `i128` at offset 245. A boosted pool carries a
+//! positive value; an unboosted pool carries the negated unclaimed protocol and
+//! creator fees held in its vault. Ignoring it, or reading it unsigned, misprices
+//! every quote: a boost over-states the output of a buy by around 16%, and a
+//! negative value read as unsigned collapses the quote to nothing. The
+//! programme's own logs spell out the rule: "effective = real + virtual is
+//! pricing-only; payout is capped at real_vault". An effective reserve at or
+//! below zero is refused.
 //!
 //! # The buyback recipient
 //!
@@ -471,9 +475,18 @@ impl PumpAmmMarket {
     }
 
     /// Quote reserve used for PRICING: the vault plus any virtual reserves.
-    fn effective_quote_reserve(&self) -> u64 {
-        self.quote_reserve
-            .saturating_add(self.state.virtual_quote_reserves)
+    fn effective_quote_reserve(&self) -> DirectSwapResult<u64> {
+        let effective = (self.quote_reserve as i128).checked_add(self.state.virtual_quote_reserves);
+        effective
+            .filter(|reserve| *reserve > 0)
+            .and_then(|reserve| u64::try_from(reserve).ok())
+            .ok_or_else(|| DirectSwapError::QuoteMath {
+                detail: format!(
+                    "the effective quote reserve (vault {} + virtual {}) is outside the \
+                     priceable range",
+                    self.quote_reserve, self.state.virtual_quote_reserves
+                ),
+            })
     }
 
     /// The PDA that owns the coin creator's fee vault.
@@ -606,14 +619,14 @@ impl PoolMarket for PumpAmmMarket {
             });
         }
 
+        let effective_quote = self.effective_quote_reserve()?;
         let (expected_out, lp_fee) = if input_is_base {
             // SELL: base in, quote out, fees off the output.
             let received = super::token2022::net_of_fee(self.transfer_fee_base.as_ref(), amount_in);
-            let gross =
-                constant_product_out(self.base_reserve, self.effective_quote_reserve(), received)
-                    // A boosted pool prices off the virtual reserve but can only pay out
-                    // of the real one.
-                    .min(self.quote_reserve);
+            let gross = constant_product_out(self.base_reserve, effective_quote, received)
+                // The programme prices off the effective reserve but can only pay out
+                // of the real vault.
+                .min(self.quote_reserve);
             let fee = self.quote_fee_on(gross);
             let net = gross.saturating_sub(fee);
             let out = super::token2022::net_of_fee(self.transfer_fee_quote.as_ref(), net);
@@ -638,8 +651,7 @@ impl PoolMarket for PumpAmmMarket {
             // `min_out` it cannot meet.
             let swapped = self.swappable_from_spend(received);
             let fee = received.saturating_sub(swapped);
-            let gross =
-                constant_product_out(self.effective_quote_reserve(), self.base_reserve, swapped);
+            let gross = constant_product_out(effective_quote, self.base_reserve, swapped);
             let out = super::token2022::net_of_fee(self.transfer_fee_base.as_ref(), gross);
             (out, fee)
         };
@@ -665,9 +677,9 @@ impl PoolMarket for PumpAmmMarket {
         }
 
         let (reserve_in, reserve_out) = if input_is_base {
-            (self.base_reserve, self.effective_quote_reserve())
+            (self.base_reserve, effective_quote)
         } else {
-            (self.effective_quote_reserve(), self.base_reserve)
+            (effective_quote, self.base_reserve)
         };
 
         Ok(VenueQuote {
@@ -1116,6 +1128,44 @@ mod tests {
             "the real vault is the ceiling, got {}",
             quote.expected_out
         );
+    }
+
+    #[test]
+    fn a_negative_virtual_reserve_prices_off_the_vault_plus_the_signed_value() {
+        let plain_state = state();
+        let mut negative_state = state();
+        negative_state.virtual_quote_reserves = -50_000_000;
+        let plain = market(plain_state, 1_000_000_000_000_000, 1_000_000_000);
+        let negative = market(negative_state, 1_000_000_000_000_000, 1_000_000_000);
+
+        let plain_buy = plain
+            .quote(&plain_state.quote_mint, 10_000_000)
+            .expect("plain");
+        let negative_buy = negative
+            .quote(&negative_state.quote_mint, 10_000_000)
+            .expect("negative");
+        assert!(
+            negative_buy.expected_out > plain_buy.expected_out
+                && negative_buy.expected_out * 100 < plain_buy.expected_out * 106,
+            "a 5% smaller effective reserve buys about 5% more base: {} vs {}",
+            negative_buy.expected_out,
+            plain_buy.expected_out
+        );
+    }
+
+    #[test]
+    fn an_effective_quote_reserve_at_or_below_zero_is_refused() {
+        let mut state = state();
+        state.virtual_quote_reserves = -1_000_000_000;
+        let drained = market(state, 1_000_000_000_000_000, 1_000_000_000);
+        assert!(matches!(
+            drained.quote(&state.quote_mint, 10_000_000),
+            Err(DirectSwapError::QuoteMath { .. })
+        ));
+        assert!(matches!(
+            drained.quote(&state.base_mint, 10_000_000),
+            Err(DirectSwapError::QuoteMath { .. })
+        ));
     }
 
     #[test]

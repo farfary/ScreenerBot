@@ -55,7 +55,7 @@ pub struct TransactionMeta {
 }
 
 /// Token balance information in transaction metadata
-#[derive(Debug, Serialize, Deserialize)]
+#[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct TokenBalance {
     #[serde(rename = "accountIndex")]
     pub account_index: u32,
@@ -68,7 +68,7 @@ pub struct TokenBalance {
 }
 
 /// Token amount with UI representation
-#[derive(Debug, Serialize, Deserialize)]
+#[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct UiTokenAmount {
     pub amount: String,
     pub decimals: u8,
@@ -100,6 +100,39 @@ pub struct SimulationOutcome {
     /// quote says nothing about it.
     #[serde(default)]
     pub inner_instructions: Vec<serde_json::Value>,
+    /// The fee the run charged the fee payer, in lamports. Already deducted in
+    /// `post_balances`.
+    #[serde(default)]
+    pub fee: Option<u64>,
+    /// Lamports of every account before the run, indexed like the message's
+    /// full key list: the static keys, then the loaded writable addresses, then
+    /// the loaded readonly addresses.
+    #[serde(default)]
+    pub pre_balances: Option<Vec<u64>>,
+    /// Lamports of every account after the run, indexed like `pre_balances`.
+    #[serde(default)]
+    pub post_balances: Option<Vec<u64>>,
+    /// Token balances before the run. `account_index` follows the same order
+    /// as `pre_balances`.
+    #[serde(default)]
+    pub pre_token_balances: Option<Vec<TokenBalance>>,
+    /// Token balances after the run, indexed like `pre_token_balances`.
+    #[serde(default)]
+    pub post_token_balances: Option<Vec<TokenBalance>>,
+    /// The addresses the message's lookup tables resolved to. They follow the
+    /// static keys in the full key list, writable first, then readonly.
+    #[serde(default)]
+    pub loaded_addresses: Option<LoadedAddresses>,
+}
+
+/// The addresses a v0 message loads from its lookup tables, in the order they
+/// extend the static key list.
+#[derive(Debug, Clone, Default, PartialEq, Eq, Serialize, Deserialize)]
+pub struct LoadedAddresses {
+    /// Loaded writable addresses, which directly follow the static keys.
+    pub writable: Vec<String>,
+    /// Loaded readonly addresses, which follow the writable ones.
+    pub readonly: Vec<String>,
 }
 
 impl SimulationOutcome {

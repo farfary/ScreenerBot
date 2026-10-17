@@ -14,7 +14,8 @@ use tabled::Tabled;
 pub use super::subject::Subject;
 
 // Analysis cache versioning (bump when snapshot schema changes)
-pub const ANALYSIS_CACHE_VERSION: u32 = 4;
+// Version 5 re-derives sell proceeds across every route leg and the whole network fee.
+pub const ANALYSIS_CACHE_VERSION: u32 = 5;
 
 /// Deferred retry record for signatures that timed out/dropped
 /// Used for both manager-level retries and service-level deferred queue
@@ -525,6 +526,9 @@ pub struct TokenBalanceChange {
     pub pre_balance: Option<f64>,
     pub post_balance: Option<f64>,
     pub change: f64,
+    /// Exact change in raw base units; `change` is a binary64 approximation of it.
+    #[serde(default)]
+    pub raw_change: i128,
     pub usd_value: Option<f64>,
 }
 
@@ -897,5 +901,27 @@ impl TransactionStats {
         } else {
             ((self.failed_transactions_count as f64) / (self.total_transactions as f64)) * 100.0
         }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::ANALYSIS_CACHE_VERSION;
+
+    /// The version stamped by the analyzer that booked a split-route sell's proceeds from
+    /// its `transferChecked` leg alone and priced the priority fee on consumed compute
+    /// units. Rows carrying it hold those `sol_amount` and `fee_sol` figures in
+    /// `swap_pnl_info`, and only a higher version makes the reclassification sweep
+    /// re-derive them.
+    const VERSION_WITH_PARTIAL_PROCEEDS_AND_FEE: u32 = 4;
+
+    #[test]
+    fn rows_stored_with_partial_split_route_proceeds_fall_below_the_current_version() {
+        assert!(
+            ANALYSIS_CACHE_VERSION > VERSION_WITH_PARTIAL_PROCEEDS_AND_FEE,
+            "the analyzer now books every proceeds leg and the whole network fee, so rows \
+             stamped {VERSION_WITH_PARTIAL_PROCEEDS_AND_FEE} must be selected by \
+             `stale_analysis_signatures` and re-derived"
+        );
     }
 }

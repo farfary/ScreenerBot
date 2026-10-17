@@ -32,7 +32,7 @@ impl TransactionProcessor {
                 balance_analysis,
                 direction,
             ),
-            "raydium" => {
+            "raydium" | "raydiumclmm" => {
                 self.apply_raydium_corrections(calculated_amount, tx_data, balance_analysis)
             }
             _ => None,

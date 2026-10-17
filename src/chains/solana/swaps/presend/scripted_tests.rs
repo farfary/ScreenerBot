@@ -4,13 +4,15 @@
 //! A scripted [`SwapNode`] that answers the send and settle steps from a
 //! fixed script and records every transaction it was handed.
 
-use std::collections::VecDeque;
+use std::collections::{HashMap, VecDeque};
 use std::sync::Mutex;
 
 use super::SwapNode;
 use crate::chains::solana::rpc::types::SimulationOutcome;
 use crate::chains::solana::settlement::FinalizedTip;
-use crate::chains::solana::solana_sdk::{signature::Signature, transaction::VersionedTransaction};
+use crate::chains::solana::solana_sdk::{
+    account::Account, pubkey::Pubkey, signature::Signature, transaction::VersionedTransaction,
+};
 use crate::chains::solana::solana_transaction_status::{
     EncodedConfirmedTransactionWithStatusMeta, TransactionConfirmationStatus, TransactionStatus,
 };
@@ -32,6 +34,10 @@ pub(crate) struct ScriptedNode {
     executed: Option<serde_json::Value>,
     sent: Mutex<Vec<VersionedTransaction>>,
     accepted: Mutex<usize>,
+    /// The accounts the node holds; any other address does not exist.
+    accounts: HashMap<Pubkey, Account>,
+    /// The epoch the node reports, `None` when it cannot answer.
+    epoch: Option<u64>,
 }
 
 impl ScriptedNode {
@@ -50,7 +56,7 @@ impl ScriptedNode {
                 err: None,
                 logs: Vec::new(),
                 units_consumed: Some(units),
-                inner_instructions: Vec::new(),
+                ..Default::default()
             }),
             sends: Mutex::new(sends.into()),
             statuses: Mutex::new(statuses.into()),
@@ -60,6 +66,8 @@ impl ScriptedNode {
             executed: None,
             sent: Mutex::new(Vec::new()),
             accepted: Mutex::new(0),
+            accounts: HashMap::new(),
+            epoch: Some(0),
         }
     }
 
@@ -81,6 +89,18 @@ impl ScriptedNode {
     /// The same node, unable to answer a simulation.
     pub(crate) fn without_simulation(mut self, error: RpcError) -> Self {
         self.simulation = Err(error);
+        self
+    }
+
+    /// The same node, holding `accounts` and reporting `epoch`, or unable to
+    /// answer the epoch when it is `None`.
+    pub(crate) fn with_chain_state(
+        mut self,
+        accounts: HashMap<Pubkey, Account>,
+        epoch: Option<u64>,
+    ) -> Self {
+        self.accounts = accounts;
+        self.epoch = epoch;
         self
     }
 
@@ -207,5 +227,21 @@ impl SwapNode for ScriptedNode {
         _signature: &Signature,
     ) -> crate::Result<Option<EncodedConfirmedTransactionWithStatusMeta>> {
         Ok(self.executed.clone().map(executed))
+    }
+
+    async fn accounts(&self, addresses: &[Pubkey]) -> crate::Result<Vec<Option<Account>>> {
+        Ok(addresses
+            .iter()
+            .map(|address| self.accounts.get(address).cloned())
+            .collect())
+    }
+
+    async fn epoch(&self) -> crate::Result<u64> {
+        self.epoch.ok_or_else(|| {
+            crate::Error::Rpc(RpcError::Network {
+                message: "epoch unavailable".to_owned(),
+                is_timeout: false,
+            })
+        })
     }
 }

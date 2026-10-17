@@ -221,18 +221,15 @@ impl TransactionProcessor {
                 (direction_opt.as_ref(), primary_token_opt.as_ref())
             {
                 // Resolve router string from DEX detection
-                let router_str = (match analysis.dex.detected_dex.as_ref() {
-                    Some(crate::chains::solana::transactions::analyzer::dex::DetectedDex::Jupiter) => "jupiter",
-                    Some(crate::chains::solana::transactions::analyzer::dex::DetectedDex::Raydium) => "raydium",
-                    Some(crate::chains::solana::transactions::analyzer::dex::DetectedDex::RaydiumCLMM) => "raydium",
-                    Some(crate::chains::solana::transactions::analyzer::dex::DetectedDex::Orca) => "orca",
-                    Some(crate::chains::solana::transactions::analyzer::dex::DetectedDex::OrcaWhirlpool) => "orca",
-                    Some(crate::chains::solana::transactions::analyzer::dex::DetectedDex::PumpFun) => "pumpfun",
-                    Some(crate::chains::solana::transactions::analyzer::dex::DetectedDex::Meteora) => "meteora",
-                    Some(_) => "unknown",
-                    None => "unknown",
-                })
-                .to_string();
+                let router_str = analysis
+                    .dex
+                    .detected_dex
+                    .as_ref()
+                    .map_or(
+                        "unknown",
+                        crate::chains::solana::transactions::analyzer::dex::DetectedDex::router_id,
+                    )
+                    .to_string();
 
                 // Helper to get wallet key string
                 let wallet_key = self.wallet_pubkey.to_string();
@@ -678,11 +675,11 @@ impl TransactionProcessor {
                     input_ui_amount: input_ui,
                     output_ui_amount: output_ui,
                     pool_address: analysis.dex.pool_address.clone(),
-                    program_id: analysis
-                        .dex
-                        .program_ids
-                        .first()
-                        .cloned()
+                    program_id:
+                        crate::chains::solana::transactions::program_ids::detect_known_program(
+                            &analysis.dex.program_ids,
+                        )
+                        .map(|known| known.id.to_owned())
                         .unwrap_or_default(),
                 };
 

@@ -312,75 +312,9 @@ async fn force_fetch_fresh_price(token_mint: &str) -> Option<crate::tokens::Toke
     None
 }
 
-/// Apply pool price bias correction using the entry price discrepancy.
-///
-/// Meteora DAMM/DLMM pools systematically underestimate prices by ~5-6%
-/// because the vault-ratio calculation doesn't account for concentrated
-/// liquidity active ranges. This function corrects the bias by comparing
-/// the pool price at entry time (entry_price) with the actual swap price
-/// (effective_entry_price) — the ratio captures the systematic gap.
-///
-/// The bias factor is clamped to [0.90, 1.25] to prevent runaway corrections
-/// if the entry prices are anomalous.
-///
-/// Only a pool price is corrected: the factor measures the gap between the pool
-/// computation and the executed swap, so it does not apply to an API price,
-/// which is not derived from the pool's reserves.
-///
-/// Returns the original price unchanged if:
-/// - the price did not come from the pool
-/// - effective_entry_price is not set (TX not verified yet)
-/// - entry_price is zero or negative
-/// - bias factor is outside sane bounds
-pub fn apply_pool_bias_correction(
-    pool_price: f64,
-    source: PriceSource,
-    entry_pool_price: f64,
-    effective_entry_price: Option<f64>,
-) -> f64 {
-    if source != PriceSource::Pool {
-        return pool_price;
-    }
-
-    let effective = match effective_entry_price {
-        Some(e) if e > 0.0 && e.is_finite() => e,
-        _ => return pool_price, // No effective price — can't correct
-    };
-
-    if entry_pool_price <= 0.0 || !entry_pool_price.is_finite() {
-        return pool_price;
-    }
-
-    let bias_factor = effective / entry_pool_price;
-
-    // Sane bounds: reject if bias is implausibly large or small
-    if bias_factor < 0.90 || bias_factor > 1.25 {
-        return pool_price; // Anomalous — don't correct
-    }
-
-    // Only correct if there's meaningful bias (>1%)
-    if (bias_factor - 1.0).abs() < 0.01 {
-        return pool_price; // Negligible bias
-    }
-
-    let corrected = pool_price * bias_factor;
-
-    if corrected > 0.0 && corrected.is_finite() {
-        corrected
-    } else {
-        pool_price
-    }
-}
-
 #[cfg(test)]
 mod tests {
     use super::*;
-
-    #[test]
-    fn pool_bias_correction_scales_a_pool_price() {
-        let corrected = apply_pool_bias_correction(1.0, PriceSource::Pool, 1.0, Some(1.05));
-        assert!((corrected - 1.05).abs() < 1e-12);
-    }
 
     #[test]
     fn api_prices_are_trusted_unless_the_two_sources_contradict_each_other() {
@@ -400,10 +334,11 @@ mod tests {
     }
 
     #[test]
-    fn pool_bias_correction_leaves_an_api_price_unchanged() {
-        assert_eq!(
-            apply_pool_bias_correction(1.0, PriceSource::Api, 1.0, Some(1.05)),
-            1.0
-        );
+    fn entry_swap_cost_does_not_scale_later_pool_prices() {
+        let removed_correction = concat!("apply_pool_bias_", "correction");
+        let source = include_str!("price_resolution.rs");
+        assert!(!source.contains(removed_correction));
+        assert!(!include_str!("price_updater.rs").contains(removed_correction));
+        assert!(!include_str!("../trader/evaluators/exit.rs").contains(removed_correction));
     }
 }

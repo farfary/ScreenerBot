@@ -24,7 +24,11 @@
 //!    ([`crate::rpc::RpcError::is_request_rejection`]), has answered, and the
 //!    answer is a refusal. Only a node that could not answer at all is
 //!    [`Verdict::NodeUnavailable`], the one verdict a caller may proceed
-//!    through.
+//!    through. A build an aggregator made is then handed to
+//!    [`cost_guard::check`] with what the simulation saw: it inspects every
+//!    top-level instruction of the message and the simulated run's effect on
+//!    the wallet, and refuses a build that spends the native asset when no
+//!    node could simulate it.
 //! 3. **Was it sent, and what became of it?** A send the one node it reached
 //!    refused as a malformed request, or whose preflight that node ran and saw
 //!    fail, provably never reached the chain. Any
@@ -53,8 +57,10 @@ use crate::chains::solana::settlement::{
 };
 use crate::chains::solana::solana_packet::PACKET_DATA_SIZE;
 use crate::chains::solana::solana_sdk::{
+    account::Account,
     compute_budget::id as compute_budget_program,
     message::VersionedMessage,
+    pubkey::Pubkey,
     signature::{Keypair, Signature, Signer},
     transaction::{Transaction, VersionedTransaction},
 };
@@ -296,6 +302,13 @@ pub trait SwapNode: Sync {
         &self,
         signature: &Signature,
     ) -> impl Future<Output = crate::Result<Option<EncodedConfirmedTransactionWithStatusMeta>>> + Send;
+    /// The accounts at `addresses`, in order, `None` for one that does not exist.
+    fn accounts(
+        &self,
+        addresses: &[Pubkey],
+    ) -> impl Future<Output = crate::Result<Vec<Option<Account>>>> + Send;
+    /// The epoch the node is in.
+    fn epoch(&self) -> impl Future<Output = crate::Result<u64>> + Send;
 }
 
 impl SwapNode for RpcClient {
@@ -329,6 +342,14 @@ impl SwapNode for RpcClient {
         signature: &Signature,
     ) -> crate::Result<Option<EncodedConfirmedTransactionWithStatusMeta>> {
         self.get_transaction(signature).await
+    }
+
+    async fn accounts(&self, addresses: &[Pubkey]) -> crate::Result<Vec<Option<Account>>> {
+        self.get_multiple_accounts(addresses).await
+    }
+
+    async fn epoch(&self) -> crate::Result<u64> {
+        self.get_epoch().await
     }
 }
 
@@ -697,11 +718,19 @@ async fn submit_on<N: SwapNode>(
         ),
     );
 
+    // Built on the aggregator's host and signed with the wallet's key, so the
+    // cost guard inspects every top-level instruction of the message and what
+    // the simulated run does with the wallet before anything is signed.
     match simulation_verdict(node.simulate(&transaction).await) {
         Verdict::Cleared(outcome) => {
-            // Built on the aggregator's host, so nothing on our side has checked
-            // what it does with the wallet's lamports.
-            cost_guard::check(router, &outcome, quote).await?;
+            cost_guard::check(
+                node,
+                router,
+                &transaction,
+                cost_guard::Simulated::Ran(&outcome),
+                quote,
+            )
+            .await?;
             let measured_units = outcome
                 .units_consumed
                 .filter(|_| compute_limit == ComputeLimit::TightenToMeasured);
@@ -725,10 +754,16 @@ async fn submit_on<N: SwapNode>(
             }));
         }
         Verdict::Refused(reason) => return Err(not_submitted(reason)),
-        Verdict::NodeUnavailable { detail } => logger::warning(
-            LogTag::Swap,
-            &format!("{router} preflight simulation unavailable, proceeding: {detail}"),
-        ),
+        Verdict::NodeUnavailable { detail } => {
+            cost_guard::check(
+                node,
+                router,
+                &transaction,
+                cost_guard::Simulated::Unavailable { detail: &detail },
+                quote,
+            )
+            .await?;
+        }
     }
 
     transaction.signatures[0] = signer.sign_message(&transaction.message.serialize());

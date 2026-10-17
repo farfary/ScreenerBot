@@ -45,6 +45,14 @@ pub async fn add_to_position(
         detail: "position has no id".to_owned(),
     })?;
 
+    if position.exit_transaction_signature.is_some() && !position.transaction_exit_verified {
+        return Err(Error::TransitionFailed {
+            transition: "dca",
+            mint: token_mint.to_owned(),
+            detail: "position has a pending exit transaction".to_owned(),
+        });
+    }
+
     // The add brings an archived position back to active management; a store that still
     // holds another active open position of the mint would then hold two, so the add is
     // refused before anything is sent.

@@ -69,17 +69,20 @@ pub async fn manual_buy_handler(Json(req): Json<ManualBuyRequest>) -> Response {
     } else {
         BlacklistPolicy::Enforce
     };
-    if let Err(error) = guard::preflight(ManualTradeKind::Buy, &req.mint, blacklist).await {
-        return trader_failure(&error);
-    }
     let slippage_pct = match guard::validate_slippage(req.slippage_pct) {
         Ok(v) => v,
         Err(error) => return trader_failure(&error),
     };
     let size = match req.size_sol {
-        Some(v) if v.is_finite() && v > 0.0 => v,
-        _ => with_config(|cfg| cfg.trader.trade_size_sol),
+        Some(v) => match guard::validate_size(v) {
+            Ok(size) => size,
+            Err(error) => return trader_failure(&error),
+        },
+        None => with_config(|cfg| cfg.trader.trade_size_sol),
     };
+    if let Err(error) = guard::preflight(ManualTradeKind::Buy, &req.mint, blacklist).await {
+        return trader_failure(&error);
+    }
     logger::info(
         LogTag::Webserver,
         &format!(
@@ -97,11 +100,6 @@ pub async fn manual_buy_handler(Json(req): Json<ManualBuyRequest>) -> Response {
 }
 
 pub async fn manual_add_handler(Json(req): Json<ManualAddRequest>) -> Response {
-    if let Err(error) =
-        guard::preflight(ManualTradeKind::Add, &req.mint, BlacklistPolicy::Enforce).await
-    {
-        return trader_failure(&error);
-    }
     let slippage_pct = match guard::validate_slippage(req.slippage_pct) {
         Ok(v) => v,
         Err(error) => return trader_failure(&error),
@@ -109,11 +107,19 @@ pub async fn manual_add_handler(Json(req): Json<ManualAddRequest>) -> Response {
     // Default add size = the configured DCA size (a fraction of the trade size). The
     // fraction must come from `trader.dca_size_percentage`, never a hardcoded 0.5.
     let size = match req.size_sol {
-        Some(v) if v.is_finite() && v > 0.0 => v,
-        _ => {
+        Some(v) => match guard::validate_size(v) {
+            Ok(size) => size,
+            Err(error) => return trader_failure(&error),
+        },
+        None => {
             with_config(|cfg| cfg.trader.trade_size_sol * (cfg.trader.dca_size_percentage / 100.0))
         }
     };
+    if let Err(error) =
+        guard::preflight(ManualTradeKind::Add, &req.mint, BlacklistPolicy::Enforce).await
+    {
+        return trader_failure(&error);
+    }
     logger::info(
         LogTag::Webserver,
         &format!("mint={} size_sol={}", req.mint, size),
@@ -123,11 +129,6 @@ pub async fn manual_add_handler(Json(req): Json<ManualAddRequest>) -> Response {
 }
 
 pub async fn manual_sell_handler(Json(req): Json<ManualSellRequest>) -> Response {
-    if let Err(error) =
-        guard::preflight(ManualTradeKind::Sell, &req.mint, BlacklistPolicy::Ignore).await
-    {
-        return trader_failure(&error);
-    }
     let pct = if req.close_all.unwrap_or_default() {
         None // Full exit (100%)
     } else {
@@ -143,6 +144,11 @@ pub async fn manual_sell_handler(Json(req): Json<ManualSellRequest>) -> Response
         Ok(v) => v,
         Err(error) => return trader_failure(&error),
     };
+    if let Err(error) =
+        guard::preflight(ManualTradeKind::Sell, &req.mint, BlacklistPolicy::Ignore).await
+    {
+        return trader_failure(&error);
+    }
     logger::info(
         LogTag::Webserver,
         &format!(

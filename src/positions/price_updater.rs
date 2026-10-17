@@ -163,37 +163,20 @@ pub async fn update_position_price_and_pnl(
 
     let _lock = crate::positions::acquire_position_lock(token_mint).await;
 
-    // Apply pool price bias correction (DAMM pool prices read ~5-6% low)
-    // Uses the ratio of actual swap price to pool price at entry time to correct ongoing
-    // bias; an API price is passed through unchanged.
-    let corrected_price = {
-        let pos_opt = crate::positions::state::get_position_by_id(position_id).await;
-        if let Some(ref pos) = pos_opt {
-            crate::positions::price_resolution::apply_pool_bias_correction(
-                current_price,
-                source,
-                pos.entry_price,
-                pos.effective_entry_price,
-            )
-        } else {
-            current_price
-        }
-    };
-
     let now = chrono::Utc::now();
 
     // Update by position ID to avoid updating a closed position with the same mint
     let updated = crate::positions::state::update_position_state_by_id(position_id, |pos| {
-        pos.current_price = Some(corrected_price);
+        pos.current_price = Some(current_price);
         pos.current_price_updated = Some(now);
         pos.current_price_source = Some(source);
 
-        if corrected_price > pos.price_highest {
-            pos.price_highest = corrected_price;
+        if current_price > pos.price_highest {
+            pos.price_highest = current_price;
         }
 
-        if corrected_price < pos.price_lowest || pos.price_lowest == 0.0 {
-            pos.price_lowest = corrected_price;
+        if current_price < pos.price_lowest || pos.price_lowest == 0.0 {
+            pos.price_lowest = current_price;
         }
     })
     .await;
@@ -207,7 +190,7 @@ pub async fn update_position_price_and_pnl(
         .await
         .ok_or(Error::NotFoundById { position_id })?;
 
-    // Calculate PnL with the bias-corrected price.
+    // Calculate PnL with the current price.
     //
     // A wallet-derived round with no established cost basis has NO honest unrealized
     // P&L: `total_size_native` is zero for it, so the calculation would report the whole
@@ -215,7 +198,7 @@ pub async fn update_position_price_and_pnl(
     // "—" rather than a plausible, permanently wrong number.
     let (pnl_native, pnl_pct) = if position.has_trustworthy_pnl() {
         let (sol, pct) =
-            crate::positions::calculate_position_pnl(&position, Some(corrected_price)).await;
+            crate::positions::calculate_position_pnl(&position, Some(current_price)).await;
         (Some(sol), Some(pct))
     } else {
         (None, None)

@@ -4,6 +4,7 @@
 //! Core Swap Operations - High-level swap functions
 //! Provides get_best_quote() and execute_swap_with_fallback()
 
+use crate::chains::solana::assets::ata::{schedule_wsol_sweep, SweepSigner};
 use crate::chains::RawAmount;
 use crate::logger::{self, LogTag};
 use crate::swaps::error::{QuoteError, QuoteResult};
@@ -736,7 +737,7 @@ pub(crate) async fn execute_with_fallback_on(
     Err(primary_error)
 }
 
-/// Record a completed swap: post-swap cleanup for the main wallet, the total
+/// Record a completed swap: post-swap cleanup for the signing wallet, the total
 /// execution time, and the caller's amount range.
 fn finish(
     signer: SwapSigner<'_>,
@@ -745,9 +746,7 @@ fn finish(
     start: Instant,
     amount_limit: SwapAmountLimit,
 ) -> Result<(Quote, SwapResult)> {
-    if matches!(signer, SwapSigner::MainWallet(_)) {
-        schedule_post_swap_cleanup(&quote);
-    }
+    schedule_post_swap_cleanup(signer, &quote);
     result.execution_time_ms = start.elapsed().as_millis() as u64;
     logger::info(
         LogTag::Swap,
@@ -905,12 +904,27 @@ async fn retry_excluding_venue(
     }
 }
 
+/// The wrapped-SOL sweep a confirmed swap owes, as the signer that must close the
+/// account: a swap with a native-asset leg may leave the signing wallet's WSOL
+/// account open and empty, whichever wallet signed it. `tool_wallet_id` is the wallet
+/// tools' id of the signer, or `None` for the main wallet.
+fn wsol_sweep_signer(tool_wallet_id: Option<i64>, quote: &Quote) -> Option<SweepSigner> {
+    let adapter = crate::chains::adapter();
+    if !adapter.is_native_asset(&quote.input_mint) && !adapter.is_native_asset(&quote.output_mint) {
+        return None;
+    }
+    Some(tool_wallet_id.map_or(SweepSigner::MainWallet, SweepSigner::Wallet))
+}
+
 /// Hand a confirmed swap with a native-asset leg to the post-swap cleanup,
 /// which reclaims the wrapped-SOL account a router may have left open.
-fn schedule_post_swap_cleanup(quote: &Quote) {
-    let adapter = crate::chains::adapter();
-    if adapter.is_native_asset(&quote.input_mint) || adapter.is_native_asset(&quote.output_mint) {
-        crate::chains::solana::assets::ata::schedule_wsol_sweep();
+fn schedule_post_swap_cleanup(signer: SwapSigner<'_>, quote: &Quote) {
+    let tool_wallet_id = match signer {
+        SwapSigner::MainWallet(_) => None,
+        SwapSigner::Wallet(wallet_id) => Some(wallet_id),
+    };
+    if let Some(sweep_signer) = wsol_sweep_signer(tool_wallet_id, quote) {
+        schedule_wsol_sweep(quote.wallet_address.clone(), sweep_signer);
     }
 }
 
@@ -2178,6 +2192,7 @@ mod tests {
             NotSubmittedReason::RequestRejected { .. } => "RequestRejected",
             NotSubmittedReason::SimulationFailed { .. } => "SimulationFailed",
             NotSubmittedReason::CostExceeded { .. } => "CostExceeded",
+            NotSubmittedReason::SimulationUnavailable { .. } => "SimulationUnavailable",
         }
     }
 
@@ -2296,6 +2311,12 @@ mod tests {
                     extra_raw: 13_045_440,
                     venue: "HumidiFi".to_owned(),
                     venue_address: "9H6tua7jkLhdm3w8BvgpTn5LZNU7g4ZynDmCiNN3q6Rp".to_owned(),
+                }),
+                true,
+            ),
+            (
+                not_submitted(NotSubmittedReason::SimulationUnavailable {
+                    detail: "no node answered".to_owned(),
                 }),
                 true,
             ),
@@ -2430,14 +2451,14 @@ mod tests {
             ),
             (
                 direct(DirectSwapError::UnsupportedVenue { program: pool }),
-                false,
+                true,
             ),
             (
                 direct(DirectSwapError::PoolUndecodable {
                     pool,
                     detail: String::new(),
                 }),
-                false,
+                true,
             ),
             (
                 direct(DirectSwapError::PairNotInPool {
@@ -2445,14 +2466,14 @@ mod tests {
                     input_mint: pool,
                     output_mint: pool,
                 }),
-                false,
+                true,
             ),
             (
                 direct(DirectSwapError::PoolNotTradable {
                     pool,
                     detail: String::new(),
                 }),
-                false,
+                true,
             ),
             (
                 direct(DirectSwapError::InsufficientLiquidity {
@@ -2460,33 +2481,33 @@ mod tests {
                     amount_in: 1,
                     detail: String::new(),
                 }),
-                false,
+                true,
             ),
             (
                 direct(DirectSwapError::InvalidRequest {
                     detail: String::new(),
                 }),
-                false,
+                true,
             ),
             (
                 direct(DirectSwapError::AccountUnavailable {
                     address: pool,
                     detail: String::new(),
                 }),
-                false,
+                true,
             ),
             (
                 direct(DirectSwapError::NodeUnavailable {
                     operation: "getLatestBlockhash",
                     detail: String::new(),
                 }),
-                false,
+                true,
             ),
             (
                 direct(DirectSwapError::QuoteMath {
                     detail: String::new(),
                 }),
-                false,
+                true,
             ),
             (
                 direct(DirectSwapError::Build {
@@ -2558,7 +2579,7 @@ mod tests {
                     required: 2,
                     available: 1,
                 }),
-                false,
+                true,
             ),
             (
                 direct(DirectSwapError::MarketMoved {
@@ -2596,7 +2617,7 @@ mod tests {
 
         let covered: std::collections::BTreeSet<String> =
             rows.iter().map(|(error, _)| row_name(error)).collect();
-        let reasons = 7;
+        let reasons = 8;
         let execution_variants = 5;
         let solana_outside_direct = 11 + execution_variants;
         let direct_variants = 20;
@@ -2782,5 +2803,29 @@ mod tests {
         .expect_err("only the named router was asked");
         assert!(is_fallback_safe(&error));
         assert_eq!(*executed.lock().unwrap(), vec!["jupiter"]);
+    }
+
+    /// A swap with a native-asset leg owes the wrapped-SOL sweep to whichever wallet
+    /// signed it, and a swap between two non-native assets owes none.
+    #[test]
+    fn a_native_leg_owes_the_wrapped_sol_sweep_to_the_signing_wallet() {
+        let mut native_in = primary_quote();
+        native_in.input_mint = "So11111111111111111111111111111111111111112".to_owned();
+        let mut native_out = primary_quote();
+        native_out.output_mint = "So11111111111111111111111111111111111111112".to_owned();
+
+        assert_eq!(
+            wsol_sweep_signer(None, &native_in),
+            Some(SweepSigner::MainWallet)
+        );
+        assert_eq!(
+            wsol_sweep_signer(Some(7), &native_in),
+            Some(SweepSigner::Wallet(7))
+        );
+        assert_eq!(
+            wsol_sweep_signer(Some(7), &native_out),
+            Some(SweepSigner::Wallet(7))
+        );
+        assert_eq!(wsol_sweep_signer(Some(7), &primary_quote()), None);
     }
 }

@@ -30,7 +30,7 @@ pub(crate) use schema::SCHEMA;
 
 // Re-export ATA cache operations
 pub use ata_cache::{
-    cleanup_old_failed_atas, get_failed_atas_for_wallet, is_ata_failed, remove_failed_ata,
+    get_excluded_atas_for_wallet, get_failed_atas_for_wallet, is_ata_failed, remove_failed_ata,
     upsert_failed_ata,
 };
 

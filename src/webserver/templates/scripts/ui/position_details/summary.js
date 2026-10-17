@@ -222,8 +222,8 @@ export function applySummaryMixin(PositionDetailsDialog) {
   };
 
   proto._buildCostsSection = function (pos) {
-    // The position's own fee fields cover only the entry and the final close; every DCA add
-    // and partial exit carries its fee on its RECORD, reported in SOL (`fees_native`).
+    // The position's own fee fields cover the fee of every buy and every sale; each record
+    // carries its own swap's fee in SOL (`fees_native`), preferred only for per-swap detail.
     const recordFees = (records) => records.reduce((sum, r) => sum + (r.fees_native || 0), 0);
     const entryFees =
       recordFees(this.fullDetails?.entries || []) || this._lamportsToSol(pos.entry_fee_raw);
