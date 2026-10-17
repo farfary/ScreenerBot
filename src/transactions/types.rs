@@ -627,6 +627,8 @@ pub struct SwapPnLInfo {
     pub timestamp: DateTime<Utc>,
     pub signature: String,
     pub router: String,
+    /// The network fee of the transaction (signature, priority fee, tips); `sol_amount`
+    /// carries none of it.
     pub fee_sol: f64,
     pub ata_rents: f64, // ATA creation and rent costs (in SOL)
 

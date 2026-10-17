@@ -96,6 +96,14 @@ pub struct FeeBreakdown {
     pub total_fees: f64,
 }
 
+impl FeeBreakdown {
+    /// What the network was paid to execute the transaction: the signature and priority
+    /// fees plus any tips. Rent and the swap's own fees are not part of it.
+    pub fn network_fee(&self) -> f64 {
+        self.base_fee + self.priority_fee + self.mev_tips
+    }
+}
+
 /// Net cost of the entire transaction
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct NetTransactionCost {
@@ -268,14 +276,13 @@ async fn calculate_fee_breakdown(
     }
 
     if let Some(price_micro) = cu_price_micro_lamports {
-        // Use computeUnitsConsumed if available; else fall back to set limit
-        let units = tx_data
-            .meta
-            .as_ref()
-            .and_then(|m| m.compute_units_consumed)
-            .or(cu_limit)
+        // The runtime charges the priority fee on the REQUESTED compute-unit limit, rounded
+        // up, whatever the transaction consumed; the consumed units stand in only when no
+        // limit is set.
+        let units = cu_limit
+            .or_else(|| tx_data.meta.as_ref().and_then(|m| m.compute_units_consumed))
             .unwrap_or_default();
-        let prio_lamports = price_micro.saturating_mul(units) / 1_000_000; // micro-lamports -> lamports
+        let prio_lamports = price_micro.saturating_mul(units).div_ceil(1_000_000);
         priority_fee = (prio_lamports as f64) / 1_000_000_000.0;
         // Recompute base fee from total meta.fee if available
         if let Some(meta) = &tx_data.meta {
@@ -433,15 +440,73 @@ mod tests {
             "blockTime": null
         }))
         .expect("v1 jsonParsed transaction decodes");
-        let balance = BalanceAnalysis {
+        let fees = calculate_fee_breakdown(&tx, &empty_balance(), &empty_ata())
+            .await
+            .expect("fee breakdown");
+
+        assert!((fees.priority_fee - 0.000006).abs() < f64::EPSILON);
+        assert!((fees.base_fee - 0.000004).abs() < f64::EPSILON);
+    }
+
+    /// Recorded Raptor buy: limit 400,000 at 50,000 micro-lamports, 152,330 units
+    /// consumed, 25,000 lamports charged. Pricing the priority fee on the consumed
+    /// units put 17,384 lamports in the base fee and booked that as the trade's fee.
+    #[tokio::test]
+    async fn the_priority_fee_is_priced_on_the_requested_limit() {
+        let tx: TransactionDetails = serde_json::from_value(serde_json::json!({
+            "slot": 1,
+            "transaction": {
+                "signatures": ["signature"],
+                "message": {
+                    "accountKeys": [],
+                    "instructions": [
+                        {
+                            "programId": "ComputeBudget111111111111111111111111111111",
+                            "parsed": { "type": "setComputeUnitLimit", "info": { "units": 400000 } }
+                        },
+                        {
+                            "programId": "ComputeBudget111111111111111111111111111111",
+                            "parsed": {
+                                "type": "setComputeUnitPrice",
+                                "info": { "microLamports": 50000 }
+                            }
+                        }
+                    ]
+                }
+            },
+            "meta": {
+                "err": null,
+                "fee": 25000,
+                "computeUnitsConsumed": 152330,
+                "preBalances": [],
+                "postBalances": []
+            },
+            "blockTime": null
+        }))
+        .expect("jsonParsed transaction decodes");
+
+        let fees = calculate_fee_breakdown(&tx, &empty_balance(), &empty_ata())
+            .await
+            .expect("fee breakdown");
+
+        assert!((fees.priority_fee - 0.00002).abs() < 1e-12);
+        assert!((fees.base_fee - 0.000005).abs() < 1e-12);
+        assert!((fees.network_fee() - 0.000025).abs() < 1e-12);
+    }
+
+    fn empty_balance() -> BalanceAnalysis {
+        BalanceAnalysis {
             sol_changes: HashMap::new(),
             token_changes: HashMap::new(),
             clean_transfers: Vec::new(),
             total_tips: 0.0,
             total_rent: 0.0,
             confidence: 1.0,
-        };
-        let ata = AtaAnalysis {
+        }
+    }
+
+    fn empty_ata() -> AtaAnalysis {
+        AtaAnalysis {
             ata_operations: Vec::new(),
             rent_summary: RentSummary {
                 total_rent_paid: 0.0,
@@ -456,14 +521,7 @@ mod tests {
                 modified_accounts: Vec::new(),
             },
             confidence: 1.0,
-        };
-
-        let fees = calculate_fee_breakdown(&tx, &balance, &ata)
-            .await
-            .expect("fee breakdown");
-
-        assert!((fees.priority_fee - 0.000006).abs() < f64::EPSILON);
-        assert!((fees.base_fee - 0.000004).abs() < f64::EPSILON);
+        }
     }
 }
 

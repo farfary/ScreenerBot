@@ -396,6 +396,14 @@ pub(super) fn sum_inner_wsol_transferchecked_ui(
     total_ui
 }
 
+/// True when a jsonParsed instruction belongs to a token program (SPL Token or Token-2022).
+fn is_spl_token_instruction(ix: &serde_json::Value) -> bool {
+    matches!(
+        ix.get("program").and_then(|v| v.as_str()),
+        Some("spl-token" | "spl-token-2022")
+    )
+}
+
 /// Sum WSOL inner transfers (transfer or transferChecked) that credit the wallet's WSOL ATAs, returning SOL units
 pub(super) fn sum_inner_wsol_transfers_ui_to_wallet(
     tx_data: &crate::chains::solana::rpc::TransactionDetails,
@@ -434,7 +442,14 @@ pub(super) fn sum_inner_wsol_transfers_ui_to_wallet(
                                 .get("mint")
                                 .and_then(|v| v.as_str())
                                 .unwrap_or_default();
-                            if mint == SOL_MINT {
+                            // A plain SPL `transfer` names no mint. Into one of the
+                            // wallet's WSOL accounts it can only move WSOL, since the token
+                            // program refuses a transfer between mints; a route that pays a
+                            // sell over several pools mixes both instruction forms.
+                            let unnamed_spl_transfer = mint.is_empty()
+                                && ix_type == "transfer"
+                                && is_spl_token_instruction(ix);
+                            if mint == SOL_MINT || unnamed_spl_transfer {
                                 let dest = info
                                     .get("destination")
                                     .and_then(|v| v.as_str())
@@ -475,4 +490,55 @@ pub(super) fn sum_inner_wsol_transfers_ui_to_wallet(
         }
     }
     total_ui
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    const WALLET: &str = "6uodGCMLfDLfeXkyW71WpUDK1BEG19bU2EV51x2dcGMv";
+
+    /// A recorded Raptor sell of 1.721433 JUP whose route paid the wallet's WSOL account
+    /// from four pools: three plain `transfer`s (946,508 + 1,777,002 + 1,139,539 lamports,
+    /// no mint named) and one `transferChecked` (1,081,615).
+    fn split_route_sell() -> crate::chains::solana::rpc::TransactionDetails {
+        serde_json::from_str(include_str!(
+            "../../../../../tests/fixtures/swaps/raptor_split_route_sell.json"
+        ))
+        .expect("the recorded transaction decodes")
+    }
+
+    #[test]
+    fn every_leg_of_a_split_route_credit_counts_toward_the_sale() {
+        let received = sum_inner_wsol_transfers_ui_to_wallet(&split_route_sell(), WALLET);
+        assert_eq!(
+            (received * 1_000_000_000.0).round() as u64,
+            946_508 + 1_777_002 + 1_139_539 + 1_081_615
+        );
+    }
+
+    #[test]
+    fn the_platform_fee_paid_beside_the_route_leaves_the_net_proceeds() {
+        let sell = split_route_sell();
+        let fee = super::super::helpers_transfers::native_platform_fee_lamports(&sell, WALLET);
+        assert_eq!(
+            fee, 24_723,
+            "0.5% of the gross proceeds, paid to the fee wallet"
+        );
+        let gross =
+            (sum_inner_wsol_transfers_ui_to_wallet(&sell, WALLET) * 1_000_000_000.0).round() as u64;
+        assert_eq!(
+            gross - fee,
+            4_919_941,
+            "the net proceeds are what the router quoted net of its fee"
+        );
+    }
+
+    #[test]
+    fn a_system_transfer_into_the_wsol_account_is_not_a_proceeds_leg() {
+        let system = serde_json::json!({ "program": "system", "parsed": { "type": "transfer" } });
+        let token = serde_json::json!({ "program": "spl-token", "parsed": { "type": "transfer" } });
+        assert!(!is_spl_token_instruction(&system));
+        assert!(is_spl_token_instruction(&token));
+    }
 }

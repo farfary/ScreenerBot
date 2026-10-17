@@ -481,6 +481,14 @@ impl TransactionProcessor {
                             }
                         }
 
+                        // A wrap measures what the route received; the platform fee the
+                        // wallet paid beside it is part of what the buy cost.
+                        if wrap_measured {
+                            let fee = native_platform_fee_lamports(&tx_data, &wallet_key);
+                            input_raw = input_raw.saturating_add(fee);
+                            input_ui = (input_raw as f64) / 1_000_000_000.0;
+                        }
+
                         let token_abs = token_ui_change.unwrap_or_default().abs();
                         output_ui = token_abs;
                         let scale = (10f64).powi(token_decimals as i32);
@@ -498,6 +506,7 @@ impl TransactionProcessor {
 
                         // For sells (token-to-SOL), prefer instruction-derived WSOL credits to the wallet's WSOL ATAs
                         // to avoid counting rent-like artifacts or unrelated WSOL flows.
+                        let mut measured_from_route = true;
                         let mut sol_from_swap = {
                             let ui = sum_inner_wsol_transfers_ui_to_wallet(&tx_data, &wallet_key);
                             if ui > 0.0 {
@@ -557,6 +566,7 @@ impl TransactionProcessor {
 
                         // Fallback to wallet-based calculation if no intermediary flows found
                         if sol_from_swap == 0.0 {
+                            measured_from_route = false;
                             let sol_abs = sol_change_wallet.unwrap_or_default().abs();
                             let fb = &analysis.pnl.fee_breakdown;
                             let mut tips = fb.mev_tips;
@@ -611,6 +621,14 @@ impl TransactionProcessor {
                                 output_raw = corrected_amount;
                                 output_ui = (corrected_amount as f64) / 1_000_000_000.0;
                             }
+                        }
+
+                        // The route's legs carry the proceeds gross of a platform fee the
+                        // wallet paid out of them beside the route; the wallet kept the rest.
+                        if measured_from_route {
+                            let fee = native_platform_fee_lamports(&tx_data, &wallet_key);
+                            output_raw = output_raw.saturating_sub(fee);
+                            output_ui = (output_raw as f64) / 1_000_000_000.0;
                         }
 
                         if self.debug_enabled {
@@ -721,7 +739,7 @@ impl TransactionProcessor {
                         timestamp: transaction.timestamp,
                         signature: transaction.signature.clone(),
                         router: router_str.clone(),
-                        fee_sol: analysis.pnl.fee_breakdown.base_fee,
+                        fee_sol: analysis.pnl.fee_breakdown.network_fee(),
                         // CRITICAL FIX: Use total_rent_paid for all swap types
                         // ATAs can be created in any swap (e.g., WSOL ATA during sells)
                         // The verifier expects this value to normalize CSV amounts that include rent

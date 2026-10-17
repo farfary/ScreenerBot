@@ -133,6 +133,22 @@ pub(super) fn find_mev_tips_from_wallet(
     }
 }
 
+/// Lamports the wallet paid the platform fee wallet in this transaction. A router or the
+/// direct engine that cannot take the fee inside its route pays it as its own system
+/// transfer, so the route's own legs carry the trade net of it: a buy's measured input
+/// leaves it out and a sell's measured proceeds still include it.
+pub(super) fn native_platform_fee_lamports(
+    tx_data: &crate::chains::solana::rpc::TransactionDetails,
+    wallet_key: &str,
+) -> u64 {
+    sum_system_transfers_to_account_from_wallet(
+        tx_data,
+        wallet_key,
+        crate::chains::solana::swaps::revenue::FEE_WALLET,
+    )
+    .unwrap_or(0)
+}
+
 /// Sum all system transfers from wallet to a specific account address
 pub(super) fn sum_system_transfers_to_account_from_wallet(
     tx_data: &crate::chains::solana::rpc::TransactionDetails,
