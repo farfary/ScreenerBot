@@ -155,7 +155,28 @@ pub fn follow_round(position: &mut Position, held: RawAmount) -> Result<FollowOu
     if !position.synthetic_exit {
         position.partial_exit_count += 1;
     }
-    let held = held.min(acquired);
+    clear_close(position, held.min(acquired), acquired);
+    Ok(FollowOutcome::Reopened)
+}
+
+/// Reopens a position the wallet history closed because its holding was missing from a
+/// wallet read, now that the history shows the round still open. No sale closed it, so no
+/// partial exit is counted: it holds everything it acquired again, and the reconcile of the
+/// open round books what the chain shows exited. Management, archive flag and price
+/// columns are never touched.
+pub fn reopen_missed_holding(position: &mut Position) -> Result<()> {
+    let Some(acquired) = position.acquired_amount() else {
+        return Err(Error::AmountOverflow {
+            mint: position.mint.clone(),
+            operation: "reopening a missed holding",
+        });
+    };
+    clear_close(position, acquired, acquired);
+    Ok(())
+}
+
+/// Clears the closing state of `position`, which holds `held` of the `acquired` amount.
+fn clear_close(position: &mut Position, held: RawAmount, acquired: RawAmount) {
     position.remaining_token_amount = Some(held);
     position.total_exited_amount = acquired.checked_sub(held).unwrap_or(RawAmount::ZERO);
     position.exit_time = None;
@@ -169,7 +190,6 @@ pub fn follow_round(position: &mut Position, held: RawAmount) -> Result<FollowOu
     position.synthetic_exit = false;
     // A kept exit signature would be verified again as a full exit of the reopened position.
     position.exit_transaction_signature = None;
-    Ok(FollowOutcome::Reopened)
 }
 
 /// Like [`follow_round`], for a closed position whose mint has another open position: one

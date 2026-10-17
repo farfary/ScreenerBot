@@ -121,6 +121,15 @@ impl SimulationOutcome {
 // Account Types
 // ============================================================================
 
+/// Every token account of one owner, with the slot the chain was read at.
+#[derive(Debug, Clone, Default)]
+pub struct TokenAccountsSnapshot {
+    /// The lower context slot of the two token-program reads, so the snapshot reflects the
+    /// chain up to at least this slot. `None` when a response carries no context slot.
+    pub slot: Option<u64>,
+    pub accounts: Vec<TokenAccountInfo>,
+}
+
 /// Structure to hold token account information
 #[derive(Debug, Clone)]
 pub struct TokenAccountInfo {

@@ -44,7 +44,8 @@
 //! targets forever, and keeps the fee-exact SOL it booked for the legs IT executed. The
 //! ledger RECONCILES it against the chain: it stamps the round key, flags a frozen
 //! account, follows the holding up as well as down, and closes a position whose token
-//! was sold somewhere else. Following it UP is what makes a buy the user made in another
+//! was sold somewhere else. A position it closed because a wallet read missed the holding
+//! reopens once its round shows the tokens still held. Following it UP is what makes a buy the user made in another
 //! wallet app show up — it is the same round, so it is the same row, and the row's basis
 //! becomes the trader's booked SOL plus the chain's SOL for every leg the trader did not
 //! book (see [`TraderLegs`]). A round that another position of the mint booked part of
@@ -69,7 +70,7 @@ use crate::chains::RawAmount;
 use crate::logger::{self, LogTag};
 use crate::positions::db::{Booking, Committed, MintRow, TraderSwapLeg};
 use crate::positions::pnl::realized_pnl;
-use crate::positions::round_state::attributable_held;
+use crate::positions::round_state::{attributable_held, is_dust, reopen_missed_holding};
 use crate::positions::types::{Position, PositionManagement, PositionOrigin, HOLDING_STATE_FROZEN};
 use crate::positions::{EXIT_RETRY_PENDING, PENDING_VERIFICATION_SUFFIX};
 
@@ -1034,7 +1035,9 @@ fn build_position(
 /// the proceeds as booked, and so does an outside acquisition of the part that the row's
 /// books do not carry, by amount or by a complete basis (see [`book_outside_proceeds`]).
 ///
-/// A round closed by a sale outside the bot closes the row. Its proceeds are the round's
+/// A row closed on a wallet read that missed its holding reopens when its round is open
+/// again (see [`closed_on_missed_holding`]). A round closed by a sale outside the bot closes
+/// the row. Its proceeds are the round's
 /// when the row owns the whole round alone, and the row's own recorded proceeds plus its
 /// part's outside sales when it is charged a part; P&L is the realized P&L of the row as
 /// closed.
@@ -1052,11 +1055,24 @@ fn reconcile_owned_position(
         (meta.frozen && round.is_open).then(|| HOLDING_STATE_FROZEN.to_owned());
 
     if existing.exit_time.is_some() {
-        return position;
+        if !closed_on_missed_holding(existing, round) {
+            return position;
+        }
+        if let Err(error) = reopen_missed_holding(&mut position) {
+            logger::warning(
+                LogTag::Positions,
+                &format!(
+                    "Ledger reconcile for {}: position not reopened: {error}",
+                    short_mint(&existing.mint)
+                ),
+            );
+            return existing.clone();
+        }
+        position.history_complete = round.history_complete;
     }
 
     let outside = outside_proceeds(round, earlier, attribution);
-    let claimed_remaining = existing.remaining_token_amount.unwrap_or_default();
+    let claimed_remaining = position.remaining_token_amount.unwrap_or_default();
     let close_proceeds = if attribution.charges_part(round, earlier) {
         let Some(share) = round_share(round, earlier, attribution)
             .filter(|share| share.acquired >= claimed_remaining)
@@ -1129,6 +1145,23 @@ fn reconcile_owned_position(
     };
 
     close_owned_position(position, existing, round, close_proceeds, now)
+}
+
+/// True when the ledger closed `existing` because a wallet read missed its holding, and its
+/// own round is open again: the close booked no sale and no proceeds, and the chain shows
+/// the tokens it called gone. A row the user archived stays as the user left it.
+fn closed_on_missed_holding(existing: &Position, round: &LedgerRound) -> bool {
+    existing.closed_reason.as_deref() == Some(CLOSED_EXTERNALLY)
+        && existing.exit_transaction_signature.is_none()
+        && !existing.history_complete
+        && !existing.synthetic_exit
+        && existing.pnl.is_none()
+        && !existing.archived
+        && existing.round_key.as_deref() == Some(round.round_key.as_str())
+        && round.is_open
+        && existing
+            .acquired_amount()
+            .is_some_and(|acquired| !is_dust(RawAmount::new(round.balance_raw), acquired))
 }
 
 /// Lowers an open row's holding from `claimed` to `observed` when tokens left the wallet.
@@ -1520,17 +1553,19 @@ async fn sync_rounds(
     // On-chain balances win over anything we inferred. A failure here is not fatal: the
     // reduced rounds are still the best truth we have, they simply keep their observed
     // balances (and `reconcile_with_wallet` is what would have flagged a mismatch).
-    let holdings =
-        match crate::chains::solana::assets::ata::get_all_token_accounts(wallet_address).await {
-            Ok(accounts) => accounts,
+    let snapshot =
+        match crate::chains::solana::assets::ata::get_token_accounts_snapshot(wallet_address).await
+        {
+            Ok(snapshot) => snapshot,
             Err(e) => {
                 logger::warning(
                     LogTag::Positions,
                     &format!("Wallet-history sync could not read token accounts: {e}"),
                 );
-                Vec::new()
+                Default::default()
             }
         };
+    let holdings = snapshot.accounts;
 
     let frozen_mints: HashSet<String> = holdings
         .iter()
@@ -1548,7 +1583,7 @@ async fn sync_rounds(
                 decimals: account.decimals,
             })
             .collect();
-        reconcile_with_wallet(&mut rounds, &wallet_holdings);
+        reconcile_with_wallet(&mut rounds, &wallet_holdings, snapshot.slot);
     }
 
     if rounds.is_empty() {
@@ -1643,6 +1678,14 @@ async fn resolve_metadata(
         .collect()
 }
 
+/// What a wallet-history write did to whether its row is open.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+enum Transition {
+    Unchanged,
+    Closed,
+    Reopened,
+}
+
 /// Write the plan to the database and mirror it into in-memory state.
 ///
 /// An update is re-derived from its round on the row read inside its own booking
@@ -1677,7 +1720,7 @@ pub async fn apply_plan(plan: SyncPlan) -> AppliedPlan {
                 if booked_before
                     .is_some_and(|seen| legs.iter().any(|leg| !seen.contains(&leg.signature)))
                 {
-                    return Ok(Booking::Skip(false));
+                    return Ok(Booking::Skip(Transition::Unchanged));
                 }
                 let mut attribution = RoundAttribution::new(
                     row,
@@ -1705,19 +1748,24 @@ pub async fn apply_plan(plan: SyncPlan) -> AppliedPlan {
                     Some(fresh) => {
                         // Decided on the row read in this transaction: a row the trader
                         // closed after the plan was made is not closed by this write.
-                        let closed_now = row.exit_time.is_none() && fresh.exit_time.is_some();
+                        let transition = match (row.exit_time.is_some(), fresh.exit_time.is_some())
+                        {
+                            (false, true) => Transition::Closed,
+                            (true, false) => Transition::Reopened,
+                            _ => Transition::Unchanged,
+                        };
                         *row = fresh;
                         Booking::Write {
                             record: None,
-                            outcome: closed_now,
+                            outcome: transition,
                         }
                     }
-                    None => Booking::Skip(false),
+                    None => Booking::Skip(Transition::Unchanged),
                 },
             )
         })
         .await;
-        let (position, closed_now) = match committed {
+        let (position, transition) = match committed {
             Ok(Committed::Written { row, outcome }) => (row, outcome),
             Ok(Committed::Skipped(_) | Committed::Deleted { .. }) => {
                 applied.skipped += 1;
@@ -1737,7 +1785,18 @@ pub async fn apply_plan(plan: SyncPlan) -> AppliedPlan {
         // A bot position this write closed still holds the trading slot it took when it
         // opened, so the slot is released here. An archived row holds none, and a row that
         // was already closed is not announced again.
-        if closed_now && !position.is_wallet_derived() {
+        // A bot position reopened here takes a trading slot back when one is free.
+        if transition == Transition::Reopened && !position.is_wallet_derived() {
+            crate::positions::state::reclaim_position_slot(&position).await;
+            logger::warning(
+                LogTag::Positions,
+                &format!(
+                    "Reopened position {id} ({}) from wallet history: its tokens are still in the wallet after a read that missed them",
+                    position.symbol
+                ),
+            );
+        }
+        if transition == Transition::Closed && !position.is_wallet_derived() {
             crate::positions::state::release_position_slot(id).await;
             logger::info(
                 LogTag::Positions,

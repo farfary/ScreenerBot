@@ -134,12 +134,23 @@ fn apply_delta(
 /// the other way around. A held mint with no round at all gets a genesis round so the
 /// dashboard shows everything the wallet holds, and an open round the wallet no longer
 /// holds is closed without inventing a closing transaction or timestamp.
-pub fn reconcile_with_wallet(rounds: &mut Vec<LedgerRound>, holdings: &[WalletHolding]) {
+///
+/// `read_slot` is the slot the holdings were read at. A round with an event after it is
+/// newer than the read, which cannot see that event — a buy that created the token account
+/// reads as an empty wallet — so such a round keeps its observed balance.
+pub fn reconcile_with_wallet(
+    rounds: &mut Vec<LedgerRound>,
+    holdings: &[WalletHolding],
+    read_slot: Option<u64>,
+) {
     let on_chain: HashMap<&str, &WalletHolding> =
         holdings.iter().map(|h| (h.mint.as_str(), h)).collect();
 
     for round in rounds.iter_mut() {
         if !round.is_open {
+            continue;
+        }
+        if read_slot.is_some_and(|read| round.last_slot().is_some_and(|last| last > read)) {
             continue;
         }
         let actual = on_chain

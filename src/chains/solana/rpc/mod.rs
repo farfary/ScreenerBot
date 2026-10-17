@@ -88,8 +88,8 @@ pub use utils::{get_ata_rent_from_chain, get_ata_rent_lamports, parse_pubkey_str
 
 pub use types::{
     PaginatedAccountsResponse, SignatureStatusData, SignatureStatusResponse, SignatureStatusResult,
-    TokenAccountInfo, TokenBalance, TransactionData, TransactionDetails, TransactionMeta,
-    UiTokenAmount,
+    TokenAccountInfo, TokenAccountsSnapshot, TokenBalance, TransactionData, TransactionDetails,
+    TransactionMeta, UiTokenAmount,
 };
 
 // ============================================================================

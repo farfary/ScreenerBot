@@ -673,6 +673,7 @@ fn reconciliation_defers_to_the_wallet_and_marks_the_round_incomplete() {
             amount_raw: 400_000_000,
             decimals: TOKEN_DECIMALS,
         }],
+        None,
     );
 
     let round = round_for(&rounds, MINT_A);
@@ -686,7 +687,7 @@ fn reconciliation_defers_to_the_wallet_and_marks_the_round_incomplete() {
 fn reconciliation_closes_an_open_round_the_wallet_no_longer_holds() {
     let mut rounds = reduce_rounds(&buy("sig1", 10, MINT_A, 1_000.0, 2.0));
 
-    reconcile_with_wallet(&mut rounds, &[]);
+    reconcile_with_wallet(&mut rounds, &[], None);
 
     let round = round_for(&rounds, MINT_A);
     assert!(!round.is_open);
@@ -694,6 +695,30 @@ fn reconciliation_closes_an_open_round_the_wallet_no_longer_holds() {
     assert_eq!(
         round.closed_at, None,
         "we never saw it close, so no timestamp may be invented"
+    );
+    assert!(!round.history_complete);
+}
+
+/// A wallet read older than a round's latest event cannot see that event. The buy that
+/// created the token account reads as an empty wallet, and closing on that read would end
+/// a position the wallet still holds.
+#[test]
+fn reconciliation_ignores_a_wallet_read_older_than_the_round() {
+    let mut rounds = reduce_rounds(&buy("sig1", 10, MINT_A, 1_000.0, 2.0));
+
+    reconcile_with_wallet(&mut rounds, &[], Some(9));
+
+    let round = round_for(&rounds, MINT_A);
+    assert!(round.is_open, "a read from before the buy proves nothing");
+    assert_eq!(round.balance_raw, 1_000_000_000);
+    assert!(round.history_complete);
+
+    reconcile_with_wallet(&mut rounds, &[], Some(10));
+
+    let round = round_for(&rounds, MINT_A);
+    assert!(
+        !round.is_open,
+        "a read at the round's slot or later is the truth"
     );
     assert!(!round.history_complete);
 }
@@ -716,6 +741,7 @@ fn reconciliation_surfaces_a_holding_no_transaction_ever_explained() {
                 decimals: TOKEN_DECIMALS,
             },
         ],
+        None,
     );
 
     assert_eq!(rounds.len(), 2, "everything held must appear as a position");
@@ -799,6 +825,7 @@ fn a_held_mint_never_reuses_a_closed_genesis_key() {
             amount_raw: 5_000_000,
             decimals: TOKEN_DECIMALS,
         }],
+        None,
     );
 
     assert_eq!(rounds.len(), 2);

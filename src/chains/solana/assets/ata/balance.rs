@@ -4,12 +4,16 @@
 //! Balance query functions for SOL and token accounts.
 
 use crate::chains::settlement::Holding;
-use crate::chains::solana::rpc::{get_rpc_client, RpcClientMethods, TokenAccountInfo};
+use crate::chains::solana::rpc::{
+    get_rpc_client, RpcClientMethods, TokenAccountInfo, TokenAccountsSnapshot,
+};
+use crate::chains::solana::solana_sdk::pubkey::Pubkey;
 use crate::chains::RawAmount;
 use crate::errors::DataError;
 use crate::logger::{self, LogTag};
 use crate::utils::{format_mint_for_log, get_wallet_address};
 use crate::{Error, Result};
+use std::str::FromStr;
 
 /// Public function to manually close all empty ATAs for the configured wallet
 /// Note: ATA cleanup is now handled automatically by background service (see ata_cleanup.rs)
@@ -137,6 +141,20 @@ pub async fn get_all_token_accounts(wallet_address: &str) -> Result<Vec<TokenAcc
     let rpc_client = get_rpc_client();
     rpc_client
         .get_all_token_accounts_str(wallet_address)
+        .await
+        .map_err(Error::from)
+}
+
+/// Gets all token accounts for a wallet with the slot they were read at.
+pub async fn get_token_accounts_snapshot(wallet_address: &str) -> Result<TokenAccountsSnapshot> {
+    let owner = Pubkey::from_str(wallet_address).map_err(|e| {
+        Error::Data(DataError::ParseError {
+            data_type: "pubkey".to_string(),
+            error: format!("Invalid owner '{wallet_address}': {e}"),
+        })
+    })?;
+    get_rpc_client()
+        .get_token_accounts_snapshot(&owner)
         .await
         .map_err(Error::from)
 }

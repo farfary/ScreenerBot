@@ -198,6 +198,11 @@ impl LedgerRound {
             .max()
             .or(self.opened_at)
     }
+
+    /// The slot of the round's latest event, `None` when no event carries one.
+    pub fn last_slot(&self) -> Option<u64> {
+        self.events.iter().filter_map(|event| event.slot).max()
+    }
 }
 
 /// A currently-held balance read from the wallet, used to reconcile the reduced rounds

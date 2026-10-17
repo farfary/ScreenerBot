@@ -650,6 +650,126 @@ fn a_close_we_could_not_time_is_dated_by_the_last_time_we_saw_the_holding() {
     assert_eq!(reconciled.pnl, None);
 }
 
+/// The bot row a wallet read that missed its holding closed: the round reconciled against
+/// an empty wallet, so the close booked no sale, no proceeds and no closing signature.
+fn closed_on_a_missed_holding() -> Position {
+    let mut missed = round(MINT, "open-sig:MINT");
+    missed.closed_at = None;
+    missed.exit_signature = None;
+    missed.average_exit_price_native = None;
+    missed.realized_proceeds_native = 0.0;
+    missed.basis_complete = false;
+    missed.history_complete = false;
+    missed.events = vec![event(1_600_000_500)];
+    let plan = plan_position_writes(
+        &[missed],
+        &[bot_position(&round(MINT, "open-sig:MINT"))],
+        &metadata(MINT, false),
+        &no_legs(),
+        &no_busy(),
+        now(),
+    );
+    let closed = plan.updates[0].position.clone();
+    assert!(closed.exit_time.is_some());
+    assert_eq!(closed.closed_reason.as_deref(), Some("closed_externally"));
+    closed
+}
+
+#[test]
+fn a_row_closed_on_a_missed_holding_reopens_when_its_round_is_still_held() {
+    let closed = closed_on_a_missed_holding();
+
+    let plan = plan_position_writes(
+        &[open_round(MINT, "open-sig:MINT")],
+        std::slice::from_ref(&closed),
+        &metadata(MINT, false),
+        &no_legs(),
+        &no_busy(),
+        now(),
+    );
+
+    assert!(
+        plan.inserts.is_empty(),
+        "the bot row owns the round, no twin"
+    );
+    let reopened = &plan.updates[0].position;
+    assert_eq!(reopened.id, closed.id);
+    assert_eq!(reopened.exit_time, None);
+    assert_eq!(reopened.closed_reason, None);
+    assert!(!reopened.transaction_exit_verified);
+    assert_eq!(reopened.remaining_token_amount, Some(raw(1_000_000)));
+    assert_eq!(reopened.total_exited_amount, raw(0));
+    assert_eq!(
+        reopened.partial_exit_count, closed.partial_exit_count,
+        "no sale closed it, so no partial exit is counted"
+    );
+    assert!(reopened.history_complete);
+    assert_eq!(reopened.total_size_native, 2.0, "the booked basis is kept");
+    assert_eq!(reopened.origin, closed.origin);
+    assert_eq!(reopened.management, closed.management);
+}
+
+#[test]
+fn a_reopened_row_books_what_the_chain_shows_sold_since() {
+    let closed = closed_on_a_missed_holding();
+    let mut partly_sold = open_round(MINT, "open-sig:MINT");
+    partly_sold.balance_raw = 400_000;
+
+    let plan = plan_position_writes(
+        &[partly_sold],
+        std::slice::from_ref(&closed),
+        &metadata(MINT, false),
+        &no_legs(),
+        &no_busy(),
+        now(),
+    );
+
+    let reopened = &plan.updates[0].position;
+    assert_eq!(reopened.exit_time, None);
+    assert_eq!(reopened.remaining_token_amount, Some(raw(400_000)));
+    assert_eq!(reopened.total_exited_amount, raw(600_000));
+}
+
+#[test]
+fn an_archived_row_closed_on_a_missed_holding_stays_as_the_user_left_it() {
+    let mut closed = closed_on_a_missed_holding();
+    closed.archived = true;
+
+    let plan = plan_position_writes(
+        &[open_round(MINT, "open-sig:MINT")],
+        std::slice::from_ref(&closed),
+        &metadata(MINT, false),
+        &no_legs(),
+        &no_busy(),
+        now(),
+    );
+
+    assert!(plan
+        .updates
+        .iter()
+        .all(|update| update.position.exit_time.is_some()));
+}
+
+#[test]
+fn a_row_closed_by_an_observed_sale_is_never_reopened_by_the_ledger() {
+    let mut closed = closed_on_a_missed_holding();
+    closed.exit_transaction_signature = Some("close-sig".to_owned());
+
+    let plan = plan_position_writes(
+        &[open_round(MINT, "open-sig:MINT")],
+        std::slice::from_ref(&closed),
+        &metadata(MINT, false),
+        &no_legs(),
+        &no_busy(),
+        now(),
+    );
+
+    assert!(plan
+        .updates
+        .iter()
+        .all(|update| update.position.exit_time.is_some()));
+}
+
 #[test]
 fn a_partial_sale_elsewhere_lowers_the_holding_but_leaves_it_open() {
     let mut partly_sold = open_round(MINT, "open-sig:MINT");
@@ -1497,6 +1617,80 @@ fn a_ledger_close_of_a_bot_position_at_a_loss_past_the_limit_pauses_entries() {
                 common::position_events("closed_externally").await,
                 1,
                 "the ledger's close is announced once"
+            );
+        },
+    );
+}
+
+#[test]
+fn a_bot_row_closed_on_a_missed_holding_reopens_in_the_store_and_in_memory() {
+    common::run_isolated(
+        module_path!(),
+        "a_bot_row_closed_on_a_missed_holding_reopens_in_the_store_and_in_memory",
+        || async {
+            let _dir = common::isolated_env();
+            let _cfg = common::config_guard();
+            screenerbot::paths::ensure_all_directories().expect("create data directories");
+            common::configure_own_wallet();
+            common::seed_decimals(common::TEST_MINT, 6);
+            screenerbot::positions::initialize_positions_database()
+                .await
+                .expect("initialise positions database");
+            state::init_global_position_semaphore(1);
+
+            let round_key = format!("entry-sig:{}", common::TEST_MINT);
+            let mut position = common::test_position(1.0, 1.0);
+            position.id = None;
+            position.token_amount = Some(RawAmount::new(1_000_000));
+            position.remaining_token_amount = Some(RawAmount::ZERO);
+            position.total_exited_amount = RawAmount::new(1_000_000);
+            position.exit_time = Some(Utc::now());
+            position.transaction_exit_verified = true;
+            position.closed_reason = Some("closed_externally".to_owned());
+            position.history_complete = false;
+            position.round_key = Some(round_key.clone());
+            let id = db::save_position(&position)
+                .await
+                .expect("persist test position");
+            position.id = Some(id);
+            state::add_position(position.clone()).await;
+
+            let still_held = LedgerRound {
+                entry_signature: position.entry_transaction_signature.clone(),
+                invested_native: 1.0,
+                average_entry_price_native: Some(1.0),
+                remaining_basis_native: 1.0,
+                ..open_round(common::TEST_MINT, &round_key)
+            };
+            let existing = db::load_all_positions().await.expect("load positions");
+            let plan = plan_position_writes(
+                &[still_held],
+                &existing,
+                &metadata(common::TEST_MINT, false),
+                &no_legs(),
+                &no_busy(),
+                Utc::now(),
+            );
+            assert_eq!(apply_plan(plan).await.updated, 1);
+
+            let stored = db::get_position_by_id(id)
+                .await
+                .expect("read stored position")
+                .expect("position stored");
+            assert_eq!(stored.exit_time, None);
+            assert_eq!(stored.closed_reason, None);
+            assert_eq!(
+                stored.remaining_token_amount,
+                Some(RawAmount::new(1_000_000))
+            );
+            let open = state::get_open_positions().await;
+            assert!(
+                open.iter().any(|row| row.id == Some(id)),
+                "the reopened row is open in memory"
+            );
+            assert!(
+                !state::try_consume_global_position_permit(),
+                "the reopened row took the only trading slot back"
             );
         },
     );

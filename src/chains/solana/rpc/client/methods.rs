@@ -6,7 +6,9 @@
 //! Type definitions and trait signatures for RPC client methods.
 //! The trait implementation for `RpcClient` is in `methods_impl.rs`.
 
-use crate::chains::solana::rpc::types::{SimulationOutcome, TokenAccountInfo, TransactionDetails};
+use crate::chains::solana::rpc::types::{
+    SimulationOutcome, TokenAccountInfo, TokenAccountsSnapshot, TransactionDetails,
+};
 use crate::chains::solana::solana_sdk::{
     account::Account, commitment_config::CommitmentLevel, hash::Hash, pubkey::Pubkey,
     signature::Signature, transaction::VersionedTransaction,
@@ -258,6 +260,13 @@ pub trait RpcClientMethods {
         &self,
         owner: &Pubkey,
     ) -> impl std::future::Future<Output = crate::Result<Vec<TokenAccountInfo>>> + Send;
+
+    /// All token accounts of a wallet (both programs) with the slot they were read at, for a
+    /// caller that compares the holdings against transactions it observed.
+    fn get_token_accounts_snapshot(
+        &self,
+        owner: &Pubkey,
+    ) -> impl std::future::Future<Output = crate::Result<TokenAccountsSnapshot>> + Send;
 
     /// Check if a mint is Token-2022 by checking account owner
     fn is_token_2022_mint(

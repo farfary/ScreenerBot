@@ -12,7 +12,9 @@ use super::methods::{
 };
 use super::RpcClient;
 use crate::chains::solana::constants::{SPL_TOKEN_PROGRAM_ID, TOKEN_2022_PROGRAM_ID};
-use crate::chains::solana::rpc::types::{SimulationOutcome, TokenAccountInfo, TransactionDetails};
+use crate::chains::solana::rpc::types::{
+    SimulationOutcome, TokenAccountInfo, TokenAccountsSnapshot, TransactionDetails,
+};
 use crate::chains::solana::solana_sdk::{
     account::Account, commitment_config::CommitmentLevel, hash::Hash, pubkey::Pubkey,
     signature::Signature, transaction::VersionedTransaction,
@@ -105,7 +107,7 @@ impl RpcClientMethods for RpcClient {
     }
 
     async fn get_sol_balance(&self, wallet: &str) -> crate::Result<f64> {
-        let params = serde_json::json!([wallet]);
+        let params = serde_json::json!([wallet, { "commitment": WALLET_READ_COMMITMENT }]);
 
         let result = self.manager.execute_raw("getBalance", params).await?;
 
@@ -123,7 +125,7 @@ impl RpcClientMethods for RpcClient {
     }
 
     async fn get_token_account_balance(&self, token_account: &str) -> crate::Result<f64> {
-        let params = serde_json::json!([token_account]);
+        let params = serde_json::json!([token_account, { "commitment": WALLET_READ_COMMITMENT }]);
 
         let result = self
             .manager
@@ -144,7 +146,7 @@ impl RpcClientMethods for RpcClient {
         let params = serde_json::json!([
             wallet_address,
             { "mint": mint },
-            { "encoding": "jsonParsed", "commitment": "confirmed" }
+            { "encoding": "jsonParsed", "commitment": WALLET_READ_COMMITMENT }
         ]);
 
         let result = self
@@ -459,7 +461,7 @@ impl RpcClientMethods for RpcClient {
         let params = serde_json::json!([
             owner.to_string(),
             { "programId": "TokenkegQfeZyiNwAJbNbGKPFXCWuBvf9Ss623VQ5DA" },
-            { "encoding": "base64" }
+            { "encoding": "base64", "commitment": WALLET_READ_COMMITMENT }
         ]);
 
         let result = self
@@ -579,22 +581,25 @@ impl RpcClientMethods for RpcClient {
     // =========================================================================
 
     async fn get_all_token_accounts(&self, owner: &Pubkey) -> crate::Result<Vec<TokenAccountInfo>> {
-        let accounts_of = |program_id: &str| {
-            serde_json::json!([
-                owner.to_string(),
-                { "programId": program_id },
-                { "encoding": "jsonParsed" }
-            ])
-        };
+        Ok(self.get_token_accounts_snapshot(owner).await?.accounts)
+    }
+
+    async fn get_token_accounts_snapshot(
+        &self,
+        owner: &Pubkey,
+    ) -> crate::Result<TokenAccountsSnapshot> {
         let spl = self
             .manager
-            .execute_raw("getTokenAccountsByOwner", accounts_of(SPL_TOKEN_PROGRAM_ID))
+            .execute_raw(
+                "getTokenAccountsByOwner",
+                token_accounts_params(owner, SPL_TOKEN_PROGRAM_ID),
+            )
             .await;
         let token_2022 = self
             .manager
             .execute_raw(
                 "getTokenAccountsByOwner",
-                accounts_of(TOKEN_2022_PROGRAM_ID),
+                token_accounts_params(owner, TOKEN_2022_PROGRAM_ID),
             )
             .await;
         token_accounts_from(spl, token_2022)
@@ -1378,8 +1383,9 @@ fn parse_helius_transactions_page(
 mod tests {
     use super::{
         block_height_params, get_transaction_config, helius_successful_transactions_params,
-        parse_helius_transactions_page, token_accounts_from, CommitmentLevel,
-        EncodedConfirmedTransactionWithStatusMeta, Pubkey, RpcError, Signature,
+        parse_helius_transactions_page, token_accounts_from, token_accounts_params,
+        CommitmentLevel, EncodedConfirmedTransactionWithStatusMeta, Pubkey, RpcError, Signature,
+        SPL_TOKEN_PROGRAM_ID,
     };
 
     fn token_account(pubkey: &str, mint: &str, amount: &str) -> serde_json::Value {
@@ -1412,6 +1418,7 @@ mod tests {
         )
         .expect("both reads succeeded");
         let read: Vec<_> = merged
+            .accounts
             .iter()
             .map(|info| (info.account.as_str(), info.balance, info.is_token_2022))
             .collect();
@@ -1419,6 +1426,61 @@ mod tests {
             read,
             [("spl-account", 5, false), ("token-2022-account", 7, true)]
         );
+    }
+
+    #[test]
+    fn token_accounts_carry_the_lower_slot_of_the_two_reads() {
+        let at = |slot: u64| Ok(serde_json::json!({ "context": { "slot": slot }, "value": [] }));
+        assert_eq!(token_accounts_from(at(12), at(10)).unwrap().slot, Some(10));
+        assert_eq!(token_accounts_from(at(10), at(12)).unwrap().slot, Some(10));
+        let without_context = || Ok(serde_json::json!({ "value": [] }));
+        assert_eq!(
+            token_accounts_from(at(10), without_context()).unwrap().slot,
+            None,
+            "a read without a slot cannot vouch for the snapshot"
+        );
+    }
+
+    #[test]
+    fn token_account_reads_name_the_wallet_commitment() {
+        let owner = Pubkey::new_unique();
+        let params = token_accounts_params(&owner, SPL_TOKEN_PROGRAM_ID);
+        assert_eq!(params[2]["commitment"], "confirmed");
+        assert_eq!(params[2]["encoding"], "jsonParsed");
+        assert_eq!(params[1]["programId"], SPL_TOKEN_PROGRAM_ID);
+    }
+
+    /// Every wallet-state read in this file names its commitment. The RPC default is
+    /// `finalized`, which trails the `confirmed` swaps and history by about 13 seconds.
+    #[test]
+    fn every_wallet_state_read_names_its_commitment() {
+        let source = include_str!("methods_impl.rs");
+        let source: String = source[..source.find("#[cfg(test)]").expect("test module")]
+            .chars()
+            .filter(|c| !c.is_whitespace())
+            .collect();
+        let mut reads = 0;
+        for method in [
+            "getBalance",
+            "getTokenAccountBalance",
+            "getTokenAccountsByOwner",
+        ] {
+            let call = format!("execute_raw(\"{method}\"");
+            let mut rest = source.as_str();
+            while let Some(at) = rest.find(&call) {
+                reads += 1;
+                let function_start = rest[..at].rfind("asyncfn").unwrap_or(0);
+                let call_end = (at + call.len() + 80).min(rest.len());
+                let call_site = &rest[function_start..call_end];
+                assert!(
+                    call_site.contains("WALLET_READ_COMMITMENT")
+                        || call_site.contains("token_accounts_params"),
+                    "{method} is read without a commitment: {call_site}"
+                );
+                rest = &rest[at + call.len()..];
+            }
+        }
+        assert!(reads >= 6, "the scan found only {reads} wallet-state reads");
     }
 
     #[test]
@@ -1692,17 +1754,39 @@ fn parse_account_from_json(value: &serde_json::Value) -> crate::Result<Option<Ac
     }))
 }
 
-/// The token accounts of both token programs from their `getTokenAccountsByOwner` responses.
+/// Commitment of every wallet balance and token-account read. Swaps and the transaction
+/// history are read at `confirmed`; a read at the RPC default, `finalized`, trails them by
+/// about 13 seconds, so a token bought moments ago reads as absent and a sold one as held.
+const WALLET_READ_COMMITMENT: &str = "confirmed";
+
+/// `getTokenAccountsByOwner` parameters for every account of `owner` under one token program.
+fn token_accounts_params(owner: &Pubkey, program_id: &str) -> serde_json::Value {
+    serde_json::json!([
+        owner.to_string(),
+        { "programId": program_id },
+        { "encoding": "jsonParsed", "commitment": WALLET_READ_COMMITMENT }
+    ])
+}
+
+/// The token accounts of both token programs from their `getTokenAccountsByOwner` responses,
+/// at the lower of the two context slots.
 /// A failed read, a response without a `value` array or an account that cannot be parsed
 /// fails the whole read: a holding summed from a partial list would understate what the
 /// wallet holds and read as a known amount.
 fn token_accounts_from(
     spl: Result<serde_json::Value, RpcError>,
     token_2022: Result<serde_json::Value, RpcError>,
-) -> crate::Result<Vec<TokenAccountInfo>> {
+) -> crate::Result<TokenAccountsSnapshot> {
     let mut accounts = Vec::new();
+    let mut slots = Vec::with_capacity(2);
     for (response, is_token_2022) in [(spl, false), (token_2022, true)] {
         let response = response?;
+        slots.push(
+            response
+                .get("context")
+                .and_then(|context| context.get("slot"))
+                .and_then(serde_json::Value::as_u64),
+        );
         let values = response
             .get("value")
             .and_then(serde_json::Value::as_array)
@@ -1727,7 +1811,12 @@ fn token_accounts_from(
             accounts.push(info);
         }
     }
-    Ok(accounts)
+    let slot = slots
+        .iter()
+        .copied()
+        .collect::<Option<Vec<u64>>>()
+        .and_then(|slots| slots.into_iter().min());
+    Ok(TokenAccountsSnapshot { slot, accounts })
 }
 
 /// Parse token account info from jsonParsed response
