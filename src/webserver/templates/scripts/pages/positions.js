@@ -12,6 +12,7 @@ import * as AppState from "../core/app_state.js";
 import { DataTable } from "../ui/data_table.js";
 import { TabBar, TabBarManager } from "../ui/tab_bar.js";
 import { stepShortLabel } from "../ui/action_step.js";
+import { buyHasLoadedPosition, rememberEntries } from "./positions/pending_buys.js";
 import { POSITION_EMPTY_LABELS, POSITION_STATUS_LABELS } from "../ui/position_status.js";
 import { manualTrade } from "../ui/manual_trade.js";
 import { PositionDetailsDialog } from "../ui/position_details_dialog.js";
@@ -137,8 +138,12 @@ function createLifecycle() {
     // Most recent server-side rows (already token-mapped) for the active view.
     // Live action updates re-merge against this without a network round-trip.
     lastServerRows: [],
+    // Latest entry time (ms) of any loaded row per mint, kept across views (see
+    // positions/pending_buys.js).
+    latestEntryMsByMint: new Map(),
     sort: getInitialSortForView("open"),
   };
+
 
   // Compact caption describing a row's live state (buying / selling / failed).
   // Open rows stay clean; an in-flight or failed row adds a tint beside this caption.
@@ -605,6 +610,7 @@ function createLifecycle() {
         : null;
       buyByMint.set(mint, {
         actionId: n.id,
+        startedAt: parseTs(n.started_at),
         mint,
         symbol,
         size: Number(n.metadata?.size_sol) || null,
@@ -708,6 +714,7 @@ function createLifecycle() {
     const pending = [];
     buyByMint.forEach((info, mint) => {
       if (presentMints.has(mint)) return; // real position exists -> it supersedes
+      if (buyHasLoadedPosition(info, state.latestEntryMsByMint.get(mint))) return;
       const failed = info.kind === "failed";
       const symbol = info.symbol || I18n.t("format-unknown");
       pending.push({
@@ -769,6 +776,7 @@ function createLifecycle() {
         token: `${row.symbol} ${row.mint}`,
       }));
       state.lastServerRows = mapped;
+      rememberEntries(state.latestEntryMsByMint, mapped);
 
       const finalRows = mergeLiveIntoRows(mapped);
       state.total = finalRows.length;

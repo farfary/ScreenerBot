@@ -142,6 +142,7 @@ pub async fn get_page_script(Path(file): Path<String>) -> Response {
         "tokens/ohlcv.js" => Some(embeds::TOKENS_OHLCV_JS),
         "tokens/favorites.js" => Some(embeds::TOKENS_FAVORITES_JS),
         "positions.js" => Some(embeds::POSITIONS_PAGE_SCRIPT),
+        "positions/pending_buys.js" => Some(embeds::POSITIONS_PENDING_BUYS_JS),
         "filtering.js" => Some(embeds::FILTERING_PAGE_SCRIPT),
         "filtering/config_metadata.js" => Some(embeds::FILTERING_CONFIG_METADATA_JS),
         "filtering/renderers.js" => Some(embeds::FILTERING_RENDERERS_JS),

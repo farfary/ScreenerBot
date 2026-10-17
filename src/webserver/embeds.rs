@@ -510,6 +510,8 @@ pub const TOKENS_FORMATTERS_JS: &str = include_str!("templates/scripts/pages/tok
 pub const TOKENS_OHLCV_JS: &str = include_str!("templates/scripts/pages/tokens/ohlcv.js");
 pub const TOKENS_FAVORITES_JS: &str = include_str!("templates/scripts/pages/tokens/favorites.js");
 pub const POSITIONS_PAGE_SCRIPT: &str = include_str!("templates/scripts/pages/positions.js");
+pub const POSITIONS_PENDING_BUYS_JS: &str =
+    include_str!("templates/scripts/pages/positions/pending_buys.js");
 pub const FILTERING_PAGE_SCRIPT: &str = include_str!("templates/scripts/pages/filtering.js");
 pub const FILTERING_CONFIG_METADATA_JS: &str =
     include_str!("templates/scripts/pages/filtering/config_metadata.js");
