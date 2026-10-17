@@ -59,6 +59,7 @@ pub use database::{
     get_all_tokens_for_filtering_async,
     get_all_tokens_optional_market_async,
     get_full_token_async,
+    get_market_prices_sol_async,
     get_recent_rejections_async,
     get_rejected_tokens_async,
     get_rejection_stats_aggregated_async,

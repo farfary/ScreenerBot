@@ -48,6 +48,11 @@ pub fn live_pool_price(mint: &str) -> Option<PriceResult> {
 /// 2. API price from Token database (DexScreener/GeckoTerminal) - if fresh enough
 /// 3. Force fetch fresh API price if stale and retry
 ///
+/// An API price is used only when the two market sources do not contradict each other
+/// (see [`sources_agree`]): a source can report a pair with fabricated liquidity as a
+/// token's main market, and a position opened at its price carries a peak and an entry
+/// that no trade ever paid.
+///
 /// This enables trading for tokens not yet in the pool service price list
 pub async fn get_price_with_api_fallback(token_mint: &str) -> Option<(PriceResult, PriceSource)> {
     // The token's chain, resolved once for both the pool and the database read.
@@ -61,6 +66,42 @@ pub async fn get_price_with_api_fallback(token_mint: &str) -> Option<(PriceResul
         }
     }
 
+    let (price_result, source) = api_price(chain, token_mint).await?;
+    let chain = chain?;
+    match crate::tokens::get_market_prices_sol_async(chain, token_mint).await {
+        Ok((dexscreener, geckoterminal)) if !sources_agree(dexscreener, geckoterminal) => {
+            logger::warning(
+                LogTag::Positions,
+                &format!(
+                    "No reliable price for {token_mint}: market sources disagree (DexScreener {dexscreener:?} SOL, GeckoTerminal {geckoterminal:?} SOL) and no pool price is known yet"
+                ),
+            );
+            None
+        }
+        _ => Some((price_result, source)),
+    }
+}
+
+/// Largest ratio between the two market sources' SOL prices at which an API price is
+/// still trusted.
+const MAX_API_SOURCE_DISAGREEMENT: f64 = 2.0;
+
+/// True unless both market sources price the token and their prices differ by more than
+/// [`MAX_API_SOURCE_DISAGREEMENT`]. One source alone cannot be contradicted.
+pub fn sources_agree(dexscreener: Option<f64>, geckoterminal: Option<f64>) -> bool {
+    match (dexscreener, geckoterminal) {
+        (Some(a), Some(b)) if a > 0.0 && b > 0.0 => {
+            a.max(b) / a.min(b) <= MAX_API_SOURCE_DISAGREEMENT
+        }
+        _ => true,
+    }
+}
+
+/// The stored API price of `token_mint`, refreshed when stale or missing.
+async fn api_price(
+    chain: Option<crate::chains::ChainId>,
+    token_mint: &str,
+) -> Option<(PriceResult, PriceSource)> {
     // Priority 2: Try API price from token database (DexScreener/GeckoTerminal).
     let stored = match chain {
         Some(chain) => crate::tokens::get_full_token_async(chain, token_mint).await,
@@ -339,6 +380,23 @@ mod tests {
     fn pool_bias_correction_scales_a_pool_price() {
         let corrected = apply_pool_bias_correction(1.0, PriceSource::Pool, 1.0, Some(1.05));
         assert!((corrected - 1.05).abs() < 1e-12);
+    }
+
+    #[test]
+    fn api_prices_are_trusted_unless_the_two_sources_contradict_each_other() {
+        // A fabricated JUP/MET pair priced JUP at 14.197 SOL; the real market was 0.00288.
+        assert!(!sources_agree(Some(14.197_378), Some(0.002_883)));
+        assert!(!sources_agree(Some(0.002_883), Some(14.197_378)));
+        assert!(sources_agree(Some(0.002_90), Some(0.002_88)));
+        assert!(
+            sources_agree(Some(2.0), Some(1.0)),
+            "a factor of two is within tolerance"
+        );
+        assert!(
+            sources_agree(Some(14.197_378), None),
+            "one source cannot be contradicted"
+        );
+        assert!(sources_agree(None, None));
     }
 
     #[test]

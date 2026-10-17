@@ -73,6 +73,29 @@ pub async fn get_full_token_async(chain: ChainId, mint: &str) -> TokenResult<Opt
         .map_err(|e| Error::Internal(InternalError::from(e)))?
 }
 
+/// The SOL price each market source stores for a token, as (DexScreener, GeckoTerminal).
+/// A source with no row or no positive finite price reads as `None`.
+pub async fn get_market_prices_sol_async(
+    chain: ChainId,
+    mint: &str,
+) -> TokenResult<(Option<f64>, Option<f64>)> {
+    let db = require_database(chain)?;
+
+    let mint = mint.to_string();
+    tokio::task::spawn_blocking(move || {
+        let priced = |price: f64| (price > 0.0 && price.is_finite()).then_some(price);
+        let dexscreener = db
+            .get_dexscreener_data(&mint)?
+            .and_then(|d| priced(d.price_sol));
+        let geckoterminal = db
+            .get_geckoterminal_data(&mint)?
+            .and_then(|g| priced(g.price_sol));
+        Ok((dexscreener, geckoterminal))
+    })
+    .await
+    .map_err(|e| Error::Internal(InternalError::from(e)))?
+}
+
 /// Async wrapper for get_token_pools (returns aggregated pool snapshot)
 pub async fn get_token_pools_async(
     chain: ChainId,

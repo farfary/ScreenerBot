@@ -82,34 +82,13 @@ async fn open_position_impl(
                 mint: token_mint.to_owned(),
             })?;
 
-    // Get price with fallback to API when pool price unavailable
-    // This enables trading for tokens not yet tracked by pool service
-    let (price_info, price_source) =
-        get_price_with_api_fallback(token_mint)
-            .await
-            .ok_or_else(|| Error::InvalidPrice {
-                mint: token_mint.to_owned(),
-                price: 0.0,
-            })?;
-
-    let entry_price = match price_info.price_native {
-        price if price > 0.0 && price.is_finite() => price,
-        price => {
-            return Err(Error::InvalidPrice {
-                mint: token_mint.to_owned(),
-                price,
-            });
-        }
-    };
-
-    // Log price source for observability
-    logger::info(
-        LogTag::Positions,
-        &format!(
-            "Opening position for {} at {} SOL (source: {:?})",
-            api_token.symbol, entry_price, price_source
-        ),
-    );
+    // The market price seeds the position's entry, peak and low until verification books
+    // the executed price. A token the pool service does not watch yet has only the API
+    // price, and none at all while its market sources contradict each other; the quote
+    // below then supplies the price this very trade is offered at.
+    let market_price = get_price_with_api_fallback(token_mint)
+        .await
+        .filter(|(price, _)| price.price_native > 0.0 && price.price_native.is_finite());
 
     // CRITICAL: Acquire global position permit FIRST to enforce MAX_OPEN_POSITIONS atomically.
     // IMPORTANT: We will "forget"this permit ONLY after the position is successfully
@@ -238,6 +217,37 @@ async fn open_position_impl(
         })?;
 
     let expected_output_amount = quote.output_amount;
+    let entry_price = match market_price {
+        Some((price, source)) => {
+            logger::info(
+                LogTag::Positions,
+                &format!(
+                    "Opening position for {} at {} SOL (source: {:?})",
+                    api_token.symbol, price.price_native, source
+                ),
+            );
+            price.price_native
+        }
+        None => {
+            let price = effective_entry_price_native(
+                trade_size_native,
+                expected_output_amount,
+                api_token.decimals,
+            )
+            .ok_or_else(|| Error::InvalidPrice {
+                mint: token_mint.to_owned(),
+                price: 0.0,
+            })?;
+            logger::info(
+                LogTag::Positions,
+                &format!(
+                    "Opening position for {} at {} SOL (source: swap quote, no trusted market price)",
+                    api_token.symbol, price
+                ),
+            );
+            price
+        }
+    };
     // From here the swap may reach the chain, and a buy that may land must not be
     // opened twice: the mark outlives a cancelled call and is released only on a
     // failure that proves nothing was sent.
