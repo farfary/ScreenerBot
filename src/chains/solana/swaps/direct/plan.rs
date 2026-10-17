@@ -13,14 +13,16 @@
 //! 4. wrap native SOL + sync_native   only when the input leg is WSOL
 //! 5. platform fee transfer (input)   only when the fee rides the input leg
 //! 6. the venue swap instruction      carries min_out, the on-chain guarantee
-//! 6a. wrap the output-side fee       only for a venue that settles native SOL
-//! 7. platform fee transfer (output)  after the swap, before the WSOL close
+//! 7. USDC fee transfer (output)      after the swap, out of the USDC account
 //! 8. close the WSOL account          unwraps the proceeds back to native SOL
+//! 9. SOL fee transfer (output)       native lamports, after the proceeds unwrap
 //! ```
 //!
-//! Step 7 before step 8 is not cosmetic: closing the account first would delete
-//! the balance the fee transfer reads from, and the whole transaction — swap
-//! included — would revert.
+//! A SOL fee is a native lamport transfer from the wallet into the fee wallet,
+//! never a WSOL transfer, so on a buy step 4 wraps only what the pool swaps and on
+//! a sell step 9 runs after step 8 has turned the proceeds into lamports. `min_out`
+//! is enforced on chain at step 6, so the wallet holds at least the fee by then. A
+//! USDC fee reads the USDC account and must run before anything could close it.
 //!
 //! The fee is in the SAME transaction as the swap by construction. There is no
 //! ordering in which a user swaps and the platform is not paid.
@@ -30,15 +32,9 @@
 //! A bonding curve (Pump.fun legacy, and any future venue like it) never reads
 //! the WSOL account: SOL moves as native lamports, straight out of the wallet
 //! on a buy and straight into it on a sell. [`PoolMarket::settles_native_sol`]
-//! is the fact the plan learns this from, and it changes exactly two steps:
-//!
-//! * step 4 wraps the PLATFORM FEE amount, not the whole input — the swap
-//!   itself spends native lamports the wrap never touched;
-//! * a new step 6a wraps the platform fee AFTER the swap, because on a sell the
-//!   proceeds land as native lamports in the wallet, not in the WSOL account
-//!   step 7's `transfer_checked` reads from. `min_out` is enforced on chain
-//!   before step 6a runs, so the wallet is guaranteed to hold at least the fee
-//!   amount by the time it wraps it.
+//! is the fact the plan learns this from, and it changes exactly one step:
+//! step 4 wraps nothing, because the swap spends native lamports and the SOL fee
+//! is native too. A sell's proceeds land as lamports, so step 9 pays from them.
 //!
 //! Every other venue leaves `settles_native_sol` at its default `false`, so
 //! this changes nothing for them.
@@ -98,13 +94,12 @@ pub fn build_plan(
     let native_settle = market.settles_native_sol();
 
     if intent.wraps_native() {
-        // A native-settling venue never reads the WSOL account for the swap
-        // itself, so wrapping the whole input would leave the fee as the only
-        // thing that ever moves through it — wrap just that much.
+        // Only what the pool swaps is wrapped: a SOL fee leaves the wallet as
+        // native lamports, and a native-settling venue spends lamports itself.
         let wrap_amount = if native_settle {
-            quote.fee.amount
+            0
         } else {
-            intent.amount_in
+            quote.swap_amount_in
         };
         if wrap_amount > 0 {
             instructions.push(system_instruction::transfer(
@@ -145,34 +140,20 @@ pub fn build_plan(
         quote.min_out,
     )?);
 
-    if quote.fee.side == FeeSide::Output {
-        // A native-settling venue's proceeds land as lamports in the wallet,
-        // not in the WSOL account the fee transfer below reads `source` from.
-        // `min_out` was just enforced on chain, so the wallet is guaranteed to
-        // hold at least the fee amount by the time this wraps it.
-        if native_settle && quote.fee.amount > 0 {
-            instructions.push(system_instruction::transfer(
-                &intent.owner,
-                &legs.output_account,
-                quote.fee.amount,
-            ));
-            instructions.push(
-                crate::chains::solana::spl_token::instruction::sync_native(
-                    &crate::chains::solana::spl_token::id(),
-                    &legs.output_account,
-                )
-                .map_err(|e| DirectSwapError::Build {
-                    detail: format!("sync_native could not be built: {e}"),
-                })?,
-            );
-        }
-        if let Some(ix) = quote
+    let output_fee = if quote.fee.side == FeeSide::Output {
+        quote
             .fee
             .transfer_instruction(&legs.output_account, &intent.owner)?
-        {
-            instructions.push(ix);
-        }
-    }
+    } else {
+        None
+    };
+    // A USDC fee is read from the USDC account; a SOL fee waits for the unwrap.
+    let native_output_fee = if quote.fee.is_native() {
+        output_fee
+    } else {
+        instructions.extend(output_fee);
+        None
+    };
 
     // Close whichever leg is the WSOL account so the wallet ends holding native
     // SOL. On a buy this reclaims the wrap account and any dust left in it; on a
@@ -191,6 +172,7 @@ pub fn build_plan(
             })?,
         );
     }
+    instructions.extend(native_output_fee);
 
     Ok(SwapPlan {
         instructions,

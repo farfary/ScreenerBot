@@ -6,14 +6,19 @@
 //! HARDCODED, INTENTIONAL REVENUE. These values are not user-configurable and
 //! must never be removed or weakened. They live here — not inside a router — so
 //! that EVERY execution path collects the same fee: the Jupiter router
-//! (`platformFeeBps` + `feeAccount`) and the direct pool-swap engine
-//! (`super::direct::fee`, which builds its own SPL transfer because a pool
-//! program has no fee hook of its own).
+//! (`platformFeeBps` + `feeAccount`), the Raptor router (`feeBps` + `feeAccount`)
+//! and the direct pool-swap engine (`super::direct::fee`, which builds its own
+//! transfer because a pool program has no fee hook of its own).
 //!
 //! The fee is always taken on the SOL or USDC side of the pair. That side is a
 //! plain SPL mint even when the traded token is Token-2022, so a single
-//! destination account per reference mint is enough and no transfer-fee
-//! extension ever applies to the fee transfer itself.
+//! destination per reference mint is enough and no transfer-fee extension ever
+//! applies to the fee transfer itself.
+//!
+//! Where a path can pay the fee wallet directly it does: the direct engine and
+//! Raptor pay SOL fees as native lamports into [`FEE_WALLET`], and every path pays
+//! USDC fees into the fee wallet's USDC account. Only Jupiter, which takes a
+//! token account of the fee mint, pays SOL fees into [`FEE_TOKEN_ACCOUNT_WSOL`].
 
 use crate::chains::solana::constants::{SOL_MINT, USDC_MINT};
 use crate::chains::solana::solana_sdk::pubkey::Pubkey;
@@ -25,11 +30,17 @@ pub const PLATFORM_FEE_BPS: u16 = 50;
 /// Basis-point denominator.
 pub const BPS_DENOMINATOR: u64 = 10_000;
 
-/// Fee destination token account for WSOL-denominated fees.
+/// The wallet that receives the platform fee: native SOL fees are paid straight into it.
+pub const FEE_WALLET: &str = "D6g8i5HkpesqiYF6YVCL93QD3py5gYwYU9ZrcRfBSayN";
+
+/// Fee destination token account for WSOL-denominated fees, for a router that takes a
+/// token account only. The fee wallet holds no WSOL account, so this is the Jupiter
+/// referral account's WSOL account.
 pub const FEE_TOKEN_ACCOUNT_WSOL: &str = "9yiZThTzanryu3mg1VVu6Qy4HiqKhydCAUqcasLHPxWB";
 
-/// Fee destination token account for USDC-denominated fees.
-pub const FEE_TOKEN_ACCOUNT_USDC: &str = "3kmcF3DFGFRKXeC5v5AMzwpsdj2Uc3Z7a5KrojtWv2GW";
+/// Fee destination token account for USDC-denominated fees: the fee wallet's
+/// associated USDC account.
+pub const FEE_TOKEN_ACCOUNT_USDC: &str = "GqnJw7x5Ss6jR5XU65v3siWmWaMae5VanxaCv7XU742v";
 
 /// The mint a fee can be denominated in, and the account that receives it.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -51,6 +62,17 @@ impl FeeReference {
     pub fn mint_pubkey(&self) -> Pubkey {
         Pubkey::from_str(self.mint).expect("hardcoded fee mint is a valid pubkey")
     }
+
+    /// True when the fee is native SOL, which a path that builds its own transfer pays
+    /// into [`FEE_WALLET`] as lamports rather than into [`Self::account`].
+    pub fn is_native_sol(&self) -> bool {
+        self.mint == SOL_MINT
+    }
+}
+
+/// [`FEE_WALLET`] as a `Pubkey`.
+pub fn fee_wallet_pubkey() -> Pubkey {
+    Pubkey::from_str(FEE_WALLET).expect("hardcoded fee wallet is a valid pubkey")
 }
 
 const WSOL_REFERENCE: FeeReference = FeeReference {
@@ -132,6 +154,26 @@ mod tests {
         let a = "9BB6NFEcjBCtnNLFko2FqVQBq8HHM13kCyYcdQbgpump";
         let b = "EKpQGSJtjMFqKZ9KQanSqYXRcF8fBopzLHYxdM65zcjm";
         assert!(fee_reference_for_pair(a, b).is_none());
+    }
+
+    #[test]
+    fn the_usdc_fee_account_is_the_fee_wallets_own_associated_account() {
+        let token_program =
+            Pubkey::from_str(crate::chains::solana::constants::SPL_TOKEN_PROGRAM_ID).unwrap();
+        let associated_program =
+            Pubkey::from_str(crate::chains::solana::constants::ASSOCIATED_TOKEN_PROGRAM_ID)
+                .unwrap();
+        let (derived, _) = Pubkey::find_program_address(
+            &[
+                fee_wallet_pubkey().as_ref(),
+                token_program.as_ref(),
+                USDC_REFERENCE.mint_pubkey().as_ref(),
+            ],
+            &associated_program,
+        );
+        assert_eq!(derived.to_string(), FEE_TOKEN_ACCOUNT_USDC);
+        assert!(!USDC_REFERENCE.is_native_sol());
+        assert!(WSOL_REFERENCE.is_native_sol());
     }
 
     #[test]

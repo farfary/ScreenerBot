@@ -353,14 +353,21 @@ fn assert_fee_is_collected(fee: &PlatformFee, plan: &direct::SwapPlan) {
         .destination
         .expect("a collectible fee has a destination");
 
+    let system_program = Pubkey::from_str("11111111111111111111111111111111").unwrap();
     let carried = plan.instructions.iter().any(|ix| {
-        ix.program_id == screenerbot::chains::solana::spl_token::id()
-            && ix.data.first() == Some(&12)
-            && ix.accounts.iter().any(|a| a.pubkey == destination)
+        if fee.is_native() {
+            ix.program_id == system_program
+                && ix.data.first() == Some(&2)
+                && ix.accounts.get(1).map(|a| a.pubkey) == Some(destination)
+        } else {
+            ix.program_id == screenerbot::chains::solana::spl_token::id()
+                && ix.data.first() == Some(&12)
+                && ix.accounts.get(2).map(|a| a.pubkey) == Some(destination)
+        }
     });
     assert!(
         carried,
-        "the plan must contain a TransferChecked into {destination} -- the fee is only real if it is in the transaction"
+        "the plan must transfer the fee into {destination} -- the fee is only real if it is in the transaction"
     );
 }
 

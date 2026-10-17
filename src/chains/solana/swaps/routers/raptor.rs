@@ -35,7 +35,8 @@ use super::http::{send_with_retry, RouterHttpFailure};
 use crate::chains::solana::constants::{SOL_MINT, USDC_MINT};
 use crate::chains::solana::solana_sdk::signature::{Keypair, Signer};
 use crate::chains::solana::swaps::revenue::{
-    fee_reference_for_mint, fee_reference_for_pair, platform_fee_amount, PLATFORM_FEE_BPS,
+    fee_reference_for_mint, fee_reference_for_pair, platform_fee_amount, FEE_WALLET,
+    PLATFORM_FEE_BPS,
 };
 use crate::config::with_config;
 use crate::errors::NetworkError;
@@ -168,8 +169,11 @@ struct FeePlacement {
 impl FeePlacement {
     fn resolve(input_mint: &str, output_mint: &str) -> Self {
         match fee_reference_for_pair(input_mint, output_mint) {
-            Some(reference) => Self {
-                account: Some(reference.account),
+            Some(_) => Self {
+                // Raptor's `feeAccount` is the fee OWNER's system wallet: Raptor pays a
+                // SOL fee into it as lamports and a USDC fee into its USDC account, and
+                // answers HTTP 400 to a token account.
+                account: Some(FEE_WALLET),
                 // The output leg is preferred; falling back to the input leg is
                 // exactly the case Raptor calls `feeFromInput`.
                 from_input: fee_reference_for_mint(output_mint).is_none(),
@@ -622,13 +626,19 @@ fn raptor_quote_error(failure: RouterHttpFailure, router: &str) -> QuoteError {
             } else {
                 QuoteError::Unavailable {
                     router,
-                    detail: format!("HTTP {status}: {}", failure.body),
+                    detail: format!(
+                        "HTTP {status}: {}",
+                        crate::errors::summarize_http_body(&failure.body)
+                    ),
                 }
             }
         }
         Some(status) => QuoteError::Unavailable {
             router,
-            detail: format!("HTTP {status}: {}", failure.body),
+            detail: format!(
+                "HTTP {status}: {}",
+                crate::errors::summarize_http_body(&failure.body)
+            ),
         },
         None if failure.timed_out => QuoteError::Timeout { router },
         None => QuoteError::Unavailable {
@@ -683,7 +693,6 @@ mod tests {
     }
 
     use crate::chains::solana::constants::USDC_MINT;
-    use crate::chains::solana::swaps::revenue::{FEE_TOKEN_ACCOUNT_USDC, FEE_TOKEN_ACCOUNT_WSOL};
 
     const TOKEN: &str = "9BB6NFEcjBCtnNLFko2FqVQBq8HHM13kCyYcdQbgpump";
 
@@ -696,22 +705,50 @@ mod tests {
         assert!(router.priority() > 0, "Jupiter stays the primary router");
     }
 
+    /// A CDN refusal is a whole HTML page; the quote error carries its one-line summary,
+    /// never the page, since that detail is logged on every quote.
+    #[test]
+    fn an_html_refusal_is_reported_on_one_line() {
+        let page = "<!DOCTYPE HTML PUBLIC \"-//W3C//DTD HTML 4.01 Transitional//EN\">\n<HTML><HEAD>\n<TITLE>ERROR: The request could not be satisfied</TITLE>\n</HEAD><BODY><H1>403 ERROR</H1></BODY></HTML>";
+        let error = raptor_quote_error(
+            RouterHttpFailure {
+                label: "quote".to_owned(),
+                status: Some(403),
+                body: page.to_owned(),
+                retry_after: None,
+                timed_out: false,
+            },
+            "Raptor",
+        );
+        let QuoteError::Unavailable { detail, .. } = error else {
+            panic!("a 403 is not a verdict on the token: {error:?}");
+        };
+        assert!(!detail.contains('\n'), "{detail}");
+        assert!(
+            detail.starts_with("HTTP 403: HTML page \"ERROR: The request could not be satisfied\"")
+        );
+    }
+
     /// A sell collects on the output leg; a buy falls back to the input leg,
     /// which is exactly what `feeFromInput` expresses.
     #[test]
     fn fee_placement_follows_the_shared_reference_rule() {
         let sell = FeePlacement::resolve(TOKEN, SOL_MINT);
-        assert_eq!(sell.account, Some(FEE_TOKEN_ACCOUNT_WSOL));
+        assert_eq!(
+            sell.account,
+            Some(FEE_WALLET),
+            "Raptor pays the fee owner's wallet"
+        );
         assert!(!sell.from_input, "a sell collects on the SOL output");
         assert_eq!(sell.bps, PLATFORM_FEE_BPS);
 
         let buy = FeePlacement::resolve(SOL_MINT, TOKEN);
-        assert_eq!(buy.account, Some(FEE_TOKEN_ACCOUNT_WSOL));
+        assert_eq!(buy.account, Some(FEE_WALLET));
         assert!(buy.from_input, "a buy has no collectable output leg");
 
         // Both legs are reference mints: the output side wins, as in revenue.rs.
         let both = FeePlacement::resolve(SOL_MINT, USDC_MINT);
-        assert_eq!(both.account, Some(FEE_TOKEN_ACCOUNT_USDC));
+        assert_eq!(both.account, Some(FEE_WALLET));
         assert!(!both.from_input);
 
         // Neither leg can receive a fee, so none is charged rather than sent

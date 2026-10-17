@@ -4,11 +4,13 @@
 //! The platform fee on a direct pool swap.
 //!
 //! A pool program has no fee hook — unlike Jupiter, nothing in the swap
-//! instruction can pay us. So the engine adds its OWN SPL transfer to the same
+//! instruction can pay us. So the engine adds its OWN transfer to the same
 //! transaction, which makes the fee atomic with the swap: either both happen or
-//! neither does. Rate and destinations come from
-//! [`crate::chains::solana::swaps::revenue`], shared with the Jupiter router so
-//! there is exactly one definition of what we charge.
+//! neither does. A SOL fee is a native lamport transfer from the wallet into the
+//! fee wallet, so it needs no token account on either side; a USDC fee is an SPL
+//! transfer into the fee wallet's USDC account. Rate and destinations come from
+//! [`crate::chains::solana::swaps::revenue`], shared with the routers so there is
+//! exactly one definition of what we charge.
 //!
 //! Which side pays is decided from the MINTS ALONE, before any amount is known
 //! ([`FeeSide::for_pair`]). That ordering is what keeps the arithmetic
@@ -26,22 +28,21 @@
 use super::error::{DirectSwapError, DirectSwapResult};
 use crate::chains::solana::constants::{SOL_MINT, USDC_MINT};
 use crate::chains::solana::solana_sdk::{instruction::Instruction, pubkey::Pubkey};
+use crate::chains::solana::solana_system_interface::instruction as system_instruction;
 use crate::chains::solana::swaps::revenue::{
-    platform_fee_amount, FEE_TOKEN_ACCOUNT_USDC, FEE_TOKEN_ACCOUNT_WSOL,
+    fee_wallet_pubkey, platform_fee_amount, FEE_TOKEN_ACCOUNT_USDC,
 };
 use std::str::FromStr;
 use std::sync::LazyLock;
 
-/// The two reference mints and their fee-collection accounts, decoded once.
+/// The two reference mints and their fee destinations, decoded once.
 /// `for_pair` and `resolve` run per quote per pool, so comparing 32-byte
 /// `Pubkey`s here rather than base58-encoding/decoding on every call matters.
 static WSOL_MINT: LazyLock<Pubkey> =
     LazyLock::new(|| Pubkey::from_str(SOL_MINT).expect("SOL_MINT constant is a valid pubkey"));
 static USDC_MINT_KEY: LazyLock<Pubkey> =
     LazyLock::new(|| Pubkey::from_str(USDC_MINT).expect("USDC_MINT constant is a valid pubkey"));
-static WSOL_FEE_ACCOUNT: LazyLock<Pubkey> = LazyLock::new(|| {
-    Pubkey::from_str(FEE_TOKEN_ACCOUNT_WSOL).expect("FEE_TOKEN_ACCOUNT_WSOL is a valid pubkey")
-});
+static FEE_WALLET_KEY: LazyLock<Pubkey> = LazyLock::new(fee_wallet_pubkey);
 static USDC_FEE_ACCOUNT: LazyLock<Pubkey> = LazyLock::new(|| {
     Pubkey::from_str(FEE_TOKEN_ACCOUNT_USDC).expect("FEE_TOKEN_ACCOUNT_USDC is a valid pubkey")
 });
@@ -85,7 +86,8 @@ pub struct PlatformFee {
     pub amount: u64,
     /// Mint the fee is denominated in (WSOL or USDC), if any.
     pub mint: Option<Pubkey>,
-    /// Token account that receives it, if any.
+    /// Where it goes, if anywhere: the fee wallet itself for a SOL fee, which is paid
+    /// in native lamports, and the fee wallet's USDC account for a USDC fee.
     pub destination: Option<Pubkey>,
     /// Decimals of [`Self::mint`], needed by `transfer_checked`.
     pub decimals: u8,
@@ -122,7 +124,7 @@ impl PlatformFee {
             FeeSide::None => unreachable!("handled above"),
         };
         let (mint, destination, decimals) = if *reference_mint == *WSOL_MINT {
-            (*WSOL_MINT, *WSOL_FEE_ACCOUNT, 9)
+            (*WSOL_MINT, *FEE_WALLET_KEY, 9)
         } else if *reference_mint == *USDC_MINT_KEY {
             (*USDC_MINT_KEY, *USDC_FEE_ACCOUNT, 6)
         } else {
@@ -139,18 +141,25 @@ impl PlatformFee {
         })
     }
 
-    /// Whether this fee produces an instruction. A zero amount does not: an
-    /// SPL transfer of zero is legal but wastes compute and log space.
+    /// Whether this fee produces an instruction. A zero amount does not: a
+    /// transfer of zero is legal but wastes compute and log space.
     pub fn is_collectible(&self) -> bool {
         self.amount > 0 && self.mint.is_some() && self.destination.is_some()
     }
 
-    /// The transfer that moves the fee. `source` is the user's token account for
-    /// [`Self::mint`]; `authority` is the wallet that owns it.
+    /// Whether the fee is paid in native lamports out of the wallet itself rather
+    /// than out of a token account.
+    pub fn is_native(&self) -> bool {
+        self.mint == Some(*WSOL_MINT)
+    }
+
+    /// The transfer that moves the fee. `authority` is the wallet that pays it;
+    /// `source` is its token account for [`Self::mint`], read by a USDC fee only.
     ///
-    /// Always `transfer_checked` — it re-verifies mint and decimals on chain, so
-    /// a wrong `source` account cannot silently move the wrong asset. The fee
-    /// mint is always WSOL or USDC, both legacy SPL, so the program is fixed.
+    /// A SOL fee is a system transfer of lamports from `authority` straight into
+    /// the fee wallet. A USDC fee is always `transfer_checked` — it re-verifies
+    /// mint and decimals on chain, so a wrong `source` account cannot silently
+    /// move the wrong asset. USDC is legacy SPL, so the program is fixed.
     pub fn transfer_instruction(
         &self,
         source: &Pubkey,
@@ -163,6 +172,13 @@ impl PlatformFee {
             (Some(mint), Some(destination)) => (mint, destination),
             _ => return Ok(None),
         };
+        if self.is_native() {
+            return Ok(Some(system_instruction::transfer(
+                authority,
+                &destination,
+                self.amount,
+            )));
+        }
         let instruction = crate::chains::solana::spl_token::instruction::transfer_checked(
             &crate::chains::solana::spl_token::id(),
             source,
@@ -183,7 +199,7 @@ impl PlatformFee {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::chains::solana::swaps::revenue::{FEE_TOKEN_ACCOUNT_USDC, FEE_TOKEN_ACCOUNT_WSOL};
+    use crate::chains::solana::swaps::revenue::{FEE_TOKEN_ACCOUNT_USDC, FEE_WALLET};
 
     fn wsol() -> Pubkey {
         Pubkey::from_str(SOL_MINT).unwrap()
@@ -217,14 +233,15 @@ mod tests {
     }
 
     #[test]
-    fn an_input_side_fee_on_sol_is_half_a_percent_paid_in_wsol() {
+    fn an_input_side_fee_on_sol_is_half_a_percent_paid_to_the_fee_wallet() {
         let token = Pubkey::new_unique();
         let fee = PlatformFee::resolve(FeeSide::Input, &wsol(), &token, 5_000_000).unwrap();
         assert_eq!(fee.amount, 25_000, "0.5% of 0.005 SOL");
         assert_eq!(fee.mint, Some(wsol()));
+        assert!(fee.is_native());
         assert_eq!(
             fee.destination.map(|d| d.to_string()).as_deref(),
-            Some(FEE_TOKEN_ACCOUNT_WSOL)
+            Some(FEE_WALLET)
         );
         assert_eq!(fee.decimals, 9);
     }
@@ -253,7 +270,7 @@ mod tests {
     }
 
     #[test]
-    fn the_fee_transfer_is_checked_and_targets_the_hardcoded_account() {
+    fn a_sol_fee_is_a_native_transfer_from_the_wallet_into_the_fee_wallet() {
         let token = Pubkey::new_unique();
         let source = Pubkey::new_unique();
         let authority = Pubkey::new_unique();
@@ -263,13 +280,36 @@ mod tests {
             .unwrap()
             .expect("a non-zero fee must produce a transfer");
 
+        assert_eq!(
+            ix,
+            system_instruction::transfer(
+                &authority,
+                &Pubkey::from_str(FEE_WALLET).unwrap(),
+                25_000
+            ),
+            "lamports leave the paying wallet, never a token account, and land in the fee wallet"
+        );
+    }
+
+    #[test]
+    fn a_usdc_fee_transfer_is_checked_and_targets_the_fee_wallets_usdc_account() {
+        let token = Pubkey::new_unique();
+        let source = Pubkey::new_unique();
+        let authority = Pubkey::new_unique();
+        let fee = PlatformFee::resolve(FeeSide::Output, &token, &usdc(), 10_000_000).unwrap();
+        assert!(!fee.is_native());
+        let ix = fee
+            .transfer_instruction(&source, &authority)
+            .unwrap()
+            .expect("a non-zero fee must produce a transfer");
+
         assert_eq!(ix.program_id, crate::chains::solana::spl_token::id());
         // TransferChecked: [source, mint, destination, authority]
         assert_eq!(ix.accounts[0].pubkey, source);
-        assert_eq!(ix.accounts[1].pubkey, wsol(), "mint is checked on chain");
+        assert_eq!(ix.accounts[1].pubkey, usdc(), "mint is checked on chain");
         assert_eq!(
             ix.accounts[2].pubkey.to_string(),
-            FEE_TOKEN_ACCOUNT_WSOL,
+            FEE_TOKEN_ACCOUNT_USDC,
             "fee lands in the platform account, never anywhere else"
         );
         assert_eq!(ix.accounts[3].pubkey, authority);

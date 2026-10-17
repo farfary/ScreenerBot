@@ -14,8 +14,9 @@
 //! Docs: https://developers.jup.ag/docs/swap/add-fees-to-swap
 
 use super::http::RouterHttpFailure;
-use crate::chains::solana::constants::{SOL_MINT, USDC_MINT};
+use crate::chains::solana::constants::SOL_MINT;
 use crate::chains::solana::solana_sdk::signature::{Keypair, Signer};
+use crate::chains::solana::swaps::revenue::{fee_reference_for_pair, PLATFORM_FEE_BPS};
 use crate::config::with_config;
 use crate::errors::NetworkError;
 use crate::logger::{self, LogTag};
@@ -51,16 +52,6 @@ fn api_endpoint() -> (&'static str, Option<String>) {
         (JUPITER_API_BASE, Some(key))
     }
 }
-
-/// HARDCODED REFERRAL FEE: 0.5% (50 basis points)
-/// This fee is MANDATORY and CANNOT be changed by users
-/// Revenue share: 80% to ScreenerBot, 20% to Jupiter
-const REFERRAL_FEE_BPS: u16 = 50;
-
-/// Referral token accounts for fee collection (must be initialized token accounts)
-/// These receive fees based on the output mint of the swap
-const REFERRAL_TOKEN_ACCOUNT_WSOL: &str = "9yiZThTzanryu3mg1VVu6Qy4HiqKhydCAUqcasLHPxWB";
-const REFERRAL_TOKEN_ACCOUNT_USDC: &str = "3kmcF3DFGFRKXeC5v5AMzwpsdj2Uc3Z7a5KrojtWv2GW";
 
 // ============================================================================
 // API TYPES
@@ -225,31 +216,13 @@ where
     super::http::send_with_retry("Jupiter", label, JUPITER_MAX_ATTEMPTS, build).await
 }
 
-/// The referral fee account (WSOL/USDC) for a swap pair. We always trade
-/// against SOL or USDC, so one side always matches; the output side is
-/// preferred because the fee is taken from the output. The fee rides that
-/// standard SPL side, which works for Token2022 tokens too when the quote uses
-/// `instructionVersion=V2`.
+/// The fee token account for a swap pair, from the shared revenue rule: the output
+/// leg when it is SOL or USDC, otherwise the input leg. The fee rides that standard
+/// SPL side, which works for Token2022 tokens too when the quote uses
+/// `instructionVersion=V2`. `None` for a pair with neither mint.
 /// Docs: developers.jup.ag/docs/swap/add-fees-to-swap
-fn referral_fee_account(input_mint: &str, output_mint: &str) -> Option<String> {
-    // Check output mint first (preferred - fee taken from output)
-    if output_mint == SOL_MINT {
-        return Some(REFERRAL_TOKEN_ACCOUNT_WSOL.to_string());
-    }
-    if output_mint == USDC_MINT {
-        return Some(REFERRAL_TOKEN_ACCOUNT_USDC.to_string());
-    }
-
-    // Check input mint (for buy swaps where output is a token)
-    if input_mint == SOL_MINT {
-        return Some(REFERRAL_TOKEN_ACCOUNT_WSOL.to_string());
-    }
-    if input_mint == USDC_MINT {
-        return Some(REFERRAL_TOKEN_ACCOUNT_USDC.to_string());
-    }
-
-    // Neither side is SOL/USDC (shouldn't happen in our trading flow)
-    None
+fn fee_account(input_mint: &str, output_mint: &str) -> Option<String> {
+    fee_reference_for_pair(input_mint, output_mint).map(|reference| reference.account.to_owned())
 }
 
 /// How long a fetched program-id-to-label map is trusted. Venues are added to
@@ -413,7 +386,7 @@ impl SwapRouter for JupiterRouter {
             amount: input_amount.to_string(),
             slippage_bps,
             swap_mode: Some(request.swap_mode.as_str().to_owned()),
-            platform_fee_bps: Some(REFERRAL_FEE_BPS),
+            platform_fee_bps: Some(PLATFORM_FEE_BPS),
             exclude_dexes: request.exclude_dexes.as_ref().map(|d| d.join(",")),
             instruction_version: Some("V2".to_owned()),
         };
@@ -426,7 +399,7 @@ impl SwapRouter for JupiterRouter {
                 request.input_mint,
                 request.output_mint,
                 slippage_bps,
-                REFERRAL_FEE_BPS
+                PLATFORM_FEE_BPS
             ),
         );
 
@@ -483,13 +456,19 @@ impl SwapRouter for JupiterRouter {
                         // a verdict on the token — it must never retire one.
                         QuoteError::Unavailable {
                             router,
-                            detail: format!("HTTP {status}: {}", failure.body),
+                            detail: format!(
+                                "HTTP {status}: {}",
+                                crate::errors::summarize_http_body(&failure.body)
+                            ),
                         }
                     }
                 }
                 Some(status) => QuoteError::Unavailable {
                     router,
-                    detail: format!("HTTP {status}: {}", failure.body),
+                    detail: format!(
+                        "HTTP {status}: {}",
+                        crate::errors::summarize_http_body(&failure.body)
+                    ),
                 },
                 None if failure.timed_out => QuoteError::Timeout { router },
                 None => QuoteError::Unavailable {
@@ -616,7 +595,7 @@ impl JupiterRouter {
                     detail: format!("the stored quote does not decode: {e}"),
                 })
             })?;
-        let fee_account = referral_fee_account(&quote.input_mint, &quote.output_mint);
+        let fee_account = fee_account(&quote.input_mint, &quote.output_mint);
         let swap_req = JupiterSwapRequest {
             user_public_key: signer.pubkey().to_string(),
             quote_response,
@@ -728,6 +707,8 @@ impl JupiterRouter {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::chains::solana::constants::USDC_MINT;
+    use crate::chains::solana::swaps::revenue::{FEE_TOKEN_ACCOUNT_USDC, FEE_TOKEN_ACCOUNT_WSOL};
 
     #[tokio::test]
     async fn oversized_input_is_rejected_before_router_io() {
@@ -747,30 +728,30 @@ mod tests {
     }
 
     #[test]
-    fn referral_account_prefers_the_output_mint_then_falls_back_to_input() {
+    fn fee_account_prefers_the_output_mint_then_falls_back_to_input() {
         let other_mint = "SomeRandomTokenMintAddress11111111111111111";
 
         // Output is SOL/USDC: fee taken from output.
         assert_eq!(
-            referral_fee_account(other_mint, SOL_MINT),
-            Some(REFERRAL_TOKEN_ACCOUNT_WSOL.to_owned())
+            fee_account(other_mint, SOL_MINT),
+            Some(FEE_TOKEN_ACCOUNT_WSOL.to_owned())
         );
         assert_eq!(
-            referral_fee_account(other_mint, USDC_MINT),
-            Some(REFERRAL_TOKEN_ACCOUNT_USDC.to_owned())
+            fee_account(other_mint, USDC_MINT),
+            Some(FEE_TOKEN_ACCOUNT_USDC.to_owned())
         );
         // Output is a token, but input is SOL/USDC: fee taken from input side.
         assert_eq!(
-            referral_fee_account(SOL_MINT, other_mint),
-            Some(REFERRAL_TOKEN_ACCOUNT_WSOL.to_owned())
+            fee_account(SOL_MINT, other_mint),
+            Some(FEE_TOKEN_ACCOUNT_WSOL.to_owned())
         );
         assert_eq!(
-            referral_fee_account(USDC_MINT, other_mint),
-            Some(REFERRAL_TOKEN_ACCOUNT_USDC.to_owned())
+            fee_account(USDC_MINT, other_mint),
+            Some(FEE_TOKEN_ACCOUNT_USDC.to_owned())
         );
         // Neither leg is SOL/USDC: no fee account, matches "shouldn't happen" path.
         assert_eq!(
-            referral_fee_account(other_mint, "AnotherTokenMint111111111111"),
+            fee_account(other_mint, "AnotherTokenMint111111111111"),
             None
         );
     }

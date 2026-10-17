@@ -45,6 +45,7 @@ use screenerbot::chains::solana::pools::layouts::raydium_clmm::{
     decode_tick_array, ClmmFeeConfig, ClmmPoolState, TickArrayBitmap,
 };
 use screenerbot::chains::solana::pools::layouts::raydium_cpmm::{CpmmFeeConfig, CpmmPoolState};
+use screenerbot::chains::solana::solana_sdk::instruction::Instruction;
 use screenerbot::chains::solana::solana_sdk::pubkey::Pubkey;
 use screenerbot::chains::solana::swaps::direct::venues::meteora_dlmm::{
     bin_array_address, bitmap_extension_address as dlmm_bitmap_extension_address,
@@ -56,6 +57,7 @@ use screenerbot::chains::solana::swaps::direct::venues::orca_whirlpool::{
 use screenerbot::chains::solana::swaps::direct::{
     self, DirectSwapIntent, FeeSide, PoolMarket, SwapAccounts,
 };
+use screenerbot::chains::solana::swaps::revenue::FEE_WALLET;
 use std::collections::HashMap;
 use std::str::FromStr;
 
@@ -733,11 +735,7 @@ fn the_plan_carries_the_fee_transfer_in_the_same_transaction_as_the_swap() {
     let fee_index = plan
         .instructions
         .iter()
-        .position(|ix| {
-            ix.program_id == screenerbot::chains::solana::spl_token::id()
-                && ix.data.first() == Some(&12)
-                && ix.accounts.iter().any(|a| a.pubkey == destination)
-        })
+        .position(|ix| pays_fee_into(ix, destination))
         .expect("the fee transfer must be IN the transaction, not merely computed");
     let swap_index = plan
         .instructions
@@ -753,12 +751,78 @@ fn the_plan_carries_the_fee_transfer_in_the_same_transaction_as_the_swap() {
         "an output-side fee is transferred AFTER the swap that produces it"
     );
     if let Some(close_index) = close_index {
-        assert!(
-            fee_index < close_index,
-            "the fee must be taken before the WSOL account is closed, or it reads an account \
-             that no longer exists and reverts the swap with it"
-        );
+        if quote.fee.is_native() {
+            assert!(
+                fee_index > close_index,
+                "a SOL fee is paid in lamports after the WSOL close has unwrapped the proceeds"
+            );
+        } else {
+            assert!(
+                fee_index < close_index,
+                "a token fee must be taken before its account is closed, or it reads an \
+                 account that no longer exists and reverts the swap with it"
+            );
+        }
     }
+}
+
+#[test]
+fn a_sol_funded_buy_wraps_only_what_the_pool_swaps_and_pays_the_fee_in_lamports() {
+    let _guard = common::config_guard();
+    // The recorded CPMM pool's first mint is WSOL.
+    let market = fixture_market("raydium_cpmm");
+    let (sol, token) = market.mints();
+    let owner = Pubkey::new_unique();
+    let intent = DirectSwapIntent {
+        pool: market.pool(),
+        owner,
+        input_mint: sol,
+        output_mint: token,
+        amount_in: 5_000_000,
+        slippage_bps: 300,
+    };
+
+    let quote = direct::quote_with_market(&intent, market.as_ref()).expect("quotes");
+    let plan = direct::build_plan(&intent, market.as_ref(), &quote).expect("plans");
+
+    assert_eq!(quote.fee.side, FeeSide::Input);
+    let fee_wallet = Pubkey::from_str(FEE_WALLET).unwrap();
+    let lamport_transfers: Vec<(Pubkey, u64)> = plan
+        .instructions
+        .iter()
+        .filter(|ix| ix.program_id == system_program_id() && ix.data.first() == Some(&2))
+        .map(|ix| {
+            assert_eq!(ix.accounts[0].pubkey, owner, "lamports leave the wallet");
+            (
+                ix.accounts[1].pubkey,
+                u64::from_le_bytes(ix.data[4..12].try_into().unwrap()),
+            )
+        })
+        .collect();
+    assert_eq!(
+        lamport_transfers,
+        [
+            (plan.input_account, quote.swap_amount_in),
+            (fee_wallet, 25_000)
+        ],
+        "the wrap carries only what the pool swaps, and the fee goes to the fee wallet"
+    );
+}
+
+/// True when `ix` moves the platform fee into `destination`: a system transfer of
+/// lamports for a SOL fee, a `TransferChecked` for a USDC fee.
+fn pays_fee_into(ix: &Instruction, destination: Pubkey) -> bool {
+    let lamports = ix.program_id == system_program_id()
+        && ix.data.first() == Some(&2)
+        && ix.accounts.get(1).map(|a| a.pubkey) == Some(destination);
+    let checked = ix.program_id == screenerbot::chains::solana::spl_token::id()
+        && ix.data.first() == Some(&12)
+        && ix.accounts.get(2).map(|a| a.pubkey) == Some(destination);
+    lamports || checked
+}
+
+fn system_program_id() -> Pubkey {
+    Pubkey::from_str("11111111111111111111111111111111").unwrap()
 }
 
 #[test]
