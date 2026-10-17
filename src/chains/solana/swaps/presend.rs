@@ -591,6 +591,22 @@ pub fn tighten_compute_unit_limit(
     Some((requested, measured))
 }
 
+/// Whether the gate may lower a built swap's compute-unit limit to what its
+/// simulation measured.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum ComputeLimit {
+    /// Lower the requested limit to the measured units plus margin
+    /// ([`tighten_compute_unit_limit`]), so the prioritization fee is charged on
+    /// what the swap uses rather than on the aggregator's ceiling.
+    TightenToMeasured,
+    /// Send the limit the router built. A program that plans its own work from
+    /// the compute budget it is given fails under a limit sized to what it
+    /// consumed: Raptor's JIT swap refuses a hop plan the remaining budget cannot
+    /// carry (`InvalidJitPlan`, custom error 6026) although the same route uses
+    /// far fewer units than the built limit.
+    AsBuilt,
+}
+
 /// Gate, sign, send and settle a transaction an aggregator built for `quote`.
 ///
 /// Every failure before the send is a [`SwapExecutionError::NotSubmitted`].
@@ -604,6 +620,7 @@ pub fn tighten_compute_unit_limit(
 /// report of its blockhash's validity, when the aggregator gives one.
 pub async fn submit_built_swap(
     router: &'static str,
+    compute_limit: ComputeLimit,
     transaction_base64: &str,
     last_valid_block_height: Option<u64>,
     quote: &Quote,
@@ -612,6 +629,7 @@ pub async fn submit_built_swap(
     submit_on(
         get_rpc_client(),
         router,
+        compute_limit,
         transaction_base64,
         last_valid_block_height,
         quote,
@@ -624,6 +642,7 @@ pub async fn submit_built_swap(
 async fn submit_on<N: SwapNode>(
     node: &N,
     router: &'static str,
+    compute_limit: ComputeLimit,
     transaction_base64: &str,
     last_valid_block_height: Option<u64>,
     quote: &Quote,
@@ -683,7 +702,10 @@ async fn submit_on<N: SwapNode>(
             // Built on the aggregator's host, so nothing on our side has checked
             // what it does with the wallet's lamports.
             cost_guard::check(router, &outcome, quote).await?;
-            if let Some(units) = outcome.units_consumed {
+            let measured_units = outcome
+                .units_consumed
+                .filter(|_| compute_limit == ComputeLimit::TightenToMeasured);
+            if let Some(units) = measured_units {
                 if let Some((requested, tightened)) =
                     tighten_compute_unit_limit(&mut transaction, units)
                 {

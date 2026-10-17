@@ -367,6 +367,7 @@ impl RaptorRouter {
         // is reconciled rather than proven expired.
         let signature = crate::chains::solana::swaps::presend::submit_built_swap(
             self.name(),
+            crate::chains::solana::swaps::presend::ComputeLimit::AsBuilt,
             &transaction,
             None,
             quote,

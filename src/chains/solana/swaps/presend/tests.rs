@@ -493,9 +493,27 @@ async fn submit(
     signer: &Keypair,
     last_valid_block_height: Option<u64>,
 ) -> crate::Result<Signature> {
+    submit_with_limit(
+        node,
+        build,
+        signer,
+        last_valid_block_height,
+        ComputeLimit::TightenToMeasured,
+    )
+    .await
+}
+
+async fn submit_with_limit(
+    node: &ScriptedNode,
+    build: &VersionedTransaction,
+    signer: &Keypair,
+    last_valid_block_height: Option<u64>,
+    compute_limit: ComputeLimit,
+) -> crate::Result<Signature> {
     submit_on(
         node,
         "Jupiter",
+        compute_limit,
         &base64_of(build),
         last_valid_block_height,
         &quote_for(signer),
@@ -656,6 +674,31 @@ async fn the_sent_swap_differs_from_its_build_only_in_the_compute_limit() {
         sent.account_keys[usize::from(fee.accounts[1])],
         fee_wallet,
         "the fee still goes to the fee account"
+    );
+}
+
+/// A router whose program plans its work from the compute budget keeps the
+/// limit it built: the sent message is the build byte-for-byte, although the
+/// simulation measured far fewer units.
+#[tokio::test(start_paused = true)]
+async fn an_as_built_compute_limit_is_sent_unchanged() {
+    let signer = Keypair::new();
+    let build = aggregator_build(&signer, &Pubkey::new_unique());
+    let node = ScriptedNode::new(
+        150_000,
+        vec![SendAnswer::Accepted],
+        vec![Ok(Some(status(Level::Confirmed, None)))],
+        0,
+    );
+    submit_with_limit(&node, &build, &signer, None, ComputeLimit::AsBuilt)
+        .await
+        .expect("the swap lands");
+    let sent = node.sent();
+    assert_eq!(sent.len(), 1, "a confirmed swap is sent once");
+    assert_eq!(
+        sent[0].message.serialize(),
+        build.message.serialize(),
+        "nothing in the built message changes"
     );
 }
 

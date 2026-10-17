@@ -670,6 +670,7 @@ impl JupiterRouter {
         // wrapping it would hide that from `swaps::unconfirmed_swap_signature`.
         let signature = crate::chains::solana::swaps::presend::submit_built_swap(
             self.name(),
+            crate::chains::solana::swaps::presend::ComputeLimit::TightenToMeasured,
             &swap_response.swap_transaction,
             swap_response.last_valid_block_height,
             quote,
