@@ -55,7 +55,7 @@ const PROMO_NO_MARKET: usize = 412;
 const PROMO_POOL_TRACKED_REJECTED: usize = 300;
 
 /// Which curated tokens are pinned as favorites.
-const PROMO_FAVORITE_SYMBOLS: &[&str] = &["TRUMP", "Fartcoin", "GOAT", "MOODENG", "GIGA"];
+const PROMO_FAVORITE_SYMBOLS: &[&str] = &["WIF", "Fartcoin", "GOAT", "MOODENG", "GIGA"];
 
 /// SOL/USD used to convert the curated SOL prices into the USD fields the market
 /// columns render. The same constant the rest of the promo prices against.
@@ -791,12 +791,24 @@ mod tests {
     use super::*;
     use crate::filtering::sources::rejection_text;
     use crate::i18n::ids;
+    use crate::webserver::promo::data::promo_curated_tokens;
 
     #[test]
     fn promo_rejection_codes_are_production_codes() {
         for code in PROMO_REJECTIONS {
             let text = rejection_text(code);
             assert_ne!(text.id, ids::FILTERING_REJECT_UNKNOWN.as_str(), "{code}");
+        }
+    }
+
+    #[test]
+    fn favorite_symbols_name_curated_tokens() {
+        let curated = promo_curated_tokens();
+        for favorite in PROMO_FAVORITE_SYMBOLS {
+            assert!(
+                curated.iter().any(|(symbol, _)| symbol == favorite),
+                "{favorite}"
+            );
         }
     }
 

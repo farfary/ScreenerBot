@@ -299,7 +299,7 @@ const PROMO_RUNS: &[PromoRun] = &[
         212,
         12_970.0,
         5_640,
-        "10 open positions, +0.417 SOL unrealised. TRUMP has run 16.4% past its trailing activation and is the only position whose exit rule is fully armed. Nothing needs a manual close.",
+        "10 open positions, +0.417 SOL unrealised. WIF has run 16.4% past its trailing activation and is the only position whose exit rule is fully armed. Nothing needs a manual close.",
     ),
     (
         39,
@@ -499,8 +499,8 @@ const PROMO_DECISIONS: &[PromoDecision] = &[
     ),
     (
         907,
-        "TRUMP",
-        "6p6xgHyF7AeE6TZkSmFsko444wqoP15icUSqi2jfGiPN",
+        "WIF",
+        "EKpQGSJtjMFqKZ9KQanSqYXRcF8fBopzLHYxdM65zcjm",
         "allow",
         86,
         "low",
@@ -679,4 +679,20 @@ pub fn get_promo_chat_session(id: i64) -> Option<GetChatSessionResponse> {
     };
 
     Some(GetChatSessionResponse { session, messages })
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::webserver::promo::data::promo_curated_tokens;
+
+    #[test]
+    fn allowed_decisions_name_curated_tokens_with_their_mint() {
+        let curated = promo_curated_tokens();
+        for (_id, symbol, mint, decision, ..) in PROMO_DECISIONS {
+            if *decision == "allow" {
+                assert!(curated.contains(&(*symbol, *mint)), "{symbol} {mint}");
+            }
+        }
+    }
 }

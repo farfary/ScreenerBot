@@ -34,12 +34,12 @@ pub(super) const PROMO_RPC_TOTAL_CALLS: u64 = 847_234;
 /// (symbol, name, mint, logo_url, entry_price_sol, current_price_sol, size_sol, hold_minutes)
 pub(super) const PROMO_OPEN_TOKENS: &[(&str, &str, &str, &str, f64, f64, f64, i64)] = &[
     (
-        "TRUMP",
-        "OFFICIAL TRUMP",
-        "6p6xgHyF7AeE6TZkSmFsko444wqoP15icUSqi2jfGiPN",
-        "https://cdn.dexscreener.com/cms/images/85a2613c51c8ded8e51b1b3910487ab66691cb60fecec7d0905481a603bba899?width=64&height=64&quality=90",
-        0.042,
-        0.0489,
+        "WIF",
+        "dogwifhat",
+        "EKpQGSJtjMFqKZ9KQanSqYXRcF8fBopzLHYxdM65zcjm",
+        "https://cdn.dexscreener.com/cms/images/c3788335fe7010d9c32ede4f211118f4a703e0b47fee61cd503c33cc9cde242a?width=64&height=64&quality=90",
+        0.001644,
+        0.001914,
         0.25,
         145,
     ),
@@ -84,12 +84,12 @@ pub(super) const PROMO_OPEN_TOKENS: &[(&str, &str, &str, &str, f64, f64, f64, i6
         23,
     ),
     (
-        "YZY",
-        "YZY",
-        "DrZ26cKJDksVRWib3DVVsjo9eeXccc7hKhDJviiYEEZY",
-        "https://cdn.dexscreener.com/cms/images/b2292ab9842bdca5d57f4b6870273904432eebf7314a6b7532ab06d424b07d6d?width=64&height=64&quality=90",
-        0.00195,
-        0.00228,
+        "POPCAT",
+        "POPCAT",
+        "7GCihgDB8fe6KNjn2MYtkzZcRjQy3t9GHdC8uHYmW2hr",
+        "https://cdn.dexscreener.com/cms/images/Pp6Fvh41hc0bHGK8?width=64&height=64&quality=90",
+        0.0003715,
+        0.0004343,
         0.18,
         52,
     ),
@@ -410,3 +410,15 @@ pub(super) const PROMO_ARCHIVED_TOKENS: &[(&str, &str, &str, f64, f64, f64, &str
         "TakeProfit",
     ),
 ];
+
+/// `(symbol, mint)` of every curated token the promo holds, has closed or has
+/// archived. The one list the fixture-reference guards resolve symbols against.
+#[cfg(test)]
+pub(super) fn promo_curated_tokens() -> Vec<(&'static str, &'static str)> {
+    PROMO_OPEN_TOKENS
+        .iter()
+        .map(|row| (row.0, row.2))
+        .chain(PROMO_CLOSED_TOKENS.iter().map(|row| (row.0, row.2)))
+        .chain(PROMO_ARCHIVED_TOKENS.iter().map(|row| (row.0, row.2)))
+        .collect()
+}

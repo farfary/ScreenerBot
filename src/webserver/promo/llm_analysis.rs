@@ -47,7 +47,7 @@ const PROMO_DECISIONS: &[(&str, &str, &str, i64, f64, f64)] = &[
     ("allow", "Entry", "GIGA", 6, 902.0, 0.81),
     ("allow", "Filter", "FWOG", 11, 655.0, 0.9),
     ("reject", "Entry", "RUGME", 17, 812.0, 0.95),
-    ("allow", "Exit", "TRUMP", 24, 588.0, 0.86),
+    ("allow", "Exit", "WIF", 24, 588.0, 0.86),
     ("reject", "Filter", "PONZI", 33, 767.0, 0.93),
     ("allow", "Filter", "GOAT", 41, 623.0, 0.89),
 ];
@@ -116,5 +116,21 @@ pub fn get_promo_analysis_status() -> AnalysisStatusResponse {
             total_providers,
         },
         recent_decisions,
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::webserver::promo::data::promo_curated_tokens;
+
+    #[test]
+    fn allowed_decisions_name_curated_tokens() {
+        let curated = promo_curated_tokens();
+        for (decision, _context, token, ..) in PROMO_DECISIONS {
+            if *decision == "allow" {
+                assert!(curated.iter().any(|(symbol, _)| symbol == token), "{token}");
+            }
+        }
     }
 }
