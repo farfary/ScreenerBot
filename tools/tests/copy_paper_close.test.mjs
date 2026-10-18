@@ -100,6 +100,19 @@ async function until(predicate) {
 
 const closeButton = (page) => page.locator(`[data-holding-action="close"][data-mint="${MINT}"]`);
 
+/**
+ * The close button once its row has re-rendered idle. A settled close shows its toast before
+ * the page reloads, so a read taken right after the toast can still see the pending row.
+ */
+async function idleCloseButton(page) {
+  const button = page.locator(
+    `[data-holding-action="close"][data-mint="${MINT}"]:not([disabled])`,
+    { hasText: /^\s*Close\s*$/ }
+  );
+  await button.waitFor();
+  return button;
+}
+
 async function confirmClose(page) {
   await closeButton(page).click();
   const dialog = page.locator(".confirmation-dialog--visible");
@@ -258,8 +271,10 @@ test("a lost response whose recorded result is a skip reports that reason", asyn
     plain(await failed.innerText()),
     /Holding could not be closed.*The quote cannot produce a usable paper fill/
   );
-  assert.equal(plain(await closeButton(page).innerText()), "Close");
-  assert.ok(await closeButton(page).isEnabled(), "the unchanged holding can be closed again");
+  assert.ok(
+    await (await idleCloseButton(page)).isEnabled(),
+    "the unchanged holding can be closed again"
+  );
 });
 
 test("a lost response with no recorded result is reported as not confirmed", async (t) => {
@@ -272,7 +287,7 @@ test("a lost response with no recorded result is reported as not confirmed", asy
   await unconfirmed.waitFor();
   assert.match(plain(await unconfirmed.innerText()), /Check Activity before closing again/);
   assert.doesNotMatch(await toastText(page), /could not be closed|Sold at/);
-  assert.ok(await closeButton(page).isEnabled());
+  assert.ok(await (await idleCloseButton(page)).isEnabled());
 });
 
 test("a refusal from the backend is a failed close and leaves the holding open", async (t) => {
@@ -287,8 +302,7 @@ test("a refusal from the backend is a failed close and leaves the holding open",
   const failed = toast(page, "could not be closed");
   await failed.waitFor();
   assert.match(plain(await failed.innerText()), /Paper execution is unavailable/);
-  assert.equal(plain(await closeButton(page).innerText()), "Close");
-  assert.ok(await closeButton(page).isEnabled());
+  assert.ok(await (await idleCloseButton(page)).isEnabled());
 });
 
 test("a holding without a pool mark can still be closed by quote", async (t) => {
@@ -407,8 +421,10 @@ test("a reopened round of the mint does not inherit the old close or its result"
   const unconfirmed = toast(page, "Close result not confirmed");
   await unconfirmed.waitFor();
   assert.doesNotMatch(await toastText(page), /Sold at/);
-  assert.equal(plain(await closeButton(page).innerText()), "Close");
-  assert.ok(await closeButton(page).isEnabled(), "the new round is its own, not pending");
+  assert.ok(
+    await (await idleCloseButton(page)).isEnabled(),
+    "the new round is its own, not pending"
+  );
   assert.equal(closes.length, 1);
 });
 
@@ -447,7 +463,10 @@ test("only a manual close result of this task and mint answers a lost close", as
     await route.abort("connectionreset");
     await toast(page, "Close result not confirmed").waitFor();
     assert.doesNotMatch(await toastText(page), /could not be closed|Sold at/, label);
-    assert.ok(await closeButton(page).isEnabled(), `${label}: the open holding stays open`);
+    assert.ok(
+      await (await idleCloseButton(page)).isEnabled(),
+      `${label}: the open holding stays open`
+    );
   }
 });
 
@@ -518,7 +537,6 @@ test("a close confirmed after the round reopened sends the confirmed round and s
   });
   await toast(page, "could not be closed").waitFor();
   assert.doesNotMatch(await toastText(page), /Sold at/);
-  assert.equal(plain(await closeButton(page).innerText()), "Close");
-  assert.ok(await closeButton(page).isEnabled(), "the reopened round stays open");
+  assert.ok(await (await idleCloseButton(page)).isEnabled(), "the reopened round stays open");
   assert.equal(closes.length, 1, "the refused close is not sent again");
 });
