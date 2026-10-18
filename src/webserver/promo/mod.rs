@@ -22,7 +22,8 @@
 //!   activity, insights, comparison, wallet profile
 //! - /api/events/head
 //! - /api/wallet/current, /api/wallet/tokens
-//! - /api/trader/stats
+//! - /api/trader/stats, /api/trader/status, /api/trader/monitors/status,
+//!   /api/trader/loss-limit/status
 //! - /api/header/metrics (SOL price is LIVE when the network is reachable)
 //! - /api/status (the status bar fields; version and service blocks stay live)
 
@@ -64,7 +65,10 @@ pub use llm_analysis::get_promo_analysis_status;
 pub use positions::{get_promo_positions, get_promo_positions_stats};
 pub use status::apply_promo_status;
 pub use tokens::{get_promo_favorites, get_promo_tokens_list, get_promo_tokens_stats};
-pub use trader::get_promo_trader_stats;
+pub use trader::{
+    get_promo_loss_limit_status, get_promo_monitors_status, get_promo_trader_stats,
+    get_promo_trader_status,
+};
 pub use wallet::{get_promo_wallet_address, get_promo_wallet_current, get_promo_wallet_tokens};
 pub use wallets::{get_promo_wallets, get_promo_watch_status, get_promo_watch_targets};
 

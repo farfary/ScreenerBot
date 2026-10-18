@@ -121,6 +121,9 @@ pub(super) fn trader_failure(error: &trader::Error) -> Response {
 
 /// GET /api/trader/status - Get current trader status
 pub async fn get_trader_status() -> Response {
+    if crate::webserver::promo::are_promo_fixtures_enabled() {
+        return success_response(crate::webserver::promo::get_promo_trader_status());
+    }
     success_response(trader::trader_status())
 }
 
@@ -179,6 +182,9 @@ pub async fn force_stop_status_handler(State(_state): State<Arc<AppState>>) -> R
 
 /// GET /api/trader/monitors/status - Get monitor status
 pub async fn monitors_status_handler(State(_state): State<Arc<AppState>>) -> Response {
+    if crate::webserver::promo::are_promo_fixtures_enabled() {
+        return success_response(crate::webserver::promo::get_promo_monitors_status());
+    }
     success_response(trader::monitors_status())
 }
 
@@ -211,6 +217,9 @@ pub async fn toggle_exit_monitor_handler(
 
 /// GET /api/trader/loss-limit/status - Get loss limit status
 pub async fn loss_limit_status_handler(State(_state): State<Arc<AppState>>) -> Response {
+    if crate::webserver::promo::are_promo_fixtures_enabled() {
+        return success_response(crate::webserver::promo::get_promo_loss_limit_status());
+    }
     success_response(trader::loss_limit_snapshot())
 }
 
