@@ -237,16 +237,27 @@ fn native_receipt(
 
     // Fall back to the lamport delta, read at the OWNER's own index rather than
     // assumed to be index 0 -- that assumption only ever held because the owner
-    // happens to be the fee payer today. Not finding the owner at all is a decode
-    // failure, never a silent zero: a wrong index here would misattribute
-    // someone else's balance change as the swap's proceeds.
-    let owner_index =
-        account_index_of(details, owner).ok_or_else(|| DirectSwapError::TransactionFailed {
-            signature: signature.to_owned(),
-            detail: "the owner account could not be located in the transaction's own account \
-                     keys, so the native-SOL lamport delta cannot be attributed"
-                .to_owned(),
-        })?;
+    // happens to be the fee payer today. The signature already landed without an
+    // error, so not finding the owner is a decode gap after landing: an estimate,
+    // never a failure. A wrong index would misattribute someone else's balance
+    // change as the swap's proceeds, so index 0 is never read in its place.
+    let Some(owner_index) = account_index_of(details, owner) else {
+        crate::logger::warning(
+            crate::logger::LogTag::Swap,
+            &format!(
+                "Swap {signature} confirmed but the owner account is not among the transaction's \
+                 account keys, so the native-SOL lamport delta cannot be attributed; reporting \
+                 the chain-guaranteed {} as an estimate",
+                plan.quote.min_net_out
+            ),
+        );
+        return Ok(Receipt {
+            received: plan.quote.min_net_out,
+            exact: false,
+            network_fee_lamports: meta.fee,
+            slot: details.slot,
+        });
+    };
     let pre = meta.pre_balances.get(owner_index).copied().unwrap_or(0);
     let post = meta.post_balances.get(owner_index).copied().unwrap_or(0);
     // Never used to FAIL a swap the chain already accepted -- a false alarm here
@@ -599,10 +610,11 @@ mod tests {
     }
 
     #[test]
-    fn a_missing_owner_in_the_account_keys_fails_cleanly_rather_than_reading_index_zero() {
+    fn a_missing_owner_in_the_account_keys_reports_the_guaranteed_floor_as_an_estimate_and_never_reads_index_zero(
+    ) {
         let owner = Pubkey::new_unique();
         let stranger = Pubkey::new_unique();
-        let quote = base_quote(wsol_mint(), 0, 0);
+        let quote = base_quote(wsol_mint(), 990_000, 5_000);
         let plan = plan(Pubkey::new_unique(), true, quote);
 
         let mut meta = empty_meta();
@@ -612,9 +624,49 @@ mod tests {
         meta.post_balances = vec![9_000_000_000];
         let details = details(json!({ "accountKeys": [stranger.to_string()] }), meta);
 
-        assert!(matches!(
-            receipt_from_transaction("sig", &owner, &plan, &details),
-            Err(DirectSwapError::TransactionFailed { .. })
-        ));
+        assert_eq!(
+            receipt_from_transaction("sig", &owner, &plan, &details).unwrap(),
+            Receipt {
+                received: 990_000,
+                exact: false,
+                network_fee_lamports: 5_000,
+                slot: 42,
+            }
+        );
+    }
+
+    /// The receipt is read only after the settle loop saw the signature land
+    /// without error, so whatever the measurement cannot attribute, the trade
+    /// happened: the outcome must send the router layer to reconcile that
+    /// signature, never license the same sale through another router.
+    #[test]
+    fn a_landed_sale_whose_owner_cannot_be_located_is_reconciled_never_sent_again() {
+        let owner = Pubkey::new_unique();
+        let stranger = Pubkey::new_unique();
+        let quote = base_quote(wsol_mint(), 990_000, 5_000);
+        let plan = plan(Pubkey::new_unique(), true, quote);
+
+        let mut meta = empty_meta();
+        meta.pre_balances = vec![5_000_000_000];
+        meta.post_balances = vec![9_000_000_000];
+        let details = details(json!({ "accountKeys": [stranger.to_string()] }), meta);
+
+        match receipt_from_transaction("sig", &owner, &plan, &details) {
+            Ok(receipt) => assert!(
+                !receipt.exact,
+                "an unattributed reading is an estimate, not a measurement"
+            ),
+            Err(error) => {
+                let decision = crate::swaps::failed_swap(&crate::Error::from(error.clone()));
+                assert_eq!(
+                    decision,
+                    crate::swaps::FailedSwap::Reconcile {
+                        signature: "sig".to_owned()
+                    },
+                    "a sale that landed was reported as `{error}`, which the router layer reads \
+                     as {decision:?}"
+                );
+            }
+        }
     }
 }

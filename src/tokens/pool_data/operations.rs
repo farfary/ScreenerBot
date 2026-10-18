@@ -94,9 +94,17 @@ pub fn ingest_pool_entry(map: &mut HashMap<String, TokenPoolInfo>, info: TokenPo
     }
 }
 
-/// Choose canonical pool address (highest liquidity SOL pair)
-pub fn choose_canonical_pool(pools: &[TokenPoolInfo]) -> Option<String> {
-    pools
+/// Share of the best pool's liquidity metric an incumbent canonical pool keeps and still
+/// wins. Two venues of one token report liquidity within a few percent of each other and swap
+/// the lead on every refresh; a canonical that flips moves the pricing pool, and with it a
+/// position's price, P&L and exit triggers.
+pub const CANONICAL_KEEP_RATIO: f64 = 0.8;
+
+/// Choose canonical pool address: the highest-liquidity SOL pair (metric, then 24h volume),
+/// except that a native-pair `previous` still in `pools` keeps the role while its metric is at
+/// least `CANONICAL_KEEP_RATIO` of the best metric.
+pub fn choose_canonical_pool(pools: &[TokenPoolInfo], previous: Option<&str>) -> Option<String> {
+    let best = pools
         .iter()
         .filter(|pool| pool.is_native_pair)
         .max_by(|a, b| {
@@ -110,8 +118,19 @@ pub fn choose_canonical_pool(pools: &[TokenPoolInfo]) -> Option<String> {
                 }
                 ordering => ordering,
             }
-        })
-        .map(|pool| pool.pool_address.clone())
+        })?;
+
+    let incumbent = previous.and_then(|address| {
+        pools
+            .iter()
+            .find(|pool| pool.is_native_pair && pool.pool_address == address)
+    });
+    if let Some(incumbent) = incumbent {
+        if calculate_pool_metric(incumbent) >= CANONICAL_KEEP_RATIO * calculate_pool_metric(best) {
+            return Some(incumbent.pool_address.clone());
+        }
+    }
+    Some(best.pool_address.clone())
 }
 
 /// Sort pools for snapshot (SOL pairs first, then by liquidity)
@@ -127,4 +146,74 @@ pub fn sort_pools_for_snapshot(pools: &mut [TokenPoolInfo]) {
             ordering => ordering,
         },
     });
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    fn native_pool(address: &str, liquidity_native: f64) -> TokenPoolInfo {
+        TokenPoolInfo {
+            pool_address: address.to_owned(),
+            is_native_pair: true,
+            liquidity_native: Some(liquidity_native),
+            ..TokenPoolInfo::default()
+        }
+    }
+
+    #[test]
+    fn an_incumbent_within_the_keep_ratio_stays_canonical() {
+        let pools = [native_pool("pump", 166.2), native_pool("dlmm", 174.0)];
+        assert_eq!(
+            choose_canonical_pool(&pools, Some("pump")).as_deref(),
+            Some("pump")
+        );
+        let pools = [native_pool("pump", 175.8), native_pool("dlmm", 174.0)];
+        assert_eq!(
+            choose_canonical_pool(&pools, Some("dlmm")).as_deref(),
+            Some("dlmm")
+        );
+    }
+
+    #[test]
+    fn a_rival_far_above_the_incumbent_wins() {
+        let pools = [native_pool("pump", 166.2), native_pool("dlmm", 166.2 * 1.5)];
+        assert_eq!(
+            choose_canonical_pool(&pools, Some("pump")).as_deref(),
+            Some("dlmm")
+        );
+    }
+
+    #[test]
+    fn a_missing_or_non_native_incumbent_yields_the_best_pool() {
+        let mut pools = vec![native_pool("pump", 166.2), native_pool("dlmm", 174.0)];
+        assert_eq!(
+            choose_canonical_pool(&pools, Some("gone")).as_deref(),
+            Some("dlmm")
+        );
+        pools[0].is_native_pair = false;
+        assert_eq!(
+            choose_canonical_pool(&pools, Some("pump")).as_deref(),
+            Some("dlmm")
+        );
+    }
+
+    #[test]
+    fn no_previous_choice_yields_the_best_pool() {
+        let pools = [native_pool("pump", 175.8), native_pool("dlmm", 174.0)];
+        assert_eq!(choose_canonical_pool(&pools, None).as_deref(), Some("pump"));
+        assert_eq!(choose_canonical_pool(&[], None), None);
+    }
+
+    #[test]
+    fn unknown_best_liquidity_keeps_a_valid_incumbent() {
+        let mut unknown = native_pool("dlmm", 0.0);
+        unknown.liquidity_native = None;
+        let mut incumbent = unknown.clone();
+        incumbent.pool_address = "pump".to_owned();
+        assert_eq!(
+            choose_canonical_pool(&[unknown, incumbent], Some("pump")).as_deref(),
+            Some("pump")
+        );
+    }
 }

@@ -7,8 +7,9 @@
 //! The controlled set is the wallet itself (index 0, the fee payer) plus every
 //! token account a pre or post token balance names the wallet as owner of.
 //! Rent the wallet pays into its own new accounts stays inside that set, so
-//! it nets out. A node that omits a balance field skips the check: some
-//! nodes do not return them, and their absence is not evidence of a cost.
+//! it nets out. A node that omits a balance field, or the owner of any token
+//! balance, skips the check: some nodes do not return them, and their absence
+//! is not evidence of a cost.
 
 use std::collections::{BTreeMap, BTreeSet};
 
@@ -18,10 +19,25 @@ use crate::chains::solana::rpc::types::{SimulationOutcome, TokenBalance};
 use crate::logger::{self, LogTag};
 use crate::swaps::Quote;
 
-/// The token balances of a run, when the node returned both lists.
+/// The token balances of a run, when the node returned both lists and named
+/// the owner of every balance in them.
 fn token_balances(outcome: &SimulationOutcome) -> Option<(&[TokenBalance], &[TokenBalance])> {
     match (&outcome.pre_token_balances, &outcome.post_token_balances) {
-        (Some(pre), Some(post)) => Some((pre, post)),
+        (Some(pre), Some(post)) => {
+            if pre
+                .iter()
+                .chain(post)
+                .any(|balance| balance.owner.is_none())
+            {
+                logger::debug(
+                    LogTag::Swap,
+                    "Simulation returned a token balance without an owner; the balance check is \
+                     skipped",
+                );
+                return None;
+            }
+            Some((pre, post))
+        }
         _ => {
             logger::debug(
                 LogTag::Swap,

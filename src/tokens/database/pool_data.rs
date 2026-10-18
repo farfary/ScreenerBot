@@ -205,7 +205,7 @@ impl TokenDatabase {
             .map(|p| p.pool_data_last_fetched_at)
             .max()
             .unwrap_or_else(|| Utc::now());
-        let canonical_pool_address = pools::choose_canonical_pool(&pools);
+        let canonical_pool_address = pools::choose_canonical_pool(&pools, None);
 
         Ok(Some(TokenPoolsSnapshot {
             mint: mint.to_string(),

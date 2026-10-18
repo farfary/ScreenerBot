@@ -2085,6 +2085,179 @@ fn every_venue_reports_its_pool_fee_in_input_units_on_both_legs() {
     );
 }
 
+/// The platform fee on every venue, on both legs, at the narrowest, a typical
+/// and the widest slippage the engine accepts. Each plan carries exactly one
+/// fee transfer of 50 bps of the leg the fee rides — what the wallet puts in
+/// when the input is the reference mint, what the pool is expected to return
+/// when the output is — paid in lamports into the fee wallet for SOL and by
+/// `TransferChecked` into its USDC account for USDC. An output-side fee never
+/// exceeds the floor the swap instruction enforces before the fee runs.
+#[test]
+fn every_venue_plan_pays_exactly_the_platform_rate_on_both_legs() {
+    use screenerbot::chains::solana::constants::USDC_MINT;
+    use screenerbot::chains::solana::swaps::direct::intent::MAX_SLIPPAGE_BPS;
+    use screenerbot::chains::solana::swaps::revenue::{
+        platform_fee_amount, FEE_TOKEN_ACCOUNT_USDC,
+    };
+
+    let _guard = common::config_guard();
+    let wsol = Pubkey::from_str(WSOL).unwrap();
+    let usdc = Pubkey::from_str(USDC_MINT).unwrap();
+    let fee_wallet = Pubkey::from_str(FEE_WALLET).unwrap();
+    let usdc_fee_account = Pubkey::from_str(FEE_TOKEN_ACCOUNT_USDC).unwrap();
+
+    let mut markets = every_fixture_market();
+    markets.push((
+        "pumpfun_amm_negative_virtual",
+        fixture_market_case("pumpfun_amm", "direct-swap-negative-virtual-reserve"),
+    ));
+
+    let mut offenders: Vec<String> = Vec::new();
+    let mut legs_checked = 0usize;
+    for (name, market) in markets {
+        let (a, b) = market.mints();
+        let Some(reference) = [a, b]
+            .into_iter()
+            .find(|mint| *mint == wsol)
+            .or_else(|| [a, b].into_iter().find(|mint| *mint == usdc))
+        else {
+            continue;
+        };
+        let other = if reference == a { b } else { a };
+
+        for slippage_bps in [1, 300, MAX_SLIPPAGE_BPS] {
+            let owner = Pubkey::new_unique();
+            let buy = DirectSwapIntent {
+                pool: market.pool(),
+                owner,
+                input_mint: reference,
+                output_mint: other,
+                amount_in: if reference == usdc {
+                    1_000_000
+                } else {
+                    5_000_000
+                },
+                slippage_bps,
+            };
+            let buy_quote = match direct::quote_with_market(&buy, market.as_ref()) {
+                Ok(quote) => quote,
+                Err(e) => {
+                    offenders.push(format!("{name} buy at {slippage_bps} bps: no quote: {e}"));
+                    continue;
+                }
+            };
+            let sell = DirectSwapIntent {
+                input_mint: other,
+                output_mint: reference,
+                amount_in: buy_quote.expected_out,
+                ..buy.clone()
+            };
+            let sell_quote = match direct::quote_with_market(&sell, market.as_ref()) {
+                Ok(quote) => Some(quote),
+                Err(e) => {
+                    eprintln!("{name:<28} sell at {slippage_bps} bps skipped: {e}");
+                    None
+                }
+            };
+
+            let legs = [("buy", &buy, Some(buy_quote)), ("sell", &sell, sell_quote)];
+            for (leg, intent, quote) in legs {
+                let Some(quote) = quote else {
+                    continue;
+                };
+                let case = format!("{name} {leg} at {slippage_bps} bps");
+                legs_checked += 1;
+
+                let side = FeeSide::for_pair(&intent.input_mint, &intent.output_mint);
+                let (fee_mint, base) = match side {
+                    FeeSide::Input => (intent.input_mint, intent.amount_in),
+                    FeeSide::Output => (intent.output_mint, quote.expected_out),
+                    FeeSide::None => {
+                        offenders.push(format!("{case}: a reference pair resolved no fee side"));
+                        continue;
+                    }
+                };
+                let expected = platform_fee_amount(base);
+                if expected == 0 {
+                    offenders.push(format!("{case}: the test size rounds the fee to zero"));
+                    continue;
+                }
+
+                let plan = match direct::build_plan(intent, market.as_ref(), &quote) {
+                    Ok(plan) => plan,
+                    Err(e) => {
+                        offenders.push(format!("{case}: no plan: {e}"));
+                        continue;
+                    }
+                };
+                let paid: Vec<u64> = plan
+                    .instructions
+                    .iter()
+                    .filter_map(|ix| {
+                        if fee_mint == wsol && pays_fee_into(ix, fee_wallet) {
+                            Some(u64::from_le_bytes(ix.data[4..12].try_into().unwrap()))
+                        } else if fee_mint == usdc
+                            && pays_fee_into(ix, usdc_fee_account)
+                            && ix.accounts[1].pubkey == usdc
+                        {
+                            Some(u64::from_le_bytes(ix.data[1..9].try_into().unwrap()))
+                        } else {
+                            None
+                        }
+                    })
+                    .collect();
+                let strays = plan
+                    .instructions
+                    .iter()
+                    .filter(|ix| {
+                        pays_fee_into(ix, fee_wallet) || pays_fee_into(ix, usdc_fee_account)
+                    })
+                    .count();
+
+                if paid != [expected] || strays != 1 {
+                    offenders.push(format!(
+                        "{case}: expected one fee of {expected} in {fee_mint}, the plan pays \
+                         {paid:?} across {strays} fee transfers"
+                    ));
+                }
+                if quote.fee.amount != expected {
+                    offenders.push(format!(
+                        "{case}: the quote carries a fee of {}, not {expected}",
+                        quote.fee.amount
+                    ));
+                }
+                match side {
+                    FeeSide::Input => {
+                        if quote.swap_amount_in + quote.fee.amount != intent.amount_in {
+                            offenders.push(format!(
+                                "{case}: {} reaches the pool and {} is the fee, of {} spent",
+                                quote.swap_amount_in, quote.fee.amount, intent.amount_in
+                            ));
+                        }
+                    }
+                    FeeSide::Output | FeeSide::None => {
+                        if quote.fee.amount > quote.min_out
+                            || quote.min_net_out != quote.min_out - quote.fee.amount
+                        {
+                            offenders.push(format!(
+                                "{case}: fee {} against a floor of {} and a net floor of {}",
+                                quote.fee.amount, quote.min_out, quote.min_net_out
+                            ));
+                        }
+                    }
+                }
+            }
+        }
+    }
+
+    assert!(legs_checked > 0, "no fixture venue produced a leg to check");
+    assert!(
+        offenders.is_empty(),
+        "every leg pays exactly the platform rate to the platform:\n  {}",
+        offenders.join("\n  ")
+    );
+}
+
 /// The preflight's flat network-fee cushion must actually cover the network fee
 /// the transaction it is preflighting will pay.
 ///

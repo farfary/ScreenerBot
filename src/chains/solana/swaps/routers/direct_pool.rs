@@ -13,7 +13,8 @@
 //! made its decision on, so the price a decision was made on is the price the
 //! decision trades at. When the token has no live price, the pools the pool
 //! service discovered for the pair are tried instead, canonical first and then
-//! by liquidity, up to [`MAX_CANDIDATE_POOLS`]; the first one that quotes wins.
+//! by liquidity, up to [`MAX_CANDIDATE_POOLS`]; every candidate is quoted and the
+//! one that leaves the wallet the most wins, the earlier candidate on a tie.
 //! Every candidate is still checked against the requested pair before anything
 //! is built.
 //!
@@ -151,7 +152,8 @@ impl DirectPoolRouter {
     /// pool service has discovered for it, canonical first and then by
     /// liquidity, so a direct swap is not limited to the tokens that happen to
     /// be priced right now. The pool is keyed by the non-reference leg, which
-    /// is the token for a SOL or USDC pair.
+    /// is the token for a SOL or USDC pair. [`best_quote`] picks among them in
+    /// this order, so an earlier candidate wins a tie.
     fn candidate_pools(input_mint: &str, output_mint: &str) -> Vec<Pubkey> {
         let (token, other) = if is_reference_mint(input_mint) {
             (output_mint, input_mint)
@@ -428,23 +430,25 @@ impl SwapRouter for DirectPoolRouter {
         }
 
         let candidates = Self::candidate_pools(&request.input_mint, &request.output_mint);
-        let mut last_error = QuoteError::NoRoute {
+        let no_pool = QuoteError::NoRoute {
             router: self.name().to_owned(),
             detail: "the pool service knows no pool for this pair yet".to_owned(),
         };
-        for pool in candidates {
-            match self.quote_pool(request, pool).await {
-                Ok(quote) => return Ok(quote),
-                Err(error) => {
-                    logger::debug(
-                        LogTag::Swap,
-                        &format!("Direct pool {pool} could not quote this trade: {error}"),
-                    );
-                    last_error = error;
-                }
+        let results = futures::future::join_all(
+            candidates
+                .iter()
+                .map(|pool| self.quote_pool(request, *pool)),
+        )
+        .await;
+        for (pool, result) in candidates.iter().zip(&results) {
+            if let Err(error) = result {
+                logger::debug(
+                    LogTag::Swap,
+                    &format!("Direct pool {pool} could not quote this trade: {error}"),
+                );
             }
         }
-        Err(last_error)
+        best_quote(results, no_pool)
     }
 
     async fn execute_swap(&self, _token: &Token, quote: &Quote) -> Result<SwapResult> {
@@ -567,6 +571,31 @@ fn parse_mint(mint: &str) -> QuoteResult<Pubkey> {
 /// slippage preference and a router are incompatible.
 fn slippage_bps_for(slippage_pct: f64) -> u16 {
     ((slippage_pct * 100.0).round() as i64).clamp(1, direct::intent::MAX_SLIPPAGE_BPS as i64) as u16
+}
+
+/// Choose among the candidate pools' quotes, given in candidate order.
+///
+/// The `Ok` quote with the largest `output_amount` wins, because that is what
+/// the wallet keeps; a tie goes to the earlier candidate, which is the pricing
+/// pool. With no `Ok` the last error in candidate order is returned, and
+/// `no_candidates` when there was nothing to quote.
+fn best_quote(results: Vec<QuoteResult<Quote>>, no_candidates: QuoteError) -> QuoteResult<Quote> {
+    let mut best: Option<Quote> = None;
+    let mut last_error = no_candidates;
+    for result in results {
+        match result {
+            Ok(quote) => {
+                if best
+                    .as_ref()
+                    .is_none_or(|kept| quote.output_amount > kept.output_amount)
+                {
+                    best = Some(quote);
+                }
+            }
+            Err(error) => last_error = error,
+        }
+    }
+    best.ok_or(last_error)
 }
 
 #[cfg(test)]
@@ -843,5 +872,91 @@ mod tests {
             hold_accepted_floor(&mut two_units, &strict),
             Err(direct::DirectSwapError::MarketMoved { .. })
         ));
+    }
+
+    fn candidate_quote(output_amount: u64, pool_label: &str) -> Quote {
+        Quote {
+            chain: crate::chains::ChainId::Solana,
+            router_id: "direct_pool".to_owned(),
+            router_name: "Direct Pool".to_owned(),
+            input_mint: crate::chains::solana::constants::SOL_MINT.to_owned(),
+            output_mint: crate::chains::solana::constants::USDC_MINT.to_owned(),
+            input_amount: 1_000_000u64.into(),
+            output_amount: output_amount.into(),
+            minimum_output_amount: output_amount.into(),
+            price_impact_pct: 0.0,
+            platform_fee_lamports: None,
+            estimated_network_fee_lamports: None,
+            slippage_bps: 100,
+            route_plan: pool_label.to_owned(),
+            swap_mode: crate::swaps::types::SwapMode::ExactIn,
+            wallet_address: String::new(),
+            exclude_dexes: None,
+            execution_data: Vec::new(),
+        }
+    }
+
+    fn no_route(detail: &str) -> QuoteError {
+        QuoteError::NoRoute {
+            router: "Direct Pool".to_owned(),
+            detail: detail.to_owned(),
+        }
+    }
+
+    #[test]
+    fn the_candidate_that_leaves_the_wallet_the_most_wins_over_an_earlier_one() {
+        let chosen = best_quote(
+            vec![
+                Ok(candidate_quote(965, "first")),
+                Ok(candidate_quote(1_000, "second")),
+                Ok(candidate_quote(990, "third")),
+            ],
+            no_route("none"),
+        )
+        .unwrap();
+        assert_eq!(chosen.route_plan, "second");
+    }
+
+    #[test]
+    fn a_tie_keeps_the_earlier_candidate() {
+        let chosen = best_quote(
+            vec![
+                Ok(candidate_quote(1_000, "pricing pool")),
+                Ok(candidate_quote(1_000, "neighbour")),
+            ],
+            no_route("none"),
+        )
+        .unwrap();
+        assert_eq!(chosen.route_plan, "pricing pool");
+    }
+
+    #[test]
+    fn with_no_quote_the_last_error_in_candidate_order_is_returned() {
+        let error = best_quote(
+            vec![Err(no_route("first")), Err(no_route("second"))],
+            no_route("none"),
+        )
+        .unwrap_err();
+        assert!(error.to_string().contains("second"), "{error}");
+    }
+
+    #[test]
+    fn one_quote_among_errors_is_returned() {
+        let chosen = best_quote(
+            vec![
+                Err(no_route("first")),
+                Ok(candidate_quote(500, "only")),
+                Err(no_route("third")),
+            ],
+            no_route("none"),
+        )
+        .unwrap();
+        assert_eq!(chosen.route_plan, "only");
+    }
+
+    #[test]
+    fn without_candidates_the_supplied_error_is_returned() {
+        let error = best_quote(Vec::new(), no_route("no pool")).unwrap_err();
+        assert!(error.to_string().contains("no pool"), "{error}");
     }
 }

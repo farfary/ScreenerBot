@@ -35,14 +35,17 @@
 //!
 //! A build that spends the native asset is never signed without a simulation;
 //! a sale is never trapped by a node outage, and proceeds on the message layer
-//! alone. The lamport comparisons follow `chains.solana.swaps.cost_guard`; the
-//! message, the grants and the token side of conservation do not, because
-//! they are not a cost judgement.
+//! alone. `chains.solana.swaps.cost_guard.enabled` and the sale's
+//! slippage-widened allowance govern only the comparison of attributed costs,
+//! what the inner-instruction assessment explains. The message, the grants
+//! and conservation of everything the assessment does not explain always run,
+//! with the standard allowance.
 //!
 //! **Stability rule for the cost comparison: only a node that ANSWERED may
 //! block a trade on cost.** An owner lookup that fails or a label the
 //! aggregator cannot name leaves the cost unattributed, and a node that omits
-//! the balance fields skips only the conservation layer. An unreadable node is
+//! the balance fields or the owner of a token balance skips only the
+//! conservation layer. An unreadable node is
 //! not evidence of a cost.
 
 mod balances;
@@ -358,22 +361,14 @@ where
     }
     balances::conserve_tokens(outcome, quote, output_transfer_fee).map_err(Refusal::Unusable)?;
 
-    if !settings.enabled {
-        return Ok(());
-    }
-
-    let allowance = expectations.allowance;
     let legs = balances::NativeLegs::of(quote).map_err(Refusal::Unusable)?;
-    if assessment.is_empty() {
-        return balances::conserve_lamports(outcome, wallet, legs, allowance).map_err(|extra| {
-            Refusal::Cost {
-                extra,
-                allowance,
-                venue_address: String::new(),
-            }
-        });
-    }
-    if !assessment.unresolved.is_empty() {
+    let trade_value = trade_value_lamports(quote).map_err(|error| {
+        Refusal::Unusable(BuildRefusal::QuoteBounds {
+            detail: error.to_string(),
+        })
+    })?;
+    let standard_allowance = allowance_lamports(trade_value, settings);
+    if settings.enabled && !assessment.unresolved.is_empty() {
         let addresses = assessment
             .unresolved
             .iter()
@@ -392,22 +387,38 @@ where
             .saturating_sub(expectations.fee_bound),
     );
     let venue_address = assessment.largest_charge().unwrap_or_default().to_owned();
-    if extra > allowance {
+    let allowance = expectations.allowance;
+    if settings.enabled && extra > allowance {
         return Err(Refusal::Cost {
             extra,
             allowance,
             venue_address,
         });
     }
-    balances::conserve_lamports(outcome, wallet, legs, allowance).map_err(|extra| {
+    // The lamports the assessment explains are conceded here; the standard
+    // allowance covers the rest. An account whose owner was not resolved is
+    // still an explained outflow: an unanswered lookup never blocks a trade.
+    // The sale's slippage share is not added: the lamport baseline is the
+    // quoted minimum, which already concedes it.
+    let unresolved_lamports = assessment
+        .unresolved
+        .iter()
+        .fold(0u64, |total, (_, lamports)| total.saturating_add(*lamports));
+    let conservation = standard_allowance.saturating_add(
+        assessment
+            .extra_cost_lamports()
+            .saturating_add(assessment.fee_wallet_lamports)
+            .saturating_add(unresolved_lamports),
+    );
+    balances::conserve_lamports(outcome, wallet, legs, conservation).map_err(|extra| {
         Refusal::Cost {
             extra,
-            allowance,
+            allowance: conservation,
             venue_address,
         }
     })?;
 
-    if extra > 0 {
+    if settings.enabled && extra > 0 {
         logger::info(
             LogTag::Swap,
             &format!(

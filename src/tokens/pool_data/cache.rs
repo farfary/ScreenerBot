@@ -487,15 +487,19 @@ async fn refresh_token_pools_and_cache(
 
     let mut pools: Vec<TokenPoolInfo> = pools_map.into_values().collect();
     sort_pools_for_snapshot(&mut pools);
-    let canonical_pool_address = choose_canonical_pool(&pools);
+    let previous_canonical = get_cached_pool_snapshot_allow_stale(chain, mint_trimmed)
+        .and_then(|snapshot| snapshot.canonical_pool_address)
+        .or_else(|| {
+            persisted_snapshot
+                .as_ref()
+                .and_then(|snapshot| snapshot.canonical_pool_address.clone())
+        });
+    let canonical_pool_address = choose_canonical_pool(&pools, previous_canonical.as_deref());
 
     let prev_pool_count = persisted_snapshot
         .as_ref()
         .map(|snapshot| snapshot.pools.len())
         .unwrap_or_default();
-    let prev_canonical = persisted_snapshot
-        .as_ref()
-        .and_then(|snapshot| snapshot.canonical_pool_address.clone());
     let prev_fetched_at = persisted_snapshot
         .as_ref()
         .map(|snapshot| snapshot.pool_data_last_fetched_at.to_rfc3339());
@@ -548,7 +552,7 @@ async fn refresh_token_pools_and_cache(
             "top_pool": top_pool_value,
             "top_metric": top_metric,
             "previous_pool_count": prev_pool_count,
-            "previous_canonical_pool": prev_canonical.clone(),
+            "previous_canonical_pool": previous_canonical.clone(),
             "previous_snapshot_fetched_at": prev_fetched_at,
             "current_snapshot_fetched_at": snapshot.pool_data_last_fetched_at.to_rfc3339(),
             "first_time": persisted_snapshot.is_none(),
@@ -556,14 +560,15 @@ async fn refresh_token_pools_and_cache(
     )
     .await;
 
-    let canonical_changed = snapshot.canonical_pool_address.as_deref() != prev_canonical.as_deref();
+    let canonical_changed =
+        snapshot.canonical_pool_address.as_deref() != previous_canonical.as_deref();
     if canonical_changed {
         record_token_event(
             mint_trimmed,
             "pool_canonical_changed",
             Severity::Info,
             json!({
-                "previous": prev_canonical,
+                "previous": previous_canonical,
                 "current": snapshot.canonical_pool_address.clone(),
                 "top_metric": top_metric,
                 "pool_count": snapshot.pools.len(),
@@ -776,7 +781,9 @@ async fn server_only_snapshot(chain: ChainId, mint: &str) -> Option<TokenPoolsSn
     }
     let mut pools: Vec<TokenPoolInfo> = pools_map.into_values().collect();
     sort_pools_for_snapshot(&mut pools);
-    let canonical_pool_address = choose_canonical_pool(&pools);
+    let previous_canonical = get_cached_pool_snapshot_allow_stale(chain, mint)
+        .and_then(|snapshot| snapshot.canonical_pool_address);
+    let canonical_pool_address = choose_canonical_pool(&pools, previous_canonical.as_deref());
 
     let snapshot = TokenPoolsSnapshot {
         mint: mint.to_string(),

@@ -1296,3 +1296,326 @@ async fn a_native_or_usdc_output_reads_no_mint() {
     let usdc = quote("jupiter", SOL_MINT, USDC_MINT, 50_000_000, 1_000_000);
     assert_eq!(output_transfer_fee(&node, &usdc).await, None);
 }
+
+// ----------------------------------------------------------------------------
+// Recorded and adversarial runs across all three layers
+// ----------------------------------------------------------------------------
+
+/// A Raptor sale of 1.721433 JUP for `WALLET`, recorded on chain with its
+/// inner instructions and balances: a split route through four venues, the
+/// platform fee paid by Raptor's own CPI into the fee wallet.
+const RAPTOR_SALE: &str =
+    include_str!("../../../../../tests/fixtures/swaps/raptor_split_route_sell.json");
+
+/// The recorded run as the simulation of the same build would report it.
+fn recorded_run(recorded: &Value) -> SimulationOutcome {
+    let meta = &recorded["meta"];
+    SimulationOutcome {
+        fee: meta["fee"].as_u64(),
+        pre_balances: Some(serde_json::from_value(meta["preBalances"].clone()).unwrap()),
+        post_balances: Some(serde_json::from_value(meta["postBalances"].clone()).unwrap()),
+        pre_token_balances: Some(serde_json::from_value(meta["preTokenBalances"].clone()).unwrap()),
+        post_token_balances: Some(
+            serde_json::from_value(meta["postTokenBalances"].clone()).unwrap(),
+        ),
+        inner_instructions: serde_json::from_value(meta["innerInstructions"].clone()).unwrap(),
+        ..Default::default()
+    }
+}
+
+/// A legitimate Raptor build must clear the message, the inner instructions
+/// and conservation, or every one-click sale through it is refused.
+#[tokio::test]
+async fn a_recorded_raptor_sale_passes_every_layer() {
+    const JUP: &str = "JUPyiwrYJFskUPiHa7hkeR8VUtAeFoSYbKedZNsDvCN";
+    let recorded: Value = serde_json::from_str(RAPTOR_SALE).expect("fixture is JSON");
+    assert_eq!(
+        recorded["transaction"]["message"]["accountKeys"][0]["pubkey"],
+        WALLET
+    );
+    let outcome = recorded_run(&recorded);
+
+    // The recorded top level: its compute budget, the wrapped-SOL account
+    // created idempotently for the wallet, and the Raptor route.
+    let transaction = build(&[
+        ComputeBudgetInstruction::set_compute_unit_limit(208_875),
+        ComputeBudgetInstruction::set_compute_unit_price(50_000),
+        create_associated_token_account_idempotent(
+            &wallet(),
+            &wallet(),
+            &key(SOL_MINT),
+            &spl_token::id(),
+        ),
+        trade(RAPTOR_PROGRAM_ID),
+    ]);
+    // Gross proceeds 4,944,664 lamports, 24,723 of them the platform fee;
+    // the floor is 1% below the net.
+    let quote = Quote {
+        output_amount: 4_919_941u64.into(),
+        minimum_output_amount: 4_870_742u64.into(),
+        platform_fee_lamports: Some(24_723),
+        ..quote("raptor", JUP, SOL_MINT, 1_721_433, 0)
+    };
+
+    let verdict = decide(
+        "Raptor",
+        &transaction,
+        Simulated::Ran(&outcome),
+        &quote,
+        &settings(),
+        None,
+        |_| async { Some(HashMap::new()) },
+    )
+    .await;
+    assert_eq!(verdict, Ok(()));
+}
+
+/// A sale with 3% slippage: 0.05 SOL expected, 0.0485 SOL guaranteed, so its
+/// allowance is the 1,500,000 lamports that slippage gives up.
+fn wide_sale() -> Quote {
+    Quote {
+        slippage_bps: 300,
+        output_amount: 50_000_000u64.into(),
+        ..quote("jupiter", MINT, SOL_MINT, 1_000, 48_500_000)
+    }
+}
+
+/// A run of `wide_sale` whose swap delivers the full expected proceeds while
+/// `taken` lamports leave the wallet's controlled accounts.
+fn sale_run_losing(taken: u64, groups: Vec<Value>) -> SimulationOutcome {
+    SimulationOutcome {
+        inner_instructions: groups,
+        ..balances(
+            vec![START, 2_039_280],
+            vec![START + 50_000_000 - taken - 5_000, 2_039_280],
+            json!([token_balance(1, MINT, 1_000)]),
+            json!([token_balance(1, MINT, 0)]),
+        )
+    }
+}
+
+/// The same loss is one verdict whichever instruction carries it. The lamport
+/// check measures against the slippage floor, which already concedes the
+/// slippage share; adding the allowance on top concedes it a second time.
+#[tokio::test]
+async fn a_sale_loss_is_refused_alike_as_a_lamport_or_a_wrapped_sol_transfer() {
+    const ELSEWHERE: &str = "7WMCUyZXrDxNjAWjuh2r7g8CdT2guqvrmdUPAnGdLsfG";
+    let quote = wide_sale();
+    let allowance = trade_allowance_lamports(&quote, &settings()).unwrap();
+    assert_eq!(allowance, 1_500_000);
+    let taken = 2_900_000;
+
+    let as_lamports = sale_run_losing(taken, vec![group(vec![transfer(WALLET, STRANGER, taken)])]);
+    let visible = verdict(
+        &jupiter_build(Vec::new()),
+        Simulated::Ran(&as_lamports),
+        &quote,
+        HashMap::from([(
+            STRANGER.to_owned(),
+            AccountControl::Program(SYSTEM_PROGRAM_ID.to_owned()),
+        )]),
+    )
+    .await;
+    assert_eq!(
+        visible,
+        Err(Refusal::Cost {
+            extra: taken,
+            allowance,
+            venue_address: STRANGER.to_owned(),
+        })
+    );
+
+    let as_wrapped_sol = sale_run_losing(
+        taken,
+        vec![group(vec![token(
+            "transfer",
+            json!({
+                "source": wrapped_sol_account().to_string(),
+                "destination": ELSEWHERE,
+                "authority": WALLET,
+                "amount": taken.to_string(),
+            }),
+        )])],
+    );
+    let hidden = verdict(
+        &jupiter_build(Vec::new()),
+        Simulated::Ran(&as_wrapped_sol),
+        &quote,
+        HashMap::new(),
+    )
+    .await;
+    assert!(
+        matches!(hidden, Err(Refusal::Cost { .. })),
+        "{taken} lamports taken beyond the expected proceeds are refused as a lamport transfer \
+         but signed as a wrapped-SOL transfer, against a {allowance} lamport allowance: \
+         {hidden:?}"
+    );
+}
+
+/// Whether the proceeds arrive is conservation, not a cost judgement: a buy
+/// whose tokens never arrive is refused with the cost comparison off, and a
+/// sale whose lamports never arrive must be refused the same way.
+#[tokio::test]
+async fn the_proceeds_must_reach_the_wallet_with_the_cost_comparison_off() {
+    let off = CostGuardSettings {
+        enabled: false,
+        ..settings()
+    };
+    let decide_with = |settings: CostGuardSettings, outcome: SimulationOutcome, quote: Quote| async move {
+        decide(
+            "Jupiter",
+            &jupiter_build(Vec::new()),
+            Simulated::Ran(&outcome),
+            &quote,
+            &settings,
+            None,
+            |_| async { Some(HashMap::new()) },
+        )
+        .await
+    };
+
+    let buy_delivered_elsewhere = balances(
+        vec![START, 0],
+        vec![START - 50_000_000 - 5_000, 0],
+        json!([token_balance(1, MINT, 0)]),
+        json!([token_balance(1, MINT, 0)]),
+    );
+    let refused = decide_with(off, buy_delivered_elsewhere, buy("jupiter")).await;
+    assert!(is_unusable(&refused), "{refused:?}");
+
+    // The 1,000 units leave the wallet; the 0.0495 SOL minimum goes elsewhere.
+    let sale_delivered_elsewhere = || {
+        balances(
+            vec![START, 2_039_280],
+            vec![START - 5_000, 2_039_280],
+            json!([token_balance(1, MINT, 1_000)]),
+            json!([token_balance(1, MINT, 0)]),
+        )
+    };
+    let on = decide_with(settings(), sale_delivered_elsewhere(), sale("jupiter")).await;
+    assert!(on.is_err(), "{on:?}");
+
+    let signed = decide_with(off, sale_delivered_elsewhere(), sale("jupiter")).await;
+    assert!(
+        signed.is_err(),
+        "a sale whose 49,500,000 lamport minimum never reached the wallet was cleared with the \
+         cost comparison off: {signed:?}"
+    );
+}
+
+/// A node that leaves out the optional `owner` of a token balance has given
+/// no reading of the wallet's accounts, and an absent reading is not evidence
+/// that the output went elsewhere.
+#[tokio::test]
+async fn a_node_that_omits_the_balance_owner_does_not_refuse_a_delivered_buy() {
+    let unowned = |amount: u64| {
+        json!({
+            "accountIndex": 1,
+            "mint": MINT,
+            "programId": SPL_TOKEN_PROGRAM_ID,
+            "uiTokenAmount": {"amount": amount.to_string(), "decimals": 6},
+        })
+    };
+    let rent = 2_039_280;
+    let outcome = balances(
+        vec![START, 0],
+        vec![START - 50_000_000 - 5_000 - rent, rent],
+        json!([]),
+        json!([unowned(950)]),
+    );
+    assert_eq!(
+        verdict(
+            &jupiter_build(Vec::new()),
+            Simulated::Ran(&outcome),
+            &buy("jupiter"),
+            HashMap::new()
+        )
+        .await,
+        Ok(()),
+        "the buy delivered its 950 units; only the node's balance owner is missing"
+    );
+}
+
+/// Rent a venue keeps, inside what the sale's slippage already concedes and
+/// with the full proceeds delivered, is not a conservation failure.
+#[tokio::test]
+async fn a_venue_rent_within_the_sale_slippage_allowance_passes_when_the_proceeds_arrive() {
+    let rent = 1_000_000;
+    let quote = wide_sale();
+    assert!(
+        rent > allowance_lamports(trade_value_lamports(&quote).unwrap(), &settings()),
+        "the rent must exceed the standard allowance to exercise the widened one"
+    );
+    let outcome = sale_run_losing(
+        rent,
+        vec![group(vec![create_account(
+            WALLET,
+            VENUE_ACCOUNT,
+            VENUE,
+            rent,
+        )])],
+    );
+    let verdict = verdict(
+        &jupiter_build(Vec::new()),
+        Simulated::Ran(&outcome),
+        &quote,
+        HashMap::new(),
+    )
+    .await;
+    assert_eq!(verdict, Ok(()));
+}
+
+/// The disabled setting lifts the cap on attributed costs and nothing else:
+/// the proceeds still reach the wallet, so the sale passes.
+#[tokio::test]
+async fn with_the_cost_comparison_off_a_large_venue_rent_passes_when_the_proceeds_arrive() {
+    let rent = 5_000_000;
+    let off = CostGuardSettings {
+        enabled: false,
+        ..settings()
+    };
+    let outcome = sale_run_losing(
+        rent,
+        vec![group(vec![create_account(
+            WALLET,
+            VENUE_ACCOUNT,
+            VENUE,
+            rent,
+        )])],
+    );
+    let verdict = decide(
+        "Jupiter",
+        &jupiter_build(Vec::new()),
+        Simulated::Ran(&outcome),
+        &wide_sale(),
+        &off,
+        None,
+        |_| async { Some(HashMap::new()) },
+    )
+    .await;
+    assert_eq!(verdict, Ok(()));
+}
+
+/// An outflow whose owner lookup went unanswered is still an explained
+/// outflow: conservation concedes it, so an unreadable node cannot block a
+/// sale whose proceeds arrive.
+#[tokio::test]
+async fn an_unanswered_owner_lookup_never_turns_a_sale_into_a_conservation_refusal() {
+    let charge = 2_500_000;
+    let quote = wide_sale();
+    let outcome = sale_run_losing(
+        charge,
+        vec![group(vec![transfer(WALLET, VENUE_ACCOUNT, charge)])],
+    );
+    let verdict = decide(
+        "Jupiter",
+        &jupiter_build(Vec::new()),
+        Simulated::Ran(&outcome),
+        &quote,
+        &settings(),
+        None,
+        |_| async { None },
+    )
+    .await;
+    assert_eq!(verdict, Ok(()));
+}
