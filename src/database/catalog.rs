@@ -389,6 +389,7 @@ pub const COPY_TRADING: StoreSpec = shared(
         keep("copy_activity", Ledger),
         keep("copy_decisions", Ledger),
         keep("copy_live_claims", Ledger),
+        keep("copy_paper_legacy_positions", Ledger),
         keep("copy_paper_positions", Ledger),
         keep("copy_position_links", Ledger),
         keep("copy_spend", Ledger),
