@@ -23,9 +23,10 @@
 
 use std::collections::HashMap;
 use std::sync::{Arc, LazyLock, Mutex};
-use std::time::Duration;
+use std::time::{Duration, Instant};
 
 use crate::chains::{adapter_for, runtime_for, ChainId, PerChain, TokenAccountFacts};
+use crate::errors::ErrorClass;
 use crate::logger::{self, LogTag};
 use crate::tokens::database::{database, require_database};
 
@@ -38,8 +39,8 @@ pub const MAX_DECIMALS: u8 = 18;
 /// Is this a decimals value we are willing to act on?
 ///
 /// Zero is rejected deliberately. It is a legal on-chain value, but every persistence path
-/// here already treats a stored `0` as "never resolved" (`get_from_db` and the startup
-/// preload both require `> 0`), so honouring it as real would make the same mint resolve
+/// here already treats a stored `0` as "never resolved" (every source read and the startup
+/// preload apply this rule), so honouring it as real would make the same mint resolve
 /// differently depending on which layer answered. A genuine 0-decimals mint still resolves
 /// correctly through the chain fallback.
 pub fn is_valid(decimals: u8) -> bool {
@@ -75,9 +76,73 @@ fn new_decimals_cache(_chain: ChainId) -> moka::sync::Cache<String, u8> {
 static FETCH_LOCKS: LazyLock<Mutex<HashMap<CacheKey, Arc<AsyncMutex<()>>>>> =
     LazyLock::new(|| Mutex::new(HashMap::new()));
 
-// Track mints with unresolved decimals to avoid repeated expensive lookups
-// Bounded moka cache per chain (max 50K entries, 24-hour TTL) to prevent unbounded growth
-static FAILED_CACHE: PerChain<moka::sync::Cache<String, ()>> = PerChain::new(new_marker_cache);
+/// Lifetime of a marker entry (permanent failures, warned mints).
+const MARKER_TTL: Duration = Duration::from_secs(86400);
+
+/// Lifetime of a transient failure marker: retry soon, but bounded so a rate-limited RPC is
+/// not hit again on every snapshot build.
+const TRANSIENT_FAILURE_TTL: Duration = Duration::from_secs(600);
+
+/// Why a mint's decimals could not be resolved.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+enum FailureKind {
+    /// The chain read failed in a way that may succeed on retry (RPC error, rate limit).
+    Transient,
+    /// The chain answered that the mint cannot be read (missing or malformed account).
+    Permanent,
+}
+
+fn failure_ttl(kind: FailureKind) -> Duration {
+    match kind {
+        FailureKind::Transient => TRANSIENT_FAILURE_TTL,
+        FailureKind::Permanent => MARKER_TTL,
+    }
+}
+
+/// Classify a failed chain read. Only a non-retryable chain error is permanent.
+fn failure_kind(chain_error: &crate::chains::Error) -> FailureKind {
+    if chain_error.is_retryable() {
+        FailureKind::Transient
+    } else {
+        FailureKind::Permanent
+    }
+}
+
+/// Per-entry expiry of the failure cache, driven by the recorded `FailureKind`.
+struct FailureExpiry;
+
+impl moka::Expiry<String, FailureKind> for FailureExpiry {
+    fn expire_after_create(
+        &self,
+        _mint: &String,
+        kind: &FailureKind,
+        _created_at: Instant,
+    ) -> Option<Duration> {
+        Some(failure_ttl(*kind))
+    }
+
+    fn expire_after_update(
+        &self,
+        _mint: &String,
+        kind: &FailureKind,
+        _updated_at: Instant,
+        _remaining: Option<Duration>,
+    ) -> Option<Duration> {
+        Some(failure_ttl(*kind))
+    }
+}
+
+// Track mints with unresolved decimals to avoid repeated expensive lookups.
+// Bounded moka cache per chain (max 50K entries); each entry expires by its failure kind.
+static FAILED_CACHE: PerChain<moka::sync::Cache<String, FailureKind>> =
+    PerChain::new(new_failure_cache);
+
+fn new_failure_cache(_chain: ChainId) -> moka::sync::Cache<String, FailureKind> {
+    moka::sync::Cache::builder()
+        .max_capacity(50_000)
+        .expire_after(FailureExpiry)
+        .build()
+}
 
 // Mints we have already warned about for invalid (>18) decimals, so the warning
 // fires once per mint instead of on every token upsert. Bounded + TTL'd, per chain.
@@ -87,7 +152,7 @@ static INVALID_DECIMALS_WARNED: PerChain<moka::sync::Cache<String, ()>> =
 fn new_marker_cache(_chain: ChainId) -> moka::sync::Cache<String, ()> {
     moka::sync::Cache::builder()
         .max_capacity(50_000)
-        .time_to_live(Duration::from_secs(86400)) // 24 hours
+        .time_to_live(MARKER_TTL)
         .build()
 }
 
@@ -184,6 +249,11 @@ pub async fn get(chain: ChainId, mint: &str) -> Option<u8> {
         return Some(d);
     }
 
+    let failure = match &chain_result {
+        Err(crate::tokens::Error::Chain(chain_error)) => failure_kind(chain_error),
+        _ => FailureKind::Transient,
+    };
+
     if let Err(err) = &chain_result {
         logger::warning(
             LogTag::Tokens,
@@ -224,7 +294,7 @@ pub async fn get(chain: ChainId, mint: &str) -> Option<u8> {
             mint
         ),
     );
-    mark_failure(chain, mint);
+    mark_failure(chain, mint, failure);
     drop(guard);
     release_lock_if_idle(chain, mint);
     None
@@ -307,9 +377,7 @@ async fn get_from_db(chain: ChainId, mint: &str) -> Option<u8> {
         .ok()?;
 
     match join_result {
-        Ok(Some(token)) => token
-            .decimals
-            .and_then(|value| (value > 0).then_some(value)),
+        Ok(Some(token)) => token.decimals.filter(|value| is_valid(*value)),
         Ok(None) => None,
         Err(_) => None,
     }
@@ -333,7 +401,14 @@ async fn get_from_server(chain: ChainId, mint: &str) -> Option<u8> {
     )
     .await?;
     let value = body.pointer(&format!("/decimals/{mint}"))?.as_u64()?;
-    (value <= u8::MAX as u64).then_some(value as u8)
+    valid_from_u64(value)
+}
+
+/// A decimals value from an untyped source, if it fits `u8` and passes `is_valid`.
+fn valid_from_u64(value: u64) -> Option<u8> {
+    u8::try_from(value)
+        .ok()
+        .filter(|decimals| is_valid(*decimals))
 }
 
 async fn get_from_rugcheck(chain: ChainId, mint: &str) -> Option<u8> {
@@ -345,9 +420,7 @@ async fn get_from_rugcheck(chain: ChainId, mint: &str) -> Option<u8> {
         .ok()?;
 
     match join_result {
-        Ok(Some(data)) => data
-            .token_decimals
-            .and_then(|value| (value > 0).then_some(value)),
+        Ok(Some(data)) => data.token_decimals.filter(|value| is_valid(*value)),
         Ok(None) => None,
         Err(_) => None,
     }
@@ -395,8 +468,8 @@ fn release_lock_if_idle(chain: ChainId, mint: &str) {
     }
 }
 
-fn mark_failure(chain: ChainId, mint: &str) {
-    FAILED_CACHE.get(chain).insert(mint.to_owned(), ());
+fn mark_failure(chain: ChainId, mint: &str, kind: FailureKind) {
+    FAILED_CACHE.get(chain).insert(mint.to_owned(), kind);
 }
 
 fn clear_failure(chain: ChainId, mint: &str) {
@@ -421,4 +494,58 @@ fn cache_authorities(chain: ChainId, mint: &str, facts: &TokenAccountFacts) {
             freeze_authority: facts.freeze_authority.clone(),
         },
     );
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    fn account_error(retryable: bool) -> crate::chains::Error {
+        if retryable {
+            crate::chains::Error::AccountRead {
+                chain: ChainId::Solana,
+                address: "Mint111".to_string(),
+                detail: "rate limited".to_string(),
+            }
+        } else {
+            crate::chains::Error::AccountNotFound {
+                chain: ChainId::Solana,
+                address: "Mint111".to_string(),
+            }
+        }
+    }
+
+    #[test]
+    fn retryable_chain_error_is_transient_with_short_ttl() {
+        let kind = failure_kind(&account_error(true));
+        assert_eq!(kind, FailureKind::Transient);
+        assert_eq!(failure_ttl(kind), TRANSIENT_FAILURE_TTL);
+        assert!(failure_ttl(kind) < MARKER_TTL);
+    }
+
+    #[test]
+    fn non_retryable_chain_error_is_permanent_for_a_day() {
+        let kind = failure_kind(&account_error(false));
+        assert_eq!(kind, FailureKind::Permanent);
+        assert_eq!(failure_ttl(kind), Duration::from_secs(86400));
+    }
+
+    #[test]
+    fn invalid_account_is_permanent() {
+        let error = crate::chains::Error::InvalidAccount {
+            chain: ChainId::Solana,
+            value: "not-a-mint".to_string(),
+        };
+        assert_eq!(failure_kind(&error), FailureKind::Permanent);
+    }
+
+    #[test]
+    fn untyped_source_values_follow_the_shared_rule() {
+        assert_eq!(valid_from_u64(6), Some(6));
+        assert_eq!(valid_from_u64(18), Some(18));
+        assert_eq!(valid_from_u64(0), None);
+        assert_eq!(valid_from_u64(19), None);
+        assert_eq!(valid_from_u64(186), None);
+        assert_eq!(valid_from_u64(256), None);
+    }
 }

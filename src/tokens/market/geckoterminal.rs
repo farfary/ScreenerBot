@@ -164,8 +164,10 @@ pub async fn fetch_geckoterminal_data_batch(
             );
         }
 
-        // CRITICAL: Update token metadata (symbol/name) from GeckoTerminal data
-        // This fixes race condition where Pool Service discovers token first without metadata
+        // CRITICAL: Update token metadata (symbol/name/decimals) from GeckoTerminal data
+        // This fixes race condition where Pool Service discovers token first without metadata.
+        // Decimals are written only while none is known: an upsert replaces the stored value,
+        // and a chain-resolved value must never be overwritten by an API value.
         let symbol = if !attrs.symbol.is_empty() {
             Some(attrs.symbol.as_str())
         } else {
@@ -177,8 +179,13 @@ pub async fn fetch_geckoterminal_data_batch(
             None
         };
 
-        if symbol.is_some() || name.is_some() {
-            if let Err(e) = db.upsert_token(mint, symbol, name, None) {
+        let decimals = attrs
+            .decimals
+            .filter(|d| crate::tokens::decimals::is_valid(*d))
+            .filter(|_| crate::tokens::decimals::get_cached(db.chain(), mint).is_none());
+
+        if symbol.is_some() || name.is_some() || decimals.is_some() {
+            if let Err(e) = db.upsert_token(mint, symbol, name, decimals) {
                 logger::error(
                     LogTag::Tokens,
                     &format!(

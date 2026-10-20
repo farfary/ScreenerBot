@@ -63,14 +63,6 @@
   color: var(--link-color);
 }
 
-.explorer-nav-rate {
-  font-size: 0.65rem;
-  color: var(--error-color);
-  font-family: var(--font-data);
-  margin-inline-end: 4px;
-  opacity: 0.8;
-}
-
 /* Tree container - only this scrolls within sidebar */
 .explorer-tree {
   flex: 1;

@@ -542,7 +542,6 @@ export function createFilteringRenderers({ state, $: _$, Utils, requestManager: 
     const data = state.analytics;
 
     const breakdownTotal = data.breakdown_total || 0;
-    const rejectionRate = data.rejection_rate ? shareText(data.rejection_rate) : "";
 
     // Compact Tree View
     const treeHtml = `
@@ -558,7 +557,6 @@ export function createFilteringRenderers({ state, $: _$, Utils, requestManager: 
         <div class="explorer-nav-overview ${!window.filteringPage.currentReason ? "active" : ""}" onclick="window.filteringPage.selectSummary()">
           <i class="icon-chart-bar tree-icon"></i>
           <span class="tree-label">${Utils.escapeHtml(I18n.t("filtering-explorer-overview"))}</span>
-          ${rejectionRate ? `<span class="explorer-nav-rate">${rejectionRate}</span>` : ""}
           <span class="tree-count">${Utils.formatNumber(breakdownTotal, 0)}</span>
         </div>
 
