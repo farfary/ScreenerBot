@@ -20,7 +20,7 @@ use super::types::{
 };
 
 // Snapshot is considered stale after FILTER_CACHE_STALE_SECS (180s = 3 min). Until
-// then a refresh request returns the existing snapshot instead of rebuilding it.
+// then an `IfStale` build request returns the existing snapshot instead of rebuilding it.
 pub(super) const FILTER_CACHE_STALE_SECS: u64 = 180;
 
 pub(super) fn collect_entries<'a>(
@@ -347,4 +347,23 @@ fn snapshot_age_secs(snapshot: &FilteringSnapshot) -> u64 {
 
 pub(super) fn is_snapshot_stale(snapshot: &FilteringSnapshot) -> bool {
     snapshot_age_secs(snapshot) > FILTER_CACHE_STALE_SECS
+}
+
+/// Why a build was requested, which decides whether a fresh snapshot may stand.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub(super) enum BuildMode {
+    /// Serve the existing snapshot until it is stale; background and first-load callers.
+    IfStale,
+    /// Rebuild with the current config whatever the age of the snapshot; the explicit
+    /// refresh after a config change or from the dashboard.
+    Forced,
+}
+
+/// Whether a build requested in `mode` must run, given the snapshot found once the build
+/// holds the refresh lock.
+pub(super) fn needs_build(existing: Option<&FilteringSnapshot>, mode: BuildMode) -> bool {
+    match mode {
+        BuildMode::Forced => true,
+        BuildMode::IfStale => existing.map_or(true, is_snapshot_stale),
+    }
 }

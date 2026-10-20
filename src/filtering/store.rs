@@ -19,8 +19,8 @@ use crate::tokens::types::Token;
 
 use super::engine::compute_snapshot;
 use super::store_helpers::{
-    apply_filters, build_stats, collect_entries, is_snapshot_stale, overlay_pool_price_data,
-    sort_tokens,
+    apply_filters, build_stats, collect_entries, is_snapshot_stale, needs_build,
+    overlay_pool_price_data, sort_tokens, BuildMode,
 };
 use super::types::{
     BlacklistReasonInfo, FilteringQuery, FilteringQueryResult, FilteringSnapshot,
@@ -80,7 +80,12 @@ impl FilteringStore {
 
         // No snapshot exists - must wait for first refresh, but not indefinitely. The
         // timeout abandons the wait only: the build runs on and installs its snapshot.
-        match tokio::time::timeout(Duration::from_secs(30), self.start_build()).await {
+        match tokio::time::timeout(
+            Duration::from_secs(30),
+            self.start_build(BuildMode::IfStale),
+        )
+        .await
+        {
             Ok(joined) => joined.map_err(InternalError::from)?,
             Err(_) => Err(Error::Internal(InternalError::Timeout {
                 message: "filtering snapshot refresh timed out after 30 seconds".to_owned(),
@@ -121,15 +126,18 @@ impl FilteringStore {
         if self.refresh_lock.try_lock().is_err() {
             return;
         }
-        drop(self.start_build());
+        drop(self.start_build(BuildMode::IfStale));
     }
 
     /// Run a build on its own task, so no caller's timeout or drop can cancel it between
     /// its database write and its snapshot swap. Builds serialize on `refresh_lock`.
-    fn start_build(self: &Arc<Self>) -> tokio::task::JoinHandle<Result<Arc<FilteringSnapshot>>> {
+    fn start_build(
+        self: &Arc<Self>,
+        mode: BuildMode,
+    ) -> tokio::task::JoinHandle<Result<Arc<FilteringSnapshot>>> {
         let store = Arc::clone(self);
         tokio::spawn(async move {
-            let result = store.try_refresh().await;
+            let result = store.try_refresh(mode).await;
             if let Err(err) = &result {
                 logger::warning(LogTag::Filtering, &format!("Refresh failed: {err}"));
             }
@@ -137,15 +145,17 @@ impl FilteringStore {
         })
     }
 
-    async fn try_refresh(&self) -> Result<Arc<FilteringSnapshot>> {
-        // Acquire refresh lock to prevent concurrent refreshes
+    /// Build a snapshot once the refresh lock is held. The snapshot is re-read under the
+    /// lock, so an `IfStale` build that waited behind another build returns that build's
+    /// result, while a `Forced` build always runs afterwards: the build it waited behind
+    /// may have read the config before the change that requested this one.
+    async fn try_refresh(&self, mode: BuildMode) -> Result<Arc<FilteringSnapshot>> {
         let _guard = self.refresh_lock.lock().await;
 
-        // Check again if snapshot is still stale (another refresh might have completed)
         let existing = self.snapshot.read().await.clone();
-        if let Some(ref snapshot) = existing {
-            if !is_snapshot_stale(snapshot) {
-                return Ok(snapshot.clone());
+        if let Some(snapshot) = existing {
+            if !needs_build(Some(&snapshot), mode) {
+                return Ok(snapshot);
             }
         }
 
@@ -185,8 +195,10 @@ impl FilteringStore {
         Ok(snapshot)
     }
 
+    /// Rebuild the snapshot with the current config, whatever the age of the cached one.
+    /// Builds serialize on `refresh_lock`; the call returns once the new snapshot is installed.
     pub async fn refresh(self: &Arc<Self>) -> Result<()> {
-        self.start_build()
+        self.start_build(BuildMode::Forced)
             .await
             .map_err(InternalError::from)?
             .map(|_| ())

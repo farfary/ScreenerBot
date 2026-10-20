@@ -13,7 +13,9 @@ use std::sync::Arc;
 
 use chrono::{Duration, Utc};
 
-use super::store_helpers::{apply_filters, collect_entries, is_snapshot_stale, sort_tokens};
+use super::store_helpers::{
+    apply_filters, collect_entries, is_snapshot_stale, needs_build, sort_tokens, BuildMode,
+};
 use super::types::{
     FilteringQuery, FilteringSnapshot, FilteringView, SortDirection, TokenEntry, TokenSortKey,
 };
@@ -866,6 +868,29 @@ fn a_snapshot_timestamped_in_the_future_is_not_stale() {
     snapshot.updated_at = Utc::now() + Duration::hours(1);
 
     assert!(!is_snapshot_stale(&snapshot));
+}
+
+#[test]
+fn a_forced_build_runs_even_on_a_fresh_snapshot() {
+    let fresh = snapshot_of(Vec::new());
+
+    assert!(needs_build(Some(&fresh), BuildMode::Forced));
+    assert!(!needs_build(Some(&fresh), BuildMode::IfStale));
+}
+
+#[test]
+fn both_modes_build_when_there_is_no_snapshot() {
+    assert!(needs_build(None, BuildMode::Forced));
+    assert!(needs_build(None, BuildMode::IfStale));
+}
+
+#[test]
+fn both_modes_build_on_a_stale_snapshot() {
+    let mut stale = snapshot_of(Vec::new());
+    stale.updated_at = Utc::now() - Duration::seconds(240);
+
+    assert!(needs_build(Some(&stale), BuildMode::Forced));
+    assert!(needs_build(Some(&stale), BuildMode::IfStale));
 }
 
 // ============================================================================
