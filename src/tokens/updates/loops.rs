@@ -347,7 +347,7 @@ async fn update_uninitialized_tokens(db: &Arc<TokenDatabase>, coordinator: &Rate
             Ok(results) => {
                 for result in results {
                     if result.is_total_failure() {
-                        handle_market_failure(db, &result.mint, &result.failures).await;
+                        handle_market_failure(db, &result).await;
                     } else if result.is_partial_failure() {
                         logger::warning(
                             LogTag::Tokens,
@@ -424,7 +424,7 @@ async fn update_open_position_tokens(db: &Arc<TokenDatabase>, coordinator: &Rate
                             LogTag::Tokens,
                             &format!("Total failure for {}: {:?}", result.mint, result.failures),
                         );
-                        handle_market_failure(db, &result.mint, &result.failures).await;
+                        handle_market_failure(db, &result).await;
                     } else if result.is_partial_failure() {
                         logger::warning(
                             LogTag::Tokens,
@@ -503,7 +503,7 @@ async fn update_pool_tracked_tokens(db: &Arc<TokenDatabase>, coordinator: &RateL
             Ok(results) => {
                 for result in results {
                     if result.is_total_failure() {
-                        handle_market_failure(db, &result.mint, &result.failures).await;
+                        handle_market_failure(db, &result).await;
                     } else if result.is_partial_failure() {
                         logger::warning(
                             LogTag::Tokens,
@@ -609,7 +609,7 @@ async fn update_filter_passed_tokens(db: &Arc<TokenDatabase>, coordinator: &Rate
             Ok(results) => {
                 for result in results {
                     if result.is_total_failure() {
-                        handle_market_failure(db, &result.mint, &result.failures).await;
+                        handle_market_failure(db, &result).await;
                     } else if result.is_partial_failure() {
                         logger::warning(
                             LogTag::Tokens,
@@ -672,7 +672,7 @@ async fn update_background_tokens(db: &Arc<TokenDatabase>, coordinator: &RateLim
         Ok(results) => {
             for result in results {
                 if result.is_total_failure() {
-                    handle_market_failure(db, &result.mint, &result.failures).await;
+                    handle_market_failure(db, &result).await;
                 } else if result.is_partial_failure() {
                     logger::warning(
                         LogTag::Tokens,

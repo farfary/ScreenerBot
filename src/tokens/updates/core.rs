@@ -4,7 +4,7 @@
 //! Token update core — main update loop that refreshes token data from multiple sources.
 
 use super::blocking::blocking_db;
-use super::helpers::{clear_in_flight, try_mark_in_flight};
+use super::helpers::{clear_in_flight, try_mark_in_flight, MarketAnswer, MarketFetchFailure};
 use super::rate_limiter::RateLimitCoordinator;
 use crate::chains::{adapter_for, ChainId};
 use crate::events::{record_token_event, Severity};
@@ -266,6 +266,7 @@ pub async fn update_token(
             mint: mint.to_string(),
             successes: Vec::new(),
             failures: Vec::new(),
+            market_failure: None,
         });
     }
 
@@ -273,17 +274,24 @@ pub async fn update_token(
     let mut failures = Vec::new();
 
     // Update DexScreener market data only
-    match coordinator.acquire_dexscreener_batch().await {
-        Ok(permit) => match dexscreener::fetch_dexscreener_data(mint, db).await {
-            Ok(Some(_)) => {
-                permit.forget();
-                successes.push("DexScreener".to_owned());
+    let dex_answer = match coordinator.acquire_dexscreener_batch().await {
+        Ok(permit) => {
+            let result = dexscreener::fetch_dexscreener_data(mint, db).await;
+            match &result {
+                Ok(Some(_)) => {
+                    permit.forget();
+                    successes.push("DexScreener".to_owned());
+                }
+                Ok(None) => failures.push("DexScreener: Token not listed".to_owned()),
+                Err(e) => failures.push(format!("DexScreener: {e}")),
             }
-            Ok(None) => failures.push("DexScreener: Token not listed".to_owned()),
-            Err(e) => failures.push(format!("DexScreener: {e}")),
-        },
-        Err(e) => failures.push(format!("DexScreener rate limit: {e}")),
-    }
+            MarketAnswer::of(&result)
+        }
+        Err(e) => {
+            failures.push(format!("DexScreener rate limit: {e}"));
+            MarketAnswer::Failed
+        }
+    };
 
     // Update tracking timestamp for market data
     let market_data_updated = !successes.is_empty();
@@ -337,6 +345,7 @@ pub async fn update_token(
         mint: mint.to_string(),
         successes,
         failures,
+        market_failure: MarketFetchFailure::from_answers(&[dex_answer]),
     })
 }
 
@@ -346,6 +355,8 @@ pub struct UpdateResult {
     pub mint: String,
     pub successes: Vec<String>,
     pub failures: Vec<String>,
+    /// How the market-data fetch failed; `None` when it succeeded or was not attempted.
+    pub market_failure: Option<MarketFetchFailure>,
 }
 
 impl UpdateResult {
@@ -445,13 +456,22 @@ pub async fn update_tokens_batch(
         let mut failures = Vec::new();
 
         // DexScreener result from batch
-        if let Some(Some(_)) = dex_results.get(mint) {
-            successes.push("DexScreener".to_owned());
-        } else if dex_results.contains_key(mint) {
-            failures.push("DexScreener: Token not listed".to_owned());
-        } else if let Some(err) = &dex_global_err {
-            failures.push(err.clone());
-        }
+        let dex_answer = match dex_results.get(mint) {
+            Some(Some(_)) => {
+                successes.push("DexScreener".to_owned());
+                MarketAnswer::Listed
+            }
+            Some(None) => {
+                failures.push("DexScreener: Token not listed".to_owned());
+                MarketAnswer::NotListed
+            }
+            None => {
+                if let Some(err) = &dex_global_err {
+                    failures.push(err.clone());
+                }
+                MarketAnswer::Failed
+            }
+        };
 
         // If no results at all, mark as failure
         if successes.is_empty() && failures.is_empty() {
@@ -469,6 +489,7 @@ pub async fn update_tokens_batch(
             mint: mint.clone(),
             successes,
             failures,
+            market_failure: MarketFetchFailure::from_answers(&[dex_answer]),
         });
     }
 
@@ -775,6 +796,11 @@ pub async fn force_update_token(
         }
     );
 
+    let market_failure = MarketFetchFailure::from_answers(&[
+        MarketAnswer::of(&dex_result),
+        MarketAnswer::of(&gecko_result),
+    ]);
+
     // Process DexScreener result
     match dex_result {
         Ok(Some(_)) => successes.push("DexScreener".to_owned()),
@@ -865,5 +891,6 @@ pub async fn force_update_token(
         mint: mint.to_string(),
         successes,
         failures,
+        market_failure,
     })
 }

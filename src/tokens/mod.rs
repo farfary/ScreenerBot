@@ -127,7 +127,7 @@ pub use decimals::{
 };
 
 // Re-export updates API
-pub use updates::UpdateResult;
+pub use updates::{MarketFetchFailure, UpdateResult};
 
 // Re-export search API
 pub use search::{search_tokens, SearchResults, TokenSearchResult};

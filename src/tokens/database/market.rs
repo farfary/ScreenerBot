@@ -585,7 +585,8 @@ impl TokenDatabase {
         })
     }
 
-    /// Record a market data fetch error for tracking and retry logic
+    /// Record a market data fetch error for tracking and retry logic.
+    /// Returns the number of consecutive errors of `error_type` recorded for the token.
     pub fn record_market_error(
         &self,
         mint: &str,
@@ -596,12 +597,14 @@ impl TokenDatabase {
 
         let now = Utc::now().timestamp();
 
-        // Update error tracking with type and increment count
+        // The count is the run of consecutive errors of this type: an error of a
+        // different type restarts it, so temporary failures never advance the
+        // "not listed" count that marks a token permanent.
         conn.execute(
             "UPDATE update_tracking SET 
                 last_error = ?1, 
                 last_error_at = ?2, 
-                market_error_count = market_error_count + 1,
+                market_error_count = CASE WHEN market_error_type = ?3 THEN market_error_count + 1 ELSE 1 END,
                 market_error_type = ?3
              WHERE chain_id = ?4 AND mint = ?5",
             params![message, now, error_type, self.chain_id(), mint],

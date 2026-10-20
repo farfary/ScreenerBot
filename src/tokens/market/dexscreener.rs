@@ -16,6 +16,7 @@ use crate::logger::{self, LogTag};
 use crate::tokens::database::TokenDatabase;
 use crate::tokens::store::{self, CacheMetrics};
 use crate::tokens::types::{DexScreenerData, TokenResult};
+use crate::tokens::Error;
 use chrono::{DateTime, Utc};
 use std::collections::HashMap;
 
@@ -114,12 +115,17 @@ fn convert_pool_to_data(pool: &DexScreenerPool, is_native_pair: bool) -> DexScre
 /// # Returns
 /// HashMap mapping mint -> Option<DexScreenerData>
 /// - Some(data) if token has market data
-/// - None if token not listed on any DEX
+/// - None if the API answered and listed no pair for the token
+///
+/// # Errors
+/// `Error::Api` when the endpoint is unhealthy (no request is made) or the batch
+/// request fails. No mint is reported as `None` in that case, so a failure can
+/// never be mistaken for "not listed".
 pub async fn fetch_dexscreener_data_batch(
     mints: &[String],
     db: &TokenDatabase,
 ) -> TokenResult<HashMap<String, Option<DexScreenerData>>> {
-    // Check connectivity before API call - fall back to cache/DB only when the
+    // Check connectivity before API call - skip the request only when the
     // endpoint is EXPLICITLY Unhealthy. An `Unknown` state (the health monitor
     // hasn't completed its first probe yet — every endpoint starts Unknown at
     // boot) must NOT suppress fetches: otherwise, right after the app launches,
@@ -134,7 +140,7 @@ pub async fn fetch_dexscreener_data_batch(
     if !connectivity_ok {
         logger::debug(
             LogTag::Tokens,
-            "DexScreener endpoint unhealthy - using cached/DB data only",
+            "DexScreener endpoint unhealthy - only cached/DB data can be served",
         );
     }
 
@@ -185,48 +191,28 @@ pub async fn fetch_dexscreener_data_batch(
         return Ok(results);
     }
 
-    // Skip API fetch if connectivity is down - return what we have from cache/DB
+    // Connectivity is down: the API is not asked, so nothing is known about these
+    // tokens. This is a failure, never a "not listed" answer.
     if !connectivity_ok {
-        logger::debug(
-            LogTag::Tokens,
-            &format!(
-                "Skipping DexScreener API fetch for {} tokens - connectivity issue",
+        return Err(Error::Api {
+            provider: "DexScreener".to_owned(),
+            message: format!(
+                "endpoint unhealthy, batch of {} tokens not requested",
                 to_fetch.len()
             ),
-        );
-        // Return None for tokens we couldn't fetch
-        for mint in &to_fetch {
-            results.insert(mint.clone(), None);
-        }
-        return Ok(results);
+        });
     }
 
     // 3. Fetch from batch API endpoint
     let api_manager = crate::apis::manager::get_api_manager();
-    let pools = match api_manager
+    let pools = api_manager
         .dexscreener
         .fetch_token_batch(&to_fetch, None)
         .await
-    {
-        Ok(pools) => pools,
-        Err(e) => {
-            // Log the batch API failure but don't fail the entire request
-            // Return what we have from cache/DB
-            logger::warning(
-                LogTag::Tokens,
-                &format!(
-                    "[TOKENS][DEXSCREENER] Batch API failed for {} tokens: {:?}",
-                    to_fetch.len(),
-                    e
-                ),
-            );
-            // Mark all unfetched tokens as None
-            for mint in &to_fetch {
-                results.insert(mint.clone(), None);
-            }
-            return Ok(results);
-        }
-    };
+        .map_err(|e| Error::Api {
+            provider: "DexScreener".to_owned(),
+            message: format!("batch of {} tokens failed: {:?}", to_fetch.len(), e),
+        })?;
 
     // Process pools - DexScreener batch returns ONE best pool per token
     for pool in pools {
@@ -312,7 +298,7 @@ pub async fn fetch_dexscreener_data_batch(
 /// * `db` - Database instance
 ///
 /// # Returns
-/// DexScreenerData if found, None if token not listed
+/// DexScreenerData if found, None if token not listed; `Err` when the lookup failed
 pub async fn fetch_dexscreener_data(
     mint: &str,
     db: &TokenDatabase,
