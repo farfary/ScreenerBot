@@ -54,7 +54,7 @@ impl Service for EventsService {
         }
 
         // Initialize events database and system
-        crate::events::init().await.map_err(|e| {
+        crate::events::ensure_initialized().await.map_err(|e| {
             crate::Error::Service(crate::errors::ServiceError::Initialize {
                 service: "events".to_owned(),
                 message: format!("Failed to initialize events system: {e}"),
@@ -68,17 +68,6 @@ impl Service for EventsService {
         shutdown: Arc<Notify>,
         monitor: tokio_metrics::TaskMonitor,
     ) -> crate::Result<Vec<JoinHandle<()>>> {
-        // If events are disabled, just wait for shutdown
-        if !is_events_enabled_in_config() {
-            let handle = tokio::spawn(monitor.instrument(async move {
-                shutdown.notified().await;
-            }));
-            return Ok(vec![handle]);
-        }
-
-        // Start maintenance task
-        crate::events::start_maintenance_task().await;
-
         // Wait for shutdown signal
         let handle = tokio::spawn(monitor.instrument(async move {
             shutdown.notified().await;
@@ -93,11 +82,13 @@ impl Service for EventsService {
             return ServiceHealth::Healthy;
         }
 
-        // Check if events DB is initialized
-        if crate::events::EVENTS_DB.get().is_some() {
-            ServiceHealth::Healthy
-        } else {
-            ServiceHealth::Unhealthy(UiText::new(ids::SERVICES_HEALTH_EVENTS_DB_UNINITIALIZED))
+        // Events switched on while the app runs have no store yet: this check
+        // starts it, and retries a start that failed earlier.
+        match crate::events::ensure_initialized().await {
+            Ok(()) => ServiceHealth::Healthy,
+            Err(_) => {
+                ServiceHealth::Unhealthy(UiText::new(ids::SERVICES_HEALTH_EVENTS_DB_UNINITIALIZED))
+            }
         }
     }
 }

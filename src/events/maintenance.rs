@@ -53,19 +53,11 @@ pub(crate) fn is_category_enabled(category: &EventCategory) -> bool {
 // MAINTENANCE FUNCTIONS
 // =============================================================================
 
-/// Start background maintenance task for events
-/// Cleans up old events and performs database optimization
-pub async fn start_maintenance_task() {
-    // Only start maintenance if events are enabled
-    if !is_events_enabled() {
-        logger::info(
-            LogTag::System,
-            "Events system disabled - skipping maintenance task",
-        );
-        return;
-    }
-
-    let mut cleanup_interval = interval(Duration::from_secs(6 * 60 * 60)); // Every 6 hours
+/// Start the background maintenance task for events: cleans up old events and
+/// reports database stats every 6 hours. Called once, by `events::init`; each
+/// tick checks the setting again, so it is harmless while events are off.
+pub(super) fn start_maintenance_task() {
+    let mut cleanup_interval = interval(Duration::from_secs(6 * 60 * 60));
 
     tokio::spawn(async move {
         loop {

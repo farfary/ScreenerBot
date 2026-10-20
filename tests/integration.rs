@@ -28,6 +28,7 @@ mod dashboard_launch_readiness;
 mod dashboard_startup_perf;
 mod direct_swaps_mainnet;
 mod direct_swaps_offline;
+mod events_runtime_enable;
 mod filtering_decision_snapshot;
 mod filtering_perf;
 mod filtering_pipeline;

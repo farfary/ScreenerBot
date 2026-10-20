@@ -64,7 +64,7 @@ mod producer_text_tests;
 use crate::logger::{self, LogTag};
 use db::EventsDatabase;
 pub use error::{Error, Result};
-pub use maintenance::{get_events_summary, search_events, start_maintenance_task};
+pub use maintenance::{get_events_summary, search_events};
 pub use recorders::{
     record_api_event, record_connectivity_event, record_filtering_event, record_ohlcv_event,
     record_pool_event, record_position_event, record_position_event_flexible, record_rpc_event,
@@ -72,6 +72,7 @@ pub use recorders::{
     record_token_event, record_trader_event, record_transaction_event, record_wallet_event,
 };
 use std::collections::{HashMap, VecDeque};
+use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::Arc;
 use std::sync::{LazyLock, OnceLock};
 use std::time::Duration;
@@ -94,6 +95,11 @@ struct EventWriter {
 /// Global event writer instance
 static EVENT_WRITER: LazyLock<Arc<Mutex<Option<EventWriter>>>> =
     LazyLock::new(|| Arc::new(Mutex::new(None)));
+
+/// Set once an initialization attempt failed and was reported; the next
+/// successful attempt clears it. Recording stops retrying while it is set, so
+/// one failure is one log line and not one per event.
+static INIT_FAILED: AtomicBool = AtomicBool::new(false);
 
 /// Global database handle
 pub static EVENTS_DB: OnceLock<Arc<EventsDatabase>> = OnceLock::new();
@@ -123,8 +129,11 @@ static EVENTS_CACHE: LazyLock<Arc<RwLock<VecDeque<Event>>>> =
 // PUBLIC API
 // =============================================================================
 
-/// Initialize the events system
-/// Must be called once at application startup
+/// Initialize the events system.
+///
+/// Idempotent: the first call opens the store, starts the writer and the
+/// maintenance task; later calls return immediately. Boot and a runtime switch
+/// of `events.enabled` share this one path.
 pub async fn init() -> Result<()> {
     let mut writer_guard = EVENT_WRITER.lock().await;
 
@@ -155,31 +164,75 @@ pub async fn init() -> Result<()> {
         _handle: handle,
     });
 
+    maintenance::start_maintenance_task();
+
     logger::info(LogTag::System, "Events system initialized successfully");
     Ok(())
+}
+
+/// [`init`] with the failure reported once: the first failure after a success
+/// (or after boot) is logged, repeats stay silent until an attempt succeeds.
+/// Callers that must make the store exist (the record path, the service health
+/// check) go through this entry point.
+pub async fn ensure_initialized() -> Result<()> {
+    match init().await {
+        Ok(()) => {
+            INIT_FAILED.store(false, Ordering::Relaxed);
+            Ok(())
+        }
+        Err(error) => {
+            if !INIT_FAILED.swap(true, Ordering::Relaxed) {
+                logger::error(
+                    LogTag::System,
+                    &format!("Events system could not start: {error}"),
+                );
+            }
+            Err(error)
+        }
+    }
+}
+
+/// The writer's channel, cloned out so no caller holds the writer lock while
+/// sending or while initializing.
+async fn writer_sender() -> Option<mpsc::Sender<Event>> {
+    EVENT_WRITER
+        .lock()
+        .await
+        .as_ref()
+        .map(|writer| writer.sender.clone())
 }
 
 /// Record an event asynchronously
 /// Non-blocking: events are queued and written by background task
 /// Returns Ok(()) silently if events system is disabled in config
+///
+/// Enabled in settings but not started yet (switched on while the app runs):
+/// the store is initialized here, once, then the event is queued. After a
+/// failed initialization the call returns [`Error::NotInitialized`] without
+/// retrying; [`ensure_initialized`] from the service health check retries.
 pub async fn record(event: Event) -> Result<()> {
     // Silently skip if events system is disabled
     if !crate::config::with_config(|c| c.events.enabled) {
         return Ok(());
     }
 
-    let writer_guard = EVENT_WRITER.lock().await;
+    let sender = match writer_sender().await {
+        Some(sender) => sender,
+        None => {
+            if INIT_FAILED.load(Ordering::Relaxed) {
+                return Err(Error::NotInitialized);
+            }
+            ensure_initialized().await?;
+            writer_sender().await.ok_or(Error::NotInitialized)?
+        }
+    };
 
-    if let Some(ref writer) = *writer_guard {
-        writer.sender.send(event).await.map_err(|_| {
-            Error::Internal(crate::errors::InternalError::InvariantViolation {
-                message: "event channel closed".to_owned(),
-            })
-        })?;
-        Ok(())
-    } else {
-        Err(Error::NotInitialized)
-    }
+    sender.send(event).await.map_err(|_| {
+        Error::Internal(crate::errors::InternalError::InvariantViolation {
+            message: "event channel closed".to_owned(),
+        })
+    })?;
+    Ok(())
 }
 
 /// Record an event with automatic error handling
@@ -191,8 +244,11 @@ pub async fn record_safe(event: Event) {
         return;
     }
 
-    if let Err(e) = record(event).await {
-        logger::warning(LogTag::System, &format!("Failed to record event: {e}"));
+    match record(event).await {
+        Ok(()) => {}
+        // Initialization failure is reported once by `ensure_initialized`.
+        Err(Error::NotInitialized) => {}
+        Err(e) => logger::warning(LogTag::System, &format!("Failed to record event: {e}")),
     }
 }
 
