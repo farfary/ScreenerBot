@@ -1,7 +1,8 @@
 {
   "snapshot_state": "ready",
   "total_tokens": 18452,
-  "total_rejected": 7247,
+  "total_rejected": 17216,
+  "breakdown_total": 7247,
   "total_passed": 1236,
   "pass_rate": 6.7,
   "rejection_rate": 93.3,

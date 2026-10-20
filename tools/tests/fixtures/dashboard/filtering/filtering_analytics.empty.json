@@ -2,6 +2,7 @@
   "snapshot_state": "ready",
   "total_tokens": 0,
   "total_rejected": 0,
+  "breakdown_total": 0,
   "total_passed": 0,
   "pass_rate": 0,
   "rejection_rate": 100,

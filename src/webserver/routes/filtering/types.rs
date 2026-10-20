@@ -92,15 +92,18 @@ pub struct DataQualityMetric {
 
 #[derive(Debug, Serialize)]
 pub struct AnalyticsResponse {
-    // Overview. The rejection breakdowns below are database-backed and always real; the
-    // corpus-wide totals and the rates derived from them come from the filtering snapshot
-    // and are NULL until it exists (see `SnapshotState`).
+    // Overview. The headline figures always describe the current filtering snapshot, whatever
+    // time range is selected, and are NULL until it exists (see `SnapshotState`). The
+    // rejection breakdowns below are database-backed and always real; `breakdown_total` is
+    // the sum of their counts: one per rejected token in the current-state view, one per
+    // rejection check in a selected period.
     pub snapshot_state: SnapshotState,
     pub total_tokens: Option<usize>,
-    pub total_rejected: i64,
+    pub total_rejected: Option<usize>,
     pub total_passed: Option<usize>,
     pub pass_rate: Option<f64>,
     pub rejection_rate: Option<f64>,
+    pub breakdown_total: i64,
 
     // Category breakdown
     pub by_category: Vec<CategoryBreakdown>,

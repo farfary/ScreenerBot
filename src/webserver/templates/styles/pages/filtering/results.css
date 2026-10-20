@@ -53,6 +53,12 @@
   color: var(--error-color);
 }
 
+/* Scope of the breakdowns under the headline cards. */
+.breakdown-note {
+  color: var(--text-secondary);
+  font-size: 0.8rem;
+}
+
 /* Charts Grid */
 .charts-grid {
   display: grid;

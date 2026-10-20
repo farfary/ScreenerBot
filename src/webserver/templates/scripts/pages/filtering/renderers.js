@@ -173,9 +173,9 @@ export function createFilteringRenderers({ state, $: _$, Utils, requestManager: 
           <span class="metric-detail">${Utils.escapeHtml(cacheDetail)}</span>
         </div>
         <div class="metric-card">
-          <span class="metric-label">${Utils.escapeHtml(I18n.t("filtering-status-priced"))}</span>
+          <span class="metric-label">${Utils.escapeHtml(I18n.t("filtering-status-pool-priced"))}</span>
           <span class="metric-value">${Utils.formatNumber(with_pool_price, 0)}</span>
-          <span class="metric-detail">${Utils.escapeHtml(I18n.t("filtering-status-priced-detail", { share: shareText(priceRate) }))}</span>
+          <span class="metric-detail">${Utils.escapeHtml(I18n.t("filtering-status-pool-priced-detail", { share: shareText(priceRate) }))}</span>
         </div>
         <div class="metric-card">
           <span class="metric-label">${Utils.escapeHtml(I18n.t("filtering-status-passed"))}</span>
@@ -325,6 +325,12 @@ export function createFilteringRenderers({ state, $: _$, Utils, requestManager: 
     </div>
   `;
 
+    // The headline cards always describe the current snapshot; the breakdowns below count
+    // rejection checks in the selected period, or one rejection per token in the current view.
+    const breakdownNoteHtml = `
+    <div class="breakdown-note">${Utils.escapeHtml(data.time_range ? I18n.t("filtering-analytics-breakdown-note-range") : I18n.t("filtering-analytics-breakdown-note-current"))}</div>
+  `;
+
     // Charts Section
     const chartsHtml = `
     <div class="charts-grid">
@@ -461,6 +467,7 @@ export function createFilteringRenderers({ state, $: _$, Utils, requestManager: 
       <div class="analytics-view">
         ${headerHtml}
         ${headlineHtml}
+        ${breakdownNoteHtml}
         ${chartsHtml}
         ${bottomHtml}
       </div>
@@ -534,7 +541,7 @@ export function createFilteringRenderers({ state, $: _$, Utils, requestManager: 
 
     const data = state.analytics;
 
-    const totalRejected = data.total_rejected || 0;
+    const breakdownTotal = data.breakdown_total || 0;
     const rejectionRate = data.rejection_rate ? shareText(data.rejection_rate) : "";
 
     // Compact Tree View
@@ -552,7 +559,7 @@ export function createFilteringRenderers({ state, $: _$, Utils, requestManager: 
           <i class="icon-chart-bar tree-icon"></i>
           <span class="tree-label">${Utils.escapeHtml(I18n.t("filtering-explorer-overview"))}</span>
           ${rejectionRate ? `<span class="explorer-nav-rate">${rejectionRate}</span>` : ""}
-          <span class="tree-count">${Utils.formatNumber(totalRejected, 0)}</span>
+          <span class="tree-count">${Utils.formatNumber(breakdownTotal, 0)}</span>
         </div>
 
         <div class="explorer-tree" id="explorer-tree">
