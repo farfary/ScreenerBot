@@ -11,6 +11,7 @@ filtering-reject-onchain-numeric-symbol = Símbolo apenas numérico (golpe)
 filtering-reject-onchain-empty-symbol = Símbolo vazio (golpe)
 filtering-reject-onchain-suspicious-symbol = Símbolo suspeito (golpe)
 filtering-reject-onchain-known-scam-authority = Autoridade de golpe conhecida
+filtering-reject-onchain-known-scam-creator = Criador de golpe conhecido
 filtering-reject-onchain-immutable-with-freeze = Imutável + autoridade de congelamento (golpe)
 filtering-reject-onchain-high-risk-score = Pontuação de risco on-chain alta
 filtering-reject-dex-empty-name = Nome vazio

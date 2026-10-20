@@ -11,6 +11,7 @@ filtering-reject-onchain-numeric-symbol = 符号仅含数字（诈骗）
 filtering-reject-onchain-empty-symbol = 符号为空（诈骗）
 filtering-reject-onchain-suspicious-symbol = 符号可疑（诈骗）
 filtering-reject-onchain-known-scam-authority = 已知诈骗权限
+filtering-reject-onchain-known-scam-creator = 已知诈骗创建者
 filtering-reject-onchain-immutable-with-freeze = 不可变 + 冻结权限（诈骗）
 filtering-reject-onchain-high-risk-score = 链上风险评分过高
 filtering-reject-dex-empty-name = 名称为空

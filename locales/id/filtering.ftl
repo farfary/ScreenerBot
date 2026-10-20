@@ -11,6 +11,7 @@ filtering-reject-onchain-numeric-symbol = Simbol hanya angka (scam)
 filtering-reject-onchain-empty-symbol = Simbol kosong (scam)
 filtering-reject-onchain-suspicious-symbol = Simbol mencurigakan (scam)
 filtering-reject-onchain-known-scam-authority = Otoritas scam yang dikenal
+filtering-reject-onchain-known-scam-creator = Kreator scam yang dikenal
 filtering-reject-onchain-immutable-with-freeze = Immutable + otoritas freeze (scam)
 filtering-reject-onchain-high-risk-score = Skor risiko on-chain tinggi
 filtering-reject-dex-empty-name = Nama kosong

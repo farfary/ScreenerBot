@@ -8,6 +8,7 @@ filtering-reject-onchain-numeric-symbol = Symbole uniquement numérique (arnaque
 filtering-reject-onchain-empty-symbol = Symbole vide (arnaque)
 filtering-reject-onchain-suspicious-symbol = Symbole suspect (arnaque)
 filtering-reject-onchain-known-scam-authority = Autorité d'arnaque connue
+filtering-reject-onchain-known-scam-creator = Créateur d'arnaque connu
 filtering-reject-onchain-immutable-with-freeze = Immuable + autorité de gel (arnaque)
 filtering-reject-onchain-high-risk-score = Score de risque on-chain élevé
 filtering-reject-dex-empty-name = Nom vide

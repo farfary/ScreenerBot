@@ -11,6 +11,7 @@ filtering-reject-onchain-numeric-symbol = Numeric-only symbol (scam)
 filtering-reject-onchain-empty-symbol = Empty symbol (scam)
 filtering-reject-onchain-suspicious-symbol = Suspicious symbol (scam)
 filtering-reject-onchain-known-scam-authority = Known scam authority
+filtering-reject-onchain-known-scam-creator = Known scam creator
 filtering-reject-onchain-immutable-with-freeze = Immutable + freeze authority (scam)
 filtering-reject-onchain-high-risk-score = On-chain high risk score
 filtering-reject-dex-empty-name = Empty name

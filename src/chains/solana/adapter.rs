@@ -8,6 +8,7 @@ use crate::chains::{
     solana::constants::{
         LAMPORTS_PER_SOL, SOL_DECIMALS, SOL_MINT, SYSTEM_PROGRAM_ID, USDC_MINT, USDT_MINT,
     },
+    solana::solana_sdk::pubkey::Pubkey,
     ChainId, ChainMetadata, Error as ChainError,
 };
 
@@ -82,6 +83,13 @@ impl ChainAdapter for SolanaAdapter {
         address == SYSTEM_PROGRAM_ID
     }
 
+    fn is_personal_wallet(&self, address: &str) -> bool {
+        !self.is_renounced_authority(address)
+            && address
+                .parse::<Pubkey>()
+                .is_ok_and(|account| account.is_on_curve())
+    }
+
     fn market_data_network(&self) -> &'static str {
         "solana"
     }
@@ -109,11 +117,17 @@ impl ChainAdapter for SolanaAdapter {
     fn has_rugcheck_reports(&self) -> bool {
         true
     }
+
+    fn has_creator_reputation(&self) -> bool {
+        true
+    }
 }
 
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::chains::solana::solana_sdk::signature::Keypair;
+    use crate::chains::solana::solana_sdk::signer::Signer;
 
     /// A real, well-formed ed25519 transaction signature (88 base58 chars).
     const REAL_SIGNATURE: &str =
@@ -133,6 +147,19 @@ mod tests {
         assert!(adapter.is_renounced_authority(SYSTEM_PROGRAM_ID));
         assert!(!adapter.is_renounced_authority(SOL_MINT));
         assert!(!adapter.is_renounced_authority(""));
+    }
+
+    #[test]
+    fn only_an_on_curve_account_is_a_personal_wallet() {
+        let adapter = SolanaAdapter;
+        let wallet = Keypair::new().pubkey();
+        let (derived, _) = Pubkey::find_program_address(&[b"creator"], &wallet);
+
+        assert!(adapter.is_personal_wallet(&wallet.to_string()));
+        assert!(!adapter.is_personal_wallet(SYSTEM_PROGRAM_ID));
+        assert!(!adapter.is_personal_wallet(&derived.to_string()));
+        assert!(!adapter.is_personal_wallet("not-an-address"));
+        assert!(!adapter.is_personal_wallet(""));
     }
 
     #[test]

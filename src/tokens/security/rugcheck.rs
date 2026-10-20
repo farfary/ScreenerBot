@@ -70,6 +70,7 @@ fn convert_rugcheck_to_data(info: &RugcheckInfo) -> RugcheckData {
         mint_authority: info.mint_authority.clone(),
         freeze_authority: info.freeze_authority.clone(),
         update_authority: info.token_update_authority.clone(),
+        creator: info.creator.clone(),
         is_mutable: info.token_mutable,
         top_10_holders_pct: top_pct,
         total_holders: info.total_holders,
@@ -335,3 +336,7 @@ pub fn get_cache_metrics() -> CacheMetrics {
 pub fn get_cache_size() -> usize {
     store::rugcheck_cache_size()
 }
+
+#[cfg(test)]
+#[path = "rugcheck_tests.rs"]
+mod tests;

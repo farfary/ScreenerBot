@@ -139,6 +139,7 @@ pub(super) fn assemble_token(
         }
     };
     let update_authority = security_ref.and_then(|sec| sec.update_authority.clone());
+    let creator = security_ref.and_then(|sec| sec.creator.clone());
     let is_mutable = security_ref.and_then(|sec| sec.is_mutable);
     let security_score = security_ref.and_then(|sec| sec.score);
     let security_score_normalised = security_ref.and_then(|sec| sec.score_normalised);
@@ -255,6 +256,7 @@ pub(super) fn assemble_token(
         mint_authority,
         freeze_authority,
         update_authority,
+        creator,
         is_mutable,
         security_score,
         security_score_normalised,
@@ -328,6 +330,7 @@ pub(super) fn assemble_token_without_market_data(
         }
     };
     let update_authority = security_ref.and_then(|sec| sec.update_authority.clone());
+    let creator = security_ref.and_then(|sec| sec.creator.clone());
     let is_mutable = security_ref.and_then(|sec| sec.is_mutable);
     let security_score = security_ref.and_then(|sec| sec.score);
     let security_score_normalised = security_ref.and_then(|sec| sec.score_normalised);
@@ -441,6 +444,7 @@ pub(super) fn assemble_token_without_market_data(
         mint_authority,
         freeze_authority,
         update_authority,
+        creator,
         is_mutable,
         security_score,
         security_score_normalised,

@@ -34,10 +34,11 @@ struct SecurityColumns {
     transfer_fee_authority: Option<String>,
     security_risks: Vec<SecurityRisk>,
     top_holders: Vec<TokenHolder>,
+    creator: Option<String>,
 }
 
 impl SecurityColumns {
-    /// Read columns 66..=77 of the batch query.
+    /// Read columns 66..=78 of the batch query.
     ///
     /// The two JSON columns are decoded leniently: a token whose stored risk or holder blob
     /// is malformed loses that one list rather than failing the entire batch load, which
@@ -59,6 +60,7 @@ impl SecurityColumns {
             transfer_fee_authority: row.get(75)?,
             security_risks: parse_json_list(risks_json.as_deref()),
             top_holders: parse_json_list(holders_json.as_deref()),
+            creator: row.get(78)?,
         })
     }
 }
@@ -255,7 +257,7 @@ impl TokenDatabase {
                 sr.token_type, sr.score_normalised, sr.top_10_holders_pct,
                 sr.total_holders, sr.total_lp_providers, sr.graph_insiders_detected,
                 sr.creator_balance_pct, sr.transfer_fee_pct, sr.transfer_fee_max_amount,
-                sr.transfer_fee_authority, sr.risks, sr.top_holders
+                sr.transfer_fee_authority, sr.risks, sr.top_holders, sr.creator
         "#;
 
         let joins = r#"
@@ -413,7 +415,7 @@ impl TokenDatabase {
                 let update_authority: Option<String> = row.get(64)?;
                 let is_mutable: Option<bool> = row.get::<_, Option<i64>>(65)?.map(|v| v != 0);
 
-                // Remaining Rugcheck columns 66..=77, carried as one value so the row tuple
+                // Remaining Rugcheck columns 66..=78, carried as one value so the row tuple
                 // does not grow another dozen slots.
                 let security = SecurityColumns::from_row(row)?;
 
@@ -923,6 +925,7 @@ impl TokenDatabase {
                 mint_authority,
                 freeze_authority,
                 update_authority,
+                creator: security.creator,
                 is_mutable,
                 security_score,
                 security_score_normalised: security.score_normalised,

@@ -74,6 +74,7 @@ fn token(mint: &str) -> Token {
         mint_authority: None,
         freeze_authority: None,
         update_authority: None,
+        creator: None,
         is_mutable: Some(true),
         security_score: None,
         security_score_normalised: None,

@@ -99,10 +99,11 @@ impl TokenDatabase {
                 top_holders,
                 markets,
                 security_data_last_fetched_at,
-                security_data_first_fetched_at
+                security_data_first_fetched_at,
+                creator
              ) VALUES (
                 ?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11, ?12,
-                ?13, ?14, ?15, ?16, ?17, ?18, ?19, ?20, ?21, ?22, ?23, ?24, ?25, ?26, ?27, ?28
+                ?13, ?14, ?15, ?16, ?17, ?18, ?19, ?20, ?21, ?22, ?23, ?24, ?25, ?26, ?27, ?28, ?29
              )
              ON CONFLICT(chain_id, mint) DO UPDATE SET
                 token_type = excluded.token_type,
@@ -129,7 +130,8 @@ impl TokenDatabase {
                 risks = excluded.risks,
                 top_holders = excluded.top_holders,
                 markets = excluded.markets,
-                security_data_last_fetched_at = excluded.security_data_last_fetched_at",
+                security_data_last_fetched_at = excluded.security_data_last_fetched_at,
+                creator = excluded.creator",
             params![
                 self.chain_id(),
                 mint,
@@ -159,6 +161,7 @@ impl TokenDatabase {
                 markets_json,
                 now_ts,
                 first_fetched_ts,
+                &data.creator,
             ],
         )
         .map_err(|e| {
@@ -206,7 +209,8 @@ impl TokenDatabase {
                     security_data_last_fetched_at,
                     security_data_first_fetched_at,
                     update_authority,
-                    is_mutable
+                    is_mutable,
+                    creator
                  FROM security_rugcheck WHERE chain_id = ?1 AND mint = ?2",
             )
             .map_err(|e| {
@@ -242,6 +246,7 @@ impl TokenDatabase {
                 mint_authority: row.get(5)?,
                 freeze_authority: row.get(6)?,
                 update_authority: row.get(24)?,
+                creator: row.get(26)?,
                 is_mutable,
                 top_10_holders_pct: row.get(7)?,
                 total_supply: row.get(8)?,

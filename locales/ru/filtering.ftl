@@ -8,6 +8,7 @@ filtering-reject-onchain-numeric-symbol = Символ только из циф�
 filtering-reject-onchain-empty-symbol = Пустой символ (скам)
 filtering-reject-onchain-suspicious-symbol = Подозрительный символ (скам)
 filtering-reject-onchain-known-scam-authority = Известные полномочия скама
+filtering-reject-onchain-known-scam-creator = Известный создатель скама
 filtering-reject-onchain-immutable-with-freeze = Неизменяемый + полномочия freeze (скам)
 filtering-reject-onchain-high-risk-score = Высокая ончейн-оценка риска
 filtering-reject-dex-empty-name = Пустое название

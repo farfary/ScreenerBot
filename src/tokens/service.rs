@@ -254,6 +254,12 @@ impl Service for TokensServiceNew {
                 db.clone(),
                 shutdown.clone(),
             ));
+
+            // Keep the blocked creator list current from the data service
+            handles.push(crate::tokens::creator_reputation::start_sync_loop(
+                db.clone(),
+                shutdown.clone(),
+            ));
         }
 
         logger::info(

@@ -65,6 +65,10 @@ pub trait ChainAdapter: Send + Sync + 'static {
     /// True for the address a token authority holds once it is given up. It
     /// identifies no one and is never a party to blame for a token.
     fn is_renounced_authority(&self, address: &str) -> bool;
+    /// True when `address` can be a person's own wallet: a well-formed account
+    /// key that is neither a program, a program-derived address nor the
+    /// renounced-authority address.
+    fn is_personal_wallet(&self, address: &str) -> bool;
 
     // --- external identity ---
     /// This chain's slug at market-data providers (GeckoTerminal network,
@@ -84,6 +88,8 @@ pub trait ChainAdapter: Send + Sync + 'static {
     // --- data coverage ---
     /// Whether Rugcheck publishes token security reports for this chain.
     fn has_rugcheck_reports(&self) -> bool;
+    /// Whether the data service reports wallets that are serial liquidity removers on this chain.
+    fn has_creator_reputation(&self) -> bool;
 }
 
 /// The adapter for `chain` — the facts of the subject's chain.

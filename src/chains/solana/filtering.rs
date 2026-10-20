@@ -1,8 +1,8 @@
 // Copyright (c) 2024-2026 ScreenerBot (screenerbot.io)
 // SPDX-License-Identifier: BUSL-1.1
 
-//! Solana's filter profile and its on-chain stage — authority reputation, immutable
-//! metadata with a freeze authority, and the combined risk score.
+//! Solana's filter profile and its on-chain stage — authority and creator reputation,
+//! immutable metadata with a freeze authority, and the combined risk score.
 
 use std::sync::{Arc, OnceLock};
 
@@ -65,7 +65,7 @@ fn evaluate(
         return Ok(());
     }
 
-    // H4: Known scam authority detection (blocked-authority set)
+    // H4: Known scam authority or creator (blocked-address set)
     if config.reject_known_scam_authorities {
         if let Some(ref freeze_auth) = token.freeze_authority {
             if crate::tokens::authority_cache::is_blocked_authority(chain, freeze_auth) {
@@ -80,6 +80,11 @@ fn evaluate(
         if let Some(ref mint_auth) = token.mint_authority {
             if crate::tokens::authority_cache::is_blocked_authority(chain, mint_auth) {
                 return Err(FilterRejectionReason::OnChainKnownScamAuthority);
+            }
+        }
+        if let Some(ref creator) = token.creator {
+            if crate::tokens::authority_cache::is_blocked_authority(chain, creator) {
+                return Err(FilterRejectionReason::OnChainKnownScamCreator);
             }
         }
     }

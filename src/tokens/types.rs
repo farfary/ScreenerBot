@@ -204,6 +204,8 @@ pub struct Token {
     pub mint_authority: Option<String>,
     pub freeze_authority: Option<String>,
     pub update_authority: Option<String>,
+    /// The wallet Rugcheck names as the token's creator; matched against the blocked-address set.
+    pub creator: Option<String>,
     pub is_mutable: Option<bool>,
 
     // Security assessment
@@ -501,6 +503,7 @@ pub struct RugcheckData {
     pub mint_authority: Option<String>,
     pub freeze_authority: Option<String>,
     pub update_authority: Option<String>,
+    pub creator: Option<String>,
     pub is_mutable: Option<bool>,
     pub top_10_holders_pct: Option<f64>,
     pub total_holders: Option<i64>,
@@ -519,41 +522,6 @@ pub struct RugcheckData {
     pub markets: Option<serde_json::Value>, // Raw market data from rugcheck
     pub security_data_last_fetched_at: DateTime<Utc>,
     pub security_data_first_fetched_at: DateTime<Utc>,
-}
-
-/// On-chain security verification (future)
-#[derive(Debug, Clone, Serialize, Deserialize)]
-pub struct OnChainSecurityData {
-    pub mint_authority: Option<String>,
-    pub freeze_authority: Option<String>,
-    pub total_supply: String,
-    pub holder_count: Option<u64>,
-    pub verified_at: DateTime<Utc>,
-}
-
-/// Combined security assessment
-#[derive(Debug, Clone, Serialize, Deserialize)]
-pub struct SecurityBundle {
-    pub rugcheck: Option<RugcheckData>,
-    pub onchain: Option<OnChainSecurityData>,
-    pub combined_score: SecurityScore,
-}
-
-/// Security score (0-100, LOWER = SAFER, HIGHER = MORE RISKY)
-#[derive(Debug, Clone, Serialize, Deserialize)]
-pub struct SecurityScore {
-    pub score: i32,
-    pub level: SecurityLevel,
-    pub reasons: Vec<String>,
-}
-
-#[derive(Debug, Clone, Serialize, Deserialize)]
-pub enum SecurityLevel {
-    Safe,      // 80-100
-    Good,      // 60-79
-    Moderate,  // 40-59
-    Risky,     // 20-39
-    Dangerous, // 0-19
 }
 
 // ============================================================================

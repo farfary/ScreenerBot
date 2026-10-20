@@ -11,6 +11,7 @@ filtering-reject-onchain-numeric-symbol = 数字のみのシンボル（詐欺�
 filtering-reject-onchain-empty-symbol = シンボルが空（詐欺）
 filtering-reject-onchain-suspicious-symbol = 不審なシンボル（詐欺）
 filtering-reject-onchain-known-scam-authority = 既知の詐欺の権限
+filtering-reject-onchain-known-scam-creator = 既知の詐欺の作成者
 filtering-reject-onchain-immutable-with-freeze = イミュータブル + フリーズ権限（詐欺）
 filtering-reject-onchain-high-risk-score = オンチェーンのリスクスコアが高い
 filtering-reject-dex-empty-name = 名前が空

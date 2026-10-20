@@ -8,6 +8,7 @@ filtering-reject-onchain-numeric-symbol = Ký hiệu chỉ toàn số (lừa đ�
 filtering-reject-onchain-empty-symbol = Ký hiệu trống (lừa đảo)
 filtering-reject-onchain-suspicious-symbol = Ký hiệu đáng ngờ (lừa đảo)
 filtering-reject-onchain-known-scam-authority = Quyền thuộc về địa chỉ lừa đảo đã biết
+filtering-reject-onchain-known-scam-creator = Người tạo là địa chỉ lừa đảo đã biết
 filtering-reject-onchain-immutable-with-freeze = Bất biến + có quyền freeze (lừa đảo)
 filtering-reject-onchain-high-risk-score = Điểm rủi ro on-chain cao
 filtering-reject-dex-empty-name = Tên trống

@@ -140,4 +140,5 @@ impl TokenDatabase {
 
 // Re-export all public items from submodules
 pub use async_api::*;
+pub use authority::CreatorReputationRow;
 pub use rejections::{FilterBuildWrite, FilterOutcome, FilterRejectionRecord};

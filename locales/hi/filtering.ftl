@@ -8,6 +8,7 @@ filtering-reject-onchain-numeric-symbol = केवल अंकों वाल
 filtering-reject-onchain-empty-symbol = खाली सिंबल (स्कैम)
 filtering-reject-onchain-suspicious-symbol = संदिग्ध सिंबल (स्कैम)
 filtering-reject-onchain-known-scam-authority = ज्ञात स्कैम अथॉरिटी
+filtering-reject-onchain-known-scam-creator = ज्ञात स्कैम क्रिएटर
 filtering-reject-onchain-immutable-with-freeze = इम्यूटेबल + फ़्रीज़ अथॉरिटी (स्कैम)
 filtering-reject-onchain-high-risk-score = ऑन-चेन उच्च जोखिम स्कोर
 filtering-reject-dex-empty-name = खाली नाम

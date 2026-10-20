@@ -20,6 +20,9 @@
 pub mod authority_cache;
 pub mod cleanup;
 pub(crate) mod column_names;
+pub mod creator_reputation;
+#[cfg(test)]
+mod creator_reputation_tests;
 pub mod database;
 pub mod decimals;
 pub mod discovery;
@@ -89,9 +92,8 @@ pub use security::rugcheck;
 // Domain types from types.rs
 pub use error::{Error, Result};
 pub use types::{
-    DataSource, DexScreenerData, GeckoTerminalData, MarketDataBundle, RugcheckData, SecurityBundle,
-    SecurityLevel, SecurityRisk, SecurityScore, SocialLink, Token, TokenHolder, TokenMetadata,
-    TokenResult, UpdateTrackingInfo, WebsiteLink,
+    DataSource, DexScreenerData, GeckoTerminalData, MarketDataBundle, RugcheckData, SecurityRisk,
+    SocialLink, Token, TokenHolder, TokenMetadata, TokenResult, UpdateTrackingInfo, WebsiteLink,
 };
 
 // API parsing types from api modules (now in crate::apis)

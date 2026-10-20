@@ -11,6 +11,7 @@ filtering-reject-onchain-numeric-symbol = 숫자로만 된 심볼 (사기)
 filtering-reject-onchain-empty-symbol = 빈 심볼 (사기)
 filtering-reject-onchain-suspicious-symbol = 의심스러운 심볼 (사기)
 filtering-reject-onchain-known-scam-authority = 알려진 사기 권한
+filtering-reject-onchain-known-scam-creator = 알려진 사기 생성자
 filtering-reject-onchain-immutable-with-freeze = 변경 불가 + 동결 권한 (사기)
 filtering-reject-onchain-high-risk-score = 온체인 위험 점수 높음
 filtering-reject-dex-empty-name = 이름 없음

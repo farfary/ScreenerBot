@@ -11,6 +11,7 @@ filtering-reject-onchain-numeric-symbol = نماد فقط عددی (کلاهبر
 filtering-reject-onchain-empty-symbol = نماد خالی (کلاهبرداری)
 filtering-reject-onchain-suspicious-symbol = نماد مشکوک (کلاهبرداری)
 filtering-reject-onchain-known-scam-authority = اختیار شناخته‌شده کلاهبرداری
+filtering-reject-onchain-known-scam-creator = سازنده شناخته‌شده کلاهبرداری
 filtering-reject-onchain-immutable-with-freeze = تغییرناپذیر + اختیار فریز (کلاهبرداری)
 filtering-reject-onchain-high-risk-score = امتیاز ریسک بالا روی زنجیره
 filtering-reject-dex-empty-name = نام خالی

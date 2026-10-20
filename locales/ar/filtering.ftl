@@ -11,6 +11,7 @@ filtering-reject-onchain-numeric-symbol = رمز مختصر أرقام فقط (�
 filtering-reject-onchain-empty-symbol = رمز مختصر فارغ (احتيال)
 filtering-reject-onchain-suspicious-symbol = رمز مختصر مشبوه (احتيال)
 filtering-reject-onchain-known-scam-authority = صلاحية احتيال معروفة
+filtering-reject-onchain-known-scam-creator = منشئ احتيال معروف
 filtering-reject-onchain-immutable-with-freeze = غير قابل للتغيير + صلاحية تجميد (احتيال)
 filtering-reject-onchain-high-risk-score = درجة مخاطر عالية على السلسلة
 filtering-reject-dex-empty-name = اسم فارغ

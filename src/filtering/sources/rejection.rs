@@ -79,6 +79,7 @@ rejection_table! {
         OnChainEmptySymbol => ("onchain_empty_symbol", ids::FILTERING_REJECT_ONCHAIN_EMPTY_SYMBOL),
         OnChainSuspiciousSymbol => ("onchain_suspicious_symbol", ids::FILTERING_REJECT_ONCHAIN_SUSPICIOUS_SYMBOL),
         OnChainKnownScamAuthority => ("onchain_known_scam_authority", ids::FILTERING_REJECT_ONCHAIN_KNOWN_SCAM_AUTHORITY),
+        OnChainKnownScamCreator => ("onchain_known_scam_creator", ids::FILTERING_REJECT_ONCHAIN_KNOWN_SCAM_CREATOR),
         OnChainImmutableWithFreeze => ("onchain_immutable_with_freeze", ids::FILTERING_REJECT_ONCHAIN_IMMUTABLE_WITH_FREEZE),
         OnChainHighRiskScore => ("onchain_high_risk_score", ids::FILTERING_REJECT_ONCHAIN_HIGH_RISK_SCORE),
         DexScreenerEmptyName => ("dex_empty_name", ids::FILTERING_REJECT_DEX_EMPTY_NAME),

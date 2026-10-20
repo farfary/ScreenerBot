@@ -8,6 +8,7 @@ filtering-reject-onchain-numeric-symbol = Yalnızca rakamlardan oluşan sembol (
 filtering-reject-onchain-empty-symbol = Boş sembol (dolandırıcılık)
 filtering-reject-onchain-suspicious-symbol = Şüpheli sembol (dolandırıcılık)
 filtering-reject-onchain-known-scam-authority = Bilinen dolandırıcı yetkisi
+filtering-reject-onchain-known-scam-creator = Bilinen dolandırıcı oluşturan
 filtering-reject-onchain-immutable-with-freeze = Değiştirilemez + dondurma yetkisi (dolandırıcılık)
 filtering-reject-onchain-high-risk-score = Zincir üstü yüksek risk puanı
 filtering-reject-dex-empty-name = Boş ad

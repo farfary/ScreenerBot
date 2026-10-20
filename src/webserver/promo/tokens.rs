@@ -240,6 +240,7 @@ fn base_token(mint: &str, symbol: &str, name: &str, discovered_minutes: i64) -> 
         mint_authority: None,
         freeze_authority: None,
         update_authority: None,
+        creator: None,
         is_mutable: Some(false),
         security_score: None,
         security_score_normalised: None,

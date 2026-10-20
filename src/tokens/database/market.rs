@@ -192,6 +192,7 @@ impl TokenDatabase {
                     mint_authority: None,
                     freeze_authority: None,
                     update_authority: None,
+                    creator: None,
                     is_mutable: None,
                     top_10_holders_pct: None,
                     total_holders: None,

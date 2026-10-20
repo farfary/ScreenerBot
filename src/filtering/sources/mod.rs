@@ -55,6 +55,7 @@ impl FilterRejectionReason {
             | FilterRejectionReason::OnChainEmptySymbol
             | FilterRejectionReason::OnChainSuspiciousSymbol
             | FilterRejectionReason::OnChainKnownScamAuthority
+            | FilterRejectionReason::OnChainKnownScamCreator
             | FilterRejectionReason::OnChainImmutableWithFreeze
             | FilterRejectionReason::OnChainHighRiskScore => FilterSource::OnChain,
             FilterRejectionReason::DexScreenerEmptyName

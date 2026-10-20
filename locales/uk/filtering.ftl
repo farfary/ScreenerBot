@@ -11,6 +11,7 @@ filtering-reject-onchain-numeric-symbol = Символ лише з цифр (с�
 filtering-reject-onchain-empty-symbol = Порожній символ (скам)
 filtering-reject-onchain-suspicious-symbol = Підозрілий символ (скам)
 filtering-reject-onchain-known-scam-authority = Відомі повноваження скаму
+filtering-reject-onchain-known-scam-creator = Відомий творець скаму
 filtering-reject-onchain-immutable-with-freeze = Незмінний + повноваження заморожування (скам)
 filtering-reject-onchain-high-risk-score = Висока ончейн-оцінка ризику
 filtering-reject-dex-empty-name = Порожня назва

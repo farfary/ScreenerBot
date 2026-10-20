@@ -326,6 +326,7 @@ fn normalize(source: &Token, originals: &mut BTreeSet<String>) -> Token {
         mint_authority,
         freeze_authority,
         update_authority,
+        creator: None,
         is_mutable: source.is_mutable,
         security_score: source.security_score,
         security_score_normalised: None,

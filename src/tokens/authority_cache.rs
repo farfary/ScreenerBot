@@ -1,18 +1,14 @@
 // Copyright (c) 2024-2026 ScreenerBot (screenerbot.io)
 // SPDX-License-Identifier: BUSL-1.1
 
-//! Token authority cache — in-memory cache for mint/freeze authority lookups.
-
-// tokens/authority_cache.rs
-// Lightweight cache for token mint authorities (freeze, mint, update)
-//
-// ARCHITECTURE:
-// - Populated as a side effect of decimals.rs chain fetches (zero extra RPC cost)
-// - In-memory moka cache for fast sync lookups during filtering
-// - DB persistence in the `authority_reputation` table (blocked addresses load on startup)
-//
-// This module does NOT fetch from chain itself — it relies on decimals.rs
-// calling `cache_mint_authorities()` when it unpacks SPL Mint data.
+//! Token authority cache — in-memory mint/freeze authority lookups and the blocked-address set.
+//!
+//! - Authorities are populated as a side effect of the `decimals.rs` chain fetch, which calls
+//!   [`cache_mint_authorities`] when it unpacks the SPL Mint data, so they cost no extra RPC.
+//!   This module never fetches from chain itself.
+//! - Authorities live in a moka cache for fast synchronous lookups while filtering.
+//! - The blocked set is loaded from the `authority_reputation` table on startup and reloaded
+//!   after each creator list sync. It holds authority and creator addresses alike.
 
 use std::collections::HashSet;
 use std::sync::Arc;
@@ -38,8 +34,8 @@ fn new_authorities_cache(_chain: ChainId) -> moka::sync::Cache<String, MintAutho
     moka::sync::Cache::builder().max_capacity(100_000).build()
 }
 
-// Blocked authorities set per chain — addresses confirmed as scam factories
-// Loaded from DB on startup
+// Blocked address set per chain — authorities and creators confirmed as scam sources
+// Loaded from DB on startup and after each creator list sync
 // Uses ArcSwap for atomic replacement (no race condition during refresh); a
 // refresh replaces only its own chain's set
 static BLOCKED_AUTHORITIES: PerChain<ArcSwap<HashSet<String>>> =
@@ -84,17 +80,19 @@ pub fn cache_mint_authorities(chain: ChainId, mint: &str, authorities: MintAutho
 // ============================================================================
 
 /// Refresh `chain`'s in-memory blocked set from the database.
-/// Called once on startup by the tokens service.
+/// Called on startup by the tokens service and after each creator list sync.
 /// Uses atomic swap — no race condition during refresh — and replaces only
 /// this chain's set.
 pub fn refresh_blocked_from_db(chain: ChainId, blocked_addresses: Vec<String>) {
     let count = blocked_addresses.len();
     let new_set: HashSet<String> = blocked_addresses.into_iter().collect();
-    BLOCKED_AUTHORITIES.get(chain).store(Arc::new(new_set));
-    logger::info(
-        LogTag::Filtering,
-        &format!("Authority reputation refreshed: {count} blocked authorities loaded"),
-    );
+    let previous = BLOCKED_AUTHORITIES.get(chain).swap(Arc::new(new_set));
+    if previous.len() != count {
+        logger::info(
+            LogTag::Filtering,
+            &format!("Authority reputation refreshed: {count} blocked addresses loaded"),
+        );
+    }
 }
 
 /// Clear all caches on every chain (for testing/reset)

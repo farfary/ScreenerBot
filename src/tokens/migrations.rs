@@ -59,6 +59,11 @@ const ADDITIVE_COLUMNS: &[AdditiveColumn] = &[
         column: "filter_evaluated_at",
         definition: "filter_evaluated_at INTEGER",
     },
+    AdditiveColumn {
+        table: "security_rugcheck",
+        column: "creator",
+        definition: "creator TEXT",
+    },
 ];
 
 /// Indexes no query uses any more. An older core still creates them on open, so every

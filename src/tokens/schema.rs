@@ -172,6 +172,7 @@ pub const CREATE_TABLES: &[&str] = &[
         markets TEXT,
         security_data_last_fetched_at INTEGER NOT NULL,
         security_data_first_fetched_at INTEGER NOT NULL,
+        creator TEXT,
         PRIMARY KEY (chain_id, mint),
         FOREIGN KEY (chain_id, mint) REFERENCES tokens(chain_id, mint) ON DELETE RESTRICT
     )

@@ -625,6 +625,7 @@ pub fn filter_token(mint: &str) -> Token {
         mint_authority: None,
         freeze_authority: None,
         update_authority: Some("UpdateAuthority11111111111111111111111111111".to_owned()),
+        creator: None,
         is_mutable: Some(true),
         security_score: Some(1_000),
         security_score_normalised: Some(10),

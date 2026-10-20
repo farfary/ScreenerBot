@@ -15,12 +15,16 @@ use screenerbot::chains::ChainId;
 use screenerbot::tokens::schema::{CREATE_TABLES, SCHEMA_VERSION};
 use screenerbot::tokens::TokenDatabase;
 
-/// Every `CREATE_TABLES` statement with `token_favorites.notes` stripped — a
-/// chain-scoped database written before that currently-declared nullable column.
-fn schema_missing_favorites_notes_column() -> Vec<String> {
+/// Every `CREATE_TABLES` statement with `token_favorites.notes` and `security_rugcheck.creator`
+/// stripped — a chain-scoped database written before those currently-declared nullable columns.
+fn schema_missing_additive_columns() -> Vec<String> {
     CREATE_TABLES
         .iter()
-        .map(|statement| statement.replace("notes TEXT,\n", ""))
+        .map(|statement| {
+            statement
+                .replace("notes TEXT,\n", "")
+                .replace("creator TEXT,\n", "")
+        })
         .collect()
 }
 
@@ -286,13 +290,14 @@ fn already_versioned_database_missing_an_additive_column_self_heals() {
 
     {
         let conn = common::seed_store(&db_path, screenerbot::database::TOKENS_DB, "");
-        for statement in schema_missing_favorites_notes_column() {
+        for statement in schema_missing_additive_columns() {
             conn.execute(&statement, [])
-                .expect("create chain-scoped table without the notes column");
+                .expect("create chain-scoped table without the additive columns");
         }
         assert!(
-            !has_column(&conn, "token_favorites", "notes"),
-            "fixture must start without the additive column"
+            !has_column(&conn, "token_favorites", "notes")
+                && !has_column(&conn, "security_rugcheck", "creator"),
+            "fixture must start without the additive columns"
         );
         seed_all_token_tables(&conn);
         // Already versioned at the current schema version, with a required
@@ -309,6 +314,10 @@ fn already_versioned_database_missing_an_additive_column_self_heals() {
         has_column(&conn, "token_favorites", "notes"),
         "additive column must be restored"
     );
+    assert!(
+        has_column(&conn, "security_rugcheck", "creator"),
+        "additive creator column must be restored"
+    );
     assert_seeded_rows_survived(&conn);
     assert_eq!(user_version(&conn), SCHEMA_VERSION);
     assert!(
@@ -323,6 +332,7 @@ fn already_versioned_database_missing_an_additive_column_self_heals() {
 
     let conn = Connection::open(&db_path).expect("reopen after second migration pass");
     assert!(has_column(&conn, "token_favorites", "notes"));
+    assert!(has_column(&conn, "security_rugcheck", "creator"));
     assert_seeded_rows_survived(&conn);
     assert_eq!(user_version(&conn), SCHEMA_VERSION);
     assert!(foreign_key_check_is_clean(&conn));
