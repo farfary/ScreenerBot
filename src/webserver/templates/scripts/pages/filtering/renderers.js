@@ -326,9 +326,10 @@ export function createFilteringRenderers({ state, $: _$, Utils, requestManager: 
   `;
 
     // The headline cards always describe the current snapshot; the breakdowns below count
-    // rejection checks in the selected period, or one rejection per token in the current view.
+    // rejections that started in the selected period (once per token and reason), or one
+    // rejection per token in the current view.
     const breakdownNoteHtml = `
-    <div class="breakdown-note">${Utils.escapeHtml(data.time_range ? I18n.t("filtering-analytics-breakdown-note-range") : I18n.t("filtering-analytics-breakdown-note-current"))}</div>
+    <div class="breakdown-note">${Utils.escapeHtml(data.time_range ? I18n.t("filtering-analytics-breakdown-note-period") : I18n.t("filtering-analytics-breakdown-note-current"))}</div>
   `;
 
     // Charts Section
@@ -535,11 +536,11 @@ export function createFilteringRenderers({ state, $: _$, Utils, requestManager: 
   }
 
   function renderExplorerView() {
-    if (!state.analytics) {
+    if (!state.explorerOverview) {
       return `<div class="loading-spinner">${Utils.escapeHtml(I18n.t("common-loading"))}</div>`;
     }
 
-    const data = state.analytics;
+    const data = state.explorerOverview;
 
     const breakdownTotal = data.breakdown_total || 0;
 

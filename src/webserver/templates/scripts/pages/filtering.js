@@ -46,11 +46,13 @@ const state = {
   stats: null,
   rejectionStats: null,
   analytics: null,
+  explorerOverview: null, // Current-state analytics payload behind the explorer tree and overview
   hasChanges: false,
   isSaving: false,
   isRefreshing: false,
   isLoadingAnalytics: false, // Loading state for analytics section
   analyticsRequestId: 0, // Request ID to prevent race conditions
+  explorerRequestId: 0, // Same guard for the explorer overview
   lastSaved: null,
   searchQuery: AppState.load("filtering_searchQuery", ""),
   activeTab: AppState.load("filtering_activeTab", "status"),
@@ -155,19 +157,20 @@ async function fetchRejectionStats() {
   });
 }
 
-async function fetchAnalytics() {
-  // Build URL with time range parameters if set
+// The analytics payload for `range` (a `state.timeRange`-shaped object). Without a range
+// the request carries no time parameters and the payload describes the current state.
+async function fetchAnalytics(range) {
   let url = "/api/filtering/analytics";
   const params = new URLSearchParams();
 
-  if (state.timeRange.startTime) {
-    params.set("start_time", state.timeRange.startTime.toString());
+  if (range?.startTime) {
+    params.set("start_time", range.startTime.toString());
   }
-  if (state.timeRange.endTime) {
-    params.set("end_time", state.timeRange.endTime.toString());
+  if (range?.endTime) {
+    params.set("end_time", range.endTime.toString());
   }
-  if (state.timeRange.preset && state.timeRange.preset !== "all") {
-    params.set("preset", state.timeRange.preset);
+  if (range?.preset && range.preset !== "all") {
+    params.set("preset", range.preset);
   }
 
   const queryString = params.toString();
@@ -670,7 +673,7 @@ async function loadAnalytics() {
   const thisRequestId = ++state.analyticsRequestId;
 
   try {
-    const response = await fetchAnalytics();
+    const response = await fetchAnalytics(state.timeRange);
 
     // Check if this is still the latest request (prevent stale data from overwriting)
     if (thisRequestId !== state.analyticsRequestId) {
@@ -693,17 +696,43 @@ async function loadAnalytics() {
   }
 }
 
+// The explorer's tree and overview always describe the current state, like the per-reason
+// lists beside them, so this payload is fetched without the analytics tab's time range.
+async function loadExplorerOverview() {
+  const thisRequestId = ++state.explorerRequestId;
+
+  try {
+    const response = await fetchAnalytics();
+
+    if (thisRequestId !== state.explorerRequestId) {
+      return; // A newer request was made, discard this response
+    }
+
+    const key = JSON.stringify(response);
+    if (key === _lastExplorerKey) return; // data unchanged — skip redraw, scroll preserved
+    _lastExplorerKey = key;
+
+    state.explorerOverview = response.data || response;
+    updateConfigPanels({ preserveScroll: true });
+  } catch (error) {
+    if (thisRequestId === state.explorerRequestId) {
+      console.error("Failed to load explorer overview:", error);
+      state.explorerOverview = null;
+    }
+  }
+}
+
 async function loadData() {
   // Config and stats travel independently: the settings tabs are usable the moment the
   // config lands, without waiting on the rejection-corpus reads behind the info bar.
   const configLoad = loadConfig().then(() => render());
   const statsLoad = loadStats();
 
-  // The explorer tree is built from the analytics payload; the analytics tab loads its own
+  // The explorer loads its own current-state payload; the analytics tab loads its ranged
   // copy through `loadStats`.
-  const analyticsLoad = state.activeTab === "explorer" ? loadAnalytics() : null;
+  const explorerLoad = state.activeTab === "explorer" ? loadExplorerOverview() : null;
 
-  await Promise.all([configLoad, statsLoad, analyticsLoad]);
+  await Promise.all([configLoad, statsLoad, explorerLoad]);
 }
 
 // ============================================================================
@@ -715,6 +744,7 @@ let poller = null;
 let _lastInfoBarKey = null;
 let _lastToolbarKey = null;
 let _lastAnalyticsKey = null;
+let _lastExplorerKey = null;
 let _lastStatusKey = null;
 
 export function createLifecycle() {
@@ -766,14 +796,16 @@ export function createLifecycle() {
             AppState.save("filtering_activeTab", tabId);
             updateToolbar();
 
-            // Switch the panel FIRST. Analytics and Explorer both render from the
-            // analytics payload, and awaiting that fetch before repainting left the
-            // previous tab's content on screen for its duration — the click looked like it
-            // had done nothing. The new panel renders its own loading state.
+            // Switch the panel FIRST. Analytics and Explorer each render from an analytics
+            // payload, and awaiting that fetch before repainting left the previous tab's
+            // content on screen for its duration — the click looked like it had done
+            // nothing. The new panel renders its own loading state.
             updateConfigPanels({ scrollTop: 0 });
 
-            if ((tabId === "analytics" || tabId === "explorer") && !state.analytics) {
+            if (tabId === "analytics" && !state.analytics) {
               void loadAnalytics();
+            } else if (tabId === "explorer" && !state.explorerOverview) {
+              void loadExplorerOverview();
             }
           },
         });
@@ -835,6 +867,7 @@ export function createLifecycle() {
       _lastInfoBarKey = null;
       _lastToolbarKey = null;
       _lastAnalyticsKey = null;
+      _lastExplorerKey = null;
       _lastStatusKey = null;
     },
   };
@@ -934,28 +967,6 @@ window.filteringPage = {
     }
   },
 
-  refreshAnalytics: async () => {
-    // Simply load analytics and re-render - no inline button spinner needed
-    // The footer refresh button and isLoadingAnalytics state handle UX
-    state.isLoadingAnalytics = true;
-    render();
-
-    try {
-      await loadAnalytics();
-      if (window.filteringPage.currentReason) {
-        window.filteringPage.loadExplorer(window.filteringPage.explorerPage);
-      } else {
-        const container = document.getElementById("explorer-detail-view");
-        if (container && state.analytics) {
-          container.innerHTML = renderers.renderExplorerDashboard(state.analytics);
-        }
-      }
-    } finally {
-      state.isLoadingAnalytics = false;
-      render();
-    }
-  },
-
   debouncedFilterExplorerTree: null,
 
   filterExplorerTree: (query) => {
@@ -1002,8 +1013,8 @@ window.filteringPage = {
     if (navOverview) navOverview.classList.add("active");
 
     const container = document.getElementById("explorer-detail-view");
-    if (container && state.analytics) {
-      container.innerHTML = renderers.renderExplorerDashboard(state.analytics);
+    if (container && state.explorerOverview) {
+      container.innerHTML = renderers.renderExplorerDashboard(state.explorerOverview);
     }
   },
 
