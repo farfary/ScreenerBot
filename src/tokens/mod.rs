@@ -46,11 +46,7 @@ use crate::chains::ChainId;
 
 // Re-export main types for convenience
 pub use database::{
-    // Batch async functions (PERF optimization - reduces 260k tasks to 4)
-    batch_clear_rejection_status_async,
     batch_update_priority_async,
-    batch_update_rejection_status_async,
-    batch_upsert_rejection_stats_async,
     cleanup_rejection_history_async,
     cleanup_rejection_stats_async,
     // Async wrappers for external code
@@ -71,7 +67,11 @@ pub use database::{
     // Per-chain database handles
     install_database,
     list_blacklisted_tokens_async,
+    record_filter_build_async,
     uninstall_databases,
+    FilterBuildWrite,
+    FilterOutcome,
+    FilterRejectionRecord,
     TokenBlacklistRecord,
     TokenDatabase,
 };

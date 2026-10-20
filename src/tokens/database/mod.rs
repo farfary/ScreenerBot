@@ -33,6 +33,8 @@ mod tracking;
 #[cfg(test)]
 mod authority_tests;
 #[cfg(test)]
+mod rejections_tests;
+#[cfg(test)]
 mod retention_tests;
 
 use crate::errors::DatabaseError;
@@ -138,3 +140,4 @@ impl TokenDatabase {
 
 // Re-export all public items from submodules
 pub use async_api::*;
+pub use rejections::{FilterBuildWrite, FilterOutcome, FilterRejectionRecord};

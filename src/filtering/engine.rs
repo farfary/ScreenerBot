@@ -7,7 +7,7 @@ use std::collections::{HashMap, HashSet};
 use std::sync::Arc;
 use std::time::Instant as StdInstant;
 
-use chrono::Utc;
+use chrono::{DateTime, Utc};
 use serde_json::json;
 
 use crate::chains::{runtime_for, ChainId};
@@ -15,11 +15,9 @@ use crate::config::FilteringConfig;
 use crate::events::{record_filtering_event, Severity};
 use crate::logger::{self, LogTag};
 use crate::positions;
-use crate::tokens::types::Token;
 use crate::tokens::{
-    batch_clear_rejection_status_async, batch_update_priority_async,
-    batch_update_rejection_status_async, batch_upsert_rejection_stats_async,
-    get_all_tokens_for_filtering_async, list_blacklisted_tokens_async,
+    batch_update_priority_async, get_all_tokens_for_filtering_async, list_blacklisted_tokens_async,
+    record_filter_build_async, FilterOutcome, FilterRejectionRecord,
 };
 
 use super::sources::FilterRejectionReason;
@@ -38,6 +36,11 @@ pub async fn compute_snapshot(
     previous: Option<&FilteringSnapshot>,
 ) -> Result<FilteringSnapshot> {
     let start = StdInstant::now();
+
+    // The build's stamp: strictly after the previous build's, so a token the previous
+    // build evaluated can never be mistaken for one this build did.
+    let now = Utc::now().timestamp();
+    let evaluated_at = previous.map_or(now, |p| now.max(p.evaluated_at + 1));
 
     // The chain's stage sequence, resolved once per refresh.
     let profile = runtime_for(chain)
@@ -68,9 +71,11 @@ pub async fn compute_snapshot(
     let total_candidates = tokens.len();
 
     if tokens.is_empty() {
+        // An empty corpus is a complete build: it records no outcomes, and the write
+        // below clears every rejection the store still holds.
         logger::debug(
             LogTag::Filtering,
-            "No tokens with market data found - snapshot remains empty",
+            "No tokens with market data found - every stored rejection is cleared",
         );
 
         // DEBUG: Record empty token store
@@ -84,8 +89,6 @@ pub async fn compute_snapshot(
             }),
         )
         .await;
-
-        return Ok(FilteringSnapshot::empty());
     }
 
     logger::info(
@@ -265,33 +268,9 @@ pub async fn compute_snapshot(
     let mut token_entries: HashMap<String, TokenEntry> = HashMap::with_capacity(tokens.len());
     let mut stats = FilteringStats::default();
 
-    // PERF: Pre-wrap all tokens in Arc to avoid cloning ~2KB Token structs
-    // This reduces memory from ~290MB (144k × 2KB clones) to ~1.2MB (144k × 8 byte refs)
-    let arc_tokens: HashMap<String, Arc<Token>> = tokens
-        .into_iter()
-        .map(|t| (t.mint.clone(), Arc::new(t)))
-        .collect();
+    let mut outcomes: Vec<FilterOutcome> = Vec::with_capacity(tokens.len());
 
-    let mut previous_pass_times: HashMap<String, i64> = HashMap::new();
-    let mut previous_reject_times: HashMap<String, i64> = HashMap::new();
-
-    if let Some(prev_snapshot) = previous {
-        for entry in &prev_snapshot.passed_tokens {
-            previous_pass_times.insert(entry.mint.clone(), entry.passed_time);
-        }
-        for entry in &prev_snapshot.rejected_tokens {
-            previous_reject_times.insert(entry.mint.clone(), entry.rejection_time);
-        }
-    }
-
-    // PERF: Collect batch data instead of spawning individual tasks
-    // This reduces 260k+ tokio::spawn calls to just 4 batch operations
-    let mut batch_clear_mints: Vec<String> = Vec::new();
-    let mut batch_priority_mints: Vec<String> = Vec::new();
-    let mut batch_rejection_updates: Vec<(String, String, String, i64)> = Vec::new();
-    let mut batch_rejection_stats: Vec<(String, String, i64)> = Vec::new();
-
-    for (mint, token) in arc_tokens.iter() {
+    for mut token in tokens {
         stats.total_processed += 1;
 
         let has_pool_price = priced_set.contains(&token.mint);
@@ -304,28 +283,28 @@ pub async fn compute_snapshot(
             .map(|dt| dt.timestamp())
             .unwrap_or_else(|| token.first_discovered_at.timestamp());
 
-        // PERF: Use Arc::clone (8 bytes) instead of Token::clone (~2KB)
-        token_entries.insert(
-            mint.clone(),
-            TokenEntry {
-                token: Arc::clone(token),
-                has_pool_price,
-                has_open_position,
-                has_ohlcv,
-                pair_created_at: Some(creation_timestamp),
-                last_updated: token.market_data_last_fetched_at,
-            },
-        );
+        let mut passed_at = None;
 
-        match profile.evaluate(token, &config).await {
+        match profile.evaluate(&token, &config).await {
             Ok(()) => {
                 filtered_mints.push(token.mint.clone());
                 stats.passed += 1;
 
-                let passed_time = previous_pass_times
-                    .get(token.mint.as_str())
-                    .copied()
-                    .unwrap_or_else(|| Utc::now().timestamp());
+                // The loaded rejection columns are the previous build's write; this build
+                // supersedes them.
+                token.last_rejection_reason = None;
+                token.last_rejection_source = None;
+                token.last_rejection_at = None;
+                outcomes.push(FilterOutcome {
+                    mint: token.mint.clone(),
+                    rejection: None,
+                });
+
+                let passed_time = previous
+                    .and_then(|prev| prev.tokens.get(token.mint.as_str()))
+                    .and_then(|entry| entry.passed_at)
+                    .unwrap_or(evaluated_at);
+                passed_at = Some(passed_time);
 
                 passed_tokens.push(PassedToken {
                     chain,
@@ -334,10 +313,6 @@ pub async fn compute_snapshot(
                     name: Some(token.name.clone()),
                     passed_time,
                 });
-
-                // PERF: Collect for batch processing instead of spawning individual tasks
-                batch_clear_mints.push(token.mint.clone());
-                batch_priority_mints.push(token.mint.clone());
 
                 // DEBUG: Record token passed (sample to avoid spam)
                 if stats.passed % 10 == 1 {
@@ -359,33 +334,40 @@ pub async fn compute_snapshot(
                 }
             }
             Err(reason) => {
-                // Clone reason since it's used multiple times and no longer Copy
                 let reason_label = reason.label();
                 let reason_source = reason.source().as_str().to_owned();
 
                 stats.record_rejection(reason);
                 rejected_mints.push(token.mint.clone());
-                let rejection_time = previous_reject_times
-                    .get(token.mint.as_str())
-                    .copied()
-                    .unwrap_or_else(|| Utc::now().timestamp());
+
+                // A rejection keeps its start while the reason is unchanged and restarts
+                // when the reason changes.
+                let since = token
+                    .last_rejection_at
+                    .map(|at| at.timestamp())
+                    .filter(|_| {
+                        token.last_rejection_reason.as_deref() == Some(reason_label.as_str())
+                    })
+                    .unwrap_or(evaluated_at);
+                token.last_rejection_reason = Some(reason_label.clone());
+                token.last_rejection_source = Some(reason_source.clone());
+                token.last_rejection_at = DateTime::from_timestamp(since, 0);
 
                 rejected_tokens.push(RejectedToken {
                     mint: token.mint.clone(),
                     symbol: token.symbol.clone(),
                     name: Some(token.name.clone()),
                     reason: reason_label.clone(),
-                    rejection_time,
+                    rejection_time: since,
                 });
-
-                // PERF: Collect for batch processing instead of spawning individual tasks
-                batch_rejection_updates.push((
-                    token.mint.clone(),
-                    reason_label.clone(),
-                    reason_source.clone(),
-                    rejection_time,
-                ));
-                batch_rejection_stats.push((reason_label.clone(), reason_source, rejection_time));
+                outcomes.push(FilterOutcome {
+                    mint: token.mint.clone(),
+                    rejection: Some(FilterRejectionRecord {
+                        reason: reason_label.clone(),
+                        source: reason_source,
+                        since,
+                    }),
+                });
 
                 // DEBUG: Record token rejection (sample to avoid spam)
                 if stats.rejected % 10 == 1 {
@@ -409,66 +391,52 @@ pub async fn compute_snapshot(
                 }
             }
         }
+
+        // The entry is built after the verdict, so it carries this build's outcome.
+        let last_updated = token.market_data_last_fetched_at;
+        let mint = token.mint.clone();
+        token_entries.insert(
+            mint,
+            TokenEntry {
+                token: Arc::new(token),
+                has_pool_price,
+                has_open_position,
+                has_ohlcv,
+                pair_created_at: Some(creation_timestamp),
+                last_updated,
+                passed_at,
+            },
+        );
     }
 
-    // PERF: Spawn only 4 batch tasks instead of 260k+ individual tasks
-    // This dramatically reduces memory usage and task scheduler overhead
-    let passed_count = batch_clear_mints.len();
-    let rejected_count = batch_rejection_updates.len();
-
-    if !batch_clear_mints.is_empty() {
-        tokio::spawn(async move {
-            if let Err(e) = batch_clear_rejection_status_async(chain, batch_clear_mints).await {
-                logger::warning(
+    // The build's database state is written before the snapshot exists, so a snapshot
+    // never describes tokens the store has not yet been told about.
+    match record_filter_build_async(chain, evaluated_at, outcomes).await {
+        Ok(write) => {
+            if write.cleared > 0 {
+                logger::info(
                     LogTag::Filtering,
-                    &format!("Failed to batch clear rejection status: {e}"),
+                    &format!(
+                        "Filtering build {evaluated_at}: cleared {} rejections of tokens the build did not evaluate",
+                        write.cleared
+                    ),
                 );
             }
-        });
-    }
-
-    if !batch_priority_mints.is_empty() {
-        tokio::spawn(async move {
-            if let Err(e) = batch_update_priority_async(chain, batch_priority_mints, 60).await {
-                logger::warning(
-                    LogTag::Filtering,
-                    &format!("Failed to batch update priorities: {e}"),
-                );
-            }
-        });
-    }
-
-    if !batch_rejection_updates.is_empty() {
-        tokio::spawn(async move {
-            if let Err(e) =
-                batch_update_rejection_status_async(chain, batch_rejection_updates).await
-            {
-                logger::warning(
-                    LogTag::Filtering,
-                    &format!("Failed to batch update rejection status: {e}"),
-                );
-            }
-        });
-    }
-
-    if !batch_rejection_stats.is_empty() {
-        tokio::spawn(async move {
-            if let Err(e) = batch_upsert_rejection_stats_async(chain, batch_rejection_stats).await {
-                logger::warning(
-                    LogTag::Filtering,
-                    &format!("Failed to batch upsert rejection stats: {e}"),
-                );
-            }
-        });
-    }
-
-    logger::debug(
-        LogTag::Filtering,
-        &format!(
-            "Batch DB updates: passed={} (clear+priority), rejected={} (status+stats)",
-            passed_count, rejected_count
+        }
+        Err(e) => logger::warning(
+            LogTag::Filtering,
+            &format!("Failed to record filtering build {evaluated_at}: {e}"),
         ),
-    );
+    }
+
+    if !filtered_mints.is_empty() {
+        if let Err(e) = batch_update_priority_async(chain, filtered_mints.clone(), 60).await {
+            logger::warning(
+                LogTag::Filtering,
+                &format!("Failed to batch update priorities: {e}"),
+            );
+        }
+    }
 
     let elapsed_ms = start.elapsed().as_millis();
 
@@ -506,6 +474,7 @@ pub async fn compute_snapshot(
 
     let snapshot = FilteringSnapshot {
         updated_at: Utc::now(),
+        evaluated_at,
         filtered_mints,
         passed_tokens: {
             passed_tokens.sort_unstable_by(|a, b| {

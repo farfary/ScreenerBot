@@ -18,7 +18,7 @@ pub const MAX_ROWS_PER_TRANSACTION: u64 = 2_000;
 /// Tokens examined per transaction.
 const CANDIDATES_PER_TRANSACTION: u32 = 500;
 /// Pause between two transactions, so writers waiting on the store get their turn.
-const TRANSACTION_PAUSE: Duration = Duration::from_millis(25);
+pub(super) const TRANSACTION_PAUSE: Duration = Duration::from_millis(25);
 
 /// The tables holding a token's rows, children first: market, security and tracking
 /// rows restrict the token's deletion.

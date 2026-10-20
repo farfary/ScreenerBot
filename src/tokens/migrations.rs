@@ -4,7 +4,7 @@
 //! Tokens schema upgrade mechanics — ordered steps run by
 //! `schema::initialize_schema` separately from fresh `CREATE TABLE IF NOT EXISTS`.
 //!
-//! Two independent, structurally gated steps:
+//! Three independent, structurally gated steps:
 //! 1. `migrate_legacy_schema` — one-time rebuild of every token table onto the
 //!    chain-scoped primary key (pre-chain-identity databases only).
 //! 2. `apply_additive_migrations` — ordered additive columns for databases that
@@ -12,6 +12,7 @@
 //!    later nullable/defaulted column must be listed here as well as in
 //!    `CREATE_TABLES`. Presence of the column, not `user_version`, decides whether
 //!    the step runs.
+//! 3. `drop_retired_indexes` — drops indexes no query uses any more, on every open.
 //!
 //! A NOT NULL column with no DEFAULT cannot go through `ALTER TABLE ADD COLUMN`
 //! on a non-empty table; SQLite rejects that shape. Additive steps must be
@@ -47,11 +48,22 @@ struct AdditiveColumn {
 
 /// Ordered additive repairs. Append a step here (and the matching column in
 /// `CREATE_TABLES`) when widening an already-versioned tokens database.
-const ADDITIVE_COLUMNS: &[AdditiveColumn] = &[AdditiveColumn {
-    table: "token_favorites",
-    column: "notes",
-    definition: "notes TEXT",
-}];
+const ADDITIVE_COLUMNS: &[AdditiveColumn] = &[
+    AdditiveColumn {
+        table: "token_favorites",
+        column: "notes",
+        definition: "notes TEXT",
+    },
+    AdditiveColumn {
+        table: "update_tracking",
+        column: "filter_evaluated_at",
+        definition: "filter_evaluated_at INTEGER",
+    },
+];
+
+/// Indexes no query uses any more. An older core still creates them on open, so every
+/// open of this core drops them again rather than only the open that upgraded the store.
+const RETIRED_INDEXES: &[&str] = &["idx_tracking_active_priority"];
 
 pub(super) fn table_needs_chain_rebuild(conn: &Connection) -> Result<bool, Error> {
     let exists = conn
@@ -231,6 +243,23 @@ pub(super) fn apply_additive_migrations(transaction: &Connection) -> Result<(), 
             )
             .map_err(|error| DatabaseError::Query {
                 operation: format!("add column {} to {}", step.column, step.table),
+                message: error.to_string(),
+            })?;
+    }
+    Ok(())
+}
+
+/// Drop every retired index that exists. Runs inside the opener's transaction and is
+/// idempotent.
+pub(super) fn drop_retired_indexes(transaction: &Connection) -> Result<(), Error> {
+    for index in RETIRED_INDEXES {
+        // SQLite does not bind identifiers; the names are constants and are quoted like
+        // the legacy index names above.
+        let quoted_index = format!("\"{}\"", index.replace('"', "\"\""));
+        transaction
+            .execute(&format!("DROP INDEX IF EXISTS {quoted_index}"), [])
+            .map_err(|error| DatabaseError::Query {
+                operation: format!("Failed to drop retired tokens index {index}"),
                 message: error.to_string(),
             })?;
     }

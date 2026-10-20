@@ -21,7 +21,15 @@ use rusqlite::{Connection, OptionalExtension, Transaction};
 /// Additive column repair inspects on-disk columns and does not trust this
 /// number alone: a database already stamped current still receives a required
 /// column that is missing from the live table.
-pub const SCHEMA_VERSION: i64 = 2;
+pub const SCHEMA_VERSION: i64 = 3;
+
+/// The oldest store version whose code still reads and writes this schema correctly.
+/// Version 3 only adds the nullable `update_tracking.filter_evaluated_at` column and
+/// retires an unused index, both of which a version 2 core ignores.
+const MIN_READER_VERSION: i64 = 2;
+
+/// The version the store held when the schema ledger was adopted.
+const LEDGER_BASELINE_VERSION: i64 = 2;
 
 /// All CREATE TABLE statements
 pub const CREATE_TABLES: &[&str] = &[
@@ -204,6 +212,7 @@ pub const CREATE_TABLES: &[&str] = &[
         last_rejection_reason TEXT,
         last_rejection_source TEXT,
         last_rejection_at INTEGER,
+        filter_evaluated_at INTEGER,
         PRIMARY KEY (chain_id, mint),
         FOREIGN KEY (chain_id, mint) REFERENCES tokens(chain_id, mint) ON DELETE RESTRICT
     )
@@ -371,9 +380,6 @@ pub const CREATE_INDEXES: &[&str] = &[
     // Unique constraint to prevent duplicate rejection history entries
     "CREATE UNIQUE INDEX IF NOT EXISTS idx_rejection_history_unique ON rejection_history(chain_id, mint, source, rejected_at)",
 
-    // Partial index for active (non-blacklisted) tokens by priority (common query pattern)
-    "CREATE INDEX IF NOT EXISTS idx_tracking_active_priority ON update_tracking(priority DESC, market_data_last_updated_at ASC) WHERE last_rejection_at IS NULL",
-
     // Authority reputation indexes (for auto-discovery queries)
     "CREATE INDEX IF NOT EXISTS idx_authority_rep_blocked ON authority_reputation(is_blocked) WHERE is_blocked = 1",
     "CREATE INDEX IF NOT EXISTS idx_authority_rep_confidence ON authority_reputation(confidence DESC)",
@@ -383,8 +389,8 @@ pub const CREATE_INDEXES: &[&str] = &[
 /// The token store's schema.
 pub(crate) const SCHEMA: StoreSchema = StoreSchema {
     version: SCHEMA_VERSION,
-    min_reader_version: SCHEMA_VERSION,
-    baseline: SCHEMA_VERSION,
+    min_reader_version: MIN_READER_VERSION,
+    baseline: LEDGER_BASELINE_VERSION,
     renames: Some(&super::column_names::RENAMES),
     step,
     legacy_stamp: None,
@@ -438,6 +444,7 @@ fn create_schema(tx: &Transaction<'_>) -> Result<(), Error> {
     }
 
     migrations::apply_additive_migrations(tx)?;
+    migrations::drop_retired_indexes(tx)?;
 
     for statement in CREATE_INDEXES {
         tx.execute(statement, [])
@@ -474,6 +481,7 @@ pub fn is_initialized(conn: &Connection) -> bool {
 mod tests {
     use super::*;
     use crate::chains::ChainId;
+    use crate::database::schema::ddl;
     use crate::database::{catalog, open};
 
     fn initialize_schema(conn: &mut Connection) -> Result<(), DatabaseError> {
@@ -557,5 +565,50 @@ mod tests {
             )
             .unwrap();
         assert_eq!(solana_rows, 0);
+    }
+
+    fn index_exists(conn: &Connection, name: &str) -> bool {
+        conn.query_row(
+            "SELECT 1 FROM sqlite_master WHERE type = 'index' AND name = ?1",
+            [name],
+            |_| Ok(()),
+        )
+        .optional()
+        .unwrap()
+        .is_some()
+    }
+
+    #[test]
+    fn a_store_without_the_evaluation_stamp_gains_it_on_open() {
+        let mut conn = Connection::open_in_memory().unwrap();
+        initialize_schema(&mut conn).unwrap();
+        conn.execute(
+            "ALTER TABLE update_tracking DROP COLUMN filter_evaluated_at",
+            [],
+        )
+        .unwrap();
+
+        initialize_schema(&mut conn).unwrap();
+
+        assert!(ddl::column_names(&conn, "update_tracking")
+            .unwrap()
+            .iter()
+            .any(|column| column == "filter_evaluated_at"));
+    }
+
+    #[test]
+    fn a_retired_index_is_dropped_on_every_open() {
+        let mut conn = Connection::open_in_memory().unwrap();
+        initialize_schema(&mut conn).unwrap();
+        assert!(!index_exists(&conn, "idx_tracking_active_priority"));
+
+        conn.execute(
+            "CREATE INDEX idx_tracking_active_priority ON update_tracking(priority)",
+            [],
+        )
+        .unwrap();
+        initialize_schema(&mut conn).unwrap();
+
+        assert!(!index_exists(&conn, "idx_tracking_active_priority"));
     }
 }

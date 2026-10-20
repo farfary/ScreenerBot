@@ -3,195 +3,183 @@
 
 //! Token rejection storage — records why tokens were filtered out with timestamps.
 
-use crate::errors::DatabaseError;
-use rusqlite::params;
+use std::collections::BTreeMap;
 
-use crate::logger::{self, LogTag};
+use crate::errors::DatabaseError;
+use rusqlite::{params, Connection};
+
 use crate::tokens::types::TokenResult;
 use crate::tokens::Error;
 
+use super::retention::{MAX_ROWS_PER_TRANSACTION, TRANSACTION_PAUSE};
 use super::TokenDatabase;
 use crate::database::WriteTransaction;
 
+/// The verdict of one filtering build on one token: `None` when the token passed.
+#[derive(Debug, Clone)]
+pub struct FilterOutcome {
+    pub mint: String,
+    pub rejection: Option<FilterRejectionRecord>,
+}
+
+/// A rejection as the token row stores it.
+#[derive(Debug, Clone)]
+pub struct FilterRejectionRecord {
+    pub reason: String,
+    pub source: String,
+    /// Stamp of the first build in the unbroken run of builds that rejected the token
+    /// for this reason.
+    pub since: i64,
+}
+
+/// What [`TokenDatabase::record_filter_build`] wrote.
+#[derive(Debug, Clone, Copy)]
+pub struct FilterBuildWrite {
+    /// Outcomes written.
+    pub outcomes: usize,
+    /// Rejections cleared from tokens the build did not evaluate.
+    pub cleared: u64,
+}
+
 impl TokenDatabase {
-    /// Batch clear rejection status for multiple tokens (PERF optimization)
-    /// Uses a single transaction instead of spawning individual tasks
-
-    pub fn batch_clear_rejection_status(&self, mints: &[String]) -> TokenResult<usize> {
-        if mints.is_empty() {
-            return Ok(0);
-        }
-
+    /// Record one complete filtering build as the chain's rejection state.
+    ///
+    /// Every outcome is written in one transaction (all-or-nothing): the evaluated
+    /// token's rejection columns take the build's verdict and `filter_evaluated_at` takes
+    /// `evaluated_at`, and `rejection_stats` counts each rejection that starts in this
+    /// build once, in the hour of `evaluated_at`. Only after that transaction committed
+    /// are the rejections of tokens the build did not evaluate (any row whose stamp is
+    /// not `evaluated_at`) cleared, in bounded transactions, so a failed outcomes
+    /// transaction leaves the previous build's state whole and an interrupted clear is
+    /// finished by the next build.
+    pub fn record_filter_build(
+        &self,
+        evaluated_at: i64,
+        outcomes: &[FilterOutcome],
+    ) -> TokenResult<FilterBuildWrite> {
         let mut conn = self.conn()?;
+        self.write_filter_outcomes(&mut conn, evaluated_at, outcomes)?;
+        let cleared = self.clear_unevaluated_rejections(&mut conn, evaluated_at)?;
+        Ok(FilterBuildWrite {
+            outcomes: outcomes.len(),
+            cleared,
+        })
+    }
 
-        let tx = conn.write_tx().map_err(|e| {
-            Error::Database(DatabaseError::Query {
-                operation: "Transaction start failed".to_owned(),
-                message: e.to_string(),
-            })
-        })?;
-
-        let mut updated = 0;
+    fn write_filter_outcomes(
+        &self,
+        conn: &mut Connection,
+        evaluated_at: i64,
+        outcomes: &[FilterOutcome],
+    ) -> TokenResult<()> {
+        let failed = |operation: &'static str| {
+            move |error| DatabaseError::classify_sqlite_failure(operation, error)
+        };
+        let mut started: BTreeMap<(&str, &str), i64> = BTreeMap::new();
+        let transaction = conn.write_tx().map_err(failed("begin filter outcomes"))?;
         {
-            let mut stmt = tx
+            let mut statement = transaction
                 .prepare_cached(
-                    "UPDATE update_tracking SET 
-                        last_rejection_reason = NULL, 
-                        last_rejection_source = NULL, 
-                        last_rejection_at = NULL 
+                    "UPDATE update_tracking
+                     SET last_rejection_reason = ?3, last_rejection_source = ?4,
+                         last_rejection_at = ?5, filter_evaluated_at = ?6
                      WHERE chain_id = ?1 AND mint = ?2",
                 )
-                .map_err(|e| {
-                    Error::Database(DatabaseError::Query {
-                        operation: "Prepare failed".to_owned(),
-                        message: e.to_string(),
-                    })
-                })?;
-
-            for mint in mints {
-                match stmt.execute(params![self.chain_id(), mint]) {
-                    Ok(rows) => updated += rows,
-                    Err(e) => {
-                        // Log but continue - don't fail entire batch
-                        logger::warning(
-                            LogTag::Tokens,
-                            &format!("batch_clear_rejection_status error for {mint}: {e}"),
-                        );
+                .map_err(failed("prepare filter outcomes"))?;
+            for outcome in outcomes {
+                let (reason, source, since) = match &outcome.rejection {
+                    Some(rejection) => (
+                        Some(rejection.reason.as_str()),
+                        Some(rejection.source.as_str()),
+                        Some(rejection.since),
+                    ),
+                    None => (None, None, None),
+                };
+                statement
+                    .execute(params![
+                        self.chain_id(),
+                        outcome.mint,
+                        reason,
+                        source,
+                        since,
+                        evaluated_at
+                    ])
+                    .map_err(failed("write filter outcome"))?;
+                if let Some(rejection) = &outcome.rejection {
+                    if rejection.since == evaluated_at {
+                        *started
+                            .entry((rejection.reason.as_str(), rejection.source.as_str()))
+                            .or_default() += 1;
                     }
                 }
             }
         }
-
-        tx.commit().map_err(|e| {
-            Error::Database(DatabaseError::Query {
-                operation: "Transaction commit failed".to_owned(),
-                message: e.to_string(),
-            })
-        })?;
-
-        Ok(updated)
-    }
-
-    /// Batch update priority for multiple tokens (PERF optimization)
-    /// Uses a single transaction instead of spawning individual tasks
-
-    pub fn batch_update_rejection_status(
-        &self,
-        updates: &[(String, String, String, i64)],
-    ) -> TokenResult<usize> {
-        if updates.is_empty() {
-            return Ok(0);
-        }
-
-        let mut conn = self.conn()?;
-
-        let tx = conn.write_tx().map_err(|e| {
-            Error::Database(DatabaseError::Query {
-                operation: "Transaction start failed".to_owned(),
-                message: e.to_string(),
-            })
-        })?;
-
-        let mut updated = 0;
         {
-            let mut stmt = tx
-                .prepare_cached(
-                    "UPDATE update_tracking SET 
-                        last_rejection_reason = ?1, 
-                        last_rejection_source = ?2, 
-                        last_rejection_at = ?3 
-                     WHERE chain_id = ?4 AND mint = ?5",
-                )
-                .map_err(|e| {
-                    Error::Database(DatabaseError::Query {
-                        operation: "Prepare failed".to_owned(),
-                        message: e.to_string(),
-                    })
-                })?;
-
-            for (mint, reason, source, rejected_at) in updates {
-                match stmt.execute(params![reason, source, rejected_at, self.chain_id(), mint]) {
-                    Ok(rows) => updated += rows,
-                    Err(e) => {
-                        logger::warning(
-                            LogTag::Tokens,
-                            &format!("batch_update_rejection_status error for {mint}: {e}"),
-                        );
-                    }
-                }
-            }
-        }
-
-        tx.commit().map_err(|e| {
-            Error::Database(DatabaseError::Query {
-                operation: "Transaction commit failed".to_owned(),
-                message: e.to_string(),
-            })
-        })?;
-
-        Ok(updated)
-    }
-
-    /// Batch upsert rejection stats (PERF optimization)
-    /// stats: Vec of (reason, source, timestamp)
-    pub fn batch_upsert_rejection_stats(
-        &self,
-        stats: &[(String, String, i64)],
-    ) -> TokenResult<usize> {
-        if stats.is_empty() {
-            return Ok(0);
-        }
-
-        let mut conn = self.conn()?;
-
-        let tx = conn.write_tx().map_err(|e| {
-            Error::Database(DatabaseError::Query {
-                operation: "Transaction start failed".to_owned(),
-                message: e.to_string(),
-            })
-        })?;
-
-        let mut updated = 0;
-        {
-            let mut stmt = tx
+            let mut statement = transaction
                 .prepare_cached(
                     "INSERT INTO rejection_stats (chain_id, bucket_hour, reason, source, rejection_count, unique_tokens, first_seen, last_seen)
-                     VALUES (?1, ?2, ?3, ?4, 1, 1, ?5, ?5)
+                     VALUES (?1, ?2, ?3, ?4, ?5, 1, ?6, ?6)
                      ON CONFLICT(chain_id, bucket_hour, reason, source) DO UPDATE SET
-                         rejection_count = rejection_count + 1,
-                         last_seen = ?5",
+                         rejection_count = rejection_count + excluded.rejection_count,
+                         last_seen = excluded.last_seen",
                 )
-                .map_err(|e| Error::Database(DatabaseError::Query { operation: "Prepare failed".to_owned(), message: e.to_string() }))?;
-
-            for (reason, source, timestamp) in stats {
-                // Round timestamp to hour bucket
-                let bucket_hour = (timestamp / 3600) * 3600;
-                match stmt.execute(params![
-                    self.chain_id(),
-                    bucket_hour,
-                    reason,
-                    source,
-                    timestamp
-                ]) {
-                    Ok(_) => updated += 1,
-                    Err(e) => {
-                        logger::warning(
-                            LogTag::Tokens,
-                            &format!("batch_upsert_rejection_stats error: {e}"),
-                        );
-                    }
-                }
+                .map_err(failed("prepare rejection stats"))?;
+            for ((reason, source), count) in started {
+                statement
+                    .execute(params![
+                        self.chain_id(),
+                        evaluated_at / 3600 * 3600,
+                        reason,
+                        source,
+                        count,
+                        evaluated_at
+                    ])
+                    .map_err(failed("write rejection stats"))?;
             }
         }
+        transaction
+            .commit()
+            .map_err(failed("commit filter outcomes"))?;
+        Ok(())
+    }
 
-        tx.commit().map_err(|e| {
-            Error::Database(DatabaseError::Query {
-                operation: "Transaction commit failed".to_owned(),
-                message: e.to_string(),
-            })
-        })?;
-
-        Ok(updated)
+    /// Clear the rejection columns of every row whose stamp is not `evaluated_at`, in
+    /// transactions of at most `MAX_ROWS_PER_TRANSACTION` rows. The partial rejection
+    /// index holds only the rows that currently carry a reason, so the walk touches
+    /// nothing else.
+    fn clear_unevaluated_rejections(
+        &self,
+        conn: &mut Connection,
+        evaluated_at: i64,
+    ) -> TokenResult<u64> {
+        let failed = |operation: &'static str| {
+            move |error| DatabaseError::classify_sqlite_failure(operation, error)
+        };
+        let mut cleared = 0u64;
+        loop {
+            let transaction = conn.write_tx().map_err(failed("begin rejection clear"))?;
+            let changed = transaction
+                .execute(
+                    "UPDATE update_tracking
+                     SET last_rejection_reason = NULL, last_rejection_source = NULL,
+                         last_rejection_at = NULL
+                     WHERE rowid IN (
+                         SELECT rowid FROM update_tracking INDEXED BY idx_tracking_rejection_reason_at
+                         WHERE chain_id = ?1 AND last_rejection_reason IS NOT NULL
+                           AND filter_evaluated_at IS NOT ?2
+                         LIMIT ?3)",
+                    params![self.chain_id(), evaluated_at, MAX_ROWS_PER_TRANSACTION],
+                )
+                .map_err(failed("clear stale rejections"))? as u64;
+            transaction
+                .commit()
+                .map_err(failed("commit rejection clear"))?;
+            cleared += changed;
+            if changed < MAX_ROWS_PER_TRANSACTION {
+                return Ok(cleared);
+            }
+            std::thread::sleep(TRANSACTION_PAUSE);
+        }
     }
 
     /// Get rejection statistics grouped by reason

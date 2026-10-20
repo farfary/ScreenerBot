@@ -276,11 +276,18 @@ pub struct TokenEntry {
     pub has_ohlcv: bool,
     pub pair_created_at: Option<i64>,
     pub last_updated: DateTime<Utc>,
+    /// Stamp of the first build in the unbroken run of builds that passed the token;
+    /// `None` while it is rejected.
+    pub passed_at: Option<i64>,
 }
 
 #[derive(Debug, Clone)]
 pub struct FilteringSnapshot {
     pub updated_at: DateTime<Utc>,
+    /// The build stamp (unix seconds) written to every evaluated token's
+    /// `filter_evaluated_at`; strictly increasing per chain within a process, `0` for an
+    /// empty snapshot that no build produced.
+    pub evaluated_at: i64,
     pub filtered_mints: Vec<String>,
     pub passed_tokens: Vec<PassedToken>,
     pub rejected_mints: Vec<String>,
@@ -293,6 +300,7 @@ impl FilteringSnapshot {
     pub fn empty() -> Self {
         Self {
             updated_at: Utc::now(),
+            evaluated_at: 0,
             filtered_mints: Vec::new(),
             passed_tokens: Vec::new(),
             rejected_mints: Vec::new(),

@@ -4,6 +4,8 @@
 //! Token filtering engine — evaluates tokens against user-defined filter criteria.
 pub mod background;
 mod engine;
+#[cfg(test)]
+mod engine_tests;
 mod error;
 pub mod sources;
 mod stage;

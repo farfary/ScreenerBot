@@ -158,6 +158,7 @@ impl EntryBuilder {
                 has_ohlcv: self.has_ohlcv,
                 pair_created_at: self.pair_created_at,
                 last_updated: Utc::now(),
+                passed_at: None,
             },
         )
     }
@@ -167,6 +168,7 @@ fn snapshot_of(entries: Vec<(String, TokenEntry)>) -> FilteringSnapshot {
     let tokens: HashMap<String, TokenEntry> = entries.into_iter().collect();
     FilteringSnapshot {
         updated_at: Utc::now(),
+        evaluated_at: 0,
         filtered_mints: Vec::new(),
         passed_tokens: Vec::new(),
         rejected_mints: Vec::new(),

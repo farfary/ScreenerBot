@@ -4,7 +4,6 @@
 //! Token filter store — manages filtered token results with pagination and querying.
 
 use std::collections::{HashMap, HashSet};
-use std::sync::atomic::{AtomicBool, Ordering as AtomicOrdering};
 use std::sync::Arc;
 use std::time::Duration;
 
@@ -13,6 +12,7 @@ use serde_json::json;
 use tokio::sync::{Mutex, RwLock};
 
 use crate::chains::{ChainId, ChainScope, PerChain};
+use crate::errors::InternalError;
 use crate::events::{record_filtering_event, Severity};
 use crate::logger::{self, LogTag};
 use crate::tokens::types::Token;
@@ -46,9 +46,7 @@ pub struct FilteringStore {
     /// The chain whose tokens this store filters.
     chain: ChainId,
     snapshot: RwLock<Option<Arc<FilteringSnapshot>>>,
-    /// Prevents multiple concurrent refresh operations
-    refresh_in_progress: AtomicBool,
-    /// Mutex to serialize refresh attempts
+    /// Serializes builds: a build holds it from its staleness check to the snapshot swap.
     refresh_lock: Mutex<()>,
 }
 
@@ -57,7 +55,6 @@ impl FilteringStore {
         Self {
             chain,
             snapshot: RwLock::new(None),
-            refresh_in_progress: AtomicBool::new(false),
             refresh_lock: Mutex::new(()),
         }
     }
@@ -81,12 +78,11 @@ impl FilteringStore {
             return Ok(existing.clone());
         }
 
-        // No snapshot exists - must wait for first refresh
-        // But use a timeout to avoid blocking indefinitely
-        match tokio::time::timeout(Duration::from_secs(30), self.try_refresh()).await {
-            Ok(Ok(snapshot)) => Ok(snapshot),
-            Ok(Err(err)) => Err(err),
-            Err(_) => Err(Error::Internal(crate::errors::InternalError::Timeout {
+        // No snapshot exists - must wait for first refresh, but not indefinitely. The
+        // timeout abandons the wait only: the build runs on and installs its snapshot.
+        match tokio::time::timeout(Duration::from_secs(30), self.start_build()).await {
+            Ok(joined) => joined.map_err(InternalError::from)?,
+            Err(_) => Err(Error::Internal(InternalError::Timeout {
                 message: "filtering snapshot refresh timed out after 30 seconds".to_owned(),
             })),
         }
@@ -120,38 +116,25 @@ impl FilteringStore {
         }
     }
 
-    /// Start a refresh off to the side, unless one is already running.
+    /// Start a refresh off to the side, unless a build is already running.
     fn spawn_background_refresh(self: &Arc<Self>) {
-        if self.refresh_in_progress.load(AtomicOrdering::Relaxed) {
+        if self.refresh_lock.try_lock().is_err() {
             return;
         }
-
-        let store = Arc::clone(self);
-        tokio::spawn(async move {
-            let _ = store.try_refresh_background().await;
-        });
+        drop(self.start_build());
     }
 
-    /// Background refresh - doesn't block, logs errors instead of returning them
-    async fn try_refresh_background(&self) -> Result<()> {
-        // Check if refresh is already in progress
-        if self.refresh_in_progress.swap(true, AtomicOrdering::SeqCst) {
-            logger::debug(LogTag::Filtering, "Skipping refresh - already in progress");
-            return Ok(());
-        }
-
-        let result = self.try_refresh_inner().await;
-        self.refresh_in_progress
-            .store(false, AtomicOrdering::SeqCst);
-
-        if let Err(ref err) = result {
-            logger::warning(
-                LogTag::Filtering,
-                &format!("Background refresh failed: {err}"),
-            );
-        }
-
-        result.map(|_| ())
+    /// Run a build on its own task, so no caller's timeout or drop can cancel it between
+    /// its database write and its snapshot swap. Builds serialize on `refresh_lock`.
+    fn start_build(self: &Arc<Self>) -> tokio::task::JoinHandle<Result<Arc<FilteringSnapshot>>> {
+        let store = Arc::clone(self);
+        tokio::spawn(async move {
+            let result = store.try_refresh().await;
+            if let Err(err) = &result {
+                logger::warning(LogTag::Filtering, &format!("Refresh failed: {err}"));
+            }
+            result
+        })
     }
 
     async fn try_refresh(&self) -> Result<Arc<FilteringSnapshot>> {
@@ -202,8 +185,11 @@ impl FilteringStore {
         Ok(snapshot)
     }
 
-    pub async fn refresh(&self) -> Result<()> {
-        self.try_refresh().await.map(|_| ())
+    pub async fn refresh(self: &Arc<Self>) -> Result<()> {
+        self.start_build()
+            .await
+            .map_err(InternalError::from)?
+            .map(|_| ())
     }
 
     pub async fn get_filtered_mints(self: &Arc<Self>) -> Result<Vec<String>> {
@@ -330,8 +316,8 @@ impl FilteringStore {
         let mut rejection_reasons = HashMap::new();
         let mut available_rejection_reasons = Vec::new();
         if matches!(query.view, FilteringView::Rejected) {
-            // Build rejection reasons from token's persisted last_rejection_reason (database)
-            // This replaces the truncated snapshot.rejected_tokens lookup
+            // The reasons come from the tokens themselves: the snapshot's own rejected_tokens
+            // list is truncated.
             for token in &items {
                 if let Some(ref reason) = token.last_rejection_reason {
                     let trimmed = reason.trim();
@@ -341,39 +327,18 @@ impl FilteringStore {
                 }
             }
 
-            // Collect unique reasons from database (not limited snapshot) for filter dropdown
-            // Use get_rejection_stats_async() which queries all rejection reasons from update_tracking table
-            match crate::tokens::get_rejection_stats_async(self.chain).await {
-                Ok(stats) => {
-                    let mut unique_reasons: HashSet<String> = HashSet::new();
-                    for (reason, _source, _count) in stats {
-                        let trimmed = reason.trim();
-                        if !trimmed.is_empty() {
-                            unique_reasons.insert(trimmed.to_string());
-                        }
-                    }
-                    let mut sorted_reasons: Vec<String> = unique_reasons.into_iter().collect();
-                    sorted_reasons.sort_unstable_by(|a, b| a.to_lowercase().cmp(&b.to_lowercase()));
-                    available_rejection_reasons = sorted_reasons;
-                }
-                Err(e) => {
-                    logger::warning(
-                        LogTag::Filtering,
-                        &format!("Failed to get rejection stats from DB: {e}"),
-                    );
-                    // Fallback to snapshot if DB query fails
-                    let mut unique_reasons: HashSet<String> = HashSet::new();
-                    for entry in &snapshot.rejected_tokens {
-                        let trimmed = entry.reason.trim();
-                        if !trimmed.is_empty() {
-                            unique_reasons.insert(trimmed.to_string());
-                        }
-                    }
-                    let mut sorted_reasons: Vec<String> = unique_reasons.into_iter().collect();
-                    sorted_reasons.sort_unstable_by(|a, b| a.to_lowercase().cmp(&b.to_lowercase()));
-                    available_rejection_reasons = sorted_reasons;
-                }
-            }
+            // The dropdown lists every reason the snapshot's rejected set carries.
+            let unique_reasons: HashSet<&str> = snapshot
+                .rejected_mints
+                .iter()
+                .filter_map(|mint| snapshot.tokens.get(mint))
+                .filter_map(|entry| entry.token.last_rejection_reason.as_deref())
+                .map(str::trim)
+                .filter(|reason| !reason.is_empty())
+                .collect();
+            available_rejection_reasons = unique_reasons.into_iter().map(str::to_owned).collect();
+            available_rejection_reasons
+                .sort_unstable_by(|a, b| a.to_lowercase().cmp(&b.to_lowercase()));
         }
 
         let mut blacklist_reasons: HashMap<String, Vec<BlacklistReasonInfo>> = HashMap::new();

@@ -12,7 +12,7 @@ use crate::tokens::Error;
 
 use crate::chains::{ChainId, ChainScope};
 
-use super::{require_database, TokenBlacklistRecord};
+use super::{require_database, FilterBuildWrite, FilterOutcome, TokenBlacklistRecord};
 
 /// Fetch token metadata asynchronously via spawn_blocking
 pub async fn get_token_async(chain: ChainId, mint: &str) -> TokenResult<Option<TokenMetadata>> {
@@ -238,21 +238,6 @@ pub async fn get_tokens_no_market_async(
     .map_err(|e| Error::Internal(InternalError::from(e)))?
 }
 
-/// Async: batch clear rejection status for multiple tokens (PERF optimization)
-/// Reduces 130k+ tokio::spawn calls to a single blocking task with transaction
-pub async fn batch_clear_rejection_status_async(
-    chain: ChainId,
-    mints: Vec<String>,
-) -> TokenResult<usize> {
-    if mints.is_empty() {
-        return Ok(0);
-    }
-    let db = require_database(chain)?;
-    tokio::task::spawn_blocking(move || db.batch_clear_rejection_status(&mints))
-        .await
-        .map_err(|e| Error::Internal(InternalError::from(e)))?
-}
-
 /// Async: batch update priority for multiple tokens (PERF optimization)
 /// Reduces 130k+ tokio::spawn calls to a single blocking task with transaction
 pub async fn batch_update_priority_async(
@@ -269,34 +254,15 @@ pub async fn batch_update_priority_async(
         .map_err(|e| Error::Internal(InternalError::from(e)))?
 }
 
-/// Async: batch update rejection status for multiple tokens (PERF optimization)
-/// Reduces 130k+ tokio::spawn calls to a single blocking task with transaction
-/// updates: Vec of (mint, reason, source, rejected_at)
-pub async fn batch_update_rejection_status_async(
+/// Async: record one complete filtering build as the chain's rejection state
+/// (see `TokenDatabase::record_filter_build`).
+pub async fn record_filter_build_async(
     chain: ChainId,
-    updates: Vec<(String, String, String, i64)>,
-) -> TokenResult<usize> {
-    if updates.is_empty() {
-        return Ok(0);
-    }
+    evaluated_at: i64,
+    outcomes: Vec<FilterOutcome>,
+) -> TokenResult<FilterBuildWrite> {
     let db = require_database(chain)?;
-    tokio::task::spawn_blocking(move || db.batch_update_rejection_status(&updates))
-        .await
-        .map_err(|e| Error::Internal(InternalError::from(e)))?
-}
-
-/// Async: batch upsert rejection stats (PERF optimization)
-/// Reduces 130k+ tokio::spawn calls to a single blocking task with transaction
-/// stats: Vec of (reason, source, timestamp)
-pub async fn batch_upsert_rejection_stats_async(
-    chain: ChainId,
-    stats: Vec<(String, String, i64)>,
-) -> TokenResult<usize> {
-    if stats.is_empty() {
-        return Ok(0);
-    }
-    let db = require_database(chain)?;
-    tokio::task::spawn_blocking(move || db.batch_upsert_rejection_stats(&stats))
+    tokio::task::spawn_blocking(move || db.record_filter_build(evaluated_at, &outcomes))
         .await
         .map_err(|e| Error::Internal(InternalError::from(e)))?
 }
