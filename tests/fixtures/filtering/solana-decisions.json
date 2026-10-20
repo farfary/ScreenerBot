@@ -119,20 +119,20 @@
       "source": "core"
     },
     "125xdsrzrcFpZDm1KbJ6CKpAQwJV74Wb8pzMrpgpG7nh": {
-      "reason": "onchain_known_scam_authority",
-      "source": "onchain"
+      "reason": "dex_txn_1h",
+      "source": "dexscreener"
     },
     "128M9guNuAgYihHt7TVdEY4j8wjJXD9NL4sEkj17CcUb": {
       "reason": "dex_txn_1h",
       "source": "dexscreener"
     },
     "129454usz9DUhRHywoTDKFYpyH71nXXvLCF4mUu8UwP3": {
-      "reason": "onchain_known_scam_authority",
-      "source": "onchain"
+      "reason": "dex_txn_1h",
+      "source": "dexscreener"
     },
     "129GXJuWmByBhezk3tshkm66awjnRPC6MNiwFx1tvTMx": {
-      "reason": "onchain_known_scam_authority",
-      "source": "onchain"
+      "reason": "dex_txn_1h",
+      "source": "dexscreener"
     },
     "12C5kPak4QkcKPuZZxnJgQ484xSbagKVpwScLsrfxidy": {
       "reason": "dex_txn_1h",
@@ -163,8 +163,8 @@
       "source": "dexscreener"
     },
     "12jZ8G9YpkgmMn6AapENYXWAtyRHQtvUP3zokbL3nzRm": {
-      "reason": "onchain_known_scam_authority",
-      "source": "onchain"
+      "reason": "dex_txn_1h",
+      "source": "dexscreener"
     },
     "12msuCJU3nbLY5EzGQwwSah4agShHBE2yJikiKJcpmeg": {
       "reason": "rug_data_missing",
@@ -175,8 +175,8 @@
       "source": "onchain"
     },
     "12nHQrFjBJM8ESkRP4GqRu2UYC9BGEnFH2cnHrfWbAvL": {
-      "reason": "onchain_known_scam_authority",
-      "source": "onchain"
+      "reason": "dex_txn_1h",
+      "source": "dexscreener"
     },
     "12vDoh5GR7dUPAjmh2aUzfkT7ssweECDNXC8hzRKUQq2": {
       "reason": "rug_data_missing",
@@ -195,8 +195,8 @@
       "source": "core"
     },
     "13SRgPEt54qK6c5QYkwcj4VFyYD5xQ6zz6y23Mpmdfq3": {
-      "reason": "onchain_known_scam_authority",
-      "source": "onchain"
+      "reason": "dex_txn_1h",
+      "source": "dexscreener"
     },
     "13ZgaRWyrryv6oqXm2HT6HiUe5tNbojmAv1iM1YG6mTS": {
       "reason": "onchain_known_scam_authority",
@@ -211,12 +211,12 @@
       "source": "core"
     },
     "147ciqrjz6iDjVb7bJZmKaLTUqZKjiCvwR6KAG8ubqVp": {
-      "reason": "onchain_known_scam_authority",
-      "source": "onchain"
+      "reason": "rug_graph_insiders",
+      "source": "rugcheck"
     },
     "14AMKaE3WZmpyXj31nnHHArWH8fGXq9MygDDbKBUVFqs": {
-      "reason": "onchain_known_scam_authority",
-      "source": "onchain"
+      "reason": "rug_graph_insiders",
+      "source": "rugcheck"
     },
     "14Lnja2ph1s4pRuv3NGxHNsnDDmDDf5fooC1vz475YCF": {
       "reason": "dex_mcap_low",
@@ -227,32 +227,32 @@
       "source": "onchain"
     },
     "14nt2hQu5ygbiv8PgJ127wdfknnkoD7hQZxiNdN3KxaP": {
-      "reason": "onchain_known_scam_authority",
-      "source": "onchain"
+      "reason": "rug_score",
+      "source": "rugcheck"
     },
     "19izeBnt5uqjsDRzwhy7EX2jqCsLcf3g2PnEXtgDof6": {
-      "reason": "onchain_known_scam_authority",
-      "source": "onchain"
+      "reason": "dex_txn_1h",
+      "source": "dexscreener"
     },
     "1JmhksVByHdrG77zjkhAdY6h3P6urYDewkf27U5518W": {
-      "reason": "onchain_known_scam_authority",
-      "source": "onchain"
+      "reason": "dex_txn_1h",
+      "source": "dexscreener"
     },
     "1Kwp47SnAzemQ5QqNqitBEbXgCWYWTsCKcPsENSGdZS": {
       "reason": "dex_liq_low",
       "source": "dexscreener"
     },
     "1W5ZrrQUiZusqe977RsDJUW9hyzJjeofLwv7NFCY9WU": {
-      "reason": "onchain_known_scam_authority",
-      "source": "onchain"
+      "reason": "dex_txn_1h",
+      "source": "dexscreener"
     },
     "1XJak1ehZCP8ayD6n9Y55j8KirbWFkYcd8fb5wRBiJW": {
-      "reason": "onchain_known_scam_authority",
-      "source": "onchain"
+      "reason": "dex_txn_1h",
+      "source": "dexscreener"
     },
     "1ZBujDftZsisfHpaDZRcSSZXwWRaMEgEjbTxfn3Rabp": {
-      "reason": "onchain_known_scam_authority",
-      "source": "onchain"
+      "reason": "dex_txn_1h",
+      "source": "dexscreener"
     },
     "237VfMbhPBgArEDqv7unsXVHeD1axf9TT2rswhnnxvXC": {
       "reason": "onchain_empty_symbol",
@@ -566,20 +566,20 @@
       "source": "core"
     },
     "125xdsrzrcFpZDm1KbJ6CKpAQwJV74Wb8pzMrpgpG7nh": {
-      "reason": "onchain_known_scam_authority",
-      "source": "onchain"
+      "reason": "dex_txn_1h",
+      "source": "dexscreener"
     },
     "128M9guNuAgYihHt7TVdEY4j8wjJXD9NL4sEkj17CcUb": {
       "reason": "dex_txn_1h",
       "source": "dexscreener"
     },
     "129454usz9DUhRHywoTDKFYpyH71nXXvLCF4mUu8UwP3": {
-      "reason": "onchain_known_scam_authority",
-      "source": "onchain"
+      "reason": "dex_txn_1h",
+      "source": "dexscreener"
     },
     "129GXJuWmByBhezk3tshkm66awjnRPC6MNiwFx1tvTMx": {
-      "reason": "onchain_known_scam_authority",
-      "source": "onchain"
+      "reason": "dex_txn_1h",
+      "source": "dexscreener"
     },
     "12C5kPak4QkcKPuZZxnJgQ484xSbagKVpwScLsrfxidy": {
       "reason": "dex_txn_1h",
@@ -610,8 +610,8 @@
       "source": "dexscreener"
     },
     "12jZ8G9YpkgmMn6AapENYXWAtyRHQtvUP3zokbL3nzRm": {
-      "reason": "onchain_known_scam_authority",
-      "source": "onchain"
+      "reason": "dex_txn_1h",
+      "source": "dexscreener"
     },
     "12msuCJU3nbLY5EzGQwwSah4agShHBE2yJikiKJcpmeg": {
       "reason": "rug_data_missing",
@@ -622,8 +622,8 @@
       "source": "onchain"
     },
     "12nHQrFjBJM8ESkRP4GqRu2UYC9BGEnFH2cnHrfWbAvL": {
-      "reason": "onchain_known_scam_authority",
-      "source": "onchain"
+      "reason": "dex_txn_1h",
+      "source": "dexscreener"
     },
     "12vDoh5GR7dUPAjmh2aUzfkT7ssweECDNXC8hzRKUQq2": {
       "reason": "rug_data_missing",
@@ -642,8 +642,8 @@
       "source": "core"
     },
     "13SRgPEt54qK6c5QYkwcj4VFyYD5xQ6zz6y23Mpmdfq3": {
-      "reason": "onchain_known_scam_authority",
-      "source": "onchain"
+      "reason": "dex_txn_1h",
+      "source": "dexscreener"
     },
     "13ZgaRWyrryv6oqXm2HT6HiUe5tNbojmAv1iM1YG6mTS": {
       "reason": "onchain_known_scam_authority",
@@ -658,12 +658,12 @@
       "source": "core"
     },
     "147ciqrjz6iDjVb7bJZmKaLTUqZKjiCvwR6KAG8ubqVp": {
-      "reason": "onchain_known_scam_authority",
-      "source": "onchain"
+      "reason": "rug_graph_insiders",
+      "source": "rugcheck"
     },
     "14AMKaE3WZmpyXj31nnHHArWH8fGXq9MygDDbKBUVFqs": {
-      "reason": "onchain_known_scam_authority",
-      "source": "onchain"
+      "reason": "rug_graph_insiders",
+      "source": "rugcheck"
     },
     "14Lnja2ph1s4pRuv3NGxHNsnDDmDDf5fooC1vz475YCF": {
       "reason": "dex_mcap_low",
@@ -674,32 +674,32 @@
       "source": "onchain"
     },
     "14nt2hQu5ygbiv8PgJ127wdfknnkoD7hQZxiNdN3KxaP": {
-      "reason": "onchain_known_scam_authority",
-      "source": "onchain"
+      "reason": "rug_score",
+      "source": "rugcheck"
     },
     "19izeBnt5uqjsDRzwhy7EX2jqCsLcf3g2PnEXtgDof6": {
-      "reason": "onchain_known_scam_authority",
-      "source": "onchain"
+      "reason": "dex_txn_1h",
+      "source": "dexscreener"
     },
     "1JmhksVByHdrG77zjkhAdY6h3P6urYDewkf27U5518W": {
-      "reason": "onchain_known_scam_authority",
-      "source": "onchain"
+      "reason": "dex_txn_1h",
+      "source": "dexscreener"
     },
     "1Kwp47SnAzemQ5QqNqitBEbXgCWYWTsCKcPsENSGdZS": {
       "reason": "dex_liq_low",
       "source": "dexscreener"
     },
     "1W5ZrrQUiZusqe977RsDJUW9hyzJjeofLwv7NFCY9WU": {
-      "reason": "onchain_known_scam_authority",
-      "source": "onchain"
+      "reason": "dex_txn_1h",
+      "source": "dexscreener"
     },
     "1XJak1ehZCP8ayD6n9Y55j8KirbWFkYcd8fb5wRBiJW": {
-      "reason": "onchain_known_scam_authority",
-      "source": "onchain"
+      "reason": "dex_txn_1h",
+      "source": "dexscreener"
     },
     "1ZBujDftZsisfHpaDZRcSSZXwWRaMEgEjbTxfn3Rabp": {
-      "reason": "onchain_known_scam_authority",
-      "source": "onchain"
+      "reason": "dex_txn_1h",
+      "source": "dexscreener"
     },
     "237VfMbhPBgArEDqv7unsXVHeD1axf9TT2rswhnnxvXC": {
       "reason": "onchain_empty_symbol",
@@ -1013,20 +1013,20 @@
       "source": "core"
     },
     "125xdsrzrcFpZDm1KbJ6CKpAQwJV74Wb8pzMrpgpG7nh": {
-      "reason": "onchain_known_scam_authority",
-      "source": "onchain"
+      "reason": "dex_txn_1h",
+      "source": "dexscreener"
     },
     "128M9guNuAgYihHt7TVdEY4j8wjJXD9NL4sEkj17CcUb": {
       "reason": "dex_txn_1h",
       "source": "dexscreener"
     },
     "129454usz9DUhRHywoTDKFYpyH71nXXvLCF4mUu8UwP3": {
-      "reason": "onchain_known_scam_authority",
-      "source": "onchain"
+      "reason": "dex_txn_1h",
+      "source": "dexscreener"
     },
     "129GXJuWmByBhezk3tshkm66awjnRPC6MNiwFx1tvTMx": {
-      "reason": "onchain_known_scam_authority",
-      "source": "onchain"
+      "reason": "dex_txn_1h",
+      "source": "dexscreener"
     },
     "12C5kPak4QkcKPuZZxnJgQ484xSbagKVpwScLsrfxidy": {
       "reason": "dex_txn_1h",
@@ -1057,8 +1057,8 @@
       "source": "dexscreener"
     },
     "12jZ8G9YpkgmMn6AapENYXWAtyRHQtvUP3zokbL3nzRm": {
-      "reason": "onchain_known_scam_authority",
-      "source": "onchain"
+      "reason": "dex_txn_1h",
+      "source": "dexscreener"
     },
     "12msuCJU3nbLY5EzGQwwSah4agShHBE2yJikiKJcpmeg": {
       "reason": "rug_data_missing",
@@ -1069,8 +1069,8 @@
       "source": "onchain"
     },
     "12nHQrFjBJM8ESkRP4GqRu2UYC9BGEnFH2cnHrfWbAvL": {
-      "reason": "onchain_known_scam_authority",
-      "source": "onchain"
+      "reason": "dex_txn_1h",
+      "source": "dexscreener"
     },
     "12vDoh5GR7dUPAjmh2aUzfkT7ssweECDNXC8hzRKUQq2": {
       "reason": "rug_data_missing",
@@ -1089,8 +1089,8 @@
       "source": "core"
     },
     "13SRgPEt54qK6c5QYkwcj4VFyYD5xQ6zz6y23Mpmdfq3": {
-      "reason": "onchain_known_scam_authority",
-      "source": "onchain"
+      "reason": "dex_txn_1h",
+      "source": "dexscreener"
     },
     "13ZgaRWyrryv6oqXm2HT6HiUe5tNbojmAv1iM1YG6mTS": {
       "reason": "onchain_known_scam_authority",
@@ -1105,12 +1105,12 @@
       "source": "core"
     },
     "147ciqrjz6iDjVb7bJZmKaLTUqZKjiCvwR6KAG8ubqVp": {
-      "reason": "onchain_known_scam_authority",
-      "source": "onchain"
+      "reason": "rug_graph_insiders",
+      "source": "rugcheck"
     },
     "14AMKaE3WZmpyXj31nnHHArWH8fGXq9MygDDbKBUVFqs": {
-      "reason": "onchain_known_scam_authority",
-      "source": "onchain"
+      "reason": "rug_graph_insiders",
+      "source": "rugcheck"
     },
     "14Lnja2ph1s4pRuv3NGxHNsnDDmDDf5fooC1vz475YCF": {
       "reason": "dex_mcap_low",
@@ -1121,32 +1121,32 @@
       "source": "onchain"
     },
     "14nt2hQu5ygbiv8PgJ127wdfknnkoD7hQZxiNdN3KxaP": {
-      "reason": "onchain_known_scam_authority",
-      "source": "onchain"
+      "reason": "rug_score",
+      "source": "rugcheck"
     },
     "19izeBnt5uqjsDRzwhy7EX2jqCsLcf3g2PnEXtgDof6": {
-      "reason": "onchain_known_scam_authority",
-      "source": "onchain"
+      "reason": "dex_txn_1h",
+      "source": "dexscreener"
     },
     "1JmhksVByHdrG77zjkhAdY6h3P6urYDewkf27U5518W": {
-      "reason": "onchain_known_scam_authority",
-      "source": "onchain"
+      "reason": "dex_txn_1h",
+      "source": "dexscreener"
     },
     "1Kwp47SnAzemQ5QqNqitBEbXgCWYWTsCKcPsENSGdZS": {
       "reason": "dex_liq_low",
       "source": "dexscreener"
     },
     "1W5ZrrQUiZusqe977RsDJUW9hyzJjeofLwv7NFCY9WU": {
-      "reason": "onchain_known_scam_authority",
-      "source": "onchain"
+      "reason": "dex_txn_1h",
+      "source": "dexscreener"
     },
     "1XJak1ehZCP8ayD6n9Y55j8KirbWFkYcd8fb5wRBiJW": {
-      "reason": "onchain_known_scam_authority",
-      "source": "onchain"
+      "reason": "dex_txn_1h",
+      "source": "dexscreener"
     },
     "1ZBujDftZsisfHpaDZRcSSZXwWRaMEgEjbTxfn3Rabp": {
-      "reason": "onchain_known_scam_authority",
-      "source": "onchain"
+      "reason": "dex_txn_1h",
+      "source": "dexscreener"
     },
     "237VfMbhPBgArEDqv7unsXVHeD1axf9TT2rswhnnxvXC": {
       "reason": "onchain_empty_symbol",

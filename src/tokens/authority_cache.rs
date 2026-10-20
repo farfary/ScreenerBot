@@ -9,7 +9,7 @@
 // ARCHITECTURE:
 // - Populated as a side effect of decimals.rs chain fetches (zero extra RPC cost)
 // - In-memory moka cache for fast sync lookups during filtering
-// - DB persistence in `authority_reputation` table for auto-discovery
+// - DB persistence in the `authority_reputation` table (blocked addresses load on startup)
 //
 // This module does NOT fetch from chain itself — it relies on decimals.rs
 // calling `cache_mint_authorities()` when it unpacks SPL Mint data.
@@ -19,7 +19,7 @@ use std::sync::Arc;
 
 use arc_swap::ArcSwap;
 
-use crate::chains::{ChainId, PerChain};
+use crate::chains::{adapter_for, ChainId, PerChain};
 use crate::logger::{self, LogTag};
 
 /// Authority data extracted from a token's account (zero extra RPC cost)
@@ -39,7 +39,7 @@ fn new_authorities_cache(_chain: ChainId) -> moka::sync::Cache<String, MintAutho
 }
 
 // Blocked authorities set per chain — addresses confirmed as scam factories
-// Loaded from DB on startup, refreshed periodically by background task
+// Loaded from DB on startup
 // Uses ArcSwap for atomic replacement (no race condition during refresh); a
 // refresh replaces only its own chain's set
 static BLOCKED_AUTHORITIES: PerChain<ArcSwap<HashSet<String>>> =
@@ -54,7 +54,11 @@ fn new_blocked_authorities(_chain: ChainId) -> ArcSwap<HashSet<String>> {
 // ============================================================================
 
 /// Check if an authority address is in the blocked set. O(1), no DB/RPC calls.
+/// The chain's renounced-authority address is never blocked, whatever the set holds.
 pub fn is_blocked_authority(chain: ChainId, address: &str) -> bool {
+    if adapter_for(chain).is_renounced_authority(address) {
+        return false;
+    }
     BLOCKED_AUTHORITIES.get(chain).load().contains(address)
 }
 
@@ -76,21 +80,11 @@ pub fn cache_mint_authorities(chain: ChainId, mint: &str, authorities: MintAutho
 }
 
 // ============================================================================
-// AUTHORITY REPUTATION — auto-discovery system
+// AUTHORITY REPUTATION — blocked set
 // ============================================================================
 
-/// Authority reputation record from the database
-#[derive(Clone, Debug)]
-pub struct AuthorityReputation {
-    pub address: String,
-    pub total_token_count: u32,
-    pub flagged_token_count: u32,
-    pub confidence: f64,
-    pub is_blocked: bool,
-}
-
 /// Refresh `chain`'s in-memory blocked set from the database.
-/// Called on startup and periodically by the background discovery task.
+/// Called once on startup by the tokens service.
 /// Uses atomic swap — no race condition during refresh — and replaces only
 /// this chain's set.
 pub fn refresh_blocked_from_db(chain: ChainId, blocked_addresses: Vec<String>) {

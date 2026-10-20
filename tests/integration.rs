@@ -14,6 +14,7 @@ mod agent_control_config_tools;
 mod agent_control_store;
 mod apis;
 mod architecture_boundaries;
+mod authority_blocking;
 mod common;
 mod config;
 mod config_api_surface;

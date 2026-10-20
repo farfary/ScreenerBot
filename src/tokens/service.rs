@@ -102,6 +102,31 @@ async fn open_chain_database(chain: ChainId) -> crate::Result<Arc<TokenDatabase>
         ),
     );
 
+    // Drop rows written by the retired automatic discovery before the blocked set loads
+    let db_for_auth_cleanup = db_arc.clone();
+    match tokio::task::spawn_blocking(move || db_for_auth_cleanup.remove_auto_reputation()).await {
+        Ok(Ok(removed)) => {
+            if removed > 0 {
+                logger::info(
+                    LogTag::Tokens,
+                    &format!("Removed {removed} automatic authority reputation rows"),
+                );
+            }
+        }
+        Ok(Err(e)) => {
+            logger::warning(
+                LogTag::Tokens,
+                &format!("Failed to remove automatic authority reputation rows: {e}"),
+            );
+        }
+        Err(e) => {
+            logger::warning(
+                LogTag::Tokens,
+                &format!("Failed to spawn authority cleanup task: {e}"),
+            );
+        }
+    }
+
     // Load blocked authorities from DB into this chain's memory cache
     let db_for_auth_loader = db_arc.clone();
     match tokio::task::spawn_blocking(move || db_for_auth_loader.load_blocked_authorities()).await {
@@ -134,66 +159,6 @@ async fn open_chain_database(chain: ChainId) -> crate::Result<Arc<TokenDatabase>
         &format!("Service initialized with database at {}", db_path.display()),
     );
     Ok(db_arc)
-}
-
-/// Authority reputation discovery for one chain's database (every 5 minutes).
-fn start_authority_discovery_loop(db: Arc<TokenDatabase>, shutdown: Arc<Notify>) -> JoinHandle<()> {
-    tokio::spawn(async move {
-        // Wait 60s before first run to let other systems warm up
-        tokio::select! {
-            _ = shutdown.notified() => return,
-            _ = tokio::time::sleep(Duration::from_secs(60)) => {}
-        }
-
-        let interval = Duration::from_secs(300); // 5 minutes
-        loop {
-            // Run authority discovery analysis
-            let db_clone = db.clone();
-            match tokio::task::spawn_blocking(move || db_clone.run_authority_discovery(5, 0.8))
-                .await
-            {
-                Ok(Ok(newly_blocked)) => {
-                    if newly_blocked > 0 {
-                        logger::info(
-                            LogTag::Filtering,
-                            &format!(
-                                "Authority discovery: {} new blocked authorities",
-                                newly_blocked
-                            ),
-                        );
-                    }
-                    // Refresh this chain's in-memory blocked set from DB
-                    let db_reload = db.clone();
-                    if let Ok(Ok(blocked)) =
-                        tokio::task::spawn_blocking(move || db_reload.load_blocked_authorities())
-                            .await
-                    {
-                        crate::tokens::authority_cache::refresh_blocked_from_db(
-                            db.chain(),
-                            blocked,
-                        );
-                    }
-                }
-                Ok(Err(e)) => {
-                    logger::warning(
-                        LogTag::Filtering,
-                        &format!("Authority discovery error: {e}"),
-                    );
-                }
-                Err(e) => {
-                    logger::warning(
-                        LogTag::Filtering,
-                        &format!("Authority discovery task panic: {e}"),
-                    );
-                }
-            }
-
-            tokio::select! {
-                _ = shutdown.notified() => break,
-                _ = tokio::time::sleep(interval) => {}
-            }
-        }
-    })
 }
 
 #[async_trait]
@@ -289,9 +254,6 @@ impl Service for TokensServiceNew {
                 db.clone(),
                 shutdown.clone(),
             ));
-
-            // Start authority reputation discovery loop
-            handles.push(start_authority_discovery_loop(db.clone(), shutdown.clone()));
         }
 
         logger::info(

@@ -61,6 +61,11 @@ pub trait ChainAdapter: Send + Sync + 'static {
         self.stable_assets().contains(&address)
     }
 
+    // --- token authorities ---
+    /// True for the address a token authority holds once it is given up. It
+    /// identifies no one and is never a party to blame for a token.
+    fn is_renounced_authority(&self, address: &str) -> bool;
+
     // --- external identity ---
     /// This chain's slug at market-data providers (GeckoTerminal network,
     /// DexScreener chainId, CoinGecko platform key, DefiLlama chain name).

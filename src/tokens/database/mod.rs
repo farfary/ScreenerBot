@@ -31,6 +31,8 @@ mod security;
 mod tracking;
 
 #[cfg(test)]
+mod authority_tests;
+#[cfg(test)]
 mod retention_tests;
 
 use crate::errors::DatabaseError;

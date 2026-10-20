@@ -78,6 +78,10 @@ impl ChainAdapter for SolanaAdapter {
         &[USDC_MINT, USDT_MINT]
     }
 
+    fn is_renounced_authority(&self, address: &str) -> bool {
+        address == SYSTEM_PROGRAM_ID
+    }
+
     fn market_data_network(&self) -> &'static str {
         "solana"
     }
@@ -121,6 +125,14 @@ mod tests {
             SolanaAdapter.platform_swap_fee_bps(),
             super::super::swaps::revenue::PLATFORM_FEE_BPS
         );
+    }
+
+    #[test]
+    fn the_renounced_authority_is_the_system_program() {
+        let adapter = SolanaAdapter;
+        assert!(adapter.is_renounced_authority(SYSTEM_PROGRAM_ID));
+        assert!(!adapter.is_renounced_authority(SOL_MINT));
+        assert!(!adapter.is_renounced_authority(""));
     }
 
     #[test]

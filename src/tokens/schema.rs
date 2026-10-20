@@ -248,8 +248,7 @@ pub const CREATE_TABLES: &[&str] = &[
         PRIMARY KEY (chain_id, bucket_hour, reason, source)
     )
     "#,
-    // Authority reputation — auto-growing scam authority detection
-    // Populated by background discovery task from filtering results
+    // Authority reputation — blocked scam authorities, loaded into memory on startup
     r#"
     CREATE TABLE IF NOT EXISTS authority_reputation (
         chain_id TEXT NOT NULL DEFAULT 'solana',

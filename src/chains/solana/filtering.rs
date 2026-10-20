@@ -65,7 +65,7 @@ fn evaluate(
         return Ok(());
     }
 
-    // H4: Known scam authority detection (auto-discovered, no hardcoding)
+    // H4: Known scam authority detection (blocked-authority set)
     if config.reject_known_scam_authorities {
         if let Some(ref freeze_auth) = token.freeze_authority {
             if crate::tokens::authority_cache::is_blocked_authority(chain, freeze_auth) {
