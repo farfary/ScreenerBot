@@ -72,16 +72,21 @@ impl PendingAuth {
     /// A plain `==` on a secret leaks its prefix through timing. The cost of
     /// doing it properly is four lines.
     pub fn state_matches(&self, supplied: &str) -> bool {
-        let expected = self.state.as_bytes();
-        let actual = supplied.as_bytes();
-        if expected.len() != actual.len() {
-            return false;
-        }
-
-        let mut difference = 0u8;
-        for (a, b) in expected.iter().zip(actual.iter()) {
-            difference |= a ^ b;
-        }
-        difference == 0
+        constant_time_eq(&self.state, supplied)
     }
+}
+
+/// Compare two secrets without leaking the length of their common prefix.
+pub fn constant_time_eq(expected: &str, supplied: &str) -> bool {
+    let expected = expected.as_bytes();
+    let actual = supplied.as_bytes();
+    if expected.len() != actual.len() {
+        return false;
+    }
+
+    let mut difference = 0u8;
+    for (a, b) in expected.iter().zip(actual.iter()) {
+        difference |= a ^ b;
+    }
+    difference == 0
 }

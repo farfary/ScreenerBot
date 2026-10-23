@@ -30,12 +30,22 @@ fn ok<T: Serialize>(data: T) -> Response {
 /// the app and the website never explain the same failure two different ways.
 fn refused(error: crate::Error) -> Response {
     match error {
-        crate::Error::Account(crate::errors::AccountError::Refused { message }) => ApiError::new(
-            ApiErrorCode::Unauthorized,
-            ids::ERRORS_ACCOUNT_SIGNIN_REFUSED,
-        )
-        .text_arg("reason", message)
-        .into_response(),
+        crate::Error::Account(crate::errors::AccountError::Refused { message, .. }) => {
+            ApiError::new(
+                ApiErrorCode::Unauthorized,
+                ids::ERRORS_ACCOUNT_SIGNIN_REFUSED,
+            )
+            .text_arg("reason", message)
+            .into_response()
+        }
+        crate::Error::Account(error @ crate::errors::AccountError::Unavailable { .. }) => {
+            ApiError::new(
+                ApiErrorCode::ServiceUnavailable,
+                ids::ERRORS_ACCOUNT_SIGNIN_UNAVAILABLE,
+            )
+            .details(error.to_string())
+            .into_response()
+        }
         other => ApiError::new(
             ApiErrorCode::Unauthorized,
             ids::ERRORS_ACCOUNT_SIGNIN_FAILED,
@@ -164,6 +174,8 @@ pub async fn check_wallet_account() -> Response {
 pub struct DeviceSignInStarted {
     user_code: String,
     verification_uri: String,
+    /// The verification page with the code filled in, when the server sends it.
+    verification_uri_complete: Option<String>,
     device_code: String,
     interval: u64,
     expires_in: u64,
@@ -175,6 +187,7 @@ pub async fn start_device_signin() -> Response {
         Ok(response) => ok(DeviceSignInStarted {
             user_code: response.user_code,
             verification_uri: response.verification_uri,
+            verification_uri_complete: response.verification_uri_complete,
             device_code: response.device_code,
             interval: response.interval,
             expires_in: response.expires_in,
@@ -190,13 +203,18 @@ pub struct DevicePoll {
 
 #[derive(Serialize)]
 pub struct DevicePollResult {
-    signed_in: bool,
+    state: account::DeviceSignIn,
+    /// Seconds the panel adds to its poll interval on `slow_down`.
+    backoff_seconds: u64,
 }
 
 /// POST /api/account/signin/device/poll
 pub async fn poll_device_signin(Json(body): Json<DevicePoll>) -> Response {
     match account::poll_device_signin(&body.device_code).await {
-        Ok(signed_in) => ok(DevicePollResult { signed_in }),
+        Ok(state) => ok(DevicePollResult {
+            state,
+            backoff_seconds: account::client::DEVICE_SLOW_DOWN_STEP.as_secs(),
+        }),
         Err(error) => refused(error),
     }
 }

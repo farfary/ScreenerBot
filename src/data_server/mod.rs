@@ -46,6 +46,7 @@
 
 pub mod access;
 
+use std::future::Future;
 use std::time::Duration;
 
 use serde::de::DeserializeOwned;
@@ -130,6 +131,39 @@ fn access_for_refusal(
     }
 }
 
+/// A refusal of the presented access token itself, which a refresh answers.
+///
+/// While a session exists this is a stale credential, never a sign-out: the
+/// cached token expired (a long sleep, a clock step) or was replaced, and the
+/// refresh token behind it is untouched.
+fn is_stale_access_token(code: &str) -> bool {
+    matches!(code, "token_expired" | "token_invalid")
+}
+
+/// Where the request credential comes from: the account session in the app,
+/// a stub in tests.
+trait Credential {
+    fn access_token(&self) -> impl Future<Output = Option<String>> + Send;
+    fn invalidate(&self, stale: &str);
+    fn has_session(&self) -> bool;
+}
+
+struct AccountCredential;
+
+impl Credential for AccountCredential {
+    fn access_token(&self) -> impl Future<Output = Option<String>> + Send {
+        crate::account::access_token()
+    }
+
+    fn invalidate(&self, stale: &str) {
+        crate::account::invalidate_access_token(stale);
+    }
+
+    fn has_session(&self) -> bool {
+        crate::account::is_signed_in()
+    }
+}
+
 /// Pull the refusal code and, for a version refusal, the minimum it names.
 ///
 /// The service writes the minimum into its sentence rather than a field, so it
@@ -202,55 +236,96 @@ pub async fn get_json<T: DeserializeOwned>(
         return None;
     }
 
-    // No credential, no request. See the module header.
-    let Some(token) = crate::account::access_token().await else {
-        access::record(DataAccess::SignedOut);
-        return None;
-    };
-
     let url = format!("{endpoint}{path}");
-    let response = service_request(&crate::net::client(), &url, chain, query)
-        .bearer_auth(token)
-        .timeout(timeout)
-        .send()
-        .await;
+    let client = crate::net::client();
+    fetch_json(&AccountCredential, path, chain, |token| {
+        service_request(&client, &url, chain, query)
+            .bearer_auth(token)
+            .timeout(timeout)
+            .send()
+    })
+    .await
+}
 
-    let response = match response {
-        Ok(response) => response,
-        Err(error) => {
-            log::debug!("Data Server: {path} on {chain} failed: {error}");
-            access::record_transport_failure();
+/// Send with the current credential and classify the answer.
+///
+/// A stale access token is dropped, refreshed once through the account's
+/// single-flight lock, and the request retried once. A session that exists but
+/// cannot produce a token right now (a transient refresh failure) is recorded
+/// as a transport failure: the account is still signed in, and saying
+/// otherwise would tell the user to sign in to fix a server hiccup.
+async fn fetch_json<T, C, Request, RequestFuture>(
+    credential: &C,
+    path: &str,
+    chain: ChainId,
+    send: Request,
+) -> Option<T>
+where
+    T: DeserializeOwned,
+    C: Credential,
+    Request: Fn(String) -> RequestFuture,
+    RequestFuture: Future<Output = reqwest::Result<reqwest::Response>>,
+{
+    let mut retried = false;
+    loop {
+        // No credential, no request. See the module header.
+        let Some(token) = credential.access_token().await else {
+            if credential.has_session() {
+                access::record_transport_failure();
+            } else {
+                access::record(DataAccess::SignedOut);
+            }
+            return None;
+        };
+
+        let response = match send(token.clone()).await {
+            Ok(response) => response,
+            Err(error) => {
+                log::debug!("Data Server: {path} on {chain} failed: {error}");
+                access::record_transport_failure();
+                return None;
+            }
+        };
+
+        let status = response.status();
+        if !status.is_success() {
+            // A refusal body is small and always JSON; an unreadable one is
+            // treated as the status alone rather than as a transport failure.
+            let body: serde_json::Value = response.json().await.unwrap_or(serde_json::Value::Null);
+            let (code, minimum) = refusal_code(&body);
+            log::debug!("Data Server: {path} on {chain} refused with {status} code={code:?}");
+
+            if is_stale_access_token(&code) && credential.has_session() {
+                credential.invalidate(&token);
+                if !retried {
+                    retried = true;
+                    continue;
+                }
+                access::record_transport_failure();
+                return None;
+            }
+
+            match access_for_refusal(status, &code, minimum) {
+                DataAccess::Unreachable => access::record_transport_failure(),
+                refusal => access::record(refusal),
+            }
             return None;
         }
-    };
 
-    let status = response.status();
-    if !status.is_success() {
-        // A refusal body is small and always JSON; an unreadable one is treated
-        // as the status alone rather than as a transport failure.
-        let body: serde_json::Value = response.json().await.unwrap_or(serde_json::Value::Null);
-        let (code, minimum) = refusal_code(&body);
-        log::debug!("Data Server: {path} on {chain} refused with {status} code={code:?}");
-        match access_for_refusal(status, &code, minimum) {
-            DataAccess::Unreachable => access::record_transport_failure(),
-            refusal => access::record(refusal),
-        }
-        return None;
-    }
-
-    match response.json::<T>().await {
-        Ok(value) => {
-            access::record(DataAccess::Ready);
-            Some(value)
-        }
-        Err(error) => {
-            // The service answered and we could not read it. That is our bug or a
-            // shape change, not a permission problem, so it is logged rather than
-            // reported to the user as an account state.
-            log::debug!("Data Server: {path} on {chain} returned an unreadable body: {error}");
-            access::record(DataAccess::Ready);
-            None
-        }
+        return match response.json::<T>().await {
+            Ok(value) => {
+                access::record(DataAccess::Ready);
+                Some(value)
+            }
+            Err(error) => {
+                // The service answered and we could not read it. That is our bug
+                // or a shape change, not a permission problem, so it is logged
+                // rather than reported to the user as an account state.
+                log::debug!("Data Server: {path} on {chain} returned an unreadable body: {error}");
+                access::record(DataAccess::Ready);
+                None
+            }
+        };
     }
 }
 
@@ -487,6 +562,147 @@ mod tests {
                 minimum: "0.3.1".to_string()
             }
         );
+    }
+
+    use std::sync::{Arc, Mutex};
+    use tokio::io::{AsyncReadExt, AsyncWriteExt};
+    use tokio::net::TcpListener;
+
+    /// A session whose tokens are handed out in order, recording every
+    /// invalidation the client asks for.
+    struct StubCredential {
+        tokens: Mutex<Vec<&'static str>>,
+        invalidated: Mutex<Vec<String>>,
+        signed_in: bool,
+    }
+
+    impl StubCredential {
+        fn new(tokens: &[&'static str]) -> Self {
+            let mut tokens = tokens.to_vec();
+            tokens.reverse();
+            Self {
+                tokens: Mutex::new(tokens),
+                invalidated: Mutex::new(Vec::new()),
+                signed_in: true,
+            }
+        }
+    }
+
+    impl Credential for StubCredential {
+        fn access_token(&self) -> impl Future<Output = Option<String>> + Send {
+            let next = self.tokens.lock().unwrap().pop().map(str::to_string);
+            async move { next }
+        }
+
+        fn invalidate(&self, stale: &str) {
+            self.invalidated.lock().unwrap().push(stale.to_string());
+        }
+
+        fn has_session(&self) -> bool {
+            self.signed_in
+        }
+    }
+
+    const EXPIRED: &[u8] = b"HTTP/1.1 401 Unauthorized\r\nContent-Type: application/json\r\nContent-Length: 24\r\nConnection: close\r\n\r\n{\"code\":\"token_expired\"}";
+    const SERVED: &[u8] = b"HTTP/1.1 200 OK\r\nContent-Type: application/json\r\nContent-Length: 11\r\nConnection: close\r\n\r\n{\"value\":7}";
+
+    /// Answers each connection with the next response and records the
+    /// `authorization` header it was sent.
+    async fn serve(responses: &'static [&'static [u8]]) -> (String, Arc<Mutex<Vec<String>>>) {
+        let listener = TcpListener::bind("127.0.0.1:0").await.unwrap();
+        let address = listener.local_addr().unwrap();
+        let seen = Arc::new(Mutex::new(Vec::new()));
+        let observed = Arc::clone(&seen);
+        tokio::spawn(async move {
+            for response in responses {
+                let (mut socket, _) = listener.accept().await.unwrap();
+                let mut request = [0_u8; 4096];
+                let read = socket.read(&mut request).await.unwrap();
+                let text = String::from_utf8_lossy(&request[..read]).to_lowercase();
+                if let Some(line) = text.lines().find(|line| line.starts_with("authorization:")) {
+                    observed.lock().unwrap().push(line.trim().to_string());
+                }
+                socket.write_all(response).await.unwrap();
+            }
+        });
+        (format!("http://{address}/v1/value"), seen)
+    }
+
+    #[derive(serde::Deserialize)]
+    struct Value {
+        value: u32,
+    }
+
+    #[tokio::test]
+    async fn a_stale_access_token_is_refreshed_once_and_the_request_retried() {
+        let (url, seen) = serve(&[EXPIRED, SERVED]).await;
+        let credential = StubCredential::new(&["stale", "fresh"]);
+        let client = reqwest::Client::new();
+
+        let value: Option<Value> = fetch_json(&credential, "/v1/value", ChainId::Solana, |token| {
+            client.get(&url).bearer_auth(token).send()
+        })
+        .await;
+
+        assert_eq!(value.map(|v| v.value), Some(7));
+        assert_eq!(*credential.invalidated.lock().unwrap(), vec!["stale"]);
+        assert_eq!(
+            *seen.lock().unwrap(),
+            vec!["authorization: bearer stale", "authorization: bearer fresh"]
+        );
+    }
+
+    #[tokio::test]
+    async fn a_session_whose_token_stays_stale_is_never_reported_signed_out() {
+        let (url, _) = serve(&[EXPIRED, EXPIRED]).await;
+        let credential = StubCredential::new(&["stale", "still-stale"]);
+        let client = reqwest::Client::new();
+
+        let value: Option<Value> = fetch_json(&credential, "/v1/value", ChainId::Solana, |token| {
+            client.get(&url).bearer_auth(token).send()
+        })
+        .await;
+
+        assert!(value.is_none());
+        assert_eq!(credential.invalidated.lock().unwrap().len(), 2);
+        assert_ne!(access::current(), DataAccess::SignedOut);
+    }
+
+    fn never_sent(_: String) -> std::future::Ready<reqwest::Result<reqwest::Response>> {
+        unreachable!("no request is sent without a credential")
+    }
+
+    #[tokio::test]
+    async fn a_session_without_a_usable_token_is_not_reported_signed_out() {
+        let credential = StubCredential::new(&[]);
+        let value: Option<Value> =
+            fetch_json(&credential, "/v1/value", ChainId::Solana, never_sent).await;
+
+        assert!(value.is_none());
+        assert_ne!(access::current(), DataAccess::SignedOut);
+
+        let signed_out = StubCredential {
+            signed_in: false,
+            ..StubCredential::new(&[])
+        };
+        let value: Option<Value> =
+            fetch_json(&signed_out, "/v1/value", ChainId::Solana, never_sent).await;
+        assert!(value.is_none());
+        assert_eq!(access::current(), DataAccess::SignedOut);
+    }
+
+    #[test]
+    fn only_token_refusals_count_as_a_stale_credential() {
+        assert!(is_stale_access_token("token_expired"));
+        assert!(is_stale_access_token("token_invalid"));
+        for code in [
+            "signin_required",
+            "token_wrong_audience",
+            "reauthorization_required",
+            "",
+        ] {
+            assert!(!is_stale_access_token(code), "{code}");
+        }
     }
 
     #[test]

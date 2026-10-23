@@ -62,6 +62,8 @@
       this.emailValue = "";
       this.walletHasAccount = false;
       this.statusWatch = null;
+      this.device = null;
+      this.deviceTimer = null;
       this.destroyed = false;
       this.focusTarget = null;
     }
@@ -132,6 +134,7 @@
       this.mode = "menu";
       this.emailValue = "";
       this.stopStatusWatch();
+      this.stopDevicePoll();
       this.render();
       this.options.onChange?.(status);
     }
@@ -177,6 +180,102 @@
       if (!this.statusWatch) return;
       window.clearInterval(this.statusWatch);
       this.statusWatch = null;
+    }
+
+    /**
+     * Device-code sign-in (RFC 8628) for an install whose browser cannot reach
+     * this machine's loopback address, such as a headless server viewed from
+     * another computer. The code is approved on screenerbot.io from any device;
+     * this panel polls the bot until the server answers.
+     */
+    async signInWithCode() {
+      this.error = null;
+      this.notice = null;
+      this.setBusy("device");
+
+      try {
+        const started = await request("/api/account/signin/device", { method: "POST" });
+        if (this.destroyed) return;
+        this.device = {
+          userCode: started.user_code,
+          verificationUri: started.verification_uri,
+          verificationLink: started.verification_uri_complete || started.verification_uri,
+          deviceCode: started.device_code,
+          intervalMs: Math.max(1, Number(started.interval) || 5) * 1000,
+          deadline: Date.now() + Math.max(0, Number(started.expires_in) || 0) * 1000,
+        };
+        this.mode = "device";
+        this.busyAction = null;
+        this.focusTarget = '[data-action="device-cancel"]';
+        this.render();
+        this.scheduleDevicePoll();
+      } catch (error) {
+        this.fail(error, '[data-action="device"]');
+      }
+    }
+
+    scheduleDevicePoll() {
+      this.stopDevicePoll();
+      if (!this.device || this.destroyed) return;
+      this.deviceTimer = window.setTimeout(() => this.pollDevice(), this.device.intervalMs);
+    }
+
+    stopDevicePoll() {
+      if (!this.deviceTimer) return;
+      window.clearTimeout(this.deviceTimer);
+      this.deviceTimer = null;
+    }
+
+    async pollDevice() {
+      this.deviceTimer = null;
+      const device = this.device;
+      if (!device || this.destroyed) return;
+      if (Date.now() >= device.deadline) {
+        this.deviceExpired();
+        return;
+      }
+
+      try {
+        const result = await request("/api/account/signin/device/poll", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ device_code: device.deviceCode }),
+        });
+        if (this.device !== device || this.destroyed) return;
+
+        switch (result?.state) {
+          case "signed_in":
+            this.endDeviceFlow();
+            this.load();
+            return;
+          case "expired":
+            this.deviceExpired();
+            return;
+          case "slow_down":
+            device.intervalMs += Math.max(0, Number(result.backoff_seconds) || 0) * 1000;
+            break;
+          default:
+            break;
+        }
+        this.scheduleDevicePoll();
+      } catch (error) {
+        if (this.device !== device || this.destroyed) return;
+        this.endDeviceFlow();
+        this.fail(error, '[data-action="device"]');
+      }
+    }
+
+    endDeviceFlow() {
+      this.stopDevicePoll();
+      this.device = null;
+      this.mode = "menu";
+    }
+
+    deviceExpired() {
+      this.endDeviceFlow();
+      this.notice = I18n.t("account-panel-code-expired");
+      this.focusTarget = '[data-action="device"]';
+      this.render();
     }
 
     async signInWithPassword(email, password) {
@@ -291,6 +390,7 @@
 
     renderSignedOut() {
       if (this.mode === "email") return this.renderEmailForm();
+      if (this.mode === "device" && this.device) return this.renderDeviceCode();
 
       const disabled = this.busyAction ? "disabled" : "";
       const walletOption = this.walletHasAccount
@@ -311,6 +411,9 @@
             <button type="button" class="account-option" data-action="email" ${disabled}>
               <span class="account-option-title" data-l10n-id="account-panel-sign-in-email"></span>
             </button>
+            <button type="button" class="account-option" data-action="device" ${disabled}>
+              <span class="account-option-title">${escapeHtml(this.busyAction === "device" ? I18n.t("account-panel-getting-code") : I18n.t("account-panel-sign-in-code"))}</span>
+            </button>
             ${walletOption}
           </div>
           <p class="account-note account-signup-note">
@@ -318,6 +421,22 @@
             <button type="button" class="account-link" data-action="signup" data-l10n-id="account-panel-create-account"></button>
           </p>
           ${this.renderNotice()}
+          ${this.renderError()}
+        </div>`;
+    }
+
+    renderDeviceCode() {
+      const { userCode, verificationUri, verificationLink } = this.device;
+      return `
+        <div class="account-device">
+          <button type="button" class="account-link account-back" data-action="device-cancel" data-l10n-id="account-panel-back-to-options"></button>
+          <p class="account-lead" data-l10n-id="account-panel-code-instructions"></p>
+          <a class="account-device-link" href="${escapeHtml(verificationLink)}" target="_blank" rel="noopener noreferrer" dir="ltr">${escapeHtml(verificationUri)}</a>
+          <div class="account-device-code-block">
+            <span class="account-field-label" data-l10n-id="account-panel-code-label"></span>
+            <code class="account-device-code" dir="ltr" translate="no">${escapeHtml(userCode)}</code>
+          </div>
+          <p class="account-note" role="status" data-l10n-id="account-panel-code-waiting"></p>
           ${this.renderError()}
         </div>`;
     }
@@ -399,9 +518,11 @@
     }
 
     renderNotice() {
-      return this.notice
-        ? `<p class="account-notice" role="status">${escapeHtml(this.notice)}</p>`
-        : "";
+      // A session the server ended explains itself until the next sign-in, so
+      // the user is not left wondering why the account disappeared.
+      const notice =
+        this.notice || (this.status?.session_ended ? I18n.t("account-panel-session-ended") : null);
+      return notice ? `<p class="account-notice" role="status">${escapeHtml(notice)}</p>` : "";
     }
 
     bind() {
@@ -439,6 +560,15 @@
               this.focusTarget = '[data-action="email"]';
               this.render();
               break;
+            case "device":
+              this.signInWithCode();
+              break;
+            case "device-cancel":
+              this.endDeviceFlow();
+              this.error = null;
+              this.focusTarget = '[data-action="device"]';
+              this.render();
+              break;
             case "wallet":
               this.signInWithWallet();
               break;
@@ -468,6 +598,7 @@
     destroy() {
       this.destroyed = true;
       this.stopStatusWatch();
+      this.stopDevicePoll();
     }
   }
 

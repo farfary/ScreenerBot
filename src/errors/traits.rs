@@ -53,15 +53,19 @@ pub trait ErrorClass {
 
 impl ErrorClass for AccountError {
     fn is_retryable(&self) -> bool {
-        // A garbled/unexpected response from screenerbot.io is often a
-        // one-off transport hiccup; everything else about an account error
-        // is a final verdict that will not change by repeating the call.
-        matches!(self, AccountError::UnexpectedResponse { .. })
+        // A garbled/unexpected response or an unavailable server is a
+        // transient condition; everything else about an account error is a
+        // final verdict that will not change by repeating the call.
+        matches!(
+            self,
+            AccountError::UnexpectedResponse { .. } | AccountError::Unavailable { .. }
+        )
     }
 
     fn retry_after(&self) -> Option<Duration> {
         match self {
             AccountError::UnexpectedResponse { .. } => Some(Duration::from_secs(2)),
+            AccountError::Unavailable { .. } => Some(Duration::from_secs(30)),
             _ => None,
         }
     }
@@ -69,7 +73,9 @@ impl ErrorClass for AccountError {
     fn severity(&self) -> Severity {
         match self {
             AccountError::NotSignedIn => Severity::Info,
-            AccountError::Refused { .. } | AccountError::SessionEnded => Severity::Warning,
+            AccountError::Refused { .. }
+            | AccountError::SessionEnded
+            | AccountError::Unavailable { .. } => Severity::Warning,
             AccountError::UnexpectedResponse { .. }
             | AccountError::Storage { .. }
             | AccountError::Generic { .. } => Severity::Error,
@@ -82,6 +88,7 @@ impl ErrorClass for AccountError {
             | AccountError::NotSignedIn
             | AccountError::SessionEnded => 401,
             AccountError::UnexpectedResponse { .. } => 502,
+            AccountError::Unavailable { .. } => 503,
             AccountError::Storage { .. } | AccountError::Generic { .. } => 500,
         }
     }

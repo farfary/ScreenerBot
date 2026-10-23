@@ -96,16 +96,23 @@ export function attachAccountHandlers() {
   if (gateway) {
     void syncGatewayToggle();
     gateway.addEventListener("change", async () => {
+      const requested = gateway.checked;
+      gateway.disabled = true;
       try {
-        await fetch("/api/account/gateway", {
+        const response = await fetch("/api/account/gateway", {
           method: "POST",
           headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ enabled: gateway.checked }),
+          body: JSON.stringify({ enabled: requested }),
         });
+        // Apply the value the server stored; a refused write rolls back.
+        const body = response.ok ? await response.json() : null;
+        gateway.checked = body ? Boolean(body.data?.use_gateway_rpc) : !requested;
       } catch {
         // Revert the control rather than leave it claiming a state the config
         // does not have.
-        gateway.checked = !gateway.checked;
+        gateway.checked = !requested;
+      } finally {
+        gateway.disabled = false;
       }
     });
   }

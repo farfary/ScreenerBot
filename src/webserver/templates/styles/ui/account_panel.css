@@ -219,6 +219,40 @@
   font-weight: 650;
 }
 
+.account-device {
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+  gap: 10px;
+}
+
+.account-device-link {
+  overflow-wrap: anywhere;
+  color: var(--link-color);
+  font-size: 0.88rem;
+  font-weight: 650;
+  text-align: start;
+}
+
+.account-device-link:hover {
+  color: var(--link-hover);
+}
+
+.account-device-code-block {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.account-device-code {
+  color: var(--text-primary);
+  font-family: var(--font-mono);
+  font-size: 1.4rem;
+  font-weight: 700;
+  letter-spacing: 0.12em;
+  user-select: all;
+}
+
 .account-identity {
   display: flex;
   align-items: center;
@@ -371,7 +405,8 @@
   .account-panel,
   .account-panel-signed-out,
   .account-panel-signed-in,
-  .account-unavailable {
+  .account-unavailable,
+  .account-device {
     gap: 9px;
   }
 
