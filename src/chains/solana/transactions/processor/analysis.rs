@@ -705,7 +705,7 @@ impl TransactionProcessor {
                     // Use the rent-excluded swap amount derived above (output_ui for
                     // sells = WSOL credited to the wallet; input_ui for buys = SOL
                     // spent). main.sol_amount_* comes from a naive "largest SOL change
-                    // anywhere" heuristic that picks up ATA rent reclaim (~0.00204 SOL)
+                    // anywhere" heuristic that picks up ATA rent reclaim
                     // and reports wildly wrong proceeds (e.g. a -99% exit looking like
                     // -59%). For token->token, fall back to the analyzer value.
                     let corrected_sol_amount = match direction {

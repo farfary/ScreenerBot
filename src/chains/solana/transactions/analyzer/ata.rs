@@ -9,7 +9,7 @@
 // creation, initialization, and rent calculations following Solana standards.
 //
 // Key operations tracked:
-// - ATA creation and rent funding (~0.00204 SOL)
+// - ATA creation and rent funding (the deposit varies by account size and rent rate)
 // - Token account initialization
 // - Rent recovery on account closure
 // - Multi-ATA operations in complex transactions

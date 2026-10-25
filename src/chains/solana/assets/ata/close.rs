@@ -90,7 +90,8 @@ pub async fn close_single_ata(wallet_address: &str, mint: &str) -> Result<String
 }
 
 /// Closes all empty ATAs (Associated Token Accounts) for a wallet
-/// This reclaims the rent SOL (~0.002 SOL per account) from all empty token accounts
+/// This reclaims the rent deposit of each empty token account: the account's own lamports,
+/// read from chain, which differ by account size and the current rent rate
 /// Returns the number of accounts closed and total signatures
 pub async fn close_all_empty_atas(wallet_address: &str) -> Result<(u32, Vec<String>)> {
     logger::info(
@@ -197,7 +198,8 @@ pub async fn close_all_empty_atas(wallet_address: &str) -> Result<(u32, Vec<Stri
 }
 
 /// Closes the Associated Token Account (ATA) for a given token mint after selling all tokens
-/// This reclaims the rent SOL (~0.002 SOL) from empty token accounts
+/// This reclaims the rent deposit of the empty token account: its own lamports, read from
+/// chain, which differ by account size and the current rent rate
 /// Supports both regular SPL tokens and Token-2022 tokens
 ///
 /// # Parameters

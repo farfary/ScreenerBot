@@ -4,7 +4,8 @@
 //! ATA Cleanup module
 //!
 //! Provides functionality for scanning and closing empty Associated Token Accounts
-//! to reclaim rent SOL (~0.002 SOL per account).
+//! to reclaim the rent deposit each account holds. The deposit is the account's own lamports,
+//! read from chain; it differs by account size and the current rent rate.
 //!
 //! ## Features
 //! - Scan wallet for all ATAs

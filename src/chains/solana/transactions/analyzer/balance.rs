@@ -11,7 +11,7 @@
 // Key features:
 // - Precise SOL balance change calculation using meta.preBalances/postBalances
 // - SPL token balance tracking with proper decimal handling
-// - Rent transfer filtering (~0.00204 SOL for ATA creation)
+// - Rent transfer filtering (the deposit for ATA creation, which varies by account size and rent rate)
 // - MEV/Jito tip exclusion for clean swap amount detection
 // - Account-to-mint mapping for token identification
 
