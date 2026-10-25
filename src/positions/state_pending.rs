@@ -482,12 +482,27 @@ async fn position_is_closed(position_id: i64) -> bool {
 /// against the chain: a mint whose balance is about to move again must be left to the
 /// trader, or the ledger would close or resize a position out from under a swap that has
 /// already been submitted.
+///
+/// A swap whose verification was abandoned does not count: the session never books it,
+/// so the ledger is what reconciles its mint instead of skipping it until a restart.
 pub async fn mints_with_pending_swaps() -> std::collections::HashSet<String> {
+    let abandoned = super::queue::abandoned_signatures().await;
+
+    let mut abandoned_partials: HashMap<String, u32> = HashMap::new();
+    for entry in PENDING_PARTIAL_EXIT_DETAILS
+        .read()
+        .await
+        .iter()
+        .filter(|(signature, _)| abandoned.contains(*signature))
+        .map(|(_, entry)| entry)
+    {
+        *abandoned_partials.entry(entry.mint.clone()).or_default() += 1;
+    }
     let mut mints: std::collections::HashSet<String> = PENDING_PARTIAL_EXITS
         .read()
         .await
         .iter()
-        .filter(|(_, count)| **count > 0)
+        .filter(|(mint, count)| **count > abandoned_partials.get(*mint).copied().unwrap_or(0))
         .map(|(mint, _)| mint.clone())
         .collect();
 
@@ -496,6 +511,7 @@ pub async fn mints_with_pending_swaps() -> std::collections::HashSet<String> {
             .read()
             .await
             .values()
+            .filter(|entry| !abandoned.contains(&entry.signature))
             .map(|entry| entry.mint.clone()),
     );
     mints.extend(
@@ -511,7 +527,11 @@ pub async fn mints_with_pending_swaps() -> std::collections::HashSet<String> {
             .await
             .iter()
             .filter(|position| {
-                position.exit_transaction_signature.is_some() && !position.transaction_exit_verified
+                !position.transaction_exit_verified
+                    && position
+                        .exit_transaction_signature
+                        .as_ref()
+                        .is_some_and(|signature| !abandoned.contains(signature))
             })
             .map(|position| position.mint.clone()),
     );

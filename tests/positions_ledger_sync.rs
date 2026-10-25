@@ -35,7 +35,8 @@ use screenerbot::positions::ledger::{
 };
 use screenerbot::positions::round_state::attributable_held;
 use screenerbot::positions::{
-    db, state, PendingPartialExit, Position, PositionManagement, PositionOrigin, PositionTransition,
+    db, queue, state, PendingDcaSwap, PendingPartialExit, Position, PositionManagement,
+    PositionOrigin, PositionTransition,
 };
 use screenerbot::transactions::deltas::{DeltaKind, SubjectAssetDelta, NATIVE_SOL_SENTINEL};
 
@@ -2077,6 +2078,98 @@ fn an_exit_held_in_memory_only_keeps_its_mint_busy() {
                 .expect("read stored position")
                 .expect("position stored");
             assert!(stored.exit_time.is_none(), "the ledger closed a busy row");
+        },
+    );
+}
+
+/// The verifier abandons a swap it will not book this session; its mint goes back to the
+/// ledger at once rather than staying busy until a restart. Covers each kind of pending
+/// swap: a full exit, a DCA add and a partial exit.
+#[test]
+fn an_abandoned_verification_frees_its_mint_for_the_ledger() {
+    const ADD_MINT: &str = "AbandonedAddMint111111111111111111111111111";
+    const PARTIAL_MINT: &str = "AbandonedPartialMint1111111111111111111111111";
+
+    common::run_isolated(
+        module_path!(),
+        "an_abandoned_verification_frees_its_mint_for_the_ledger",
+        || async {
+            let _dir = common::isolated_env();
+            let _cfg = common::config_guard();
+            screenerbot::paths::ensure_all_directories().expect("create data directories");
+            common::configure_own_wallet();
+            common::seed_decimals(common::TEST_MINT, 6);
+            screenerbot::positions::initialize_positions_database()
+                .await
+                .expect("initialise positions database");
+
+            let id = store_unverified("b1").await;
+            apply_transition(PositionTransition::EntryVerified {
+                position_id: id,
+                effective_entry_price: 1.0,
+                token_amount_units: RawAmount::new(1_000_000),
+                fee_raw: 5_000,
+                native_size: 1.0,
+                held_after: None,
+            })
+            .await
+            .expect("the entry commits");
+            assert!(
+                state::set_exit_submission_in_memory(
+                    id,
+                    "exit-1",
+                    1.0,
+                    "stop_loss_pending_verification"
+                )
+                .await
+            );
+            state::register_pending_dca_swap(PendingDcaSwap {
+                signature: "add-1".to_owned(),
+                mint: ADD_MINT.to_owned(),
+                position_id: id,
+                expiry_height: None,
+                created_at: Utc::now(),
+                size_sol: 0.1,
+            })
+            .await
+            .expect("register the add");
+            state::mark_partial_exit_pending(PARTIAL_MINT).await;
+            state::register_pending_partial_exit(PendingPartialExit {
+                signature: "partial-1".to_owned(),
+                mint: PARTIAL_MINT.to_owned(),
+                position_id: id,
+                expected_exit_amount: RawAmount::new(500_000),
+                requested_exit_percentage: 50.0,
+                expiry_height: None,
+                created_at: Utc::now(),
+            })
+            .await
+            .expect("register the partial exit");
+
+            let busy = state::mints_with_pending_swaps().await;
+            for mint in [common::TEST_MINT, ADD_MINT, PARTIAL_MINT] {
+                assert!(
+                    busy.contains(mint),
+                    "{mint} is busy while its swap is verified"
+                );
+            }
+
+            for signature in ["exit-1", "add-1", "partial-1"] {
+                queue::abandon_verification(signature.to_owned()).await;
+            }
+            let busy = state::mints_with_pending_swaps().await;
+            for mint in [common::TEST_MINT, ADD_MINT, PARTIAL_MINT] {
+                assert!(
+                    !busy.contains(mint),
+                    "{mint} stayed busy after its swap was abandoned"
+                );
+            }
+
+            // A second partial exit counted on the mint, not yet registered, still holds it.
+            state::mark_partial_exit_pending(PARTIAL_MINT).await;
+            assert!(state::mints_with_pending_swaps()
+                .await
+                .contains(PARTIAL_MINT));
         },
     );
 }

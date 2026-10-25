@@ -505,6 +505,11 @@ pub async fn abandon_verification(signature: String) {
     queue.abandon(signature);
 }
 
+/// Signatures abandoned this session: nothing in this session books them any more.
+pub async fn abandoned_signatures() -> HashSet<String> {
+    VERIFICATION_QUEUE.read().await.abandoned.clone()
+}
+
 /// Resolves as soon as new work is enqueued (see [`QUEUE_SIGNAL`]).
 pub async fn wait_for_new_work() {
     QUEUE_SIGNAL.notified().await;
