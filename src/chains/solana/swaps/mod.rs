@@ -25,6 +25,7 @@
 
 pub mod cost_guard;
 pub mod direct;
+pub mod funds;
 pub mod presend;
 pub mod revenue;
 pub mod routers;

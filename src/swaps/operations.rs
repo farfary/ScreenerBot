@@ -542,6 +542,7 @@ pub(crate) async fn execute_with_fallback_on(
     }
 
     amount_limit.check_quote(&quote).map_err(Error::from)?;
+    crate::chains::solana::swaps::funds::check_native_funds(&quote).await?;
 
     logger::info(
         LogTag::Swap,
@@ -2193,6 +2194,7 @@ mod tests {
             NotSubmittedReason::SimulationFailed { .. } => "SimulationFailed",
             NotSubmittedReason::CostExceeded { .. } => "CostExceeded",
             NotSubmittedReason::SimulationUnavailable { .. } => "SimulationUnavailable",
+            NotSubmittedReason::InsufficientFunds { .. } => "InsufficientFunds",
         }
     }
 
@@ -2317,6 +2319,16 @@ mod tests {
             (
                 not_submitted(NotSubmittedReason::SimulationUnavailable {
                     detail: "no node answered".to_owned(),
+                }),
+                true,
+            ),
+            // Refused before any router built anything: nothing was sent, so the
+            // attempt is forgotten, and the funds check runs ahead of the fallback
+            // chain so no other router is asked.
+            (
+                not_submitted(NotSubmittedReason::InsufficientFunds {
+                    required_raw: 995_000_000,
+                    available_raw: 82_086_537,
                 }),
                 true,
             ),
@@ -2617,7 +2629,7 @@ mod tests {
 
         let covered: std::collections::BTreeSet<String> =
             rows.iter().map(|(error, _)| row_name(error)).collect();
-        let reasons = 8;
+        let reasons = 9;
         let execution_variants = 5;
         let solana_outside_direct = 11 + execution_variants;
         let direct_variants = 20;

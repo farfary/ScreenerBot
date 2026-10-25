@@ -11,7 +11,7 @@ use axum::{
 
 use crate::config::with_config;
 use crate::errors::ErrorClass;
-use crate::i18n::ids;
+use crate::i18n::{ids, UiArg};
 use crate::logger::{self, LogTag};
 use crate::swaps::{try_get_best_quote, NotSubmittedReason, QuoteError};
 use crate::trader::manual::guard::{self, BlacklistPolicy, ManualTradeKind};
@@ -54,6 +54,32 @@ fn trade_response(
         )
         .details(detail)
         .into_response(),
+        // A wallet that cannot fund the trade is told its balance and the need, in
+        // native units; the refusal came before anything was built or sent.
+        Ok(crate::trader::TradeResult {
+            success: false,
+            not_submitted:
+                Some(NotSubmittedReason::InsufficientFunds {
+                    required_raw,
+                    available_raw,
+                }),
+            ..
+        }) => {
+            let adapter = crate::chains::adapter();
+            ApiError::new(
+                ApiErrorCode::InvalidInput,
+                ids::ERRORS_TRADE_INSUFFICIENT_FUNDS,
+            )
+            .arg(
+                "required",
+                UiArg::Number(adapter.raw_to_native(required_raw)),
+            )
+            .arg(
+                "available",
+                UiArg::Number(adapter.raw_to_native(available_raw)),
+            )
+            .into_response()
+        }
         Ok(tr) if !tr.success => match tr.error {
             Some(reason) => {
                 ApiError::new(ApiErrorCode::InvalidInput, ids::ERRORS_TRADE_MANUAL_REFUSED)
@@ -561,6 +587,28 @@ mod tests {
         let message =
             crate::i18n::format_message(&source, "errors-trade-swap-simulation-failed", None)
                 .expect("catalog message");
+        assert!(message.value.is_some_and(|title| !title.is_empty()));
+        assert!(message
+            .attributes
+            .iter()
+            .any(|(name, hint)| name == "hint" && !hint.is_empty()));
+        let unfunded = envelope(failed_buy(Some(NotSubmittedReason::InsufficientFunds {
+            required_raw: 995_000_000,
+            available_raw: 82_086_537,
+        })))
+        .await;
+        assert_eq!(
+            unfunded["error"]["text"]["id"],
+            "errors-trade-insufficient-funds"
+        );
+        let args = unfunded["error"]["text"]["args"].to_string();
+        assert!(
+            args.contains("required") && args.contains("available"),
+            "{unfunded}"
+        );
+        assert!(!unfunded.to_string().contains("-32602"), "{unfunded}");
+        let message = crate::i18n::format_message(&source, "errors-trade-insufficient-funds", None)
+            .expect("catalog message");
         assert!(message.value.is_some_and(|title| !title.is_empty()));
         assert!(message
             .attributes

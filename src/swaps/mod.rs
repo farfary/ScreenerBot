@@ -7,6 +7,7 @@
 //! `SwapRouter` contract, the registry that wires adapters up, and the
 //! router-agnostic quote/execute-with-fallback policy.
 pub mod error;
+pub(crate) mod funds;
 pub mod operations;
 mod operations_wallet;
 pub mod progress;

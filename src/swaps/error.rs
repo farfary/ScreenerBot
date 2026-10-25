@@ -301,6 +301,13 @@ pub enum NotSubmittedReason {
     /// nothing established what it would do with the wallet before signing.
     #[error("the transaction could not be simulated: {detail}")]
     SimulationUnavailable { detail: String },
+    /// The signing wallet holds less native coin than the trade, the network fee
+    /// and the accounts the swap may open need; nothing was built.
+    #[error("the wallet holds {available_raw} raw native units, the trade needs {required_raw}")]
+    InsufficientFunds {
+        required_raw: u64,
+        available_raw: u64,
+    },
 }
 
 impl NotSubmittedReason {
@@ -314,7 +321,8 @@ impl NotSubmittedReason {
             | NotSubmittedReason::UnsupportedFormat { .. }
             | NotSubmittedReason::RequestRejected { .. }
             | NotSubmittedReason::SimulationFailed { .. }
-            | NotSubmittedReason::CostExceeded { .. } => 422,
+            | NotSubmittedReason::CostExceeded { .. }
+            | NotSubmittedReason::InsufficientFunds { .. } => 422,
             NotSubmittedReason::SimulationUnavailable { .. } => 503,
         }
     }
