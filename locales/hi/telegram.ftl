@@ -496,7 +496,6 @@ telegram-position-sell-done =
 
     टोकन — { $symbol }
     बेचा गया — { $percent }%
-    प्राप्त — { $amount } { -sol }
 telegram-position-sell-failed = <b>बिक्री विफल रही</b>
 telegram-position-adding = { $symbol } में { $amount } { -sol } जोड़े जा रहे हैं...
 telegram-position-dca-done =

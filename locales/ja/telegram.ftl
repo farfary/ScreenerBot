@@ -517,7 +517,6 @@ telegram-position-sell-done =
 
     トークン — { $symbol }
     売却 — { $percent }%
-    受取額 — { $amount } { -sol }
 telegram-position-sell-failed = <b>売却に失敗しました</b>
 telegram-position-adding = { $symbol } に { $amount } { -sol } を追加中...
 telegram-position-dca-done =

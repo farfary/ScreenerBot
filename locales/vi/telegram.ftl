@@ -509,7 +509,6 @@ telegram-position-sell-done =
 
     Token — { $symbol }
     Đã bán — { $percent }%
-    Đã nhận — { $amount } { -sol }
 telegram-position-sell-failed = <b>Bán thất bại</b>
 telegram-position-adding = Đang thêm { $amount } { -sol } vào { $symbol }...
 telegram-position-dca-done =

@@ -524,7 +524,6 @@ telegram-position-sell-done =
 
     Token — { $symbol }
     Sold — { $percent }%
-    Received — { $amount } { -sol }
 telegram-position-sell-failed = <b>Sell Failed</b>
 telegram-position-adding = Adding { $amount } { -sol } to { $symbol }...
 telegram-position-dca-done =

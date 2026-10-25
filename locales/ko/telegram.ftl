@@ -507,7 +507,6 @@ telegram-position-sell-done =
 
     토큰 — { $symbol }
     매도 — { $percent }%
-    수령 — { $amount } { -sol }
 telegram-position-sell-failed = <b>매도 실패</b>
 telegram-position-adding = { $symbol }에 { $amount } { -sol } 추가하는 중...
 telegram-position-dca-done =

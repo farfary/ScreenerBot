@@ -305,25 +305,23 @@ pub(super) async fn execute_sell(
                 Ok(()) => manual_sell(&pos.mint, Some(percent as f64), None).await,
                 Err(e) => Err(e),
             };
+            // A trade the bot refused comes back as a result that did not succeed, not as
+            // an error, and must be reported as the failure it is.
+            let sold = sold
+                .map_err(|e| e.to_string())
+                .and_then(|result| refused_reason(&result).map_or(Ok(()), Err));
             match sold {
-                Ok(result) => {
+                Ok(()) => {
                     let msg = row(
                         "✅",
                         UiText::new(ids::TELEGRAM_POSITION_SELL_DONE)
                             .arg("symbol", text_arg(pos.symbol.as_str()))
-                            .arg("percent", text_arg(percent.to_string()))
-                            .arg(
-                                "amount",
-                                text_arg(format!(
-                                    "{:.4}",
-                                    result.executed_size_native.unwrap_or_default()
-                                )),
-                            ),
+                            .arg("percent", text_arg(percent.to_string())),
                     );
                     send_with_keyboard(bot, chat_id, &msg, keyboards::main_menu_compact()).await
                 }
                 Err(e) => {
-                    let msg = failure_screen(ids::TELEGRAM_POSITION_SELL_FAILED, &e.to_string());
+                    let msg = failure_screen(ids::TELEGRAM_POSITION_SELL_FAILED, &e);
                     send_with_keyboard(bot, chat_id, &msg, keyboards::main_menu_compact()).await
                 }
             }
@@ -366,8 +364,11 @@ pub(super) async fn execute_dca(
                 Ok(()) => manual_add(&pos.mint, amount, None).await,
                 Err(e) => Err(e),
             };
+            let added = added
+                .map_err(|e| e.to_string())
+                .and_then(|result| refused_reason(&result).map_or(Ok(()), Err));
             match added {
-                Ok(_) => {
+                Ok(()) => {
                     let msg = row(
                         "✅",
                         UiText::new(ids::TELEGRAM_POSITION_DCA_DONE)
@@ -377,7 +378,7 @@ pub(super) async fn execute_dca(
                     send_with_keyboard(bot, chat_id, &msg, keyboards::main_menu_compact()).await
                 }
                 Err(e) => {
-                    let msg = failure_screen(ids::TELEGRAM_POSITION_DCA_FAILED, &e.to_string());
+                    let msg = failure_screen(ids::TELEGRAM_POSITION_DCA_FAILED, &e);
                     send_with_keyboard(bot, chat_id, &msg, keyboards::main_menu_compact()).await
                 }
             }
@@ -421,8 +422,8 @@ pub(super) async fn execute_close_all(bot: &Bot, chat_id: ChatId) -> Result<()> 
             Err(e) => Err(e),
         };
         match sold {
-            Ok(_) => success += 1,
-            Err(_) => failed += 1,
+            Ok(result) if result.success => success += 1,
+            _ => failed += 1,
         }
     }
 
@@ -513,6 +514,11 @@ fn confirm_screen(body: UiText, hint: crate::i18n::MessageId) -> String {
 }
 
 /// Failure title followed by the error detail.
+/// Why a manual trade that returned a result did not go through; `None` when it did.
+pub(super) fn refused_reason(result: &crate::trader::TradeResult) -> Option<String> {
+    (!result.success).then(|| result.error.clone().unwrap_or_default())
+}
+
 fn failure_screen(title: crate::i18n::MessageId, detail: &str) -> String {
     format!(
         "{}\n\n{}",

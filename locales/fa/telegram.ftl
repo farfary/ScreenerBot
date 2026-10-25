@@ -520,7 +520,6 @@ telegram-position-sell-done =
 
     توکن — { $symbol }
     فروخته‌شده — { $percent }%
-    دریافتی — { $amount } { -sol }
 telegram-position-sell-failed = <b>فروش ناموفق بود</b>
 telegram-position-adding = در حال افزودن { $amount } { -sol } به { $symbol }...
 telegram-position-dca-done =

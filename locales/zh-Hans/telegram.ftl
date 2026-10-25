@@ -517,7 +517,6 @@ telegram-position-sell-done =
 
     代币 — { $symbol }
     已卖出 — { $percent }%
-    已收到 — { $amount } { -sol }
 telegram-position-sell-failed = <b>卖出失败</b>
 telegram-position-adding = 正在向 { $symbol } 加仓 { $amount } { -sol }…
 telegram-position-dca-done =

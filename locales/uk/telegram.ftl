@@ -518,7 +518,6 @@ telegram-position-sell-done =
 
     Токен — { $symbol }
     Продано — { $percent }%
-    Отримано — { $amount } { -sol }
 telegram-position-sell-failed = <b>Продаж не вдався</b>
 telegram-position-adding = Докупівля { $amount } { -sol } до { $symbol }...
 telegram-position-dca-done =

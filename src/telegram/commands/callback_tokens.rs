@@ -567,11 +567,12 @@ pub(super) async fn execute_token_buy(
             None,
         )
         .await
-        .map_err(|e| e.to_string()),
+        .map_err(|e| e.to_string())
+        .and_then(|result| super::callback_positions::refused_reason(&result).map_or(Ok(()), Err)),
         Err(e) => Err(e.to_string()),
     };
     match bought {
-        Ok(_) => {
+        Ok(()) => {
             let success_msg = row(
                 "✅",
                 UiText::new(ids::TELEGRAM_TOKEN_BUY_DONE)

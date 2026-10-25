@@ -518,7 +518,6 @@ telegram-position-sell-done =
 
     الرمز — { $symbol }
     المباع — { $percent }%
-    المستلم — { $amount } { -sol }
 telegram-position-sell-failed = <b>فشل البيع</b>
 telegram-position-adding = جارٍ إضافة { $amount } { -sol } إلى { $symbol }...
 telegram-position-dca-done =
