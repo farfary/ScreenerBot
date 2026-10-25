@@ -90,7 +90,7 @@ pub async fn perform_initial_transaction_bootstrap(
     }
 
     // Determine bootstrap mode using persistent bootstrap_state
-    // Backfill mode: full history not completed yet → page newest→oldest using backfill_before_cursor
+    // Backfill mode: full history not completed yet → page newest→oldest from the newest signature
     // Forward incremental: once full history completed → fetch only newer than newest known
     let mut bootstrap_mode = "FULL".to_owned();
     let mut checkpoint_signature: Option<String> = None;
@@ -232,18 +232,6 @@ pub async fn perform_initial_transaction_bootstrap(
         );
 
         before = signatures.last().cloned();
-
-        // Persist backfill cursor every page (only in FULL/backfill mode)
-        if bootstrap_mode == "FULL" {
-            if let Some(db) = transaction_db.as_ref() {
-                if let Err(e) = db.set_backfill_cursor(before.as_deref()).await {
-                    logger::info(
-                        LogTag::Transactions,
-                        &format!("Failed to persist backfill cursor: {e}"),
-                    );
-                }
-            }
-        }
 
         if signatures.len() < batch_limit {
             if bootstrap_mode == "FULL" {
@@ -617,35 +605,18 @@ pub async fn perform_initial_transaction_bootstrap(
     stats.duration_ms = bootstrap_timer.elapsed().as_millis();
 
     // If FULL/backfill completed to chain-end (no more pages), mark full history completed so next run uses forward-only incremental
-    if bootstrap_mode == "FULL" {
+    if bootstrap_mode == "FULL" && reached_chain_end {
         if let Some(db) = transaction_db.as_ref() {
-            if reached_chain_end {
-                if let Err(e) = db.mark_full_history_completed().await {
-                    logger::info(
-                        LogTag::Transactions,
-                        &format!("Failed to mark full history completed: {e}"),
-                    );
-                } else {
-                    // Clear cursor since we reached chain end
-                    if let Err(e) = db.clear_backfill_cursor().await {
-                        logger::info(
-                            LogTag::Transactions,
-                            &format!("Failed to clear backfill cursor: {e}"),
-                        );
-                    }
-                    logger::info(
-            LogTag::Transactions,
-            "Full history backfill completed. Switching to forward incremental on next start."
-          );
-                }
+            if let Err(e) = db.mark_full_history_completed().await {
+                logger::info(
+                    LogTag::Transactions,
+                    &format!("Failed to mark full history completed: {e}"),
+                );
             } else {
-                // Persist last cursor already done per-page; ensure it's saved for resume
-                if let Err(e) = db.set_backfill_cursor(before.as_deref()).await {
-                    logger::info(
-                        LogTag::Transactions,
-                        &format!("Failed to persist final backfill cursor: {e}"),
-                    );
-                }
+                logger::info(
+                    LogTag::Transactions,
+                    "Full history backfill completed. Switching to forward incremental on next start.",
+                );
             }
         }
     }

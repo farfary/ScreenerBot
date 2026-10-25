@@ -589,7 +589,6 @@ pub(super) async fn collect_transactions_snapshot() -> Option<TransactionsStatus
             Ok(state) => {
                 bootstrap_snapshot = Some(TransactionBootstrapSnapshot {
                     full_history_completed: state.full_history_completed,
-                    backfill_cursor: state.backfill_before_cursor,
                 });
             }
             Err(err) => logger::warning(

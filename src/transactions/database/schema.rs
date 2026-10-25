@@ -216,7 +216,8 @@ CREATE TABLE IF NOT EXISTS db_metadata (
 );
 "#;
 
-/// Bootstrap state table to persist resume cursor and completion flag across restarts
+/// Bootstrap state table persisting the full-history completion flag across restarts. The
+/// `backfill_before_cursor` column of stored databases is no longer written or read.
 pub(super) const SCHEMA_BOOTSTRAP_STATE: &str = r#"
 CREATE TABLE IF NOT EXISTS bootstrap_state (
     chain_id TEXT NOT NULL DEFAULT 'solana',

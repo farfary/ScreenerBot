@@ -12,7 +12,6 @@
   "db_size_mb": 3.2,
   "db_schema_version": 9,
   "bootstrap_state": {
-    "backfill_cursor": null,
     "full_history_completed": true
   }
 }

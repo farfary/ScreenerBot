@@ -71,7 +71,6 @@ pub struct TransactionSummaryResponse {
 
 #[derive(Debug, Serialize)]
 pub struct BootstrapStateInfo {
-    pub backfill_cursor: Option<String>,
     pub full_history_completed: bool,
 }
 

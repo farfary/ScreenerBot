@@ -117,7 +117,6 @@ pub(super) async fn get_summary(
                 db_size_mb: 0.0,
                 db_schema_version: 0,
                 bootstrap_state: BootstrapStateInfo {
-                    backfill_cursor: None,
                     full_history_completed: false,
                 },
             });
@@ -142,7 +141,6 @@ pub(super) async fn get_summary(
                 db_size_mb: 0.0,
                 db_schema_version: 0,
                 bootstrap_state: BootstrapStateInfo {
-                    backfill_cursor: None,
                     full_history_completed: false,
                 },
             });
@@ -215,7 +213,6 @@ pub(super) async fn get_summary(
         db_size_mb: db_stats.database_size_bytes as f64 / (1024.0 * 1024.0),
         db_schema_version: db_stats.schema_version,
         bootstrap_state: BootstrapStateInfo {
-            backfill_cursor: bootstrap.backfill_before_cursor,
             full_history_completed: bootstrap.full_history_completed,
         },
     })

@@ -441,8 +441,6 @@ pub struct TransactionDatabaseSnapshot {
 #[derive(Clone, Debug, Serialize)]
 pub struct TransactionBootstrapSnapshot {
     pub full_history_completed: bool,
-    #[serde(skip_serializing_if = "Option::is_none")]
-    pub backfill_cursor: Option<String>,
 }
 
 #[derive(Clone, Debug, Serialize, serde::Deserialize)]
