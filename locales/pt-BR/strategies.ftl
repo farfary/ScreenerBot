@@ -249,6 +249,63 @@ strategies-condition-volume-spike-param-lookback = Janela de análise
 strategies-condition-volume-spike-param-multiplier = Multiplicador de volume
     .description = Quantas vezes acima da média (ex.: 2.0 = 200% da média)
 
+strategies-condition-rsi = RSI (Índice de Força Relativa)
+    .description = Dispara quando o RSI dos fechamentos dos candles, suavizado como Wilder definiu, está abaixo ou acima de um limite. Lê apenas candles.
+strategies-condition-rsi-param-period = Período do RSI
+    .description = Número de candles sobre os quais o RSI é calculado; a condição precisa de um candle a mais que este valor
+strategies-condition-rsi-param-comparison = Comparação
+    .description = Se o RSI deve estar abaixo ou acima do limite
+strategies-condition-rsi-param-comparison-option-below = Abaixo (sobrevendido)
+strategies-condition-rsi-param-comparison-option-above = Acima (sobrecomprado)
+strategies-condition-rsi-param-threshold = Limite do RSI
+    .description = Nível de RSI de 1 a 99 (30 e 70 são os níveis usuais de sobrevenda e sobrecompra)
+
+strategies-condition-ma-cross = Cruzamento de médias móveis
+    .description = Dispara quando uma média móvel rápida cruza uma lenta dentro dos últimos candles. Lê apenas candles.
+strategies-condition-ma-cross-param-ma-type = Tipo de média
+    .description = Médias exponenciais dão mais peso aos candles recentes; médias simples pesam todos os candles igualmente
+strategies-condition-ma-cross-param-ma-type-option-ema = Exponencial (EMA)
+strategies-condition-ma-cross-param-ma-type-option-sma = Simples (SMA)
+strategies-condition-ma-cross-param-fast-period = Período rápido
+    .description = Número de candles da média rápida
+strategies-condition-ma-cross-param-slow-period = Período lento
+    .description = Número de candles da média lenta; deve ser maior que o período rápido
+strategies-condition-ma-cross-param-direction = Direção do cruzamento
+    .description = Em que sentido a média rápida cruza a lenta
+strategies-condition-ma-cross-param-direction-option-bullish = Altista (a rápida cruza para cima)
+strategies-condition-ma-cross-param-direction-option-bearish = Baixista (a rápida cruza para baixo)
+strategies-condition-ma-cross-param-within-candles = Cruzamento nos últimos candles
+    .description = Quantos dos últimos candles podem conter o cruzamento; 1 significa apenas o último candle
+
+strategies-condition-position-profit = Lucro da posição
+    .description = Dispara quando o lucro não realizado da posição aberta, medido pelo preço do pool em relação ao preço de entrada, está acima ou abaixo de uma porcentagem. Somente para estratégias de saída.
+strategies-condition-position-profit-param-comparison = Comparação
+    .description = Se o lucro deve ser no mínimo ou no máximo o limite
+strategies-condition-position-profit-param-comparison-option-above = No mínimo (≥)
+strategies-condition-position-profit-param-comparison-option-below = No máximo (≤)
+strategies-condition-position-profit-param-threshold-pct = Limite de lucro %
+    .description = Lucro não realizado como porcentagem do preço de entrada; valores negativos são prejuízos
+
+strategies-condition-drawdown-from-peak = Queda desde o pico
+    .description = Dispara quando o preço do pool caiu uma porcentagem desde o maior preço visto após a entrada, depois que esse pico esteve alto o bastante acima do preço de entrada. Lê apenas preços do pool. Somente para estratégias de saída.
+strategies-condition-drawdown-from-peak-param-drop-pct = Queda desde o pico %
+    .description = Quanto abaixo do pico o preço atual precisa estar
+strategies-condition-drawdown-from-peak-param-arm-after-profit-pct = Armar após lucro %
+    .description = O pico precisa ter ficado pelo menos esta porcentagem acima do preço de entrada antes de a condição poder disparar; 0 significa sempre armada
+
+strategies-condition-buy-pressure = Pressão de compra
+    .description = Dispara quando as compras representam pelo menos uma parcela das transações de uma janela de tempo e a janela tem transações suficientes. Lê as contagens de compras e vendas do token.
+strategies-condition-buy-pressure-param-window = Janela de tempo
+    .description = Período coberto pelas contagens de compras e vendas
+strategies-condition-buy-pressure-param-window-option-5m = 5 minutos
+strategies-condition-buy-pressure-param-window-option-1h = 1 hora
+strategies-condition-buy-pressure-param-window-option-6h = 6 horas
+strategies-condition-buy-pressure-param-window-option-24h = 24 horas
+strategies-condition-buy-pressure-param-min-buy-share-pct = Parcela mínima de compras %
+    .description = Compras como porcentagem de todas as transações da janela
+strategies-condition-buy-pressure-param-min-transactions = Transações mínimas
+    .description = Janelas com menos transações nunca disparam a condição
+
 ## Shared by every condition
 
 strategies-condition-param-timeframe = Timeframe
@@ -283,6 +340,7 @@ strategies-error-insufficient-candles = Candles insuficientes para { $indicator 
 strategies-error-stale-candle-data = Os dados de candle de { $timeframe } estão desatualizados: a idade de { $age } s excede { $max } s
 strategies-error-invalid-rule-tree = Árvore de regras inválida: { $reason }
 strategies-error-evaluation-timeout = A avaliação da estratégia expirou após { $timeout } ms
+strategies-error-condition-not-applicable = { $condition } não pode ser usado em estratégias do tipo { $strategy }
 strategies-error-invalid-rules = Não foi possível ler as regras: { $reason }
 
 # Parameter names
@@ -308,6 +366,17 @@ strategies-error-field-threshold = limite
 strategies-error-field-time-unit = unidade de tempo
 strategies-error-field-time-value = valor de tempo
 strategies-error-field-timeframe = timeframe
+strategies-error-field-arm-after-profit = armar após lucro
+strategies-error-field-drop-percentage = porcentagem de queda
+strategies-error-field-entry-price = preço de entrada
+strategies-error-field-fast-period = período rápido
+strategies-error-field-minimum-buy-share = parcela mínima de compras
+strategies-error-field-minimum-transactions = transações mínimas
+strategies-error-field-moving-average-type = tipo de média
+strategies-error-field-peak-price = preço de pico
+strategies-error-field-slow-period = período lento
+strategies-error-field-window = janela
+strategies-error-field-within-candles = candles do cruzamento
 
 # Expected parameter types
 
@@ -322,6 +391,8 @@ strategies-error-data-liquidity-data = Dados de liquidez
 strategies-error-data-market-data = Dados de mercado
 strategies-error-data-ohlcv-data = Dados OHLCV
 strategies-error-data-position-data = Dados da posição
+strategies-error-data-peak-price = Preço de pico
+strategies-error-data-transaction-counts = Contagens de transações
 
 # Indicators
 
@@ -330,6 +401,8 @@ strategies-error-indicator-moving-average = média móvel
 strategies-error-indicator-price-breakout = rompimento de preço
 strategies-error-indicator-price-change-lookback = janela de variação de preço
 strategies-error-indicator-volume-spike = pico de volume
+strategies-error-indicator-moving-average-cross = cruzamento de médias móveis
+strategies-error-indicator-rsi = RSI
 
 # Rule tree faults
 
@@ -339,3 +412,7 @@ strategies-error-rule-branch-node-must-have-at-least-one-child = O nó de ramifi
 strategies-error-rule-invalid-rule-tree-structure = Estrutura de árvore de regras inválida
 strategies-error-rule-leaf-node-missing-condition = Nó folha sem condição
 strategies-error-rule-not-operator-must-have-exactly-one-child = O operador NOT deve ter exatamente um filho
+strategies-error-rule-a-group-needs-at-least-one-condition-switched-on = Um grupo precisa de pelo menos uma condição ativada
+strategies-error-rule-not-operator-cannot-have-a-switched-off-child = O operador NOT não pode ter um filho desativado
+strategies-error-rule-rules-nest-deeper-than-four-levels = As regras não podem se aninhar em mais de quatro níveis
+strategies-error-rule-the-root-group-cannot-be-switched-off = O grupo raiz não pode ser desativado

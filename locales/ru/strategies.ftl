@@ -224,6 +224,63 @@ strategies-condition-volume-spike-param-lookback = Период просмотр
 strategies-condition-volume-spike-param-multiplier = Множитель объёма
     .description = Во сколько раз выше среднего (например, 2.0 = 200% от среднего)
 
+strategies-condition-rsi = RSI (индекс относительной силы)
+    .description = Срабатывает, когда RSI цен закрытия свечей, сглаженный по Уайлдеру, ниже или выше порога. Читает только свечи.
+strategies-condition-rsi-param-period = Период RSI
+    .description = Число свечей, по которым считается RSI; условию нужна на одну свечу больше этого значения
+strategies-condition-rsi-param-comparison = Сравнение
+    .description = Должен ли RSI быть ниже или выше порога
+strategies-condition-rsi-param-comparison-option-below = Ниже (перепроданность)
+strategies-condition-rsi-param-comparison-option-above = Выше (перекупленность)
+strategies-condition-rsi-param-threshold = Порог RSI
+    .description = Уровень RSI от 1 до 99 (обычно 30 для перепроданности и 70 для перекупленности)
+
+strategies-condition-ma-cross = Пересечение скользящих средних
+    .description = Срабатывает, когда быстрая скользящая средняя пересекла медленную в последних свечах. Читает только свечи.
+strategies-condition-ma-cross-param-ma-type = Тип средней
+    .description = Экспоненциальные средние сильнее учитывают недавние свечи, простые учитывают все свечи одинаково
+strategies-condition-ma-cross-param-ma-type-option-ema = Экспоненциальная (EMA)
+strategies-condition-ma-cross-param-ma-type-option-sma = Простая (SMA)
+strategies-condition-ma-cross-param-fast-period = Быстрый период
+    .description = Число свечей в быстрой средней
+strategies-condition-ma-cross-param-slow-period = Медленный период
+    .description = Число свечей в медленной средней; должно быть больше быстрого периода
+strategies-condition-ma-cross-param-direction = Направление пересечения
+    .description = В какую сторону быстрая средняя пересекает медленную
+strategies-condition-ma-cross-param-direction-option-bullish = Бычье (быстрая пересекает снизу вверх)
+strategies-condition-ma-cross-param-direction-option-bearish = Медвежье (быстрая пересекает сверху вниз)
+strategies-condition-ma-cross-param-within-candles = Пересечение за последние свечи
+    .description = Сколько последних свечей может содержать пересечение; 1 означает только последнюю свечу
+
+strategies-condition-position-profit = Прибыль позиции
+    .description = Срабатывает, когда нереализованная прибыль открытой позиции, измеренная по цене пула относительно цены входа, выше или ниже заданного процента. Только для стратегий выхода.
+strategies-condition-position-profit-param-comparison = Сравнение
+    .description = Должна ли прибыль быть не меньше или не больше порога
+strategies-condition-position-profit-param-comparison-option-above = Не меньше (≥)
+strategies-condition-position-profit-param-comparison-option-below = Не больше (≤)
+strategies-condition-position-profit-param-threshold-pct = Порог прибыли, %
+    .description = Нереализованная прибыль в процентах от цены входа; отрицательные значения означают убыток
+
+strategies-condition-drawdown-from-peak = Просадка от пика
+    .description = Срабатывает, когда цена пула упала на заданный процент от максимальной цены с момента входа, при условии что этот пик был достаточно выше цены входа. Читает только цены пула. Только для стратегий выхода.
+strategies-condition-drawdown-from-peak-param-drop-pct = Просадка от пика, %
+    .description = Насколько текущая цена должна быть ниже пика
+strategies-condition-drawdown-from-peak-param-arm-after-profit-pct = Включать после прибыли, %
+    .description = Пик должен был превысить цену входа не меньше чем на этот процент, прежде чем условие сможет сработать; 0 означает, что оно действует всегда
+
+strategies-condition-buy-pressure = Давление покупок
+    .description = Срабатывает, когда покупки составляют не меньше заданной доли транзакций за временное окно и в окне достаточно транзакций. Читает число покупок и продаж токена.
+strategies-condition-buy-pressure-param-window = Временное окно
+    .description = Период, который охватывают числа покупок и продаж
+strategies-condition-buy-pressure-param-window-option-5m = 5 минут
+strategies-condition-buy-pressure-param-window-option-1h = 1 час
+strategies-condition-buy-pressure-param-window-option-6h = 6 часов
+strategies-condition-buy-pressure-param-window-option-24h = 24 часа
+strategies-condition-buy-pressure-param-min-buy-share-pct = Минимальная доля покупок, %
+    .description = Покупки в процентах от всех транзакций окна
+strategies-condition-buy-pressure-param-min-transactions = Минимум транзакций
+    .description = Окна с меньшим числом транзакций никогда не запускают условие
+
 strategies-condition-param-timeframe = Таймфрейм
     .description = Размер свечи: длительность каждой свечи, которую читает условие (таймфрейм стратегии, если не задан)
 strategies-condition-timeframe-option-1m = 1 минута
@@ -251,6 +308,7 @@ strategies-error-insufficient-candles = Недостаточно свечей (�
 strategies-error-stale-candle-data = Данные свечей для таймфрейма { $timeframe } устарели: возраст { $age } с превышает { $max } с
 strategies-error-invalid-rule-tree = Недопустимое дерево правил: { $reason }
 strategies-error-evaluation-timeout = Время оценки стратегии истекло через { $timeout } мс
+strategies-error-condition-not-applicable = { $condition } нельзя использовать в стратегиях типа «{ $strategy }»
 strategies-error-invalid-rules = Не удалось прочитать правила: { $reason }
 
 strategies-error-field-average-volume = средний объём
@@ -274,6 +332,17 @@ strategies-error-field-threshold = порог
 strategies-error-field-time-unit = единица времени
 strategies-error-field-time-value = значение времени
 strategies-error-field-timeframe = таймфрейм
+strategies-error-field-arm-after-profit = включение после прибыли
+strategies-error-field-drop-percentage = процент просадки
+strategies-error-field-entry-price = цена входа
+strategies-error-field-fast-period = быстрый период
+strategies-error-field-minimum-buy-share = минимальная доля покупок
+strategies-error-field-minimum-transactions = минимум транзакций
+strategies-error-field-moving-average-type = тип средней
+strategies-error-field-peak-price = цена пика
+strategies-error-field-slow-period = медленный период
+strategies-error-field-window = окно
+strategies-error-field-within-candles = число свечей пересечения
 
 strategies-error-expected-boolean = логическое значение
 strategies-error-expected-number = число
@@ -284,12 +353,16 @@ strategies-error-data-liquidity-data = Данные о ликвидности
 strategies-error-data-market-data = Рыночные данные
 strategies-error-data-ohlcv-data = Данные OHLCV
 strategies-error-data-position-data = Данные о позиции
+strategies-error-data-peak-price = Цена пика
+strategies-error-data-transaction-counts = Число транзакций
 
 strategies-error-indicator-consecutive-candles = свечи подряд
 strategies-error-indicator-moving-average = скользящая средняя
 strategies-error-indicator-price-breakout = пробой цены
 strategies-error-indicator-price-change-lookback = период просмотра изменения цены
 strategies-error-indicator-volume-spike = всплеск объёма
+strategies-error-indicator-moving-average-cross = пересечение скользящих средних
+strategies-error-indicator-rsi = RSI
 
 strategies-error-rule-branch-node-missing-conditions = У узла ветви нет условий
 strategies-error-rule-branch-node-missing-operator = У узла ветви нет оператора
@@ -297,3 +370,7 @@ strategies-error-rule-branch-node-must-have-at-least-one-child = У узла в�
 strategies-error-rule-invalid-rule-tree-structure = Недопустимая структура дерева правил
 strategies-error-rule-leaf-node-missing-condition = У листового узла нет условия
 strategies-error-rule-not-operator-must-have-exactly-one-child = У оператора NOT должен быть ровно один дочерний узел
+strategies-error-rule-a-group-needs-at-least-one-condition-switched-on = Группе нужно хотя бы одно включённое условие
+strategies-error-rule-not-operator-cannot-have-a-switched-off-child = Оператор NOT не может иметь отключённый дочерний узел
+strategies-error-rule-rules-nest-deeper-than-four-levels = Правила могут быть вложены не глубже четырёх уровней
+strategies-error-rule-the-root-group-cannot-be-switched-off = Корневую группу нельзя отключить

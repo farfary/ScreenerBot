@@ -2,29 +2,40 @@
 // SPDX-License-Identifier: BUSL-1.1
 
 //! Strategy condition evaluators for rule-tree nodes (price, volume, candle patterns).
+mod buy_pressure;
 mod candle_size;
 mod catalog;
 mod consecutive_candles;
+mod drawdown_from_peak;
 mod liquidity_level;
+mod ma_cross;
 mod position_holding_time;
+mod position_profit;
 mod price_breakout;
 mod price_change_percent;
 mod price_to_ma;
+mod rsi;
 mod volume_spike;
 
+pub use buy_pressure::BuyPressureCondition;
 pub use candle_size::CandleSizeCondition;
 pub use consecutive_candles::ConsecutiveCandlesCondition;
+pub use drawdown_from_peak::DrawdownFromPeakCondition;
 pub use liquidity_level::LiquidityLevelCondition;
+pub use ma_cross::MaCrossCondition;
 pub use position_holding_time::PositionHoldingTimeCondition;
+pub use position_profit::PositionProfitCondition;
 pub use price_breakout::PriceBreakoutCondition;
 pub use price_change_percent::PriceChangePercentCondition;
 pub use price_to_ma::PriceToMaCondition;
+pub use rsi::RsiCondition;
 pub use volume_spike::VolumeSpikeCondition;
 
 use crate::ohlcvs::{Candle, Timeframe};
-use crate::strategies::types::{Condition, EvaluationContext};
+use crate::strategies::types::{Condition, EvaluationContext, StrategyType};
 use crate::strategies::{Error, Result};
 use async_trait::async_trait;
+use serde_json::json;
 use std::collections::HashMap;
 
 /// How far behind the evaluation instant a series may fall before it is refused.
@@ -154,6 +165,12 @@ pub trait ConditionEvaluator: Send + Sync {
     /// Validate condition parameters
     fn validate(&self, condition: &Condition) -> Result<()>;
 
+    /// Strategy types this condition can be used in. A condition that reads position data
+    /// applies to exit strategies only: in an entry strategy it could never be evaluated.
+    fn applies_to(&self) -> &'static [StrategyType] {
+        &[StrategyType::Entry, StrategyType::Exit]
+    }
+
     /// Structure of the parameters for the UI. Carries no display text: the registry adds
     /// the localization keys (see `catalog`).
     fn parameter_schema(&self) -> serde_json::Value;
@@ -180,6 +197,11 @@ impl ConditionRegistry {
         registry.register(Box::new(VolumeSpikeCondition));
         registry.register(Box::new(LiquidityLevelCondition));
         registry.register(Box::new(PositionHoldingTimeCondition));
+        registry.register(Box::new(RsiCondition));
+        registry.register(Box::new(MaCrossCondition));
+        registry.register(Box::new(PositionProfitCondition));
+        registry.register(Box::new(DrawdownFromPeakCondition));
+        registry.register(Box::new(BuyPressureCondition));
 
         registry
     }
@@ -205,6 +227,7 @@ impl ConditionRegistry {
         let mut schemas = serde_json::Map::new();
         for (name, evaluator) in &self.evaluators {
             let mut schema = evaluator.parameter_schema();
+            schema["applies_to"] = json!(evaluator.applies_to());
             catalog::attach_text_keys(&mut schema);
             schemas.insert(name.clone(), schema);
         }
@@ -229,6 +252,38 @@ pub fn get_param_f64(condition: &Condition, param_name: &'static str) -> Result<
         field: param_name,
         expected: "a number",
     })
+}
+
+/// Read a numeric parameter and refuse a value outside `min..=max`, naming `field` in the error.
+pub fn get_param_f64_in_range(
+    condition: &Condition,
+    param_name: &'static str,
+    field: &'static str,
+    min: f64,
+    max: f64,
+) -> Result<f64> {
+    let value = get_param_f64(condition, param_name)?;
+    if !(min..=max).contains(&value) {
+        return Err(Error::InvalidConditionValue {
+            field,
+            value: value.to_string(),
+        });
+    }
+    Ok(value)
+}
+
+/// Read a string parameter and refuse a value outside `allowed`, naming `field` in the error.
+pub fn get_param_choice(
+    condition: &Condition,
+    param_name: &'static str,
+    field: &'static str,
+    allowed: &[&str],
+) -> Result<String> {
+    let value = get_param_string(condition, param_name)?;
+    if !allowed.contains(&value.as_str()) {
+        return Err(Error::InvalidConditionValue { field, value });
+    }
+    Ok(value)
 }
 
 /// Helper function to get parameter value as string

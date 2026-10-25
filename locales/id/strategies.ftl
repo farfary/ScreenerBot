@@ -219,6 +219,63 @@ strategies-condition-volume-spike-param-lookback = Periode Lookback
 strategies-condition-volume-spike-param-multiplier = Pengali Volume
     .description = Berapa kali di atas rata-rata (mis., 2.0 = 200% dari rata-rata)
 
+strategies-condition-rsi = RSI (Relative Strength Index)
+    .description = Terpicu saat RSI dari harga penutupan candle, yang dihaluskan menurut Wilder, berada di bawah atau di atas ambang. Hanya membaca candle.
+strategies-condition-rsi-param-period = Periode RSI
+    .description = Jumlah candle yang dipakai untuk menghitung RSI; kondisi ini membutuhkan satu candle lebih banyak dari nilai ini
+strategies-condition-rsi-param-comparison = Perbandingan
+    .description = Apakah RSI harus di bawah atau di atas ambang
+strategies-condition-rsi-param-comparison-option-below = Di Bawah (Oversold)
+strategies-condition-rsi-param-comparison-option-above = Di Atas (Overbought)
+strategies-condition-rsi-param-threshold = Ambang RSI
+    .description = Level RSI dari 1 sampai 99 (30 dan 70 adalah level oversold dan overbought yang lazim)
+
+strategies-condition-ma-cross = Persilangan Moving Average
+    .description = Terpicu saat moving average cepat memotong yang lambat dalam beberapa candle terakhir. Hanya membaca candle.
+strategies-condition-ma-cross-param-ma-type = Jenis Average
+    .description = Average eksponensial memberi bobot lebih pada candle terbaru; average sederhana membobot semua candle sama
+strategies-condition-ma-cross-param-ma-type-option-ema = Eksponensial (EMA)
+strategies-condition-ma-cross-param-ma-type-option-sma = Sederhana (SMA)
+strategies-condition-ma-cross-param-fast-period = Periode Cepat
+    .description = Jumlah candle pada average cepat
+strategies-condition-ma-cross-param-slow-period = Periode Lambat
+    .description = Jumlah candle pada average lambat; harus lebih besar dari periode cepat
+strategies-condition-ma-cross-param-direction = Arah Persilangan
+    .description = Ke arah mana average cepat memotong yang lambat
+strategies-condition-ma-cross-param-direction-option-bullish = Bullish (Cepat Memotong ke Atas)
+strategies-condition-ma-cross-param-direction-option-bearish = Bearish (Cepat Memotong ke Bawah)
+strategies-condition-ma-cross-param-within-candles = Persilangan dalam
+    .description = Berapa candle terakhir yang boleh memuat persilangan; 1 berarti hanya candle terakhir
+
+strategies-condition-position-profit = Profit Posisi
+    .description = Terpicu saat profit belum terealisasi dari posisi terbuka, diukur dari harga pool terhadap harga entry, berada di atas atau di bawah suatu persentase. Hanya untuk strategi exit.
+strategies-condition-position-profit-param-comparison = Perbandingan
+    .description = Apakah profit harus minimal atau maksimal sebesar ambang
+strategies-condition-position-profit-param-comparison-option-above = Minimal (≥)
+strategies-condition-position-profit-param-comparison-option-below = Maksimal (≤)
+strategies-condition-position-profit-param-threshold-pct = Ambang Profit %
+    .description = Profit belum terealisasi sebagai persentase dari harga entry; nilai negatif berarti rugi
+
+strategies-condition-drawdown-from-peak = Penurunan dari Puncak
+    .description = Terpicu saat harga pool turun sebesar persentase tertentu dari harga tertinggi sejak entry, setelah puncak itu cukup jauh di atas harga entry. Hanya membaca harga pool. Hanya untuk strategi exit.
+strategies-condition-drawdown-from-peak-param-drop-pct = Penurunan dari Puncak %
+    .description = Seberapa jauh harga saat ini harus di bawah puncak
+strategies-condition-drawdown-from-peak-param-arm-after-profit-pct = Aktif Setelah Profit %
+    .description = Puncak harus pernah setidaknya sejauh ini di atas harga entry sebelum kondisi bisa terpicu; 0 berarti selalu aktif
+
+strategies-condition-buy-pressure = Tekanan Beli
+    .description = Terpicu saat pembelian minimal membentuk persentase tertentu dari transaksi dalam suatu jendela waktu dan jendela itu punya cukup transaksi. Membaca jumlah beli dan jual token.
+strategies-condition-buy-pressure-param-window = Jendela Waktu
+    .description = Periode yang dicakup jumlah beli dan jual
+strategies-condition-buy-pressure-param-window-option-5m = 5 Menit
+strategies-condition-buy-pressure-param-window-option-1h = 1 Jam
+strategies-condition-buy-pressure-param-window-option-6h = 6 Jam
+strategies-condition-buy-pressure-param-window-option-24h = 24 Jam
+strategies-condition-buy-pressure-param-min-buy-share-pct = Porsi Beli Minimum %
+    .description = Pembelian sebagai persentase dari semua transaksi dalam jendela
+strategies-condition-buy-pressure-param-min-transactions = Transaksi Minimum
+    .description = Jendela dengan transaksi lebih sedikit tidak pernah memicu kondisi ini
+
 strategies-condition-param-timeframe = Timeframe
     .description = Ukuran candle: durasi setiap candle yang dibaca kondisi (timeframe strategi jika tidak diatur)
 strategies-condition-timeframe-option-1m = 1 Menit
@@ -246,6 +303,7 @@ strategies-error-insufficient-candles = Candle tidak cukup untuk { $indicator }:
 strategies-error-stale-candle-data = Data candle { $timeframe } sudah usang: usianya { $age } dtk melebihi { $max } dtk
 strategies-error-invalid-rule-tree = Pohon aturan tidak valid: { $reason }
 strategies-error-evaluation-timeout = Evaluasi strategi habis waktu setelah { $timeout } ms
+strategies-error-condition-not-applicable = { $condition } tidak dapat dipakai pada strategi { $strategy }
 strategies-error-invalid-rules = Aturan tidak dapat dibaca: { $reason }
 
 strategies-error-field-average-volume = volume rata-rata
@@ -269,6 +327,17 @@ strategies-error-field-threshold = ambang
 strategies-error-field-time-unit = satuan waktu
 strategies-error-field-time-value = nilai waktu
 strategies-error-field-timeframe = timeframe
+strategies-error-field-arm-after-profit = aktif setelah profit
+strategies-error-field-drop-percentage = persentase penurunan
+strategies-error-field-entry-price = harga entry
+strategies-error-field-fast-period = periode cepat
+strategies-error-field-minimum-buy-share = porsi beli minimum
+strategies-error-field-minimum-transactions = transaksi minimum
+strategies-error-field-moving-average-type = jenis average
+strategies-error-field-peak-price = harga puncak
+strategies-error-field-slow-period = periode lambat
+strategies-error-field-window = jendela
+strategies-error-field-within-candles = jumlah candle persilangan
 
 strategies-error-expected-boolean = boolean
 strategies-error-expected-number = angka
@@ -279,12 +348,16 @@ strategies-error-data-liquidity-data = Data likuiditas
 strategies-error-data-market-data = Data pasar
 strategies-error-data-ohlcv-data = Data OHLCV
 strategies-error-data-position-data = Data posisi
+strategies-error-data-peak-price = Harga puncak
+strategies-error-data-transaction-counts = Jumlah transaksi
 
 strategies-error-indicator-consecutive-candles = candle berurutan
 strategies-error-indicator-moving-average = moving average
 strategies-error-indicator-price-breakout = breakout harga
 strategies-error-indicator-price-change-lookback = lookback perubahan harga
 strategies-error-indicator-volume-spike = lonjakan volume
+strategies-error-indicator-moving-average-cross = persilangan moving average
+strategies-error-indicator-rsi = RSI
 
 strategies-error-rule-branch-node-missing-conditions = Node cabang tidak memiliki kondisi
 strategies-error-rule-branch-node-missing-operator = Node cabang tidak memiliki operator
@@ -292,3 +365,7 @@ strategies-error-rule-branch-node-must-have-at-least-one-child = Node cabang har
 strategies-error-rule-invalid-rule-tree-structure = Struktur pohon aturan tidak valid
 strategies-error-rule-leaf-node-missing-condition = Node daun tidak memiliki kondisi
 strategies-error-rule-not-operator-must-have-exactly-one-child = Operator NOT harus memiliki tepat satu anak
+strategies-error-rule-a-group-needs-at-least-one-condition-switched-on = Grup membutuhkan minimal satu kondisi yang aktif
+strategies-error-rule-not-operator-cannot-have-a-switched-off-child = Operator NOT tidak boleh memiliki anak yang dimatikan
+strategies-error-rule-rules-nest-deeper-than-four-levels = Aturan tidak boleh bersarang lebih dari empat tingkat
+strategies-error-rule-the-root-group-cannot-be-switched-off = Grup akar tidak dapat dimatikan

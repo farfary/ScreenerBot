@@ -61,7 +61,7 @@ async fn get_engine() -> crate::Result<Arc<RwLock<Option<StrategyEngine>>>> {
 /// # Arguments
 /// * `token_mint` - The token mint address
 /// * `current_price` - Current token price in SOL
-/// * `market_data` - Optional market data (liquidity, volume, etc.)
+/// * `market_data` - Optional market data (liquidity, transaction counts)
 /// * `timeframe_bundle` - Optional multi-timeframe OHLCV bundle
 ///
 /// # Returns
@@ -144,7 +144,7 @@ pub async fn evaluate_entry_strategies(
 /// * `token_mint` - The token mint address
 /// * `current_price` - Current token price in SOL
 /// * `position_data` - Position data (entry price, age, etc.)
-/// * `market_data` - Optional market data (liquidity, volume, etc.)
+/// * `market_data` - Optional market data (liquidity, transaction counts)
 /// * `timeframe_bundle` - Optional multi-timeframe OHLCV bundle
 ///
 /// # Returns

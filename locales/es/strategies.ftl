@@ -243,6 +243,63 @@ strategies-condition-volume-spike-param-lookback = Período de revisión
 strategies-condition-volume-spike-param-multiplier = Multiplicador de volumen
     .description = Cuántas veces por encima del promedio (p. ej., 2.0 = 200% del promedio)
 
+strategies-condition-rsi = RSI (índice de fuerza relativa)
+    .description = Se activa cuando el RSI de los cierres de las velas, suavizado como lo definió Wilder, está por debajo o por encima de un umbral. Solo lee velas.
+strategies-condition-rsi-param-period = Período del RSI
+    .description = Número de velas sobre las que se calcula el RSI; la condición necesita una vela más que este valor
+strategies-condition-rsi-param-comparison = Comparación
+    .description = Si el RSI debe estar por debajo o por encima del umbral
+strategies-condition-rsi-param-comparison-option-below = Por debajo (sobrevendido)
+strategies-condition-rsi-param-comparison-option-above = Por encima (sobrecomprado)
+strategies-condition-rsi-param-threshold = Umbral del RSI
+    .description = Nivel de RSI de 1 a 99 (30 y 70 son los niveles habituales de sobreventa y sobrecompra)
+
+strategies-condition-ma-cross = Cruce de medias móviles
+    .description = Se activa cuando una media móvil rápida cruza una lenta dentro de las últimas velas. Solo lee velas.
+strategies-condition-ma-cross-param-ma-type = Tipo de media
+    .description = Las medias exponenciales dan más peso a las velas recientes; las simples pesan todas las velas por igual
+strategies-condition-ma-cross-param-ma-type-option-ema = Exponencial (EMA)
+strategies-condition-ma-cross-param-ma-type-option-sma = Simple (SMA)
+strategies-condition-ma-cross-param-fast-period = Período rápido
+    .description = Número de velas de la media rápida
+strategies-condition-ma-cross-param-slow-period = Período lento
+    .description = Número de velas de la media lenta; debe ser mayor que el período rápido
+strategies-condition-ma-cross-param-direction = Dirección del cruce
+    .description = En qué sentido la media rápida cruza la lenta
+strategies-condition-ma-cross-param-direction-option-bullish = Alcista (la rápida cruza hacia arriba)
+strategies-condition-ma-cross-param-direction-option-bearish = Bajista (la rápida cruza hacia abajo)
+strategies-condition-ma-cross-param-within-candles = Cruce en las últimas velas
+    .description = Cuántas de las últimas velas pueden contener el cruce; 1 significa solo la última vela
+
+strategies-condition-position-profit = Beneficio de la posición
+    .description = Se activa cuando el beneficio no realizado de la posición abierta, medido con el precio del pool frente al precio de entrada, está por encima o por debajo de un porcentaje. Solo para estrategias de salida.
+strategies-condition-position-profit-param-comparison = Comparación
+    .description = Si el beneficio debe ser como mínimo o como máximo el umbral
+strategies-condition-position-profit-param-comparison-option-above = Al menos (≥)
+strategies-condition-position-profit-param-comparison-option-below = Como máximo (≤)
+strategies-condition-position-profit-param-threshold-pct = Umbral de beneficio %
+    .description = Beneficio no realizado como porcentaje del precio de entrada; los valores negativos son pérdidas
+
+strategies-condition-drawdown-from-peak = Caída desde el máximo
+    .description = Se activa cuando el precio del pool ha caído un porcentaje desde el precio más alto visto desde la entrada, una vez que ese máximo estuvo lo bastante por encima del precio de entrada. Solo lee precios del pool. Solo para estrategias de salida.
+strategies-condition-drawdown-from-peak-param-drop-pct = Caída desde el máximo %
+    .description = Cuánto por debajo del máximo debe estar el precio actual
+strategies-condition-drawdown-from-peak-param-arm-after-profit-pct = Activar tras beneficio %
+    .description = El máximo debe haber estado al menos este porcentaje por encima del precio de entrada antes de que la condición pueda activarse; 0 significa siempre activa
+
+strategies-condition-buy-pressure = Presión compradora
+    .description = Se activa cuando las compras suponen al menos una parte de las transacciones de una ventana de tiempo y la ventana tiene suficientes transacciones. Lee los recuentos de compras y ventas del token.
+strategies-condition-buy-pressure-param-window = Ventana de tiempo
+    .description = Período que cubren los recuentos de compras y ventas
+strategies-condition-buy-pressure-param-window-option-5m = 5 minutos
+strategies-condition-buy-pressure-param-window-option-1h = 1 hora
+strategies-condition-buy-pressure-param-window-option-6h = 6 horas
+strategies-condition-buy-pressure-param-window-option-24h = 24 horas
+strategies-condition-buy-pressure-param-min-buy-share-pct = Cuota mínima de compras %
+    .description = Compras como porcentaje de todas las transacciones de la ventana
+strategies-condition-buy-pressure-param-min-transactions = Transacciones mínimas
+    .description = Las ventanas con menos transacciones nunca activan la condición
+
 ## Shared by every condition
 
 strategies-condition-param-timeframe = Temporalidad
@@ -277,6 +334,7 @@ strategies-error-insufficient-candles = Velas insuficientes para { $indicator }:
 strategies-error-stale-candle-data = Los datos de velas de { $timeframe } están desactualizados: su antigüedad de { $age } s supera { $max } s
 strategies-error-invalid-rule-tree = Árbol de reglas no válido: { $reason }
 strategies-error-evaluation-timeout = La evaluación de la estrategia agotó el tiempo tras { $timeout } ms
+strategies-error-condition-not-applicable = { $condition } no se puede usar en estrategias de tipo { $strategy }
 strategies-error-invalid-rules = No se pudieron leer las reglas: { $reason }
 
 # Parameter names
@@ -302,6 +360,17 @@ strategies-error-field-threshold = umbral
 strategies-error-field-time-unit = unidad de tiempo
 strategies-error-field-time-value = valor de tiempo
 strategies-error-field-timeframe = temporalidad
+strategies-error-field-arm-after-profit = activación tras beneficio
+strategies-error-field-drop-percentage = porcentaje de caída
+strategies-error-field-entry-price = precio de entrada
+strategies-error-field-fast-period = período rápido
+strategies-error-field-minimum-buy-share = cuota mínima de compras
+strategies-error-field-minimum-transactions = transacciones mínimas
+strategies-error-field-moving-average-type = tipo de media
+strategies-error-field-peak-price = precio máximo
+strategies-error-field-slow-period = período lento
+strategies-error-field-window = ventana
+strategies-error-field-within-candles = velas del cruce
 
 # Expected parameter types
 
@@ -316,6 +385,8 @@ strategies-error-data-liquidity-data = Los datos de liquidez
 strategies-error-data-market-data = Los datos de mercado
 strategies-error-data-ohlcv-data = Los datos OHLCV
 strategies-error-data-position-data = Los datos de la posición
+strategies-error-data-peak-price = El precio máximo
+strategies-error-data-transaction-counts = Los recuentos de transacciones
 
 # Indicators
 
@@ -324,6 +395,8 @@ strategies-error-indicator-moving-average = media móvil
 strategies-error-indicator-price-breakout = ruptura de precio
 strategies-error-indicator-price-change-lookback = período de revisión de variación de precio
 strategies-error-indicator-volume-spike = pico de volumen
+strategies-error-indicator-moving-average-cross = cruce de medias móviles
+strategies-error-indicator-rsi = RSI
 
 # Rule tree faults
 
@@ -333,3 +406,7 @@ strategies-error-rule-branch-node-must-have-at-least-one-child = El nodo de rama
 strategies-error-rule-invalid-rule-tree-structure = Estructura del árbol de reglas no válida
 strategies-error-rule-leaf-node-missing-condition = Al nodo hoja le falta la condición
 strategies-error-rule-not-operator-must-have-exactly-one-child = El operador NOT debe tener exactamente un hijo
+strategies-error-rule-a-group-needs-at-least-one-condition-switched-on = Un grupo necesita al menos una condición activada
+strategies-error-rule-not-operator-cannot-have-a-switched-off-child = El operador NOT no puede tener un hijo desactivado
+strategies-error-rule-rules-nest-deeper-than-four-levels = Las reglas no pueden anidarse más de cuatro niveles
+strategies-error-rule-the-root-group-cannot-be-switched-off = El grupo raíz no se puede desactivar

@@ -245,6 +245,63 @@ strategies-condition-volume-spike-param-lookback = 参照期間
 strategies-condition-volume-spike-param-multiplier = 出来高倍率
     .description = 平均の何倍か（例: 2.0 = 平均の 200%）
 
+strategies-condition-rsi = RSI（相対力指数）
+    .description = ローソク足の終値から求めた RSI（ワイルダー方式で平滑化）がしきい値を下回る、または上回ると発動します。ローソク足のみを読み取ります。
+strategies-condition-rsi-param-period = RSI 期間
+    .description = RSI の計算に使うローソク足の本数。この値より 1 本多く必要です
+strategies-condition-rsi-param-comparison = 比較
+    .description = RSI がしきい値を下回る必要があるか、上回る必要があるか
+strategies-condition-rsi-param-comparison-option-below = 下回る（売られすぎ）
+strategies-condition-rsi-param-comparison-option-above = 上回る（買われすぎ）
+strategies-condition-rsi-param-threshold = RSI しきい値
+    .description = 1〜99 の RSI 水準（売られすぎは 30、買われすぎは 70 が一般的）
+
+strategies-condition-ma-cross = 移動平均のクロス
+    .description = 短期の移動平均が直近の数本以内に長期の移動平均を交差すると発動します。ローソク足のみを読み取ります。
+strategies-condition-ma-cross-param-ma-type = 平均の種類
+    .description = 指数移動平均は新しいローソク足を重く、単純移動平均はすべてのローソク足を同じ重みで扱います
+strategies-condition-ma-cross-param-ma-type-option-ema = 指数（EMA）
+strategies-condition-ma-cross-param-ma-type-option-sma = 単純（SMA）
+strategies-condition-ma-cross-param-fast-period = 短期の期間
+    .description = 短期移動平均のローソク足の本数
+strategies-condition-ma-cross-param-slow-period = 長期の期間
+    .description = 長期移動平均のローソク足の本数。短期の期間より大きくする必要があります
+strategies-condition-ma-cross-param-direction = クロスの方向
+    .description = 短期平均が長期平均をどちら向きに交差するか
+strategies-condition-ma-cross-param-direction-option-bullish = 強気（短期が上抜け）
+strategies-condition-ma-cross-param-direction-option-bearish = 弱気（短期が下抜け）
+strategies-condition-ma-cross-param-within-candles = クロスの対象範囲
+    .description = クロスを含んでよい直近のローソク足の本数。1 は最新の 1 本のみ
+
+strategies-condition-position-profit = ポジション損益
+    .description = オープン中のポジションの含み益（プール価格をエントリー価格と比べて算出）が指定した割合を上回る、または下回ると発動します。エグジット戦略専用です。
+strategies-condition-position-profit-param-comparison = 比較
+    .description = 利益がしきい値以上か、以下か
+strategies-condition-position-profit-param-comparison-option-above = 以上（≥）
+strategies-condition-position-profit-param-comparison-option-below = 以下（≤）
+strategies-condition-position-profit-param-threshold-pct = 利益しきい値 %
+    .description = エントリー価格に対する含み益の割合。負の値は損失です
+
+strategies-condition-drawdown-from-peak = 高値からの下落
+    .description = エントリー以降の最高価格から指定した割合だけプール価格が下落すると発動します。その最高価格がエントリー価格より十分高かった場合に限ります。プール価格のみを読み取ります。エグジット戦略専用です。
+strategies-condition-drawdown-from-peak-param-drop-pct = 高値からの下落 %
+    .description = 現在価格が最高価格よりどれだけ低い必要があるか
+strategies-condition-drawdown-from-peak-param-arm-after-profit-pct = 利益後に有効化 %
+    .description = 条件が発動できるようになるには、最高価格がエントリー価格よりこの割合以上高かったことが必要です。0 は常に有効
+
+strategies-condition-buy-pressure = 買い圧力
+    .description = 集計期間内の取引に占める買いの割合が指定以上で、その期間に十分な取引数がある場合に発動します。トークンの買い・売りの取引数を読み取ります。
+strategies-condition-buy-pressure-param-window = 集計期間
+    .description = 買い・売りの取引数が対象とする期間
+strategies-condition-buy-pressure-param-window-option-5m = 5 分
+strategies-condition-buy-pressure-param-window-option-1h = 1 時間
+strategies-condition-buy-pressure-param-window-option-6h = 6 時間
+strategies-condition-buy-pressure-param-window-option-24h = 24 時間
+strategies-condition-buy-pressure-param-min-buy-share-pct = 最低買い比率 %
+    .description = 集計期間内の全取引に占める買いの割合
+strategies-condition-buy-pressure-param-min-transactions = 最低取引数
+    .description = 取引数がこれより少ない集計期間では条件が発動しません
+
 ## Shared by every condition
 
 strategies-condition-param-timeframe = 時間足
@@ -279,6 +336,7 @@ strategies-error-insufficient-candles = { $indicator } のローソク足が不�
 strategies-error-stale-candle-data = { $timeframe } のローソク足データが古くなっています: 経過 { $age }秒が上限 { $max }秒を超えています
 strategies-error-invalid-rule-tree = ルールツリーが無効です: { $reason }
 strategies-error-evaluation-timeout = ストラテジーの評価が { $timeout }ミリ秒でタイムアウトしました
+strategies-error-condition-not-applicable = { $condition } は { $strategy } 戦略では使用できません
 strategies-error-invalid-rules = ルールを読み取れませんでした: { $reason }
 
 # Parameter names
@@ -304,6 +362,17 @@ strategies-error-field-threshold = しきい値
 strategies-error-field-time-unit = 時間の単位
 strategies-error-field-time-value = 時間の値
 strategies-error-field-timeframe = 時間足
+strategies-error-field-arm-after-profit = 利益後の有効化
+strategies-error-field-drop-percentage = 下落率
+strategies-error-field-entry-price = エントリー価格
+strategies-error-field-fast-period = 短期の期間
+strategies-error-field-minimum-buy-share = 最低買い比率
+strategies-error-field-minimum-transactions = 最低取引数
+strategies-error-field-moving-average-type = 平均の種類
+strategies-error-field-peak-price = 最高価格
+strategies-error-field-slow-period = 長期の期間
+strategies-error-field-window = 集計期間
+strategies-error-field-within-candles = クロス対象の本数
 
 # Expected parameter types
 
@@ -318,6 +387,8 @@ strategies-error-data-liquidity-data = 流動性データ
 strategies-error-data-market-data = マーケットデータ
 strategies-error-data-ohlcv-data = OHLCV データ
 strategies-error-data-position-data = ポジションデータ
+strategies-error-data-peak-price = 最高価格
+strategies-error-data-transaction-counts = 取引数
 
 # Indicators
 
@@ -326,6 +397,8 @@ strategies-error-indicator-moving-average = 移動平均
 strategies-error-indicator-price-breakout = 価格ブレイクアウト
 strategies-error-indicator-price-change-lookback = 価格変動の参照期間
 strategies-error-indicator-volume-spike = 出来高急増
+strategies-error-indicator-moving-average-cross = 移動平均のクロス
+strategies-error-indicator-rsi = RSI
 
 # Rule tree faults
 
@@ -335,3 +408,7 @@ strategies-error-rule-branch-node-must-have-at-least-one-child = ブランチノ
 strategies-error-rule-invalid-rule-tree-structure = ルールツリーの構造が無効です
 strategies-error-rule-leaf-node-missing-condition = リーフノードに条件がありません
 strategies-error-rule-not-operator-must-have-exactly-one-child = NOT 演算子の子はちょうど1つである必要があります
+strategies-error-rule-a-group-needs-at-least-one-condition-switched-on = グループには有効な条件が 1 つ以上必要です
+strategies-error-rule-not-operator-cannot-have-a-switched-off-child = NOT 演算子の子ノードを無効にすることはできません
+strategies-error-rule-rules-nest-deeper-than-four-levels = ルールのネストは 4 階層までです
+strategies-error-rule-the-root-group-cannot-be-switched-off = ルートグループは無効にできません

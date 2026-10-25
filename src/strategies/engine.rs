@@ -6,7 +6,8 @@
 use crate::logger::{self, LogTag};
 use crate::strategies::conditions::ConditionRegistry;
 use crate::strategies::types::{
-    EvaluationContext, EvaluationResult, LogicalOperator, RuleTree, Strategy,
+    EvaluationContext, EvaluationResult, LogicalOperator, RuleTree, Strategy, StrategyType,
+    WindowCounts,
 };
 use crate::strategies::{Error, Result};
 use crate::trader::STRATEGY_CACHE_MAX_ENTRIES;
@@ -16,6 +17,10 @@ use std::sync::Arc;
 use std::time::Instant;
 use tokio::sync::RwLock;
 use tokio::time::{timeout, Duration};
+
+/// Deepest level a rule tree may reach: the root group is level 1, a node directly under
+/// it level 2.
+const MAX_RULE_DEPTH: usize = 4;
 
 /// Strategy evaluation engine
 pub struct StrategyEngine {
@@ -65,6 +70,12 @@ impl StrategyEngine {
         context: &EvaluationContext,
     ) -> Result<EvaluationResult> {
         let start = Instant::now();
+
+        if strategy.rules.disabled {
+            return Err(Error::InvalidRuleTree {
+                reason: "the root group cannot be switched off",
+            });
+        }
 
         // Check cache first (safe-scoped to a fingerprint of the evaluation context)
         let cache_enabled = self.config.cache_ttl_seconds > 0;
@@ -188,7 +199,7 @@ impl StrategyEngine {
                 return match operator {
                     LogicalOperator::And => {
                         // Short-circuit AND: return false on first false
-                        for child in conditions {
+                        for child in enabled_children(conditions)? {
                             let result = self.evaluate_rule_tree(child, context).await?;
                             if !result {
                                 return Ok(false);
@@ -198,7 +209,7 @@ impl StrategyEngine {
                     }
                     LogicalOperator::Or => {
                         // Short-circuit OR: return true on first true
-                        for child in conditions {
+                        for child in enabled_children(conditions)? {
                             let result = self.evaluate_rule_tree(child, context).await?;
                             if result {
                                 return Ok(true);
@@ -210,6 +221,11 @@ impl StrategyEngine {
                         if conditions.len() != 1 {
                             return Err(Error::InvalidRuleTree {
                                 reason: "NOT operator must have exactly one child",
+                            });
+                        }
+                        if conditions[0].disabled {
+                            return Err(Error::InvalidRuleTree {
+                                reason: "NOT operator cannot have a switched-off child",
                             });
                         }
                         let result = self.evaluate_rule_tree(&conditions[0], context).await?;
@@ -267,11 +283,29 @@ impl StrategyEngine {
 
     /// Validate a strategy without evaluating
     pub fn validate_strategy(&self, strategy: &Strategy) -> Result<()> {
-        self.validate_rule_tree(&strategy.rules)
+        self.validate_rule_tree(&strategy.rules, 1, strategy.strategy_type)
     }
 
-    /// Validate a rule tree recursively
-    fn validate_rule_tree(&self, rule_tree: &RuleTree) -> Result<()> {
+    /// Validate a rule tree recursively. `depth` is the level of `rule_tree`: the root is 1
+    /// and a node directly under it is 2.
+    fn validate_rule_tree(
+        &self,
+        rule_tree: &RuleTree,
+        depth: usize,
+        strategy_type: StrategyType,
+    ) -> Result<()> {
+        if depth > MAX_RULE_DEPTH {
+            return Err(Error::InvalidRuleTree {
+                reason: "rules nest deeper than four levels",
+            });
+        }
+
+        if depth == 1 && rule_tree.disabled {
+            return Err(Error::InvalidRuleTree {
+                reason: "the root group cannot be switched off",
+            });
+        }
+
         // Leaf node - validate condition
         if rule_tree.is_leaf() {
             if let Some(condition) = &rule_tree.condition {
@@ -282,6 +316,13 @@ impl StrategyEngine {
                         field: "condition type",
                         value: condition.condition_type.clone(),
                     })?;
+
+                if !evaluator.applies_to().contains(&strategy_type) {
+                    return Err(Error::ConditionNotApplicable {
+                        condition_type: condition.condition_type.clone(),
+                        strategy_type,
+                    });
+                }
 
                 return evaluator.validate(condition);
             } else {
@@ -311,15 +352,29 @@ impl StrategyEngine {
                 });
             }
 
-            if operator == LogicalOperator::Not && conditions.len() != 1 {
+            if operator == LogicalOperator::Not {
+                if conditions.len() != 1 {
+                    return Err(Error::InvalidRuleTree {
+                        reason: "NOT operator must have exactly one child",
+                    });
+                }
+                if conditions[0].disabled {
+                    return Err(Error::InvalidRuleTree {
+                        reason: "NOT operator cannot have a switched-off child",
+                    });
+                }
+            }
+
+            if conditions.iter().all(|child| child.disabled) {
                 return Err(Error::InvalidRuleTree {
-                    reason: "NOT operator must have exactly one child",
+                    reason: "a group needs at least one condition switched on",
                 });
             }
 
-            // Validate all children recursively
+            // Validate all children recursively, switched-off ones included: a condition
+            // that is saved but off must still be well-formed for when it is switched on.
             for child in conditions {
-                self.validate_rule_tree(child)?;
+                self.validate_rule_tree(child, depth + 1, strategy_type)?;
             }
 
             return Ok(());
@@ -329,6 +384,18 @@ impl StrategyEngine {
             reason: "invalid rule tree structure",
         })
     }
+}
+
+/// The children of a group that are switched on. A group with none has nothing to decide
+/// it: an empty AND would be true and an empty OR false, so it is refused instead.
+fn enabled_children(children: &[RuleTree]) -> Result<Vec<&RuleTree>> {
+    let enabled: Vec<&RuleTree> = children.iter().filter(|child| !child.disabled).collect();
+    if enabled.is_empty() {
+        return Err(Error::InvalidRuleTree {
+            reason: "a group needs at least one condition switched on",
+        });
+    }
+    Ok(enabled)
 }
 
 /// Build a stable fingerprint for an evaluation context. The goal is correctness first:
@@ -358,6 +425,11 @@ fn context_fingerprint(ctx: &EvaluationContext) -> u64 {
         } else {
             "no_profit".hash(&mut s);
         }
+        if let Some(peak) = pos.peak_price {
+            format!("{:.12}", peak).hash(&mut s);
+        } else {
+            "no_peak".hash(&mut s);
+        }
     } else {
         "no_position".hash(&mut s);
     }
@@ -369,25 +441,12 @@ fn context_fingerprint(ctx: &EvaluationContext) -> u64 {
         } else {
             "nlq".hash(&mut s);
         }
-        if let Some(v) = m.volume_24h {
-            format!("{:.2}", v).hash(&mut s);
+        if let Some(counts) = &m.transactions {
+            for window in [counts.m5, counts.h1, counts.h6, counts.h24] {
+                hash_window(window, &mut s);
+            }
         } else {
-            "nvol".hash(&mut s);
-        }
-        if let Some(v) = m.market_cap {
-            format!("{:.2}", v).hash(&mut s);
-        } else {
-            "nmc".hash(&mut s);
-        }
-        if let Some(v) = m.holder_count {
-            v.hash(&mut s);
-        } else {
-            0u32.hash(&mut s);
-        }
-        if let Some(v) = m.token_age_hours {
-            format!("{:.2}", v).hash(&mut s);
-        } else {
-            "ntag".hash(&mut s);
+            "no_txns".hash(&mut s);
         }
     } else {
         "no_market".hash(&mut s);
@@ -402,4 +461,15 @@ fn context_fingerprint(ctx: &EvaluationContext) -> u64 {
     }
 
     s.finish()
+}
+
+/// Hash one transaction window; a window never reported is told apart from zero counts.
+fn hash_window(window: Option<WindowCounts>, hasher: &mut impl Hasher) {
+    match window {
+        Some(counts) => {
+            counts.buys.hash(hasher);
+            counts.sells.hash(hasher);
+        }
+        None => "no_window".hash(hasher),
+    }
 }

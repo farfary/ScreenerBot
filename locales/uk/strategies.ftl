@@ -251,6 +251,63 @@ strategies-condition-volume-spike-param-lookback = Період огляду
 strategies-condition-volume-spike-param-multiplier = Множник обсягу
     .description = У скільки разів вище середнього (напр., 2,0 = 200% від середнього)
 
+strategies-condition-rsi = RSI (індекс відносної сили)
+    .description = Спрацьовує, коли RSI цін закриття свічок, згладжений за Вайлдером, нижчий або вищий за поріг. Читає лише свічки.
+strategies-condition-rsi-param-period = Період RSI
+    .description = Кількість свічок, за якими обчислюється RSI; умові потрібна ще одна свічка понад це значення
+strategies-condition-rsi-param-comparison = Порівняння
+    .description = Чи має RSI бути нижчим, чи вищим за поріг
+strategies-condition-rsi-param-comparison-option-below = Нижче (перепроданість)
+strategies-condition-rsi-param-comparison-option-above = Вище (перекупленість)
+strategies-condition-rsi-param-threshold = Поріг RSI
+    .description = Рівень RSI від 1 до 99 (звично 30 для перепроданості та 70 для перекупленості)
+
+strategies-condition-ma-cross = Перетин ковзних середніх
+    .description = Спрацьовує, коли швидка ковзна середня перетнула повільну в останніх свічках. Читає лише свічки.
+strategies-condition-ma-cross-param-ma-type = Тип середньої
+    .description = Експоненційні середні сильніше враховують нещодавні свічки, прості враховують усі свічки однаково
+strategies-condition-ma-cross-param-ma-type-option-ema = Експоненційна (EMA)
+strategies-condition-ma-cross-param-ma-type-option-sma = Проста (SMA)
+strategies-condition-ma-cross-param-fast-period = Швидкий період
+    .description = Кількість свічок у швидкій середній
+strategies-condition-ma-cross-param-slow-period = Повільний період
+    .description = Кількість свічок у повільній середній; має бути більшою за швидкий період
+strategies-condition-ma-cross-param-direction = Напрямок перетину
+    .description = У який бік швидка середня перетинає повільну
+strategies-condition-ma-cross-param-direction-option-bullish = Бичачий (швидка перетинає знизу вгору)
+strategies-condition-ma-cross-param-direction-option-bearish = Ведмежий (швидка перетинає згори вниз)
+strategies-condition-ma-cross-param-within-candles = Перетин за останні свічки
+    .description = Скільки останніх свічок може містити перетин; 1 означає лише останню свічку
+
+strategies-condition-position-profit = Прибуток позиції
+    .description = Спрацьовує, коли нереалізований прибуток відкритої позиції, виміряний за ціною пулу відносно ціни входу, вищий або нижчий за заданий відсоток. Лише для стратегій виходу.
+strategies-condition-position-profit-param-comparison = Порівняння
+    .description = Чи має прибуток бути не меншим, чи не більшим за поріг
+strategies-condition-position-profit-param-comparison-option-above = Щонайменше (≥)
+strategies-condition-position-profit-param-comparison-option-below = Щонайбільше (≤)
+strategies-condition-position-profit-param-threshold-pct = Поріг прибутку, %
+    .description = Нереалізований прибуток у відсотках від ціни входу; від'ємні значення означають збиток
+
+strategies-condition-drawdown-from-peak = Просадка від піку
+    .description = Спрацьовує, коли ціна пулу впала на заданий відсоток від найвищої ціни з моменту входу, якщо цей пік був достатньо вищим за ціну входу. Читає лише ціни пулу. Лише для стратегій виходу.
+strategies-condition-drawdown-from-peak-param-drop-pct = Просадка від піку, %
+    .description = Наскільки поточна ціна має бути нижчою за пік
+strategies-condition-drawdown-from-peak-param-arm-after-profit-pct = Вмикати після прибутку, %
+    .description = Пік мав перевищити ціну входу щонайменше на цей відсоток, перш ніж умова зможе спрацювати; 0 означає, що вона діє завжди
+
+strategies-condition-buy-pressure = Тиск покупок
+    .description = Спрацьовує, коли покупки становлять не менше заданої частки транзакцій за часове вікно, а у вікні достатньо транзакцій. Читає кількість покупок і продажів токена.
+strategies-condition-buy-pressure-param-window = Часове вікно
+    .description = Період, який охоплюють кількості покупок і продажів
+strategies-condition-buy-pressure-param-window-option-5m = 5 хвилин
+strategies-condition-buy-pressure-param-window-option-1h = 1 година
+strategies-condition-buy-pressure-param-window-option-6h = 6 годин
+strategies-condition-buy-pressure-param-window-option-24h = 24 години
+strategies-condition-buy-pressure-param-min-buy-share-pct = Мінімальна частка покупок, %
+    .description = Покупки у відсотках від усіх транзакцій вікна
+strategies-condition-buy-pressure-param-min-transactions = Мінімум транзакцій
+    .description = Вікна з меншою кількістю транзакцій ніколи не запускають умову
+
 ## Shared by every condition
 
 strategies-condition-param-timeframe = Таймфрейм
@@ -285,6 +342,7 @@ strategies-error-insufficient-candles = Недостатньо свічок дл
 strategies-error-stale-candle-data = Дані свічок для таймфрейму { $timeframe } застарілі: їхній вік { $age } с перевищує { $max } с
 strategies-error-invalid-rule-tree = Недійсне дерево правил: { $reason }
 strategies-error-evaluation-timeout = Час оцінювання стратегії вичерпано через { $timeout } мс
+strategies-error-condition-not-applicable = { $condition } не можна використовувати в стратегіях { $strategy }
 strategies-error-invalid-rules = Не вдалося прочитати правила: { $reason }
 
 # Parameter names
@@ -310,6 +368,17 @@ strategies-error-field-threshold = поріг
 strategies-error-field-time-unit = одиниця часу
 strategies-error-field-time-value = значення часу
 strategies-error-field-timeframe = таймфрейм
+strategies-error-field-arm-after-profit = вмикання після прибутку
+strategies-error-field-drop-percentage = відсоток просадки
+strategies-error-field-entry-price = ціна входу
+strategies-error-field-fast-period = швидкий період
+strategies-error-field-minimum-buy-share = мінімальна частка покупок
+strategies-error-field-minimum-transactions = мінімум транзакцій
+strategies-error-field-moving-average-type = тип середньої
+strategies-error-field-peak-price = ціна піку
+strategies-error-field-slow-period = повільний період
+strategies-error-field-window = вікно
+strategies-error-field-within-candles = кількість свічок перетину
 
 # Expected parameter types
 
@@ -324,6 +393,8 @@ strategies-error-data-liquidity-data = Дані ліквідності
 strategies-error-data-market-data = Ринкові дані
 strategies-error-data-ohlcv-data = Дані OHLCV
 strategies-error-data-position-data = Дані позиції
+strategies-error-data-peak-price = Ціна піку
+strategies-error-data-transaction-counts = Кількість транзакцій
 
 # Indicators
 
@@ -332,6 +403,8 @@ strategies-error-indicator-moving-average = ковзна середня
 strategies-error-indicator-price-breakout = пробій ціни
 strategies-error-indicator-price-change-lookback = огляд зміни ціни
 strategies-error-indicator-volume-spike = сплеск обсягу
+strategies-error-indicator-moving-average-cross = перетин ковзних середніх
+strategies-error-indicator-rsi = RSI
 
 # Rule tree faults
 
@@ -341,3 +414,7 @@ strategies-error-rule-branch-node-must-have-at-least-one-child = Вузол гі
 strategies-error-rule-invalid-rule-tree-structure = Недійсна структура дерева правил
 strategies-error-rule-leaf-node-missing-condition = У листового вузла немає умови
 strategies-error-rule-not-operator-must-have-exactly-one-child = Оператор NOT має мати рівно один дочірній елемент
+strategies-error-rule-a-group-needs-at-least-one-condition-switched-on = Групі потрібна принаймні одна ввімкнена умова
+strategies-error-rule-not-operator-cannot-have-a-switched-off-child = Оператор NOT не може мати вимкнений дочірній вузол
+strategies-error-rule-rules-nest-deeper-than-four-levels = Правила можуть бути вкладені не глибше ніж на чотири рівні
+strategies-error-rule-the-root-group-cannot-be-switched-off = Кореневу групу не можна вимкнути

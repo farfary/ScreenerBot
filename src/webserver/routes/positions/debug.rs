@@ -8,6 +8,7 @@ use serde::Serialize;
 
 use crate::chains::adapter;
 use crate::positions;
+use crate::strategies::types::TransactionCounts;
 
 // =============================================================================
 // DEBUG INFO ENDPOINT FOR POSITIONS
@@ -45,6 +46,7 @@ pub struct PositionSummary {
     pub unrealized_pnl: Option<f64>,
     pub unrealized_pnl_percent: Option<f64>,
     pub phantom_confirmations: u32,
+    pub peak_price: f64,
 }
 
 #[derive(Debug, Serialize)]
@@ -72,6 +74,7 @@ pub struct MarketData {
     pub fdv: Option<f64>,
     pub liquidity_usd: Option<f64>,
     pub volume_24h: Option<f64>,
+    pub transactions: TransactionCounts,
 }
 
 #[derive(Debug, Serialize)]
@@ -216,6 +219,7 @@ pub async fn get_position_debug_info(Path(mint): Path<String>) -> Json<PositionD
             unrealized_pnl,
             unrealized_pnl_percent,
             phantom_confirmations: p.phantom_confirmations,
+            peak_price: p.price_highest,
         }
     });
 
@@ -308,6 +312,7 @@ pub async fn get_position_debug_info(Path(mint): Path<String>) -> Json<PositionD
         fdv: token.fdv,
         liquidity_usd: token.liquidity_usd,
         volume_24h: token.volume_h24,
+        transactions: TransactionCounts::from_token(token),
     });
 
     // 5. Get pool info

@@ -221,6 +221,63 @@ strategies-condition-volume-spike-param-lookback = Période de référence
 strategies-condition-volume-spike-param-multiplier = Multiplicateur de volume
     .description = Combien de fois au-dessus de la moyenne (p. ex. 2.0 = 200 % de la moyenne)
 
+strategies-condition-rsi = RSI (indice de force relative)
+    .description = Se déclenche lorsque le RSI des clôtures des bougies, lissé selon la méthode de Wilder, est inférieur ou supérieur à un seuil. Lit uniquement les bougies.
+strategies-condition-rsi-param-period = Période du RSI
+    .description = Nombre de bougies sur lesquelles le RSI est calculé ; la condition exige une bougie de plus que cette valeur
+strategies-condition-rsi-param-comparison = Comparaison
+    .description = Indique si le RSI doit être inférieur ou supérieur au seuil
+strategies-condition-rsi-param-comparison-option-below = Inférieur (survente)
+strategies-condition-rsi-param-comparison-option-above = Supérieur (surachat)
+strategies-condition-rsi-param-threshold = Seuil du RSI
+    .description = Niveau de RSI de 1 à 99 (30 et 70 sont les niveaux habituels de survente et de surachat)
+
+strategies-condition-ma-cross = Croisement de moyennes mobiles
+    .description = Se déclenche lorsqu'une moyenne mobile rapide croise une moyenne lente au cours des dernières bougies. Lit uniquement les bougies.
+strategies-condition-ma-cross-param-ma-type = Type de moyenne
+    .description = Les moyennes exponentielles donnent plus de poids aux bougies récentes ; les moyennes simples pèsent toutes les bougies de la même façon
+strategies-condition-ma-cross-param-ma-type-option-ema = Exponentielle (EMA)
+strategies-condition-ma-cross-param-ma-type-option-sma = Simple (SMA)
+strategies-condition-ma-cross-param-fast-period = Période rapide
+    .description = Nombre de bougies de la moyenne rapide
+strategies-condition-ma-cross-param-slow-period = Période lente
+    .description = Nombre de bougies de la moyenne lente ; doit être supérieur à la période rapide
+strategies-condition-ma-cross-param-direction = Sens du croisement
+    .description = Sens dans lequel la moyenne rapide croise la lente
+strategies-condition-ma-cross-param-direction-option-bullish = Haussier (la rapide passe au-dessus)
+strategies-condition-ma-cross-param-direction-option-bearish = Baissier (la rapide passe en dessous)
+strategies-condition-ma-cross-param-within-candles = Croisement sur les dernières bougies
+    .description = Nombre de dernières bougies pouvant contenir le croisement ; 1 signifie la dernière bougie seulement
+
+strategies-condition-position-profit = Profit de la position
+    .description = Se déclenche lorsque le profit latent de la position ouverte, mesuré sur le prix du pool par rapport au prix d'entrée, est supérieur ou inférieur à un pourcentage. Stratégies de sortie uniquement.
+strategies-condition-position-profit-param-comparison = Comparaison
+    .description = Indique si le profit doit être au moins ou au plus égal au seuil
+strategies-condition-position-profit-param-comparison-option-above = Au moins (≥)
+strategies-condition-position-profit-param-comparison-option-below = Au plus (≤)
+strategies-condition-position-profit-param-threshold-pct = Seuil de profit %
+    .description = Profit latent en pourcentage du prix d'entrée ; les valeurs négatives sont des pertes
+
+strategies-condition-drawdown-from-peak = Repli depuis le sommet
+    .description = Se déclenche lorsque le prix du pool a reculé d'un pourcentage par rapport au prix le plus haut atteint depuis l'entrée, une fois ce sommet suffisamment au-dessus du prix d'entrée. Lit uniquement les prix du pool. Stratégies de sortie uniquement.
+strategies-condition-drawdown-from-peak-param-drop-pct = Repli depuis le sommet %
+    .description = De combien le prix actuel doit être sous le sommet
+strategies-condition-drawdown-from-peak-param-arm-after-profit-pct = Armement après profit %
+    .description = Le sommet doit avoir dépassé le prix d'entrée d'au moins ce pourcentage avant que la condition puisse se déclencher ; 0 signifie toujours armée
+
+strategies-condition-buy-pressure = Pression acheteuse
+    .description = Se déclenche lorsque les achats représentent au moins une part des transactions d'une fenêtre de temps et que la fenêtre compte assez de transactions. Lit les nombres d'achats et de ventes du token.
+strategies-condition-buy-pressure-param-window = Fenêtre de temps
+    .description = Période couverte par les nombres d'achats et de ventes
+strategies-condition-buy-pressure-param-window-option-5m = 5 minutes
+strategies-condition-buy-pressure-param-window-option-1h = 1 heure
+strategies-condition-buy-pressure-param-window-option-6h = 6 heures
+strategies-condition-buy-pressure-param-window-option-24h = 24 heures
+strategies-condition-buy-pressure-param-min-buy-share-pct = Part d'achats minimale %
+    .description = Achats en pourcentage de toutes les transactions de la fenêtre
+strategies-condition-buy-pressure-param-min-transactions = Transactions minimales
+    .description = Les fenêtres comptant moins de transactions ne déclenchent jamais la condition
+
 strategies-condition-param-timeframe = Période des bougies
     .description = Taille des bougies : la durée de chaque bougie lue par la condition (celle de la stratégie si non définie)
 strategies-condition-timeframe-option-1m = 1 minute
@@ -248,6 +305,7 @@ strategies-error-insufficient-candles = Bougies insuffisantes pour { $indicator 
 strategies-error-stale-candle-data = Les données de bougies { $timeframe } sont obsolètes : leur âge de { $age }s dépasse { $max }s
 strategies-error-invalid-rule-tree = Arbre de règles invalide : { $reason }
 strategies-error-evaluation-timeout = Délai d'évaluation de la stratégie dépassé après { $timeout }ms
+strategies-error-condition-not-applicable = { $condition } ne peut pas être utilisé dans les stratégies de type { $strategy }
 strategies-error-invalid-rules = Impossible de lire les règles : { $reason }
 
 strategies-error-field-average-volume = le volume moyen
@@ -271,6 +329,17 @@ strategies-error-field-threshold = le seuil
 strategies-error-field-time-unit = l'unité de temps
 strategies-error-field-time-value = la valeur de temps
 strategies-error-field-timeframe = la période des bougies
+strategies-error-field-arm-after-profit = le gain avant armement
+strategies-error-field-drop-percentage = le pourcentage de repli
+strategies-error-field-entry-price = le prix d'entrée
+strategies-error-field-fast-period = la période rapide
+strategies-error-field-minimum-buy-share = la part d'achats minimale
+strategies-error-field-minimum-transactions = le nombre minimal de transactions
+strategies-error-field-moving-average-type = le type de moyenne
+strategies-error-field-peak-price = le prix du sommet
+strategies-error-field-slow-period = la période lente
+strategies-error-field-window = la fenêtre
+strategies-error-field-within-candles = le nombre de bougies du croisement
 
 strategies-error-expected-boolean = un booléen
 strategies-error-expected-number = un nombre
@@ -281,12 +350,16 @@ strategies-error-data-liquidity-data = Les données de liquidité
 strategies-error-data-market-data = Les données de marché
 strategies-error-data-ohlcv-data = Les données OHLCV
 strategies-error-data-position-data = Les données de position
+strategies-error-data-peak-price = Le prix du sommet
+strategies-error-data-transaction-counts = Les nombres de transactions
 
 strategies-error-indicator-consecutive-candles = les bougies consécutives
 strategies-error-indicator-moving-average = la moyenne mobile
 strategies-error-indicator-price-breakout = la cassure de prix
 strategies-error-indicator-price-change-lookback = la période de variation du prix
 strategies-error-indicator-volume-spike = le pic de volume
+strategies-error-indicator-moving-average-cross = le croisement de moyennes mobiles
+strategies-error-indicator-rsi = le RSI
 
 strategies-error-rule-branch-node-missing-conditions = Nœud de branche sans conditions
 strategies-error-rule-branch-node-missing-operator = Nœud de branche sans opérateur
@@ -294,3 +367,7 @@ strategies-error-rule-branch-node-must-have-at-least-one-child = Un nœud de bra
 strategies-error-rule-invalid-rule-tree-structure = Structure d'arbre de règles invalide
 strategies-error-rule-leaf-node-missing-condition = Nœud feuille sans condition
 strategies-error-rule-not-operator-must-have-exactly-one-child = L'opérateur NOT doit avoir exactement un enfant
+strategies-error-rule-a-group-needs-at-least-one-condition-switched-on = Un groupe doit avoir au moins une condition activée
+strategies-error-rule-not-operator-cannot-have-a-switched-off-child = L'opérateur NOT ne peut pas avoir d'enfant désactivé
+strategies-error-rule-rules-nest-deeper-than-four-levels = Les règles ne peuvent pas être imbriquées sur plus de quatre niveaux
+strategies-error-rule-the-root-group-cannot-be-switched-off = Le groupe racine ne peut pas être désactivé

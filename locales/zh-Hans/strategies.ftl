@@ -245,6 +245,63 @@ strategies-condition-volume-spike-param-lookback = 回溯期
 strategies-condition-volume-spike-param-multiplier = 成交量倍数
     .description = 高于平均值的倍数（例如 2.0 = 平均值的 200%）
 
+strategies-condition-rsi = RSI（相对强弱指数）
+    .description = 当 K 线收盘价的 RSI（按威尔德方式平滑）低于或高于阈值时触发。只读取 K 线。
+strategies-condition-rsi-param-period = RSI 周期
+    .description = 计算 RSI 所用的 K 线数量；条件需要比该值多一根 K 线
+strategies-condition-rsi-param-comparison = 比较方式
+    .description = RSI 必须低于还是高于阈值
+strategies-condition-rsi-param-comparison-option-below = 低于（超卖）
+strategies-condition-rsi-param-comparison-option-above = 高于（超买）
+strategies-condition-rsi-param-threshold = RSI 阈值
+    .description = 1 到 99 之间的 RSI 水平（常用 30 表示超卖、70 表示超买）
+
+strategies-condition-ma-cross = 移动平均线交叉
+    .description = 当快速移动平均线在最近几根 K 线内穿过慢速移动平均线时触发。只读取 K 线。
+strategies-condition-ma-cross-param-ma-type = 均线类型
+    .description = 指数均线给近期 K 线更高权重，简单均线对所有 K 线权重相同
+strategies-condition-ma-cross-param-ma-type-option-ema = 指数（EMA）
+strategies-condition-ma-cross-param-ma-type-option-sma = 简单（SMA）
+strategies-condition-ma-cross-param-fast-period = 快线周期
+    .description = 快速均线包含的 K 线数量
+strategies-condition-ma-cross-param-slow-period = 慢线周期
+    .description = 慢速均线包含的 K 线数量；必须大于快线周期
+strategies-condition-ma-cross-param-direction = 交叉方向
+    .description = 快线以哪个方向穿过慢线
+strategies-condition-ma-cross-param-direction-option-bullish = 看涨（快线上穿）
+strategies-condition-ma-cross-param-direction-option-bearish = 看跌（快线下穿）
+strategies-condition-ma-cross-param-within-candles = 交叉发生在最近
+    .description = 交叉可以出现在最近多少根 K 线内；1 表示仅最新一根
+
+strategies-condition-position-profit = 仓位盈利
+    .description = 当持仓的未实现盈利（按流动性池价格相对入场价格计算）高于或低于指定百分比时触发。仅适用于出场策略。
+strategies-condition-position-profit-param-comparison = 比较方式
+    .description = 盈利必须不低于阈值，还是不高于阈值
+strategies-condition-position-profit-param-comparison-option-above = 不低于（≥）
+strategies-condition-position-profit-param-comparison-option-below = 不高于（≤）
+strategies-condition-position-profit-param-threshold-pct = 盈利阈值 %
+    .description = 未实现盈利占入场价格的百分比；负值表示亏损
+
+strategies-condition-drawdown-from-peak = 从高点回撤
+    .description = 当流动性池价格从入场以来的最高价下跌指定百分比，且该高点已足够高于入场价格时触发。只读取流动性池价格。仅适用于出场策略。
+strategies-condition-drawdown-from-peak-param-drop-pct = 从高点回撤 %
+    .description = 当前价格必须比高点低多少
+strategies-condition-drawdown-from-peak-param-arm-after-profit-pct = 盈利后启用 %
+    .description = 高点必须至少高于入场价格这一比例，条件才可能触发；0 表示始终启用
+
+strategies-condition-buy-pressure = 买入压力
+    .description = 当买入占某个时间窗口内交易的比例不低于指定值，且该窗口交易数量足够时触发。读取代币的买入和卖出笔数。
+strategies-condition-buy-pressure-param-window = 时间窗口
+    .description = 买入和卖出笔数所覆盖的时间段
+strategies-condition-buy-pressure-param-window-option-5m = 5 分钟
+strategies-condition-buy-pressure-param-window-option-1h = 1 小时
+strategies-condition-buy-pressure-param-window-option-6h = 6 小时
+strategies-condition-buy-pressure-param-window-option-24h = 24 小时
+strategies-condition-buy-pressure-param-min-buy-share-pct = 最低买入占比 %
+    .description = 买入占窗口内全部交易的百分比
+strategies-condition-buy-pressure-param-min-transactions = 最低交易笔数
+    .description = 交易笔数少于该值的窗口永远不会触发条件
+
 ## Shared by every condition
 
 strategies-condition-param-timeframe = 时间周期
@@ -279,6 +336,7 @@ strategies-error-insufficient-candles = { $indicator } 的 K 线数量不足：�
 strategies-error-stale-candle-data = { $timeframe } K 线数据已过期：其时长 { $age } 秒超过了 { $max } 秒
 strategies-error-invalid-rule-tree = 规则树无效：{ $reason }
 strategies-error-evaluation-timeout = 策略评估在 { $timeout } 毫秒后超时
+strategies-error-condition-not-applicable = { $condition } 无法用于{ $strategy }策略
 strategies-error-invalid-rules = 无法读取规则：{ $reason }
 
 # Parameter names
@@ -304,6 +362,17 @@ strategies-error-field-threshold = 阈值
 strategies-error-field-time-unit = 时间单位
 strategies-error-field-time-value = 时间数值
 strategies-error-field-timeframe = 时间周期
+strategies-error-field-arm-after-profit = 盈利后启用
+strategies-error-field-drop-percentage = 回撤比例
+strategies-error-field-entry-price = 入场价格
+strategies-error-field-fast-period = 快线周期
+strategies-error-field-minimum-buy-share = 最低买入占比
+strategies-error-field-minimum-transactions = 最低交易笔数
+strategies-error-field-moving-average-type = 均线类型
+strategies-error-field-peak-price = 高点价格
+strategies-error-field-slow-period = 慢线周期
+strategies-error-field-window = 时间窗口
+strategies-error-field-within-candles = 交叉 K 线数
 
 # Expected parameter types
 
@@ -318,6 +387,8 @@ strategies-error-data-liquidity-data = 流动性数据
 strategies-error-data-market-data = 市场数据
 strategies-error-data-ohlcv-data = OHLCV 数据
 strategies-error-data-position-data = 仓位数据
+strategies-error-data-peak-price = 高点价格
+strategies-error-data-transaction-counts = 交易笔数
 
 # Indicators
 
@@ -326,6 +397,8 @@ strategies-error-indicator-moving-average = 移动平均线
 strategies-error-indicator-price-breakout = 价格突破
 strategies-error-indicator-price-change-lookback = 价格变化回溯期
 strategies-error-indicator-volume-spike = 成交量激增
+strategies-error-indicator-moving-average-cross = 移动平均线交叉
+strategies-error-indicator-rsi = RSI
 
 # Rule tree faults
 
@@ -335,3 +408,7 @@ strategies-error-rule-branch-node-must-have-at-least-one-child = 分支节点必
 strategies-error-rule-invalid-rule-tree-structure = 规则树结构无效
 strategies-error-rule-leaf-node-missing-condition = 叶节点缺少条件
 strategies-error-rule-not-operator-must-have-exactly-one-child = NOT 运算符必须恰好有一个子节点
+strategies-error-rule-a-group-needs-at-least-one-condition-switched-on = 每个分组至少需要一个已开启的条件
+strategies-error-rule-not-operator-cannot-have-a-switched-off-child = NOT 运算符的子节点不能被关闭
+strategies-error-rule-rules-nest-deeper-than-four-levels = 规则嵌套不能超过四层
+strategies-error-rule-the-root-group-cannot-be-switched-off = 根分组不能被关闭

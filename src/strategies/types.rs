@@ -9,6 +9,7 @@ use std::collections::HashMap;
 
 // Import unified types from OHLCV module
 use crate::ohlcvs::TimeframeBundle;
+use crate::tokens::Token;
 
 /// Strategy type classification
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
@@ -54,6 +55,9 @@ pub struct RuleTree {
     pub conditions: Option<Vec<RuleTree>>,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub condition: Option<Condition>,
+    /// A node the user switched off: kept in the strategy, skipped by evaluation.
+    #[serde(default, skip_serializing_if = "std::ops::Not::not")]
+    pub disabled: bool,
 }
 
 impl RuleTree {
@@ -63,6 +67,7 @@ impl RuleTree {
             operator: None,
             conditions: None,
             condition: Some(condition),
+            disabled: false,
         }
     }
 
@@ -72,6 +77,7 @@ impl RuleTree {
             operator: Some(operator),
             conditions: Some(conditions),
             condition: None,
+            disabled: false,
         }
     }
 
@@ -152,16 +158,61 @@ pub struct PositionData {
     pub current_size_sol: f64,
     pub unrealized_profit_pct: Option<f64>,
     pub position_age_hours: f64,
+    /// Highest pool price seen while the position was open.
+    pub peak_price: Option<f64>,
 }
 
 /// Market-related data for evaluation
 #[derive(Debug, Clone)]
 pub struct MarketData {
     pub liquidity_sol: Option<f64>,
-    pub volume_24h: Option<f64>,
-    pub market_cap: Option<f64>,
-    pub holder_count: Option<u32>,
-    pub token_age_hours: Option<f64>,
+    /// Buy and sell counts per window from the cached token snapshot; `None` when the
+    /// token is not cached.
+    pub transactions: Option<TransactionCounts>,
+}
+
+/// Buy and sell transaction counts of one time window.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize)]
+pub struct WindowCounts {
+    pub buys: u64,
+    pub sells: u64,
+}
+
+impl WindowCounts {
+    /// Counts of a window, or `None` when either side is missing or negative: a window
+    /// that was never reported is not a window with zero trades.
+    pub fn from_reported(buys: Option<i64>, sells: Option<i64>) -> Option<Self> {
+        Some(Self {
+            buys: u64::try_from(buys?).ok()?,
+            sells: u64::try_from(sells?).ok()?,
+        })
+    }
+
+    /// Buys plus sells.
+    pub fn total(&self) -> u64 {
+        self.buys.saturating_add(self.sells)
+    }
+}
+
+/// Buy and sell counts for the four windows the token store carries.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize)]
+pub struct TransactionCounts {
+    pub m5: Option<WindowCounts>,
+    pub h1: Option<WindowCounts>,
+    pub h6: Option<WindowCounts>,
+    pub h24: Option<WindowCounts>,
+}
+
+impl TransactionCounts {
+    /// The windows of a token snapshot.
+    pub fn from_token(token: &Token) -> Self {
+        Self {
+            m5: WindowCounts::from_reported(token.txns_m5_buys, token.txns_m5_sells),
+            h1: WindowCounts::from_reported(token.txns_h1_buys, token.txns_h1_sells),
+            h6: WindowCounts::from_reported(token.txns_h6_buys, token.txns_h6_sells),
+            h24: WindowCounts::from_reported(token.txns_h24_buys, token.txns_h24_sells),
+        }
+    }
 }
 
 /// Result of strategy evaluation

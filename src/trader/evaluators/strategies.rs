@@ -12,7 +12,7 @@ use crate::pools::PriceResult;
 use crate::positions::Position;
 use crate::strategies;
 use crate::strategies::db::has_enabled_strategies;
-use crate::strategies::types::{MarketData, PositionData, StrategyType};
+use crate::strategies::types::{MarketData, PositionData, StrategyType, TransactionCounts};
 use crate::trader::constants::STRATEGY_EVALUATION_TIMEOUT_SECS;
 use crate::trader::types::{TradeAction, TradeDecision, TradePriority, TradeReason};
 use chrono::Utc;
@@ -25,6 +25,11 @@ use std::time::Duration;
 /// would satisfy every "liquidity below X" rule on a token whose liquidity is unknown.
 fn usable_liquidity(native_reserves: f64) -> Option<f64> {
     (native_reserves.is_finite() && native_reserves > 0.0).then_some(native_reserves)
+}
+
+/// Transaction counts of the cached token snapshot; `None` when the token is not cached.
+fn cached_transactions(chain: ChainId, mint: &str) -> Option<TransactionCounts> {
+    crate::tokens::get_cached_token(chain, mint).map(|token| TransactionCounts::from_token(&token))
 }
 
 /// Evaluator for applying strategies to trading decisions
@@ -64,10 +69,7 @@ impl StrategyEvaluator {
         // Build market data from price info
         let market_data = MarketData {
             liquidity_sol: usable_liquidity(price_info.native_reserves),
-            volume_24h: None,
-            market_cap: None,
-            holder_count: None,
-            token_age_hours: None,
+            transactions: cached_transactions(chain, token_mint),
         };
 
         // Prefetch OHLCV bundle from cache (non-blocking)
@@ -260,6 +262,7 @@ impl StrategyEvaluator {
             current_size_sol: position.total_size_native,
             unrealized_profit_pct,
             position_age_hours: (Utc::now() - position.entry_time).num_seconds() as f64 / 3600.0,
+            peak_price: Some(position.price_highest).filter(|peak| peak.is_finite() && *peak > 0.0),
         };
 
         // Build market data. Liquidity comes from the same single source the entry path
@@ -270,10 +273,7 @@ impl StrategyEvaluator {
         let market_data = MarketData {
             liquidity_sol: crate::positions::price_resolution::live_pool_price(&position.mint)
                 .and_then(|price| usable_liquidity(price.native_reserves)),
-            volume_24h: None,
-            market_cap: None,
-            holder_count: None,
-            token_age_hours: None,
+            transactions: cached_transactions(chain, &position.mint),
         };
 
         // Prefetch OHLCV bundle from cache (non-blocking)

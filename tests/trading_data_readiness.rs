@@ -215,27 +215,22 @@ fn every_candle_rule() -> Vec<(&'static str, Box<dyn ConditionEvaluator>, Condit
 // so a change there that quietly starves a rule of its input fails here.
 
 /// `check_entry_strategies`: liquidity comes from the pool price result's `native_reserves`;
-/// every other market field is `None`.
+/// the transaction counts come from the token cache and are `None` for an uncached token.
 fn entry_market_data(liquidity_sol: f64) -> MarketData {
     MarketData {
         liquidity_sol: Some(liquidity_sol),
-        volume_24h: None,
-        market_cap: None,
-        holder_count: None,
-        token_age_hours: None,
+        transactions: None,
     }
 }
 
 /// `check_exit_strategies`: liquidity is read from the live pool price result — the same
 /// single source the entry path uses — and stays `None` only when no pool price exists
-/// for the mint (an API-derived price carries no reserves). Every other field is `None`.
+/// for the mint (an API-derived price carries no reserves). Transaction counts are `None` for
+/// an uncached token.
 fn exit_market_data(liquidity_sol: Option<f64>) -> MarketData {
     MarketData {
         liquidity_sol,
-        volume_24h: None,
-        market_cap: None,
-        holder_count: None,
-        token_age_hours: None,
+        transactions: None,
     }
 }
 
@@ -251,6 +246,7 @@ fn exit_position_data(entry_price: f64, current_price: f64) -> PositionData {
         current_size_sol: 1.0,
         unrealized_profit_pct,
         position_age_hours: 1.0,
+        peak_price: None,
     }
 }
 

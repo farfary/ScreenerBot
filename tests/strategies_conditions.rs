@@ -1,7 +1,7 @@
 // Copyright (c) 2024-2026 ScreenerBot (screenerbot.io)
 // SPDX-License-Identifier: BUSL-1.1
 
-//! Pure: the eight strategy condition evaluators — the leaves every user strategy is
+//! Pure: the strategy condition evaluators — the leaves every user strategy is
 //! built from. No network, no DB.
 //!
 //! A condition is what actually decides to spend SOL, so the properties that matter are
@@ -16,11 +16,14 @@ use common::{
     anchor_ts, bundle_with, candle, candle_series, condition, context_bare, context_with_candles,
 };
 use screenerbot::strategies::conditions::{
-    CandleSizeCondition, ConditionEvaluator, ConsecutiveCandlesCondition, LiquidityLevelCondition,
-    PositionHoldingTimeCondition, PriceBreakoutCondition, PriceChangePercentCondition,
-    PriceToMaCondition, VolumeSpikeCondition,
+    BuyPressureCondition, CandleSizeCondition, ConditionEvaluator, ConsecutiveCandlesCondition,
+    DrawdownFromPeakCondition, LiquidityLevelCondition, MaCrossCondition,
+    PositionHoldingTimeCondition, PositionProfitCondition, PriceBreakoutCondition,
+    PriceChangePercentCondition, PriceToMaCondition, RsiCondition, VolumeSpikeCondition,
 };
-use screenerbot::strategies::types::{Condition, EvaluationContext, MarketData, PositionData};
+use screenerbot::strategies::types::{
+    Condition, EvaluationContext, MarketData, PositionData, TransactionCounts, WindowCounts,
+};
 use screenerbot::strategies::Error as StrategyError;
 use serde_json::json;
 
@@ -54,10 +57,7 @@ fn market_context(liquidity_sol: Option<f64>) -> EvaluationContext {
     let mut ctx = context_bare(Some(1.0));
     ctx.market_data = Some(MarketData {
         liquidity_sol,
-        volume_24h: None,
-        market_cap: None,
-        holder_count: None,
-        token_age_hours: None,
+        transactions: None,
     });
     ctx
 }
@@ -70,6 +70,7 @@ fn position_context(age_hours: f64) -> EvaluationContext {
         current_size_sol: 1.0,
         unrealized_profit_pct: None,
         position_age_hours: age_hours,
+        peak_price: None,
     });
     ctx
 }
@@ -919,6 +920,573 @@ async fn holding_time_validation_bounds() {
         .is_ok());
 }
 
+// ==================== Rsi ====================
+
+fn rsi(period: i64, comparison: &str, threshold: f64) -> Condition {
+    condition(
+        "Rsi",
+        &[
+            ("period", json!(period)),
+            ("comparison", json!(comparison)),
+            ("threshold", json!(threshold)),
+        ],
+    )
+}
+
+fn closes_context(closes: &[f64]) -> EvaluationContext {
+    context_with_candles(
+        1.0,
+        "5m",
+        bundle_with("5m", candle_series(anchor_ts(), MINUTE * 5, closes)),
+    )
+}
+
+#[tokio::test]
+async fn rsi_of_strictly_rising_closes_is_one_hundred() {
+    let rising: Vec<f64> = (1..=15).map(f64::from).collect();
+    let ctx = closes_context(&rising);
+    assert!(eval(&RsiCondition, &rsi(14, "ABOVE", 99.0), &ctx).await);
+    assert!(!eval(&RsiCondition, &rsi(14, "BELOW", 99.0), &ctx).await);
+}
+
+#[tokio::test]
+async fn rsi_of_strictly_falling_closes_is_zero() {
+    let falling: Vec<f64> = (1..=15).rev().map(f64::from).collect();
+    let ctx = closes_context(&falling);
+    assert!(eval(&RsiCondition, &rsi(14, "BELOW", 1.0), &ctx).await);
+    assert!(!eval(&RsiCondition, &rsi(14, "ABOVE", 1.0), &ctx).await);
+}
+
+#[tokio::test]
+async fn rsi_of_equal_gains_and_losses_is_fifty_and_the_comparisons_are_strict() {
+    let ctx = closes_context(&[10.0, 11.0, 10.0]);
+    assert!(!eval(&RsiCondition, &rsi(2, "ABOVE", 50.0), &ctx).await);
+    assert!(!eval(&RsiCondition, &rsi(2, "BELOW", 50.0), &ctx).await);
+    assert!(eval(&RsiCondition, &rsi(2, "ABOVE", 49.0), &ctx).await);
+    assert!(eval(&RsiCondition, &rsi(2, "BELOW", 51.0), &ctx).await);
+}
+
+#[tokio::test]
+async fn rsi_of_a_flat_series_is_fifty() {
+    let ctx = closes_context(&[5.0; 4]);
+    assert!(eval(&RsiCondition, &rsi(3, "ABOVE", 49.0), &ctx).await);
+    assert!(eval(&RsiCondition, &rsi(3, "BELOW", 51.0), &ctx).await);
+}
+
+#[tokio::test]
+async fn rsi_matches_a_hand_computed_wilder_value() {
+    // Period 2 over [10, 11, 10, 12]: changes +1, -1, +2. The first two seed the averages
+    // (gain 0.5, loss 0.5); the third smooths in: gain (0.5 + 2) / 2 = 1.25, loss
+    // 0.5 / 2 = 0.25. RS = 5, RSI = 100 - 100 / 6 = 83.33.
+    let ctx = closes_context(&[10.0, 11.0, 10.0, 12.0]);
+    assert!(eval(&RsiCondition, &rsi(2, "ABOVE", 83.3), &ctx).await);
+    assert!(!eval(&RsiCondition, &rsi(2, "ABOVE", 83.34), &ctx).await);
+    assert!(eval(&RsiCondition, &rsi(2, "BELOW", 83.34), &ctx).await);
+    assert!(!eval(&RsiCondition, &rsi(2, "BELOW", 83.3), &ctx).await);
+}
+
+#[tokio::test]
+async fn rsi_reads_candles_and_never_the_live_price() {
+    let mut ctx = closes_context(&[10.0, 11.0, 10.0, 12.0]);
+    ctx.current_price = None;
+    assert!(eval(&RsiCondition, &rsi(2, "ABOVE", 80.0), &ctx).await);
+}
+
+#[tokio::test]
+async fn rsi_needs_one_more_close_than_its_period() {
+    let ctx = closes_context(&[10.0; 14]);
+    let err = eval_err(&RsiCondition, &rsi(14, "BELOW", 30.0), &ctx).await;
+    assert!(
+        matches!(
+            err,
+            StrategyError::InsufficientCandles {
+                indicator: "rsi",
+                available: 14,
+                required: 15
+            }
+        ),
+        "unexpected error: {err}"
+    );
+    let missing = eval_err(&RsiCondition, &rsi(14, "BELOW", 30.0), &context_bare(None)).await;
+    assert!(matches!(
+        missing,
+        StrategyError::MissingContextData { data: "OHLCV data" }
+    ));
+}
+
+#[test]
+fn rsi_validation_bounds() {
+    assert!(RsiCondition.validate(&rsi(1, "BELOW", 30.0)).is_err());
+    assert!(RsiCondition.validate(&rsi(101, "BELOW", 30.0)).is_err());
+    assert!(RsiCondition.validate(&rsi(14, "BELOW", 0.0)).is_err());
+    assert!(RsiCondition.validate(&rsi(14, "BELOW", 100.0)).is_err());
+    assert!(RsiCondition.validate(&rsi(14, "NEAR", 30.0)).is_err());
+    assert!(RsiCondition.validate(&rsi(2, "ABOVE", 1.0)).is_ok());
+    assert!(RsiCondition.validate(&rsi(100, "BELOW", 99.0)).is_ok());
+}
+
+// ==================== MaCross ====================
+
+fn cross(ma_type: &str, fast: i64, slow: i64, direction: &str, within_candles: i64) -> Condition {
+    condition(
+        "MaCross",
+        &[
+            ("ma_type", json!(ma_type)),
+            ("fast_period", json!(fast)),
+            ("slow_period", json!(slow)),
+            ("direction", json!(direction)),
+            ("within_candles", json!(within_candles)),
+        ],
+    )
+}
+
+#[tokio::test]
+async fn sma_bullish_cross_is_found_on_the_last_close() {
+    // Fast SMA(2) and slow SMA(3) are both 10 before the jump, then 15 against 13.33.
+    let ctx = closes_context(&[10.0, 10.0, 10.0, 10.0, 10.0, 20.0]);
+    assert!(eval(&MaCrossCondition, &cross("SMA", 2, 3, "BULLISH", 1), &ctx).await);
+    assert!(!eval(&MaCrossCondition, &cross("SMA", 2, 3, "BEARISH", 1), &ctx).await);
+}
+
+#[tokio::test]
+async fn a_cross_is_found_within_n_candles_and_not_one_further_back() {
+    // The cross happens on the second-to-last close; the last close keeps fast above slow.
+    let ctx = closes_context(&[10.0, 10.0, 10.0, 10.0, 10.0, 20.0, 20.0]);
+    assert!(!eval(&MaCrossCondition, &cross("SMA", 2, 3, "BULLISH", 1), &ctx).await);
+    assert!(eval(&MaCrossCondition, &cross("SMA", 2, 3, "BULLISH", 2), &ctx).await);
+}
+
+#[tokio::test]
+async fn sma_bearish_cross_mirrors_the_bullish_one() {
+    let ctx = closes_context(&[20.0, 20.0, 20.0, 20.0, 20.0, 10.0]);
+    assert!(eval(&MaCrossCondition, &cross("SMA", 2, 3, "BEARISH", 1), &ctx).await);
+    assert!(!eval(&MaCrossCondition, &cross("SMA", 2, 3, "BULLISH", 1), &ctx).await);
+}
+
+#[tokio::test]
+async fn ema_bullish_cross_is_found() {
+    // EMA(2) reaches 16.67 against EMA(3) at 15 after both sat at 10.
+    let ctx = closes_context(&[10.0, 10.0, 10.0, 10.0, 10.0, 20.0]);
+    assert!(eval(&MaCrossCondition, &cross("EMA", 2, 3, "BULLISH", 1), &ctx).await);
+}
+
+#[tokio::test]
+async fn ema_and_sma_disagree_where_their_weights_differ() {
+    // SMA(2) 12.5 crosses above SMA(3) 11.67. EMA(2) 13.70 stays under EMA(3) 14.17,
+    // because the old 30 still weighs on the quicker average through its seed.
+    let ctx = closes_context(&[30.0, 10.0, 10.0, 10.0, 15.0]);
+    assert!(eval(&MaCrossCondition, &cross("SMA", 2, 3, "BULLISH", 1), &ctx).await);
+    assert!(!eval(&MaCrossCondition, &cross("EMA", 2, 3, "BULLISH", 1), &ctx).await);
+}
+
+#[tokio::test]
+async fn touching_without_crossing_is_not_a_cross() {
+    let ctx = closes_context(&[10.0; 6]);
+    assert!(!eval(&MaCrossCondition, &cross("SMA", 2, 3, "BULLISH", 3), &ctx).await);
+    assert!(!eval(&MaCrossCondition, &cross("EMA", 2, 3, "BEARISH", 3), &ctx).await);
+}
+
+#[tokio::test]
+async fn ma_cross_needs_the_slow_period_plus_the_window() {
+    let ctx = closes_context(&[10.0; 4]);
+    let err = eval_err(&MaCrossCondition, &cross("SMA", 2, 3, "BULLISH", 2), &ctx).await;
+    assert!(
+        matches!(
+            err,
+            StrategyError::InsufficientCandles {
+                indicator: "moving average cross",
+                available: 4,
+                required: 5
+            }
+        ),
+        "unexpected error: {err}"
+    );
+    let missing = eval_err(
+        &MaCrossCondition,
+        &cross("SMA", 2, 3, "BULLISH", 1),
+        &context_bare(Some(1.0)),
+    )
+    .await;
+    assert!(matches!(
+        missing,
+        StrategyError::MissingContextData { data: "OHLCV data" }
+    ));
+}
+
+#[test]
+fn ma_cross_validation_bounds() {
+    let validate = |c: Condition| MaCrossCondition.validate(&c);
+    assert!(validate(cross("EMA", 9, 21, "BULLISH", 1)).is_ok());
+    assert!(validate(cross("SMA", 100, 200, "BEARISH", 20)).is_ok());
+    assert!(validate(cross("EMA", 1, 21, "BULLISH", 1)).is_err());
+    assert!(validate(cross("EMA", 101, 150, "BULLISH", 1)).is_err());
+    assert!(validate(cross("EMA", 9, 201, "BULLISH", 1)).is_err());
+    assert!(validate(cross("EMA", 9, 21, "BULLISH", 0)).is_err());
+    assert!(validate(cross("EMA", 9, 21, "BULLISH", 21)).is_err());
+    assert!(validate(cross("WMA", 9, 21, "BULLISH", 1)).is_err());
+    assert!(validate(cross("EMA", 9, 21, "SIDEWAYS", 1)).is_err());
+    // The slow average must be strictly slower than the fast one.
+    assert!(matches!(
+        validate(cross("EMA", 9, 9, "BULLISH", 1)),
+        Err(StrategyError::InvalidConditionValue {
+            field: "slow period",
+            ..
+        })
+    ));
+    assert!(validate(cross("EMA", 9, 5, "BULLISH", 1)).is_err());
+}
+
+// ==================== PositionProfit ====================
+
+fn profit(comparison: &str, threshold_pct: f64) -> Condition {
+    condition(
+        "PositionProfit",
+        &[
+            ("comparison", json!(comparison)),
+            ("threshold_pct", json!(threshold_pct)),
+        ],
+    )
+}
+
+fn profit_context(unrealized_profit_pct: Option<f64>) -> EvaluationContext {
+    let mut ctx = context_bare(Some(1.0));
+    ctx.position_data = Some(PositionData {
+        entry_price: 1.0,
+        entry_time: chrono::Utc::now(),
+        current_size_sol: 1.0,
+        unrealized_profit_pct,
+        position_age_hours: 1.0,
+        peak_price: None,
+    });
+    ctx
+}
+
+#[tokio::test]
+async fn position_profit_boundaries_are_inclusive_on_both_sides() {
+    let ctx = profit_context(Some(20.0));
+    assert!(eval(&PositionProfitCondition, &profit("ABOVE", 20.0), &ctx).await);
+    assert!(!eval(&PositionProfitCondition, &profit("ABOVE", 20.001), &ctx).await);
+    assert!(eval(&PositionProfitCondition, &profit("BELOW", 20.0), &ctx).await);
+    assert!(!eval(&PositionProfitCondition, &profit("BELOW", 19.999), &ctx).await);
+}
+
+#[tokio::test]
+async fn position_profit_reads_negative_thresholds() {
+    let ctx = profit_context(Some(-30.0));
+    assert!(eval(&PositionProfitCondition, &profit("BELOW", -25.0), &ctx).await);
+    assert!(!eval(&PositionProfitCondition, &profit("BELOW", -35.0), &ctx).await);
+}
+
+#[tokio::test]
+async fn position_profit_without_a_reading_errors() {
+    for ctx in [context_bare(Some(1.0)), profit_context(None)] {
+        let err = eval_err(&PositionProfitCondition, &profit("ABOVE", 20.0), &ctx).await;
+        assert!(
+            matches!(
+                err,
+                StrategyError::MissingContextData {
+                    data: "position data"
+                }
+            ),
+            "unexpected error: {err}"
+        );
+    }
+}
+
+#[test]
+fn position_profit_validation_bounds() {
+    assert!(PositionProfitCondition
+        .validate(&profit("ABOVE", -99.0))
+        .is_ok());
+    assert!(PositionProfitCondition
+        .validate(&profit("BELOW", 10000.0))
+        .is_ok());
+    assert!(PositionProfitCondition
+        .validate(&profit("ABOVE", -100.0))
+        .is_err());
+    assert!(PositionProfitCondition
+        .validate(&profit("ABOVE", 10001.0))
+        .is_err());
+    assert!(PositionProfitCondition
+        .validate(&profit("AROUND", 20.0))
+        .is_err());
+}
+
+// ==================== DrawdownFromPeak ====================
+
+fn drawdown(drop_pct: f64, arm_after_profit_pct: f64) -> Condition {
+    condition(
+        "DrawdownFromPeak",
+        &[
+            ("drop_pct", json!(drop_pct)),
+            ("arm_after_profit_pct", json!(arm_after_profit_pct)),
+        ],
+    )
+}
+
+/// A position entered at `entry`, whose highest pool price was `peak`, priced at `price`.
+fn peak_context(entry: f64, peak: Option<f64>, price: Option<f64>) -> EvaluationContext {
+    let mut ctx = context_bare(price);
+    ctx.position_data = Some(PositionData {
+        entry_price: entry,
+        entry_time: chrono::Utc::now(),
+        current_size_sol: 1.0,
+        unrealized_profit_pct: None,
+        position_age_hours: 1.0,
+        peak_price: peak,
+    });
+    ctx
+}
+
+#[tokio::test]
+async fn drawdown_fires_exactly_at_the_drop_and_not_just_short_of_it() {
+    // 8 -> 6 is exactly a 25% drop; entry 4 puts the peak exactly 100% above entry.
+    let ctx = peak_context(4.0, Some(8.0), Some(6.0));
+    assert!(eval(&DrawdownFromPeakCondition, &drawdown(25.0, 0.0), &ctx).await);
+    assert!(!eval(&DrawdownFromPeakCondition, &drawdown(25.01, 0.0), &ctx).await);
+}
+
+#[tokio::test]
+async fn drawdown_waits_for_the_peak_to_clear_the_arming_profit() {
+    let ctx = peak_context(4.0, Some(8.0), Some(6.0));
+    assert!(eval(&DrawdownFromPeakCondition, &drawdown(10.0, 100.0), &ctx).await);
+    assert!(!eval(&DrawdownFromPeakCondition, &drawdown(10.0, 100.5), &ctx).await);
+}
+
+#[tokio::test]
+async fn drawdown_does_not_fire_at_a_new_high() {
+    let ctx = peak_context(4.0, Some(8.0), Some(8.0));
+    assert!(!eval(&DrawdownFromPeakCondition, &drawdown(0.1, 0.0), &ctx).await);
+}
+
+#[tokio::test]
+async fn drawdown_refuses_missing_or_unusable_data() {
+    let cond = drawdown(10.0, 0.0);
+    let no_position = eval_err(&DrawdownFromPeakCondition, &cond, &context_bare(Some(6.0))).await;
+    assert!(matches!(
+        no_position,
+        StrategyError::MissingContextData {
+            data: "position data"
+        }
+    ));
+    let no_peak = eval_err(
+        &DrawdownFromPeakCondition,
+        &cond,
+        &peak_context(4.0, None, Some(6.0)),
+    )
+    .await;
+    assert!(matches!(
+        no_peak,
+        StrategyError::MissingContextData { data: "peak price" }
+    ));
+    let no_price = eval_err(
+        &DrawdownFromPeakCondition,
+        &cond,
+        &peak_context(4.0, Some(8.0), None),
+    )
+    .await;
+    assert!(matches!(
+        no_price,
+        StrategyError::MissingContextData {
+            data: "current price"
+        }
+    ));
+    let zero_entry = eval_err(
+        &DrawdownFromPeakCondition,
+        &cond,
+        &peak_context(0.0, Some(8.0), Some(6.0)),
+    )
+    .await;
+    assert!(matches!(
+        zero_entry,
+        StrategyError::InvalidConditionValue {
+            field: "entry price",
+            ..
+        }
+    ));
+    let zero_peak = eval_err(
+        &DrawdownFromPeakCondition,
+        &cond,
+        &peak_context(4.0, Some(0.0), Some(6.0)),
+    )
+    .await;
+    assert!(matches!(
+        zero_peak,
+        StrategyError::InvalidConditionValue {
+            field: "peak price",
+            ..
+        }
+    ));
+}
+
+#[test]
+fn drawdown_validation_bounds() {
+    assert!(DrawdownFromPeakCondition
+        .validate(&drawdown(0.1, 0.0))
+        .is_ok());
+    assert!(DrawdownFromPeakCondition
+        .validate(&drawdown(99.0, 10000.0))
+        .is_ok());
+    assert!(DrawdownFromPeakCondition
+        .validate(&drawdown(0.09, 0.0))
+        .is_err());
+    assert!(DrawdownFromPeakCondition
+        .validate(&drawdown(99.5, 0.0))
+        .is_err());
+    assert!(DrawdownFromPeakCondition
+        .validate(&drawdown(10.0, -1.0))
+        .is_err());
+    assert!(DrawdownFromPeakCondition
+        .validate(&drawdown(10.0, 10001.0))
+        .is_err());
+}
+
+// ==================== BuyPressure ====================
+
+fn pressure(window: &str, min_buy_share_pct: f64, min_transactions: i64) -> Condition {
+    condition(
+        "BuyPressure",
+        &[
+            ("window", json!(window)),
+            ("min_buy_share_pct", json!(min_buy_share_pct)),
+            ("min_transactions", json!(min_transactions)),
+        ],
+    )
+}
+
+fn counts(buys: u64, sells: u64) -> Option<WindowCounts> {
+    Some(WindowCounts { buys, sells })
+}
+
+fn transactions_context(transactions: Option<TransactionCounts>) -> EvaluationContext {
+    let mut ctx = context_bare(Some(1.0));
+    ctx.market_data = Some(MarketData {
+        liquidity_sol: None,
+        transactions,
+    });
+    ctx
+}
+
+fn one_hour(buys: u64, sells: u64) -> EvaluationContext {
+    transactions_context(Some(TransactionCounts {
+        m5: None,
+        h1: counts(buys, sells),
+        h6: None,
+        h24: None,
+    }))
+}
+
+#[tokio::test]
+async fn buy_share_boundary_is_inclusive() {
+    let ctx = one_hour(60, 40);
+    assert!(eval(&BuyPressureCondition, &pressure("1h", 60.0, 100), &ctx).await);
+    assert!(!eval(&BuyPressureCondition, &pressure("1h", 60.5, 100), &ctx).await);
+}
+
+#[tokio::test]
+async fn buy_pressure_is_false_below_the_minimum_transactions() {
+    let ctx = one_hour(60, 40);
+    assert!(!eval(&BuyPressureCondition, &pressure("1h", 50.0, 101), &ctx).await);
+    // All buys, but too few of them to mean anything.
+    let thin = one_hour(5, 0);
+    assert!(!eval(&BuyPressureCondition, &pressure("1h", 50.0, 50), &thin).await);
+}
+
+#[tokio::test]
+async fn buy_pressure_reads_the_selected_window() {
+    let ctx = transactions_context(Some(TransactionCounts {
+        m5: counts(10, 0),
+        h1: counts(0, 10),
+        h6: counts(10, 10),
+        h24: counts(30, 10),
+    }));
+    assert!(eval(&BuyPressureCondition, &pressure("5m", 100.0, 10), &ctx).await);
+    assert!(!eval(&BuyPressureCondition, &pressure("1h", 50.0, 10), &ctx).await);
+    assert!(eval(&BuyPressureCondition, &pressure("6h", 50.0, 20), &ctx).await);
+    assert!(eval(&BuyPressureCondition, &pressure("24h", 75.0, 40), &ctx).await);
+    assert!(!eval(&BuyPressureCondition, &pressure("24h", 76.0, 40), &ctx).await);
+}
+
+#[tokio::test]
+async fn buy_pressure_refuses_missing_counts() {
+    let cond = pressure("1h", 60.0, 50);
+    let missing_window = transactions_context(Some(TransactionCounts {
+        m5: counts(100, 0),
+        h1: None,
+        h6: None,
+        h24: None,
+    }));
+    for ctx in [
+        context_bare(Some(1.0)),
+        transactions_context(None),
+        missing_window,
+    ] {
+        let err = eval_err(&BuyPressureCondition, &cond, &ctx).await;
+        assert!(
+            matches!(
+                err,
+                StrategyError::MissingContextData {
+                    data: "transaction counts"
+                }
+            ),
+            "unexpected error: {err}"
+        );
+    }
+}
+
+#[test]
+fn buy_pressure_validation_bounds() {
+    assert!(BuyPressureCondition
+        .validate(&pressure("5m", 50.0, 1))
+        .is_ok());
+    assert!(BuyPressureCondition
+        .validate(&pressure("24h", 100.0, 100000))
+        .is_ok());
+    assert!(BuyPressureCondition
+        .validate(&pressure("2h", 60.0, 50))
+        .is_err());
+    assert!(BuyPressureCondition
+        .validate(&pressure("1h", 49.0, 50))
+        .is_err());
+    assert!(BuyPressureCondition
+        .validate(&pressure("1h", 101.0, 50))
+        .is_err());
+    assert!(BuyPressureCondition
+        .validate(&pressure("1h", 60.0, 0))
+        .is_err());
+    assert!(BuyPressureCondition
+        .validate(&pressure("1h", 60.0, 100001))
+        .is_err());
+}
+
+#[test]
+fn a_window_reported_on_one_side_only_or_negative_is_not_a_window() {
+    assert_eq!(WindowCounts::from_reported(Some(3), Some(2)), counts(3, 2));
+    assert_eq!(WindowCounts::from_reported(Some(0), Some(0)), counts(0, 0));
+    assert_eq!(WindowCounts::from_reported(Some(3), None), None);
+    assert_eq!(WindowCounts::from_reported(None, Some(2)), None);
+    assert_eq!(WindowCounts::from_reported(Some(-1), Some(2)), None);
+    assert_eq!(WindowCounts::from_reported(Some(3), Some(-2)), None);
+}
+
+#[test]
+fn transaction_counts_follow_the_token_snapshot_windows() {
+    let mut token = common::filter_token(common::TEST_MINT);
+    token.txns_m5_buys = Some(1);
+    token.txns_m5_sells = Some(2);
+    token.txns_h1_buys = Some(3);
+    token.txns_h1_sells = None;
+    token.txns_h6_buys = Some(5);
+    token.txns_h6_sells = Some(6);
+    token.txns_h24_buys = Some(-7);
+    token.txns_h24_sells = Some(8);
+    let transactions = TransactionCounts::from_token(&token);
+    assert_eq!(transactions.m5, counts(1, 2));
+    assert_eq!(transactions.h1, None);
+    assert_eq!(transactions.h6, counts(5, 6));
+    assert_eq!(transactions.h24, None);
+}
+
 // ==================== PARAMETER PLUMBING ====================
 
 #[tokio::test]
@@ -980,4 +1548,12 @@ fn every_condition_reports_the_type_name_it_is_registered_under() {
         PositionHoldingTimeCondition.condition_type(),
         "PositionHoldingTime"
     );
+    assert_eq!(RsiCondition.condition_type(), "Rsi");
+    assert_eq!(MaCrossCondition.condition_type(), "MaCross");
+    assert_eq!(PositionProfitCondition.condition_type(), "PositionProfit");
+    assert_eq!(
+        DrawdownFromPeakCondition.condition_type(),
+        "DrawdownFromPeak"
+    );
+    assert_eq!(BuyPressureCondition.condition_type(), "BuyPressure");
 }

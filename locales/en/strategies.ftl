@@ -247,6 +247,63 @@ strategies-condition-volume-spike-param-lookback = Lookback Period
 strategies-condition-volume-spike-param-multiplier = Volume Multiplier
     .description = How many times above average (e.g., 2.0 = 200% of average)
 
+strategies-condition-rsi = RSI (Relative Strength Index)
+    .description = Fires when the RSI of the candle closes, smoothed the way Wilder defined it, is below or above a threshold. Reads candles only.
+strategies-condition-rsi-param-period = RSI Period
+    .description = Number of candles the RSI is calculated over; the condition needs one more candle than this
+strategies-condition-rsi-param-comparison = Comparison
+    .description = Whether the RSI must be below or above the threshold
+strategies-condition-rsi-param-comparison-option-below = Below (Oversold)
+strategies-condition-rsi-param-comparison-option-above = Above (Overbought)
+strategies-condition-rsi-param-threshold = RSI Threshold
+    .description = RSI level from 1 to 99 (30 and 70 are the usual oversold and overbought levels)
+
+strategies-condition-ma-cross = Moving Average Cross
+    .description = Fires when a fast moving average crosses a slow one within the last few candles. Reads candles only.
+strategies-condition-ma-cross-param-ma-type = Average Type
+    .description = Exponential averages weight recent candles more; simple averages weight all candles equally
+strategies-condition-ma-cross-param-ma-type-option-ema = Exponential (EMA)
+strategies-condition-ma-cross-param-ma-type-option-sma = Simple (SMA)
+strategies-condition-ma-cross-param-fast-period = Fast Period
+    .description = Number of candles in the fast average
+strategies-condition-ma-cross-param-slow-period = Slow Period
+    .description = Number of candles in the slow average; must be larger than the fast period
+strategies-condition-ma-cross-param-direction = Cross Direction
+    .description = Which way the fast average crosses the slow one
+strategies-condition-ma-cross-param-direction-option-bullish = Bullish (Fast Crosses Above)
+strategies-condition-ma-cross-param-direction-option-bearish = Bearish (Fast Crosses Below)
+strategies-condition-ma-cross-param-within-candles = Cross Within
+    .description = How many of the latest candles may hold the cross; 1 means the latest candle only
+
+strategies-condition-position-profit = Position Profit
+    .description = Fires when the open position's unrealized profit, measured on the pool price against the entry price, is above or below a percentage. Exit strategies only.
+strategies-condition-position-profit-param-comparison = Comparison
+    .description = Whether the profit must be at least or at most the threshold
+strategies-condition-position-profit-param-comparison-option-above = At Least (≥)
+strategies-condition-position-profit-param-comparison-option-below = At Most (≤)
+strategies-condition-position-profit-param-threshold-pct = Profit Threshold %
+    .description = Unrealized profit as a percentage of the entry price; negative values are losses
+
+strategies-condition-drawdown-from-peak = Drawdown From Peak
+    .description = Fires when the pool price has fallen by a percentage from the highest price seen since entry, once that peak stood far enough above the entry price. Reads pool prices only. Exit strategies only.
+strategies-condition-drawdown-from-peak-param-drop-pct = Drop From Peak %
+    .description = How far below the peak the current price must be
+strategies-condition-drawdown-from-peak-param-arm-after-profit-pct = Arm After Profit %
+    .description = The peak must have been at least this far above the entry price before the condition can fire; 0 means always armed
+
+strategies-condition-buy-pressure = Buy Pressure
+    .description = Fires when buys make up at least a share of the transactions in a time window and the window has enough transactions. Reads the token's buy and sell counts.
+strategies-condition-buy-pressure-param-window = Time Window
+    .description = Period the buy and sell counts cover
+strategies-condition-buy-pressure-param-window-option-5m = 5 Minutes
+strategies-condition-buy-pressure-param-window-option-1h = 1 Hour
+strategies-condition-buy-pressure-param-window-option-6h = 6 Hours
+strategies-condition-buy-pressure-param-window-option-24h = 24 Hours
+strategies-condition-buy-pressure-param-min-buy-share-pct = Minimum Buy Share %
+    .description = Buys as a percentage of all transactions in the window
+strategies-condition-buy-pressure-param-min-transactions = Minimum Transactions
+    .description = Windows with fewer transactions never fire the condition
+
 ## Shared by every condition
 
 strategies-condition-param-timeframe = Timeframe
@@ -281,6 +338,7 @@ strategies-error-insufficient-candles = Not enough candles for { $indicator }: h
 strategies-error-stale-candle-data = The { $timeframe } candle data is stale: its age of { $age } s exceeds { $max } s
 strategies-error-invalid-rule-tree = Invalid rule tree: { $reason }
 strategies-error-evaluation-timeout = Strategy evaluation timed out after { $timeout } ms
+strategies-error-condition-not-applicable = { $condition } cannot be used in { $strategy } strategies
 strategies-error-invalid-rules = The rules could not be read: { $reason }
 
 # Parameter names
@@ -306,6 +364,17 @@ strategies-error-field-threshold = threshold
 strategies-error-field-time-unit = time unit
 strategies-error-field-time-value = time value
 strategies-error-field-timeframe = timeframe
+strategies-error-field-arm-after-profit = arm after profit
+strategies-error-field-drop-percentage = drop percentage
+strategies-error-field-entry-price = entry price
+strategies-error-field-fast-period = fast period
+strategies-error-field-minimum-buy-share = minimum buy share
+strategies-error-field-minimum-transactions = minimum transactions
+strategies-error-field-moving-average-type = moving average type
+strategies-error-field-peak-price = peak price
+strategies-error-field-slow-period = slow period
+strategies-error-field-window = window
+strategies-error-field-within-candles = within candles
 
 # Expected parameter types
 
@@ -320,6 +389,8 @@ strategies-error-data-liquidity-data = Liquidity data
 strategies-error-data-market-data = Market data
 strategies-error-data-ohlcv-data = OHLCV data
 strategies-error-data-position-data = Position data
+strategies-error-data-peak-price = Peak price
+strategies-error-data-transaction-counts = Transaction counts
 
 # Indicators
 
@@ -328,6 +399,8 @@ strategies-error-indicator-moving-average = moving average
 strategies-error-indicator-price-breakout = price breakout
 strategies-error-indicator-price-change-lookback = price change lookback
 strategies-error-indicator-volume-spike = volume spike
+strategies-error-indicator-moving-average-cross = moving average cross
+strategies-error-indicator-rsi = RSI
 
 # Rule tree faults
 
@@ -337,3 +410,7 @@ strategies-error-rule-branch-node-must-have-at-least-one-child = Branch node mus
 strategies-error-rule-invalid-rule-tree-structure = Invalid rule tree structure
 strategies-error-rule-leaf-node-missing-condition = Leaf node missing condition
 strategies-error-rule-not-operator-must-have-exactly-one-child = NOT operator must have exactly one child
+strategies-error-rule-a-group-needs-at-least-one-condition-switched-on = A group needs at least one condition switched on
+strategies-error-rule-not-operator-cannot-have-a-switched-off-child = NOT operator cannot have a switched-off child
+strategies-error-rule-rules-nest-deeper-than-four-levels = Rules nest deeper than four levels
+strategies-error-rule-the-root-group-cannot-be-switched-off = The root group cannot be switched off

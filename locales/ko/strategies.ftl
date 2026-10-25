@@ -245,6 +245,63 @@ strategies-condition-volume-spike-param-lookback = 조회 기간
 strategies-condition-volume-spike-param-multiplier = 거래량 배수
     .description = 평균의 몇 배인지 (예: 2.0 = 평균의 200%)
 
+strategies-condition-rsi = RSI (상대강도지수)
+    .description = 캔들 종가의 RSI(와일더 방식으로 평활화)가 임계값보다 낮거나 높을 때 발동합니다. 캔들만 읽습니다.
+strategies-condition-rsi-param-period = RSI 기간
+    .description = RSI를 계산하는 캔들 수. 이 값보다 캔들이 하나 더 필요합니다
+strategies-condition-rsi-param-comparison = 비교
+    .description = RSI가 임계값보다 낮아야 하는지 높아야 하는지
+strategies-condition-rsi-param-comparison-option-below = 미만 (과매도)
+strategies-condition-rsi-param-comparison-option-above = 초과 (과매수)
+strategies-condition-rsi-param-threshold = RSI 임계값
+    .description = 1~99 사이의 RSI 수준 (과매도 30, 과매수 70이 일반적입니다)
+
+strategies-condition-ma-cross = 이동평균 교차
+    .description = 빠른 이동평균이 최근 몇 개의 캔들 안에 느린 이동평균을 교차하면 발동합니다. 캔들만 읽습니다.
+strategies-condition-ma-cross-param-ma-type = 평균 종류
+    .description = 지수 평균은 최근 캔들에 더 큰 가중치를 주고, 단순 평균은 모든 캔들에 같은 가중치를 줍니다
+strategies-condition-ma-cross-param-ma-type-option-ema = 지수 (EMA)
+strategies-condition-ma-cross-param-ma-type-option-sma = 단순 (SMA)
+strategies-condition-ma-cross-param-fast-period = 빠른 기간
+    .description = 빠른 평균의 캔들 수
+strategies-condition-ma-cross-param-slow-period = 느린 기간
+    .description = 느린 평균의 캔들 수. 빠른 기간보다 커야 합니다
+strategies-condition-ma-cross-param-direction = 교차 방향
+    .description = 빠른 평균이 느린 평균을 어느 방향으로 교차하는지
+strategies-condition-ma-cross-param-direction-option-bullish = 상승 (빠른 선이 위로 교차)
+strategies-condition-ma-cross-param-direction-option-bearish = 하락 (빠른 선이 아래로 교차)
+strategies-condition-ma-cross-param-within-candles = 교차 허용 범위
+    .description = 교차가 포함될 수 있는 최근 캔들 수. 1은 가장 최근 캔들만 의미합니다
+
+strategies-condition-position-profit = 포지션 수익
+    .description = 열린 포지션의 미실현 수익(풀 가격을 진입 가격과 비교해 측정)이 지정한 비율보다 높거나 낮을 때 발동합니다. 청산 전략 전용입니다.
+strategies-condition-position-profit-param-comparison = 비교
+    .description = 수익이 임계값 이상이어야 하는지 이하여야 하는지
+strategies-condition-position-profit-param-comparison-option-above = 이상 (≥)
+strategies-condition-position-profit-param-comparison-option-below = 이하 (≤)
+strategies-condition-position-profit-param-threshold-pct = 수익 임계값 %
+    .description = 진입 가격 대비 미실현 수익 비율. 음수는 손실입니다
+
+strategies-condition-drawdown-from-peak = 고점 대비 하락
+    .description = 진입 이후 최고 가격에서 지정한 비율만큼 풀 가격이 하락하면 발동합니다. 단, 그 고점이 진입 가격보다 충분히 높았어야 합니다. 풀 가격만 읽습니다. 청산 전략 전용입니다.
+strategies-condition-drawdown-from-peak-param-drop-pct = 고점 대비 하락 %
+    .description = 현재 가격이 고점보다 얼마나 낮아야 하는지
+strategies-condition-drawdown-from-peak-param-arm-after-profit-pct = 수익 후 활성화 %
+    .description = 조건이 발동하려면 고점이 진입 가격보다 최소한 이 비율만큼 높았어야 합니다. 0은 항상 활성
+
+strategies-condition-buy-pressure = 매수 압력
+    .description = 시간 구간의 거래 중 매수 비율이 지정 값 이상이고 그 구간에 거래가 충분할 때 발동합니다. 토큰의 매수·매도 건수를 읽습니다.
+strategies-condition-buy-pressure-param-window = 시간 구간
+    .description = 매수·매도 건수가 다루는 기간
+strategies-condition-buy-pressure-param-window-option-5m = 5분
+strategies-condition-buy-pressure-param-window-option-1h = 1시간
+strategies-condition-buy-pressure-param-window-option-6h = 6시간
+strategies-condition-buy-pressure-param-window-option-24h = 24시간
+strategies-condition-buy-pressure-param-min-buy-share-pct = 최소 매수 비율 %
+    .description = 구간 내 전체 거래 중 매수의 비율
+strategies-condition-buy-pressure-param-min-transactions = 최소 거래 수
+    .description = 거래가 이보다 적은 구간은 조건을 발동하지 않습니다
+
 ## Shared by every condition
 
 strategies-condition-param-timeframe = 타임프레임
@@ -279,6 +336,7 @@ strategies-error-insufficient-candles = { $indicator } 캔들 부족: 보유 { $
 strategies-error-stale-candle-data = 타임프레임 { $timeframe }의 캔들 데이터가 오래되었습니다: 경과 시간 { $age }초가 { $max }초를 초과합니다
 strategies-error-invalid-rule-tree = 규칙 트리가 올바르지 않습니다: { $reason }
 strategies-error-evaluation-timeout = { $timeout }ms 후 전략 평가가 시간 초과되었습니다
+strategies-error-condition-not-applicable = { $condition }은(는) { $strategy } 전략에서 사용할 수 없습니다
 strategies-error-invalid-rules = 규칙을 읽을 수 없습니다: { $reason }
 
 # Parameter names
@@ -304,6 +362,17 @@ strategies-error-field-threshold = 임계값
 strategies-error-field-time-unit = 시간 단위
 strategies-error-field-time-value = 시간 값
 strategies-error-field-timeframe = 타임프레임
+strategies-error-field-arm-after-profit = 수익 후 활성화
+strategies-error-field-drop-percentage = 하락률
+strategies-error-field-entry-price = 진입 가격
+strategies-error-field-fast-period = 빠른 기간
+strategies-error-field-minimum-buy-share = 최소 매수 비율
+strategies-error-field-minimum-transactions = 최소 거래 수
+strategies-error-field-moving-average-type = 평균 종류
+strategies-error-field-peak-price = 고점 가격
+strategies-error-field-slow-period = 느린 기간
+strategies-error-field-window = 시간 구간
+strategies-error-field-within-candles = 교차 캔들 수
 
 # Expected parameter types
 
@@ -318,6 +387,8 @@ strategies-error-data-liquidity-data = 유동성 데이터
 strategies-error-data-market-data = 시장 데이터
 strategies-error-data-ohlcv-data = OHLCV 데이터
 strategies-error-data-position-data = 포지션 데이터
+strategies-error-data-peak-price = 고점 가격
+strategies-error-data-transaction-counts = 거래 건수
 
 # Indicators
 
@@ -326,6 +397,8 @@ strategies-error-indicator-moving-average = 이동평균
 strategies-error-indicator-price-breakout = 가격 돌파
 strategies-error-indicator-price-change-lookback = 가격 변동 조회
 strategies-error-indicator-volume-spike = 거래량 급증
+strategies-error-indicator-moving-average-cross = 이동평균 교차
+strategies-error-indicator-rsi = RSI
 
 # Rule tree faults
 
@@ -335,3 +408,7 @@ strategies-error-rule-branch-node-must-have-at-least-one-child = 분기 노드�
 strategies-error-rule-invalid-rule-tree-structure = 규칙 트리 구조가 올바르지 않습니다
 strategies-error-rule-leaf-node-missing-condition = 리프 노드에 조건이 없습니다
 strategies-error-rule-not-operator-must-have-exactly-one-child = NOT 연산자에는 하위 노드가 정확히 하나 있어야 합니다
+strategies-error-rule-a-group-needs-at-least-one-condition-switched-on = 그룹에는 켜진 조건이 하나 이상 필요합니다
+strategies-error-rule-not-operator-cannot-have-a-switched-off-child = NOT 연산자의 자식 노드는 꺼져 있을 수 없습니다
+strategies-error-rule-rules-nest-deeper-than-four-levels = 규칙은 4단계보다 깊게 중첩할 수 없습니다
+strategies-error-rule-the-root-group-cannot-be-switched-off = 루트 그룹은 끌 수 없습니다

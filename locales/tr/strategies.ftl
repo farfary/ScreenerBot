@@ -219,6 +219,63 @@ strategies-condition-volume-spike-param-lookback = Geriye bakış dönemi
 strategies-condition-volume-spike-param-multiplier = Hacim çarpanı
     .description = Ortalamanın kaç katı üstünde (örn. 2,0 = ortalamanın %200'ü)
 
+strategies-condition-rsi = RSI (Göreceli Güç Endeksi)
+    .description = Mum kapanışlarının Wilder yöntemiyle yumuşatılmış RSI değeri bir eşiğin altında veya üstünde olduğunda tetiklenir. Yalnızca mumları okur.
+strategies-condition-rsi-param-period = RSI dönemi
+    .description = RSI'nin hesaplandığı mum sayısı; koşul bu değerden bir mum fazlasına ihtiyaç duyar
+strategies-condition-rsi-param-comparison = Karşılaştırma
+    .description = RSI'nin eşiğin altında mı üstünde mi olması gerektiği
+strategies-condition-rsi-param-comparison-option-below = Altında (aşırı satım)
+strategies-condition-rsi-param-comparison-option-above = Üstünde (aşırı alım)
+strategies-condition-rsi-param-threshold = RSI eşiği
+    .description = 1 ile 99 arasında RSI seviyesi (aşırı satım için 30, aşırı alım için 70 yaygındır)
+
+strategies-condition-ma-cross = Hareketli ortalama kesişimi
+    .description = Hızlı bir hareketli ortalama son birkaç mum içinde yavaş olanı kestiğinde tetiklenir. Yalnızca mumları okur.
+strategies-condition-ma-cross-param-ma-type = Ortalama türü
+    .description = Üstel ortalamalar yakın tarihli mumlara daha çok ağırlık verir; basit ortalamalar tüm mumlara eşit ağırlık verir
+strategies-condition-ma-cross-param-ma-type-option-ema = Üstel (EMA)
+strategies-condition-ma-cross-param-ma-type-option-sma = Basit (SMA)
+strategies-condition-ma-cross-param-fast-period = Hızlı dönem
+    .description = Hızlı ortalamadaki mum sayısı
+strategies-condition-ma-cross-param-slow-period = Yavaş dönem
+    .description = Yavaş ortalamadaki mum sayısı; hızlı dönemden büyük olmalıdır
+strategies-condition-ma-cross-param-direction = Kesişim yönü
+    .description = Hızlı ortalamanın yavaş olanı hangi yönde kestiği
+strategies-condition-ma-cross-param-direction-option-bullish = Yükseliş (hızlı yukarı keser)
+strategies-condition-ma-cross-param-direction-option-bearish = Düşüş (hızlı aşağı keser)
+strategies-condition-ma-cross-param-within-candles = Kesişim son mumlar içinde
+    .description = Kesişimin kaç son mumda bulunabileceği; 1 yalnızca son mum demektir
+
+strategies-condition-position-profit = Pozisyon kârı
+    .description = Açık pozisyonun, havuz fiyatının giriş fiyatına göre ölçülen gerçekleşmemiş kârı bir yüzdenin üstünde veya altında olduğunda tetiklenir. Yalnızca çıkış stratejileri için.
+strategies-condition-position-profit-param-comparison = Karşılaştırma
+    .description = Kârın eşiğe en az mı en fazla mı eşit olması gerektiği
+strategies-condition-position-profit-param-comparison-option-above = En az (≥)
+strategies-condition-position-profit-param-comparison-option-below = En fazla (≤)
+strategies-condition-position-profit-param-threshold-pct = Kâr eşiği %
+    .description = Giriş fiyatının yüzdesi olarak gerçekleşmemiş kâr; negatif değerler zarardır
+
+strategies-condition-drawdown-from-peak = Zirveden düşüş
+    .description = Havuz fiyatı, girişten bu yana görülen en yüksek fiyattan bir yüzde kadar düştüğünde ve bu zirve giriş fiyatının yeterince üzerinde olduğunda tetiklenir. Yalnızca havuz fiyatlarını okur. Yalnızca çıkış stratejileri için.
+strategies-condition-drawdown-from-peak-param-drop-pct = Zirveden düşüş %
+    .description = Güncel fiyatın zirvenin ne kadar altında olması gerektiği
+strategies-condition-drawdown-from-peak-param-arm-after-profit-pct = Kârdan sonra devreye al %
+    .description = Koşulun tetiklenebilmesi için zirvenin giriş fiyatının en az bu kadar üzerine çıkmış olması gerekir; 0 her zaman etkin demektir
+
+strategies-condition-buy-pressure = Alım baskısı
+    .description = Alımlar bir zaman penceresindeki işlemlerin en az belirli bir payını oluşturduğunda ve pencerede yeterli işlem bulunduğunda tetiklenir. Tokenin alım ve satım sayılarını okur.
+strategies-condition-buy-pressure-param-window = Zaman penceresi
+    .description = Alım ve satım sayılarının kapsadığı dönem
+strategies-condition-buy-pressure-param-window-option-5m = 5 dakika
+strategies-condition-buy-pressure-param-window-option-1h = 1 saat
+strategies-condition-buy-pressure-param-window-option-6h = 6 saat
+strategies-condition-buy-pressure-param-window-option-24h = 24 saat
+strategies-condition-buy-pressure-param-min-buy-share-pct = Asgari alım payı %
+    .description = Alımların penceredeki tüm işlemlere yüzdesi
+strategies-condition-buy-pressure-param-min-transactions = Asgari işlem sayısı
+    .description = Daha az işlemi olan pencereler koşulu asla tetiklemez
+
 strategies-condition-param-timeframe = Zaman dilimi
     .description = Mum boyutu: koşulun okuduğu her mumun süresi (ayarlanmazsa strateji zaman dilimi)
 strategies-condition-timeframe-option-1m = 1 dakika
@@ -246,6 +303,7 @@ strategies-error-insufficient-candles = { $indicator } için yeterli mum yok: me
 strategies-error-stale-candle-data = { $timeframe } mum verisi eski: yaş { $age }sn, sınır { $max }sn
 strategies-error-invalid-rule-tree = Geçersiz kural ağacı: { $reason }
 strategies-error-evaluation-timeout = Strateji değerlendirmesi { $timeout }ms sonra zaman aşımına uğradı
+strategies-error-condition-not-applicable = { $condition }, { $strategy } stratejilerinde kullanılamaz
 strategies-error-invalid-rules = Kurallar okunamadı: { $reason }
 
 strategies-error-field-average-volume = ortalama hacim
@@ -269,6 +327,17 @@ strategies-error-field-threshold = eşik
 strategies-error-field-time-unit = zaman birimi
 strategies-error-field-time-value = zaman değeri
 strategies-error-field-timeframe = zaman dilimi
+strategies-error-field-arm-after-profit = kârdan sonra devreye alma
+strategies-error-field-drop-percentage = düşüş yüzdesi
+strategies-error-field-entry-price = giriş fiyatı
+strategies-error-field-fast-period = hızlı dönem
+strategies-error-field-minimum-buy-share = asgari alım payı
+strategies-error-field-minimum-transactions = asgari işlem sayısı
+strategies-error-field-moving-average-type = ortalama türü
+strategies-error-field-peak-price = zirve fiyatı
+strategies-error-field-slow-period = yavaş dönem
+strategies-error-field-window = pencere
+strategies-error-field-within-candles = kesişim mum sayısı
 
 strategies-error-expected-boolean = bir mantıksal değer
 strategies-error-expected-number = bir sayı
@@ -279,12 +348,16 @@ strategies-error-data-liquidity-data = Likidite verisi
 strategies-error-data-market-data = Piyasa verisi
 strategies-error-data-ohlcv-data = OHLCV verisi
 strategies-error-data-position-data = Pozisyon verisi
+strategies-error-data-peak-price = Zirve fiyatı
+strategies-error-data-transaction-counts = İşlem sayıları
 
 strategies-error-indicator-consecutive-candles = ardışık mumlar
 strategies-error-indicator-moving-average = hareketli ortalama
 strategies-error-indicator-price-breakout = fiyat kırılımı
 strategies-error-indicator-price-change-lookback = fiyat değişimi geriye bakışı
 strategies-error-indicator-volume-spike = hacim sıçraması
+strategies-error-indicator-moving-average-cross = hareketli ortalama kesişimi
+strategies-error-indicator-rsi = RSI
 
 strategies-error-rule-branch-node-missing-conditions = Dal düğümünde koşullar eksik
 strategies-error-rule-branch-node-missing-operator = Dal düğümünde operatör eksik
@@ -292,3 +365,7 @@ strategies-error-rule-branch-node-must-have-at-least-one-child = Dal düğümün
 strategies-error-rule-invalid-rule-tree-structure = Geçersiz kural ağacı yapısı
 strategies-error-rule-leaf-node-missing-condition = Yaprak düğümünde koşul eksik
 strategies-error-rule-not-operator-must-have-exactly-one-child = NOT operatörünün tam olarak bir alt öğesi olmalıdır
+strategies-error-rule-a-group-needs-at-least-one-condition-switched-on = Bir grupta en az bir koşul açık olmalıdır
+strategies-error-rule-not-operator-cannot-have-a-switched-off-child = NOT operatörünün kapalı bir alt düğümü olamaz
+strategies-error-rule-rules-nest-deeper-than-four-levels = Kurallar dört seviyeden daha derin iç içe geçemez
+strategies-error-rule-the-root-group-cannot-be-switched-off = Kök grup kapatılamaz

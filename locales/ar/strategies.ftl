@@ -255,6 +255,63 @@ strategies-condition-volume-spike-param-lookback = فترة الرجوع
 strategies-condition-volume-spike-param-multiplier = مضاعف حجم التداول
     .description = كم مرة فوق المتوسط (مثال: 2.0 = 200% من المتوسط)
 
+strategies-condition-rsi = RSI (مؤشر القوة النسبية)
+    .description = يعمل عندما يكون مؤشر RSI لأسعار إغلاق الشموع، بعد تنعيمه بطريقة وايلدر، أقل من حد معيّن أو أعلى منه. يقرأ الشموع فقط.
+strategies-condition-rsi-param-period = فترة RSI
+    .description = عدد الشموع التي يُحسب عليها المؤشر؛ يحتاج الشرط إلى شمعة أكثر من هذه القيمة
+strategies-condition-rsi-param-comparison = المقارنة
+    .description = هل يجب أن يكون المؤشر أقل من الحد أم أعلى منه
+strategies-condition-rsi-param-comparison-option-below = أقل من (تشبع بيعي)
+strategies-condition-rsi-param-comparison-option-above = أعلى من (تشبع شرائي)
+strategies-condition-rsi-param-threshold = حد RSI
+    .description = مستوى المؤشر من 1 إلى 99 (القيمتان 30 و70 هما المستويان المعتادان للتشبع البيعي والشرائي)
+
+strategies-condition-ma-cross = تقاطع المتوسطات المتحركة
+    .description = يعمل عندما يقطع متوسط متحرك سريع متوسطًا بطيئًا خلال آخر عدة شموع. يقرأ الشموع فقط.
+strategies-condition-ma-cross-param-ma-type = نوع المتوسط
+    .description = المتوسطات الأسية تعطي الشموع الحديثة وزنًا أكبر، والبسيطة تعطي كل الشموع وزنًا متساويًا
+strategies-condition-ma-cross-param-ma-type-option-ema = أسّي (EMA)
+strategies-condition-ma-cross-param-ma-type-option-sma = بسيط (SMA)
+strategies-condition-ma-cross-param-fast-period = الفترة السريعة
+    .description = عدد الشموع في المتوسط السريع
+strategies-condition-ma-cross-param-slow-period = الفترة البطيئة
+    .description = عدد الشموع في المتوسط البطيء؛ يجب أن يكون أكبر من الفترة السريعة
+strategies-condition-ma-cross-param-direction = اتجاه التقاطع
+    .description = في أي اتجاه يقطع المتوسط السريع المتوسط البطيء
+strategies-condition-ma-cross-param-direction-option-bullish = صاعد (السريع يقطع للأعلى)
+strategies-condition-ma-cross-param-direction-option-bearish = هابط (السريع يقطع للأسفل)
+strategies-condition-ma-cross-param-within-candles = التقاطع خلال آخر
+    .description = كم من آخر الشموع يمكن أن يحتوي التقاطع؛ القيمة 1 تعني أحدث شمعة فقط
+
+strategies-condition-position-profit = ربح المركز
+    .description = يعمل عندما يكون الربح غير المحقق للمركز المفتوح، مقيسًا بسعر مجمع السيولة مقابل سعر الدخول، أعلى من نسبة مئوية أو أقل منها. لاستراتيجيات الخروج فقط.
+strategies-condition-position-profit-param-comparison = المقارنة
+    .description = هل يجب أن يكون الربح مساويًا للحد أو أكبر منه، أم مساويًا له أو أقل منه
+strategies-condition-position-profit-param-comparison-option-above = على الأقل (≥)
+strategies-condition-position-profit-param-comparison-option-below = على الأكثر (≤)
+strategies-condition-position-profit-param-threshold-pct = حد الربح %
+    .description = الربح غير المحقق كنسبة مئوية من سعر الدخول؛ القيم السالبة خسائر
+
+strategies-condition-drawdown-from-peak = التراجع عن القمة
+    .description = يعمل عندما ينخفض سعر مجمع السيولة بنسبة مئوية عن أعلى سعر شوهد منذ الدخول، بعد أن كانت تلك القمة أعلى من سعر الدخول بما يكفي. يقرأ أسعار مجمع السيولة فقط. لاستراتيجيات الخروج فقط.
+strategies-condition-drawdown-from-peak-param-drop-pct = التراجع عن القمة %
+    .description = كم يجب أن يكون السعر الحالي أدنى من القمة
+strategies-condition-drawdown-from-peak-param-arm-after-profit-pct = التفعيل بعد ربح %
+    .description = يجب أن تكون القمة قد ارتفعت عن سعر الدخول بهذه النسبة على الأقل قبل أن يعمل الشرط؛ القيمة 0 تعني أنه مفعّل دائمًا
+
+strategies-condition-buy-pressure = ضغط الشراء
+    .description = يعمل عندما تشكّل عمليات الشراء نسبة معينة على الأقل من معاملات نافذة زمنية وتحتوي النافذة على معاملات كافية. يقرأ أعداد الشراء والبيع للعملة.
+strategies-condition-buy-pressure-param-window = النافذة الزمنية
+    .description = الفترة التي تغطيها أعداد الشراء والبيع
+strategies-condition-buy-pressure-param-window-option-5m = 5 دقائق
+strategies-condition-buy-pressure-param-window-option-1h = ساعة واحدة
+strategies-condition-buy-pressure-param-window-option-6h = 6 ساعات
+strategies-condition-buy-pressure-param-window-option-24h = 24 ساعة
+strategies-condition-buy-pressure-param-min-buy-share-pct = الحد الأدنى لحصة الشراء %
+    .description = عمليات الشراء كنسبة مئوية من كل معاملات النافذة
+strategies-condition-buy-pressure-param-min-transactions = الحد الأدنى للمعاملات
+    .description = النوافذ ذات المعاملات الأقل لا تُفعّل الشرط أبدًا
+
 ## Shared by every condition
 
 strategies-condition-param-timeframe = الإطار الزمني
@@ -289,6 +346,7 @@ strategies-error-insufficient-candles = الشموع غير كافية لـ { $i
 strategies-error-stale-candle-data = بيانات شموع الإطار الزمني { $timeframe } قديمة: عمرها { $age } ث يتجاوز { $max } ث
 strategies-error-invalid-rule-tree = شجرة قواعد غير صالحة: { $reason }
 strategies-error-evaluation-timeout = انتهت مهلة تقييم الاستراتيجية بعد { $timeout } ms
+strategies-error-condition-not-applicable = لا يمكن استخدام { $condition } في استراتيجيات من نوع { $strategy }
 strategies-error-invalid-rules = تعذّرت قراءة القواعد: { $reason }
 
 # Parameter names
@@ -314,6 +372,17 @@ strategies-error-field-threshold = الحد
 strategies-error-field-time-unit = وحدة الوقت
 strategies-error-field-time-value = قيمة الوقت
 strategies-error-field-timeframe = الإطار الزمني
+strategies-error-field-arm-after-profit = التفعيل بعد الربح
+strategies-error-field-drop-percentage = نسبة التراجع
+strategies-error-field-entry-price = سعر الدخول
+strategies-error-field-fast-period = الفترة السريعة
+strategies-error-field-minimum-buy-share = الحد الأدنى لحصة الشراء
+strategies-error-field-minimum-transactions = الحد الأدنى للمعاملات
+strategies-error-field-moving-average-type = نوع المتوسط
+strategies-error-field-peak-price = سعر القمة
+strategies-error-field-slow-period = الفترة البطيئة
+strategies-error-field-window = النافذة
+strategies-error-field-within-candles = عدد شموع التقاطع
 
 # Expected parameter types
 
@@ -328,6 +397,8 @@ strategies-error-data-liquidity-data = بيانات السيولة
 strategies-error-data-market-data = بيانات السوق
 strategies-error-data-ohlcv-data = بيانات OHLCV
 strategies-error-data-position-data = بيانات المركز
+strategies-error-data-peak-price = سعر القمة
+strategies-error-data-transaction-counts = أعداد المعاملات
 
 # Indicators
 
@@ -336,6 +407,8 @@ strategies-error-indicator-moving-average = المتوسط المتحرك
 strategies-error-indicator-price-breakout = اختراق السعر
 strategies-error-indicator-price-change-lookback = فترة رجوع تغير السعر
 strategies-error-indicator-volume-spike = طفرة حجم التداول
+strategies-error-indicator-moving-average-cross = تقاطع المتوسطات المتحركة
+strategies-error-indicator-rsi = RSI
 
 # Rule tree faults
 
@@ -345,3 +418,7 @@ strategies-error-rule-branch-node-must-have-at-least-one-child = يجب أن ت�
 strategies-error-rule-invalid-rule-tree-structure = بنية شجرة القواعد غير صالحة
 strategies-error-rule-leaf-node-missing-condition = عقدة الورقة تفتقر إلى شرط
 strategies-error-rule-not-operator-must-have-exactly-one-child = يجب أن يكون للعامل NOT عقدة فرعية واحدة بالضبط
+strategies-error-rule-a-group-needs-at-least-one-condition-switched-on = تحتاج المجموعة إلى شرط واحد مفعّل على الأقل
+strategies-error-rule-not-operator-cannot-have-a-switched-off-child = لا يمكن أن يكون للعامل NOT عقدة فرعية معطّلة
+strategies-error-rule-rules-nest-deeper-than-four-levels = لا يمكن تداخل القواعد لأكثر من أربعة مستويات
+strategies-error-rule-the-root-group-cannot-be-switched-off = لا يمكن تعطيل المجموعة الجذرية

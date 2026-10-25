@@ -247,6 +247,63 @@ strategies-condition-volume-spike-param-lookback = بازه بازبینی
 strategies-condition-volume-spike-param-multiplier = ضریب حجم
     .description = چند برابر میانگین (مثلاً 2.0 = 200% میانگین)
 
+strategies-condition-rsi = RSI (شاخص قدرت نسبی)
+    .description = وقتی فعال می‌شود که RSI قیمت‌های بسته‌شدن کندل‌ها، هموارشده به روش وایلدر، پایین‌تر یا بالاتر از یک آستانه باشد. فقط کندل‌ها را می‌خواند.
+strategies-condition-rsi-param-period = دوره RSI
+    .description = تعداد کندل‌هایی که RSI روی آن‌ها محاسبه می‌شود؛ شرط به یک کندل بیشتر از این مقدار نیاز دارد
+strategies-condition-rsi-param-comparison = مقایسه
+    .description = RSI باید پایین‌تر از آستانه باشد یا بالاتر
+strategies-condition-rsi-param-comparison-option-below = پایین‌تر (اشباع فروش)
+strategies-condition-rsi-param-comparison-option-above = بالاتر (اشباع خرید)
+strategies-condition-rsi-param-threshold = آستانه RSI
+    .description = سطح RSI از 1 تا 99 (مقادیر رایج 30 برای اشباع فروش و 70 برای اشباع خرید است)
+
+strategies-condition-ma-cross = تقاطع میانگین‌های متحرک
+    .description = وقتی فعال می‌شود که یک میانگین متحرک سریع در چند کندل اخیر میانگین کند را قطع کند. فقط کندل‌ها را می‌خواند.
+strategies-condition-ma-cross-param-ma-type = نوع میانگین
+    .description = میانگین‌های نمایی به کندل‌های اخیر وزن بیشتری می‌دهند؛ میانگین‌های ساده همه کندل‌ها را یکسان وزن می‌کنند
+strategies-condition-ma-cross-param-ma-type-option-ema = نمایی (EMA)
+strategies-condition-ma-cross-param-ma-type-option-sma = ساده (SMA)
+strategies-condition-ma-cross-param-fast-period = دوره سریع
+    .description = تعداد کندل‌ها در میانگین سریع
+strategies-condition-ma-cross-param-slow-period = دوره کند
+    .description = تعداد کندل‌ها در میانگین کند؛ باید از دوره سریع بزرگ‌تر باشد
+strategies-condition-ma-cross-param-direction = جهت تقاطع
+    .description = میانگین سریع در چه جهتی میانگین کند را قطع می‌کند
+strategies-condition-ma-cross-param-direction-option-bullish = صعودی (سریع به بالا قطع می‌کند)
+strategies-condition-ma-cross-param-direction-option-bearish = نزولی (سریع به پایین قطع می‌کند)
+strategies-condition-ma-cross-param-within-candles = تقاطع در آخرین
+    .description = تقاطع می‌تواند در چند کندل آخر باشد؛ 1 یعنی فقط جدیدترین کندل
+
+strategies-condition-position-profit = سود پوزیشن
+    .description = وقتی فعال می‌شود که سود تحقق‌نیافته پوزیشن باز، که با قیمت استخر نسبت به قیمت ورود سنجیده می‌شود، بالاتر یا پایین‌تر از یک درصد باشد. فقط برای استراتژی‌های خروج.
+strategies-condition-position-profit-param-comparison = مقایسه
+    .description = سود باید دست‌کم برابر آستانه یا حداکثر برابر آن باشد
+strategies-condition-position-profit-param-comparison-option-above = دست‌کم (≥)
+strategies-condition-position-profit-param-comparison-option-below = حداکثر (≤)
+strategies-condition-position-profit-param-threshold-pct = آستانه سود %
+    .description = سود تحقق‌نیافته به‌صورت درصدی از قیمت ورود؛ مقادیر منفی زیان هستند
+
+strategies-condition-drawdown-from-peak = افت از اوج
+    .description = وقتی فعال می‌شود که قیمت استخر به‌اندازه یک درصد از بالاترین قیمت دیده‌شده از زمان ورود افت کرده باشد، به شرط آنکه آن اوج به‌اندازه کافی بالای قیمت ورود بوده باشد. فقط قیمت استخر را می‌خواند. فقط برای استراتژی‌های خروج.
+strategies-condition-drawdown-from-peak-param-drop-pct = افت از اوج %
+    .description = قیمت فعلی چقدر باید پایین‌تر از اوج باشد
+strategies-condition-drawdown-from-peak-param-arm-after-profit-pct = فعال‌سازی پس از سود %
+    .description = اوج باید دست‌کم این‌قدر بالاتر از قیمت ورود بوده باشد تا شرط بتواند فعال شود؛ 0 یعنی همیشه فعال
+
+strategies-condition-buy-pressure = فشار خرید
+    .description = وقتی فعال می‌شود که خریدها دست‌کم سهم معینی از تراکنش‌های یک بازه زمانی باشند و آن بازه تراکنش کافی داشته باشد. تعداد خرید و فروش توکن را می‌خواند.
+strategies-condition-buy-pressure-param-window = بازه زمانی
+    .description = دوره‌ای که تعداد خرید و فروش پوشش می‌دهد
+strategies-condition-buy-pressure-param-window-option-5m = 5 دقیقه
+strategies-condition-buy-pressure-param-window-option-1h = 1 ساعت
+strategies-condition-buy-pressure-param-window-option-6h = 6 ساعت
+strategies-condition-buy-pressure-param-window-option-24h = 24 ساعت
+strategies-condition-buy-pressure-param-min-buy-share-pct = حداقل سهم خرید %
+    .description = خریدها به‌صورت درصدی از همه تراکنش‌های بازه
+strategies-condition-buy-pressure-param-min-transactions = حداقل تراکنش
+    .description = بازه‌هایی با تراکنش کمتر هرگز شرط را فعال نمی‌کنند
+
 ## Shared by every condition
 
 strategies-condition-param-timeframe = بازه زمانی
@@ -281,6 +338,7 @@ strategies-error-insufficient-candles = کندل‌ها برای { $indicator } 
 strategies-error-stale-candle-data = داده کندل بازه { $timeframe } قدیمی است: عمر { $age } ثانیه از { $max } ثانیه بیشتر است
 strategies-error-invalid-rule-tree = درخت قوانین نامعتبر است: { $reason }
 strategies-error-evaluation-timeout = ارزیابی استراتژی پس از { $timeout } ms به پایان زمان مجاز رسید
+strategies-error-condition-not-applicable = { $condition } در استراتژی‌های نوع { $strategy } قابل استفاده نیست
 strategies-error-invalid-rules = خواندن قوانین ممکن نشد: { $reason }
 
 # Parameter names
@@ -306,6 +364,17 @@ strategies-error-field-threshold = آستانه
 strategies-error-field-time-unit = واحد زمان
 strategies-error-field-time-value = مقدار زمان
 strategies-error-field-timeframe = بازه زمانی
+strategies-error-field-arm-after-profit = فعال‌سازی پس از سود
+strategies-error-field-drop-percentage = درصد افت
+strategies-error-field-entry-price = قیمت ورود
+strategies-error-field-fast-period = دوره سریع
+strategies-error-field-minimum-buy-share = حداقل سهم خرید
+strategies-error-field-minimum-transactions = حداقل تراکنش
+strategies-error-field-moving-average-type = نوع میانگین
+strategies-error-field-peak-price = قیمت اوج
+strategies-error-field-slow-period = دوره کند
+strategies-error-field-window = بازه
+strategies-error-field-within-candles = تعداد کندل تقاطع
 
 # Expected parameter types
 
@@ -320,6 +389,8 @@ strategies-error-data-liquidity-data = داده نقدینگی
 strategies-error-data-market-data = داده بازار
 strategies-error-data-ohlcv-data = داده OHLCV
 strategies-error-data-position-data = داده پوزیشن
+strategies-error-data-peak-price = قیمت اوج
+strategies-error-data-transaction-counts = تعداد تراکنش‌ها
 
 # Indicators
 
@@ -328,6 +399,8 @@ strategies-error-indicator-moving-average = میانگین متحرک
 strategies-error-indicator-price-breakout = شکست قیمت
 strategies-error-indicator-price-change-lookback = بازه بازبینی تغییر قیمت
 strategies-error-indicator-volume-spike = جهش حجم
+strategies-error-indicator-moving-average-cross = تقاطع میانگین‌های متحرک
+strategies-error-indicator-rsi = RSI
 
 # Rule tree faults
 
@@ -337,3 +410,7 @@ strategies-error-rule-branch-node-must-have-at-least-one-child = گره شاخه
 strategies-error-rule-invalid-rule-tree-structure = ساختار درخت قوانین نامعتبر است
 strategies-error-rule-leaf-node-missing-condition = گره برگ فاقد شرط است
 strategies-error-rule-not-operator-must-have-exactly-one-child = عملگر NOT باید دقیقاً یک فرزند داشته باشد
+strategies-error-rule-a-group-needs-at-least-one-condition-switched-on = هر گروه دست‌کم به یک شرط روشن نیاز دارد
+strategies-error-rule-not-operator-cannot-have-a-switched-off-child = عملگر NOT نمی‌تواند فرزند خاموش داشته باشد
+strategies-error-rule-rules-nest-deeper-than-four-levels = قوانین نمی‌توانند بیش از چهار سطح تودرتو باشند
+strategies-error-rule-the-root-group-cannot-be-switched-off = گروه ریشه را نمی‌توان خاموش کرد

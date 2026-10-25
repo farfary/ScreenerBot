@@ -217,6 +217,63 @@ strategies-condition-volume-spike-param-lookback = Khoảng nhìn lại
 strategies-condition-volume-spike-param-multiplier = Hệ số khối lượng
     .description = Cao hơn trung bình bao nhiêu lần (ví dụ: 2.0 = 200% mức trung bình)
 
+strategies-condition-rsi = RSI (Chỉ số sức mạnh tương đối)
+    .description = Kích hoạt khi RSI của giá đóng cửa các nến, làm mượt theo cách của Wilder, thấp hơn hoặc cao hơn một ngưỡng. Chỉ đọc nến.
+strategies-condition-rsi-param-period = Chu kỳ RSI
+    .description = Số nến dùng để tính RSI; điều kiện cần nhiều hơn giá trị này một nến
+strategies-condition-rsi-param-comparison = So sánh
+    .description = RSI phải thấp hơn hay cao hơn ngưỡng
+strategies-condition-rsi-param-comparison-option-below = Thấp hơn (quá bán)
+strategies-condition-rsi-param-comparison-option-above = Cao hơn (quá mua)
+strategies-condition-rsi-param-threshold = Ngưỡng RSI
+    .description = Mức RSI từ 1 đến 99 (30 và 70 là các mức quá bán và quá mua thường dùng)
+
+strategies-condition-ma-cross = Giao cắt đường trung bình động
+    .description = Kích hoạt khi đường trung bình động nhanh cắt đường chậm trong vài nến gần nhất. Chỉ đọc nến.
+strategies-condition-ma-cross-param-ma-type = Loại đường trung bình
+    .description = Đường trung bình hàm mũ cho các nến gần đây trọng số lớn hơn; đường trung bình đơn giản coi mọi nến như nhau
+strategies-condition-ma-cross-param-ma-type-option-ema = Hàm mũ (EMA)
+strategies-condition-ma-cross-param-ma-type-option-sma = Đơn giản (SMA)
+strategies-condition-ma-cross-param-fast-period = Chu kỳ nhanh
+    .description = Số nến của đường trung bình nhanh
+strategies-condition-ma-cross-param-slow-period = Chu kỳ chậm
+    .description = Số nến của đường trung bình chậm; phải lớn hơn chu kỳ nhanh
+strategies-condition-ma-cross-param-direction = Hướng giao cắt
+    .description = Đường nhanh cắt đường chậm theo hướng nào
+strategies-condition-ma-cross-param-direction-option-bullish = Tăng giá (đường nhanh cắt lên)
+strategies-condition-ma-cross-param-direction-option-bearish = Giảm giá (đường nhanh cắt xuống)
+strategies-condition-ma-cross-param-within-candles = Giao cắt trong
+    .description = Số nến gần nhất được phép chứa điểm giao cắt; 1 nghĩa là chỉ nến mới nhất
+
+strategies-condition-position-profit = Lợi nhuận vị thế
+    .description = Kích hoạt khi lợi nhuận chưa thực hiện của vị thế đang mở, tính theo giá pool so với giá vào lệnh, cao hơn hoặc thấp hơn một tỷ lệ phần trăm. Chỉ dùng cho chiến lược thoát lệnh.
+strategies-condition-position-profit-param-comparison = So sánh
+    .description = Lợi nhuận phải tối thiểu hay tối đa bằng ngưỡng
+strategies-condition-position-profit-param-comparison-option-above = Ít nhất (≥)
+strategies-condition-position-profit-param-comparison-option-below = Nhiều nhất (≤)
+strategies-condition-position-profit-param-threshold-pct = Ngưỡng lợi nhuận %
+    .description = Lợi nhuận chưa thực hiện theo phần trăm giá vào lệnh; giá trị âm là lỗ
+
+strategies-condition-drawdown-from-peak = Sụt giảm từ đỉnh
+    .description = Kích hoạt khi giá pool giảm một tỷ lệ phần trăm so với giá cao nhất kể từ lúc vào lệnh, sau khi đỉnh đó đã đủ cao hơn giá vào lệnh. Chỉ đọc giá pool. Chỉ dùng cho chiến lược thoát lệnh.
+strategies-condition-drawdown-from-peak-param-drop-pct = Sụt giảm từ đỉnh %
+    .description = Giá hiện tại phải thấp hơn đỉnh bao nhiêu
+strategies-condition-drawdown-from-peak-param-arm-after-profit-pct = Kích hoạt sau lợi nhuận %
+    .description = Đỉnh phải từng cao hơn giá vào lệnh ít nhất mức này thì điều kiện mới có thể kích hoạt; 0 nghĩa là luôn sẵn sàng
+
+strategies-condition-buy-pressure = Áp lực mua
+    .description = Kích hoạt khi lệnh mua chiếm ít nhất một tỷ lệ giao dịch trong một khung thời gian và khung đó có đủ giao dịch. Đọc số lệnh mua và bán của token.
+strategies-condition-buy-pressure-param-window = Khung thời gian
+    .description = Khoảng thời gian mà số lệnh mua và bán bao phủ
+strategies-condition-buy-pressure-param-window-option-5m = 5 phút
+strategies-condition-buy-pressure-param-window-option-1h = 1 giờ
+strategies-condition-buy-pressure-param-window-option-6h = 6 giờ
+strategies-condition-buy-pressure-param-window-option-24h = 24 giờ
+strategies-condition-buy-pressure-param-min-buy-share-pct = Tỷ lệ mua tối thiểu %
+    .description = Lệnh mua tính theo phần trăm tổng giao dịch trong khung
+strategies-condition-buy-pressure-param-min-transactions = Số giao dịch tối thiểu
+    .description = Khung có ít giao dịch hơn sẽ không bao giờ kích hoạt điều kiện
+
 strategies-condition-param-timeframe = Khung thời gian
     .description = Kích thước nến: độ dài mỗi cây nến mà điều kiện đọc (khung thời gian của chiến lược nếu không đặt)
 strategies-condition-timeframe-option-1m = 1 phút
@@ -244,6 +301,7 @@ strategies-error-insufficient-candles = Không đủ nến cho { $indicator }: c
 strategies-error-stale-candle-data = Dữ liệu nến khung { $timeframe } đã cũ: tuổi { $age } giây vượt quá { $max } giây
 strategies-error-invalid-rule-tree = Cây quy tắc không hợp lệ: { $reason }
 strategies-error-evaluation-timeout = Đánh giá chiến lược hết thời gian sau { $timeout } ms
+strategies-error-condition-not-applicable = { $condition } không thể dùng trong chiến lược loại { $strategy }
 strategies-error-invalid-rules = Không đọc được các quy tắc: { $reason }
 
 strategies-error-field-average-volume = khối lượng trung bình
@@ -267,6 +325,17 @@ strategies-error-field-threshold = ngưỡng
 strategies-error-field-time-unit = đơn vị thời gian
 strategies-error-field-time-value = giá trị thời gian
 strategies-error-field-timeframe = khung thời gian
+strategies-error-field-arm-after-profit = kích hoạt sau lợi nhuận
+strategies-error-field-drop-percentage = tỷ lệ sụt giảm
+strategies-error-field-entry-price = giá vào lệnh
+strategies-error-field-fast-period = chu kỳ nhanh
+strategies-error-field-minimum-buy-share = tỷ lệ mua tối thiểu
+strategies-error-field-minimum-transactions = số giao dịch tối thiểu
+strategies-error-field-moving-average-type = loại đường trung bình
+strategies-error-field-peak-price = giá đỉnh
+strategies-error-field-slow-period = chu kỳ chậm
+strategies-error-field-window = khung
+strategies-error-field-within-candles = số nến giao cắt
 
 strategies-error-expected-boolean = giá trị đúng/sai
 strategies-error-expected-number = một số
@@ -277,12 +346,16 @@ strategies-error-data-liquidity-data = Dữ liệu thanh khoản
 strategies-error-data-market-data = Dữ liệu thị trường
 strategies-error-data-ohlcv-data = Dữ liệu OHLCV
 strategies-error-data-position-data = Dữ liệu vị thế
+strategies-error-data-peak-price = Giá đỉnh
+strategies-error-data-transaction-counts = Số lượng giao dịch
 
 strategies-error-indicator-consecutive-candles = nến liên tiếp
 strategies-error-indicator-moving-average = đường trung bình động
 strategies-error-indicator-price-breakout = breakout giá
 strategies-error-indicator-price-change-lookback = khoảng nhìn lại biến động giá
 strategies-error-indicator-volume-spike = khối lượng tăng vọt
+strategies-error-indicator-moving-average-cross = giao cắt đường trung bình động
+strategies-error-indicator-rsi = RSI
 
 strategies-error-rule-branch-node-missing-conditions = Nút nhánh thiếu điều kiện
 strategies-error-rule-branch-node-missing-operator = Nút nhánh thiếu toán tử
@@ -290,3 +363,7 @@ strategies-error-rule-branch-node-must-have-at-least-one-child = Nút nhánh ph�
 strategies-error-rule-invalid-rule-tree-structure = Cấu trúc cây quy tắc không hợp lệ
 strategies-error-rule-leaf-node-missing-condition = Nút lá thiếu điều kiện
 strategies-error-rule-not-operator-must-have-exactly-one-child = Toán tử NOT phải có đúng một nút con
+strategies-error-rule-a-group-needs-at-least-one-condition-switched-on = Mỗi nhóm cần ít nhất một điều kiện đang bật
+strategies-error-rule-not-operator-cannot-have-a-switched-off-child = Toán tử NOT không được có nút con đã tắt
+strategies-error-rule-rules-nest-deeper-than-four-levels = Các quy tắc không được lồng sâu hơn bốn cấp
+strategies-error-rule-the-root-group-cannot-be-switched-off = Nhóm gốc không thể bị tắt

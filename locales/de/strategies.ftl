@@ -235,6 +235,63 @@ strategies-condition-volume-spike-param-lookback = Rückblickzeitraum
 strategies-condition-volume-spike-param-multiplier = Volumenmultiplikator
     .description = Wievielfaches des Durchschnitts (z. B. 2,0 = 200 % des Durchschnitts)
 
+strategies-condition-rsi = RSI (Relative-Stärke-Index)
+    .description = Wird ausgelöst, wenn der RSI der Schlusskurse der Kerzen, nach Wilder geglättet, unter oder über einer Schwelle liegt. Liest nur Kerzen.
+strategies-condition-rsi-param-period = RSI-Periode
+    .description = Anzahl der Kerzen, über die der RSI berechnet wird; die Bedingung braucht eine Kerze mehr als diesen Wert
+strategies-condition-rsi-param-comparison = Vergleich
+    .description = Ob der RSI unter oder über der Schwelle liegen muss
+strategies-condition-rsi-param-comparison-option-below = Unter (überverkauft)
+strategies-condition-rsi-param-comparison-option-above = Über (überkauft)
+strategies-condition-rsi-param-threshold = RSI-Schwelle
+    .description = RSI-Wert von 1 bis 99 (üblich sind 30 für überverkauft und 70 für überkauft)
+
+strategies-condition-ma-cross = Kreuzung gleitender Durchschnitte
+    .description = Wird ausgelöst, wenn ein schneller gleitender Durchschnitt einen langsamen innerhalb der letzten Kerzen kreuzt. Liest nur Kerzen.
+strategies-condition-ma-cross-param-ma-type = Durchschnittstyp
+    .description = Exponentielle Durchschnitte gewichten neuere Kerzen stärker, einfache gewichten alle Kerzen gleich
+strategies-condition-ma-cross-param-ma-type-option-ema = Exponentiell (EMA)
+strategies-condition-ma-cross-param-ma-type-option-sma = Einfach (SMA)
+strategies-condition-ma-cross-param-fast-period = Schnelle Periode
+    .description = Anzahl der Kerzen im schnellen Durchschnitt
+strategies-condition-ma-cross-param-slow-period = Langsame Periode
+    .description = Anzahl der Kerzen im langsamen Durchschnitt; muss größer als die schnelle Periode sein
+strategies-condition-ma-cross-param-direction = Kreuzungsrichtung
+    .description = In welche Richtung der schnelle den langsamen Durchschnitt kreuzt
+strategies-condition-ma-cross-param-direction-option-bullish = Bullisch (schnell kreuzt nach oben)
+strategies-condition-ma-cross-param-direction-option-bearish = Bärisch (schnell kreuzt nach unten)
+strategies-condition-ma-cross-param-within-candles = Kreuzung innerhalb
+    .description = Wie viele der letzten Kerzen die Kreuzung enthalten dürfen; 1 bedeutet nur die letzte Kerze
+
+strategies-condition-position-profit = Positionsgewinn
+    .description = Wird ausgelöst, wenn der nicht realisierte Gewinn der offenen Position, gemessen am Poolpreis gegenüber dem Einstiegspreis, über oder unter einem Prozentwert liegt. Nur für Ausstiegsstrategien.
+strategies-condition-position-profit-param-comparison = Vergleich
+    .description = Ob der Gewinn mindestens oder höchstens der Schwelle entsprechen muss
+strategies-condition-position-profit-param-comparison-option-above = Mindestens (≥)
+strategies-condition-position-profit-param-comparison-option-below = Höchstens (≤)
+strategies-condition-position-profit-param-threshold-pct = Gewinnschwelle %
+    .description = Nicht realisierter Gewinn in Prozent des Einstiegspreises; negative Werte sind Verluste
+
+strategies-condition-drawdown-from-peak = Rückgang vom Höchststand
+    .description = Wird ausgelöst, wenn der Poolpreis um einen Prozentwert unter den höchsten Preis seit dem Einstieg gefallen ist und dieser Höchststand weit genug über dem Einstiegspreis lag. Liest nur Poolpreise. Nur für Ausstiegsstrategien.
+strategies-condition-drawdown-from-peak-param-drop-pct = Rückgang vom Höchststand %
+    .description = Wie weit der aktuelle Preis unter dem Höchststand liegen muss
+strategies-condition-drawdown-from-peak-param-arm-after-profit-pct = Aktivierung nach Gewinn %
+    .description = Der Höchststand muss mindestens so weit über dem Einstiegspreis gelegen haben, bevor die Bedingung auslösen kann; 0 bedeutet immer aktiv
+
+strategies-condition-buy-pressure = Kaufdruck
+    .description = Wird ausgelöst, wenn Käufe mindestens einen Anteil der Transaktionen in einem Zeitfenster ausmachen und das Fenster genug Transaktionen hat. Liest die Kauf- und Verkaufszahlen des Tokens.
+strategies-condition-buy-pressure-param-window = Zeitfenster
+    .description = Zeitraum, den die Kauf- und Verkaufszahlen abdecken
+strategies-condition-buy-pressure-param-window-option-5m = 5 Minuten
+strategies-condition-buy-pressure-param-window-option-1h = 1 Stunde
+strategies-condition-buy-pressure-param-window-option-6h = 6 Stunden
+strategies-condition-buy-pressure-param-window-option-24h = 24 Stunden
+strategies-condition-buy-pressure-param-min-buy-share-pct = Mindestkaufanteil %
+    .description = Käufe in Prozent aller Transaktionen im Fenster
+strategies-condition-buy-pressure-param-min-transactions = Mindestanzahl Transaktionen
+    .description = Fenster mit weniger Transaktionen lösen die Bedingung nie aus
+
 ## Shared by every condition
 
 strategies-condition-param-timeframe = Zeitrahmen
@@ -268,6 +325,7 @@ strategies-error-insufficient-candles = Nicht genug Kerzen für { $indicator }: 
 strategies-error-stale-candle-data = Die Kerzendaten für { $timeframe } sind veraltet: Ihr Alter von { $age } s überschreitet { $max } s
 strategies-error-invalid-rule-tree = Ungültiger Regelbaum: { $reason }
 strategies-error-evaluation-timeout = Strategieauswertung nach { $timeout } ms abgebrochen (Zeitüberschreitung)
+strategies-error-condition-not-applicable = { $condition } kann nicht in Strategien vom Typ { $strategy } verwendet werden
 strategies-error-invalid-rules = Die Regeln konnten nicht gelesen werden: { $reason }
 
 strategies-error-field-average-volume = Durchschnittsvolumen
@@ -291,6 +349,17 @@ strategies-error-field-threshold = Schwelle
 strategies-error-field-time-unit = Zeiteinheit
 strategies-error-field-time-value = Zeitwert
 strategies-error-field-timeframe = Zeitrahmen
+strategies-error-field-arm-after-profit = Aktivierung nach Gewinn
+strategies-error-field-drop-percentage = Rückgangsprozent
+strategies-error-field-entry-price = Einstiegspreis
+strategies-error-field-fast-period = Schnelle Periode
+strategies-error-field-minimum-buy-share = Mindestkaufanteil
+strategies-error-field-minimum-transactions = Mindestanzahl Transaktionen
+strategies-error-field-moving-average-type = Durchschnittstyp
+strategies-error-field-peak-price = Höchstpreis
+strategies-error-field-slow-period = Langsame Periode
+strategies-error-field-window = Zeitfenster
+strategies-error-field-within-candles = Kerzenzahl der Kreuzung
 
 strategies-error-expected-boolean = ein Boolean
 strategies-error-expected-number = eine Zahl
@@ -301,12 +370,16 @@ strategies-error-data-liquidity-data = Liquiditätsdaten
 strategies-error-data-market-data = Marktdaten
 strategies-error-data-ohlcv-data = OHLCV-Daten
 strategies-error-data-position-data = Positionsdaten
+strategies-error-data-peak-price = Höchstpreis
+strategies-error-data-transaction-counts = Transaktionszahlen
 
 strategies-error-indicator-consecutive-candles = aufeinanderfolgende Kerzen
 strategies-error-indicator-moving-average = gleitenden Durchschnitt
 strategies-error-indicator-price-breakout = Preisausbruch
 strategies-error-indicator-price-change-lookback = Preisänderungs-Rückblick
 strategies-error-indicator-volume-spike = Volumenspitze
+strategies-error-indicator-moving-average-cross = Kreuzung gleitender Durchschnitte
+strategies-error-indicator-rsi = RSI
 
 strategies-error-rule-branch-node-missing-conditions = Verzweigungsknoten ohne Bedingungen
 strategies-error-rule-branch-node-missing-operator = Verzweigungsknoten ohne Operator
@@ -314,3 +387,7 @@ strategies-error-rule-branch-node-must-have-at-least-one-child = Verzweigungskno
 strategies-error-rule-invalid-rule-tree-structure = Ungültige Regelbaumstruktur
 strategies-error-rule-leaf-node-missing-condition = Blattknoten ohne Bedingung
 strategies-error-rule-not-operator-must-have-exactly-one-child = Der NOT-Operator muss genau einen Unterknoten haben
+strategies-error-rule-a-group-needs-at-least-one-condition-switched-on = Eine Gruppe braucht mindestens eine eingeschaltete Bedingung
+strategies-error-rule-not-operator-cannot-have-a-switched-off-child = Der NOT-Operator darf keinen ausgeschalteten Unterknoten haben
+strategies-error-rule-rules-nest-deeper-than-four-levels = Regeln dürfen höchstens vier Ebenen tief verschachtelt sein
+strategies-error-rule-the-root-group-cannot-be-switched-off = Die oberste Gruppe kann nicht ausgeschaltet werden

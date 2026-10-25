@@ -6,6 +6,7 @@
 use std::time::Duration;
 
 use crate::errors::{ErrorClass, Severity};
+use crate::strategies::types::StrategyType;
 
 /// Everything that can go wrong while validating or evaluating strategies.
 #[derive(Debug, Clone, thiserror::Error)]
@@ -73,6 +74,13 @@ pub enum Error {
     #[error("invalid rule tree: {reason}")]
     InvalidRuleTree { reason: &'static str },
 
+    /// A condition is used in a strategy type it cannot read the data for.
+    #[error("{condition_type} cannot be used in a {strategy_type} strategy")]
+    ConditionNotApplicable {
+        condition_type: String,
+        strategy_type: StrategyType,
+    },
+
     /// Evaluation did not complete before its configured deadline.
     #[error("strategy evaluation timed out after {timeout_ms}ms")]
     EvaluationTimeout { timeout_ms: u64 },
@@ -98,7 +106,8 @@ impl ErrorClass for Error {
             Error::MissingConditionParameter { .. }
             | Error::ConditionParameterType { .. }
             | Error::InvalidConditionValue { .. }
-            | Error::InvalidRuleTree { .. } => Severity::Warning,
+            | Error::InvalidRuleTree { .. }
+            | Error::ConditionNotApplicable { .. } => Severity::Warning,
             Error::MissingContextData { .. }
             | Error::NoCandleData { .. }
             | Error::InsufficientCandles { .. }
@@ -113,7 +122,8 @@ impl ErrorClass for Error {
             Error::MissingConditionParameter { .. }
             | Error::ConditionParameterType { .. }
             | Error::InvalidConditionValue { .. }
-            | Error::InvalidRuleTree { .. } => 400,
+            | Error::InvalidRuleTree { .. }
+            | Error::ConditionNotApplicable { .. } => 400,
             Error::MissingContextData { .. }
             | Error::NoCandleData { .. }
             | Error::InsufficientCandles { .. }

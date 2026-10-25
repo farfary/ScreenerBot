@@ -14,7 +14,8 @@ use crate::common;
 use common::{condition, context_bare, TEST_MINT};
 use screenerbot::strategies::engine::{EngineConfig, StrategyEngine};
 use screenerbot::strategies::types::{
-    Condition, EvaluationContext, LogicalOperator, MarketData, RuleTree, Strategy, StrategyType,
+    Condition, EvaluationContext, LogicalOperator, MarketData, PositionData, RuleTree, Strategy,
+    StrategyType, TransactionCounts, WindowCounts,
 };
 use screenerbot::strategies::Error as StrategyError;
 use serde_json::json;
@@ -46,11 +47,15 @@ fn leaf(cond: Condition) -> RuleTree {
 }
 
 fn strategy(rules: RuleTree) -> Strategy {
+    strategy_of(StrategyType::Entry, rules)
+}
+
+fn strategy_of(strategy_type: StrategyType, rules: RuleTree) -> Strategy {
     Strategy {
         id: "test-strategy".to_owned(),
         name: "Test".to_owned(),
         description: None,
-        strategy_type: StrategyType::Entry,
+        strategy_type,
         enabled: true,
         priority: 1,
         timeframe: "5m".to_owned(),
@@ -68,10 +73,7 @@ fn context(liquidity_sol: f64) -> EvaluationContext {
     ctx.token_mint = TEST_MINT.to_owned();
     ctx.market_data = Some(MarketData {
         liquidity_sol: Some(liquidity_sol),
-        volume_24h: None,
-        market_cap: None,
-        holder_count: None,
-        token_age_hours: None,
+        transactions: None,
     });
     ctx
 }
@@ -293,6 +295,7 @@ async fn an_empty_node_is_neither_leaf_nor_branch_and_is_rejected() {
         operator: None,
         conditions: None,
         condition: None,
+        disabled: false,
     };
     let err = engine
         .evaluate_strategy(&strategy(empty.clone()), &context(100.0))
@@ -344,6 +347,232 @@ async fn a_well_formed_tree_passes_validation() {
         ],
     );
     assert!(engine.validate_strategy(&strategy(rules)).is_ok());
+}
+
+// ==================== SWITCHED-OFF NODES AND NESTING ====================
+
+/// The same node, switched off.
+fn off(mut node: RuleTree) -> RuleTree {
+    node.disabled = true;
+    node
+}
+
+fn and(children: Vec<RuleTree>) -> RuleTree {
+    RuleTree::branch(LogicalOperator::And, children)
+}
+
+/// A chain of `levels` groups ending in a leaf, so the leaf sits at level `levels + 1`.
+fn nested_groups(levels: usize) -> RuleTree {
+    (0..levels).fold(leaf(liquidity_at_least(1.0)), |inner, _| and(vec![inner]))
+}
+
+fn invalid_reason(result: Result<(), StrategyError>) -> &'static str {
+    match result {
+        Err(StrategyError::InvalidRuleTree { reason }) => reason,
+        other => panic!("expected an invalid rule tree, got {other:?}"),
+    }
+}
+
+#[tokio::test]
+async fn a_switched_off_child_is_skipped_by_and() {
+    // Alone, the off child (liquidity below 10) would be false and sink the AND.
+    let engine = uncached_engine();
+    let rules = and(vec![
+        leaf(liquidity_at_least(100.0)),
+        off(leaf(liquidity_below(10.0))),
+    ]);
+    assert!(evaluate(&engine, rules, 150.0).await);
+}
+
+#[tokio::test]
+async fn a_switched_off_child_is_skipped_by_or() {
+    // Alone, the off child (liquidity at least 10) would be true and fire the OR.
+    let engine = uncached_engine();
+    let rules = RuleTree::branch(
+        LogicalOperator::Or,
+        vec![
+            leaf(liquidity_at_least(1000.0)),
+            off(leaf(liquidity_at_least(10.0))),
+        ],
+    );
+    assert!(!evaluate(&engine, rules, 150.0).await);
+}
+
+#[tokio::test]
+async fn a_group_with_every_child_off_is_refused_not_vacuously_true() {
+    let engine = uncached_engine();
+    let rules = and(vec![off(leaf(liquidity_at_least(1.0)))]);
+    assert_eq!(
+        invalid_reason(engine.validate_strategy(&strategy(rules.clone()))),
+        "a group needs at least one condition switched on"
+    );
+    let err = engine
+        .evaluate_strategy(&strategy(rules), &context(150.0))
+        .await
+        .expect_err("a group with nothing switched on must not evaluate");
+    assert!(
+        matches!(err, StrategyError::InvalidRuleTree { .. }),
+        "{err}"
+    );
+}
+
+#[tokio::test]
+async fn a_switched_off_root_is_refused() {
+    let engine = uncached_engine();
+    let rules = off(and(vec![leaf(liquidity_at_least(1.0))]));
+    assert_eq!(
+        invalid_reason(engine.validate_strategy(&strategy(rules.clone()))),
+        "the root group cannot be switched off"
+    );
+    let err = engine
+        .evaluate_strategy(&strategy(rules), &context(150.0))
+        .await
+        .expect_err("a switched-off root must not evaluate");
+    assert!(
+        matches!(err, StrategyError::InvalidRuleTree { .. }),
+        "{err}"
+    );
+}
+
+#[tokio::test]
+async fn not_cannot_invert_a_switched_off_child() {
+    let engine = uncached_engine();
+    let rules = and(vec![
+        leaf(liquidity_at_least(1.0)),
+        RuleTree::branch(LogicalOperator::Not, vec![off(leaf(liquidity_below(10.0)))]),
+    ]);
+    assert_eq!(
+        invalid_reason(engine.validate_strategy(&strategy(rules.clone()))),
+        "NOT operator cannot have a switched-off child"
+    );
+    assert!(engine
+        .evaluate_strategy(&strategy(rules), &context(150.0))
+        .await
+        .is_err());
+}
+
+#[test]
+fn rules_nest_four_levels_deep_and_no_deeper() {
+    let engine = uncached_engine();
+    // Root group (1) -> group (2) -> group (3) -> leaf (4).
+    assert!(engine
+        .validate_strategy(&strategy(nested_groups(3)))
+        .is_ok());
+    // One more group puts the leaf at level 5.
+    assert_eq!(
+        invalid_reason(engine.validate_strategy(&strategy(nested_groups(4)))),
+        "rules nest deeper than four levels"
+    );
+}
+
+#[test]
+fn a_switched_off_condition_is_still_validated() {
+    let engine = uncached_engine();
+    let malformed = condition(
+        "LiquidityLevel",
+        &[
+            ("threshold", json!(-5.0)),
+            ("comparison", json!("GREATER_EQUAL")),
+        ],
+    );
+    let rules = and(vec![leaf(liquidity_at_least(1.0)), off(leaf(malformed))]);
+    assert!(matches!(
+        engine.validate_strategy(&strategy(rules)),
+        Err(StrategyError::InvalidConditionValue {
+            field: "threshold",
+            ..
+        })
+    ));
+
+    let unknown = and(vec![
+        leaf(liquidity_at_least(1.0)),
+        off(leaf(condition("NoSuchCondition", &[]))),
+    ]);
+    assert!(engine.validate_strategy(&strategy(unknown)).is_err());
+}
+
+fn liquidity_leaf_json() -> serde_json::Value {
+    json!({
+        "condition": {
+            "type": "LiquidityLevel",
+            "parameters": {
+                "threshold": { "value": 100.0, "default": 50.0 },
+                "comparison": { "value": "GREATER_EQUAL", "default": "GREATER_THAN" }
+            }
+        }
+    })
+}
+
+#[test]
+fn a_tree_saved_without_the_disabled_flag_loads_enabled() {
+    let tree: RuleTree = serde_json::from_value(liquidity_leaf_json()).expect("loads");
+    assert!(!tree.disabled);
+}
+
+#[test]
+fn the_disabled_flag_is_written_only_when_set() {
+    let enabled = serde_json::to_value(leaf(liquidity_at_least(1.0))).unwrap();
+    assert!(enabled.get("disabled").is_none(), "{enabled}");
+
+    let switched_off = serde_json::to_value(off(leaf(liquidity_at_least(1.0)))).unwrap();
+    assert_eq!(switched_off["disabled"], json!(true));
+    let reloaded: RuleTree = serde_json::from_value(switched_off).unwrap();
+    assert!(reloaded.disabled);
+}
+
+// ==================== APPLICABILITY ====================
+
+fn profit_condition() -> Condition {
+    condition(
+        "PositionProfit",
+        &[
+            ("comparison", json!("ABOVE")),
+            ("threshold_pct", json!(20.0)),
+        ],
+    )
+}
+
+#[test]
+fn an_exit_only_condition_is_refused_in_an_entry_strategy() {
+    let engine = uncached_engine();
+    let rules = and(vec![leaf(profit_condition())]);
+    assert!(matches!(
+        engine.validate_strategy(&strategy_of(StrategyType::Entry, rules.clone())),
+        Err(StrategyError::ConditionNotApplicable {
+            ref condition_type,
+            strategy_type: StrategyType::Entry,
+        }) if condition_type == "PositionProfit"
+    ));
+    assert!(engine
+        .validate_strategy(&strategy_of(StrategyType::Exit, rules))
+        .is_ok());
+}
+
+#[test]
+fn a_switched_off_exit_only_condition_is_still_refused_in_an_entry_strategy() {
+    let engine = uncached_engine();
+    let rules = and(vec![
+        leaf(liquidity_at_least(1.0)),
+        off(leaf(profit_condition())),
+    ]);
+    assert!(matches!(
+        engine.validate_strategy(&strategy_of(StrategyType::Entry, rules)),
+        Err(StrategyError::ConditionNotApplicable { .. })
+    ));
+}
+
+#[test]
+fn every_schema_declares_the_strategy_types_it_applies_to() {
+    let schemas = uncached_engine().get_condition_registry().get_all_schemas();
+    let exit_only = ["PositionHoldingTime", "PositionProfit", "DrawdownFromPeak"];
+    for (name, schema) in schemas.as_object().expect("schemas are an object") {
+        let expected = if exit_only.contains(&name.as_str()) {
+            json!(["EXIT"])
+        } else {
+            json!(["ENTRY", "EXIT"])
+        };
+        assert_eq!(schema["applies_to"], expected, "{name}");
+    }
 }
 
 // ==================== CACHE ====================
@@ -472,6 +701,98 @@ async fn a_changed_market_input_busts_the_cache() {
     );
 }
 
+/// An exit context: a position entered at 4 whose highest price was `peak`, priced at 6.
+fn exit_context(peak: f64) -> EvaluationContext {
+    let mut ctx = common::context_bare(Some(6.0));
+    ctx.token_mint = TEST_MINT.to_owned();
+    ctx.position_data = Some(PositionData {
+        entry_price: 4.0,
+        entry_time: chrono::DateTime::parse_from_rfc3339("2026-01-01T00:00:00Z")
+            .expect("fixed entry time")
+            .with_timezone(&chrono::Utc),
+        current_size_sol: 1.0,
+        unrealized_profit_pct: Some(50.0),
+        position_age_hours: 1.0,
+        peak_price: Some(peak),
+    });
+    ctx
+}
+
+#[tokio::test]
+async fn a_changed_peak_price_busts_the_cache() {
+    // Peak 8 against a price of 6 is a 25% drawdown; peak 6 is none.
+    let engine = cached_engine();
+    let s = strategy_of(
+        StrategyType::Exit,
+        leaf(condition(
+            "DrawdownFromPeak",
+            &[
+                ("drop_pct", json!(20.0)),
+                ("arm_after_profit_pct", json!(0.0)),
+            ],
+        )),
+    );
+
+    assert!(
+        engine
+            .evaluate_strategy(&s, &exit_context(8.0))
+            .await
+            .unwrap()
+            .result
+    );
+    assert!(
+        !engine
+            .evaluate_strategy(&s, &exit_context(6.0))
+            .await
+            .unwrap()
+            .result,
+        "a position whose peak moved must be re-evaluated"
+    );
+}
+
+fn counts_context(buys: u64, sells: u64) -> EvaluationContext {
+    let mut ctx = context(100.0);
+    ctx.market_data = Some(MarketData {
+        liquidity_sol: Some(100.0),
+        transactions: Some(TransactionCounts {
+            m5: None,
+            h1: Some(WindowCounts { buys, sells }),
+            h6: None,
+            h24: None,
+        }),
+    });
+    ctx
+}
+
+#[tokio::test]
+async fn a_changed_transaction_count_busts_the_cache() {
+    let engine = cached_engine();
+    let s = strategy(leaf(condition(
+        "BuyPressure",
+        &[
+            ("window", json!("1h")),
+            ("min_buy_share_pct", json!(60.0)),
+            ("min_transactions", json!(50)),
+        ],
+    )));
+
+    assert!(
+        engine
+            .evaluate_strategy(&s, &counts_context(60, 40))
+            .await
+            .unwrap()
+            .result
+    );
+    assert!(
+        !engine
+            .evaluate_strategy(&s, &counts_context(50, 50))
+            .await
+            .unwrap()
+            .result,
+        "a window whose counts moved must be re-evaluated"
+    );
+}
+
 #[tokio::test]
 async fn two_tokens_never_share_a_cache_entry() {
     // Sharing an entry across mints would trade one token on another token's signal.
@@ -569,13 +890,18 @@ fn the_registry_exposes_every_built_in_condition() {
     assert_eq!(
         types,
         vec![
+            "BuyPressure",
             "CandleSize",
             "ConsecutiveCandles",
+            "DrawdownFromPeak",
             "LiquidityLevel",
+            "MaCross",
             "PositionHoldingTime",
+            "PositionProfit",
             "PriceBreakout",
             "PriceChangePercent",
             "PriceToMA",
+            "Rsi",
             "VolumeSpike",
         ]
     );
@@ -586,7 +912,7 @@ fn every_registered_condition_publishes_a_parameter_schema() {
     let engine = uncached_engine();
     let schemas = engine.get_condition_registry().get_all_schemas();
     let object = schemas.as_object().expect("schemas are an object");
-    assert_eq!(object.len(), 8);
+    assert_eq!(object.len(), 13);
     for (name, schema) in object {
         assert!(
             schema.get("parameters").is_some(),

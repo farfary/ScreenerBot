@@ -219,6 +219,63 @@ strategies-condition-volume-spike-param-lookback = लुकबैक अवध�
 strategies-condition-volume-spike-param-multiplier = वॉल्यूम गुणक
     .description = औसत से कितने गुना ऊपर (जैसे, 2.0 = औसत का 200%)
 
+strategies-condition-rsi = RSI (रिलेटिव स्ट्रेंथ इंडेक्स)
+    .description = तब ट्रिगर होता है जब कैंडल क्लोज़ का RSI, वाइल्डर की विधि से स्मूद किया हुआ, किसी सीमा से नीचे या ऊपर हो। केवल कैंडल पढ़ता है।
+strategies-condition-rsi-param-period = RSI अवधि
+    .description = कितनी कैंडल पर RSI निकाला जाता है; शर्त को इस मान से एक कैंडल अधिक चाहिए
+strategies-condition-rsi-param-comparison = तुलना
+    .description = RSI सीमा से नीचे होना चाहिए या ऊपर
+strategies-condition-rsi-param-comparison-option-below = नीचे (ओवरसोल्ड)
+strategies-condition-rsi-param-comparison-option-above = ऊपर (ओवरबॉट)
+strategies-condition-rsi-param-threshold = RSI सीमा
+    .description = 1 से 99 के बीच RSI स्तर (ओवरसोल्ड के लिए 30 और ओवरबॉट के लिए 70 आम हैं)
+
+strategies-condition-ma-cross = मूविंग एवरेज क्रॉस
+    .description = तब ट्रिगर होता है जब तेज़ मूविंग एवरेज पिछली कुछ कैंडल में धीमे एवरेज को काट दे। केवल कैंडल पढ़ता है।
+strategies-condition-ma-cross-param-ma-type = एवरेज का प्रकार
+    .description = एक्सपोनेंशियल एवरेज हाल की कैंडल को अधिक वज़न देते हैं; सिंपल एवरेज सभी कैंडल को बराबर वज़न देते हैं
+strategies-condition-ma-cross-param-ma-type-option-ema = एक्सपोनेंशियल (EMA)
+strategies-condition-ma-cross-param-ma-type-option-sma = सिंपल (SMA)
+strategies-condition-ma-cross-param-fast-period = तेज़ अवधि
+    .description = तेज़ एवरेज में कैंडल की संख्या
+strategies-condition-ma-cross-param-slow-period = धीमी अवधि
+    .description = धीमे एवरेज में कैंडल की संख्या; तेज़ अवधि से बड़ी होनी चाहिए
+strategies-condition-ma-cross-param-direction = क्रॉस की दिशा
+    .description = तेज़ एवरेज धीमे एवरेज को किस दिशा में काटता है
+strategies-condition-ma-cross-param-direction-option-bullish = तेज़ी (तेज़ ऊपर काटे)
+strategies-condition-ma-cross-param-direction-option-bearish = मंदी (तेज़ नीचे काटे)
+strategies-condition-ma-cross-param-within-candles = क्रॉस इतनी कैंडल में
+    .description = क्रॉस कितनी पिछली कैंडल में हो सकता है; 1 का मतलब केवल सबसे ताज़ा कैंडल
+
+strategies-condition-position-profit = पोज़िशन का मुनाफ़ा
+    .description = तब ट्रिगर होता है जब खुली पोज़िशन का अवास्तविक मुनाफ़ा, पूल प्राइस को एंट्री प्राइस से तुलना कर मापा गया, किसी प्रतिशत से ऊपर या नीचे हो। केवल एग्ज़िट रणनीतियों के लिए।
+strategies-condition-position-profit-param-comparison = तुलना
+    .description = मुनाफ़ा सीमा के बराबर या उससे अधिक होना चाहिए, या बराबर या उससे कम
+strategies-condition-position-profit-param-comparison-option-above = कम से कम (≥)
+strategies-condition-position-profit-param-comparison-option-below = अधिकतम (≤)
+strategies-condition-position-profit-param-threshold-pct = मुनाफ़ा सीमा %
+    .description = एंट्री प्राइस के प्रतिशत के रूप में अवास्तविक मुनाफ़ा; नकारात्मक मान घाटा हैं
+
+strategies-condition-drawdown-from-peak = पीक से गिरावट
+    .description = तब ट्रिगर होता है जब पूल प्राइस एंट्री के बाद देखे गए सबसे ऊँचे प्राइस से किसी प्रतिशत गिर जाए, बशर्ते वह पीक एंट्री प्राइस से पर्याप्त ऊपर रहा हो। केवल पूल प्राइस पढ़ता है। केवल एग्ज़िट रणनीतियों के लिए।
+strategies-condition-drawdown-from-peak-param-drop-pct = पीक से गिरावट %
+    .description = मौजूदा प्राइस पीक से कितना नीचे होना चाहिए
+strategies-condition-drawdown-from-peak-param-arm-after-profit-pct = मुनाफ़े के बाद सक्रिय %
+    .description = शर्त ट्रिगर हो सके, इससे पहले पीक एंट्री प्राइस से कम से कम इतना ऊपर रहा होना चाहिए; 0 का मतलब हमेशा सक्रिय
+
+strategies-condition-buy-pressure = खरीद दबाव
+    .description = तब ट्रिगर होता है जब किसी समय विंडो के ट्रांज़ैक्शन में खरीद का हिस्सा कम से कम तय प्रतिशत हो और विंडो में पर्याप्त ट्रांज़ैक्शन हों। टोकन की खरीद और बिक्री की गिनती पढ़ता है।
+strategies-condition-buy-pressure-param-window = समय विंडो
+    .description = वह अवधि जिसे खरीद और बिक्री की गिनती कवर करती है
+strategies-condition-buy-pressure-param-window-option-5m = 5 मिनट
+strategies-condition-buy-pressure-param-window-option-1h = 1 घंटा
+strategies-condition-buy-pressure-param-window-option-6h = 6 घंटे
+strategies-condition-buy-pressure-param-window-option-24h = 24 घंटे
+strategies-condition-buy-pressure-param-min-buy-share-pct = न्यूनतम खरीद हिस्सा %
+    .description = विंडो के कुल ट्रांज़ैक्शन में खरीद का प्रतिशत
+strategies-condition-buy-pressure-param-min-transactions = न्यूनतम ट्रांज़ैक्शन
+    .description = कम ट्रांज़ैक्शन वाली विंडो शर्त को कभी ट्रिगर नहीं करतीं
+
 strategies-condition-param-timeframe = टाइमफ़्रेम
     .description = कैंडल आकार: शर्त जिस हर कैंडल को पढ़ती है उसकी अवधि (सेट न होने पर स्ट्रैटेजी टाइमफ़्रेम)
 strategies-condition-timeframe-option-1m = 1 मिनट
@@ -246,6 +303,7 @@ strategies-error-insufficient-candles = { $indicator } के लिए पर�
 strategies-error-stale-candle-data = { $timeframe } कैंडल डेटा पुराना है: इसकी आयु { $age } सेकंड, { $max } सेकंड से अधिक है
 strategies-error-invalid-rule-tree = अमान्य रूल ट्री: { $reason }
 strategies-error-evaluation-timeout = स्ट्रैटेजी मूल्यांकन { $timeout } ms बाद टाइमआउट हुआ
+strategies-error-condition-not-applicable = { $condition } को { $strategy } प्रकार की रणनीतियों में इस्तेमाल नहीं किया जा सकता
 strategies-error-invalid-rules = नियम पढ़े नहीं जा सके: { $reason }
 
 strategies-error-field-average-volume = औसत वॉल्यूम
@@ -269,6 +327,17 @@ strategies-error-field-threshold = सीमा
 strategies-error-field-time-unit = समय इकाई
 strategies-error-field-time-value = समय मान
 strategies-error-field-timeframe = टाइमफ़्रेम
+strategies-error-field-arm-after-profit = मुनाफ़े के बाद सक्रिय
+strategies-error-field-drop-percentage = गिरावट प्रतिशत
+strategies-error-field-entry-price = एंट्री प्राइस
+strategies-error-field-fast-period = तेज़ अवधि
+strategies-error-field-minimum-buy-share = न्यूनतम खरीद हिस्सा
+strategies-error-field-minimum-transactions = न्यूनतम ट्रांज़ैक्शन
+strategies-error-field-moving-average-type = एवरेज का प्रकार
+strategies-error-field-peak-price = पीक प्राइस
+strategies-error-field-slow-period = धीमी अवधि
+strategies-error-field-window = विंडो
+strategies-error-field-within-candles = क्रॉस की कैंडल संख्या
 
 strategies-error-expected-boolean = बूलियन
 strategies-error-expected-number = संख्या
@@ -279,12 +348,16 @@ strategies-error-data-liquidity-data = लिक्विडिटी डेट�
 strategies-error-data-market-data = मार्केट डेटा
 strategies-error-data-ohlcv-data = OHLCV डेटा
 strategies-error-data-position-data = पोज़िशन डेटा
+strategies-error-data-peak-price = पीक प्राइस
+strategies-error-data-transaction-counts = ट्रांज़ैक्शन की गिनती
 
 strategies-error-indicator-consecutive-candles = लगातार कैंडल
 strategies-error-indicator-moving-average = मूविंग एवरेज
 strategies-error-indicator-price-breakout = प्राइस ब्रेकआउट
 strategies-error-indicator-price-change-lookback = प्राइस बदलाव लुकबैक
 strategies-error-indicator-volume-spike = वॉल्यूम स्पाइक
+strategies-error-indicator-moving-average-cross = मूविंग एवरेज क्रॉस
+strategies-error-indicator-rsi = RSI
 
 strategies-error-rule-branch-node-missing-conditions = ब्रांच नोड में शर्तें नहीं हैं
 strategies-error-rule-branch-node-missing-operator = ब्रांच नोड में ऑपरेटर नहीं है
@@ -292,3 +365,7 @@ strategies-error-rule-branch-node-must-have-at-least-one-child = ब्रां
 strategies-error-rule-invalid-rule-tree-structure = अमान्य रूल ट्री संरचना
 strategies-error-rule-leaf-node-missing-condition = लीफ़ नोड में शर्त नहीं है
 strategies-error-rule-not-operator-must-have-exactly-one-child = NOT ऑपरेटर में ठीक एक चाइल्ड होना चाहिए
+strategies-error-rule-a-group-needs-at-least-one-condition-switched-on = हर समूह में कम से कम एक शर्त चालू होनी चाहिए
+strategies-error-rule-not-operator-cannot-have-a-switched-off-child = NOT ऑपरेटर का चाइल्ड बंद नहीं हो सकता
+strategies-error-rule-rules-nest-deeper-than-four-levels = नियम चार स्तर से अधिक गहरे नेस्ट नहीं हो सकते
+strategies-error-rule-the-root-group-cannot-be-switched-off = रूट समूह को बंद नहीं किया जा सकता
