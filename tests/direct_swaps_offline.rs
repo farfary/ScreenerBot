@@ -1806,11 +1806,16 @@ fn a_fluxbeam_quote_off_real_state_charges_the_pools_own_rate() {
     );
     // This fixture's owner_trade_fee is 99/100 -- an unusually high, PER-POOL
     // rate read straight from the account (see the module docs), so almost
-    // the whole trade is fee rather than genuine reserve-depth impact. The
-    // fee itself is asserted above; here just check it dominates as expected.
+    // the whole trade is fee. The fee is reported as the fee, and the price
+    // impact measures only the curve movement of what reached the pool.
     assert!(
-        quote.price_impact_pct > 90.0,
-        "a 99% owner fee must dominate the reported impact, got {}%",
+        quote.lp_fee * 10 > amount_in * 9,
+        "a 99% owner fee is reported as the fee, got {} of {amount_in}",
+        quote.lp_fee
+    );
+    assert!(
+        quote.price_impact_pct < 1.0,
+        "the venue fee is not counted as price impact, got {}%",
         quote.price_impact_pct
     );
 
