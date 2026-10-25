@@ -241,34 +241,9 @@ pub async fn monitor_positions(
                     continue;
                 }
 
-                // Create action for dashboard visibility
-                let action = actions::AutoCloseAction::new(
-                    &decision.mint,
-                    Some(&evaluation.symbol),
-                    decision.position_id.as_ref().and_then(|s| s.parse().ok()),
-                    &format!("{:?}", decision.reason),
-                )
-                .await
-                .ok();
-
-                // Mark evaluation complete
-                if let Some(ref a) = action {
-                    a.complete_evaluation().await;
-                    a.start_quote().await;
-                }
-
-                match executors::execute_trade(&decision).await {
+                match executors::execute_tracked_exit(&decision, Some(&evaluation.symbol)).await {
                     Ok(result) => {
                         if result.success {
-                            // Complete action successfully
-                            if let Some(ref a) = action {
-                                a.complete_quote().await;
-                                a.start_swap().await;
-                                let sig = result.tx_signature.as_deref().unwrap_or("unknown");
-                                a.complete_swap(sig, result.executed_size_native).await;
-                                a.complete(result.tx_signature.as_deref()).await;
-                            }
-
                             logger::info(
                                 LogTag::Trader,
                                 &format!(
@@ -278,16 +253,7 @@ pub async fn monitor_positions(
                                 ),
                             );
                         } else {
-                            // Fail action
                             let error_msg = result.error.clone().unwrap_or_default();
-                            if let Some(ref a) = action {
-                                a.fail(ActionFailure::with_details(
-                                    ids::ACTIONS_FAILURE_EXIT,
-                                    error_msg.as_str(),
-                                ))
-                                .await;
-                            }
-
                             logger::error(
                                 LogTag::Trader,
                                 &format!("Exit failed for {}: {}", evaluation.symbol, error_msg),
@@ -299,18 +265,7 @@ pub async fn monitor_positions(
                         // searching its message for "429": the message is
                         // written by whichever provider failed, and a rewording
                         // there would silently switch the back-off off.
-                        let throttled = e.is_rate_limited();
-                        let e = e.to_string();
-                        // Fail action
-                        if let Some(ref a) = action {
-                            a.fail(ActionFailure::with_details(
-                                ids::ACTIONS_FAILURE_EXIT,
-                                e.as_str(),
-                            ))
-                            .await;
-                        }
-
-                        if throttled {
+                        if e.is_rate_limited() {
                             logger::warning(
                                 LogTag::Trader,
                                 &format!(

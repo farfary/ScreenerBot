@@ -656,9 +656,10 @@ async fn process_sell_activity(
                 continue;
             }
         };
+        let symbol = position.as_ref().map(|position| position.symbol.clone());
         let outcome = execute_copy_sell_with(plan, |decision| async move {
             CopySellSubmitResult::from_trade_result(
-                crate::trader::executors::execute_trade(&decision).await,
+                crate::trader::executors::execute_tracked_exit(&decision, symbol.as_deref()).await,
             )
         })
         .await;
