@@ -68,6 +68,7 @@ mod storage_wallet_amount_migration;
 mod storage_wallet_columns_migration;
 mod strategies_conditions;
 mod strategies_engine;
+mod strategies_routes;
 mod subject_deltas_persistence;
 mod swap_amount_execution;
 mod swap_resilience;

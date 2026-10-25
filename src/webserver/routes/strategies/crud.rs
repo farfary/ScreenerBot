@@ -414,6 +414,18 @@ pub async fn set_strategy_enabled_handler(
         }
     };
 
+    // Switching a strategy on puts its rules into trading, so they pass the validation a
+    // save applies; switching one off is always allowed.
+    if request.enabled {
+        if let Err(e) = strategies::validate_strategy(&strategy).await {
+            return err_cause(
+                ApiErrorCode::InvalidInput,
+                ids::ERRORS_STRATEGIES_VALIDATION_FAILED,
+                &e,
+            );
+        }
+    }
+
     strategy.enabled = request.enabled;
     strategy.updated_at = Utc::now();
     strategy.version += 1;
