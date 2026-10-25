@@ -176,7 +176,7 @@ async fn build_token_activity(current: &Position) -> TokenActivityResponse {
     state_history.sort_by_key(|change| change.changed_at);
 
     let mut totals = walk(&mut events, &mut summaries);
-    settle_closed_rounds(&mut summaries, &settled, &mut totals);
+    settle_closed_rounds(&mut summaries, &mut events, &settled, &mut totals);
 
     TokenActivityResponse {
         mint,
@@ -324,17 +324,21 @@ fn walk(events: &mut [ActivityEvent], summaries: &mut [ActivityPositionSummary])
     totals
 }
 
-/// What a CLOSED position row booked for its round: the proceeds and P&L the positions list
-/// reports for it.
+/// What a CLOSED position row booked for its round: the cost basis, proceeds and P&L the
+/// positions list reports for it.
 ///
 /// The row is the source of truth for a closed round. The timeline walk only sees exits
 /// that have a record, and not every close writes one: a round the wallet-history ledger
 /// closes because the token left the wallet outside the bot
 /// (`positions::ledger::sync::reconcile_owned_position`, `closed_externally`) stores its
 /// chain-reduced proceeds and P&L on the row alone. Walking the records gives such a round
-/// zero returned and zero realized.
+/// zero returned and zero realized. Nor does every buy write a record: a round whose DCA
+/// adds have none walks a basis far below what it paid, and prices its exits against it.
 #[derive(Clone, Copy, Debug)]
 struct StoredClose {
+    /// The round's whole cost basis (`total_size_native`, every buy including DCA); `None`
+    /// when the row cannot stand behind it either.
+    native_invested: Option<f64>,
     sol_received: Option<f64>,
     /// `None` when the row has no P&L it can stand behind (`has_trustworthy_pnl`), the same
     /// filter the positions stats apply to realized P&L.
@@ -346,18 +350,22 @@ impl StoredClose {
         if position.exit_time.is_none() && !position.synthetic_exit {
             return None;
         }
+        let trustworthy = position.has_trustworthy_pnl();
         Some(Self {
+            native_invested: Some(position.total_size_native)
+                .filter(|invested| trustworthy && invested.is_finite() && *invested > 0.0),
             sol_received: position.native_received,
-            pnl: position.pnl.filter(|_| position.has_trustworthy_pnl()),
+            pnl: position.pnl.filter(|_| trustworthy),
         })
     }
 }
 
-/// Replace each closed round's walked proceeds and realized P&L with the values its row
-/// stored, and move the totals by the same difference so they stay the sum of the rounds.
-/// A value the row does not carry leaves the walked one in place.
+/// Replace each closed round's walked basis, proceeds and realized P&L with the values its
+/// row stored, and move the totals by the same difference so they stay the sum of the
+/// rounds. A value the row does not carry leaves the walked one in place.
 fn settle_closed_rounds(
     summaries: &mut [ActivityPositionSummary],
+    events: &mut [ActivityEvent],
     settled: &HashMap<i64, StoredClose>,
     totals: &mut ActivityTotals,
 ) {
@@ -365,6 +373,11 @@ fn settle_closed_rounds(
         let Some(close) = settled.get(&summary.id) else {
             continue;
         };
+        if let Some(invested) = close.native_invested {
+            totals.native_invested += invested - summary.native_invested;
+            summary.native_invested = invested;
+            rebase_round_exits(events, summary.id, invested, close.pnl);
+        }
         if let Some(received) = close.sol_received {
             totals.native_returned += received - summary.native_returned;
             summary.native_returned = received;
@@ -373,6 +386,58 @@ fn settle_closed_rounds(
             totals.realized_pnl += pnl - summary.realized_pnl;
             summary.realized_pnl = pnl;
         }
+    }
+}
+
+/// Price a closed round's booked exits against the round's whole basis `invested`. Each
+/// exit keeps its walked share of the basis (by sold amount when the walk had no basis at
+/// all), so the exits' bases add up to `invested`; with a stored round P&L, the last exit
+/// absorbs the difference the walk cannot see (fees, chain-reduced proceeds), so the exits'
+/// P&L adds up to the round's.
+fn rebase_round_exits(
+    events: &mut [ActivityEvent],
+    position_id: i64,
+    invested: f64,
+    round_pnl: Option<f64>,
+) {
+    let mut exits: Vec<&mut ActivityEvent> = events
+        .iter_mut()
+        .filter(|event| {
+            event.position_id == Some(position_id) && event.side == "exit" && event.recorded
+        })
+        .collect();
+    if exits.is_empty() {
+        return;
+    }
+
+    let walked: f64 = exits.iter().filter_map(|event| event.cost_basis).sum();
+    let sold: f64 = exits.iter().filter_map(|event| event.token_amount).sum();
+    let count = exits.len() as f64;
+    for event in exits.iter_mut() {
+        let share = if walked > 0.0 {
+            event.cost_basis.unwrap_or(0.0) / walked
+        } else if sold > 0.0 {
+            event.token_amount.unwrap_or(0.0) / sold
+        } else {
+            1.0 / count
+        };
+        let basis = invested * share;
+        event.cost_basis = Some(basis);
+        event.realized_pnl = Some(event.sol_amount.unwrap_or(0.0) - basis);
+    }
+
+    if let Some(round_pnl) = round_pnl {
+        let walked_pnl: f64 = exits.iter().filter_map(|event| event.realized_pnl).sum();
+        if let Some(last) = exits.last_mut() {
+            last.realized_pnl = last.realized_pnl.map(|pnl| pnl + (round_pnl - walked_pnl));
+        }
+    }
+
+    for event in exits {
+        event.realized_pnl_percent = match (event.realized_pnl, event.cost_basis) {
+            (Some(pnl), Some(basis)) if basis > 0.0 => Some(pnl / basis * 100.0),
+            _ => None,
+        };
     }
 }
 
