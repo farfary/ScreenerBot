@@ -472,6 +472,12 @@ fn mark_failure(chain: ChainId, mint: &str, kind: FailureKind) {
     FAILED_CACHE.get(chain).insert(mint.to_owned(), kind);
 }
 
+/// Record `mint` as unresolvable, as a failed chain lookup does.
+#[cfg(test)]
+pub(crate) fn mark_unresolvable_for_tests(chain: ChainId, mint: &str) {
+    mark_failure(chain, mint, FailureKind::Permanent);
+}
+
 fn clear_failure(chain: ChainId, mint: &str) {
     FAILED_CACHE.get(chain).invalidate(mint);
 }

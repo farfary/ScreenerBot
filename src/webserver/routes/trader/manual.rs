@@ -175,7 +175,6 @@ pub async fn manual_sell_handler(Json(req): Json<ManualSellRequest>) -> Response
 /// For SELL: requires amount_tokens (tokens to sell), returns SOL received
 pub async fn quote_preview_handler(Query(req): Query<QuotePreviewRequest>) -> Response {
     use crate::swaps::types::{QuoteRequest, SwapMode};
-    use crate::tokens::database::get_token_async;
     use crate::utils::get_wallet_address;
 
     // Validate mint
@@ -193,6 +192,19 @@ pub async fn quote_preview_handler(Query(req): Query<QuotePreviewRequest>) -> Re
         "buy"
     };
 
+    // A token the database has not seen yet (a launch minutes old) still has
+    // its decimals on chain; guessing would misstate the amounts by orders of
+    // magnitude.
+    let Some(token_decimals) =
+        crate::tokens::decimals::get(crate::chains::active_chain(), &req.mint)
+            .await
+            .map(u32::from)
+    else {
+        return ApiError::new(ApiErrorCode::NotFound, ids::ERRORS_TRADE_TOKEN_DATA_MISSING)
+            .text_arg("mint", req.mint.clone())
+            .into_response();
+    };
+
     let wallet_address = match get_wallet_address() {
         Ok(addr) => addr,
         Err(_) => {
@@ -202,13 +214,6 @@ pub async fn quote_preview_handler(Query(req): Query<QuotePreviewRequest>) -> Re
             )
             .into_response();
         }
-    };
-
-    // Get token info for decimals (needed for sell)
-    let token_decimals = match get_token_async(crate::chains::active_chain(), &req.mint).await {
-        Ok(Some(token)) => token.decimals.unwrap_or(9) as u32,
-        Ok(None) => 9, // Default to 9 decimals if token not found
-        Err(_) => 9,
     };
 
     // Build quote request based on direction
@@ -474,6 +479,32 @@ mod tests {
             .await
             .expect("body");
         serde_json::from_slice(&body).expect("JSON envelope")
+    }
+
+    /// A preview of a token whose decimals cannot be resolved is refused; it is
+    /// never priced at an assumed precision.
+    #[tokio::test]
+    async fn a_preview_without_known_decimals_is_refused() {
+        let mint = "Gta9mPvjzLKCbHyyJiqay3VkmcmGoATf3ZSXFK9Kpump";
+        crate::tokens::decimals::mark_unresolvable_for_tests(crate::chains::active_chain(), mint);
+        let response = quote_preview_handler(Query(QuotePreviewRequest {
+            mint: mint.to_owned(),
+            amount_sol: Some(0.01),
+            amount_tokens: None,
+            percentage: None,
+            slippage_pct: None,
+            direction: "buy".to_owned(),
+        }))
+        .await;
+        assert_eq!(response.status(), axum::http::StatusCode::NOT_FOUND);
+        let body = axum::body::to_bytes(response.into_body(), usize::MAX)
+            .await
+            .expect("body");
+        let envelope: serde_json::Value = serde_json::from_slice(&body).expect("JSON envelope");
+        assert_eq!(
+            envelope["error"]["text"]["id"],
+            "errors-trade-token-data-missing"
+        );
     }
 
     /// A buy no route could fit in one transaction says so from the catalog, with
