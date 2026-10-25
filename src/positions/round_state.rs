@@ -130,7 +130,15 @@ pub fn exit_awaiting_verification(position: &Position) -> Option<&str> {
 /// leg stays, and the management, archive flag and price columns are never touched. At or
 /// below dust it stays closed with nothing held and its P&L taken from the booked legs. An
 /// open position is left unchanged.
-pub fn follow_round(position: &mut Position, held: RawAmount) -> Result<FollowOutcome> {
+///
+/// The sale that closed the position becomes one of its partial exits only when
+/// `closing_sale_recorded`: the position holds the exit record of that sale. A close the
+/// wallet history made, and a write-off, have no such record, so they add no partial exit.
+pub fn follow_round(
+    position: &mut Position,
+    held: RawAmount,
+    closing_sale_recorded: bool,
+) -> Result<FollowOutcome> {
     if !is_closed(position) {
         return Ok(FollowOutcome::Unchanged);
     }
@@ -150,9 +158,7 @@ pub fn follow_round(position: &mut Position, held: RawAmount) -> Result<FollowOu
         return Ok(FollowOutcome::StaysClosed);
     }
 
-    // The sale that closed the position is now one of its partial exits; a write-off sold
-    // nothing.
-    if !position.synthetic_exit {
+    if closing_sale_recorded {
         position.partial_exit_count += 1;
     }
     clear_close(position, held.min(acquired), acquired);
@@ -200,6 +206,7 @@ fn clear_close(position: &mut Position, held: RawAmount, acquired: RawAmount) {
 pub fn hand_over_round(
     position: &mut Position,
     held: RawAmount,
+    closing_sale_recorded: bool,
 ) -> Result<(FollowOutcome, Option<Handover>)> {
     if !is_closed(position) {
         return Ok((FollowOutcome::Unchanged, None));
@@ -211,7 +218,7 @@ pub fn hand_over_round(
         });
     };
     if is_dust(held, acquired) {
-        return Ok((follow_round(position, held)?, None));
+        return Ok((follow_round(position, held, closing_sale_recorded)?, None));
     }
     let held = held.min(acquired);
     let share = held.raw() as f64 / acquired.raw() as f64;
@@ -320,11 +327,13 @@ fn fraction(part: RawAmount, whole: RawAmount) -> f64 {
 /// the buy no longer held is booked on the closed position as acquired and exited at the
 /// buy's price, with the same share of the buy's fee, so the closed position's books change
 /// by exactly that part and its P&L is restated over what it kept. The rest of the fee goes
-/// with the handed-over part of the buy.
+/// with the handed-over part of the buy. `closing_sale_recorded` is passed to
+/// [`follow_round`].
 pub(crate) fn hand_over_leg(
     position: &mut Position,
     fill: &DcaFill,
     held: RawAmount,
+    closing_sale_recorded: bool,
 ) -> Result<(FollowOutcome, LegSplit)> {
     if !is_closed(position) {
         position.book_dca(fill)?;
@@ -340,7 +349,10 @@ pub(crate) fn hand_over_leg(
         .ok_or_else(overflow)?;
     if is_dust(held, acquired) {
         position.book_dca(fill)?;
-        return Ok((follow_round(position, held)?, LegSplit::kept_whole(fill)));
+        return Ok((
+            follow_round(position, held, closing_sale_recorded)?,
+            LegSplit::kept_whole(fill),
+        ));
     }
 
     let held = held.min(acquired);
@@ -615,6 +627,21 @@ mod tests {
         (actual - expected).abs() < 1e-12
     }
 
+    /// The sale that closed a position is counted as a partial exit of the reopened position
+    /// only when the position holds that sale's exit record.
+    #[test]
+    fn a_reopened_position_counts_its_closing_sale_only_when_the_sale_is_recorded() {
+        for (recorded, partial_exits) in [(true, 1), (false, 0)] {
+            let mut position = closed(1_000, 1.0, 0.6);
+            position.partial_exit_count = 0;
+            let outcome = follow_round(&mut position, raw(500), recorded).unwrap();
+
+            assert_eq!(outcome, FollowOutcome::Reopened);
+            assert_eq!(position.partial_exit_count, partial_exits);
+            assert_eq!(position.remaining_token_amount, Some(raw(500)));
+        }
+    }
+
     /// A buy at half the closed position's price lands after its full exit; the wallet still
     /// holds exactly the buy beside the open position. The buy moves at its own cost, so the
     /// closed position's realized P&L is what its own trades made.
@@ -622,7 +649,7 @@ mod tests {
     fn a_late_buy_still_held_moves_at_its_own_cost_and_leaves_the_closed_books_unchanged() {
         let mut position = closed(1_000, 1.0, 0.6);
         let (outcome, split) =
-            hand_over_leg(&mut position, &late_buy(1_000, 0.5), raw(1_000)).unwrap();
+            hand_over_leg(&mut position, &late_buy(1_000, 0.5), raw(1_000), true).unwrap();
 
         assert_eq!(outcome, FollowOutcome::HandedOver);
         assert_eq!(split.kept.tokens, raw(0));
@@ -647,7 +674,7 @@ mod tests {
     fn the_part_of_a_late_buy_no_longer_held_stays_on_the_closed_position_at_its_own_cost() {
         let mut position = closed(1_000, 1.0, 0.6);
         let (outcome, split) =
-            hand_over_leg(&mut position, &late_buy(1_000, 0.5), raw(400)).unwrap();
+            hand_over_leg(&mut position, &late_buy(1_000, 0.5), raw(400), true).unwrap();
 
         assert_eq!(outcome, FollowOutcome::HandedOver);
         assert_eq!(split.handed_leg.tokens, raw(400));
@@ -671,7 +698,7 @@ mod tests {
         let mut position = closed(1_000, 1.0, 0.6);
         let mut buy = late_buy(1_000, 0.5);
         buy.fee_raw = 10_001;
-        let (outcome, split) = hand_over_leg(&mut position, &buy, raw(400)).unwrap();
+        let (outcome, split) = hand_over_leg(&mut position, &buy, raw(400), true).unwrap();
 
         assert_eq!(outcome, FollowOutcome::HandedOver);
         assert_eq!(split.handed_fee_raw, 4_000);
@@ -687,7 +714,7 @@ mod tests {
     fn earlier_tokens_held_beyond_the_buy_move_at_the_pre_buy_average_cost() {
         let mut position = closed(1_000, 1.0, 0.0);
         let (outcome, split) =
-            hand_over_leg(&mut position, &late_buy(1_000, 0.5), raw(1_250)).unwrap();
+            hand_over_leg(&mut position, &late_buy(1_000, 0.5), raw(1_250), true).unwrap();
 
         assert_eq!(outcome, FollowOutcome::HandedOver);
         assert_eq!(split.handed_leg.tokens, raw(1_000));
@@ -705,7 +732,7 @@ mod tests {
     fn a_dust_holding_keeps_the_whole_late_buy_on_the_closed_position() {
         let mut position = closed(1_000_000, 1.0, 0.6);
         let (outcome, split) =
-            hand_over_leg(&mut position, &late_buy(1_000_000, 0.5), raw(2_000)).unwrap();
+            hand_over_leg(&mut position, &late_buy(1_000_000, 0.5), raw(2_000), true).unwrap();
 
         assert_eq!(outcome, FollowOutcome::StaysClosed);
         assert_eq!(split.kept.tokens, raw(1_000_000));

@@ -8,6 +8,8 @@
 //! `self.get_connection()`, `String` errors, one `unchecked_transaction()` per batch
 //! write.
 
+use std::sync::atomic::{AtomicBool, Ordering};
+
 use rusqlite::types::{FromSql, FromSqlError, FromSqlResult, ToSql, ToSqlOutput, Value, ValueRef};
 use rusqlite::{params, OptionalExtension, Transaction as SqlTransaction};
 
@@ -25,6 +27,22 @@ const BACKFILL_METADATA_KEY: &str = "subject_deltas_backfill_version";
 /// thousands of rows with large JSON blobs, so the whole table is never loaded at
 /// once.
 const BACKFILL_BATCH_SIZE: i64 = 500;
+
+/// Set when a processed own-wallet transaction was stored without its deltas, and cleared
+/// by the reader that repairs the hole before it reduces the ledger.
+static SUBJECT_DELTA_GAP: AtomicBool = AtomicBool::new(false);
+
+/// Records that a processed own-wallet transaction lacks its deltas, so the next ledger
+/// reduction repairs the hole first (see [`TransactionDatabase::fill_subject_delta_gaps`]).
+pub fn note_subject_delta_gap() {
+    SUBJECT_DELTA_GAP.store(true, Ordering::SeqCst);
+}
+
+/// Whether a delta hole was noted since the last call, clearing the note. The caller that
+/// receives `true` owns the repair, and notes the gap again when the repair fails.
+pub fn take_subject_delta_gap() -> bool {
+    SUBJECT_DELTA_GAP.swap(false, Ordering::SeqCst)
+}
 
 /// One cached `raw_transactions` row as both re-extraction passes read it:
 /// `(signature, raw JSON, slot, block_time, success)`.
@@ -371,31 +389,21 @@ impl TransactionDatabase {
         Ok(total_deltas)
     }
 
-    /// Extract deltas for any recent own-wallet transaction that has none — the
+    /// Extract deltas for every successful own-wallet transaction that has none — the
     /// self-healing counterpart to the once-per-version backfill.
     ///
     /// The full backfill runs once and never again, so a transaction that was stored
     /// while the extraction was unavailable (a crash between recording and extraction, a
     /// write that failed, a build where the live hook was missing) would stay outside
-    /// the ledger for the life of the install. This pass costs one indexed scan per boot
-    /// because it starts at the newest slot the ledger already knows about: everything
-    /// older is, by construction, already reduced.
+    /// the ledger for the life of the install. The scan covers every raw own-wallet
+    /// transaction without deltas, wherever it lies among the deltas already stored: a
+    /// hole below a newer delta unbalances the chain of balances the ledger reduces, so
+    /// it must be found whatever was stored after it. A failed transaction moves nothing
+    /// and is not decoded.
     ///
-    /// A transaction that genuinely moves nothing produces no delta rows and is
-    /// re-examined on the next boot; that is a handful of rows, not a rescan.
+    /// A successful transaction that genuinely moves nothing produces no delta rows and is
+    /// decoded again on every run; that is bounded by the raw rows kept.
     pub async fn fill_subject_delta_gaps(&self, wallet_address: &str) -> Result<u64, Error> {
-        let watermark: i64 = {
-            let conn = self.get_connection()?;
-            conn.query_row(
-                "SELECT COALESCE(MAX(slot), 0) FROM subject_asset_deltas WHERE chain_id = ?1 AND wallet_address = ?2",
-                params![self.chain.as_str(), wallet_address],
-                |row| row.get(0),
-            )
-            .map_err(|e| Error::DeltaBackfill {
-                detail: format!("failed to read subject deltas watermark: {e}"),
-            })?
-        };
-
         let mut cursor = String::new();
         let mut repaired: u64 = 0;
 
@@ -408,8 +416,8 @@ impl TransactionDatabase {
                          FROM raw_transactions r
                          WHERE r.chain_id = ?1 AND r.wallet_address = ?2
                            AND r.raw_transaction_data IS NOT NULL
-                           AND (r.slot IS NULL OR r.slot >= ?3)
-                           AND r.signature > ?4
+                           AND r.success = 1
+                           AND r.signature > ?3
                            AND NOT EXISTS (
                              SELECT 1 FROM subject_asset_deltas d
                              WHERE d.chain_id = r.chain_id
@@ -417,7 +425,7 @@ impl TransactionDatabase {
                                AND d.signature = r.signature
                            )
                          ORDER BY r.signature
-                         LIMIT ?5",
+                         LIMIT ?4",
                     )
                     .map_err(|e| Error::DeltaBackfill {
                         detail: format!("failed to prepare subject deltas gap query: {e}"),
@@ -428,7 +436,6 @@ impl TransactionDatabase {
                         params![
                             self.chain.as_str(),
                             wallet_address,
-                            watermark,
                             cursor,
                             BACKFILL_BATCH_SIZE
                         ],

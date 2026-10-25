@@ -55,8 +55,8 @@ pub async fn partial_close_position(
         });
     }
 
-    // Get position
-    let position = crate::positions::state::get_position_by_mint(token_mint)
+    // The open round of the mint, archived or not: the row a manual sell targets.
+    let position = crate::positions::state::get_open_round_by_mint(token_mint)
         .await
         .ok_or_else(|| Error::NotFound {
             mint: token_mint.to_owned(),

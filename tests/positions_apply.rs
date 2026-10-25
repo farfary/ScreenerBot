@@ -16,7 +16,9 @@ use screenerbot::positions::operations::{force_close_position, mark_exit_submitt
 use screenerbot::positions::price_updater::update_position_price_and_pnl;
 use screenerbot::positions::round_state::exit_awaiting_verification;
 use screenerbot::positions::transitions::NotLandedEvidence;
-use screenerbot::positions::verifier::{check_exit_residual, classify_exit_residual, ExitResidual};
+use screenerbot::positions::verifier::{
+    check_exit_residual, classify_exit_residual, unsold_own_holding, ExitResidual,
+};
 use screenerbot::positions::{
     buy_target, db, state, ApplyFailureDisposition, BuyTarget, Error, GiveUpReason, PendingDcaSwap,
     PendingPartialExit, Position, PositionManagement, PositionOrigin, PositionTransition,
@@ -2584,20 +2586,48 @@ fn an_unverified_entry_of_another_position_never_stalls_a_close() {
                     position_id: blocking
                 },
             );
-            apply_transition(PositionTransition::ExitVerified {
+            // A sale that covers the position's holding up to dust leaves nothing of its own
+            // unsold: whatever stays in the wallet is the other position's.
+            assert_eq!(
+                unsold_own_holding(Some(id), RawAmount::new(HELD)).await,
+                None
+            );
+            assert_eq!(
+                unsold_own_holding(Some(id), RawAmount::new(HELD - 10)).await,
+                None
+            );
+            // The sale left 30% of the position's own holding unsold: it is booked for what it
+            // sold and the close is retried, never booked as a full exit.
+            assert_eq!(
+                unsold_own_holding(Some(id), sold).await,
+                Some(RawAmount::new(HELD))
+            );
+            apply_transition(PositionTransition::ExitResidualClearForRetry {
                 position_id: id,
-                effective_exit_price: 1.5,
+                exit_amount: sold,
                 native_received: 1.05,
+                effective_exit_price: 1.5,
                 fee_raw: SWAP_FEE_RAW,
                 exit_time: Utc::now(),
                 exit_signature: CLOSE_SIGNATURE.to_owned(),
-                exit_amount: sold,
+                exit_percentage: 70.0,
                 held_after: Some(left),
             })
             .await
-            .expect("the close is booked");
-            let booked = in_storage(id).await;
-            assert!(booked.transaction_exit_verified && booked.exit_time.is_some());
+            .expect("the sold part is booked");
+            for position in [stored_position(id).await, memory_position(id).await] {
+                assert!(
+                    position.exit_time.is_none(),
+                    "unsold tokens were booked as exited"
+                );
+                assert!(!position.transaction_exit_verified);
+                assert_eq!(position.remaining_token_amount, Some(left));
+                assert_eq!(position.total_exited_amount, sold);
+                assert_eq!(position.partial_exit_count, 1);
+                assert_eq!(position.native_received, Some(1.05));
+                assert_eq!(position.exit_transaction_signature, None);
+            }
+            assert_eq!(exit_records(id).await, 1);
             assert_eq!(
                 common::position_events("exit_residual_unattributed").await,
                 1
@@ -2634,6 +2664,33 @@ fn wallet_history_close_reasons() -> [String; 3] {
     ]
 }
 
+/// A partial sale of 400_000 raw for 0.8 SOL, made at `sold_at`.
+fn partial_sale_at(id: i64, signature: &str, sold_at: DateTime<Utc>) -> PositionTransition {
+    match late_partial(id, Some(RawAmount::ZERO)) {
+        PositionTransition::PartialExitVerified {
+            position_id,
+            exit_amount,
+            native_received,
+            effective_exit_price,
+            fee_raw,
+            exit_percentage,
+            held_after,
+            ..
+        } => PositionTransition::PartialExitVerified {
+            position_id,
+            exit_amount,
+            native_received,
+            effective_exit_price,
+            fee_raw,
+            exit_time: sold_at,
+            exit_signature: signature.to_owned(),
+            exit_percentage,
+            held_after,
+        },
+        _ => unreachable!("a partial exit"),
+    }
+}
+
 #[test]
 fn a_sale_the_wallet_history_close_already_counts_is_not_booked_again() {
     common::run_isolated(
@@ -2643,46 +2700,158 @@ fn a_sale_the_wallet_history_close_already_counts_is_not_booked_again() {
             let _dir = common::isolated_env();
             let _cfg = common::config_guard();
             open_position(|_| {}).await;
-            for reason in wallet_history_close_reasons() {
-                let closed_at = Utc::now();
-                // The ledger closed the row from the chain: every disposal of the round up
-                // to its close is in the proceeds, and its exit is the round's last
-                // disposal.
-                let id = store_position(|position| {
-                    position.exit_time = Some(closed_at);
-                    position.transaction_exit_verified = true;
-                    position.closed_reason = Some(reason.clone());
-                    position.exit_transaction_signature = Some("last-disposal-sig".to_owned());
-                    position.native_received = Some(1.5);
-                    position.remaining_token_amount = Some(RawAmount::ZERO);
-                    position.total_exited_amount = RawAmount::new(HELD);
-                })
-                .await;
-                let before = in_storage(id).await;
+            // Both transitions that book a sale onto a closed row, with the proceeds the row
+            // holds after the one sale made after the close.
+            type Sale = fn(i64, &str, DateTime<Utc>) -> PositionTransition;
+            let sales: [(&str, Sale, f64); 2] = [
+                ("full sale", sale_at, 3.0),
+                ("partial sale", partial_sale_at, 2.3),
+            ];
+            for (kind, sale, received_after) in sales {
+                for reason in wallet_history_close_reasons() {
+                    let closed_at = Utc::now();
+                    // The ledger closed the row from the chain: every disposal of the round
+                    // up to its close is in the proceeds, and its exit is the round's last
+                    // disposal.
+                    let id = store_position(|position| {
+                        position.exit_time = Some(closed_at);
+                        position.transaction_exit_verified = true;
+                        position.closed_reason = Some(reason.clone());
+                        position.exit_transaction_signature = Some("last-disposal-sig".to_owned());
+                        position.native_received = Some(1.5);
+                        position.remaining_token_amount = Some(RawAmount::ZERO);
+                        position.total_exited_amount = RawAmount::new(HELD);
+                    })
+                    .await;
+                    let before = in_storage(id).await;
 
-                apply_transition(sale_at(
-                    id,
-                    &format!("{CLOSE_SIGNATURE}-{id}"),
-                    closed_at - chrono::Duration::minutes(5),
-                ))
-                .await
-                .expect("the sale is settled");
-                assert_unchanged(id, &before).await;
-                assert_eq!(
-                    exit_records(id).await,
-                    0,
-                    "a sale the close with reason {reason} counts is booked again"
-                );
+                    apply_transition(sale(
+                        id,
+                        &format!("{CLOSE_SIGNATURE}-{id}"),
+                        closed_at - chrono::Duration::minutes(5),
+                    ))
+                    .await
+                    .expect("the sale is settled");
+                    assert_unchanged(id, &before).await;
+                    assert_eq!(
+                        exit_records(id).await,
+                        0,
+                        "a {kind} the close with reason {reason} counts is booked again"
+                    );
 
-                apply_transition(sale_at(
-                    id,
-                    &format!("later-sale-sig-{id}"),
-                    closed_at + chrono::Duration::minutes(5),
-                ))
+                    apply_transition(sale(
+                        id,
+                        &format!("later-sale-sig-{id}"),
+                        closed_at + chrono::Duration::minutes(5),
+                    ))
+                    .await
+                    .expect("a sale after the close is booked");
+                    assert_eq!(exit_records(id).await, 1, "{kind}, {reason}");
+                    let received = in_storage(id).await.native_received.expect("proceeds");
+                    assert!(
+                        (received - received_after).abs() < 1e-12,
+                        "{kind}, {reason}: {received}"
+                    );
+                }
+            }
+        },
+    );
+}
+
+/// A full sale of `sold` raw tokens for `received` SOL.
+fn sale_of(id: i64, signature: &str, sold: u128, received: f64) -> PositionTransition {
+    PositionTransition::ExitVerified {
+        position_id: id,
+        effective_exit_price: received / sold as f64 * 1e6,
+        native_received: received,
+        fee_raw: SWAP_FEE_RAW,
+        exit_time: Utc::now(),
+        exit_signature: signature.to_owned(),
+        exit_amount: RawAmount::new(sold),
+        held_after: Some(RawAmount::ZERO),
+    }
+}
+
+#[test]
+fn a_bot_close_that_sold_tokens_the_row_never_acquired_flags_its_basis() {
+    common::run_isolated(
+        module_path!(),
+        "a_bot_close_that_sold_tokens_the_row_never_acquired_flags_its_basis",
+        || async {
+            let _dir = common::isolated_env();
+            let _cfg = common::config_guard();
+
+            // The wallet held twice what the row holds: a buy made outside the bot that no
+            // sync had absorbed went out with the close. The proceeds are booked whole, so
+            // the row carries the tokens and its basis is no longer complete.
+            let id = open_position(|_| {}).await;
+            apply_transition(sale_of(id, CLOSE_SIGNATURE, 2 * HELD, 2.4))
                 .await
-                .expect("a sale after the close is booked");
-                assert_eq!(exit_records(id).await, 1);
-                assert_eq!(in_storage(id).await.native_received, Some(3.0));
+                .expect("the close is booked");
+            assert_acquired_balances(id, 2 * HELD).await;
+            for position in [stored_position(id).await, memory_position(id).await] {
+                assert!(position.exit_time.is_some());
+                assert_eq!(position.total_exited_amount, RawAmount::new(2 * HELD));
+                assert_eq!(position.native_received, Some(2.4));
+                assert!(!position.basis_complete);
+                assert!(!position.has_trustworthy_pnl());
+            }
+
+            // An excess that is dust of what the row acquired is the residue of an earlier
+            // round: the basis stays complete.
+            let id = store_position(|_| {}).await;
+            apply_transition(sale_of(id, "dust-close-sig", HELD + 10, 1.5))
+                .await
+                .expect("the close is booked");
+            assert_acquired_balances(id, HELD).await;
+            for position in [stored_position(id).await, memory_position(id).await] {
+                assert!(position.exit_time.is_some());
+                assert_eq!(position.native_received, Some(1.5));
+                assert!(position.basis_complete);
+                assert!(position.has_trustworthy_pnl());
+            }
+        },
+    );
+}
+
+#[test]
+fn a_close_that_sold_a_confirming_bot_add_leaves_it_to_the_add() {
+    common::run_isolated(
+        module_path!(),
+        "a_close_that_sold_a_confirming_bot_add_leaves_it_to_the_add",
+        || async {
+            let _dir = common::isolated_env();
+            let _cfg = common::config_guard();
+
+            // The close sold the row's holding and the tokens of its own add, still
+            // confirming. The add books them when it verifies, once, and the basis stays
+            // complete: nothing was bought outside the bot.
+            let id = open_position(|_| {}).await;
+            register_dca(id).await;
+            let added: u128 = 500_000;
+            apply_transition(sale_of(id, CLOSE_SIGNATURE, HELD + added, 1.8))
+                .await
+                .expect("the close is booked");
+            assert_acquired_balances(id, HELD).await;
+
+            apply_transition(PositionTransition::DcaVerified {
+                position_id: id,
+                tokens_bought: RawAmount::new(added),
+                native_spent: 0.5,
+                effective_price: 1.0,
+                fee_raw: SWAP_FEE_RAW,
+                dca_time: Utc::now(),
+                dca_signature: DCA_SIGNATURE.to_owned(),
+                held_after: Some(RawAmount::ZERO),
+            })
+            .await
+            .expect("the add is booked");
+            assert_acquired_balances(id, HELD + added).await;
+            for position in [stored_position(id).await, memory_position(id).await] {
+                assert!(position.exit_time.is_some(), "the position stays closed");
+                assert_eq!(position.total_exited_amount, RawAmount::new(HELD + added));
+                assert_eq!(position.dca_count, 1);
+                assert!(position.basis_complete);
             }
         },
     );
@@ -2776,6 +2945,120 @@ fn a_dca_after_a_write_off_with_tokens_held_reopens_the_position() {
             assert_eq!(entry_records(id).await, 1);
             assert_eq!(common::position_events("fill_after_force_close").await, 1);
             assert_eq!(common::position_events("dca_verified").await, 1);
+        },
+    );
+}
+
+#[test]
+fn a_late_buy_on_a_ledger_closed_row_does_not_count_the_outside_sale() {
+    common::run_isolated(
+        module_path!(),
+        "a_late_buy_on_a_ledger_closed_row_does_not_count_the_outside_sale",
+        || async {
+            let _dir = common::isolated_env();
+            let _cfg = common::config_guard();
+            state::init_global_position_semaphore(1);
+            // The ledger closed the row on a sale made outside the bot: the exit signature is
+            // that sale's, and the row holds no exit record for it.
+            let id = open_position(|position| {
+                position.exit_time = Some(Utc::now() - chrono::Duration::hours(1));
+                position.transaction_exit_verified = true;
+                position.closed_reason =
+                    Some(screenerbot::positions::ledger::CLOSED_EXTERNALLY.to_owned());
+                position.exit_transaction_signature = Some("outside-sale-sig".to_owned());
+                position.native_received = Some(1.5);
+                position.remaining_token_amount = Some(RawAmount::ZERO);
+                position.total_exited_amount = RawAmount::new(HELD);
+                position.partial_exit_count = 0;
+            })
+            .await;
+            assert_eq!(exit_records(id).await, 0);
+
+            apply_transition(late_dca(id, Some(RawAmount::new(500_000))))
+                .await
+                .expect("the late DCA is booked");
+
+            for position in [stored_position(id).await, memory_position(id).await] {
+                assert!(position.exit_time.is_none(), "the position is open again");
+                assert_eq!(position.dca_count, 1);
+                assert_eq!(
+                    position.partial_exit_count, 0,
+                    "the outside sale is no partial exit of the row"
+                );
+                assert_eq!(
+                    position.remaining_token_amount,
+                    Some(RawAmount::new(500_000))
+                );
+                assert_eq!(position.total_exited_amount, RawAmount::new(HELD));
+            }
+            assert_eq!(exit_records(id).await, 0);
+        },
+    );
+}
+
+#[test]
+fn a_late_buy_on_a_row_the_bot_closed_counts_its_recorded_sale_once() {
+    common::run_isolated(
+        module_path!(),
+        "a_late_buy_on_a_row_the_bot_closed_counts_its_recorded_sale_once",
+        || async {
+            let _dir = common::isolated_env();
+            let _cfg = common::config_guard();
+            state::init_global_position_semaphore(1);
+            let id = open_position(|_| {}).await;
+            apply_transition(sale_at(id, CLOSE_SIGNATURE, Utc::now()))
+                .await
+                .expect("the bot's close is booked");
+            assert_eq!(exit_records(id).await, 1);
+
+            apply_transition(late_dca(id, Some(RawAmount::new(500_000))))
+                .await
+                .expect("the late DCA is booked");
+
+            for position in [stored_position(id).await, memory_position(id).await] {
+                assert!(position.exit_time.is_none(), "the position is open again");
+                assert_eq!(position.dca_count, 1);
+                assert_eq!(
+                    position.partial_exit_count, 1,
+                    "the bot's recorded sale is a partial exit of the reopened row"
+                );
+            }
+        },
+    );
+}
+
+#[test]
+fn a_late_sale_that_reopens_a_write_off_counts_its_own_record() {
+    common::run_isolated(
+        module_path!(),
+        "a_late_sale_that_reopens_a_write_off_counts_its_own_record",
+        || async {
+            let _dir = common::isolated_env();
+            let _cfg = common::config_guard();
+            // A write-off a late sale settles while the wallet still holds part of the round
+            // reopens with that sale as its one partial exit: the record the booking writes.
+            let id = written_off(|_| {}).await;
+            apply_transition(PositionTransition::ExitVerified {
+                position_id: id,
+                effective_exit_price: 1.5,
+                native_received: 0.6,
+                fee_raw: SWAP_FEE_RAW,
+                exit_time: Utc::now(),
+                exit_signature: "late-sale-sig".to_owned(),
+                exit_amount: RawAmount::new(400_000),
+                held_after: Some(RawAmount::new(600_000)),
+            })
+            .await
+            .expect("the late sale is booked");
+            assert_eq!(exit_records(id).await, 1);
+            for position in [stored_position(id).await, memory_position(id).await] {
+                assert!(position.exit_time.is_none(), "the position is open again");
+                assert_eq!(
+                    position.remaining_token_amount,
+                    Some(RawAmount::new(600_000))
+                );
+                assert_eq!(position.partial_exit_count, 1);
+            }
         },
     );
 }

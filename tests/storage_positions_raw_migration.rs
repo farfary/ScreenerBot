@@ -45,6 +45,10 @@ DROP INDEX IF EXISTS idx_positions_entry_signature;
 DROP INDEX IF EXISTS idx_positions_exit_signature;
 ";
 
+/// A released-layout position row: id, mint, exit price, exit time, native received, token
+/// amount, remaining amount, exited amount and P&L.
+const INSERT_RELEASED_POSITION: &str = "INSERT INTO positions (id, chain_id, wallet_address, mint, symbol, name, entry_price, entry_time, exit_price, exit_time, position_type, entry_size_sol, total_size_sol, price_highest, price_lowest, sol_received, entry_fee_lamports, exit_fee_lamports, token_amount, remaining_token_amount, total_exited_amount, pnl, archived) VALUES (?1, 'solana', 'wallet', ?2, 'SYM', 'Token', 0.5, '2025-01-01T00:00:00Z', ?3, ?4, 'buy', 1.5, 2.5, 0.75, 0.25, ?5, 11, 13, ?6, ?7, ?8, ?9, 0)";
+
 fn open(dir: &Path) -> Connection {
     Connection::open(dir.join("data/positions.db")).unwrap()
 }
@@ -177,7 +181,7 @@ fn assert_checks_pass(conn: &Connection, case: &str) {
 /// Synthetic rows every released layout holds: a closed auto-trader position, an open one,
 /// a manual one, an entry and an exit, and a deleted last position id.
 fn seed_released_rows(conn: &Connection, legacy_manual_flag: bool) {
-    let insert = "INSERT INTO positions (id, chain_id, wallet_address, mint, symbol, name, entry_price, entry_time, exit_price, exit_time, position_type, entry_size_sol, total_size_sol, price_highest, price_lowest, sol_received, entry_fee_lamports, exit_fee_lamports, token_amount, remaining_token_amount, total_exited_amount, pnl, archived) VALUES (?1, 'solana', 'wallet', ?2, 'SYM', 'Token', 0.5, '2025-01-01T00:00:00Z', ?3, ?4, 'buy', 1.5, 2.5, 0.75, 0.25, ?5, 11, 13, ?6, ?7, ?8, ?9, 0)";
+    let insert = INSERT_RELEASED_POSITION;
     conn.execute(
         insert,
         params![
@@ -715,4 +719,288 @@ fn malformed_legacy_amount_preserves_original_storage() {
         .unwrap(),
         0
     );
+}
+
+/// One position row for the leg counter repair: its mint, whether it is open, its origin, the
+/// counters it carries, and the records it holds as (entries flagged as adds, other entries,
+/// partial exits, recorded closing sales).
+struct CounterCase {
+    id: i64,
+    open: bool,
+    origin: &'static str,
+    dca_count: i64,
+    partial_exit_count: i64,
+    adds: i64,
+    first_entries: i64,
+    partials: i64,
+    closing_sales: i64,
+}
+
+fn seed_counter_case(conn: &Connection, case: &CounterCase) {
+    let exit_time = (!case.open).then_some("2025-01-02T00:00:00Z");
+    conn.execute(
+        INSERT_RELEASED_POSITION,
+        params![
+            case.id,
+            format!("mint-{}", case.id),
+            None::<f64>,
+            exit_time,
+            None::<f64>,
+            1_000,
+            1_000,
+            0,
+            None::<f64>
+        ],
+    )
+    .unwrap();
+    // The row's own entry is the first of its first-entry records; an add or a handover
+    // record carries another swap's signature.
+    conn.execute(
+        "UPDATE positions SET origin_kind = ?2, dca_count = ?3, partial_exit_count = ?4, entry_transaction_signature = ?5 WHERE id = ?1",
+        params![
+            case.id,
+            case.origin,
+            case.dca_count,
+            case.partial_exit_count,
+            format!("entry-{}-1", case.id)
+        ],
+    )
+    .unwrap();
+    let mut record = 0;
+    for (count, is_dca, kind) in [(case.first_entries, 0, "entry"), (case.adds, 1, "add")] {
+        for _ in 0..count {
+            record += 1;
+            conn.execute(
+                "INSERT INTO position_entries (position_id, wallet_address, timestamp, amount, price, sol_spent, transaction_signature, is_dca, fees_lamports) VALUES (?1, 'wallet', '2025-01-01T00:00:00Z', 10, 0.5, 1.5, ?2, ?3, 11)",
+                params![case.id, format!("{kind}-{}-{record}", case.id), is_dca],
+            )
+            .unwrap();
+        }
+    }
+    let mut exit = 0;
+    for (count, is_partial) in [(case.partials, 1), (case.closing_sales, 0)] {
+        for _ in 0..count {
+            exit += 1;
+            conn.execute(
+                "INSERT INTO position_exits (position_id, wallet_address, timestamp, amount, price, sol_received, transaction_signature, is_partial, percentage, fees_lamports) VALUES (?1, 'wallet', '2025-01-02T00:00:00Z', 5, 0.75, 1.0, ?2, ?3, 25.0, 13)",
+                params![case.id, format!("exit-{}-{exit}", case.id), is_partial],
+            )
+            .unwrap();
+        }
+    }
+}
+
+/// Open bot rows whose counters a release before the ledger stopped writing them left above
+/// their records are lowered to those records by the production initializer, once; every
+/// other row, and the records themselves, are kept as stored.
+#[test]
+fn inflated_leg_counters_are_lowered_by_the_initializer_once() {
+    if std::env::var_os(CHILD).is_some() {
+        return;
+    }
+    // (counters expected after the repair) per row.
+    let cases = [
+        // Inflated by outside buys and a wallet-history close: lowered to the records.
+        (
+            CounterCase {
+                id: 11,
+                open: true,
+                origin: "auto",
+                dca_count: 3,
+                partial_exit_count: 2,
+                adds: 1,
+                first_entries: 1,
+                partials: 1,
+                closing_sales: 0,
+            },
+            (1, 1),
+        ),
+        // Inflated adds only: the partial counter already equals its records.
+        (
+            CounterCase {
+                id: 12,
+                open: true,
+                origin: "manual",
+                dca_count: 4,
+                partial_exit_count: 1,
+                adds: 0,
+                first_entries: 1,
+                partials: 1,
+                closing_sales: 0,
+            },
+            (0, 1),
+        ),
+        // Counters equal to their records.
+        (
+            CounterCase {
+                id: 13,
+                open: true,
+                origin: "auto",
+                dca_count: 1,
+                partial_exit_count: 1,
+                adds: 1,
+                first_entries: 1,
+                partials: 1,
+                closing_sales: 0,
+            },
+            (1, 1),
+        ),
+        // Counters below their records are never raised.
+        (
+            CounterCase {
+                id: 14,
+                open: true,
+                origin: "copy",
+                dca_count: 0,
+                partial_exit_count: 0,
+                adds: 2,
+                first_entries: 1,
+                partials: 2,
+                closing_sales: 0,
+            },
+            (0, 0),
+        ),
+        // A wallet-derived row counts the round's acquisitions, not records.
+        (
+            CounterCase {
+                id: 15,
+                open: true,
+                origin: "external",
+                dca_count: 5,
+                partial_exit_count: 3,
+                adds: 0,
+                first_entries: 1,
+                partials: 0,
+                closing_sales: 0,
+            },
+            (5, 3),
+        ),
+        // A closed row is settled.
+        (
+            CounterCase {
+                id: 16,
+                open: false,
+                origin: "auto",
+                dca_count: 6,
+                partial_exit_count: 6,
+                adds: 1,
+                first_entries: 1,
+                partials: 1,
+                closing_sales: 0,
+            },
+            (6, 6),
+        ),
+        // A row a later buy reopened counts its recorded closing sale as a partial exit.
+        (
+            CounterCase {
+                id: 18,
+                open: true,
+                origin: "auto",
+                dca_count: 1,
+                partial_exit_count: 4,
+                adds: 1,
+                first_entries: 1,
+                partials: 1,
+                closing_sales: 1,
+            },
+            (1, 2),
+        ),
+        (
+            CounterCase {
+                id: 19,
+                open: true,
+                origin: "auto",
+                dca_count: 1,
+                partial_exit_count: 2,
+                adds: 1,
+                first_entries: 1,
+                partials: 1,
+                closing_sales: 1,
+            },
+            (1, 2),
+        ),
+        // A row with no entry record has nothing to count against.
+        (
+            CounterCase {
+                id: 17,
+                open: true,
+                origin: "auto",
+                dca_count: 2,
+                partial_exit_count: 2,
+                adds: 0,
+                first_entries: 0,
+                partials: 0,
+                closing_sales: 0,
+            },
+            (2, 2),
+        ),
+        // Records of other swaps alone, such as a handover, are not the row's own: its
+        // adds may be missing from them, so its counters are kept.
+        (
+            CounterCase {
+                id: 20,
+                open: true,
+                origin: "auto",
+                dca_count: 3,
+                partial_exit_count: 0,
+                adds: 1,
+                first_entries: 0,
+                partials: 0,
+                closing_sales: 0,
+            },
+            (3, 0),
+        ),
+    ];
+
+    for (created_by, sql) in CREATED_BY {
+        let dir = tempfile::tempdir().unwrap();
+        let conn = seed(dir.path(), sql);
+        for (case, _) in &cases {
+            seed_counter_case(&conn, case);
+        }
+        let records = |conn: &Connection| -> (i64, i64) {
+            conn.query_row(
+                "SELECT (SELECT COUNT(*) FROM position_entries), (SELECT COUNT(*) FROM position_exits)",
+                [],
+                |row| Ok((row.get(0)?, row.get(1)?)),
+            )
+            .unwrap()
+        };
+        let released_records = records(&conn);
+        drop(conn);
+
+        boot(dir.path(), true);
+        let conn = open(dir.path());
+        assert_checks_pass(&conn, created_by);
+        let counters = |conn: &Connection| -> Vec<(i64, i64, i64)> {
+            conn.prepare("SELECT id, dca_count, partial_exit_count FROM positions ORDER BY id")
+                .unwrap()
+                .query_map([], |row| Ok((row.get(0)?, row.get(1)?, row.get(2)?)))
+                .unwrap()
+                .collect::<rusqlite::Result<_>>()
+                .unwrap()
+        };
+        let mut expected: Vec<(i64, i64, i64)> = cases
+            .iter()
+            .map(|(case, (dca, partial))| (case.id, *dca, *partial))
+            .collect();
+        expected.sort_unstable();
+        assert_eq!(counters(&conn), expected, "{created_by}: first launch");
+        assert_eq!(
+            records(&conn),
+            released_records,
+            "{created_by}: records kept"
+        );
+
+        let repaired = (schema(&conn), contents(&conn));
+        drop(conn);
+        boot(dir.path(), true);
+        let conn = open(dir.path());
+        assert_checks_pass(&conn, created_by);
+        assert_eq!(
+            (schema(&conn), contents(&conn)),
+            repaired,
+            "{created_by}: second launch"
+        );
+    }
 }

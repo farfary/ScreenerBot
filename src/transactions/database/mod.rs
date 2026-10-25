@@ -37,6 +37,9 @@ pub use types::{
 // Re-export bootstrap types
 pub use bootstrap::BootstrapState;
 
+// Re-export the delta-hole flag shared by the transaction processor and the ledger
+pub use deltas::{note_subject_delta_gap, take_subject_delta_gap};
+
 // Re-export main database struct
 pub use operations::TransactionDatabase;
 pub(crate) use schema::SCHEMA;

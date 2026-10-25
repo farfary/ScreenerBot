@@ -187,6 +187,43 @@ pub(super) fn merge_ledger_duplicates(conn: &Connection) -> Result<u64> {
     Ok(merged)
 }
 
+/// Lower the leg counters of open bot rows to the records they hold.
+///
+/// Releases before the ledger stopped writing leg counters set `dca_count` from the round's
+/// traded acquisitions, outside buys included, and counted a wallet-history close as a
+/// partial exit when the row reopened. A bot row's counters count its own records: the
+/// entries flagged as adds and the partial exits. An open bot row holding the record of its own entry whose counter is
+/// above its records is lowered to them; a counter at or below its records, a closed row, a
+/// wallet-derived row and a row without its own entry record, whose adds may be missing
+/// from the records, are left as they are.
+///
+/// Idempotent: a lowered counter equals its records and is no longer a candidate. Returns
+/// the rows lowered.
+pub(super) fn lower_inflated_leg_counts(conn: &Connection) -> Result<u64> {
+    const OWN_ADDS: &str = "(SELECT COUNT(*) FROM position_entries e WHERE e.position_id = positions.id AND e.is_dca = 1)";
+    // On an open row every exit record counts: its partial exits, and the recorded closing
+    // sale of a row a later buy reopened, which the bookings count as a partial exit.
+    const OWN_PARTIALS: &str =
+        "(SELECT COUNT(*) FROM position_exits x WHERE x.position_id = positions.id)";
+    let lowered = conn
+        .execute(
+            &format!(
+                "UPDATE positions SET
+                    dca_count = MIN(dca_count, {OWN_ADDS}),
+                    partial_exit_count = MIN(partial_exit_count, {OWN_PARTIALS})
+                 WHERE exit_time IS NULL
+                   AND origin_kind != 'external'
+                   AND EXISTS (SELECT 1 FROM position_entries e WHERE e.position_id = positions.id AND e.transaction_signature = positions.entry_transaction_signature)
+                   AND (dca_count > {OWN_ADDS} OR partial_exit_count > {OWN_PARTIALS})"
+            ),
+            [],
+        )
+        .map_err(|e| Error::SchemaMigration {
+            detail: format!("failed to lower inflated position leg counters: {e}"),
+        })?;
+    Ok(lowered as u64)
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;

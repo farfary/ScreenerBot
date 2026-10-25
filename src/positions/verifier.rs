@@ -79,9 +79,10 @@ pub enum ExitResidual {
     Dust,
     /// The holding is more than dust while another open position of the mint, `position_id`,
     /// has an unverified entry: it may be that position's tokens, and a retried close sells
-    /// the wallet's holding, so the close is booked rather than retried. A mint has one open
-    /// position, so this needs two open rows of one mint: a breach of that invariant, which
-    /// only a store holding duplicate open rows from before the open-round index can reach.
+    /// the wallet's holding, so the close is not retried against the wallet: it is booked
+    /// for what it sold (see [`unsold_own_holding`]). A mint has one open position, so this
+    /// needs two open rows of one mint: a breach of that invariant, which only a store
+    /// holding duplicate open rows from before the open-round index can reach.
     Unattributable { position_id: i64 },
     /// More than dust of the holding is the position's own: another close must sell it.
     Own,
@@ -141,6 +142,19 @@ pub async fn classify_exit_residual(
     Ok(ExitResidual::Own)
 }
 
+/// The position's own holding as booked, when a sale of `sold` leaves more than dust of what
+/// it acquired unsold. `None` when the sale covers the position's holding up to dust, or the
+/// position is not in memory.
+pub async fn unsold_own_holding(position_id: Option<i64>, sold: RawAmount) -> Option<RawAmount> {
+    let position = get_position_by_id(position_id?).await?;
+    let held = position.held_amount()?;
+    let acquired = held
+        .checked_add(position.total_exited_amount)
+        .unwrap_or(RawAmount::new(u128::MAX));
+    let unsold = held.checked_sub(sold).unwrap_or(RawAmount::ZERO);
+    (!is_dust(unsold, acquired)).then_some(held)
+}
+
 /// Classifies the holding a full exit of `item`'s position left, `remaining_balance`, after
 /// a sale of `sold` (see [`classify_exit_residual`]), and reports a close that will be booked
 /// with it: a log line that says which residual it is, and for a residual that cannot be
@@ -172,11 +186,11 @@ pub async fn check_exit_residual(
     Ok(residual)
 }
 
-/// Records a full close booked while the wallet still holds more than dust of the mint that
+/// Records a full close verified while the wallet still holds more than dust of the mint that
 /// cannot be told apart from the tokens of `blocking_position`, whose entry is not verified.
 /// Two open positions of one mint breach the one-open-position invariant, so this is an
 /// error log and an error event naming that position and the part of what the closing
-/// position held that its sale left unsold, which no position manages.
+/// position held that its sale left unsold.
 async fn record_unattributed_residual(
     item: &VerificationItem,
     remaining_balance: RawAmount,
@@ -196,7 +210,7 @@ async fn record_unattributed_residual(
     logger::error(
         LogTag::Positions,
         &format!(
-            "Invariant breach: mint {} has a second open position {blocking_position} beside closing position {:?}. Exit verified with residual {remaining_balance} left in the wallet: the entry of position {blocking_position} is not verified, so the residual may be its tokens and the close is booked without a retry; the sale left {unsold} of what this position held unsold",
+            "Invariant breach: mint {} has a second open position {blocking_position} beside closing position {:?}. The exit left {remaining_balance} in the wallet: the entry of position {blocking_position} is not verified, so the residual may be its tokens and is never sold for this position; the sale left {unsold} of what this position held unsold",
             item.mint, item.position_id
         ),
     );
@@ -574,7 +588,16 @@ pub async fn verify_transaction(item: &VerificationItem) -> VerificationOutcome 
                         ));
                 }
             };
-            if residual == ExitResidual::Own {
+            // A residual the position cannot be told from the other positions' tokens is
+            // not retried against the wallet; the position's own booked holding decides
+            // whether the sale left any of it unsold.
+            let unsold_own = match residual {
+                ExitResidual::Unattributable { .. } => {
+                    unsold_own_holding(item.position_id, RawAmount::from(exit_amount)).await
+                }
+                _ => None,
+            };
+            if residual == ExitResidual::Own || unsold_own.is_some() {
                 logger::warning(
                     LogTag::Positions,
                     &format!(
@@ -601,7 +624,10 @@ pub async fn verify_transaction(item: &VerificationItem) -> VerificationOutcome 
                 // close_position_direct sells the primary ATA only). The fill is recorded as
                 // a partial exit, then the exit is cleared for a retry of the residual.
                 let sold_pct = {
-                    let total = remaining_balance.raw() as f64 + exit_amount as f64;
+                    let total = match unsold_own {
+                        Some(held) => held.raw() as f64,
+                        None => remaining_balance.raw() as f64 + exit_amount as f64,
+                    };
                     if total > 0.0 {
                         ((exit_amount as f64 / total) * 100.0).clamp(0.0, 100.0)
                     } else {

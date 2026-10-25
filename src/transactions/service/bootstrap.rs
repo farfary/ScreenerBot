@@ -719,6 +719,7 @@ pub async fn perform_initial_transaction_bootstrap(
         // Then repair anything recent the extraction missed. The backfill above runs
         // once per version and cannot fix a gap that opens afterwards.
         if let Err(e) = db.fill_subject_delta_gaps(&subject.address()).await {
+            crate::transactions::database::note_subject_delta_gap();
             logger::warning(
                 LogTag::Transactions,
                 &format!("Subject deltas gap fill failed: {e}"),

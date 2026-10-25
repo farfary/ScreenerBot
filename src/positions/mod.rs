@@ -11,7 +11,6 @@ mod error;
 mod holdings;
 pub use error::{Error, Result};
 pub mod helpers;
-pub use helpers as lib; // Backward compatibility alias
 pub mod ledger;
 pub mod loss_detection;
 pub mod metrics;

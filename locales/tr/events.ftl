@@ -209,7 +209,7 @@ events-connectivity-endpoint-recovered = Uç nokta { $from } durumundan sağlık
 events-position-entry-not-landed = { $symbol } alımı zincire ulaşmadı; pozisyonu kaldırıldı
 events-position-fill-after-force-close = { $symbol } için bir işlem, pozisyonu zorla kapatıldıktan sonra zincire ulaştı; işlem kaydedildi ve pozisyon yeniden hesaplandı
 events-position-swap-unbooked = { $symbol } için zincirde onaylanan bir takas henüz pozisyonuna kaydedilmedi; kaydedilene kadar yeniden doğrulanıyor
-events-position-exit-residual-unattributed = { $symbol } kapatıldı ancak bu mint'in tokenları cüzdanda kaldı. Girişi doğrulanmamış { $blocking } pozisyonuna ait olabilirler; bu yüzden satılmadılar ve hiçbir pozisyon onları yönetmiyor
+events-position-exit-residual-unattributed = { $symbol } çıkışı bu mint'in tokenlarını cüzdanda bıraktı. Girişi doğrulanmamış { $blocking } pozisyonuna ait olabilirler; bu yüzden satılmazlar ve hiçbir pozisyon onları yönetmez
 
 events-category-swap = Takas
 events-category-transaction = İşlem

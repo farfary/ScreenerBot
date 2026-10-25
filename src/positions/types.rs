@@ -315,11 +315,14 @@ pub struct Position {
     pub remaining_token_amount: Option<RawAmount>, // Current holdings after partial exits
     pub total_exited_amount: RawAmount,            // Cumulative tokens sold
     pub average_exit_price: Option<f64>,           // Weighted average exit price
-    pub partial_exit_count: u32,                   // Number of partial exits executed
+    pub partial_exit_count: u32, // Partial exits booked on the row (plus the recorded closing sale of a reopened row)
 
     // DCA tracking
-    pub dca_count: u32,                       // Number of additional entries (DCA)
-    pub average_entry_price: f64,             // Weighted average entry price (all entries)
+    // Adds after the first entry. On a bot row: the adds booked on it (its DCAs and the
+    // handovers it received, each with an entry record). On a wallet-derived row: the round's
+    // traded acquisitions after its first.
+    pub dca_count: u32,
+    pub average_entry_price: f64, // Weighted average entry price (all entries)
     pub last_dca_time: Option<DateTime<Utc>>, // Last DCA timestamp for cooldown
 
     // ==================== ARCHIVAL ====================

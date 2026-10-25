@@ -472,8 +472,11 @@ async fn position_is_closed(position_id: i64) -> bool {
         .is_some_and(|position| super::round_state::is_closed(&position))
 }
 
-/// Every mint with a swap in flight — a pending partial exit, a pending DCA add, or a bot
-/// swap submitted whose pending state is not recorded yet.
+/// Every mint with a swap in flight — a pending partial exit, a pending DCA add, a bot
+/// swap submitted whose pending state is not recorded yet, or a position whose memory holds
+/// a submitted full exit that is not verified. The last one covers a submission whose row
+/// write failed: the database row shows no exit in flight, and the memory copy is the only
+/// record of it.
 ///
 /// The wallet-history ledger reads this before reconciling a bot-executed position
 /// against the chain: a mint whose balance is about to move again must be left to the
@@ -501,6 +504,16 @@ pub async fn mints_with_pending_swaps() -> std::collections::HashSet<String> {
             .unwrap_or_else(|poisoned| poisoned.into_inner())
             .keys()
             .map(|(_, mint)| mint.clone()),
+    );
+    mints.extend(
+        super::state::POSITIONS
+            .read()
+            .await
+            .iter()
+            .filter(|position| {
+                position.exit_transaction_signature.is_some() && !position.transaction_exit_verified
+            })
+            .map(|position| position.mint.clone()),
     );
 
     mints

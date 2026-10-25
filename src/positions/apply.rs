@@ -23,17 +23,18 @@ use super::db::{
 use super::ledger::is_wallet_history_close_reason;
 use super::pnl::position_pnl;
 use super::round_state::{
-    attributable_held, follow_round, hand_over_leg, hand_over_round, is_closed, FollowOutcome,
-    Handover, Leg,
+    attributable_held, follow_round, hand_over_leg, hand_over_round, is_closed, is_dust,
+    FollowOutcome, Handover, Leg,
 };
 use super::types::{EntryRecord, ExitRecord, Position};
 use super::{
     loss_detection::process_position_loss_detection,
     state::{
-        clear_pending_dca_swap, get_position_by_id, get_position_by_mint, other_swap_in_flight,
-        position_has_pending_swap, publish_committed, reclaim_position_slot, release_position_slot,
-        remove_position_by_id, remove_signature_from_index, set_position_archived_in_memory,
-        update_position_state, with_booking_lock,
+        clear_pending_dca_swap, get_pending_dca_swaps_for_mint, get_position_by_id,
+        get_position_by_mint, other_swap_in_flight, position_has_pending_swap, publish_committed,
+        reclaim_position_slot, release_position_slot, remove_position_by_id,
+        remove_signature_from_index, set_position_archived_in_memory, update_position_state,
+        with_booking_lock,
     },
     transitions::PositionTransition,
 };
@@ -115,7 +116,8 @@ pub async fn apply_transition(transition: PositionTransition) -> Result<ApplyEff
                 row.apply_entry_fill(&fill);
                 let late = after_write_off
                     .map(|after_write_off| {
-                        late_fill(row, reads, reading, store_chain, after_write_off)
+                        let recorded = closing_sale_recorded(row, reads)?;
+                        late_fill(row, reads, reading, store_chain, after_write_off, recorded)
                             .and_then(|late| bring_back_reopened(row, reads, late))
                     })
                     .transpose()?;
@@ -226,6 +228,13 @@ pub async fn apply_transition(transition: PositionTransition) -> Result<ApplyEff
                 exit_time,
             )
             .await;
+            // A bot add of this position still confirming may have bought part of what the
+            // close sold. Its own verification books those tokens, so the close leaves them
+            // to it rather than taking them for a buy made outside the bot.
+            let own_add_pending = get_pending_dca_swaps_for_mint(&snapshot.mint)
+                .await
+                .iter()
+                .any(|add| add.position_id == position_id);
             let store_chain = get_store_chain().await?;
             let fill = CloseFill {
                 effective_exit_price,
@@ -257,14 +266,21 @@ pub async fn apply_transition(transition: PositionTransition) -> Result<ApplyEff
                         return Ok(Booking::Skip(None));
                     }
                     let after_write_off = row.synthetic_exit;
+                    let earlier_sale_recorded = closing_sale_recorded(row, reads)?;
                     row.book_late_close(&fill);
-                    Some(late_fill(
-                        row,
-                        reads,
-                        reading,
-                        store_chain,
-                        after_write_off,
-                    )?)
+                    // A write-off is from then on closed by this sale.
+                    if after_write_off {
+                        row.exit_transaction_signature = Some(exit_signature.clone());
+                    }
+                    // This booking writes the sale's exit record, so a reopened row counts
+                    // it as a partial exit, and the earlier closing sale too when the row
+                    // holds its record.
+                    let late =
+                        late_fill(row, reads, reading, store_chain, after_write_off, true)?;
+                    if earlier_sale_recorded && late.follow == FollowOutcome::Reopened {
+                        row.partial_exit_count += 1;
+                    }
+                    Some(late)
                 } else {
                     if row.transaction_exit_verified {
                         return Ok(Booking::Skip(None));
@@ -273,6 +289,9 @@ pub async fn apply_transition(transition: PositionTransition) -> Result<ApplyEff
                     // only; the verified swap supplies it to the row.
                     if row.exit_transaction_signature.is_none() {
                         row.exit_transaction_signature = Some(exit_signature.clone());
+                    }
+                    if !own_add_pending {
+                        absorb_unbooked_sale(row, exit_amount)?;
                     }
                     row.book_close(&fill)?;
                     None
@@ -613,9 +632,20 @@ pub async fn apply_transition(transition: PositionTransition) -> Result<ApplyEff
                     fees_raw: Some(fee_raw),
                 });
                 if is_closed(row) {
+                    if ledger_close_counts(row, exit_time) {
+                        logger::info(
+                            LogTag::Positions,
+                            &format!(
+                                "Partial exit {exit_signature} of position {position_id} is already in the proceeds of its close from wallet history"
+                            ),
+                        );
+                        return Ok(Booking::Skip(None));
+                    }
                     let after_write_off = row.synthetic_exit;
                     row.book_late_partial_exit(native_received, fee_raw);
-                    let late = late_fill(row, reads, reading, store_chain, after_write_off)?;
+                    let recorded = closing_sale_recorded(row, reads)?;
+                    let late =
+                        late_fill(row, reads, reading, store_chain, after_write_off, recorded)?;
                     return Ok(Booking::Write {
                         record: Some(record),
                         outcome: Some(late),
@@ -652,7 +682,7 @@ pub async fn apply_transition(transition: PositionTransition) -> Result<ApplyEff
                 logger::debug(
                     LogTag::Positions,
                     &format!(
-                        "Partial exit {exit_signature} already recorded for position {position_id} - skipping"
+                        "Partial exit {exit_signature} of position {position_id} is already booked or already counted - skipping"
                     ),
                 );
                 // Still drop the pending marks, or the mint stays flagged as "a partial
@@ -868,7 +898,6 @@ pub async fn apply_transition(transition: PositionTransition) -> Result<ApplyEff
                 }
                 super::state::clear_partial_exit_pending(&position.mint).await;
             }
-            // TODO: Implement retry logic if needed
         }
 
         // ==================== DCA TRANSITIONS ====================
@@ -1159,7 +1188,6 @@ pub async fn apply_transition(transition: PositionTransition) -> Result<ApplyEff
                 );
                 return Err(err);
             }
-            // TODO: Implement retry logic if needed
         }
 
         // =================================================================
@@ -1496,26 +1524,69 @@ fn late_fill_holding(
     ))
 }
 
+/// Books the part of a full sale of `sold` tokens that exceeds what the open `row` holds as
+/// an acquisition of the row, and flags its basis incomplete.
+///
+/// A close sells the wallet's whole holding, which can include tokens bought outside the bot
+/// that no sync has absorbed yet. Their proceeds are booked on the row with the rest of the
+/// sale, so their tokens join the row's acquired amount, while their cost is not on the row
+/// and its P&L is no longer trustworthy. An excess that is dust of what the row acquired is
+/// the residue of an earlier round and is ignored.
+fn absorb_unbooked_sale(row: &mut Position, sold: RawAmount) -> Result<()> {
+    let held = row.remaining_token_amount.unwrap_or(RawAmount::ZERO);
+    let Some(excess) = sold
+        .checked_sub(held)
+        .filter(|excess| *excess > RawAmount::ZERO)
+    else {
+        return Ok(());
+    };
+    let acquired = row.acquired_amount().ok_or_else(|| Error::AmountOverflow {
+        mint: row.mint.clone(),
+        operation: "absorbing an unbooked sale",
+    })?;
+    if is_dust(excess, acquired) {
+        return Ok(());
+    }
+    row.book_acquisition(excess)?;
+    row.basis_complete = false;
+    Ok(())
+}
+
+/// Whether the sale that closed `row` is one the row holds an exit record for. A write-off
+/// sold nothing, and a close the wallet history made carries a sale no record of the row
+/// holds; neither becomes a partial exit when the row reopens.
+fn closing_sale_recorded(row: &Position, reads: &BookingReads<'_>) -> Result<bool> {
+    if row.synthetic_exit {
+        return Ok(false);
+    }
+    match row.exit_transaction_signature.as_deref() {
+        Some(signature) => reads.exit_record_exists(signature),
+        None => Ok(false),
+    }
+}
+
 /// Makes a closed `row`, with a late swap's own leg already booked on it, follow its round
 /// (see [`late_fill_holding`]). Beside another open position of the mint, the holding is
-/// handed to that position at the row's average cost.
+/// handed to that position at the row's average cost. `closing_sale_recorded` is whether
+/// the sale that closed the row has, or is being given, an exit record of the row.
 fn late_fill(
     row: &mut Position,
     reads: &BookingReads<'_>,
     reading: LateFillReading,
     chain: ChainId,
     after_write_off: bool,
+    closing_sale_recorded: bool,
 ) -> Result<LateFill> {
     let held = late_fill_holding(row, reads, &reading, chain, RawAmount::ZERO)?;
     let Some(open_round_id) = reads.open_round_beside(&row.mint)? else {
         return Ok(LateFill {
             after_write_off,
-            follow: follow_round(row, held)?,
+            follow: follow_round(row, held, closing_sale_recorded)?,
             handed_to: None,
             unarchived: false,
         });
     };
-    let (follow, handover) = hand_over_round(row, held)?;
+    let (follow, handover) = hand_over_round(row, held, closing_sale_recorded)?;
     let handed_to = handover
         .map(|handover| {
             hand_over(
@@ -1558,7 +1629,9 @@ struct KeptLeg {
 /// [`hand_over_leg`]: the part the wallet still holds goes to the open position at the buy's
 /// own price and fee share, with any of the row's earlier tokens still held at the row's
 /// average cost, and the row keeps only the part no longer held. Returns the part the row
-/// booked, which its own entry record carries; the records of one buy sum to the buy.
+/// booked, which its own entry record carries. When part of the buy went to the open
+/// position, the row's record carries only the kept part and the open position's handover
+/// record carries the rest, plus any earlier tokens that moved with it.
 fn late_dca(
     row: &mut Position,
     reads: &BookingReads<'_>,
@@ -1574,18 +1647,19 @@ fn late_dca(
         },
         fee_raw: dca.fill.fee_raw,
     };
+    let closing_sale_recorded = closing_sale_recorded(row, reads)?;
     let held = late_fill_holding(row, reads, &reading, chain, dca.fill.tokens_bought)?;
     let Some(open_round_id) = reads.open_round_beside(&row.mint)? else {
         row.book_dca(dca.fill)?;
         let late = LateFill {
             after_write_off,
-            follow: follow_round(row, held)?,
+            follow: follow_round(row, held, closing_sale_recorded)?,
             handed_to: None,
             unarchived: false,
         };
         return Ok((late, whole));
     };
-    let (follow, split) = hand_over_leg(row, dca.fill, held)?;
+    let (follow, split) = hand_over_leg(row, dca.fill, held, closing_sale_recorded)?;
     if follow != FollowOutcome::HandedOver {
         let late = LateFill {
             after_write_off,

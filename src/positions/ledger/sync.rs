@@ -244,8 +244,6 @@ struct RoundShare {
     acquired: RawAmount,
     /// The row's booked SOL plus the SOL of every outside traded acquisition of its part.
     invested_native: f64,
-    /// The row's booked entries plus the outside traded acquisitions of its part.
-    entries: u32,
     /// The wallet's holding the row can own.
     held: RawAmount,
     has_outside_acquisition: bool,
@@ -290,7 +288,6 @@ fn round_share(
     let own = &attribution.own;
     let mut acquired = own.booked_acquired;
     let mut invested_native = own.booked_invested_native;
-    let mut entries = u32::try_from(own.entry_signatures.len()).unwrap_or(u32::MAX);
     let mut has_outside_acquisition = false;
     let mut outside_acquisitions_priced = true;
     let mut basis_complete = true;
@@ -315,7 +312,6 @@ fn round_share(
                         outside_acquisitions_priced = false;
                         continue;
                     }
-                    entries = entries.saturating_add(1);
                     match sol_quote(event) {
                         Some(sol) => invested_native += sol,
                         None => outside_acquisitions_priced = false,
@@ -329,7 +325,6 @@ fn round_share(
     Some(RoundShare {
         acquired,
         invested_native,
-        entries,
         held: attributable_held(
             RawAmount::new(round.balance_raw),
             attribution.held_elsewhere,
@@ -1099,12 +1094,16 @@ fn build_position(
 /// the proceeds as booked, and so does an outside acquisition of the part that the row's
 /// books do not carry, by amount or by a complete basis (see [`book_outside_proceeds`]).
 ///
+/// Growth precedes everything else: the row absorbs every outside acquisition of its part
+/// before it shrinks, credits an outside sale or closes. The sizes growth sets already
+/// include the sales of the part, so a grown row is not shrunk again.
+///
 /// A row closed on a wallet read that missed its holding reopens when its round is open
 /// again (see [`closed_on_missed_holding`]). A round closed by a sale outside the bot closes
-/// the row. Its proceeds are the round's
-/// when the row owns the whole round alone, and the row's own recorded proceeds plus its
-/// part's outside sales when it is charged a part; P&L is the realized P&L of the row as
-/// closed.
+/// the row. Its proceeds are the round's when the row owns the whole round alone, and the
+/// row's own recorded proceeds plus its part's outside sales when it is charged a part and
+/// its books carry every outside acquisition of the part; P&L is the realized P&L of the row
+/// as closed.
 fn reconcile_owned_position(
     existing: &Position,
     round: &LedgerRound,
@@ -1137,6 +1136,7 @@ fn reconcile_owned_position(
 
     let outside = outside_proceeds(round, earlier, attribution);
     let claimed_remaining = position.remaining_token_amount.unwrap_or_default();
+    let acquired_before = position.acquired_amount();
     let close_proceeds = if attribution.charges_part(round, earlier) {
         let Some(share) = round_share(round, earlier, attribution)
             .filter(|share| share.acquired >= claimed_remaining)
@@ -1148,8 +1148,10 @@ fn reconcile_owned_position(
             }
             return close_owned_position(position, existing, round, CloseProceeds::Unknown, now);
         };
-        if share.has_outside_acquisition && share.held > claimed_remaining && share.history_complete
-        {
+        let grown = share.has_outside_acquisition
+            && share.history_complete
+            && acquired_before.is_some_and(|before| share.acquired > before);
+        if grown {
             adopt_external_growth(
                 &mut position,
                 Growth {
@@ -1159,35 +1161,44 @@ fn reconcile_owned_position(
                         .acquired
                         .checked_sub(share.held)
                         .unwrap_or(RawAmount::ZERO),
-                    entries: share.entries,
                     invested_native: share.basis_known.then_some(share.invested_native),
                 },
                 round.decimals,
             );
         }
         if round.is_open {
-            shrink_to(&mut position, existing, claimed_remaining, share.held);
+            if !grown {
+                shrink_to(&mut position, existing, claimed_remaining, share.held);
+            }
             book_outside_proceeds(&mut position, &attribution.own, outside);
             return position;
         }
-        if share.history_complete {
+        if !share.history_complete {
+            CloseProceeds::Unknown
+        } else if outside
+            .as_ref()
+            .is_some_and(|sold| !outside_acquisitions_carried(&position, &attribution.own, sold))
+        {
+            CloseProceeds::Unknown
+        } else {
             CloseProceeds::Outside {
                 own_native: attribution.own.booked_received_native,
                 sold: outside,
             }
-        } else {
-            CloseProceeds::Unknown
         }
     } else {
         let observed_remaining = RawAmount::new(round.balance_raw);
-        if observed_remaining > claimed_remaining && round.history_complete {
+        let grown = round.history_complete
+            && round_has_outside_acquisition(round, attribution)
+            && acquired_before
+                .is_some_and(|before| RawAmount::new(round.total_acquired_raw) > before);
+        if grown {
             adopt_external_growth(
                 &mut position,
                 Growth {
                     held: observed_remaining,
                     acquired: RawAmount::new(round.total_acquired_raw),
                     exited: RawAmount::new(round.total_disposed_raw),
-                    entries: round.entry_count,
                     invested_native: round
                         .basis_complete
                         .then(|| whole_round_invested(existing, round, &attribution.own)),
@@ -1196,12 +1207,14 @@ fn reconcile_owned_position(
             );
         }
         if round.is_open {
-            shrink_to(
-                &mut position,
-                existing,
-                claimed_remaining,
-                observed_remaining,
-            );
+            if !grown {
+                shrink_to(
+                    &mut position,
+                    existing,
+                    claimed_remaining,
+                    observed_remaining,
+                );
+            }
             book_outside_proceeds(&mut position, &attribution.own, outside);
             return position;
         }
@@ -1270,16 +1283,38 @@ fn book_outside_proceeds(
     let Some(outside) = outside else {
         return;
     };
-    let covered = outside.acquired == RawAmount::ZERO
+    if outside_acquisitions_carried(position, own, &outside) {
+        position.native_received = Some(own.booked_received_native + outside.native);
+    }
+}
+
+/// True when the row's books carry every acquisition of the part that happened outside the
+/// bot, by amount and by a complete basis: what the row ever acquired, held plus exited,
+/// covers its own booked acquisitions plus the outside ones. A part with no outside
+/// acquisition is carried trivially.
+fn outside_acquisitions_carried(
+    position: &Position,
+    own: &TraderLegs,
+    outside: &OutsideProceeds,
+) -> bool {
+    outside.acquired == RawAmount::ZERO
         || (position.basis_complete
             && own
                 .booked_acquired
                 .checked_add(outside.acquired)
                 .zip(position.acquired_amount())
-                .is_some_and(|(needed, acquired)| acquired >= needed));
-    if covered {
-        position.native_received = Some(own.booked_received_native + outside.native);
-    }
+                .is_some_and(|(needed, acquired)| acquired >= needed))
+}
+
+/// True when an event of `round` acquired tokens outside the bot: no position of the mint
+/// booked its signature.
+fn round_has_outside_acquisition(round: &LedgerRound, attribution: &RoundAttribution) -> bool {
+    round.events.iter().any(|event| {
+        matches!(
+            event.kind,
+            LedgerEventKind::Entry | LedgerEventKind::Add | LedgerEventKind::Receive
+        ) && attribution.is_outside(&event.signature)
+    })
 }
 
 /// Which proceeds a round closed outside the bot books on the row it closes.
@@ -1388,8 +1423,6 @@ struct Growth {
     held: RawAmount,
     acquired: RawAmount,
     exited: RawAmount,
-    /// Traded acquisitions, the entry included.
-    entries: u32,
     /// What everything acquired cost, `None` when part of it has no SOL price.
     invested_native: Option<f64>,
 }
@@ -1408,8 +1441,10 @@ struct Growth {
 /// holding, everything acquired is held, so the average is the whole basis over the holding,
 /// recomputed in full on each pass. After a sale, the cost of the tokens sold is no longer
 /// held: the growth since the row's own books is one buy of the newly acquired tokens for the
-/// newly invested SOL, blended into the row's average. The callers adopt only when the
-/// holding grew past what the row claims, so the step is taken once per increase.
+/// newly invested SOL, blended into the row's average. The callers adopt only when the part
+/// acquired more than the row carries, so the step is taken once per increase. The leg
+/// counters are not touched: they count the row's own recorded legs, and only the bookings
+/// write them.
 fn adopt_external_growth(position: &mut Position, growth: Growth, decimals: u8) {
     let acquired_before = position.acquired_amount().unwrap_or(RawAmount::ZERO);
     let invested_before = position.total_size_native;
@@ -1417,7 +1452,6 @@ fn adopt_external_growth(position: &mut Position, growth: Growth, decimals: u8) 
     position.remaining_token_amount = Some(growth.held);
     position.token_amount = Some(growth.acquired);
     position.total_exited_amount = growth.exited;
-    position.dca_count = growth.entries.saturating_sub(1);
 
     let Some(invested_native) = growth.invested_native else {
         position.basis_complete = false;
@@ -1485,7 +1519,6 @@ fn differs_owned(existing: &Position, fresh: &Position) -> bool {
         || existing.remaining_token_amount != fresh.remaining_token_amount
         || existing.token_amount != fresh.token_amount
         || existing.total_exited_amount != fresh.total_exited_amount
-        || existing.dca_count != fresh.dca_count
         || existing.basis_complete != fresh.basis_complete
         || !same_money(existing.total_size_native, fresh.total_size_native)
         || !same_money(existing.average_entry_price, fresh.average_entry_price)
@@ -1552,6 +1585,9 @@ fn short_mint(mint: &str) -> String {
 /// Reduce the wallet's processed history into rounds and write the missing/changed
 /// external position rows.
 ///
+/// A processed own-wallet transaction noted as lacking its deltas is repaired first; when
+/// the repair fails nothing is reduced or written.
+///
 /// Never fails the caller in a way that matters: every step degrades to "sync nothing"
 /// rather than corrupting an existing position. Safe to call repeatedly — a wallet whose
 /// history has not moved produces an empty plan and writes nothing.
@@ -1567,6 +1603,23 @@ pub async fn sync_wallet_history() -> super::super::error::Result<SyncSummary> {
     else {
         return Err(Error::NotInitialised);
     };
+
+    // A processed transaction known to lack its deltas unbalances the chain of balances the
+    // reduction reads, and every round after it would be reduced as an incomplete history.
+    // The hole is repaired first, and a failed repair stops the reduction until the next one.
+    if crate::transactions::database::take_subject_delta_gap() {
+        if let Err(e) = transactions_db
+            .fill_subject_delta_gaps(&wallet_address)
+            .await
+        {
+            crate::transactions::database::note_subject_delta_gap();
+            logger::warning(
+                LogTag::Positions,
+                &format!("Wallet-history sync skipped: the subject delta gap fill failed: {e}"),
+            );
+            return Ok(SyncSummary::default());
+        }
+    }
 
     let summary = sync_rounds(&transactions_db, &wallet_address).await?;
     reconcile_replaced_stores(&transactions_db).await;

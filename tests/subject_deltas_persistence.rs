@@ -22,6 +22,7 @@ use crate::common;
 
 use serde_json::json;
 
+use screenerbot::transactions::database::{note_subject_delta_gap, take_subject_delta_gap};
 use screenerbot::transactions::deltas::{DeltaKind, SubjectAssetDelta};
 use screenerbot::transactions::{Subject, Transaction, TransactionDatabase};
 
@@ -158,10 +159,10 @@ async fn deltas_are_written_live_and_any_gap_is_repaired_on_the_next_boot() {
     assert_eq!(repaired_again, 0, "nothing is left to repair");
     assert_eq!(db.count_subject_deltas(&wallet).await.expect("count"), 4);
 
-    // ---- 4. The scan is bounded by the ledger's newest slot ----
-    // Everything older than the newest delta was reduced when it arrived, so an old
-    // transaction is deliberately NOT re-examined. Without that bound this pass would
-    // re-read the whole raw history — tens of thousands of JSON blobs — every boot.
+    // ---- 4. A hole below newer deltas is found too ----
+    // The chain of balances the ledger reduces breaks at any missing transaction, however
+    // many newer ones were stored after it: the scan covers every raw transaction without
+    // deltas, not only those above the newest stored slot.
     let ancient = swap("ancient-signature", &wallet, 10, 250_000_000, 750_000);
     db.store_raw_transaction(subject.clone(), &ancient)
         .await
@@ -171,10 +172,31 @@ async fn deltas_are_written_live_and_any_gap_is_repaired_on_the_next_boot() {
         db.fill_subject_delta_gaps(&wallet)
             .await
             .expect("gap fill runs"),
-        0,
-        "history below the watermark is not rescanned"
+        1,
+        "the hole below the newest delta is filled"
     );
-    assert_eq!(db.count_subject_deltas(&wallet).await.expect("count"), 4);
+    assert_eq!(db.count_subject_deltas(&wallet).await.expect("count"), 6);
+    let deltas = db.get_subject_deltas(&wallet).await.expect("read deltas");
+    let ancient_token = deltas
+        .iter()
+        .find(|delta| delta.mint == MINT && delta.signature == "ancient-signature")
+        .expect("the old transaction's token leg is stored");
+    assert_eq!(ancient_token.delta_raw, 750_000);
+    assert_eq!(ancient_token.slot, Some(10));
+    assert_eq!(
+        db.fill_subject_delta_gaps(&wallet)
+            .await
+            .expect("gap fill runs again"),
+        0,
+        "a filled hole is not found again"
+    );
+
+    // The hole flag is raised once per noted gap and cleared by whoever repairs it.
+    assert!(!take_subject_delta_gap());
+    note_subject_delta_gap();
+    note_subject_delta_gap();
+    assert!(take_subject_delta_gap());
+    assert!(!take_subject_delta_gap());
 
     // ---- 5. A failed transaction moves nothing and must never reach the ledger ----
     let mut failed = swap("failed-signature", &wallet, 300, 1_000_000_000, 3_000_000);
@@ -186,7 +208,20 @@ async fn deltas_are_written_live_and_any_gap_is_repaired_on_the_next_boot() {
         0,
         "a failed transaction has no balance movements"
     );
-    assert_eq!(db.count_subject_deltas(&wallet).await.expect("count"), 4);
+    assert_eq!(db.count_subject_deltas(&wallet).await.expect("count"), 6);
+
+    // A failed transaction kept as raw data is not a gap: the scan leaves it alone.
+    db.store_raw_transaction(subject.clone(), &failed)
+        .await
+        .expect("store the failed raw transaction");
+    assert_eq!(
+        db.fill_subject_delta_gaps(&wallet)
+            .await
+            .expect("gap fill runs"),
+        0,
+        "a failed transaction is not decoded again"
+    );
+    assert_eq!(db.count_subject_deltas(&wallet).await.expect("count"), 6);
 
     // ---- 6. A cached blob that hides its timestamp is repaired from the row itself ----
     // Blobs cached before `TransactionDetails` renamed the field spell it `block_time`,
@@ -209,7 +244,7 @@ async fn deltas_are_written_live_and_any_gap_is_repaired_on_the_next_boot() {
             .await
             .expect("gap fill runs"),
         1,
-        "the transaction above the watermark is reduced"
+        "only the undated transaction is left to reduce"
     );
 
     let deltas = db.get_subject_deltas(&wallet).await.expect("read deltas");
@@ -266,7 +301,7 @@ async fn deltas_are_written_live_and_any_gap_is_repaired_on_the_next_boot() {
         .filter(|row| row.signature.starts_with("wide-"))
         .collect();
     assert_eq!(retrieved_wide, wide);
-    assert_eq!(db.count_subject_deltas(&wallet).await.unwrap(), 10);
+    assert_eq!(db.count_subject_deltas(&wallet).await.unwrap(), 12);
     assert_eq!(
         db.get_subject_deltas("other-wallet").await.unwrap(),
         vec![other_wallet]

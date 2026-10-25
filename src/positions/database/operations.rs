@@ -17,7 +17,9 @@ use crate::positions::types::{Position, PositionManagement, PositionOrigin};
 use crate::positions::{Error, Result};
 
 use super::open_round::{install_open_round_index, query_open_round_id, OPEN_ROUND_INDEX_NAME};
-use super::provenance::{merge_ledger_duplicates, migrate_position_provenance};
+use super::provenance::{
+    lower_inflated_leg_counts, merge_ledger_duplicates, migrate_position_provenance,
+};
 use super::raw_migration::{canonicalize_amount_tables, migrate_pending_partial_exit_amounts};
 use super::types::*;
 
@@ -53,8 +55,8 @@ fn step(tx: &Transaction<'_>, context: &SchemaContext) -> std::result::Result<()
 }
 
 /// Brings the store to the current schema and returns what each step changed: tables,
-/// historical columns, unit-neutral names, the canonical amount tables, ledger merges,
-/// indexes and the data migrations, in dependency order. Foreign keys are off because a
+/// historical columns, unit-neutral names, the canonical amount tables, ledger merges, leg
+/// counter repairs, indexes and the data migrations, in dependency order. Foreign keys are off because a
 /// rebuilt root table is dropped before its replacement takes its name; the rebuild
 /// checks them before commit.
 fn create_schema(tx: &Transaction<'_>, chains: &[ChainId]) -> Result<Vec<String>> {
@@ -122,6 +124,14 @@ fn create_schema(tx: &Transaction<'_>, chains: &[ChainId]) -> Result<Vec<String>
             &format!(
                 "Merged {merged} duplicate wallet-history rows into the positions they belong to"
             ),
+        ),
+    }
+
+    match lower_inflated_leg_counts(tx)? {
+        0 => {}
+        lowered => logger::info(
+            LogTag::Positions,
+            &format!("Lowered the leg counters of {lowered} open positions to their records"),
         ),
     }
 

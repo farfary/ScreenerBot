@@ -239,6 +239,7 @@ impl TransactionProcessor {
                     .store_transaction_deltas(&self.wallet_pubkey.to_string(), &transaction)
                     .await
                 {
+                    crate::transactions::database::note_subject_delta_gap();
                     logger::warning(
                         LogTag::Transactions,
                         &format!("Failed to store subject deltas for {signature}: {e}"),
