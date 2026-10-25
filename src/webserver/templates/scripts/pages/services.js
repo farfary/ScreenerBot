@@ -263,6 +263,7 @@ function createLifecycle() {
           minWidth: 140,
           wrap: false,
           render: (v) => `<strong>${v ? Utils.escapeHtml(serviceName(v)) : ABSENT}</strong>`,
+          searchValue: (row) => (row.name ? serviceName(row.name) : ""),
         },
         {
           id: "health",

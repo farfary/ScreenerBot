@@ -782,7 +782,6 @@ export function createFilteringRenderers({ state, $: _$, Utils, requestManager: 
             <span class="config-field-bound-label">${Utils.escapeHtml(I18n.t("filtering-field-min"))}</span>
             ${renderNumberInput(min, source, I18n.attr("filtering-field-min-aria", "aria-label", { label: row.label }))}${unit}
           </span>
-          <span class="config-field-range-sep" aria-hidden="true">–</span>
           <span class="config-field-bound">
             <span class="config-field-bound-label">${Utils.escapeHtml(I18n.t("filtering-field-max"))}</span>
             ${renderNumberInput(max, source, I18n.attr("filtering-field-max-aria", "aria-label", { label: row.label }))}${unit}

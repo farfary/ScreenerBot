@@ -117,7 +117,6 @@ shell-notification-filter-clear =
     .aria-label = مسح عوامل التصفية
 shell-notification-list =
     .aria-label = الإشعارات
-shell-notification-empty = لا توجد إجراءات بعد
 shell-notification-loading-more = جارٍ تحميل المزيد...
 shell-notification-back-to-top =
     .title = العودة إلى الأعلى

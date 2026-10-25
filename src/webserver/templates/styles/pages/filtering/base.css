@@ -328,7 +328,7 @@
 .filtering-config-list {
   /* Range rows put two inputs in the control track, so it is wider here than
      the Configuration page's single-value default. */
-  --config-field-control-width: clamp(240px, 26vw, 380px);
+  --config-field-control-width: clamp(240px, 30vw, 440px);
 
   display: flex;
   flex-direction: column;

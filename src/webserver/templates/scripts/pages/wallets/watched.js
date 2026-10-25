@@ -639,7 +639,11 @@ export function createWatchedWallets({
   }
 
   function formatTime(value) {
-    return Utils.formatTimestamp(value, { fallback: I18n.t("format-unknown") });
+    return Utils.formatTimestamp(value, {
+      includeYear: false,
+      includeSeconds: false,
+      fallback: I18n.t("format-unknown"),
+    });
   }
 
   function reset() {

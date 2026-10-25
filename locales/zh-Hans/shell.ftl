@@ -117,7 +117,6 @@ shell-notification-filter-clear =
     .aria-label = 清除筛选
 shell-notification-list =
     .aria-label = 通知
-shell-notification-empty = 暂无操作
 shell-notification-loading-more = 正在加载更多...
 shell-notification-back-to-top =
     .title = 回到顶部

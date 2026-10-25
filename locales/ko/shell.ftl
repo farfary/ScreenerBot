@@ -117,7 +117,6 @@ shell-notification-filter-clear =
     .aria-label = 필터 지우기
 shell-notification-list =
     .aria-label = 알림
-shell-notification-empty = 아직 작업이 없습니다
 shell-notification-loading-more = 더 불러오는 중...
 shell-notification-back-to-top =
     .title = 맨 위로

@@ -115,7 +115,7 @@ export function applyHeaderMixin(PositionDetailsDialog) {
     const usdNote = I18n.t("positions-header-usd-note");
 
     if (this._isSettled()) {
-      const exitPrice = pos.average_exit_price || pos.exit_price;
+      const exitPrice = this._exitFillPrice(pos);
       return [
         metric(
           I18n.t("positions-header-exit-price"),

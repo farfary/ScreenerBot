@@ -106,7 +106,6 @@ shell-notification-filter-clear =
     .aria-label = Xóa bộ lọc
 shell-notification-list =
     .aria-label = Thông báo
-shell-notification-empty = Chưa có hành động nào
 shell-notification-loading-more = Đang tải thêm...
 shell-notification-back-to-top =
     .title = Về đầu trang

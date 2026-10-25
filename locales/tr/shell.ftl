@@ -106,7 +106,6 @@ shell-notification-filter-clear =
     .aria-label = Filtreleri temizle
 shell-notification-list =
     .aria-label = Bildirimler
-shell-notification-empty = Henüz eylem yok
 shell-notification-loading-more = Daha fazla yükleniyor...
 shell-notification-back-to-top =
     .title = Başa dön

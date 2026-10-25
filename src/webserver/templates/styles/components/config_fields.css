@@ -296,12 +296,17 @@
 }
 
 /* Range row: a `min_x` / `max_x` pair is ONE parameter with two bounds, so it
-   is one row with two inputs — never two rows repeating the same subject. The
-   inputs share the track equally and drop the single-value max-width. */
+   is one row with two inputs — never two rows repeating the same subject. Each
+   bound is sized from what it must show — nine digits, the unit and the
+   stepper, the same gutter the shell reserves — instead of splitting the track
+   in halves, so a long value is never clipped under its unit. When the two
+   bounds do not fit the track side by side, the second wraps beneath the first. */
 .config-field-range {
   display: flex;
+  flex-wrap: wrap;
   align-items: center;
-  gap: 6px;
+  justify-content: flex-end;
+  gap: 6px 12px;
   width: 100%;
   min-width: 0;
 }
@@ -310,8 +315,8 @@
   display: flex;
   align-items: center;
   gap: 6px;
-  flex: 1 1 0;
   min-width: 0;
+  max-width: 100%;
 }
 
 .config-field-range .config-field-bound-label {
@@ -322,16 +327,13 @@
   color: var(--text-muted);
 }
 
-/* Both bounds share the track equally, so the shell — not the input — is what
-   grows, and it drops the single-value cap. */
+/* The shell, not the input, carries the width and drops the single-value cap:
+   the input's left padding plus nine digits of the data face, then the gutter
+   that holds the unit and the stepper. */
 .config-field-range .config-field-bound .number-field {
-  flex: 1 1 0;
-  max-width: none;
-}
-
-.config-field-range .config-field-range-sep {
-  color: var(--text-muted);
-  font-size: 0.75rem;
+  flex: 0 1 auto;
+  width: calc(var(--number-field-gutter) + 12px + 9ch);
+  max-width: 100%;
 }
 
 /* A row whose group or source master switch is off: muted, but fully editable —

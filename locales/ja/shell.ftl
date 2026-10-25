@@ -117,7 +117,6 @@ shell-notification-filter-clear =
     .aria-label = フィルターをクリア
 shell-notification-list =
     .aria-label = 通知
-shell-notification-empty = アクションはまだありません
 shell-notification-loading-more = さらに読み込み中...
 shell-notification-back-to-top =
     .title = 先頭に戻る

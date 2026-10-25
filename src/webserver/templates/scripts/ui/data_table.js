@@ -95,6 +95,8 @@
  * - visible: Initial visibility (optional, default: true)
  * - render: (value, row) => string - Custom cell renderer (optional)
  * - sortFn: (rowA, rowB) => number - Custom sort function (optional)
+ * - searchValue: (row) => string - Text the client-side search matches when the cell
+ *   shows something other than the raw field (optional, default: row[id])
  * - className: CSS class for cells (optional)
  * - fallback: Default value for null/undefined (optional, default: "—")
  * - wrap: Text wrapping behavior (optional)
@@ -157,6 +159,7 @@ import { applyClientPaginationMixin } from "./data_table/client_pagination.js";
 import { applyServerPaginationMixin } from "./data_table/server_pagination.js";
 import { applyEventHandlersMixin } from "./data_table/event_handlers.js";
 import { columnLayoutSignature, reconcileSavedLayout } from "./data_table/layout_state.js";
+import { rowMatchesSearch } from "./data_table/search.js";
 
 /** The small arrow beside a sorted column's label; `aria-sort` carries the state. */
 function sortArrow(direction) {
@@ -1732,12 +1735,7 @@ export class DataTable {
     // Apply search (client-side only)
     if (this._getSearchMode() !== "server" && this.state.searchQuery) {
       const query = this.state.searchQuery.toLowerCase();
-      data = data.filter((row) => {
-        return this.options.columns.some((col) => {
-          const value = String(row[col.id] || "").toLowerCase();
-          return value.includes(query);
-        });
-      });
+      data = data.filter((row) => rowMatchesSearch(row, this.options.columns, query));
     }
 
     // Apply client filters through the normalized toolbar index. Typed controls

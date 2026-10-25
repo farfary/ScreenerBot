@@ -108,7 +108,6 @@ shell-notification-filter-clear =
     .aria-label = Hapus filter
 shell-notification-list =
     .aria-label = Notifikasi
-shell-notification-empty = Belum ada aksi
 shell-notification-loading-more = Memuat lebih banyak...
 shell-notification-back-to-top =
     .title = Kembali ke atas

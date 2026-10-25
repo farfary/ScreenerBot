@@ -117,7 +117,6 @@ shell-notification-filter-clear =
     .aria-label = Borrar filtros
 shell-notification-list =
     .aria-label = Notificaciones
-shell-notification-empty = Aún no hay acciones
 shell-notification-loading-more = Cargando más...
 shell-notification-back-to-top =
     .title = Volver arriba

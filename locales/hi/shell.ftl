@@ -106,7 +106,6 @@ shell-notification-filter-clear =
     .aria-label = फ़िल्टर साफ़ करें
 shell-notification-list =
     .aria-label = नोटिफ़िकेशन
-shell-notification-empty = अभी कोई कार्रवाई नहीं
 shell-notification-loading-more = और लोड हो रहा है...
 shell-notification-back-to-top =
     .title = ऊपर जाएं

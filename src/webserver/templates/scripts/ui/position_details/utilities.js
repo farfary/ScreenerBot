@@ -40,6 +40,15 @@ export function applyUtilitiesMixin(PositionDetailsDialog) {
     return Boolean(pos && (pos.transaction_exit_verified || pos.exit_time != null));
   };
 
+  /**
+   * The price the exit filled at, the counterpart of the average entry (also a fill price).
+   * `exit_price` is the market price at the moment the exit was decided, so it stands in only
+   * for a position with no recorded fill.
+   */
+  proto._exitFillPrice = function (pos) {
+    return pos.effective_exit_price || pos.average_exit_price || pos.exit_price;
+  };
+
   proto._formatPrice = function (price) {
     if (price === null || price === undefined) return "—";
     return Utils.formatPriceSubscript(price, { trim: false });

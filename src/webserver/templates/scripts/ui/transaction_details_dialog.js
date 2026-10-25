@@ -16,6 +16,7 @@ import { directionBadge } from "./transaction_direction.js";
 import { statusBadge } from "./transaction_status.js";
 import { venueLabel } from "./venue.js";
 import { renderStateView } from "./state_view.js";
+import { createExpandToggle } from "./expand_toggle.js";
 import { explorerMenuButton, openExplorerMenu } from "./context_menu.js";
 import {
   getIdentity,
@@ -952,7 +953,7 @@ export class TransactionDetailsDialog {
         <div class="instruction-card-body">
           <div class="instruction-detail">
             <span class="detail-label">${Utils.escapeHtml(I18n.t("transactions-dialog-instruction-program-id"))}</span>
-            <span class="detail-value">${renderAddress(programId, { explorer: "account" })}</span>
+            <span class="detail-value">${programId ? renderAddress(programId, { explorer: "account" }) : Utils.escapeHtml(I18n.t("transactions-dialog-unknown"))}</span>
           </div>
           ${
             accounts.length > 0
@@ -1173,6 +1174,23 @@ export class TransactionDetailsDialog {
     if (!tx) return;
 
     const rawData = tx.raw_transaction_data;
+    const sections =
+      rawData && typeof rawData === "object" && !Array.isArray(rawData)
+        ? Object.entries(rawData)
+        : [];
+    const rawBody = !rawData
+      ? `<pre class="raw-json">${Utils.escapeHtml(I18n.t("transactions-dialog-raw-empty"))}</pre>`
+      : sections.length > 0
+        ? sections
+            .map(
+              ([key, value]) => `
+          <details class="raw-section" open>
+            <summary class="raw-section-title">${Utils.escapeHtml(key)}</summary>
+            <pre class="raw-json">${Utils.escapeHtml(JSON.stringify(value, null, 2))}</pre>
+          </details>`
+            )
+            .join("")
+        : `<pre class="raw-json">${Utils.escapeHtml(JSON.stringify(rawData, null, 2))}</pre>`;
 
     content.innerHTML = `
       <div class="tx-raw-layout">
@@ -1181,14 +1199,8 @@ export class TransactionDetailsDialog {
             <i class="icon-copy"></i>
             ${Utils.escapeHtml(I18n.t("transactions-dialog-raw-copy"))}
           </button>
-          <button class="raw-expand-btn" id="expandAllBtn">
-            <i class="icon-chevrons-down"></i>
-            ${Utils.escapeHtml(I18n.t("common-action-expand-all"))}
-          </button>
         </div>
-        <div class="raw-json-container">
-          <pre class="raw-json" id="rawJsonPre">${rawData ? Utils.escapeHtml(JSON.stringify(rawData, null, 2)) : Utils.escapeHtml(I18n.t("transactions-dialog-raw-empty"))}</pre>
-        </div>
+        <div class="raw-json-container">${rawBody}</div>
       </div>
     `;
 
@@ -1199,6 +1211,20 @@ export class TransactionDetailsDialog {
         Utils.copyToClipboard(JSON.stringify(rawData, null, 2));
         Utils.notifyCopied(I18n.t("common-copied-json"));
       });
+    }
+
+    // Expand/collapse every raw section at once
+    if (sections.length > 0) {
+      const details = content.querySelectorAll(".raw-section");
+      const toggle = createExpandToggle({
+        expanded: true,
+        onToggle: (expanded) => {
+          details.forEach((section) => {
+            section.open = expanded;
+          });
+        },
+      });
+      content.querySelector(".raw-toolbar").appendChild(toggle.element);
     }
   }
 

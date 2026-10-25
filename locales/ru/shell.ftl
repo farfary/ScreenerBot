@@ -106,7 +106,6 @@ shell-notification-filter-clear =
     .aria-label = Сбросить фильтры
 shell-notification-list =
     .aria-label = Уведомления
-shell-notification-empty = Действий пока нет
 shell-notification-loading-more = Загрузка...
 shell-notification-back-to-top =
     .title = Наверх

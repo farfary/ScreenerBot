@@ -159,7 +159,7 @@ export function applySummaryMixin(PositionDetailsDialog) {
     if (!entry || !peak || !low) return "";
 
     const settled = this._isSettled();
-    const mark = settled ? pos.average_exit_price || pos.exit_price : pos.current_price;
+    const mark = settled ? this._exitFillPrice(pos) : pos.current_price;
     const vsEntry = (price) =>
       I18n.t("positions-fact-vs-entry", {
         percent: this._formatPct(((price - entry) / entry) * 100, 1),

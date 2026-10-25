@@ -117,7 +117,6 @@ shell-notification-filter-clear =
     .aria-label = پاک کردن فیلترها
 shell-notification-list =
     .aria-label = اعلان‌ها
-shell-notification-empty = هنوز اقدامی ثبت نشده است
 shell-notification-loading-more = در حال بارگذاری موارد بیشتر...
 shell-notification-back-to-top =
     .title = بازگشت به بالا

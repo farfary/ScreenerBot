@@ -807,7 +807,7 @@ async function loadTelegramAuthState(dialog, content) {
     const lockscreenData = await lockscreenResponse.json();
 
     if (!lockscreenResponse.ok) {
-      throw new Error(lockscreenData.error || I18n.t("settings-security-load-failed"));
+      throw new Error(apiErrorMessage(lockscreenData, I18n.t("settings-security-load-failed")));
     }
 
     const totpEnabled = lockscreenData.totp_enabled || false;

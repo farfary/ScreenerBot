@@ -33,7 +33,7 @@ export async function loadSecurityTab(dialog, content) {
       enabled: false,
       has_password: false,
       password_type: "pin6",
-      auto_lock_timeout_minutes: 0,
+      auto_lock_timeout_secs: 0,
       lock_on_blur: false,
     };
 

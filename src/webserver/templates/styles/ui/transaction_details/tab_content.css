@@ -451,8 +451,7 @@
   border-bottom: 1px solid var(--border-color);
 }
 
-.transaction-details-dialog .raw-copy-btn,
-.transaction-details-dialog .raw-expand-btn {
+.transaction-details-dialog .raw-copy-btn {
   display: flex;
   align-items: center;
   gap: 6px;
@@ -467,8 +466,7 @@
   transition: all var(--transition-fast);
 }
 
-.transaction-details-dialog .raw-copy-btn:hover,
-.transaction-details-dialog .raw-expand-btn:hover {
+.transaction-details-dialog .raw-copy-btn:hover {
   background: var(--bg-card-hover);
   color: var(--text-primary);
   border-color: var(--text-muted);
@@ -479,6 +477,19 @@
   overflow: auto;
   padding: 16px;
   background: var(--bg-primary);
+}
+
+.transaction-details-dialog .raw-section + .raw-section {
+  margin-top: 12px;
+}
+
+.transaction-details-dialog .raw-section-title {
+  font-family: var(--font-mono);
+  font-size: 0.75rem;
+  font-weight: 600;
+  color: var(--text-primary);
+  cursor: pointer;
+  margin-bottom: 6px;
 }
 
 .transaction-details-dialog .raw-json {

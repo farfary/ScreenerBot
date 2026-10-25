@@ -479,8 +479,8 @@ export function applyChartMixin(PositionDetailsDialog) {
     if (!entries.length && pos.entry_time && pos.entry_price) {
       entries = [{ timestamp: pos.entry_time, price: pos.entry_price, is_dca: false }];
     }
-    if (!exits.length && this._isSettled() && pos.exit_time && pos.exit_price) {
-      exits = [{ timestamp: pos.exit_time, price: pos.exit_price }];
+    if (!exits.length && this._isSettled() && pos.exit_time && this._exitFillPrice(pos)) {
+      exits = [{ timestamp: pos.exit_time, price: this._exitFillPrice(pos) }];
     }
     return { entries, exits };
   };

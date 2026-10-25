@@ -155,6 +155,7 @@ export function createUpdatesView(Utils) {
         I18n.t("updates-detail-last-checked"),
         Utils.formatTimestamp(state.last_check || state.last_check_attempt, {
           fallback: I18n.t("updates-detail-never"),
+          includeYear: false,
           includeSeconds: false,
         }),
       ]
