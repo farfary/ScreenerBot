@@ -22,7 +22,7 @@
 
 import * as Utils from "../core/utils.js";
 import { tradeToastKey } from "../core/action_toasts.js";
-import { requestManager, apiErrorMessage } from "../core/request_manager.js";
+import { requestManager, errorMessageOf } from "../core/request_manager.js";
 import { TradeActionDialog } from "./trade_action_dialog.js";
 
 // One dialog instance shared by every caller — it is modal, so there is never a
@@ -378,26 +378,10 @@ export async function submitTrade({ action, mint, result, btn = null }) {
       key: tradeToastKey(mint),
       type: "error",
       title: I18n.label(FAILURE_TITLE_LABELS, action),
-      message: await describeError(error),
+      message: await errorMessageOf(error, error?.message || null),
     });
     return false;
   } finally {
     if (btn) btn.disabled = false;
   }
-}
-
-/**
- * requestManager throws a generic `HTTP 400: Bad Request` on a failed response, so
- * the backend's actual reason ("insufficient balance", "force stop active", ...)
- * would be lost. It attaches the Response, so read the real message back off it.
- */
-async function describeError(error) {
-  try {
-    const body = await error?.response?.json();
-    const message = apiErrorMessage(body);
-    if (message) return message;
-  } catch {
-    // no JSON body — fall back below
-  }
-  return error?.message || null;
 }

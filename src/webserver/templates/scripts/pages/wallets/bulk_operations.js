@@ -8,6 +8,7 @@
  */
 
 import { apiErrorMessage } from "../../core/request_manager.js";
+import { downloadBlob } from "../../core/download.js";
 import { renderNamedAddress } from "../../ui/token_identity.js";
 
 // Phrase typed to confirm an export that includes private keys. It is compared
@@ -700,16 +701,7 @@ export function createBulkOperations({
         if (match) filename = match[1];
       }
 
-      // Download the file
-      const blob = await response.blob();
-      const url = window.URL.createObjectURL(blob);
-      const a = document.createElement("a");
-      a.href = url;
-      a.download = filename;
-      document.body.appendChild(a);
-      a.click();
-      document.body.removeChild(a);
-      window.URL.revokeObjectURL(url);
+      downloadBlob(filename, await response.blob());
 
       Utils.showToast(I18n.t("wallets-bulk-export-done", { filename }), "success");
       hideBulkExportModal();

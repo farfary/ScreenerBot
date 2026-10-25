@@ -13,6 +13,7 @@ import * as Hints from "../../core/hints.js";
 import { HintTrigger } from "../../ui/hint_popover.js";
 import { renderAddress, renderNamedAddress, renderSignature } from "../../ui/token_identity.js";
 import { apiErrorMessage } from "../../core/request_manager.js";
+import { downloadJson } from "../../core/download.js";
 import { renderStateView } from "../../ui/state_view.js";
 
 // Ids are the categories of the burn scan.
@@ -1081,15 +1082,7 @@ function handleExportGeneratedWallets() {
     secret: wallet.secret,
   }));
 
-  const blob = new Blob([JSON.stringify(exportData, null, 2)], { type: "application/json" });
-  const url = URL.createObjectURL(blob);
-  const a = document.createElement("a");
-  a.href = url;
-  a.download = `solana-wallets-${new Date().toISOString().slice(0, 10)}.json`;
-  document.body.appendChild(a);
-  a.click();
-  document.body.removeChild(a);
-  URL.revokeObjectURL(url);
+  downloadJson(`solana-wallets-${new Date().toISOString().slice(0, 10)}.json`, exportData);
 
   Utils.showToast(I18n.t("tools-generator-exported"), "warning");
 }

@@ -324,6 +324,7 @@ pub const CORE_ACTION_TOASTS: &str = include_str!("templates/scripts/core/action
 pub const CORE_ACTION_MESSAGE: &str = include_str!("templates/scripts/core/action_message.js");
 pub const CORE_AGENT_APPROVALS: &str = include_str!("templates/scripts/core/agent_approvals.js");
 pub const CORE_REQUEST_MANAGER: &str = include_str!("templates/scripts/core/request_manager.js");
+pub const CORE_DOWNLOAD: &str = include_str!("templates/scripts/core/download.js");
 pub const CORE_CLIENT_READY: &str = include_str!("templates/scripts/core/client_ready.js");
 pub const CORE_I18N: &str = include_str!("templates/scripts/core/i18n.js");
 pub const CORE_SPLASH: &str = include_str!("templates/scripts/core/splash.js");

@@ -12,6 +12,7 @@ import { formatSizeAt } from "../../core/format.js";
 import { ConfirmationDialog } from "../confirmation_dialog.js";
 import { renderStateView } from "../state_view.js";
 import { apiErrorMessage } from "../../core/request_manager.js";
+import { downloadJson } from "../../core/download.js";
 import { createStorageView } from "./storage_view.js";
 
 /** How often the report is read again while a cleanup pass runs. */
@@ -498,16 +499,10 @@ async function exportConfig() {
       throw new Error(I18n.t("settings-data-config-fetch-failed"));
     }
 
-    const dataStr = JSON.stringify(exported.config, null, 2);
-    const blob = new Blob([dataStr], { type: "application/json" });
-    const url = URL.createObjectURL(blob);
-    const a = document.createElement("a");
-    a.href = url;
-    a.download = `screenerbot-config-${new Date().toISOString().split("T")[0]}.json`;
-    document.body.appendChild(a);
-    a.click();
-    document.body.removeChild(a);
-    URL.revokeObjectURL(url);
+    downloadJson(
+      `screenerbot-config-${new Date().toISOString().split("T")[0]}.json`,
+      exported.config
+    );
 
     Utils.showToast(I18n.t("settings-data-config-exported"), "success");
   } catch (err) {

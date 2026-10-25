@@ -14,6 +14,7 @@
 import { registerPage } from "../core/lifecycle.js";
 import { Poller } from "../core/poller.js";
 import { requestManager } from "../core/request_manager.js";
+import { downloadJson } from "../core/download.js";
 import { $ } from "../core/dom.js";
 import * as Utils from "../core/utils.js";
 import * as AppState from "../core/app_state.js";
@@ -573,14 +574,7 @@ async function handleRefreshSnapshot() {
 }
 
 function handleExportConfig() {
-  const json = JSON.stringify(state.draft, null, 2);
-  const blob = new Blob([json], { type: "application/json" });
-  const url = URL.createObjectURL(blob);
-  const a = document.createElement("a");
-  a.href = url;
-  a.download = `filtering-config-${Date.now()}.json`;
-  a.click();
-  URL.revokeObjectURL(url);
+  downloadJson(`filtering-config-${Date.now()}.json`, state.draft);
   Utils.showToast({
     type: "success",
     title: I18n.t("filtering-toast-exported"),

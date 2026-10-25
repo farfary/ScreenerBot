@@ -71,6 +71,24 @@ export function apiErrorMessage(body, fallback) {
 }
 
 /**
+ * User-facing message of a failed request. `requestManager` throws a generic
+ * `HTTP 400: Bad Request` and attaches the Response, so the server's own reason is
+ * read back off it (once) and rendered with `apiErrorMessage`.
+ * @param {any} error The error `requestManager.fetch` threw.
+ * @param {string|null} [fallback] Returned when the response carries no message.
+ * @returns {Promise<string|null|undefined>}
+ */
+export async function errorMessageOf(error, fallback) {
+  try {
+    const message = apiErrorMessage(await error?.response?.json());
+    if (message) return message;
+  } catch {
+    // The body was not JSON or was already read; the fallback is all there is.
+  }
+  return fallback;
+}
+
+/**
  * Untranslated technical context of an API error envelope.
  * @param {any} body Parsed response body.
  * @returns {string|null}

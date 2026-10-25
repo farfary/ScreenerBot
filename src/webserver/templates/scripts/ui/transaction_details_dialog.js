@@ -9,7 +9,7 @@
 import * as Utils from "../core/utils.js";
 import { createFocusTrap } from "../core/utils.js";
 import { formatFixed, withSolUnit } from "../core/format.js";
-import { requestManager, apiErrorMessage } from "../core/request_manager.js";
+import { requestManager, errorMessageOf } from "../core/request_manager.js";
 import { DialogTabBar, renderDialogTabRow } from "./dialog_tab_bar.js";
 import { typeIcon, typeLabel } from "./transaction_type.js";
 import { directionBadge } from "./transaction_direction.js";
@@ -131,15 +131,8 @@ export class TransactionDetailsDialog {
     if (!error?.response) {
       return error?.notFound ? I18n.t("transactions-dialog-not-found") : fallback;
     }
-    try {
-      const body = await error.response.json();
-      const message = apiErrorMessage(body);
-      return message
-        ? I18n.t("transactions-dialog-load-failed-reason", { reason: message })
-        : fallback;
-    } catch {
-      return fallback;
-    }
+    const message = await errorMessageOf(error, null);
+    return message ? I18n.t("transactions-dialog-load-failed-reason", { reason: message }) : fallback;
   }
 
   _showError(message) {

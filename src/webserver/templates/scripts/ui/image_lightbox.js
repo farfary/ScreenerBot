@@ -10,6 +10,7 @@
  * and friends), so the same markup works anywhere.
  */
 import * as Utils from "../core/utils.js";
+import { downloadBlob } from "../core/download.js";
 
 /**
  * Show the lightbox. Returns a close() function.
@@ -227,14 +228,7 @@ async function saveImage(url, label) {
     const res = await fetch(url, { mode: "cors" });
     if (!res.ok) throw new Error("fetch failed");
     const blob = await res.blob();
-    const objUrl = URL.createObjectURL(blob);
-    const a = document.createElement("a");
-    a.href = objUrl;
-    a.download = filename;
-    document.body.appendChild(a);
-    a.click();
-    a.remove();
-    setTimeout(() => URL.revokeObjectURL(objUrl), 1000);
+    downloadBlob(filename, blob);
   } catch {
     // Cross-origin image without CORS headers — open it so the user can save it.
     window.open(url, "_blank", "noopener");

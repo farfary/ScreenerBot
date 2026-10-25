@@ -17,6 +17,7 @@ import { on, create, show, hide, setIconLabel } from "../core/dom.js";
 import * as Utils from "../core/utils.js";
 import { playClick, playSuccess, playError } from "../core/sounds.js";
 import { requestManager } from "../core/request_manager.js";
+import { downloadJson } from "../core/download.js";
 import { hasSectionLabel, sectionLabel } from "../pages/config/field_text.js";
 
 // ============================================================================
@@ -310,16 +311,8 @@ export class ConfigExportDialog {
         throw new Error(I18n.t("system-config-export-invalid-response"));
       }
 
-      // Download the config
-      const json = JSON.stringify(response.config, null, 2);
-      const blob = new Blob([json], { type: "application/json" });
-      const url = URL.createObjectURL(blob);
-      const a = document.createElement("a");
-      a.href = url;
       const date = new Date().toISOString().split("T")[0];
-      a.download = `screenerbot-config-${date}.json`;
-      a.click();
-      URL.revokeObjectURL(url);
+      downloadJson(`screenerbot-config-${date}.json`, response.config);
 
       playSuccess();
       Utils.showToast({
