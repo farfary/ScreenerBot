@@ -401,9 +401,11 @@ pub async fn run_discovery_once(
                         .or_insert(valid_from_source);
                 }
             }
+            // One provider failing a tick (a rate limit, an outage) leaves the other sources
+            // running and is counted in the tick's summary; it is not a fault of the app.
             Err(err) => {
                 stats.errors += 1;
-                logger::error(
+                logger::warning(
                     LogTag::Tokens,
                     &format!("[DISCOVERY] Source {source} failed: {err}"),
                 );
