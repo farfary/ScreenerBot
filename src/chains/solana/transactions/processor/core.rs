@@ -287,14 +287,25 @@ mod tests {
         include_str!("../../../../../tests/fixtures/swaps/meteora_damm_v2_sell.json");
     const UNLISTED_ROUTER_SELL: &str =
         include_str!("../../../../../tests/fixtures/swaps/unlisted_router_sell.json");
+    /// The wallet the USDC-quoted recordings below were made by, through a relayer
+    /// that paid the fee.
+    const USDC_WALLET: &str = "6qudAN2kV8mtCcYJxb5QQ6Vr15itdHHdeVbYm99NKMhy";
+    const USDC_RELAYED_BUY: &str =
+        include_str!("../../../../../tests/fixtures/swaps/copy_usdc_relayed_buy.json");
+    const USDC_RELAYED_SELL: &str =
+        include_str!("../../../../../tests/fixtures/swaps/copy_usdc_relayed_sell.json");
 
     /// Decodes a recorded transaction for [`WALLET`] through the same pipeline a fetched
     /// one takes, without the RPC.
     async fn decode_recorded(fixture: &str) -> Transaction {
+        decode_recorded_for(WALLET, fixture).await
+    }
+
+    async fn decode_recorded_for(wallet: &str, fixture: &str) -> Transaction {
         let details: crate::chains::solana::rpc::TransactionDetails =
             serde_json::from_str(fixture).expect("the recorded transaction decodes");
         let signature = details.transaction.signatures[0].clone();
-        TransactionProcessor::new(Pubkey::from_str(WALLET).expect("wallet address"))
+        TransactionProcessor::new(Pubkey::from_str(wallet).expect("wallet address"))
             .decode_details(&signature, &details)
             .await
             .expect("the recorded transaction analyzes")
@@ -345,6 +356,24 @@ mod tests {
             "classified as {:?}",
             transaction.transaction_type
         );
+    }
+
+    /// A token bought and sold against USDC, with the fee paid by a relayer, moves no
+    /// SOL of the wallet's own: it is a token-to-token swap, never a trade for SOL.
+    #[tokio::test]
+    async fn a_usdc_quoted_swap_is_a_token_to_token_swap() {
+        let usdc = crate::chains::solana::constants::USDC_MINT;
+        for (fixture, from_usdc) in [(USDC_RELAYED_BUY, true), (USDC_RELAYED_SELL, false)] {
+            let transaction = decode_recorded_for(USDC_WALLET, fixture).await;
+            let TransactionType::SwapTokenToToken {
+                from_mint, to_mint, ..
+            } = &transaction.transaction_type
+            else {
+                panic!("classified as {:?}", transaction.transaction_type);
+            };
+            assert_eq!(from_mint == usdc, from_usdc, "{from_mint} -> {to_mint}");
+            assert_eq!(to_mint == usdc, !from_usdc, "{from_mint} -> {to_mint}");
+        }
     }
 
     #[tokio::test]

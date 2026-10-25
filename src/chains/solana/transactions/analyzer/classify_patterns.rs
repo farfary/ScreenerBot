@@ -218,6 +218,13 @@ fn swap_patterns_of<'a>(nodes: impl Iterator<Item = &'a FlowNode>) -> Vec<FlowPa
 
     // Find accounts with both SOL and token changes
     for node in nodes {
+        // An account that sends one token and receives another traded them for each
+        // other. Its SOL change is then rent for an account opened or closed on the
+        // way, a tip or a fee, never the price, so it must not pair with either leg.
+        if let Some(pattern) = token_for_token(node) {
+            patterns.push(pattern);
+            continue;
+        }
         // Proceeds credited as wrapped SOL into an account the wallet leaves open reach it
         // as a token change, so they count as SOL received.
         let sol_received =
@@ -254,6 +261,28 @@ fn swap_patterns_of<'a>(nodes: impl Iterator<Item = &'a FlowNode>) -> Vec<FlowPa
     }
 
     patterns
+}
+
+/// The largest non-SOL token an account sent paired with the largest one it received.
+fn token_for_token(node: &FlowNode) -> Option<FlowPattern> {
+    let legs = || {
+        node.token_changes
+            .iter()
+            .filter(|(mint, _)| mint.as_str() != SOL_MINT)
+    };
+    let (sent, _) = legs()
+        .filter(|(_, change)| **change < 0.0)
+        .max_by(|a, b| a.1.abs().total_cmp(&b.1.abs()))?;
+    let (received, amount) = legs()
+        .filter(|(_, change)| **change > 0.0)
+        .max_by(|a, b| a.1.total_cmp(b.1))?;
+    Some(FlowPattern {
+        pattern_type: PatternType::SimpleSwap,
+        from_token: sent.clone(),
+        to_token: received.clone(),
+        amount: *amount,
+        confidence: 0.8,
+    })
 }
 
 /// Detect transfer patterns (simple movements)
