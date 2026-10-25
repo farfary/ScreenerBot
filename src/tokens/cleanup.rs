@@ -9,7 +9,12 @@
 //!
 //! NOTE: Liquidity and security scores are FILTERING criteria, not blacklist criteria.
 //! Blacklist is for tokens that should NEVER be traded due to fundamental risks.
+//!
+//! The chain's native and stablecoin quote assets are never blacklisted automatically: a
+//! stablecoin issuer holds mint and freeze authority by design, and blacklisting the quote side
+//! drops its pools from discovery and refuses trades into it.
 
+use crate::chains::ChainId;
 use crate::errors::DatabaseError;
 use crate::events::{record_token_event, Severity};
 use crate::logger::{self, LogTag};
@@ -55,13 +60,19 @@ pub async fn should_blacklist_for_authorities(
     Ok(None)
 }
 
+/// True for the chain's native asset and its canonical stablecoin quote assets, which no
+/// automatic rule may blacklist.
+pub fn is_exempt_from_auto_blacklist(chain: ChainId, mint: &str) -> bool {
+    let adapter = crate::chains::adapter_for(chain);
+    adapter.is_native_asset(mint) || adapter.is_stable_asset(mint)
+}
+
 /// Evaluate all blacklist conditions for a token
 ///
 /// Only checks for permanent token characteristics (authorities).
 /// Filtering criteria (liquidity, security scores) are handled by the filtering system.
 pub async fn evaluate_blacklist(mint: &str, db: &TokenDatabase) -> TokenResult<Option<String>> {
-    // Check if already blacklisted
-    if db.is_blacklisted(mint)? {
+    if is_exempt_from_auto_blacklist(db.chain(), mint) || db.is_blacklisted(mint)? {
         return Ok(None);
     }
 
@@ -151,6 +162,29 @@ pub async fn run_cleanup_scan(db: &TokenDatabase) -> TokenResult<CleanupResult> 
     })
 }
 
+/// Remove an automatic entry an earlier build filed against an exempt quote asset. An entry the
+/// owner made by hand stays. Runs once when the cleanup loop starts.
+pub fn lift_automatic_quote_asset_entries(db: &TokenDatabase) -> TokenResult<()> {
+    let adapter = crate::chains::adapter_for(db.chain());
+    let native = adapter.native_asset_address();
+    for mint in std::iter::once(native).chain(adapter.stable_assets().iter().copied()) {
+        let Some((reason, source)) = db.get_blacklist_reason(mint)? else {
+            continue;
+        };
+        if source == "manual" {
+            continue;
+        }
+        db.remove_from_blacklist(mint)?;
+        logger::info(
+            LogTag::Tokens,
+            &format!(
+                "[CLEANUP] Lifted the {source} blacklist entry on quote asset {mint}: {reason}"
+            ),
+        );
+    }
+    Ok(())
+}
+
 /// Result of a cleanup scan
 #[derive(Debug, Clone)]
 pub struct CleanupResult {
@@ -162,6 +196,12 @@ pub struct CleanupResult {
 /// Start cleanup loop (runs every hour)
 pub fn start_cleanup_loop(db: Arc<TokenDatabase>, shutdown: Arc<Notify>) -> JoinHandle<()> {
     tokio::spawn(async move {
+        if let Err(e) = lift_automatic_quote_asset_entries(&db) {
+            logger::error(
+                LogTag::Tokens,
+                &format!("[CLEANUP] Failed to lift quote asset entries: {e}"),
+            );
+        }
         loop {
             if check_shutdown_or_delay(&shutdown, Duration::from_secs(3600)).await {
                 break;

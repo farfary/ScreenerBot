@@ -1270,6 +1270,9 @@ fn retire_token(mint: &str, symbol: &str, reason: &str, cause: &QuoteError) {
     let Some(db) = crate::tokens::database::database(crate::chains::active_chain()) else {
         return;
     };
+    if crate::tokens::cleanup::is_exempt_from_auto_blacklist(db.chain(), mint) {
+        return;
+    }
     match crate::tokens::cleanup::blacklist_token(mint, reason, "auto_swap_route", &db) {
         Ok(()) => logger::info(
             LogTag::Swap,
