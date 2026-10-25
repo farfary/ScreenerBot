@@ -274,6 +274,39 @@ async fn a_processing_failure_never_advances_the_durable_cursor() {
 }
 
 #[tokio::test]
+async fn a_range_resumed_after_a_failed_poll_is_backfill() {
+    let address = "OutageTarget1111";
+    let fake_runtime = FakeRuntime::new(vec![address.to_owned()]);
+    fake_runtime.fail_fetches(address, 1);
+    fake_runtime.queue_page(address, vec!["late-sig".to_owned()]);
+    let chain_runtime: Arc<dyn WalletWatchRuntime> = fake_runtime;
+    let (watch_db, _dir) = temp_watch_db();
+    watch_db.mark_cursor_initialized(address).await.unwrap();
+    let own = Subject::from_account(
+        crate::chains::AccountId::new(crate::chains::ChainId::Solana, "OwnWallet1111").unwrap(),
+    );
+
+    let mut target_runtime = idle_target_runtime(alert_watch_target(address, 4));
+    poll_target(
+        &mut target_runtime,
+        &chain_runtime,
+        &watch_db,
+        own.clone(),
+        false,
+    )
+    .await;
+    assert!(
+        target_runtime.backfill,
+        "a cadence poll that failed leaves its range to be resumed as history"
+    );
+
+    // The next cadence tick resumes the same range and keeps it a backfill.
+    poll_target(&mut target_runtime, &chain_runtime, &watch_db, own, false).await;
+    assert!(target_runtime.backfill);
+    assert!(target_runtime.catch_up.is_some());
+}
+
+#[tokio::test]
 async fn failed_external_page_advances_raw_cursor_without_decoding() {
     use crate::wallets::watch::SignaturePageItem;
 

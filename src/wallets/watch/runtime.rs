@@ -243,6 +243,7 @@ pub(crate) mod test_support {
         classify_results:
             Mutex<std::collections::HashMap<String, (ActivityKind, Option<&'static str>)>>,
         fetch_blocks: Mutex<std::collections::HashMap<String, Arc<FetchBlock>>>,
+        fetch_failures: Mutex<std::collections::HashMap<String, usize>>,
         pub calls: Mutex<FakeCalls>,
     }
 
@@ -260,6 +261,7 @@ pub(crate) mod test_support {
                 decode_results: Mutex::new(std::collections::HashMap::new()),
                 classify_results: Mutex::new(std::collections::HashMap::new()),
                 fetch_blocks: Mutex::new(std::collections::HashMap::new()),
+                fetch_failures: Mutex::new(std::collections::HashMap::new()),
                 calls: Mutex::new(FakeCalls::default()),
             })
         }
@@ -287,6 +289,15 @@ pub(crate) mod test_support {
                 .unwrap()
                 .insert(address.to_owned(), Arc::clone(&block));
             block
+        }
+
+        /// Fail the next `count` signature-page fetches for `address`, as an
+        /// unreachable provider does.
+        pub fn fail_fetches(&self, address: &str, count: usize) {
+            self.fetch_failures
+                .lock()
+                .unwrap()
+                .insert(address.to_owned(), count);
         }
 
         pub fn queue_page_items(&self, address: &str, page: Vec<SignaturePageItem>) {
@@ -404,6 +415,15 @@ pub(crate) mod test_support {
             let block = self.fetch_blocks.lock().unwrap().get(address).cloned();
             if let Some(block) = block {
                 block.wait().await;
+            }
+            if let Some(remaining) = self.fetch_failures.lock().unwrap().get_mut(address) {
+                if *remaining > 0 {
+                    *remaining -= 1;
+                    return Err(Error::ChainRuntime {
+                        operation: "fetch_signatures_page",
+                        detail: "provider unreachable".to_owned(),
+                    });
+                }
             }
             let mut pages = self.pages.lock().unwrap();
             Ok(pages

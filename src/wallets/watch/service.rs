@@ -281,6 +281,10 @@ pub(super) async fn poll_target(
                 LogTag::WalletWatch,
                 &format!("Poll failed for {}: {e}", target_runtime.target.address),
             );
+            // The range resumes after the outage, so what it finds is history:
+            // copy trading then refuses anything older than its arrival limit
+            // instead of buying minutes behind the target.
+            target_runtime.backfill = true;
             return;
         }
     };
@@ -335,6 +339,8 @@ pub(super) async fn poll_target(
     }
 
     if !replay_complete {
+        // The unfinished signatures are retried on a later tick, behind the target.
+        target_runtime.backfill = true;
         return;
     }
 
