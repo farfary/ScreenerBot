@@ -64,7 +64,7 @@ fn stable_buy() -> ActivityKind {
     ActivityKind::StableSwap {
         mint: MINT.to_owned(),
         side: SwapSide::Buy,
-        stable_mint: crate::chains::solana::constants::USDC_MINT.to_owned(),
+        stable_mint: crate::chains::adapter_for(ChainId::Solana).stable_assets()[0].to_owned(),
         stable_amount: 250.0,
         token_amount: 1_000.0,
         venue: None,
