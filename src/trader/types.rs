@@ -249,20 +249,22 @@ impl FailedTradeStep for crate::Error {
 }
 
 impl TradeResult {
-    /// Create a successful trade result
+    /// Create a successful trade result. A price or size that is `None`, not finite or not
+    /// positive is stored as `None`: the value is not known until verification.
     pub fn success(
         decision: TradeDecision,
         tx_signature: String,
-        executed_price_native: f64,
-        executed_size_native: f64,
+        executed_price_native: Option<f64>,
+        executed_size_native: Option<f64>,
         position_id: Option<String>,
     ) -> Self {
+        let known = |value: Option<f64>| value.filter(|v| v.is_finite() && *v > 0.0);
         Self {
             decision,
             success: true,
             tx_signature: Some(tx_signature),
-            executed_price_native: Some(executed_price_native),
-            executed_size_native: Some(executed_size_native),
+            executed_price_native: known(executed_price_native),
+            executed_size_native: known(executed_size_native),
             error: None,
             position_id,
             execution_timestamp: Utc::now(),
@@ -314,6 +316,49 @@ impl TradeResult {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    fn decision() -> TradeDecision {
+        TradeDecision {
+            position_id: None,
+            mint: "Mint".to_owned(),
+            action: TradeAction::Buy,
+            reason: TradeReason::ManualEntry,
+            strategy_id: None,
+            timestamp: Utc::now(),
+            priority: TradePriority::Normal,
+            price_native: None,
+            size_native: None,
+            slippage_pct: None,
+            exit_percentage: None,
+        }
+    }
+
+    /// A fill price or size that is zero, non-finite or unknown is never stored as a value.
+    #[test]
+    fn a_trade_result_keeps_only_real_prices_and_sizes() {
+        let unknown = TradeResult::success(
+            decision(),
+            "sig".to_owned(),
+            Some(0.0),
+            Some(f64::NAN),
+            None,
+        );
+        assert_eq!(unknown.executed_price_native, None);
+        assert_eq!(unknown.executed_size_native, None);
+        let negative = TradeResult::success(decision(), "sig".to_owned(), Some(-1.0), None, None);
+        assert_eq!(negative.executed_price_native, None);
+        assert_eq!(negative.executed_size_native, None);
+        let real = TradeResult::success(
+            decision(),
+            "sig".to_owned(),
+            Some(0.000_5),
+            Some(0.2),
+            Some("7".to_owned()),
+        );
+        assert_eq!(real.executed_price_native, Some(0.000_5));
+        assert_eq!(real.executed_size_native, Some(0.2));
+        assert_eq!(real.position_id.as_deref(), Some("7"));
+    }
 
     /// A trade that never got a quote must not be reported as a failed SWAP.
     /// The prose ladder this replaced did exactly that, telling the user a

@@ -388,6 +388,7 @@ async fn open_position_impl(
                 transaction_signature,
                 confirmation_pending,
                 entry_price_native: effective_entry_price,
+                position_id: None,
             });
         }
     };
@@ -490,6 +491,7 @@ async fn open_position_impl(
         transaction_signature,
         confirmation_pending,
         entry_price_native: effective_entry_price,
+        position_id: Some(position_id),
     })
 }
 
@@ -551,6 +553,7 @@ async fn book_entry_as_add(
         transaction_signature: signature.to_owned(),
         confirmation_pending,
         entry_price_native,
+        position_id: Some(position_id),
     }
 }
 

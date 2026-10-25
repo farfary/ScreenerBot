@@ -158,8 +158,8 @@ fn confirmation_pending_trade_result_is_never_reported_as_confirmed() {
     let mut result = TradeResult::success(
         prepared.decision,
         "ours-ambiguous".to_owned(),
-        0.005,
-        0.2,
+        Some(0.005),
+        Some(0.2),
         None,
     );
     result.confirmation_pending = true;

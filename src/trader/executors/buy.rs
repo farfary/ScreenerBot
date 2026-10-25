@@ -103,9 +103,9 @@ pub async fn execute_buy_managed(
             let mut result = TradeResult::success(
                 decision.clone(),
                 transaction_signature,
-                submission.entry_price_native,
-                trade_size_native,
-                None, // Position ID will be set by verification
+                Some(submission.entry_price_native),
+                Some(trade_size_native),
+                submission.position_id.map(|id| id.to_string()),
             );
             result.confirmation_pending = submission.confirmation_pending;
             Ok(result)
@@ -210,8 +210,8 @@ pub async fn execute_dca(decision: &TradeDecision) -> crate::trader::Result<Trad
             Ok(TradeResult::success(
                 decision.clone(),
                 transaction_signature,
-                decision.price_native.unwrap_or_default(),
-                dca_amount_native,
+                None,
+                Some(dca_amount_native),
                 decision.position_id.clone(),
             ))
         }

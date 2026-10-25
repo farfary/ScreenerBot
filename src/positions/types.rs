@@ -249,6 +249,8 @@ pub struct EntrySubmission {
     pub transaction_signature: String,
     pub confirmation_pending: bool,
     pub entry_price_native: f64,
+    /// The open position the entry is booked on; `None` when the row could not be saved.
+    pub position_id: Option<i64>,
 }
 
 // ==================== POSITION STRUCTURES ====================
