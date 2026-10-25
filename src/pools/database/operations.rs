@@ -15,7 +15,7 @@ use crate::pools::Error;
 use r2d2::Pool;
 use r2d2_sqlite::SqliteConnectionManager;
 use rusqlite::params;
-use std::collections::{HashMap, HashSet};
+use std::collections::HashMap;
 use std::sync::Arc;
 use std::sync::RwLock;
 use tokio::sync::mpsc;
@@ -41,7 +41,8 @@ pub struct PoolsDatabase {
     pub(super) pool: Option<Pool<SqliteConnectionManager>>,
     pub(super) write_queue: Option<mpsc::UnboundedSender<PriceResult>>,
     // In-memory blacklists (source of truth for runtime checks)
-    pub(super) blacklisted_accounts: Arc<RwLock<HashSet<String>>>,
+    /// Blacklisted accounts -> unix time each leaves the blacklist
+    pub(super) blacklisted_accounts: Arc<RwLock<HashMap<String, i64>>>,
     /// Actively blacklisted pools -> unix time each leaves the blacklist
     pub(super) blacklisted_pools: Arc<RwLock<HashMap<String, i64>>>,
 }
@@ -56,7 +57,7 @@ impl PoolsDatabase {
                 .to_string(),
             pool: None,
             write_queue: None,
-            blacklisted_accounts: Arc::new(RwLock::new(HashSet::new())),
+            blacklisted_accounts: Arc::new(RwLock::new(HashMap::new())),
             blacklisted_pools: Arc::new(RwLock::new(HashMap::new())),
         }
     }
@@ -98,20 +99,22 @@ impl PoolsDatabase {
             &format!("Pools database initialized: {}", self.db_path),
         );
 
-        // Load blacklists into memory (priority for runtime checks). Pool rows
-        // count only under the current blacklist policy: rows below the failure
-        // threshold or older than the TTL stay in the table but do not exclude
-        // their pool.
+        // Load blacklists into memory (priority for runtime checks). Rows count
+        // only under the current blacklist policy: an account row or a pool row
+        // older than the TTL, or a pool row below the failure threshold, stays in
+        // the table but excludes nothing.
         let pool_policy = PoolBlacklistPolicy::from_config();
 
         let conn = pool.get().map_err(DatabaseError::from)?;
 
         // Accounts
-        let account_keys = match conn
-            .prepare("SELECT account_pubkey FROM blacklist_accounts WHERE chain_id = ?")
-        {
+        let account_rows = match conn.prepare(
+            "SELECT account_pubkey, last_failed_at FROM blacklist_accounts WHERE chain_id = ?",
+        ) {
             Ok(mut stmt) => {
-                let rows = stmt.query_map([self.chain_id.as_str()], |row| row.get::<_, String>(0));
+                let rows = stmt.query_map([self.chain_id.as_str()], |row| {
+                    Ok((row.get::<_, String>(0)?, row.get::<_, i64>(1)?))
+                });
                 match rows {
                     Ok(iter) => iter.filter_map(|r| r.ok()).collect::<Vec<_>>(),
                     Err(e) => {
@@ -169,15 +172,17 @@ impl PoolsDatabase {
         };
 
         // Populate memory sets
+        let now = chrono::Utc::now().timestamp();
         {
             let mut accounts = self.blacklisted_accounts.write().unwrap();
-            for key in account_keys {
-                accounts.insert(key);
+            for (key, last_failed_at) in account_rows {
+                if !pool_policy.is_stale(last_failed_at, now) {
+                    accounts.insert(key, last_failed_at.saturating_add(pool_policy.ttl_secs));
+                }
             }
         }
 
         let pool_rows_total = pool_rows.len();
-        let now = chrono::Utc::now().timestamp();
         let active_pools = {
             let mut pools = self.blacklisted_pools.write().unwrap();
             for (pool_id, record) in pool_rows {
@@ -490,7 +495,7 @@ pub(super) fn pooled_legacy_database(label: &str) -> (PoolsDatabase, tempfile::T
         db_path: path.to_string_lossy().to_string(),
         pool: Some(pool),
         write_queue: None,
-        blacklisted_accounts: Arc::new(RwLock::new(HashSet::new())),
+        blacklisted_accounts: Arc::new(RwLock::new(HashMap::new())),
         blacklisted_pools: Arc::new(RwLock::new(HashMap::new())),
     };
     (db, dir)

@@ -24,7 +24,7 @@ fn unix_now() -> i64 {
 // =============================================================================
 
 impl PoolsDatabase {
-    /// Add account to blacklist
+    /// Add account to blacklist until the blacklist TTL passes after this failure
     pub async fn add_account_to_blacklist(
         &self,
         account_pubkey: &str,
@@ -32,6 +32,7 @@ impl PoolsDatabase {
         source: Option<&str>,
         pool_id: Option<&str>,
         token_mint: Option<&str>,
+        policy: PoolBlacklistPolicy,
     ) -> Result<(), Error> {
         let account_key = account_pubkey.to_string();
         let reason_str = reason.to_string();
@@ -40,9 +41,10 @@ impl PoolsDatabase {
         let token_mint_str = token_mint.map(|s| s.to_string());
         let chain_id = self.chain_id.as_str().to_owned();
         // Update memory immediately
+        let ttl_secs = policy.ttl_secs;
         {
-            let mut set = self.blacklisted_accounts.write().unwrap();
-            set.insert(account_key.clone());
+            let mut accounts = self.blacklisted_accounts.write().unwrap();
+            accounts.insert(account_key.clone(), unix_now().saturating_add(ttl_secs));
         }
 
         let pool = self.shared_pool()?;
@@ -92,11 +94,13 @@ impl PoolsDatabase {
     .map_err(InternalError::from)?
     }
 
-    /// Check if account is blacklisted
+    /// Check if account is blacklisted: only while its blacklist entry has not expired
     pub async fn is_account_blacklisted(&self, account_pubkey: &str) -> Result<bool, Error> {
         // Hot path: memory only
-        let set = self.blacklisted_accounts.read().unwrap();
-        Ok(set.contains(account_pubkey))
+        let accounts = self.blacklisted_accounts.read().unwrap();
+        Ok(accounts
+            .get(account_pubkey)
+            .is_some_and(|expires_at| unix_now() < *expires_at))
     }
 
     /// Record failures of a pool and apply the pool blacklist policy.
@@ -218,8 +222,8 @@ impl PoolsDatabase {
     pub async fn remove_account_from_blacklist(&self, account_pubkey: &str) -> Result<(), Error> {
         // Update memory immediately
         {
-            let mut set = self.blacklisted_accounts.write().unwrap();
-            set.remove(account_pubkey);
+            let mut accounts = self.blacklisted_accounts.write().unwrap();
+            accounts.remove(account_pubkey);
         }
         // Persist
         let account_key = account_pubkey.to_string();
@@ -274,10 +278,16 @@ impl PoolsDatabase {
         .map_err(InternalError::from)?
     }
 
-    /// Get blacklist statistics: blacklisted accounts and currently blacklisted pools
+    /// Get blacklist statistics: currently blacklisted accounts and pools
     pub async fn get_blacklist_stats(&self) -> Result<(usize, usize), Error> {
-        let accounts = self.blacklisted_accounts.read().unwrap().len();
         let now = unix_now();
+        let accounts = self
+            .blacklisted_accounts
+            .read()
+            .unwrap()
+            .values()
+            .filter(|expires_at| now < **expires_at)
+            .count();
         let pools = self
             .blacklisted_pools
             .read()
@@ -549,6 +559,31 @@ mod tests {
         assert_eq!(outcome.blacklisted_until, None);
         assert_eq!(stored_count(&db, "PoolB"), 1);
         assert!(!db.is_pool_blacklisted("PoolB").await.unwrap());
+    }
+
+    #[tokio::test]
+    async fn an_account_blacklist_entry_expires_with_the_blacklist_ttl() {
+        let (db, _dir) = pooled_legacy_database("blacklist-account-expiry");
+        db.add_account_to_blacklist(
+            "AccountA",
+            "account_not_found_threshold",
+            None,
+            None,
+            None,
+            POLICY,
+        )
+        .await
+        .expect("record account failure");
+        assert!(db.is_account_blacklisted("AccountA").await.unwrap());
+        assert_eq!(db.get_blacklist_stats().await.unwrap().0, 1);
+
+        // Its expiry passes: the account is fetched again without a restart
+        db.blacklisted_accounts
+            .write()
+            .unwrap()
+            .insert("AccountA".to_owned(), unix_now() - 1);
+        assert!(!db.is_account_blacklisted("AccountA").await.unwrap());
+        assert_eq!(db.get_blacklist_stats().await.unwrap().0, 0);
     }
 
     #[tokio::test]

@@ -99,7 +99,14 @@ pub async fn add_account_to_blacklist(
 ) -> Result<(), Error> {
     database(chain)
         .ok_or(Error::NotInitialized)?
-        .add_account_to_blacklist(account_pubkey, reason, source, pool_id, token_mint)
+        .add_account_to_blacklist(
+            account_pubkey,
+            reason,
+            source,
+            pool_id,
+            token_mint,
+            PoolBlacklistPolicy::from_config(),
+        )
         .await
 }
 

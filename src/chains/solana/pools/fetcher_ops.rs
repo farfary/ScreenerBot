@@ -20,7 +20,8 @@ use crate::chains::solana::rpc::{get_rpc_client, RpcClientMethods};
 use crate::events::{record_safe, Event, EventCategory};
 use crate::logger::{self, LogTag};
 use crate::pools::types::{
-    account_blacklist_threshold, failure_window_secs, pool_blacklist_threshold, PoolDescriptor,
+    account_blacklist_threshold, failure_window_secs, pool_blacklist_threshold,
+    pool_blacklist_ttl_secs, PoolDescriptor,
 };
 
 use crate::chains::solana::solana_sdk::pubkey::Pubkey;
@@ -536,21 +537,23 @@ impl AccountFetcher {
         }
     }
 
-    /// Remove expired entries from account and pool failure trackers
+    /// Remove expired entries from account and pool failure trackers. A blacklisted
+    /// entry is kept until the blacklist itself expires, so the account or pool is
+    /// fetched, and can fail and be blacklisted, again afterwards.
     pub(crate) fn cleanup_missing_failure_trackers(
         account_failure_tracker: &mut HashMap<Pubkey, MissingAccountState>,
         pool_failure_tracker: &mut HashMap<Pubkey, MissingPoolState>,
     ) {
-        let expiry = Duration::from_secs(failure_window_secs());
+        let windows = TrackerWindows {
+            failure: Duration::from_secs(failure_window_secs()),
+            blacklist: Duration::from_secs(pool_blacklist_ttl_secs()),
+        };
         let now = Instant::now();
 
-        account_failure_tracker.retain(|_, state| {
-            state.blacklisted || now.duration_since(state.last_failure) <= expiry
-        });
-
-        pool_failure_tracker.retain(|_, state| {
-            state.blacklisted || now.duration_since(state.last_failure) <= expiry
-        });
+        account_failure_tracker
+            .retain(|_, state| windows.is_live(state.blacklisted, state.last_failure, now));
+        pool_failure_tracker
+            .retain(|_, state| windows.is_live(state.blacklisted, state.last_failure, now));
     }
 
     /// Fetch a batch of accounts
@@ -839,5 +842,47 @@ impl AccountFetcher {
                 }
             }
         }
+    }
+}
+
+/// How long a failure tracker entry lives after its latest failure: the failure
+/// window while it is counting, the blacklist TTL once it has blacklisted.
+struct TrackerWindows {
+    failure: Duration,
+    blacklist: Duration,
+}
+
+impl TrackerWindows {
+    fn is_live(&self, blacklisted: bool, last_failure: Instant, now: Instant) -> bool {
+        let window = if blacklisted {
+            self.blacklist
+        } else {
+            self.failure
+        };
+        now.duration_since(last_failure) <= window
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    const WINDOWS: TrackerWindows = TrackerWindows {
+        failure: Duration::from_secs(60),
+        blacklist: Duration::from_secs(3_600),
+    };
+
+    #[test]
+    fn a_counting_entry_lives_for_the_failure_window() {
+        let now = Instant::now() + Duration::from_secs(7_200);
+        assert!(WINDOWS.is_live(false, now - Duration::from_secs(60), now));
+        assert!(!WINDOWS.is_live(false, now - Duration::from_secs(61), now));
+    }
+
+    #[test]
+    fn a_blacklisted_entry_is_forgotten_once_the_blacklist_expires() {
+        let now = Instant::now() + Duration::from_secs(7_200);
+        assert!(WINDOWS.is_live(true, now - Duration::from_secs(3_600), now));
+        assert!(!WINDOWS.is_live(true, now - Duration::from_secs(3_601), now));
     }
 }
