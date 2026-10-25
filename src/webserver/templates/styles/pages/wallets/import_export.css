@@ -312,11 +312,6 @@
   color: var(--error-color);
 }
 
-.validation-badge.duplicate {
-  background: var(--warning-alpha-15);
-  color: var(--warning-color);
-}
-
 .validation-badge i {
   font-size: 0.7rem;
 }

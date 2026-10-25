@@ -14,6 +14,61 @@ import { renderNamedAddress } from "../../ui/token_identity.js";
 // verbatim and shown to the user in its own element, so it is never translated.
 const EXPORT_KEYS_CONFIRMATION = "EXPORT KEYS";
 
+// Execute options of `POST /api/wallets/import/execute` (`ImportOptions` in
+// `wallets/bulk/types.rs`): rows already present are skipped, never reported as failures.
+const IMPORT_OPTIONS = Object.freeze({
+  skip_invalid: true,
+  skip_duplicates: true,
+  set_first_as_main: false,
+});
+
+// Column selection keys, named as the route's `ColumnMappingRequest` fields.
+const MAPPING_FIELDS = ["name_col", "private_key_col", "notes_col"];
+
+/** The mapping the server detected, as the selection the user edits (address column included). */
+export function selectionFromPreview(preview) {
+  const detected = preview?.preview?.column_mapping || {};
+  const selection = {};
+  for (const key of [...MAPPING_FIELDS, "address_col"]) {
+    if (Number.isInteger(detected[key])) selection[key] = detected[key];
+  }
+  return selection;
+}
+
+/** The `POST /api/wallets/import/execute` body for a preview response and a column selection. */
+export function buildImportRequest(previewResponse, selection) {
+  const mapping = {};
+  for (const key of [...MAPPING_FIELDS, "address_col"]) {
+    mapping[key] = Number.isInteger(selection[key]) ? selection[key] : null;
+  }
+  return {
+    session_id: previewResponse.session_id,
+    mapping,
+    options: { ...IMPORT_OPTIONS },
+  };
+}
+
+/** Counts shown under the preview; the server counts duplicates inside its invalid rows. */
+export function summarizePreview(preview) {
+  return {
+    valid: preview.valid_count,
+    duplicate: preview.duplicate_count,
+    invalid: preview.invalid_count - preview.duplicate_count,
+  };
+}
+
+/** One validated row of the preview (`RowValidationResult`, tagged by `status`). */
+export function previewRowView(row) {
+  const valid = row.status === "Valid";
+  return {
+    rowNum: row.row_num,
+    valid,
+    name: valid ? row.name : "",
+    address: valid ? row.address : "",
+    errors: valid ? [] : row.errors || [],
+  };
+}
+
 export function createBulkOperations({
   $,
   Utils,
@@ -244,9 +299,10 @@ export function createBulkOperations({
       }
 
       importPreviewData = data;
-      renderColumnMapping(data);
-      renderPreviewTable(data);
-      updateImportSummary(data);
+      importColumnMapping = selectionFromPreview(data);
+      renderColumnMapping(data.preview);
+      renderPreviewTable(data.preview);
+      updateImportSummary(data.preview);
 
       return true;
     } catch (error) {
@@ -265,11 +321,11 @@ export function createBulkOperations({
     const container = $("#column-mapping-grid");
     if (!container) return;
 
-    const columns = preview.columns || [];
+    const columns = preview.headers || [];
     const fields = [
-      { id: "name", label: I18n.t("wallets-field-name"), required: true },
-      { id: "private_key", label: I18n.t("wallets-field-private-key"), required: true },
-      { id: "notes", label: I18n.t("wallets-field-notes"), required: false },
+      { id: "name_col", label: I18n.t("wallets-field-name"), required: true },
+      { id: "private_key_col", label: I18n.t("wallets-field-private-key"), required: true },
+      { id: "notes_col", label: I18n.t("wallets-field-notes"), required: false },
     ];
 
     const optionsList = columns
@@ -279,12 +335,6 @@ export function createBulkOperations({
     container.innerHTML = fields
       .map((field) => {
         const requiredMark = field.required ? '<span class="required">*</span>' : "";
-        // Try to auto-detect column
-        const autoIdx = autoDetectColumn(field.id, columns);
-        if (autoIdx >= 0) {
-          importColumnMapping[field.id] = autoIdx;
-        }
-
         return `
           <div class="mapping-field">
             <label>${Utils.escapeHtml(field.label)} ${requiredMark}</label>
@@ -297,7 +347,7 @@ export function createBulkOperations({
       })
       .join("");
 
-    // Set auto-detected values and wire events
+    // Pre-select the columns the server detected and wire events
     container.querySelectorAll("select").forEach((select) => {
       const fieldId = select.dataset.field;
       if (importColumnMapping[fieldId] !== undefined) {
@@ -311,7 +361,6 @@ export function createBulkOperations({
         } else {
           importColumnMapping[fieldId] = parseInt(val, 10);
         }
-        updatePreviewWithMapping();
         validateImportMapping();
       });
     });
@@ -319,28 +368,10 @@ export function createBulkOperations({
     validateImportMapping();
   }
 
-  function autoDetectColumn(fieldId, columns) {
-    const patterns = {
-      name: ["name", "wallet", "label", "title"],
-      private_key: ["private", "key", "secret", "privatekey", "private_key"],
-      notes: ["note", "notes", "description", "memo", "comment"],
-    };
-
-    const fieldPatterns = patterns[fieldId] || [];
-    for (let i = 0; i < columns.length; i++) {
-      const colLower = columns[i].toLowerCase();
-      if (fieldPatterns.some((p) => colLower.includes(p))) {
-        return i;
-      }
-    }
-    return -1;
-  }
-
   function renderPreviewTable(preview) {
     const container = $("#preview-table-wrapper");
     if (!container) return;
 
-    const columns = preview.columns || [];
     const rows = preview.rows || [];
 
     if (rows.length === 0) {
@@ -348,22 +379,28 @@ export function createBulkOperations({
       return;
     }
 
-    const headerCells = columns.map((col) => `<th>${Utils.escapeHtml(col)}</th>`).join("");
-
     const bodyRows = rows
       .slice(0, 5)
-      .map((row, rowIdx) => {
-        const validation = preview.validations?.[rowIdx];
-        const statusBadge = renderValidationBadge(validation);
-        const cells = row.map((cell) => `<td>${Utils.escapeHtml(cell || "")}</td>`).join("");
-        return `<tr>${cells}<td>${statusBadge}</td></tr>`;
+      .map((row) => {
+        const view = previewRowView(row);
+        return `<tr>
+          <td>${view.rowNum}</td>
+          <td>${Utils.escapeHtml(view.name)}</td>
+          <td>${Utils.escapeHtml(view.address)}</td>
+          <td>${renderValidationBadge(view)}</td>
+        </tr>`;
       })
       .join("");
 
     container.innerHTML = `
       <table class="preview-table">
         <thead>
-          <tr>${headerCells}<th>${Utils.escapeHtml(I18n.t("wallets-bulk-preview-status"))}</th></tr>
+          <tr>
+            <th>${Utils.escapeHtml(I18n.t("wallets-bulk-preview-col-row"))}</th>
+            <th>${Utils.escapeHtml(I18n.t("wallets-list-col-name"))}</th>
+            <th>${Utils.escapeHtml(I18n.t("wallets-bulk-preview-col-address"))}</th>
+            <th>${Utils.escapeHtml(I18n.t("wallets-bulk-preview-status"))}</th>
+          </tr>
         </thead>
         <tbody>
           ${bodyRows}
@@ -372,48 +409,30 @@ export function createBulkOperations({
     `;
   }
 
-  function renderValidationBadge(validation) {
-    if (!validation) return '<span class="validation-badge">—</span>';
-
-    if (validation.status === "valid") {
+  function renderValidationBadge(view) {
+    if (view.valid) {
       return `<span class="validation-badge valid"><i class="icon-check"></i> ${Utils.escapeHtml(I18n.t("wallets-bulk-status-valid"))}</span>`;
-    } else if (validation.status === "duplicate") {
-      return `<span class="validation-badge duplicate"><i class="icon-copy"></i> ${Utils.escapeHtml(I18n.t("wallets-bulk-status-duplicate"))}</span>`;
-    } else {
-      // The reason is a per-row validation outcome from the backend, shown as sent.
-      return `<span class="validation-badge invalid"><i class="icon-x"></i> ${Utils.escapeHtml(validation.reason || I18n.t("wallets-bulk-status-invalid"))}</span>`; // api-body-ok: per-row validation outcome field
     }
-  }
-
-  function updatePreviewWithMapping() {
-    // Re-validate with current mapping if needed
-    if (importPreviewData) {
-      renderPreviewTable(importPreviewData);
-    }
+    // The reasons are per-row validation outcomes from the backend, shown as sent.
+    const reason = view.errors.join("; ") || I18n.t("wallets-bulk-status-invalid"); // api-body-ok: per-row validation outcome field
+    return `<span class="validation-badge invalid"><i class="icon-x"></i> ${Utils.escapeHtml(reason)}</span>`;
   }
 
   function updateImportSummary(preview) {
-    const validations = preview.validations || [];
-    let valid = 0,
-      invalid = 0,
-      duplicate = 0;
-
-    validations.forEach((v) => {
-      if (v.status === "valid") valid++;
-      else if (v.status === "duplicate") duplicate++;
-      else invalid++;
-    });
+    const counts = summarizePreview(preview);
 
     const validEl = $("#import-summary-valid");
     const invalidEl = $("#import-summary-invalid");
     const duplicateEl = $("#import-summary-duplicate");
 
-    if (validEl) validEl.innerHTML = I18n.markup("wallets-bulk-summary-valid", { count: valid });
+    if (validEl) validEl.innerHTML = I18n.markup("wallets-bulk-summary-valid", { count: counts.valid });
     if (invalidEl) {
-      invalidEl.innerHTML = I18n.markup("wallets-bulk-summary-invalid", { count: invalid });
+      invalidEl.innerHTML = I18n.markup("wallets-bulk-summary-invalid", { count: counts.invalid });
     }
     if (duplicateEl) {
-      duplicateEl.innerHTML = I18n.markup("wallets-bulk-summary-duplicate", { count: duplicate });
+      duplicateEl.innerHTML = I18n.markup("wallets-bulk-summary-duplicate", {
+        count: counts.duplicate,
+      });
     }
   }
 
@@ -421,11 +440,14 @@ export function createBulkOperations({
     const executeBtn = $("#import-step2-execute");
     if (!executeBtn) return;
 
-    const hasName = importColumnMapping.name !== undefined;
-    const hasKey = importColumnMapping.private_key !== undefined;
-    const hasValidRows = importPreviewData?.validations?.some((v) => v.status === "valid");
+    const hasName = importColumnMapping.name_col !== undefined;
+    const hasKey = importColumnMapping.private_key_col !== undefined;
+    // Rows were validated against the detected mapping; when that mapping was incomplete
+    // every row reads invalid, and the user's own selection is what the server re-validates.
+    const preview = importPreviewData?.preview;
+    const canImport = preview && (preview.valid_count > 0 || !preview.column_mapping.is_valid);
 
-    executeBtn.disabled = !(hasName && hasKey && hasValidRows);
+    executeBtn.disabled = !(hasName && hasKey && canImport);
   }
 
   async function executeImport() {
@@ -439,10 +461,7 @@ export function createBulkOperations({
       const response = await fetch("/api/wallets/import/execute", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          preview_id: importPreviewData?.preview_id,
-          column_mapping: importColumnMapping,
-        }),
+        body: JSON.stringify(buildImportRequest(importPreviewData, importColumnMapping)),
       });
 
       const data = await response.json();
@@ -453,8 +472,10 @@ export function createBulkOperations({
       renderImportResults(data);
       goToImportStep(3);
 
-      const successCount = data.results?.filter((r) => r.success).length || 0;
-      Utils.showToast(I18n.t("wallets-bulk-import-toast", { count: successCount }), "success");
+      Utils.showToast(
+        I18n.t("wallets-bulk-import-toast", { count: data.success_count }),
+        "success",
+      );
     } catch (error) {
       console.error("[Wallets] Import failed:", error);
       Utils.showToast(I18n.t("wallets-bulk-import-error", { reason: error.message }), "error");
@@ -472,9 +493,9 @@ export function createBulkOperations({
 
     if (!headerEl || !tableEl) return;
 
-    const results = data.results || [];
-    const successCount = results.filter((r) => r.success).length;
-    const errorCount = results.filter((r) => !r.success).length;
+    const results = data.rows || [];
+    const successCount = data.success_count;
+    const errorCount = results.length - successCount;
 
     // Determine result type
     let resultClass, icon, title, subtitle;
