@@ -27,11 +27,16 @@ export async function withDetail(error) {
   return wrapped;
 }
 
+/**
+ * Request options shared by every copy-trading write. A write is never replayed
+ * after a lost connection: the server may have committed it before the response
+ * was lost, and a replayed create opens a second task on the same wallet. The
+ * page reloads its state after a failed write instead.
+ */
+const WRITE_OPTIONS = { priority: "high", skipDedup: true, retryOnConnectionError: false };
+
 export function createApi(requestManager) {
-  async function call(
-    path,
-    { method = "GET", body, signal, timeout, retryOnConnectionError } = {}
-  ) {
+  async function call(path, { method = "GET", body, signal, timeout } = {}) {
     const write = method !== "GET";
     try {
       return await requestManager.fetch(`${BASE}${path}`, {
@@ -39,10 +44,8 @@ export function createApi(requestManager) {
         ...(body !== undefined
           ? { headers: { "Content-Type": "application/json" }, body: JSON.stringify(body) }
           : {}),
-        priority: write ? "high" : "normal",
-        skipDedup: write,
+        ...(write ? WRITE_OPTIONS : { priority: "normal", skipDedup: false }),
         ...(timeout !== undefined ? { timeout } : {}),
-        ...(retryOnConnectionError !== undefined ? { retryOnConnectionError } : {}),
         signal,
       });
     } catch (error) {
@@ -84,7 +87,6 @@ export function createApi(requestManager) {
         method: "POST",
         body: { opened_at: openedAt },
         timeout: CLOSE_TIMEOUT_MS,
-        retryOnConnectionError: false,
       }),
     async config() {
       try {
@@ -100,8 +102,7 @@ export function createApi(requestManager) {
           method: "PATCH",
           headers: { "Content-Type": "application/json" },
           body: JSON.stringify(patch),
-          priority: "high",
-          skipDedup: true,
+          ...WRITE_OPTIONS,
         });
       } catch (error) {
         throw await withDetail(error);

@@ -52,18 +52,31 @@ test("a manual close is sent once, with the long timeout and no connection retry
   assert.equal(options.priority, "high");
 });
 
-test("every other writer keeps the request manager's retry policy", async () => {
+test("no copy write is replayed after a lost connection", async () => {
   const { api, calls } = recordingApi();
-  await api.reset(3);
+  await api.create({ target_address: "Target" });
   await api.update(3, { enabled: false });
+  await api.remove(3);
   await api.setMode(3, "paper");
+  await api.reset(3);
+  await api.closeHolding(3, "Mint", "2026-10-07T03:00:00Z");
   await api.patchConfig({ enabled: true });
-  assert.equal(calls.length, 4);
+  assert.equal(calls.length, 7);
   for (const { url, options } of calls) {
-    assert.ok(
-      !Object.hasOwn(options, "retryOnConnectionError"),
-      `${options.method} ${url} must not override the retry policy`
-    );
+    assert.notEqual(options.method, "GET", url);
+    assert.equal(options.retryOnConnectionError, false, `${options.method} ${url} must not replay`);
+    assert.equal(options.skipDedup, true, `${options.method} ${url}`);
+    assert.equal(options.priority, "high", `${options.method} ${url}`);
+  }
+});
+
+test("reads keep the request manager's retry policy", async () => {
+  const { api, calls } = recordingApi();
+  await api.overview();
+  await api.activity(3, { limit: 5 });
+  for (const { url, options } of calls) {
+    assert.equal(options.method, "GET", url);
+    assert.ok(!Object.hasOwn(options, "retryOnConnectionError"), url);
   }
 });
 
