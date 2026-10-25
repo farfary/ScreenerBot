@@ -96,10 +96,14 @@ pub async fn preview_multi_sell(Json(request): Json<MultiSellPreviewRequest>) ->
     let mut wallets_with_balance = Vec::new();
     let mut total_token_balance = 0.0;
 
-    // Fetch token decimals once for display conversion
-    let token_decimals = decimals::get(crate::chains::active_chain(), &request.token_mint)
-        .await
-        .unwrap_or(9);
+    // Fetch token decimals once for display conversion. The lookup already falls back
+    // to the chain, so no answer means the address is not a mint.
+    let Some(token_decimals) =
+        decimals::get(crate::chains::active_chain(), &request.token_mint).await
+    else {
+        return ApiError::new(ApiErrorCode::InvalidInput, ids::ERRORS_TOOLS_MINT_INVALID)
+            .into_response();
+    };
     let divisor = 10f64.powi(token_decimals as i32);
 
     for wallet in secondary_wallets {
