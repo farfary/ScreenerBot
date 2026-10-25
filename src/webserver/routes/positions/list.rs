@@ -6,6 +6,7 @@
 use std::collections::HashMap;
 
 use axum::{extract::Query, Json};
+use chrono::{DateTime, Utc};
 
 use super::types::*;
 use crate::chains::ChainId;
@@ -59,6 +60,9 @@ pub async fn load_positions_with_filters(
         positions
     };
 
+    // A limit keeps the most recent rows, so order before cutting: the store
+    // holds positions in no particular order.
+    sort_newest_first(&mut filtered_positions, |p| (p.entry_time, p.exit_time));
     if limit > 0 {
         filtered_positions.truncate(limit);
     }
@@ -100,6 +104,18 @@ pub async fn load_positions_with_filters(
             )
         })
         .collect()
+}
+
+/// Order `items` by their latest activity, newest first: the exit when there is
+/// one, else the entry. `times` gives an item's `(entry_time, exit_time)`.
+fn sort_newest_first<T>(
+    items: &mut [T],
+    times: impl Fn(&T) -> (DateTime<Utc>, Option<DateTime<Utc>>),
+) {
+    items.sort_by_key(|item| {
+        let (entry, exit) = times(item);
+        std::cmp::Reverse(exit.unwrap_or(entry))
+    });
 }
 
 /// Map position to response with a pre-fetched logo URL (used for batch operations)
@@ -234,4 +250,31 @@ pub async fn get_positions_stats() -> Json<PositionsStatsResponse> {
         total_invested_native,
         total_pnl,
     })
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use chrono::TimeZone;
+
+    fn at(hour: u32) -> DateTime<Utc> {
+        Utc.with_ymd_and_hms(2026, 10, 1, hour, 0, 0).unwrap()
+    }
+
+    #[test]
+    fn rows_are_ordered_by_latest_activity_so_a_limit_keeps_the_newest() {
+        // (name, entry, exit)
+        let mut rows = vec![
+            ("old-open", at(1), None),
+            ("closed-late", at(2), Some(at(9))),
+            ("new-open", at(7), None),
+            ("closed-early", at(3), Some(at(4))),
+        ];
+        sort_newest_first(&mut rows, |row| (row.1, row.2));
+        let names: Vec<_> = rows.iter().map(|row| row.0).collect();
+        assert_eq!(
+            names,
+            ["closed-late", "new-open", "closed-early", "old-open"]
+        );
+    }
 }
