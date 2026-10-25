@@ -323,6 +323,7 @@ tools-multi-op-sell-failed = Sell failed
 tools-multi-op-transfer-failed = Transfer failed
 tools-multi-op-balance-failed = Failed to get balance
 tools-multi-op-mint-invalid = Invalid mint address
+tools-multi-op-close-failed = Account close failed
 tools-multi-buy-session-failed = Multi-buy failed
 tools-multi-sell-session-failed = Multi-sell failed
 tools-multi-session-aborted = Operation aborted by user
@@ -504,6 +505,8 @@ tools-consolidation-empty = No sub-wallets found
 tools-consolidation-empty-hint = Create sub-wallets using Multi-Buy to get started
 tools-consolidation-load-failed = Failed to load: { $reason }
 tools-consolidation-select-prompt = Select wallets to consolidate
+# $failed and $total count the transfers and account closes of one consolidation.
+tools-consolidation-partial = Failed operations: { $failed } of { $total }
 # $amount is the selected balance with its unit.
 tools-consolidation-selection-totals =
     | { $amount } | { $tokens ->

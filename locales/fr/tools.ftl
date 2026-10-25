@@ -300,6 +300,7 @@ tools-multi-op-sell-failed = Échec de la vente
 tools-multi-op-transfer-failed = Échec du transfert
 tools-multi-op-balance-failed = Échec de la récupération du solde
 tools-multi-op-mint-invalid = Adresse de mint invalide
+tools-multi-op-close-failed = Échec de la fermeture du compte
 tools-multi-buy-session-failed = Échec du multi-achat
 tools-multi-sell-session-failed = Échec de la multi-vente
 tools-multi-session-aborted = Opération interrompue par l'utilisateur
@@ -482,6 +483,8 @@ tools-consolidation-empty = Aucun sous-portefeuille trouvé
 tools-consolidation-empty-hint = Créez des sous-portefeuilles avec le multi-achat pour commencer
 tools-consolidation-load-failed = Échec du chargement : { $reason }
 tools-consolidation-select-prompt = Sélectionnez les portefeuilles à consolider
+# $failed and $total count the transfers and account closes of one consolidation.
+tools-consolidation-partial = Opérations échouées : { $failed } sur { $total }
 tools-consolidation-selection-totals =
     | { $amount } | { $tokens ->
         [one] { $tokens } token

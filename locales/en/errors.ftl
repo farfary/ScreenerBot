@@ -313,7 +313,6 @@ errors-tools-session-active = Another multi-wallet operation is already in progr
 errors-tools-config-invalid = Invalid tool configuration: { $reason }
 errors-tools-config-rejected = Invalid tool configuration
 errors-tools-consolidate-failed = Failed to consolidate wallets
-errors-tools-ata-cleanup-failed = Failed to cleanup ATAs
 errors-tools-routers-unavailable = Swap routers are not ready yet
 errors-tools-router-disabled-chain-settings = { $router } is disabled in Settings > Chains
 errors-tools-router-unknown = Unknown swap router '{ $router }'

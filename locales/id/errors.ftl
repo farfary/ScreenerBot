@@ -283,7 +283,6 @@ errors-tools-session-active = Operasi multi-dompet lain sedang berlangsung
 errors-tools-config-invalid = Konfigurasi alat tidak valid: { $reason }
 errors-tools-config-rejected = Konfigurasi alat tidak valid
 errors-tools-consolidate-failed = Gagal mengonsolidasikan dompet
-errors-tools-ata-cleanup-failed = Gagal membersihkan ATA
 errors-tools-routers-unavailable = Router swap belum siap
 errors-tools-router-disabled-chain-settings = { $router } dinonaktifkan di Pengaturan > Blockchain
 errors-tools-router-unknown = Router swap '{ $router }' tidak dikenal

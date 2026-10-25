@@ -299,6 +299,7 @@ tools-multi-op-sell-failed = Не удалось продать
 tools-multi-op-transfer-failed = Не удалось выполнить перевод
 tools-multi-op-balance-failed = Не удалось получить баланс
 tools-multi-op-mint-invalid = Недопустимый адрес минта
+tools-multi-op-close-failed = Не удалось закрыть аккаунт
 tools-multi-buy-session-failed = Мультипокупка не удалась
 tools-multi-sell-session-failed = Мультипродажа не удалась
 tools-multi-session-aborted = Операция прервана пользователем
@@ -490,6 +491,8 @@ tools-consolidation-empty = Дополнительные кошельки не �
 tools-consolidation-empty-hint = Создайте дополнительные кошельки через мультипокупку, чтобы начать
 tools-consolidation-load-failed = Не удалось загрузить: { $reason }
 tools-consolidation-select-prompt = Выберите кошельки для консолидации
+# $failed and $total count the transfers and account closes of one consolidation.
+tools-consolidation-partial = Неудачных операций: { $failed } из { $total }
 tools-consolidation-selection-totals =
     | { $amount } | { $tokens ->
         [one] { $tokens } токен

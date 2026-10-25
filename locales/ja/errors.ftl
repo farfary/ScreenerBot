@@ -283,7 +283,6 @@ errors-tools-session-active = 別のマルチウォレット操作がすでに�
 errors-tools-config-invalid = ツールの設定が無効です: { $reason }
 errors-tools-config-rejected = ツールの設定が無効です
 errors-tools-consolidate-failed = ウォレットを統合できませんでした
-errors-tools-ata-cleanup-failed = ATA をクリーンアップできませんでした
 errors-tools-routers-unavailable = スワップルーターの準備がまだできていません
 errors-tools-router-disabled-chain-settings = { $router } は設定 > チェーンで無効になっています
 errors-tools-router-unknown = 不明なスワップルーター '{ $router }'

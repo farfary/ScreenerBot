@@ -282,6 +282,7 @@ tools-multi-op-sell-failed = Venta fallida
 tools-multi-op-transfer-failed = Transferencia fallida
 tools-multi-op-balance-failed = Error al obtener el saldo
 tools-multi-op-mint-invalid = Dirección mint no válida
+tools-multi-op-close-failed = Error al cerrar la cuenta
 tools-multi-buy-session-failed = Compra múltiple fallida
 tools-multi-sell-session-failed = Venta múltiple fallida
 tools-multi-session-aborted = Operación cancelada por el usuario
@@ -452,6 +453,8 @@ tools-consolidation-empty = No se encontraron subbilleteras
 tools-consolidation-empty-hint = Crea subbilleteras con la Compra múltiple para empezar
 tools-consolidation-load-failed = Error al cargar: { $reason }
 tools-consolidation-select-prompt = Selecciona las billeteras a consolidar
+# $failed and $total count the transfers and account closes of one consolidation.
+tools-consolidation-partial = Operaciones fallidas: { $failed } de { $total }
 tools-consolidation-selection-totals =
     | { $amount } | { $tokens ->
         [one] { $tokens } token

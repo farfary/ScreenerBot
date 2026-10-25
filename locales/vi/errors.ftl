@@ -280,7 +280,6 @@ errors-tools-session-active = Một thao tác đa ví khác đang được thự
 errors-tools-config-invalid = Cấu hình công cụ không hợp lệ: { $reason }
 errors-tools-config-rejected = Cấu hình công cụ không hợp lệ
 errors-tools-consolidate-failed = Không gộp được số dư các ví
-errors-tools-ata-cleanup-failed = Không dọn dẹp được ATA
 errors-tools-routers-unavailable = Các router swap chưa sẵn sàng
 errors-tools-router-disabled-chain-settings = { $router } đã bị tắt trong Cài đặt > Chuỗi
 errors-tools-router-unknown = Router swap '{ $router }' không xác định

@@ -281,6 +281,7 @@ tools-multi-op-sell-failed = बिक्री विफल रही
 tools-multi-op-transfer-failed = ट्रांसफ़र विफल रहा
 tools-multi-op-balance-failed = बैलेंस प्राप्त करने में विफल
 tools-multi-op-mint-invalid = मिंट एड्रेस अमान्य है
+tools-multi-op-close-failed = अकाउंट बंद करना विफल रहा
 tools-multi-buy-session-failed = मल्टी-बाय विफल रहा
 tools-multi-sell-session-failed = मल्टी-सेल विफल रहा
 tools-multi-session-aborted = ऑपरेशन उपयोगकर्ता द्वारा रोका गया
@@ -442,6 +443,8 @@ tools-consolidation-empty = कोई सब-वॉलेट नहीं मि
 tools-consolidation-empty-hint = शुरू करने के लिए मल्टी-बाय से सब-वॉलेट बनाएँ
 tools-consolidation-load-failed = लोड करने में विफल: { $reason }
 tools-consolidation-select-prompt = कंसॉलिडेट करने के लिए वॉलेट चुनें
+# $failed and $total count the transfers and account closes of one consolidation.
+tools-consolidation-partial = विफल ऑपरेशन: { $total } में से { $failed }
 tools-consolidation-selection-totals =
     | { $amount } | { $tokens ->
         [one] { $tokens } टोकन

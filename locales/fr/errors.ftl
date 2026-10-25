@@ -304,7 +304,6 @@ errors-tools-session-active = Une autre opération multi-portefeuilles est déj�
 errors-tools-config-invalid = Configuration de l'outil invalide : { $reason }
 errors-tools-config-rejected = Configuration de l'outil invalide
 errors-tools-consolidate-failed = Échec de la consolidation des portefeuilles
-errors-tools-ata-cleanup-failed = Échec du nettoyage des ATA
 errors-tools-routers-unavailable = Les routeurs de swap ne sont pas encore prêts
 errors-tools-router-disabled-chain-settings = { $router } est désactivé dans Paramètres > Chaînes
 errors-tools-router-unknown = Routeur de swap inconnu « { $router } »

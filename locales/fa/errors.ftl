@@ -312,7 +312,6 @@ errors-tools-session-active = عملیات چندکیف‌پولی دیگری د
 errors-tools-config-invalid = پیکربندی ابزار نامعتبر است: { $reason }
 errors-tools-config-rejected = پیکربندی ابزار نامعتبر است
 errors-tools-consolidate-failed = تجمیع کیف پول‌ها ناموفق بود
-errors-tools-ata-cleanup-failed = پاکسازی ATAها ناموفق بود
 errors-tools-routers-unavailable = روترهای سواپ هنوز آماده نیستند
 errors-tools-router-disabled-chain-settings = { $router } در تنظیمات > زنجیره‌ها غیرفعال است
 errors-tools-router-unknown = روتر سواپ ناشناخته '{ $router }'

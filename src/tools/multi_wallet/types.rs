@@ -239,47 +239,57 @@ impl MultiSellConfig {
     }
 }
 
-/// Configuration for consolidation operation
+/// Configuration for consolidation operation. Nothing is implied: the
+/// sub-wallets and every operation are named, so an incomplete request is
+/// rejected instead of widening to every sub-wallet.
 #[derive(Clone, Debug, Serialize, Deserialize)]
 pub struct ConsolidateConfig {
-    /// Specific wallet IDs to consolidate (None = all sub-wallets)
-    pub wallet_ids: Option<Vec<i64>>,
+    /// Sub-wallets to consolidate; each must be an active secondary wallet
+    pub wallet_ids: Vec<i64>,
     /// Transfer SOL back to main wallet
     pub transfer_sol: bool,
-    /// Token mints to transfer (None = no tokens)
-    pub transfer_tokens: Option<Vec<String>>,
-    /// Close empty ATAs to reclaim rent
+    /// Token mints to transfer (empty = no tokens)
+    pub transfer_tokens: Vec<String>,
+    /// Close empty token accounts to reclaim their rent deposits
     pub close_atas: bool,
     /// Include Token-2022 accounts
     pub include_token_2022: bool,
-    /// Leave rent-exempt amount (~0.00089 SOL) in sub-wallets
+    /// Leave the rent-exempt minimum of a system account in each sub-wallet
     pub leave_rent_exempt: bool,
-}
-
-impl Default for ConsolidateConfig {
-    fn default() -> Self {
-        Self {
-            wallet_ids: None,
-            transfer_sol: true,
-            transfer_tokens: None,
-            close_atas: true,
-            include_token_2022: true,
-            leave_rent_exempt: false,
-        }
-    }
 }
 
 impl ConsolidateConfig {
     /// Validate the configuration
     pub fn validate(&self) -> Result<(), Error> {
-        // At least one operation should be enabled
-        if !self.transfer_sol && self.transfer_tokens.is_none() && !self.close_atas {
+        if self.wallet_ids.is_empty() {
+            return Err(Error::InvalidConfig {
+                detail: "no sub-wallet selected".to_owned(),
+            });
+        }
+        if !self.transfer_sol && self.transfer_tokens.is_empty() && !self.close_atas {
             return Err(Error::InvalidConfig {
                 detail: "at least one consolidation operation must be enabled".to_owned(),
             });
         }
         Ok(())
     }
+}
+
+/// What a consolidation moved, beside the per-operation session record.
+#[derive(Clone, Debug)]
+pub struct ConsolidationResult {
+    /// Every transfer and close, with its outcome
+    pub session: SessionResult,
+    /// Sub-wallets consolidated
+    pub wallets: usize,
+    /// SOL transferred to the main wallet
+    pub sol_transferred: f64,
+    /// Token transfers that landed
+    pub tokens_transferred: usize,
+    /// Token accounts closed
+    pub accounts_closed: usize,
+    /// Rent deposits the closed accounts returned to their sub-wallets
+    pub rent_reclaimed_sol: f64,
 }
 
 // =============================================================================

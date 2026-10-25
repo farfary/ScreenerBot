@@ -301,6 +301,7 @@ tools-multi-op-sell-failed = 売却に失敗しました
 tools-multi-op-transfer-failed = 送金に失敗しました
 tools-multi-op-balance-failed = 残高を取得できませんでした
 tools-multi-op-mint-invalid = ミントアドレスが無効です
+tools-multi-op-close-failed = アカウントのクローズに失敗しました
 tools-multi-buy-session-failed = マルチ購入に失敗しました
 tools-multi-sell-session-failed = マルチ売却に失敗しました
 tools-multi-session-aborted = ユーザーが操作を中止しました
@@ -465,6 +466,8 @@ tools-consolidation-empty = サブウォレットが見つかりません
 tools-consolidation-empty-hint = マルチ購入でサブウォレットを作成して開始します
 tools-consolidation-load-failed = 読み込みに失敗しました: { $reason }
 tools-consolidation-select-prompt = 統合するウォレットを選択してください
+# $failed and $total count the transfers and account closes of one consolidation.
+tools-consolidation-partial = 失敗した操作: { $total } 件中 { $failed } 件
 tools-consolidation-selection-totals =
     | { $amount } | { $tokens ->
        *[other] { $tokens }個のトークン

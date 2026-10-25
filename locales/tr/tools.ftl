@@ -305,6 +305,7 @@ tools-multi-op-sell-failed = Satım başarısız oldu
 tools-multi-op-transfer-failed = Transfer başarısız oldu
 tools-multi-op-balance-failed = Bakiye alınamadı
 tools-multi-op-mint-invalid = Mint adresi geçersiz
+tools-multi-op-close-failed = Hesap kapatılamadı
 tools-multi-buy-session-failed = Çoklu alım başarısız oldu
 tools-multi-sell-session-failed = Çoklu satım başarısız oldu
 tools-multi-session-aborted = İşlem kullanıcı tarafından iptal edildi
@@ -479,6 +480,8 @@ tools-consolidation-empty = Alt cüzdan bulunamadı
 tools-consolidation-empty-hint = Başlamak için Çoklu Alım ile alt cüzdanlar oluşturun
 tools-consolidation-load-failed = Yüklenemedi: { $reason }
 tools-consolidation-select-prompt = Birleştirilecek cüzdanları seçin
+# $failed and $total count the transfers and account closes of one consolidation.
+tools-consolidation-partial = Başarısız işlemler: { $total } işlemden { $failed }
 tools-consolidation-selection-totals =
     | { $amount } | { $tokens ->
         [one] { $tokens } token

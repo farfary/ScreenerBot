@@ -304,7 +304,6 @@ errors-tools-session-active = Başka bir çoklu cüzdan işlemi zaten sürüyor
 errors-tools-config-invalid = Araç yapılandırması geçersiz: { $reason }
 errors-tools-config-rejected = Araç yapılandırması geçersiz
 errors-tools-consolidate-failed = Cüzdanlar birleştirilemedi
-errors-tools-ata-cleanup-failed = ATA temizliği başarısız oldu
 errors-tools-routers-unavailable = Takas yönlendiricileri henüz hazır değil
 errors-tools-router-disabled-chain-settings = { $router } Ayarlar > Zincirler bölümünde devre dışı
 errors-tools-router-unknown = Bilinmeyen takas yönlendiricisi: '{ $router }'

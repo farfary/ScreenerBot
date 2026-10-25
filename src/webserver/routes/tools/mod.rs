@@ -28,9 +28,9 @@ use favorites::{
     add_favorite, delete_favorite, get_favorites_list, mark_favorite_used, update_favorite,
 };
 use multi_wallet::{
-    abort_multi_buy, abort_multi_sell, cleanup_subwallet_atas, consolidate_wallets,
-    get_multi_buy_status, get_multi_sell_status, get_multi_wallet_sessions, get_wallets_summary,
-    preview_multi_buy, preview_multi_sell, start_multi_buy, start_multi_sell,
+    abort_multi_buy, abort_multi_sell, consolidate_wallets, get_multi_buy_status,
+    get_multi_sell_status, get_multi_wallet_sessions, get_wallets_summary, preview_multi_buy,
+    preview_multi_sell, start_multi_buy, start_multi_sell,
 };
 use trade_watcher::{
     add_watched_token_handler, delete_watched_token_handler, get_trade_watcher_status_handler,
@@ -58,7 +58,6 @@ fn multi_wallet_routes() -> Router<Arc<AppState>> {
         // Wallet Management
         .route("/wallets/summary", get(get_wallets_summary))
         .route("/wallets/consolidate", post(consolidate_wallets))
-        .route("/wallets/cleanup-atas", post(cleanup_subwallet_atas))
         // Sessions
         .route("/multi-wallet/sessions", get(get_multi_wallet_sessions))
 }

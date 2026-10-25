@@ -312,7 +312,6 @@ errors-tools-session-active = عملية متعددة المحافظ أخرى ق
 errors-tools-config-invalid = إعدادات الأداة غير صالحة: { $reason }
 errors-tools-config-rejected = إعدادات الأداة غير صالحة
 errors-tools-consolidate-failed = تعذّر تجميع المحافظ
-errors-tools-ata-cleanup-failed = تعذّر تنظيف حسابات ATA
 errors-tools-routers-unavailable = موجّهات المبادلة غير جاهزة بعد
 errors-tools-router-disabled-chain-settings = { $router } معطّل في الإعدادات > السلاسل
 errors-tools-router-unknown = موجّه مبادلة غير معروف '{ $router }'

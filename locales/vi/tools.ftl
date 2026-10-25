@@ -298,6 +298,7 @@ tools-multi-op-sell-failed = Bán thất bại
 tools-multi-op-transfer-failed = Chuyển thất bại
 tools-multi-op-balance-failed = Không lấy được số dư
 tools-multi-op-mint-invalid = Địa chỉ mint không hợp lệ
+tools-multi-op-close-failed = Đóng tài khoản thất bại
 tools-multi-buy-session-failed = Mua nhiều lần thất bại
 tools-multi-sell-session-failed = Bán nhiều lần thất bại
 tools-multi-session-aborted = Người dùng đã hủy thao tác
@@ -462,6 +463,8 @@ tools-consolidation-empty = Không tìm thấy ví phụ nào
 tools-consolidation-empty-hint = Tạo ví phụ bằng công cụ Mua nhiều lần để bắt đầu
 tools-consolidation-load-failed = Không tải được: { $reason }
 tools-consolidation-select-prompt = Chọn các ví để gộp số dư
+# $failed and $total count the transfers and account closes of one consolidation.
+tools-consolidation-partial = Thao tác thất bại: { $failed } / { $total }
 tools-consolidation-selection-totals =
     | { $amount } | { $tokens ->
        *[other] { $tokens } token

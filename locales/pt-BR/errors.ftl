@@ -283,7 +283,6 @@ errors-tools-session-active = Já há outra operação com várias carteiras em 
 errors-tools-config-invalid = Configuração da ferramenta inválida: { $reason }
 errors-tools-config-rejected = Configuração da ferramenta inválida
 errors-tools-consolidate-failed = Falha ao consolidar as carteiras
-errors-tools-ata-cleanup-failed = Falha ao limpar as ATAs
 errors-tools-routers-unavailable = Os roteadores de swap ainda não estão prontos
 errors-tools-router-disabled-chain-settings = { $router } está desativado em Configurações > Redes
 errors-tools-router-unknown = Roteador de swap '{ $router }' desconhecido

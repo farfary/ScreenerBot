@@ -280,7 +280,6 @@ errors-tools-session-active = Ya hay otra operación con varias billeteras en cu
 errors-tools-config-invalid = Configuración de la herramienta no válida: { $reason }
 errors-tools-config-rejected = Configuración de la herramienta no válida
 errors-tools-consolidate-failed = Error al consolidar las billeteras
-errors-tools-ata-cleanup-failed = Error al limpiar las ATA
 errors-tools-routers-unavailable = Los enrutadores de swap aún no están listos
 errors-tools-router-disabled-chain-settings = { $router } está desactivado en Configuración > Cadenas
 errors-tools-router-unknown = Enrutador de swap desconocido '{ $router }'

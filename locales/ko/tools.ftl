@@ -305,6 +305,7 @@ tools-multi-op-sell-failed = 매도 실패
 tools-multi-op-transfer-failed = 전송 실패
 tools-multi-op-balance-failed = 잔액을 가져오지 못했습니다
 tools-multi-op-mint-invalid = 올바르지 않은 민트 주소
+tools-multi-op-close-failed = 계정 닫기 실패
 tools-multi-buy-session-failed = 멀티 매수에 실패했습니다
 tools-multi-sell-session-failed = 멀티 매도에 실패했습니다
 tools-multi-session-aborted = 사용자가 작업을 중단했습니다
@@ -470,6 +471,8 @@ tools-consolidation-empty = 하위 지갑이 없습니다
 tools-consolidation-empty-hint = 멀티 매수로 하위 지갑을 만들어 시작하세요
 tools-consolidation-load-failed = 불러오기 실패: { $reason }
 tools-consolidation-select-prompt = 통합할 지갑을 선택하세요
+# $failed and $total count the transfers and account closes of one consolidation.
+tools-consolidation-partial = 실패한 작업: { $total }개 중 { $failed }개
 tools-consolidation-selection-totals =
     | { $amount } | 토큰 { $tokens }개 | 빈 ATA { $atas }개
 tools-consolidation-transferred-native = 메인 지갑으로 { $amount } 전송됨

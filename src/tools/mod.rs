@@ -72,6 +72,7 @@ pub use multi_wallet::{
     execute_multi_sell,
     fund_wallets,
     ConsolidateConfig,
+    ConsolidationResult,
     // Configuration types
     MultiBuyConfig,
     MultiSellConfig,

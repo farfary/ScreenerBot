@@ -280,7 +280,6 @@ errors-tools-session-active = एक और मल्टी-वॉलेट ऑ�
 errors-tools-config-invalid = टूल कॉन्फ़िगरेशन अमान्य है: { $reason }
 errors-tools-config-rejected = टूल कॉन्फ़िगरेशन अमान्य है
 errors-tools-consolidate-failed = वॉलेट कंसॉलिडेट करने में विफल
-errors-tools-ata-cleanup-failed = ATA साफ़ करने में विफल
 errors-tools-routers-unavailable = स्वैप राउटर अभी तैयार नहीं हैं
 errors-tools-router-disabled-chain-settings = { $router } सेटिंग्स > ब्लॉकचेन में बंद है
 errors-tools-router-unknown = अज्ञात स्वैप राउटर '{ $router }'

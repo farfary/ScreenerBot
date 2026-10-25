@@ -299,6 +299,7 @@ tools-multi-op-sell-failed = Verkauf fehlgeschlagen
 tools-multi-op-transfer-failed = Übertragung fehlgeschlagen
 tools-multi-op-balance-failed = Guthaben konnte nicht abgerufen werden
 tools-multi-op-mint-invalid = Ungültige Mint-Adresse
+tools-multi-op-close-failed = Schließen des Kontos fehlgeschlagen
 tools-multi-buy-session-failed = Multi-Buy fehlgeschlagen
 tools-multi-sell-session-failed = Multi-Sell fehlgeschlagen
 tools-multi-session-aborted = Vorgang vom Nutzer abgebrochen
@@ -472,6 +473,8 @@ tools-consolidation-empty = Keine Sub-Wallets gefunden
 tools-consolidation-empty-hint = Erstellen Sie Sub-Wallets mit Multi-Buy, um zu beginnen
 tools-consolidation-load-failed = Laden fehlgeschlagen: { $reason }
 tools-consolidation-select-prompt = Wallets zum Zusammenführen auswählen
+# $failed and $total count the transfers and account closes of one consolidation.
+tools-consolidation-partial = Fehlgeschlagene Vorgänge: { $failed } von { $total }
 tools-consolidation-selection-totals =
     | { $amount } | { $tokens ->
         [one] { $tokens } Token

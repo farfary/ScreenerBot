@@ -307,7 +307,6 @@ errors-tools-session-active = 다른 멀티 지갑 작업이 이미 진행 중�
 errors-tools-config-invalid = 도구 설정이 올바르지 않습니다: { $reason }
 errors-tools-config-rejected = 도구 설정이 올바르지 않습니다
 errors-tools-consolidate-failed = 지갑을 통합하지 못했습니다
-errors-tools-ata-cleanup-failed = ATA를 정리하지 못했습니다
 errors-tools-routers-unavailable = 스왑 라우터가 아직 준비되지 않았습니다
 errors-tools-router-disabled-chain-settings = 설정 > 체인에서 사용 중지됨: { $router }
 errors-tools-router-unknown = 알 수 없는 스왑 라우터 '{ $router }'

@@ -280,7 +280,6 @@ errors-tools-session-active = Другая операция с нескольк�
 errors-tools-config-invalid = Недопустимая конфигурация инструмента: { $reason }
 errors-tools-config-rejected = Недопустимая конфигурация инструмента
 errors-tools-consolidate-failed = Не удалось консолидировать кошельки
-errors-tools-ata-cleanup-failed = Не удалось очистить ATA
 errors-tools-routers-unavailable = Роутеры свопов ещё не готовы
 errors-tools-router-disabled-chain-settings = { $router } отключён в разделе «Настройки» > «Блокчейны»
 errors-tools-router-unknown = Неизвестный роутер свопов '{ $router }'

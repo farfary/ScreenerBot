@@ -307,7 +307,6 @@ errors-tools-session-active = 另一项多钱包操作正在进行中
 errors-tools-config-invalid = 工具配置无效：{ $reason }
 errors-tools-config-rejected = 工具配置无效
 errors-tools-consolidate-failed = 归集钱包失败
-errors-tools-ata-cleanup-failed = 清理 ATA 失败
 errors-tools-routers-unavailable = 兑换路由尚未就绪
 errors-tools-router-disabled-chain-settings = { $router } 已在设置 > 区块链中停用
 errors-tools-router-unknown = 未知的兑换路由 '{ $router }'

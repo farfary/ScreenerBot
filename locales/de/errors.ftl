@@ -280,7 +280,6 @@ errors-tools-session-active = Ein anderer Multi-Wallet-Vorgang läuft bereits
 errors-tools-config-invalid = Ungültige Tool-Konfiguration: { $reason }
 errors-tools-config-rejected = Ungültige Tool-Konfiguration
 errors-tools-consolidate-failed = Wallets konnten nicht zusammengeführt werden
-errors-tools-ata-cleanup-failed = ATAs konnten nicht bereinigt werden
 errors-tools-routers-unavailable = Swap-Router sind noch nicht bereit
 errors-tools-router-disabled-chain-settings = { $router } ist unter Einstellungen > Blockchains deaktiviert
 errors-tools-router-unknown = Unbekannter Swap-Router '{ $router }'

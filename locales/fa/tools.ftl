@@ -323,6 +323,7 @@ tools-multi-op-sell-failed = فروش ناموفق بود
 tools-multi-op-transfer-failed = انتقال ناموفق بود
 tools-multi-op-balance-failed = دریافت موجودی ناموفق بود
 tools-multi-op-mint-invalid = آدرس مینت نامعتبر است
+tools-multi-op-close-failed = بستن حساب ناموفق بود
 tools-multi-buy-session-failed = خرید چندگانه ناموفق بود
 tools-multi-sell-session-failed = فروش چندگانه ناموفق بود
 tools-multi-session-aborted = عملیات توسط کاربر متوقف شد
@@ -504,6 +505,8 @@ tools-consolidation-empty = کیف پول فرعی پیدا نشد
 tools-consolidation-empty-hint = برای شروع، با «خرید چندگانه» کیف پول فرعی بسازید
 tools-consolidation-load-failed = بارگیری ناموفق بود: { $reason }
 tools-consolidation-select-prompt = کیف پول‌ها را برای تجمیع انتخاب کنید
+# $failed and $total count the transfers and account closes of one consolidation.
+tools-consolidation-partial = عملیات‌های ناموفق: { $failed } از { $total }
 # $amount is the selected balance with its unit.
 tools-consolidation-selection-totals =
     | { $amount } | { $tokens ->

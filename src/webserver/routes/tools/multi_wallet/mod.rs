@@ -22,4 +22,4 @@ pub use multi_sell::{
     abort_multi_sell, get_multi_sell_status, preview_multi_sell, start_multi_sell,
 };
 pub use session::get_multi_wallet_sessions;
-pub use wallet_ops::{cleanup_subwallet_atas, consolidate_wallets, get_wallets_summary};
+pub use wallet_ops::{consolidate_wallets, get_wallets_summary};

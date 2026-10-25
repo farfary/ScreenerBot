@@ -299,6 +299,7 @@ tools-multi-op-sell-failed = Не вдалося продати
 tools-multi-op-transfer-failed = Не вдалося виконати переказ
 tools-multi-op-balance-failed = Не вдалося отримати баланс
 tools-multi-op-mint-invalid = Недійсна адреса мінта
+tools-multi-op-close-failed = Не вдалося закрити акаунт
 tools-multi-buy-session-failed = Мультикупівля не вдалася
 tools-multi-sell-session-failed = Мультипродаж не вдався
 tools-multi-session-aborted = Операцію перервав користувач
@@ -490,6 +491,8 @@ tools-consolidation-empty = Субгаманців не знайдено
 tools-consolidation-empty-hint = Створіть субгаманці через мультикупівлю, щоб почати
 tools-consolidation-load-failed = Не вдалося завантажити: { $reason }
 tools-consolidation-select-prompt = Виберіть гаманці для консолідації
+# $failed and $total count the transfers and account closes of one consolidation.
+tools-consolidation-partial = Невдалих операцій: { $failed } з { $total }
 tools-consolidation-selection-totals =
     | { $amount } | { $tokens ->
         [one] { $tokens } токен

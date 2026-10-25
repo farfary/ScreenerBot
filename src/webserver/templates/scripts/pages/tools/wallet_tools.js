@@ -1188,9 +1188,9 @@ function renderWalletConsolidationTool(container, actionsContainer) {
   const cleanupBtn = $("#wc-cleanup-btn");
 
   if (refreshBtn) on(refreshBtn, "click", loadConsolidationData);
-  if (transferSolBtn) on(transferSolBtn, "click", handleConsolidateSOL);
-  if (transferTokensBtn) on(transferTokensBtn, "click", handleConsolidateTokens);
-  if (cleanupBtn) on(cleanupBtn, "click", handleConsolidateCleanup);
+  if (transferSolBtn) on(transferSolBtn, "click", () => runConsolidation("sol"));
+  if (transferTokensBtn) on(transferTokensBtn, "click", () => runConsolidation("tokens"));
+  if (cleanupBtn) on(cleanupBtn, "click", () => runConsolidation("cleanup"));
 
   // Load initial data
   loadConsolidationData();
@@ -1220,22 +1220,27 @@ async function loadConsolidationData() {
     }
 
     const data = await response.json();
-    consolidationState.wallets = data.wallets || [];
+    // Only sub-wallets are consolidated; the main wallet is the destination.
+    consolidationState.wallets = (data.wallets || []).filter((w) => w.role === "secondary");
+    const present = new Set(consolidationState.wallets.map((w) => w.address));
+    for (const address of consolidationState.selectedAddresses) {
+      if (!present.has(address)) consolidationState.selectedAddresses.delete(address);
+    }
 
     // Update summary
     const walletCount = $("#wc-wallet-count");
     const totalSol = $("#wc-total-sol");
     const totalTokens = $("#wc-total-tokens");
     const reclaimable = $("#wc-reclaimable");
+    const subWalletSol = consolidationState.wallets.reduce(
+      (sum, w) => sum + (w.sol_balance || 0),
+      0
+    );
 
-    if (walletCount) walletCount.textContent = data.wallet_count || 0;
-    if (totalSol) totalSol.textContent = Utils.formatSol(data.total_native || 0);
+    if (walletCount) walletCount.textContent = consolidationState.wallets.length;
+    if (totalSol) totalSol.textContent = Utils.formatSol(subWalletSol);
     if (totalTokens) totalTokens.textContent = data.token_types || 0;
-    if (reclaimable) {
-      reclaimable.textContent = I18n.t("tools-wallet-amount-approx", {
-        amount: Utils.formatSol(data.reclaimable_rent || 0),
-      });
-    }
+    if (reclaimable) reclaimable.textContent = Utils.formatSol(data.reclaimable_rent || 0);
 
     // Render wallets table
     if (consolidationState.wallets.length === 0) {
@@ -1252,7 +1257,7 @@ async function loadConsolidationData() {
       <table class="wc-wallet-table">
         <thead>
           <tr>
-            <th><input type="checkbox" id="wc-check-all" /></th>
+            <th><input type="checkbox" id="wc-check-all"${consolidationState.wallets.every((w) => consolidationState.selectedAddresses.has(w.address)) ? " checked" : ""} /></th>
             <th data-l10n-id="tools-consolidation-column-name"></th>
             <th data-l10n-id="tools-consolidation-column-native"></th>
             <th data-l10n-id="tools-consolidation-column-tokens"></th>
@@ -1264,7 +1269,7 @@ async function loadConsolidationData() {
             .map(
               (w) => `
             <tr data-address="${w.address}" class="${w.sol_balance === 0 && w.token_count === 0 ? "empty-wallet" : ""}">
-              <td><input type="checkbox" class="wc-wallet-check" data-address="${w.address}" /></td>
+              <td><input type="checkbox" class="wc-wallet-check" data-address="${w.address}"${consolidationState.selectedAddresses.has(w.address) ? " checked" : ""} /></td>
               <td>${renderNamedAddress(w.name, w.address)}</td>
               <td class="mono">${Utils.formatSol(w.sol_balance, { suffix: "", trim: false })}</td>
               <td class="mono">${w.token_count}</td>
@@ -1364,67 +1369,76 @@ function updateConsolidationSelectionSummary() {
   if (cleanupBtn) cleanupBtn.disabled = !hasSelection || totalEmptyAtas <= 0;
 }
 
-async function handleConsolidateSOL() {
-  const addresses = Array.from(consolidationState.selectedAddresses);
-  if (addresses.length === 0) return;
+/**
+ * The `ConsolidateRequest` for one action on the selected sub-wallets. Every field is
+ * explicit: the route rejects a request that leaves the selection or an operation out.
+ */
+function buildConsolidateRequest(wallets, selectedAddresses, action) {
+  const selected = wallets.filter((w) => selectedAddresses.has(w.address));
+  return {
+    wallet_ids: selected.map((w) => w.id),
+    transfer_sol: action === "sol",
+    transfer_tokens:
+      action === "tokens" ? [...new Set(selected.flatMap((w) => w.token_mints || []))] : [],
+    close_atas: action === "cleanup",
+  };
+}
 
-  const transferSolBtn = $("#wc-transfer-sol-btn");
-  if (!transferSolBtn) return;
-
-  transferSolBtn.disabled = true;
-  setButton(transferSolBtn, "icon-loader spin", I18n.t("tools-consolidation-action-transferring"));
-
-  try {
-    const response = await fetch("/api/tools/wallets/consolidate", {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ wallets: addresses, type: "sol" }),
-    });
-
-    if (!response.ok) {
-      throw await responseError(response);
-    }
-
-    const result = await response.json();
-    Utils.showToast(
+const CONSOLIDATION_ACTIONS = Object.freeze({
+  sol: {
+    button: "#wc-transfer-sol-btn",
+    icon: "icon-arrow-right",
+    label: () => I18n.t("tools-consolidation-action-transfer-native"),
+    busy: () => I18n.t("tools-consolidation-action-transferring"),
+    failed: (reason) => I18n.t("tools-wallet-transfer-failed", { reason }),
+    done: (result) =>
       I18n.t("tools-consolidation-transferred-native", {
-        amount: Utils.formatSol(result.total_transferred),
+        amount: Utils.formatSol(result.sol_recovered),
       }),
-      "success"
-    );
-    loadConsolidationData();
-  } catch (error) {
-    console.error("SOL consolidation failed:", error);
-    Utils.showToast(I18n.t("tools-wallet-transfer-failed", { reason: error.message }), "error");
-  } finally {
-    transferSolBtn.disabled = false;
-    setButton(
-      transferSolBtn,
-      "icon-arrow-right",
-      I18n.t("tools-consolidation-action-transfer-native")
-    );
-  }
-}
+  },
+  tokens: {
+    button: "#wc-transfer-tokens-btn",
+    icon: "icon-send",
+    label: () => I18n.t("tools-consolidation-action-transfer-tokens"),
+    busy: () => I18n.t("tools-consolidation-action-transferring"),
+    failed: (reason) => I18n.t("tools-wallet-transfer-failed", { reason }),
+    done: (result) =>
+      I18n.t("tools-consolidation-transferred-tokens", { count: result.tokens_transferred }),
+  },
+  cleanup: {
+    button: "#wc-cleanup-btn",
+    icon: "icon-trash-2",
+    label: () => I18n.t("tools-consolidation-action-cleanup"),
+    busy: () => I18n.t("tools-wallet-cleanup-action-cleaning"),
+    failed: (reason) => I18n.t("tools-wallet-cleanup-failed", { reason }),
+    done: (result) =>
+      I18n.t("tools-consolidation-cleaned", {
+        count: result.accounts_closed,
+        amount: Utils.formatSol(result.rent_reclaimed),
+      }),
+  },
+});
 
-async function handleConsolidateTokens() {
-  const addresses = Array.from(consolidationState.selectedAddresses);
-  if (addresses.length === 0) return;
-
-  const transferTokensBtn = $("#wc-transfer-tokens-btn");
-  if (!transferTokensBtn) return;
-
-  transferTokensBtn.disabled = true;
-  setButton(
-    transferTokensBtn,
-    "icon-loader spin",
-    I18n.t("tools-consolidation-action-transferring")
+async function runConsolidation(action) {
+  const spec = CONSOLIDATION_ACTIONS[action];
+  const request = buildConsolidateRequest(
+    consolidationState.wallets,
+    consolidationState.selectedAddresses,
+    action
   );
+  if (request.wallet_ids.length === 0) return;
+
+  const button = $(spec.button);
+  if (!button) return;
+
+  button.disabled = true;
+  setButton(button, "icon-loader spin", spec.busy());
 
   try {
     const response = await fetch("/api/tools/wallets/consolidate", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ wallets: addresses, type: "tokens" }),
+      body: JSON.stringify(request),
     });
 
     if (!response.ok) {
@@ -1432,56 +1446,23 @@ async function handleConsolidateTokens() {
     }
 
     const result = await response.json();
-    Utils.showToast(
-      I18n.t("tools-consolidation-transferred-tokens", { count: result.tokens_transferred }),
-      "success"
-    );
-    loadConsolidationData();
-  } catch (error) {
-    console.error("Token consolidation failed:", error);
-    Utils.showToast(I18n.t("tools-wallet-transfer-failed", { reason: error.message }), "error");
-  } finally {
-    transferTokensBtn.disabled = false;
-    setButton(transferTokensBtn, "icon-send", I18n.t("tools-consolidation-action-transfer-tokens"));
-  }
-}
-
-async function handleConsolidateCleanup() {
-  const addresses = Array.from(consolidationState.selectedAddresses);
-  if (addresses.length === 0) return;
-
-  const cleanupBtn = $("#wc-cleanup-btn");
-  if (!cleanupBtn) return;
-
-  cleanupBtn.disabled = true;
-  setButton(cleanupBtn, "icon-loader spin", I18n.t("tools-wallet-cleanup-action-cleaning"));
-
-  try {
-    const response = await fetch("/api/tools/wallets/cleanup-atas", {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ wallets: addresses }),
-    });
-
-    if (!response.ok) {
-      throw await responseError(response);
+    Utils.showToast(spec.done(result), "success");
+    if (result.failed_ops > 0) {
+      Utils.showToast(
+        I18n.t("tools-consolidation-partial", {
+          failed: result.failed_ops,
+          total: result.failed_ops + result.successful_ops,
+        }),
+        "warning"
+      );
     }
-
-    const result = await response.json();
-    Utils.showToast(
-      I18n.t("tools-consolidation-cleaned", {
-        count: result.atas_closed,
-        amount: Utils.formatSol(result.native_reclaimed),
-      }),
-      "success"
-    );
     loadConsolidationData();
   } catch (error) {
-    console.error("ATA cleanup failed:", error);
-    Utils.showToast(I18n.t("tools-wallet-cleanup-failed", { reason: error.message }), "error");
+    console.error(`Consolidation (${action}) failed:`, error);
+    Utils.showToast(spec.failed(error.message), "error");
   } finally {
-    cleanupBtn.disabled = false;
-    setButton(cleanupBtn, "icon-trash-2", I18n.t("tools-consolidation-action-cleanup"));
+    button.disabled = false;
+    setButton(button, spec.icon, spec.label());
   }
 }
 
@@ -1495,6 +1476,7 @@ export {
   renderWalletConsolidationTool,
   renderAirdropCheckerTool,
   renderWalletGeneratorTool,
+  buildConsolidateRequest,
   // State exports for cleanup (if needed by main tools.js)
   burnTokensState,
   consolidationState,

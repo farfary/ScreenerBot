@@ -3,14 +3,17 @@
 
 //! Wallet management operation handlers
 //!
-//! Handles wallet summary, consolidation, and ATA cleanup operations.
+//! Handles the wallet summary and sub-wallet consolidation.
 
 use axum::{response::Response, Json};
+
+use std::collections::HashSet;
 
 use crate::chains::solana::rpc::{get_rpc_client, RpcClientMethods};
 use crate::i18n::ids;
 use crate::logger::{self, LogTag};
-use crate::tools::multi_wallet::{execute_consolidation, ConsolidateConfig};
+use crate::tools::multi_wallet::{execute_consolidation, ConsolidateConfig, TokenHoldings};
+use crate::tools::Error;
 use crate::wallets;
 use crate::webserver::api_error::{ApiError, ApiErrorCode};
 use crate::webserver::utils::success_response;
@@ -24,6 +27,10 @@ use super::config_error::invalid_config;
 // =============================================================================
 
 /// Get wallets summary
+///
+/// Every active wallet with its SOL balance; sub-wallets also carry what a
+/// consolidation can move (token balances by mint) and what a cleanup can
+/// reclaim (empty token accounts and the rent deposits they hold).
 pub async fn get_wallets_summary() -> Response {
     // Get all wallets
     let all_wallets = match wallets::list_active_wallets().await {
@@ -40,6 +47,8 @@ pub async fn get_wallets_summary() -> Response {
     let mut main_wallet_info = None;
     let mut total_native = 0.0;
     let mut secondary_count = 0;
+    let mut sub_wallet_mints = HashSet::new();
+    let mut reclaimable_rent = 0.0;
 
     for wallet in &all_wallets {
         // Get SOL balance via RPC
@@ -50,6 +59,24 @@ pub async fn get_wallets_summary() -> Response {
 
         total_native += sol_balance;
 
+        let holdings = if wallet.role == wallets::WalletRole::Secondary {
+            match rpc.get_all_token_accounts_str(&wallet.address).await {
+                Ok(accounts) => TokenHoldings::from_accounts(&accounts),
+                Err(e) => {
+                    return ApiError::new(
+                        ApiErrorCode::Internal,
+                        ids::ERRORS_TOOLS_WALLETS_GET_FAILED,
+                    )
+                    .details(e.to_string())
+                    .into_response();
+                }
+            }
+        } else {
+            TokenHoldings::default()
+        };
+        sub_wallet_mints.extend(holdings.mints.iter().cloned());
+        reclaimable_rent += holdings.reclaimable_rent;
+
         let info = WalletInfoResponse {
             id: wallet.id,
             address: wallet.address.clone(),
@@ -57,6 +84,10 @@ pub async fn get_wallets_summary() -> Response {
             role: format!("{:?}", wallet.role).to_lowercase(),
             sol_balance,
             is_active: wallet.is_active,
+            token_count: holdings.mints.len(),
+            token_mints: holdings.mints,
+            empty_atas: holdings.empty_accounts,
+            reclaimable_rent: holdings.reclaimable_rent,
         };
 
         if wallet.role == wallets::WalletRole::Main {
@@ -73,26 +104,30 @@ pub async fn get_wallets_summary() -> Response {
         secondary_wallets: secondary_count,
         main_wallet: main_wallet_info,
         total_native,
+        token_types: sub_wallet_mints.len(),
+        reclaimable_rent,
         wallets: wallets_info,
     })
 }
 
-/// Consolidate wallets
+/// Consolidate the selected sub-wallets: the operations the request names, on
+/// the wallets it names, and nothing else.
 pub async fn consolidate_wallets(Json(request): Json<ConsolidateRequest>) -> Response {
     logger::info(
         LogTag::Tools,
         &format!(
-            "Starting consolidation: sol={}, tokens={:?}, close_atas={}",
+            "Starting consolidation: wallets={}, sol={}, tokens={}, close_atas={}",
+            request.wallet_ids.len(),
             request.transfer_sol,
-            request.transfer_tokens.as_ref().map(|t| t.len()),
+            request.transfer_tokens.len(),
             request.close_atas
         ),
     );
 
     let config = ConsolidateConfig {
-        wallet_ids: request.wallet_ids.clone(),
+        wallet_ids: request.wallet_ids,
         transfer_sol: request.transfer_sol,
-        transfer_tokens: request.transfer_tokens.clone(),
+        transfer_tokens: request.transfer_tokens,
         close_atas: request.close_atas,
         include_token_2022: request.include_token_2022,
         leave_rent_exempt: request.leave_rent_exempt,
@@ -106,75 +141,21 @@ pub async fn consolidate_wallets(Json(request): Json<ConsolidateRequest>) -> Res
     // The transfers run on their own task: a dropped request must not stop
     // the loop between two sends, nor lose the session record of one sent.
     match tokio::spawn(execute_consolidation(config)).await {
-        Ok(Ok(result)) => {
-            logger::info(
-                LogTag::Tools,
-                &format!(
-                    "Consolidation complete: {}/{} successful, {:.6} SOL recovered",
-                    result.successful_ops, result.total_wallets, result.total_sol_recovered
-                ),
-            );
-
-            success_response(ConsolidateResponse {
-                session_id: result.session_id,
-                total_wallets: result.total_wallets,
-                successful_ops: result.successful_ops,
-                failed_ops: result.failed_ops,
-                sol_recovered: result.total_sol_recovered,
-            })
-        }
+        Ok(Ok(result)) => success_response(ConsolidateResponse {
+            session_id: result.session.session_id,
+            total_wallets: result.wallets,
+            successful_ops: result.session.successful_ops,
+            failed_ops: result.session.failed_ops,
+            sol_recovered: result.sol_transferred,
+            tokens_transferred: result.tokens_transferred,
+            accounts_closed: result.accounts_closed,
+            rent_reclaimed: result.rent_reclaimed_sol,
+        }),
+        Ok(Err(e @ Error::InvalidConfig { .. })) => invalid_config(&e).into_response(),
         Ok(Err(e)) => ApiError::new(ApiErrorCode::Internal, ids::ERRORS_TOOLS_CONSOLIDATE_FAILED)
             .details(e.to_string())
             .into_response(),
         Err(e) => ApiError::new(ApiErrorCode::Internal, ids::ERRORS_TOOLS_CONSOLIDATE_FAILED)
-            .details(e.to_string())
-            .into_response(),
-    }
-}
-
-/// Cleanup ATAs on sub-wallets
-pub async fn cleanup_subwallet_atas(Json(request): Json<SubWalletAtaCleanupRequest>) -> Response {
-    logger::info(
-        LogTag::Tools,
-        &format!(
-            "Starting sub-wallet ATA cleanup: wallets={:?}",
-            request.wallet_ids
-        ),
-    );
-
-    // Use consolidation with only close_atas enabled
-    let config = ConsolidateConfig {
-        wallet_ids: request.wallet_ids.clone(),
-        transfer_sol: false,
-        transfer_tokens: None,
-        close_atas: true,
-        include_token_2022: request.include_token_2022,
-        leave_rent_exempt: true,
-    };
-
-    // Each account close is a sent transaction; the loop runs on its own task.
-    match tokio::spawn(execute_consolidation(config)).await {
-        Ok(Ok(result)) => {
-            logger::info(
-                LogTag::Tools,
-                &format!(
-                    "Sub-wallet ATA cleanup complete: {}/{} successful, {:.6} SOL recovered",
-                    result.successful_ops, result.total_wallets, result.total_sol_recovered
-                ),
-            );
-
-            success_response(ConsolidateResponse {
-                session_id: result.session_id,
-                total_wallets: result.total_wallets,
-                successful_ops: result.successful_ops,
-                failed_ops: result.failed_ops,
-                sol_recovered: result.total_sol_recovered,
-            })
-        }
-        Ok(Err(e)) => ApiError::new(ApiErrorCode::Internal, ids::ERRORS_TOOLS_ATA_CLEANUP_FAILED)
-            .details(e.to_string())
-            .into_response(),
-        Err(e) => ApiError::new(ApiErrorCode::Internal, ids::ERRORS_TOOLS_ATA_CLEANUP_FAILED)
             .details(e.to_string())
             .into_response(),
     }

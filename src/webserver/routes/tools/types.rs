@@ -263,6 +263,10 @@ pub struct WalletsSummaryResponse {
     pub main_wallet: Option<WalletInfoResponse>,
     /// Total SOL across all wallets
     pub total_native: f64,
+    /// Distinct token mints the sub-wallets hold
+    pub token_types: usize,
+    /// Rent deposits of the sub-wallets' empty token accounts, in SOL
+    pub reclaimable_rent: f64,
     /// Per-wallet details
     pub wallets: Vec<WalletInfoResponse>,
 }
@@ -276,20 +280,28 @@ pub struct WalletInfoResponse {
     pub role: String,
     pub sol_balance: f64,
     pub is_active: bool,
+    /// Token accounts holding a transferable balance (sub-wallets only)
+    pub token_count: usize,
+    /// Mints of those balances, the ones a token consolidation moves
+    pub token_mints: Vec<String>,
+    /// Empty token accounts a cleanup can close (sub-wallets only)
+    pub empty_atas: usize,
+    /// Rent deposits those empty accounts hold, in SOL
+    pub reclaimable_rent: f64,
 }
 
-/// Request for consolidation
+/// Request for consolidation. The selection and every operation are explicit:
+/// a request missing any of them fails to parse, and an empty selection is
+/// rejected, so nothing widens to every sub-wallet.
 #[derive(Debug, Deserialize)]
 pub struct ConsolidateRequest {
-    /// Specific wallet IDs to consolidate (None = all)
-    pub wallet_ids: Option<Vec<i64>>,
+    /// Sub-wallets to consolidate
+    pub wallet_ids: Vec<i64>,
     /// Transfer SOL to main wallet
-    #[serde(default = "default_transfer_sol")]
     pub transfer_sol: bool,
-    /// Token mints to transfer
-    pub transfer_tokens: Option<Vec<String>>,
-    /// Close empty ATAs
-    #[serde(default = "default_close_atas")]
+    /// Token mints to transfer (empty = none)
+    pub transfer_tokens: Vec<String>,
+    /// Close empty token accounts
     pub close_atas: bool,
     /// Include Token-2022 accounts
     #[serde(default = "default_include_token_2022")]
@@ -297,10 +309,6 @@ pub struct ConsolidateRequest {
     /// Leave rent-exempt amount in wallets
     #[serde(default)]
     pub leave_rent_exempt: bool,
-}
-
-pub fn default_transfer_sol() -> bool {
-    true
 }
 
 pub fn default_include_token_2022() -> bool {
@@ -312,24 +320,20 @@ pub fn default_include_token_2022() -> bool {
 pub struct ConsolidateResponse {
     /// Session ID
     pub session_id: String,
-    /// Total wallets processed
+    /// Sub-wallets consolidated
     pub total_wallets: usize,
     /// Successful operations
     pub successful_ops: usize,
     /// Failed operations
     pub failed_ops: usize,
-    /// SOL recovered
+    /// SOL transferred to the main wallet
     pub sol_recovered: f64,
-}
-
-/// Request for ATA cleanup on sub-wallets
-#[derive(Debug, Deserialize)]
-pub struct SubWalletAtaCleanupRequest {
-    /// Specific wallet IDs (None = all secondary)
-    pub wallet_ids: Option<Vec<i64>>,
-    /// Include Token-2022 accounts
-    #[serde(default = "default_include_token_2022")]
-    pub include_token_2022: bool,
+    /// Token transfers that landed
+    pub tokens_transferred: usize,
+    /// Token accounts closed
+    pub accounts_closed: usize,
+    /// Rent deposits the closed accounts returned, in SOL
+    pub rent_reclaimed: f64,
 }
 
 /// Response for sessions list
@@ -462,6 +466,13 @@ pub struct AddWatchedTokenRequest {
     pub watch_type: String,
     pub trigger_amount_sol: Option<f64>,
     pub action_amount_sol: Option<f64>,
+    #[serde(default = "default_watch_slippage_bps")]
+    pub slippage_bps: i32,
+}
+
+/// Slippage applied to a watch whose request carries none (5%)
+fn default_watch_slippage_bps() -> i32 {
+    500
 }
 
 // =============================================================================
@@ -571,6 +582,55 @@ mod tests {
                 "tools-burn-category-hint-zero-liquidity",
             ),
         }
+    }
+
+    #[test]
+    fn a_consolidation_request_must_name_its_wallets_and_operations() {
+        let parse = |body: serde_json::Value| serde_json::from_value::<ConsolidateRequest>(body);
+
+        let request = parse(serde_json::json!({
+            "wallet_ids": [4, 9],
+            "transfer_sol": false,
+            "transfer_tokens": ["So11111111111111111111111111111111111111112"],
+            "close_atas": false,
+        }))
+        .expect("a complete request parses");
+        assert_eq!(request.wallet_ids, vec![4, 9]);
+        assert!(!request.transfer_sol && !request.close_atas);
+        assert_eq!(request.transfer_tokens.len(), 1);
+
+        // The shape the dashboard once sent: addresses and a kind, which used to
+        // parse as "every sub-wallet, SOL and close" through the defaults.
+        assert!(parse(serde_json::json!({ "wallets": ["addr"], "type": "sol" })).is_err());
+        for missing in [
+            "wallet_ids",
+            "transfer_sol",
+            "transfer_tokens",
+            "close_atas",
+        ] {
+            let mut body = serde_json::json!({
+                "wallet_ids": [4],
+                "transfer_sol": true,
+                "transfer_tokens": [],
+                "close_atas": true,
+            });
+            body.as_object_mut().unwrap().remove(missing);
+            assert!(parse(body).is_err(), "{missing} is required");
+        }
+    }
+
+    #[test]
+    fn watched_token_request_defaults_slippage_and_reads_an_explicit_value() {
+        let body = |extra: &str| {
+            format!(
+                r#"{{"mint":"m","pool_address":"p","pool_source":"geckoterminal","watch_type":"notify-only"{extra}}}"#
+            )
+        };
+        let default: AddWatchedTokenRequest = serde_json::from_str(&body("")).unwrap();
+        assert_eq!(default.slippage_bps, 500);
+        let explicit: AddWatchedTokenRequest =
+            serde_json::from_str(&body(r#","slippage_bps":150"#)).unwrap();
+        assert_eq!(explicit.slippage_bps, 150);
     }
 
     #[test]

@@ -280,7 +280,6 @@ errors-tools-session-active = Іншу мультигаманцеву опера
 errors-tools-config-invalid = Недійсна конфігурація інструмента: { $reason }
 errors-tools-config-rejected = Недійсна конфігурація інструмента
 errors-tools-consolidate-failed = Не вдалося консолідувати гаманці
-errors-tools-ata-cleanup-failed = Не вдалося очистити ATA
 errors-tools-routers-unavailable = Маршрутизатори свопів ще не готові
 errors-tools-router-disabled-chain-settings = { $router } вимкнено в розділі Налаштування > Блокчейни
 errors-tools-router-unknown = Невідомий маршрутизатор свопів «{ $router }»

@@ -299,6 +299,7 @@ tools-multi-op-sell-failed = Penjualan gagal
 tools-multi-op-transfer-failed = Transfer gagal
 tools-multi-op-balance-failed = Gagal mendapatkan saldo
 tools-multi-op-mint-invalid = Alamat mint tidak valid
+tools-multi-op-close-failed = Gagal menutup akun
 tools-multi-buy-session-failed = Multi-beli gagal
 tools-multi-sell-session-failed = Multi-jual gagal
 tools-multi-session-aborted = Operasi dibatalkan oleh pengguna
@@ -463,6 +464,8 @@ tools-consolidation-empty = Sub-dompet tidak ditemukan
 tools-consolidation-empty-hint = Buat sub-dompet dengan Multi-beli untuk memulai
 tools-consolidation-load-failed = Gagal memuat: { $reason }
 tools-consolidation-select-prompt = Pilih dompet untuk dikonsolidasikan
+# $failed and $total count the transfers and account closes of one consolidation.
+tools-consolidation-partial = Operasi gagal: { $failed } dari { $total }
 tools-consolidation-selection-totals =
     | { $amount } | { $tokens ->
        *[other] { $tokens } token

@@ -299,6 +299,7 @@ tools-multi-op-sell-failed = 卖出失败
 tools-multi-op-transfer-failed = 转账失败
 tools-multi-op-balance-failed = 获取余额失败
 tools-multi-op-mint-invalid = 铸造地址无效
+tools-multi-op-close-failed = 关闭账户失败
 tools-multi-buy-session-failed = 批量买入失败
 tools-multi-sell-session-failed = 批量卖出失败
 tools-multi-session-aborted = 操作已被用户中止
@@ -463,6 +464,8 @@ tools-consolidation-empty = 未找到子钱包
 tools-consolidation-empty-hint = 使用批量买入创建子钱包即可开始
 tools-consolidation-load-failed = 加载失败：{ $reason }
 tools-consolidation-select-prompt = 选择要归集的钱包
+# $failed and $total count the transfers and account closes of one consolidation.
+tools-consolidation-partial = 失败的操作：{ $failed }/{ $total }
 tools-consolidation-selection-totals = | { $amount } | { $tokens ->
        *[other] { $tokens } 个代币
     } | { $atas ->

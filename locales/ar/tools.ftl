@@ -327,6 +327,7 @@ tools-multi-op-sell-failed = فشل البيع
 tools-multi-op-transfer-failed = فشل التحويل
 tools-multi-op-balance-failed = تعذّر جلب الرصيد
 tools-multi-op-mint-invalid = عنوان الإصدار غير صالح
+tools-multi-op-close-failed = فشل إغلاق الحساب
 tools-multi-buy-session-failed = فشل الشراء المتعدد
 tools-multi-sell-session-failed = فشل البيع المتعدد
 tools-multi-session-aborted = أوقف المستخدم العملية
@@ -520,6 +521,8 @@ tools-consolidation-empty = لم يتم العثور على محافظ فرعي�
 tools-consolidation-empty-hint = أنشئ محافظ فرعية باستخدام الشراء المتعدد للبدء
 tools-consolidation-load-failed = تعذّر التحميل: { $reason }
 tools-consolidation-select-prompt = اختر المحافظ المراد تجميعها
+# $failed and $total count the transfers and account closes of one consolidation.
+tools-consolidation-partial = العمليات الفاشلة: { $failed } من { $total }
 # $amount is the selected balance with its unit.
 tools-consolidation-selection-totals = | { $amount } | الرموز: { $tokens } | حسابات ATA الفارغة: { $atas }
 # $amount is the transferred balance with its unit.
