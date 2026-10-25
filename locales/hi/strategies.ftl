@@ -20,9 +20,6 @@ strategies-editor-name =
     .placeholder = स्ट्रैटेजी का नाम
 strategies-editor-dirty =
     .title = बिना सहेजे बदलाव
-strategies-editor-enabled =
-    .aria-label = स्ट्रैटेजी सक्षम
-    .title = स्ट्रैटेजी सक्षम
 strategies-action-validate = सत्यापित करें
 strategies-editor-empty = संपादित करने के लिए कोई स्ट्रैटेजी चुनें, या नई बनाएं
 strategies-conditions-empty-title = अभी कोई शर्त नहीं
@@ -70,11 +67,100 @@ strategies-unit-multiplier = ×
 
 strategies-catalog-search =
     .placeholder = शर्तें खोजें...
+    .aria-label = शर्तें खोजें
 strategies-catalog-search-clear =
     .aria-label = खोज साफ़ करें
-strategies-catalog-fold-all = सभी समेटें
-strategies-catalog-unfold-all = सभी फैलाएं
 strategies-catalog-no-description = कोई विवरण उपलब्ध नहीं
+
+# Editor header: the timeframe is the default for candle conditions that leave theirs unset.
+strategies-editor-active = सक्रिय
+strategies-editor-timeframe = डिफ़ॉल्ट टाइमफ़्रेम
+    .title = उन शर्तों के लिए कैंडल टाइमफ़्रेम जो अपना टाइमफ़्रेम तय नहीं करतीं
+strategies-editor-priority = प्राथमिकता
+    .title = 1 से 100 तक मूल्यांकन क्रम; छोटी संख्याओं का मूल्यांकन पहले होता है
+strategies-editor-description = विवरण
+strategies-editor-description-field =
+    .placeholder = यह स्ट्रैटेजी क्या करती है
+    .aria-label = स्ट्रैटेजी का विवरण
+strategies-action-export = एक्सपोर्ट
+
+# Rule groups. $mode is the all/any select written into the sentence.
+strategies-rules-match = पूरी होने वाली शर्तें: { $mode }
+strategies-group-match = पूरी होनी चाहिए: { $mode }
+strategies-match-all = सभी
+strategies-match-any = कम से कम एक
+strategies-match-mode =
+    .aria-label = सभी या कम से कम एक शर्त
+strategies-invert = उलटें
+    .title = उलटें: यह मेल न खाने पर सही होता है
+strategies-chip-off = बंद
+strategies-chip-inverted = उलटा
+strategies-row-switch =
+    .title = सहेजे रखने के लिए बंद करें, पर मूल्यांकन न हो
+    .aria-label = इस स्ट्रैटेजी द्वारा मूल्यांकित
+strategies-row-expand =
+    .aria-label = पैरामीटर दिखाएं या छिपाएं
+strategies-add-group = ग्रुप जोड़ें
+# $count is the number of conditions in the group.
+strategies-group-delete-confirm = ग्रुप हटाएं
+    .message =
+        { $count ->
+            [one] इस ग्रुप और इसकी शर्त को हटाएं?
+           *[other] इस ग्रुप और इसकी { $count } शर्तों को हटाएं?
+        }
+
+# Problems that block saving. $first is the first problem, $name the condition, $field the parameter.
+strategies-problems =
+    { $count ->
+        [one] सुधारने के लिए { $count } समस्या: { $first }
+       *[other] सुधारने के लिए { $count } समस्याएं: { $first }
+    }
+strategies-problem-located = { $name }: { $problem }
+strategies-problem-located-field = { $name }, { $field }: { $problem }
+strategies-problem-rules-empty = कम से कम एक चालू शर्त जोड़ें
+strategies-problem-group-empty = ग्रुप में कम से कम एक चालू शर्त होनी चाहिए
+strategies-problem-not-applicable = इस शर्त का उपयोग इस प्रकार की स्ट्रैटेजी में नहीं किया जा सकता
+strategies-problem-unknown-condition = अज्ञात शर्त प्रकार: { $type }
+strategies-problem-too-deep = नियम अधिकतम { $max } स्तर तक नेस्ट हो सकते हैं; उलटा ग्रुप एक अतिरिक्त स्तर गिना जाता है
+strategies-problem-required = कोई संख्या दर्ज करें
+strategies-problem-range = { $min } और { $max } के बीच होना चाहिए
+strategies-problem-invalid-option = दिए गए विकल्पों में से एक चुनें
+
+# Catalog dialog: the data a condition reads and why one is unavailable.
+strategies-catalog-all = सभी
+strategies-catalog-categories =
+    .aria-label = श्रेणियां
+strategies-catalog-empty = आपकी खोज से कोई शर्त मेल नहीं खाती
+strategies-catalog-exit-only = केवल एग्ज़िट स्ट्रैटेजी के लिए
+strategies-catalog-entry-only = केवल एंट्री स्ट्रैटेजी के लिए
+strategies-data-candles = कैंडल
+strategies-data-pool = पूल
+strategies-data-position = पोज़िशन
+strategies-data-market = बाज़ार गतिविधि
+
+# Trade counts: $count selects the plural, $amount is the formatted number.
+strategies-unit-trades = ट्रेड
+strategies-value-trades =
+    { $count ->
+        [one] { $amount } ट्रेड
+       *[other] { $amount } ट्रेड
+    }
+
+# Unsaved changes, import and export. $max is the deepest level a rule tree may reach.
+strategies-toast-too-deep = बहुत अधिक स्तर
+    .message = नियम अधिकतम { $max } स्तर तक नेस्ट हो सकते हैं
+strategies-toast-priority-invalid = अमान्य प्राथमिकता
+    .message = 1 से 100 के बीच कोई पूर्ण संख्या दर्ज करें
+strategies-toast-exported = स्ट्रैटेजी एक्सपोर्ट की गई
+# $name is the strategy name.
+strategies-unsaved-confirm = बिना सहेजे बदलाव छोड़ें?
+    .message = "{ $name }" में बदलाव सहेजे नहीं गए हैं।
+strategies-unsaved-discard = छोड़ें
+strategies-import-error-json = फ़ाइल मान्य JSON नहीं है
+strategies-import-error-shape = फ़ाइल में कोई स्ट्रैटेजी नहीं है
+# $type is the condition type id, $name the condition name.
+strategies-import-error-unknown-condition = फ़ाइल ऐसी शर्त का उपयोग करती है जो इस संस्करण में नहीं है: { $type }
+strategies-import-error-not-applicable = { $name } का उपयोग इस प्रकार की स्ट्रैटेजी में नहीं किया जा सकता
 
 strategies-create-title = नई स्ट्रैटेजी बनाएं
 strategies-create-prompt = चुनें कि आप किस प्रकार की स्ट्रैटेजी बनाना चाहते हैं:
@@ -87,19 +173,11 @@ strategies-delete-title = स्ट्रैटेजी हटाएं
 strategies-delete-message = स्ट्रैटेजी "{ $name }" हटाएं? यह कार्रवाई वापस नहीं की जा सकती।
 
 strategies-toast-fix-validation = सहेजने से पहले सत्यापन त्रुटियां ठीक करें
-strategies-toast-enabled = स्ट्रैटेजी चालू
-    .message = "{ $name }" चालू किया गया
-strategies-toast-disabled = स्ट्रैटेजी बंद
-    .message = "{ $name }" बंद किया गया
-strategies-toast-toggle-failed = टॉगल विफल
-    .message = स्ट्रैटेजी स्टेटस अपडेट करने में विफल
 strategies-toast-load-failed = लोड विफल
     .message = सर्वर से स्ट्रैटेजी लोड करने में विफल
 strategies-toast-load-strategy-failed = स्ट्रैटेजी लोड करने में विफल
 strategies-toast-no-strategy = कोई स्ट्रैटेजी नहीं बनी
     .message = कम से कम एक शर्त जोड़ें या पहले स्ट्रैटेजी बनाने के लिए 'नई स्ट्रैटेजी' पर क्लिक करें
-strategies-toast-no-conditions-save = कोई शर्त नहीं
-    .message = सहेजने से पहले स्ट्रैटेजी में कम से कम एक शर्त जोड़ें
 strategies-toast-name-required = नाम ज़रूरी है
     .message = सहेजने से पहले स्ट्रैटेजी का नाम दर्ज करें
 strategies-toast-saved = स्ट्रैटेजी सहेजी गई
@@ -107,8 +185,6 @@ strategies-toast-saved = स्ट्रैटेजी सहेजी गई
 strategies-toast-save-failed = सहेजना विफल
     .message = स्ट्रैटेजी को डेटाबेस में सहेजने में विफल
 strategies-toast-no-strategy-validate = सत्यापित करने के लिए कोई स्ट्रैटेजी नहीं
-strategies-toast-no-conditions-validate = कोई शर्त नहीं
-    .message = सत्यापित करने से पहले कम से कम एक शर्त जोड़ें
 strategies-toast-valid = स्ट्रैटेजी मान्य है
 strategies-toast-invalid = स्ट्रैटेजी में त्रुटियां हैं
 strategies-toast-validation-failed = सत्यापन विफल

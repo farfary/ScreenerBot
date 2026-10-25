@@ -22,9 +22,6 @@ strategies-editor-name =
     .placeholder = Nama strategi
 strategies-editor-dirty =
     .title = Perubahan belum disimpan
-strategies-editor-enabled =
-    .aria-label = Strategi aktif
-    .title = Strategi aktif
 strategies-action-validate = Validasi
 strategies-editor-empty = Pilih strategi untuk diedit, atau buat yang baru
 strategies-conditions-empty-title = Belum ada kondisi
@@ -70,11 +67,88 @@ strategies-unit-multiplier = ×
 
 strategies-catalog-search =
     .placeholder = Cari kondisi...
+    .aria-label = Cari kondisi
 strategies-catalog-search-clear =
     .aria-label = Hapus pencarian
-strategies-catalog-fold-all = Ciutkan Semua
-strategies-catalog-unfold-all = Bentangkan Semua
 strategies-catalog-no-description = Tidak ada deskripsi
+
+# Editor header: the timeframe is the default for candle conditions that leave theirs unset.
+strategies-editor-active = Aktif
+strategies-editor-timeframe = Timeframe default
+    .title = Timeframe candle untuk kondisi yang tidak menetapkan sendiri
+strategies-editor-priority = Prioritas
+    .title = Urutan evaluasi dari 1 sampai 100; angka lebih kecil dievaluasi lebih dulu
+strategies-editor-description = Deskripsi
+strategies-editor-description-field =
+    .placeholder = Apa yang dilakukan strategi ini
+    .aria-label = Deskripsi strategi
+strategies-action-export = Ekspor
+
+# Rule groups. $mode is the all/any select written into the sentence.
+strategies-rules-match = Cocokkan { $mode } kondisi ini
+strategies-group-match = Cocokkan { $mode } kondisi di sini
+strategies-match-all = semua
+strategies-match-any = salah satu
+strategies-match-mode =
+    .aria-label = Cocokkan semua atau salah satu
+strategies-invert = Balikkan
+    .title = Balikkan: benar saat ini tidak cocok
+strategies-chip-off = Mati
+strategies-chip-inverted = Dibalik
+strategies-row-switch =
+    .title = Matikan untuk tetap menyimpan tanpa dievaluasi
+    .aria-label = Dievaluasi oleh strategi ini
+strategies-row-expand =
+    .aria-label = Tampilkan atau sembunyikan parameter
+strategies-add-group = Tambah Grup
+# $count is the number of conditions in the group.
+strategies-group-delete-confirm = Hapus grup
+    .message = Hapus grup ini beserta { $count } kondisi di dalamnya?
+
+# Problems that block saving. $first is the first problem, $name the condition, $field the parameter.
+strategies-problems = { $count } masalah perlu diperbaiki: { $first }
+strategies-problem-located = { $name }: { $problem }
+strategies-problem-located-field = { $name }, { $field }: { $problem }
+strategies-problem-rules-empty = Tambahkan setidaknya satu kondisi yang aktif
+strategies-problem-group-empty = Grup memerlukan setidaknya satu kondisi yang aktif
+strategies-problem-not-applicable = Kondisi ini tidak dapat dipakai pada jenis strategi ini
+strategies-problem-unknown-condition = Jenis kondisi tidak dikenal: { $type }
+strategies-problem-too-deep = Aturan dapat bersarang paling banyak { $max } tingkat; grup yang dibalik dihitung sebagai satu tingkat tambahan
+strategies-problem-required = Masukkan angka
+strategies-problem-range = Harus antara { $min } dan { $max }
+strategies-problem-invalid-option = Pilih salah satu opsi yang tersedia
+
+# Catalog dialog: the data a condition reads and why one is unavailable.
+strategies-catalog-all = Semua
+strategies-catalog-categories =
+    .aria-label = Kategori
+strategies-catalog-empty = Tidak ada kondisi yang cocok dengan pencarian
+strategies-catalog-exit-only = Hanya strategi exit
+strategies-catalog-entry-only = Hanya strategi entry
+strategies-data-candles = Candle
+strategies-data-pool = Pool
+strategies-data-position = Posisi
+strategies-data-market = Aktivitas pasar
+
+# Trade counts: $count selects the plural, $amount is the formatted number.
+strategies-unit-trades = trade
+strategies-value-trades = { $amount } trade
+
+# Unsaved changes, import and export. $max is the deepest level a rule tree may reach.
+strategies-toast-too-deep = Terlalu Banyak Tingkat
+    .message = Aturan dapat bersarang paling banyak { $max } tingkat
+strategies-toast-priority-invalid = Prioritas Tidak Valid
+    .message = Masukkan bilangan bulat dari 1 sampai 100
+strategies-toast-exported = Strategi diekspor
+# $name is the strategy name.
+strategies-unsaved-confirm = Buang perubahan yang belum disimpan?
+    .message = "{ $name }" memiliki perubahan yang belum disimpan.
+strategies-unsaved-discard = Buang
+strategies-import-error-json = File bukan JSON yang valid
+strategies-import-error-shape = File tidak menjelaskan sebuah strategi
+# $type is the condition type id, $name the condition name.
+strategies-import-error-unknown-condition = File memakai kondisi yang tidak ada di versi ini: { $type }
+strategies-import-error-not-applicable = { $name } tidak dapat dipakai pada jenis strategi ini
 
 strategies-create-title = Buat Strategi Baru
 strategies-create-prompt = Pilih jenis strategi yang ingin Anda buat:
@@ -87,19 +161,11 @@ strategies-delete-title = Hapus Strategi
 strategies-delete-message = Hapus strategi "{ $name }"? Tindakan ini tidak dapat dibatalkan.
 
 strategies-toast-fix-validation = Perbaiki kesalahan validasi sebelum menyimpan
-strategies-toast-enabled = Strategi Diaktifkan
-    .message = "{ $name }" diaktifkan
-strategies-toast-disabled = Strategi Dinonaktifkan
-    .message = "{ $name }" dinonaktifkan
-strategies-toast-toggle-failed = Gagal Mengalihkan
-    .message = Gagal memperbarui status strategi
 strategies-toast-load-failed = Gagal Memuat
     .message = Gagal memuat strategi dari server
 strategies-toast-load-strategy-failed = Gagal memuat strategi
 strategies-toast-no-strategy = Belum Ada Strategi
     .message = Tambahkan setidaknya satu kondisi atau klik 'Strategi Baru' untuk membuat strategi terlebih dahulu
-strategies-toast-no-conditions-save = Tidak Ada Kondisi
-    .message = Tambahkan setidaknya satu kondisi ke strategi sebelum menyimpan
 strategies-toast-name-required = Nama Wajib Diisi
     .message = Masukkan nama strategi sebelum menyimpan
 strategies-toast-saved = Strategi Disimpan
@@ -107,8 +173,6 @@ strategies-toast-saved = Strategi Disimpan
 strategies-toast-save-failed = Gagal Menyimpan
     .message = Gagal menyimpan strategi ke database
 strategies-toast-no-strategy-validate = Tidak ada strategi untuk divalidasi
-strategies-toast-no-conditions-validate = Tidak Ada Kondisi
-    .message = Tambahkan setidaknya satu kondisi sebelum memvalidasi
 strategies-toast-valid = Strategi valid
 strategies-toast-invalid = Strategi memiliki kesalahan
 strategies-toast-validation-failed = Validasi gagal

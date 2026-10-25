@@ -33,9 +33,6 @@ strategies-editor-name =
     .placeholder = ストラテジー名
 strategies-editor-dirty =
     .title = 未保存の変更
-strategies-editor-enabled =
-    .aria-label = ストラテジーを有効化
-    .title = ストラテジーを有効化
 strategies-action-validate = 検証
 strategies-editor-empty = 編集するストラテジーを選択するか、新規作成してください
 strategies-conditions-empty-title = 条件はまだありません
@@ -86,11 +83,88 @@ strategies-unit-multiplier = ×
 
 strategies-catalog-search =
     .placeholder = 条件を検索...
+    .aria-label = 条件を検索
 strategies-catalog-search-clear =
     .aria-label = 検索をクリア
-strategies-catalog-fold-all = すべて折りたたむ
-strategies-catalog-unfold-all = すべて展開
 strategies-catalog-no-description = 説明はありません
+
+# Editor header: the timeframe is the default for candle conditions that leave theirs unset.
+strategies-editor-active = 有効
+strategies-editor-timeframe = 既定の時間足
+    .title = 独自の時間足を指定しない条件が使うローソク足の時間足
+strategies-editor-priority = 優先度
+    .title = 1〜100 の評価順。小さい数値ほど先に評価されます
+strategies-editor-description = 説明
+strategies-editor-description-field =
+    .placeholder = このストラテジーの内容
+    .aria-label = ストラテジーの説明
+strategies-action-export = エクスポート
+
+# Rule groups. $mode is the all/any select written into the sentence.
+strategies-rules-match = 次の条件のうち{ $mode }を満たす
+strategies-group-match = 次のうち{ $mode }を満たす
+strategies-match-all = すべて
+strategies-match-any = いずれか
+strategies-match-mode =
+    .aria-label = すべてまたはいずれかの条件
+strategies-invert = 反転
+    .title = 反転：これに一致しないときに成立します
+strategies-chip-off = オフ
+strategies-chip-inverted = 反転中
+strategies-row-switch =
+    .title = 保存したまま評価しない場合はオフにします
+    .aria-label = このストラテジーで評価
+strategies-row-expand =
+    .aria-label = パラメーターの表示・非表示
+strategies-add-group = グループを追加
+# $count is the number of conditions in the group.
+strategies-group-delete-confirm = グループを削除
+    .message = このグループと中の{ $count }件の条件を削除しますか？
+
+# Problems that block saving. $first is the first problem, $name the condition, $field the parameter.
+strategies-problems = 修正が必要な問題が{ $count }件あります: { $first }
+strategies-problem-located = { $name }: { $problem }
+strategies-problem-located-field = { $name }（{ $field }）: { $problem }
+strategies-problem-rules-empty = オンの条件を少なくとも1つ追加してください
+strategies-problem-group-empty = グループにはオンの条件が少なくとも1つ必要です
+strategies-problem-not-applicable = この条件はこの種類のストラテジーでは使用できません
+strategies-problem-unknown-condition = 不明な条件タイプ: { $type }
+strategies-problem-too-deep = ルールの入れ子は最大{ $max }階層までです。反転したグループは1階層多く数えます
+strategies-problem-required = 数値を入力してください
+strategies-problem-range = { $min }〜{ $max }の範囲で指定してください
+strategies-problem-invalid-option = 一覧のいずれかを選択してください
+
+# Catalog dialog: the data a condition reads and why one is unavailable.
+strategies-catalog-all = すべて
+strategies-catalog-categories =
+    .aria-label = カテゴリ
+strategies-catalog-empty = 検索に一致する条件はありません
+strategies-catalog-exit-only = エグジットストラテジー専用
+strategies-catalog-entry-only = エントリーストラテジー専用
+strategies-data-candles = ローソク足
+strategies-data-pool = プール
+strategies-data-position = ポジション
+strategies-data-market = 市場アクティビティ
+
+# Trade counts: $count selects the plural, $amount is the formatted number.
+strategies-unit-trades = 件
+strategies-value-trades = { $amount }件
+
+# Unsaved changes, import and export. $max is the deepest level a rule tree may reach.
+strategies-toast-too-deep = 階層が多すぎます
+    .message = ルールの入れ子は最大{ $max }階層までです
+strategies-toast-priority-invalid = 優先度が正しくありません
+    .message = 1〜100の整数を入力してください
+strategies-toast-exported = ストラテジーをエクスポートしました
+# $name is the strategy name.
+strategies-unsaved-confirm = 未保存の変更を破棄しますか？
+    .message = 「{ $name }」に未保存の変更があります。
+strategies-unsaved-discard = 破棄
+strategies-import-error-json = ファイルは有効なJSONではありません
+strategies-import-error-shape = ファイルにストラテジーが記述されていません
+# $type is the condition type id, $name the condition name.
+strategies-import-error-unknown-condition = このバージョンにない条件がファイルで使われています: { $type }
+strategies-import-error-not-applicable = 「{ $name }」はこの種類のストラテジーでは使用できません
 
 ## New strategy dialog
 
@@ -110,19 +184,11 @@ strategies-delete-message = ストラテジー「{ $name }」を削除します�
 ## Toasts. A message value is the title; `.message` is the body.
 
 strategies-toast-fix-validation = 保存する前に検証エラーを修正してください
-strategies-toast-enabled = ストラテジーを有効にしました
-    .message = 「{ $name }」を有効にしました
-strategies-toast-disabled = ストラテジーを無効にしました
-    .message = 「{ $name }」を無効にしました
-strategies-toast-toggle-failed = 切り替え失敗
-    .message = ストラテジーのステータスを更新できませんでした
 strategies-toast-load-failed = 読み込み失敗
     .message = サーバーからストラテジーを読み込めませんでした
 strategies-toast-load-strategy-failed = ストラテジーを読み込めませんでした
 strategies-toast-no-strategy = ストラテジーが作成されていません
     .message = 条件を1つ以上追加するか、「新規ストラテジー」をクリックして先にストラテジーを作成してください
-strategies-toast-no-conditions-save = 条件がありません
-    .message = 保存する前に、ストラテジーに条件を1つ以上追加してください
 strategies-toast-name-required = 名前が必要です
     .message = 保存する前にストラテジー名を入力してください
 strategies-toast-saved = ストラテジーを保存しました
@@ -130,8 +196,6 @@ strategies-toast-saved = ストラテジーを保存しました
 strategies-toast-save-failed = 保存失敗
     .message = ストラテジーをデータベースに保存できませんでした
 strategies-toast-no-strategy-validate = 検証するストラテジーがありません
-strategies-toast-no-conditions-validate = 条件がありません
-    .message = 検証する前に条件を1つ以上追加してください
 strategies-toast-valid = ストラテジーは有効です
 strategies-toast-invalid = ストラテジーにエラーがあります
 strategies-toast-validation-failed = 検証に失敗しました
@@ -150,7 +214,6 @@ strategies-toast-create-first = 先にストラテジーを作成してくださ
     .message = 条件を追加する前に、「新規ストラテジー」をクリックしてストラテジーを作成してください
 strategies-toast-condition-added = 条件を追加しました
     .message = { $name } をストラテジーに追加しました
-
 
 ## Conditions
 

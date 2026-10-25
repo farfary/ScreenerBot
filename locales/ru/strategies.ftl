@@ -20,9 +20,6 @@ strategies-editor-name =
     .placeholder = Название стратегии
 strategies-editor-dirty =
     .title = Есть несохранённые изменения
-strategies-editor-enabled =
-    .aria-label = Стратегия включена
-    .title = Стратегия включена
 strategies-action-validate = Проверить
 strategies-editor-empty = Выберите стратегию для редактирования или создайте новую
 strategies-conditions-empty-title = Условий пока нет
@@ -74,11 +71,106 @@ strategies-unit-multiplier = ×
 
 strategies-catalog-search =
     .placeholder = Поиск условий...
+    .aria-label = Поиск условий
 strategies-catalog-search-clear =
     .aria-label = Очистить поиск
-strategies-catalog-fold-all = Свернуть все
-strategies-catalog-unfold-all = Развернуть все
 strategies-catalog-no-description = Описание недоступно
+
+# Editor header: the timeframe is the default for candle conditions that leave theirs unset.
+strategies-editor-active = Активна
+strategies-editor-timeframe = Таймфрейм по умолчанию
+    .title = Таймфрейм свечей для условий, у которых нет своего
+strategies-editor-priority = Приоритет
+    .title = Порядок вычисления от 1 до 100; меньшие числа вычисляются первыми
+strategies-editor-description = Описание
+strategies-editor-description-field =
+    .placeholder = Что делает эта стратегия
+    .aria-label = Описание стратегии
+strategies-action-export = Экспорт
+
+# Rule groups. $mode is the all/any select written into the sentence.
+strategies-rules-match = Условия должны выполняться: { $mode }
+strategies-group-match = Должны выполняться: { $mode }
+strategies-match-all = все
+strategies-match-any = хотя бы одно
+strategies-match-mode =
+    .aria-label = Все условия или хотя бы одно
+strategies-invert = Инвертировать
+    .title = Инвертировать: истинно, когда это не выполняется
+strategies-chip-off = Выкл.
+strategies-chip-inverted = Инвертировано
+strategies-row-switch =
+    .title = Выключите, чтобы сохранить, но не вычислять
+    .aria-label = Вычисляется этой стратегией
+strategies-row-expand =
+    .aria-label = Показать или скрыть параметры
+strategies-add-group = Добавить группу
+# $count is the number of conditions in the group.
+strategies-group-delete-confirm = Удалить группу
+    .message =
+        { $count ->
+            [one] Удалить эту группу и её условие?
+            [few] Удалить эту группу и её { $count } условия?
+            [many] Удалить эту группу и её { $count } условий?
+           *[other] Удалить эту группу и её { $count } условия?
+        }
+
+# Problems that block saving. $first is the first problem, $name the condition, $field the parameter.
+strategies-problems =
+    { $count ->
+        [one] Исправьте { $count } проблему: { $first }
+        [few] Исправьте { $count } проблемы: { $first }
+        [many] Исправьте { $count } проблем: { $first }
+       *[other] Исправьте { $count } проблемы: { $first }
+    }
+strategies-problem-located = { $name }: { $problem }
+strategies-problem-located-field = { $name }, { $field }: { $problem }
+strategies-problem-rules-empty = Добавьте хотя бы одно включённое условие
+strategies-problem-group-empty = В группе должно быть хотя бы одно включённое условие
+strategies-problem-not-applicable = Это условие нельзя использовать в стратегии этого типа
+strategies-problem-unknown-condition = Неизвестный тип условия: { $type }
+strategies-problem-too-deep = Правила могут вкладываться не глубже { $max } уровней; инвертированная группа занимает ещё один уровень
+strategies-problem-required = Введите число
+strategies-problem-range = Значение должно быть от { $min } до { $max }
+strategies-problem-invalid-option = Выберите один из предложенных вариантов
+
+# Catalog dialog: the data a condition reads and why one is unavailable.
+strategies-catalog-all = Все
+strategies-catalog-categories =
+    .aria-label = Категории
+strategies-catalog-empty = Ни одно условие не соответствует запросу
+strategies-catalog-exit-only = Только для стратегий выхода
+strategies-catalog-entry-only = Только для стратегий входа
+strategies-data-candles = Свечи
+strategies-data-pool = Пул
+strategies-data-position = Позиция
+strategies-data-market = Рыночная активность
+
+# Trade counts: $count selects the plural, $amount is the formatted number.
+strategies-unit-trades = сделок
+strategies-value-trades =
+    { $count ->
+        [one] { $amount } сделка
+        [few] { $amount } сделки
+        [many] { $amount } сделок
+       *[other] { $amount } сделки
+    }
+
+# Unsaved changes, import and export. $max is the deepest level a rule tree may reach.
+strategies-toast-too-deep = Слишком много уровней
+    .message = Правила могут вкладываться не глубже { $max } уровней
+strategies-toast-priority-invalid = Недопустимый приоритет
+    .message = Введите целое число от 1 до 100
+strategies-toast-exported = Стратегия экспортирована
+# $name is the strategy name.
+strategies-unsaved-confirm = Отменить несохранённые изменения?
+    .message = В «{ $name }» есть несохранённые изменения.
+strategies-unsaved-discard = Отменить изменения
+strategies-import-error-json = Файл не является корректным JSON
+strategies-import-error-shape = Файл не описывает стратегию
+# $type is the condition type id, $name the condition name.
+strategies-import-error-unknown-condition = Файл использует условие, которого нет в этой версии: { $type }
+strategies-import-error-not-applicable = Условие «{ $name }» нельзя использовать в стратегии этого типа
 
 strategies-create-title = Создать новую стратегию
 strategies-create-prompt = Выберите тип стратегии, которую хотите создать:
@@ -91,19 +183,11 @@ strategies-delete-title = Удалить стратегию
 strategies-delete-message = Удалить стратегию «{ $name }»? Это действие нельзя отменить.
 
 strategies-toast-fix-validation = Исправьте ошибки проверки перед сохранением
-strategies-toast-enabled = Стратегия включена
-    .message = «{ $name }» включена
-strategies-toast-disabled = Стратегия отключена
-    .message = «{ $name }» отключена
-strategies-toast-toggle-failed = Не удалось переключить
-    .message = Не удалось обновить статус стратегии
 strategies-toast-load-failed = Ошибка загрузки
     .message = Не удалось загрузить стратегии с сервера
 strategies-toast-load-strategy-failed = Не удалось загрузить стратегию
 strategies-toast-no-strategy = Стратегия не создана
     .message = Добавьте хотя бы одно условие или нажмите «Новая стратегия», чтобы сначала создать стратегию
-strategies-toast-no-conditions-save = Нет условий
-    .message = Перед сохранением добавьте в стратегию хотя бы одно условие
 strategies-toast-name-required = Нужно название
     .message = Перед сохранением введите название стратегии
 strategies-toast-saved = Стратегия сохранена
@@ -111,8 +195,6 @@ strategies-toast-saved = Стратегия сохранена
 strategies-toast-save-failed = Ошибка сохранения
     .message = Не удалось сохранить стратегию в базе данных
 strategies-toast-no-strategy-validate = Нет стратегии для проверки
-strategies-toast-no-conditions-validate = Нет условий
-    .message = Перед проверкой добавьте хотя бы одно условие
 strategies-toast-valid = Стратегия корректна
 strategies-toast-invalid = В стратегии есть ошибки
 strategies-toast-validation-failed = Ошибка проверки
@@ -131,7 +213,6 @@ strategies-toast-create-first = Сначала создайте стратеги
     .message = Нажмите «Новая стратегия», чтобы создать стратегию перед добавлением условий
 strategies-toast-condition-added = Условие добавлено
     .message = { $name } добавлено в стратегию
-
 
 strategies-condition-candle-size = Паттерн размера свечи
     .description = Обнаруживает определённые паттерны свечей: большое тело, маленькое тело (доджи), длинные тени

@@ -2,10 +2,6 @@
  * SPDX-License-Identifier: BUSL-1.1 */
 
 /* ==========================================================================
-   Modals - See strategies/modals.css
-   ========================================================================== */
-
-/* ==========================================================================
    Strategy Filter Bar — compact segmented control
    ========================================================================== */
 .strategy-filter-bar {
@@ -87,23 +83,6 @@
 }
 
 /* ==========================================================================
-   Editor Header Switch
-   ========================================================================== */
-
-/* The editor's master switch sits in a dense toolbar, so it earns a hit-area
-   chip. The switch itself is the canonical .toggle - this adds nothing but the
-   chip and its hover. */
-.enable-toggle {
-  padding: 0.25rem 0.5rem;
-  border-radius: var(--radius-sm);
-  transition: background var(--transition-base);
-}
-
-.enable-toggle:hover {
-  background: var(--hover-color);
-}
-
-/* ==========================================================================
    Create Strategy Modal
    ========================================================================== */
 .create-strategy-modal .modal-desc {
@@ -167,33 +146,8 @@
 }
 
 /* Responsive */
-@media (width <= 1200px) {
-  .strategies-page {
-    grid-template-columns: 260px 1fr;
-  }
-
-  .category-items {
-    grid-template-columns: 1fr;
-  }
-
-  .editor-controls .btn span {
-    display: none;
-  }
-
-  .strategy-name-input {
-    max-width: 220px;
-  }
-}
-
 @media (width <= 1024px) {
   .strategies-sidebar {
     width: 240px;
-  }
-}
-
-@media (width <= 768px) {
-  .strategy-name-input {
-    max-width: 160px;
-    font-size: 0.9rem;
   }
 }

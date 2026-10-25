@@ -27,9 +27,6 @@ strategies-editor-name =
     .placeholder = Nombre de la estrategia
 strategies-editor-dirty =
     .title = Cambios sin guardar
-strategies-editor-enabled =
-    .aria-label = Estrategia activada
-    .title = Estrategia activada
 strategies-action-validate = Validar
 strategies-editor-empty = Selecciona una estrategia para editarla o crea una nueva
 strategies-conditions-empty-title = Aún no hay condiciones
@@ -84,11 +81,103 @@ strategies-unit-multiplier = ×
 
 strategies-catalog-search =
     .placeholder = Buscar condiciones...
+    .aria-label = Buscar condiciones
 strategies-catalog-search-clear =
     .aria-label = Borrar búsqueda
-strategies-catalog-fold-all = Contraer todo
-strategies-catalog-unfold-all = Expandir todo
 strategies-catalog-no-description = Sin descripción disponible
+
+# Editor header: the timeframe is the default for candle conditions that leave theirs unset.
+strategies-editor-active = Activa
+strategies-editor-timeframe = Temporalidad predeterminada
+    .title = Temporalidad de las velas para las condiciones que no definen la suya
+strategies-editor-priority = Prioridad
+    .title = Orden de evaluación del 1 al 100; los números menores se evalúan primero
+strategies-editor-description = Descripción
+strategies-editor-description-field =
+    .placeholder = Qué hace esta estrategia
+    .aria-label = Descripción de la estrategia
+strategies-action-export = Exportar
+
+# Rule groups. $mode is the all/any select written into the sentence.
+strategies-rules-match = Condiciones que deben cumplirse: { $mode }
+strategies-group-match = Deben cumplirse: { $mode }
+strategies-match-all = todas
+strategies-match-any = al menos una
+strategies-match-mode =
+    .aria-label = Todas o al menos una condición
+strategies-invert = Invertir
+    .title = Invertir: se cumple cuando esto no coincide
+strategies-chip-off = Desactivado
+strategies-chip-inverted = Invertido
+strategies-row-switch =
+    .title = Desactivar para conservarlo guardado pero sin evaluarlo
+    .aria-label = Evaluado por esta estrategia
+strategies-row-expand =
+    .aria-label = Mostrar u ocultar los parámetros
+strategies-add-group = Añadir grupo
+# $count is the number of conditions in the group.
+strategies-group-delete-confirm = Quitar grupo
+    .message =
+        { $count ->
+            [one] ¿Quitar este grupo y su condición?
+            [many] ¿Quitar este grupo y sus { $count } condiciones?
+           *[other] ¿Quitar este grupo y sus { $count } condiciones?
+        }
+
+# Problems that block saving. $first is the first problem, $name the condition, $field the parameter.
+strategies-problems =
+    { $count ->
+        [one] { $count } problema por resolver: { $first }
+        [many] { $count } problemas por resolver: { $first }
+       *[other] { $count } problemas por resolver: { $first }
+    }
+strategies-problem-located = { $name }: { $problem }
+strategies-problem-located-field = { $name }, { $field }: { $problem }
+strategies-problem-rules-empty = Añade al menos una condición activada
+strategies-problem-group-empty = Un grupo necesita al menos una condición activada
+strategies-problem-not-applicable = Esta condición no se puede usar en este tipo de estrategia
+strategies-problem-unknown-condition = Tipo de condición desconocido: { $type }
+strategies-problem-too-deep = Las reglas admiten como máximo { $max } niveles de anidación; un grupo invertido cuenta como un nivel más
+strategies-problem-required = Introduce un número
+strategies-problem-range = Debe estar entre { $min } y { $max }
+strategies-problem-invalid-option = Elige una de las opciones disponibles
+
+# Catalog dialog: the data a condition reads and why one is unavailable.
+strategies-catalog-all = Todas
+strategies-catalog-categories =
+    .aria-label = Categorías
+strategies-catalog-empty = Ninguna condición coincide con la búsqueda
+strategies-catalog-exit-only = Solo estrategias de salida
+strategies-catalog-entry-only = Solo estrategias de entrada
+strategies-data-candles = Velas
+strategies-data-pool = Pool
+strategies-data-position = Posición
+strategies-data-market = Actividad del mercado
+
+# Trade counts: $count selects the plural, $amount is the formatted number.
+strategies-unit-trades = trades
+strategies-value-trades =
+    { $count ->
+        [one] { $amount } trade
+        [many] { $amount } trades
+       *[other] { $amount } trades
+    }
+
+# Unsaved changes, import and export. $max is the deepest level a rule tree may reach.
+strategies-toast-too-deep = Demasiados niveles
+    .message = Las reglas admiten como máximo { $max } niveles de anidación
+strategies-toast-priority-invalid = Prioridad no válida
+    .message = Introduce un número entero del 1 al 100
+strategies-toast-exported = Estrategia exportada
+# $name is the strategy name.
+strategies-unsaved-confirm = ¿Descartar los cambios sin guardar?
+    .message = «{ $name }» tiene cambios sin guardar.
+strategies-unsaved-discard = Descartar
+strategies-import-error-json = El archivo no es un JSON válido
+strategies-import-error-shape = El archivo no describe una estrategia
+# $type is the condition type id, $name the condition name.
+strategies-import-error-unknown-condition = El archivo usa una condición que esta versión no tiene: { $type }
+strategies-import-error-not-applicable = { $name } no se puede usar en este tipo de estrategia
 
 ## New strategy dialog
 
@@ -108,19 +197,11 @@ strategies-delete-message = ¿Eliminar la estrategia "{ $name }"? Esta acción n
 ## Toasts. A message value is the title; `.message` is the body.
 
 strategies-toast-fix-validation = Corrige los errores de validación antes de guardar
-strategies-toast-enabled = Estrategia activada
-    .message = "{ $name }" activada
-strategies-toast-disabled = Estrategia desactivada
-    .message = "{ $name }" desactivada
-strategies-toast-toggle-failed = Error al cambiar el estado
-    .message = No se pudo actualizar el estado de la estrategia
 strategies-toast-load-failed = Error al cargar
     .message = No se pudieron cargar las estrategias desde el servidor
 strategies-toast-load-strategy-failed = No se pudo cargar la estrategia
 strategies-toast-no-strategy = No hay ninguna estrategia creada
     .message = Añade al menos una condición o haz clic en 'Nueva estrategia' para crear una primero
-strategies-toast-no-conditions-save = Sin condiciones
-    .message = Añade al menos una condición a la estrategia antes de guardar
 strategies-toast-name-required = Nombre obligatorio
     .message = Introduce un nombre para la estrategia antes de guardar
 strategies-toast-saved = Estrategia guardada
@@ -128,8 +209,6 @@ strategies-toast-saved = Estrategia guardada
 strategies-toast-save-failed = Error al guardar
     .message = No se pudo guardar la estrategia en la base de datos
 strategies-toast-no-strategy-validate = No hay estrategia que validar
-strategies-toast-no-conditions-validate = Sin condiciones
-    .message = Añade al menos una condición antes de validar
 strategies-toast-valid = La estrategia es válida
 strategies-toast-invalid = La estrategia tiene errores
 strategies-toast-validation-failed = Falló la validación
@@ -148,7 +227,6 @@ strategies-toast-create-first = Crea una estrategia primero
     .message = Haz clic en 'Nueva estrategia' para crear una antes de añadir condiciones
 strategies-toast-condition-added = Condición añadida
     .message = { $name } añadida a la estrategia
-
 
 ## Conditions
 

@@ -33,9 +33,6 @@ strategies-editor-name =
     .placeholder = Strategy name
 strategies-editor-dirty =
     .title = Unsaved changes
-strategies-editor-enabled =
-    .aria-label = Strategy enabled
-    .title = Strategy enabled
 strategies-action-validate = Validate
 strategies-editor-empty = Select a strategy to edit, or create a new one
 strategies-conditions-empty-title = No conditions yet
@@ -88,11 +85,100 @@ strategies-unit-multiplier = ×
 
 strategies-catalog-search =
     .placeholder = Search conditions...
+    .aria-label = Search conditions
 strategies-catalog-search-clear =
     .aria-label = Clear search
-strategies-catalog-fold-all = Fold All
-strategies-catalog-unfold-all = Unfold All
 strategies-catalog-no-description = No description available
+
+# Editor header: the timeframe is the default for candle conditions that leave theirs unset.
+strategies-editor-active = Active
+strategies-editor-timeframe = Default Timeframe
+    .title = Candle timeframe used by conditions that do not set their own
+strategies-editor-priority = Priority
+    .title = Evaluation order from 1 to 100; lower numbers are evaluated first
+strategies-editor-description = Description
+strategies-editor-description-field =
+    .placeholder = What this strategy does
+    .aria-label = Strategy description
+strategies-action-export = Export
+
+# Rule groups. $mode is the all/any select written into the sentence.
+strategies-rules-match = Match { $mode } of these conditions
+strategies-group-match = Match { $mode } of these
+strategies-match-all = all
+strategies-match-any = any
+strategies-match-mode =
+    .aria-label = Match all or any
+strategies-invert = Invert
+    .title = Invert: true when this does not match
+strategies-chip-off = Off
+strategies-chip-inverted = Inverted
+strategies-row-switch =
+    .title = Switch off to keep it saved but not evaluated
+    .aria-label = Evaluated by this strategy
+strategies-row-expand =
+    .aria-label = Show or hide parameters
+strategies-add-group = Add Group
+# $count is the number of conditions in the group.
+strategies-group-delete-confirm = Remove group
+    .message =
+        { $count ->
+            [one] Remove this group and its condition?
+           *[other] Remove this group and its { $count } conditions?
+        }
+
+# Problems that block saving. $first is the first problem, $name the condition, $field the parameter.
+strategies-problems =
+    { $count ->
+        [one] { $count } problem to fix: { $first }
+       *[other] { $count } problems to fix: { $first }
+    }
+strategies-problem-located = { $name }: { $problem }
+strategies-problem-located-field = { $name }, { $field }: { $problem }
+strategies-problem-rules-empty = Add at least one condition that is switched on
+strategies-problem-group-empty = A group needs at least one condition that is switched on
+strategies-problem-not-applicable = This condition cannot be used in this type of strategy
+strategies-problem-unknown-condition = Unknown condition type: { $type }
+strategies-problem-too-deep = Rules can nest { $max } levels at most; an inverted group counts as one more level
+strategies-problem-required = Enter a number
+strategies-problem-range = Must be between { $min } and { $max }
+strategies-problem-invalid-option = Choose one of the listed options
+
+# Catalog dialog: the data a condition reads and why one is unavailable.
+strategies-catalog-all = All
+strategies-catalog-categories =
+    .aria-label = Categories
+strategies-catalog-empty = No condition matches your search
+strategies-catalog-exit-only = Exit strategies only
+strategies-catalog-entry-only = Entry strategies only
+strategies-data-candles = Candles
+strategies-data-pool = Pool
+strategies-data-position = Position
+strategies-data-market = Market activity
+
+# Trade counts: $count selects the plural, $amount is the formatted number.
+strategies-unit-trades = trades
+strategies-value-trades =
+    { $count ->
+        [one] { $amount } trade
+       *[other] { $amount } trades
+    }
+
+# Unsaved changes, import and export. $max is the deepest level a rule tree may reach.
+strategies-toast-too-deep = Too Many Levels
+    .message = Rules can nest { $max } levels at most
+strategies-toast-priority-invalid = Invalid Priority
+    .message = Enter a whole number from 1 to 100
+strategies-toast-exported = Strategy exported
+# $name is the strategy name.
+strategies-unsaved-confirm = Discard unsaved changes?
+    .message = "{ $name }" has changes that are not saved.
+strategies-unsaved-discard = Discard
+strategies-import-error-json = The file is not valid JSON
+strategies-import-error-shape = The file does not describe a strategy
+# $type is the condition type id, $name the condition name.
+strategies-import-error-unknown-condition = The file uses a condition this version does not have: { $type }
+strategies-import-error-not-applicable = { $name } cannot be used in this type of strategy
 
 ## New strategy dialog
 
@@ -112,19 +198,11 @@ strategies-delete-message = Delete strategy "{ $name }"? This action cannot be u
 ## Toasts. A message value is the title; `.message` is the body.
 
 strategies-toast-fix-validation = Please fix validation errors before saving
-strategies-toast-enabled = Strategy Enabled
-    .message = "{ $name }" enabled
-strategies-toast-disabled = Strategy Disabled
-    .message = "{ $name }" disabled
-strategies-toast-toggle-failed = Toggle Failed
-    .message = Failed to update strategy status
 strategies-toast-load-failed = Load Failed
     .message = Failed to load strategies from server
 strategies-toast-load-strategy-failed = Failed to load strategy
 strategies-toast-no-strategy = No Strategy Created
     .message = Add at least one condition or click 'New Strategy' to create a strategy first
-strategies-toast-no-conditions-save = No Conditions
-    .message = Add at least one condition to the strategy before saving
 strategies-toast-name-required = Name Required
     .message = Enter a strategy name before saving
 strategies-toast-saved = Strategy Saved
@@ -132,8 +210,6 @@ strategies-toast-saved = Strategy Saved
 strategies-toast-save-failed = Save Failed
     .message = Failed to save strategy to database
 strategies-toast-no-strategy-validate = No strategy to validate
-strategies-toast-no-conditions-validate = No Conditions
-    .message = Add at least one condition before validating
 strategies-toast-valid = Strategy is valid
 strategies-toast-invalid = Strategy has errors
 strategies-toast-validation-failed = Validation failed
@@ -152,7 +228,6 @@ strategies-toast-create-first = Create Strategy First
     .message = Click 'New Strategy' to create a strategy before adding conditions
 strategies-toast-condition-added = Condition Added
     .message = { $name } added to strategy
-
 
 ## Conditions
 

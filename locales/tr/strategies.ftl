@@ -20,9 +20,6 @@ strategies-editor-name =
     .placeholder = Strateji adı
 strategies-editor-dirty =
     .title = Kaydedilmemiş değişiklikler
-strategies-editor-enabled =
-    .aria-label = Strateji etkin
-    .title = Strateji etkin
 strategies-action-validate = Doğrula
 strategies-editor-empty = Düzenlemek için bir strateji seçin veya yeni bir tane oluşturun
 strategies-conditions-empty-title = Henüz koşul yok
@@ -70,11 +67,100 @@ strategies-unit-multiplier = ×
 
 strategies-catalog-search =
     .placeholder = Koşullarda ara...
+    .aria-label = Koşullarda ara
 strategies-catalog-search-clear =
     .aria-label = Aramayı temizle
-strategies-catalog-fold-all = Tümünü daralt
-strategies-catalog-unfold-all = Tümünü genişlet
 strategies-catalog-no-description = Açıklama yok
+
+# Editor header: the timeframe is the default for candle conditions that leave theirs unset.
+strategies-editor-active = Etkin
+strategies-editor-timeframe = Varsayılan zaman dilimi
+    .title = Kendi zaman dilimini belirlemeyen koşullar için mum zaman dilimi
+strategies-editor-priority = Öncelik
+    .title = 1 ile 100 arasında değerlendirme sırası; küçük sayılar önce değerlendirilir
+strategies-editor-description = Açıklama
+strategies-editor-description-field =
+    .placeholder = Bu stratejinin ne yaptığı
+    .aria-label = Strateji açıklaması
+strategies-action-export = Dışa aktar
+
+# Rule groups. $mode is the all/any select written into the sentence.
+strategies-rules-match = Bu koşulların { $mode } sağlanmalı
+strategies-group-match = Bunların { $mode } sağlanmalı
+strategies-match-all = tümü
+strategies-match-any = en az biri
+strategies-match-mode =
+    .aria-label = Tümü veya en az bir koşul
+strategies-invert = Ters çevir
+    .title = Ters çevir: bu eşleşmediğinde doğru olur
+strategies-chip-off = Kapalı
+strategies-chip-inverted = Ters çevrilmiş
+strategies-row-switch =
+    .title = Kayıtlı kalsın ama değerlendirilmesin diye kapatın
+    .aria-label = Bu strateji tarafından değerlendirilir
+strategies-row-expand =
+    .aria-label = Parametreleri göster veya gizle
+strategies-add-group = Grup ekle
+# $count is the number of conditions in the group.
+strategies-group-delete-confirm = Grubu kaldır
+    .message =
+        { $count ->
+            [one] Bu grup ve içindeki koşul kaldırılsın mı?
+           *[other] Bu grup ve içindeki { $count } koşul kaldırılsın mı?
+        }
+
+# Problems that block saving. $first is the first problem, $name the condition, $field the parameter.
+strategies-problems =
+    { $count ->
+        [one] { $count } sorun düzeltilmeli: { $first }
+       *[other] { $count } sorun düzeltilmeli: { $first }
+    }
+strategies-problem-located = { $name }: { $problem }
+strategies-problem-located-field = { $name }, { $field }: { $problem }
+strategies-problem-rules-empty = En az bir açık koşul ekleyin
+strategies-problem-group-empty = Bir grubun en az bir açık koşula ihtiyacı var
+strategies-problem-not-applicable = Bu koşul bu strateji türünde kullanılamaz
+strategies-problem-unknown-condition = Bilinmeyen koşul türü: { $type }
+strategies-problem-too-deep = Kurallar en fazla { $max } düzey iç içe geçebilir; ters çevrilmiş bir grup bir düzey daha sayılır
+strategies-problem-required = Bir sayı girin
+strategies-problem-range = { $min } ile { $max } arasında olmalı
+strategies-problem-invalid-option = Listelenen seçeneklerden birini seçin
+
+# Catalog dialog: the data a condition reads and why one is unavailable.
+strategies-catalog-all = Tümü
+strategies-catalog-categories =
+    .aria-label = Kategoriler
+strategies-catalog-empty = Aramanızla eşleşen koşul yok
+strategies-catalog-exit-only = Yalnızca çıkış stratejileri
+strategies-catalog-entry-only = Yalnızca giriş stratejileri
+strategies-data-candles = Mumlar
+strategies-data-pool = Havuz
+strategies-data-position = Pozisyon
+strategies-data-market = Piyasa etkinliği
+
+# Trade counts: $count selects the plural, $amount is the formatted number.
+strategies-unit-trades = işlem
+strategies-value-trades =
+    { $count ->
+        [one] { $amount } işlem
+       *[other] { $amount } işlem
+    }
+
+# Unsaved changes, import and export. $max is the deepest level a rule tree may reach.
+strategies-toast-too-deep = Çok fazla düzey
+    .message = Kurallar en fazla { $max } düzey iç içe geçebilir
+strategies-toast-priority-invalid = Geçersiz öncelik
+    .message = 1 ile 100 arasında bir tam sayı girin
+strategies-toast-exported = Strateji dışa aktarıldı
+# $name is the strategy name.
+strategies-unsaved-confirm = Kaydedilmemiş değişiklikler silinsin mi?
+    .message = "{ $name }" kaydedilmemiş değişiklikler içeriyor.
+strategies-unsaved-discard = Değişiklikleri sil
+strategies-import-error-json = Dosya geçerli bir JSON değil
+strategies-import-error-shape = Dosya bir strateji tanımlamıyor
+# $type is the condition type id, $name the condition name.
+strategies-import-error-unknown-condition = Dosya bu sürümde bulunmayan bir koşul kullanıyor: { $type }
+strategies-import-error-not-applicable = { $name } bu strateji türünde kullanılamaz
 
 strategies-create-title = Yeni strateji oluştur
 strategies-create-prompt = Oluşturmak istediğiniz strateji türünü seçin:
@@ -87,19 +173,11 @@ strategies-delete-title = Stratejiyi sil
 strategies-delete-message = "{ $name }" stratejisi silinsin mi? Bu işlem geri alınamaz.
 
 strategies-toast-fix-validation = Kaydetmeden önce lütfen doğrulama hatalarını düzeltin
-strategies-toast-enabled = Strateji etkinleştirildi
-    .message = "{ $name }" etkinleştirildi
-strategies-toast-disabled = Strateji devre dışı bırakıldı
-    .message = "{ $name }" devre dışı bırakıldı
-strategies-toast-toggle-failed = Değiştirme başarısız
-    .message = Strateji durumu güncellenemedi
 strategies-toast-load-failed = Yükleme başarısız
     .message = Stratejiler sunucudan yüklenemedi
 strategies-toast-load-strategy-failed = Strateji yüklenemedi
 strategies-toast-no-strategy = Strateji oluşturulmadı
     .message = En az bir koşul ekleyin veya önce bir strateji oluşturmak için "Yeni strateji"ye tıklayın
-strategies-toast-no-conditions-save = Koşul yok
-    .message = Kaydetmeden önce stratejiye en az bir koşul ekleyin
 strategies-toast-name-required = Ad gerekli
     .message = Kaydetmeden önce bir strateji adı girin
 strategies-toast-saved = Strateji kaydedildi
@@ -107,8 +185,6 @@ strategies-toast-saved = Strateji kaydedildi
 strategies-toast-save-failed = Kaydetme başarısız
     .message = Strateji veritabanına kaydedilemedi
 strategies-toast-no-strategy-validate = Doğrulanacak strateji yok
-strategies-toast-no-conditions-validate = Koşul yok
-    .message = Doğrulamadan önce en az bir koşul ekleyin
 strategies-toast-valid = Strateji geçerli
 strategies-toast-invalid = Stratejide hatalar var
 strategies-toast-validation-failed = Doğrulama başarısız

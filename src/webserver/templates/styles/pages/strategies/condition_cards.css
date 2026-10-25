@@ -2,244 +2,228 @@
  * SPDX-License-Identifier: BUSL-1.1 */
 
 /* ==========================================================================
-   Condition Cards (Wide & Inline)
+   Rule groups and condition rows. A condition row is collapsed to one line
+   (glyph, name, parameter summary, chips, actions) and opens its parameter grid.
    ========================================================================== */
 
-/* Condition Cards - Enhanced Design */
-.condition-card {
-  background: var(--surface-color);
-  border: 2px solid var(--border-color);
-  border-radius: var(--radius-xl);
-  transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
-  box-shadow: 0 2px 4px rgb(0, 0, 0, 0.04);
-  overflow: hidden;
-  position: relative;
+.rule-group {
+  display: flex;
+  flex-direction: column;
+  gap: var(--spacing-sm);
 }
 
-.condition-card:hover,
-.condition-card:has(.custom-select:is(.open, .closing)) {
-  border-color: var(--primary-color);
-  box-shadow: 0 8px 16px rgb(0, 0, 0, 0.1);
-  transform: translateY(-2px);
-}
-
-.condition-card.expanded {
-  border-color: var(--primary-color);
-}
-
-/* Status States */
-.condition-card.status-disabled {
-  opacity: 0.6;
-  border-color: var(--border-color);
-}
-
-.condition-card.status-disabled:hover {
-  opacity: 0.8;
-}
-
-/* Card Header - Horizontal Layout - Scoped to condition-card to avoid conflicts */
-.condition-card .card-header {
-  padding: 1rem 1.25rem;
+.rule-group-head {
   display: flex;
   align-items: center;
-  justify-content: space-between;
-  gap: 1rem;
-  cursor: pointer;
-  user-select: none;
-  background: linear-gradient(to bottom, transparent, rgb(0, 0, 0, 0.01));
-}
-
-.condition-card .card-header-left {
-  display: flex;
-  align-items: center;
-  gap: 1rem;
-  flex: 1;
-  min-width: 0;
-}
-
-.condition-card .card-header-right {
-  display: flex;
-  align-items: center;
-  gap: 1rem;
-  flex-shrink: 0;
-}
-
-/* Condition Icon: a bare glyph, size and colour only. */
-.condition-icon {
-  width: 40px;
-  height: 40px;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  font-size: 20px;
-  color: var(--primary-color);
-  flex-shrink: 0;
-}
-
-/* Condition Info */
-.condition-info {
-  flex: 1;
-  min-width: 0;
-}
-
-.condition-name {
-  font-weight: 600;
-  font-size: 0.95rem;
-  color: var(--text-color);
-  display: flex;
-  align-items: center;
-  gap: 0.5rem;
   flex-wrap: wrap;
+  gap: var(--spacing-sm);
+  min-height: 44px;
 }
 
-.condition-description {
-  font-size: 0.8rem;
-  color: var(--text-muted);
-  margin-top: 0.25rem;
-  line-height: 1.4;
-  display: -webkit-box;
-  -webkit-line-clamp: 2;
-  line-clamp: 2;
-  -webkit-box-orient: vertical;
-  overflow: hidden;
+.rule-group.is-root > .rule-group-head {
+  justify-content: space-between;
 }
 
-.condition-card.expanded .condition-description {
-  -webkit-line-clamp: unset;
-  line-clamp: unset;
-}
-
-/* Category Badge */
-.condition-category-badge {
-  font-size: 0.7rem;
-  font-weight: 500;
-  padding: 0.2rem 0.6rem;
-  border-radius: var(--radius-sm);
-  background: var(--background-color);
+/* A nested group is a tinted section, so its rows read as one set inside the parent. */
+.rule-group.is-nested {
+  padding: var(--spacing-sm) var(--spacing-md) var(--spacing-md);
   border: 1px solid var(--border-color);
-  color: var(--text-muted);
-  text-transform: uppercase;
-  letter-spacing: 0.5px;
+  border-radius: var(--radius-lg);
+  background: var(--bg-tertiary);
 }
 
-/* Category Color Coding */
-.category-price-analysis {
-  background: rgb(59, 130, 246, 0.1);
-  border-color: rgb(59, 130, 246, 0.3);
-  color: rgb(59, 130, 246);
+.rule-group.is-nested > .rule-group-head > .rule-actions {
+  margin-inline-start: auto;
 }
 
-.category-position-performance {
-  background: rgb(16, 185, 129, 0.1);
-  border-color: rgb(16, 185, 129, 0.3);
-  color: rgb(16, 185, 129);
+.rule-group.is-nested.has-problem {
+  border-color: var(--error-color);
 }
 
-.category-market-context {
-  background: rgb(245, 158, 11, 0.1);
-  border-color: rgb(245, 158, 11, 0.3);
-  color: rgb(245, 158, 11);
-}
-
-.category-candle-patterns {
-  background: rgb(139, 92, 246, 0.1);
-  border-color: rgb(139, 92, 246, 0.3);
-  color: rgb(139, 92, 246);
-}
-
-.category-volume-analysis {
-  background: rgb(236, 72, 153, 0.1);
-  border-color: rgb(236, 72, 153, 0.3);
-  color: rgb(236, 72, 153);
-}
-
-/* Status Toggle */
-.condition-status {
-  display: flex;
+.rule-match-line {
+  display: inline-flex;
   align-items: center;
+  flex-wrap: wrap;
+  gap: var(--spacing-sm);
+  font-size: var(--font-size-sm);
+  font-weight: 600;
+  color: var(--text-secondary);
 }
 
-/* Expand Indicator */
-.expand-indicator {
-  font-size: 1rem;
-  color: var(--text-muted);
-  transition: transform 0.3s cubic-bezier(0.4, 0, 0.2, 1);
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  width: 24px;
-  height: 24px;
+.rule-match-line .custom-select {
+  min-width: 72px;
 }
 
-.condition-card.expanded .expand-indicator {
-  transform: rotate(180deg);
+.rule-invert[aria-pressed="true"],
+.rule-actions .btn-icon[aria-pressed="true"] {
   color: var(--primary-color);
 }
 
-/* Card Summary */
-.card-summary {
-  padding: 0 1.25rem 0.75rem;
-  border-bottom: 1px solid transparent;
-  transition: all var(--transition-normal);
+.rule-children {
+  display: flex;
+  flex-direction: column;
+  gap: var(--spacing-sm);
 }
 
-.condition-card.expanded .card-summary {
-  border-bottom-color: var(--border-color);
-  padding-bottom: 1rem;
+.rule-group-add {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--spacing-sm);
+}
+
+/* A switched-off group or row stays in place, dimmed; its switch stays at full strength. */
+.rule-group.is-off > .rule-children,
+.rule-group.is-off > .rule-group-head .rule-match-line,
+.rule-row.is-off :is(.rule-glyph, .rule-name, .summary-content),
+.rule-row.is-off > .rule-body {
+  opacity: 0.5;
+}
+
+/* Condition row */
+.rule-row {
+  background: var(--surface-color);
+  border: 1px solid var(--border-color);
+  border-radius: var(--radius-lg);
+  transition: border-color var(--transition-fast);
+}
+
+.rule-row:hover,
+.rule-row.is-open {
+  border-color: var(--primary-color);
+}
+
+.rule-row.has-problem,
+.rule-row.has-problem:hover {
+  border-color: var(--error-color);
+}
+
+.rule-head {
+  display: flex;
+  align-items: center;
+  gap: var(--spacing-sm);
+  min-height: 44px;
+  padding-inline-end: var(--spacing-sm);
+}
+
+.rule-head-toggle {
+  flex: 1;
+  min-width: 0;
+  min-height: 44px;
+  display: flex;
+  align-items: center;
+  gap: var(--spacing-sm);
+  padding-block: var(--spacing-sm);
+  padding-inline: var(--spacing-md) var(--spacing-sm);
+  background: none;
+  border: none;
+  border-radius: var(--radius-lg);
+  color: inherit;
+  font: inherit;
+  text-align: start;
+  cursor: pointer;
+}
+
+.rule-head-toggle:disabled {
+  cursor: default;
+}
+
+.rule-head-toggle:focus-visible {
+  outline: 2px solid var(--primary-color);
+  outline-offset: -2px;
+}
+
+/* A condition glyph is bare: size and colour only. */
+.rule-glyph {
+  flex-shrink: 0;
+  width: 24px;
+  font-size: 20px;
+  line-height: 1;
+  text-align: center;
+  color: var(--primary-color);
+}
+
+.rule-name {
+  flex-shrink: 0;
+  font-weight: 600;
+  font-size: var(--font-size-sm);
+  color: var(--text-color);
 }
 
 .summary-content {
-  font-size: 0.85rem;
-  color: var(--text-muted);
-  line-height: 1.5;
+  flex: 1;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
   font-family: var(--font-sans);
+  font-size: 0.8rem;
   font-feature-settings: "tnum" 1;
-  background: rgb(0, 0, 0, 0.02);
-  padding: 0.5rem 0.75rem;
-  border-radius: var(--radius-md);
+  color: var(--text-muted);
+}
+
+.rule-chips {
+  display: flex;
+  gap: var(--spacing-xs);
+  flex-shrink: 0;
+}
+
+.rule-chip {
+  padding: 2px var(--spacing-sm);
+  border: 1px solid var(--border-color);
+  border-radius: var(--radius-full);
+  font-size: 0.7rem;
+  font-weight: 600;
+  color: var(--text-muted);
+}
+
+.rule-actions {
+  display: flex;
+  align-items: center;
+  gap: var(--spacing-xs);
+  flex-shrink: 0;
+}
+
+.rule-actions .btn-icon,
+.rule-chevron {
+  width: 32px;
+  height: 32px;
+  font-size: 0.85rem;
+}
+
+.rule-chevron i {
+  transition: transform var(--transition-base);
+}
+
+.rule-row.is-open .rule-chevron i {
+  transform: rotate(180deg);
+}
+
+.rule-node-problem {
+  padding: 0 var(--spacing-md) var(--spacing-sm);
+  font-size: 0.8rem;
+  color: var(--error-color);
+}
+
+.rule-group > .rule-node-problem {
+  padding-inline: 0;
+}
+
+.rule-body {
+  padding: var(--spacing-md);
   border-top: 1px solid var(--border-color);
 }
 
-/* Condition Actions */
-.condition-actions {
-  display: flex;
-  gap: 0.25rem;
-  align-items: center;
-}
-
-.condition-actions .btn-icon {
-  width: 28px;
-  height: 28px;
-  font-size: 0.85rem;
-}
-
-/* Card Body - scoped to condition-card to avoid conflicts with other pages */
-.condition-card .card-body {
-  --fade-rise: -10px;
-
-  padding: 1.25rem;
-  background: linear-gradient(to bottom, rgb(0, 0, 0, 0.01), transparent);
-  border-end-start-radius: var(--radius-lg);
-  border-end-end-radius: var(--radius-lg);
-  display: none;
-  animation: fadeIn 0.3s ease;
-}
-
-.condition-card.expanded .card-body {
-  display: block;
-}
-
-/* Inline Parameter Styling */
+/* Parameter grid */
 .param-row {
   display: grid;
-  grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
-  gap: 1rem;
+  grid-template-columns: repeat(auto-fit, minmax(240px, 1fr));
+  gap: var(--spacing-md);
 }
 
 .param-field {
   display: flex;
   flex-direction: column;
-  gap: 0.4rem;
+  gap: var(--spacing-xs);
 }
 
 .param-field
@@ -249,50 +233,30 @@
   color: var(--text-muted);
 }
 
-/* Select field styling — arrow inherited from global `select {}` (form_controls.css). */
-.select-field {
-  padding-inline-end: 2.5rem;
+.param-field-error {
+  font-size: 0.75rem;
+  color: var(--error-color);
 }
 
-.param-field input:not([type="checkbox"], [type="radio"]),
-.param-field select {
-  padding: 0.5rem;
-  border: 1px solid var(--border-color);
-  border-radius: var(--radius-sm);
-  background-color: var(--surface-color);
-  color: var(--text-color);
-  font-size: 0.9rem;
-  transition:
-    border-color 0.2s ease,
-    box-shadow 0.2s ease;
+.param-field-error:empty {
+  display: none;
 }
 
-.param-field select {
-  /* Arrow inherited from global `select {}` (form_controls.css). */
-  padding-inline-end: 28px;
-  cursor: pointer;
-}
+@media (width <= 720px) {
+  .rule-head {
+    flex-wrap: wrap;
+    padding-block-end: var(--spacing-sm);
+  }
 
-/* Condition Summary (Visible when collapsed) */
-.condition-summary {
-  font-size: 0.85rem;
-  color: var(--text-muted);
-  margin-inline-end: 1rem;
-}
+  .rule-head-toggle {
+    flex-basis: 100%;
+  }
 
-/* Utilities */
-.full-width {
-  width: 100%;
-}
+  .rule-chevron {
+    display: none;
+  }
 
-.btn.dashed {
-  border: 1px dashed var(--border-color);
-  background: transparent;
-  color: var(--text-muted);
-}
-
-.btn.dashed:hover {
-  border-color: var(--primary-color);
-  color: var(--primary-color);
-  background: var(--primary-color-light);
+  .summary-content {
+    white-space: normal;
+  }
 }

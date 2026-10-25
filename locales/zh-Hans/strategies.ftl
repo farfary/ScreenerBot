@@ -33,9 +33,6 @@ strategies-editor-name =
     .placeholder = 策略名称
 strategies-editor-dirty =
     .title = 有未保存的更改
-strategies-editor-enabled =
-    .aria-label = 启用策略
-    .title = 启用策略
 strategies-action-validate = 验证
 strategies-editor-empty = 请选择要编辑的策略，或新建一个
 strategies-conditions-empty-title = 暂无条件
@@ -86,11 +83,88 @@ strategies-unit-multiplier = ×
 
 strategies-catalog-search =
     .placeholder = 搜索条件...
+    .aria-label = 搜索条件
 strategies-catalog-search-clear =
     .aria-label = 清除搜索
-strategies-catalog-fold-all = 全部折叠
-strategies-catalog-unfold-all = 全部展开
 strategies-catalog-no-description = 暂无描述
+
+# Editor header: the timeframe is the default for candle conditions that leave theirs unset.
+strategies-editor-active = 启用
+strategies-editor-timeframe = 默认时间周期
+    .title = 未设置自身时间周期的条件所使用的 K 线时间周期
+strategies-editor-priority = 优先级
+    .title = 评估顺序，范围 1 到 100；数值越小越先评估
+strategies-editor-description = 描述
+strategies-editor-description-field =
+    .placeholder = 此策略的作用
+    .aria-label = 策略描述
+strategies-action-export = 导出
+
+# Rule groups. $mode is the all/any select written into the sentence.
+strategies-rules-match = 满足这些条件中的{ $mode }
+strategies-group-match = 满足其中的{ $mode }
+strategies-match-all = 全部
+strategies-match-any = 任意一个
+strategies-match-mode =
+    .aria-label = 全部或任意一个条件
+strategies-invert = 反转
+    .title = 反转：当此项不匹配时为真
+strategies-chip-off = 关闭
+strategies-chip-inverted = 已反转
+strategies-row-switch =
+    .title = 关闭后仍保留，但不再评估
+    .aria-label = 由此策略评估
+strategies-row-expand =
+    .aria-label = 显示或隐藏参数
+strategies-add-group = 添加分组
+# $count is the number of conditions in the group.
+strategies-group-delete-confirm = 移除分组
+    .message = 要移除此分组及其中的 { $count } 个条件吗？
+
+# Problems that block saving. $first is the first problem, $name the condition, $field the parameter.
+strategies-problems = 有 { $count } 个问题待修复：{ $first }
+strategies-problem-located = { $name }：{ $problem }
+strategies-problem-located-field = { $name }，{ $field }：{ $problem }
+strategies-problem-rules-empty = 请至少添加一个已启用的条件
+strategies-problem-group-empty = 分组至少需要一个已启用的条件
+strategies-problem-not-applicable = 此条件不能用于这种类型的策略
+strategies-problem-unknown-condition = 未知的条件类型：{ $type }
+strategies-problem-too-deep = 规则最多嵌套 { $max } 层；反转的分组多占一层
+strategies-problem-required = 请输入数字
+strategies-problem-range = 必须介于 { $min } 和 { $max } 之间
+strategies-problem-invalid-option = 请从列出的选项中选择
+
+# Catalog dialog: the data a condition reads and why one is unavailable.
+strategies-catalog-all = 全部
+strategies-catalog-categories =
+    .aria-label = 分类
+strategies-catalog-empty = 没有符合搜索的条件
+strategies-catalog-exit-only = 仅限出场策略
+strategies-catalog-entry-only = 仅限入场策略
+strategies-data-candles = K 线
+strategies-data-pool = 池
+strategies-data-position = 仓位
+strategies-data-market = 市场活动
+
+# Trade counts: $count selects the plural, $amount is the formatted number.
+strategies-unit-trades = 笔
+strategies-value-trades = { $amount } 笔
+
+# Unsaved changes, import and export. $max is the deepest level a rule tree may reach.
+strategies-toast-too-deep = 层级过多
+    .message = 规则最多嵌套 { $max } 层
+strategies-toast-priority-invalid = 优先级无效
+    .message = 请输入 1 到 100 的整数
+strategies-toast-exported = 策略已导出
+# $name is the strategy name.
+strategies-unsaved-confirm = 要放弃未保存的更改吗？
+    .message = “{ $name }”有尚未保存的更改。
+strategies-unsaved-discard = 放弃
+strategies-import-error-json = 文件不是有效的 JSON
+strategies-import-error-shape = 文件未描述任何策略
+# $type is the condition type id, $name the condition name.
+strategies-import-error-unknown-condition = 文件使用了此版本没有的条件：{ $type }
+strategies-import-error-not-applicable = “{ $name }”不能用于这种类型的策略
 
 ## New strategy dialog
 
@@ -110,19 +184,11 @@ strategies-delete-message = 删除策略“{ $name }”？此操作无法撤销�
 ## Toasts. A message value is the title; `.message` is the body.
 
 strategies-toast-fix-validation = 请先修复验证错误再保存
-strategies-toast-enabled = 策略已启用
-    .message = “{ $name }”已启用
-strategies-toast-disabled = 策略已停用
-    .message = “{ $name }”已停用
-strategies-toast-toggle-failed = 切换失败
-    .message = 更新策略状态失败
 strategies-toast-load-failed = 加载失败
     .message = 从服务器加载策略失败
 strategies-toast-load-strategy-failed = 加载策略失败
 strategies-toast-no-strategy = 尚未创建策略
     .message = 请至少添加一个条件，或先点击“新建策略”创建策略
-strategies-toast-no-conditions-save = 没有条件
-    .message = 保存前请至少为策略添加一个条件
 strategies-toast-name-required = 需要名称
     .message = 保存前请输入策略名称
 strategies-toast-saved = 策略已保存
@@ -130,8 +196,6 @@ strategies-toast-saved = 策略已保存
 strategies-toast-save-failed = 保存失败
     .message = 将策略保存到数据库失败
 strategies-toast-no-strategy-validate = 没有可验证的策略
-strategies-toast-no-conditions-validate = 没有条件
-    .message = 验证前请至少添加一个条件
 strategies-toast-valid = 策略有效
 strategies-toast-invalid = 策略存在错误
 strategies-toast-validation-failed = 验证失败
@@ -150,7 +214,6 @@ strategies-toast-create-first = 请先创建策略
     .message = 添加条件之前，请先点击“新建策略”创建策略
 strategies-toast-condition-added = 条件已添加
     .message = 已将 { $name } 添加到策略
-
 
 ## Conditions
 

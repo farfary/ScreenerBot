@@ -33,9 +33,6 @@ strategies-editor-name =
     .placeholder = نام استراتژی
 strategies-editor-dirty =
     .title = تغییرات ذخیره‌نشده
-strategies-editor-enabled =
-    .aria-label = استراتژی فعال است
-    .title = استراتژی فعال است
 strategies-action-validate = اعتبارسنجی
 strategies-editor-empty = استراتژی‌ای برای ویرایش انتخاب کنید یا استراتژی جدیدی بسازید
 strategies-conditions-empty-title = هنوز شرطی وجود ندارد
@@ -88,11 +85,100 @@ strategies-unit-multiplier = ×
 
 strategies-catalog-search =
     .placeholder = جستجوی شرط‌ها...
+    .aria-label = جست‌وجوی شرط‌ها
 strategies-catalog-search-clear =
     .aria-label = پاک کردن جستجو
-strategies-catalog-fold-all = بستن همه
-strategies-catalog-unfold-all = باز کردن همه
 strategies-catalog-no-description = توضیحی موجود نیست
+
+# Editor header: the timeframe is the default for candle conditions that leave theirs unset.
+strategies-editor-active = فعال
+strategies-editor-timeframe = بازه زمانی پیش‌فرض
+    .title = بازه زمانی کندل برای شرط‌هایی که بازه زمانی خودشان را تعیین نمی‌کنند
+strategies-editor-priority = اولویت
+    .title = ترتیب ارزیابی از 1 تا 100؛ عدد کوچک‌تر زودتر ارزیابی می‌شود
+strategies-editor-description = توضیحات
+strategies-editor-description-field =
+    .placeholder = این استراتژی چه می‌کند
+    .aria-label = توضیحات استراتژی
+strategies-action-export = برون‌بری
+
+# Rule groups. $mode is the all/any select written into the sentence.
+strategies-rules-match = شرط‌هایی که باید برقرار باشند: { $mode }
+strategies-group-match = باید برقرار باشد: { $mode }
+strategies-match-all = همه
+strategies-match-any = دست‌کم یکی
+strategies-match-mode =
+    .aria-label = همه یا دست‌کم یکی از شرط‌ها
+strategies-invert = معکوس
+    .title = معکوس: وقتی این مورد برقرار نیست درست می‌شود
+strategies-chip-off = خاموش
+strategies-chip-inverted = معکوس‌شده
+strategies-row-switch =
+    .title = برای نگه‌داشتن بدون ارزیابی خاموش کنید
+    .aria-label = توسط این استراتژی ارزیابی می‌شود
+strategies-row-expand =
+    .aria-label = نمایش یا پنهان‌کردن پارامترها
+strategies-add-group = افزودن گروه
+# $count is the number of conditions in the group.
+strategies-group-delete-confirm = حذف گروه
+    .message =
+        { $count ->
+            [one] این گروه و شرط آن حذف شود؟
+           *[other] این گروه و { $count } شرط آن حذف شود؟
+        }
+
+# Problems that block saving. $first is the first problem, $name the condition, $field the parameter.
+strategies-problems =
+    { $count ->
+        [one] { $count } مشکل برای رفع: { $first }
+       *[other] { $count } مشکل برای رفع: { $first }
+    }
+strategies-problem-located = { $name }: { $problem }
+strategies-problem-located-field = { $name }، { $field }: { $problem }
+strategies-problem-rules-empty = دست‌کم یک شرط روشن اضافه کنید
+strategies-problem-group-empty = گروه دست‌کم به یک شرط روشن نیاز دارد
+strategies-problem-not-applicable = این شرط در این نوع استراتژی قابل استفاده نیست
+strategies-problem-unknown-condition = نوع شرط ناشناخته: { $type }
+strategies-problem-too-deep = قاعده‌ها حداکثر تا { $max } سطح می‌توانند تو در تو باشند؛ گروه معکوس یک سطح اضافه حساب می‌شود
+strategies-problem-required = یک عدد وارد کنید
+strategies-problem-range = باید بین { $min } و { $max } باشد
+strategies-problem-invalid-option = یکی از گزینه‌های فهرست را انتخاب کنید
+
+# Catalog dialog: the data a condition reads and why one is unavailable.
+strategies-catalog-all = همه
+strategies-catalog-categories =
+    .aria-label = دسته‌ها
+strategies-catalog-empty = هیچ شرطی با جست‌وجوی شما مطابقت ندارد
+strategies-catalog-exit-only = فقط برای استراتژی‌های خروج
+strategies-catalog-entry-only = فقط برای استراتژی‌های ورود
+strategies-data-candles = کندل‌ها
+strategies-data-pool = استخر
+strategies-data-position = موقعیت
+strategies-data-market = فعالیت بازار
+
+# Trade counts: $count selects the plural, $amount is the formatted number.
+strategies-unit-trades = معامله
+strategies-value-trades =
+    { $count ->
+        [one] { $amount } معامله
+       *[other] { $amount } معامله
+    }
+
+# Unsaved changes, import and export. $max is the deepest level a rule tree may reach.
+strategies-toast-too-deep = سطح‌های بیش از حد
+    .message = قاعده‌ها حداکثر تا { $max } سطح می‌توانند تو در تو باشند
+strategies-toast-priority-invalid = اولویت نامعتبر
+    .message = یک عدد صحیح از 1 تا 100 وارد کنید
+strategies-toast-exported = استراتژی برون‌بری شد
+# $name is the strategy name.
+strategies-unsaved-confirm = تغییرات ذخیره‌نشده کنار گذاشته شود؟
+    .message = «{ $name }» تغییرات ذخیره‌نشده دارد.
+strategies-unsaved-discard = کنار گذاشتن
+strategies-import-error-json = فایل JSON معتبر نیست
+strategies-import-error-shape = فایل هیچ استراتژی‌ای را توصیف نمی‌کند
+# $type is the condition type id, $name the condition name.
+strategies-import-error-unknown-condition = فایل از شرطی استفاده می‌کند که در این نسخه وجود ندارد: { $type }
+strategies-import-error-not-applicable = «{ $name }» در این نوع استراتژی قابل استفاده نیست
 
 ## New strategy dialog
 
@@ -112,19 +198,11 @@ strategies-delete-message = استراتژی «{ $name }» حذف شود؟ ای�
 ## Toasts. A message value is the title; `.message` is the body.
 
 strategies-toast-fix-validation = پیش از ذخیره، خطاهای اعتبارسنجی را برطرف کنید
-strategies-toast-enabled = استراتژی فعال شد
-    .message = «{ $name }» فعال شد
-strategies-toast-disabled = استراتژی غیرفعال شد
-    .message = «{ $name }» غیرفعال شد
-strategies-toast-toggle-failed = تغییر وضعیت ناموفق بود
-    .message = به‌روزرسانی وضعیت استراتژی ناموفق بود
 strategies-toast-load-failed = بارگذاری ناموفق بود
     .message = بارگذاری استراتژی‌ها از سرور ناموفق بود
 strategies-toast-load-strategy-failed = بارگذاری استراتژی ناموفق بود
 strategies-toast-no-strategy = استراتژی‌ای ساخته نشده است
     .message = ابتدا دست‌کم یک شرط اضافه کنید یا برای ساخت استراتژی «استراتژی جدید» را بزنید
-strategies-toast-no-conditions-save = بدون شرط
-    .message = پیش از ذخیره، دست‌کم یک شرط به استراتژی اضافه کنید
 strategies-toast-name-required = نام لازم است
     .message = پیش از ذخیره، نام استراتژی را وارد کنید
 strategies-toast-saved = استراتژی ذخیره شد
@@ -132,8 +210,6 @@ strategies-toast-saved = استراتژی ذخیره شد
 strategies-toast-save-failed = ذخیره ناموفق بود
     .message = ذخیره استراتژی در پایگاه داده ناموفق بود
 strategies-toast-no-strategy-validate = استراتژی‌ای برای اعتبارسنجی وجود ندارد
-strategies-toast-no-conditions-validate = بدون شرط
-    .message = پیش از اعتبارسنجی، دست‌کم یک شرط اضافه کنید
 strategies-toast-valid = استراتژی معتبر است
 strategies-toast-invalid = استراتژی خطا دارد
 strategies-toast-validation-failed = اعتبارسنجی ناموفق بود
@@ -152,7 +228,6 @@ strategies-toast-create-first = ابتدا استراتژی بسازید
     .message = پیش از افزودن شرط، برای ساخت استراتژی «استراتژی جدید» را بزنید
 strategies-toast-condition-added = شرط اضافه شد
     .message = { $name } به استراتژی اضافه شد
-
 
 ## Conditions
 

@@ -20,9 +20,6 @@ strategies-editor-name =
     .placeholder = Tên chiến lược
 strategies-editor-dirty =
     .title = Có thay đổi chưa lưu
-strategies-editor-enabled =
-    .aria-label = Bật chiến lược
-    .title = Bật chiến lược
 strategies-action-validate = Kiểm tra
 strategies-editor-empty = Chọn một chiến lược để chỉnh sửa hoặc tạo chiến lược mới
 strategies-conditions-empty-title = Chưa có điều kiện nào
@@ -68,11 +65,88 @@ strategies-unit-multiplier = ×
 
 strategies-catalog-search =
     .placeholder = Tìm điều kiện...
+    .aria-label = Tìm điều kiện
 strategies-catalog-search-clear =
     .aria-label = Xóa tìm kiếm
-strategies-catalog-fold-all = Thu gọn tất cả
-strategies-catalog-unfold-all = Mở rộng tất cả
 strategies-catalog-no-description = Không có mô tả
+
+# Editor header: the timeframe is the default for candle conditions that leave theirs unset.
+strategies-editor-active = Hoạt động
+strategies-editor-timeframe = Khung thời gian mặc định
+    .title = Khung thời gian nến cho các điều kiện không tự đặt khung riêng
+strategies-editor-priority = Mức ưu tiên
+    .title = Thứ tự đánh giá từ 1 đến 100; số nhỏ hơn được đánh giá trước
+strategies-editor-description = Mô tả
+strategies-editor-description-field =
+    .placeholder = Chiến lược này làm gì
+    .aria-label = Mô tả chiến lược
+strategies-action-export = Xuất
+
+# Rule groups. $mode is the all/any select written into the sentence.
+strategies-rules-match = Điều kiện cần thỏa mãn: { $mode }
+strategies-group-match = Cần thỏa mãn: { $mode }
+strategies-match-all = tất cả
+strategies-match-any = ít nhất một
+strategies-match-mode =
+    .aria-label = Tất cả hoặc ít nhất một điều kiện
+strategies-invert = Đảo ngược
+    .title = Đảo ngược: đúng khi mục này không khớp
+strategies-chip-off = Tắt
+strategies-chip-inverted = Đã đảo
+strategies-row-switch =
+    .title = Tắt để vẫn lưu giữ nhưng không đánh giá
+    .aria-label = Được chiến lược này đánh giá
+strategies-row-expand =
+    .aria-label = Hiện hoặc ẩn tham số
+strategies-add-group = Thêm nhóm
+# $count is the number of conditions in the group.
+strategies-group-delete-confirm = Gỡ nhóm
+    .message = Gỡ nhóm này cùng { $count } điều kiện trong đó?
+
+# Problems that block saving. $first is the first problem, $name the condition, $field the parameter.
+strategies-problems = Cần sửa { $count } vấn đề: { $first }
+strategies-problem-located = { $name }: { $problem }
+strategies-problem-located-field = { $name }, { $field }: { $problem }
+strategies-problem-rules-empty = Thêm ít nhất một điều kiện đang bật
+strategies-problem-group-empty = Nhóm cần ít nhất một điều kiện đang bật
+strategies-problem-not-applicable = Không thể dùng điều kiện này trong loại chiến lược này
+strategies-problem-unknown-condition = Loại điều kiện không xác định: { $type }
+strategies-problem-too-deep = Quy tắc chỉ lồng nhau tối đa { $max } cấp; nhóm đảo ngược tính thêm một cấp
+strategies-problem-required = Nhập một số
+strategies-problem-range = Phải nằm trong khoảng từ { $min } đến { $max }
+strategies-problem-invalid-option = Chọn một trong các tùy chọn có sẵn
+
+# Catalog dialog: the data a condition reads and why one is unavailable.
+strategies-catalog-all = Tất cả
+strategies-catalog-categories =
+    .aria-label = Danh mục
+strategies-catalog-empty = Không có điều kiện nào khớp với tìm kiếm
+strategies-catalog-exit-only = Chỉ dành cho chiến lược thoát lệnh
+strategies-catalog-entry-only = Chỉ dành cho chiến lược vào lệnh
+strategies-data-candles = Nến
+strategies-data-pool = Pool
+strategies-data-position = Vị thế
+strategies-data-market = Hoạt động thị trường
+
+# Trade counts: $count selects the plural, $amount is the formatted number.
+strategies-unit-trades = lệnh
+strategies-value-trades = { $amount } lệnh
+
+# Unsaved changes, import and export. $max is the deepest level a rule tree may reach.
+strategies-toast-too-deep = Quá nhiều cấp
+    .message = Quy tắc chỉ lồng nhau tối đa { $max } cấp
+strategies-toast-priority-invalid = Mức ưu tiên không hợp lệ
+    .message = Nhập một số nguyên từ 1 đến 100
+strategies-toast-exported = Đã xuất chiến lược
+# $name is the strategy name.
+strategies-unsaved-confirm = Bỏ các thay đổi chưa lưu?
+    .message = "{ $name }" có thay đổi chưa được lưu.
+strategies-unsaved-discard = Bỏ thay đổi
+strategies-import-error-json = Tệp không phải JSON hợp lệ
+strategies-import-error-shape = Tệp không mô tả một chiến lược
+# $type is the condition type id, $name the condition name.
+strategies-import-error-unknown-condition = Tệp dùng một điều kiện mà phiên bản này không có: { $type }
+strategies-import-error-not-applicable = Không thể dùng { $name } trong loại chiến lược này
 
 strategies-create-title = Tạo chiến lược mới
 strategies-create-prompt = Chọn loại chiến lược bạn muốn tạo:
@@ -85,19 +159,11 @@ strategies-delete-title = Xóa chiến lược
 strategies-delete-message = Xóa chiến lược "{ $name }"? Không thể hoàn tác thao tác này.
 
 strategies-toast-fix-validation = Vui lòng sửa các lỗi kiểm tra trước khi lưu
-strategies-toast-enabled = Đã bật chiến lược
-    .message = Đã bật "{ $name }"
-strategies-toast-disabled = Đã tắt chiến lược
-    .message = Đã tắt "{ $name }"
-strategies-toast-toggle-failed = Bật/tắt thất bại
-    .message = Không thể cập nhật trạng thái chiến lược
 strategies-toast-load-failed = Tải thất bại
     .message = Không thể tải chiến lược từ máy chủ
 strategies-toast-load-strategy-failed = Không thể tải chiến lược
 strategies-toast-no-strategy = Chưa tạo chiến lược
     .message = Hãy thêm ít nhất một điều kiện hoặc nhấp 'Chiến lược mới' để tạo chiến lược trước
-strategies-toast-no-conditions-save = Chưa có điều kiện
-    .message = Hãy thêm ít nhất một điều kiện vào chiến lược trước khi lưu
 strategies-toast-name-required = Cần nhập tên
     .message = Nhập tên chiến lược trước khi lưu
 strategies-toast-saved = Đã lưu chiến lược
@@ -105,8 +171,6 @@ strategies-toast-saved = Đã lưu chiến lược
 strategies-toast-save-failed = Lưu thất bại
     .message = Không thể lưu chiến lược vào cơ sở dữ liệu
 strategies-toast-no-strategy-validate = Không có chiến lược để kiểm tra
-strategies-toast-no-conditions-validate = Chưa có điều kiện
-    .message = Hãy thêm ít nhất một điều kiện trước khi kiểm tra
 strategies-toast-valid = Chiến lược hợp lệ
 strategies-toast-invalid = Chiến lược có lỗi
 strategies-toast-validation-failed = Kiểm tra thất bại

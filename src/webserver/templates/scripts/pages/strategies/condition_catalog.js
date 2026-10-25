@@ -1,276 +1,213 @@
 // Copyright (c) 2024-2026 ScreenerBot (screenerbot.io)
 // SPDX-License-Identifier: BUSL-1.1
 //
+// Condition catalog dialog - category rail, search and condition buttons that add a condition to the group that opened it.
+
+import { categoryLabel, conditionDescription, conditionName } from "./condition_text.js";
+
+/** Message ids of the data tags, by tag. */
+export const DATA_TAG_LABELS = Object.freeze({
+  candles: "strategies-data-candles",
+  pool: "strategies-data-pool",
+  position: "strategies-data-position",
+  market: "strategies-data-market",
+});
+
+/** Message ids of the line a condition shows when the strategy type cannot use it. */
+const RESTRICTION_LABELS = Object.freeze({
+  EXIT: "strategies-catalog-exit-only",
+  ENTRY: "strategies-catalog-entry-only",
+});
+
+const CANDLE_CATEGORIES = new Set(["Candle Patterns", "Technical Indicators", "Volume Analysis"]);
 
 /**
- * Condition Catalog Module
- * Handles the condition catalog modal and browsing functionality
+ * What a condition reads, from its category and parameters: the open position's pool
+ * price and P&L, the token's buy and sell counts over a time window, candles (any
+ * condition with a timeframe), or the pool itself.
+ * @param {object} schema Condition schema.
+ * @returns {"candles"|"pool"|"position"|"market"}
  */
+export function dataTagOf(schema) {
+  const params = schema.parameters ?? {};
+  if (schema.category === "Position & Performance") return "position";
+  if (CANDLE_CATEGORIES.has(schema.category) || "timeframe" in params) return "candles";
+  return "window" in params ? "market" : "pool";
+}
 
-import {
-  categoryLabel,
-  conditionDescription,
-  conditionName,
-} from "./condition_text.js";
+/** Whether a condition can be used in a strategy of `strategyType`. */
+export function appliesTo(schema, strategyType) {
+  return !Array.isArray(schema.applies_to) || schema.applies_to.includes(strategyType);
+}
+
+/** Catalog entries of the strategy-origin schemas, by name. */
+export function catalogEntries(schemas, strategyType) {
+  return Object.entries(schemas ?? {})
+    .filter(([, schema]) => !schema.origin || String(schema.origin).toLowerCase() === "strategy")
+    .map(([type, schema]) => ({
+      type,
+      icon: schema.icon || "icon-puzzle",
+      category: schema.category || "General",
+      categoryName: categoryLabel(schema),
+      name: conditionName(schema, type),
+      description: conditionDescription(schema),
+      tag: dataTagOf(schema),
+      applicable: appliesTo(schema, strategyType),
+      only: schema.applies_to?.length === 1 ? schema.applies_to[0] : null,
+    }))
+    .sort((a, b) => a.name.localeCompare(b.name));
+}
+
+/** Entries of one category (`null` for all) whose name or description contains `query`. */
+export function filterEntries(entries, { category = null, query = "" } = {}) {
+  const needle = query.trim().toLocaleLowerCase();
+  return entries.filter(
+    (entry) =>
+      (category === null || entry.category === category) &&
+      (needle === "" ||
+        entry.name.toLocaleLowerCase().includes(needle) ||
+        entry.description.toLocaleLowerCase().includes(needle))
+  );
+}
+
+/** Categories of the entries by name, each with its count. */
+export function categoriesOf(entries) {
+  const found = new Map();
+  for (const entry of entries) {
+    const known = found.get(entry.category);
+    if (known) known.count += 1;
+    else found.set(entry.category, { category: entry.category, name: entry.categoryName, count: 1 });
+  }
+  return [...found.values()].sort((a, b) => a.name.localeCompare(b.name));
+}
 
 export function createConditionCatalog({
   conditionSchemas,
-  categoryStates,
   $,
-  $$,
   Utils,
-  AppState,
   addTrackedListener,
-  clearScope,
-  CleanupScope,
 }) {
-  /**
-   * Initialize the condition catalog modal with categories and items
-   */
-  function initializeConditionCatalog(onAddCondition) {
-    const container = $("#condition-categories");
-    if (!container || !conditionSchemas) return;
+  const escape = (text) => Utils.escapeHtml(String(text ?? ""));
+  let entries = [];
+  let category = null;
+  let onPick = null;
+  let opener = null;
 
-    clearScope(CleanupScope.MODAL);
-
-    // Build categories from schema metadata; hide non-strategy origins
-    const categories = {};
-    Object.entries(conditionSchemas).forEach(([type, schema]) => {
-      if (schema.origin && String(schema.origin).toLowerCase() !== "strategy") return;
-      const cat = schema.category || "General";
-      if (!categories[cat]) categories[cat] = [];
-      categories[cat].push({ type, ...schema });
-    });
-
-    const savedStates = getCategoryStates();
-
-    // Render
-    container.innerHTML = Object.entries(categories)
-      .map(([category, list]) => {
-        const isCollapsed = savedStates[category] !== false; // Default to collapsed
-        return `
-          <div class="condition-category">
-            <div class="category-header ${isCollapsed ? "collapsed" : ""}" data-category="${Utils.escapeHtml(category)}">
-              <div class="category-title">
-                <span class="icon"><i class="${getCategoryIcon(category)}"></i></span>
-                ${Utils.escapeHtml(categoryLabel(list[0]))}
-              </div>
-              <i class="category-toggle ${isCollapsed ? "icon-chevron-right" : "icon-chevron-down"}" aria-hidden="true"></i>
-            </div>
-            <div class="category-items ${isCollapsed ? "collapsed" : ""}">
-              ${list.map((c) => renderConditionItem(c)).join("")}
-            </div>
-          </div>
-        `;
-      })
-      .join("");
-
-    // Toggle with state persistence (with cleanup tracking)
-    $$(".category-header").forEach((header) => {
-      const category = header.dataset.category;
-      const shouldCollapse = savedStates[category] !== false;
-      applyCategoryCollapsedState(header, shouldCollapse);
-
-      const handler = () => {
-        const nextCollapsed = !header.classList.contains("collapsed");
-        applyCategoryCollapsedState(header, nextCollapsed);
-        updateCategoryState(category, nextCollapsed);
-      };
-      addTrackedListener(header, "click", handler, CleanupScope.MODAL);
-    });
-
-    setupCategoryBulkControls();
-
-    // Click to add (with cleanup tracking)
-    $$(".condition-item").forEach((item) => {
-      const handler = () => {
-        const type = item.dataset.conditionType;
-        onAddCondition(type);
-        const catalog = $("#condition-catalog-modal");
-        if (catalog) catalog.hidden = true;
-      };
-      addTrackedListener(item, "click", handler, CleanupScope.MODAL);
-    });
-  }
-
-  /**
-   * Render a single condition item in the catalog
-   */
-  function renderConditionItem(condition) {
-    const iconClass = condition.icon || getConditionIcon(condition.type);
+  /** One condition as a button: glyph, name, description, what it reads and why it is off. */
+  function renderEntry(entry) {
+    const note =
+      !entry.applicable && Object.hasOwn(RESTRICTION_LABELS, entry.only)
+        ? `<span class="catalog-entry-note">${escape(I18n.label(RESTRICTION_LABELS, entry.only))}</span>`
+        : "";
     return `
-      <div class="condition-item" draggable="true" data-condition-type="${condition.type}">
-        <div class="condition-item-header">
-          <i class="${iconClass}"></i>
-          <span class="condition-name">${Utils.escapeHtml(conditionName(condition, condition.type))}</span>
-        </div>
-        <div class="condition-description">
-          ${Utils.escapeHtml(conditionDescription(condition) || I18n.t("strategies-catalog-no-description"))}
-        </div>
-      </div>
-    `;
+      <button type="button" class="catalog-entry" data-condition-type="${escape(entry.type)}"${entry.applicable ? "" : " disabled"}>
+        <i class="catalog-entry-glyph ${escape(entry.icon)}" aria-hidden="true"></i>
+        <span class="catalog-entry-main">
+          <span class="catalog-entry-name">${escape(entry.name)}</span>
+          <span class="catalog-entry-desc" title="${escape(entry.description)}">${escape(entry.description || I18n.t("strategies-catalog-no-description"))}</span>
+          ${note}
+        </span>
+        <span class="catalog-entry-tag">${escape(I18n.label(DATA_TAG_LABELS, entry.tag))}</span>
+      </button>`;
   }
 
-  /** One control folds every category while any is open, and unfolds them all otherwise. */
-  function setupCategoryBulkControls() {
-    const toggle = $("#toggle-all-categories");
-    if (!toggle) return;
-    addTrackedListener(
-      toggle,
-      "click",
-      () => setAllCategoriesCollapsed(anyCategoryOpen()),
-      CleanupScope.MODAL
-    );
-    syncBulkToggle();
+  function renderRail() {
+    const item = (value, name, count) => `
+      <button type="button" class="catalog-category" data-category="${escape(value ?? "")}" aria-pressed="${category === value}">
+        <span class="catalog-category-name">${escape(name)}</span>
+        <span class="catalog-category-count">${count}</span>
+      </button>`;
+    return [
+      item(null, I18n.t("strategies-catalog-all"), entries.length),
+      ...categoriesOf(entries).map(({ category: value, name, count }) => item(value, name, count)),
+    ].join("");
   }
 
-  function anyCategoryOpen() {
-    return $$(".condition-category .category-header").some(
-      (header) => !header.classList.contains("collapsed")
-    );
+  function visibleEntries() {
+    return filterEntries(entries, { category, query: $("#condition-search")?.value ?? "" });
   }
 
-  /** Label the bulk control with the action it performs next. */
-  function syncBulkToggle() {
-    const toggle = $("#toggle-all-categories");
-    if (!toggle) return;
-    const fold = anyCategoryOpen();
-    toggle.querySelector("i").className = fold ? "icon-chevrons-up" : "icon-chevrons-down";
-    const label = toggle.querySelector("span");
-    label.setAttribute(
-      "data-l10n-id",
-      fold ? "strategies-catalog-fold-all" : "strategies-catalog-unfold-all"
-    );
-    I18n.localizeTree(label);
+  function render() {
+    const rail = $("#catalog-categories");
+    if (rail) rail.innerHTML = renderRail();
+    const listEl = $("#catalog-list");
+    if (!listEl) return;
+    const shown = visibleEntries();
+    listEl.innerHTML = shown.length
+      ? shown.map(renderEntry).join("")
+      : `<div class="catalog-empty">${escape(I18n.t("strategies-catalog-empty"))}</div>`;
+  }
+
+  function close() {
+    const modal = $("#condition-catalog-modal");
+    if (modal) modal.hidden = true;
+    onPick = null;
+    opener?.focus?.();
+    opener = null;
+  }
+
+  function pick(type) {
+    const handler = onPick;
+    close();
+    handler?.(type);
   }
 
   /**
-   * Collapse or expand all categories
+   * Show the catalog for a strategy type; `handler` receives the type of the condition
+   * the user picks.
    */
-  function setAllCategoriesCollapsed(collapsed) {
-    const headers = $$(".condition-category .category-header");
-    if (!headers.length) return;
-    const states = getCategoryStates();
-    headers.forEach((header) => {
-      const category = header.dataset.category;
-      applyCategoryCollapsedState(header, collapsed);
-      if (category) {
-        states[category] = collapsed;
+  function open({ strategyType, handler }) {
+    entries = catalogEntries(conditionSchemas, strategyType);
+    category = null;
+    onPick = handler;
+    opener = globalThis.document?.activeElement ?? null;
+    const search = $("#condition-search");
+    if (search) search.value = "";
+    render();
+    const modal = $("#condition-catalog-modal");
+    if (modal) modal.hidden = false;
+    search?.focus();
+  }
+
+  /** Wire the dialog once; its list and rail are redrawn on every search and category. */
+  function bind() {
+    const modal = $("#condition-catalog-modal");
+    const search = $("#condition-search");
+    addTrackedListener($("#close-condition-catalog"), "click", close);
+    addTrackedListener(modal, "click", (event) => {
+      if (event.target === modal) close();
+    });
+    addTrackedListener(modal, "keydown", (event) => {
+      if (event.key === "Escape" && !modal.hidden) {
+        event.stopPropagation();
+        close();
       }
     });
-    updateAllCategoryStates(states);
-  }
-
-  /**
-   * Update a single category's collapsed state
-   */
-  function updateCategoryState(category, collapsed) {
-    if (!category) return;
-    const states = getCategoryStates();
-    states[category] = collapsed;
-    updateAllCategoryStates(states);
-  }
-
-  /**
-   * Apply collapsed/expanded visual state to a category header
-   */
-  function applyCategoryCollapsedState(header, collapsed) {
-    if (!header) return;
-    const items = header.nextElementSibling;
-    const toggle = header.querySelector(".category-toggle");
-
-    header.classList.toggle("collapsed", collapsed);
-    if (items) items.classList.toggle("collapsed", collapsed);
-    // A closed section points along the reading direction (mirrored in RTL), an open one down.
-    if (toggle) toggle.className = `category-toggle ${collapsed ? "icon-chevron-right" : "icon-chevron-down"}`;
-    syncBulkToggle();
-  }
-
-  /**
-   * Get category states (loads from memory or AppState)
-   */
-  function getCategoryStates() {
-    if (!categoryStates.data) {
-      categoryStates.data = loadStoredCategoryStates();
-    }
-    return categoryStates.data;
-  }
-
-  /**
-   * Load category states from AppState (server-side storage)
-   */
-  function loadStoredCategoryStates() {
-    try {
-      const stored = AppState.load("condition-category-states");
-      if (stored && typeof stored === "object") {
-        return stored;
+    addTrackedListener(search, "input", render);
+    addTrackedListener(search, "keydown", (event) => {
+      if (event.key !== "Enter") return;
+      const matches = visibleEntries().filter((entry) => entry.applicable);
+      if (matches.length === 1) {
+        event.preventDefault();
+        pick(matches[0].type);
       }
-    } catch (error) {
-      console.warn("[Strategies] Failed to load category states:", error);
-    }
-    return {};
+    });
+    addTrackedListener($("#clear-search"), "click", () => {
+      if (search) search.value = "";
+      render();
+      search?.focus();
+    });
+    addTrackedListener($("#catalog-categories"), "click", (event) => {
+      const button = event.target.closest("[data-category]");
+      if (!button) return;
+      category = button.dataset.category === "" ? null : button.dataset.category;
+      render();
+    });
+    addTrackedListener($("#catalog-list"), "click", (event) => {
+      const button = event.target.closest(".catalog-entry");
+      if (button && !button.disabled) pick(button.dataset.conditionType);
+    });
   }
 
-  /**
-   * Persist all category states to AppState
-   */
-  function updateAllCategoryStates(states) {
-    categoryStates.data = states;
-    persistCategoryStates();
-  }
-
-  /**
-   * Save category states via AppState (server-side)
-   */
-  function persistCategoryStates() {
-    try {
-      AppState.save("condition-category-states", categoryStates.data || {});
-    } catch (error) {
-      console.warn("[Strategies] Failed to save category states:", error);
-    }
-  }
-
-  /**
-   * Get icon for a category
-   */
-  function getCategoryIcon(category) {
-    const icons = {
-      "Price Patterns": "icon-chart-line",
-      "Price Analysis": "icon-chart-line",
-      "Candle Patterns": "icon-chart-candlestick",
-      "Technical Indicators": "icon-sliders-horizontal",
-      "Market Context": "icon-globe",
-      "Position & Performance": "icon-trophy",
-      "Volume Analysis": "icon-chart-bar",
-    };
-    return icons[category] || "icon-bookmark";
-  }
-
-  /**
-   * Get icon for a specific condition type
-   */
-  function getConditionIcon(type) {
-    const icons = {
-      PriceChangePercent: "icon-percent",
-      PriceToMa: "icon-chart-line",
-      LiquidityLevel: "icon-droplet",
-      PriceBreakout: "icon-rocket",
-      PositionHoldingTime: "icon-hourglass",
-      CandleSize: "icon-expand",
-      ConsecutiveCandles: "icon-chart-candlestick",
-      VolumeSpike: "icon-chart-bar",
-    };
-    return icons[type] || "icon-puzzle";
-  }
-
-  return {
-    initializeConditionCatalog,
-    renderConditionItem,
-    getCategoryIcon,
-    getConditionIcon,
-    getCategoryStates,
-    applyCategoryCollapsedState,
-    setAllCategoriesCollapsed,
-    updateCategoryState,
-  };
+  return { bind, open, close, renderEntry, render };
 }

@@ -33,9 +33,6 @@ strategies-editor-name =
     .placeholder = Назва стратегії
 strategies-editor-dirty =
     .title = Незбережені зміни
-strategies-editor-enabled =
-    .aria-label = Стратегію ввімкнено
-    .title = Стратегію ввімкнено
 strategies-action-validate = Перевірити
 strategies-editor-empty = Виберіть стратегію для редагування або створіть нову
 strategies-conditions-empty-title = Умов ще немає
@@ -92,11 +89,106 @@ strategies-unit-multiplier = ×
 
 strategies-catalog-search =
     .placeholder = Пошук умов...
+    .aria-label = Пошук умов
 strategies-catalog-search-clear =
     .aria-label = Очистити пошук
-strategies-catalog-fold-all = Згорнути все
-strategies-catalog-unfold-all = Розгорнути все
 strategies-catalog-no-description = Опис недоступний
+
+# Editor header: the timeframe is the default for candle conditions that leave theirs unset.
+strategies-editor-active = Активна
+strategies-editor-timeframe = Таймфрейм за замовчуванням
+    .title = Таймфрейм свічок для умов, які не задають власного
+strategies-editor-priority = Пріоритет
+    .title = Порядок обчислення від 1 до 100; менші числа обчислюються першими
+strategies-editor-description = Опис
+strategies-editor-description-field =
+    .placeholder = Що робить ця стратегія
+    .aria-label = Опис стратегії
+strategies-action-export = Експорт
+
+# Rule groups. $mode is the all/any select written into the sentence.
+strategies-rules-match = Умови, що мають виконуватися: { $mode }
+strategies-group-match = Мають виконуватися: { $mode }
+strategies-match-all = усі
+strategies-match-any = принаймні одна
+strategies-match-mode =
+    .aria-label = Усі умови або принаймні одна
+strategies-invert = Інвертувати
+    .title = Інвертувати: істинно, коли це не виконується
+strategies-chip-off = Вимк.
+strategies-chip-inverted = Інвертовано
+strategies-row-switch =
+    .title = Вимкніть, щоб зберегти, але не обчислювати
+    .aria-label = Обчислюється цією стратегією
+strategies-row-expand =
+    .aria-label = Показати або сховати параметри
+strategies-add-group = Додати групу
+# $count is the number of conditions in the group.
+strategies-group-delete-confirm = Вилучити групу
+    .message =
+        { $count ->
+            [one] Вилучити цю групу та її умову?
+            [few] Вилучити цю групу та її { $count } умови?
+            [many] Вилучити цю групу та її { $count } умов?
+           *[other] Вилучити цю групу та її { $count } умови?
+        }
+
+# Problems that block saving. $first is the first problem, $name the condition, $field the parameter.
+strategies-problems =
+    { $count ->
+        [one] Виправте { $count } проблему: { $first }
+        [few] Виправте { $count } проблеми: { $first }
+        [many] Виправте { $count } проблем: { $first }
+       *[other] Виправте { $count } проблеми: { $first }
+    }
+strategies-problem-located = { $name }: { $problem }
+strategies-problem-located-field = { $name }, { $field }: { $problem }
+strategies-problem-rules-empty = Додайте принаймні одну ввімкнену умову
+strategies-problem-group-empty = У групі має бути принаймні одна ввімкнена умова
+strategies-problem-not-applicable = Цю умову не можна використовувати в стратегії цього типу
+strategies-problem-unknown-condition = Невідомий тип умови: { $type }
+strategies-problem-too-deep = Правила можуть вкладатися не глибше ніж на { $max } рівнів; інвертована група займає ще один рівень
+strategies-problem-required = Введіть число
+strategies-problem-range = Значення має бути від { $min } до { $max }
+strategies-problem-invalid-option = Виберіть один із запропонованих варіантів
+
+# Catalog dialog: the data a condition reads and why one is unavailable.
+strategies-catalog-all = Усі
+strategies-catalog-categories =
+    .aria-label = Категорії
+strategies-catalog-empty = Жодна умова не відповідає запиту
+strategies-catalog-exit-only = Лише для стратегій виходу
+strategies-catalog-entry-only = Лише для стратегій входу
+strategies-data-candles = Свічки
+strategies-data-pool = Пул
+strategies-data-position = Позиція
+strategies-data-market = Ринкова активність
+
+# Trade counts: $count selects the plural, $amount is the formatted number.
+strategies-unit-trades = угод
+strategies-value-trades =
+    { $count ->
+        [one] { $amount } угода
+        [few] { $amount } угоди
+        [many] { $amount } угод
+       *[other] { $amount } угоди
+    }
+
+# Unsaved changes, import and export. $max is the deepest level a rule tree may reach.
+strategies-toast-too-deep = Забагато рівнів
+    .message = Правила можуть вкладатися не глибше ніж на { $max } рівнів
+strategies-toast-priority-invalid = Недійсний пріоритет
+    .message = Введіть ціле число від 1 до 100
+strategies-toast-exported = Стратегію експортовано
+# $name is the strategy name.
+strategies-unsaved-confirm = Відхилити незбережені зміни?
+    .message = У «{ $name }» є незбережені зміни.
+strategies-unsaved-discard = Відхилити зміни
+strategies-import-error-json = Файл не є коректним JSON
+strategies-import-error-shape = Файл не описує стратегію
+# $type is the condition type id, $name the condition name.
+strategies-import-error-unknown-condition = Файл використовує умову, якої немає в цій версії: { $type }
+strategies-import-error-not-applicable = Умову «{ $name }» не можна використовувати в стратегії цього типу
 
 ## New strategy dialog
 
@@ -116,19 +208,11 @@ strategies-delete-message = Видалити стратегію «{ $name }»? �
 ## Toasts. A message value is the title; `.message` is the body.
 
 strategies-toast-fix-validation = Виправте помилки перевірки перед збереженням
-strategies-toast-enabled = Стратегію увімкнено
-    .message = «{ $name }» увімкнено
-strategies-toast-disabled = Стратегію вимкнено
-    .message = «{ $name }» вимкнено
-strategies-toast-toggle-failed = Не вдалося перемкнути
-    .message = Не вдалося оновити статус стратегії
 strategies-toast-load-failed = Помилка завантаження
     .message = Не вдалося завантажити стратегії із сервера
 strategies-toast-load-strategy-failed = Не вдалося завантажити стратегію
 strategies-toast-no-strategy = Стратегію не створено
     .message = Спершу додайте хоча б одну умову або натисніть «Нова стратегія», щоб створити стратегію
-strategies-toast-no-conditions-save = Немає умов
-    .message = Додайте до стратегії хоча б одну умову перед збереженням
 strategies-toast-name-required = Потрібна назва
     .message = Введіть назву стратегії перед збереженням
 strategies-toast-saved = Стратегію збережено
@@ -136,8 +220,6 @@ strategies-toast-saved = Стратегію збережено
 strategies-toast-save-failed = Помилка збереження
     .message = Не вдалося зберегти стратегію в базу даних
 strategies-toast-no-strategy-validate = Немає стратегії для перевірки
-strategies-toast-no-conditions-validate = Немає умов
-    .message = Додайте хоча б одну умову перед перевіркою
 strategies-toast-valid = Стратегія дійсна
 strategies-toast-invalid = Стратегія має помилки
 strategies-toast-validation-failed = Помилка перевірки
@@ -156,7 +238,6 @@ strategies-toast-create-first = Спершу створіть стратегію
     .message = Натисніть «Нова стратегія», щоб створити стратегію перед додаванням умов
 strategies-toast-condition-added = Умову додано
     .message = { $name } додано до стратегії
-
 
 ## Conditions
 

@@ -26,9 +26,6 @@ strategies-editor-name =
     .placeholder = Strategiename
 strategies-editor-dirty =
     .title = Ungespeicherte Änderungen
-strategies-editor-enabled =
-    .aria-label = Strategie aktiviert
-    .title = Strategie aktiviert
 strategies-action-validate = Validieren
 strategies-editor-empty = Wählen Sie eine Strategie zum Bearbeiten aus oder erstellen Sie eine neue
 strategies-conditions-empty-title = Noch keine Bedingungen
@@ -78,11 +75,100 @@ strategies-unit-multiplier = ×
 
 strategies-catalog-search =
     .placeholder = Bedingungen durchsuchen...
+    .aria-label = Bedingungen durchsuchen
 strategies-catalog-search-clear =
     .aria-label = Suche löschen
-strategies-catalog-fold-all = Alle einklappen
-strategies-catalog-unfold-all = Alle ausklappen
 strategies-catalog-no-description = Keine Beschreibung verfügbar
+
+# Editor header: the timeframe is the default for candle conditions that leave theirs unset.
+strategies-editor-active = Aktiv
+strategies-editor-timeframe = Standard-Zeitrahmen
+    .title = Kerzen-Zeitrahmen für Bedingungen, die keinen eigenen festlegen
+strategies-editor-priority = Priorität
+    .title = Auswertungsreihenfolge von 1 bis 100; kleinere Zahlen werden zuerst ausgewertet
+strategies-editor-description = Beschreibung
+strategies-editor-description-field =
+    .placeholder = Was diese Strategie tut
+    .aria-label = Beschreibung der Strategie
+strategies-action-export = Exportieren
+
+# Rule groups. $mode is the all/any select written into the sentence.
+strategies-rules-match = Es müssen { $mode } dieser Bedingungen zutreffen
+strategies-group-match = Es müssen { $mode } davon zutreffen
+strategies-match-all = alle
+strategies-match-any = mindestens eine
+strategies-match-mode =
+    .aria-label = Alle oder mindestens eine Bedingung
+strategies-invert = Umkehren
+    .title = Umkehren: trifft zu, wenn dies nicht zutrifft
+strategies-chip-off = Aus
+strategies-chip-inverted = Umgekehrt
+strategies-row-switch =
+    .title = Ausschalten, um es gespeichert zu lassen, aber nicht auszuwerten
+    .aria-label = Von dieser Strategie ausgewertet
+strategies-row-expand =
+    .aria-label = Parameter ein- oder ausblenden
+strategies-add-group = Gruppe hinzufügen
+# $count is the number of conditions in the group.
+strategies-group-delete-confirm = Gruppe entfernen
+    .message =
+        { $count ->
+            [one] Diese Gruppe mit ihrer Bedingung entfernen?
+           *[other] Diese Gruppe mit ihren { $count } Bedingungen entfernen?
+        }
+
+# Problems that block saving. $first is the first problem, $name the condition, $field the parameter.
+strategies-problems =
+    { $count ->
+        [one] { $count } Problem zu beheben: { $first }
+       *[other] { $count } Probleme zu beheben: { $first }
+    }
+strategies-problem-located = { $name }: { $problem }
+strategies-problem-located-field = { $name }, { $field }: { $problem }
+strategies-problem-rules-empty = Fügen Sie mindestens eine eingeschaltete Bedingung hinzu
+strategies-problem-group-empty = Eine Gruppe braucht mindestens eine eingeschaltete Bedingung
+strategies-problem-not-applicable = Diese Bedingung kann in diesem Strategietyp nicht verwendet werden
+strategies-problem-unknown-condition = Unbekannter Bedingungstyp: { $type }
+strategies-problem-too-deep = Regeln dürfen höchstens { $max } Ebenen tief verschachtelt sein; eine umgekehrte Gruppe zählt als eine weitere Ebene
+strategies-problem-required = Geben Sie eine Zahl ein
+strategies-problem-range = Muss zwischen { $min } und { $max } liegen
+strategies-problem-invalid-option = Wählen Sie eine der angebotenen Optionen
+
+# Catalog dialog: the data a condition reads and why one is unavailable.
+strategies-catalog-all = Alle
+strategies-catalog-categories =
+    .aria-label = Kategorien
+strategies-catalog-empty = Keine Bedingung passt zu Ihrer Suche
+strategies-catalog-exit-only = Nur für Ausstiegsstrategien
+strategies-catalog-entry-only = Nur für Einstiegsstrategien
+strategies-data-candles = Kerzen
+strategies-data-pool = Pool
+strategies-data-position = Position
+strategies-data-market = Marktaktivität
+
+# Trade counts: $count selects the plural, $amount is the formatted number.
+strategies-unit-trades = Trades
+strategies-value-trades =
+    { $count ->
+        [one] { $amount } Trade
+       *[other] { $amount } Trades
+    }
+
+# Unsaved changes, import and export. $max is the deepest level a rule tree may reach.
+strategies-toast-too-deep = Zu viele Ebenen
+    .message = Regeln dürfen höchstens { $max } Ebenen tief verschachtelt sein
+strategies-toast-priority-invalid = Ungültige Priorität
+    .message = Geben Sie eine ganze Zahl von 1 bis 100 ein
+strategies-toast-exported = Strategie exportiert
+# $name is the strategy name.
+strategies-unsaved-confirm = Ungespeicherte Änderungen verwerfen?
+    .message = „{ $name }“ hat Änderungen, die nicht gespeichert sind.
+strategies-unsaved-discard = Verwerfen
+strategies-import-error-json = Die Datei ist kein gültiges JSON
+strategies-import-error-shape = Die Datei beschreibt keine Strategie
+# $type is the condition type id, $name the condition name.
+strategies-import-error-unknown-condition = Die Datei verwendet eine Bedingung, die diese Version nicht kennt: { $type }
+strategies-import-error-not-applicable = { $name } kann in diesem Strategietyp nicht verwendet werden
 
 ## New strategy dialog
 
@@ -101,19 +187,11 @@ strategies-delete-message = Strategie „{ $name }“ löschen? Diese Aktion kan
 ## Toasts. A message value is the title; `.message` is the body.
 
 strategies-toast-fix-validation = Bitte beheben Sie die Validierungsfehler vor dem Speichern
-strategies-toast-enabled = Strategie aktiviert
-    .message = „{ $name }“ aktiviert
-strategies-toast-disabled = Strategie deaktiviert
-    .message = „{ $name }“ deaktiviert
-strategies-toast-toggle-failed = Umschalten fehlgeschlagen
-    .message = Strategiestatus konnte nicht aktualisiert werden
 strategies-toast-load-failed = Laden fehlgeschlagen
     .message = Strategien konnten nicht vom Server geladen werden
 strategies-toast-load-strategy-failed = Strategie konnte nicht geladen werden
 strategies-toast-no-strategy = Keine Strategie erstellt
     .message = Fügen Sie mindestens eine Bedingung hinzu oder klicken Sie auf „Neue Strategie“, um zuerst eine Strategie zu erstellen
-strategies-toast-no-conditions-save = Keine Bedingungen
-    .message = Fügen Sie der Strategie vor dem Speichern mindestens eine Bedingung hinzu
 strategies-toast-name-required = Name erforderlich
     .message = Geben Sie vor dem Speichern einen Strategienamen ein
 strategies-toast-saved = Strategie gespeichert
@@ -121,8 +199,6 @@ strategies-toast-saved = Strategie gespeichert
 strategies-toast-save-failed = Speichern fehlgeschlagen
     .message = Strategie konnte nicht in der Datenbank gespeichert werden
 strategies-toast-no-strategy-validate = Keine Strategie zum Validieren
-strategies-toast-no-conditions-validate = Keine Bedingungen
-    .message = Fügen Sie vor dem Validieren mindestens eine Bedingung hinzu
 strategies-toast-valid = Strategie ist gültig
 strategies-toast-invalid = Strategie enthält Fehler
 strategies-toast-validation-failed = Validierung fehlgeschlagen

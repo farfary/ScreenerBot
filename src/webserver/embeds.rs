@@ -525,8 +525,12 @@ pub const CONFIG_FIELD_RENDERERS_JS: &str =
     include_str!("templates/scripts/pages/config/field_renderers.js");
 pub const CONFIG_FIELD_TEXT_JS: &str = include_str!("templates/scripts/pages/config/field_text.js");
 pub const STRATEGIES_PAGE_SCRIPT: &str = include_str!("templates/scripts/pages/strategies.js");
-pub const STRATEGIES_CONDITION_EDITOR_JS: &str =
-    include_str!("templates/scripts/pages/strategies/condition_editor.js");
+pub const STRATEGIES_RULE_EDITOR_JS: &str =
+    include_str!("templates/scripts/pages/strategies/rule_editor.js");
+pub const STRATEGIES_RULE_TREE_JS: &str =
+    include_str!("templates/scripts/pages/strategies/rule_tree.js");
+pub const STRATEGIES_STRATEGY_IO_JS: &str =
+    include_str!("templates/scripts/pages/strategies/strategy_io.js");
 pub const STRATEGIES_CONDITION_CATALOG_JS: &str =
     include_str!("templates/scripts/pages/strategies/condition_catalog.js");
 pub const STRATEGIES_CONDITION_TEXT_JS: &str =

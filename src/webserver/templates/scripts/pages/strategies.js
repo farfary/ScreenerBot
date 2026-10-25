@@ -6,25 +6,32 @@
 import { Poller } from "../core/poller.js";
 import { $, $$ } from "../core/dom.js";
 import * as Utils from "../core/utils.js";
-import * as AppState from "../core/app_state.js";
 import { ConfirmationDialog } from "../ui/confirmation_dialog.js";
 import { renderStateView } from "../ui/state_view.js";
 import { STRATEGY_TYPE_LABELS } from "../ui/strategy_type.js";
-import { requestManager } from "../core/request_manager.js";
+import { requestManager, errorMessageOf } from "../core/request_manager.js";
+import { downloadJson } from "../core/download.js";
 import { enhanceAllSelects } from "../ui/custom_select.js";
-import { createConditionEditor } from "./strategies/condition_editor.js";
+import { createRuleEditor } from "./strategies/rule_editor.js";
 import { createConditionCatalog } from "./strategies/condition_catalog.js";
+import { conditionName, optionLabel, optionValue } from "./strategies/condition_text.js";
+import {
+  DEFAULT_PRIORITY,
+  exportEnvelope,
+  exportFileName,
+  isValidPriority,
+  parseImport,
+  requestBodyOf,
+  strategyFromDetail,
+  timeframeOptions,
+} from "./strategies/strategy_io.js";
 
 export function createLifecycle() {
   // State
   let currentStrategy = null;
   let strategies = [];
-  let conditionSchemas = null;
+  const conditionSchemas = {}; // filled in place once the schemas are loaded
   let defaultTimeframe = null; // timeframe a new strategy is saved with
-  let categoryStates = { data: null }; // Wrapped in object to pass by reference
-
-  // Editor state (vertical cards)
-  let conditions = []; // [{ type, enabled, params: {k: v} }]
 
   // Pollers
   let strategiesPoller = null;
@@ -34,15 +41,12 @@ export function createLifecycle() {
 
   // Dirty tracking — unsaved editor changes
   let _isDirty = false;
-  let _loadingStrategy = false; // suppress dirty during load
 
   // Event listener cleanup tracking
   const eventCleanups = [];
   const CleanupScope = {
     STATIC: "static",
     STRATEGIES_LIST: "strategies-list",
-    CONDITION_CARDS: "condition-cards",
-    MODAL: "condition-modal",
   };
 
   // Helper to track event listeners for cleanup
@@ -112,51 +116,30 @@ export function createLifecycle() {
   }
 
   // Initialize sub-modules
-  const conditionEditor = createConditionEditor({
-    state: { get currentStrategy() { return currentStrategy; }, set currentStrategy(val) { currentStrategy = val; } },
-    conditions,
-    conditionSchemas: new Proxy({}, {
-      get: (_, prop) => conditionSchemas?.[prop]
-    }),
+  const ruleEditor = createRuleEditor({
+    state: {
+      get currentStrategy() {
+        return currentStrategy;
+      },
+    },
+    conditionSchemas,
     $,
-    $$,
     Utils,
     renderStateView,
     announce,
     confirm: (config) => ConfirmationDialog.show(config),
     enhanceAllSelects,
     addTrackedListener,
-    clearScope,
-    CleanupScope,
+    onChange: markDirty,
+    openCatalog: openConditionCatalog,
   });
 
   const conditionCatalog = createConditionCatalog({
-    conditionSchemas: new Proxy({}, {
-      get: (_, prop) => conditionSchemas?.[prop],
-      ownKeys: () => (conditionSchemas ? Reflect.ownKeys(conditionSchemas) : []),
-      getOwnPropertyDescriptor: (_, prop) =>
-        conditionSchemas && prop in conditionSchemas
-          ? { configurable: true, enumerable: true, writable: false }
-          : undefined,
-    }),
-    categoryStates,
+    conditionSchemas,
     $,
-    $$,
     Utils,
-    AppState,
     addTrackedListener,
-    clearScope,
-    CleanupScope,
   });
-
-  // Wrap conditionEditor.renderConditionsList to mark dirty on user edits
-  {
-    const _origRender = conditionEditor.renderConditionsList.bind(conditionEditor);
-    conditionEditor.renderConditionsList = (...args) => {
-      if (currentStrategy && !_loadingStrategy) markDirty();
-      return _origRender(...args);
-    };
-  }
 
   return {
     async init(_ctx) {
@@ -165,26 +148,15 @@ export function createLifecycle() {
       // Hide editor area until a strategy is selected
       hideEditor();
 
-      // Setup strategy type toggle
-      setupTypeToggle();
-
-      // Setup sidebar actions
+      setupFilterTabs();
       setupSidebarActions();
-
-      // Setup editor actions
-      setupEditorActions();
-
-      // Setup toolbar actions
-      setupToolbarActions();
-
-      // Setup search
-      setupSearch();
+      setupHeaderActions();
 
       // Load condition schemas
       await loadConditionSchemas();
 
-      // Initialize condition catalog (modal)
-      conditionCatalog.initializeConditionCatalog(conditionEditor.addCondition);
+      ruleEditor.bind();
+      conditionCatalog.bind();
     },
 
     async activate(ctx) {
@@ -222,15 +194,13 @@ export function createLifecycle() {
       // Cleanup state
       currentStrategy = null;
       strategies = [];
-      conditions = [];
       _lastStrategiesKey = null;
       _isDirty = false;
-      _loadingStrategy = false;
     },
   };
 
-  // Strategy Type Toggle
-  function setupTypeToggle() {
+  // Strategy list filter tabs
+  function setupFilterTabs() {
     // Setup filter tabs in sidebar
     const filterTabs = document.querySelectorAll(".filter-tab");
 
@@ -325,216 +295,120 @@ export function createLifecycle() {
       addTrackedListener(card, "click", () => {
         const type = card.dataset.type;
         hideCreateStrategyModal();
-        createNewStrategy(type);
+        startNewStrategy(type);
       });
     });
   }
 
-  // Editor actions (add condition, load template)
-  function setupEditorActions() {
-    const addBtn = $("#add-condition");
-    const catalog = $("#condition-catalog-modal");
-    const closeCatalog = $("#close-condition-catalog");
-    const searchInput = $("#condition-search");
-
-    if (addBtn) {
-      addTrackedListener(addBtn, "click", () => openConditionCatalog());
-    }
-    if (closeCatalog && catalog) {
-      addTrackedListener(closeCatalog, "click", () => (catalog.hidden = true));
-      addTrackedListener(catalog, "click", (e) => {
-        if (e.target === catalog) catalog.hidden = true;
-      });
-    }
-
-    // Search conditions
-    if (searchInput) {
-      addTrackedListener(searchInput, "input", (e) => {
-        const query = e.target.value.toLowerCase().trim();
-        filterConditions(query);
-      });
-    }
-  }
-
-  function filterConditions(query) {
-    const categories = $$(".condition-category");
-
-    if (!query) {
-      const states = conditionCatalog.getCategoryStates();
-      // Show all, restore saved states
-      categories.forEach((cat) => {
-        cat.style.display = "block";
-        const header = cat.querySelector(".category-header");
-        if (!header) return;
-        const collapsed = states[header.dataset.category] !== false;
-        conditionCatalog.applyCategoryCollapsedState(header, collapsed);
-      });
-
-      $$(".condition-item").forEach((item) => {
-        item.style.display = "block";
-      });
-      return;
-    }
-
-    // Filter conditions
-    categories.forEach((cat) => {
-      const items = cat.querySelectorAll(".condition-item");
-      const header = cat.querySelector(".category-header");
-      let hasVisibleItems = false;
-
-      items.forEach((item) => {
-        const nameEl = item.querySelector(".condition-name");
-        const descEl = item.querySelector(".condition-description");
-        if (!nameEl || !descEl) return;
-
-        const name = nameEl.textContent.toLowerCase();
-        const desc = descEl.textContent.toLowerCase();
-        const matches = name.includes(query) || desc.includes(query);
-
-        if (matches) {
-          item.style.display = "block";
-          hasVisibleItems = true;
-        } else {
-          item.style.display = "none";
-        }
-      });
-
-      // Show/hide category based on matches
-      if (hasVisibleItems) {
-        cat.style.display = "block";
-        conditionCatalog.applyCategoryCollapsedState(header, false);
-      } else {
-        cat.style.display = "none";
-      }
-    });
-  }
-
-  // Toolbar Actions
-  function setupToolbarActions() {
-    const saveBtn = $("#save-strategy");
-    const validateBtn = $("#validate-strategy");
-    const enableToggle = $("#strategy-enabled-toggle");
-    const nameInput = $("#strategy-name");
-
-    // Sync strategy name in real-time as user types
-    if (nameInput) {
-      addTrackedListener(nameInput, "input", (e) => {
-        if (currentStrategy) {
-          currentStrategy.name = e.target.value.trim();
-          markDirty();
-        }
-      });
-    }
-
-    if (saveBtn) {
-      addTrackedListener(saveBtn, "click", async () => {
-        // Validate first before saving
-        const isValid = await validateStrategy();
-        if (!isValid) {
-          Utils.showToast(I18n.t("strategies-toast-fix-validation"), "error");
-          return;
-        }
-        await saveStrategy();
-      });
-    }
-
-    if (validateBtn) {
-      addTrackedListener(validateBtn, "click", async () => {
-        await validateStrategy();
-      });
-    }
-
-    // Enable toggle - saves immediately
-    if (enableToggle) {
-      addTrackedListener(enableToggle, "change", async (e) => {
-        if (currentStrategy) {
-          currentStrategy.enabled = e.target.checked;
-          // If strategy is saved, update via API immediately
-          if (currentStrategy.id) {
-            await toggleCurrentStrategyEnabled();
-          }
-        }
-      });
-    }
-  }
-
-  /** Create, update and validate request body of the strategy being edited. */
-  function strategyRequestBody() {
-    return {
-      name: currentStrategy.name,
-      description: currentStrategy.description || null,
-      strategy_type: currentStrategy.type,
-      enabled: !!currentStrategy.enabled,
-      priority: currentStrategy.priority ?? 10,
-      timeframe: currentStrategy.timeframe || undefined,
-      rules: currentStrategy.rules || null,
-      parameters: currentStrategy.parameters || {},
-      author: currentStrategy.author || null,
+  /** Editor header: every field edits the open strategy and marks it unsaved. */
+  function setupHeaderActions() {
+    const edit = (apply) => (event) => {
+      if (!currentStrategy) return;
+      apply(event.target);
+      markDirty();
     };
+
+    addTrackedListener(
+      $("#strategy-name"),
+      "input",
+      edit((input) => {
+        currentStrategy.name = input.value;
+      })
+    );
+    addTrackedListener(
+      $("#strategy-enabled-toggle"),
+      "change",
+      edit((input) => {
+        currentStrategy.enabled = input.checked;
+      })
+    );
+    addTrackedListener(
+      $("#strategy-timeframe"),
+      "change",
+      edit((select) => {
+        currentStrategy.timeframe = select.value;
+        // Conditions without a timeframe of their own show the strategy's.
+        ruleEditor.render();
+      })
+    );
+    addTrackedListener(
+      $("#strategy-priority"),
+      "input",
+      edit((input) => {
+        currentStrategy.priority = input.value === "" ? null : Number(input.value);
+        setPriorityInvalid(!isValidPriority(currentStrategy.priority));
+      })
+    );
+    addTrackedListener(
+      $("#strategy-description"),
+      "input",
+      edit((input) => {
+        currentStrategy.description = input.value;
+      })
+    );
+    addTrackedListener($("#toggle-description"), "click", () => {
+      setDescriptionOpen($("#strategy-description-panel")?.hidden ?? false);
+    });
+
+    addTrackedListener($("#save-strategy"), "click", saveStrategy);
+    addTrackedListener($("#validate-strategy"), "click", validateStrategy);
+    addTrackedListener($("#export-strategy"), "click", exportStrategy);
   }
 
-  async function toggleCurrentStrategyEnabled() {
-    if (!currentStrategy?.id) return;
-
-    try {
-      const body = strategyRequestBody();
-
-      await requestManager.fetch(`/api/strategies/${currentStrategy.id}`, {
-        method: "PUT",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify(body),
-        priority: "high",
-      });
-
-      await loadStrategies();
-      const args = { name: currentStrategy.name };
-      if (currentStrategy.enabled) {
-        announce(
-          "success",
-          I18n.t("strategies-toast-enabled", args),
-          I18n.attr("strategies-toast-enabled", "message", args)
-        );
-      } else {
-        announce(
-          "success",
-          I18n.t("strategies-toast-disabled", args),
-          I18n.attr("strategies-toast-disabled", "message", args)
-        );
-      }
-    } catch (error) {
-      console.error("Failed to toggle strategy:", error);
-      announce(
-        "error",
-        I18n.t("strategies-toast-toggle-failed"),
-        I18n.attr("strategies-toast-toggle-failed", "message")
-      );
-      // Revert toggle state
-      const toggle = $("#strategy-enabled-toggle");
-      if (toggle) toggle.checked = !currentStrategy.enabled;
-      currentStrategy.enabled = !currentStrategy.enabled;
-    }
+  function setPriorityInvalid(invalid) {
+    const input = $("#strategy-priority");
+    if (!input) return;
+    if (invalid) input.setAttribute("aria-invalid", "true");
+    else input.removeAttribute("aria-invalid");
   }
 
-  // Search (condition catalog)
-  function setupSearch() {
-    const searchInput = $("#condition-search");
-    const clearBtn = $("#clear-search");
+  function setDescriptionOpen(open) {
+    const panel = $("#strategy-description-panel");
+    const toggle = $("#toggle-description");
+    if (panel) panel.hidden = !open;
+    if (toggle) toggle.setAttribute("aria-expanded", String(open));
+  }
 
-    if (searchInput) {
-      addTrackedListener(searchInput, "input", (e) => {
-        const query = e.target.value.toLowerCase();
-        filterConditions(query);
-      });
+  /** The timeframe select: the options candle conditions offer, plus a saved value outside them. */
+  function populateTimeframe(value) {
+    const select = $("#strategy-timeframe");
+    if (!select) return;
+    const options = timeframeOptions(conditionSchemas).map(
+      (option) =>
+        `<option value="${Utils.escapeHtml(String(optionValue(option)))}">${Utils.escapeHtml(optionLabel(option))}</option>`
+    );
+    if (value && !timeframeOptions(conditionSchemas).some((option) => optionValue(option) === value)) {
+      const text = Utils.escapeHtml(String(value));
+      options.push(`<option value="${text}">${text}</option>`);
     }
+    select.innerHTML = options.join("");
+    select.value = value ?? "";
+  }
 
-    if (clearBtn) {
-      addTrackedListener(clearBtn, "click", () => {
-        if (searchInput) {
-          searchInput.value = "";
-          filterConditions("");
-        }
-      });
-    }
+  /** Show a strategy in the header and the rule editor. */
+  function fillEditor(strategy) {
+    const nameInput = $("#strategy-name");
+    if (nameInput) nameInput.value = strategy.name;
+    updateTypeBadge(strategy.type);
+    const enableToggle = $("#strategy-enabled-toggle");
+    if (enableToggle) enableToggle.checked = strategy.enabled;
+    populateTimeframe(strategy.timeframe);
+    const priority = $("#strategy-priority");
+    if (priority) priority.value = strategy.priority ?? DEFAULT_PRIORITY;
+    setPriorityInvalid(false);
+    const description = $("#strategy-description");
+    if (description) description.value = strategy.description ?? "";
+    setDescriptionOpen(Boolean(strategy.description));
+    ruleEditor.load(strategy.rules);
+  }
+
+  /** The strategy in the editor with the name trimmed and the rules the editor holds. */
+  function editedStrategy() {
+    return {
+      ...currentStrategy,
+      name: String(currentStrategy.name ?? "").trim(),
+      rules: ruleEditor.serialize(),
+    };
   }
 
   // Load Data
@@ -573,11 +447,10 @@ export function createLifecycle() {
       const data = await requestManager.fetch("/api/strategies/conditions/schemas", {
         priority: "normal",
       });
-      conditionSchemas = data.schemas || {};
+      Object.assign(conditionSchemas, data.schemas || {});
       defaultTimeframe = data.default_timeframe ?? null;
     } catch (error) {
       console.error("Failed to load condition schemas:", error);
-      conditionSchemas = {};
     }
   }
 
@@ -679,43 +552,72 @@ export function createLifecycle() {
     filterStrategies(filter);
   }
 
-  function openConditionCatalog() {
-    const modal = $("#condition-catalog-modal");
-    if (modal) modal.hidden = false;
+  function openConditionCatalog(groupId) {
+    if (!currentStrategy) {
+      return announce(
+        "warning",
+        I18n.t("strategies-toast-create-first"),
+        I18n.attr("strategies-toast-create-first", "message")
+      );
+    }
+    return conditionCatalog.open({
+      strategyType: currentStrategy.type,
+      handler: (type) => ruleEditor.addConditionTo(groupId, type),
+    });
+  }
+
+  /** Ask before an unsaved strategy is replaced; true when the editor may be overwritten. */
+  async function confirmDiscard() {
+    if (!_isDirty || !currentStrategy) return true;
+    const { confirmed } = await ConfirmationDialog.show({
+      title: I18n.t("strategies-unsaved-confirm"),
+      message: I18n.attr("strategies-unsaved-confirm", "message", { name: currentStrategy.name }),
+      confirmLabel: I18n.t("strategies-unsaved-discard"),
+      cancelLabel: I18n.t("common-action-cancel"),
+      variant: "warning",
+    });
+    return confirmed;
+  }
+
+  /** Put a strategy in the editor; the list highlights it when it is saved. */
+  function openInEditor(strategy, { dirty }) {
+    currentStrategy = strategy;
+    fillEditor(strategy);
+    showEditor();
+    clearDirty();
+    if (dirty) markDirty();
+    $$(".strategy-item").forEach((item) => {
+      item.classList.toggle("active", Boolean(strategy.id) && item.dataset.strategyId === strategy.id);
+    });
+  }
+
+  /** Clear the editor back to its empty state, as when nothing is selected. */
+  function closeEditor() {
+    currentStrategy = null;
+    clearDirty();
+    hideEditor();
   }
 
   // Strategy Operations
   function createNewStrategy(strategyType = "ENTRY") {
-    currentStrategy = {
-      id: null,
-      name: I18n.t("strategies-new-name"),
-      type: strategyType,
-      enabled: true,
-      priority: 10,
-      timeframe: defaultTimeframe,
-      rules: null,
-      parameters: {},
-    };
+    openInEditor(
+      {
+        id: null,
+        name: I18n.t("strategies-new-name"),
+        description: null,
+        type: strategyType,
+        enabled: true,
+        priority: DEFAULT_PRIORITY,
+        timeframe: defaultTimeframe,
+        rules: null,
+        parameters: {},
+      },
+      { dirty: true }
+    );
+  }
 
-    // Update UI
-    const nameInput = $("#strategy-name");
-    if (nameInput) nameInput.value = currentStrategy.name;
-
-    // Update type badge
-    updateTypeBadge(strategyType);
-
-    // Update enable toggle
-    const enableToggle = $("#strategy-enabled-toggle");
-    if (enableToggle) enableToggle.checked = true;
-
-    // Clear editor conditions (suppress dirty during reset)
-    _loadingStrategy = true;
-    conditions.length = 0;
-    conditionEditor.renderConditionsList();
-    _loadingStrategy = false;
-
-    showEditor();
-    markDirty(); // new strategy is always unsaved
+  async function startNewStrategy(strategyType) {
+    if (await confirmDiscard()) createNewStrategy(strategyType);
   }
 
   function updateTypeBadge(type) {
@@ -728,58 +630,49 @@ export function createLifecycle() {
   }
 
   async function loadStrategy(strategyId) {
+    if (currentStrategy?.id === strategyId) return;
+    if (!(await confirmDiscard())) return;
     try {
       const data = await requestManager.fetch(`/api/strategies/${strategyId}`, {
         priority: "normal",
       });
-      currentStrategy = {
-        id: data.id,
-        name: data.name,
-        description: data.description || null,
-        type: data.strategy_type,
-        enabled: !!data.enabled,
-        priority: data.priority,
-        timeframe: data.timeframe,
-        rules: data.rules || null,
-        parameters: data.parameters || {},
-        created_at: data.created_at,
-        updated_at: data.updated_at,
-        author: data.author || null,
-        version: data.version,
-      };
-
-      // Update UI
-      const nameInput = $("#strategy-name");
-      if (nameInput) nameInput.value = currentStrategy.name;
-
-      // Update type badge
-      updateTypeBadge(currentStrategy.type);
-
-      // Update enable toggle
-      const enableToggle = $("#strategy-enabled-toggle");
-      if (enableToggle) enableToggle.checked = currentStrategy.enabled;
-
-      // Render strategy into vertical editor (suppress dirty during load)
-      _loadingStrategy = true;
-      conditionEditor.parseRuleTreeToConditions(currentStrategy.rules);
-      conditionEditor.renderConditionsList();
-      _loadingStrategy = false;
-
-      showEditor();
-      clearDirty();
-
-      // Update active state in list
-      $$(".strategy-item").forEach((item) => {
-        if (item.dataset.strategyId === strategyId) {
-          item.classList.add("active");
-        } else {
-          item.classList.remove("active");
-        }
-      });
+      openInEditor(strategyFromDetail(data), { dirty: false });
     } catch (error) {
       console.error("Failed to load strategy:", error);
       Utils.showToast(I18n.t("strategies-toast-load-strategy-failed"), "error");
     }
+  }
+
+  /**
+   * True when the strategy is fit to send: it has a name, a priority in range and a rule
+   * tree without problems. Otherwise the first thing to fix is brought into view.
+   */
+  function checkBeforeSend() {
+    const nameInput = $("#strategy-name");
+    if (!currentStrategy.name.trim()) {
+      announce(
+        "warning",
+        I18n.t("strategies-toast-name-required"),
+        I18n.attr("strategies-toast-name-required", "message")
+      );
+      if (nameInput) nameInput.focus();
+      return false;
+    }
+    if (!isValidPriority(currentStrategy.priority)) {
+      setPriorityInvalid(true);
+      announce(
+        "warning",
+        I18n.t("strategies-toast-priority-invalid"),
+        I18n.attr("strategies-toast-priority-invalid", "message")
+      );
+      $("#strategy-priority")?.focus();
+      return false;
+    }
+    if (!ruleEditor.checkBeforeSave()) {
+      Utils.showToast(I18n.t("strategies-toast-fix-validation"), "error");
+      return false;
+    }
+    return true;
   }
 
   async function saveStrategy() {
@@ -791,50 +684,20 @@ export function createLifecycle() {
       );
       return;
     }
-
-    // Validate strategy has conditions
-    if (conditions.length === 0) {
-      announce(
-        "warning",
-        I18n.t("strategies-toast-no-conditions-save"),
-        I18n.attr("strategies-toast-no-conditions-save", "message")
-      );
-      return;
-    }
+    if (!checkBeforeSend()) return;
 
     try {
-      // Get current values from UI
-      const nameInput = $("#strategy-name");
-      const typeSelect = $("#strategy-type");
-
-      if (nameInput) currentStrategy.name = nameInput.value.trim();
-      if (typeSelect) currentStrategy.type = typeSelect.value;
-
-      // Validate name
-      if (!currentStrategy.name) {
-        announce(
-        "warning",
-        I18n.t("strategies-toast-name-required"),
-        I18n.attr("strategies-toast-name-required", "message")
-      );
-        if (nameInput) nameInput.focus();
-        return;
-      }
-
-      // Sync rule tree from editor
-      conditionEditor.updateRuleTreeFromEditor();
-
-      const body = strategyRequestBody();
-
-      const method = currentStrategy.id ? "PUT" : "POST";
-      const url = currentStrategy.id ? `/api/strategies/${currentStrategy.id}` : "/api/strategies";
+      const saved = editedStrategy();
+      const method = saved.id ? "PUT" : "POST";
+      const url = saved.id ? `/api/strategies/${saved.id}` : "/api/strategies";
 
       const data = await requestManager.fetch(url, {
         method,
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify(body),
+        body: JSON.stringify(requestBodyOf(saved)),
         priority: "high",
       });
+      currentStrategy.name = saved.name;
       if (!currentStrategy.id && data.id) {
         currentStrategy.id = data.id;
       }
@@ -852,7 +715,7 @@ export function createLifecycle() {
       announce(
         "error",
         I18n.t("strategies-toast-save-failed"),
-        I18n.attr("strategies-toast-save-failed", "message")
+        await errorMessageOf(error, I18n.attr("strategies-toast-save-failed", "message"))
       );
     }
   }
@@ -860,98 +723,65 @@ export function createLifecycle() {
   async function validateStrategy() {
     if (!currentStrategy) {
       Utils.showToast(I18n.t("strategies-toast-no-strategy-validate"), "warning");
-      return false;
+      return;
     }
-
-    // Make sure rule tree is up to date
-    conditionEditor.updateRuleTreeFromEditor();
-
-    // Check if strategy has conditions
-    if (!currentStrategy.rules) {
-      announce(
-        "warning",
-        I18n.t("strategies-toast-no-conditions-validate"),
-        I18n.attr("strategies-toast-no-conditions-validate", "message")
-      );
-      return false;
-    }
+    if (!checkBeforeSend()) return;
 
     try {
-      let data;
-
-      if (currentStrategy.id) {
-        // Strategy exists on server - use ID-based validation
-        data = await requestManager.fetch(`/api/strategies/${currentStrategy.id}/validate`, {
-          method: "POST",
-          priority: "high",
-        });
-      } else {
-        // Unsaved strategy - use inline validation with JSON body
-        const body = strategyRequestBody();
-
-        data = await requestManager.fetch("/api/strategies/validate", {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify(body),
-          priority: "high",
-        });
-      }
+      const data = await requestManager.fetch("/api/strategies/validate", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(requestBodyOf(editedStrategy())),
+        priority: "high",
+      });
 
       if (data.valid) {
         Utils.showToast(I18n.t("strategies-toast-valid"), "success");
-        return true;
+        return;
       }
       const reasons = (data.errors || []).map((error) => I18n.text(error));
-      announce(
-        "error",
-        I18n.t("strategies-toast-invalid"),
-        Utils.formatList(reasons, { type: "unit" })
-      );
-      return false;
+      announce("error", I18n.t("strategies-toast-invalid"), Utils.formatList(reasons, { type: "unit" }));
     } catch (error) {
       console.error("Validation failed:", error);
-      Utils.showToast(I18n.t("strategies-toast-validation-failed"), "error");
-      return false;
+      announce(
+        "error",
+        I18n.t("strategies-toast-validation-failed"),
+        await errorMessageOf(error, null)
+      );
     }
   }
 
+  /** Switch a listed strategy on or off; the rest of the stored strategy is untouched. */
   async function toggleStrategyEnabled(strategyId) {
     try {
       const strategy = strategies.find((s) => s.id === strategyId);
       if (!strategy) return;
-      // Fetch full detail to avoid missing fields
-      const detail = await requestManager.fetch(`/api/strategies/${strategyId}`, {
-        priority: "normal",
-      });
+      const enabled = !strategy.enabled;
 
-      const body = {
-        name: detail.name,
-        description: detail.description || null,
-        strategy_type: detail.strategy_type,
-        enabled: !strategy.enabled,
-        priority: detail.priority,
-        rules: detail.rules || null,
-        parameters: detail.parameters || {},
-        author: detail.author || null,
-      };
-
-      await requestManager.fetch(`/api/strategies/${strategyId}`, {
-        method: "PUT",
+      await requestManager.fetch(`/api/strategies/${encodeURIComponent(strategyId)}/enabled`, {
+        method: "PATCH",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify(body),
+        body: JSON.stringify({ enabled }),
         priority: "high",
       });
 
+      if (currentStrategy?.id === strategyId) {
+        currentStrategy.enabled = enabled;
+        const toggle = $("#strategy-enabled-toggle");
+        if (toggle) toggle.checked = enabled;
+      }
       await loadStrategies();
       Utils.showToast(
-        strategy.enabled
-          ? I18n.t("strategies-toast-item-disabled")
-          : I18n.t("strategies-toast-item-enabled"),
+        enabled ? I18n.t("strategies-toast-item-enabled") : I18n.t("strategies-toast-item-disabled"),
         "success"
       );
     } catch (error) {
       console.error("Failed to toggle strategy:", error);
-      Utils.showToast(I18n.t("strategies-toast-item-toggle-failed"), "error");
+      announce(
+        "error",
+        I18n.t("strategies-toast-item-toggle-failed"),
+        await errorMessageOf(error, null)
+      );
     }
   }
 
@@ -975,10 +805,7 @@ export function createLifecycle() {
         priority: "high",
       });
 
-      if (currentStrategy?.id === strategyId) {
-        currentStrategy = null;
-        createNewStrategy();
-      }
+      if (currentStrategy?.id === strategyId) closeEditor();
 
       await loadStrategies();
       const args = { name: strategy.name };
@@ -992,8 +819,32 @@ export function createLifecycle() {
       announce(
         "error",
         I18n.t("strategies-toast-delete-failed"),
-        I18n.attr("strategies-toast-delete-failed", "message")
+        await errorMessageOf(error, I18n.attr("strategies-toast-delete-failed", "message"))
       );
+    }
+  }
+
+  /** Download the strategy in the editor as an export file. */
+  function exportStrategy() {
+    if (!currentStrategy) return;
+    const strategy = editedStrategy();
+    downloadJson(exportFileName(strategy.name), exportEnvelope(strategy));
+    Utils.showToast(I18n.t("strategies-toast-exported"), "success");
+  }
+
+  /** Reason an import file was refused. */
+  function importRefusal({ code, args }) {
+    switch (code) {
+      case "json":
+        return I18n.t("strategies-import-error-json");
+      case "unknown-condition":
+        return I18n.t("strategies-import-error-unknown-condition", { type: args.type });
+      case "not-applicable":
+        return I18n.t("strategies-import-error-not-applicable", {
+          name: conditionName(conditionSchemas[args.type], args.type),
+        });
+      default:
+        return I18n.t("strategies-import-error-shape");
     }
   }
 
@@ -1007,17 +858,13 @@ export function createLifecycle() {
       if (!file) return;
 
       try {
-        const text = await file.text();
-        const strategy = JSON.parse(text);
-
-        currentStrategy = { ...strategy, id: null };
-
-        const nameInput = $("#strategy-name");
-        const typeSelect = $("#strategy-type");
-
-        if (nameInput) nameInput.value = currentStrategy.name;
-        if (typeSelect) typeSelect.value = currentStrategy.type;
-
+        const { strategy, error } = parseImport(await file.text(), conditionSchemas, defaultTimeframe);
+        if (error) {
+          announce("error", I18n.t("strategies-toast-import-failed"), importRefusal(error));
+          return;
+        }
+        if (!(await confirmDiscard())) return;
+        openInEditor(strategy, { dirty: true });
         Utils.showToast(I18n.t("strategies-toast-imported"), "success");
       } catch (error) {
         console.error("Failed to import strategy:", error);

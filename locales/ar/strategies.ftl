@@ -33,9 +33,6 @@ strategies-editor-name =
     .placeholder = اسم الاستراتيجية
 strategies-editor-dirty =
     .title = تغييرات غير محفوظة
-strategies-editor-enabled =
-    .aria-label = الاستراتيجية مفعّلة
-    .title = الاستراتيجية مفعّلة
 strategies-action-validate = تحقق
 strategies-editor-empty = اختر استراتيجية لتعديلها، أو أنشئ استراتيجية جديدة
 strategies-conditions-empty-title = لا توجد شروط بعد
@@ -96,11 +93,112 @@ strategies-unit-multiplier = ×
 
 strategies-catalog-search =
     .placeholder = البحث في الشروط...
+    .aria-label = البحث في الشروط
 strategies-catalog-search-clear =
     .aria-label = مسح البحث
-strategies-catalog-fold-all = طيّ الكل
-strategies-catalog-unfold-all = فتح الكل
 strategies-catalog-no-description = لا يوجد وصف متاح
+
+# Editor header: the timeframe is the default for candle conditions that leave theirs unset.
+strategies-editor-active = نشطة
+strategies-editor-timeframe = الإطار الزمني الافتراضي
+    .title = الإطار الزمني للشموع للشروط التي لا تحدد إطارًا خاصًا بها
+strategies-editor-priority = الأولوية
+    .title = ترتيب التقييم من 1 إلى 100؛ الأرقام الأصغر تُقيَّم أولًا
+strategies-editor-description = الوصف
+strategies-editor-description-field =
+    .placeholder = ما تفعله هذه الاستراتيجية
+    .aria-label = وصف الاستراتيجية
+strategies-action-export = تصدير
+
+# Rule groups. $mode is the all/any select written into the sentence.
+strategies-rules-match = الشروط المطلوب تحققها: { $mode }
+strategies-group-match = المطلوب تحققه: { $mode }
+strategies-match-all = جميعها
+strategies-match-any = واحد على الأقل
+strategies-match-mode =
+    .aria-label = جميع الشروط أو واحد على الأقل
+strategies-invert = عكس
+    .title = عكس: يتحقق عندما لا يتطابق هذا
+strategies-chip-off = متوقف
+strategies-chip-inverted = معكوس
+strategies-row-switch =
+    .title = أوقفه للاحتفاظ به محفوظًا دون تقييم
+    .aria-label = تقيّمه هذه الاستراتيجية
+strategies-row-expand =
+    .aria-label = إظهار المعاملات أو إخفاؤها
+strategies-add-group = إضافة مجموعة
+# $count is the number of conditions in the group.
+strategies-group-delete-confirm = إزالة المجموعة
+    .message =
+        { $count ->
+            [zero] إزالة هذه المجموعة؟
+            [one] إزالة هذه المجموعة وشرطها الوحيد؟
+            [two] إزالة هذه المجموعة وشرطيها؟
+            [few] إزالة هذه المجموعة وشروطها الـ { $count }؟
+            [many] إزالة هذه المجموعة وشروطها الـ { $count }؟
+           *[other] إزالة هذه المجموعة وشروطها الـ { $count }؟
+        }
+
+# Problems that block saving. $first is the first problem, $name the condition, $field the parameter.
+strategies-problems =
+    { $count ->
+        [zero] لا توجد مشكلات لإصلاحها: { $first }
+        [one] مشكلة واحدة تحتاج إلى إصلاح: { $first }
+        [two] مشكلتان تحتاجان إلى إصلاح: { $first }
+        [few] { $count } مشكلات تحتاج إلى إصلاح: { $first }
+        [many] { $count } مشكلة تحتاج إلى إصلاح: { $first }
+       *[other] { $count } مشكلة تحتاج إلى إصلاح: { $first }
+    }
+strategies-problem-located = { $name }: { $problem }
+strategies-problem-located-field = { $name }، { $field }: { $problem }
+strategies-problem-rules-empty = أضف شرطًا واحدًا مفعّلًا على الأقل
+strategies-problem-group-empty = تحتاج المجموعة إلى شرط مفعّل واحد على الأقل
+strategies-problem-not-applicable = لا يمكن استخدام هذا الشرط في هذا النوع من الاستراتيجيات
+strategies-problem-unknown-condition = نوع شرط غير معروف: { $type }
+strategies-problem-too-deep = يمكن تداخل القواعد حتى { $max } مستويات كحد أقصى؛ وتُحتسب المجموعة المعكوسة مستوى إضافيًا
+strategies-problem-required = أدخل رقمًا
+strategies-problem-range = يجب أن تكون القيمة بين { $min } و{ $max }
+strategies-problem-invalid-option = اختر أحد الخيارات المعروضة
+
+# Catalog dialog: the data a condition reads and why one is unavailable.
+strategies-catalog-all = الكل
+strategies-catalog-categories =
+    .aria-label = الفئات
+strategies-catalog-empty = لا يوجد شرط يطابق بحثك
+strategies-catalog-exit-only = لاستراتيجيات الخروج فقط
+strategies-catalog-entry-only = لاستراتيجيات الدخول فقط
+strategies-data-candles = الشموع
+strategies-data-pool = المجمّع
+strategies-data-position = المركز
+strategies-data-market = نشاط السوق
+
+# Trade counts: $count selects the plural, $amount is the formatted number.
+strategies-unit-trades = صفقة
+strategies-value-trades =
+    { $count ->
+        [zero] { $amount } صفقة
+        [one] { $amount } صفقة
+        [two] { $amount } صفقتان
+        [few] { $amount } صفقات
+        [many] { $amount } صفقة
+       *[other] { $amount } صفقة
+    }
+
+# Unsaved changes, import and export. $max is the deepest level a rule tree may reach.
+strategies-toast-too-deep = مستويات كثيرة جدًا
+    .message = يمكن تداخل القواعد حتى { $max } مستويات كحد أقصى
+strategies-toast-priority-invalid = أولوية غير صالحة
+    .message = أدخل عددًا صحيحًا من 1 إلى 100
+strategies-toast-exported = تم تصدير الاستراتيجية
+# $name is the strategy name.
+strategies-unsaved-confirm = تجاهل التغييرات غير المحفوظة؟
+    .message = لدى «{ $name }» تغييرات غير محفوظة.
+strategies-unsaved-discard = تجاهل
+strategies-import-error-json = الملف ليس JSON صالحًا
+strategies-import-error-shape = الملف لا يصف استراتيجية
+# $type is the condition type id, $name the condition name.
+strategies-import-error-unknown-condition = يستخدم الملف شرطًا غير موجود في هذا الإصدار: { $type }
+strategies-import-error-not-applicable = لا يمكن استخدام «{ $name }» في هذا النوع من الاستراتيجيات
 
 ## New strategy dialog
 
@@ -120,19 +218,11 @@ strategies-delete-message = هل تريد حذف الاستراتيجية «{ $n
 ## Toasts. A message value is the title; `.message` is the body.
 
 strategies-toast-fix-validation = يرجى إصلاح أخطاء التحقق قبل الحفظ
-strategies-toast-enabled = تم تفعيل الاستراتيجية
-    .message = تم تفعيل «{ $name }»
-strategies-toast-disabled = تم تعطيل الاستراتيجية
-    .message = تم تعطيل «{ $name }»
-strategies-toast-toggle-failed = فشل التبديل
-    .message = فشل تحديث حالة الاستراتيجية
 strategies-toast-load-failed = فشل التحميل
     .message = فشل تحميل الاستراتيجيات من الخادم
 strategies-toast-load-strategy-failed = فشل تحميل الاستراتيجية
 strategies-toast-no-strategy = لم يتم إنشاء استراتيجية
     .message = أضف شرطًا واحدًا على الأقل أو انقر «استراتيجية جديدة» لإنشاء استراتيجية أولًا
-strategies-toast-no-conditions-save = لا توجد شروط
-    .message = أضف شرطًا واحدًا على الأقل إلى الاستراتيجية قبل الحفظ
 strategies-toast-name-required = الاسم مطلوب
     .message = أدخل اسم الاستراتيجية قبل الحفظ
 strategies-toast-saved = تم حفظ الاستراتيجية
@@ -140,8 +230,6 @@ strategies-toast-saved = تم حفظ الاستراتيجية
 strategies-toast-save-failed = فشل الحفظ
     .message = فشل حفظ الاستراتيجية في قاعدة البيانات
 strategies-toast-no-strategy-validate = لا توجد استراتيجية للتحقق منها
-strategies-toast-no-conditions-validate = لا توجد شروط
-    .message = أضف شرطًا واحدًا على الأقل قبل التحقق
 strategies-toast-valid = الاستراتيجية صالحة
 strategies-toast-invalid = الاستراتيجية تحتوي على أخطاء
 strategies-toast-validation-failed = فشل التحقق
@@ -160,7 +248,6 @@ strategies-toast-create-first = أنشئ استراتيجية أولًا
     .message = انقر «استراتيجية جديدة» لإنشاء استراتيجية قبل إضافة الشروط
 strategies-toast-condition-added = تمت إضافة الشرط
     .message = تمت إضافة { $name } إلى الاستراتيجية
-
 
 ## Conditions
 

@@ -1,20 +1,15 @@
 /* Copyright (c) 2024-2026 ScreenerBot (screenerbot.io)
  * SPDX-License-Identifier: BUSL-1.1 */
 
-/* Strategies Page Layout - Focused Stack Design */
+/* Strategies Page Layout - Focused Stack Design
 
-/* ==========================================================================
-   IMPORTANT: This file has been split into sub-modules for maintainability.
-   
-   Sub-modules (registered in templates.rs):
-   - strategies/condition_cards.css  (~427 lines) - Condition card components
-   - strategies/modals.css           (~600 lines) - Catalog & Parameter Editor modals
-   - strategies/editor.css           (~592 lines) - Main editor area (tabs, lists, cards)
-   - strategies/ui_components.css    (~376 lines) - Filter tabs, badges, toggles, modal
-   
-   ========================================================================== */
+   Page layout, the sidebar and the strategy list. The editor is split by concern
+   (registered in templates.rs):
+   - strategies/editor.css           - editor header, rules area, sticky footer
+   - strategies/condition_cards.css  - rule groups, condition rows, parameter fields
+   - strategies/modals.css           - condition catalog dialog
+   - strategies/ui_components.css    - filter tabs, kind colours, type badge, create dialog */
 
-/* Strategies Page Layout - Focused Stack Design */
 #page-strategies {
   overflow: hidden !important;
   display: flex !important;
@@ -41,7 +36,6 @@
   flex-shrink: 0;
   z-index: 10;
 }
-
 
 .sidebar-content {
   flex: 1;
@@ -71,14 +65,100 @@
   height: 36px;
 }
 
-/* Strategy List Items */
+/* Strategy List */
 .strategy-list {
+  flex: 1;
+  overflow-y: auto;
   display: flex;
   flex-direction: column;
-  gap: 0.25rem;
+  gap: 0.5rem;
 }
 
-/* strategy-item styles defined later with merged template-list styles */
+/* Strategy list items — flat, compact, no cards */
+.strategy-item {
+  padding: 7px 10px;
+  border-radius: var(--radius-sm);
+  cursor: pointer;
+  transition: background var(--transition-fast);
+  display: flex;
+  flex-direction: column;
+  gap: 5px;
+  position: relative;
+  border: 1px solid transparent;
+}
+
+.strategy-item:hover {
+  background: var(--bg-card-hover);
+}
+
+.strategy-item.active {
+  background: var(--primary-alpha-10);
+  border-color: var(--primary-alpha-20);
+}
+
+.strategy-item-name {
+  font-size: 0.82rem;
+  font-weight: 600;
+  color: var(--text-primary);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  line-height: 1.3;
+}
+
+.strategy-item.active .strategy-item-name {
+  color: var(--primary-color);
+}
+
+.strategy-item-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 6px;
+}
+
+.strategy-item-tags {
+  display: flex;
+  align-items: center;
+  gap: 5px;
+  min-width: 0;
+  flex: 1;
+}
+
+.strategy-type-tag {
+  font-size: 0.6rem;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  padding: 1px 5px;
+  border-radius: var(--radius-sm);
+  flex-shrink: 0;
+  background: var(--strategy-kind-tint);
+  color: var(--strategy-kind-color);
+}
+
+.strategy-state-tag {
+  font-size: 0.7rem;
+  color: var(--text-muted);
+  white-space: nowrap;
+}
+
+.strategy-state-tag.enabled {
+  color: var(--success-color);
+}
+
+.strategy-item-btns {
+  display: flex;
+  gap: 2px;
+  flex-shrink: 0;
+  opacity: 0;
+  transition: opacity var(--transition-fast);
+}
+
+.strategy-item:hover .strategy-item-btns,
+.strategy-item.active .strategy-item-btns {
+  opacity: 1;
+}
 
 /* ==========================================================================
    Main Editor Area
@@ -91,94 +171,6 @@
   background: var(--background-color);
 }
 
-/* Editor Header — hidden by default; JS adds it when a strategy is loaded */
-.editor-header {
-  display: none;
-  flex: 0 0 auto;
-  align-items: center;
-  justify-content: space-between;
-  padding: 0.625rem 1rem;
-  border-bottom: 1px solid var(--border-color);
-  background: var(--surface-color);
-  z-index: 5;
-  gap: 0.75rem;
-}
-
-/* Identity group: type badge + name input + dirty dot */
-.editor-identity {
-  display: flex;
-  align-items: center;
-  gap: 0.5rem;
-  flex: 1;
-  min-width: 0;
-}
-
-.strategy-name-input {
-  font-size: 0.95rem;
-  font-weight: 600;
-  padding: 0.3rem 0.5rem;
-  background: transparent;
-  border: 1px solid transparent;
-  border-radius: var(--radius-md);
-  color: var(--text-color);
-  flex: 1;
-  min-width: 0;
-  max-width: 320px;
-  transition: border-color var(--transition-fast), background var(--transition-fast);
-  letter-spacing: 0.01em;
-}
-
-.strategy-name-input:hover {
-  border-color: var(--border-color);
-  background: var(--background-color);
-}
-
-.strategy-name-input:focus {
-  outline: none;
-  border-color: var(--primary-color);
-  background: var(--background-color);
-  box-shadow: 0 0 0 2px var(--primary-alpha-10);
-}
-
-/* Dirty indicator dot — visible only in dirty state */
-.editor-dirty-dot {
-  width: 7px;
-  height: 7px;
-  border-radius: 50%;
-  background: var(--warning-color, #f59e0b);
-  flex-shrink: 0;
-  display: none;
-  transition: opacity var(--transition-fast);
-}
-
-.editor-header.dirty .editor-dirty-dot {
-  display: block;
-}
-
-/* Controls group: toggle + separator + actions */
-.editor-controls {
-  display: flex;
-  align-items: center;
-  gap: 0.5rem;
-  flex-shrink: 0;
-}
-
-.editor-sep {
-  width: 1px;
-  height: 20px;
-  background: var(--border-color);
-  flex-shrink: 0;
-}
-
-/* Save button — hidden until dirty */
-.editor-save-btn {
-  display: none;
-}
-
-.editor-header.dirty .editor-save-btn {
-  display: inline-flex;
-}
-
 /* Holds the editor's empty state, filling the editor while no strategy is selected */
 .editor-placeholder {
   flex: 1;
@@ -186,41 +178,3 @@
   flex-direction: column;
   pointer-events: none;
 }
-
-/* Scrollable Content */
-.editor-scroll-area {
-  flex: 1;
-  overflow-y: auto;
-  padding: 1.5rem;
-  display: flex;
-  justify-content: center;
-}
-
-.conditions-container {
-  width: 100%;
-  max-width: 900px; /* Optimal reading width */
-  display: flex;
-  flex-direction: column;
-  gap: 1rem;
-}
-
-.conditions-list {
-  display: flex;
-  flex-direction: column;
-  gap: 1rem;
-}
-
-/* Sticky Footer */
-.editor-footer {
-  flex: 0 0 auto;
-  padding: 1rem 1.5rem;
-  background: var(--surface-color);
-  border-top: 1px solid var(--border-color);
-  display: flex;
-  justify-content: center;
-}
-
-.editor-footer .btn {
-  max-width: 900px;
-}
-

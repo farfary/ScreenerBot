@@ -1,7 +1,7 @@
 <!-- Copyright (c) 2024-2026 ScreenerBot (screenerbot.io)
      SPDX-License-Identifier: BUSL-1.1
 
-     Strategy editor page - strategy list sidebar, condition editor and the condition catalog dialog. -->
+     Strategy editor page - strategy list sidebar, rule editor and the condition catalog dialog. -->
 
 <div class="strategies-page">
   <!-- Left Sidebar: Strategy Management -->
@@ -40,31 +40,64 @@
   <main class="strategy-editor">
     <!-- Header: only shown when a strategy is loaded -->
     <header class="editor-header" id="editor-header">
-      <div class="editor-identity">
-        <span class="strategy-type-badge entry" id="strategy-type-badge">
-          <i class="icon-trending-up"></i> <span data-l10n-id="strategies-type-entry"></span>
-        </span>
-        <input
-          type="text"
-          id="strategy-name"
-          data-l10n-id="strategies-editor-name"
-          class="strategy-name-input"
-          spellcheck="false"
-        />
-        <span class="editor-dirty-dot" id="editor-dirty-dot" data-l10n-id="strategies-editor-dirty"></span>
-      </div>
-      <div class="editor-controls">
-        <label class="toggle enable-toggle" data-level="root">
-          <input type="checkbox" id="strategy-enabled-toggle" data-l10n-id="strategies-editor-enabled" />
+      <div class="editor-row">
+        <div class="editor-identity">
+          <span class="strategy-type-badge entry" id="strategy-type-badge">
+            <i class="icon-trending-up"></i> <span data-l10n-id="strategies-type-entry"></span>
+          </span>
+          <input
+            type="text"
+            id="strategy-name"
+            data-l10n-id="strategies-editor-name"
+            class="strategy-name-input"
+            spellcheck="false"
+          />
+          <span class="editor-dirty-dot" id="editor-dirty-dot" data-l10n-id="strategies-editor-dirty"></span>
+        </div>
+        <label class="toggle editor-active">
+          <span data-l10n-id="strategies-editor-active"></span>
+          <input type="checkbox" id="strategy-enabled-toggle" />
           <span class="toggle-track"></span>
         </label>
-        <span class="editor-sep"></span>
-        <button type="button" class="btn btn-sm" id="validate-strategy">
-          <i class="icon-circle-check"></i> <span data-l10n-id="strategies-action-validate"></span>
-        </button>
-        <button type="button" class="btn primary btn-sm editor-save-btn" id="save-strategy">
-          <i class="icon-save"></i> <span data-l10n-id="common-action-save"></span>
-        </button>
+      </div>
+      <div class="editor-row">
+        <div class="editor-fields">
+          <div class="editor-field">
+            <label for="strategy-timeframe" data-l10n-id="strategies-editor-timeframe"></label>
+            <select id="strategy-timeframe" data-custom-select data-cs-fit-options></select>
+          </div>
+          <div class="editor-field">
+            <label for="strategy-priority" data-l10n-id="strategies-editor-priority"></label>
+            <input type="number" id="strategy-priority" min="1" max="100" step="1" />
+          </div>
+          <button
+            type="button"
+            class="btn btn-sm"
+            id="toggle-description"
+            aria-expanded="false"
+            aria-controls="strategy-description-panel"
+          >
+            <i class="icon-file-text"></i> <span data-l10n-id="strategies-editor-description"></span>
+          </button>
+        </div>
+        <div class="editor-controls">
+          <button type="button" class="btn btn-sm" id="validate-strategy">
+            <i class="icon-circle-check"></i> <span data-l10n-id="strategies-action-validate"></span>
+          </button>
+          <button type="button" class="btn btn-sm" id="export-strategy">
+            <i class="icon-upload"></i> <span data-l10n-id="strategies-action-export"></span>
+          </button>
+          <button type="button" class="btn primary btn-sm editor-save-btn" id="save-strategy">
+            <i class="icon-save"></i> <span data-l10n-id="common-action-save"></span>
+          </button>
+        </div>
+      </div>
+      <div class="editor-description" id="strategy-description-panel" hidden>
+        <textarea
+          id="strategy-description"
+          rows="2"
+          data-l10n-id="strategies-editor-description-field"
+        ></textarea>
       </div>
     </header>
 
@@ -78,56 +111,55 @@
       </div>
     </div>
 
-    <!-- Scrollable Content Area -->
+    <!-- Scrollable Content Area: the root rule group -->
     <div class="editor-scroll-area" id="editor-scroll-area">
       <div class="conditions-container">
-        <div class="conditions-list" id="conditions-list">
-          <div class="state-view state-view-empty state-view-compact" role="status" aria-live="polite">
-            <div class="state-view-heading">
-              <i class="state-view-icon icon-puzzle" aria-hidden="true"></i>
-              <span class="state-view-title" data-l10n-id="strategies-conditions-empty-title"></span>
-            </div>
-            <div class="state-view-message" data-l10n-id="strategies-conditions-empty-hint"></div>
-          </div>
-        </div>
+        <div class="conditions-list" id="conditions-list"></div>
       </div>
     </div>
 
     <!-- Sticky Footer -->
     <footer class="editor-footer" id="editor-footer">
-      <button type="button" class="btn dashed full-width" id="add-condition">
-        <i class="icon-plus"></i> <span data-l10n-id="strategies-add-condition"></span>
-      </button>
+      <button type="button" class="rule-problems" id="rule-problems" hidden></button>
+      <div class="editor-footer-actions">
+        <button type="button" class="btn dashed" id="add-condition">
+          <i class="icon-plus"></i> <span data-l10n-id="strategies-add-condition"></span>
+        </button>
+        <button type="button" class="btn dashed" id="add-group">
+          <i class="icon-plus"></i> <span data-l10n-id="strategies-add-group"></span>
+        </button>
+      </div>
     </footer>
   </main>
 
   <!-- Condition Catalog Modal -->
   <div class="modal-overlay condition-catalog-modal" id="condition-catalog-modal" hidden>
-    <div class="modal-dialog condition-catalog-content">
+    <div
+      class="modal-dialog condition-catalog-content"
+      role="dialog"
+      aria-modal="true"
+      aria-labelledby="condition-catalog-title"
+    >
       <div class="modal-header">
-        <h3><i class="icon-puzzle"></i> <span data-l10n-id="strategies-add-condition"></span></h3>
+        <h3 id="condition-catalog-title"><i class="icon-puzzle"></i> <span data-l10n-id="strategies-add-condition"></span></h3>
         <button type="button" class="modal-close" id="close-condition-catalog" data-l10n-id="strategies-modal-close">
           <i class="icon-x"></i>
         </button>
       </div>
       <div class="modal-body condition-catalog-body">
-        <div class="search-container">
-          <input
-            type="text"
-            id="condition-search"
-            data-l10n-id="strategies-catalog-search"
-            class="search-input"
-          />
-          <button type="button" class="btn-icon" id="clear-search" data-l10n-id="strategies-catalog-search-clear"><i class="icon-x"></i></button>
-        </div>
-        <div class="condition-catalog-actions">
-          <button type="button" class="catalog-toggle-btn" id="toggle-all-categories">
-            <i class="icon-chevrons-down"></i>
-            <span data-l10n-id="strategies-catalog-unfold-all"></span>
-          </button>
-        </div>
-        <div class="condition-categories" id="condition-categories">
-          <!-- Dynamically populated -->
+        <nav class="catalog-rail" id="catalog-categories" data-l10n-id="strategies-catalog-categories"></nav>
+        <div class="catalog-main">
+          <div class="search-container">
+            <input
+              type="text"
+              id="condition-search"
+              data-l10n-id="strategies-catalog-search"
+              class="search-input"
+              autocomplete="off"
+            />
+            <button type="button" class="btn-icon" id="clear-search" data-l10n-id="strategies-catalog-search-clear"><i class="icon-x"></i></button>
+          </div>
+          <div class="catalog-list" id="catalog-list"></div>
         </div>
       </div>
     </div>

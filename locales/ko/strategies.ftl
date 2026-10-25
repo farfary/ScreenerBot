@@ -33,9 +33,6 @@ strategies-editor-name =
     .placeholder = 전략 이름
 strategies-editor-dirty =
     .title = 저장되지 않은 변경 사항
-strategies-editor-enabled =
-    .aria-label = 전략 활성화
-    .title = 전략 활성화
 strategies-action-validate = 검증
 strategies-editor-empty = 편집할 전략을 선택하거나 새로 만드세요
 strategies-conditions-empty-title = 아직 조건이 없습니다
@@ -86,11 +83,88 @@ strategies-unit-multiplier = ×
 
 strategies-catalog-search =
     .placeholder = 조건 검색...
+    .aria-label = 조건 검색
 strategies-catalog-search-clear =
     .aria-label = 검색 지우기
-strategies-catalog-fold-all = 모두 접기
-strategies-catalog-unfold-all = 모두 펼치기
 strategies-catalog-no-description = 설명이 없습니다
+
+# Editor header: the timeframe is the default for candle conditions that leave theirs unset.
+strategies-editor-active = 활성
+strategies-editor-timeframe = 기본 타임프레임
+    .title = 자체 타임프레임이 없는 조건이 사용하는 캔들 타임프레임
+strategies-editor-priority = 우선순위
+    .title = 1부터 100까지의 평가 순서이며, 작은 숫자가 먼저 평가됩니다
+strategies-editor-description = 설명
+strategies-editor-description-field =
+    .placeholder = 이 전략이 하는 일
+    .aria-label = 전략 설명
+strategies-action-export = 내보내기
+
+# Rule groups. $mode is the all/any select written into the sentence.
+strategies-rules-match = 다음 조건 중 { $mode } 충족
+strategies-group-match = 다음 중 { $mode } 충족
+strategies-match-all = 모두
+strategies-match-any = 하나 이상
+strategies-match-mode =
+    .aria-label = 모든 조건 또는 하나 이상의 조건
+strategies-invert = 반전
+    .title = 반전: 이 조건이 충족되지 않을 때 참이 됩니다
+strategies-chip-off = 꺼짐
+strategies-chip-inverted = 반전됨
+strategies-row-switch =
+    .title = 저장은 유지하되 평가하지 않으려면 끄세요
+    .aria-label = 이 전략에서 평가됨
+strategies-row-expand =
+    .aria-label = 매개변수 표시 또는 숨기기
+strategies-add-group = 그룹 추가
+# $count is the number of conditions in the group.
+strategies-group-delete-confirm = 그룹 제거
+    .message = 이 그룹과 그 안의 조건 { $count }개를 제거할까요?
+
+# Problems that block saving. $first is the first problem, $name the condition, $field the parameter.
+strategies-problems = 해결할 문제 { $count }개: { $first }
+strategies-problem-located = { $name }: { $problem }
+strategies-problem-located-field = { $name }, { $field }: { $problem }
+strategies-problem-rules-empty = 켜진 조건을 하나 이상 추가하세요
+strategies-problem-group-empty = 그룹에는 켜진 조건이 하나 이상 필요합니다
+strategies-problem-not-applicable = 이 조건은 이 유형의 전략에서 사용할 수 없습니다
+strategies-problem-unknown-condition = 알 수 없는 조건 유형: { $type }
+strategies-problem-too-deep = 규칙은 최대 { $max }단계까지 중첩할 수 있으며, 반전된 그룹은 한 단계를 더 차지합니다
+strategies-problem-required = 숫자를 입력하세요
+strategies-problem-range = { $min }에서 { $max } 사이여야 합니다
+strategies-problem-invalid-option = 목록의 옵션 중 하나를 선택하세요
+
+# Catalog dialog: the data a condition reads and why one is unavailable.
+strategies-catalog-all = 전체
+strategies-catalog-categories =
+    .aria-label = 카테고리
+strategies-catalog-empty = 검색과 일치하는 조건이 없습니다
+strategies-catalog-exit-only = 청산 전략 전용
+strategies-catalog-entry-only = 진입 전략 전용
+strategies-data-candles = 캔들
+strategies-data-pool = 풀
+strategies-data-position = 포지션
+strategies-data-market = 시장 활동
+
+# Trade counts: $count selects the plural, $amount is the formatted number.
+strategies-unit-trades = 건
+strategies-value-trades = { $amount }건
+
+# Unsaved changes, import and export. $max is the deepest level a rule tree may reach.
+strategies-toast-too-deep = 단계가 너무 많음
+    .message = 규칙은 최대 { $max }단계까지 중첩할 수 있습니다
+strategies-toast-priority-invalid = 잘못된 우선순위
+    .message = 1에서 100 사이의 정수를 입력하세요
+strategies-toast-exported = 전략을 내보냈습니다
+# $name is the strategy name.
+strategies-unsaved-confirm = 저장하지 않은 변경 사항을 버릴까요?
+    .message = "{ $name }"에 저장되지 않은 변경 사항이 있습니다.
+strategies-unsaved-discard = 버리기
+strategies-import-error-json = 파일이 올바른 JSON이 아닙니다
+strategies-import-error-shape = 파일이 전략을 설명하지 않습니다
+# $type is the condition type id, $name the condition name.
+strategies-import-error-unknown-condition = 파일이 이 버전에 없는 조건을 사용합니다: { $type }
+strategies-import-error-not-applicable = "{ $name }"은(는) 이 유형의 전략에서 사용할 수 없습니다
 
 ## New strategy dialog
 
@@ -110,19 +184,11 @@ strategies-delete-message = 전략 "{ $name }"을 삭제하시겠습니까? 이 
 ## Toasts. A message value is the title; `.message` is the body.
 
 strategies-toast-fix-validation = 저장하기 전에 검증 오류를 수정하세요
-strategies-toast-enabled = 전략 사용 설정됨
-    .message = "{ $name }" 사용 설정됨
-strategies-toast-disabled = 전략 사용 안 함
-    .message = "{ $name }" 사용 안 함
-strategies-toast-toggle-failed = 전환 실패
-    .message = 전략 상태를 업데이트하지 못했습니다
 strategies-toast-load-failed = 불러오기 실패
     .message = 서버에서 전략을 불러오지 못했습니다
 strategies-toast-load-strategy-failed = 전략을 불러오지 못했습니다
 strategies-toast-no-strategy = 생성된 전략 없음
     .message = 조건을 하나 이상 추가하거나 '새 전략'을 눌러 먼저 전략을 만드세요
-strategies-toast-no-conditions-save = 조건 없음
-    .message = 저장하기 전에 전략에 조건을 하나 이상 추가하세요
 strategies-toast-name-required = 이름 필요
     .message = 저장하기 전에 전략 이름을 입력하세요
 strategies-toast-saved = 전략 저장됨
@@ -130,8 +196,6 @@ strategies-toast-saved = 전략 저장됨
 strategies-toast-save-failed = 저장 실패
     .message = 전략을 데이터베이스에 저장하지 못했습니다
 strategies-toast-no-strategy-validate = 검증할 전략이 없습니다
-strategies-toast-no-conditions-validate = 조건 없음
-    .message = 검증하기 전에 조건을 하나 이상 추가하세요
 strategies-toast-valid = 전략이 유효합니다
 strategies-toast-invalid = 전략에 오류가 있습니다
 strategies-toast-validation-failed = 검증에 실패했습니다
@@ -150,7 +214,6 @@ strategies-toast-create-first = 먼저 전략 만들기
     .message = 조건을 추가하기 전에 '새 전략'을 눌러 전략을 만드세요
 strategies-toast-condition-added = 조건 추가됨
     .message = 전략에 { $name } 추가됨
-
 
 ## Conditions
 
