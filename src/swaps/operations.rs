@@ -221,8 +221,10 @@ async fn quote_from(
             );
             validate_quote_with_net(router, request, quote)
         }
+        // One router declining is part of the comparison, not its outcome: the winning quote or
+        // the combined failure is what the caller reports.
         Err(e) => {
-            logger::warning(
+            logger::info(
                 LogTag::Swap,
                 &format!("{} quote failed: {e}", router.name()),
             );

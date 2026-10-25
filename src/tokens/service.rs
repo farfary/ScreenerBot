@@ -204,18 +204,11 @@ impl Service for TokensServiceNew {
             }));
         }
 
-        // TODO: Wire up metrics instrumentation
-        logger::warning(
-            LogTag::Tokens,
-            "Metrics collection not yet implemented - TaskMonitor not instrumented",
-        );
-        let _ = monitor;
-
         // A single refill task (every minute) tops up every chain's rate budget. Each
         // chain holds a fair share of one provider budget, so the total stays one budget
         // however many chains run.
         let shutdown_refill = shutdown.clone();
-        let refill_handle = tokio::spawn(async move {
+        let refill_handle = tokio::spawn(monitor.instrument(async move {
             loop {
                 tokio::select! {
                     _ = shutdown_refill.notified() => break,
@@ -226,7 +219,7 @@ impl Service for TokensServiceNew {
                     }
                 }
             }
-        });
+        }));
         let mut handles = vec![refill_handle];
 
         for db in &self.databases {
