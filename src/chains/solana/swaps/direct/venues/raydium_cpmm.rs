@@ -194,16 +194,8 @@ impl CpmmMarket {
     /// Swappable reserves: vault balances less every fee bucket awaiting
     /// collection out of the same vault.
     pub fn reserves(&self) -> (u64, u64) {
-        (
-            self.vault_0_balance
-                .saturating_sub(self.state.protocol_fees_0)
-                .saturating_sub(self.state.fund_fees_0)
-                .saturating_sub(self.state.creator_fees_0),
-            self.vault_1_balance
-                .saturating_sub(self.state.protocol_fees_1)
-                .saturating_sub(self.state.fund_fees_1)
-                .saturating_sub(self.state.creator_fees_1),
-        )
+        self.state
+            .tradable_reserves(self.vault_0_balance, self.vault_1_balance)
     }
 
     /// Whether `mint` is the pool's token_0 side.
@@ -326,7 +318,13 @@ impl PoolMarket for CpmmMarket {
             amount_in,
             expected_out,
             lp_fee,
-            price_impact_pct: price_impact_pct(reserve_in, reserve_out, amount_in, expected_out),
+            price_impact_pct: price_impact_pct(
+                reserve_in,
+                reserve_out,
+                amount_in,
+                lp_fee,
+                expected_out,
+            ),
         })
     }
 

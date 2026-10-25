@@ -177,7 +177,11 @@ use crate::chains::solana::constants::{
     ASSOCIATED_TOKEN_PROGRAM_ID, MOONIT_AMM_PROGRAM_ID, SOL_MINT, SYSTEM_PROGRAM_ID,
 };
 use crate::chains::solana::layout::mint_decimals;
-use crate::chains::solana::pools::layouts::moonit::{ConfigAccountState, CurveAccountState};
+use crate::chains::solana::pools::layouts::moonit::{
+    current_reserves, ConfigAccountState, CurveAccountState, COLLATERAL_CURRENCY_SOL,
+    CURVE_TYPE_CONSTANT_PRODUCT_V1, INITIAL_VIRTUAL_COLLATERAL_RESERVES,
+    INITIAL_VIRTUAL_TOKEN_RESERVES,
+};
 use crate::chains::solana::pools::types::ProgramKind;
 use crate::chains::solana::solana_sdk::{
     account::Account,
@@ -205,22 +209,10 @@ const SELL: [u8; 8] = [0x33, 0xe6, 0x85, 0xa4, 0x01, 0x7f, 0x83, 0xad];
 /// replayed while building this venue used this value.
 const FIXED_SIDE_IN: u8 = 0;
 
-/// `curve_type` byte for `ConstantProductV1`, the only curve this venue quotes.
-const CURVE_TYPE_CONSTANT_PRODUCT_V1: u8 = 1;
-/// `collateral_currency` byte for SOL, the only collateral this venue quotes.
-const COLLATERAL_CURRENCY_SOL: u8 = 0;
-
 /// Seed of `ConfigAccount`'s PDA. Verified: derives
 /// `36Eru7v11oU5Pfrojyn5oY3nETA1a1iqsw2WUu6afkM9` with bump 251, matching the
 /// account's own stored `bump` byte read live.
 const CONFIG_ACCOUNT_SEED: &[u8] = b"config_account";
-
-/// The reference implementation's global virtual reserves
-/// (`@heliofi/launchpad-common`'s `ConstantProductCurveV1`), reproduced
-/// exactly rather than fitted -- see the module docs for the four-trade
-/// replay and the live on-chain proof.
-const INITIAL_VIRTUAL_TOKEN_RESERVES: u128 = 1_073_000_000_000_000_000;
-const INITIAL_VIRTUAL_COLLATERAL_RESERVES: u128 = 30_000_000_000;
 
 /// Denominator the programme's `fee_bps` is expressed over (basis points).
 const BPS: u128 = 10_000;
@@ -345,25 +337,6 @@ impl PoolVenue for MoonitVenue {
             config_state.fee_bps,
         )))
     }
-}
-
-impl CurveAccountState {
-    /// Tokens sold so far, the reference curve's own `curvePosition`.
-    fn curve_position(&self) -> u128 {
-        (self.total_supply as u128).saturating_sub(self.curve_amount as u128)
-    }
-}
-
-/// The current virtual reserves at `curve_position`, the reference SDK's own
-/// `getCurrentReserves`: RECOMPUTED fresh from the token position rather than
-/// tracked continuously, floor-rounded, exactly as the live programme does.
-fn current_reserves(curve_position: u128) -> Option<(u128, u128)> {
-    let vtr = INITIAL_VIRTUAL_TOKEN_RESERVES.checked_sub(curve_position)?;
-    if vtr == 0 {
-        return None;
-    }
-    let constant_product = INITIAL_VIRTUAL_TOKEN_RESERVES * INITIAL_VIRTUAL_COLLATERAL_RESERVES;
-    Some((vtr, constant_product / vtr))
 }
 
 /// Tokens returned for `net_collateral` (already net of the programme's own
@@ -552,6 +525,7 @@ impl PoolMarket for MoonitMarket {
                 reserve_in_u64,
                 reserve_out_u64,
                 amount_in,
+                lp_fee,
                 expected_out,
             ),
         })

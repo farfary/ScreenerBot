@@ -579,7 +579,13 @@ impl PoolMarket for PumpLegacyMarket {
             amount_in,
             expected_out,
             lp_fee,
-            price_impact_pct: price_impact_pct(reserve_in, reserve_out, amount_in, expected_out),
+            price_impact_pct: price_impact_pct(
+                reserve_in,
+                reserve_out,
+                amount_in,
+                lp_fee,
+                expected_out,
+            ),
         })
     }
 

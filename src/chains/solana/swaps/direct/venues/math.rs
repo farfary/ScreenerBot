@@ -48,15 +48,24 @@ pub fn constant_product_out(reserve_in: u64, reserve_out: u64, amount_in: u64) -
 
 /// Price impact of a fill, as a percentage.
 ///
-/// Compares the realised rate against the pool's marginal rate before the trade.
-/// Decimals cancel out because both rates are in the same raw units, so this is
-/// safe to compute without knowing either mint's decimals.
-pub fn price_impact_pct(reserve_in: u64, reserve_out: u64, amount_in: u64, amount_out: u64) -> f64 {
-    if reserve_in == 0 || reserve_out == 0 || amount_in == 0 || amount_out == 0 {
+/// Compares the realised rate of the amount that reached the curve (`amount_in`
+/// less the venue's own `lp_fee`, both in input units) against the pool's
+/// marginal rate before the trade, so the fee is reported as a fee and never as
+/// impact. Decimals cancel out because both rates are in the same raw units, so
+/// this is safe to compute without knowing either mint's decimals.
+pub fn price_impact_pct(
+    reserve_in: u64,
+    reserve_out: u64,
+    amount_in: u64,
+    lp_fee: u64,
+    amount_out: u64,
+) -> f64 {
+    let swapped = amount_in.saturating_sub(lp_fee);
+    if reserve_in == 0 || reserve_out == 0 || swapped == 0 || amount_out == 0 {
         return 0.0;
     }
     let spot = (reserve_out as f64) / (reserve_in as f64);
-    let realised = (amount_out as f64) / (amount_in as f64);
+    let realised = (amount_out as f64) / (swapped as f64);
     if spot <= 0.0 {
         return 0.0;
     }
@@ -71,6 +80,18 @@ pub(crate) use crate::chains::amount::math::{
 mod tests {
     use super::*;
     use crate::chains::amount::math::mul_full;
+
+    #[test]
+    fn the_venue_fee_is_not_counted_as_price_impact() {
+        // A 1% fee on a trade too small to move a deep pool: the curve output is
+        // the spot rate on the 99 that reached it.
+        let (reserve_in, reserve_out) = (1_000_000_000_000, 2_000_000_000_000);
+        let out = constant_product_out(reserve_in, reserve_out, 99);
+        assert_eq!(out, 197);
+        let impact = price_impact_pct(reserve_in, reserve_out, 100, 1, out);
+        assert!(impact < 0.6, "only rounding remains, got {impact}");
+        assert!(price_impact_pct(reserve_in, reserve_out, 100, 0, out) > impact);
+    }
 
     #[test]
     fn mul_shr128_of_operands_below_the_scale_is_zero() {
@@ -146,12 +167,14 @@ mod tests {
             1_000_000_000,
             1_000_000_000,
             1_000,
+            0,
             constant_product_out(1_000_000_000, 1_000_000_000, 1_000),
         );
         let whale = price_impact_pct(
             1_000_000_000,
             1_000_000_000,
             500_000_000,
+            0,
             constant_product_out(1_000_000_000, 1_000_000_000, 500_000_000),
         );
         assert!(dust < 0.5, "dust barely moves the pool, got {dust}");
@@ -163,8 +186,13 @@ mod tests {
 
     #[test]
     fn price_impact_of_an_empty_or_zero_fill_is_zero_not_nan() {
-        assert_eq!(price_impact_pct(0, 1, 1, 1), 0.0);
-        assert_eq!(price_impact_pct(1, 1, 0, 0), 0.0);
+        assert_eq!(price_impact_pct(0, 1, 1, 0, 1), 0.0);
+        assert_eq!(price_impact_pct(1, 1, 0, 0, 0), 0.0);
+        assert_eq!(
+            price_impact_pct(1, 1, 5, 5, 1),
+            0.0,
+            "a fee that consumes the input"
+        );
     }
 
     #[test]
