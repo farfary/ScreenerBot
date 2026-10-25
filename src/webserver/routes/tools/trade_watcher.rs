@@ -91,7 +91,7 @@ pub async fn add_watched_token_handler(Json(req): Json<AddWatchedTokenRequest>) 
         watch_type: req.watch_type,
         trigger_amount_sol: req.trigger_amount_sol,
         action_amount_sol: req.action_amount_sol,
-        slippage_bps: Some(500),
+        slippage_bps: Some(req.slippage_bps),
     };
 
     match add_watched_token(&config) {

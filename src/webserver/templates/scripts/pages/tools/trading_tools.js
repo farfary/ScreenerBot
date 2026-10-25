@@ -30,9 +30,36 @@ const WATCH_TYPE_LABELS = Object.freeze({
 // Trade Watcher Tool
 // =============================================================================
 
+const WATCHED_TOKENS_URL = "/api/tools/watched-tokens";
+const WATCHER_MONITOR_URL = "/api/tools/trade-watcher";
+
+/** The `POST /api/tools/watched-tokens` body (`AddWatchedTokenRequest`) for the form values. */
+export function buildWatchRequest({
+  mint,
+  symbol,
+  pool,
+  watchType,
+  triggerAmount,
+  actionAmount,
+  slippagePct,
+}) {
+  return {
+    mint,
+    symbol: symbol || null,
+    pool_address: pool.address,
+    pool_source: String(pool.source || "").toLowerCase(),
+    pool_dex: pool.dex || null,
+    watch_type: watchType,
+    trigger_amount_sol: triggerAmount,
+    action_amount_sol: actionAmount,
+    slippage_bps: Math.round(slippagePct * 100),
+  };
+}
+
 // Trade Watcher state
 let twPoolSelector = null;
 let twSelectedPool = null;
+let twWatches = [];
 
 /** The watch list before any watch exists, in the panel and after the last one stops. */
 function tradeWatcherEmptyState() {
@@ -290,18 +317,15 @@ function updateTwPoolDisplay() {
 function updateTwStartButtonState() {
   const startBtn = $("#tw-start-btn");
   const mintInput = $("#tw-mint");
-  const watchType = $("#tw-watch-type");
 
   if (!startBtn) return;
 
   const mint = mintInput?.value?.trim();
   const isValidMint = mint && /^[1-9A-HJ-NP-Za-km-z]{32,44}$/.test(mint);
   const hasPool = twSelectedPool !== null;
-  const isNotifyOnly = watchType?.value === "notify-only";
 
-  // For notify-only, only need valid mint
-  // For buy/sell actions, need pool selected
-  startBtn.disabled = !isValidMint || (!isNotifyOnly && !hasPool);
+  // Every watch follows one pool, so a valid mint alone is not enough
+  startBtn.disabled = !isValidMint || !hasPool;
 }
 
 /**
@@ -319,7 +343,7 @@ async function handleTwStartWatch() {
   const watchType = watchTypeSelect?.value;
   const triggerAmount = parseFloat(triggerAmountInput?.value) || 0.1;
   const actionAmount = parseFloat(actionAmountInput?.value) || 0.1;
-  const slippage = parseFloat(slippageInput?.value) || 5;
+  const slippagePct = parseFloat(slippageInput?.value) || 5;
 
   if (!mint) {
     Utils.showToast(I18n.t("tools-validation-mint-required"), "warning");
@@ -332,29 +356,38 @@ async function handleTwStartWatch() {
   I18n.localizeTree(startBtn);
 
   try {
-    const response = await fetch("/api/tools/trade-watcher/start", {
+    const symbol = getIdentity(mint).symbol;
+    const response = await fetch(WATCHED_TOKENS_URL, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({
-        mint,
-        pool_address: twSelectedPool?.address || null,
-        watch_type: watchType,
-        trigger_amount_sol: triggerAmount,
-        action_amount_sol: actionAmount,
-        slippage_bps: slippage * 100,
-      }),
+      body: JSON.stringify(
+        buildWatchRequest({
+          mint,
+          symbol,
+          pool: twSelectedPool,
+          watchType,
+          triggerAmount,
+          actionAmount,
+          slippagePct,
+        })
+      ),
     });
 
-    const data = await response.json();
+    if (!response.ok) {
+      throw new Error(
+        apiErrorMessage(await response.json(), I18n.t("tools-trade-watcher-start-failed"))
+      );
+    }
 
-    if (!response.ok || !data.success) {
-      throw new Error(apiErrorMessage(data, I18n.t("tools-trade-watcher-start-failed")));
+    const monitor = await fetch(`${WATCHER_MONITOR_URL}/start`, { method: "POST" });
+    if (!monitor.ok) {
+      throw new Error(
+        apiErrorMessage(await monitor.json(), I18n.t("tools-trade-watcher-start-failed"))
+      );
     }
 
     Utils.showToast(
-      I18n.t("tools-trade-watcher-started", {
-        token: data.symbol || getIdentity(mint).symbol || I18n.t("format-unknown"),
-      }),
+      I18n.t("tools-trade-watcher-started", { token: symbol || I18n.t("format-unknown") }),
       "success"
     );
 
@@ -389,14 +422,21 @@ async function handleTwStopAllWatches() {
   I18n.localizeTree(stopAllBtn);
 
   try {
-    const response = await fetch("/api/tools/trade-watcher/stop-all", {
-      method: "POST",
-    });
+    const removals = await Promise.all(
+      twWatches.map((watch) => fetch(`${WATCHED_TOKENS_URL}/${watch.id}`, { method: "DELETE" }))
+    );
+    const failed = removals.find((response) => !response.ok);
+    if (failed) {
+      throw new Error(
+        apiErrorMessage(await failed.json(), I18n.t("tools-trade-watcher-stop-all-failed"))
+      );
+    }
 
-    const data = await response.json();
-
-    if (!response.ok || !data.success) {
-      throw new Error(apiErrorMessage(data, I18n.t("tools-trade-watcher-stop-all-failed")));
+    const monitor = await fetch(`${WATCHER_MONITOR_URL}/stop`, { method: "POST" });
+    if (!monitor.ok) {
+      throw new Error(
+        apiErrorMessage(await monitor.json(), I18n.t("tools-trade-watcher-stop-all-failed"))
+      );
     }
 
     Utils.showToast(I18n.t("tools-trade-watcher-stopped-all"), "success");
@@ -422,14 +462,15 @@ async function loadTwActiveWatches() {
   if (!tableEl) return;
 
   try {
-    const response = await fetch("/api/tools/trade-watcher/list");
+    const response = await fetch(WATCHED_TOKENS_URL);
     const data = await response.json();
 
-    if (!response.ok || !data.success) {
+    if (!response.ok) {
       throw new Error(apiErrorMessage(data, I18n.t("tools-trade-watcher-load-failed")));
     }
 
-    const watches = data.watches || [];
+    const watches = data.tokens || [];
+    twWatches = watches;
 
     if (countEl) countEl.textContent = formatNumber(watches.length, 0);
     if (stopAllBtn) stopAllBtn.disabled = watches.length === 0;
@@ -464,7 +505,7 @@ async function loadTwActiveWatches() {
               </td>
               <td class="mono">${watch.trigger_amount_sol ? Utils.formatSol(watch.trigger_amount_sol, { suffix: "", trim: false }) : "—"}</td>
               <td class="mono">${watch.action_amount_sol ? Utils.formatSol(watch.action_amount_sol, { suffix: "", trim: false }) : "—"}</td>
-              <td class="mono">${formatNumber(watch.trigger_count || 0, 0)}</td>
+              <td class="mono">${formatNumber(watch.actions_triggered || 0, 0)}</td>
               <td>
                 <button class="btn-icon danger tw-stop-btn" data-l10n-id="tools-trade-watcher-stop-watch">
                   <i class="icon-x"></i>
@@ -505,14 +546,12 @@ async function loadTwActiveWatches() {
  */
 async function stopTwWatch(watchId) {
   try {
-    const response = await fetch(`/api/tools/trade-watcher/stop/${watchId}`, {
-      method: "POST",
-    });
+    const response = await fetch(`${WATCHED_TOKENS_URL}/${watchId}`, { method: "DELETE" });
 
-    const data = await response.json();
-
-    if (!response.ok || !data.success) {
-      throw new Error(apiErrorMessage(data, I18n.t("tools-trade-watcher-stop-failed")));
+    if (!response.ok) {
+      throw new Error(
+        apiErrorMessage(await response.json(), I18n.t("tools-trade-watcher-stop-failed"))
+      );
     }
 
     Utils.showToast(I18n.t("tools-trade-watcher-stopped"), "success");
@@ -531,6 +570,7 @@ function cleanupTradeWatcher() {
     twPoolSelector = null;
   }
   twSelectedPool = null;
+  twWatches = [];
 }
 
 // =============================================================================
