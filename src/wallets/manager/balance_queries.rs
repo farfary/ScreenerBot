@@ -7,7 +7,7 @@ use crate::chains::adapter;
 use crate::chains::solana::accounts::{
     fetch_wallet_sol_balance, fetch_wallet_sol_balances, fetch_wallet_token_balances,
 };
-use crate::chains::solana::constants::RENT_EXEMPT_MINIMUM_LAMPORTS;
+use crate::chains::solana::assets::ata::get_all_token_accounts;
 use crate::logger::{self, LogTag};
 
 use super::super::error::Error;
@@ -29,11 +29,6 @@ fn native_topup_needed(native_balance: f64) -> (bool, f64) {
     } else {
         (false, 0.0)
     }
-}
-
-fn reclaimable_ata_rent(empty_ata_count: u32) -> f64 {
-    let ata_rent_exempt = adapter().raw_to_native(RENT_EXEMPT_MINIMUM_LAMPORTS);
-    empty_ata_count as f64 * ata_rent_exempt
 }
 
 /// SOL balance of each wallet, aligned with `wallets`, read in batched account
@@ -122,9 +117,10 @@ pub async fn get_all_wallet_balances() -> Result<Vec<WalletBalanceSummary>, Erro
         // Get SOL balance
         let native_balance = fetch_wallet_sol_balance(&wallet.address).await;
 
-        // Get all token balances for this wallet
-        let token_balances = match fetch_wallet_token_balances(wallet.id, &wallet.address).await {
-            Ok(balances) => balances,
+        // Read the token accounts themselves: an empty account's reclaimable rent is
+        // the lamports it holds, which depend on the rent rate when it was opened.
+        let token_accounts = match get_all_token_accounts(&wallet.address).await {
+            Ok(accounts) => accounts,
             Err(e) => {
                 logger::warning(
                     LogTag::Wallet,
@@ -150,22 +146,24 @@ pub async fn get_all_wallet_balances() -> Result<Vec<WalletBalanceSummary>, Erro
 
         let mut tokens = Vec::new();
         let mut empty_ata_count = 0u32;
+        let mut reclaimable_lamports = 0u64;
 
-        for token_balance in token_balances {
-            if token_balance.balance == crate::chains::RawAmount::ZERO {
+        for account in token_accounts.into_iter().filter(|account| !account.is_nft) {
+            if account.balance == 0 {
                 empty_ata_count += 1;
+                reclaimable_lamports = reclaimable_lamports.saturating_add(account.lamports);
             } else {
                 tokens.push(SimpleTokenBalance {
-                    mint: token_balance.mint,
-                    symbol: None, // Could be populated from token service if needed
-                    balance: token_balance.ui_amount,
-                    decimals: token_balance.decimals,
+                    balance: account.balance as f64 / 10f64.powi(account.decimals as i32),
+                    mint: account.mint,
+                    symbol: None,
+                    decimals: account.decimals,
                 });
             }
         }
 
         let token_count = tokens.len() as u32;
-        let reclaimable_native = reclaimable_ata_rent(empty_ata_count);
+        let reclaimable_native = adapter().raw_to_native(reclaimable_lamports);
 
         results.push(WalletBalanceSummary {
             wallet_id: wallet.id,

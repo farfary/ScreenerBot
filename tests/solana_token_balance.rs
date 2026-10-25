@@ -23,7 +23,7 @@ use tokio::net::{TcpListener, TcpStream};
 fn token_account(pubkey: &Pubkey, mint: &Pubkey, amount: u64) -> Value {
     json!({
         "pubkey": pubkey.to_string(),
-        "account": { "data": { "parsed": { "info": {
+        "account": { "lamports": 1_488_440, "data": { "parsed": { "info": {
             "mint": mint.to_string(),
             "state": "initialized",
             "tokenAmount": { "amount": amount.to_string(), "decimals": 6 }

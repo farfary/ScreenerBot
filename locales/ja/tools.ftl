@@ -345,7 +345,7 @@ tools-wallet-cleanup-done =
 
 tools-burn-section-title = トークンのバーン
 tools-burn-info-title = バーンとは？
-tools-burn-info-body = バーンするとトークンは完全に破棄され、復元できません。バーン後にウォレットクリーンアップを実行すると、空の ATA をクローズして、トークン 1 個あたり約 0.002 { -sol } のレントを回収できます。
+tools-burn-info-body = バーンするとトークンは完全に破棄され、復元できません。バーン後にウォレットクリーンアップを実行すると、空の ATA をクローズして、トークン 1 個あたり約 0.0015–0.002 { -sol } のレントを回収できます。
 tools-burn-stat-total = トークン合計
 tools-burn-stat-selected = 選択中
 tools-burn-stat-rent = 回収可能なレント
@@ -572,7 +572,7 @@ tools-multi-sell-post-title = 売却後のアクション
 tools-multi-sell-consolidate-label = { -sol } をメインウォレットに統合
 tools-multi-sell-consolidate-hint = サブウォレットのすべての { -sol } をメインウォレットに送金します
 tools-multi-sell-close-atas-label = 売却後にトークン ATA をクローズ
-tools-multi-sell-close-atas-hint = ATA 1 つあたり約 0.002 { -sol } を回収
+tools-multi-sell-close-atas-hint = ATA 1 つあたり約 0.0015–0.002 { -sol } を回収
 tools-multi-sell-wallets-title = トークンを保有するウォレット
 tools-multi-sell-empty = このトークンを保有するサブウォレットはありません
 tools-multi-sell-column-tokens = トークン

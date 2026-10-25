@@ -14,7 +14,7 @@ use tokio::time::{sleep, Duration};
 use crate::actions::ActionFailure;
 use crate::chains::adapter;
 use crate::chains::solana::assets::transfer::{transfer_sol_for_wallet, transfer_sol_from_main};
-use crate::chains::solana::constants::RENT_EXEMPT_MINIMUM_LAMPORTS;
+use crate::chains::solana::rent;
 use crate::chains::solana::rpc::{get_rpc_client, RpcClientMethods};
 use crate::i18n::ids;
 use crate::logger::{self, LogTag};
@@ -139,7 +139,20 @@ pub async fn collect_sol(
 
         // Calculate transfer amount
         let rent_reserve = if leave_rent {
-            adapter().raw_to_native(RENT_EXEMPT_MINIMUM_LAMPORTS)
+            match rent::minimum_balance(0).await {
+                Ok(lamports) => adapter().raw_to_native(lamports),
+                Err(e) => {
+                    results.push(WalletOpResult::failure(
+                        wallet_id,
+                        wallet_address,
+                        ActionFailure::with_details(
+                            ids::TOOLS_MULTI_OP_TRANSFER_FAILED,
+                            e.to_string(),
+                        ),
+                    ));
+                    continue;
+                }
+            }
         } else {
             0.0
         };

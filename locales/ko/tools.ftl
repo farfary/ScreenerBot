@@ -349,7 +349,7 @@ tools-wallet-cleanup-done =
 
 tools-burn-section-title = 토큰 소각
 tools-burn-info-title = 소각이란?
-tools-burn-info-body = 소각은 토큰을 영구적으로 파기하며 복구할 수 없습니다. 소각 후 지갑 정리를 실행하면 빈 ATA를 닫고 토큰당 약 0.002 { -sol }의 렌트를 회수할 수 있습니다.
+tools-burn-info-body = 소각은 토큰을 영구적으로 파기하며 복구할 수 없습니다. 소각 후 지갑 정리를 실행하면 빈 ATA를 닫고 토큰당 약 0.0015–0.002 { -sol }의 렌트를 회수할 수 있습니다.
 tools-burn-stat-total = 전체 토큰
 tools-burn-stat-selected = 선택됨
 tools-burn-stat-rent = 회수 가능한 렌트
@@ -574,7 +574,7 @@ tools-multi-sell-post-title = 매도 후 작업
 tools-multi-sell-consolidate-label = { -sol }을 메인 지갑으로 통합
 tools-multi-sell-consolidate-hint = 하위 지갑의 모든 { -sol }을 메인 지갑으로 되돌립니다
 tools-multi-sell-close-atas-label = 매도 후 토큰 ATA 닫기
-tools-multi-sell-close-atas-hint = ATA당 약 0.002 { -sol } 회수
+tools-multi-sell-close-atas-hint = ATA당 약 0.0015–0.002 { -sol } 회수
 tools-multi-sell-wallets-title = 토큰 보유 지갑
 tools-multi-sell-empty = 이 토큰을 보유한 하위 지갑이 없습니다
 tools-multi-sell-column-tokens = 토큰

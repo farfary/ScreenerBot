@@ -208,13 +208,7 @@ pub async fn cleanup_empty_atas(wallet_address: &str) -> Result<AtaCleanupResult
             Ok(signature) => {
                 result.closed_count += 1;
                 result.signatures.push(signature);
-
-                // Query actual ATA rent from chain
-                let rent = match crate::chains::solana::rpc::get_ata_rent_lamports().await {
-                    Ok(lamports) => adapter().raw_to_native(lamports),
-                    Err(_) => crate::chains::solana::constants::ATA_RENT_COST_SOL,
-                };
-                result.rent_reclaimed += rent;
+                result.rent_reclaimed += adapter().raw_to_native(ata.lamports);
             }
             Err(_) => {
                 result.failed_count += 1;
@@ -324,7 +318,13 @@ pub async fn get_ata_status() -> Result<String, Error> {
     let non_empty_count = all_atas.len() - empty_count;
     let failed_count = get_failed_ata_count();
     let stats = get_cleanup_stats();
-    let potential_rent = (empty_count as f64) * crate::chains::solana::constants::ATA_RENT_COST_SOL;
+    let potential_rent = adapter().raw_to_native(
+        all_atas
+            .iter()
+            .filter(|ata| ata.is_empty())
+            .map(|ata| ata.lamports)
+            .sum(),
+    );
 
     let status = format!(
         "ATA Status - Total: {}, Empty: {}, Active: {}, Failed Cache: {}, Total Closed: {}, Rent Reclaimed: {:.6} SOL, Potential: {:.6} SOL",

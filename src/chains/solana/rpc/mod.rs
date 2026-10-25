@@ -80,7 +80,7 @@ pub use testing::{
 // Re-exports - Utility Functions
 // ============================================================================
 
-pub use utils::{get_ata_rent_from_chain, get_ata_rent_lamports, parse_pubkey_string, AtaRentInfo};
+pub use utils::parse_pubkey_string;
 
 // ============================================================================
 // Re-exports - Transaction & Account Types

@@ -331,12 +331,12 @@ hints-tools-wallet-cleanup-content =
     { "*" }*Thu hồi SOL từ các tài khoản token trống**
 
     { "*" }*ATA là gì?**
-    Associated Token Account (ATA) là các tài khoản Solana chứa token của bạn. Mỗi token bạn tương tác sẽ tạo một ATA cần khoảng 0.002 SOL phí rent.
+    Associated Token Account (ATA) là các tài khoản Solana chứa token của bạn. Mỗi token bạn tương tác sẽ tạo một ATA giữ khoản đặt cọc rent: khoảng 0.0015 SOL với tài khoản mở hiện nay, khoảng 0.002 SOL với tài khoản cũ hơn.
 
     { "*" }*Vì sao nên dọn dẹp ATA trống?**
-    • Thu hồi phí rent (~0.002 SOL cho mỗi ATA)
+    • Thu hồi phí rent (~0.0015–0.002 SOL cho mỗi ATA)
     • Trader hoạt động nhiều có thể tích lũy hàng trăm ATA trống
-    • 100 ATA trống = ~0.2 SOL có thể thu hồi
+    • 100 ATA trống = ~0.15–0.2 SOL có thể thu hồi
 
     { "*" }*Cách hoạt động:**
     • Quét ví để tìm các ATA có số dư bằng 0
@@ -359,7 +359,7 @@ hints-tools-burn-tokens-content =
     { "*" }*Điều xảy ra khi burn:**
     • Token được gửi đến một địa chỉ burn (không thể khôi phục)
     • Số dư token về 0
-    • Sau đó có thể đóng ATA qua Dọn dẹp ví để thu hồi ~0.002 SOL phí rent
+    • Sau đó có thể đóng ATA qua Dọn dẹp ví để thu hồi ~0.0015–0.002 SOL phí rent
 
     { "*" }*Các loại token:**
     • **Vị thế đang mở** - Không thể burn (giao dịch đang hoạt động)
@@ -434,7 +434,7 @@ hints-tools-multi-sell-content =
 
     { "*" }*Hành động sau khi bán:**
     • **Gộp SOL** — chuyển toàn bộ SOL về ví chính
-    • **Đóng ATA** — đóng tài khoản token để thu hồi phí rent (~0.002 SOL mỗi tài khoản)
+    • **Đóng ATA** — đóng tài khoản token để thu hồi phí rent (~0.0015–0.002 SOL mỗi tài khoản)
 
     { "*" }*Cài đặt thực thi:**
     • **Độ trễ** — độ trễ ngẫu nhiên giữa các giao dịch

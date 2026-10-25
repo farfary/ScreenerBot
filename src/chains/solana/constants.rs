@@ -29,18 +29,6 @@ pub fn sol_to_lamports(sol: f64) -> u64 {
 pub const USDC_MINT: &str = "EPjFWdd5AufqSSqeM2qN1xzybapC8G4wEGGkZwyTDt1v";
 pub const USDT_MINT: &str = "Es9vMFrzaCERmJfrF4H2FYD4KCoNkY11McCe8BenwNYB";
 
-/// Standard ATA creation/closure cost in SOL
-pub const ATA_RENT_COST_SOL: f64 = 0.00203928;
-
-/// Rent-exempt minimum for a token account, in lamports.
-pub const RENT_EXEMPT_MINIMUM_LAMPORTS: u64 = 890_880;
-
-/// Rent-exempt lamports held by an associated token account.
-pub const ATA_RENT_LAMPORTS: u64 = 2_039_280;
-
-/// Tolerance for ATA rent variations (lamports)
-pub const ATA_RENT_TOLERANCE_LAMPORTS: i64 = 10000;
-
 /// Default compute unit price (micro-lamports)
 pub const DEFAULT_COMPUTE_UNIT_PRICE: u64 = 1000;
 

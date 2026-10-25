@@ -334,12 +334,12 @@ hints-tools-wallet-cleanup-content =
     { "*" }*Klaim Kembali SOL dari Akun Token Kosong**
 
     { "*" }*Apa itu ATA?**
-    Associated Token Account (ATA) adalah akun Solana yang menyimpan token Anda. Setiap token yang Anda gunakan membuat ATA yang membutuhkan rent ~0.002 SOL.
+    Associated Token Account (ATA) adalah akun Solana yang menyimpan token Anda. Setiap token yang Anda gunakan membuat ATA yang menyimpan deposit rent: ~0.0015 SOL untuk akun yang dibuka sekarang, ~0.002 SOL untuk akun yang lebih lama.
 
     { "*" }*Mengapa membersihkan ATA kosong?**
-    • Klaim kembali rent (~0.002 SOL per ATA)
+    • Klaim kembali rent (~0.0015–0.002 SOL per ATA)
     • Trader aktif dapat mengumpulkan ratusan ATA kosong
-    • 100 ATA kosong = ~0.2 SOL dapat diklaim
+    • 100 ATA kosong = ~0.15–0.2 SOL dapat diklaim
 
     { "*" }*Cara kerja:**
     • Memindai dompet Anda untuk ATA dengan saldo nol
@@ -362,7 +362,7 @@ hints-tools-burn-tokens-content =
     { "*" }*Yang terjadi saat burn:**
     • Token dikirim ke alamat burn (tidak dapat dipulihkan)
     • Saldo token menjadi nol
-    • ATA kemudian dapat ditutup lewat Pembersihan Dompet untuk mengklaim kembali rent ~0.002 SOL
+    • ATA kemudian dapat ditutup lewat Pembersihan Dompet untuk mengklaim kembali rent ~0.0015–0.002 SOL
 
     { "*" }*Kategori Token:**
     • **Posisi Terbuka** - Tidak dapat di-burn (trade aktif)
@@ -437,7 +437,7 @@ hints-tools-multi-sell-content =
 
     { "*" }*Aksi Setelah Jual:**
     • **Konsolidasi SOL** — transfer semua SOL kembali ke dompet utama
-    • **Tutup ATA** — tutup akun token untuk mengklaim kembali rent (~0.002 SOL masing-masing)
+    • **Tutup ATA** — tutup akun token untuk mengklaim kembali rent (~0.0015–0.002 SOL masing-masing)
 
     { "*" }*Pengaturan Eksekusi:**
     • **Jeda** — jeda acak antar transaksi

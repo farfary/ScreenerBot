@@ -313,12 +313,12 @@ hints-tools-wallet-cleanup-content =
     { "*" }*Recupera SOL de las cuentas de token vacías**
 
     { "*" }*¿Qué son las ATA?**
-    Las Associated Token Accounts (ATA) son cuentas de Solana que guardan tus tokens. Cada token con el que interactúas crea una ATA que requiere ~0.002 SOL de renta.
+    Las Associated Token Accounts (ATA) son cuentas de Solana que guardan tus tokens. Cada token con el que interactúas crea una ATA que guarda un depósito de renta: ~0.0015 SOL para cuentas abiertas ahora, ~0.002 SOL para las más antiguas.
 
     { "*" }*¿Por qué limpiar las ATA vacías?**
-    • Recuperar la renta (~0.002 SOL por ATA)
+    • Recuperar la renta (~0.0015–0.002 SOL por ATA)
     • Los traders activos pueden acumular cientos de ATA vacías
-    • 100 ATA vacías = ~0.2 SOL recuperables
+    • 100 ATA vacías = ~0.15–0.2 SOL recuperables
 
     { "*" }*Cómo funciona:**
     • Escanea tu billetera en busca de ATA con saldo cero
@@ -341,7 +341,7 @@ hints-tools-burn-tokens-content =
     { "*" }*Qué ocurre al quemar:**
     • Los tokens se envían a una dirección de quema (irrecuperable)
     • El saldo del token pasa a cero
-    • Después se puede cerrar la ATA con la limpieza de billetera para recuperar ~0.002 SOL de renta
+    • Después se puede cerrar la ATA con la limpieza de billetera para recuperar ~0.0015–0.002 SOL de renta
 
     { "*" }*Categorías de tokens:**
     • **Posiciones abiertas** - No se pueden quemar (operaciones activas)
@@ -416,7 +416,7 @@ hints-tools-multi-sell-content =
 
     { "*" }*Acciones posteriores a la venta:**
     • **Consolidar SOL** — transfiere todo el SOL de vuelta a la billetera principal
-    • **Cerrar ATA** — cierra las cuentas de token para recuperar la renta (~0.002 SOL cada una)
+    • **Cerrar ATA** — cierra las cuentas de token para recuperar la renta (~0.0015–0.002 SOL cada una)
 
     { "*" }*Ajustes de ejecución:**
     • **Retraso** — retraso aleatorio entre transacciones

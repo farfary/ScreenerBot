@@ -1520,7 +1520,7 @@ mod tests {
     fn token_account(pubkey: &str, mint: &str, amount: &str) -> serde_json::Value {
         serde_json::json!({
             "pubkey": pubkey,
-            "account": { "data": { "parsed": { "info": {
+            "account": { "lamports": 2_039_280, "data": { "parsed": { "info": {
                 "mint": mint,
                 "state": "initialized",
                 "tokenAmount": { "amount": amount, "decimals": 6 }
@@ -1549,11 +1549,21 @@ mod tests {
         let read: Vec<_> = merged
             .accounts
             .iter()
-            .map(|info| (info.account.as_str(), info.balance, info.is_token_2022))
+            .map(|info| {
+                (
+                    info.account.as_str(),
+                    info.balance,
+                    info.is_token_2022,
+                    info.lamports,
+                )
+            })
             .collect();
         assert_eq!(
             read,
-            [("spl-account", 5, false), ("token-2022-account", 7, true)]
+            [
+                ("spl-account", 5, false, 2_039_280),
+                ("token-2022-account", 7, true, 2_039_280)
+            ]
         );
     }
 
@@ -1980,6 +1990,7 @@ fn parse_token_account_info(
 ) -> Option<TokenAccountInfo> {
     let pubkey_str = item.get("pubkey")?.as_str()?;
     let account = item.get("account")?;
+    let lamports = account.get("lamports")?.as_u64()?;
     let data = account.get("data")?;
     let parsed = data.get("parsed")?;
     let info = parsed.get("info")?;
@@ -2006,5 +2017,6 @@ fn parse_token_account_info(
         is_token_2022,
         is_nft,
         is_frozen,
+        lamports,
     })
 }

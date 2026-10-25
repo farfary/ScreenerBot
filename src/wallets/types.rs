@@ -263,7 +263,7 @@ pub struct WalletBalanceSummary {
     pub tokens: Vec<SimpleTokenBalance>,
     /// Number of empty ATAs (token accounts with 0 balance)
     pub empty_ata_count: u32,
-    /// Reclaimable SOL from closing empty ATAs (~0.00089088 per ATA)
+    /// SOL returned by closing the empty ATAs: the sum of the lamports they hold
     pub reclaimable_native: f64,
 }
 

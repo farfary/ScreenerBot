@@ -346,7 +346,7 @@ tools-wallet-cleanup-done =
 
 tools-burn-section-title = Tokens verbrennen
 tools-burn-info-title = Was ist Verbrennen?
-tools-burn-info-body = Beim Verbrennen werden Tokens dauerhaft vernichtet und sind nicht wiederherstellbar. Führen Sie danach die Wallet-Bereinigung aus, um leere ATAs zu schließen und ca. 0,002 { -sol } Miete pro Token zurückzuholen.
+tools-burn-info-body = Beim Verbrennen werden Tokens dauerhaft vernichtet und sind nicht wiederherstellbar. Führen Sie danach die Wallet-Bereinigung aus, um leere ATAs zu schließen und ca. 0,0015–0,002 { -sol } Miete pro Token zurückzuholen.
 tools-burn-stat-total = Tokens gesamt
 tools-burn-stat-selected = Ausgewählt
 tools-burn-stat-rent = Zurückholbare Miete
@@ -584,7 +584,7 @@ tools-multi-sell-post-title = Aktionen nach dem Verkauf
 tools-multi-sell-consolidate-label = { -sol } in der Haupt-Wallet zusammenführen
 tools-multi-sell-consolidate-hint = Gesamte { -sol } aus den Sub-Wallets zurück an die Haupt-Wallet übertragen
 tools-multi-sell-close-atas-label = Token-ATAs nach dem Verkauf schließen
-tools-multi-sell-close-atas-hint = Ca. 0,002 { -sol } pro ATA zurückholen
+tools-multi-sell-close-atas-hint = Ca. 0,0015–0,002 { -sol } pro ATA zurückholen
 tools-multi-sell-wallets-title = Wallets mit Token
 tools-multi-sell-empty = Keine Sub-Wallet hält diesen Token
 tools-multi-sell-column-tokens = Tokens

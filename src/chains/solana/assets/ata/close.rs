@@ -117,6 +117,7 @@ pub async fn close_all_empty_atas(wallet_address: &str) -> Result<(u32, Vec<Stri
 
     let mut signatures = Vec::new();
     let mut closed_count = 0u32;
+    let mut reclaimed_lamports = 0u64;
 
     // Close each empty account
     for account_info in empty_accounts {
@@ -152,6 +153,7 @@ pub async fn close_all_empty_atas(wallet_address: &str) -> Result<(u32, Vec<Stri
                 );
                 signatures.push(signature);
                 closed_count += 1;
+                reclaimed_lamports = reclaimed_lamports.saturating_add(account_info.lamports);
 
                 // Small delay between closures to avoid overwhelming the network
                 tokio::time::sleep(Duration::from_millis(500)).await;
@@ -166,8 +168,7 @@ pub async fn close_all_empty_atas(wallet_address: &str) -> Result<(u32, Vec<Stri
         }
     }
 
-    let rent_reclaimed =
-        (closed_count as f64) * crate::chains::solana::constants::ATA_RENT_COST_SOL;
+    let rent_reclaimed = crate::chains::solana::constants::lamports_to_sol(reclaimed_lamports);
     logger::info(
         LogTag::Wallet,
         &format!(

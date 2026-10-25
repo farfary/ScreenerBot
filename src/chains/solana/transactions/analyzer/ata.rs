@@ -18,8 +18,10 @@ use serde::{Deserialize, Serialize};
 use serde_json::Value;
 
 use crate::chains::solana::constants::{
-    lamports_to_sol, ASSOCIATED_TOKEN_PROGRAM_ID, SPL_TOKEN_PROGRAM_ID, TOKEN_2022_PROGRAM_ID,
+    lamports_to_sol, sol_to_lamports, ASSOCIATED_TOKEN_PROGRAM_ID, SPL_TOKEN_PROGRAM_ID,
+    TOKEN_2022_PROGRAM_ID,
 };
+use crate::chains::solana::rent;
 use crate::logger::{self, LogTag};
 use crate::transactions::types::*;
 
@@ -118,22 +120,6 @@ pub enum AccountType {
     ProgramAccount,
     Unknown,
 }
-
-// =============================================================================
-// STANDARD RENT AMOUNTS
-// =============================================================================
-
-/// Standard rent amounts for different account types (in lamports)
-const STANDARD_RENTS: &[(u64, &str)] = &[
-    (2039280, "Standard ATA"),     // Most common ATA rent
-    (1461600, "Token Account"),    // Basic token account
-    (890880, "Mint Account"),      // Token mint account
-    (1002240, "Multisig Account"), // Multisig account
-    (5616720, "Metadata Account"), // NFT metadata account
-];
-
-/// Maximum expected rent for validation (10 SOL)
-const MAX_EXPECTED_RENT: u64 = 10_000_000_000;
 
 // =============================================================================
 // MAIN ANALYSIS FUNCTION
@@ -238,7 +224,7 @@ async fn extract_from_balance_changes(
         let change_lamports = (post_balance as i64) - (pre_balance as i64);
 
         // Check for rent patterns - restrict to ATA accounts by lifecycle heuristics
-        if let Some(_rent_type) = identify_rent_pattern(change_lamports.abs() as u64) {
+        if rent::is_rent_deposit(change_lamports.unsigned_abs()) {
             // Classify as Create only when the account was zero before (new account funded with rent)
             if change_lamports > 0 && pre_balance == 0 {
                 operations.push(AtaOperation {
@@ -488,28 +474,6 @@ fn calculate_rent_summary(operations: &[AtaOperation]) -> RentSummary {
     }
 }
 
-/// Identify rent pattern from lamport amount
-fn identify_rent_pattern(lamports: u64) -> Option<&'static str> {
-    if lamports > MAX_EXPECTED_RENT {
-        return None; // Too large to be rent
-    }
-
-    for (rent_amount, description) in STANDARD_RENTS {
-        if lamports == *rent_amount {
-            return Some(description);
-        }
-    }
-
-    // Check for close matches (within ~150k lamports ≈ 0.00015 SOL)
-    for (rent_amount, description) in STANDARD_RENTS {
-        if ((lamports as i64) - (*rent_amount as i64)).abs() <= 150_000 {
-            return Some(description);
-        }
-    }
-
-    None
-}
-
 // =============================================================================
 // ACCOUNT LIFECYCLE TRACKING
 // =============================================================================
@@ -573,7 +537,7 @@ fn calculate_ata_confidence(operations: &[AtaOperation], rent_summary: &RentSumm
     // Factor 2: Rent amounts match known patterns
     let valid_rent_operations = operations
         .iter()
-        .filter(|op| identify_rent_pattern((op.rent_amount * 1_000_000_000.0) as u64).is_some())
+        .filter(|op| rent::is_rent_deposit(sol_to_lamports(op.rent_amount)))
         .count();
 
     if operations.is_empty() {

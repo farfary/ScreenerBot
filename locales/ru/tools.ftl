@@ -352,7 +352,7 @@ tools-wallet-cleanup-done =
 
 tools-burn-section-title = Сжигание токенов
 tools-burn-info-title = Что такое сжигание?
-tools-burn-info-body = Сжигание навсегда уничтожает токены, и вернуть их невозможно. После сжигания запустите очистку кошелька, чтобы закрыть пустые ATA и вернуть ~0,002 { -sol } ренты за каждый токен.
+tools-burn-info-body = Сжигание навсегда уничтожает токены, и вернуть их невозможно. После сжигания запустите очистку кошелька, чтобы закрыть пустые ATA и вернуть ~0,0015–0,002 { -sol } ренты за каждый токен.
 tools-burn-stat-total = Всего токенов
 tools-burn-stat-selected = Выбрано
 tools-burn-stat-rent = Рента к возврату
@@ -612,7 +612,7 @@ tools-multi-sell-post-title = Действия после продажи
 tools-multi-sell-consolidate-label = Консолидировать { -sol } на основной кошелёк
 tools-multi-sell-consolidate-hint = Перевести весь { -sol } с дополнительных кошельков обратно на основной
 tools-multi-sell-close-atas-label = Закрывать ATA токена после продажи
-tools-multi-sell-close-atas-hint = Возвращает ~0,002 { -sol } за каждый ATA
+tools-multi-sell-close-atas-hint = Возвращает ~0,0015–0,002 { -sol } за каждый ATA
 tools-multi-sell-wallets-title = Кошельки с токеном
 tools-multi-sell-empty = Ни на одном дополнительном кошельке нет этого токена
 tools-multi-sell-column-tokens = Токены

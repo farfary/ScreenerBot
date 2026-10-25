@@ -331,12 +331,12 @@ hints-tools-wallet-cleanup-content =
     { "*" }*Boş Token Hesaplarından SOL Geri Alın**
 
     { "*" }*ATA nedir?**
-    İlişkili Token Hesapları (ATA), tokenlarınızı tutan Solana hesaplarıdır. Etkileşime girdiğiniz her token, ~0,002 SOL kira (rent) gerektiren bir ATA oluşturur.
+    İlişkili Token Hesapları (ATA), tokenlarınızı tutan Solana hesaplarıdır. Etkileşime girdiğiniz her token, bir kira (rent) depozitosu tutan bir ATA oluşturur: şimdi açılan hesaplarda ~0,0015 SOL, eski hesaplarda ~0,002 SOL.
 
     { "*" }*Boş ATA'lar neden temizlenmeli?**
-    • Kirayı geri alın (ATA başına ~0,002 SOL)
+    • Kirayı geri alın (ATA başına ~0,0015–0,002 SOL)
     • Aktif trader'larda yüzlerce boş ATA birikebilir
-    • 100 boş ATA = geri alınabilir ~0,2 SOL
+    • 100 boş ATA = geri alınabilir ~0,15–0,2 SOL
 
     { "*" }*Nasıl çalışır:**
     • Cüzdanınızda bakiyesi sıfır olan ATA'ları tarar
@@ -359,7 +359,7 @@ hints-tools-burn-tokens-content =
     { "*" }*Yaktığınızda ne olur:**
     • Tokenlar bir yakma adresine gönderilir (geri alınamaz)
     • Token bakiyesi sıfır olur
-    • ATA daha sonra Cüzdan Temizleme ile kapatılıp ~0,002 SOL kira geri alınabilir
+    • ATA daha sonra Cüzdan Temizleme ile kapatılıp ~0,0015–0,002 SOL kira geri alınabilir
 
     { "*" }*Token Kategorileri:**
     • **Açık Pozisyonlar** - Yakılamaz (aktif işlemler)
@@ -434,7 +434,7 @@ hints-tools-multi-sell-content =
 
     { "*" }*Satış Sonrası Eylemler:**
     • **SOL'u Birleştir** — tüm SOL'u ana cüzdana geri aktar
-    • **ATA'ları Kapat** — kirayı geri almak için token hesaplarını kapat (her biri ~0,002 SOL)
+    • **ATA'ları Kapat** — kirayı geri almak için token hesaplarını kapat (her biri ~0,0015–0,002 SOL)
 
     { "*" }*Yürütme Ayarları:**
     • **Gecikme** — işlemler arasında rastgele gecikme

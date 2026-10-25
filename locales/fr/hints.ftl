@@ -331,12 +331,12 @@ hints-tools-wallet-cleanup-content =
     { "*" }*Récupérez du SOL des comptes de token vides**
 
     { "*" }*Que sont les ATA ?**
-    Les comptes de token associés (ATA) sont des comptes Solana qui contiennent vos tokens. Chaque token avec lequel vous interagissez crée un ATA qui nécessite environ 0.002 SOL de rent.
+    Les comptes de token associés (ATA) sont des comptes Solana qui contiennent vos tokens. Chaque token avec lequel vous interagissez crée un ATA qui contient un dépôt de rent : environ 0.0015 SOL pour les comptes ouverts maintenant, environ 0.002 SOL pour les plus anciens.
 
     { "*" }*Pourquoi nettoyer les ATA vides ?**
-    • Récupérer le rent (environ 0.002 SOL par ATA)
+    • Récupérer le rent (environ 0.0015–0.002 SOL par ATA)
     • Les traders actifs peuvent accumuler des centaines d'ATA vides
-    • 100 ATA vides = environ 0.2 SOL récupérables
+    • 100 ATA vides = environ 0.15–0.2 SOL récupérables
 
     { "*" }*Fonctionnement :**
     • Analyse votre portefeuille à la recherche d'ATA à solde nul
@@ -359,7 +359,7 @@ hints-tools-burn-tokens-content =
     { "*" }*Ce qui se passe lors d'un burn :**
     • Les tokens sont envoyés à une adresse de burn (irrécupérable)
     • Le solde du token devient nul
-    • L'ATA peut ensuite être fermé via le nettoyage du portefeuille pour récupérer environ 0.002 SOL de rent
+    • L'ATA peut ensuite être fermé via le nettoyage du portefeuille pour récupérer environ 0.0015–0.002 SOL de rent
 
     { "*" }*Catégories de tokens :**
     • **Positions ouvertes** - Burn impossible (trades actifs)
@@ -434,7 +434,7 @@ hints-tools-multi-sell-content =
 
     { "*" }*Actions après la vente :**
     • **Consolider le SOL** — transfère tout le SOL vers le portefeuille principal
-    • **Fermer les ATA** — ferme les comptes de token pour récupérer le rent (~0.002 SOL chacun)
+    • **Fermer les ATA** — ferme les comptes de token pour récupérer le rent (~0.0015–0.002 SOL chacun)
 
     { "*" }*Paramètres d'exécution :**
     • **Délai** — délai aléatoire entre les transactions

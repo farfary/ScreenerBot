@@ -373,7 +373,7 @@ tools-wallet-cleanup-done = حسابات ATA التي تم تنظيفها: { $co
 
 tools-burn-section-title = حرق الرموز
 tools-burn-info-title = ما هو الحرق؟
-tools-burn-info-body = يؤدي الحرق إلى إتلاف الرموز نهائيًا بحيث يستحيل استرجاعها. بعد الحرق، شغّل تنظيف المحفظة لإغلاق حسابات ATA الفارغة واسترداد إيجار يقارب 0.002 { -sol } لكل رمز.
+tools-burn-info-body = يؤدي الحرق إلى إتلاف الرموز نهائيًا بحيث يستحيل استرجاعها. بعد الحرق، شغّل تنظيف المحفظة لإغلاق حسابات ATA الفارغة واسترداد إيجار يقارب 0.0015–0.002 { -sol } لكل رمز.
 tools-burn-stat-total = إجمالي الرموز
 tools-burn-stat-selected = المحدد
 tools-burn-stat-rent = الإيجار القابل للاسترداد
@@ -628,7 +628,7 @@ tools-multi-sell-post-title = إجراءات ما بعد البيع
 tools-multi-sell-consolidate-label = تجميع { -sol } في المحفظة الرئيسية
 tools-multi-sell-consolidate-hint = تحويل كل { -sol } من المحافظ الفرعية إلى المحفظة الرئيسية
 tools-multi-sell-close-atas-label = إغلاق حسابات ATA للرمز بعد البيع
-tools-multi-sell-close-atas-hint = استرداد نحو 0.002 { -sol } لكل حساب ATA
+tools-multi-sell-close-atas-hint = استرداد نحو 0.0015–0.002 { -sol } لكل حساب ATA
 tools-multi-sell-wallets-title = المحافظ التي تحتوي على الرمز
 tools-multi-sell-empty = لا توجد محافظ فرعية تحتفظ بهذا الرمز
 tools-multi-sell-column-tokens = الرموز

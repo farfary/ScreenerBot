@@ -24,6 +24,8 @@ pub struct AtaInfo {
     pub is_token_2022: bool,
     /// Whether this is an NFT
     pub is_nft: bool,
+    /// Lamports the account holds, returned to the wallet when it is closed
+    pub lamports: u64,
 }
 
 impl AtaInfo {
@@ -47,6 +49,7 @@ impl From<&crate::chains::solana::rpc::TokenAccountInfo> for AtaInfo {
             decimals: info.decimals,
             is_token_2022: info.is_token_2022,
             is_nft: info.is_nft,
+            lamports: info.lamports,
         }
     }
 }

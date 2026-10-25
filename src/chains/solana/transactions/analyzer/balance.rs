@@ -72,13 +72,6 @@ pub enum TransferType {
 // KNOWN CONSTANTS (industry standard)
 // =============================================================================
 
-/// Common rent amounts for ATA creation (exclude from swap analysis)
-const COMMON_RENT_AMOUNTS: &[u64] = &[
-    2039280, // Standard ATA rent
-    1461600, // Token account rent
-    890880,  // Mint account rent
-];
-
 // MEV/Jito tip addresses are centralized in program_ids; reuse that list via helper.
 
 /// Maximum tip amount to consider valid (larger amounts are likely swaps)
@@ -427,7 +420,7 @@ async fn filter_noise_transfers(
     for change in sol_changes.values() {
         // Convert SOL amount back to lamports for rent pattern matching
         let change_lamports = sol_to_lamports(change.change.abs());
-        if is_rent_amount(change_lamports) {
+        if crate::chains::solana::rent::is_rent_deposit(change_lamports) {
             total_rent += change.change.abs();
             continue;
         }
@@ -477,18 +470,6 @@ async fn filter_noise_transfers(
     }
 
     Ok((clean_transfers, total_tips, total_rent))
-}
-
-/// Check if amount matches known rent patterns
-pub(crate) fn is_rent_amount(lamports: u64) -> bool {
-    // Consider close matches around known rent amounts to account for rent param variance and residuals
-    const TOLERANCE: i64 = 150_000; // ~0.00015 SOL
-    for known in COMMON_RENT_AMOUNTS {
-        if ((lamports as i64) - (*known as i64)).abs() <= TOLERANCE {
-            return true;
-        }
-    }
-    false
 }
 
 /// Check if transfer is likely a tip to MEV/Jito

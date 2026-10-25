@@ -322,7 +322,7 @@ tools-wallet-cleanup-done =
 
 tools-burn-section-title = टोकन बर्न
 tools-burn-info-title = बर्न करना क्या है?
-tools-burn-info-body = बर्न करने पर टोकन हमेशा के लिए नष्ट हो जाते हैं और वापस नहीं पाए जा सकते। बर्न के बाद, खाली ATA बंद करने और प्रति टोकन लगभग 0.002 { -sol } रेंट वापस पाने के लिए वॉलेट क्लीनअप चलाएँ।
+tools-burn-info-body = बर्न करने पर टोकन हमेशा के लिए नष्ट हो जाते हैं और वापस नहीं पाए जा सकते। बर्न के बाद, खाली ATA बंद करने और प्रति टोकन लगभग 0.0015–0.002 { -sol } रेंट वापस पाने के लिए वॉलेट क्लीनअप चलाएँ।
 tools-burn-stat-total = कुल टोकन
 tools-burn-stat-selected = चुने गए
 tools-burn-stat-rent = वापस पाने योग्य रेंट
@@ -548,7 +548,7 @@ tools-multi-sell-post-title = बिक्री के बाद की क्�
 tools-multi-sell-consolidate-label = { -sol } मुख्य वॉलेट में कंसॉलिडेट करें
 tools-multi-sell-consolidate-hint = सब-वॉलेट से सारा { -sol } मुख्य वॉलेट में वापस ट्रांसफ़र करें
 tools-multi-sell-close-atas-label = बिक्री के बाद टोकन ATA बंद करें
-tools-multi-sell-close-atas-hint = प्रति ATA लगभग 0.002 { -sol } वापस पाएँ
+tools-multi-sell-close-atas-hint = प्रति ATA लगभग 0.0015–0.002 { -sol } वापस पाएँ
 tools-multi-sell-wallets-title = टोकन वाले वॉलेट
 tools-multi-sell-empty = किसी सब-वॉलेट में यह टोकन नहीं है
 tools-multi-sell-column-tokens = टोकन

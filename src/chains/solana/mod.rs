@@ -28,6 +28,7 @@ mod error;
 pub mod filtering;
 pub mod layout;
 pub mod pools;
+pub mod rent;
 pub mod rpc;
 pub mod runtime;
 pub mod settlement;

@@ -343,7 +343,7 @@ tools-wallet-cleanup-done =
 
 tools-burn-section-title = 销毁代币
 tools-burn-info-title = 什么是销毁？
-tools-burn-info-body = 销毁会永久销毁代币，且无法恢复。销毁后，请运行钱包清理以关闭空 ATA，每个代币可回收约 0.002 { -sol } 租金。
+tools-burn-info-body = 销毁会永久销毁代币，且无法恢复。销毁后，请运行钱包清理以关闭空 ATA，每个代币可回收约 0.0015–0.002 { -sol } 租金。
 tools-burn-stat-total = 代币总数
 tools-burn-stat-selected = 已选择
 tools-burn-stat-rent = 可回收租金
@@ -569,7 +569,7 @@ tools-multi-sell-post-title = 卖出后操作
 tools-multi-sell-consolidate-label = 将 { -sol } 归集到主钱包
 tools-multi-sell-consolidate-hint = 将子钱包中的所有 { -sol } 转回主钱包
 tools-multi-sell-close-atas-label = 卖出后关闭代币 ATA
-tools-multi-sell-close-atas-hint = 每个 ATA 可回收约 0.002 { -sol }
+tools-multi-sell-close-atas-hint = 每个 ATA 可回收约 0.0015–0.002 { -sol }
 tools-multi-sell-wallets-title = 持有该代币的钱包
 tools-multi-sell-empty = 没有子钱包持有该代币
 tools-multi-sell-column-tokens = 代币

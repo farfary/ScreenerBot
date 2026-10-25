@@ -331,12 +331,12 @@ hints-tools-wallet-cleanup-content =
     { "*" }*SOL aus leeren Token-Konten zurückholen**
 
     { "*" }*Was sind ATAs?**
-    Associated Token Accounts (ATAs) sind Solana-Konten, die Ihre Tokens halten. Jeder Token, mit dem Sie interagieren, erzeugt ein ATA, das ca. 0,002 SOL Miete bindet.
+    Associated Token Accounts (ATAs) sind Solana-Konten, die Ihre Tokens halten. Jeder Token, mit dem Sie interagieren, erzeugt ein ATA, das eine Mietkaution hält: ca. 0,0015 SOL bei jetzt eröffneten Konten, ca. 0,002 SOL bei älteren.
 
     { "*" }*Warum leere ATAs bereinigen?**
-    • Miete zurückholen (ca. 0,002 SOL pro ATA)
+    • Miete zurückholen (ca. 0,0015–0,002 SOL pro ATA)
     • Aktive Trader können Hunderte leere ATAs ansammeln
-    • 100 leere ATAs = ca. 0,2 SOL zurückholbar
+    • 100 leere ATAs = ca. 0,15–0,2 SOL zurückholbar
 
     { "*" }*So funktioniert es:**
     • Scannt Ihre Wallet nach ATAs mit Guthaben null
@@ -359,7 +359,7 @@ hints-tools-burn-tokens-content =
     { "*" }*Was beim Verbrennen passiert:**
     • Tokens werden an eine Burn-Adresse gesendet (nicht wiederherstellbar)
     • Das Token-Guthaben wird null
-    • Das ATA kann danach über die Wallet-Bereinigung geschlossen werden, um ca. 0,002 SOL Miete zurückzuholen
+    • Das ATA kann danach über die Wallet-Bereinigung geschlossen werden, um ca. 0,0015–0,002 SOL Miete zurückzuholen
 
     { "*" }*Token-Kategorien:**
     • **Offene Positionen** - Können nicht verbrannt werden (aktive Trades)
@@ -434,7 +434,7 @@ hints-tools-multi-sell-content =
 
     { "*" }*Aktionen nach dem Verkauf:**
     • **SOL zusammenführen** — gesamtes SOL zurück an die Haupt-Wallet übertragen
-    • **ATAs schließen** — Token-Konten schließen, um Miete zurückzuholen (je ca. 0,002 SOL)
+    • **ATAs schließen** — Token-Konten schließen, um Miete zurückzuholen (je ca. 0,0015–0,002 SOL)
 
     { "*" }*Ausführungseinstellungen:**
     • **Verzögerung** — zufällige Verzögerung zwischen Transaktionen

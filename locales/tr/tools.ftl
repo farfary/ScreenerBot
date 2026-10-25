@@ -352,7 +352,7 @@ tools-wallet-cleanup-done =
 
 tools-burn-section-title = Token Yak
 tools-burn-info-title = Yakmak nedir?
-tools-burn-info-body = Yakmak, tokenları kalıcı olarak yok eder ve geri alınamaz hale getirir. Yaktıktan sonra boş ATA'ları kapatıp token başına ~0,002 { -sol } kirayı geri almak için Cüzdan Temizleme'yi çalıştırın.
+tools-burn-info-body = Yakmak, tokenları kalıcı olarak yok eder ve geri alınamaz hale getirir. Yaktıktan sonra boş ATA'ları kapatıp token başına ~0,0015–0,002 { -sol } kirayı geri almak için Cüzdan Temizleme'yi çalıştırın.
 tools-burn-stat-total = Toplam Token
 tools-burn-stat-selected = Seçilen
 tools-burn-stat-rent = Geri Alınabilir Kira
@@ -592,7 +592,7 @@ tools-multi-sell-post-title = Satış Sonrası Eylemler
 tools-multi-sell-consolidate-label = { -sol } ana cüzdanda birleştirilsin
 tools-multi-sell-consolidate-hint = Alt cüzdanlardaki tüm { -sol } ana cüzdana geri aktarılır
 tools-multi-sell-close-atas-label = Satıştan sonra token ATA'larını kapat
-tools-multi-sell-close-atas-hint = ATA başına ~0,002 { -sol } geri alın
+tools-multi-sell-close-atas-hint = ATA başına ~0,0015–0,002 { -sol } geri alın
 tools-multi-sell-wallets-title = Tokenı Tutan Cüzdanlar
 tools-multi-sell-empty = Hiçbir alt cüzdan bu tokenı tutmuyor
 tools-multi-sell-column-tokens = Tokenlar

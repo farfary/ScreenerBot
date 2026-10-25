@@ -352,7 +352,7 @@ tools-wallet-cleanup-done =
 
 tools-burn-section-title = Спалення токенів
 tools-burn-info-title = Що таке спалення?
-tools-burn-info-body = Спалення безповоротно знищує токени, і відновити їх неможливо. Після спалення запустіть «Очищення гаманця», щоб закрити порожні ATA й повернути ~0.002 { -sol } ренти за кожен токен.
+tools-burn-info-body = Спалення безповоротно знищує токени, і відновити їх неможливо. Після спалення запустіть «Очищення гаманця», щоб закрити порожні ATA й повернути ~0.0015–0.002 { -sol } ренти за кожен токен.
 tools-burn-stat-total = Усього токенів
 tools-burn-stat-selected = Вибрано
 tools-burn-stat-rent = Рента до повернення
@@ -612,7 +612,7 @@ tools-multi-sell-post-title = Дії після продажу
 tools-multi-sell-consolidate-label = Консолідувати { -sol } на основний гаманець
 tools-multi-sell-consolidate-hint = Повернути весь { -sol } із субгаманців на основний гаманець
 tools-multi-sell-close-atas-label = Закривати ATA токена після продажу
-tools-multi-sell-close-atas-hint = Повернення ~0.002 { -sol } за кожен ATA
+tools-multi-sell-close-atas-hint = Повернення ~0.0015–0.002 { -sol } за кожен ATA
 tools-multi-sell-wallets-title = Гаманці з токеном
 tools-multi-sell-empty = Жоден субгаманець не володіє цим токеном
 tools-multi-sell-column-tokens = Токени

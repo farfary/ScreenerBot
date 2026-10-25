@@ -172,6 +172,7 @@ mod tests {
             is_token_2022: false,
             is_nft: false,
             is_frozen,
+            lamports: 1_488_440,
         }
     }
 

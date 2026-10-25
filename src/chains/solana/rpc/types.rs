@@ -177,6 +177,9 @@ pub struct TokenAccountInfo {
     /// `holding_state = "frozen"` so the user can archive an unsellable holding
     /// instead of watching a sell fail forever.
     pub is_frozen: bool,
+    /// Lamports the account holds: its rent deposit, returned to the owner when
+    /// the account is closed. Accounts opened at a former rent rate hold more.
+    pub lamports: u64,
 }
 
 // ============================================================================

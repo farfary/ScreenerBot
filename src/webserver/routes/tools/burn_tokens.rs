@@ -10,7 +10,6 @@ use std::time::Duration;
 use crate::actions::ActionFailure;
 use crate::chains::solana::assets::ata::get_all_token_accounts;
 use crate::chains::solana::assets::burn_configured_wallet_token;
-use crate::chains::solana::constants::ATA_RENT_COST_SOL;
 use crate::i18n::{ids, UiArg, UiText};
 use crate::logger::{self, LogTag};
 use crate::pools;
@@ -149,9 +148,12 @@ pub async fn scan_burnable_tokens() -> Response {
         };
 
         // Only count rent reclaimable for tokens we can burn
-        if can_burn {
-            total_rent_reclaimable += ATA_RENT_COST_SOL;
-        }
+        let rent_reclaimable_native = if can_burn {
+            crate::chains::adapter().raw_to_native(account.lamports)
+        } else {
+            0.0
+        };
+        total_rent_reclaimable += rent_reclaimable_native;
 
         tokens.push(BurnableTokenInfo {
             mint: account.mint.clone(),
@@ -167,7 +169,7 @@ pub async fn scan_burnable_tokens() -> Response {
             has_liquidity,
             can_burn,
             burn_warning,
-            rent_reclaimable_native: if can_burn { ATA_RENT_COST_SOL } else { 0.0 },
+            rent_reclaimable_native,
         });
     }
 
@@ -348,7 +350,8 @@ pub async fn burn_selected_tokens(Json(request): Json<BurnTokensRequest>) -> Res
                         error: None,
                     });
                     successful += 1;
-                    native_reclaimed += ATA_RENT_COST_SOL; // Will be reclaimed when ATA is closed
+                    // Reclaimed when ATA cleanup closes the emptied account.
+                    native_reclaimed += crate::chains::adapter().raw_to_native(account.lamports);
                 }
                 Err(e) => {
                     logger::error(

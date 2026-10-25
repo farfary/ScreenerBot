@@ -350,7 +350,7 @@ tools-wallet-cleanup-done =
 
 tools-burn-section-title = Burn de tokens
 tools-burn-info-title = Qu'est-ce que le burn ?
-tools-burn-info-body = Le burn détruit définitivement des tokens, qui deviennent irrécupérables. Après un burn, lancez le nettoyage du portefeuille pour fermer les ATA vides et récupérer environ 0.002 { -sol } de rent par token.
+tools-burn-info-body = Le burn détruit définitivement des tokens, qui deviennent irrécupérables. Après un burn, lancez le nettoyage du portefeuille pour fermer les ATA vides et récupérer environ 0.0015–0.002 { -sol } de rent par token.
 tools-burn-stat-total = Total des tokens
 tools-burn-stat-selected = Sélectionnés
 tools-burn-stat-rent = Rent récupérable
@@ -599,7 +599,7 @@ tools-multi-sell-post-title = Actions après la vente
 tools-multi-sell-consolidate-label = Consolider le { -sol } vers le portefeuille principal
 tools-multi-sell-consolidate-hint = Transférer tout le { -sol } des sous-portefeuilles vers le portefeuille principal
 tools-multi-sell-close-atas-label = Fermer les ATA du token après la vente
-tools-multi-sell-close-atas-hint = Récupérer environ 0.002 { -sol } par ATA
+tools-multi-sell-close-atas-hint = Récupérer environ 0.0015–0.002 { -sol } par ATA
 tools-multi-sell-wallets-title = Portefeuilles détenant le token
 tools-multi-sell-empty = Aucun sous-portefeuille ne détient ce token
 tools-multi-sell-column-tokens = Tokens

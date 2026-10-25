@@ -7,7 +7,6 @@ use axum::{response::Response, Json};
 
 use crate::chains::adapter;
 use crate::chains::solana::assets::ata::get_all_token_accounts;
-use crate::chains::solana::constants::ATA_RENT_LAMPORTS;
 use crate::i18n::ids;
 use crate::logger::{self, LogTag};
 use crate::tools::ata_cleanup::{
@@ -63,9 +62,10 @@ pub async fn scan_atas() -> Response {
     let non_empty_count = all_accounts.len() - empty_accounts.len();
     let failed_count = get_failed_ata_count();
 
-    // Estimate rent reclaimable (approximately 0.00203928 SOL per ATA)
+    // Closing an account returns the lamports it holds, which depend on the rent
+    // rate in force when it was opened.
     let reclaimable_native =
-        adapter().raw_to_native(empty_accounts.len() as u64 * ATA_RENT_LAMPORTS);
+        adapter().raw_to_native(empty_accounts.iter().map(|acc| acc.lamports).sum());
 
     // Build empty ATA info list
     let empty_atas: Vec<EmptyAtaInfo> = empty_accounts
@@ -73,7 +73,7 @@ pub async fn scan_atas() -> Response {
         .map(|acc| EmptyAtaInfo {
             mint: acc.mint.clone(),
             ata_address: acc.account.clone(),
-            rent_raw: ATA_RENT_LAMPORTS,
+            rent_raw: acc.lamports,
         })
         .collect();
 

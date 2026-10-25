@@ -373,7 +373,7 @@ tools-wallet-cleanup-done =
 
 tools-burn-section-title = Burn Tokens
 tools-burn-info-title = What is burning?
-tools-burn-info-body = Burning permanently destroys tokens, making them unrecoverable. After burning, run Wallet Cleanup to close empty ATAs and reclaim ~0.002 { -sol } rent per token.
+tools-burn-info-body = Burning permanently destroys tokens, making them unrecoverable. After burning, run Wallet Cleanup to close empty ATAs and reclaim ~0.0015–0.002 { -sol } rent per token.
 tools-burn-stat-total = Total Tokens
 tools-burn-stat-selected = Selected
 tools-burn-stat-rent = Rent Reclaimable
@@ -623,7 +623,7 @@ tools-multi-sell-post-title = Post-Sell Actions
 tools-multi-sell-consolidate-label = Consolidate { -sol } to main wallet
 tools-multi-sell-consolidate-hint = Transfer all { -sol } from sub-wallets back to main wallet
 tools-multi-sell-close-atas-label = Close token ATAs after sell
-tools-multi-sell-close-atas-hint = Reclaim ~0.002 { -sol } per ATA
+tools-multi-sell-close-atas-hint = Reclaim ~0.0015–0.002 { -sol } per ATA
 tools-multi-sell-wallets-title = Wallets with Token
 tools-multi-sell-empty = No sub-wallets hold this token
 tools-multi-sell-column-tokens = Tokens

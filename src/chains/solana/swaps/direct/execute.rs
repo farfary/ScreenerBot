@@ -35,6 +35,7 @@
 use super::error::{DirectSwapError, DirectSwapResult};
 use super::plan::SwapPlan;
 use super::verify::{receipt_from_transaction, Receipt};
+use crate::chains::solana::rent;
 use crate::chains::solana::rpc::{get_rpc_client, RpcClientMethods};
 use crate::chains::solana::solana_sdk::{
     commitment_config::CommitmentLevel,
@@ -88,10 +89,6 @@ const RECEIPT_READ_ATTEMPTS: usize = 6;
 /// Delay between those attempts.
 const RECEIPT_READ_DELAY: Duration = Duration::from_millis(600);
 
-/// Cached rent-exempt minimum for a 165-byte SPL token account. Fixed by the
-/// runtime, so it is read once rather than once per swap.
-static ATA_RENT_LAMPORTS: tokio::sync::OnceCell<u64> = tokio::sync::OnceCell::const_new();
-
 /// Extra headroom, in percent, on top of the network fee the plan's own compute
 /// budget determines. Deliberately conservative: a preflight that
 /// under-estimates would let a swap through that then fails on chain, which is
@@ -112,22 +109,13 @@ fn network_fee_cushion_lamports(plan: &SwapPlan) -> u64 {
         .saturating_div(100)
 }
 
-/// SPL token account size, used to size the ATA rent-exemption read.
-const TOKEN_ACCOUNT_SIZE: usize = 165;
-
 async fn ata_rent_lamports() -> DirectSwapResult<u64> {
-    ATA_RENT_LAMPORTS
-        .get_or_try_init(|| async {
-            get_rpc_client()
-                .get_minimum_balance_for_rent_exemption(TOKEN_ACCOUNT_SIZE)
-                .await
-                .map_err(|e| DirectSwapError::NodeUnavailable {
-                    operation: "getMinimumBalanceForRentExemption",
-                    detail: format!("could not read the ATA rent-exempt minimum: {e}"),
-                })
-        })
+    rent::minimum_balance(rent::TOKEN_ACCOUNT_LEN)
         .await
-        .copied()
+        .map_err(|e| DirectSwapError::NodeUnavailable {
+            operation: "getMinimumBalanceForRentExemption",
+            detail: format!("could not read the ATA rent-exempt minimum: {e}"),
+        })
 }
 
 /// Refuse a swap the wallet plainly cannot afford before it costs an RPC round

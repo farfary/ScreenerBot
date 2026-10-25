@@ -168,6 +168,7 @@ impl CaseAccounts {
             is_nft: false,
             is_frozen: account.data.get(TOKEN_ACCOUNT_STATE_OFFSET)
                 == Some(&TOKEN_ACCOUNT_STATE_FROZEN),
+            lamports: account.lamports,
         }
     }
 }
@@ -206,6 +207,7 @@ impl AccountReader for CaseAccounts {
                 is_token_2022: false,
                 is_nft: false,
                 is_frozen: false,
+                lamports: 0,
             });
         }
         Ok(held)

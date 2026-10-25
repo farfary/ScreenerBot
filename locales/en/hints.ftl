@@ -336,12 +336,12 @@ hints-tools-wallet-cleanup-content =
     { "*" }*Reclaim SOL from Empty Token Accounts**
 
     { "*" }*What are ATAs?**
-    Associated Token Accounts (ATAs) are Solana accounts that hold your tokens. Each token you interact with creates an ATA that requires ~0.002 SOL in rent.
+    Associated Token Accounts (ATAs) are Solana accounts that hold your tokens. Each token you interact with creates an ATA that holds a rent deposit: ~0.0015 SOL for accounts opened now, ~0.002 SOL for older ones.
 
     { "*" }*Why clean up empty ATAs?**
-    • Reclaim rent (~0.002 SOL per ATA)
+    • Reclaim rent (~0.0015–0.002 SOL per ATA)
     • Active traders can accumulate hundreds of empty ATAs
-    • 100 empty ATAs = ~0.2 SOL reclaimable
+    • 100 empty ATAs = ~0.15–0.2 SOL reclaimable
 
     { "*" }*How it works:**
     • Scans your wallet for ATAs with zero balance
@@ -364,7 +364,7 @@ hints-tools-burn-tokens-content =
     { "*" }*What happens when you burn:**
     • Tokens are sent to a burn address (unrecoverable)
     • Token balance becomes zero
-    • ATA can then be closed via Wallet Cleanup to reclaim ~0.002 SOL rent
+    • ATA can then be closed via Wallet Cleanup to reclaim ~0.0015–0.002 SOL rent
 
     { "*" }*Token Categories:**
     • **Open Positions** - Cannot burn (active trades)
@@ -439,7 +439,7 @@ hints-tools-multi-sell-content =
 
     { "*" }*Post-Sell Actions:**
     • **Consolidate SOL** — transfer all SOL back to main wallet
-    • **Close ATAs** — close token accounts to reclaim rent (~0.002 SOL each)
+    • **Close ATAs** — close token accounts to reclaim rent (~0.0015–0.002 SOL each)
 
     { "*" }*Execution Settings:**
     • **Delay** — random delay between transactions

@@ -342,7 +342,7 @@ tools-wallet-cleanup-done =
 
 tools-burn-section-title = Burn token
 tools-burn-info-title = Burn là gì?
-tools-burn-info-body = Burn sẽ hủy vĩnh viễn token và không thể khôi phục. Sau khi burn, hãy chạy Dọn dẹp ví để đóng ATA trống và thu hồi khoảng 0.002 { -sol } phí rent cho mỗi token.
+tools-burn-info-body = Burn sẽ hủy vĩnh viễn token và không thể khôi phục. Sau khi burn, hãy chạy Dọn dẹp ví để đóng ATA trống và thu hồi khoảng 0.0015–0.002 { -sol } phí rent cho mỗi token.
 tools-burn-stat-total = Tổng số token
 tools-burn-stat-selected = Đã chọn
 tools-burn-stat-rent = Phí rent có thể thu hồi
@@ -569,7 +569,7 @@ tools-multi-sell-post-title = Hành động sau khi bán
 tools-multi-sell-consolidate-label = Gộp { -sol } về ví chính
 tools-multi-sell-consolidate-hint = Chuyển toàn bộ { -sol } từ các ví phụ về ví chính
 tools-multi-sell-close-atas-label = Đóng ATA của token sau khi bán
-tools-multi-sell-close-atas-hint = Thu hồi khoảng 0.002 { -sol } cho mỗi ATA
+tools-multi-sell-close-atas-hint = Thu hồi khoảng 0.0015–0.002 { -sol } cho mỗi ATA
 tools-multi-sell-wallets-title = Các ví có token
 tools-multi-sell-empty = Không có ví phụ nào nắm giữ token này
 tools-multi-sell-column-tokens = Token

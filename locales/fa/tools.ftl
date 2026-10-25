@@ -373,7 +373,7 @@ tools-wallet-cleanup-done =
 
 tools-burn-section-title = برن توکن
 tools-burn-info-title = برن چیست؟
-tools-burn-info-body = برن، توکن‌ها را برای همیشه نابود می‌کند و بازیابی آن‌ها ممکن نیست. پس از برن، «پاکسازی کیف پول» را اجرا کنید تا ATAهای خالی بسته شوند و به ازای هر توکن حدود 0.002 { -sol } رنت بازپس گرفته شود.
+tools-burn-info-body = برن، توکن‌ها را برای همیشه نابود می‌کند و بازیابی آن‌ها ممکن نیست. پس از برن، «پاکسازی کیف پول» را اجرا کنید تا ATAهای خالی بسته شوند و به ازای هر توکن حدود 0.0015–0.002 { -sol } رنت بازپس گرفته شود.
 tools-burn-stat-total = کل توکن‌ها
 tools-burn-stat-selected = انتخاب‌شده
 tools-burn-stat-rent = رنت قابل بازپس‌گیری
@@ -623,7 +623,7 @@ tools-multi-sell-post-title = اقدام‌های پس از فروش
 tools-multi-sell-consolidate-label = تجمیع { -sol } در کیف پول اصلی
 tools-multi-sell-consolidate-hint = انتقال همه { -sol } کیف پول‌های فرعی به کیف پول اصلی
 tools-multi-sell-close-atas-label = بستن ATAهای توکن پس از فروش
-tools-multi-sell-close-atas-hint = بازپس‌گیری حدود 0.002 { -sol } به ازای هر ATA
+tools-multi-sell-close-atas-hint = بازپس‌گیری حدود 0.0015–0.002 { -sol } به ازای هر ATA
 tools-multi-sell-wallets-title = کیف پول‌های دارای توکن
 tools-multi-sell-empty = هیچ کیف پول فرعی این توکن را ندارد
 tools-multi-sell-column-tokens = توکن‌ها

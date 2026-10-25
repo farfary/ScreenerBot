@@ -746,7 +746,7 @@ fn find_corresponding_sol_change(
     _token_change: &TokenBalanceChange,
 ) -> crate::chains::solana::Result<f64> {
     // Pick the largest SOL change by magnitude, EXCLUDING rent amounts (e.g. an
-    // ATA close reclaims ~0.00204 SOL). Rent movements are not swap value; counting
+    // ATA close returns its rent deposit). Rent movements are not swap value; counting
     // them as proceeds reports wildly wrong P&L. Note: the authoritative swap amount
     // for buys/sells is derived in the processor from the wallet's WSOL flow
     // (output_ui/input_ui) — this balance-only value feeds secondary metrics.
@@ -755,7 +755,7 @@ fn find_corresponding_sol_change(
         .values()
         .filter(|c| {
             let lamports = (c.change.abs() * 1_000_000_000.0).round() as u64;
-            !crate::chains::solana::transactions::analyzer::balance::is_rent_amount(lamports)
+            !crate::chains::solana::rent::is_rent_deposit(lamports)
         })
         .max_by(|a, b| {
             a.change

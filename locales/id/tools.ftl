@@ -343,7 +343,7 @@ tools-wallet-cleanup-done =
 
 tools-burn-section-title = Burn Token
 tools-burn-info-title = Apa itu burn?
-tools-burn-info-body = Burn menghancurkan token secara permanen sehingga tidak dapat dipulihkan. Setelah burn, jalankan Pembersihan Dompet untuk menutup ATA kosong dan mengklaim kembali rent ~0.002 { -sol } per token.
+tools-burn-info-body = Burn menghancurkan token secara permanen sehingga tidak dapat dipulihkan. Setelah burn, jalankan Pembersihan Dompet untuk menutup ATA kosong dan mengklaim kembali rent ~0.0015–0.002 { -sol } per token.
 tools-burn-stat-total = Total Token
 tools-burn-stat-selected = Dipilih
 tools-burn-stat-rent = Rent yang Dapat Diklaim
@@ -570,7 +570,7 @@ tools-multi-sell-post-title = Aksi Setelah Jual
 tools-multi-sell-consolidate-label = Konsolidasikan { -sol } ke dompet utama
 tools-multi-sell-consolidate-hint = Transfer semua { -sol } dari sub-dompet kembali ke dompet utama
 tools-multi-sell-close-atas-label = Tutup ATA token setelah jual
-tools-multi-sell-close-atas-hint = Klaim kembali ~0.002 { -sol } per ATA
+tools-multi-sell-close-atas-hint = Klaim kembali ~0.0015–0.002 { -sol } per ATA
 tools-multi-sell-wallets-title = Dompet dengan Token
 tools-multi-sell-empty = Tidak ada sub-dompet yang memiliki token ini
 tools-multi-sell-column-tokens = Token

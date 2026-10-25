@@ -351,7 +351,7 @@ tools-wallet-cleanup-done =
 
 tools-burn-section-title = Queimar tokens
 tools-burn-info-title = O que é queimar?
-tools-burn-info-body = Queimar destrói tokens de forma permanente, tornando-os irrecuperáveis. Depois de queimar, execute a Limpeza de carteira para fechar ATAs vazias e recuperar ~0.002 { -sol } de rent por token.
+tools-burn-info-body = Queimar destrói tokens de forma permanente, tornando-os irrecuperáveis. Depois de queimar, execute a Limpeza de carteira para fechar ATAs vazias e recuperar ~0.0015–0.002 { -sol } de rent por token.
 tools-burn-stat-total = Total de tokens
 tools-burn-stat-selected = Selecionados
 tools-burn-stat-rent = Rent recuperável
@@ -600,7 +600,7 @@ tools-multi-sell-post-title = Ações após a venda
 tools-multi-sell-consolidate-label = Consolidar { -sol } na carteira principal
 tools-multi-sell-consolidate-hint = Transfere todo o { -sol } das subcarteiras de volta para a carteira principal
 tools-multi-sell-close-atas-label = Fechar ATAs do token após a venda
-tools-multi-sell-close-atas-hint = Recupere ~0.002 { -sol } por ATA
+tools-multi-sell-close-atas-hint = Recupere ~0.0015–0.002 { -sol } por ATA
 tools-multi-sell-wallets-title = Carteiras com o token
 tools-multi-sell-empty = Nenhuma subcarteira possui este token
 tools-multi-sell-column-tokens = Tokens

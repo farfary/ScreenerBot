@@ -528,12 +528,12 @@ impl TransactionProcessor {
                                 if change < 0.0 {
                                     let outflow_amount = change.abs();
 
-                                    // Skip rent-pattern outflows (e.g., ATA close rent ~0.00203928 SOL)
+                                    // Skip rent deposits (an account opened or closed by the swap)
                                     let outflow_lamports = (outflow_amount * 1_000_000_000.0)
                                         .round()
                                         .clamp(0.0, u64::MAX as f64)
                                         as u64;
-                                    if crate::chains::solana::transactions::analyzer::balance::is_rent_amount(
+                                    if crate::chains::solana::rent::is_rent_deposit(
                                         outflow_lamports,
                                     ) {
                                         continue;

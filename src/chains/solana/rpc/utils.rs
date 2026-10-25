@@ -5,12 +5,8 @@
 //!
 //! Common utilities for RPC operations.
 
-use crate::chains::solana::constants::ATA_RENT_LAMPORTS;
 use crate::chains::solana::solana_sdk::pubkey::Pubkey;
-use crate::logger::{self, LogTag};
 use std::str::FromStr;
-use std::sync::{Arc, LazyLock, Mutex};
-use std::time::{Duration, Instant};
 
 /// Parse a pubkey from string safely
 ///
@@ -20,81 +16,4 @@ pub fn parse_pubkey_string(s: &str) -> crate::chains::solana::Result<Pubkey> {
         kind: "pubkey",
         value: s.to_owned(),
     })
-}
-
-/// Get minimum rent for ATA from chain with caching
-///
-/// Uses a 10-second cache to avoid excessive RPC calls.
-/// Falls back to default ATA rent (2039280 lamports) on errors.
-pub async fn get_ata_rent_from_chain() -> crate::chains::solana::Result<u64> {
-    use crate::chains::solana::rpc::global::get_rpc_client;
-    use crate::chains::solana::rpc::RpcClientMethods;
-
-    // Use the new client
-    let client = get_rpc_client();
-
-    // ATA data size is 165 bytes
-    client
-        .get_minimum_balance_for_rent_exemption(165)
-        .await
-        .map_err(|e| crate::chains::solana::Error::Rpc {
-            operation: "get_minimum_balance_for_rent_exemption",
-            detail: e.to_string(),
-        })
-}
-
-/// Cached ATA rent information
-#[derive(Debug, Clone)]
-pub struct AtaRentInfo {
-    pub rent_lamports: u64,
-    pub cached_at: Instant,
-}
-
-/// Global cache for ATA rent amounts (10-second cache)
-static ATA_RENT_CACHE: LazyLock<Arc<Mutex<Option<AtaRentInfo>>>> =
-    LazyLock::new(|| Arc::new(Mutex::new(None)));
-
-/// Get ATA rent with caching (10-second TTL)
-///
-/// Attempts to fetch from chain, uses cache, falls back to default.
-pub async fn get_ata_rent_lamports() -> crate::Result<u64> {
-    // Check cache first
-    {
-        let cache = match ATA_RENT_CACHE.try_lock() {
-            Ok(cache) => cache,
-            Err(_) => {
-                logger::debug(
-                    LogTag::Rpc,
-                    "ATA rent cache lock contention - using default ATA rent",
-                );
-                return Ok(ATA_RENT_LAMPORTS);
-            }
-        };
-        if let Some(ref info) = *cache {
-            if info.cached_at.elapsed() < Duration::from_secs(10) {
-                return Ok(info.rent_lamports);
-            }
-        }
-    }
-
-    // Fetch from chain
-    match get_ata_rent_from_chain().await {
-        Ok(rent) => {
-            // Update cache
-            if let Ok(mut cache) = ATA_RENT_CACHE.try_lock() {
-                *cache = Some(AtaRentInfo {
-                    rent_lamports: rent,
-                    cached_at: Instant::now(),
-                });
-            }
-            Ok(rent)
-        }
-        Err(e) => {
-            logger::warning(
-                LogTag::Rpc,
-                &format!("Failed to get ATA rent from chain: {e} - using default"),
-            );
-            Ok(ATA_RENT_LAMPORTS)
-        }
-    }
 }
