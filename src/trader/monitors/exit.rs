@@ -136,6 +136,7 @@ pub async fn monitor_positions(
             let shutdown_check = shutdown.clone();
             let position_mint = position.mint.clone();
             let position_symbol = position.symbol.clone();
+            let position_origin = position.origin.kind();
 
             let task = tokio::spawn(async move {
                 // Check shutdown before acquiring semaphore
@@ -156,6 +157,7 @@ pub async fn monitor_positions(
                     Ok(Some(d)) => Some(PositionEvaluation {
                         mint: position_mint,
                         symbol: position_symbol,
+                        origin: position_origin,
                         decision: Some(d.clone()),
                         priority: d.priority,
                     }),
@@ -241,7 +243,13 @@ pub async fn monitor_positions(
                     continue;
                 }
 
-                match executors::execute_tracked_exit(&decision, Some(&evaluation.symbol)).await {
+                match executors::execute_tracked_exit(
+                    &decision,
+                    Some(&evaluation.symbol),
+                    evaluation.origin,
+                )
+                .await
+                {
                     Ok(result) => {
                         if result.success {
                             logger::info(
@@ -414,6 +422,8 @@ pub async fn monitor_positions(
 struct PositionEvaluation {
     mint: String,
     symbol: String,
+    /// The position's `PositionOrigin::kind`
+    origin: &'static str,
     decision: Option<TradeDecision>,
     priority: TradePriority,
 }

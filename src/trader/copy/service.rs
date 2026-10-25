@@ -657,9 +657,18 @@ async fn process_sell_activity(
             }
         };
         let symbol = position.as_ref().map(|position| position.symbol.clone());
+        // A planned copy sell always sells this task's own copy position.
+        let origin = position
+            .as_ref()
+            .map_or("copy", |position| position.origin.kind());
         let outcome = execute_copy_sell_with(plan, |decision| async move {
             CopySellSubmitResult::from_trade_result(
-                crate::trader::executors::execute_tracked_exit(&decision, symbol.as_deref()).await,
+                crate::trader::executors::execute_tracked_exit(
+                    &decision,
+                    symbol.as_deref(),
+                    origin,
+                )
+                .await,
             )
         })
         .await;

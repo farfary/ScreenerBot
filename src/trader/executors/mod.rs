@@ -33,16 +33,20 @@ pub async fn execute_trade(decision: &TradeDecision) -> crate::trader::Result<Tr
 
 /// Execute an automatic sell and record it in the Actions panel. The position
 /// monitor and copy trading both close through here, so every automatic exit is
-/// visible whichever service decided it.
+/// visible whichever service decided it. `origin` is the kind of the position
+/// sold (`PositionOrigin::kind`).
 pub async fn execute_tracked_exit(
     decision: &TradeDecision,
     symbol: Option<&str>,
+    origin: &str,
 ) -> crate::trader::Result<TradeResult> {
     let action = AutoCloseAction::new(
         &decision.mint,
         symbol,
         decision.position_id.as_ref().and_then(|s| s.parse().ok()),
         &format!("{:?}", decision.reason),
+        decision.exit_percentage,
+        origin,
     )
     .await
     .ok();

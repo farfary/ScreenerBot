@@ -128,26 +128,33 @@ pub struct AutoCloseAction {
 }
 
 impl AutoCloseAction {
-    /// Create and register a new automated position close action
+    /// Create and register a new automated position close action. `exit_percentage`
+    /// is the share of the position sold (`None` is a full close) and `origin` the
+    /// kind of position it closes (`PositionOrigin::kind`).
     pub async fn new(
         mint: &str,
         symbol: Option<&str>,
         position_id: Option<i64>,
         reason: &str,
+        exit_percentage: Option<f64>,
+        origin: &str,
     ) -> Result<Self, Error> {
         let action_id = Uuid::new_v4().to_string();
+        let percentage = exit_percentage.unwrap_or(100.0);
 
         let metadata = json!({
             "mint": mint,
             "symbol": symbol.unwrap_or("Unknown"),
             "position_id": position_id,
             "reason": reason,
+            "percentage": percentage,
+            "origin": origin,
             "operation": "auto_close"
         });
 
         let action = Action::new(
             action_id.clone(),
-            ActionType::PositionClose,
+            close_action_type(percentage),
             mint.to_string(),
             AUTO_CLOSE_STEPS.to_vec(),
             metadata,
@@ -296,5 +303,25 @@ impl AutoDcaAction {
     /// Fail the action with error
     pub async fn fail(&self, failure: ActionFailure) {
         complete_action_failed(&self.action_id, failure).await;
+    }
+}
+
+/// A sale of the whole position is a close; a smaller share is a partial exit.
+fn close_action_type(percentage: f64) -> ActionType {
+    if percentage < 100.0 {
+        ActionType::PositionPartialExit
+    } else {
+        ActionType::PositionClose
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn a_partial_sale_is_a_partial_exit_and_a_full_sale_a_close() {
+        assert_eq!(close_action_type(25.0), ActionType::PositionPartialExit);
+        assert_eq!(close_action_type(100.0), ActionType::PositionClose);
     }
 }
