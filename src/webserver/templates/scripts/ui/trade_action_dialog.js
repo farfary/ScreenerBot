@@ -13,8 +13,10 @@ import { HintTrigger } from "./hint_popover.js";
 import { applyQuickTradeMixin } from "./trade_action/quick_trade.js";
 import { applyQuoteManagerMixin } from "./trade_action/quote_manager.js";
 
-// Hard ceiling on a manual slippage override. MUST match the backend's
-// trader::constants::MAX_MANUAL_SLIPPAGE_PCT — the route rejects anything above it.
+// Bounds of a manual slippage override. MUST match the backend's
+// trader::constants::{MIN,MAX}_MANUAL_SLIPPAGE_PCT — the route rejects anything outside them.
+// The floor is one basis point, the smallest slippage every router can express.
+const MIN_SLIPPAGE_PCT = 0.01;
 const MAX_SLIPPAGE_PCT = 50;
 
 // SOL held back from a buy so the transaction can still pay its network fee and, for a
@@ -272,9 +274,9 @@ export class TradeActionDialog {
                 type="number"
                 class="trade-action-slippage-input"
                 data-l10n-id="trade-slippage-custom"
-                min="0.1"
-                max="50"
-                step="0.1"
+                min="${MIN_SLIPPAGE_PCT}"
+                max="${MAX_SLIPPAGE_PCT}"
+                step="0.01"
                 inputmode="decimal"
               />
             </div>
@@ -938,7 +940,7 @@ export class TradeActionDialog {
       if (this.slippageInputEl) this.slippageInputEl.value = "";
     } else {
       const pct = Number(value);
-      if (!Number.isFinite(pct) || pct <= 0 || pct > MAX_SLIPPAGE_PCT) return;
+      if (!Number.isFinite(pct) || pct < MIN_SLIPPAGE_PCT || pct > MAX_SLIPPAGE_PCT) return;
       this._slippagePct = pct;
     }
 

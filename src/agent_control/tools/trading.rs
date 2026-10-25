@@ -16,7 +16,7 @@ use super::{Tool, ToolCategory, ToolDefinition, ToolResult};
 use crate::config::with_config;
 use crate::positions::{self, PositionManagement};
 use crate::trader::manual::{self, guard};
-use crate::trader::{TradeResult, MAX_MANUAL_SLIPPAGE_PCT};
+use crate::trader::{TradeResult, MAX_MANUAL_SLIPPAGE_PCT, MIN_MANUAL_SLIPPAGE_PCT};
 
 #[derive(Serialize)]
 struct TradeResponse {
@@ -36,7 +36,7 @@ fn slippage_schema() -> serde_json::Value {
     json!({
         "type": "number",
         "description": format!(
-            "Per-trade slippage override in percent, (0, {MAX_MANUAL_SLIPPAGE_PCT}]. Omit to use the configured slippage."
+            "Per-trade slippage override in percent, [{MIN_MANUAL_SLIPPAGE_PCT}, {MAX_MANUAL_SLIPPAGE_PCT}]. Omit to use the configured slippage."
         )
     })
 }

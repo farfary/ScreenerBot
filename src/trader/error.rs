@@ -33,8 +33,12 @@ pub enum Error {
     InvalidMint { mint: String },
     #[error("token {mint} is blacklisted")]
     Blacklisted { mint: String },
-    #[error("slippage {slippage_pct}% must be in (0, {maximum_pct}]")]
-    InvalidSlippage { slippage_pct: f64, maximum_pct: f64 },
+    #[error("slippage {slippage_pct}% must be between {minimum_pct}% and {maximum_pct}%")]
+    InvalidSlippage {
+        slippage_pct: f64,
+        minimum_pct: f64,
+        maximum_pct: f64,
+    },
     #[error("sell percentage {percentage} must be in (0, 100]")]
     InvalidPercentage { percentage: f64 },
     #[error(transparent)]

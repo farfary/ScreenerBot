@@ -7,7 +7,7 @@
 //! as a failed action so it shows in the dashboard like any other attempt.
 
 use crate::trader::admission::{check_entry_storage, EntryBlock};
-use crate::trader::constants::MAX_MANUAL_SLIPPAGE_PCT;
+use crate::trader::constants::{MAX_MANUAL_SLIPPAGE_PCT, MIN_MANUAL_SLIPPAGE_PCT};
 use crate::trader::Error;
 
 /// Which manual operation is being gated; selects the failed-action recorder.
@@ -119,12 +119,18 @@ pub async fn preflight(
 }
 
 /// Validate a per-trade slippage override. `None` follows the configured
-/// slippage; a value must be finite and within (0, MAX_MANUAL_SLIPPAGE_PCT].
+/// slippage; a value must be finite and within
+/// [MIN_MANUAL_SLIPPAGE_PCT, MAX_MANUAL_SLIPPAGE_PCT].
 pub fn validate_slippage(slippage_pct: Option<f64>) -> Result<Option<f64>, Error> {
     match slippage_pct {
-        Some(pct) if !pct.is_finite() || pct <= 0.0 || pct > MAX_MANUAL_SLIPPAGE_PCT => {
+        Some(pct)
+            if !pct.is_finite()
+                || pct < MIN_MANUAL_SLIPPAGE_PCT
+                || pct > MAX_MANUAL_SLIPPAGE_PCT =>
+        {
             Err(Error::InvalidSlippage {
                 slippage_pct: pct,
+                minimum_pct: MIN_MANUAL_SLIPPAGE_PCT,
                 maximum_pct: MAX_MANUAL_SLIPPAGE_PCT,
             })
         }
@@ -206,7 +212,24 @@ mod tests {
         assert_eq!(validate_slippage(Some(1.5)).unwrap(), Some(1.5));
         assert!(validate_slippage(Some(0.0)).is_err());
         assert!(validate_slippage(Some(f64::NAN)).is_err());
+        assert_eq!(
+            validate_slippage(Some(MIN_MANUAL_SLIPPAGE_PCT)).unwrap(),
+            Some(MIN_MANUAL_SLIPPAGE_PCT)
+        );
+        assert_eq!(
+            validate_slippage(Some(MAX_MANUAL_SLIPPAGE_PCT)).unwrap(),
+            Some(MAX_MANUAL_SLIPPAGE_PCT)
+        );
         assert!(validate_slippage(Some(MAX_MANUAL_SLIPPAGE_PCT + 1.0)).is_err());
+    }
+
+    #[test]
+    fn slippage_below_one_basis_point_names_the_minimum() {
+        let refused = validate_slippage(Some(0.0001)).unwrap_err();
+        assert!(matches!(
+            refused,
+            Error::InvalidSlippage { minimum_pct, .. } if minimum_pct == MIN_MANUAL_SLIPPAGE_PCT
+        ));
     }
 
     #[test]

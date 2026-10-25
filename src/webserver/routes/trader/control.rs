@@ -53,9 +53,11 @@ pub(super) fn trader_failure(error: &trader::Error) -> Response {
         }
         Error::InvalidSlippage {
             slippage_pct,
+            minimum_pct,
             maximum_pct,
         } => ApiError::new(code, ids::ERRORS_TRADE_SLIPPAGE_INVALID)
             .arg("slippage", UiArg::Number(*slippage_pct))
+            .arg("minimum", UiArg::Number(*minimum_pct))
             .arg("maximum", UiArg::Number(*maximum_pct)),
         Error::InvalidPercentage { percentage } => {
             ApiError::new(code, ids::ERRORS_TRADE_PERCENTAGE_INVALID)

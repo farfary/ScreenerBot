@@ -31,6 +31,10 @@ pub const MIN_TRADE_SIZE_NATIVE: f64 = 0.001;
 /// The auto-trader never uses this — it always follows `trader.slippage.*`.
 pub const MAX_MANUAL_SLIPPAGE_PCT: f64 = 50.0;
 
+/// Floor on a MANUAL per-trade slippage override, in percent: one basis point, the
+/// smallest slippage every router can express.
+pub const MIN_MANUAL_SLIPPAGE_PCT: f64 = 0.01;
+
 // History limits
 pub const MANUAL_TRADE_HISTORY_LIMIT: usize = 1000;
 
