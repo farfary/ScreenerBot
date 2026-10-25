@@ -62,6 +62,8 @@ pub(super) async fn enrich_token_overview(
 
     for balance in balances {
         let token_meta = metadata_map.get(&balance.mint);
+        // Priced by the worth owner, so the rows sum to the wallet's own worth figure.
+        let held_price_sol = crate::wallet::held_token_price_native(&balance.mint);
 
         let (
             symbol,
@@ -74,12 +76,9 @@ pub(super) async fn enrich_token_overview(
             last_updated,
             dex_id,
         ) = if let Some(meta) = token_meta {
-            let price_sol = if meta.price_sol > 0.0 {
-                Some(meta.price_sol)
-            } else {
-                None
-            };
-            let price_usd = if meta.price_usd > 0.0 {
+            let price_sol = held_price_sol;
+            // The USD figure is display only and shown only beside a native price.
+            let price_usd = if price_sol.is_some() && meta.price_usd > 0.0 {
                 Some(meta.price_usd)
             } else {
                 None
@@ -111,7 +110,7 @@ pub(super) async fn enrich_token_overview(
                 short_mint_label(&balance.mint),
                 None,
                 None,
-                None,
+                held_price_sol,
                 None,
                 None,
                 None,

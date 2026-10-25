@@ -4374,3 +4374,29 @@ fn connection_pools_are_built_only_by_the_store_opener() {
         violations.join("\n")
     );
 }
+
+/// Every list of wallet holdings prices its rows through the worth owner
+/// (`wallet::held_token_price_native`), so the rows sum to the wallet's own worth
+/// figure. Promotional fixtures carry their own fixed prices.
+#[test]
+fn wallet_holding_rows_are_priced_by_the_worth_owner() {
+    let mut violations = Vec::new();
+    for (relative, contents) in walk_src() {
+        if relative.starts_with("webserver/promo") || is_test_support_file(&relative) {
+            continue;
+        }
+        let code = strip_comment_text(&production_text(&contents));
+        let builds_rows =
+            code.contains("WalletTokenOverview {") || code.contains("WalletTokenHolding {");
+        let defines_type = code.contains("pub struct WalletTokenOverview")
+            || code.contains("pub struct WalletTokenHolding");
+        if builds_rows && !defines_type && !code.contains("held_token_price_native(") {
+            violations.push(format!("src/{}", relative.display()));
+        }
+    }
+    assert!(
+        violations.is_empty(),
+        "price wallet holding rows with wallet::held_token_price_native:\n{}",
+        violations.join("\n")
+    );
+}
