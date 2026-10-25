@@ -69,31 +69,25 @@
   margin-bottom: 16px;
 }
 
+/* The dialog's icon is a bare glyph inline with the title: size and colour only. */
 .confirmation-dialog__icon {
   flex-shrink: 0;
-  width: 40px;
-  height: 40px;
   display: flex;
   align-items: center;
-  justify-content: center;
   font-size: 24px;
-  border-radius: var(--radius-lg);
-  background: rgb(255, 255, 255, 0.05);
+  line-height: 1;
 }
 
 .confirmation-dialog--danger .confirmation-dialog__icon {
   color: #f85149;
-  background: rgb(248, 81, 73, 0.1);
 }
 
 .confirmation-dialog--warning .confirmation-dialog__icon {
   color: #d29922;
-  background: rgb(210, 153, 34, 0.1);
 }
 
 .confirmation-dialog--info .confirmation-dialog__icon {
   color: #58a6ff;
-  background: rgb(88, 166, 255, 0.1);
 }
 
 .confirmation-dialog__title {
@@ -335,6 +329,3 @@
   border-color: rgb(0, 0, 0, 0.2);
 }
 
-[data-theme="light"] .confirmation-dialog__icon {
-  background: rgb(0, 0, 0, 0.05);
-}
