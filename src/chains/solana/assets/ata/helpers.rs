@@ -15,7 +15,32 @@ use crate::chains::solana::spl_token::instruction::close_account;
 use crate::chains::solana::swaps::presend::send_and_settle_signed;
 use crate::logger::{self, LogTag};
 use crate::{Error, Result};
+use std::collections::HashMap;
 use std::str::FromStr;
+use std::sync::{Arc, LazyLock, Mutex};
+
+/// One lock per token account with a close in flight. The post-swap WSOL sweep and
+/// the periodic ATA cleanup can pick the same empty account at the same moment;
+/// without this both would send a close and the second would fail against an
+/// account that no longer exists.
+static CLOSE_LOCKS: LazyLock<Mutex<HashMap<String, Arc<tokio::sync::Mutex<()>>>>> =
+    LazyLock::new(|| Mutex::new(HashMap::new()));
+
+/// The close lock of `token_account`, dropping the locks no close holds any more.
+fn close_lock(token_account: &str) -> Arc<tokio::sync::Mutex<()>> {
+    let mut locks = CLOSE_LOCKS.lock().unwrap_or_else(|e| e.into_inner());
+    locks.retain(|_, lock| Arc::strong_count(lock) > 1);
+    locks.entry(token_account.to_owned()).or_default().clone()
+}
+
+/// Whether `error` reports that the account is already gone: a close that lost
+/// the race to another one, which reclaimed the rent itself.
+pub(super) fn is_already_closed(error: &Error) -> bool {
+    matches!(
+        error,
+        Error::Solana(crate::chains::solana::Error::AccountNotFound { .. })
+    )
+}
 
 /// Gets the associated token account address for a wallet and mint
 pub(super) async fn get_associated_token_account(
@@ -64,6 +89,30 @@ pub(super) async fn close_ata(
             }
         ),
     );
+
+    // A close that had to wait for another close of the same account sends only
+    // if the account survived it.
+    let lock = close_lock(token_account);
+    let _closing = match lock.clone().try_lock_owned() {
+        Ok(guard) => guard,
+        Err(_) => {
+            let guard = lock.lock_owned().await;
+            let pubkey = Pubkey::from_str(token_account).map_err(|e| {
+                Error::invalid_amount(
+                    format!("Invalid token account: {e}"),
+                    "Token account validation failed".to_owned(),
+                )
+            })?;
+            let exists = get_rpc_client().get_account(&pubkey).await?.is_some();
+            if !exists {
+                return Err(crate::chains::solana::Error::AccountNotFound {
+                    address: token_account.to_owned(),
+                }
+                .into());
+            }
+            guard
+        }
+    };
 
     // Use proper Solana SDK to build and send close instruction
     logger::debug(
@@ -303,4 +352,36 @@ fn build_token_2022_close_instruction(
         accounts,
         data: instruction_data,
     })
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn closes_of_one_account_share_a_lock_and_idle_locks_are_dropped() {
+        let first = close_lock("CloseLockAccountA");
+        let second = close_lock("CloseLockAccountA");
+        assert!(Arc::ptr_eq(&first, &second));
+        assert!(!Arc::ptr_eq(&first, &close_lock("CloseLockAccountB")));
+
+        drop((first, second));
+        let _other = close_lock("CloseLockAccountC");
+        let locks = CLOSE_LOCKS.lock().unwrap();
+        assert!(!locks.contains_key("CloseLockAccountA"));
+    }
+
+    #[test]
+    fn only_a_missing_account_counts_as_already_closed() {
+        let gone: Error = crate::chains::solana::Error::AccountNotFound {
+            address: "x".to_owned(),
+        }
+        .into();
+        assert!(is_already_closed(&gone));
+        let other: Error = crate::chains::solana::Error::InvalidPool {
+            reason: "x".to_owned(),
+        }
+        .into();
+        assert!(!is_already_closed(&other));
+    }
 }

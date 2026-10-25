@@ -54,6 +54,16 @@ pub async fn close_single_ata(wallet_address: &str, mint: &str) -> Result<String
                     );
                     Ok(signature)
                 }
+                Err(e) if super::helpers::is_already_closed(&e) => {
+                    logger::info(
+                        LogTag::Wallet,
+                        &format!(
+                            "ATA {} for mint {} is already closed",
+                            account.account, mint
+                        ),
+                    );
+                    Err(e)
+                }
                 Err(e) => {
                     logger::error(
                         LogTag::Wallet,
@@ -157,6 +167,12 @@ pub async fn close_all_empty_atas(wallet_address: &str) -> Result<(u32, Vec<Stri
 
                 // Small delay between closures to avoid overwhelming the network
                 tokio::time::sleep(Duration::from_millis(500)).await;
+            }
+            Err(e) if super::helpers::is_already_closed(&e) => {
+                logger::info(
+                    LogTag::Wallet,
+                    &format!("ATA {} is already closed", account_info.account),
+                );
             }
             Err(e) => {
                 logger::error(
@@ -449,10 +465,17 @@ pub async fn close_token_account_with_context(
                     token_account, mint, e
                 ),
             );
-            logger::error(
-                LogTag::Wallet,
-                &format!("Failed to close token account for {mint}: {e}"),
-            );
+            if super::helpers::is_already_closed(&e) {
+                logger::info(
+                    LogTag::Wallet,
+                    &format!("Token account for {mint} is already closed"),
+                );
+            } else {
+                logger::error(
+                    LogTag::Wallet,
+                    &format!("Failed to close token account for {mint}: {e}"),
+                );
+            }
             Err(e)
         }
     }
