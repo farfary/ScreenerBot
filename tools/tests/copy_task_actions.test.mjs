@@ -11,6 +11,9 @@
  * from saved progress, or skip and resume from now. Both sit in the recovery panel as real
  * button variants, and the action row offers neither.
  *
+ * The strip's bulk action follows the task states: Pause all only while a task copies,
+ * Resume while any task exists.
+ *
  * Run with `npm run test:js`.
  */
 
@@ -115,4 +118,36 @@ test("a watch over its limit offers both ways out inside the recovery panel", as
   assert.ok(await resume.isDisabled(), "resuming from now waits for the acknowledgement");
   await panel.locator("[data-watch-resume-ack]").check();
   assert.ok(await resume.isEnabled(), "the acknowledgement enables resuming from now");
+});
+
+test("Pause all is offered only while a task copies", async (t) => {
+  const overview = JSON.parse(readFileSync(`${FIXTURES_ROOT}/copy/copy_overview.json`, "utf8"));
+  const status = (overview.data ?? overview).status;
+  const context = await browser.newContext({ viewport: { width: 1440, height: 900 } });
+  const api = createApiHandler([await loadIndex("copy"), await loadIndex("shell")], "populated");
+  const host = await serveDashboard(context, {
+    locale: "en",
+    onApi: (request) =>
+      request.url.pathname === "/api/copy-trading/overview"
+        ? { body: JSON.stringify(overview) }
+        : api.onApi(request),
+  });
+  t.after(async () => {
+    await context.close();
+    await host.close();
+  });
+  const page = await context.newPage();
+  const action = page.locator("#copy-global-action");
+  const states = [
+    [{ enabled: true, active_tasks: 0, paper_tasks: 0, live_tasks: 0 }, "Pause all", true],
+    [{ enabled: true, active_tasks: 1, paper_tasks: 1, live_tasks: 0 }, "Pause all", false],
+    [{ enabled: false, active_tasks: 0, paper_tasks: 0, live_tasks: 0 }, "Resume processing", false],
+  ];
+  for (const [patch, label, disabled] of states) {
+    Object.assign(status, patch);
+    await page.goto(`${host.origin}/copy`);
+    await page.waitForSelector("#copy-system-state[data-state]:not([data-state='unknown'])");
+    assert.equal((await action.textContent()).trim(), label);
+    assert.equal(await action.isDisabled(), disabled, JSON.stringify(patch));
+  }
 });

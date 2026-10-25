@@ -55,7 +55,9 @@ export function renderStrip(page) {
   button.textContent = status.enabled
     ? I18n.t("copy-strip-pause-all")
     : I18n.t("copy-strip-resume");
-  button.disabled = !status.total_tasks;
+  // Pausing everything is offered only while a task copies; resuming, while any task exists.
+  const copying = status.live_tasks || status.paper_tasks;
+  button.disabled = status.enabled ? !copying : !status.total_tasks;
 }
 
 function figure(label, value, { tone = "", note = "", extra = "" } = {}, escapeHtml) {
