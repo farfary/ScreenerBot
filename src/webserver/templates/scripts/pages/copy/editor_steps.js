@@ -223,6 +223,10 @@ function sizingStep({ draft, defaults }, esc) {
 
 function entryStep({ draft, defaults }, esc) {
   const global = Boolean(defaults?.require_filter_pass);
+  const globalStable = Boolean(defaults?.copy_stable_quoted);
+  const stableMode =
+    draft.copy_stable_quoted == null ? "inherit" : draft.copy_stable_quoted ? "on" : "off";
+  const stableLabel = I18n.t("copy-rules-stable-trades");
   const filterMode =
     draft.require_filter_pass == null ? "inherit" : draft.require_filter_pass ? "require" : "skip";
   const requires = draft.require_filter_pass ?? global;
@@ -249,7 +253,23 @@ function entryStep({ draft, defaults }, esc) {
       esc,
       filterLabel
     )}<small>${esc(I18n.t("copy-editor-filter-help"))}</small></div>
-    ${requires ? `<p class="copy-warning" role="note"><i class="icon-triangle-alert" aria-hidden="true"></i>${esc(I18n.t("copy-editor-filter-warning"))}</p>` : ""}`;
+    ${requires ? `<p class="copy-warning" role="note"><i class="icon-triangle-alert" aria-hidden="true"></i>${esc(I18n.t("copy-editor-filter-warning"))}</p>` : ""}
+    <div class="copy-field"><span>${esc(stableLabel)}</span>${segmented(
+      "stable-mode",
+      [
+        {
+          id: "inherit",
+          label: globalStable
+            ? I18n.t("copy-stable-copy-setting-on")
+            : I18n.t("copy-stable-copy-setting-off"),
+        },
+        { id: "on", label: I18n.t("copy-rule-on") },
+        { id: "off", label: I18n.t("copy-rule-off") },
+      ],
+      stableMode,
+      esc,
+      stableLabel
+    )}<small>${esc(I18n.t("copy-editor-stable-help"))}</small></div>`;
 }
 
 function ruleCard(rule, { draft, defaults }, esc) {
@@ -333,6 +353,7 @@ function exitsStep(context, esc) {
 
 function reviewStep({ draft, defaults, mode, source }, esc) {
   const global = Boolean(defaults?.require_filter_pass);
+  const globalStable = Boolean(defaults?.copy_stable_quoted);
   const task = {
     ...draft,
     target_address: mode === "edit" ? source.target_address : draft.target_address,
@@ -356,6 +377,8 @@ function reviewStep({ draft, defaults, mode, source }, esc) {
         managesExits: draft.exit_mode !== "mirror",
         requireFilter: draft.require_filter_pass ?? global,
         globalRequireFilter: global,
+        copyStable: draft.copy_stable_quoted ?? globalStable,
+        globalCopyStable: globalStable,
         feePct: defaults?.swap_fee_pct,
       },
       esc

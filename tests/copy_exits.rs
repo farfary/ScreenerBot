@@ -41,6 +41,7 @@ fn task(exit_mode: ExitMode, mode: CopyMode) -> CopyTask {
         created_at: now,
         updated_at: now,
         require_filter_pass: None,
+        copy_stable_quoted: None,
         pause_reason: None,
         paused_at: None,
     }

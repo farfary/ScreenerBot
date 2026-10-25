@@ -397,7 +397,8 @@ fn reject_completion(
 
 mod executor;
 pub(super) use executor::{
-    execute_paper_entry, observation_telemetry, skipped, skipped_paper, skipped_paper_intent,
+    execute_paper_entry, in_paper_epoch, observation_telemetry, skipped, skipped_activity,
+    skipped_paper, skipped_paper_intent,
 };
 
 #[cfg(test)]

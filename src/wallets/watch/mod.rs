@@ -47,8 +47,8 @@ pub use poller::{cadence_secs, needs_gap_fill, CatchUpState, CompletedCatchUp, P
 pub use service::subscribe_activity;
 pub use types::{
     ActivityKind, SignaturePageItem, SuccessfulTransactionPageItem, SuccessfulTransactionsPage,
-    SwapSide, TransferDirection, WalletActivity, WatchDisableReason, WatchMode, WatchNotification,
-    WatchSource, WatchStatus, WatchTarget,
+    SwapSide, TransferDirection, UnresolvedSwapReason, WalletActivity, WatchDisableReason,
+    WatchMode, WatchNotification, WatchSource, WatchStatus, WatchTarget,
 };
 
 use std::sync::{Arc, OnceLock};

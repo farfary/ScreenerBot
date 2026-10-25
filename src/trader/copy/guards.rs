@@ -440,6 +440,7 @@ mod tests {
             created_at: Utc::now(),
             updated_at: Utc::now(),
             require_filter_pass: None,
+            copy_stable_quoted: None,
             pause_reason: (!enabled).then_some(CopyPauseReason::User),
             paused_at: (!enabled).then(Utc::now),
         }

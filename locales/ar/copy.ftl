@@ -32,6 +32,11 @@ copy-skip-claim-reconciled-abandoned = أُغلق إرسال حي متوقف د�
 copy-skip-stale-observation = أُعيد تشغيلها بعد توقف، وهي أقدم من أن تُنسخ
 copy-skip-unknown-observation-time = الصفقة المعاد تشغيلها بلا وقت كتلة
 copy-skip-entry-blocked = الدخول محظور
+copy-skip-stable-quote-disabled = المدفوع بـ USDC أو USDT؛ تداولات العملات المستقرة متوقفة لهذه المهمة
+copy-skip-stable-quote-price-unavailable = المدفوع بـ USDC أو USDT، ولا يتوفر سعر SOL الحالي لتحديد حجم النسخ
+copy-skip-swap-mixed-quote = المدفوع بـ SOL وعملة مستقرة معًا، فلا يوجد حجم واحد للصفقة
+copy-skip-swap-multiple-tokens = جرى تداول أكثر من رمز في معاملة واحدة
+copy-skip-swap-unreadable = تعذّرت قراءة مبالغ الصفقة
 
 copy-entry-block-force-stopped = التداول في إيقاف قسري
 copy-entry-block-loss-limit = حد الخسارة يمنع عمليات الدخول الجديدة
@@ -148,6 +153,8 @@ copy-field-slippage = الانزلاق السعري
 copy-rules-wallet-sells-only = عمليات بيع المحفظة فقط
 copy-filter-copy-setting-required = إعداد نسخ التداول (مطلوب)
 copy-filter-copy-setting-not-required = إعداد نسخ التداول (غير مطلوب)
+copy-stable-copy-setting-on = إعداد نسخ التداول (يُنسخ)
+copy-stable-copy-setting-off = إعداد نسخ التداول (لا يُنسخ)
 copy-count-closed-rounds =
     { $count ->
         [zero] { $count } جولة مغلقة
@@ -531,6 +538,9 @@ copy-rules-filter-pass = اجتياز الترشيح
 copy-rules-filter-required = مطلوب
 copy-rules-filter-not-required = غير مطلوب
 copy-rules-filter-task-override = تجاوز المهمة
+copy-rules-stable-trades = تداولات العملات المستقرة
+copy-rules-stable-copied = تُنسخ بسعر SOL الحالي
+copy-rules-stable-not-copied = لا تُنسخ
 copy-rules-exits = الخروج
 copy-rules-exits-inactive = تُباع الحيازات فقط عندما تبيع المحفظة؛ القواعد أدناه لا تعمل في هذا الوضع.
 
@@ -922,6 +932,7 @@ copy-editor-filter-require = مطلوب
 copy-editor-filter-skip = غير مطلوب
 copy-editor-filter-help = اشترط أن يجتاز الرمز مسار الترشيح الخاص بك قبل نسخه.
 copy-editor-filter-warning = مع إعداد الترشيح الافتراضي يفشل تقريبًا كل رمز، فالمهمة التي تشترط الاجتياز لا تنسخ شيئًا. اشترطه فقط عندما تُجيز مرشحاتك الرموز التي تتداولها هذه المحفظة.
+copy-editor-stable-help = انسخ مشتريات المحفظة المدفوعة بـ USDC أو USDT، بحجم يُحسب وفق سعر SOL الحالي. تُتَّبع مبيعات الرموز التي تحتفظ بها هذه المهمة أيًا كانت عملة الدفع.
 copy-editor-exit-both = كلاهما
 copy-editor-exit-help-buy-only = قواعدك أدناه تبيع كل حيازة؛ وتُتجاهل عمليات بيع المحفظة.
 copy-editor-exit-help-hybrid = أيهما يأتي أولًا: أن تبيع المحفظة، أو أن تنطلق إحدى قواعدك.

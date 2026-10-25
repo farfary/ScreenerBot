@@ -32,6 +32,11 @@ copy-skip-claim-reconciled-abandoned = Pengiriman live yang terputus ditutup tan
 copy-skip-stale-observation = Diputar ulang setelah downtime, terlalu lama untuk disalin
 copy-skip-unknown-observation-time = Trade yang diputar ulang tidak memiliki waktu blok
 copy-skip-entry-blocked = Entry diblokir
+copy-skip-stable-quote-disabled = Dibayar dengan USDC atau USDT; trade stablecoin dinonaktifkan untuk tugas ini
+copy-skip-stable-quote-price-unavailable = Dibayar dengan USDC atau USDT, tanpa harga SOL saat ini untuk menentukan ukuran salinan
+copy-skip-swap-mixed-quote = Dibayar dengan SOL dan stablecoin sekaligus, sehingga trade tidak memiliki satu ukuran
+copy-skip-swap-multiple-tokens = Lebih dari satu token diperdagangkan dalam satu transaksi
+copy-skip-swap-unreadable = Jumlah trade tidak dapat dibaca
 
 copy-entry-block-force-stopped = Trading dihentikan paksa
 copy-entry-block-loss-limit = Batas kerugian memblokir entry baru
@@ -137,6 +142,8 @@ copy-field-slippage = Slippage
 copy-rules-wallet-sells-only = Hanya penjualan dompet
 copy-filter-copy-setting-required = Pengaturan Copy Trading (wajib)
 copy-filter-copy-setting-not-required = Pengaturan Copy Trading (tidak wajib)
+copy-stable-copy-setting-on = Pengaturan Copy Trading (disalin)
+copy-stable-copy-setting-off = Pengaturan Copy Trading (tidak disalin)
 copy-count-closed-rounds =
     { $count ->
        *[other] { $count } putaran tertutup
@@ -445,6 +452,9 @@ copy-rules-filter-pass = Lolos Pemfilteran
 copy-rules-filter-required = Wajib
 copy-rules-filter-not-required = Tidak wajib
 copy-rules-filter-task-override = Penggantian tugas
+copy-rules-stable-trades = Trade stablecoin
+copy-rules-stable-copied = Disalin pada harga SOL saat ini
+copy-rules-stable-not-copied = Tidak disalin
 copy-rules-exits = Exit
 copy-rules-exits-inactive = Kepemilikan hanya dijual saat dompet menjual; aturan di bawah tidak berjalan pada mode ini.
 
@@ -796,6 +806,7 @@ copy-editor-filter-require = Wajibkan
 copy-editor-filter-skip = Jangan wajibkan
 copy-editor-filter-help = Wajibkan token lolos pipeline Pemfilteran Anda sebelum disalin.
 copy-editor-filter-warning = Dengan pengaturan Pemfilteran default hampir semua token gagal, sehingga tugas yang mewajibkan lolos tidak menyalin apa pun. Wajibkan hanya jika filter Anda meloloskan token yang diperdagangkan dompet ini.
+copy-editor-stable-help = Salin pembelian dompet yang dibayar dengan USDC atau USDT, dengan ukuran sesuai harga SOL saat ini. Penjualan token yang dipegang tugas ini diikuti apa pun mata uang pembayarannya.
 copy-editor-exit-both = Keduanya
 copy-editor-exit-help-buy-only = Aturan Anda di bawah menjual setiap kepemilikan; penjualan dompet diabaikan.
 copy-editor-exit-help-hybrid = Mana yang lebih dulu: dompet menjual, atau salah satu aturan Anda terpicu.

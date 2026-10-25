@@ -32,6 +32,11 @@ copy-skip-claim-reconciled-abandoned = Envío en vivo interrumpido, cerrado sin 
 copy-skip-stale-observation = Reproducida tras una interrupción, demasiado antigua para copiar
 copy-skip-unknown-observation-time = La operación reproducida no tiene hora de bloque
 copy-skip-entry-blocked = Entrada bloqueada
+copy-skip-stable-quote-disabled = Pagado en USDC o USDT; las operaciones con stablecoins están desactivadas para esta tarea
+copy-skip-stable-quote-price-unavailable = Pagado en USDC o USDT, sin un precio actual de SOL para dimensionar la copia
+copy-skip-swap-mixed-quote = Pagado con SOL y una stablecoin a la vez, por lo que la operación no tiene un único tamaño
+copy-skip-swap-multiple-tokens = Se operó más de un token en una misma transacción
+copy-skip-swap-unreadable = No se pudieron leer los importes de la operación
 
 copy-entry-block-force-stopped = El trading está detenido a la fuerza
 copy-entry-block-loss-limit = El límite de pérdidas bloquea nuevas entradas
@@ -143,6 +148,8 @@ copy-field-slippage = Deslizamiento
 copy-rules-wallet-sells-only = Solo ventas de la billetera
 copy-filter-copy-setting-required = Ajuste de Copy Trading (obligatorio)
 copy-filter-copy-setting-not-required = Ajuste de Copy Trading (no obligatorio)
+copy-stable-copy-setting-on = Ajuste de Copy Trading (copiado)
+copy-stable-copy-setting-off = Ajuste de Copy Trading (no copiado)
 copy-count-closed-rounds =
     { $count ->
         [one] { $count } ronda cerrada
@@ -481,6 +488,9 @@ copy-rules-filter-pass = Aprobar el filtrado
 copy-rules-filter-required = Obligatorio
 copy-rules-filter-not-required = No obligatorio
 copy-rules-filter-task-override = Ajuste de la tarea
+copy-rules-stable-trades = Operaciones con stablecoins
+copy-rules-stable-copied = Copiado al precio actual de SOL
+copy-rules-stable-not-copied = No copiado
 copy-rules-exits = Salidas
 copy-rules-exits-inactive = Las tenencias solo se venden cuando vende la billetera; las reglas de abajo no se aplican en este modo.
 
@@ -848,6 +858,7 @@ copy-editor-filter-require = Exigir
 copy-editor-filter-skip = No exigir
 copy-editor-filter-help = Exige que un token supere tu pipeline de filtrado antes de copiarlo.
 copy-editor-filter-warning = Con la configuración de filtrado predeterminada casi todos los tokens fallan, así que una tarea que exige aprobarlo no copia nada. Exígelo solo cuando tus filtros aprueben los tokens que opera esta billetera.
+copy-editor-stable-help = Copia las compras de la billetera pagadas en USDC o USDT, dimensionadas al precio actual de SOL. Las ventas de tokens que mantiene esta tarea se siguen sea cual sea la moneda de pago.
 copy-editor-exit-both = Ambas
 copy-editor-exit-help-buy-only = Tus reglas de abajo venden cada tenencia; las ventas de la billetera se ignoran.
 copy-editor-exit-help-hybrid = Lo que ocurra primero: vende la billetera o se activa una de tus reglas.

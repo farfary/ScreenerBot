@@ -114,15 +114,79 @@ pub enum ActivityKind {
         venue: Option<String>,
         price_native: Option<f64>,
     },
+    /// A DEX/aggregator swap of one primary mint paid or received in exactly one
+    /// stable coin. The amounts are the subject's own; converting the stable leg to
+    /// native terms is the consumer's choice, made with a price it trusts.
+    StableSwap {
+        mint: String,
+        side: SwapSide,
+        stable_mint: String,
+        stable_amount: f64,
+        token_amount: f64,
+        venue: Option<String>,
+    },
+    /// A DEX/aggregator transaction shaped like a trade that cannot be reduced to one
+    /// copyable swap. `mint` is the traded token when exactly one moved.
+    UnresolvedSwap {
+        mint: Option<String>,
+        reason: UnresolvedSwapReason,
+        venue: Option<String>,
+    },
     /// A plain SPL/SOL transfer -- no DEX program involved.
     Transfer {
         mint: String,
         amount: f64,
         direction: TransferDirection,
     },
-    /// Decoded successfully but not a swap or a simple transfer (liquidity ops,
-    /// program interactions, an ambiguous/skipped multi-hop or non-SOL-quoted route).
+    /// Decoded successfully but neither a trade nor a simple transfer (liquidity
+    /// ops, wrapping SOL, claims and other program interactions).
     Other,
+}
+
+impl ActivityKind {
+    /// The native-quoted `Swap` equal to a `StableSwap`, valuing the stable coin at
+    /// one US dollar and the native coin at `native_usd`. `None` for any other kind
+    /// or an unusable price.
+    pub fn stable_swap_in_native(&self, native_usd: f64) -> Option<ActivityKind> {
+        let ActivityKind::StableSwap {
+            mint,
+            side,
+            stable_amount,
+            token_amount,
+            venue,
+            ..
+        } = self
+        else {
+            return None;
+        };
+        let native_amount = stable_amount / native_usd;
+        let price_native = native_amount / token_amount;
+        (native_usd.is_finite()
+            && native_usd > 0.0
+            && native_amount.is_finite()
+            && native_amount > 0.0
+            && price_native.is_finite()
+            && price_native > 0.0)
+            .then(|| ActivityKind::Swap {
+                mint: mint.clone(),
+                side: *side,
+                native_amount,
+                token_amount: *token_amount,
+                venue: venue.clone(),
+                price_native: Some(price_native),
+            })
+    }
+}
+
+/// Why a trade-shaped transaction has no single copyable swap.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum UnresolvedSwapReason {
+    /// Paid with native SOL and a stable coin together, so neither is its size.
+    MixedQuote,
+    /// More than one non-quote token, or both stable coins, moved.
+    MultipleTokens,
+    /// An amount or a native transfer of the transaction could not be read.
+    Unreadable,
 }
 
 /// One piece of on-chain activity for a watched subject, published on the shared
@@ -307,6 +371,35 @@ mod tests {
             let text = error.ui_text();
             assert_ne!(format_en(&text.id, None), text.id, "missing {}", text.id);
         }
+    }
+
+    #[test]
+    fn a_stable_swap_is_stated_in_native_terms_at_the_native_price() {
+        let stable_buy = ActivityKind::StableSwap {
+            mint: "mint".to_owned(),
+            side: SwapSide::Buy,
+            stable_mint: "stable".to_owned(),
+            stable_amount: 250.0,
+            token_amount: 1_000.0,
+            venue: None,
+        };
+        let Some(ActivityKind::Swap {
+            native_amount,
+            price_native,
+            side: SwapSide::Buy,
+            token_amount,
+            ..
+        }) = stable_buy.stable_swap_in_native(125.0)
+        else {
+            panic!("a stable swap converts to a native swap");
+        };
+        assert_eq!(native_amount, 2.0);
+        assert_eq!(token_amount, 1_000.0);
+        assert_eq!(price_native, Some(0.002));
+        for unusable in [0.0, -1.0, f64::NAN, f64::INFINITY] {
+            assert!(stable_buy.stable_swap_in_native(unusable).is_none());
+        }
+        assert!(ActivityKind::Other.stable_swap_in_native(125.0).is_none());
     }
 
     #[test]

@@ -100,6 +100,9 @@ pub struct CopyTask {
     /// Per-task override of `copy_trading.require_filter_pass`; `None` inherits.
     #[serde(default)]
     pub require_filter_pass: Option<bool>,
+    /// Per-task override of `copy_trading.copy_stable_quoted`; `None` inherits.
+    #[serde(default)]
+    pub copy_stable_quoted: Option<bool>,
     #[serde(default)]
     pub pause_reason: Option<CopyPauseReason>,
     #[serde(default)]
@@ -109,6 +112,11 @@ pub struct CopyTask {
 impl CopyTask {
     pub fn requires_filter_pass(&self, global: bool) -> bool {
         self.require_filter_pass.unwrap_or(global)
+    }
+
+    /// Whether wallet buys paid in a stable coin are copied.
+    pub fn copies_stable_quoted(&self, global: bool) -> bool {
+        self.copy_stable_quoted.unwrap_or(global)
     }
 }
 
@@ -133,6 +141,8 @@ pub struct CopyTaskInput {
     pub slippage_pct: f64,
     #[serde(default)]
     pub require_filter_pass: Option<bool>,
+    #[serde(default)]
+    pub copy_stable_quoted: Option<bool>,
 }
 
 impl CopyTaskInput {
@@ -237,6 +247,7 @@ impl CopyTaskInput {
             created_at: now,
             updated_at: now,
             require_filter_pass: self.require_filter_pass,
+            copy_stable_quoted: self.copy_stable_quoted,
             pause_reason: (!self.enabled).then_some(CopyPauseReason::User),
             paused_at: (!self.enabled).then_some(now),
         })
@@ -263,6 +274,7 @@ impl From<&CopyTask> for CopyTaskInput {
             buy_once_per_token: task.buy_once_per_token,
             slippage_pct: task.slippage_pct,
             require_filter_pass: task.require_filter_pass,
+            copy_stable_quoted: task.copy_stable_quoted,
         }
     }
 }
@@ -360,6 +372,27 @@ pub enum CopySkip {
     },
     /// A replayed observation has no block time, so its age cannot be bounded.
     UnknownObservationTime,
+    /// The wallet paid in a stable coin and the task copies native-quoted buys only.
+    StableQuoteDisabled,
+    /// A stable-quoted trade could not be sized: no fresh native price.
+    StableQuotePriceUnavailable,
+    /// The wallet paid with native SOL and a stable coin in one trade.
+    SwapMixedQuote,
+    /// The wallet traded more than one token in one transaction.
+    SwapMultipleTokens,
+    /// The wallet's trade amounts could not be read from the transaction.
+    SwapUnreadable,
+}
+
+impl From<crate::wallets::watch::UnresolvedSwapReason> for CopySkip {
+    fn from(reason: crate::wallets::watch::UnresolvedSwapReason) -> Self {
+        use crate::wallets::watch::UnresolvedSwapReason;
+        match reason {
+            UnresolvedSwapReason::MixedQuote => Self::SwapMixedQuote,
+            UnresolvedSwapReason::MultipleTokens => Self::SwapMultipleTokens,
+            UnresolvedSwapReason::Unreadable => Self::SwapUnreadable,
+        }
+    }
 }
 
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]

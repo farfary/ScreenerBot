@@ -101,6 +101,11 @@ const SKIP_LABELS = Object.freeze({
   paper_queue_full: "copy-skip-paper-queue-full",
   paper_execution_unavailable: "copy-skip-paper-execution-unavailable",
   entry_blocked: "copy-skip-entry-blocked",
+  stable_quote_disabled: "copy-skip-stable-quote-disabled",
+  stable_quote_price_unavailable: "copy-skip-stable-quote-price-unavailable",
+  swap_mixed_quote: "copy-skip-swap-mixed-quote",
+  swap_multiple_tokens: "copy-skip-swap-multiple-tokens",
+  swap_unreadable: "copy-skip-swap-unreadable",
 });
 
 // Block ids serialized by `EntryBlock` (src/trader/admission.rs).

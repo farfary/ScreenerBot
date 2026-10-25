@@ -37,6 +37,7 @@ fn observed_buy_is_prechecked_and_sized_before_quote_execution() {
         created_at: detected,
         updated_at: detected,
         require_filter_pass: None,
+        copy_stable_quoted: None,
         pause_reason: None,
         paused_at: None,
     };

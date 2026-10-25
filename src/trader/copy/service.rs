@@ -10,7 +10,9 @@ use chrono::Utc;
 use tokio::sync::broadcast::error::RecvError;
 use tokio::sync::Notify;
 
-use super::paper_execution::{execute_paper_entry, skipped, skipped_paper};
+use super::paper_execution::{
+    execute_paper_entry, in_paper_epoch, skipped, skipped_activity, skipped_paper,
+};
 use crate::config::with_config;
 use crate::logger::{self, LogTag};
 use crate::wallets::watch::{
@@ -128,21 +130,58 @@ async fn reconcile_runtime_state(database: &CopyDatabase) -> crate::trader::Resu
 async fn process_activity(
     database: &CopyDatabase,
     paper_runtime: Option<&super::paper_execution::PaperExecutionHandle>,
-    activity: &WalletActivity,
+    observed: &WalletActivity,
 ) -> crate::trader::Result<()> {
-    let (copy_enabled, require_filter_pass) = with_config(|config| {
+    let (copy_enabled, require_filter_pass, global_stable_quoted) = with_config(|config| {
         (
             config.copy_trading.enabled,
             config.copy_trading.require_filter_pass,
+            config.copy_trading.copy_stable_quoted,
         )
     });
-    if !activity
+    if !observed
         .sources
         .iter()
         .any(|source| matches!(source, WatchSource::Copy { .. }))
     {
         return Ok(());
     }
+    // A stable-quoted trade is copied in native terms at the current price, so
+    // sizing, limits and the paper book all read one native-quoted swap.
+    let converted;
+    let activity = match &observed.kind {
+        ActivityKind::Swap { .. } => observed,
+        ActivityKind::StableSwap { mint, .. } => {
+            let native_usd = crate::apis::native_price::get_native_price();
+            let Some(kind) = observed.kind.stable_swap_in_native(native_usd) else {
+                return record_uncopyable(
+                    database,
+                    observed,
+                    Some(mint),
+                    CopySkip::StableQuotePriceUnavailable,
+                    copy_enabled,
+                )
+                .await;
+            };
+            converted = WalletActivity {
+                kind,
+                ..observed.clone()
+            };
+            &converted
+        }
+        ActivityKind::UnresolvedSwap { mint, reason, .. } => {
+            return record_uncopyable(
+                database,
+                observed,
+                mint.as_deref(),
+                CopySkip::from(*reason),
+                copy_enabled,
+            )
+            .await;
+        }
+        ActivityKind::Transfer { .. } | ActivityKind::Other => return Ok(()),
+    };
+    let stable_quoted = matches!(observed.kind, ActivityKind::StableSwap { .. });
     let ActivityKind::Swap { mint, side, .. } = &activity.kind else {
         return Ok(());
     };
@@ -184,6 +223,11 @@ async fn process_activity(
         return Ok(());
     }
     super::guards::apply_latency_kill_switch(database, activity, &mut tasks).await?;
+    // A held copy follows the wallet's exit whatever coin it is paid in; only a
+    // new stable-quoted buy needs the task's consent.
+    if stable_quoted && !selling {
+        tasks = admit_stable_quoted(database, tasks, activity, mint, global_stable_quoted).await?;
+    }
     if tasks.is_empty() {
         return Ok(());
     }
@@ -385,6 +429,70 @@ async fn process_activity(
     Ok(())
 }
 
+/// Keeps the tasks that copy a stable-quoted buy and records why the others did not.
+async fn admit_stable_quoted(
+    database: &CopyDatabase,
+    tasks: Vec<super::CopyTask>,
+    activity: &WalletActivity,
+    mint: &str,
+    global_stable_quoted: bool,
+) -> crate::trader::Result<Vec<super::CopyTask>> {
+    let mut consenting = Vec::with_capacity(tasks.len());
+    for task in tasks {
+        if task.copies_stable_quoted(global_stable_quoted) {
+            consenting.push(task);
+        } else {
+            record_skip(
+                database,
+                &task,
+                activity,
+                Some(mint),
+                CopySkip::StableQuoteDisabled,
+            )
+            .await?;
+        }
+    }
+    Ok(consenting)
+}
+
+/// Records a skip for one task, bound to the paper book a paper task runs in.
+async fn record_skip(
+    database: &CopyDatabase,
+    task: &super::CopyTask,
+    activity: &WalletActivity,
+    mint: Option<&str>,
+    reason: CopySkip,
+) -> crate::trader::Result<()> {
+    let outcome = skipped_activity(task.id, activity, mint, reason);
+    let outcome = match task.mode {
+        CopyMode::Paper => in_paper_epoch(outcome, database.paper_epoch(task.id).await?),
+        CopyMode::Live => outcome,
+    };
+    notify::record(database, outcome).await?;
+    Ok(())
+}
+
+/// A wallet trade no task can copy is shown, with its reason, in every enabled
+/// task that would otherwise have acted on it.
+async fn record_uncopyable(
+    database: &CopyDatabase,
+    activity: &WalletActivity,
+    mint: Option<&str>,
+    reason: CopySkip,
+    copy_enabled: bool,
+) -> crate::trader::Result<()> {
+    if !copy_enabled {
+        return Ok(());
+    }
+    let watching = database.tasks_for_subject(&activity.subject).await?;
+    for task in matching_tasks(activity, &watching) {
+        if task.enabled {
+            record_skip(database, task, activity, mint, reason.clone()).await?;
+        }
+    }
+    Ok(())
+}
+
 async fn observe_target_inventory(
     database: &CopyDatabase,
     activity: &WalletActivity,
@@ -558,3 +666,6 @@ async fn process_sell_activity(
     }
     Ok(())
 }
+
+#[cfg(test)]
+mod tests;

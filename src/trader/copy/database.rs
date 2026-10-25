@@ -145,8 +145,9 @@ impl CopyDatabase {
                 "INSERT INTO copy_tasks (chain_id, target_address, label, enabled, mode_json, sizing_json, \
                  exit_mode_json, exit_policy_json, max_native_per_trade, max_native_per_token, total_budget_native, \
                  min_target_trade_native, max_target_trade_native, buy_once_per_token, slippage_pct, \
-                 created_at, updated_at, require_filter_pass, pause_reason_json, paused_at) VALUES \
-                 (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11, ?12, ?13, ?14, ?15, ?16, ?17, ?18, ?19, ?20)",
+                 created_at, updated_at, require_filter_pass, pause_reason_json, paused_at, \
+                 copy_stable_quoted) VALUES \
+                 (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11, ?12, ?13, ?14, ?15, ?16, ?17, ?18, ?19, ?20, ?21)",
                 params![
                     self.chain.as_str(), task.target_address,
                     task.label,
@@ -167,6 +168,7 @@ impl CopyDatabase {
                     task.require_filter_pass,
                     pause_reason_json(&task)?,
                     task.paused_at.map(|at| at.to_rfc3339()),
+                    task.copy_stable_quoted,
                 ],
             )
             .map_err(crate::errors::DatabaseError::from)?;
@@ -273,7 +275,7 @@ impl CopyDatabase {
                  exit_mode_json=?5, exit_policy_json=?6, max_native_per_trade=?7, max_native_per_token=?8, \
                  total_budget_native=?9, min_target_trade_native=?10, max_target_trade_native=?11, \
                  buy_once_per_token=?12, slippage_pct=?13, updated_at=?14, require_filter_pass=?15, \
-                 pause_reason_json=?16, paused_at=?17 WHERE id=?18 AND chain_id=?19",
+                 pause_reason_json=?16, paused_at=?17, copy_stable_quoted=?18 WHERE id=?19 AND chain_id=?20",
                 params![
                     task.label,
                     task.enabled,
@@ -292,6 +294,7 @@ impl CopyDatabase {
                     task.require_filter_pass,
                     pause_reason_json(&task)?,
                     task.paused_at.map(|at| at.to_rfc3339()),
+                    task.copy_stable_quoted,
                     task.id,
                     self.chain.as_str(),
                 ],

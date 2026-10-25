@@ -10,13 +10,23 @@ use crate::errors::DatabaseError;
 use crate::trader::copy::types::CopyOutcome;
 use crate::trader::error::Error;
 
-const SCHEMA_VERSION: i64 = 8;
+const SCHEMA_VERSION: i64 = 9;
+
+/// Additive columns since v8 leave v8 readers correct.
+const MIN_READER_VERSION: i64 = 8;
+
+/// The version the store held when the schema ledger was adopted.
+const LEDGER_BASELINE_VERSION: i64 = 8;
+
+/// The version whose open archived the estimate-model paper book. Pinned, not
+/// `SCHEMA_VERSION`: a later version must never archive the quote-model book again.
+const QUOTE_PAPER_BOOK_VERSION: i64 = 8;
 
 /// The schema of `copy_trading.db`.
 pub(crate) const SCHEMA: StoreSchema = StoreSchema {
     version: SCHEMA_VERSION,
-    min_reader_version: SCHEMA_VERSION,
-    baseline: SCHEMA_VERSION,
+    min_reader_version: MIN_READER_VERSION,
+    baseline: LEDGER_BASELINE_VERSION,
     renames: Some(&super::column_names::RENAMES),
     step,
     legacy_stamp: None,
@@ -72,7 +82,8 @@ CREATE TABLE IF NOT EXISTS copy_tasks (
     updated_at TEXT NOT NULL,
     require_filter_pass INTEGER,
     pause_reason_json TEXT,
-    paused_at TEXT
+    paused_at TEXT,
+    copy_stable_quoted INTEGER
 );
 CREATE INDEX IF NOT EXISTS idx_copy_tasks_target_enabled
     ON copy_tasks(target_address, enabled);
@@ -249,6 +260,8 @@ fn migrate(connection: &Transaction<'_>) -> crate::trader::Result<()> {
         ("require_filter_pass", "INTEGER"),
         ("pause_reason_json", "TEXT"),
         ("paused_at", "TEXT"),
+        // v9: the per-task stable-quoted copy override.
+        ("copy_stable_quoted", "INTEGER"),
     ] {
         ddl::add_column(connection, "copy_tasks", column, definition)?;
     }
@@ -349,7 +362,7 @@ fn migrate_legacy_paper_archive(transaction: &Transaction<'_>) -> crate::trader:
             detail: "copy schema version is malformed".to_owned(),
         });
     }
-    if version >= SCHEMA_VERSION {
+    if version >= QUOTE_PAPER_BOOK_VERSION {
         return Ok(());
     }
 

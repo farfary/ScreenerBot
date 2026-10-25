@@ -36,6 +36,7 @@ fn task() -> CopyTask {
         created_at: Utc::now(),
         updated_at: Utc::now(),
         require_filter_pass: None,
+        copy_stable_quoted: None,
         pause_reason: None,
         paused_at: None,
     }

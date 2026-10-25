@@ -40,6 +40,7 @@ fn task(exit_mode: ExitMode) -> CopyTask {
         created_at: now,
         updated_at: now,
         require_filter_pass: None,
+        copy_stable_quoted: None,
         pause_reason: None,
         paused_at: None,
     }
@@ -63,6 +64,7 @@ fn input(mode: CopyMode) -> CopyTaskInput {
         buy_once_per_token: task.buy_once_per_token,
         slippage_pct: task.slippage_pct,
         require_filter_pass: None,
+        copy_stable_quoted: None,
     }
 }
 

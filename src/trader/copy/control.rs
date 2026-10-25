@@ -52,6 +52,8 @@ pub struct CopyTaskSummary {
     pub effective_state: &'static str,
     /// The filter rule the task runs under after its own override.
     pub effective_require_filter_pass: bool,
+    /// Whether the task copies stable-quoted buys after its own override.
+    pub effective_copy_stable_quoted: bool,
     /// Cumulative realized P&L after each of the latest closed rounds.
     pub pnl_trend: Vec<f64>,
     /// Why the task is paused; absent while it is enabled.
@@ -318,8 +320,12 @@ pub fn summarize(
         .filter(|telemetry| !telemetry.backfill)
         .filter_map(arrival_distance_ms)
         .collect();
-    let global_filter =
-        crate::config::with_config(|config| config.copy_trading.require_filter_pass);
+    let (global_filter, global_stable) = crate::config::with_config(|config| {
+        (
+            config.copy_trading.require_filter_pass,
+            config.copy_trading.copy_stable_quoted,
+        )
+    });
     (
         CopyTaskSummary {
             stats,
@@ -327,6 +333,7 @@ pub fn summarize(
             spent_native,
             effective_state: effective_state(status, &task),
             effective_require_filter_pass: task.requires_filter_pass(global_filter),
+            effective_copy_stable_quoted: task.copies_stable_quoted(global_stable),
             pnl_trend,
             pause_text: (!task.enabled).then(|| pause_text(task.pause_reason.as_ref())),
             task,
@@ -656,6 +663,7 @@ mod tests {
             created_at: Utc::now(),
             updated_at: Utc::now(),
             require_filter_pass: None,
+            copy_stable_quoted: None,
             pause_reason: None,
             paused_at: None,
         }

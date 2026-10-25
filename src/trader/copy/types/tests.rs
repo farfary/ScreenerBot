@@ -56,6 +56,7 @@ fn input() -> CopyTaskInput {
         buy_once_per_token: true,
         slippage_pct: 2.0,
         require_filter_pass: None,
+        copy_stable_quoted: None,
     }
 }
 
@@ -186,6 +187,11 @@ fn skip_label_key(skip: &CopySkip) -> &'static str {
         CopySkip::PaperMinimumOutputNotMet => "copy-skip-paper-minimum-output-not-met",
         CopySkip::PaperQueueFull => "copy-skip-paper-queue-full",
         CopySkip::PaperExecutionUnavailable => "copy-skip-paper-execution-unavailable",
+        CopySkip::StableQuoteDisabled => "copy-skip-stable-quote-disabled",
+        CopySkip::StableQuotePriceUnavailable => "copy-skip-stable-quote-price-unavailable",
+        CopySkip::SwapMixedQuote => "copy-skip-swap-mixed-quote",
+        CopySkip::SwapMultipleTokens => "copy-skip-swap-multiple-tokens",
+        CopySkip::SwapUnreadable => "copy-skip-swap-unreadable",
     }
 }
 
@@ -234,6 +240,11 @@ fn copy_skip_labels_exist_in_the_catalog() {
         CopySkip::PaperMinimumOutputNotMet,
         CopySkip::PaperQueueFull,
         CopySkip::PaperExecutionUnavailable,
+        CopySkip::StableQuoteDisabled,
+        CopySkip::StableQuotePriceUnavailable,
+        CopySkip::SwapMixedQuote,
+        CopySkip::SwapMultipleTokens,
+        CopySkip::SwapUnreadable,
     ];
     for skip in &skips {
         let value = serde_json::to_value(skip).unwrap();

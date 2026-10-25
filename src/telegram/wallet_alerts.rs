@@ -12,7 +12,8 @@ use crate::telegram::{queue_notification, Notification};
 use crate::wallets::watch::{ActivityKind, SwapSide, WalletActivity, WatchSource};
 
 /// Convert one observed wallet activity into the existing tracked-wallet trade
-/// notification. Non-alert sources and non-swap activity are deliberately ignored:
+/// notification; a stable-quoted swap is stated in native terms at the current
+/// price. Non-alert sources and non-swap activity are deliberately ignored:
 /// `NotificationType::TradeAlert` is governed by the user's trade-alert preference
 /// and minimum-SOL threshold, while transfers have no matching notification policy.
 pub(super) fn notification_for_activity(activity: &WalletActivity) -> Option<Notification> {
@@ -24,12 +25,22 @@ pub(super) fn notification_for_activity(activity: &WalletActivity) -> Option<Not
         return None;
     }
 
+    let converted;
+    let kind = match &activity.kind {
+        ActivityKind::StableSwap { .. } => {
+            converted = activity
+                .kind
+                .stable_swap_in_native(crate::apis::native_price::get_native_price())?;
+            &converted
+        }
+        kind => kind,
+    };
     let ActivityKind::Swap {
         mint,
         side,
         native_amount,
         ..
-    } = &activity.kind
+    } = kind
     else {
         return None;
     };

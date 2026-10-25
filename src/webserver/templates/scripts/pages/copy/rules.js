@@ -67,7 +67,16 @@ function ruleTable({ task, effective, traderDefaults, managesExits }, esc) {
 
 /** Sizing, entry and exit sections for a task-shaped object. */
 export function rulesHtml(context, esc) {
-  const { task, effective, managesExits, requireFilter, globalRequireFilter, feePct } = context;
+  const {
+    task,
+    effective,
+    managesExits,
+    requireFilter,
+    globalRequireFilter,
+    copyStable,
+    globalCopyStable,
+    feePct,
+  } = context;
   const budgetNote = Number.isFinite(Number(task.spent_native))
     ? I18n.t("copy-rules-budget-note", {
         spent: settingFixed(task.spent_native),
@@ -115,6 +124,15 @@ export function rulesHtml(context, esc) {
             : I18n.t("copy-filter-copy-setting-not-required")
           : I18n.t("copy-rules-filter-task-override"),
       ],
+      [
+        I18n.t("copy-rules-stable-trades"),
+        copyStable ? I18n.t("copy-rules-stable-copied") : I18n.t("copy-rules-stable-not-copied"),
+        task.copy_stable_quoted == null
+          ? globalCopyStable
+            ? I18n.t("copy-stable-copy-setting-on")
+            : I18n.t("copy-stable-copy-setting-off")
+          : I18n.t("copy-rules-filter-task-override"),
+      ],
     ],
     esc
   );
@@ -141,6 +159,8 @@ export function renderRules({ ws, defaults }, esc) {
       managesExits: ws.policy_manages_exits,
       requireFilter: ws.effective_require_filter_pass,
       globalRequireFilter: ws.global_require_filter_pass,
+      copyStable: ws.effective_copy_stable_quoted,
+      globalCopyStable: ws.global_copy_stable_quoted,
       feePct: defaults?.swap_fee_pct,
     },
     esc

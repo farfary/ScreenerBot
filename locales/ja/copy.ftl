@@ -32,6 +32,11 @@ copy-skip-claim-reconciled-abandoned = 中断されたライブ送信は再試�
 copy-skip-stale-observation = 停止期間後に再生されたため、コピーするには古すぎます
 copy-skip-unknown-observation-time = 再生された取引にブロック時刻がありません
 copy-skip-entry-blocked = エントリーがブロックされました
+copy-skip-stable-quote-disabled = USDCまたはUSDTで支払われています。このタスクではステーブルコイン取引がオフです
+copy-skip-stable-quote-price-unavailable = USDCまたはUSDTで支払われており、コピーのサイズを決める現在のSOL価格がありません
+copy-skip-swap-mixed-quote = SOLとステーブルコインの両方で支払われているため、取引のサイズを一つに決められません
+copy-skip-swap-multiple-tokens = 1つのトランザクションで複数のトークンが取引されました
+copy-skip-swap-unreadable = 取引金額を読み取れませんでした
 
 copy-entry-block-force-stopped = 取引は強制停止されています
 copy-entry-block-loss-limit = 損失上限により新規エントリーがブロックされています
@@ -137,6 +142,8 @@ copy-field-slippage = スリッページ
 copy-rules-wallet-sells-only = ウォレットの売却のみ
 copy-filter-copy-setting-required = コピートレード設定（必須）
 copy-filter-copy-setting-not-required = コピートレード設定（必須ではない）
+copy-stable-copy-setting-on = コピートレード設定（コピーする）
+copy-stable-copy-setting-off = コピートレード設定（コピーしない）
 copy-count-closed-rounds =
     { $count ->
        *[other] クローズ済みラウンド { $count }件
@@ -445,6 +452,9 @@ copy-rules-filter-pass = フィルタリング通過
 copy-rules-filter-required = 必須
 copy-rules-filter-not-required = 必須ではない
 copy-rules-filter-task-override = タスクで上書き
+copy-rules-stable-trades = ステーブルコイン取引
+copy-rules-stable-copied = 現在のSOL価格でコピー
+copy-rules-stable-not-copied = コピーしない
 copy-rules-exits = エグジット
 copy-rules-exits-inactive = 保有はウォレットが売却したときにのみ売却されます。このモードでは、以下のルールは実行されません。
 
@@ -796,6 +806,7 @@ copy-editor-filter-require = 必須にする
 copy-editor-filter-skip = 必須にしない
 copy-editor-filter-help = トークンをコピーする前に、フィルタリングパイプラインの通過を必須にします。
 copy-editor-filter-warning = デフォルトのフィルタリング設定では、ほぼすべてのトークンが不合格になるため、通過を必須にしたタスクは何もコピーしません。ウォレットが取引するトークンをフィルターが通過する場合にのみ、必須にしてください。
+copy-editor-stable-help = USDCまたはUSDTで支払われたウォレットの買いを、現在のSOL価格に基づくサイズでコピーします。このタスクが保有するトークンの売りは、支払い通貨にかかわらず追従します。
 copy-editor-exit-both = 両方
 copy-editor-exit-help-buy-only = 以下のルールですべての保有を売却します。ウォレットの売却は無視されます。
 copy-editor-exit-help-hybrid = ウォレットが売却するか、ルールが発動するか、先に起きた方で売却します。

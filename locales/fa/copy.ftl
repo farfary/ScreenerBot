@@ -32,6 +32,11 @@ copy-skip-claim-reconciled-abandoned = ارسال زنده ناتمام بدون
 copy-skip-stale-observation = پس از توقف دوباره پخش شد، برای کپی بسیار قدیمی است
 copy-skip-unknown-observation-time = معامله بازپخش‌شده زمان بلاک ندارد
 copy-skip-entry-blocked = ورود مسدود شد
+copy-skip-stable-quote-disabled = پرداخت با USDC یا USDT؛ معاملات استیبل‌کوین برای این وظیفه خاموش است
+copy-skip-stable-quote-price-unavailable = پرداخت با USDC یا USDT، بدون قیمت فعلی SOL برای تعیین حجم کپی
+copy-skip-swap-mixed-quote = پرداخت هم‌زمان با SOL و استیبل‌کوین، بنابراین معامله حجم واحدی ندارد
+copy-skip-swap-multiple-tokens = بیش از یک توکن در یک تراکنش معامله شده است
+copy-skip-swap-unreadable = مقدارهای معامله قابل خواندن نبود
 
 copy-entry-block-force-stopped = معاملات به‌طور اجباری متوقف شده است
 copy-entry-block-loss-limit = محدودیت ضرر ورودهای جدید را مسدود می‌کند
@@ -140,6 +145,8 @@ copy-field-slippage = اسلیپیج
 copy-rules-wallet-sells-only = فقط فروش‌های کیف پول
 copy-filter-copy-setting-required = تنظیم کپی‌تریدینگ (الزامی)
 copy-filter-copy-setting-not-required = تنظیم کپی‌تریدینگ (غیرالزامی)
+copy-stable-copy-setting-on = تنظیم کپی‌تریدینگ (کپی می‌شود)
+copy-stable-copy-setting-off = تنظیم کپی‌تریدینگ (کپی نمی‌شود)
 copy-count-closed-rounds =
     { $count ->
         [one] { $count } دور بسته
@@ -463,6 +470,9 @@ copy-rules-filter-pass = عبور از فیلترینگ
 copy-rules-filter-required = الزامی
 copy-rules-filter-not-required = غیرالزامی
 copy-rules-filter-task-override = بازنویسی وظیفه
+copy-rules-stable-trades = معاملات استیبل‌کوین
+copy-rules-stable-copied = با قیمت فعلی SOL کپی می‌شود
+copy-rules-stable-not-copied = کپی نمی‌شود
 copy-rules-exits = خروج‌ها
 copy-rules-exits-inactive = دارایی‌ها فقط وقتی کیف پول می‌فروشد فروخته می‌شوند؛ قوانین زیر در این حالت اجرا نمی‌شوند.
 
@@ -822,6 +832,7 @@ copy-editor-filter-require = الزامی
 copy-editor-filter-skip = غیرالزامی
 copy-editor-filter-help = توکن پیش از کپی‌شدن باید از خط لوله فیلترینگ شما عبور کند.
 copy-editor-filter-warning = با تنظیمات پیش‌فرض فیلترینگ تقریباً همه توکن‌ها رد می‌شوند، پس وظیفه‌ای که عبور را الزامی کند چیزی کپی نمی‌کند. فقط وقتی آن را الزامی کنید که فیلترهای شما توکن‌های معامله‌شده توسط این کیف پول را عبور دهند.
+copy-editor-stable-help = خریدهای کیف پول را که با USDC یا USDT پرداخت شده‌اند، با حجم محاسبه‌شده بر پایه قیمت فعلی SOL کپی کنید. فروش توکن‌هایی که این وظیفه نگه می‌دارد، بدون توجه به ارز پرداخت دنبال می‌شود.
 copy-editor-exit-both = هر دو
 copy-editor-exit-help-buy-only = قوانین شما در زیر هر دارایی را می‌فروشند؛ فروش‌های کیف پول نادیده گرفته می‌شوند.
 copy-editor-exit-help-hybrid = هر کدام زودتر برسد: کیف پول بفروشد، یا یکی از قوانین شما فعال شود.

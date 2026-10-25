@@ -21,11 +21,16 @@ use crate::chains::solana::transactions::deltas::{extract_subject_deltas, subjec
 use crate::chains::solana::transactions::program_ids::detect_router;
 use crate::transactions::deltas::NATIVE_SOL_SENTINEL;
 use crate::transactions::types::Transaction;
-use crate::wallets::watch::{ActivityKind, SwapSide, TransferDirection};
+use crate::wallets::watch::{ActivityKind, SwapSide, TransferDirection, UnresolvedSwapReason};
 
 /// Below this, a SOL balance delta is indistinguishable from transaction-fee noise
 /// (base fee + a moderate priority fee) rather than a real transfer.
 const FEE_NOISE_LAMPORTS: i64 = 50_000;
+
+/// Native movement a stable-quoted swap may carry beside its stable leg: rent for
+/// a token account it opens or closes, plus fees. Larger movement means the swap
+/// was also paid in native SOL and has no single quote.
+const STABLE_NATIVE_RESIDUE_LAMPORTS: i64 = 10_000_000;
 
 /// Returns whether the decoded transaction may have changed the subject's assets.
 ///
@@ -135,10 +140,10 @@ fn record_subject_token_balance(
 /// what gets written to the database, not what is present on the decoded value).
 ///
 /// Returns `(kind, skip_reason)`. `skip_reason` is `Some` whenever `kind` came back
-/// `Other` because an explicit rule below declined to call it a `Swap` or `Transfer`
-/// (no DEX program, ambiguous token legs, a route with no SOL-quoted leg) rather than
-/// because nothing happened at all -- the funnel logs it so "why didn't this copy"
-/// never has to be guessed at.
+/// `Other` or `UnresolvedSwap` because an explicit rule below declined to call it a
+/// `Swap`, `StableSwap` or `Transfer` (no DEX program, ambiguous token legs, a mixed
+/// quote) rather than because nothing happened at all -- the funnel logs it so
+/// "why didn't this copy" never has to be guessed at.
 pub fn classify_transaction_activity(
     subject_address: &str,
     transaction: &Transaction,
@@ -201,14 +206,10 @@ pub fn classify_transaction_activity(
         .and_then(|ids| detect_router(&ids).map(str::to_owned));
 
     Some(if venue.is_some() {
-        if has_ambiguous_native_transfer(raw, &account_keys, subject_index, &owned_indices) {
-            (
-                ActivityKind::Other,
-                Some("ambiguous independent native transfer"),
-            )
-        } else {
-            classify_swap(sol_delta_lamports, &token_deltas, &token_decimals, venue)
-        }
+        let own_accounts = subject_accounts(raw, &account_keys, subject_address, &owned_indices);
+        let native_leg_lamports = external_native_transfers(raw, subject_address, &own_accounts)
+            .map(|external| sol_delta_lamports + external);
+        classify_swap(native_leg_lamports, &token_deltas, &token_decimals, venue)
     } else {
         classify_transfer(sol_delta_lamports, &token_deltas, &token_decimals)
     })
@@ -273,18 +274,90 @@ fn validated_subject_token_decimals(
     Some(decimals)
 }
 
-fn has_ambiguous_native_transfer(
-    raw: &serde_json::Value,
-    account_keys: &[String],
-    subject_index: usize,
-    owned_indices: &HashSet<usize>,
-) -> bool {
-    let Some(instructions) = raw
+/// Every parsed instruction of the transaction, top level first, then inner ones.
+fn parsed_instructions(raw: &serde_json::Value) -> impl Iterator<Item = &serde_json::Value> {
+    let top_level = raw
         .pointer("/transaction/message/instructions")
         .and_then(serde_json::Value::as_array)
-    else {
-        return false;
-    };
+        .into_iter()
+        .flatten();
+    let inner = raw
+        .pointer("/meta/innerInstructions")
+        .and_then(serde_json::Value::as_array)
+        .into_iter()
+        .flatten()
+        .filter_map(|group| {
+            group
+                .get("instructions")
+                .and_then(serde_json::Value::as_array)
+        })
+        .flatten();
+    top_level.chain(inner)
+}
+
+fn info_str<'a>(instruction: &'a serde_json::Value, field: &str) -> Option<&'a str> {
+    instruction
+        .pointer(&format!("/parsed/info/{field}"))
+        .and_then(serde_json::Value::as_str)
+}
+
+/// Addresses whose lamports are part of the subject's own balance sheet: token
+/// accounts it holds before or after the transaction, and token accounts the
+/// transaction opens for it. A temporary wSOL account is created, funded, swapped
+/// through and closed inside one transaction, so no token-balance list names it.
+fn subject_accounts(
+    raw: &serde_json::Value,
+    account_keys: &[String],
+    subject_address: &str,
+    owned_indices: &HashSet<usize>,
+) -> HashSet<String> {
+    let mut accounts = owned_indices
+        .iter()
+        .filter_map(|index| account_keys.get(*index).cloned())
+        .collect::<HashSet<_>>();
+    for instruction in parsed_instructions(raw) {
+        let program = instruction
+            .get("program")
+            .and_then(serde_json::Value::as_str);
+        let kind = instruction
+            .pointer("/parsed/type")
+            .and_then(serde_json::Value::as_str)
+            .unwrap_or_default();
+        let opened_for_subject = match program {
+            Some("spl-token" | "spl-token-2022") if kind.starts_with("initializeAccount") => {
+                info_str(instruction, "owner") == Some(subject_address)
+            }
+            Some("spl-associated-token-account")
+                if matches!(kind, "create" | "createIdempotent") =>
+            {
+                info_str(instruction, "wallet") == Some(subject_address)
+            }
+            _ => false,
+        };
+        if let Some(account) = info_str(instruction, "account").filter(|_| opened_for_subject) {
+            accounts.insert(account.to_owned());
+        }
+    }
+    accounts
+}
+
+/// Net lamports the subject moved through top-level system transfers to or from
+/// accounts outside its own balance sheet, positive when the subject paid out. A
+/// priority tip, a trading terminal's fee or a relayer refund rides beside the
+/// swap as its own instruction and is no part of the traded amount; a payment into
+/// the subject's own temporary wSOL account is the swap itself and stays in it.
+/// `None` when a transfer cannot be read.
+fn external_native_transfers(
+    raw: &serde_json::Value,
+    subject_address: &str,
+    own_accounts: &HashSet<String>,
+) -> Option<i128> {
+    let instructions = raw
+        .pointer("/transaction/message/instructions")
+        .and_then(serde_json::Value::as_array)
+        .map(Vec::as_slice)
+        .unwrap_or_default();
+    let mut external = 0_i128;
     for instruction in instructions {
         if instruction
             .get("program")
@@ -297,87 +370,140 @@ fn has_ambiguous_native_transfer(
         {
             continue;
         }
-        let Some(parsed) = instruction.get("parsed") else {
-            continue;
-        };
-        let Some(kind) = parsed.get("type").and_then(serde_json::Value::as_str) else {
+        let Some(kind) = instruction
+            .pointer("/parsed/type")
+            .and_then(serde_json::Value::as_str)
+        else {
             continue;
         };
         if !matches!(kind, "transfer" | "transferWithSeed") {
             continue;
         }
-        let Some(info) = parsed.get("info") else {
-            return true;
-        };
-        let source = info.get("source").and_then(serde_json::Value::as_str);
-        let destination = info.get("destination").and_then(serde_json::Value::as_str);
-        let (Some(source), Some(destination)) = (source, destination) else {
-            return true;
-        };
-        let subject = account_keys.get(subject_index).map(String::as_str);
-        let owned_counterparty = |address: &str| {
-            owned_indices
-                .iter()
-                .any(|index| account_keys.get(*index).map(String::as_str) == Some(address))
-        };
-        if (Some(source) == subject && !owned_counterparty(destination))
-            || (Some(destination) == subject && !owned_counterparty(source))
-        {
-            return true;
+        let source = info_str(instruction, "source")?;
+        let destination = info_str(instruction, "destination")?;
+        let lamports = instruction
+            .pointer("/parsed/info/lamports")
+            .and_then(serde_json::Value::as_u64)?;
+        if source == subject_address && !own_accounts.contains(destination) {
+            external += i128::from(lamports);
+        } else if destination == subject_address && !own_accounts.contains(source) {
+            external -= i128::from(lamports);
         }
     }
-    false
+    Some(external)
 }
 
-/// A DEX program is present. Resolve to `Swap` only when the subject has exactly one
-/// non-wSOL token leg, a nonzero native SOL movement, and opposing movement signs.
-/// Stable-quoted and multi-token routes remain `Other` because this activity shape
-/// has no independent quote amount for those routes.
+fn is_stable(mint: &str) -> bool {
+    mint == USDC_MINT || mint == USDT_MINT
+}
+
+fn decimal_amount(raw: i128, mint: &str, decimals: &HashMap<String, u8>) -> f64 {
+    raw.unsigned_abs() as f64 / 10_f64.powi(i32::from(*decimals.get(mint).unwrap_or(&0)))
+}
+
+/// A DEX program is present. One non-quote token leg against native SOL resolves
+/// to `Swap`; against exactly one stable coin, with the native movement inside
+/// account-rent residue, to `StableSwap`. A swap-shaped transaction (legs moving in
+/// both directions around at least one non-quote token) that fits neither becomes
+/// `UnresolvedSwap` so its consumers can say why it was not copied; anything else,
+/// such as wrapping SOL or claiming a token, stays `Other`.
 fn classify_swap(
-    sol_delta_lamports: i128,
+    native_leg_lamports: Option<i128>,
     token_deltas: &[(String, i128)],
     decimals: &HashMap<String, u8>,
     venue: Option<String>,
 ) -> (ActivityKind, Option<&'static str>) {
-    if sol_delta_lamports.unsigned_abs() <= FEE_NOISE_LAMPORTS as u128 {
-        return (
-            ActivityKind::Other,
-            Some("no SOL-quoted leg for this subject"),
-        );
-    }
-
-    if token_deltas
-        .iter()
-        .any(|(mint, delta)| (mint == USDC_MINT || mint == USDT_MINT) && *delta != 0)
-    {
-        return (ActivityKind::Other, Some("unsupported stable-quoted swap"));
-    }
-
     let candidates: Vec<&(String, i128)> = token_deltas
         .iter()
-        .filter(|(mint, _)| mint != SOL_MINT)
+        .filter(|(mint, _)| mint != SOL_MINT && !is_stable(mint))
         .collect();
+    let stables: Vec<&(String, i128)> = token_deltas
+        .iter()
+        .filter(|(mint, _)| is_stable(mint))
+        .collect();
+    if candidates.is_empty() {
+        return (ActivityKind::Other, Some("no nonquote token leg"));
+    }
+    let sole_mint = (candidates.len() == 1).then(|| candidates[0].0.clone());
+    let unresolved = |reason: UnresolvedSwapReason, why: &'static str| {
+        (
+            ActivityKind::UnresolvedSwap {
+                mint: sole_mint.clone(),
+                reason,
+                venue: venue.clone(),
+            },
+            Some(why),
+        )
+    };
+    let Some(native_leg) = native_leg_lamports else {
+        return unresolved(
+            UnresolvedSwapReason::Unreadable,
+            "unreadable top-level native transfer",
+        );
+    };
 
-    if candidates.len() != 1 {
-        return (ActivityKind::Other, Some("ambiguous nonquote token legs"));
+    let native_counts = native_leg.unsigned_abs() > FEE_NOISE_LAMPORTS as u128;
+    let legs = candidates
+        .iter()
+        .chain(stables.iter())
+        .map(|(_, delta)| *delta)
+        .chain(native_counts.then_some(native_leg));
+    let (mut gains, mut losses) = (false, false);
+    for delta in legs {
+        gains |= delta > 0;
+        losses |= delta < 0;
+    }
+    if !(gains && losses) {
+        return (ActivityKind::Other, Some("no opposing leg for the token"));
+    }
+    if candidates.len() > 1 || stables.len() > 1 {
+        return unresolved(
+            UnresolvedSwapReason::MultipleTokens,
+            "more than one nonquote token leg",
+        );
     }
 
     let (mint, token_delta) = candidates[0];
-    if (*token_delta > 0) == (sol_delta_lamports > 0) {
-        return (
-            ActivityKind::Other,
-            Some("token and native movements have same sign"),
-        );
-    }
-
     let side = if *token_delta > 0 {
         SwapSide::Buy
     } else {
         SwapSide::Sell
     };
-    let sol_amount = sol_delta_lamports.unsigned_abs() as f64 / LAMPORTS_PER_SOL as f64;
-    let token_amount = token_delta.unsigned_abs() as f64
-        / 10_f64.powi(i32::from(*decimals.get(mint).unwrap_or(&0)));
+    let token_amount = decimal_amount(*token_delta, mint, decimals);
+
+    if let Some((stable_mint, stable_delta)) = stables.first().copied() {
+        if native_leg.unsigned_abs() > STABLE_NATIVE_RESIDUE_LAMPORTS as u128 {
+            return unresolved(
+                UnresolvedSwapReason::MixedQuote,
+                "native and stable quote legs together",
+            );
+        }
+        let stable_amount = decimal_amount(*stable_delta, stable_mint, decimals);
+        if (*stable_delta > 0) == (*token_delta > 0)
+            || !stable_amount.is_finite()
+            || !token_amount.is_finite()
+            || stable_amount <= 0.0
+            || token_amount <= 0.0
+        {
+            return unresolved(
+                UnresolvedSwapReason::Unreadable,
+                "invalid stable swap amount",
+            );
+        }
+        return (
+            ActivityKind::StableSwap {
+                mint: mint.clone(),
+                side,
+                stable_mint: stable_mint.clone(),
+                stable_amount,
+                token_amount,
+                venue,
+            },
+            None,
+        );
+    }
+
+    let sol_amount = native_leg.unsigned_abs() as f64 / LAMPORTS_PER_SOL as f64;
     let price_sol = sol_amount / token_amount;
     if !sol_amount.is_finite()
         || !token_amount.is_finite()
@@ -386,7 +512,7 @@ fn classify_swap(
         || token_amount <= 0.0
         || price_sol <= 0.0
     {
-        return (ActivityKind::Other, Some("invalid swap amount"));
+        return unresolved(UnresolvedSwapReason::Unreadable, "invalid swap amount");
     }
 
     (

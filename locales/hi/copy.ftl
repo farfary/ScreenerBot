@@ -34,6 +34,11 @@ copy-skip-claim-reconciled-abandoned = बाधित लाइव सबमि
 copy-skip-stale-observation = डाउनटाइम के बाद रीप्ले हुआ, कॉपी करने के लिए बहुत पुराना
 copy-skip-unknown-observation-time = रीप्ले किए गए ट्रेड का कोई ब्लॉक टाइम नहीं है
 copy-skip-entry-blocked = एंट्री ब्लॉक
+copy-skip-stable-quote-disabled = USDC या USDT में भुगतान; इस टास्क के लिए स्टेबलकॉइन ट्रेड बंद हैं
+copy-skip-stable-quote-price-unavailable = USDC या USDT में भुगतान, कॉपी का आकार तय करने के लिए मौजूदा SOL कीमत उपलब्ध नहीं
+copy-skip-swap-mixed-quote = SOL और स्टेबलकॉइन दोनों से एक साथ भुगतान, इसलिए ट्रेड का कोई एक आकार नहीं है
+copy-skip-swap-multiple-tokens = एक ही ट्रांज़ैक्शन में एक से ज़्यादा टोकन का ट्रेड हुआ
+copy-skip-swap-unreadable = ट्रेड की राशियाँ पढ़ी नहीं जा सकीं
 
 copy-entry-block-force-stopped = ट्रेडिंग ज़बरन रोकी गई है
 copy-entry-block-loss-limit = लॉस लिमिट नई एंट्री रोकती है
@@ -138,6 +143,8 @@ copy-field-slippage = स्लिपेज
 copy-rules-wallet-sells-only = केवल वॉलेट के सेल
 copy-filter-copy-setting-required = कॉपी ट्रेडिंग सेटिंग (ज़रूरी)
 copy-filter-copy-setting-not-required = कॉपी ट्रेडिंग सेटिंग (ज़रूरी नहीं)
+copy-stable-copy-setting-on = कॉपी ट्रेडिंग सेटिंग (कॉपी होता है)
+copy-stable-copy-setting-off = कॉपी ट्रेडिंग सेटिंग (कॉपी नहीं होता)
 copy-count-closed-rounds =
     { $count ->
         [one] { $count } बंद राउंड
@@ -443,6 +450,9 @@ copy-rules-filter-pass = फ़िल्टरिंग पास
 copy-rules-filter-required = ज़रूरी
 copy-rules-filter-not-required = ज़रूरी नहीं
 copy-rules-filter-task-override = टास्क ओवरराइड
+copy-rules-stable-trades = स्टेबलकॉइन ट्रेड
+copy-rules-stable-copied = मौजूदा SOL कीमत पर कॉपी
+copy-rules-stable-not-copied = कॉपी नहीं
 copy-rules-exits = एग्ज़िट
 copy-rules-exits-inactive = होल्डिंग केवल तब बिकती है जब वॉलेट बेचता है; नीचे के नियम इस मोड में नहीं चलते।
 
@@ -784,6 +794,7 @@ copy-editor-filter-require = ज़रूरी करें
 copy-editor-filter-skip = ज़रूरी न करें
 copy-editor-filter-help = कॉपी करने से पहले टोकन को आपकी फ़िल्टरिंग पाइपलाइन पास करना ज़रूरी करें।
 copy-editor-filter-warning = डिफ़ॉल्ट फ़िल्टरिंग सेटअप में लगभग हर टोकन फ़ेल होता है, इसलिए पास ज़रूरी करने वाला टास्क कुछ भी कॉपी नहीं करता। इसे केवल तब ज़रूरी करें जब आपके फ़िल्टर वे टोकन पास करें जिन्हें यह वॉलेट ट्रेड करता है।
+copy-editor-stable-help = वॉलेट की USDC या USDT में चुकाई गई खरीद को मौजूदा SOL कीमत के हिसाब से आकार देकर कॉपी करें। इस टास्क के पास मौजूद टोकन की बिक्री का भुगतान किसी भी मुद्रा में हो, उसे फ़ॉलो किया जाता है।
 copy-editor-exit-both = दोनों
 copy-editor-exit-help-buy-only = नीचे के आपके नियम हर होल्डिंग बेचते हैं; वॉलेट के सेल अनदेखे किए जाते हैं।
 copy-editor-exit-help-hybrid = जो पहले हो: वॉलेट बेचे, या आपका कोई नियम ट्रिगर हो।

@@ -236,6 +236,7 @@ pub struct CopyTaskWorkspace {
     pub live_remaining_budget_native: f64,
     pub policy_manages_exits: bool,
     pub global_require_filter_pass: bool,
+    pub global_copy_stable_quoted: bool,
     pub paper_holdings: Vec<PaperHolding>,
     pub legacy_paper: LegacyPaperSummary,
     pub paper_execution: PaperExecutionSettings,
@@ -332,6 +333,7 @@ pub fn build_workspace(
         effective_policy: (&policy).into(),
         policy_manages_exits: manages,
         global_require_filter_pass: with_config(|config| config.copy_trading.require_filter_pass),
+        global_copy_stable_quoted: with_config(|config| config.copy_trading.copy_stable_quoted),
         paper_holdings,
         legacy_paper,
         paper_execution: PaperExecutionSettings {
@@ -551,6 +553,7 @@ pub async fn compare_tasks(range: InsightRange) -> Result<Vec<TaskComparison>> {
 pub struct CopyDefaults {
     pub trader_defaults: EffectiveExitPolicy,
     pub require_filter_pass: bool,
+    pub copy_stable_quoted: bool,
     pub default_slippage_pct: f64,
     pub min_slippage_pct: f64,
     pub max_slippage_pct: f64,
@@ -573,6 +576,7 @@ pub fn defaults() -> CopyDefaults {
     CopyDefaults {
         trader_defaults: (&ExitPolicy::from_config()).into(),
         require_filter_pass: config.require_filter_pass,
+        copy_stable_quoted: config.copy_stable_quoted,
         default_slippage_pct: config.default_slippage_pct,
         min_slippage_pct: super::MIN_COPY_SLIPPAGE_PCT,
         max_slippage_pct: crate::trader::constants::MAX_MANUAL_SLIPPAGE_PCT,

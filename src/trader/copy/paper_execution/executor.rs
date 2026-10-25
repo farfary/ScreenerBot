@@ -286,11 +286,21 @@ pub(in crate::trader::copy) fn skipped(
     mint: &str,
     reason: CopySkip,
 ) -> CopyOutcome {
+    skipped_activity(task_id, activity, Some(mint), reason)
+}
+
+/// A skip of an observed activity whose traded token may be unknown.
+pub(in crate::trader::copy) fn skipped_activity(
+    task_id: i64,
+    activity: &WalletActivity,
+    mint: Option<&str>,
+    reason: CopySkip,
+) -> CopyOutcome {
     let telemetry = observation_telemetry(activity);
     CopyOutcome::Skipped {
         task_id,
         signature: activity.signature.clone(),
-        mint: Some(mint.to_owned()),
+        mint: mint.map(str::to_owned),
         reason,
         decided_at: telemetry.decided_at,
         telemetry: Some(telemetry),
@@ -305,7 +315,11 @@ pub(in crate::trader::copy) fn skipped_paper(
     reason: CopySkip,
     epoch: u64,
 ) -> CopyOutcome {
-    let mut outcome = skipped(task_id, activity, mint, reason);
+    in_paper_epoch(skipped(task_id, activity, mint, reason), epoch)
+}
+
+/// Binds a paper task's skip to the paper book it was decided against.
+pub(in crate::trader::copy) fn in_paper_epoch(mut outcome: CopyOutcome, epoch: u64) -> CopyOutcome {
     if let CopyOutcome::Skipped { paper, .. } = &mut outcome {
         *paper = Some(PaperContext {
             model: PaperModel::Quote,

@@ -32,6 +32,11 @@ copy-skip-claim-reconciled-abandoned = Lệnh live bị gián đoạn đã đư�
 copy-skip-stale-observation = Phát lại sau thời gian ngừng hoạt động, quá cũ để copy
 copy-skip-unknown-observation-time = Giao dịch phát lại không có thời gian block
 copy-skip-entry-blocked = Lệnh vào bị chặn
+copy-skip-stable-quote-disabled = Thanh toán bằng USDC hoặc USDT; giao dịch stablecoin đang tắt cho tác vụ này
+copy-skip-stable-quote-price-unavailable = Thanh toán bằng USDC hoặc USDT, không có giá SOL hiện tại để xác định quy mô lệnh copy
+copy-skip-swap-mixed-quote = Thanh toán đồng thời bằng SOL và stablecoin nên giao dịch không có một quy mô duy nhất
+copy-skip-swap-multiple-tokens = Có hơn một token được giao dịch trong một giao dịch
+copy-skip-swap-unreadable = Không đọc được số tiền của giao dịch
 
 copy-entry-block-force-stopped = Giao dịch đang bị dừng cưỡng chế
 copy-entry-block-loss-limit = Giới hạn lỗ đang chặn các lệnh vào mới
@@ -133,6 +138,8 @@ copy-field-slippage = Trượt giá
 copy-rules-wallet-sells-only = Chỉ theo lệnh bán của ví
 copy-filter-copy-setting-required = Cài đặt Copy trading (bắt buộc)
 copy-filter-copy-setting-not-required = Cài đặt Copy trading (không bắt buộc)
+copy-stable-copy-setting-on = Cài đặt Copy trading (được copy)
+copy-stable-copy-setting-off = Cài đặt Copy trading (không được copy)
 copy-count-closed-rounds =
     { $count ->
        *[other] { $count } vòng đã đóng
@@ -423,6 +430,9 @@ copy-rules-filter-pass = Đạt bộ lọc
 copy-rules-filter-required = Bắt buộc
 copy-rules-filter-not-required = Không bắt buộc
 copy-rules-filter-task-override = Ghi đè của tác vụ
+copy-rules-stable-trades = Giao dịch stablecoin
+copy-rules-stable-copied = Copy theo giá SOL hiện tại
+copy-rules-stable-not-copied = Không copy
 copy-rules-exits = Lệnh thoát
 copy-rules-exits-inactive = Các khoản nắm giữ chỉ được bán khi ví bán; các quy tắc bên dưới không chạy ở chế độ này.
 
@@ -756,6 +766,7 @@ copy-editor-filter-require = Bắt buộc
 copy-editor-filter-skip = Không bắt buộc
 copy-editor-filter-help = Yêu cầu token đạt quy trình Lọc của bạn trước khi được copy.
 copy-editor-filter-warning = Với thiết lập Lọc mặc định, gần như mọi token đều không đạt, nên tác vụ yêu cầu đạt bộ lọc sẽ không copy gì cả. Chỉ bật khi bộ lọc của bạn cho qua các token mà ví này giao dịch.
+copy-editor-stable-help = Copy các lệnh mua của ví được thanh toán bằng USDC hoặc USDT, quy mô tính theo giá SOL hiện tại. Lệnh bán các token mà tác vụ này đang giữ vẫn được theo dõi dù thanh toán bằng loại tiền nào.
 copy-editor-exit-both = Cả hai
 copy-editor-exit-help-buy-only = Các quy tắc bên dưới của bạn bán mọi khoản nắm giữ; lệnh bán của ví bị bỏ qua.
 copy-editor-exit-help-hybrid = Cái nào đến trước: ví bán, hoặc một trong các quy tắc của bạn kích hoạt.

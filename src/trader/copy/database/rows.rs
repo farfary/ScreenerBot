@@ -12,7 +12,8 @@ use rusqlite::{Connection, OptionalExtension};
 pub(super) const TASK_COLUMNS: &str = "id, chain_id, target_address, label, enabled, mode_json, \
      sizing_json, exit_mode_json, exit_policy_json, max_native_per_trade, max_native_per_token, \
      total_budget_native, min_target_trade_native, max_target_trade_native, buy_once_per_token, \
-     slippage_pct, created_at, updated_at, require_filter_pass, pause_reason_json, paused_at";
+     slippage_pct, created_at, updated_at, require_filter_pass, pause_reason_json, paused_at, \
+     copy_stable_quoted";
 
 pub(super) fn row_to_task(row: &rusqlite::Row<'_>) -> rusqlite::Result<CopyTask> {
     let parse_json = |index| -> rusqlite::Result<String> { row.get(index) };
@@ -53,6 +54,7 @@ pub(super) fn row_to_task(row: &rusqlite::Row<'_>) -> rusqlite::Result<CopyTask>
             .get::<_, Option<String>>(20)?
             .map(|value| parse_datetime(&value, 20))
             .transpose()?,
+        copy_stable_quoted: row.get(21)?,
     })
 }
 

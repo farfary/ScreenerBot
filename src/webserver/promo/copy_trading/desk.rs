@@ -68,6 +68,7 @@ fn base_task(wallet: (i64, &str, &str, i64), now: DateTime<Utc>) -> CopyTask {
         created_at,
         updated_at: created_at + Duration::hours(6),
         require_filter_pass: None,
+        copy_stable_quoted: None,
         pause_reason: None,
         paused_at: None,
     }

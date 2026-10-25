@@ -254,6 +254,56 @@ fn released_copy_columns_open_under_unit_neutral_names() {
     assert_eq!(integrity, "ok");
 }
 
+/// A store already on the quote-model paper book keeps it through every later
+/// schema version: the one-time archive of estimate-model books is pinned to v8.
+#[test]
+fn a_v8_store_keeps_its_quote_paper_book_and_gains_new_task_columns() {
+    let dir = tempfile::tempdir().unwrap();
+    let path = dir.path().join("copy_trading.db");
+    released_with_history(&path);
+    drop(CopyDatabase::open(&path, ChainId::Solana).unwrap());
+    let conn = Connection::open(&path).unwrap();
+    conn.execute_batch(
+        "UPDATE copy_metadata SET value = '8' WHERE key = 'schema_version';
+         INSERT INTO copy_paper_positions (task_id, mint, token_amount, cost_basis_native, \
+             invested_native, buys, opened_at, updated_at, token_amount_raw, token_decimals) \
+         VALUES (7, 'quote-mint', 40.0, 0.25, 0.25, 1, '2026-10-01T00:00:00Z', \
+             '2026-10-01T00:00:00Z', '40000000', 6);",
+    )
+    .unwrap();
+    drop(conn);
+
+    drop(CopyDatabase::open(&path, ChainId::Solana).unwrap());
+    let conn = Connection::open(&path).unwrap();
+    let kept: (String, f64) = conn
+        .query_row(
+            "SELECT mint, token_amount FROM copy_paper_positions WHERE task_id = 7",
+            [],
+            |row| Ok((row.get(0)?, row.get(1)?)),
+        )
+        .unwrap();
+    assert_eq!(kept, ("quote-mint".to_owned(), 40.0));
+    let archived: i64 = conn
+        .query_row(
+            "SELECT COUNT(*) FROM copy_paper_legacy_positions WHERE mint = 'quote-mint'",
+            [],
+            |row| row.get(0),
+        )
+        .unwrap();
+    assert_eq!(archived, 0);
+    assert!(columns(&conn, "copy_tasks")
+        .iter()
+        .any(|name| name == "copy_stable_quoted"));
+    let stable: Option<bool> = conn
+        .query_row(
+            "SELECT copy_stable_quoted FROM copy_tasks WHERE id = 7",
+            [],
+            |row| row.get(0),
+        )
+        .unwrap();
+    assert_eq!(stable, None, "an existing task inherits the global setting");
+}
+
 #[test]
 fn a_table_with_both_column_names_refuses_and_keeps_storage() {
     let dir = tempfile::tempdir().unwrap();

@@ -32,6 +32,7 @@ fn task(sizing: SizingMode) -> CopyTask {
         created_at: Utc::now(),
         updated_at: Utc::now(),
         require_filter_pass: None,
+        copy_stable_quoted: None,
         pause_reason: None,
         paused_at: None,
     }
@@ -209,6 +210,7 @@ fn task_input_rejects_invalid_mode_sizing_ranges_and_slippage() {
         buy_once_per_token: true,
         slippage_pct: 1.0,
         require_filter_pass: None,
+        copy_stable_quoted: None,
     };
 
     assert_eq!(

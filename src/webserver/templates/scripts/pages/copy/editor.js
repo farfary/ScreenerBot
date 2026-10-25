@@ -76,6 +76,7 @@ export function createEditor(page) {
       buy_once_per_token: Boolean(task.buy_once_per_token),
       slippage_pct: task.slippage_pct,
       require_filter_pass: task.require_filter_pass ?? null,
+      copy_stable_quoted: task.copy_stable_quoted ?? null,
     };
   }
 
@@ -96,6 +97,7 @@ export function createEditor(page) {
       buy_once_per_token: draft.buy_once_per_token,
       slippage_pct: draft.slippage_pct,
       require_filter_pass: draft.require_filter_pass,
+      copy_stable_quoted: draft.copy_stable_quoted,
     };
   }
 
@@ -324,6 +326,8 @@ export function createEditor(page) {
           : { kind: "ratio_of_target", pct: sizingMemory.ratio_of_target };
     } else if (name === "filter-mode") {
       draft.require_filter_pass = value === "inherit" ? null : value === "require";
+    } else if (name === "stable-mode") {
+      draft.copy_stable_quoted = value === "inherit" ? null : value === "on";
     } else if (name === "exit-mode") {
       draft.exit_mode = value;
     } else if (name === "preset") {

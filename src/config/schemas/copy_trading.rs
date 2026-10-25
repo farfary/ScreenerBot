@@ -22,6 +22,10 @@ config_struct! {
         // so requiring a pass would leave a new copy task copying nothing.
         #[metadata(field_metadata! { impact: ConfigImpact::High, category: ConfigCategory::CopyTrading, })]
         require_filter_pass: bool = false,
+        // Off by default: a stable-quoted buy is sized at the current SOL price, an
+        // assumption the user opts into.
+        #[metadata(field_metadata! { impact: ConfigImpact::High, category: ConfigCategory::CopyTrading, })]
+        copy_stable_quoted: bool = false,
         #[metadata(field_metadata! { impact: ConfigImpact::High, category: ConfigCategory::CopyTrading, hidden: true, })]
         block_on_force_stop: bool = true,
         #[metadata(field_metadata! { impact: ConfigImpact::High, category: ConfigCategory::CopyTrading, })]
@@ -134,6 +138,18 @@ mod tests {
         let saved: CopyTradingConfig =
             toml::from_str("require_filter_pass = true").expect("saved section parses");
         assert!(saved.require_filter_pass);
+    }
+
+    #[test]
+    fn stable_quoted_copies_are_off_by_default_and_a_saved_value_is_kept() {
+        assert!(!CopyTradingConfig::default().copy_stable_quoted);
+
+        let unsaved: CopyTradingConfig = toml::from_str("").expect("empty section parses");
+        assert!(!unsaved.copy_stable_quoted);
+
+        let saved: CopyTradingConfig =
+            toml::from_str("copy_stable_quoted = true").expect("saved section parses");
+        assert!(saved.copy_stable_quoted);
     }
 
     #[test]

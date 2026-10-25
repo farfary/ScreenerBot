@@ -56,6 +56,7 @@ export function createSettings(page) {
       const config = await api.config();
       if (!dialogs.isOpen("copy-settings")) return;
       $("#copy-settings-filter").checked = Boolean(config.require_filter_pass);
+      $("#copy-settings-stable").checked = Boolean(config.copy_stable_quoted);
       $("#copy-settings-latency").checked = Boolean(config.latency_kill_switch_enabled);
       $("#copy-settings-delay").value = String(Number(config.max_arrival_distance_ms) / 1000);
       $("#copy-settings-window").value = String(config.latency_window_size);
@@ -81,6 +82,7 @@ export function createSettings(page) {
     const number = (selector) => Number($(selector).value);
     const payload = {
       require_filter_pass: $("#copy-settings-filter").checked,
+      copy_stable_quoted: $("#copy-settings-stable").checked,
       latency_kill_switch_enabled: $("#copy-settings-latency").checked,
       max_arrival_distance_ms: Math.round(number("#copy-settings-delay") * 1000),
       latency_window_size: number("#copy-settings-window"),

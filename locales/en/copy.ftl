@@ -35,6 +35,11 @@ copy-skip-claim-reconciled-abandoned = Interrupted live submission closed withou
 copy-skip-stale-observation = Replayed after downtime, too old to copy
 copy-skip-unknown-observation-time = Replayed trade has no block time
 copy-skip-entry-blocked = Entry blocked
+copy-skip-stable-quote-disabled = Paid in USDC or USDT; stable-coin trades are off for this task
+copy-skip-stable-quote-price-unavailable = Paid in USDC or USDT, with no current SOL price to size the copy
+copy-skip-swap-mixed-quote = Paid with SOL and a stable coin together, so the trade has no single size
+copy-skip-swap-multiple-tokens = More than one token traded in one transaction
+copy-skip-swap-unreadable = The trade amounts could not be read
 
 # Why a new entry was blocked. Ids come from EntryBlock in src/trader/admission.rs.
 copy-entry-block-force-stopped = Trading is force-stopped
@@ -157,6 +162,8 @@ copy-field-slippage = Slippage
 copy-rules-wallet-sells-only = Wallet sells only
 copy-filter-copy-setting-required = Copy Trading setting (required)
 copy-filter-copy-setting-not-required = Copy Trading setting (not required)
+copy-stable-copy-setting-on = Copy Trading setting (copied)
+copy-stable-copy-setting-off = Copy Trading setting (not copied)
 copy-count-closed-rounds =
     { $count ->
         [one] { $count } closed round
@@ -501,6 +508,9 @@ copy-rules-filter-pass = Filtering pass
 copy-rules-filter-required = Required
 copy-rules-filter-not-required = Not required
 copy-rules-filter-task-override = Task override
+copy-rules-stable-trades = Stable-coin trades
+copy-rules-stable-copied = Copied at the current SOL price
+copy-rules-stable-not-copied = Not copied
 copy-rules-exits = Exits
 copy-rules-exits-inactive = Holdings are sold only when the wallet sells; the rules below do not run in this mode.
 
@@ -901,6 +911,7 @@ copy-editor-filter-require = Require
 copy-editor-filter-skip = Don't require
 copy-editor-filter-help = Require a token to pass your Filtering pipeline before it is copied.
 copy-editor-filter-warning = With the default Filtering setup almost every token fails, so a task that requires a pass copies nothing. Require it only when your filters pass the tokens this wallet trades.
+copy-editor-stable-help = Copy the wallet's buys paid in USDC or USDT, sized at the current SOL price. Sells of tokens this task holds are followed whatever they are paid in.
 copy-editor-exit-both = Both
 copy-editor-exit-help-buy-only = Your rules below sell every holding; the wallet's sells are ignored.
 copy-editor-exit-help-hybrid = Whichever comes first: the wallet sells, or one of your rules fires.

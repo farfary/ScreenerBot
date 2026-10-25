@@ -32,6 +32,11 @@ copy-skip-claim-reconciled-abandoned = 中断的实盘提交已关闭，不再�
 copy-skip-stale-observation = 停机后重放，已过久无法跟单
 copy-skip-unknown-observation-time = 重放的交易没有区块时间
 copy-skip-entry-blocked = 入场被拦截
+copy-skip-stable-quote-disabled = 以 USDC 或 USDT 支付；此任务已关闭稳定币交易
+copy-skip-stable-quote-price-unavailable = 以 USDC 或 USDT 支付，且没有当前 SOL 价格来确定跟单规模
+copy-skip-swap-mixed-quote = 同时以 SOL 和稳定币支付，因此该交易没有单一规模
+copy-skip-swap-multiple-tokens = 同一笔交易中交易了多个代币
+copy-skip-swap-unreadable = 无法读取交易金额
 
 copy-entry-block-force-stopped = 交易已被强制停止
 copy-entry-block-loss-limit = 亏损限额已拦截新入场
@@ -137,6 +142,8 @@ copy-field-slippage = 滑点
 copy-rules-wallet-sells-only = 仅钱包卖出
 copy-filter-copy-setting-required = 跟单交易设置（必须通过）
 copy-filter-copy-setting-not-required = 跟单交易设置（无需通过）
+copy-stable-copy-setting-on = 跟单交易设置（会跟单）
+copy-stable-copy-setting-off = 跟单交易设置（不跟单）
 copy-count-closed-rounds =
     { $count ->
        *[other] { $count } 个已平仓轮次
@@ -445,6 +452,9 @@ copy-rules-filter-pass = 通过过滤
 copy-rules-filter-required = 必须
 copy-rules-filter-not-required = 无需
 copy-rules-filter-task-override = 任务覆盖
+copy-rules-stable-trades = 稳定币交易
+copy-rules-stable-copied = 按当前 SOL 价格跟单
+copy-rules-stable-not-copied = 不跟单
 copy-rules-exits = 出场
 copy-rules-exits-inactive = 仅在钱包卖出时才卖出持仓；下列规则在此模式下不会运行。
 
@@ -796,6 +806,7 @@ copy-editor-filter-require = 必须通过
 copy-editor-filter-skip = 无需通过
 copy-editor-filter-help = 要求代币先通过您的过滤流程，才会被跟单。
 copy-editor-filter-warning = 在默认的过滤设置下，几乎所有代币都无法通过，因此要求通过的任务不会跟单任何代币。仅当您的过滤器能放行此钱包所交易的代币时才要求通过。
+copy-editor-stable-help = 跟单钱包以 USDC 或 USDT 支付的买入，规模按当前 SOL 价格计算。此任务持有的代币的卖出，无论以何种币种支付都会跟随。
 copy-editor-exit-both = 两者
 copy-editor-exit-help-buy-only = 下方您的规则会卖出所有持仓；钱包的卖出将被忽略。
 copy-editor-exit-help-hybrid = 以先发生者为准：钱包卖出，或您的某条规则触发。

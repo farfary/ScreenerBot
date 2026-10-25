@@ -34,6 +34,11 @@ copy-skip-claim-reconciled-abandoned = Envoi réel interrompu, clôturé sans no
 copy-skip-stale-observation = Rejoué après une interruption, trop ancien pour être copié
 copy-skip-unknown-observation-time = Le trade rejoué n'a pas d'horodatage de bloc
 copy-skip-entry-blocked = Entrée bloquée
+copy-skip-stable-quote-disabled = Payé en USDC ou USDT ; les trades en stablecoins sont désactivés pour cette tâche
+copy-skip-stable-quote-price-unavailable = Payé en USDC ou USDT, sans prix SOL actuel pour dimensionner la copie
+copy-skip-swap-mixed-quote = Payé à la fois en SOL et en stablecoin, le trade n'a donc pas de taille unique
+copy-skip-swap-multiple-tokens = Plus d'un token échangé dans une même transaction
+copy-skip-swap-unreadable = Les montants du trade n'ont pas pu être lus
 
 copy-entry-block-force-stopped = Le trading est en arrêt forcé
 copy-entry-block-loss-limit = La limite de perte bloque les nouvelles entrées
@@ -147,6 +152,8 @@ copy-field-slippage = Slippage
 copy-rules-wallet-sells-only = Ventes du portefeuille uniquement
 copy-filter-copy-setting-required = Réglage du Copy trading (requis)
 copy-filter-copy-setting-not-required = Réglage du Copy trading (non requis)
+copy-stable-copy-setting-on = Réglage du Copy trading (copié)
+copy-stable-copy-setting-off = Réglage du Copy trading (non copié)
 copy-count-closed-rounds =
     { $count ->
         [one] { $count } cycle clôturé
@@ -486,6 +493,9 @@ copy-rules-filter-pass = Validation du filtrage
 copy-rules-filter-required = Requise
 copy-rules-filter-not-required = Non requise
 copy-rules-filter-task-override = Surcharge de la tâche
+copy-rules-stable-trades = Trades en stablecoins
+copy-rules-stable-copied = Copié au prix SOL actuel
+copy-rules-stable-not-copied = Non copié
 copy-rules-exits = Sorties
 copy-rules-exits-inactive = Les détentions ne sont vendues que lorsque le portefeuille vend ; les règles ci-dessous ne s'appliquent pas dans ce mode.
 
@@ -854,6 +864,7 @@ copy-editor-filter-require = Exiger
 copy-editor-filter-skip = Ne pas exiger
 copy-editor-filter-help = Exige qu'un token passe votre pipeline de filtrage avant d'être copié.
 copy-editor-filter-warning = Avec la configuration de filtrage par défaut, presque tous les tokens échouent, une tâche qui exige la validation ne copie donc rien. Ne l'exigez que si vos filtres valident les tokens échangés par ce portefeuille.
+copy-editor-stable-help = Copie les achats du portefeuille payés en USDC ou USDT, dimensionnés au prix SOL actuel. Les ventes de tokens détenus par cette tâche sont suivies quelle que soit la monnaie de paiement.
 copy-editor-exit-both = Les deux
 copy-editor-exit-help-buy-only = Vos règles ci-dessous vendent chaque détention ; les ventes du portefeuille sont ignorées.
 copy-editor-exit-help-hybrid = Le premier des deux : le portefeuille vend, ou l'une de vos règles se déclenche.

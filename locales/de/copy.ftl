@@ -32,6 +32,11 @@ copy-skip-claim-reconciled-abandoned = Unterbrochene Live-Übermittlung ohne Wie
 copy-skip-stale-observation = Nach Ausfallzeit nachgeholt, zu alt zum Kopieren
 copy-skip-unknown-observation-time = Nachgeholter Trade hat keine Blockzeit
 copy-skip-entry-blocked = Einstieg blockiert
+copy-skip-stable-quote-disabled = Mit USDC oder USDT bezahlt; Stablecoin-Trades sind für diese Aufgabe deaktiviert
+copy-skip-stable-quote-price-unavailable = Mit USDC oder USDT bezahlt, ohne aktuellen SOL-Preis zur Bemessung der Kopie
+copy-skip-swap-mixed-quote = Gleichzeitig mit SOL und einem Stablecoin bezahlt, daher hat der Trade keine einheitliche Größe
+copy-skip-swap-multiple-tokens = Mehr als ein Token in einer Transaktion gehandelt
+copy-skip-swap-unreadable = Die Trade-Beträge konnten nicht gelesen werden
 
 copy-entry-block-force-stopped = Trading ist per Sofortstopp angehalten
 copy-entry-block-loss-limit = Verlustlimit blockiert neue Einstiege
@@ -140,6 +145,8 @@ copy-field-slippage = Slippage
 copy-rules-wallet-sells-only = Nur Wallet-Verkäufe
 copy-filter-copy-setting-required = Copy-Trading-Einstellung (erforderlich)
 copy-filter-copy-setting-not-required = Copy-Trading-Einstellung (nicht erforderlich)
+copy-stable-copy-setting-on = Copy-Trading-Einstellung (kopiert)
+copy-stable-copy-setting-off = Copy-Trading-Einstellung (nicht kopiert)
 copy-count-closed-rounds =
     { $count ->
         [one] { $count } geschlossene Runde
@@ -463,6 +470,9 @@ copy-rules-filter-pass = Filterung bestanden
 copy-rules-filter-required = Erforderlich
 copy-rules-filter-not-required = Nicht erforderlich
 copy-rules-filter-task-override = Aufgaben-Überschreibung
+copy-rules-stable-trades = Stablecoin-Trades
+copy-rules-stable-copied = Zum aktuellen SOL-Preis kopiert
+copy-rules-stable-not-copied = Nicht kopiert
 copy-rules-exits = Ausstiege
 copy-rules-exits-inactive = Bestände werden nur verkauft, wenn die Wallet verkauft; die Regeln unten laufen in diesem Modus nicht.
 
@@ -822,6 +832,7 @@ copy-editor-filter-require = Verlangen
 copy-editor-filter-skip = Nicht verlangen
 copy-editor-filter-help = Verlangen, dass ein Token Ihre Filterungs-Pipeline besteht, bevor er kopiert wird.
 copy-editor-filter-warning = Mit der Standard-Filterung fällt fast jeder Token durch, sodass eine Aufgabe, die ein Bestehen verlangt, nichts kopiert. Verlangen Sie es nur, wenn Ihre Filter die Tokens durchlassen, die diese Wallet handelt.
+copy-editor-stable-help = Kopiert die Käufe der Wallet, die mit USDC oder USDT bezahlt wurden, bemessen zum aktuellen SOL-Preis. Verkäufen von Tokens, die diese Aufgabe hält, wird unabhängig von der Zahlungswährung gefolgt.
 copy-editor-exit-both = Beides
 copy-editor-exit-help-buy-only = Ihre Regeln unten verkaufen jeden Bestand; die Verkäufe der Wallet werden ignoriert.
 copy-editor-exit-help-hybrid = Was zuerst eintritt: Die Wallet verkauft oder eine Ihrer Regeln greift.

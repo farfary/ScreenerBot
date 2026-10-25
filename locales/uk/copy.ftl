@@ -32,6 +32,11 @@ copy-skip-claim-reconciled-abandoned = Перервану реальну від�
 copy-skip-stale-observation = Відтворено після простою, надто стара для копіювання
 copy-skip-unknown-observation-time = Відтворена угода не має часу блока
 copy-skip-entry-blocked = Вхід заблоковано
+copy-skip-stable-quote-disabled = Сплачено USDC або USDT; угоди зі стейблкоїнами для цього завдання вимкнено
+copy-skip-stable-quote-price-unavailable = Сплачено USDC або USDT, поточної ціни SOL для розрахунку розміру копії немає
+copy-skip-swap-mixed-quote = Сплачено одночасно SOL і стейблкоїном, тому угода не має єдиного розміру
+copy-skip-swap-multiple-tokens = В одній транзакції торгувалося більше ніж один токен
+copy-skip-swap-unreadable = Не вдалося прочитати суми угоди
 
 copy-entry-block-force-stopped = Торгівлю примусово зупинено
 copy-entry-block-loss-limit = Ліміт збитків блокує нові входи
@@ -140,6 +145,8 @@ copy-field-slippage = Проковзування
 copy-rules-wallet-sells-only = Лише продажі гаманця
 copy-filter-copy-setting-required = Налаштування копітрейдингу (обов’язково)
 copy-filter-copy-setting-not-required = Налаштування копітрейдингу (необов’язково)
+copy-stable-copy-setting-on = Налаштування копітрейдингу (копіюється)
+copy-stable-copy-setting-off = Налаштування копітрейдингу (не копіюється)
 copy-count-closed-rounds =
     { $count ->
         [one] { $count } закритий раунд
@@ -493,6 +500,9 @@ copy-rules-filter-pass = Проходження фільтрації
 copy-rules-filter-required = Обов’язково
 copy-rules-filter-not-required = Необов’язково
 copy-rules-filter-task-override = Перевизначення завдання
+copy-rules-stable-trades = Угоди зі стейблкоїнами
+copy-rules-stable-copied = Копіюється за поточною ціною SOL
+copy-rules-stable-not-copied = Не копіюється
 copy-rules-exits = Виходи
 copy-rules-exits-inactive = Утримувані токени продаються лише тоді, коли продає гаманець; правила нижче в цьому режимі не діють.
 
@@ -862,6 +872,7 @@ copy-editor-filter-require = Вимагати
 copy-editor-filter-skip = Не вимагати
 copy-editor-filter-help = Вимагати, щоб токен пройшов вашу фільтрацію перед копіюванням.
 copy-editor-filter-warning = За стандартного налаштування фільтрації майже кожен токен не проходить, тож завдання, що вимагає проходження, нічого не копіює. Вмикайте це, лише коли ваші фільтри пропускають токени, якими торгує цей гаманець.
+copy-editor-stable-help = Копіювати покупки гаманця, сплачені USDC або USDT, з розміром за поточною ціною SOL. Продажі токенів, які має це завдання, копіюються незалежно від валюти оплати.
 copy-editor-exit-both = Обидва
 copy-editor-exit-help-buy-only = Ваші правила нижче продають кожен утримуваний токен; продажі гаманця ігноруються.
 copy-editor-exit-help-hybrid = Що станеться раніше: гаманець продасть або спрацює одне з ваших правил.

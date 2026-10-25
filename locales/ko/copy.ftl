@@ -32,6 +32,11 @@ copy-skip-claim-reconciled-abandoned = 중단된 실거래 제출을 재시도 �
 copy-skip-stale-observation = 중단 이후 재처리됨, 카피하기에는 너무 오래되었습니다
 copy-skip-unknown-observation-time = 재처리된 거래에 블록 시간이 없습니다
 copy-skip-entry-blocked = 진입 차단됨
+copy-skip-stable-quote-disabled = USDC 또는 USDT로 결제됨, 이 작업에서는 스테이블코인 거래가 꺼져 있습니다
+copy-skip-stable-quote-price-unavailable = USDC 또는 USDT로 결제됨, 카피 규모를 정할 현재 SOL 가격이 없습니다
+copy-skip-swap-mixed-quote = SOL과 스테이블코인으로 함께 결제되어 거래 규모를 하나로 정할 수 없습니다
+copy-skip-swap-multiple-tokens = 한 트랜잭션에서 둘 이상의 토큰이 거래되었습니다
+copy-skip-swap-unreadable = 거래 금액을 읽을 수 없습니다
 
 copy-entry-block-force-stopped = 거래가 강제 중지되었습니다
 copy-entry-block-loss-limit = 손실 한도로 신규 진입이 차단되었습니다
@@ -139,6 +144,8 @@ copy-field-slippage = 슬리피지
 copy-rules-wallet-sells-only = 지갑 매도만
 copy-filter-copy-setting-required = 카피 트레이딩 설정 (필수)
 copy-filter-copy-setting-not-required = 카피 트레이딩 설정 (필수 아님)
+copy-stable-copy-setting-on = 카피 트레이딩 설정 (카피함)
+copy-stable-copy-setting-off = 카피 트레이딩 설정 (카피 안 함)
 copy-count-closed-rounds =
     { $count ->
        *[other] 종료된 라운드 { $count }개
@@ -448,6 +455,9 @@ copy-rules-filter-pass = 필터링 통과
 copy-rules-filter-required = 필수
 copy-rules-filter-not-required = 필수 아님
 copy-rules-filter-task-override = 작업 재정의
+copy-rules-stable-trades = 스테이블코인 거래
+copy-rules-stable-copied = 현재 SOL 가격으로 카피
+copy-rules-stable-not-copied = 카피 안 함
 copy-rules-exits = 청산
 copy-rules-exits-inactive = 보유 수량은 지갑이 매도할 때만 매도됩니다. 이 모드에서는 아래 규칙이 실행되지 않습니다.
 
@@ -800,6 +810,7 @@ copy-editor-filter-require = 필수
 copy-editor-filter-skip = 필수 아님
 copy-editor-filter-help = 토큰을 카피하기 전에 내 필터링 파이프라인을 통과하도록 요구합니다.
 copy-editor-filter-warning = 기본 필터링 설정에서는 거의 모든 토큰이 통과하지 못하므로 통과를 요구하면 아무것도 카피되지 않습니다. 이 지갑이 거래하는 토큰을 필터가 통과시킬 때만 요구하세요.
+copy-editor-stable-help = USDC 또는 USDT로 결제한 지갑의 매수를 현재 SOL 가격 기준 규모로 카피합니다. 이 작업이 보유한 토큰의 매도는 결제 통화와 관계없이 따라갑니다.
 copy-editor-exit-both = 둘 다
 copy-editor-exit-help-buy-only = 아래 내 규칙이 모든 보유 수량을 매도하며 지갑의 매도는 무시됩니다.
 copy-editor-exit-help-hybrid = 먼저 발생하는 쪽이 적용됩니다: 지갑이 매도하거나 내 규칙 중 하나가 작동합니다.

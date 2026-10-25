@@ -32,6 +32,11 @@ copy-skip-claim-reconciled-abandoned = Yarım kalan canlı gönderim yeniden den
 copy-skip-stale-observation = Kesinti sonrası yeniden oynatıldı, kopyalamak için çok eski
 copy-skip-unknown-observation-time = Yeniden oynatılan işlemin blok zamanı yok
 copy-skip-entry-blocked = Giriş engellendi
+copy-skip-stable-quote-disabled = USDC veya USDT ile ödendi; bu görev için stablecoin işlemleri kapalı
+copy-skip-stable-quote-price-unavailable = USDC veya USDT ile ödendi, kopyanın boyutunu belirleyecek güncel SOL fiyatı yok
+copy-skip-swap-mixed-quote = SOL ve stablecoin ile birlikte ödendi, bu yüzden işlemin tek bir boyutu yok
+copy-skip-swap-multiple-tokens = Tek bir işlemde birden fazla token alınıp satıldı
+copy-skip-swap-unreadable = İşlem tutarları okunamadı
 
 copy-entry-block-force-stopped = İşlem zorla durduruldu
 copy-entry-block-loss-limit = Zarar limiti yeni girişleri engelliyor
@@ -136,6 +141,8 @@ copy-field-slippage = Kayma
 copy-rules-wallet-sells-only = Yalnızca cüzdan satışları
 copy-filter-copy-setting-required = Kopya İşlem ayarı (gerekli)
 copy-filter-copy-setting-not-required = Kopya İşlem ayarı (gerekli değil)
+copy-stable-copy-setting-on = Kopya İşlem ayarı (kopyalanır)
+copy-stable-copy-setting-off = Kopya İşlem ayarı (kopyalanmaz)
 copy-count-closed-rounds =
     { $count ->
         [one] { $count } kapanmış tur
@@ -429,6 +436,9 @@ copy-rules-filter-pass = Filtreleme geçişi
 copy-rules-filter-required = Gerekli
 copy-rules-filter-not-required = Gerekli değil
 copy-rules-filter-task-override = Görev ayarı
+copy-rules-stable-trades = Stablecoin işlemleri
+copy-rules-stable-copied = Güncel SOL fiyatından kopyalanır
+copy-rules-stable-not-copied = Kopyalanmaz
 copy-rules-exits = Çıkışlar
 copy-rules-exits-inactive = Varlıklar yalnızca cüzdan sattığında satılır; aşağıdaki kurallar bu modda çalışmaz.
 
@@ -770,6 +780,7 @@ copy-editor-filter-require = Gerekli kıl
 copy-editor-filter-skip = Gerekli kılma
 copy-editor-filter-help = Bir tokenın kopyalanmadan önce Filtreleme hattınızı geçmesini isteyin.
 copy-editor-filter-warning = Varsayılan Filtreleme kurulumuyla neredeyse her token başarısız olur, bu yüzden geçişi zorunlu kılan bir görev hiçbir şey kopyalamaz. Yalnızca filtreleriniz bu cüzdanın işlem yaptığı tokenları geçiriyorsa zorunlu kılın.
+copy-editor-stable-help = Cüzdanın USDC veya USDT ile ödenen alımlarını güncel SOL fiyatına göre boyutlandırarak kopyalayın. Bu görevin elindeki tokenların satışları, ödeme birimi ne olursa olsun takip edilir.
 copy-editor-exit-both = İkisi de
 copy-editor-exit-help-buy-only = Aşağıdaki kurallarınız her varlığı satar; cüzdanın satışları yok sayılır.
 copy-editor-exit-help-hybrid = Hangisi önce gelirse: cüzdan satar veya kurallarınızdan biri tetiklenir.

@@ -80,7 +80,8 @@ fn task_field_schema() -> serde_json::Value {
         "max_target_trade_native": { "type": ["number", "null"], "description": "Ignore target buys larger than this" },
         "buy_once_per_token": { "type": "boolean", "description": "Copy only the first buy of each token" },
         "slippage_pct": { "type": "number", "description": "Slippage for copied trades in percent" },
-        "require_filter_pass": { "type": ["boolean", "null"], "description": "Per-task override of copy_trading.require_filter_pass (only copy tokens the filtering pipeline passed); null inherits the global setting" }
+        "require_filter_pass": { "type": ["boolean", "null"], "description": "Per-task override of copy_trading.require_filter_pass (only copy tokens the filtering pipeline passed); null inherits the global setting" },
+        "copy_stable_quoted": { "type": ["boolean", "null"], "description": "Per-task override of copy_trading.copy_stable_quoted (also copy wallet buys paid in USDC or USDT, sized at the current SOL price); null inherits the global setting" }
     })
 }
 
@@ -260,6 +261,8 @@ struct CreateParams {
     slippage_pct: Option<f64>,
     #[serde(default)]
     require_filter_pass: Option<bool>,
+    #[serde(default)]
+    copy_stable_quoted: Option<bool>,
 }
 
 fn enabled_default() -> bool {
@@ -316,6 +319,7 @@ impl Tool for CreateCopyTaskTool {
                 .slippage_pct
                 .unwrap_or_else(|| with_config(|cfg| cfg.copy_trading.default_slippage_pct)),
             require_filter_pass: p.require_filter_pass,
+            copy_stable_quoted: p.copy_stable_quoted,
         };
         respond(
             control::create_task(input)
