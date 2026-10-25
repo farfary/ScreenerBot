@@ -13,9 +13,10 @@ use super::decoders::{
     fluxbeam_amm::FluxbeamAmmDecoder, meteora_damm::MeteoraDammDecoder,
     meteora_dlmm::MeteoraDlmmDecoder, orca_whirlpool::OrcaWhirlpoolDecoder,
     pumpfun_amm::PumpFunAmmDecoder, raydium_clmm::RaydiumClmmDecoder,
-    raydium_cpmm::RaydiumCpmmDecoder,
 };
-use super::layouts::{meteora_dbc::VirtualPoolState, raydium_amm_v4::AmmV4PoolState};
+use super::layouts::{
+    meteora_dbc::VirtualPoolState, raydium_amm_v4::AmmV4PoolState, raydium_cpmm::CpmmPoolState,
+};
 use super::types::ProgramKind;
 
 use crate::chains::solana::rpc::{RpcClient, RpcClientMethods};
@@ -100,8 +101,10 @@ impl PoolAnalyzer {
         pool_data: &[u8],
         mints: &[Pubkey],
     ) -> Option<Vec<Pubkey>> {
-        let vaults = RaydiumCpmmDecoder::extract_reserve_accounts(pool_data)?;
-        pool_vaults_and_mints(pool_id, &vaults, mints)
+        let state = CpmmPoolState::decode(*pool_id, pool_data)?;
+        let mut accounts = vec![*pool_id, state.vault_0, state.vault_1];
+        accounts.extend_from_slice(mints);
+        Some(accounts)
     }
 
     /// Raydium AMM v4: the pool, its coin and pc vaults and the mints.

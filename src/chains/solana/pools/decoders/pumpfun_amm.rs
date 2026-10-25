@@ -5,8 +5,8 @@
 
 use super::{AccountData, PoolDecoder};
 use crate::chains::solana::constants::{SOL_DECIMALS, SOL_MINT};
+use crate::chains::solana::pools::layouts::pumpfun_amm::PumpAmmPoolState;
 use crate::chains::solana::pools::types::ProgramKind;
-#[cfg(test)]
 use crate::chains::solana::solana_sdk::pubkey::Pubkey;
 use crate::logger::{self, LogTag};
 use crate::pools::types::PriceResult;
@@ -167,12 +167,27 @@ impl PumpFunAmmDecoder {
         // Extract LP supply from the pool data
         let lp_supply = extract_lp_supply(data).unwrap_or_default();
 
+        // The programme prices off the quote vault plus this signed virtual reserve;
+        // a pool account too short to carry it cannot be priced the way it trades.
+        let Some(state) = PumpAmmPoolState::decode(Pubkey::default(), data) else {
+            logger::warning(
+                LogTag::PoolDecoder,
+                &format!(
+                    "PumpFun pool account ({} bytes) does not carry the virtual quote reserve",
+                    data.len()
+                ),
+            );
+            return None;
+        };
+
         Some(PumpFunAmmPoolInfo {
             base_mint: pair_info.token_mint,
             quote_mint: pair_info.sol_mint,
             pool_base_token_account: pair_info.token_vault,
             pool_quote_token_account: pair_info.sol_vault,
             lp_supply,
+            virtual_quote_reserves: state.virtual_quote_reserves,
+            sol_is_pool_quote: !pair_info.sol_is_first,
         })
     }
 
@@ -183,7 +198,7 @@ impl PumpFunAmmDecoder {
         vault1: &Pubkey,
         vault2: &Pubkey,
     ) -> Vec<u8> {
-        let mut data = vec![0u8; 210];
+        let mut data = vec![0u8; 301];
         let mut offset = 43usize; // discriminator(8) + bump(1) + index(2) + creator(32)
         data[offset..offset + 32].copy_from_slice(base_mint.as_ref());
         offset += 32;
@@ -290,15 +305,24 @@ impl PumpFunAmmDecoder {
         let token_adjusted = (token_reserve as f64) / (10_f64).powi(token_decimals as i32);
         let sol_adjusted = (sol_reserve as f64) / (10_f64).powi(sol_decimals as i32);
 
-        if token_adjusted <= 0.0 {
-            logger::error(
+        let Some((pricing_token, pricing_sol)) = pricing_reserves(
+            token_reserve,
+            sol_reserve,
+            pool_info.virtual_quote_reserves,
+            pool_info.sol_is_pool_quote,
+        ) else {
+            logger::warning(
                 LogTag::PoolDecoder,
-                "Token adjusted amount is zero or negative",
+                &format!(
+                    "PumpFun pool {}: virtual quote reserve {} leaves no positive reserve",
+                    pool_account, pool_info.virtual_quote_reserves
+                ),
             );
             return None;
-        }
+        };
 
-        let price_sol = sol_adjusted / token_adjusted;
+        let price_sol = (pricing_sol as f64 / (10_f64).powi(sol_decimals as i32))
+            / (pricing_token as f64 / (10_f64).powi(token_decimals as i32));
 
         // Validate price is reasonable
         if price_sol <= 0.0 || price_sol > 1_000_000.0 {
@@ -416,6 +440,31 @@ pub struct PumpFunAmmPoolInfo {
     pub pool_base_token_account: String,
     pub pool_quote_token_account: String,
     pub lp_supply: u64,
+    /// Signed virtual reserve the programme adds to the pool's quote side.
+    pub virtual_quote_reserves: i128,
+    /// Whether SOL is the pool's quote side, the side the virtual reserve joins.
+    pub sol_is_pool_quote: bool,
+}
+
+/// The raw `(token, sol)` reserves the programme prices against: the vault
+/// balances with the signed virtual reserve added to the pool's quote side.
+/// `None` when either side is not positive.
+fn pricing_reserves(
+    token_reserve: u64,
+    sol_reserve: u64,
+    virtual_quote_reserves: i128,
+    sol_is_pool_quote: bool,
+) -> Option<(u128, u128)> {
+    let (mut token, mut sol) = (token_reserve as i128, sol_reserve as i128);
+    if sol_is_pool_quote {
+        sol = sol.checked_add(virtual_quote_reserves)?;
+    } else {
+        token = token.checked_add(virtual_quote_reserves)?;
+    }
+    if token <= 0 || sol <= 0 {
+        return None;
+    }
+    Some((token as u128, sol as u128))
 }
 
 impl PumpFunAmmDecoder {
@@ -463,6 +512,48 @@ mod tests {
         assert_eq!(info.quote_mint, SOL_MINT);
         assert_eq!(info.pool_base_token_account, vault1.to_string());
         assert_eq!(info.pool_quote_token_account, vault2.to_string());
+    }
+
+    #[test]
+    fn the_virtual_reserve_joins_the_pools_quote_side_only() {
+        // SOL quoted: a boost adds to the SOL side, an unboosted pool's negative
+        // value removes the unclaimed fees from it.
+        assert_eq!(
+            pricing_reserves(1_000, 2_000, 500, true),
+            Some((1_000, 2_500))
+        );
+        assert_eq!(
+            pricing_reserves(1_000, 2_000, -500, true),
+            Some((1_000, 1_500))
+        );
+        // SOL as the pool's base: the token is the quote side.
+        assert_eq!(
+            pricing_reserves(1_000, 2_000, 500, false),
+            Some((1_500, 2_000))
+        );
+        // A virtual reserve that drains the quote side leaves nothing to price.
+        assert_eq!(pricing_reserves(1_000, 2_000, -2_000, true), None);
+    }
+
+    #[test]
+    fn the_virtual_quote_reserve_is_read_from_the_pool_account() {
+        let base_mint = Pubkey::new_unique();
+        let sol_mint = Pubkey::from_str(SOL_MINT).unwrap();
+        let mut data = PumpFunAmmDecoder::build_pool_bytes(
+            &base_mint,
+            &sol_mint,
+            &Pubkey::new_unique(),
+            &Pubkey::new_unique(),
+        );
+        data[245..261].copy_from_slice(&(-42i128).to_le_bytes());
+        let info = PumpFunAmmDecoder::decode_pump_fun_amm_pool(&data).expect("decodes");
+        assert_eq!(info.virtual_quote_reserves, -42);
+        assert!(info.sol_is_pool_quote);
+
+        assert!(
+            PumpFunAmmDecoder::decode_pump_fun_amm_pool(&data[..250]).is_none(),
+            "an account without the virtual reserve is not priced"
+        );
     }
 
     #[test]

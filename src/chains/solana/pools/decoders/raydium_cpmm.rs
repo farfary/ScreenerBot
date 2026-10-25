@@ -1,24 +1,27 @@
 // Copyright (c) 2024-2026 ScreenerBot (screenerbot.io)
 // SPDX-License-Identifier: BUSL-1.1
 
-//! Raydium CPMM pool decoder
+//! Raydium CPMM (CP-Swap) decoder
 //!
-//! This module handles decoding Raydium Constant Product Market Maker pools.
-//! Extracts reserve data and calculates token prices.
+//! Decodes the pool with the shared `PoolState` layout
+//! (`crate::chains::solana::pools::layouts::raydium_cpmm`), reads the two vaults it
+//! names and prices the token from the tradable reserves: each vault less the
+//! protocol, fund and creator fees still held in it. A pool whose status does not
+//! permit swapping, a vault missing from the bundle, a vault holding a different
+//! mint than the pool names for that side, or a token whose cached decimals
+//! disagree with the decimals the pool recorded yields no price.
 
 use super::{AccountData, PoolDecoder};
-#[cfg(test)]
-use crate::chains::solana::solana_sdk::pubkey::Pubkey;
 
-use crate::chains::solana::constants::RAYDIUM_CPMM_PROGRAM_ID;
-use crate::chains::solana::constants::SOL_MINT;
-use crate::chains::solana::layout::{read_bool_at_offset, read_u64_at_offset, read_u8_at_offset};
-use crate::chains::solana::pools::decode_utils::read_pubkey_at_offset;
+use crate::chains::solana::constants::{RAYDIUM_CPMM_PROGRAM_ID, SOL_MINT};
+use crate::chains::solana::layout::{pubkey_at, token_account_amount};
+use crate::chains::solana::pools::layouts::raydium_cpmm::CpmmPoolState;
 use crate::chains::solana::pools::types::ProgramKind;
 use crate::logger::{self, LogTag};
 use crate::pools::types::PriceResult;
 use crate::tokens::get_cached_decimals;
 
+use crate::chains::solana::solana_sdk::pubkey::Pubkey;
 use std::collections::HashMap;
 
 /// Raydium CPMM decoder implementation
@@ -31,304 +34,88 @@ impl PoolDecoder for RaydiumCpmmDecoder {
 
     fn decode_and_calculate(
         accounts: &HashMap<String, AccountData>,
-        base_mint: &str,
-        quote_mint: &str,
+        _base_mint: &str,
+        _quote_mint: &str,
     ) -> Option<PriceResult> {
-        logger::debug(
-            LogTag::PoolDecoder,
-            &format!(
-                "Decoding Raydium CPMM pool for {}/{}",
-                base_mint, quote_mint
-            ),
-        );
-
-        // Find the pool account by checking owner program ID (like CLMM decoder)
-        let pool_account = accounts.values().find(|acc| {
-            // Look for account with Raydium CPMM program as owner
-            let owner_str = acc.owner.to_string();
-            let matches = owner_str == RAYDIUM_CPMM_PROGRAM_ID;
-            logger::debug(
-                LogTag::PoolDecoder,
-                &format!(
-                    "Checking account owner: {} vs expected: {}, matches: {}",
-                    owner_str, RAYDIUM_CPMM_PROGRAM_ID, matches
-                ),
-            );
-
-            matches
-        })?;
-
-        logger::debug(
-            LogTag::PoolDecoder,
-            &format!(
-                "Found CPMM pool account {} with {} bytes",
-                pool_account.pubkey,
-                pool_account.data.len()
-            ),
-        );
-
-        let pool_info =
-            Self::decode_raydium_cpmm_pool(&pool_account.data, &pool_account.pubkey.to_string())?;
-
-        Self::calculate_raydium_cpmm_price(&pool_info, accounts, base_mint, quote_mint)
-    }
-}
-
-impl RaydiumCpmmDecoder {
-    /// Extract reserve account addresses from CPMM pool data for analyzer use
-    /// Returns the account addresses that need to be fetched: [token_0_vault, token_1_vault]
-    pub fn extract_reserve_accounts(pool_data: &[u8]) -> Option<Vec<String>> {
-        if pool_data.len() < 8 + 32 * 4 {
-            return None;
-        }
-
-        let mut offset = 8; // Skip discriminator
-
-        // Extract vault addresses (same logic as decode_raydium_cpmm_pool)
-        let _amm_config = read_pubkey_at_offset(pool_data, &mut offset).ok()?;
-        let _pool_creator = read_pubkey_at_offset(pool_data, &mut offset).ok()?;
-        let token_0_vault = read_pubkey_at_offset(pool_data, &mut offset).ok()?;
-        let token_1_vault = read_pubkey_at_offset(pool_data, &mut offset).ok()?;
-
-        Some(vec![token_0_vault, token_1_vault])
-    }
-
-    /// Decode Raydium CPMM pool data from account bytes
-    pub fn decode_raydium_cpmm_pool(data: &[u8], pool_id: &str) -> Option<RaydiumCpmmPoolInfo> {
-        if data.len() < 8 + 32 * 10 + 8 * 10 {
+        let pool_account = accounts
+            .values()
+            .find(|a| a.owner.to_string() == RAYDIUM_CPMM_PROGRAM_ID)?;
+        let Some(state) = CpmmPoolState::decode(pool_account.pubkey, &pool_account.data) else {
             logger::error(
                 LogTag::PoolDecoder,
                 &format!(
-                    "Invalid Raydium CPMM pool account data length: {}",
-                    data.len()
-                ),
-            );
-            return None;
-        }
-
-        let mut offset = 8; // Skip discriminator
-
-        // Decode pool data according to Raydium CPMM layout (enhanced version)
-        let amm_config = read_pubkey_at_offset(data, &mut offset).ok()?;
-        let pool_creator = read_pubkey_at_offset(data, &mut offset).ok()?;
-        let token_0_vault = read_pubkey_at_offset(data, &mut offset).ok()?;
-        let token_1_vault = read_pubkey_at_offset(data, &mut offset).ok()?;
-        let lp_mint = read_pubkey_at_offset(data, &mut offset).ok()?;
-        let token_0_mint = read_pubkey_at_offset(data, &mut offset).ok()?;
-        let token_1_mint = read_pubkey_at_offset(data, &mut offset).ok()?;
-        let token_0_program = read_pubkey_at_offset(data, &mut offset).ok()?;
-        let token_1_program = read_pubkey_at_offset(data, &mut offset).ok()?;
-        let observation_key = read_pubkey_at_offset(data, &mut offset).ok()?;
-
-        let auth_bump = read_u8_at_offset(data, &mut offset).ok()?;
-        let status = read_u8_at_offset(data, &mut offset).ok()?;
-        let lp_mint_decimals = read_u8_at_offset(data, &mut offset).ok()?;
-        let pool_mint_0_decimals = read_u8_at_offset(data, &mut offset).ok()?;
-        let pool_mint_1_decimals = read_u8_at_offset(data, &mut offset).ok()?;
-
-        // Skip padding to reach LP supply field at offset 333
-        offset = 333;
-        let lp_supply = read_u64_at_offset(data, &mut offset).ok()?;
-        let protocol_fees_token_0 = read_u64_at_offset(data, &mut offset).ok()?;
-        let protocol_fees_token_1 = read_u64_at_offset(data, &mut offset).ok()?;
-        let fund_fees_token_0 = read_u64_at_offset(data, &mut offset).ok()?;
-        let fund_fees_token_1 = read_u64_at_offset(data, &mut offset).ok()?;
-        let open_time = read_u64_at_offset(data, &mut offset).ok()?;
-        let recent_epoch = read_u64_at_offset(data, &mut offset).ok()?;
-
-        // Skip padding to reach creator fee fields
-        offset = 389; // After recent_epoch
-        let creator_fee_on = read_u8_at_offset(data, &mut offset).ok()?;
-        let enable_creator_fee = read_bool_at_offset(data, &mut offset).ok()?;
-
-        // Skip padding1[6] bytes
-        offset += 6;
-        let creator_fees_token_0 = read_u64_at_offset(data, &mut offset).ok()?;
-        let creator_fees_token_1 = read_u64_at_offset(data, &mut offset).ok()?;
-
-        // Get token decimals - CRITICAL: must be available, no fallback to pool defaults
-        let mint_0_decimals =
-            match get_cached_decimals(crate::chains::ChainId::Solana, &token_0_mint) {
-                Some(decimals) => decimals,
-                None => {
-                    logger::error(
-                        LogTag::PoolDecoder,
-                        &format!(
-                            "No decimals found for CPMM token_0: {}, skipping pool calculation",
-                            token_0_mint
-                        ),
-                    );
-                    return None;
-                }
-            };
-
-        let mint_1_decimals =
-            match get_cached_decimals(crate::chains::ChainId::Solana, &token_1_mint) {
-                Some(decimals) => decimals,
-                None => {
-                    logger::error(
-                        LogTag::PoolDecoder,
-                        &format!(
-                            "No decimals found for CPMM token_1: {}, skipping pool calculation",
-                            token_1_mint
-                        ),
-                    );
-                    return None;
-                }
-            };
-
-        logger::debug(
-            LogTag::PoolDecoder,
-            &format!(
-                "Decimal Analysis:\n\n                     Token0 {} decimals: {} (cached) vs {} (pool)\n\n                     Token1 {} decimals: {} (cached) vs {} (pool)",
-                token_0_mint,
-                mint_0_decimals,
-                pool_mint_0_decimals,
-                token_1_mint,
-                mint_1_decimals,
-                pool_mint_1_decimals
-            ),
-        );
-
-        // Warning if cached and pool decimals don't match
-        if mint_0_decimals != pool_mint_0_decimals {
-            logger::warning(
-                LogTag::PoolDecoder,
-                &format!(
-                    "DECIMAL MISMATCH Token0 {}: cache={}, pool={}",
-                    token_0_mint, mint_0_decimals, pool_mint_0_decimals
-                ),
-            );
-        }
-        if mint_1_decimals != pool_mint_1_decimals {
-            logger::warning(
-                LogTag::PoolDecoder,
-                &format!(
-                    "DECIMAL MISMATCH Token1 {}: cache={}, pool={}",
-                    token_1_mint, mint_1_decimals, pool_mint_1_decimals
-                ),
-            );
-        }
-
-        Some(RaydiumCpmmPoolInfo {
-            // Basic token information
-            token_0_mint,
-            token_1_mint,
-            token_0_vault,
-            token_1_vault,
-            token_0_decimals: mint_0_decimals,
-            token_1_decimals: mint_1_decimals,
-
-            // Additional fields for swap operations
-            pool_id: pool_id.to_string(),
-            amm_config,
-            pool_creator,
-            lp_mint,
-            token_0_program,
-            token_1_program,
-            observation_key,
-            auth_bump,
-            status,
-            lp_mint_decimals,
-
-            // Complete CPMM pool state fields
-            lp_supply,
-            protocol_fees_token_0,
-            protocol_fees_token_1,
-            fund_fees_token_0,
-            fund_fees_token_1,
-            open_time,
-            recent_epoch,
-            creator_fee_on,
-            enable_creator_fee,
-            creator_fees_token_0,
-            creator_fees_token_1,
-        })
-    }
-
-    /// Calculate price for Raydium CPMM pool
-    fn calculate_raydium_cpmm_price(
-        pool_info: &RaydiumCpmmPoolInfo,
-        accounts: &HashMap<String, AccountData>,
-        base_mint: &str,
-        quote_mint: &str,
-    ) -> Option<PriceResult> {
-        // Determine which token is SOL and which is the target token
-        let sol_mint_str = SOL_MINT;
-        let (target_mint, sol_reserve, token_reserve, sol_decimals, token_decimals) = if pool_info
-            .token_0_mint
-            == sol_mint_str
-            && pool_info.token_1_mint == base_mint
-        {
-            // Token 0 is SOL, Token 1 is the target
-            let vault_0_balance =
-                Self::get_vault_balance_from_accounts(accounts, &pool_info.token_0_vault)?;
-            let vault_1_balance =
-                Self::get_vault_balance_from_accounts(accounts, &pool_info.token_1_vault)?;
-            (
-                base_mint.to_string(),
-                vault_0_balance,
-                vault_1_balance,
-                pool_info.token_0_decimals,
-                pool_info.token_1_decimals,
-            )
-        } else if pool_info.token_1_mint == sol_mint_str && pool_info.token_0_mint == base_mint {
-            // Token 1 is SOL, Token 0 is the target
-            let vault_0_balance =
-                Self::get_vault_balance_from_accounts(accounts, &pool_info.token_0_vault)?;
-            let vault_1_balance =
-                Self::get_vault_balance_from_accounts(accounts, &pool_info.token_1_vault)?;
-            (
-                base_mint.to_string(),
-                vault_1_balance,
-                vault_0_balance,
-                pool_info.token_1_decimals,
-                pool_info.token_0_decimals,
-            )
-        } else if pool_info.token_0_mint == sol_mint_str && pool_info.token_1_mint == quote_mint {
-            // Token 0 is SOL, Token 1 is the target
-            let vault_0_balance =
-                Self::get_vault_balance_from_accounts(accounts, &pool_info.token_0_vault)?;
-            let vault_1_balance =
-                Self::get_vault_balance_from_accounts(accounts, &pool_info.token_1_vault)?;
-            (
-                quote_mint.to_string(),
-                vault_0_balance,
-                vault_1_balance,
-                pool_info.token_0_decimals,
-                pool_info.token_1_decimals,
-            )
-        } else if pool_info.token_1_mint == sol_mint_str && pool_info.token_0_mint == quote_mint {
-            // Token 1 is SOL, Token 0 is the target
-            let vault_0_balance =
-                Self::get_vault_balance_from_accounts(accounts, &pool_info.token_0_vault)?;
-            let vault_1_balance =
-                Self::get_vault_balance_from_accounts(accounts, &pool_info.token_1_vault)?;
-            (
-                quote_mint.to_string(),
-                vault_1_balance,
-                vault_0_balance,
-                pool_info.token_1_decimals,
-                pool_info.token_0_decimals,
-            )
-        } else {
-            logger::error(
-                LogTag::PoolDecoder,
-                &format!(
-                    "Pool does not contain SOL or target tokens {}/{}",
-                    base_mint, quote_mint
+                    "CPMM pool {} does not match the PoolState layout ({} bytes)",
+                    pool_account.pubkey,
+                    pool_account.data.len()
                 ),
             );
             return None;
         };
-
-        // Validate reserves
-        if sol_reserve == 0 || token_reserve == 0 {
-            logger::error(LogTag::PoolDecoder, "Pool has zero reserves");
+        if !state.swap_enabled() {
+            logger::debug(
+                LogTag::PoolDecoder,
+                &format!(
+                    "CPMM pool {} status {} does not permit swapping",
+                    state.pool, state.status
+                ),
+            );
             return None;
         }
 
-        // Calculate price: price = sol_reserve / token_reserve (adjusted for decimals)
+        let balance_0 = vault_balance(accounts, &state.pool, &state.vault_0, &state.mint_0)?;
+        let balance_1 = vault_balance(accounts, &state.pool, &state.vault_1, &state.mint_1)?;
+        let (reserve_0, reserve_1) = state.tradable_reserves(balance_0, balance_1);
+
+        let mint_0 = state.mint_0.to_string();
+        let mint_1 = state.mint_1.to_string();
+        let (sol_raw, sol_decimals, token_raw, token_decimals, token_mint) = if mint_0 == SOL_MINT {
+            (
+                reserve_0,
+                state.decimals_0,
+                reserve_1,
+                state.decimals_1,
+                mint_1,
+            )
+        } else if mint_1 == SOL_MINT {
+            (
+                reserve_1,
+                state.decimals_1,
+                reserve_0,
+                state.decimals_0,
+                mint_0,
+            )
+        } else {
+            logger::error(
+                LogTag::PoolDecoder,
+                &format!("CPMM pool {} has no SOL side", state.pool),
+            );
+            return None;
+        };
+
+        // CRITICAL: decimals must be cached, no fallback
+        let Some(cached_decimals) =
+            get_cached_decimals(crate::chains::ChainId::Solana, &token_mint)
+        else {
+            logger::error(
+                LogTag::PoolDecoder,
+                &format!("CPMM: Token decimals not found for {token_mint}, skipping price"),
+            );
+            return None;
+        };
+        if cached_decimals != token_decimals {
+            logger::warning(
+                LogTag::PoolDecoder,
+                &format!(
+                    "CPMM pool {}: cached decimals {} for {} disagree with the pool's {}",
+                    state.pool, cached_decimals, token_mint, token_decimals
+                ),
+            );
+            return None;
+        }
+
+        if sol_raw == 0 || token_raw == 0 {
+            return None;
+        }
         if sol_decimals > 18 || token_decimals > 18 {
             logger::error(
                 LogTag::PoolDecoder,
@@ -339,205 +126,185 @@ impl RaydiumCpmmDecoder {
             );
             return None;
         }
-        let sol_adjusted = (sol_reserve as f64) / (10_f64).powi(sol_decimals as i32);
-        let token_adjusted = (token_reserve as f64) / (10_f64).powi(token_decimals as i32);
-
+        let sol_adjusted = (sol_raw as f64) / (10f64).powi(sol_decimals as i32);
+        let token_adjusted = (token_raw as f64) / (10f64).powi(token_decimals as i32);
         let price_sol = sol_adjusted / token_adjusted;
-
-        // Validate price is reasonable
-        if price_sol <= 0.0 || price_sol > 1_000_000.0 {
-            logger::error(
-                LogTag::PoolDecoder,
-                &format!("Invalid price calculated: {:.12} SOL", price_sol),
-            );
+        if !price_sol.is_finite() || price_sol <= 0.0 || price_sol > 1_000_000.0 {
             return None;
         }
 
-        logger::verbose(
+        logger::debug(
             LogTag::PoolDecoder,
             &format!(
-                "Raydium CPMM Price Calculation for {}:\n\n                     SOL Reserve: {} ({:.9} adjusted, {} decimals)\n\n                     Token Reserve: {} ({:.9} adjusted, {} decimals)\n\n                     Price: {:.9} SOL",
-                target_mint,
-                sol_reserve,
-                sol_adjusted,
-                sol_decimals,
-                token_reserve,
-                token_adjusted,
-                token_decimals,
-                price_sol
+                "CPMM price: {:.12} SOL (sol_reserve={} token_reserve={} token_dec={} mint_0={} mint_1={})",
+                price_sol, sol_adjusted, token_adjusted, token_decimals, state.mint_0, state.mint_1
             ),
         );
 
-        // Additional validation checks
-        if sol_adjusted <= 0.0 || token_adjusted <= 0.0 {
-            logger::warning(
-                LogTag::PoolDecoder,
-                &format!(
-                    "WARNING: Zero or negative adjusted values detected! SOL_adj: {:.9}, Token_adj: {:.9}",
-                    sol_adjusted, token_adjusted
-                ),
-            );
-        }
-
-        // Check for extremely small or large prices that might indicate decimal issues
-        if price_sol < 0.000000001 || price_sol > 1000.0 {
-            logger::warning(
-                LogTag::PoolDecoder,
-                &format!(
-                    "WARNING: Unusual price detected: {:.12} SOL. Check if decimals are correct (SOL: {}, Token: {})",
-                    price_sol, sol_decimals, token_decimals
-                ),
-            );
-        }
-
         Some(PriceResult::new(
-            target_mint,
-            0.0, // No USD calculation
+            token_mint,
+            0.0,
             price_sol,
             sol_adjusted,
             token_adjusted,
-            String::new(), // Pool address will be set by calculator
+            state.pool.to_string(),
         ))
     }
+}
 
-    /// Extract vault balance from token account data
-    fn get_vault_balance_from_accounts(
-        accounts: &HashMap<String, AccountData>,
-        vault_address: &str,
-    ) -> Option<u64> {
-        let account_data = accounts.get(vault_address)?;
-        Self::decode_token_account_amount(&account_data.data).ok()
+/// The balance of `vault`, refused when the bundle lacks it or when it holds a
+/// different mint than `mint`, the side the pool names it for.
+fn vault_balance(
+    accounts: &HashMap<String, AccountData>,
+    pool: &Pubkey,
+    vault: &Pubkey,
+    mint: &Pubkey,
+) -> Option<u64> {
+    let Some(account) = accounts.get(&vault.to_string()) else {
+        logger::warning(
+            LogTag::PoolDecoder,
+            &format!("CPMM pool {pool}: vault {vault} is not in the account bundle"),
+        );
+        return None;
+    };
+    let held = pubkey_at(&account.data, 0)?;
+    if held != *mint {
+        logger::warning(
+            LogTag::PoolDecoder,
+            &format!("CPMM pool {pool}: vault {vault} holds mint {held}, the pool names {mint}"),
+        );
+        return None;
     }
-
-    /// Decode token account amount from account data
-    fn decode_token_account_amount(data: &[u8]) -> crate::chains::solana::Result<u64> {
-        if data.len() < 72 {
-            return Err(crate::chains::solana::Error::Decode {
-                payload: "pool vault token account",
-                detail: "invalid token account data length".to_owned(),
-            });
-        }
-
-        // Token account amount is at offset 64 (8 bytes)
-        let amount_bytes = &data[64..72];
-        let amount = u64::from_le_bytes(amount_bytes.try_into().map_err(|_| {
-            crate::chains::solana::Error::Decode {
-                payload: "pool vault token account amount",
-                detail: "failed to parse token account amount".to_owned(),
-            }
-        })?);
-
-        Ok(amount)
-    }
+    token_account_amount(&account.data)
 }
 
 #[cfg(test)]
 mod tests {
     use super::*;
+    use std::str::FromStr;
+    use std::time::Instant;
 
-    fn pubkey_bytes(seed: u8) -> [u8; 32] {
-        [seed; 32]
+    struct Pool {
+        accounts: HashMap<String, AccountData>,
+        pool: Pubkey,
+        vault_1: Pubkey,
+        token_mint: Pubkey,
     }
 
-    fn write_pubkey(buf: &mut [u8], offset: usize, seed: u8) {
-        buf[offset..offset + 32].copy_from_slice(&pubkey_bytes(seed));
+    fn account(pubkey: Pubkey, owner: Pubkey, data: Vec<u8>) -> AccountData {
+        AccountData {
+            pubkey,
+            data,
+            slot: 1,
+            fetched_at: Instant::now(),
+            lamports: 0,
+            owner,
+        }
     }
 
-    fn write_u64(buf: &mut [u8], offset: usize, value: u64) {
-        buf[offset..offset + 8].copy_from_slice(&value.to_le_bytes());
+    fn token_account(mint: &Pubkey, amount: u64) -> Vec<u8> {
+        let mut data = vec![0u8; 165];
+        data[0..32].copy_from_slice(mint.as_ref());
+        data[64..72].copy_from_slice(&amount.to_le_bytes());
+        data
+    }
+
+    fn write_u64(data: &mut [u8], offset: usize, value: u64) {
+        data[offset..offset + 8].copy_from_slice(&value.to_le_bytes());
+    }
+
+    /// A swappable WSOL/token pool (token_0 = WSOL, 9 dp; token_1 = the token,
+    /// 6 dp) holding 2 SOL against 1,000 tokens, with no fees awaiting collection.
+    fn pool() -> Pool {
+        let pool = Pubkey::new_unique();
+        let vault_0 = Pubkey::new_unique();
+        let vault_1 = Pubkey::new_unique();
+        let wsol = Pubkey::from_str(SOL_MINT).unwrap();
+        let token_mint = Pubkey::new_unique();
+
+        let mut data = vec![0u8; 637];
+        data[72..104].copy_from_slice(vault_0.as_ref());
+        data[104..136].copy_from_slice(vault_1.as_ref());
+        data[168..200].copy_from_slice(wsol.as_ref());
+        data[200..232].copy_from_slice(token_mint.as_ref());
+        data[331] = 9;
+        data[332] = 6;
+        crate::tokens::cache_decimals(crate::chains::ChainId::Solana, &token_mint.to_string(), 6);
+
+        let program = Pubkey::from_str(RAYDIUM_CPMM_PROGRAM_ID).unwrap();
+        let token_program = crate::chains::solana::spl_token::id();
+        let accounts = HashMap::from([
+            (pool.to_string(), account(pool, program, data)),
+            (
+                vault_0.to_string(),
+                account(vault_0, token_program, token_account(&wsol, 2_000_000_000)),
+            ),
+            (
+                vault_1.to_string(),
+                account(
+                    vault_1,
+                    token_program,
+                    token_account(&token_mint, 1_000_000_000),
+                ),
+            ),
+        ]);
+        Pool {
+            accounts,
+            pool,
+            vault_1,
+            token_mint,
+        }
+    }
+
+    fn decode(pool: &Pool) -> Option<PriceResult> {
+        RaydiumCpmmDecoder::decode_and_calculate(&pool.accounts, "", "")
+    }
+
+    fn pool_data(pool: &mut Pool) -> &mut Vec<u8> {
+        &mut pool.accounts.get_mut(&pool.pool.to_string()).unwrap().data
     }
 
     #[test]
-    fn short_data_is_rejected_without_panicking() {
-        let too_short = vec![0u8; 8 + 32 * 10 + 8 * 10 - 1];
-        assert!(RaydiumCpmmDecoder::decode_raydium_cpmm_pool(&too_short, "pool").is_none());
-        assert!(RaydiumCpmmDecoder::decode_raydium_cpmm_pool(&[], "pool").is_none());
+    fn the_price_is_sol_per_token_from_the_vaults_the_pool_names() {
+        let p = pool();
+        let price = decode(&p).expect("a swappable pool prices");
+        assert_eq!(price.mint, p.token_mint.to_string());
+        assert!((price.price_native - 0.002).abs() < 1e-12);
+        assert!((price.native_reserves - 2.0).abs() < 1e-12);
+        assert!((price.token_reserves - 1_000.0).abs() < 1e-9);
     }
 
     #[test]
-    fn valid_layout_decodes_mints_vaults_and_state_fields() {
-        let mut data = vec![0u8; 420];
-        // 8-byte discriminator, then 10 pubkeys in declaration order.
-        write_pubkey(&mut data, 8, 1); // amm_config
-        write_pubkey(&mut data, 40, 2); // pool_creator
-        write_pubkey(&mut data, 72, 3); // token_0_vault
-        write_pubkey(&mut data, 104, 4); // token_1_vault
-        write_pubkey(&mut data, 136, 5); // lp_mint
-        write_pubkey(&mut data, 168, 6); // token_0_mint
-        write_pubkey(&mut data, 200, 7); // token_1_mint
-        write_pubkey(&mut data, 232, 8); // token_0_program
-        write_pubkey(&mut data, 264, 9); // token_1_program
-        write_pubkey(&mut data, 296, 10); // observation_key
-        data[328] = 254; // auth_bump
-        data[329] = 1; // status
-        data[330] = 9; // lp_mint_decimals
-        data[331] = 6; // pool_mint_0_decimals
-        data[332] = 9; // pool_mint_1_decimals
-        write_u64(&mut data, 333, 1_000_000); // lp_supply
-        write_u64(&mut data, 397, 111); // creator_fees_token_0
-        write_u64(&mut data, 405, 222); // creator_fees_token_1
-
-        let token_0_mint = Pubkey::new_from_array(pubkey_bytes(6)).to_string();
-        let token_1_mint = Pubkey::new_from_array(pubkey_bytes(7)).to_string();
-        // Decode reads decimals from the shared cache; populate it for this pair.
-        crate::tokens::cache_decimals(crate::chains::ChainId::Solana, &token_0_mint, 6);
-        crate::tokens::cache_decimals(crate::chains::ChainId::Solana, &token_1_mint, 9);
-
-        let info = RaydiumCpmmDecoder::decode_raydium_cpmm_pool(&data, "poolAddr")
-            .expect("well-formed CPMM account data must decode");
-
-        assert_eq!(info.pool_id, "poolAddr");
-        assert_eq!(info.token_0_mint, token_0_mint);
-        assert_eq!(info.token_1_mint, token_1_mint);
-        assert_eq!(
-            info.token_0_vault,
-            Pubkey::new_from_array(pubkey_bytes(3)).to_string()
-        );
-        assert_eq!(
-            info.token_1_vault,
-            Pubkey::new_from_array(pubkey_bytes(4)).to_string()
-        );
-        assert_eq!(info.lp_supply, 1_000_000);
-        assert_eq!(info.creator_fees_token_0, 111);
-        assert_eq!(info.creator_fees_token_1, 222);
-        assert_eq!(info.status, 1);
+    fn fees_awaiting_collection_are_not_priced_as_liquidity() {
+        let mut p = pool();
+        let data = pool_data(&mut p);
+        write_u64(data, 341, 200_000_000); // protocol fees, SOL side
+        write_u64(data, 357, 100_000_000); // fund fees, SOL side
+        write_u64(data, 397, 200_000_000); // creator fees, SOL side
+        let price = decode(&p).expect("prices");
+        assert!((price.native_reserves - 1.5).abs() < 1e-12);
+        assert!((price.price_native - 0.0015).abs() < 1e-12);
     }
-}
 
-/// Raydium CPMM pool information extracted from account data
-/// Enhanced version with all fields needed for direct swap operations and complete pool state
-#[derive(Debug, Clone)]
-pub struct RaydiumCpmmPoolInfo {
-    // Basic token information
-    pub token_0_mint: String,
-    pub token_1_mint: String,
-    pub token_0_vault: String,
-    pub token_1_vault: String,
-    pub token_0_decimals: u8,
-    pub token_1_decimals: u8,
+    #[test]
+    fn cached_decimals_that_disagree_with_the_pool_yield_no_price() {
+        let mut p = pool();
+        pool_data(&mut p)[332] = 9;
+        assert!(decode(&p).is_none());
+    }
 
-    // Additional fields required for swap operations
-    pub pool_id: String,         // Pool's public key
-    pub amm_config: String,      // AMM configuration account
-    pub pool_creator: String,    // Pool creator account
-    pub lp_mint: String,         // LP token mint
-    pub token_0_program: String, // Token 0 program ID
-    pub token_1_program: String, // Token 1 program ID
-    pub observation_key: String, // Observation state account
-    pub auth_bump: u8,           // Authority bump seed
-    pub status: u8,              // Pool status
-    pub lp_mint_decimals: u8,    // LP token decimals
+    #[test]
+    fn a_vault_holding_the_other_sides_mint_yields_no_price() {
+        let mut p = pool();
+        let wsol = Pubkey::from_str(SOL_MINT).unwrap();
+        p.accounts.get_mut(&p.vault_1.to_string()).unwrap().data = token_account(&wsol, 1);
+        assert!(decode(&p).is_none());
+    }
 
-    // Complete CPMM pool state fields
-    pub lp_supply: u64,             // LP token supply
-    pub protocol_fees_token_0: u64, // Protocol fees for token 0
-    pub protocol_fees_token_1: u64, // Protocol fees for token 1
-    pub fund_fees_token_0: u64,     // Fund fees for token 0
-    pub fund_fees_token_1: u64,     // Fund fees for token 1
-    pub open_time: u64,             // Pool open timestamp
-    pub recent_epoch: u64,          // Recent epoch number
-    pub creator_fee_on: u8,         // Creator fee status
-    pub enable_creator_fee: bool,   // Creator fee enabled flag
-    pub creator_fees_token_0: u64,  // Creator fees for token 0
-    pub creator_fees_token_1: u64,  // Creator fees for token 1
+    #[test]
+    fn a_pool_whose_status_disables_swapping_yields_no_price() {
+        let mut p = pool();
+        pool_data(&mut p)[329] = 1 << 2;
+        assert!(decode(&p).is_none());
+    }
 }

@@ -286,8 +286,8 @@ impl PoolDecoder for OrcaWhirlpoolDecoder {
             token_mint.to_string(),
             0.0, // No USD calculation
             price_sol,
-            sol_reserve as f64,
-            token_reserve as f64,
+            sol_reserve as f64 / (10_f64).powi(sol_decimals as i32),
+            token_reserve as f64 / (10_f64).powi(token_decimals as i32),
             String::new(), // Pool address will be set by calculator
         ))
     }
@@ -537,5 +537,15 @@ mod tests {
         );
         let (accounts, mint) = token_sol_pool(0);
         assert!(OrcaWhirlpoolDecoder::decode_and_calculate(&accounts, &mint, SOL_MINT).is_none());
+    }
+
+    #[test]
+    fn reserves_are_reported_in_whole_units_of_each_mint() {
+        // Both vaults hold 1,000,000,000 raw: 1 SOL (9 dp) and 1,000 tokens (6 dp).
+        let (accounts, mint) = token_sol_pool(1_000);
+        let price =
+            OrcaWhirlpoolDecoder::decode_and_calculate(&accounts, &mint, SOL_MINT).expect("prices");
+        assert!((price.native_reserves - 1.0).abs() < 1e-12);
+        assert!((price.token_reserves - 1_000.0).abs() < 1e-9);
     }
 }

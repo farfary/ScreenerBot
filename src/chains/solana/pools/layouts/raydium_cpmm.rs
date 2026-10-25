@@ -91,6 +91,22 @@ impl CpmmPoolState {
     pub fn is_open(&self, now_unix: u64) -> bool {
         now_unix >= self.open_time
     }
+
+    /// Tradable `(token_0, token_1)` reserves from the two vault balances: each
+    /// vault less the protocol, fund and creator fees awaiting collection out of
+    /// it.
+    pub fn tradable_reserves(&self, vault_0_balance: u64, vault_1_balance: u64) -> (u64, u64) {
+        (
+            vault_0_balance
+                .saturating_sub(self.protocol_fees_0)
+                .saturating_sub(self.fund_fees_0)
+                .saturating_sub(self.creator_fees_0),
+            vault_1_balance
+                .saturating_sub(self.protocol_fees_1)
+                .saturating_sub(self.fund_fees_1)
+                .saturating_sub(self.creator_fees_1),
+        )
+    }
 }
 
 /// The fee rates from `AmmConfig`.
@@ -164,6 +180,19 @@ mod tests {
         s.open_time = 1_000;
         assert!(!s.is_open(999));
         assert!(s.is_open(1_000));
+    }
+
+    #[test]
+    fn tradable_reserves_exclude_every_uncollected_fee_and_never_underflow() {
+        let mut s = sample_state();
+        s.protocol_fees_0 = 10;
+        s.fund_fees_0 = 20;
+        s.creator_fees_0 = 30;
+        s.protocol_fees_1 = 1;
+        s.fund_fees_1 = 2;
+        s.creator_fees_1 = 3;
+        assert_eq!(s.tradable_reserves(1_000, 100), (940, 94));
+        assert_eq!(s.tradable_reserves(50, 5), (0, 0));
     }
 
     #[test]

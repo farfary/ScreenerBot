@@ -18,11 +18,38 @@
 //! `curve_amount` was independently confirmed to equal the curve's own SPL
 //! token account balance to the raw unit on both live pools. The deployed
 //! programme's account carries one undocumented field beyond its own published
-//! IDL, `price_increase` (`u16` @82), mirroring the existing price DECODER at
-//! `pools/decoders/moonit_amm.rs`; neither it nor `coef_b` is decoded here.
+//! IDL, `price_increase` (`u16` @82); neither it nor `coef_b` takes part in the
+//! `ConstantProductV1` price, so neither is decoded here.
 
 use crate::chains::solana::layout::{pubkey_at, u16_at, u64_at, u8_at};
 use crate::chains::solana::solana_sdk::pubkey::Pubkey;
+
+/// `curve_type` byte for `ConstantProductV1`, the only curve whose formula is
+/// verified here.
+pub const CURVE_TYPE_CONSTANT_PRODUCT_V1: u8 = 1;
+/// `collateral_currency` byte for SOL.
+pub const COLLATERAL_CURRENCY_SOL: u8 = 0;
+
+/// The reference implementation's global virtual reserves
+/// (`@heliofi/launchpad-common`'s `ConstantProductCurveV1`), reproduced
+/// exactly rather than fitted: raw token units (9 dp) and lamports. The direct
+/// swap venue (`swaps/direct/venues/moonit.rs`) documents the four-trade replay
+/// and the live on-chain proof.
+pub const INITIAL_VIRTUAL_TOKEN_RESERVES: u128 = 1_073_000_000_000_000_000;
+pub const INITIAL_VIRTUAL_COLLATERAL_RESERVES: u128 = 30_000_000_000;
+
+/// The current virtual `(token, collateral)` reserves at `curve_position`, the
+/// reference SDK's own `getCurrentReserves`: recomputed fresh from the token
+/// position rather than tracked continuously, floor-rounded, exactly as the
+/// live programme does. `None` once the position leaves no virtual tokens.
+pub fn current_reserves(curve_position: u128) -> Option<(u128, u128)> {
+    let vtr = INITIAL_VIRTUAL_TOKEN_RESERVES.checked_sub(curve_position)?;
+    if vtr == 0 {
+        return None;
+    }
+    let constant_product = INITIAL_VIRTUAL_TOKEN_RESERVES * INITIAL_VIRTUAL_COLLATERAL_RESERVES;
+    Some((vtr, constant_product / vtr))
+}
 
 /// The parts of Moonit's `CurveAccount` a swap needs.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -52,6 +79,11 @@ impl CurveAccountState {
             collateral_currency: u8_at(data, 57)?,
             curve_type: u8_at(data, 58)?,
         })
+    }
+
+    /// Tokens sold so far, the reference curve's own `curvePosition`.
+    pub fn curve_position(&self) -> u128 {
+        (self.total_supply as u128).saturating_sub(self.curve_amount as u128)
     }
 }
 

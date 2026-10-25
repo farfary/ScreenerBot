@@ -18,8 +18,6 @@ pub mod raydium_clmm;
 pub mod raydium_cpmm;
 pub mod raydium_legacy_amm;
 
-pub use raydium_cpmm::{RaydiumCpmmDecoder, RaydiumCpmmPoolInfo};
-
 use super::fetcher::AccountData;
 use super::types::ProgramKind;
 use crate::pools::types::PriceResult;
