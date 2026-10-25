@@ -16,7 +16,9 @@
 //! by liquidity, up to [`MAX_CANDIDATE_POOLS`]; every candidate is quoted and the
 //! one that leaves the wallet the most wins, the earlier candidate on a tie.
 //! Every candidate is still checked against the requested pair before anything
-//! is built.
+//! is built. A token neither source knows -- one launched seconds ago, which no
+//! aggregator routes yet either -- is tried at its pump.fun bonding curve, whose
+//! address derives from the mint.
 //!
 //! # Failure classification
 //!
@@ -434,6 +436,21 @@ impl SwapRouter for DirectPoolRouter {
             router: self.name().to_owned(),
             detail: "the pool service knows no pool for this pair yet".to_owned(),
         };
+        if candidates.is_empty() {
+            // Most tokens are bought first on their launch curve, before any
+            // discovery source has indexed them. Any refusal from the derived
+            // curve (no such account, a migrated curve) keeps the no-pool answer.
+            let Some(curve) = launch_curve_for(&request.input_mint, &request.output_mint) else {
+                return Err(no_pool);
+            };
+            return self.quote_pool(request, curve).await.map_err(|error| {
+                logger::debug(
+                    LogTag::Swap,
+                    &format!("Launch curve {curve} could not quote this trade: {error}"),
+                );
+                no_pool
+            });
+        }
         let results = futures::future::join_all(
             candidates
                 .iter()
@@ -523,6 +540,23 @@ impl SwapRouter for DirectPoolRouter {
 fn is_reference_mint(mint: &str) -> bool {
     mint == crate::chains::solana::constants::SOL_MINT
         || mint == crate::chains::solana::constants::USDC_MINT
+}
+
+/// The pump.fun bonding curve of the token in a SOL pair, derived from its mint.
+fn launch_curve_for(input_mint: &str, output_mint: &str) -> Option<Pubkey> {
+    let sol = crate::chains::solana::constants::SOL_MINT;
+    let token = if input_mint == sol {
+        output_mint
+    } else if output_mint == sol {
+        input_mint
+    } else {
+        return None;
+    };
+    if is_reference_mint(token) {
+        return None;
+    }
+    let mint = Pubkey::from_str(token).ok()?;
+    Some(direct::venues::pumpfun_legacy::bonding_curve_address(&mint))
 }
 
 /// The exclusion label that rules this pool's program out, if any.
@@ -624,6 +658,30 @@ mod tests {
     }
 
     use crate::chains::solana::swaps::direct::DirectSwapError;
+
+    #[test]
+    fn only_the_token_of_a_sol_pair_is_tried_at_its_launch_curve() {
+        let sol = crate::chains::solana::constants::SOL_MINT;
+        let usdc = crate::chains::solana::constants::USDC_MINT;
+        let token = "AMmANDhpdoJiyqqzkHAC2c992WDR9DXbTw6AezTApump";
+        let curve = direct::venues::pumpfun_legacy::bonding_curve_address(
+            &Pubkey::from_str(token).expect("valid mint"),
+        );
+
+        assert_eq!(launch_curve_for(sol, token), Some(curve), "a buy");
+        assert_eq!(launch_curve_for(token, sol), Some(curve), "a sell");
+        assert_eq!(
+            launch_curve_for(usdc, token),
+            None,
+            "the curve trades SOL only"
+        );
+        assert_eq!(
+            launch_curve_for(sol, usdc),
+            None,
+            "a reference pair has no curve"
+        );
+        assert_eq!(launch_curve_for(sol, "not-a-mint"), None);
+    }
 
     #[test]
     fn slippage_converts_percent_to_basis_points_and_never_reaches_zero() {
