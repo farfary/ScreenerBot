@@ -42,6 +42,18 @@ fn trade_response(
             ApiError::new(ApiErrorCode::InvalidInput, ids::ERRORS_TRADE_SWAP_TOO_LARGE)
                 .into_response()
         }
+        // A swap a node refused in simulation is explained from its type; the node's
+        // text travels only as the error's details.
+        Ok(crate::trader::TradeResult {
+            success: false,
+            not_submitted: Some(NotSubmittedReason::SimulationFailed { detail }),
+            ..
+        }) => ApiError::new(
+            ApiErrorCode::InvalidInput,
+            ids::ERRORS_TRADE_SWAP_SIMULATION_FAILED,
+        )
+        .details(detail)
+        .into_response(),
         Ok(tr) if !tr.success => match tr.error {
             Some(reason) => {
                 ApiError::new(ApiErrorCode::InvalidInput, ids::ERRORS_TRADE_MANUAL_REFUSED)
@@ -537,7 +549,23 @@ mod tests {
             detail: "custom 6001".to_owned(),
         })))
         .await;
-        assert_eq!(other["error"]["text"]["id"], "errors-trade-manual-refused");
+        assert_eq!(
+            other["error"]["text"]["id"],
+            "errors-trade-swap-simulation-failed"
+        );
+        assert_eq!(other["error"]["details"], "custom 6001");
+        assert!(
+            !other["error"]["text"].to_string().contains("custom 6001"),
+            "{other}"
+        );
+        let message =
+            crate::i18n::format_message(&source, "errors-trade-swap-simulation-failed", None)
+                .expect("catalog message");
+        assert!(message.value.is_some_and(|title| !title.is_empty()));
+        assert!(message
+            .attributes
+            .iter()
+            .any(|(name, hint)| name == "hint" && !hint.is_empty()));
         let unrecorded = envelope(failed_buy(None)).await;
         assert_eq!(
             unrecorded["error"]["text"]["id"],
