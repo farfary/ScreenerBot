@@ -17,14 +17,14 @@ use axum::{
 };
 
 use crate::{
-    global,
+    config, global,
     logger::{self, LogTag},
 };
 
 /// Security header name for token validation
 pub const SECURITY_TOKEN_HEADER: &str = "X-ScreenerBot-Token";
 
-/// Security gate middleware (GUI mode only)
+/// Security gate middleware
 ///
 /// In GUI mode, validates that requests target the loopback dashboard origin,
 /// then requires a valid security token for protected APIs.
@@ -47,11 +47,30 @@ pub const SECURITY_TOKEN_HEADER: &str = "X-ScreenerBot-Token";
 ///   NOTE: /api/account/* is deliberately NOT exempt - it is the sign-in API
 ///   and must keep requiring the token.
 ///
-/// In CLI mode, this middleware does nothing (allows all requests).
+/// In headless mode the dashboard has no security token. With password
+/// authentication enabled the session cookie protects it and the server may be
+/// reached through any address. Without it the server is bound to loopback
+/// only (`validate_headless_bind`), and the same loopback `Host`/`Origin` check
+/// applies, so a page that rebinds its own hostname to 127.0.0.1 cannot drive
+/// the API from the user's browser.
 pub async fn security_gate(request: Request, next: Next) -> Response {
-    // Skip security check in CLI mode
     if !global::is_gui_mode() {
-        return next.run(request).await;
+        let auth_enabled = config::with_config(|cfg| cfg.webserver.auth_enabled);
+        if headless_request_allowed(auth_enabled, request.headers()) {
+            return next.run(request).await;
+        }
+        logger::warning(
+            LogTag::Webserver,
+            &format!(
+                "Blocked request to {} - not a local dashboard request and authentication is disabled",
+                request.uri().path()
+            ),
+        );
+        return ApiError::new(
+            ApiErrorCode::InvalidLocalRequest,
+            ids::ERRORS_SECURITY_INVALID_LOCAL_REQUEST,
+        )
+        .into_response();
     }
 
     if !has_valid_local_request_headers(request.headers()) {
@@ -125,10 +144,24 @@ pub async fn security_gate(request: Request, next: Next) -> Response {
     }
 }
 
+/// Whether a headless request may proceed: password authentication guards the
+/// dashboard on its own; without it only a loopback same-origin request does.
+fn headless_request_allowed(auth_enabled: bool, headers: &HeaderMap) -> bool {
+    auth_enabled || has_valid_local_request_headers(headers)
+}
+
+/// The host and port of `value` when it names this machine: `localhost` or a
+/// loopback IP literal (which no DNS answer can rebind), with an explicit port.
 fn parse_loopback_authority(value: &str) -> Option<(String, u16)> {
     let authority = value.parse::<Authority>().ok()?;
     let host = authority.host().to_ascii_lowercase();
-    if host != "127.0.0.1" && host != "localhost" {
+    let is_loopback = host == "localhost"
+        || host
+            .trim_start_matches('[')
+            .trim_end_matches(']')
+            .parse::<std::net::IpAddr>()
+            .is_ok_and(|address| address.is_loopback());
+    if !is_loopback {
         return None;
     }
 
@@ -409,7 +442,6 @@ pub async fn cache_control(request: Request, next: Next) -> Response {
 ///
 /// In GUI mode, this middleware does nothing (GUI uses security token instead).
 pub async fn auth_gate(request: Request, next: Next) -> Response {
-    use crate::config;
     use crate::webserver::routes::auth::extract_session_token;
     use crate::webserver::session;
 
@@ -437,9 +469,10 @@ pub async fn auth_gate(request: Request, next: Next) -> Response {
         // handler authenticates a mandatory pairing bearer credential instead,
         // in every mode. That credential — not a loopback guarantee — is what
         // protects the surface: with password auth enabled a headless server
-        // can be bound to a non-loopback address, and `security_gate`'s
-        // Host/Origin check does not run in headless mode. GUI mode additionally
-        // applies that local Host/Origin check to this path like any other.
+        // can be bound to a non-loopback address, and `security_gate` skips
+        // its Host/Origin check for a headless server with authentication
+        // enabled. Without authentication, and in GUI mode, that local
+        // Host/Origin check applies to this path like any other.
         || path.starts_with(crate::webserver::routes::agent_bridge::BRIDGE_PREFIX)
     {
         return next.run(request).await;
@@ -511,6 +544,38 @@ mod tests {
         ] {
             assert!(!has_valid_local_request_headers(&headers));
         }
+    }
+
+    #[test]
+    fn loopback_ip_literals_are_local_hosts() {
+        assert!(has_valid_local_request_headers(&request_headers(
+            Some("[::1]:8080"),
+            Some("http://[::1]:8080")
+        )));
+        assert!(has_valid_local_request_headers(&request_headers(
+            Some("127.0.0.2:8080"),
+            None
+        )));
+        assert!(!has_valid_local_request_headers(&request_headers(
+            Some("[::1]:8080"),
+            Some("http://127.0.0.1:8080")
+        )));
+    }
+
+    #[test]
+    fn headless_without_auth_admits_only_local_same_origin_requests() {
+        let local = request_headers(Some("127.0.0.1:8080"), Some("http://127.0.0.1:8080"));
+        let rebound = request_headers(
+            Some("rebind.example:8080"),
+            Some("http://rebind.example:8080"),
+        );
+        let cross_origin = request_headers(Some("127.0.0.1:8080"), Some("http://evil.example"));
+
+        assert!(headless_request_allowed(false, &local));
+        assert!(!headless_request_allowed(false, &rebound));
+        assert!(!headless_request_allowed(false, &cross_origin));
+        // Password authentication protects a headless server on any address.
+        assert!(headless_request_allowed(true, &rebound));
     }
 
     #[test]

@@ -384,7 +384,7 @@ fn build_app(state: Arc<AppState>) -> Router {
     // Add middleware layers
     // Order matters - layers are applied in reverse order (last added runs first):
     // 1. Compression runs first (outermost)
-    // 2. Security gate checks token (GUI mode only)
+    // 2. Security gate checks the local Host/Origin and, in GUI mode, the token
     // 3. Auth gate checks session cookie (headless mode only)
     // 4. Initialization gate checks init status
     // 5. Cache control adds no-cache headers (innermost, runs last on response)
