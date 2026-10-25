@@ -135,7 +135,7 @@ pub(super) async fn handle_market_failure(db: &Arc<TokenDatabase>, result: &Upda
                     );
                     return false;
                 }
-                logger::info(
+                logger::debug(
                     LogTag::Tokens,
                     &format!(
                         "Marked {} as permanently failed for market data after {} attempts (not listed on any exchange)",

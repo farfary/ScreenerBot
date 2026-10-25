@@ -202,7 +202,7 @@ impl PoolDiscovery {
 
         let added_count = tokens.len() - initial_count;
         if added_count > 0 {
-            logger::info(
+            logger::debug(
                 LogTag::PoolDiscovery,
                 &format!(
                     "Added {} position/wallet-held tokens to monitoring set",

@@ -35,14 +35,14 @@ pub(super) async fn health_check() -> Response {
 
 /// GET /api/status
 pub(super) async fn system_status() -> Response {
-    logger::info(LogTag::Webserver, "Fetching system status snapshot");
+    logger::debug(LogTag::Webserver, "Fetching system status snapshot");
 
     let mut snapshot = gather_status_snapshot().await;
     if promo::are_promo_fixtures_enabled() {
         promo::apply_promo_status(&mut snapshot);
     }
 
-    logger::info(
+    logger::debug(
         LogTag::Webserver,
         &format!(
             "Status snapshot ready (uptime={}s, trading_enabled={}, open_positions={})",
@@ -55,7 +55,7 @@ pub(super) async fn system_status() -> Response {
 
 /// GET /api/status/services
 pub(super) async fn service_status() -> Response {
-    logger::info(LogTag::Webserver, "Fetching service status snapshot");
+    logger::debug(LogTag::Webserver, "Fetching service status snapshot");
 
     let services = collect_service_status_snapshot();
     success_response(services)
@@ -63,7 +63,7 @@ pub(super) async fn service_status() -> Response {
 
 /// GET /api/status/metrics
 pub(super) async fn system_metrics() -> Response {
-    logger::info(LogTag::Webserver, "Fetching system metrics snapshot");
+    logger::debug(LogTag::Webserver, "Fetching system metrics snapshot");
 
     let metrics = get_cached_system_metrics().await;
     success_response(metrics)
