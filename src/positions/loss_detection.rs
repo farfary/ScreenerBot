@@ -66,7 +66,7 @@ pub async fn process_position_loss_detection(position: &Position) -> Result<()> 
         logger::warning(
             LogTag::Positions,
             &format!(
-                "Loss detected for {} ({}): -{:.3} SOL ({:.1}%)",
+                "Loss detected for {} ({}): -{:.9} SOL ({:.1}%)",
                 position.symbol, &position.mint, loss_native, net_pnl_percent
             ),
         );
@@ -135,7 +135,7 @@ pub async fn process_position_loss_detection(position: &Position) -> Result<()> 
             logger::info(
                 LogTag::Positions,
                 &format!(
-                    "Minor loss for {} not blacklisted: -{:.3} SOL ({:.1}%)",
+                    "Minor loss for {} not blacklisted: -{:.9} SOL ({:.1}%)",
                     position.symbol, loss_native, net_pnl_percent
                 ),
             );
@@ -144,7 +144,7 @@ pub async fn process_position_loss_detection(position: &Position) -> Result<()> 
         logger::info(
             LogTag::Positions,
             &format!(
-                "Profit recorded for {} ({}): +{:.3} SOL ({:.1}%)",
+                "Profit recorded for {} ({}): +{:.9} SOL ({:.1}%)",
                 position.symbol, &position.mint, net_pnl_native, net_pnl_percent
             ),
         );
