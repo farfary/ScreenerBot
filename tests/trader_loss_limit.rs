@@ -169,6 +169,48 @@ fn a_profit_never_counts_against_the_budget() {
 }
 
 #[test]
+fn a_gain_on_tokens_of_unknown_cost_is_not_reported_as_profit() {
+    // A close that sold tokens of unknown cost booked its proceeds over a cost that misses
+    // them: its loss is at least the booked one and counts, its gain may not exist.
+    common::run_isolated(
+        module_path!(),
+        "a_gain_on_tokens_of_unknown_cost_is_not_reported_as_profit",
+        || async {
+            let _dir = common::isolated_env();
+            let _cfg = config_guard();
+            open_books().await;
+            enable_limit(10.0);
+
+            book_close_with(3.0, |position| position.basis_complete = false).await;
+            book_close_with(-0.5, |position| position.basis_complete = false).await;
+            book_close(1.0).await;
+            book_close(-2.0).await;
+
+            let stats = screenerbot::positions::get_period_trading_stats(
+                Utc::now() - chrono::Duration::hours(1),
+                None,
+            )
+            .await
+            .expect("read the period statistics");
+            assert_eq!(stats.closed_positions, 4);
+            assert_eq!(stats.wins, 1);
+            assert!((stats.profit_native - 1.0).abs() < 1e-12);
+            assert!((stats.loss_native - 2.5).abs() < 1e-12);
+            assert!((stats.net_pnl_native + 1.5).abs() < 1e-12);
+            assert!((recorded() - 2.5).abs() < 1e-12);
+
+            let bounded = screenerbot::positions::get_period_trading_stats(
+                Utc::now() - chrono::Duration::hours(1),
+                Some(Utc::now() - chrono::Duration::minutes(30)),
+            )
+            .await
+            .expect("read a bounded period");
+            assert_eq!(bounded.closed_positions, 0);
+        },
+    );
+}
+
+#[test]
 fn a_loss_on_a_wallet_derived_round_is_not_counted() {
     // A wallet-derived round is the user's own holding, not risk the bot took.
     common::run_isolated(

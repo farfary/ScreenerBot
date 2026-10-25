@@ -13,6 +13,25 @@ use crate::positions::{Error, Result};
 
 use super::types::*;
 
+/// The bot's closed, exit-verified positions of wallet `?1` on chain `?2` that exited from
+/// `?3`, before `?4` when it is not NULL, with the P&L the statistics count.
+///
+/// A position whose cost basis or history is incomplete booked its proceeds over a cost
+/// that misses what it does not know, so its P&L is an upper bound of the real one: a loss
+/// it shows is a loss at least that large and counts, a gain it shows may not exist and
+/// counts as none, so the profit, net P&L and wins of a period never include it.
+const COUNTED_CLOSED_POSITIONS: &str = r#"
+      SELECT exit_time, pnl_percent, dca_count, partial_exit_count,
+        CASE WHEN basis_complete = 1 AND history_complete = 1 THEN pnl ELSE MIN(pnl, 0) END AS pnl
+      FROM positions
+      WHERE wallet_address = ?1 AND chain_id = ?2
+        AND transaction_exit_verified = 1
+        AND origin_kind != 'external'
+        AND exit_time IS NOT NULL
+        AND datetime(exit_time) >= datetime(?3)
+        AND (?4 IS NULL OR datetime(exit_time) < datetime(?4))
+"#;
+
 impl PositionsDatabase {
     /// Get position by ID
     pub async fn get_position_by_id(&self, id: i64) -> Result<Option<Position>> {
@@ -381,14 +400,15 @@ impl PositionsDatabase {
         Ok(count)
     }
 
-    /// Get aggregated trading statistics for a time period (OPTIMIZED - SQL aggregation)
-    /// This replaces fetching all positions and calculating in Rust
+    /// Aggregated trading statistics of the bot's positions closed from `period_start`, up
+    /// to `period_end` when one is given, in one SQL aggregation.
     ///
     /// Wallet-derived rounds (`origin_kind = 'external'`) are excluded here and in every
     /// other performance query: they are the user's own pre-existing history, not trades
     /// the bot placed. Counting them would misreport win rate and — because
     /// `initialize_from_history` seeds the loss limiter from this — could trip the loss
-    /// limit at startup on losses the bot never took.
+    /// limit at startup on losses the bot never took. P&L is counted as
+    /// [`COUNTED_CLOSED_POSITIONS`] defines it.
     pub async fn get_period_trading_stats(
         &self,
         period_start: DateTime<Utc>,
@@ -400,138 +420,69 @@ impl PositionsDatabase {
                 detail: e.to_string(),
             })?;
 
-        let query = if period_end.is_some() {
+        let query = format!(
             r#"
-      SELECT 
+      WITH closed AS ({COUNTED_CLOSED_POSITIONS})
+      SELECT
         COUNT(*) as trade_count,
         SUM(CASE WHEN pnl > 0 THEN 1 ELSE 0 END) as wins,
         COALESCE(SUM(CASE WHEN pnl > 0 THEN pnl ELSE 0 END), 0) as profit,
         COALESCE(SUM(CASE WHEN pnl < 0 THEN ABS(pnl) ELSE 0 END), 0) as loss,
         COALESCE(SUM(pnl), 0) as total_pnl,
         COALESCE(SUM(1 + dca_count), 0) as total_buys,
-        COALESCE(SUM(CASE 
-          WHEN partial_exit_count > 0 
-          THEN partial_exit_count + 1 
-          ELSE 1 
+        COALESCE(SUM(CASE
+          WHEN partial_exit_count > 0
+          THEN partial_exit_count + 1
+          ELSE 1
         END), 0) as total_sells,
         COALESCE(MAX(CASE WHEN pnl_percent < 0 THEN ABS(pnl_percent) ELSE 0 END), 0) as max_dd
-      FROM positions 
-      WHERE wallet_address = ?1 AND chain_id = ?2
-        AND transaction_exit_verified = 1
-        AND origin_kind != 'external'
-        AND exit_time IS NOT NULL
-        AND datetime(exit_time) >= datetime(?3)
-        AND datetime(exit_time) < datetime(?4)
+      FROM closed
       "#
-        } else {
-            r#"
-      SELECT 
-        COUNT(*) as trade_count,
-        SUM(CASE WHEN pnl > 0 THEN 1 ELSE 0 END) as wins,
-        COALESCE(SUM(CASE WHEN pnl > 0 THEN pnl ELSE 0 END), 0) as profit,
-        COALESCE(SUM(CASE WHEN pnl < 0 THEN ABS(pnl) ELSE 0 END), 0) as loss,
-        COALESCE(SUM(pnl), 0) as total_pnl,
-        COALESCE(SUM(1 + dca_count), 0) as total_buys,
-        COALESCE(SUM(CASE 
-          WHEN partial_exit_count > 0 
-          THEN partial_exit_count + 1 
-          ELSE 1 
-        END), 0) as total_sells,
-        COALESCE(MAX(CASE WHEN pnl_percent < 0 THEN ABS(pnl_percent) ELSE 0 END), 0) as max_dd
-      FROM positions 
-      WHERE wallet_address = ?1 AND chain_id = ?2
-        AND transaction_exit_verified = 1
-        AND origin_kind != 'external'
-        AND exit_time IS NOT NULL
-        AND datetime(exit_time) >= datetime(?3)
-      "#
-        };
+        );
 
-        let start_str = period_start.to_rfc3339();
+        conn.query_row(
+            &query,
+            params![
+                wallet_address,
+                self.chain.as_str(),
+                period_start.to_rfc3339(),
+                period_end.map(|end| end.to_rfc3339())
+            ],
+            |row| {
+                let trade_count: i64 = row.get(0)?;
+                let wins: i64 = row.get::<_, Option<i64>>(1)?.unwrap_or_default();
+                let win_rate = if trade_count > 0 {
+                    (wins as f64 / trade_count as f64) * 100.0
+                } else {
+                    0.0
+                };
 
-        let stats = if let Some(end) = period_end {
-            let end_str = end.to_rfc3339();
-            conn.query_row(
-                query,
-                params![wallet_address, self.chain.as_str(), start_str, end_str],
-                |row| {
-                    let trade_count: i64 = row.get(0)?;
-                    let wins: Option<i64> = row.get(1)?;
-                    let profit: f64 = row.get(2)?;
-                    let loss: f64 = row.get(3)?;
-                    let total_pnl: f64 = row.get(4)?;
-                    let total_buys: i64 = row.get(5)?;
-                    let total_sells: i64 = row.get(6)?;
-                    let max_dd: f64 = row.get(7)?;
-
-                    let win_rate = if trade_count > 0 {
-                        (wins.unwrap_or_default() as f64 / trade_count as f64) * 100.0
-                    } else {
-                        0.0
-                    };
-
-                    Ok(PeriodTradingStats {
-                        buys: total_buys,
-                        sells: total_sells,
-                        profit_native: profit,
-                        loss_native: loss,
-                        net_pnl_native: total_pnl,
-                        drawdown_percent: max_dd,
-                        win_rate,
-                        closed_positions: trade_count,
-                        wins: wins.unwrap_or_default(),
-                    })
-                },
-            )
-            .map_err(|e| DatabaseError::Query {
+                Ok(PeriodTradingStats {
+                    buys: row.get(5)?,
+                    sells: row.get(6)?,
+                    profit_native: row.get(2)?,
+                    loss_native: row.get(3)?,
+                    net_pnl_native: row.get(4)?,
+                    drawdown_percent: row.get(7)?,
+                    win_rate,
+                    closed_positions: trade_count,
+                    wins,
+                })
+            },
+        )
+        .map_err(|e| {
+            DatabaseError::Query {
                 operation: "execute period stats query".to_owned(),
                 message: e.to_string(),
-            })?
-        } else {
-            conn.query_row(
-                query,
-                params![wallet_address, self.chain.as_str(), start_str],
-                |row| {
-                    let trade_count: i64 = row.get(0)?;
-                    let wins: Option<i64> = row.get(1)?;
-                    let profit: f64 = row.get(2)?;
-                    let loss: f64 = row.get(3)?;
-                    let total_pnl: f64 = row.get(4)?;
-                    let total_buys: i64 = row.get(5)?;
-                    let total_sells: i64 = row.get(6)?;
-                    let max_dd: f64 = row.get(7)?;
-
-                    let win_rate = if trade_count > 0 {
-                        (wins.unwrap_or_default() as f64 / trade_count as f64) * 100.0
-                    } else {
-                        0.0
-                    };
-
-                    Ok(PeriodTradingStats {
-                        buys: total_buys,
-                        sells: total_sells,
-                        profit_native: profit,
-                        loss_native: loss,
-                        net_pnl_native: total_pnl,
-                        drawdown_percent: max_dd,
-                        win_rate,
-                        closed_positions: trade_count,
-                        wins: wins.unwrap_or_default(),
-                    })
-                },
-            )
-            .map_err(|e| DatabaseError::Query {
-                operation: "execute period stats query".to_owned(),
-                message: e.to_string(),
-            })?
-        };
-
-        Ok(stats)
+            }
+            .into()
+        })
     }
 
     /// Get realized trading statistics grouped by calendar day (UTC) for a period.
     /// Used by the home portfolio calendar. Only exit-verified, closed positions count,
-    /// keyed by the day their exit was recorded (`exit_time`).
+    /// keyed by the day their exit was recorded (`exit_time`), with P&L counted as
+    /// [`COUNTED_CLOSED_POSITIONS`] defines it.
     pub async fn get_daily_trading_stats(
         &self,
         period_start: DateTime<Utc>,
@@ -544,8 +495,9 @@ impl PositionsDatabase {
             })?;
 
         let mut stmt = conn
-            .prepare(
+            .prepare(&format!(
                 r#"
+        WITH closed AS ({COUNTED_CLOSED_POSITIONS})
         SELECT
           strftime('%Y-%m-%d', exit_time) as day,
           COUNT(*) as trades,
@@ -553,17 +505,11 @@ impl PositionsDatabase {
           COALESCE(SUM(CASE WHEN pnl > 0 THEN pnl ELSE 0 END), 0) as profit,
           COALESCE(SUM(CASE WHEN pnl < 0 THEN ABS(pnl) ELSE 0 END), 0) as loss,
           COALESCE(SUM(pnl), 0) as total_pnl
-        FROM positions
-        WHERE wallet_address = ?1 AND chain_id = ?2
-          AND transaction_exit_verified = 1
-          AND origin_kind != 'external'
-          AND exit_time IS NOT NULL
-          AND datetime(exit_time) >= datetime(?3)
-          AND datetime(exit_time) < datetime(?4)
+        FROM closed
         GROUP BY day
         ORDER BY day ASC
-        "#,
-            )
+        "#
+            ))
             .map_err(|e| DatabaseError::Query {
                 operation: "prepare daily stats query".to_owned(),
                 message: e.to_string(),
@@ -575,7 +521,7 @@ impl PositionsDatabase {
                     wallet_address,
                     self.chain.as_str(),
                     period_start.to_rfc3339(),
-                    period_end.to_rfc3339()
+                    Some(period_end.to_rfc3339())
                 ],
                 |row| {
                     Ok(DailyTradingStats {
