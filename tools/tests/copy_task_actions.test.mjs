@@ -11,6 +11,9 @@
  * from saved progress, or skip and resume from now. Both sit in the recovery panel as real
  * button variants, and the action row offers neither.
  *
+ * The recovery panel takes a full-width row under the title and the actions, which keep
+ * their place top-right as on every other task.
+ *
  * The strip's bulk action follows the task states: Pause all only while a task copies,
  * Resume while any task exists.
  *
@@ -113,6 +116,26 @@ test("a watch over its limit offers both ways out inside the recovery panel", as
   );
   for (const choice of choices) assert.ok(choice.legible, `${choice.action} is legible`);
   assert.equal(await page.locator("#copy-ws-actions [data-ws-action='resume-budget']").count(), 0);
+
+  const layout = await page.evaluate(() => {
+    const box = (selector) => document.querySelector(selector).getBoundingClientRect();
+    const head = box(".copy-ws-head");
+    const actions = box("#copy-ws-actions");
+    const recovery = box("#copy-ws-watch-recovery");
+    return { head, actions, recovery };
+  });
+  assert.ok(
+    layout.actions.bottom <= layout.recovery.top,
+    "the actions stay on the title row, above the recovery panel"
+  );
+  assert.ok(
+    Math.abs(layout.actions.right - layout.head.right) < 1,
+    "the actions stay right-aligned"
+  );
+  assert.ok(
+    Math.abs(layout.recovery.width - layout.head.width) < 1,
+    "the recovery panel spans the header"
+  );
 
   const resume = panel.locator("[data-ws-action='resume-budget']");
   assert.ok(await resume.isDisabled(), "resuming from now waits for the acknowledgement");

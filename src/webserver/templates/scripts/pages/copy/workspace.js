@@ -200,7 +200,7 @@ export function createWorkspace(page) {
         <div class="copy-ws-state" id="copy-ws-state" aria-live="polite"></div>
         <div class="copy-ws-watch-status" id="copy-ws-watch-status"></div>
       </div>
-      <div id="copy-ws-watch-recovery"></div>
+      <div class="copy-ws-recovery" id="copy-ws-watch-recovery"></div>
       <div class="copy-ws-actions" id="copy-ws-actions"></div>
     </header>
     <div class="copy-tabs" role="tablist" aria-label="${esc(I18n.t("copy-tabs-label"))}" id="copy-ws-tabs"></div>
@@ -367,7 +367,6 @@ export function createWorkspace(page) {
       const recovery = recoveryHtml(task);
       recoveryNode.hidden = !recovery;
       paint(recoveryNode, recovery);
-      recoveryNode.closest(".copy-ws-head")?.classList.toggle("has-watch-recovery", !!recovery);
     }
     paint($("#copy-ws-actions"), actionsHtml(task));
     syncRecoveryAction();

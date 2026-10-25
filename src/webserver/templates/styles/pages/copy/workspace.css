@@ -24,9 +24,9 @@
   gap: var(--spacing-md);
 }
 
-.copy-ws-head.has-watch-recovery {
-  display: grid;
-  grid-template-columns: minmax(0, 1fr);
+.copy-ws-recovery {
+  flex: 1 0 100%;
+  order: 1;
 }
 
 .copy-ws-identity {
@@ -141,16 +141,6 @@
 .copy-watch-resume .copy-watch-ack {
   margin: var(--spacing-xs) 0;
   color: var(--text-secondary);
-}
-
-@media (width > 1500px) {
-  .copy-ws-head.has-watch-recovery {
-    grid-template-columns: minmax(0, 1fr) minmax(300px, 420px);
-  }
-
-  .copy-ws-head.has-watch-recovery .copy-ws-actions {
-    grid-column: 1 / -1;
-  }
 }
 
 .copy-ws-actions {
@@ -280,6 +270,10 @@
   display: grid;
   grid-template-columns: repeat(2, minmax(0, 1fr));
   gap: var(--spacing-md);
+}
+
+.copy-split {
+  align-items: start;
 }
 
 .copy-decision-split {
