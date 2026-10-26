@@ -440,7 +440,6 @@ telegram-notify-update-available =
 
     { $how }
     Ukuran unduhan: { $size } MB
-telegram-notify-update-how-installer = Rilis ini juga memperbarui aplikasi desktop, sehingga penginstalnya harus dijalankan sekali.
 telegram-notify-update-ready =
     <b>Pembaruan v{ $version } siap</b>
 

@@ -440,7 +440,6 @@ telegram-notify-update-available =
 
     { $how }
     ダウンロードサイズ: { $size } MB
-telegram-notify-update-how-installer = このリリースにはデスクトップアプリの更新も含まれるため、インストーラーを1回実行する必要があります。
 telegram-notify-update-ready =
     <b>アップデート v{ $version } の準備ができました</b>
 

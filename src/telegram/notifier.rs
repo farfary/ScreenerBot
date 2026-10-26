@@ -356,15 +356,15 @@ impl TelegramNotifier {
                 let installs_silently = *silent;
                 match stage {
                     UpdateStage::Available => {
-                        // A full release on a headless install is installed by the
-                        // package manager on the server, never by this process.
-                        let how = if installs_silently {
-                            ids::TELEGRAM_UPDATE_HOW_CORE
-                        } else if self_install_supported(UpdateKind::Full) {
-                            ids::TELEGRAM_NOTIFY_UPDATE_HOW_INSTALLER
+                        // A silent release is a core release; a full release on a
+                        // headless install is installed by the package manager on
+                        // the server, never by this process.
+                        let kind = if installs_silently {
+                            UpdateKind::Core
                         } else {
-                            ids::TELEGRAM_UPDATE_HOW_HEADLESS
+                            UpdateKind::Full
                         };
+                        let how = messages::update_how(kind, self_install_supported(kind));
                         let megabytes = *transfer_bytes as f64 / (1024.0 * 1024.0);
                         with_icon(
                             "\u{2b06}\u{fe0f}",

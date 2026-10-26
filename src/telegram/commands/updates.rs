@@ -9,6 +9,7 @@
 //! touches the network.
 
 use crate::i18n::{ids, MessageId, UiArg, UiText};
+use crate::telegram::messages;
 use crate::telegram::text::{tg, tg_id, tg_plain, with_icon};
 use crate::version::{self, UpdateKind, UpdatePhase};
 
@@ -110,22 +111,12 @@ pub async fn handle_update_command() -> String {
 /// full release on a headless install) is installed by the package manager on the
 /// server and never downloads on its own, so its notice names that command instead.
 fn available_text(kind: UpdateKind, self_install: bool, version: &str) -> UiText {
-    let (message, how) = if !self_install {
-        (
-            ids::TELEGRAM_UPDATE_AVAILABLE_HEADLESS,
-            ids::TELEGRAM_UPDATE_HOW_HEADLESS,
-        )
-    } else if kind == UpdateKind::Core {
-        (
-            ids::TELEGRAM_UPDATE_AVAILABLE,
-            ids::TELEGRAM_UPDATE_HOW_CORE,
-        )
+    let message = if self_install {
+        ids::TELEGRAM_UPDATE_AVAILABLE
     } else {
-        (
-            ids::TELEGRAM_UPDATE_AVAILABLE,
-            ids::TELEGRAM_UPDATE_HOW_INSTALLER,
-        )
+        ids::TELEGRAM_UPDATE_AVAILABLE_HEADLESS
     };
+    let how = messages::update_how(kind, self_install);
     version_text(message, version).arg("how", UiArg::Nested(Box::new(UiText::new(how))))
 }
 

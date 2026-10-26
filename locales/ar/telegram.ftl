@@ -443,7 +443,6 @@ telegram-notify-update-available =
 
     { $how }
     حجم التنزيل: { $size } MB
-telegram-notify-update-how-installer = يحدّث هذا الإصدار تطبيق سطح المكتب أيضًا، لذا يجب تشغيل مثبّته مرة واحدة.
 telegram-notify-update-ready =
     <b>التحديث v{ $version } جاهز</b>
 

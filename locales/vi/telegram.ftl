@@ -432,7 +432,6 @@ telegram-notify-update-available =
 
     { $how }
     Dung lượng tải: { $size } MB
-telegram-notify-update-how-installer = Bản phát hành này cũng cập nhật ứng dụng máy tính, nên trình cài đặt phải chạy một lần.
 telegram-notify-update-ready =
     <b>Bản cập nhật v{ $version } đã sẵn sàng</b>
 

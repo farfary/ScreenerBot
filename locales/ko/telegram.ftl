@@ -430,7 +430,6 @@ telegram-notify-update-available =
 
     { $how }
     다운로드 크기: { $size } MB
-telegram-notify-update-how-installer = 이 릴리스는 데스크톱 앱도 업데이트하므로 설치 프로그램을 한 번 실행해야 합니다.
 telegram-notify-update-ready =
     <b>업데이트 v{ $version } 준비 완료</b>
 

@@ -434,7 +434,6 @@ telegram-notify-update-available =
 
     { $how }
     İndirme boyutu: { $size } MB
-telegram-notify-update-how-installer = Bu sürüm masaüstü uygulamasını da güncelliyor, bu yüzden yükleyicisinin bir kez çalıştırılması gerekir.
 telegram-notify-update-ready =
     <b>v{ $version } güncellemesi hazır</b>
 

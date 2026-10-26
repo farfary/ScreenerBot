@@ -8,7 +8,7 @@
 //! and are escaped by `tg`.
 
 use crate::events::ScheduledTaskOutcome;
-use crate::i18n::{ids, UiText};
+use crate::i18n::{ids, MessageId, UiText};
 use crate::telegram::formatters::{
     bold, code, duration_text, format_ai_reasoning, format_mint_display, format_pnl,
     format_pnl_bold, format_tokens_f64, native_arg, nested_arg, pnl_plain, price_arg, row,
@@ -18,6 +18,7 @@ use crate::telegram::text::{tg, tg_escape, tg_id, with_icon};
 use crate::telegram::types::{ErrorSeverity, StartMode, StopReason};
 use crate::trader::closed_reason_text;
 use crate::trader::copy::task_arg;
+use crate::version::UpdateKind;
 
 /// `$SYMBOL — P&L` subject line.
 fn symbol_pnl_line(symbol: &str, pnl: String) -> String {
@@ -460,9 +461,38 @@ pub fn msg_confirm_close(
     )
 }
 
+/// How an available release installs: a core release silently, a full release
+/// through the desktop installer when this process can install it, and on a
+/// headless install with the server's package manager. The update notification
+/// and the update command read the same line from here.
+pub fn update_how(kind: UpdateKind, self_install: bool) -> MessageId {
+    if !self_install {
+        ids::TELEGRAM_UPDATE_HOW_HEADLESS
+    } else if kind == UpdateKind::Core {
+        ids::TELEGRAM_UPDATE_HOW_CORE
+    } else {
+        ids::TELEGRAM_UPDATE_HOW_INSTALLER
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn each_install_path_names_its_own_update_line() {
+        assert_eq!(
+            update_how(UpdateKind::Core, true),
+            ids::TELEGRAM_UPDATE_HOW_CORE
+        );
+        assert_eq!(
+            update_how(UpdateKind::Full, true),
+            ids::TELEGRAM_UPDATE_HOW_INSTALLER
+        );
+        for kind in [UpdateKind::Core, UpdateKind::Full] {
+            assert_eq!(update_how(kind, false), ids::TELEGRAM_UPDATE_HOW_HEADLESS);
+        }
+    }
 
     #[test]
     fn an_unbooked_swap_message_carries_its_text_symbol_and_signature() {

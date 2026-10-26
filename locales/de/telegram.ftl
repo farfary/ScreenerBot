@@ -434,7 +434,6 @@ telegram-notify-update-available =
 
     { $how }
     Downloadgröße: { $size } MB
-telegram-notify-update-how-installer = Dieses Release aktualisiert auch die Desktop-App, daher muss deren Installer einmal ausgeführt werden.
 telegram-notify-update-ready =
     <b>Update v{ $version } bereit</b>
 

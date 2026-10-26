@@ -436,7 +436,6 @@ telegram-notify-update-available =
 
     { $how }
     Taille du téléchargement : { $size } Mo
-telegram-notify-update-how-installer = Cette version met aussi à jour l'application de bureau ; son programme d'installation doit donc être exécuté une fois.
 telegram-notify-update-ready =
     <b>Mise à jour v{ $version } prête</b>
 

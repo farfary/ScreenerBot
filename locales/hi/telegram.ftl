@@ -422,7 +422,6 @@ telegram-notify-update-available =
 
     { $how }
     डाउनलोड साइज़: { $size } MB
-telegram-notify-update-how-installer = यह रिलीज़ डेस्कटॉप ऐप भी अपडेट करती है, इसलिए उसका इंस्टॉलर एक बार चलाना होगा।
 telegram-notify-update-ready =
     <b>अपडेट v{ $version } तैयार है</b>
 

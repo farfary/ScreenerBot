@@ -440,7 +440,6 @@ telegram-notify-update-available =
 
     { $how }
     下载大小：{ $size } MB
-telegram-notify-update-how-installer = 此版本同时更新桌面应用，因此需要运行一次其安装程序。
 telegram-notify-update-ready =
     <b>更新 v{ $version } 已就绪</b>
 

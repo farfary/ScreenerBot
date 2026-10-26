@@ -442,7 +442,6 @@ telegram-notify-update-available =
 
     { $how }
     حجم دانلود: { $size } MB
-telegram-notify-update-how-installer = این نسخه برنامه دسکتاپ را هم به‌روزرسانی می‌کند، بنابراین نصب‌کننده آن باید یک بار اجرا شود.
 telegram-notify-update-ready =
     <b>به‌روزرسانی v{ $version } آماده است</b>
 
