@@ -13,8 +13,16 @@ use r2d2::PooledConnection;
 use r2d2_sqlite::SqliteConnectionManager;
 use rusqlite::{params, OptionalExtension, Transaction};
 
-// Database schema version
+/// The version the store's own `schema_version` table records once its tables exist.
 const STRATEGIES_SCHEMA_VERSION: u32 = 1;
+
+/// The store version this core writes. Version 2 drops `strategy_assignments`, which
+/// nothing read or wrote (an automatic position records its strategy in its origin).
+/// A drop is a breaking change, so v2 is also the oldest version that reads the store.
+const STORE_VERSION: i64 = 2;
+
+/// The version the store held when the schema ledger was adopted.
+const LEDGER_BASELINE_VERSION: i64 = 1;
 
 // =============================================================================
 // DATABASE SCHEMA DEFINITIONS
@@ -62,18 +70,6 @@ CREATE INDEX IF NOT EXISTS idx_performance_timestamp ON strategy_performance(exe
 CREATE INDEX IF NOT EXISTS idx_performance_token ON strategy_performance(token_mint);
 "#;
 
-const SCHEMA_STRATEGY_ASSIGNMENTS: &str = r#"
-CREATE TABLE IF NOT EXISTS strategy_assignments (
-    position_id TEXT NOT NULL,
-    strategy_id TEXT NOT NULL,
-    assigned_at TEXT NOT NULL,
-    PRIMARY KEY (position_id, strategy_id)
-);
-
-CREATE INDEX IF NOT EXISTS idx_assignments_position ON strategy_assignments(position_id);
-CREATE INDEX IF NOT EXISTS idx_assignments_strategy ON strategy_assignments(strategy_id);
-"#;
-
 const SCHEMA_STRATEGY_TEMPLATES: &str = r#"
 CREATE TABLE IF NOT EXISTS strategy_templates (
     id TEXT PRIMARY KEY,
@@ -110,6 +106,13 @@ CREATE INDEX IF NOT EXISTS idx_backtests_strategy ON strategy_backtests(strategy
 CREATE INDEX IF NOT EXISTS idx_backtests_start ON strategy_backtests(start_time);
 "#;
 
+/// Drops the tables of removed features. A core from before v2 re-creates them
+/// whenever it opens the store, so every open checks for them rather than only the
+/// upgrade that retired them.
+const DROP_RETIRED_TABLES: &str = r#"
+DROP TABLE IF EXISTS strategy_assignments;
+"#;
+
 const SCHEMA_VERSION_TABLE: &str = r#"
 CREATE TABLE IF NOT EXISTS schema_version (
     version INTEGER PRIMARY KEY,
@@ -123,9 +126,9 @@ CREATE TABLE IF NOT EXISTS schema_version (
 
 /// The schema of `strategies.db`.
 pub(crate) const SCHEMA: StoreSchema = StoreSchema {
-    version: STRATEGIES_SCHEMA_VERSION as i64,
-    min_reader_version: STRATEGIES_SCHEMA_VERSION as i64,
-    baseline: STRATEGIES_SCHEMA_VERSION as i64,
+    version: STORE_VERSION,
+    min_reader_version: STORE_VERSION,
+    baseline: LEDGER_BASELINE_VERSION,
     renames: None,
     step: create_schema,
     legacy_stamp: None,
@@ -153,10 +156,6 @@ fn create_schema(tx: &Transaction<'_>, _: &SchemaContext) -> Result<(), Database
                 "create strategy_performance table",
                 SCHEMA_STRATEGY_PERFORMANCE,
             ),
-            (
-                "create strategy_assignments table",
-                SCHEMA_STRATEGY_ASSIGNMENTS,
-            ),
             ("create strategy_templates table", SCHEMA_STRATEGY_TEMPLATES),
             ("create strategy_backtests table", SCHEMA_STRATEGY_BACKTESTS),
         ] {
@@ -180,7 +179,7 @@ fn create_schema(tx: &Transaction<'_>, _: &SchemaContext) -> Result<(), Database
         "chain_id",
         "TEXT NOT NULL DEFAULT 'solana'",
     )?;
-    Ok(())
+    ddl::run_batch(tx, "drop retired strategies tables", DROP_RETIRED_TABLES)
 }
 
 /// Get a connection from the strategies store's pool.

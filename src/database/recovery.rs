@@ -183,7 +183,8 @@ fn quarantine_into(
         operation: format!("encode {}", manifest_path.display()),
         message: error.to_string(),
     })?;
-    fs::write(&manifest_path, encoded).map_err(io(format!("write {}", manifest_path.display())))?;
+    crate::utils::atomic_file::replace(&manifest_path, &encoded, 0o600)
+        .map_err(io(format!("write {}", manifest_path.display())))?;
 
     let store_file = directory.join(path.file_name().unwrap_or_default());
     Ok(Quarantined {

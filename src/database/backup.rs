@@ -89,9 +89,7 @@ pub fn back_up_before_upgrade(
     };
     let encoded = serde_json::to_vec_pretty(&manifest)
         .map_err(|e| failed(format!("encode manifest: {e}")))?;
-    let manifest_partial = manifest_path.with_extension("json.partial");
-    fs::write(&manifest_partial, encoded)
-        .and_then(|()| fs::rename(&manifest_partial, &manifest_path))
+    crate::utils::atomic_file::replace(&manifest_path, &encoded, 0o600)
         .map_err(|e| failed(format!("write {}: {e}", manifest_path.display())))?;
     Ok(backup_path)
 }

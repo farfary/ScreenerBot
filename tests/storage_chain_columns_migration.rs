@@ -58,7 +58,6 @@ const TABLES_WITHOUT_CHAIN_SCOPE: &[(&str, &[&str])] = &[
             "schema_version",
             "store_schema",
             "strategies",
-            "strategy_assignments",
             "strategy_backtests",
             "strategy_templates",
         ],
@@ -224,6 +223,30 @@ fn v0_2_13_fixtures_gain_chain_scope_and_survive_a_second_boot() {
             "{database}: foreign-key violations after migration"
         );
     }
+
+    // `strategy_assignments`, which nothing read or wrote, is dropped from the v0.2.13
+    // store, and the drop makes the strategies store's own version its oldest reader.
+    let strategies = open_database(fixture_dir.path(), "strategies.db");
+    let retired: i64 = strategies
+        .query_row(
+            "SELECT COUNT(*) FROM sqlite_master WHERE name = 'strategy_assignments'",
+            [],
+            |row| row.get(0),
+        )
+        .expect("look up strategy_assignments");
+    assert_eq!(
+        retired, 0,
+        "strategies.db: strategy_assignments must be dropped"
+    );
+    let ledger: (i64, i64) = strategies
+        .query_row(
+            "SELECT version, min_reader_version FROM store_schema WHERE id = 1",
+            [],
+            |row| Ok((row.get(0)?, row.get(1)?)),
+        )
+        .expect("read the strategies store ledger");
+    assert_eq!(ledger, (2, 2), "strategies.db: store ledger");
+    drop(strategies);
 
     // The audit: no table in these databases is chain-scoped without a
     // chain_id column. A new table in one of these files appears here and

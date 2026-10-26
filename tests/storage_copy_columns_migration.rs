@@ -1,7 +1,8 @@
 // Copyright (c) 2024-2026 ScreenerBot (screenerbot.io)
 // SPDX-License-Identifier: BUSL-1.1
 
-//! Released copy-trading storage through the production opener: unit-neutral column names.
+//! Released copy-trading storage through the production opener: unit-neutral column names
+//! and the retired tables dropped.
 
 use crate::common;
 
@@ -302,6 +303,72 @@ fn a_v8_store_keeps_its_quote_paper_book_and_gains_new_task_columns() {
         )
         .unwrap();
     assert_eq!(stable, None, "an existing task inherits the global setting");
+}
+
+/// A store a v9 core wrote holds the position-link table, which nothing reads or
+/// writes. The upgrade drops it and keeps every other table and row, and the ledger
+/// makes v10 the oldest reader, since a drop is a breaking change.
+#[test]
+fn a_v9_store_drops_the_position_link_table_and_keeps_its_rows() {
+    let dir = tempfile::tempdir().unwrap();
+    let path = dir.path().join("copy_trading.db");
+    released_with_history(&path);
+    drop(CopyDatabase::open(&path, ChainId::Solana).unwrap());
+    let conn = Connection::open(&path).unwrap();
+    conn.execute_batch(
+        "UPDATE copy_metadata SET value = '9' WHERE key = 'schema_version';
+         UPDATE store_schema SET version = 9, min_reader_version = 8 WHERE id = 1;
+         CREATE TABLE copy_position_links (
+             task_id INTEGER NOT NULL, position_id TEXT NOT NULL UNIQUE, mint TEXT NOT NULL,
+             created_at TEXT NOT NULL, PRIMARY KEY (task_id, position_id),
+             FOREIGN KEY (task_id) REFERENCES copy_tasks(id) ON DELETE CASCADE
+         );
+         INSERT INTO copy_position_links VALUES (7, 'position-1', 'mint', '2026-01-02T00:00:00Z');",
+    )
+    .unwrap();
+    let kept_before: Vec<String> = schema(&conn)
+        .into_iter()
+        .map(|(name, _)| name)
+        .filter(|name| name != "copy_position_links")
+        .collect();
+    drop(conn);
+
+    drop(CopyDatabase::open(&path, ChainId::Solana).unwrap());
+    let conn = Connection::open(&path).unwrap();
+    let names: Vec<String> = schema(&conn).into_iter().map(|(name, _)| name).collect();
+    assert!(
+        !names.iter().any(|name| name == "copy_position_links"),
+        "{names:?}"
+    );
+    assert_eq!(names, kept_before, "every other table and index is kept");
+    let tasks: i64 = conn
+        .query_row("SELECT COUNT(*) FROM copy_tasks", [], |row| row.get(0))
+        .unwrap();
+    assert_eq!(tasks, 1);
+    let ledger: (i64, i64) = conn
+        .query_row(
+            "SELECT version, min_reader_version FROM store_schema WHERE id = 1",
+            [],
+            |row| Ok((row.get(0)?, row.get(1)?)),
+        )
+        .unwrap();
+    assert_eq!(ledger, (10, 10));
+    let fk_violations = conn
+        .prepare("PRAGMA foreign_key_check")
+        .unwrap()
+        .query_map([], |_| Ok(()))
+        .unwrap()
+        .count();
+    assert_eq!(fk_violations, 0);
+
+    let upgraded = schema(&conn);
+    drop(conn);
+    drop(CopyDatabase::open(&path, ChainId::Solana).unwrap());
+    assert_eq!(
+        schema(&Connection::open(&path).unwrap()),
+        upgraded,
+        "a second open is a no-op"
+    );
 }
 
 #[test]

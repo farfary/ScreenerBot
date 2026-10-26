@@ -10,10 +10,11 @@ use crate::errors::DatabaseError;
 use crate::trader::copy::types::CopyOutcome;
 use crate::trader::error::Error;
 
-const SCHEMA_VERSION: i64 = 9;
+const SCHEMA_VERSION: i64 = 10;
 
-/// Additive columns since v8 leave v8 readers correct.
-const MIN_READER_VERSION: i64 = 8;
+/// Version 10 drops the position-link table, which nothing read or wrote. A drop is
+/// a breaking change, so v10 is the oldest version that reads the store.
+const MIN_READER_VERSION: i64 = 10;
 
 /// The version the store held when the schema ledger was adopted.
 const LEDGER_BASELINE_VERSION: i64 = 8;
@@ -46,6 +47,11 @@ fn step(transaction: &Transaction<'_>, _: &SchemaContext) -> Result<(), Database
 fn create_schema(transaction: &Transaction<'_>) -> crate::trader::Result<()> {
     ddl::run_batch(transaction, "create copy-trading tables", SCHEMA_SQL)?;
     migrate(transaction)?;
+    ddl::run_batch(
+        transaction,
+        "drop retired copy-trading tables",
+        DROP_RETIRED_TABLES,
+    )?;
     transaction
         .execute(
             "INSERT INTO copy_metadata (key, value) VALUES ('schema_version', ?1) \
@@ -185,14 +191,13 @@ CREATE TABLE IF NOT EXISTS copy_activity (
 );
 CREATE INDEX IF NOT EXISTS idx_copy_activity_task_time
     ON copy_activity(task_id, created_at DESC);
-CREATE TABLE IF NOT EXISTS copy_position_links (
-    task_id INTEGER NOT NULL,
-    position_id TEXT NOT NULL UNIQUE,
-    mint TEXT NOT NULL,
-    created_at TEXT NOT NULL,
-    PRIMARY KEY (task_id, position_id),
-    FOREIGN KEY (task_id) REFERENCES copy_tasks(id) ON DELETE CASCADE
-);
+"#;
+
+/// Drops the tables of removed features. A core from before v10 re-creates them
+/// whenever it opens the store, so every open checks for them rather than only the
+/// upgrade that retired them.
+const DROP_RETIRED_TABLES: &str = r#"
+DROP TABLE IF EXISTS copy_position_links;
 "#;
 
 /// Every schema step of one open. Runs inside the opener's transaction, so a
