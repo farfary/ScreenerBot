@@ -272,7 +272,7 @@ async fn pipeline_reports_the_first_failing_stage_meta_before_onchain() {
     let config = filters_default_dex_only();
 
     let mut token = seeded_token();
-    token.first_discovered_at = chrono::Utc::now(); // too new
+    token.blockchain_created_at = Some(chrono::Utc::now()); // too new
     token.symbol = "0000".to_owned(); // and a scam symbol
     token.liquidity_usd = Some(0.0); // and no liquidity
 
@@ -321,7 +321,7 @@ async fn pipeline_rejection_sources_match_the_stage_that_produced_them() {
     let config = filters_default_dex_only();
 
     let mut too_new = seeded_token();
-    too_new.first_discovered_at = chrono::Utc::now();
+    too_new.blockchain_created_at = Some(chrono::Utc::now());
 
     let mut scam_symbol = seeded_token();
     scam_symbol.symbol = "0000".to_owned();
@@ -364,7 +364,7 @@ async fn pipeline_age_boundary_is_inclusive() {
     let mut token = seeded_token();
     // A whole-minute boundary truncates downwards, so add a second of slack to keep the
     // assertion about the RULE rather than about clock resolution.
-    token.first_discovered_at = chrono::Utc::now() - chrono::Duration::seconds(60 * 60 + 1);
+    token.blockchain_created_at = Some(chrono::Utc::now() - chrono::Duration::seconds(60 * 60 + 1));
     assert!(
         evaluate_token(&solana_filter_profile(), &token, &config)
             .await
@@ -372,7 +372,7 @@ async fn pipeline_age_boundary_is_inclusive() {
         "exactly the minimum age is old enough (`<` rejects)"
     );
 
-    token.first_discovered_at = chrono::Utc::now() - chrono::Duration::minutes(59);
+    token.blockchain_created_at = Some(chrono::Utc::now() - chrono::Duration::minutes(59));
     assert_eq!(
         rejection(evaluate_token(&solana_filter_profile(), &token, &config).await),
         FilterRejectionReason::TokenTooNew
@@ -380,30 +380,69 @@ async fn pipeline_age_boundary_is_inclusive() {
 }
 
 #[tokio::test]
-async fn pipeline_age_measures_discovery_not_creation() {
-    // DEFECT PIN: the age rule reads `first_discovered_at` — when the BOT first saw the
-    // token — while the snapshot's "Recent" view reads `blockchain_created_at`. A token
-    // minted a year ago is "too new" for a minute after discovery, which quietly delays
-    // every token found after a restart or a cold start.
+async fn pipeline_age_measures_creation_not_discovery() {
+    // Discovery time belongs to the install, not to the token: on a fresh install every
+    // token was discovered minutes ago, and a discovery-based age rejected long-established
+    // tokens as "too new" for the whole minimum age after the first launch.
     let _cfg = config_guard();
     let mut config = filters_default_dex_only();
     config.age_enabled = true;
     config.min_token_age_minutes = 60;
 
-    let mut token = seeded_token();
-    token.blockchain_created_at = Some(chrono::Utc::now() - chrono::Duration::days(365));
-    token.first_discovered_at = chrono::Utc::now() - chrono::Duration::minutes(1);
+    let mut established = seeded_token();
+    established.blockchain_created_at = Some(chrono::Utc::now() - chrono::Duration::days(365));
+    established.first_discovered_at = chrono::Utc::now();
+    assert!(
+        evaluate_token(&solana_filter_profile(), &established, &config)
+            .await
+            .is_ok(),
+        "a year-old token discovered just now is old enough"
+    );
 
+    let mut fresh = seeded_token();
+    fresh.blockchain_created_at = Some(chrono::Utc::now() - chrono::Duration::minutes(5));
+    fresh.first_discovered_at = chrono::Utc::now() - chrono::Duration::days(30);
     assert_eq!(
-        rejection(evaluate_token(&solana_filter_profile(), &token, &config).await),
+        rejection(evaluate_token(&solana_filter_profile(), &fresh, &config).await),
         FilterRejectionReason::TokenTooNew,
-        "a year-old token counts as new because WE only just found it"
+        "a token created minutes ago is too new however long ago the pair was first seen"
     );
 }
 
 #[tokio::test]
-async fn pipeline_age_check_tolerates_a_future_discovery_timestamp() {
-    // A clock skew or a bad API timestamp can put discovery in the future; the negative
+async fn pipeline_age_falls_back_to_discovery_without_a_valid_creation_time() {
+    // Without a creation time, or with the zero timestamp market APIs report for an unknown
+    // pair age, discovery is the only evidence of age there is.
+    let _cfg = config_guard();
+    let mut config = filters_default_dex_only();
+    config.age_enabled = true;
+    config.min_token_age_minutes = 60;
+
+    let unknown_creation = [None, Some(chrono::DateTime::UNIX_EPOCH)];
+    for created in unknown_creation {
+        let mut token = seeded_token();
+        token.blockchain_created_at = created;
+
+        token.first_discovered_at = chrono::Utc::now() - chrono::Duration::minutes(5);
+        assert_eq!(
+            rejection(evaluate_token(&solana_filter_profile(), &token, &config).await),
+            FilterRejectionReason::TokenTooNew,
+            "creation {created:?}: a token discovered minutes ago is too new"
+        );
+
+        token.first_discovered_at = chrono::Utc::now() - chrono::Duration::days(2);
+        assert!(
+            evaluate_token(&solana_filter_profile(), &token, &config)
+                .await
+                .is_ok(),
+            "creation {created:?}: a token discovered two days ago is old enough"
+        );
+    }
+}
+
+#[tokio::test]
+async fn pipeline_age_check_tolerates_a_future_creation_timestamp() {
+    // A clock skew or a bad API timestamp can put creation in the future; the negative
     // age is clamped to 0 rather than wrapping into a huge positive number.
     let _cfg = config_guard();
     let mut config = filters_default_dex_only();
@@ -411,7 +450,7 @@ async fn pipeline_age_check_tolerates_a_future_discovery_timestamp() {
     config.min_token_age_minutes = 60;
 
     let mut token = seeded_token();
-    token.first_discovered_at = chrono::Utc::now() + chrono::Duration::days(7);
+    token.blockchain_created_at = Some(chrono::Utc::now() + chrono::Duration::days(7));
 
     assert_eq!(
         rejection(evaluate_token(&solana_filter_profile(), &token, &config).await),

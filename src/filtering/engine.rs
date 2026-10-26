@@ -27,8 +27,6 @@ use super::types::{
 };
 use super::{Error, Result};
 
-const MIN_VALID_BLOCKCHAIN_TIMESTAMP: i64 = 1; // Avoid 0/invalid timestamps from market APIs
-
 /// Compute a full filtering snapshot by evaluating all tokens against configured filters.
 pub async fn compute_snapshot(
     chain: ChainId,
@@ -277,11 +275,7 @@ pub async fn compute_snapshot(
         let has_open_position = open_position_set.contains(&token.mint);
         let has_ohlcv = ohlcv_set.contains(&token.mint);
 
-        let creation_timestamp = token
-            .blockchain_created_at
-            .filter(|dt| dt.timestamp() >= MIN_VALID_BLOCKCHAIN_TIMESTAMP)
-            .map(|dt| dt.timestamp())
-            .unwrap_or_else(|| token.first_discovered_at.timestamp());
+        let creation_timestamp = token.created_at().timestamp();
 
         let mut passed_at = None;
 

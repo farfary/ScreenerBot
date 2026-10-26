@@ -254,7 +254,22 @@ pub struct Token {
     pub last_rejection_at: Option<DateTime<Utc>>,
 }
 
+/// The earliest creation timestamp accepted as real. Market APIs report `0` for a pair whose
+/// age they do not know, which would otherwise read as a token created in 1970.
+const MIN_VALID_CREATION_TIMESTAMP: i64 = 1;
+
 impl Token {
+    /// When the token came into existence: its on-chain creation time when a provider
+    /// reported a valid one, otherwise when this install first discovered it.
+    ///
+    /// The one definition of a token's age. Discovery time alone is a property of the
+    /// install, not of the token: on a fresh install every token was discovered minutes ago.
+    pub fn created_at(&self) -> DateTime<Utc> {
+        self.blockchain_created_at
+            .filter(|created| created.timestamp() >= MIN_VALID_CREATION_TIMESTAMP)
+            .unwrap_or(self.first_discovered_at)
+    }
+
     /// Total transactions (buys + sells) for the 5 minute window.
     pub fn txns_5m_total(&self) -> Option<i64> {
         txns_total(self.txns_m5_buys, self.txns_m5_sells)

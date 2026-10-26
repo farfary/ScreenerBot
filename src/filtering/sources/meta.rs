@@ -81,7 +81,7 @@ fn evaluate_with_decimals<'a>(token: &'a Token, config: &'a FilteringConfig) -> 
 
 fn is_too_new(token: &Token, config: &FilteringConfig) -> bool {
     let age_minutes = Utc::now()
-        .signed_duration_since(token.first_discovered_at)
+        .signed_duration_since(token.created_at())
         .num_minutes()
         .max(0);
 
